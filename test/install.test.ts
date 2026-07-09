@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parse as parseToml } from 'smol-toml';
 import { patchConfigToml, unpatchConfigToml, trustedHashKey } from '../core/install/patch-codex.ts';
-import { patchSettings, unpatchSettings, unpatchHooks } from '../core/install/patch-claude.ts';
+import { patchSettings, unpatchSettings, patchAllow, unpatchHooks } from '../core/install/patch-claude.ts';
 import type { Settings } from '../core/install/patch-claude.ts';
 import { detectHosts } from '../core/install/detect.ts';
 import { must, asRecord } from './helpers.ts';
@@ -204,4 +204,19 @@ test('detectHosts honours CLAUDE_CONFIG_DIR and CODEX_HOME overrides', () => {
 test('trustedHashKey follows <plugin>@<marketplace>:<file>:<snake_event>:<i>:<j>', () => {
   const key = trustedHashKey('omd@omd', 'hooks/pre-tool-use-requiring-frame.json', 'PreToolUse', 0, 0);
   assert.equal(key, 'omd@omd:hooks/pre-tool-use-requiring-frame.json:pre_tool_use:0:0');
+});
+
+// Found in review: patchAllow only appended, so a subcommand removed in an upgrade kept
+// its permission forever. `omd session` survived long after the command was deleted.
+test('patchAllow replaces our namespace rather than accumulating dead permissions', () => {
+  const stale: Settings = { permissions: { allow: ['Bash(git status)', 'Bash(omd session:*)', 'Bash(omd check:*)'] } };
+  const next = patchAllow(stale, ['Bash(omd check:*)', 'Bash(omd coach:*)']);
+  assert.deepEqual(next.permissions?.allow, ['Bash(git status)', 'Bash(omd check:*)', 'Bash(omd coach:*)']);
+});
+
+test('patchAllow is idempotent and preserves foreign permissions', () => {
+  const base: Settings = { permissions: { allow: ['Bash(git status)'], defaultMode: 'acceptEdits' } };
+  const once = patchAllow(base, ['Bash(omd check:*)']);
+  assert.deepEqual(patchAllow(once, ['Bash(omd check:*)']), once);
+  assert.equal(once.permissions?.['defaultMode'], 'acceptEdits');
 });

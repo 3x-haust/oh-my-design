@@ -112,15 +112,21 @@
   },
   "hotPaths": [
     {
+      "path": "bin/omd.ts",
+      "accessCount": 27,
+      "lastAccessed": 1783613381294,
+      "type": "file"
+    },
+    {
       "path": "Plan.md",
       "accessCount": 17,
       "lastAccessed": 1783607092098,
       "type": "file"
     },
     {
-      "path": "bin/omd.ts",
-      "accessCount": 17,
-      "lastAccessed": 1783612205734,
+      "path": "core/types.ts",
+      "accessCount": 15,
+      "lastAccessed": 1783612972840,
       "type": "file"
     },
     {
@@ -133,12 +139,6 @@
       "path": "bin/omd.mjs",
       "accessCount": 13,
       "lastAccessed": 1783593355638,
-      "type": "file"
-    },
-    {
-      "path": "core/types.ts",
-      "accessCount": 13,
-      "lastAccessed": 1783612020390,
       "type": "file"
     },
     {
@@ -184,27 +184,27 @@
       "type": "file"
     },
     {
+      "path": "src/skills/ultradesign/SKILL.md",
+      "accessCount": 8,
+      "lastAccessed": 1783613165952,
+      "type": "file"
+    },
+    {
+      "path": "core/install/patch-claude.ts",
+      "accessCount": 8,
+      "lastAccessed": 1783613503087,
+      "type": "file"
+    },
+    {
       "path": "core/hook/dispatch.ts",
       "accessCount": 7,
       "lastAccessed": 1783594942965,
       "type": "file"
     },
     {
-      "path": "core/install/patch-claude.ts",
-      "accessCount": 7,
-      "lastAccessed": 1783605764559,
-      "type": "file"
-    },
-    {
       "path": "core/session/index.ts",
       "accessCount": 6,
       "lastAccessed": 1783595403247,
-      "type": "file"
-    },
-    {
-      "path": "src/skills/ultradesign/SKILL.md",
-      "accessCount": 6,
-      "lastAccessed": 1783607166775,
       "type": "file"
     },
     {

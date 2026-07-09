@@ -75,9 +75,12 @@ export function unpatchSettings(settings: Settings): Settings {
  */
 export function patchAllow(settings: Settings, allow: string[]): Settings {
   const out = clone(settings ?? {});
-  const merged = [...(out.permissions?.allow ?? [])];
-  for (const entry of allow) if (!merged.includes(entry)) merged.push(entry);
-  out.permissions = { ...out.permissions, allow: merged };
+
+  // We own the `Bash(omd ...)` namespace, so we replace it wholesale rather than appending.
+  // Appending leaves permissions for subcommands that no longer exist — an upgrade that
+  // removed `omd session` would otherwise grant it forever. Foreign entries keep their order.
+  const foreign = (out.permissions?.allow ?? []).filter((e) => !e.startsWith(ALLOW_PREFIX));
+  out.permissions = { ...out.permissions, allow: [...foreign, ...allow] };
   return out;
 }
 

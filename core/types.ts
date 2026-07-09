@@ -194,6 +194,49 @@ export interface RefDistance {
   drivers: string[];
 }
 
+/**
+ * One `omd check` run, appended to `.omd/history.jsonl`.
+ *
+ * Coach cannot exist without this. "You were told about contrast forty-one times" is a
+ * claim about the past, and until now nothing remembered the past: check printed and exited.
+ */
+export interface Run {
+  ts: string;
+  page: string;
+  /** ruleId -> how many nodes violated it in this run. */
+  counts: Record<string, number>;
+  total: number;
+}
+
+export interface Recurring {
+  rule: string;
+  category: Category;
+  /** Violations across every run. */
+  total: number;
+  /** How many distinct runs it showed up in. */
+  runs: number;
+  trend: 'improving' | 'worsening' | 'flat' | 'insufficient';
+  /** Percent change between the first and second half of the runs. Null when insufficient. */
+  changePct: number | null;
+}
+
+/**
+ * What the user keeps getting wrong — skill, not taste.
+ *
+ * Taste ("you prefer dense layouts") has no right answer: professional designers agree at
+ * α = 0.248. Skill ("you keep missing contrast") has one. The two must never be mixed, so
+ * Coach never reads `.omd/taste/`.
+ */
+export interface CoachReport {
+  runs: number;
+  span: { from: string; to: string } | null;
+  recurring: Recurring[];
+  /** Slop rules the user overruled in decisions.md, and how often. */
+  overrules: { rule: string; count: number }[];
+  /** False when there is too little history to claim a trend. Say so rather than invent one. */
+  confident: boolean;
+}
+
 export interface Choice {
   ts: string;
   among: string[];

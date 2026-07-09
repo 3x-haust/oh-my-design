@@ -1,10 +1,12 @@
 #!/usr/bin/env node
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { stringify } from 'yaml';
 import { readFrame } from '../core/frame/index.ts';
 import { writeFrameRecord, reframe, setGenerator, logDecision, logChoice, tasteProfile } from '../core/frame/write.ts';
+import { logRun, readHistory } from '../core/history/index.ts';
+import { analyse } from '../core/coach/index.ts';
 import type { Layer, RawIr } from '../core/types.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -24,10 +26,12 @@ interface Opts {
   to?: string;
   because?: string;
   as?: string;
+  add?: string;
+  noLog?: boolean;
 }
 
-const FLAGS = new Set(['json']);
-const ALIASES: Record<string, keyof Opts> = { o: 'out' };
+const FLAGS = new Set(['json', 'no-log']);
+const ALIASES: Record<string, keyof Opts> = { o: 'out', 'no-log': 'noLog' };
 
 function parseArgs(args: string[]): Opts {
   const opts: Opts = { _: [] };
@@ -87,7 +91,48 @@ async function cmdCheck(opts: Opts): Promise<never> {
   if (opts.json) process.stdout.write(JSON.stringify(violations));
   else for (const v of violations) console.log(`[${v.severity}] ${v.id} ${v.path}: ${v.message}`);
 
+  if (!opts.noLog) {
+    const page = opts._[0] ?? opts.ir ?? '(unknown)';
+    logRun(process.cwd(), page, violations);
+  }
+
   process.exit(violations.length > 0 ? 1 : 0);
+}
+
+/** One decision is one block, so a rule named in both its title and its reason counts once. */
+function readDecisionBlocks(cwd: string): string[] {
+  const path = join(cwd, '.omd', 'decisions.md');
+  if (!existsSync(path)) return [];
+  return readFileSync(path, 'utf8').split(/^## /m).slice(1);
+}
+
+function cmdCoach(): never {
+  const report = analyse(readHistory(process.cwd()), readDecisionBlocks(process.cwd()));
+
+  if (report.runs === 0) {
+    console.log('No check history yet. Run `omd check` on something.');
+    process.exit(0);
+  }
+
+  if (!report.confident) {
+    console.log(`Seen ${report.runs} run${report.runs === 1 ? '' : 's'} so far.`);
+    for (const r of report.recurring) console.log(`  ${r.rule}  ${r.total} findings across ${r.runs} runs`);
+    console.log(`\nToo little history to claim a trend. Four runs is the minimum; there are ${report.runs}.`);
+    process.exit(0);
+  }
+
+  for (const r of report.recurring) {
+    // A rule with no baseline has no percentage. Say "appeared", never a fabricated number.
+    const delta = r.changePct === null ? 'appeared' : `${r.changePct > 0 ? '+' : ''}${r.changePct}%`;
+    console.log(`${r.rule}  ${r.total} findings across ${r.runs} runs   ${delta}  ${r.trend}`);
+  }
+
+  if (report.overrules.length > 0) {
+    console.log('\nOverruled:');
+    for (const o of report.overrules) console.log(`  ${o.rule}  x${o.count}`);
+  }
+
+  process.exit(0);
 }
 
 function cmdFrameShow(): never {
@@ -142,6 +187,47 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
   });
   console.log(path);
   console.log(JSON.stringify(invariants, null, 2));
+  process.exit(0);
+}
+
+/**
+ * A principle answers *why* a reference is the way it is, and no function can form that
+ * judgement. It is written by a model that looked at the render, and merely recorded here —
+ * the same split as everywhere else: the tool measures, the model interprets.
+ */
+async function cmdRefPrinciples(opts: Opts): Promise<never> {
+  const source = opts._[0];
+  if (!source || !opts.as || !opts.add) {
+    console.error('usage: omd ref principles <source> --as <component> --add "why it is built that way"');
+    process.exit(1);
+  }
+  const { addPrinciples } = await import('../core/ref/store.ts');
+  addPrinciples(process.cwd(), source, opts.as, [opts.add]);
+  console.log(`${source} (${opts.as}): principle recorded`);
+  process.exit(0);
+}
+
+async function cmdRefShow(opts: Opts): Promise<never> {
+  const source = opts._[0];
+  if (!source || !opts.as) {
+    console.error('usage: omd ref show <source> --as <component>');
+    process.exit(1);
+  }
+  const { loadRefs } = await import('../core/ref/store.ts');
+  const ref = loadRefs(process.cwd()).find((r) => r.source === source && r.component === opts.as);
+  if (!ref) {
+    console.error(`no reference for ${source} (${opts.as})`);
+    process.exit(1);
+  }
+
+  console.log(`${ref.source}  ${ref.component}  captured ${ref.capturedAt}`);
+  console.log(JSON.stringify(ref.invariants, null, 2));
+  if (ref.principles.length === 0) {
+    console.log('\nNo principles yet — nothing has looked at it.');
+  } else {
+    console.log('\nPrinciples:');
+    for (const p of ref.principles) console.log(`  - ${p}`);
+  }
   process.exit(0);
 }
 
@@ -202,7 +288,8 @@ function usage(): never {
     'usage: omd <command>\n\n'
     + '  ir <page> [-o f]                            rendered DOM -> Design IR\n'
     + '  render <page> -o shot.png [--viewport WxH]  headless screenshot\n'
-    + '  check [<page>|--ir f] [--json] [--category slop]\n'
+    + '  check [<page>|--ir f] [--json] [--category slop] [--no-log]\n'
+    + '  coach                                        trends across `omd check` history\n'
     + '\n'
     + '  frame show\n'
     + '  frame set --problem P --reframe R --why EVIDENCE\n'
@@ -215,7 +302,9 @@ function usage(): never {
     + '\n'
     + '  ref add <url|file> --as <component>         render, extract invariants, save\n'
     + '  ref list                                    one line per saved reference\n'
-    + '  ref distance <page>                         compare a page to every saved reference',
+    + '  ref distance <page>                         compare a page to every saved reference\n'
+    + '  ref principles <source> --as C --add "..."   record why a reference works\n'
+    + '  ref show <source> --as C                    invariants + principles',
   );
   process.exit(1);
 }
@@ -233,6 +322,7 @@ async function main(): Promise<never> {
   if (cmd === 'ir') return cmdIr(parseArgs(args.slice(1)));
   if (cmd === 'render') return cmdRender(parseArgs(args.slice(1)));
   if (cmd === 'check') return cmdCheck(parseArgs(args.slice(1)));
+  if (cmd === 'coach') return cmdCoach();
 
   if (cmd === 'frame') {
     const opts = parseArgs(args.slice(2));
@@ -271,6 +361,8 @@ async function main(): Promise<never> {
     if (sub === 'add') return cmdRefAdd(opts);
     if (sub === 'list') return cmdRefList();
     if (sub === 'distance') return cmdRefDistance(opts);
+    if (sub === 'principles') return cmdRefPrinciples(opts);
+    if (sub === 'show') return cmdRefShow(opts);
     return usage();
   }
 

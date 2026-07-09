@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync, readdirSync, readFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readdirSync, readFileSync, existsSync } from 'node:fs';
 import { join, basename, resolve } from 'node:path';
 import type { Reference } from '../types.ts';
 
@@ -15,7 +15,7 @@ function hostPart(source: string): string {
   }
 }
 
-function slugFor(ref: Reference): string {
+function slugFor(ref: Pick<Reference, 'source' | 'component'>): string {
   return `${hostPart(ref.source)}.${ref.component}`;
 }
 
@@ -51,4 +51,22 @@ export function loadRefs(cwd: string): Reference[] {
   }
 
   return refs.sort((a, b) => a.source.localeCompare(b.source) || a.component.localeCompare(b.component));
+}
+
+/**
+ * Appends principles to an existing reference. Throws if none exists: a principle without
+ * measurements is an opinion, not a record.
+ */
+export function addPrinciples(cwd: string, source: string, component: string, principles: string[]): void {
+  const path = join(refsDir(cwd), `${slugFor({ source, component })}.json`);
+  if (!existsSync(path)) {
+    throw new Error(`no reference found for ${source} (${component})`);
+  }
+
+  const ref = JSON.parse(readFileSync(path, 'utf8')) as Reference;
+  for (const principle of principles) {
+    if (!ref.principles.includes(principle)) ref.principles.push(principle);
+  }
+
+  writeFileSync(path, `${JSON.stringify(ref, null, 2)}\n`);
 }

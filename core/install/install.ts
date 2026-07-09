@@ -38,9 +38,12 @@ function backupFile(path: string, home: string): void {
   cpSync(path, dest);
 }
 
+// Every omd subcommand the skill invokes. A loop that raises a permission prompt ten times
+// per iteration is a loop nobody finishes.
 const OMD_ALLOW = [
-  'Bash(omd check:*)', 'Bash(omd ir:*)', 'Bash(omd render:*)', 'Bash(omd session:*)',
-  'Bash(omd frame:*)', 'Bash(omd choose:*)', 'Bash(omd decision:*)', 'Bash(omd taste:*)',
+  'Bash(omd check:*)', 'Bash(omd ir:*)', 'Bash(omd render:*)',
+  'Bash(omd frame:*)', 'Bash(omd ref:*)', 'Bash(omd choose:*)',
+  'Bash(omd decision:*)', 'Bash(omd taste:*)', 'Bash(omd coach:*)',
 ];
 
 /**
