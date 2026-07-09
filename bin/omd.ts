@@ -1,11 +1,12 @@
 #!/usr/bin/env node
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { stringify } from 'yaml';
-import { readFrame, approvalRefusal } from '../core/frame/index.ts';
+import { readFrame, approvalRefusal, isApproved } from '../core/frame/index.ts';
 import { proposeFrame, setGenerator, logDecision, logChoice, tasteProfile } from '../core/frame/write.ts';
 import { preTool } from '../core/hook/dispatch.ts';
+import { readSession, startSession, endSession, DEFAULT_SCOPE } from '../core/session/index.ts';
 import type { Layer, RawIr } from '../core/types.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -22,6 +23,8 @@ interface Opts {
   why?: string;
   set?: string;
   chose?: string;
+  brief?: string;
+  scope?: string;
 }
 
 const FLAGS = new Set(['json']);
@@ -60,13 +63,13 @@ async function rawIrFor(opts: Opts, target: string | undefined): Promise<RawIr> 
     const { extractIr, parseViewport } = await import('../core/render/index.ts');
     return extractIr(target, { viewport: parseViewport(opts.viewport) });
   }
-  const irPath = opts.ir ?? join(process.cwd(), '.design', '.cache', 'ir.json');
+  const irPath = opts.ir ?? join(process.cwd(), '.omd', '.cache', 'ir.json');
   return JSON.parse(readFileSync(irPath, 'utf8')) as RawIr;
 }
 
 async function cmdIr(opts: Opts): Promise<never> {
   const raw = await rawIrFor(opts, opts._[0]);
-  const out = opts.out ?? join(process.cwd(), '.design', '.cache', 'ir.json');
+  const out = opts.out ?? join(process.cwd(), '.omd', '.cache', 'ir.json');
   mkdirSync(dirname(resolve(out)), { recursive: true });
   writeFileSync(out, JSON.stringify(raw, null, 2));
   console.log(`${out}  (${raw.nodes.length} nodes, ${Object.keys(raw.tokens ?? {}).length} tokens)`);
@@ -102,7 +105,7 @@ async function cmdCheck(opts: Opts): Promise<never> {
 function cmdFrameShow(): never {
   const frame = readFrame(process.cwd());
   if (!frame) {
-    console.error('No frame found. Run `omd init` first.');
+    console.error('No frame found. Run `omd session start --brief "..."` first.');
     process.exit(1);
   }
   console.log(JSON.stringify(frame, null, 2));
@@ -110,10 +113,10 @@ function cmdFrameShow(): never {
 }
 
 function cmdFrameApprove(): never {
-  const path = join(process.cwd(), '.design', 'frame.md');
+  const path = join(process.cwd(), '.omd', 'frame.md');
   const frame = readFrame(process.cwd());
   if (!frame) {
-    console.error('No frame found at .design/frame.md');
+    console.error('No frame found at .omd/frame.md');
     process.exit(1);
   }
 
@@ -129,80 +132,70 @@ function cmdFrameApprove(): never {
   process.exit(0);
 }
 
+/**
+ * Only `cwd` and the tool's target path are read off the wire. Spreading the payload
+ * would let a hook input of {"env":{"OMD_NO_FRAME":"1"}} unlock the gate it is meant to
+ * guard, so every other field is ignored.
+ */
+function extractFilePath(parsed: unknown): string | undefined {
+  if (typeof parsed !== 'object' || parsed === null) return undefined;
+  const p = parsed as {
+    filePath?: unknown;
+    tool_input?: { file_path?: unknown; path?: unknown };
+    params?: { file_path?: unknown };
+  };
+  if (typeof p.filePath === 'string') return p.filePath;
+  if (typeof p.tool_input?.file_path === 'string') return p.tool_input.file_path;
+  if (typeof p.tool_input?.path === 'string') return p.tool_input.path;
+  if (typeof p.params?.file_path === 'string') return p.params.file_path;
+  return undefined;
+}
+
 async function cmdHookPreTool(): Promise<never> {
   let cwd = process.cwd();
+  let filePath: string | undefined;
   try {
     const raw = await readStdin();
-    // Only `cwd` is read off the wire. Spreading the payload would let a hook input of
-    // {"env":{"OMD_NO_FRAME":"1"}} unlock the gate it is meant to guard.
-    const parsed = raw ? (JSON.parse(raw) as { cwd?: unknown }) : {};
-    if (typeof parsed.cwd === 'string') cwd = parsed.cwd;
+    const parsed: unknown = raw ? JSON.parse(raw) : {};
+    if (typeof parsed === 'object' && parsed !== null && typeof (parsed as { cwd?: unknown }).cwd === 'string') {
+      cwd = (parsed as { cwd: string }).cwd;
+    }
+    filePath = extractFilePath(parsed);
   } catch {
     // Garbage on stdin is not a reason to fail open.
   }
 
-  const result = await preTool({ cwd, env: process.env });
+  const result = await preTool(filePath !== undefined ? { cwd, env: process.env, filePath } : { cwd, env: process.env });
   if (result.decision === 'allow') process.exit(0);
   console.error(result.reason);
   process.exit(2);
 }
 
-const FRAME_TEMPLATE = `---
-approved: false
-why: ""
----
-
-## 주어진 문제
-
-<의뢰받은 그대로 적는다>
-
-## 재프레이밍
-
-<이 문제가 정말 그 문제인가. 가설로 적는다.>
-
-## 근거
-
-<리뷰 인용, 티켓, 데이터. 이게 없으면 승인이 거부된다.>
-
-## 버려지는 것 / 얻어지는 것
-`;
-
-// The hook is spawned by the host, which does not necessarily hand it our PATH.
-// Resolve the interpreter and the script absolutely, once, at install time.
-const hookCommand = (): string =>
-  `${JSON.stringify(process.execPath)} ${JSON.stringify(join(root, 'bin', 'omd.ts'))} hook pre-tool`;
-
-interface Settings {
-  hooks?: { PreToolUse?: unknown[] };
+function cmdSessionStart(opts: Opts): never {
+  const cwd = process.cwd();
+  const brief = opts.brief ?? '';
+  const scope = opts.scope ? opts.scope.split(',').map((s) => s.trim()).filter(Boolean) : DEFAULT_SCOPE;
+  startSession(cwd, brief, scope);
+  console.log(join(cwd, '.omd', 'session.json'));
+  process.exit(0);
 }
 
-function cmdInit(): never {
+function cmdSessionEnd(): never {
+  endSession(process.cwd());
+  process.exit(0);
+}
+
+function cmdSessionStatus(): never {
   const cwd = process.cwd();
-  const settingsPath = join(cwd, '.claude', 'settings.json');
-  const framePath = join(cwd, '.design', 'frame.md');
-
-  const settings: Settings = existsSync(settingsPath)
-    ? (JSON.parse(readFileSync(settingsPath, 'utf8')) as Settings)
-    : {};
-  settings.hooks ??= {};
-  const others = (settings.hooks.PreToolUse ?? []).filter((e) => !JSON.stringify(e).includes('omd.ts'));
-  settings.hooks.PreToolUse = [
-    ...others,
-    { matcher: 'Write|Edit', hooks: [{ type: 'command', command: hookCommand(), timeout: 5 }] },
-  ];
-
-  mkdirSync(join(cwd, '.claude'), { recursive: true });
-  writeFileSync(settingsPath, `${JSON.stringify(settings, null, 2)}\n`);
-
-  mkdirSync(join(cwd, '.design'), { recursive: true });
-  if (existsSync(framePath)) console.log(`kept    ${framePath}`);
-  else {
-    writeFileSync(framePath, FRAME_TEMPLATE);
-    console.log(`created ${framePath}`);
+  const session = readSession(cwd);
+  if (!session) {
+    console.log('no session open');
+    process.exit(1);
   }
-  console.log(`wrote   ${settingsPath}`);
-  console.log('\nThe gate is live in the NEXT Claude Code session started here.');
-  console.log('Fill in .design/frame.md, then run `omd frame approve` in your terminal.');
+  console.log(`session started ${session.startedAt}`);
+  console.log(`brief: ${session.brief}`);
+  console.log(`scope: ${session.scope.join(', ')}`);
+  console.log(`frame approved: ${isApproved(cwd)}`);
   process.exit(0);
 }
 
@@ -223,7 +216,9 @@ function cmdChoose(opts: Opts): never {
 function usage(): never {
   console.error(
     'usage: omd <command>\n\n'
-    + '  init                          scaffold the gate into this project\n'
+    + '  session start --brief "..." [--scope "a,b"]   open the gate for this project\n'
+    + '  session end                                    close the gate\n'
+    + '  session status                                  print session + approval state\n'
     + '  ir <page> [-o f]              rendered DOM -> Design IR\n'
     + '  render <page> -o shot.png     headless screenshot\n'
     + '  check [<page>|--ir f] [--json]\n'
@@ -248,7 +243,14 @@ async function main(): Promise<never> {
     process.exit(0);
   }
 
-  if (cmd === 'init') return cmdInit();
+  if (cmd === 'session') {
+    const opts = parseArgs(args.slice(2));
+    if (sub === 'start') return cmdSessionStart(opts);
+    if (sub === 'end') return cmdSessionEnd();
+    if (sub === 'status') return cmdSessionStatus();
+    return usage();
+  }
+
   if (cmd === 'ir') return cmdIr(parseArgs(args.slice(1)));
   if (cmd === 'render') return cmdRender(parseArgs(args.slice(1)));
   if (cmd === 'check') return cmdCheck(parseArgs(args.slice(1)));

@@ -39,7 +39,7 @@ That paragraph is the deliverable. The list was already free.
 
 **3. Judge against the frame, not against yourself.**
 
-Read `.design/frame.md`. It holds the primary generator — the metaphor the team committed
+Read `.omd/frame.md`. It holds the primary generator — the metaphor the team committed
 to. Layer 2 findings are contradictions with that metaphor, and they are the ones a linter
 can never produce:
 
@@ -59,7 +59,7 @@ For each finding say what it costs the user, in one sentence.
 - **Never cite your own taste as evidence.** Professional designers agree with each other
   at Krippendorff's α = 0.248 on pairwise UI preference; more than a quarter of comparisons
   split them almost completely. Your preference is not a finding. Layer 3 lives in
-  `.design/taste/`, it belongs to the user, and it is not an argument you get to make.
+  `.omd/taste/`, it belongs to the user, and it is not an argument you get to make.
 - **Never invent a defect to look thorough, or soften a real one to be agreeable.**
   If the screen is fine, say it is fine.
 

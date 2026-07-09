@@ -119,8 +119,74 @@
     },
     {
       "path": "test/cli.test.ts",
+      "accessCount": 12,
+      "lastAccessed": 1783594857157,
+      "type": "file"
+    },
+    {
+      "path": "test/adapters.test.ts",
+      "accessCount": 12,
+      "lastAccessed": 1783595109549,
+      "type": "file"
+    },
+    {
+      "path": "bin/omd.ts",
+      "accessCount": 11,
+      "lastAccessed": 1783594825466,
+      "type": "file"
+    },
+    {
+      "path": "test/rules.test.ts",
+      "accessCount": 11,
+      "lastAccessed": 1783595354974,
+      "type": "file"
+    },
+    {
+      "path": "core/types.ts",
+      "accessCount": 10,
+      "lastAccessed": 1783594788318,
+      "type": "file"
+    },
+    {
+      "path": "test/regression.test.ts",
       "accessCount": 9,
-      "lastAccessed": 1783594059908,
+      "lastAccessed": 1783594874734,
+      "type": "file"
+    },
+    {
+      "path": "core/ir/dom.ts",
+      "accessCount": 9,
+      "lastAccessed": 1783595306870,
+      "type": "file"
+    },
+    {
+      "path": "test/frame-hook.test.ts",
+      "accessCount": 8,
+      "lastAccessed": 1783594946146,
+      "type": "file"
+    },
+    {
+      "path": "test/eye.test.ts",
+      "accessCount": 8,
+      "lastAccessed": 1783595370483,
+      "type": "file"
+    },
+    {
+      "path": "core/hook/dispatch.ts",
+      "accessCount": 7,
+      "lastAccessed": 1783594942965,
+      "type": "file"
+    },
+    {
+      "path": "test/install.test.ts",
+      "accessCount": 6,
+      "lastAccessed": 1783595078720,
+      "type": "file"
+    },
+    {
+      "path": "core/session/index.ts",
+      "accessCount": 6,
+      "lastAccessed": 1783595403247,
       "type": "file"
     },
     {
@@ -130,39 +196,111 @@
       "type": "file"
     },
     {
-      "path": "test/adapters.test.ts",
+      "path": "core/install/patch-claude.ts",
       "accessCount": 5,
-      "lastAccessed": 1783593940555,
+      "lastAccessed": 1783594971592,
       "type": "file"
     },
     {
-      "path": "test/regression.test.ts",
+      "path": "adapters/claude.ts",
       "accessCount": 5,
-      "lastAccessed": 1783594032536,
+      "lastAccessed": 1783594989582,
       "type": "file"
     },
     {
-      "path": "test/eye.test.ts",
+      "path": "adapters/codex.ts",
+      "accessCount": 5,
+      "lastAccessed": 1783594999481,
+      "type": "file"
+    },
+    {
+      "path": "test/helpers.ts",
       "accessCount": 4,
-      "lastAccessed": 1783593968447,
+      "lastAccessed": 1783594802663,
       "type": "file"
     },
     {
-      "path": "core/types.ts",
-      "accessCount": 3,
-      "lastAccessed": 1783593752153,
+      "path": "core/install/patch-codex.ts",
+      "accessCount": 4,
+      "lastAccessed": 1783594980847,
       "type": "file"
     },
     {
-      "path": "test/frame-hook.test.ts",
-      "accessCount": 3,
-      "lastAccessed": 1783593975656,
+      "path": "package.json",
+      "accessCount": 4,
+      "lastAccessed": 1783595052745,
+      "type": "file"
+    },
+    {
+      "path": "core/ir/normalize.ts",
+      "accessCount": 4,
+      "lastAccessed": 1783595100430,
+      "type": "file"
+    },
+    {
+      "path": "core/rules/engine.ts",
+      "accessCount": 4,
+      "lastAccessed": 1783595111593,
       "type": "file"
     },
     {
       "path": "core/rules/builtin/token.yaml",
-      "accessCount": 2,
-      "lastAccessed": 1783592956972,
+      "accessCount": 4,
+      "lastAccessed": 1783595128370,
+      "type": "file"
+    },
+    {
+      "path": "test/ir.test.ts",
+      "accessCount": 4,
+      "lastAccessed": 1783595150570,
+      "type": "file"
+    },
+    {
+      "path": "core/rules/builtin/slop.yaml",
+      "accessCount": 4,
+      "lastAccessed": 1783595354504,
+      "type": "file"
+    },
+    {
+      "path": "core/frame/index.ts",
+      "accessCount": 3,
+      "lastAccessed": 1783594736287,
+      "type": "file"
+    },
+    {
+      "path": "test/adapters-regression.test.ts",
+      "accessCount": 3,
+      "lastAccessed": 1783594795416,
+      "type": "file"
+    },
+    {
+      "path": "src/skills/ultradesign/SKILL.md",
+      "accessCount": 3,
+      "lastAccessed": 1783594846283,
+      "type": "file"
+    },
+    {
+      "path": "test/session.test.ts",
+      "accessCount": 3,
+      "lastAccessed": 1783594907212,
+      "type": "file"
+    },
+    {
+      "path": "core/rules/builtin/hit-area.yaml",
+      "accessCount": 3,
+      "lastAccessed": 1783595127645,
+      "type": "file"
+    },
+    {
+      "path": "test/fixtures/ir.raw.json",
+      "accessCount": 3,
+      "lastAccessed": 1783595143051,
+      "type": "file"
+    },
+    {
+      "path": "core/frame/write.ts",
+      "accessCount": 3,
+      "lastAccessed": 1783595418879,
       "type": "file"
     },
     {
@@ -172,105 +310,27 @@
       "type": "file"
     },
     {
-      "path": "package.json",
+      "path": "test/fixtures/page.html",
       "accessCount": 2,
-      "lastAccessed": 1783593638936,
+      "lastAccessed": 1783594703347,
       "type": "file"
     },
     {
-      "path": "bin/omd.ts",
+      "path": "tsconfig.json",
       "accessCount": 2,
-      "lastAccessed": 1783593696715,
+      "lastAccessed": 1783594796883,
       "type": "file"
     },
     {
-      "path": "test/helpers.ts",
+      "path": "adapters/tokens.ts",
       "accessCount": 2,
-      "lastAccessed": 1783593751781,
-      "type": "file"
-    },
-    {
-      "path": "adapters/codex.ts",
-      "accessCount": 2,
-      "lastAccessed": 1783593764286,
-      "type": "file"
-    },
-    {
-      "path": "adapters/claude.ts",
-      "accessCount": 2,
-      "lastAccessed": 1783593765028,
-      "type": "file"
-    },
-    {
-      "path": "core/install/patch-claude.ts",
-      "accessCount": 2,
-      "lastAccessed": 1783593765430,
-      "type": "file"
-    },
-    {
-      "path": "core/install/patch-codex.ts",
-      "accessCount": 2,
-      "lastAccessed": 1783593765807,
-      "type": "file"
-    },
-    {
-      "path": "core/hook/dispatch.ts",
-      "accessCount": 2,
-      "lastAccessed": 1783593766125,
-      "type": "file"
-    },
-    {
-      "path": "core/frame/index.ts",
-      "accessCount": 2,
-      "lastAccessed": 1783593766503,
-      "type": "file"
-    },
-    {
-      "path": "test/adapters-regression.test.ts",
-      "accessCount": 2,
-      "lastAccessed": 1783593916060,
-      "type": "file"
-    },
-    {
-      "path": "test/install.test.ts",
-      "accessCount": 2,
-      "lastAccessed": 1783593992864,
-      "type": "file"
-    },
-    {
-      "path": "test/ir.test.ts",
-      "accessCount": 2,
-      "lastAccessed": 1783594008901,
-      "type": "file"
-    },
-    {
-      "path": "test/rules.test.ts",
-      "accessCount": 2,
-      "lastAccessed": 1783594043650,
-      "type": "file"
-    },
-    {
-      "path": "src/skills/ultradesign/SKILL.md",
-      "accessCount": 2,
-      "lastAccessed": 1783594173142,
-      "type": "file"
-    },
-    {
-      "path": "core/rules/builtin/hit-area.yaml",
-      "accessCount": 1,
-      "lastAccessed": 1783592861451,
+      "lastAccessed": 1783594797419,
       "type": "file"
     },
     {
       "path": "core/render/index.mjs",
       "accessCount": 1,
       "lastAccessed": 1783592872207,
-      "type": "file"
-    },
-    {
-      "path": "test/fixtures/page.html",
-      "accessCount": 1,
-      "lastAccessed": 1783592904070,
       "type": "file"
     },
     {
@@ -289,12 +349,6 @@
       "path": "src/agents/hand.agent.yaml",
       "accessCount": 1,
       "lastAccessed": 1783593157256,
-      "type": "file"
-    },
-    {
-      "path": "tsconfig.json",
-      "accessCount": 1,
-      "lastAccessed": 1783593203941,
       "type": "file"
     },
     {
@@ -322,39 +376,39 @@
       "type": "file"
     },
     {
-      "path": "core/ir/normalize.ts",
-      "accessCount": 1,
-      "lastAccessed": 1783593381080,
-      "type": "file"
-    },
-    {
-      "path": "core/rules/engine.ts",
-      "accessCount": 1,
-      "lastAccessed": 1783593397777,
-      "type": "file"
-    },
-    {
-      "path": "core/ir/dom.ts",
-      "accessCount": 1,
-      "lastAccessed": 1783593427378,
-      "type": "file"
-    },
-    {
-      "path": "core/frame/write.ts",
-      "accessCount": 1,
-      "lastAccessed": 1783593476380,
-      "type": "file"
-    },
-    {
       "path": "core/render/index.ts",
       "accessCount": 1,
       "lastAccessed": 1783593487271,
       "type": "file"
     },
     {
-      "path": "adapters/tokens.ts",
+      "path": "src/hooks/require-frame.hook.json",
       "accessCount": 1,
-      "lastAccessed": 1783593576373,
+      "lastAccessed": 1783594797543,
+      "type": "file"
+    },
+    {
+      "path": "adapters/tool-map.json",
+      "accessCount": 1,
+      "lastAccessed": 1783594803308,
+      "type": "file"
+    },
+    {
+      "path": "Plan.md",
+      "accessCount": 1,
+      "lastAccessed": 1783594871511,
+      "type": "file"
+    },
+    {
+      "path": "test/scope-regression.test.ts",
+      "accessCount": 1,
+      "lastAccessed": 1783594955934,
+      "type": "file"
+    },
+    {
+      "path": "core/install/detect.ts",
+      "accessCount": 1,
+      "lastAccessed": 1783594956717,
       "type": "file"
     }
   ],

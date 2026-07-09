@@ -3,6 +3,14 @@ import type { AbstractAgent, AbstractHook, Emitted } from '../core/types.ts';
 
 const substitute = substituter('codex');
 
+// Published server, not one we run: gives the model eyes (navigate/screenshot) without
+// us hosting anything. Our own deterministic measurement stays in the `omd` CLI.
+const MCP_SERVERS = {
+  mcpServers: {
+    'chrome-devtools': { command: 'npx', args: ['-y', 'chrome-devtools-mcp@latest'] },
+  },
+};
+
 const tomlBasic = (s: string): string =>
   `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n')}"`;
 
@@ -53,10 +61,13 @@ export function emitCodex({ hooks = [], agents = [] }: { hooks?: AbstractHook[];
   for (const hook of hooks) files[`hooks/${hook.codexFileName}`] = emitHookFile(hook);
   for (const agent of agents) files[`agents/${agent.name}.toml`] = emitAgentFile(agent);
 
+  files['.mcp.json'] = MCP_SERVERS;
+
   files['.codex-plugin/plugin.json'] = {
     name: 'oh-my-design',
     skills: './skills/',
     hooks: hooks.map((h) => `./hooks/${h.codexFileName}`),
+    mcpServers: './.mcp.json',
     interface: {
       displayName: 'Oh My Design',
       shortDescription: 'Design cognition loop — frame, diverge, see, reframe',

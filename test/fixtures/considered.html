@@ -1,0 +1,40 @@
+<meta charset="utf-8">
+<title>considered</title>
+<style>
+  :root {
+    --surface: #ffffff;
+    --ink: #1a1a1a;
+    --brand: #14532d;
+  }
+  body { margin: 0; background: var(--surface); color: var(--ink); font: 16px/1.6 system-ui; text-align: left; }
+  .hero { margin: 16px; padding: 32px; background: var(--brand); border-radius: 4px; }
+  .hero h1 { margin: 0; color: #ffffff; font-size: 32px; text-align: left; }
+  .hero p { margin: 16px 0 0; color: #ffffff; text-align: left; }
+  .cta { display: inline-flex; align-items: center; justify-content: center; height: 48px; min-width: 140px; padding: 0 24px; margin-top: 16px; background: #ffffff; color: #14532d; border-radius: 4px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); text-decoration: none; }
+  .cards { display: flex; align-items: flex-start; gap: 16px; padding: 16px; }
+  .card-primary { flex: 2; padding: 32px; background: #ffffff; border: 1px solid #d4d4d4; border-radius: 12px; }
+  .card-primary h2 { margin: 0 0 8px; font-size: 24px; text-align: left; }
+  .card-primary p { margin: 0; color: #3a3a3a; text-align: left; }
+  .card-secondary { flex: 1; padding: 16px; background: #ffffff; border: 1px solid #d4d4d4; border-radius: 8px; }
+  .card-secondary h2 { margin: 0 0 8px; font-size: 18px; text-align: left; }
+  .card-secondary p { margin: 0; color: #3a3a3a; text-align: left; }
+</style>
+<div class="hero">
+  <h1>Deploy previews for every pull request</h1>
+  <p>Each branch gets a live URL the moment CI finishes, so reviewers click a link instead of pulling code.</p>
+  <a class="cta" href="#">Read the docs</a>
+</div>
+<div class="cards">
+  <div class="card-primary">
+    <h2>Automatic preview URLs</h2>
+    <p>Every push rebuilds the preview in under 40 seconds and posts the link back to the PR.</p>
+  </div>
+  <div class="card-secondary">
+    <h2>Rollback in one click</h2>
+    <p>Pin any previous deploy as production without re-running the pipeline.</p>
+  </div>
+  <div class="card-secondary">
+    <h2>Usage-based pricing</h2>
+    <p>Pay for build minutes you actually consume, billed to the minute.</p>
+  </div>
+</div>

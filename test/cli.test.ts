@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Frame, Violation } from '../core/types.ts';
+import { startSession } from '../core/session/index.ts';
 import { must } from './helpers.ts';
 
 const CLI = fileURLToPath(new URL('../bin/omd.ts', import.meta.url));
@@ -15,12 +16,14 @@ const REAL_FRAME_BODY = '사람들은 배고파서가 아니라 결정하기 싫
 
 function project({ approved }: { approved: boolean }): string {
   const dir = mkdtempSync(join(tmpdir(), 'omd-cli-'));
-  mkdirSync(join(dir, '.design'), { recursive: true });
+  mkdirSync(join(dir, '.omd'), { recursive: true });
   writeFileSync(
-    join(dir, '.design', 'frame.md'),
+    join(dir, '.omd', 'frame.md'),
     `---\napproved: ${approved}\nwhy: "리뷰 표본 n=240, 최다 불만 31%"\n---\n\n${REAL_FRAME_BODY}\n`,
   );
   cpSync(FIXTURE, join(dir, 'ir.json'));
+  // The gate only guards a project with a session open.
+  startSession(dir, 'test brief');
   return dir;
 }
 
@@ -68,7 +71,7 @@ test('omd hook pre-tool exits 0 when the frame is approved', () => {
 
 test('omd hook pre-tool FAILS CLOSED — a corrupt frame blocks rather than passes', () => {
   const dir = project({ approved: true });
-  writeFileSync(join(dir, '.design', 'frame.md'), '---\n: : not: yaml: [\n---\n');
+  writeFileSync(join(dir, '.omd', 'frame.md'), '---\n: : not: yaml: [\n---\n');
   const r = run(['hook', 'pre-tool'], { cwd: dir, input: '{}' });
   assert.equal(r.status, 2);
 });
@@ -100,8 +103,8 @@ test('omd frame approve refuses a caller with no terminal', () => {
 
 test('omd frame approve refuses a frame with no evidence', () => {
   const dir = mkdtempSync(join(tmpdir(), 'omd-noevidence-'));
-  mkdirSync(join(dir, '.design'), { recursive: true });
-  writeFileSync(join(dir, '.design', 'frame.md'), `---\napproved: false\n---\n\n${REAL_FRAME_BODY}\n`);
+  mkdirSync(join(dir, '.omd'), { recursive: true });
+  writeFileSync(join(dir, '.omd', 'frame.md'), `---\napproved: false\n---\n\n${REAL_FRAME_BODY}\n`);
   const r = run(['frame', 'approve'], { cwd: dir, env: asHuman });
   assert.equal(r.status, 1);
   assert.match(r.stderr, /no evidence/);
@@ -109,8 +112,8 @@ test('omd frame approve refuses a frame with no evidence', () => {
 
 test('omd frame approve refuses to sign off on a stub', () => {
   const dir = mkdtempSync(join(tmpdir(), 'omd-stub-'));
-  mkdirSync(join(dir, '.design'), { recursive: true });
-  writeFileSync(join(dir, '.design', 'frame.md'), '---\napproved: false\nwhy: "리뷰 표본 n=240"\n---\n\n가설.\n');
+  mkdirSync(join(dir, '.omd'), { recursive: true });
+  writeFileSync(join(dir, '.omd', 'frame.md'), '---\napproved: false\nwhy: "리뷰 표본 n=240"\n---\n\n가설.\n');
   const r = run(['frame', 'approve'], { cwd: dir, env: asHuman });
   assert.equal(r.status, 1);
   assert.match(r.stderr, /stub/);

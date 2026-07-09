@@ -1,5 +1,6 @@
 id: SPACING-001
 layer: 1
+category: system
 severity: warn
 when: "Boolean(node.layout && node.layout.padding)"
 value: "node.layout.padding"

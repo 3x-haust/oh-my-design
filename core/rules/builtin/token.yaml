@@ -1,5 +1,6 @@
 id: TOKEN-003
 layer: 1
+category: system
 severity: warn
 when: "Boolean(node.fill) && !node.fill.inherited && node.fill.authored !== false"
 value: "node.fill.token"

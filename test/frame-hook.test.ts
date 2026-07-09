@@ -5,14 +5,22 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { readFrame, isApproved } from '../core/frame/index.ts';
 import { preTool } from '../core/hook/dispatch.ts';
+import { startSession } from '../core/session/index.ts';
 import { must } from './helpers.ts';
 
 function project(frameMd: string | null): string {
   const dir = mkdtempSync(join(tmpdir(), 'omd-'));
   if (frameMd !== null) {
-    mkdirSync(join(dir, '.design'), { recursive: true });
-    writeFileSync(join(dir, '.design', 'frame.md'), frameMd);
+    mkdirSync(join(dir, '.omd'), { recursive: true });
+    writeFileSync(join(dir, '.omd', 'frame.md'), frameMd);
   }
+  return dir;
+}
+
+// preTool only guards a project with a session open; readFrame/isApproved do not care.
+function gatedProject(frameMd: string | null): string {
+  const dir = project(frameMd);
+  startSession(dir, 'test brief');
   return dir;
 }
 
@@ -55,29 +63,34 @@ test('isApproved is false for missing, pending, and malformed frames', () => {
 // ── The gate. This is the single defence line after dropping MCP. ──
 
 test('preTool allows the write when the frame is approved', async () => {
-  const r = await preTool({ cwd: project(APPROVED) });
+  const r = await preTool({ cwd: gatedProject(APPROVED) });
   assert.equal(r.decision, 'allow');
 });
 
 test('preTool denies the write when the frame is not approved', async () => {
-  const r = await preTool({ cwd: project(PENDING) });
+  const r = await preTool({ cwd: gatedProject(PENDING) });
   assert.equal(r.decision, 'deny');
   assert.ok(r.reason.includes('omd frame approve'));
 });
 
 test('preTool denies when there is no frame at all', async () => {
-  const r = await preTool({ cwd: project(null) });
+  const r = await preTool({ cwd: gatedProject(null) });
   assert.equal(r.decision, 'deny');
+});
+
+test('preTool allows when there is no session open at all', async () => {
+  const r = await preTool({ cwd: project(null) });
+  assert.equal(r.decision, 'allow');
 });
 
 test('preTool FAILS CLOSED — an internal crash denies rather than allows', async () => {
   const boom = () => { throw new Error('disk on fire'); };
-  const r = await preTool({ cwd: project(APPROVED) }, { isApproved: boom });
+  const r = await preTool({ cwd: gatedProject(APPROVED) }, { isApproved: boom });
   assert.equal(r.decision, 'deny');
   assert.ok(/disk on fire/.test(r.reason));
 });
 
 test('preTool honours the --no-frame escape hatch via env', async () => {
-  const r = await preTool({ cwd: project(PENDING), env: { OMD_NO_FRAME: '1' } });
+  const r = await preTool({ cwd: gatedProject(PENDING), env: { OMD_NO_FRAME: '1' } });
   assert.equal(r.decision, 'allow');
 });

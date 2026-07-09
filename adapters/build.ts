@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parse } from 'yaml';
 import { emitCodex } from './codex.ts';
 import { emitClaude } from './claude.ts';
@@ -47,30 +47,35 @@ function write(host: Host, rel: string, content: unknown): void {
   writeFileSync(path, typeof content === 'string' ? content : `${JSON.stringify(content, null, 2)}\n`);
 }
 
-const hooks = readAll<AbstractHook>('src/hooks', '.hook.json', (t) => JSON.parse(t) as AbstractHook);
-const agents = readAll<AbstractAgent>('src/agents', '.agent.yaml', (t) => parse(t) as AbstractAgent);
-const skills = readSkills();
+export function build(): void {
+  const hooks = readAll<AbstractHook>('src/hooks', '.hook.json', (t) => JSON.parse(t) as AbstractHook);
+  const agents = readAll<AbstractAgent>('src/agents', '.agent.yaml', (t) => parse(t) as AbstractAgent);
+  const skills = readSkills();
 
-const emitters: Record<Host, (opts: { hooks: AbstractHook[]; agents: AbstractAgent[] }) => Emitted> = {
-  codex: emitCodex,
-  claude: emitClaude,
-};
+  const emitters: Record<Host, (opts: { hooks: AbstractHook[]; agents: AbstractAgent[] }) => Emitted> = {
+    codex: emitCodex,
+    claude: emitClaude,
+  };
 
-for (const host of Object.keys(emitters) as Host[]) {
-  const { files } = emitters[host]({ hooks, agents });
-  for (const [rel, content] of Object.entries(files)) write(host, rel, content);
+  for (const host of Object.keys(emitters) as Host[]) {
+    const { files } = emitters[host]({ hooks, agents });
+    for (const [rel, content] of Object.entries(files)) write(host, rel, content);
 
-  for (const skill of skills) {
-    write(host, `skills/${skill.name}/SKILL.md`, skill.source);
-    if (host === 'codex') {
-      write(host, `skills/${skill.name}/agents/openai.yaml`, [
-        'interface:',
-        `  display_name: ${JSON.stringify(titleCase(skill.name))}`,
-        `  short_description: ${JSON.stringify(firstSentence(skill.description))}`,
-        '',
-      ].join('\n'));
+    for (const skill of skills) {
+      write(host, `skills/${skill.name}/SKILL.md`, skill.source);
+      if (host === 'codex') {
+        write(host, `skills/${skill.name}/agents/openai.yaml`, [
+          'interface:',
+          `  display_name: ${JSON.stringify(titleCase(skill.name))}`,
+          `  short_description: ${JSON.stringify(firstSentence(skill.description))}`,
+          '',
+        ].join('\n'));
+      }
     }
-  }
 
-  console.log(`${host}: ${Object.keys(files).length} files, ${skills.length} skills`);
+    console.log(`${host}: ${Object.keys(files).length} files, ${skills.length} skills`);
+  }
 }
+
+// Run when invoked directly (`node adapters/build.ts`), not when imported by install.ts.
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) build();

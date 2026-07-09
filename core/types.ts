@@ -35,6 +35,17 @@ export interface RawNode {
   color?: Hex;
   interactive?: boolean;
   inline?: boolean;
+
+  // Read only so that slop can be detected. Convergence to the mean is invisible
+  // node-by-node; it only shows up in the distribution.
+  /** The element's own text, trimmed, capped. Empty for containers. */
+  text?: string;
+  /** Heading level, 1-6. Set only for h1..h6. */
+  heading?: number;
+  shadow?: Styled;
+  /** The raw `background-image` when it is a gradient. */
+  gradient?: string;
+  textAlign?: 'left' | 'center' | 'right' | 'justify';
 }
 
 /**
@@ -51,6 +62,12 @@ export interface Computed {
   tokenCoverage: number;
   hitArea: { w: number; h: number };
   isInteractive: boolean;
+  /**
+   * How many siblings share this node's shape: same tag, same child count, same radius
+   * and shadow. Three of them in a row is the feature-card grid every generated landing
+   * page reaches for when nobody decided what matters most.
+   */
+  identicalSiblings: number;
 }
 
 export type Node = RawNode & { computed: Computed };
@@ -60,6 +77,14 @@ export interface Stats {
   colorHistogram: Record<string, number>;
   orphanStyles: Hex[];
   componentReuse: Record<string, number>;
+
+  /** Distributions, because a monoculture is a property of the whole, not of any part. */
+  radiusHistogram: Record<string, number>;
+  shadowHistogram: Record<string, number>;
+  /** Fraction of text-bearing nodes that are centred. 0..1 */
+  centeredTextRatio: number;
+  /** Every gradient on the page, verbatim. */
+  gradients: string[];
 }
 
 export interface RawIr {
@@ -78,9 +103,18 @@ export type Severity = 'error' | 'warn';
 /** Layer 1 is universal and free. Layer 2 is the team's own frame. Layer 3 never lives here. */
 export type Layer = 1 | 2;
 
+/**
+ * `a11y` and `system` are defects: something is measurably wrong.
+ * `slop` is different. Nothing here is broken — the design has simply converged on the
+ * mean of everything the model has seen. Each rule is a heuristic and can be wrong about
+ * a deliberate choice, which is why every one of them is a warning and none is an error.
+ */
+export type Category = 'a11y' | 'system' | 'slop';
+
 export interface Rule {
   id: string;
   layer: Layer;
+  category: Category;
   severity: Severity;
   /** JS expression over `node`, `ir`. Truthy selects the node. */
   when: string;
@@ -98,6 +132,7 @@ export interface Violation {
   id: string;
   severity: Severity;
   layer: Layer;
+  category: Category;
   nodeId: string;
   path: string;
   value: RuleValue;
@@ -110,6 +145,19 @@ export interface Frame {
   why?: string;
   generator?: string;
   body: string;
+}
+
+/**
+ * The gate is installed globally but must not bite globally. A hook that blocks every
+ * write in every project is uninstalled within a day. A session, opened by the
+ * ultradesign skill and closed when it ends, is what scopes the gate to the work it
+ * belongs to.
+ */
+export interface Session {
+  startedAt: string;
+  brief: string;
+  /** Glob patterns whose writes the gate guards. Everything else passes untouched. */
+  scope: string[];
 }
 
 export type Decision = { decision: 'allow' } | { decision: 'deny'; reason: string };

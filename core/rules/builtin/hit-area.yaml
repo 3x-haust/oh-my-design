@@ -1,5 +1,6 @@
 id: HIT-002
 layer: 1
+category: a11y
 severity: error
 when: "node.computed.isInteractive && !node.inline"
 value: "node.computed.hitArea"

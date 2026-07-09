@@ -13,7 +13,7 @@
       "parent": null,
       "box": { "x": 0, "y": 0, "w": 390, "h": 844 },
       "fill": { "value": "#FFFFFF", "token": "bg/surface" },
-      "children": ["1:10", "1:20", "1:30"]
+      "children": ["1:10", "1:20", "1:30", "1:40", "1:41", "1:42", "1:45", "1:50", "1:51", "1:52", "1:60"]
     },
     {
       "id": "1:10",
@@ -49,6 +49,92 @@
       "color": "#8A8A8A",
       "fill": { "value": "#F0F0F0", "token": null },
       "interactive": true,
+      "children": []
+    },
+    {
+      "id": "1:40",
+      "name": "CardOffGrid",
+      "type": "FRAME",
+      "path": "Screen/Grid/CardOffGrid1",
+      "parent": "1:1",
+      "box": { "x": 16, "y": 300, "w": 100, "h": 100 },
+      "radius": { "value": 12, "token": null },
+      "children": []
+    },
+    {
+      "id": "1:41",
+      "name": "CardOffGrid",
+      "type": "FRAME",
+      "path": "Screen/Grid/CardOffGrid2",
+      "parent": "1:1",
+      "box": { "x": 132, "y": 300, "w": 100, "h": 100 },
+      "radius": { "value": 12, "token": null },
+      "children": []
+    },
+    {
+      "id": "1:42",
+      "name": "CardOffGrid",
+      "type": "FRAME",
+      "path": "Screen/Grid/CardOffGrid3",
+      "parent": "1:1",
+      "box": { "x": 248, "y": 300, "w": 100, "h": 100 },
+      "radius": { "value": 12, "token": null },
+      "children": []
+    },
+    {
+      "id": "1:45",
+      "name": "PayNow",
+      "type": "FRAME",
+      "path": "Screen/Aside/Shadowed",
+      "parent": "1:1",
+      "box": { "x": 16, "y": 420, "w": 100, "h": 40 },
+      "shadow": { "value": "0 2px 4px rgba(0,0,0,0.2)", "token": null },
+      "children": []
+    },
+    {
+      "id": "1:50",
+      "name": "PayNow",
+      "type": "TEXT",
+      "path": "Screen/Copy/Centered",
+      "parent": "1:1",
+      "box": { "x": 16, "y": 480, "w": 200, "h": 20 },
+      "color": "#000000",
+      "text": "Centered copy",
+      "textAlign": "center",
+      "children": []
+    },
+    {
+      "id": "1:51",
+      "name": "PayNow",
+      "type": "TEXT",
+      "path": "Screen/Copy/Left",
+      "parent": "1:1",
+      "box": { "x": 16, "y": 510, "w": 200, "h": 20 },
+      "color": "#000000",
+      "text": "Left copy",
+      "textAlign": "left",
+      "children": []
+    },
+    {
+      "id": "1:52",
+      "name": "PayNow",
+      "type": "TEXT",
+      "path": "Screen/Copy/Heading",
+      "parent": "1:1",
+      "box": { "x": 16, "y": 540, "w": 200, "h": 24 },
+      "color": "#000000",
+      "text": "Growth Report",
+      "heading": 2,
+      "children": []
+    },
+    {
+      "id": "1:60",
+      "name": "PayNow",
+      "type": "FRAME",
+      "path": "Screen/Hero/Gradient",
+      "parent": "1:1",
+      "box": { "x": 16, "y": 580, "w": 358, "h": 80 },
+      "gradient": "linear-gradient(90deg, #FF5A1F, #FFB199)",
       "children": []
     }
   ]

@@ -1,5 +1,6 @@
 - id: DUP-001
   layer: 1
+  category: system
   severity: warn
   when: "true"
   assert: "true"
@@ -7,6 +8,7 @@
 
 - id: DUP-001
   layer: 1
+  category: system
   severity: warn
   when: "true"
   assert: "true"

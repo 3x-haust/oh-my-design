@@ -1,5 +1,6 @@
 id: CONTRAST-001
 layer: 1
+category: a11y
 severity: error
 when: "node.type === 'TEXT'"
 value: "node.computed.contrastWithParent"

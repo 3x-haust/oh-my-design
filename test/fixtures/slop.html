@@ -1,0 +1,51 @@
+<meta charset="utf-8">
+<title>slop</title>
+<style>
+  :root {
+    --surface: #ffffff;
+    --ink: #1a1a1a;
+    --radius: 16px;
+    --shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+  body { margin: 0; background: var(--surface); color: var(--ink); font: 16px/1.5 system-ui; text-align: center; }
+  .hero { margin: 16px; padding: 32px; background-color: #4338ca; background-image: linear-gradient(135deg, #4f46e5, #a855f7); border-radius: var(--radius); }
+  .hero h1 { margin: 0; color: #ffffff; font-size: 32px; text-align: center; }
+  .hero p { margin: 16px 0 0; color: #ffffff; text-align: center; }
+  .cta { display: inline-flex; align-items: center; justify-content: center; height: 48px; min-width: 140px; padding: 0 24px; margin-top: 16px; background: #ffffff; color: #3730a3; border-radius: var(--radius); box-shadow: var(--shadow); text-decoration: none; }
+  .nav { display: flex; justify-content: center; gap: 16px; padding: 16px; }
+  .pill { display: inline-flex; align-items: center; justify-content: center; height: 44px; min-width: 44px; padding: 0 16px; background: #eef2ff; color: #3730a3; border-radius: var(--radius); text-decoration: none; }
+  .cards { display: flex; justify-content: center; gap: 16px; padding: 16px; }
+  .card { flex: 1; max-width: 220px; padding: 24px; background: #ffffff; border-radius: var(--radius); box-shadow: var(--shadow); text-align: center; }
+  .card h2 { margin: 0 0 8px; font-size: 20px; text-align: center; }
+  .card p { margin: 0; color: #3a3a3a; text-align: center; }
+  .trust { display: flex; justify-content: center; gap: 16px; padding: 16px; }
+  .badge { padding: 8px 16px; background: #ffffff; box-shadow: var(--shadow); text-align: center; color: #3a3a3a; }
+</style>
+<div class="hero">
+  <h1>🚀 Welcome to the Platform</h1>
+  <p>Unlock the power of your workflow with our all-in-one suite.</p>
+  <a class="cta" href="#">Get Started</a>
+</div>
+<nav class="nav">
+  <a class="pill" href="#">Features</a>
+  <a class="pill" href="#">Pricing</a>
+  <a class="pill" href="#">About</a>
+</nav>
+<div class="cards">
+  <div class="card">
+    <h2>Speed</h2>
+    <p>Blazing fast performance for every team.</p>
+  </div>
+  <div class="card">
+    <h2>Scale</h2>
+    <p>Grows with you from day one to day one thousand.</p>
+  </div>
+  <div class="card">
+    <h2>Security</h2>
+    <p>Enterprise grade protection built in.</p>
+  </div>
+</div>
+<div class="trust">
+  <div class="badge">Trusted by teams worldwide</div>
+  <div class="badge">99.9% uptime guaranteed</div>
+</div>

@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { parse } from 'yaml';
 import type { Frame } from '../types.ts';
 
-const framePath = (cwd: string): string => join(cwd, '.design', 'frame.md');
+const framePath = (cwd: string): string => join(cwd, '.omd', 'frame.md');
 
 const isEnoent = (err: unknown): boolean =>
   typeof err === 'object' && err !== null && (err as NodeJS.ErrnoException).code === 'ENOENT';

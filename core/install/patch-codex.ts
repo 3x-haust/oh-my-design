@@ -48,3 +48,35 @@ export function unpatchConfigToml(text: string): string {
   const block = new RegExp(`\\n${escapeRegExp(MARKER_BEGIN)}[\\s\\S]*?${escapeRegExp(MARKER_END)}\\n`);
   return text.replace(block, '').split('\n').filter((l) => !l.endsWith(TAG)).join('\n');
 }
+
+/**
+ * Codex trusts a hook file by the sha256 of its bytes rather than by a version, recording
+ * `[hooks.state."<key>"] trusted_hash = "sha256:..."` in config.toml. The key format below
+ * was read off a real install:
+ *   "omo@sisyphuslabs:hooks/session-start-loading-project-rules.json:session_start:0:0"
+ * i.e. `<plugin>@<marketplace>:<relative hook file>:<snake_case event>:<groupIndex>:<hookIndex>`.
+ * This has NOT been independently confirmed against a real Codex session for this project's
+ * plugin id — `doctor` must report hook trust as unverified, never as a pass.
+ */
+export function trustedHashKey(
+  pluginId: string,
+  hookFile: string,
+  event: string,
+  groupIndex = 0,
+  hookIndex = 0,
+): string {
+  const snakeEvent = event.replace(/([a-z0-9])([A-Z])/g, '$1_$2').toLowerCase();
+  return `${pluginId}:${hookFile}:${snakeEvent}:${groupIndex}:${hookIndex}`;
+}
+
+/** Writes (or replaces) trusted_hash entries. Caller supplies the sha256 of each hook file. */
+export function patchHookTrust(text: string, entries: { key: string; sha256: string }[]): string {
+  let out = text;
+  for (const { key, sha256 } of entries) {
+    const header = `[hooks.state."${key}"]`;
+    const block = `${header}\ntrusted_hash = "sha256:${sha256}"\n`;
+    const re = new RegExp(`\\[hooks\\.state\\."${escapeRegExp(key)}"\\][^\\[]*`);
+    out = re.test(out) ? out.replace(re, block) : `${out.endsWith('\n') ? out : `${out}\n`}\n${block}`;
+  }
+  return out;
+}

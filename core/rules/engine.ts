@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { parse } from 'yaml';
-import type { Ir, Layer, Node, Rule, RuleValue, Violation } from '../types.ts';
+import type { Category, Ir, Layer, Node, Rule, RuleValue, Violation } from '../types.ts';
 
 export function loadRules(dirPath: string): Rule[] {
   const rules: Rule[] = [];
@@ -12,6 +12,7 @@ export function loadRules(dirPath: string): Rule[] {
     for (const rule of (Array.isArray(parsed) ? parsed : [parsed]) as Rule[]) {
       if (seen.has(rule.id)) throw new Error(`duplicate rule id "${rule.id}" found in ${file}`);
       seen.add(rule.id);
+      if (!rule.category) throw new Error(`rule "${rule.id}" is missing category`);
       rules.push(rule);
     }
   }
@@ -53,11 +54,12 @@ function interpolate(template: string, ctx: Record<string, unknown>): string {
   return template.replace(/\{(\w+)\}/g, (_, key: string) => formatValue(ctx[key]));
 }
 
-export function check(ir: Ir, rules: Rule[], opts: { layers?: Layer[] } = {}): Violation[] {
+export function check(ir: Ir, rules: Rule[], opts: { layers?: Layer[]; categories?: Category[] } = {}): Violation[] {
   const violations: Violation[] = [];
 
   for (const rule of rules) {
     if (opts.layers && !opts.layers.includes(rule.layer)) continue;
+    if (opts.categories && !opts.categories.includes(rule.category)) continue;
 
     for (const node of ir.nodes) {
       if (!evalExpr(rule.id, rule.when, node, ir, null)) continue;
@@ -69,6 +71,7 @@ export function check(ir: Ir, rules: Rule[], opts: { layers?: Layer[] } = {}): V
         id: rule.id,
         severity: rule.severity,
         layer: rule.layer,
+        category: rule.category,
         nodeId: node.id,
         path: node.path,
         value,

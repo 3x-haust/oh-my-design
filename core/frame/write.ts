@@ -4,7 +4,7 @@ import { stringify } from 'yaml';
 import { readFrame } from './index.ts';
 import type { Choice } from '../types.ts';
 
-const designDir = (cwd: string): string => join(cwd, '.design');
+const designDir = (cwd: string): string => join(cwd, '.omd');
 
 export function writeFrame(cwd: string, frontmatter: Record<string, unknown>, body: string): void {
   mkdirSync(designDir(cwd), { recursive: true });
@@ -19,9 +19,9 @@ export function proposeFrame(cwd: string, opts: { problem: string; reframe: stri
     );
   }
   const body = [
-    '## 주어진 문제', '', opts.problem.trim(), '',
-    '## 재프레이밍', '', opts.reframe.trim(), '',
-    '## 근거', '', opts.why.trim(),
+    '## The given problem', '', opts.problem.trim(), '',
+    '## The reframing', '', opts.reframe.trim(), '',
+    '## Evidence', '', opts.why.trim(),
   ].join('\n');
 
   writeFrame(cwd, { approved: false, why: opts.why.trim() }, body);
@@ -39,10 +39,10 @@ export function logDecision(cwd: string, what: string, why: string): string {
   mkdirSync(designDir(cwd), { recursive: true });
   const path = join(designDir(cwd), 'decisions.md');
   if (!existsSync(path)) {
-    writeFileSync(path, '# 결정 기록\n\n왜 그렇게 했는지가 남는다. 무엇을 했는지는 코드에 있다.\n');
+    writeFileSync(path, '# Decisions\n\nWhat was built is in the code. Why it was built that way is only here.\n');
   }
-  const generator = readFrame(cwd)?.generator ?? '(미설정)';
-  appendFileSync(path, `\n## ${what}\n\n- 언제: ${new Date().toISOString()}\n- 관점: ${generator}\n- 왜: ${why}\n`);
+  const generator = readFrame(cwd)?.generator ?? '(none set)';
+  appendFileSync(path, `\n## ${what}\n\n- When: ${new Date().toISOString()}\n- Point of view: ${generator}\n- Why: ${why}\n`);
   return path;
 }
 

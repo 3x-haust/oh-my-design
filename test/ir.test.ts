@@ -68,3 +68,27 @@ test('stats.componentReuse counts node names', () => {
   assert.equal(ir.stats.componentReuse['CardGood'], 1);
   assert.equal(Object.keys(ir.stats.componentReuse).length, 4);
 });
+
+test('computed.identicalSiblings counts shape-matching siblings, including self', () => {
+  assert.equal(at('1:40').computed.identicalSiblings, 3);
+  assert.equal(at('1:41').computed.identicalSiblings, 3);
+  assert.equal(at('1:42').computed.identicalSiblings, 3);
+  assert.equal(at('1:10').computed.identicalSiblings, 1); // no other node shares its shape
+  assert.equal(at('1:1').computed.identicalSiblings, 0); // root has no parent
+});
+
+test('stats.radiusHistogram counts nodes by radius value', () => {
+  assert.deepEqual(ir.stats.radiusHistogram, { 8: 2, 12: 3 });
+});
+
+test('stats.shadowHistogram counts nodes by shadow value', () => {
+  assert.deepEqual(ir.stats.shadowHistogram, { '0 2px 4px rgba(0,0,0,0.2)': 1 });
+});
+
+test('stats.centeredTextRatio is the fraction of text-bearing nodes that are centred', () => {
+  assert.equal(ir.stats.centeredTextRatio, 0.3333);
+});
+
+test('stats.gradients lists distinct gradients in first-seen order', () => {
+  assert.deepEqual(ir.stats.gradients, ['linear-gradient(90deg, #FF5A1F, #FFB199)']);
+});

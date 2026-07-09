@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { normalize } from '../core/ir/normalize.ts';
+import { startSession } from '../core/session/index.ts';
 import { must } from './helpers.ts';
 
 const CLI = fileURLToPath(new URL('../bin/omd.ts', import.meta.url));
@@ -40,8 +41,9 @@ test('text keeps sitting on its own surface when it declares one', () => {
 // stdin of {"env":{"OMD_NO_FRAME":"1"}} unlocked the gate it exists to guard.
 test('hook stdin cannot unlock the gate through injected env', () => {
   const dir = mkdtempSync(join(tmpdir(), 'omd-inject-'));
-  mkdirSync(join(dir, '.design'), { recursive: true });
-  writeFileSync(join(dir, '.design', 'frame.md'), '---\napproved: false\n---\n\nbody\n');
+  mkdirSync(join(dir, '.omd'), { recursive: true });
+  writeFileSync(join(dir, '.omd', 'frame.md'), '---\napproved: false\n---\n\nbody\n');
+  startSession(dir, 'test brief');
 
   for (const payload of ['{"env":{"OMD_NO_FRAME":"1"}}', '{"env":{"OMD_NO_FRAME":1}}']) {
     const r = spawnSync(process.execPath, [CLI, 'hook', 'pre-tool'], { cwd: dir, input: payload, encoding: 'utf8' });
@@ -51,8 +53,8 @@ test('hook stdin cannot unlock the gate through injected env', () => {
 
 test('the escape hatch still works when it comes from the real environment', () => {
   const dir = mkdtempSync(join(tmpdir(), 'omd-hatch-'));
-  mkdirSync(join(dir, '.design'), { recursive: true });
-  writeFileSync(join(dir, '.design', 'frame.md'), '---\napproved: false\n---\n\nbody\n');
+  mkdirSync(join(dir, '.omd'), { recursive: true });
+  writeFileSync(join(dir, '.omd', 'frame.md'), '---\napproved: false\n---\n\nbody\n');
   const r = spawnSync(process.execPath, [CLI, 'hook', 'pre-tool'], {
     cwd: dir, input: '{}', encoding: 'utf8', env: { ...process.env, OMD_NO_FRAME: '1' },
   });

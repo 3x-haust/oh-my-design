@@ -78,19 +78,55 @@ function tokenCoverage(node: RawNode): number {
   return present.filter((p) => node[p]!.token != null).length / present.length;
 }
 
+// Same tag(-ish) name, same child count, same radius, same shadow — the feature-card grid
+// every generated landing page reaches for when nobody decided what matters most.
+function shapeSignature(node: RawNode): string {
+  const name = node.name.split('.')[0];
+  return `${name}|${node.children.length}|${node.radius?.value ?? 'none'}|${node.shadow?.value ?? 'none'}`;
+}
+
+function identicalSiblings(node: RawNode, childrenOf: Map<string, string[]>, byId: Index): number {
+  if (!node.parent) return 0;
+  const sibIds = childrenOf.get(node.parent) ?? [];
+  const mySig = shapeSignature(node);
+  let count = 0;
+  for (const id of sibIds) {
+    const sibling = byId.get(id);
+    if (sibling && shapeSignature(sibling) === mySig) count += 1;
+  }
+  return count;
+}
+
 function computeStats(nodes: RawNode[]): Stats {
   const spacingHistogram: Record<string, number> = {};
   const colorHistogram: Record<string, number> = {};
   const componentReuse: Record<string, number> = {};
+  const radiusHistogram: Record<string, number> = {};
+  const shadowHistogram: Record<string, number> = {};
   const bump = (bag: Record<string, number>, key: string | number): void => {
     bag[key] = (bag[key] ?? 0) + 1;
   };
+
+  const gradients: string[] = [];
+  const seenGradients = new Set<string>();
+  let textNodes = 0;
+  let centeredTextNodes = 0;
 
   for (const node of nodes) {
     if (node.layout?.padding) for (const v of node.layout.padding) bump(spacingHistogram, v);
     if (node.layout?.gap != null) bump(spacingHistogram, node.layout.gap);
     if (node.fill) bump(colorHistogram, String(node.fill.value));
     bump(componentReuse, node.name);
+    if (node.radius) bump(radiusHistogram, node.radius.value);
+    if (node.shadow) bump(shadowHistogram, node.shadow.value);
+    if (node.gradient && !seenGradients.has(node.gradient)) {
+      seenGradients.add(node.gradient);
+      gradients.push(node.gradient);
+    }
+    if (node.text) {
+      textNodes += 1;
+      if (node.textAlign === 'center') centeredTextNodes += 1;
+    }
   }
 
   const orphanStyles = Object.entries(colorHistogram)
@@ -98,7 +134,18 @@ function computeStats(nodes: RawNode[]): Stats {
     .map(([value]) => value)
     .sort();
 
-  return { spacingHistogram, colorHistogram, orphanStyles, componentReuse };
+  const centeredTextRatio = textNodes === 0 ? 0 : Math.round((centeredTextNodes / textNodes) * 10000) / 10000;
+
+  return {
+    spacingHistogram,
+    colorHistogram,
+    orphanStyles,
+    componentReuse,
+    radiusHistogram,
+    shadowHistogram,
+    centeredTextRatio,
+    gradients,
+  };
 }
 
 export function normalize(rawIr: RawIr): Ir {
@@ -121,6 +168,7 @@ export function normalize(rawIr: RawIr): Ir {
       tokenCoverage: tokenCoverage(node),
       hitArea: { w: node.box.w, h: node.box.h },
       isInteractive: Boolean(node.interactive),
+      identicalSiblings: identicalSiblings(node, childrenOf, byId),
     };
     return { ...node, computed };
   });

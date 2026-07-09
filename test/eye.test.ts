@@ -51,3 +51,49 @@ test('contrast is measured against the painted backdrop, inherited if transparen
   const good = must(ir.nodes.find((n) => n.path.endsWith('div.card-good')), 'good');
   assert.ok(must(good.fill, 'fill').value === '#FFFFFF');
 });
+
+// slop is orthogonal to defects: a page can be fully accessible and still be generic.
+const SLOP_PAGE = fileURLToPath(new URL('./fixtures/slop.html', import.meta.url));
+const CONSIDERED_PAGE = fileURLToPath(new URL('./fixtures/considered.html', import.meta.url));
+
+const slopIr = normalize(await extractIr(SLOP_PAGE, { viewport: parseViewport('390x844') }));
+const slopViolations = check(slopIr, rules);
+
+const consideredIr = normalize(await extractIr(CONSIDERED_PAGE, { viewport: parseViewport('390x844') }));
+const consideredViolations = check(consideredIr, rules);
+
+test('slop.html is clean on a11y — slop is orthogonal to defects', () => {
+  const a11y = check(slopIr, rules, { categories: ['a11y'] });
+  assert.deepEqual(a11y, []);
+});
+
+test('slop.html fires every slop heuristic', () => {
+  const ids = new Set(slopViolations.filter((v) => v.category === 'slop').map((v) => v.id));
+  assert.deepEqual(
+    [...ids].sort(),
+    [
+      'SLOP-COPY',
+      'SLOP-EMOJI-HEADING',
+      'SLOP-EVERYTHING-CENTERED',
+      'SLOP-GRADIENT',
+      'SLOP-RADIUS-MONOCULTURE',
+      'SLOP-SHADOW-MONOCULTURE',
+      'SLOP-TRIPLE-CARD',
+    ],
+  );
+});
+
+test('considered.html — a deliberate design with a point of view — produces zero slop violations', () => {
+  const slop = consideredViolations.filter((v) => v.category === 'slop');
+  assert.deepEqual(
+    slop,
+    [],
+    `slop false-positived: ${slop.map((v) => `${v.id} (${v.path}): ${v.message}`).join('; ')}`,
+  );
+});
+
+test('check(..., { categories: ["slop"] }) returns only slop violations', () => {
+  const v = check(slopIr, rules, { categories: ['slop'] });
+  assert.ok(v.length > 0);
+  for (const violation of v) assert.equal(violation.category, 'slop');
+});

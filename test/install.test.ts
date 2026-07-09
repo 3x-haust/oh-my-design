@@ -1,9 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { parse as parseToml } from 'smol-toml';
-import { patchConfigToml, unpatchConfigToml } from '../core/install/patch-codex.ts';
-import { patchSettings, unpatchSettings } from '../core/install/patch-claude.ts';
+import { patchConfigToml, unpatchConfigToml, trustedHashKey } from '../core/install/patch-codex.ts';
+import { patchSettings, unpatchSettings, patchHooks, unpatchHooks } from '../core/install/patch-claude.ts';
 import type { Settings } from '../core/install/patch-claude.ts';
+import { detectHosts } from '../core/install/detect.ts';
 import { must, asRecord } from './helpers.ts';
 
 const AGENTS = ['omd-framer', 'omd-eye'];
@@ -123,4 +127,105 @@ test('patchSettings works on an empty settings file', () => {
   const s = patchSettings({}, OPTS);
   assert.equal(must(s.enabledPlugins, 'enabledPlugins')['oh-my-design@omd'], true);
   assert.deepEqual(unpatchSettings(s), {});
+});
+
+// ── Claude Code: hooks ──
+
+const HOOK_COMMAND = '"/usr/bin/node" "/opt/omd/bin/omd.ts" hook pre-tool';
+
+test('patchHooks adds a PreToolUse entry pointed at omd.ts', () => {
+  const s = patchHooks({}, { command: HOOK_COMMAND });
+  const pre = must(must(s.hooks, 'hooks').PreToolUse, 'PreToolUse');
+  assert.equal(pre.length, 1);
+  assert.equal(pre[0]?.matcher, 'Write|Edit');
+  assert.equal(pre[0]?.hooks[0]?.command, HOOK_COMMAND);
+});
+
+test('patchHooks is idempotent — patching twice yields one entry, not two', () => {
+  const once = patchHooks({}, { command: HOOK_COMMAND });
+  const twice = patchHooks(once, { command: HOOK_COMMAND });
+  assert.deepEqual(twice, once);
+  assert.equal(must(twice.hooks, 'hooks').PreToolUse?.length, 1);
+});
+
+test('patchHooks preserves foreign PreToolUse hooks and other events untouched', () => {
+  const foreign: Settings = {
+    hooks: {
+      PreToolUse: [{ matcher: '*', hooks: [{ type: 'command', command: 'some-other-plugin.sh', timeout: 3 }] }],
+      Stop: [{ matcher: '*', hooks: [{ type: 'command', command: 'stop-hook.sh', timeout: 3 }] }],
+    },
+  };
+  const s = patchHooks(foreign, { command: HOOK_COMMAND });
+  const pre = must(s.hooks, 'hooks').PreToolUse ?? [];
+  assert.equal(pre.length, 2);
+  assert.ok(pre.some((e) => e.hooks[0]?.command === 'some-other-plugin.sh'));
+  assert.ok(pre.some((e) => e.hooks[0]?.command === HOOK_COMMAND));
+  assert.deepEqual(must(s.hooks, 'hooks').Stop, foreign.hooks?.Stop);
+});
+
+test('unpatchHooks removes only our entry and restores an untouched settings object', () => {
+  const before: Settings = { model: 'opus' };
+  const restored = unpatchHooks(patchHooks(before, { command: HOOK_COMMAND }));
+  assert.deepEqual(restored, before);
+});
+
+test('unpatchHooks preserves foreign hooks when removing ours', () => {
+  const foreign: Settings = {
+    hooks: { PreToolUse: [{ matcher: '*', hooks: [{ type: 'command', command: 'some-other-plugin.sh', timeout: 3 }] }] },
+  };
+  const restored = unpatchHooks(patchHooks(foreign, { command: HOOK_COMMAND }));
+  assert.deepEqual(restored, foreign);
+});
+
+// ── detectHosts ──
+
+test('detectHosts finds only hosts whose config directory exists', () => {
+  const fakeHome = mkdtempSync(join(tmpdir(), 'omd-detect-'));
+  try {
+    mkdirSync(join(fakeHome, '.claude'), { recursive: true });
+    const detected = detectHosts({}, { homedir: fakeHome });
+    assert.deepEqual(detected, [{ host: 'claude', home: join(fakeHome, '.claude') }]);
+  } finally {
+    rmSync(fakeHome, { recursive: true, force: true });
+  }
+});
+
+test('detectHosts finds both hosts when both config directories exist', () => {
+  const fakeHome = mkdtempSync(join(tmpdir(), 'omd-detect-'));
+  try {
+    mkdirSync(join(fakeHome, '.claude'), { recursive: true });
+    mkdirSync(join(fakeHome, '.codex'), { recursive: true });
+    const detected = detectHosts({}, { homedir: fakeHome });
+    assert.deepEqual(new Set(detected.map((d) => d.host)), new Set(['claude', 'codex']));
+  } finally {
+    rmSync(fakeHome, { recursive: true, force: true });
+  }
+});
+
+test('detectHosts finds nothing when neither config directory exists', () => {
+  const fakeHome = mkdtempSync(join(tmpdir(), 'omd-detect-'));
+  try {
+    assert.deepEqual(detectHosts({}, { homedir: fakeHome }), []);
+  } finally {
+    rmSync(fakeHome, { recursive: true, force: true });
+  }
+});
+
+test('detectHosts honours CLAUDE_CONFIG_DIR and CODEX_HOME overrides', () => {
+  const fakeHome = mkdtempSync(join(tmpdir(), 'omd-detect-'));
+  const claudeDir = mkdtempSync(join(tmpdir(), 'omd-claude-'));
+  try {
+    const detected = detectHosts({ CLAUDE_CONFIG_DIR: claudeDir }, { homedir: fakeHome });
+    assert.deepEqual(detected, [{ host: 'claude', home: claudeDir }]);
+  } finally {
+    rmSync(fakeHome, { recursive: true, force: true });
+    rmSync(claudeDir, { recursive: true, force: true });
+  }
+});
+
+// ── Codex: hook trust key format ──
+
+test('trustedHashKey follows <plugin>@<marketplace>:<file>:<snake_event>:<i>:<j>', () => {
+  const key = trustedHashKey('omd@omd', 'hooks/pre-tool-use-requiring-frame.json', 'PreToolUse', 0, 0);
+  assert.equal(key, 'omd@omd:hooks/pre-tool-use-requiring-frame.json:pre_tool_use:0:0');
 });

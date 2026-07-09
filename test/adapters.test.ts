@@ -2,13 +2,14 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { emitCodex } from '../adapters/codex.ts';
 import { emitClaude } from '../adapters/claude.ts';
-import { hookFile, jsonFile, textFile, firstCommand, matcherOf } from './helpers.ts';
+import { hookFile, jsonFile, textFile, firstCommand, matcherOf, must } from './helpers.ts';
 
 interface CodexManifest {
   name: string;
   skills: string;
   hooks: string[];
   agents?: unknown;
+  mcpServers?: string;
 }
 
 const HOOK = {
@@ -100,4 +101,30 @@ test('codex manifest carries no agents key — agents are installed via config.t
   const manifest = jsonFile<CodexManifest>(emitCodex({ agents: [AGENT], hooks: [HOOK] }), '.codex-plugin/plugin.json');
   assert.equal(manifest.agents, undefined);
   assert.equal(manifest.skills, './skills/');
+});
+
+// ── chrome-devtools MCP: consumed, not run by us ──
+
+interface McpFile {
+  mcpServers: Record<string, { command: string; args: string[] }>;
+}
+
+interface ClaudeManifest {
+  mcpServers?: string;
+}
+
+test('both hosts emit .mcp.json registering the published chrome-devtools-mcp server', () => {
+  for (const emitted of [emitCodex({}), emitClaude({})]) {
+    const mcp = jsonFile<McpFile>(emitted, '.mcp.json');
+    const server = must(mcp.mcpServers['chrome-devtools'], 'chrome-devtools');
+    assert.equal(server.command, 'npx');
+    assert.deepEqual(server.args, ['-y', 'chrome-devtools-mcp@latest']);
+  }
+});
+
+test('both plugin manifests point mcpServers at ./.mcp.json', () => {
+  const cx = jsonFile<CodexManifest>(emitCodex({}), '.codex-plugin/plugin.json');
+  const cl = jsonFile<ClaudeManifest>(emitClaude({}), '.claude-plugin/plugin.json');
+  assert.equal(cx.mcpServers, './.mcp.json');
+  assert.equal(cl.mcpServers, './.mcp.json');
 });

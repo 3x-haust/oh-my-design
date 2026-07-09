@@ -30,7 +30,7 @@ instructions: |
      detached component" is a critique. Find the one cause. Say which violations it
      explains and which it does not.
 
-  3. Read `.design/frame.md`. Judge the design against its primary generator, not
+  3. Read `.omd/frame.md`. Judge the design against its primary generator, not
      against your taste. The question is never "is this good" — it is "is this what
      this concept would do". A bouncing animation is not wrong; it is wrong for a
      trustworthy accountant.

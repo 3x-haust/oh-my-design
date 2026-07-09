@@ -1,0 +1,6 @@
+id: NO-CATEGORY-001
+layer: 1
+severity: warn
+when: "true"
+assert: "true"
+message: "missing category"

@@ -69,6 +69,23 @@ export function extractInPage(maxNodes: number): RawIr {
   const hasOwnText = (el: Element): boolean =>
     Array.from(el.childNodes).some((n) => n.nodeType === 3 && (n.textContent ?? '').trim().length > 0);
 
+  // Own text only — a container's descendants speak for themselves as their own nodes.
+  const ownText = (el: Element): string | undefined => {
+    const joined = Array.from(el.childNodes)
+      .filter((n) => n.nodeType === 3)
+      .map((n) => n.textContent ?? '')
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return joined ? joined.slice(0, 200) : undefined;
+  };
+
+  const HEADING_RE = /^H([1-6])$/;
+  const headingOf = (el: Element): number | undefined => {
+    const m = HEADING_RE.exec(el.tagName);
+    return m && m[1] ? Number(m[1]) : undefined;
+  };
+
   const px = (v: string): number => Math.round(parseFloat(v) || 0);
 
   const pathOf = (el: Element): string => {
@@ -111,6 +128,20 @@ export function extractInPage(maxNodes: number): RawIr {
     if (radius > 0) node.radius = { value: radius, token: nameOf(String(radius)) };
     if (isInteractive(el)) node.interactive = true;
     if (cs.display === 'inline') node.inline = true;
+
+    const text = ownText(el);
+    if (text) node.text = text;
+    const heading = headingOf(el);
+    if (heading) node.heading = heading;
+    if (cs.boxShadow && cs.boxShadow !== 'none') node.shadow = { value: cs.boxShadow, token: nameOf(cs.boxShadow) };
+    if (cs.backgroundImage && cs.backgroundImage.includes('gradient')) {
+      // The browser reports stops as rgb(); normalise to hex so a rule can read the colour
+      // instead of parsing two notations, and so the IR stays byte-stable across engines.
+      node.gradient = cs.backgroundImage.replace(/rgba?\([^)]+\)/g, (m) => toHex(m) ?? m);
+    }
+    if (cs.textAlign === 'left' || cs.textAlign === 'center' || cs.textAlign === 'right' || cs.textAlign === 'justify') {
+      node.textAlign = cs.textAlign;
+    }
 
     const isFlex = cs.display.includes('flex') || cs.display.includes('grid');
     if (isFlex || declares(authored, 'padding')) {
