@@ -113,8 +113,8 @@
   "hotPaths": [
     {
       "path": "Plan.md",
-      "accessCount": 15,
-      "lastAccessed": 1783606574791,
+      "accessCount": 17,
+      "lastAccessed": 1783607092098,
       "type": "file"
     },
     {
@@ -202,6 +202,12 @@
       "type": "file"
     },
     {
+      "path": "src/skills/ultradesign/SKILL.md",
+      "accessCount": 6,
+      "lastAccessed": 1783607166775,
+      "type": "file"
+    },
+    {
       "path": "core/ir/dom.mjs",
       "accessCount": 5,
       "lastAccessed": 1783593260400,
@@ -277,12 +283,6 @@
       "path": "core/frame/index.ts",
       "accessCount": 4,
       "lastAccessed": 1783605549056,
-      "type": "file"
-    },
-    {
-      "path": "src/skills/ultradesign/SKILL.md",
-      "accessCount": 4,
-      "lastAccessed": 1783605883748,
       "type": "file"
     },
     {
