@@ -328,6 +328,12 @@
       "type": "file"
     },
     {
+      "path": "Plan.md",
+      "accessCount": 2,
+      "lastAccessed": 1783595677795,
+      "type": "file"
+    },
+    {
       "path": "core/render/index.mjs",
       "accessCount": 1,
       "lastAccessed": 1783592872207,
@@ -391,12 +397,6 @@
       "path": "adapters/tool-map.json",
       "accessCount": 1,
       "lastAccessed": 1783594803308,
-      "type": "file"
-    },
-    {
-      "path": "Plan.md",
-      "accessCount": 1,
-      "lastAccessed": 1783594871511,
       "type": "file"
     },
     {
