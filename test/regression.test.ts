@@ -5,9 +5,10 @@ import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { normalize } from '../core/ir/normalize.mjs';
+import { normalize } from '../core/ir/normalize.ts';
+import { must } from './helpers.ts';
 
-const CLI = fileURLToPath(new URL('../bin/omd.mjs', import.meta.url));
+const CLI = fileURLToPath(new URL('../bin/omd.ts', import.meta.url));
 
 // Found in review: measuring a container against its OWN fill always yields 1.0,
 // which reports a dark card on a dark page as "fine". Containers must be
@@ -19,8 +20,8 @@ test('a dark card on a dark page is not invisible to the linter', () => {
       { id: 'c', name: 'Card', type: 'FRAME', path: 'Page/Card', parent: 'p', box: { x: 0, y: 0, w: 50, h: 50 }, fill: { value: '#121212', token: null }, children: [] },
     ],
   });
-  const card = ir.nodes.find((n) => n.id === 'c');
-  assert.ok(card.computed.contrastWithParent < 1.05);
+  const card = must(ir.nodes.find((n) => n.id === 'c'), 'card');
+  assert.ok(must(card.computed.contrastWithParent, 'contrastWithParent') < 1.05);
   assert.notEqual(card.computed.contrastWithParent, 1, 'must compare against the parent, not itself');
 });
 
@@ -31,11 +32,11 @@ test('text keeps sitting on its own surface when it declares one', () => {
       { id: 't', name: 'Label', type: 'TEXT', path: 'Page/Label', parent: 'p', box: { x: 0, y: 0, w: 50, h: 20 }, color: '#8A8A8A', fill: { value: '#F0F0F0', token: null }, children: [] },
     ],
   });
-  const label = ir.nodes.find((n) => n.id === 't');
-  assert.ok(Math.abs(label.computed.contrastWithParent - 3.03) < 0.02);
+  const label = must(ir.nodes.find((n) => n.id === 't'), 'label');
+  assert.ok(Math.abs(must(label.computed.contrastWithParent, 'contrastWithParent') - 3.03) < 0.02);
 });
 
-// Found in review: bin/omd.mjs spread the hook payload into preTool(), so a
+// Found in review: bin/omd.ts spread the hook payload into preTool(), so a
 // stdin of {"env":{"OMD_NO_FRAME":"1"}} unlocked the gate it exists to guard.
 test('hook stdin cannot unlock the gate through injected env', () => {
   const dir = mkdtempSync(join(tmpdir(), 'omd-inject-'));
@@ -62,7 +63,7 @@ test('the escape hatch still works when it comes from the real environment', () 
 // locale. Both hosts must emit byte-identical output — that is what Phase 1 proves.
 test('violation order does not depend on the ICU locale', () => {
   const fixture = fileURLToPath(new URL('./fixtures/ir.raw.json', import.meta.url));
-  const runIn = (locale) => spawnSync(process.execPath, [CLI, 'check', '--ir', fixture, '--json'], {
+  const runIn = (locale: string) => spawnSync(process.execPath, [CLI, 'check', '--ir', fixture, '--json'], {
     encoding: 'utf8', env: { ...process.env, LANG: locale, LC_ALL: locale },
   }).stdout;
   assert.equal(runIn('en_US.UTF-8'), runIn('tr_TR.UTF-8'));

@@ -1,0 +1,25 @@
+<meta charset="utf-8">
+<title>fixture</title>
+<style>
+  :root {
+    --surface: #ffffff;
+    --ink: #111111;
+    --brand: #ff5a1f;
+  }
+  body { margin: 0; background: var(--surface); font: 16px system-ui; }
+  .list { display: flex; flex-direction: column; gap: 8px; padding: 16px; }
+
+  /* tokenised, on-grid, accessible — must produce no violations */
+  .card-good { background: var(--surface); padding: 16px; border-radius: 8px; color: var(--ink); }
+
+  /* hardcoded fill, padding-bottom off the 8pt grid */
+  .card-bad { background: #fefefe; padding: 16px 16px 14px 16px; border-radius: 8px; color: #111111; }
+
+  /* grey on grey, and only 38px tall */
+  .pay { display: block; width: 100%; height: 38px; background: #f0f0f0; color: #8a8a8a; border: 0; }
+</style>
+<div class="list">
+  <div class="card-good">Tokenised card</div>
+  <div class="card-bad">Hardcoded card</div>
+  <button class="pay">Pay Now</button>
+</div>

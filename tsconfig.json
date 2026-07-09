@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "target": "es2023",
+    "lib": ["es2023", "dom"],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": false,
+    "verbatimModuleSyntax": true,
+    "erasableSyntaxOnly": true,
+    "isolatedModules": true,
+    "noEmit": true,
+
+    "skipLibCheck": true,
+    "types": ["node"]
+  },
+  "include": ["bin", "core", "adapters", "test"]
+}

@@ -1,17 +1,18 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { normalize } from '../core/ir/normalize.mjs';
-import { loadRules, check } from '../core/rules/engine.mjs';
+import { normalize } from '../core/ir/normalize.ts';
+import { loadRules, check } from '../core/rules/engine.ts';
+import type { RawIr, Rule } from '../core/types.ts';
+import { must, asRecord, readJson } from './helpers.ts';
 
-const ir = normalize(JSON.parse(readFileSync(new URL('./fixtures/ir.raw.json', import.meta.url))));
+const ir = normalize(readJson<RawIr>(new URL('./fixtures/ir.raw.json', import.meta.url)));
 const builtin = loadRules(new URL('../core/rules/builtin/', import.meta.url).pathname);
 
 test('loadRules reads every builtin rule and validates required fields', () => {
   assert.ok(builtin.length >= 4);
   for (const r of builtin) {
     for (const k of ['id', 'layer', 'severity', 'when', 'assert', 'message']) {
-      assert.ok(r[k] !== undefined, `${r.id ?? '?'} missing ${k}`);
+      assert.ok(asRecord(r)[k] !== undefined, `${r.id ?? '?'} missing ${k}`);
     }
     assert.ok(['error', 'warn'].includes(r.severity));
     assert.ok([1, 2].includes(r.layer));
@@ -30,7 +31,7 @@ test('check finds exactly the seeded violations', () => {
 
 test('violations carry nodeId, path, value and an interpolated message', () => {
   const v = check(ir, builtin);
-  const spacing = v.find((x) => x.id === 'SPACING-001');
+  const spacing = must(v.find((x) => x.id === 'SPACING-001'), 'spacing violation');
   assert.equal(spacing.nodeId, '1:20');
   assert.equal(spacing.path, 'Screen/List/CardOffGrid');
   assert.deepEqual(spacing.value, [16, 16, 14, 16]);
@@ -51,12 +52,12 @@ test('layer filter selects rules by layer', () => {
 });
 
 test('a rule whose when-expression throws is reported, not silently skipped', () => {
-  const bad = [{ id: 'BAD-001', layer: 1, severity: 'error', when: 'node.nope.deep', assert: 'true', message: 'x' }];
+  const bad: Rule[] = [{ id: 'BAD-001', layer: 1, severity: 'error', when: 'node.nope.deep', assert: 'true', message: 'x' }];
   assert.throws(() => check(ir, bad), /BAD-001/);
 });
 
 test('team rules can reference frame concepts (Layer 2)', () => {
-  const teamRule = [{
+  const teamRule: Rule[] = [{
     id: 'BRAND-014',
     layer: 2,
     severity: 'error',
@@ -67,6 +68,7 @@ test('team rules can reference frame concepts (Layer 2)', () => {
   }];
   const v = check(ir, teamRule, { layers: [2] });
   assert.equal(v.length, 1);
-  assert.equal(v[0].nodeId, '1:30');
-  assert.ok(v[0].message.includes('null'));
+  const violation = must(v[0], 'violation');
+  assert.equal(violation.nodeId, '1:30');
+  assert.ok(violation.message.includes('null'));
 });

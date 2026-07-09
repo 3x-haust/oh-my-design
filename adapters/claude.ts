@@ -1,24 +1,11 @@
-import toolMap from './tool-map.json' with { type: 'json' };
+import { substituter } from './tokens.ts';
+import type { AbstractAgent, AbstractHook, Emitted } from '../core/types.ts';
 
-const TOKENS = {
-  '@fileWrite': toolMap.fileWrite.claude,
-  '@pluginRoot': toolMap.pluginRoot.claude,
-  '@high': toolMap.model.high.claude,
-  '@medium': toolMap.model.medium.claude,
-};
+const substitute = substituter('claude');
 
-function substitute(value) {
-  if (typeof value !== 'string') return value;
-  let out = value;
-  for (const [token, replacement] of Object.entries(TOKENS)) out = out.split(token).join(replacement);
-  return out;
-}
+const yamlScalar = (s: string): string => JSON.stringify(s.replace(/\s*\n\s*/g, ' ').trim());
 
-function yamlScalar(s) {
-  return JSON.stringify(String(s).replace(/\s*\n\s*/g, ' ').trim());
-}
-
-function emitAgentFile(agent) {
+function emitAgentFile(agent: AbstractAgent): string {
   const frontmatter = [
     '---',
     `name: ${agent.name}`,
@@ -27,13 +14,13 @@ function emitAgentFile(agent) {
   ];
   if (agent.deny?.length) frontmatter.push(`disallowedTools: ${agent.deny.join(', ')}`);
   frontmatter.push('---', '');
-  return `${frontmatter.join('\n')}\n${agent.instructions ?? ''}`;
+  return `${frontmatter.join('\n')}\n${agent.instructions}`;
 }
 
-export function emitClaude({ hooks = [], agents = [] } = {}) {
-  const files = {};
+export function emitClaude({ hooks = [], agents = [] }: { hooks?: AbstractHook[]; agents?: AbstractAgent[] } = {}): Emitted {
+  const files: Record<string, unknown> = {};
 
-  const merged = {};
+  const merged: Record<string, unknown[]> = {};
   for (const hook of hooks) {
     (merged[hook.event] ??= []).push({
       matcher: substitute(hook.matcher),

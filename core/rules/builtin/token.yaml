@@ -1,7 +1,7 @@
 id: TOKEN-003
 layer: 1
 severity: warn
-when: "Boolean(node.fill)"
+when: "Boolean(node.fill) && !node.fill.inherited && node.fill.authored !== false"
 value: "node.fill.token"
 assert: "value !== null"
 message: "Fill is not tokenised (got {value})"

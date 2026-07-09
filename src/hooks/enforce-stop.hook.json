@@ -1,9 +1,0 @@
-{
-  "id": "enforce-stop",
-  "event": "Stop",
-  "matcher": "*",
-  "command": "node \"@pluginRoot/bin/omd.mjs\" hook stop",
-  "timeout": 10,
-  "statusMessage": "(OMD) Checking stop conditions",
-  "codexFileName": "stop-enforcing-loop.json"
-}

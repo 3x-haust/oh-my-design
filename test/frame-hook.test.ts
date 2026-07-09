@@ -3,10 +3,11 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { readFrame, isApproved } from '../core/frame/index.mjs';
-import { preTool } from '../core/hook/dispatch.mjs';
+import { readFrame, isApproved } from '../core/frame/index.ts';
+import { preTool } from '../core/hook/dispatch.ts';
+import { must } from './helpers.ts';
 
-function project(frameMd) {
+function project(frameMd: string | null): string {
   const dir = mkdtempSync(join(tmpdir(), 'omd-'));
   if (frameMd !== null) {
     mkdirSync(join(dir, '.design'), { recursive: true });
@@ -33,7 +34,7 @@ approved: false
 `;
 
 test('readFrame parses frontmatter and body', () => {
-  const f = readFrame(project(APPROVED));
+  const f = must(readFrame(project(APPROVED)), 'frame');
   assert.equal(f.approved, true);
   assert.equal(f.generator, '친구의 추천');
   assert.ok(f.body.includes('결정 마비'));

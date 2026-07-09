@@ -1,13 +1,21 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { emitCodex } from '../adapters/codex.mjs';
-import { emitClaude } from '../adapters/claude.mjs';
+import { emitCodex } from '../adapters/codex.ts';
+import { emitClaude } from '../adapters/claude.ts';
+import { hookFile, jsonFile, textFile, firstCommand, matcherOf } from './helpers.ts';
+
+interface CodexManifest {
+  name: string;
+  skills: string;
+  hooks: string[];
+  agents?: unknown;
+}
 
 const HOOK = {
   id: 'require-frame',
   event: 'PreToolUse',
   matcher: '@fileWrite',
-  command: 'node "@pluginRoot/bin/omd.mjs" hook pre-tool',
+  command: 'node "@pluginRoot/bin/omd.ts" hook pre-tool',
   timeout: 5,
   statusMessage: '(OMD) Checking frame approval',
   codexFileName: 'pre-tool-use-requiring-frame.json',
@@ -29,8 +37,8 @@ const AGENT = {
 test('codex hook matches apply_patch, claude hook matches Write|Edit', () => {
   const cx = emitCodex({ hooks: [HOOK] });
   const cl = emitClaude({ hooks: [HOOK] });
-  assert.equal(cx.files['hooks/pre-tool-use-requiring-frame.json'].hooks.PreToolUse[0].matcher, 'apply_patch');
-  assert.equal(cl.files['hooks/hooks.json'].hooks.PreToolUse[0].matcher, 'Write|Edit');
+  assert.equal(matcherOf(hookFile(cx, 'hooks/pre-tool-use-requiring-frame.json'), 'PreToolUse'), 'apply_patch');
+  assert.equal(matcherOf(hookFile(cl, 'hooks/hooks.json'), 'PreToolUse'), 'Write|Edit');
 });
 
 test('no @token survives emission', () => {
@@ -42,44 +50,46 @@ test('no @token survives emission', () => {
 });
 
 test('each host gets its own plugin-root variable', () => {
-  const cx = emitCodex({ hooks: [HOOK] }).files['hooks/pre-tool-use-requiring-frame.json'];
-  const cl = emitClaude({ hooks: [HOOK] }).files['hooks/hooks.json'];
-  assert.ok(cx.hooks.PreToolUse[0].hooks[0].command.includes('${PLUGIN_ROOT}'));
-  assert.ok(cl.hooks.PreToolUse[0].hooks[0].command.includes('$CLAUDE_PLUGIN_ROOT'));
+  const cx = hookFile(emitCodex({ hooks: [HOOK] }), 'hooks/pre-tool-use-requiring-frame.json');
+  const cl = hookFile(emitClaude({ hooks: [HOOK] }), 'hooks/hooks.json');
+  assert.ok(firstCommand(cx, 'PreToolUse').includes('${PLUGIN_ROOT}'));
+  assert.ok(firstCommand(cl, 'PreToolUse').includes('$CLAUDE_PLUGIN_ROOT'));
 });
 
 test('codex emits one file per hook and lists them in the manifest', () => {
   const cx = emitCodex({ hooks: [HOOK] });
   assert.ok(cx.files['hooks/pre-tool-use-requiring-frame.json']);
-  assert.deepEqual(cx.files['.codex-plugin/plugin.json'].hooks, ['./hooks/pre-tool-use-requiring-frame.json']);
+  const manifest = jsonFile<CodexManifest>(cx, '.codex-plugin/plugin.json');
+  assert.deepEqual(manifest.hooks, ['./hooks/pre-tool-use-requiring-frame.json']);
 });
 
 test('claude merges every hook into one hooks.json keyed by event', () => {
-  const second = { ...HOOK, id: 'enforce-stop', event: 'Stop', matcher: '*', command: 'node "@pluginRoot/bin/omd.mjs" hook stop' };
+  const second = { ...HOOK, id: 'enforce-stop', event: 'Stop', matcher: '*', command: 'node "@pluginRoot/bin/omd.ts" hook stop' };
   const cl = emitClaude({ hooks: [HOOK, second] });
-  const h = cl.files['hooks/hooks.json'].hooks;
+  const h = hookFile(cl, 'hooks/hooks.json').hooks;
   assert.equal(Object.keys(h).length, 2);
-  assert.ok(h.PreToolUse && h.Stop);
+  assert.ok(h['PreToolUse'] && h['Stop']);
   assert.equal(Object.keys(cl.files).filter((f) => f.startsWith('hooks/')).length, 1);
 });
 
 test('codex hook JSON is a stable shim — it must not embed policy', () => {
-  const cx = emitCodex({ hooks: [HOOK] }).files['hooks/pre-tool-use-requiring-frame.json'];
-  const cmd = cx.hooks.PreToolUse[0].hooks[0].command;
+  const cx = emitCodex({ hooks: [HOOK] });
+  const file = hookFile(cx, 'hooks/pre-tool-use-requiring-frame.json');
+  const cmd = firstCommand(file, 'PreToolUse');
   // Codex trusts hooks by sha256; if this file changes, the user must re-approve.
   // So it may only dispatch into the CLI, never carry logic or a version string.
-  assert.match(cmd, /omd\.mjs" hook pre-tool$/);
-  assert.ok(!/\d+\.\d+\.\d+/.test(JSON.stringify(cx)), 'no version string may leak into a trusted hook file');
+  assert.match(cmd, /omd\.ts" hook pre-tool$/);
+  assert.ok(!/\d+\.\d+\.\d+/.test(JSON.stringify(file)), 'no version string may leak into a trusted hook file');
 });
 
 test('agents render to toml for codex and md for claude, with the right model', () => {
-  const toml = emitCodex({ agents: [AGENT] }).files['agents/omd-eye.toml'];
+  const toml = textFile(emitCodex({ agents: [AGENT] }), 'agents/omd-eye.toml');
   assert.match(toml, /^name = "omd-eye"/m);
   assert.match(toml, /model = "gpt-5\.5"/);
   assert.match(toml, /model_reasoning_effort = "high"/);
   assert.match(toml, /developer_instructions = """/);
 
-  const md = emitClaude({ agents: [AGENT] }).files['agents/omd-eye.md'];
+  const md = textFile(emitClaude({ agents: [AGENT] }), 'agents/omd-eye.md');
   assert.match(md, /^---\n/);
   assert.match(md, /^model: claude-opus-4-8$/m);
   assert.match(md, /^name: omd-eye$/m);
@@ -87,7 +97,7 @@ test('agents render to toml for codex and md for claude, with the right model', 
 });
 
 test('codex manifest carries no agents key — agents are installed via config.toml', () => {
-  const manifest = emitCodex({ agents: [AGENT], hooks: [HOOK] }).files['.codex-plugin/plugin.json'];
+  const manifest = jsonFile<CodexManifest>(emitCodex({ agents: [AGENT], hooks: [HOOK] }), '.codex-plugin/plugin.json');
   assert.equal(manifest.agents, undefined);
   assert.equal(manifest.skills, './skills/');
 });
