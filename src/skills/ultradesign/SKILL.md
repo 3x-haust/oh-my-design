@@ -2,7 +2,7 @@
 name: ultradesign
 description: >-
   Design and build an interface the way a designer does — interrogate the brief, commit to
-  a concept, study real references and extract why they work, sketch cheaply, build once,
+  a concept, study real references and extract why they work, commit to one structure,
   look at what actually rendered, and let what you see rewrite the problem. Produces work
   with a position, not the average of every landing page ever scraped. Runs end to end
   without asking the user to approve anything.
@@ -29,8 +29,8 @@ Your job is to produce work that could not have been produced for anyone else.
 
 **The user asked for a website. Give them a website.**
 
-Do not ask them to approve a framing. Do not ask them to pick a concept. Do not stop to ask
-which sketch they prefer, and **never tell them to run a command in their terminal.** They
+Do not ask them to approve a framing. Do not ask them to pick a concept or a structure,
+and **never tell them to run a command in their terminal.** They
 came here because they did not want to do this work.
 
 Run the whole loop. Show them the result. Tell them what you decided and why. Every decision
@@ -130,49 +130,42 @@ it against a single standard.**
 
 ---
 
-## 4. SKETCH — diverge cheaply
+## 4. COMMIT — one structure, its cost named
 
-A designer does not finish three comps and bin two. They draw three thumbnails in minutes,
-pick one, and finish only that. **Divergence is cheap; convergence is expensive.**
+The first structure that occurs to you is the mean of the training distribution. So take
+one breath before building: name the structure you are committing to, and **name what it
+costs.** One sentence each, in prose. No alternatives, no candidates, no picking.
 
-Spawn **three `omd-sketch` subagents in one message.** They cannot see one another: a single
-context asked for "three options" returns one option in three colours, and the anchoring is
-unavoidable.
+> Structure: conversational, one question at a time.
+> Cost: it cannot be skimmed — a returning reader already knows what they want.
 
-Each gets a different *structural bet*, all serving the concept and the principles:
+A structure whose cost you cannot name is one you have not understood, and the cost you
+write down here is exactly what step 6 will probe. Record it:
 
+```bash
+omd decision "Committed to a conversational structure" --why "serves the concept; cost: cannot be skimmed"
 ```
-c1  a vertical stack, generous whitespace
-c2  a fixed three-card deck
-c3  conversational, one question at a time
-```
 
-Structure only. Semantic HTML, no CSS, no polish. Each sketch must **expose the awkward
-consequence of its own bet** — c3 cannot be skimmed, c2 breaks at eleven items. A sketch
-that hides its cost wins the cull for the wrong reason.
-
-> **Do not skip the sketches to save tokens.** The first structure that occurs to you is the
-> mean of the training distribution — precisely the thing this skill exists to avoid.
+> An earlier version of this skill generated three candidates — first as parallel subagent
+> builds, then as prose sketches — and picked one. Both were theatre: the alternatives were
+> invented in one context and judged in the same one, so nothing was actually diverged.
+> Three candidates cost three times the tokens and bought a ritual. The real defence
+> against the mean is `omd check --category slop`, which *measures* it, and the reframe
+> step, which rebuilds when the structure was wrong. Trust those.
 
 ---
 
-## 5. CULL and BUILD
+## 5. BUILD — one thing, properly
 
-Choose one, against the concept and the reference principles. Never against your own taste.
-
-```bash
-omd choose c1 c2 c3 --chose c3 --why "conversational serves the concept; c2 contradicts it"
-```
-
-> Professional designers agree on pairwise UI preference at Krippendorff's α = 0.248. On more
-> than a quarter of comparisons they split almost completely. There is no universal "good",
-> so **your preference is not evidence** — the concept, the principles, and the findings are.
-
-Now spawn **one** `omd-hand` and build the winner properly. Real files, real CSS, real
-components. Ninety percent of the tokens belong here, on the one thing that ships.
+Spawn **one** `omd-hand` and build the committed structure. Real files, real CSS, real components.
+All the tokens belong here, on the one thing that ships.
 
 Declare colour, spacing, and radius as CSS custom properties on `:root`. The eye reads those
 as the design system; an inline hex is reported as a defect, correctly.
+
+If the build reveals the structure was wrong — and sometimes it will — that is what the
+reframe step is for. Rebuilding once is cheaper than generating alternatives every time on
+the chance it might be.
 
 ---
 
@@ -230,16 +223,16 @@ about why you built it that way. It cannot defend your reasoning because it does
 
 The step you will most want to skip, because it means admitting the work is stale.
 
-Ask the eye: *what does the winner reveal about the problem that we did not know when we
-framed it?* The sketches you discarded are the material for this — "the reason I rejected c2
-was actually a hole in the frame" is a sentence you can only write because you drew c2.
+Ask the eye: *what does the built page reveal about the problem that we did not know when we
+framed it?* The cost you named in step 4 is the first place to look — if it turned out to be
+the cost that matters, that is not a flaw in the build. It is a hole in the frame.
 
-> c3 works, but it cannot be skimmed. A returning reader already knows what they want.
-> That is not a flaw in c3 — **it is a hole in the frame.**
+> The conversational structure works, but it cannot be skimmed. A returning reader already
+> knows what they want. That is not a flaw in the build — **it is a hole in the frame.**
 
 ```bash
 omd frame reframe --to "new readers face paralysis; returning readers face friction" \
-                  --because "c3 cannot be skimmed, and most traffic is returning"
+                  --because "the build cannot be skimmed, and most traffic is returning"
 ```
 
 The old framing is kept, not overwritten. Do not quietly patch the winner to cover the hole:
@@ -274,8 +267,6 @@ Everything is in `.omd/`, committed with the repo. Six months from now someone r
 - **Never look at a reference's pixels, or describe how it looks.** Take the principle.
 - **Never let `omd ref distance` come back over 0.6 and ship anyway.** That is a clone.
 - **Never critique in the context that built the thing.** Spawn `omd-eye`.
-- **Never call three variations of one idea a divergence.** Different structures, separate
-  subagents, one parallel message.
 - **Never cite your taste as a reason.** α = 0.248.
 - **Never dismiss a slop finding silently.** Fix it, or overrule it in writing.
 - **Never skip step 7** because the work looks finished. Looking finished is exactly when the

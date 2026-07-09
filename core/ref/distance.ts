@@ -89,6 +89,7 @@ export function similarity(a: Invariants, b: Invariants): number {
 
 export function distances(page: Invariants, refs: Reference[]): RefDistance[] {
   return refs
+    .filter((ref): ref is Reference & { invariants: Invariants } => ref.invariants !== null)
     .map((ref) => {
       const scores = componentScores(page, ref.invariants);
       const drivers = (Object.keys(WEIGHTS) as Component[])

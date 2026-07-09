@@ -14,7 +14,7 @@ const run = (args: string[], cwd: string) => spawnSync(process.execPath, [CLI, .
 const project = (): string => mkdtempSync(join(tmpdir(), 'omd-prin-'));
 
 const ref = (): Reference => ({
-  source: 'https://linear.app', component: 'page', capturedAt: new Date().toISOString(),
+  source: 'https://linear.app', component: 'page', kind: 'page', capturedAt: new Date().toISOString(),
   invariants: { spacingLadder: [4, 8], radiusLadder: [4, 8], elevationLevels: 3, centeredRatio: 0.09, tokenCoverage: 0.7, paddingWeight: 10 },
   principles: [],
 });
@@ -37,7 +37,7 @@ test('addPrinciples attaches reasoning to an existing reference', () => {
   const loaded = must(loadRefs(dir)[0]);
   assert.equal(loaded.principles.length, 1);
   assert.match(must(loaded.principles[0]), /different materials/);
-  assert.deepEqual(loaded.invariants.radiusLadder, [4, 8], 'measurements are untouched');
+  assert.deepEqual(must(loaded.invariants).radiusLadder, [4, 8], 'measurements are untouched');
 });
 
 test('addPrinciples appends rather than replacing, and never duplicates', () => {

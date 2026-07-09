@@ -124,8 +124,8 @@ test('an empty ladder never divides by zero', () => {
 
 test('distances ranks every reference and names what drove the score', () => {
   const refs: Reference[] = [
-    { source: 'https://linear.app', component: 'page', capturedAt: 'x', invariants: base, principles: [] },
-    { source: 'https://stripe.com', component: 'page', capturedAt: 'x', invariants: { ...base, radiusLadder: [2], elevationLevels: 0, centeredRatio: 0.8 }, principles: [] },
+    { source: 'https://linear.app', component: 'page', kind: 'page', capturedAt: 'x', invariants: base, principles: [] },
+    { source: 'https://stripe.com', component: 'page', kind: 'page', capturedAt: 'x', invariants: { ...base, radiusLadder: [2], elevationLevels: 0, centeredRatio: 0.8 }, principles: [] },
   ];
   const out = distances(base, refs);
   assert.equal(out.length, 2);
@@ -138,7 +138,7 @@ test('distances ranks every reference and names what drove the score', () => {
 // ── store ──
 
 const ref: Reference = {
-  source: 'https://linear.app', component: 'search-bar', capturedAt: new Date().toISOString(),
+  source: 'https://linear.app', component: 'search-bar', kind: 'component', capturedAt: new Date().toISOString(),
   invariants: base, principles: ['Radii split into three rungs, so an input and a card are different materials.'],
 };
 

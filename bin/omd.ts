@@ -28,9 +28,11 @@ interface Opts {
   as?: string;
   add?: string;
   noLog?: boolean;
+  selector?: string;
+  image?: boolean;
 }
 
-const FLAGS = new Set(['json', 'no-log']);
+const FLAGS = new Set(['json', 'no-log', 'image']);
 const ALIASES: Record<string, keyof Opts> = { o: 'out', 'no-log': 'noLog' };
 
 function parseArgs(args: string[]): Opts {
@@ -50,10 +52,10 @@ function parseArgs(args: string[]): Opts {
   return opts;
 }
 
-async function rawIrFor(opts: Opts, target: string | undefined): Promise<RawIr> {
+async function rawIrFor(opts: Opts, target: string | undefined, selector?: string | null): Promise<RawIr> {
   if (target) {
     const { extractIr, parseViewport } = await import('../core/render/index.ts');
-    return extractIr(target, { viewport: parseViewport(opts.viewport) });
+    return extractIr(target, { viewport: parseViewport(opts.viewport), selector: selector ?? null });
   }
   const irPath = opts.ir ?? join(process.cwd(), '.omd', '.cache', 'ir.json');
   return JSON.parse(readFileSync(irPath, 'utf8')) as RawIr;
@@ -168,20 +170,40 @@ function cmdChoose(opts: Opts): never {
 async function cmdRefAdd(opts: Opts): Promise<never> {
   const target = opts._[0];
   if (!target || !opts.as) {
-    console.error('usage: omd ref add <url|file> --as <component>');
+    console.error('usage: omd ref add <url|file> --as <component> [--selector "css"] [--image]');
     process.exit(1);
   }
-  const { normalize } = await import('../core/ir/normalize.ts');
-  const { extractInvariants } = await import('../core/ref/invariants.ts');
+  if (opts.image && opts.selector) {
+    console.error('--image and --selector cannot be used together: an image has no subtree to scope.');
+    process.exit(1);
+  }
   const { saveRef } = await import('../core/ref/store.ts');
 
-  const raw = await rawIrFor(opts, target);
+  if (opts.image) {
+    const path = saveRef(process.cwd(), {
+      source: target,
+      component: opts.as,
+      kind: 'image',
+      capturedAt: new Date().toISOString(),
+      invariants: null,
+      principles: [],
+    });
+    console.log(path);
+    process.exit(0);
+  }
+
+  const { normalize } = await import('../core/ir/normalize.ts');
+  const { extractInvariants } = await import('../core/ref/invariants.ts');
+
+  const raw = await rawIrFor(opts, target, opts.selector);
   const ir = normalize(raw);
   const invariants = extractInvariants(ir);
   const path = saveRef(process.cwd(), {
     source: target,
     component: opts.as,
+    kind: opts.selector ? 'component' : 'page',
     capturedAt: new Date().toISOString(),
+    ...(opts.selector ? { selector: opts.selector } : {}),
     invariants,
     principles: [],
   });
@@ -239,9 +261,14 @@ async function cmdRefList(): Promise<never> {
     process.exit(0);
   }
   for (const ref of refs) {
+    const granularity = ref.selector ? `[${ref.kind} ${ref.selector}]` : `[${ref.kind}]`;
+    if (ref.kind === 'image' || ref.invariants === null) {
+      console.log(`${ref.source}  ${ref.component}  ${granularity}`);
+      continue;
+    }
     const inv = ref.invariants;
     console.log(
-      `${ref.source}  ${ref.component}  radius=[${inv.radiusLadder.join(',')}] `
+      `${ref.source}  ${ref.component}  ${granularity}  radius=[${inv.radiusLadder.join(',')}] `
       + `spacing=[${inv.spacingLadder.join(',')}] elevation=${inv.elevationLevels}`,
     );
   }
@@ -259,6 +286,14 @@ async function cmdRefDistance(opts: Opts): Promise<never> {
     process.exit(0);
   }
 
+  const measured = refs.filter((r) => r.invariants !== null);
+  const skippedImages = refs.filter((r) => r.kind === 'image').length;
+
+  if (measured.length === 0) {
+    console.log('Nothing to compare: no measured references, only image references.');
+    process.exit(0);
+  }
+
   const { normalize } = await import('../core/ir/normalize.ts');
   const { extractInvariants } = await import('../core/ref/invariants.ts');
   const { distances } = await import('../core/ref/distance.ts');
@@ -266,10 +301,14 @@ async function cmdRefDistance(opts: Opts): Promise<never> {
   const raw = await rawIrFor(opts, target);
   const ir = normalize(raw);
   const invariants = extractInvariants(ir);
-  const results = distances(invariants, refs);
+  const results = distances(invariants, measured);
 
   for (const r of results) {
     console.log(`  ${r.similarity.toFixed(2)}  ${r.reference}   (${r.drivers.join(', ')})`);
+  }
+
+  if (skippedImages > 0) {
+    console.log(`(skipped ${skippedImages} image reference${skippedImages === 1 ? '' : 's'} — pixels cannot be measured)`);
   }
 
   const tooClose = results.filter((r) => r.similarity >= 0.6);
@@ -300,7 +339,8 @@ function usage(): never {
     + '  decision "what" --why "why"\n'
     + '  taste profile\n'
     + '\n'
-    + '  ref add <url|file> --as <component>         render, extract invariants, save\n'
+    + '  ref add <url|file> --as <component> [--selector "css"] [--image]\n'
+    + '                                                render, extract invariants, save\n'
     + '  ref list                                    one line per saved reference\n'
     + '  ref distance <page>                         compare a page to every saved reference\n'
     + '  ref principles <source> --as C --add "..."   record why a reference works\n'

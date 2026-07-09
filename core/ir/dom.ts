@@ -5,7 +5,7 @@ import type { RawIr } from '../types.ts';
  * no imports, no closure over module scope, and nothing that survives type stripping
  * as a runtime construct.
  */
-export function extractInPage(maxNodes: number): RawIr {
+export function extractInPage(maxNodes: number, selector?: string | null): RawIr {
   const toHex = (css: string): string | null => {
     const m = /^rgba?\(([^)]+)\)$/.exec(css);
     if (!m || !m[1]) return null;
@@ -157,7 +157,13 @@ export function extractInPage(maxNodes: number): RawIr {
     for (const child of Array.from(el.children)) walk(child, id);
   };
 
-  walk(document.body, null);
+  let root: Element = document.body;
+  if (selector) {
+    const found = document.querySelector(selector);
+    if (!found) throw new Error(`no element matches selector: ${selector}`);
+    root = found;
+  }
+  walk(root, null);
 
   // Contrast needs a real backdrop, not `transparent`. Inherit the nearest painted fill.
   const byId = new Map(nodes.map((n) => [n.id, n]));
@@ -170,7 +176,25 @@ export function extractInPage(maxNodes: number): RawIr {
         break;
       }
     }
-    if (!node.fill) node.fill = { value: '#FFFFFF', token: null, inherited: true };
+    if (!node.fill) {
+      // The captured root itself may have no painted fill within the walk (it's
+      // transparent, or a scoped selector cut it off from the page's own background).
+      // Defaulting to white would poison contrast math with a backdrop nobody painted;
+      // walk the root's live-DOM ancestors (its own parent up through documentElement,
+      // same climb the whole-page path always used since root there IS document.body)
+      // for the first actually-painted backgroundColor.
+      let paintedHex: string | null = null;
+      for (let anc: Element | null = root.parentElement; anc; anc = anc.parentElement) {
+        const ancBg = toHex(getComputedStyle(anc).backgroundColor);
+        if (ancBg) {
+          paintedHex = ancBg;
+          break;
+        }
+      }
+      node.fill = paintedHex
+        ? { value: paintedHex, token: nameOf(paintedHex), inherited: true }
+        : { value: '#FFFFFF', token: null, inherited: true };
+    }
   }
 
   return { meta: { source: 'dom', url: location.href }, tokens: tokenByValue, nodes };

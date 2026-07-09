@@ -64,8 +64,18 @@ function installClaude(d: Detected, _version: string, changes: string[]): void {
   if (existsSync(agentsSrc)) {
     const dest = join(d.home, 'agents');
     mkdirSync(dest, { recursive: true });
-    for (const file of readdirSafe(agentsSrc)) cpSync(join(agentsSrc, file), join(dest, file));
-    changes.push(`claude: installed agents -> ${dest}`);
+    const shipped = readdirSafe(agentsSrc);
+    for (const file of shipped) cpSync(join(agentsSrc, file), join(dest, file));
+
+    // An agent we stopped shipping must stop being installed. Copying without pruning left
+    // `omd-sketch` registered long after it was deleted — the same defect as a stale dist/
+    // and a permission for a subcommand that no longer exists.
+    for (const file of readdirSafe(dest)) {
+      if (!file.startsWith('omd-') || shipped.includes(file)) continue;
+      rmSync(join(dest, file), { force: true });
+      changes.push(`claude: removed stale agent ${file}`);
+    }
+    changes.push(`claude: installed agents -> ${dest} (${shipped.length})`);
   }
 
   const settingsPath = join(d.home, 'settings.json');

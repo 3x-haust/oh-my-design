@@ -113,8 +113,8 @@
   "hotPaths": [
     {
       "path": "bin/omd.ts",
-      "accessCount": 27,
-      "lastAccessed": 1783613381294,
+      "accessCount": 34,
+      "lastAccessed": 1783635500433,
       "type": "file"
     },
     {
@@ -125,14 +125,20 @@
     },
     {
       "path": "core/types.ts",
-      "accessCount": 15,
-      "lastAccessed": 1783612972840,
+      "accessCount": 17,
+      "lastAccessed": 1783635632001,
       "type": "file"
     },
     {
       "path": "test/cli.test.ts",
       "accessCount": 14,
       "lastAccessed": 1783605725610,
+      "type": "file"
+    },
+    {
+      "path": "core/ir/dom.ts",
+      "accessCount": 14,
+      "lastAccessed": 1783638365032,
       "type": "file"
     },
     {
@@ -160,9 +166,9 @@
       "type": "file"
     },
     {
-      "path": "core/ir/dom.ts",
+      "path": "src/skills/ultradesign/SKILL.md",
       "accessCount": 9,
-      "lastAccessed": 1783595306870,
+      "lastAccessed": 1783615031220,
       "type": "file"
     },
     {
@@ -181,12 +187,6 @@
       "path": "test/install.test.ts",
       "accessCount": 8,
       "lastAccessed": 1783605817790,
-      "type": "file"
-    },
-    {
-      "path": "src/skills/ultradesign/SKILL.md",
-      "accessCount": 8,
-      "lastAccessed": 1783613165952,
       "type": "file"
     },
     {
@@ -286,6 +286,12 @@
       "type": "file"
     },
     {
+      "path": "core/render/index.ts",
+      "accessCount": 4,
+      "lastAccessed": 1783635631480,
+      "type": "file"
+    },
+    {
       "path": "test/adapters-regression.test.ts",
       "accessCount": 3,
       "lastAccessed": 1783594795416,
@@ -337,12 +343,6 @@
       "path": "adapters/tokens.ts",
       "accessCount": 2,
       "lastAccessed": 1783594797419,
-      "type": "file"
-    },
-    {
-      "path": "core/render/index.ts",
-      "accessCount": 2,
-      "lastAccessed": 1783612129730,
       "type": "file"
     },
     {

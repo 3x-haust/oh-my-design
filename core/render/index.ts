@@ -40,8 +40,8 @@ export function renderPage(target: string, opts: { viewport: Viewport; out: stri
   });
 }
 
-export function extractIr(target: string, opts: { viewport: Viewport }): Promise<RawIr> {
+export function extractIr(target: string, opts: { viewport: Viewport; selector?: string | null }): Promise<RawIr> {
   // Node strips the types, so toString() yields runnable JS for the browser.
   return withPage(target, opts.viewport, (page) =>
-    page.evaluate(`(${extractInPage.toString()})(${MAX_NODES})`) as Promise<RawIr>);
+    page.evaluate(`(${extractInPage.toString()})(${MAX_NODES}, ${JSON.stringify(opts.selector ?? null)})`) as Promise<RawIr>);
 }

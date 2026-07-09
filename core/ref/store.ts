@@ -27,8 +27,13 @@ export function saveRef(cwd: string, ref: Reference): string {
   return resolve(path);
 }
 
-function isReference(value: unknown): value is Reference {
-  return typeof value === 'object' && value !== null && 'invariants' in value;
+function isReference(value: unknown): value is Partial<Reference> & Pick<Reference, 'source' | 'component'> {
+  return (
+    typeof value === 'object'
+    && value !== null
+    && typeof (value as Record<string, unknown>)['source'] === 'string'
+    && typeof (value as Record<string, unknown>)['component'] === 'string'
+  );
 }
 
 export function loadRefs(cwd: string): Reference[] {
@@ -44,7 +49,17 @@ export function loadRefs(cwd: string): Reference[] {
   for (const file of files) {
     try {
       const parsed: unknown = JSON.parse(readFileSync(join(dir, file), 'utf8'));
-      if (isReference(parsed)) refs.push(parsed);
+      if (isReference(parsed)) {
+        refs.push({
+          source: parsed.source,
+          component: parsed.component,
+          kind: parsed.kind ?? 'page',
+          capturedAt: parsed.capturedAt ?? '',
+          ...(parsed.selector !== undefined ? { selector: parsed.selector } : {}),
+          invariants: parsed.invariants ?? null,
+          principles: parsed.principles ?? [],
+        });
+      }
     } catch {
       // corrupt file: skip it, don't fail the run
     }

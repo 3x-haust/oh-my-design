@@ -177,12 +177,29 @@ export interface Invariants {
   paddingWeight: number;
 }
 
+/**
+ * How closely a reference was looked at.
+ *
+ * `page`      the whole thing — its overall feel, its rhythm
+ * `component` one part of it, scoped by a CSS selector: a search bar, a single button
+ * `image`     a picture. A screenshot, a Pinterest pin, a photo of a book cover.
+ */
+export type RefKind = 'page' | 'component' | 'image';
+
 export interface Reference {
   source: string;
   component: string;
+  kind: RefKind;
   capturedAt: string;
-  invariants: Invariants;
-  /** Why it was built that way. Written by a model that saw the render *and* the numbers. */
+  /** The CSS selector the measurements were taken from. Absent for `page` and `image`. */
+  selector?: string;
+  /**
+   * Null for an image, and the type says so on purpose. Pixels cannot be measured this way:
+   * there is no spacing ladder to read out of a JPEG. An image reference carries reasoning
+   * and nothing else, which also means `ref distance` cannot check it for cloning.
+   */
+  invariants: Invariants | null;
+  /** Why it was built that way. Written by a model that looked, then closed the tab. */
   principles: string[];
 }
 
