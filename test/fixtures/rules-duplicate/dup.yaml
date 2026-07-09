@@ -1,0 +1,13 @@
+- id: DUP-001
+  layer: 1
+  severity: warn
+  when: "true"
+  assert: "true"
+  message: "first"
+
+- id: DUP-001
+  layer: 1
+  severity: warn
+  when: "true"
+  assert: "true"
+  message: "second"

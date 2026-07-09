@@ -1,0 +1,7 @@
+id: HIT-002
+layer: 1
+severity: error
+when: "node.computed.isInteractive"
+value: "node.computed.hitArea"
+assert: "value.w >= 44 && value.h >= 44"
+message: "Hit area {value} is smaller than the 44x44 minimum"

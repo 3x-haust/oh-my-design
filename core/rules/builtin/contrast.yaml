@@ -1,0 +1,7 @@
+id: CONTRAST-001
+layer: 1
+severity: error
+when: "node.type === 'TEXT'"
+value: "node.computed.contrastWithParent"
+assert: "value >= 4.5"
+message: "Contrast ratio {value} is below the WCAG AA minimum of 4.5"

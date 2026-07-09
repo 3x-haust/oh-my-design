@@ -1,0 +1,7 @@
+id: TOKEN-003
+layer: 1
+severity: warn
+when: "Boolean(node.fill)"
+value: "node.fill.token"
+assert: "value !== null"
+message: "Fill is not tokenised (got {value})"

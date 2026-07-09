@@ -1,0 +1,55 @@
+{
+  "meta": { "source": "fixture" },
+  "tokens": {
+    "spacing": { "xs": 4, "sm": 8, "md": 16, "lg": 24 },
+    "color": { "bg/surface": "#FFFFFF", "brand/primary": "#FF5A1F" }
+  },
+  "nodes": [
+    {
+      "id": "1:1",
+      "name": "Screen",
+      "type": "FRAME",
+      "path": "Screen",
+      "parent": null,
+      "box": { "x": 0, "y": 0, "w": 390, "h": 844 },
+      "fill": { "value": "#FFFFFF", "token": "bg/surface" },
+      "children": ["1:10", "1:20", "1:30"]
+    },
+    {
+      "id": "1:10",
+      "name": "CardGood",
+      "type": "FRAME",
+      "path": "Screen/List/CardGood",
+      "parent": "1:1",
+      "box": { "x": 16, "y": 100, "w": 343, "h": 96 },
+      "layout": { "mode": "VERTICAL", "gap": 8, "padding": [16, 16, 16, 16] },
+      "fill": { "value": "#FFFFFF", "token": "bg/surface" },
+      "radius": { "value": 8, "token": "radius/md" },
+      "children": []
+    },
+    {
+      "id": "1:20",
+      "name": "CardOffGrid",
+      "type": "FRAME",
+      "path": "Screen/List/CardOffGrid",
+      "parent": "1:1",
+      "box": { "x": 16, "y": 220, "w": 343, "h": 96 },
+      "layout": { "mode": "VERTICAL", "gap": 8, "padding": [16, 16, 14, 16] },
+      "fill": { "value": "#FEFEFE", "token": null },
+      "radius": { "value": 8, "token": null },
+      "children": []
+    },
+    {
+      "id": "1:30",
+      "name": "PayNow",
+      "type": "TEXT",
+      "path": "Screen/Checkout/PayNow",
+      "parent": "1:1",
+      "box": { "x": 16, "y": 700, "w": 343, "h": 38 },
+      "color": "#8A8A8A",
+      "fill": { "value": "#F0F0F0", "token": null },
+      "interactive": true,
+      "children": []
+    }
+  ]
+}

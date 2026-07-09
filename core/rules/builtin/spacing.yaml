@@ -1,0 +1,8 @@
+id: SPACING-001
+layer: 1
+severity: warn
+when: "Boolean(node.layout && node.layout.padding)"
+value: "node.layout.padding"
+assert: "value.every((v) => v % 8 === 0 || v === 4)"
+message: "Padding {value} is off the 8pt grid (4 excepted)"
+fix: normalize-spacing
