@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { stringify } from 'yaml';
-import { readFrame, isApproved } from '../core/frame/index.mjs';
+import { readFrame, approvalRefusal } from '../core/frame/index.mjs';
 import { preTool } from '../core/hook/dispatch.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -77,8 +77,15 @@ function cmdFrameApprove() {
   }
 
   const frame = readFrame(process.cwd());
+  const refusal = approvalRefusal(frame, { isTTY: Boolean(process.stdin.isTTY), env: process.env });
+  if (refusal) {
+    console.error(refusal);
+    process.exit(1);
+  }
+
   const { body, ...frontmatter } = frame;
   frontmatter.approved = true;
+  frontmatter.approvedAt = new Date().toISOString();
   const yamlText = stringify(frontmatter).trimEnd();
   const content = `---\n${yamlText}\n---\n${body}`;
   writeFileSync(path, content);

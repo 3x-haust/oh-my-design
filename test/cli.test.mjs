@@ -9,13 +9,21 @@ import { fileURLToPath } from 'node:url';
 const CLI = fileURLToPath(new URL('../bin/omd.mjs', import.meta.url));
 const FIXTURE = fileURLToPath(new URL('./fixtures/ir.raw.json', import.meta.url));
 
+const REAL_FRAME_BODY = '사람들은 배고파서가 아니라 결정하기 싫어서 앱을 연다. 선택 마비 문제다.';
+
 function project({ approved }) {
   const dir = mkdtempSync(join(tmpdir(), 'omd-cli-'));
   mkdirSync(join(dir, '.design'), { recursive: true });
-  writeFileSync(join(dir, '.design', 'frame.md'), `---\napproved: ${approved}\n---\n\nbody\n`);
+  writeFileSync(
+    join(dir, '.design', 'frame.md'),
+    `---\napproved: ${approved}\nwhy: "리뷰 표본 n=240, 최다 불만 31%"\n---\n\n${REAL_FRAME_BODY}\n`,
+  );
   cpSync(FIXTURE, join(dir, 'ir.json'));
   return dir;
 }
+
+// An agent's Bash has no TTY. Tests are machines too, so they must say so explicitly.
+const asHuman = { ...process.env, OMD_ALLOW_NONINTERACTIVE_APPROVE: '1' };
 
 const run = (args, opts = {}) => spawnSync(process.execPath, [CLI, ...args], { encoding: 'utf8', ...opts });
 
@@ -72,8 +80,45 @@ test('omd hook pre-tool never exits with a code other than 0 or 2', () => {
 test('omd frame approve flips the gate', () => {
   const dir = project({ approved: false });
   assert.equal(run(['hook', 'pre-tool'], { cwd: dir, input: '{}' }).status, 2);
-  execFileSync(process.execPath, [CLI, 'frame', 'approve'], { cwd: dir });
+  execFileSync(process.execPath, [CLI, 'frame', 'approve'], { cwd: dir, env: asHuman });
   assert.equal(run(['hook', 'pre-tool'], { cwd: dir, input: '{}' }).status, 0);
+});
+
+// Verified against a real headless Claude Code session: told to clear the gate itself,
+// the agent ran `omd frame approve` and wrote the file. The key sat inside the gate.
+
+test('omd frame approve refuses a caller with no terminal', () => {
+  const dir = project({ approved: false });
+  const r = run(['frame', 'approve'], { cwd: dir });
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /human at a terminal/);
+  assert.equal(run(['hook', 'pre-tool'], { cwd: dir, input: '{}' }).status, 2, 'gate must still hold');
+});
+
+test('omd frame approve refuses a frame with no evidence', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'omd-noevidence-'));
+  mkdirSync(join(dir, '.design'), { recursive: true });
+  writeFileSync(join(dir, '.design', 'frame.md'), `---\napproved: false\n---\n\n${REAL_FRAME_BODY}\n`);
+  const r = run(['frame', 'approve'], { cwd: dir, env: asHuman });
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /no evidence/);
+});
+
+test('omd frame approve refuses to sign off on a stub', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'omd-stub-'));
+  mkdirSync(join(dir, '.design'), { recursive: true });
+  writeFileSync(join(dir, '.design', 'frame.md'), '---\napproved: false\nwhy: "리뷰 표본 n=240"\n---\n\n가설.\n');
+  const r = run(['frame', 'approve'], { cwd: dir, env: asHuman });
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /stub/);
+});
+
+test('approval stamps when it happened', () => {
+  const dir = project({ approved: false });
+  execFileSync(process.execPath, [CLI, 'frame', 'approve'], { cwd: dir, env: asHuman });
+  const out = JSON.parse(run(['frame', 'show'], { cwd: dir }).stdout);
+  assert.equal(out.approved, true);
+  assert.ok(Date.parse(out.approvedAt) > 0);
 });
 
 test('omd --version and unknown commands behave', () => {
