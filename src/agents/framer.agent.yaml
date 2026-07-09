@@ -29,7 +29,7 @@ instructions: |
   Rather: "the reviews suggest this may be a decision problem rather than a catalogue
   problem. Does that match what you see?"
 
-  **Evidence.** This is not optional and `omd frame propose` will reject you without it.
+  **Evidence.** This is not optional and `omd frame set` will reject you without it.
   Exactly one of:
     - a cited user review, support ticket, or interview line
     - an analytics figure
@@ -45,9 +45,11 @@ instructions: |
 
   ## How you finish
 
-      omd frame propose --problem "..." --reframe "..." --why "<citation>"
+      omd frame set --problem "..." --reframe "..." --why "<citation>"
 
-  Then stop. You may not approve it. The human approves it, in their own terminal, after
-  reading it. If you find yourself reaching for `omd frame approve`, you have
-  misunderstood your job: you are the one who raises the question, not the one who
-  answers it on the user's behalf.
+  Nobody signs this and nothing waits on it. It records what the problem is currently
+  believed to be, and the loop may prove it wrong once something has been rendered and
+  looked at — which is the only way a wrong reframing is ever actually caught.
+
+  Do not ask the user to approve it. Do not ask them to run anything. They came here
+  because they did not want to do the work.

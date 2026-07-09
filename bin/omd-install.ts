@@ -29,7 +29,17 @@ async function main(): Promise<void> {
 
   if (cmd !== 'install' && cmd !== 'uninstall' && cmd !== 'doctor') usage();
 
-  const hosts = detectHosts();
+  const args = process.argv.slice(3);
+  const hostArg = args.find((a) => a.startsWith('--host'))?.split('=')[1] ?? args[args.indexOf('--host') + 1];
+
+  let hosts = detectHosts();
+  if (hostArg) {
+    hosts = hosts.filter((h) => h.host === hostArg);
+    if (hosts.length === 0) {
+      console.error(`No such host detected: ${hostArg}`);
+      process.exit(1);
+    }
+  }
   if (hosts.length === 0) {
     console.error('No supported host found: neither ~/.claude nor ~/.codex exists.');
     process.exit(1);

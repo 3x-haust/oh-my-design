@@ -112,15 +112,27 @@
   },
   "hotPaths": [
     {
+      "path": "Plan.md",
+      "accessCount": 15,
+      "lastAccessed": 1783606574791,
+      "type": "file"
+    },
+    {
+      "path": "test/cli.test.ts",
+      "accessCount": 14,
+      "lastAccessed": 1783605725610,
+      "type": "file"
+    },
+    {
       "path": "bin/omd.mjs",
       "accessCount": 13,
       "lastAccessed": 1783593355638,
       "type": "file"
     },
     {
-      "path": "test/cli.test.ts",
-      "accessCount": 12,
-      "lastAccessed": 1783594857157,
+      "path": "bin/omd.ts",
+      "accessCount": 13,
+      "lastAccessed": 1783605614198,
       "type": "file"
     },
     {
@@ -130,21 +142,15 @@
       "type": "file"
     },
     {
-      "path": "bin/omd.ts",
-      "accessCount": 11,
-      "lastAccessed": 1783594825466,
+      "path": "core/types.ts",
+      "accessCount": 12,
+      "lastAccessed": 1783605590721,
       "type": "file"
     },
     {
       "path": "test/rules.test.ts",
       "accessCount": 11,
       "lastAccessed": 1783595354974,
-      "type": "file"
-    },
-    {
-      "path": "core/types.ts",
-      "accessCount": 10,
-      "lastAccessed": 1783594788318,
       "type": "file"
     },
     {
@@ -172,15 +178,21 @@
       "type": "file"
     },
     {
+      "path": "test/install.test.ts",
+      "accessCount": 8,
+      "lastAccessed": 1783605817790,
+      "type": "file"
+    },
+    {
       "path": "core/hook/dispatch.ts",
       "accessCount": 7,
       "lastAccessed": 1783594942965,
       "type": "file"
     },
     {
-      "path": "test/install.test.ts",
-      "accessCount": 6,
-      "lastAccessed": 1783595078720,
+      "path": "core/install/patch-claude.ts",
+      "accessCount": 7,
+      "lastAccessed": 1783605764559,
       "type": "file"
     },
     {
@@ -196,12 +208,6 @@
       "type": "file"
     },
     {
-      "path": "core/install/patch-claude.ts",
-      "accessCount": 5,
-      "lastAccessed": 1783594971592,
-      "type": "file"
-    },
-    {
       "path": "adapters/claude.ts",
       "accessCount": 5,
       "lastAccessed": 1783594989582,
@@ -211,6 +217,12 @@
       "path": "adapters/codex.ts",
       "accessCount": 5,
       "lastAccessed": 1783594999481,
+      "type": "file"
+    },
+    {
+      "path": "core/frame/write.ts",
+      "accessCount": 5,
+      "lastAccessed": 1783605576865,
       "type": "file"
     },
     {
@@ -263,20 +275,20 @@
     },
     {
       "path": "core/frame/index.ts",
-      "accessCount": 3,
-      "lastAccessed": 1783594736287,
+      "accessCount": 4,
+      "lastAccessed": 1783605549056,
+      "type": "file"
+    },
+    {
+      "path": "src/skills/ultradesign/SKILL.md",
+      "accessCount": 4,
+      "lastAccessed": 1783605883748,
       "type": "file"
     },
     {
       "path": "test/adapters-regression.test.ts",
       "accessCount": 3,
       "lastAccessed": 1783594795416,
-      "type": "file"
-    },
-    {
-      "path": "src/skills/ultradesign/SKILL.md",
-      "accessCount": 3,
-      "lastAccessed": 1783594846283,
       "type": "file"
     },
     {
@@ -298,9 +310,9 @@
       "type": "file"
     },
     {
-      "path": "core/frame/write.ts",
+      "path": "src/agents/framer.agent.yaml",
       "accessCount": 3,
-      "lastAccessed": 1783595418879,
+      "lastAccessed": 1783605900252,
       "type": "file"
     },
     {
@@ -328,12 +340,6 @@
       "type": "file"
     },
     {
-      "path": "Plan.md",
-      "accessCount": 2,
-      "lastAccessed": 1783595677795,
-      "type": "file"
-    },
-    {
       "path": "core/render/index.mjs",
       "accessCount": 1,
       "lastAccessed": 1783592872207,
@@ -343,12 +349,6 @@
       "path": "core/frame/write.mjs",
       "accessCount": 1,
       "lastAccessed": 1783593070912,
-      "type": "file"
-    },
-    {
-      "path": "src/agents/framer.agent.yaml",
-      "accessCount": 1,
-      "lastAccessed": 1783593139123,
       "type": "file"
     },
     {

@@ -139,32 +139,15 @@ export interface Violation {
   message: string;
 }
 
+/** A record of what the problem is believed to be. The loop rewrites it; nobody signs it. */
 export interface Frame {
-  approved: boolean;
-  approvedAt?: string;
   why?: string;
   generator?: string;
+  revision?: number;
+  writtenAt?: string;
+  reframedAt?: string;
   body: string;
-}
-
-/**
- * The gate is installed globally but must not bite globally. A hook that blocks every
- * write in every project is uninstalled within a day. A session, opened by the
- * ultradesign skill and closed when it ends, is what scopes the gate to the work it
- * belongs to.
- */
-export interface Session {
-  startedAt: string;
-  brief: string;
-  /** Glob patterns whose writes the gate guards. Everything else passes untouched. */
-  scope: string[];
-}
-
-export type Decision = { decision: 'allow' } | { decision: 'deny'; reason: string };
-
-export interface HookInput {
-  cwd: string;
-  env?: NodeJS.ProcessEnv;
+  [key: string]: unknown;
 }
 
 export interface Choice {

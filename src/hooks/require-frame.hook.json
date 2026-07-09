@@ -1,9 +1,0 @@
-{
-  "id": "require-frame",
-  "event": "PreToolUse",
-  "matcher": "@fileWrite",
-  "command": "node \"@pluginRoot/bin/omd.mjs\" hook pre-tool",
-  "timeout": 5,
-  "statusMessage": "(OMD) Checking frame approval",
-  "codexFileName": "pre-tool-use-requiring-frame.json"
-}

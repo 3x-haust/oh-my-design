@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parse as parseToml } from 'smol-toml';
 import { patchConfigToml, unpatchConfigToml, trustedHashKey } from '../core/install/patch-codex.ts';
-import { patchSettings, unpatchSettings, patchHooks, unpatchHooks } from '../core/install/patch-claude.ts';
+import { patchSettings, unpatchSettings, unpatchHooks } from '../core/install/patch-claude.ts';
 import type { Settings } from '../core/install/patch-claude.ts';
 import { detectHosts } from '../core/install/detect.ts';
 import { must, asRecord } from './helpers.ts';
@@ -129,52 +129,28 @@ test('patchSettings works on an empty settings file', () => {
   assert.deepEqual(unpatchSettings(s), {});
 });
 
-// ── Claude Code: hooks ──
+// ── Claude Code: removing the gate that older versions installed ──
+//
+// Nothing installs a hook now. But a machine that ran an earlier version still has the
+// PreToolUse gate wired into settings.json, and install must clear it.
 
-const HOOK_COMMAND = '"/usr/bin/node" "/opt/omd/bin/omd.ts" hook pre-tool';
+const GATE = { matcher: 'Write|Edit', hooks: [{ type: 'command' as const, command: '"/usr/bin/node" "/opt/omd/bin/omd.ts" hook pre-tool', timeout: 5 }] };
+const FOREIGN = { matcher: '*', hooks: [{ type: 'command' as const, command: 'some-other-plugin.sh', timeout: 3 }] };
 
-test('patchHooks adds a PreToolUse entry pointed at omd.ts', () => {
-  const s = patchHooks({}, { command: HOOK_COMMAND });
-  const pre = must(must(s.hooks, 'hooks').PreToolUse, 'PreToolUse');
-  assert.equal(pre.length, 1);
-  assert.equal(pre[0]?.matcher, 'Write|Edit');
-  assert.equal(pre[0]?.hooks[0]?.command, HOOK_COMMAND);
+test('unpatchHooks removes the legacy omd gate', () => {
+  const gated: Settings = { model: 'opus', hooks: { PreToolUse: [GATE] } };
+  assert.deepEqual(unpatchHooks(gated), { model: 'opus' });
 });
 
-test('patchHooks is idempotent — patching twice yields one entry, not two', () => {
-  const once = patchHooks({}, { command: HOOK_COMMAND });
-  const twice = patchHooks(once, { command: HOOK_COMMAND });
-  assert.deepEqual(twice, once);
-  assert.equal(must(twice.hooks, 'hooks').PreToolUse?.length, 1);
+test('unpatchHooks leaves another plugin\'s hooks exactly as they were', () => {
+  const mixed: Settings = { hooks: { PreToolUse: [FOREIGN, GATE], Stop: [FOREIGN] } };
+  assert.deepEqual(unpatchHooks(mixed), { hooks: { PreToolUse: [FOREIGN], Stop: [FOREIGN] } });
 });
 
-test('patchHooks preserves foreign PreToolUse hooks and other events untouched', () => {
-  const foreign: Settings = {
-    hooks: {
-      PreToolUse: [{ matcher: '*', hooks: [{ type: 'command', command: 'some-other-plugin.sh', timeout: 3 }] }],
-      Stop: [{ matcher: '*', hooks: [{ type: 'command', command: 'stop-hook.sh', timeout: 3 }] }],
-    },
-  };
-  const s = patchHooks(foreign, { command: HOOK_COMMAND });
-  const pre = must(s.hooks, 'hooks').PreToolUse ?? [];
-  assert.equal(pre.length, 2);
-  assert.ok(pre.some((e) => e.hooks[0]?.command === 'some-other-plugin.sh'));
-  assert.ok(pre.some((e) => e.hooks[0]?.command === HOOK_COMMAND));
-  assert.deepEqual(must(s.hooks, 'hooks').Stop, foreign.hooks?.Stop);
-});
-
-test('unpatchHooks removes only our entry and restores an untouched settings object', () => {
-  const before: Settings = { model: 'opus' };
-  const restored = unpatchHooks(patchHooks(before, { command: HOOK_COMMAND }));
-  assert.deepEqual(restored, before);
-});
-
-test('unpatchHooks preserves foreign hooks when removing ours', () => {
-  const foreign: Settings = {
-    hooks: { PreToolUse: [{ matcher: '*', hooks: [{ type: 'command', command: 'some-other-plugin.sh', timeout: 3 }] }] },
-  };
-  const restored = unpatchHooks(patchHooks(foreign, { command: HOOK_COMMAND }));
-  assert.deepEqual(restored, foreign);
+test('unpatchHooks is a no-op on settings that never had the gate', () => {
+  const clean: Settings = { model: 'opus', hooks: { Stop: [FOREIGN] } };
+  assert.deepEqual(unpatchHooks(clean), clean);
+  assert.deepEqual(unpatchHooks({}), {});
 });
 
 // ── detectHosts ──

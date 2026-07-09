@@ -1,5 +1,5 @@
 import { substituter } from './tokens.ts';
-import type { AbstractAgent, AbstractHook, Emitted } from '../core/types.ts';
+import type { AbstractAgent, Emitted } from '../core/types.ts';
 
 const substitute = substituter('codex');
 
@@ -19,19 +19,6 @@ function tomlMultiline(s: string): string {
   return `"""\n${body.endsWith('\n') ? body : `${body}\n`}"""`;
 }
 
-const emitHookFile = (hook: AbstractHook): unknown => ({
-  hooks: {
-    [hook.event]: [{
-      matcher: substitute(hook.matcher),
-      hooks: [{
-        type: 'command',
-        command: substitute(hook.command),
-        timeout: hook.timeout,
-        statusMessage: hook.statusMessage,
-      }],
-    }],
-  },
-});
 
 /**
  * Codex agent TOML has no tool-restriction key — only name, description, model,
@@ -55,10 +42,9 @@ const emitAgentFile = (agent: AbstractAgent): string => [
   '',
 ].join('\n');
 
-export function emitCodex({ hooks = [], agents = [] }: { hooks?: AbstractHook[]; agents?: AbstractAgent[] } = {}): Emitted {
+export function emitCodex({ agents = [] }: { agents?: AbstractAgent[] } = {}): Emitted {
   const files: Record<string, unknown> = {};
 
-  for (const hook of hooks) files[`hooks/${hook.codexFileName}`] = emitHookFile(hook);
   for (const agent of agents) files[`agents/${agent.name}.toml`] = emitAgentFile(agent);
 
   files['.mcp.json'] = MCP_SERVERS;
@@ -66,7 +52,6 @@ export function emitCodex({ hooks = [], agents = [] }: { hooks?: AbstractHook[];
   files['.codex-plugin/plugin.json'] = {
     name: 'oh-my-design',
     skills: './skills/',
-    hooks: hooks.map((h) => `./hooks/${h.codexFileName}`),
     mcpServers: './.mcp.json',
     interface: {
       displayName: 'Oh My Design',

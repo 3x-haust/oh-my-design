@@ -11,7 +11,11 @@ export function writeFrame(cwd: string, frontmatter: Record<string, unknown>, bo
   writeFileSync(join(designDir(cwd), 'frame.md'), `---\n${stringify(frontmatter).trimEnd()}\n---\n\n${body.trim()}\n`);
 }
 
-export function proposeFrame(cwd: string, opts: { problem: string; reframe: string; why?: string }): string {
+/**
+ * Nobody signs this. The `--why` requirement is not a gate on the human — it is a gate on
+ * the agent, which will otherwise reframe a brief on a hunch and call the hunch insight.
+ */
+export function writeFrameRecord(cwd: string, opts: { problem: string; reframe: string; why?: string }): string {
   if (!opts.why || opts.why.trim().length < 10) {
     throw new Error(
       'A reframing without a cited observation is a guess. Pass --why with the review, '
@@ -24,14 +28,38 @@ export function proposeFrame(cwd: string, opts: { problem: string; reframe: stri
     '## Evidence', '', opts.why.trim(),
   ].join('\n');
 
-  writeFrame(cwd, { approved: false, why: opts.why.trim() }, body);
+  writeFrame(cwd, { why: opts.why.trim(), writtenAt: new Date().toISOString() }, body);
+  return join(designDir(cwd), 'frame.md');
+}
+
+/**
+ * What the loop does when a rendered candidate reveals the problem was misunderstood.
+ * The old framing is kept, not overwritten: a frame that changed twice is the most
+ * interesting thing in the repository six months later.
+ */
+export function reframe(cwd: string, opts: { to: string; because: string }): string {
+  const frame = readFrame(cwd);
+  if (!frame) throw new Error('No frame yet. Run `omd frame set` first.');
+
+  const { body, ...frontmatter } = frame;
+  const revision = (typeof frontmatter['revision'] === 'number' ? frontmatter['revision'] : 0) + 1;
+  const appended = [
+    body.trimEnd(),
+    '',
+    `## Reframing ${revision}`,
+    '',
+    `**Now:** ${opts.to.trim()}`,
+    '',
+    `**Because:** ${opts.because.trim()}`,
+  ].join('\n');
+
+  writeFrame(cwd, { ...frontmatter, revision, reframedAt: new Date().toISOString() }, appended);
   return join(designDir(cwd), 'frame.md');
 }
 
 export function setGenerator(cwd: string, generator: string): void {
   const frame = readFrame(cwd);
-  if (!frame) throw new Error('No frame yet. Run `omd frame propose` first.');
-  const { body, ...frontmatter } = frame;
+  const { body = '', ...frontmatter } = frame ?? {};
   writeFrame(cwd, { ...frontmatter, generator }, body);
 }
 

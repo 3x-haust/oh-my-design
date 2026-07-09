@@ -3,10 +3,8 @@ import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { stringify } from 'yaml';
-import { readFrame, approvalRefusal, isApproved } from '../core/frame/index.ts';
-import { proposeFrame, setGenerator, logDecision, logChoice, tasteProfile } from '../core/frame/write.ts';
-import { preTool } from '../core/hook/dispatch.ts';
-import { readSession, startSession, endSession, DEFAULT_SCOPE } from '../core/session/index.ts';
+import { readFrame } from '../core/frame/index.ts';
+import { writeFrameRecord, reframe, setGenerator, logDecision, logChoice, tasteProfile } from '../core/frame/write.ts';
 import type { Layer, RawIr } from '../core/types.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -23,8 +21,8 @@ interface Opts {
   why?: string;
   set?: string;
   chose?: string;
-  brief?: string;
-  scope?: string;
+  to?: string;
+  because?: string;
 }
 
 const FLAGS = new Set(['json']);
@@ -45,17 +43,6 @@ function parseArgs(args: string[]): Opts {
     else bag[key] = args[++i];
   }
   return opts;
-}
-
-function readStdin(): Promise<string> {
-  return new Promise((done) => {
-    let data = '';
-    if (process.stdin.isTTY) return done('');
-    process.stdin.setEncoding('utf8');
-    process.stdin.on('data', (chunk: string) => { data += chunk; });
-    process.stdin.on('end', () => done(data));
-    process.stdin.on('error', () => done(data));
-  });
 }
 
 async function rawIrFor(opts: Opts, target: string | undefined): Promise<RawIr> {
@@ -105,110 +92,29 @@ async function cmdCheck(opts: Opts): Promise<never> {
 function cmdFrameShow(): never {
   const frame = readFrame(process.cwd());
   if (!frame) {
-    console.error('No frame found. Run `omd session start --brief "..."` first.');
+    console.error('No frame yet. Run `omd frame set --problem P --reframe R --why EVIDENCE`.');
     process.exit(1);
   }
   console.log(JSON.stringify(frame, null, 2));
   process.exit(0);
 }
 
-function cmdFrameApprove(): never {
-  const path = join(process.cwd(), '.omd', 'frame.md');
-  const frame = readFrame(process.cwd());
-  if (!frame) {
-    console.error('No frame found at .omd/frame.md');
-    process.exit(1);
-  }
-
-  const refusal = approvalRefusal(frame, { isTTY: Boolean(process.stdin.isTTY), env: process.env });
-  if (refusal) {
-    console.error(refusal);
-    process.exit(1);
-  }
-
-  const { body, ...frontmatter } = frame;
-  const stamped = { ...frontmatter, approved: true, approvedAt: new Date().toISOString() };
-  writeFileSync(path, `---\n${stringify(stamped).trimEnd()}\n---\n${body}`);
-  process.exit(0);
-}
-
 /**
- * Only `cwd` and the tool's target path are read off the wire. Spreading the payload
- * would let a hook input of {"env":{"OMD_NO_FRAME":"1"}} unlock the gate it is meant to
- * guard, so every other field is ignored.
+ * The agent picks, states why, and records it. It does not stop and wait: a loop that
+ * halts for a decision the user was never asked to make is a loop that never finishes.
+ * The recorded choice is the training signal, and the user can overrule it afterwards.
  */
-function extractFilePath(parsed: unknown): string | undefined {
-  if (typeof parsed !== 'object' || parsed === null) return undefined;
-  const p = parsed as {
-    filePath?: unknown;
-    tool_input?: { file_path?: unknown; path?: unknown };
-    params?: { file_path?: unknown };
-  };
-  if (typeof p.filePath === 'string') return p.filePath;
-  if (typeof p.tool_input?.file_path === 'string') return p.tool_input.file_path;
-  if (typeof p.tool_input?.path === 'string') return p.tool_input.path;
-  if (typeof p.params?.file_path === 'string') return p.params.file_path;
-  return undefined;
-}
-
-async function cmdHookPreTool(): Promise<never> {
-  let cwd = process.cwd();
-  let filePath: string | undefined;
-  try {
-    const raw = await readStdin();
-    const parsed: unknown = raw ? JSON.parse(raw) : {};
-    if (typeof parsed === 'object' && parsed !== null && typeof (parsed as { cwd?: unknown }).cwd === 'string') {
-      cwd = (parsed as { cwd: string }).cwd;
-    }
-    filePath = extractFilePath(parsed);
-  } catch {
-    // Garbage on stdin is not a reason to fail open.
-  }
-
-  const result = await preTool(filePath !== undefined ? { cwd, env: process.env, filePath } : { cwd, env: process.env });
-  if (result.decision === 'allow') process.exit(0);
-  console.error(result.reason);
-  process.exit(2);
-}
-
-function cmdSessionStart(opts: Opts): never {
-  const cwd = process.cwd();
-  const brief = opts.brief ?? '';
-  const scope = opts.scope ? opts.scope.split(',').map((s) => s.trim()).filter(Boolean) : DEFAULT_SCOPE;
-  startSession(cwd, brief, scope);
-  console.log(join(cwd, '.omd', 'session.json'));
-  process.exit(0);
-}
-
-function cmdSessionEnd(): never {
-  endSession(process.cwd());
-  process.exit(0);
-}
-
-function cmdSessionStatus(): never {
-  const cwd = process.cwd();
-  const session = readSession(cwd);
-  if (!session) {
-    console.log('no session open');
-    process.exit(1);
-  }
-  console.log(`session started ${session.startedAt}`);
-  console.log(`brief: ${session.brief}`);
-  console.log(`scope: ${session.scope.join(', ')}`);
-  console.log(`frame approved: ${isApproved(cwd)}`);
-  process.exit(0);
-}
-
 function cmdChoose(opts: Opts): never {
   const among = opts._;
-  if (!opts.chose) {
-    console.error(`Present these to the user and re-run with --chose:\n  ${among.join('  ')}\n`
-      + 'The choice is the training signal for Layer 3. Do not pick for them.');
+  if (among.length < 2) {
+    console.error('usage: omd choose c1 c2 c3 --chose c3 --why "..."');
     process.exit(1);
   }
-  const path = logChoice(process.cwd(), opts.why
-    ? { among, chose: opts.chose, why: opts.why }
-    : { among, chose: opts.chose });
+  if (!opts.chose || !opts.why) {
+    console.error('--chose and --why are both required. A choice without a reason teaches nothing.');
+    process.exit(1);
+  }
+  const path = logChoice(process.cwd(), { among, chose: opts.chose, why: opts.why });
   console.log(`${path}  (${tasteProfile(process.cwd()).n} choices recorded)`);
   process.exit(0);
 }
@@ -216,19 +122,18 @@ function cmdChoose(opts: Opts): never {
 function usage(): never {
   console.error(
     'usage: omd <command>\n\n'
-    + '  session start --brief "..." [--scope "a,b"]   open the gate for this project\n'
-    + '  session end                                    close the gate\n'
-    + '  session status                                  print session + approval state\n'
-    + '  ir <page> [-o f]              rendered DOM -> Design IR\n'
-    + '  render <page> -o shot.png     headless screenshot\n'
-    + '  check [<page>|--ir f] [--json]\n'
-    + '  frame show | approve\n'
-    + '  frame propose --problem P --reframe R --why EVIDENCE\n'
-    + '  frame generator --set "은유"\n'
-    + '  choose c1 c2 c3 --chose c3 [--why W]\n'
+    + '  ir <page> [-o f]                            rendered DOM -> Design IR\n'
+    + '  render <page> -o shot.png [--viewport WxH]  headless screenshot\n'
+    + '  check [<page>|--ir f] [--json] [--category slop]\n'
+    + '\n'
+    + '  frame show\n'
+    + '  frame set --problem P --reframe R --why EVIDENCE\n'
+    + '  frame reframe --to "..." --because "what the render revealed"\n'
+    + '  frame generator --set "metaphor"\n'
+    + '\n'
+    + '  choose c1 c2 c3 --chose c3 --why "..."\n'
     + '  decision "what" --why "why"\n'
-    + '  taste profile\n'
-    + '  hook pre-tool',
+    + '  taste profile',
   );
   process.exit(1);
 }
@@ -243,14 +148,6 @@ async function main(): Promise<never> {
     process.exit(0);
   }
 
-  if (cmd === 'session') {
-    const opts = parseArgs(args.slice(2));
-    if (sub === 'start') return cmdSessionStart(opts);
-    if (sub === 'end') return cmdSessionEnd();
-    if (sub === 'status') return cmdSessionStatus();
-    return usage();
-  }
-
   if (cmd === 'ir') return cmdIr(parseArgs(args.slice(1)));
   if (cmd === 'render') return cmdRender(parseArgs(args.slice(1)));
   if (cmd === 'check') return cmdCheck(parseArgs(args.slice(1)));
@@ -258,16 +155,26 @@ async function main(): Promise<never> {
   if (cmd === 'frame') {
     const opts = parseArgs(args.slice(2));
     if (sub === 'show') return cmdFrameShow();
-    if (sub === 'approve') return cmdFrameApprove();
-    if (sub === 'propose') {
-      const path = proposeFrame(process.cwd(), {
+
+    if (sub === 'set') {
+      const path = writeFrameRecord(process.cwd(), {
         problem: opts.problem ?? '',
         reframe: opts.reframe ?? '',
         ...(opts.why ? { why: opts.why } : {}),
       });
-      console.log(`${path}\n\nNot approved. Show it to the user; they approve it in their own terminal.`);
+      console.log(path);
       process.exit(0);
     }
+
+    if (sub === 'reframe') {
+      if (!opts.to || !opts.because) {
+        console.error('usage: omd frame reframe --to "..." --because "what the render revealed"');
+        process.exit(1);
+      }
+      console.log(reframe(process.cwd(), { to: opts.to, because: opts.because }));
+      process.exit(0);
+    }
+
     if (sub === 'generator') {
       if (!opts.set) usage();
       setGenerator(process.cwd(), opts.set);
@@ -296,25 +203,17 @@ async function main(): Promise<never> {
     else {
       const lines = records.map((r) => {
         const over = r.among.filter((a) => a !== r.chose).join(',');
-        return `  ${r.chose} over ${over}${r.why ? ` — ${r.why}` : ''}`;
+        return `  ${r.chose} over ${over}${r.why ? ` \u2014 ${r.why}` : ''}`;
       });
       console.log(`${n} choices\n${lines.join('\n')}`);
     }
     process.exit(0);
   }
 
-  if (cmd === 'hook' && sub === 'pre-tool') return cmdHookPreTool();
-
   return usage();
 }
 
 main().catch((err: unknown) => {
-  const message = err instanceof Error ? err.message : String(err);
-  // `hook pre-tool` may only ever exit 0 or 2; anything else and Codex continues the call.
-  if (process.argv[2] === 'hook' && process.argv[3] === 'pre-tool') {
-    console.error(`OMD internal error, blocking to stay safe: ${message}`);
-    process.exit(2);
-  }
-  console.error(message);
+  console.error(err instanceof Error ? err.message : String(err));
   process.exit(1);
 });

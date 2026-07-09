@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-import { mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync, rmSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parse } from 'yaml';
 import { emitCodex } from './codex.ts';
 import { emitClaude } from './claude.ts';
-import type { AbstractAgent, AbstractHook, Emitted, Host } from '../core/types.ts';
+import type { AbstractAgent, Emitted, Host } from '../core/types.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -48,17 +48,20 @@ function write(host: Host, rel: string, content: unknown): void {
 }
 
 export function build(): void {
-  const hooks = readAll<AbstractHook>('src/hooks', '.hook.json', (t) => JSON.parse(t) as AbstractHook);
+  // Wipe first. A file that stopped being emitted must stop being installed — a stale
+  // hooks/ directory left here is a gate that quietly comes back to life.
+  rmSync(join(root, 'dist'), { recursive: true, force: true });
+
   const agents = readAll<AbstractAgent>('src/agents', '.agent.yaml', (t) => parse(t) as AbstractAgent);
   const skills = readSkills();
 
-  const emitters: Record<Host, (opts: { hooks: AbstractHook[]; agents: AbstractAgent[] }) => Emitted> = {
+  const emitters: Record<Host, (opts: { agents: AbstractAgent[] }) => Emitted> = {
     codex: emitCodex,
     claude: emitClaude,
   };
 
   for (const host of Object.keys(emitters) as Host[]) {
-    const { files } = emitters[host]({ hooks, agents });
+    const { files } = emitters[host]({ agents });
     for (const [rel, content] of Object.entries(files)) write(host, rel, content);
 
     for (const skill of skills) {

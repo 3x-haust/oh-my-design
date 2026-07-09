@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"npx tsc --noEmit -p tsconfig.app.json && echo TSC_OK && npx vite build 2>&1 | tail -30\"}",
+  "error": "Exit code 2\nsrc/c2/Page.tsx(115,10): error TS2746: This JSX tag's 'children' prop expects a single child of type 'Element', but multiple children were provided.\nsrc/c2/Page.tsx(125,10): error TS2746: This JSX tag's 'children' prop expects a single child of type 'Element', but multiple children were provided.\nsrc/c2/Page.tsx(152,10): error TS2746: This JSX tag's 'children' prop expects a single child of type 'Element', but multiple children were provided.\nsrc/c2/Page.tsx(181,10): error TS2746: Th...",
+  "timestamp": "2026-07-09T14:13:38.253Z",
+  "retry_count": 3
+}

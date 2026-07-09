@@ -1,5 +1,5 @@
 import { substituter } from './tokens.ts';
-import type { AbstractAgent, AbstractHook, Emitted } from '../core/types.ts';
+import type { AbstractAgent, Emitted } from '../core/types.ts';
 
 const substitute = substituter('claude');
 
@@ -25,17 +25,9 @@ function emitAgentFile(agent: AbstractAgent): string {
   return `${frontmatter.join('\n')}\n${agent.instructions}`;
 }
 
-export function emitClaude({ hooks = [], agents = [] }: { hooks?: AbstractHook[]; agents?: AbstractAgent[] } = {}): Emitted {
+export function emitClaude({ agents = [] }: { agents?: AbstractAgent[] } = {}): Emitted {
   const files: Record<string, unknown> = {};
 
-  const merged: Record<string, unknown[]> = {};
-  for (const hook of hooks) {
-    (merged[hook.event] ??= []).push({
-      matcher: substitute(hook.matcher),
-      hooks: [{ type: 'command', command: substitute(hook.command), timeout: hook.timeout }],
-    });
-  }
-  if (hooks.length) files['hooks/hooks.json'] = { hooks: merged };
 
   for (const agent of agents) files[`agents/${agent.name}.md`] = emitAgentFile(agent);
 
@@ -46,7 +38,6 @@ export function emitClaude({ hooks = [], agents = [] }: { hooks?: AbstractHook[]
     description: 'Design cognition loop — frame, diverge, see, reframe',
     skills: './skills/',
     agents: './agents/',
-    hooks: './hooks/hooks.json',
     mcpServers: './.mcp.json',
   };
 

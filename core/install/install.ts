@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { parse as parseToml } from 'smol-toml';
 import { build } from '../../adapters/build.ts';
 import type { Detected } from './detect.ts';
-import { patchSettings, unpatchSettings, patchHooks, unpatchHooks } from './patch-claude.ts';
+import { unpatchSettings, patchAllow, unpatchHooks } from './patch-claude.ts';
 import type { Settings } from './patch-claude.ts';
 import { patchConfigToml, unpatchConfigToml } from './patch-codex.ts';
 import type { Host } from '../types.ts';
@@ -38,28 +38,40 @@ function backupFile(path: string, home: string): void {
   cpSync(path, dest);
 }
 
-/**
- * The hook is spawned by the host, which does not necessarily hand it our PATH — so the
- * interpreter and the script are both resolved to absolute paths at install time, never
- * left to be found on PATH later.
- */
-function hookCommand(): string {
-  return `${JSON.stringify(process.execPath)} ${JSON.stringify(join(pkgRoot, 'bin', 'omd.ts'))} hook pre-tool`;
-}
+const OMD_ALLOW = [
+  'Bash(omd check:*)', 'Bash(omd ir:*)', 'Bash(omd render:*)', 'Bash(omd session:*)',
+  'Bash(omd frame:*)', 'Bash(omd choose:*)', 'Bash(omd decision:*)', 'Bash(omd taste:*)',
+];
 
-function installClaude(d: Detected, version: string, changes: string[]): void {
-  const pluginDir = join(d.home, 'plugins', 'omd', 'oh-my-design', version);
-  mkdirSync(pluginDir, { recursive: true });
-  cpSync(join(pkgRoot, 'dist', 'claude'), pluginDir, { recursive: true });
-  changes.push(`claude: installed plugin -> ${pluginDir}`);
+/**
+ * Skills and agents are copied into the directories the host actually reads, not into a
+ * plugin folder behind a marketplace we do not publish. A plugin registered against a
+ * marketplace that does not exist never loads, and `/ultradesign` never appears.
+ */
+function installClaude(d: Detected, _version: string, changes: string[]): void {
+  const skillsSrc = join(pkgRoot, 'dist', 'claude', 'skills');
+  if (existsSync(skillsSrc)) {
+    const dest = join(d.home, 'skills');
+    mkdirSync(dest, { recursive: true });
+    cpSync(skillsSrc, dest, { recursive: true });
+    changes.push(`claude: installed skills -> ${dest} (${readdirSafe(skillsSrc).join(', ')})`);
+  }
+
+  const agentsSrc = join(pkgRoot, 'dist', 'claude', 'agents');
+  if (existsSync(agentsSrc)) {
+    const dest = join(d.home, 'agents');
+    mkdirSync(dest, { recursive: true });
+    for (const file of readdirSafe(agentsSrc)) cpSync(join(agentsSrc, file), join(dest, file));
+    changes.push(`claude: installed agents -> ${dest}`);
+  }
 
   const settingsPath = join(d.home, 'settings.json');
   backupFile(settingsPath, d.home);
   const current: Settings = existsSync(settingsPath)
     ? (JSON.parse(readFileSync(settingsPath, 'utf8')) as Settings)
     : {};
-  let next = patchSettings(current, { marketplaceUrl: MARKETPLACE_URL, allow: ['Bash(omd *)'] });
-  next = patchHooks(next, { command: hookCommand() });
+  // unpatchHooks clears the PreToolUse gate that older versions installed.
+  const next = unpatchHooks(patchAllow(current, OMD_ALLOW));
   mkdirSync(d.home, { recursive: true });
   writeFileSync(settingsPath, `${JSON.stringify(next, null, 2)}\n`);
   changes.push(`claude: patched ${settingsPath}`);
@@ -74,7 +86,22 @@ function uninstallClaude(d: Detected, changes: string[]): void {
     changes.push(`claude: unpatched ${settingsPath}`);
   }
 
-  // NEVER delete .omd/ — that is the user's own work, and it never lives under plugins/.
+  // Remove only the skills we shipped, by name. The user's own skills live beside them.
+  const skillsSrc = join(pkgRoot, 'dist', 'claude', 'skills');
+  for (const name of readdirSafe(skillsSrc)) {
+    const installed = join(d.home, 'skills', name);
+    if (!existsSync(installed)) continue;
+    rmSync(installed, { recursive: true, force: true });
+    changes.push(`claude: removed ${installed}`);
+  }
+
+  for (const file of readdirSafe(join(d.home, 'agents'))) {
+    if (!file.startsWith('omd-')) continue;
+    rmSync(join(d.home, 'agents', file), { force: true });
+    changes.push(`claude: removed ${join(d.home, 'agents', file)}`);
+  }
+
+  // NEVER delete .omd/ — that is the user's own work.
   const pluginRoot = join(d.home, 'plugins', 'omd');
   if (existsSync(pluginRoot)) {
     rmSync(pluginRoot, { recursive: true, force: true });

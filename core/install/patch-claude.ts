@@ -69,25 +69,27 @@ export function unpatchSettings(settings: Settings): Settings {
 }
 
 /**
- * Adds (or replaces) the PreToolUse hook that gates writes on frame approval. Idempotent —
- * patching twice yields the same single entry — and it never touches hooks another plugin
- * registered, on PreToolUse or any other event.
+ * Grants the `omd` subcommands the skill needs, without claiming a marketplace. Every
+ * Bash call the model makes would otherwise raise a permission prompt, and a loop that
+ * prompts ten times per iteration is a loop nobody finishes.
  */
-export function patchHooks(settings: Settings, opts: { command: string; matcher?: string; timeout?: number }): Settings {
+export function patchAllow(settings: Settings, allow: string[]): Settings {
   const out = clone(settings ?? {});
-  const hooks: HooksBlock = { ...(out.hooks ?? {}) };
-  const existing = hooks.PreToolUse ?? [];
-  const foreign = existing.filter((entry) => !entry.hooks.some((h) => h.command.includes(HOOK_MARKER)));
-  const ours: HookMatcherEntry = {
-    matcher: opts.matcher ?? 'Write|Edit',
-    hooks: [{ type: 'command', command: opts.command, timeout: opts.timeout ?? 5 }],
-  };
-  hooks.PreToolUse = [...foreign, ours];
-  out.hooks = hooks;
+  const merged = [...(out.permissions?.allow ?? [])];
+  for (const entry of allow) if (!merged.includes(entry)) merged.push(entry);
+  out.permissions = { ...out.permissions, allow: merged };
   return out;
 }
 
-/** Removes only the hook entries we identify as ours; restores byte-for-byte otherwise. */
+/**
+ * Removes the PreToolUse gate that earlier versions installed, and only that: every other
+ * hook, on PreToolUse or any other event, is left exactly as it was.
+ *
+ * Nothing installs a hook any more. The gate made a human sign off on the reframing before
+ * anything could be built, which meant nothing could be rendered, which meant nothing could
+ * reveal that the reframing was wrong. It solved by signature a problem that is only ever
+ * solved by looking.
+ */
 export function unpatchHooks(settings: Settings): Settings {
   const out = clone(settings ?? {});
   if (!out.hooks) return out;

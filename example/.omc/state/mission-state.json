@@ -1,0 +1,111 @@
+{
+  "updatedAt": "2026-07-09T14:16:40.633Z",
+  "missions": [
+    {
+      "id": "session:094a051b-a0cc-4ef4-a195-057632a1cc4b:none",
+      "source": "session",
+      "name": "none",
+      "objective": "Session mission",
+      "createdAt": "2026-07-09T14:12:04.212Z",
+      "updatedAt": "2026-07-09T14:16:40.633Z",
+      "status": "running",
+      "workerCount": 6,
+      "taskCounts": {
+        "total": 6,
+        "pending": 0,
+        "blocked": 0,
+        "inProgress": 3,
+        "completed": 3,
+        "failed": 0
+      },
+      "agents": [
+        {
+          "name": "omd-hand:a0ba361",
+          "role": "omd-hand",
+          "ownership": "a0ba361e9efde8d43",
+          "status": "done",
+          "currentStep": null,
+          "latestUpdate": "completed",
+          "completedSummary": null,
+          "updatedAt": "2026-07-09T14:13:47.758Z"
+        },
+        {
+          "name": "omd-hand:a48bc6f",
+          "role": "omd-hand",
+          "ownership": "a48bc6fc21f4049d1",
+          "status": "done",
+          "currentStep": null,
+          "latestUpdate": "completed",
+          "completedSummary": null,
+          "updatedAt": "2026-07-09T14:14:29.389Z"
+        },
+        {
+          "name": "omd-hand:abf092e",
+          "role": "omd-hand",
+          "ownership": "abf092e55f8d626e6",
+          "status": "done",
+          "currentStep": null,
+          "latestUpdate": "completed",
+          "completedSummary": null,
+          "updatedAt": "2026-07-09T14:15:07.959Z"
+        },
+        {
+          "name": "omd-eye:a6acdc4",
+          "role": "omd-eye",
+          "ownership": "a6acdc477b0fb761b",
+          "status": "running",
+          "currentStep": null,
+          "latestUpdate": null,
+          "completedSummary": null,
+          "updatedAt": "2026-07-09T14:16:22.574Z"
+        },
+        {
+          "name": "omd-eye:ad89d62",
+          "role": "omd-eye",
+          "ownership": "ad89d6232699faae2",
+          "status": "running",
+          "currentStep": null,
+          "latestUpdate": null,
+          "completedSummary": null,
+          "updatedAt": "2026-07-09T14:16:31.225Z"
+        },
+        {
+          "name": "omd-eye:af87c81",
+          "role": "omd-eye",
+          "ownership": "af87c81e2abeffb8c",
+          "status": "running",
+          "currentStep": null,
+          "latestUpdate": null,
+          "completedSummary": null,
+          "updatedAt": "2026-07-09T14:16:40.633Z"
+        }
+      ],
+      "timeline": [
+        {
+          "id": "session-start:a6acdc477b0fb761b:2026-07-09T14:16:22.574Z",
+          "at": "2026-07-09T14:16:22.574Z",
+          "kind": "update",
+          "agent": "omd-eye:a6acdc4",
+          "detail": "started omd-eye:a6acdc4",
+          "sourceKey": "session-start:a6acdc477b0fb761b"
+        },
+        {
+          "id": "session-start:ad89d6232699faae2:2026-07-09T14:16:31.225Z",
+          "at": "2026-07-09T14:16:31.225Z",
+          "kind": "update",
+          "agent": "omd-eye:ad89d62",
+          "detail": "started omd-eye:ad89d62",
+          "sourceKey": "session-start:ad89d6232699faae2"
+        },
+        {
+          "id": "session-start:af87c81e2abeffb8c:2026-07-09T14:16:40.633Z",
+          "at": "2026-07-09T14:16:40.633Z",
+          "kind": "update",
+          "agent": "omd-eye:af87c81",
+          "detail": "started omd-eye:af87c81",
+          "sourceKey": "session-start:af87c81e2abeffb8c"
+        }
+      ]
+    }
+  ]
+}

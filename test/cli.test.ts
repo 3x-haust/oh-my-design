@@ -1,130 +1,136 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, cpSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Frame, Violation } from '../core/types.ts';
-import { startSession } from '../core/session/index.ts';
 import { must } from './helpers.ts';
 
 const CLI = fileURLToPath(new URL('../bin/omd.ts', import.meta.url));
 const FIXTURE = fileURLToPath(new URL('./fixtures/ir.raw.json', import.meta.url));
 
-const REAL_FRAME_BODY = '사람들은 배고파서가 아니라 결정하기 싫어서 앱을 연다. 선택 마비 문제다.';
+const run = (args: string[], cwd?: string) =>
+  spawnSync(process.execPath, [CLI, ...args], { encoding: 'utf8', ...(cwd ? { cwd } : {}) });
 
-function project({ approved }: { approved: boolean }): string {
-  const dir = mkdtempSync(join(tmpdir(), 'omd-cli-'));
-  mkdirSync(join(dir, '.omd'), { recursive: true });
-  writeFileSync(
-    join(dir, '.omd', 'frame.md'),
-    `---\napproved: ${approved}\nwhy: "리뷰 표본 n=240, 최다 불만 31%"\n---\n\n${REAL_FRAME_BODY}\n`,
-  );
-  cpSync(FIXTURE, join(dir, 'ir.json'));
-  // The gate only guards a project with a session open.
-  startSession(dir, 'test brief');
-  return dir;
-}
+const project = (): string => mkdtempSync(join(tmpdir(), 'omd-cli-'));
 
-// An agent's Bash has no TTY. Tests are machines too, so they must say so explicitly.
-const asHuman = { ...process.env, OMD_ALLOW_NONINTERACTIVE_APPROVE: '1' };
-
-const run = (args: string[], opts: { cwd?: string; input?: string; env?: NodeJS.ProcessEnv } = {}) =>
-  spawnSync(process.execPath, [CLI, ...args], { encoding: 'utf8', ...opts });
+const EVIDENCE = 'App store reviews, n=240: 31% say "too many choices"';
 
 test('omd check exits 1 when violations exist — usable as a CI design linter', () => {
   const r = run(['check', '--ir', FIXTURE]);
   assert.equal(r.status, 1);
-  assert.match(r.stdout, /SPACING-001/);
   assert.match(r.stdout, /CONTRAST-001/);
 });
 
-test('omd check --json emits a parseable violation array on stdout', () => {
-  const r = run(['check', '--ir', FIXTURE, '--json']);
-  const parsed = JSON.parse(r.stdout) as Violation[];
-  assert.equal(parsed.length, 5);
-  assert.ok(parsed.every((v) => v.id && v.nodeId && v.path && v.severity));
+test('omd check --json emits a parseable violation array', () => {
+  const parsed = JSON.parse(run(['check', '--ir', FIXTURE, '--json']).stdout) as Violation[];
+  assert.ok(parsed.length > 0);
+  assert.ok(parsed.every((v) => v.id && v.nodeId && v.path && v.severity && v.category));
 });
 
 test('omd check exits 0 on a clean IR', () => {
-  const dir = project({ approved: true });
+  const dir = project();
   const clean = join(dir, 'clean.json');
   writeFileSync(clean, JSON.stringify({ meta: {}, tokens: {}, nodes: [] }));
   assert.equal(run(['check', '--ir', clean]).status, 0);
 });
 
-// ── The gate contract, exercised as the host actually exercises it. ──
-// Codex treats a non-zero exit that is NOT 2 as "hook failed" and CONTINUES.
-// So the handler must exit exactly 2 to block, even when it crashes internally.
+// ── The frame is a record the loop keeps, not a gate a human signs. ──
 
-test('omd hook pre-tool exits 2 and explains itself when the frame is unapproved', () => {
-  const r = run(['hook', 'pre-tool'], { cwd: project({ approved: false }), input: '{}' });
-  assert.equal(r.status, 2, 'exit 2 is the only code that blocks the tool call');
-  assert.match(r.stderr, /omd frame approve/);
+test('there is no approval command any more', () => {
+  assert.notEqual(run(['frame', 'approve'], project()).status, 0);
 });
 
-test('omd hook pre-tool exits 0 when the frame is approved', () => {
-  const r = run(['hook', 'pre-tool'], { cwd: project({ approved: true }), input: '{}' });
+test('nothing blocks a write: there is no hook subcommand', () => {
+  assert.notEqual(run(['hook', 'pre-tool']).status, 0);
+});
+
+test('omd frame set refuses a reframing with no cited evidence', () => {
+  const r = run(['frame', 'set', '--problem', 'a blog', '--reframe', 'a reading problem'], project());
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /without a cited observation is a guess/);
+});
+
+test('omd frame set writes a record that needs no signature', () => {
+  const dir = project();
+  assert.equal(run(['frame', 'set', '--problem', 'a blog', '--reframe', 'a reading problem', '--why', EVIDENCE], dir).status, 0);
+
+  const frame = JSON.parse(run(['frame', 'show'], dir).stdout) as Frame;
+  assert.equal(frame.why, EVIDENCE);
+  assert.ok(frame.writtenAt);
+  assert.equal(frame['approved'], undefined, 'approval is not a concept any more');
+  assert.match(frame.body, /## The reframing/);
+});
+
+test('omd frame reframe appends a revision rather than overwriting the old framing', () => {
+  const dir = project();
+  run(['frame', 'set', '--problem', 'a blog', '--reframe', 'a reading problem', '--why', EVIDENCE], dir);
+  run(['frame', 'reframe', '--to', 'two modes: new and returning', '--because', 'c3 cannot be skimmed'], dir);
+
+  const frame = JSON.parse(run(['frame', 'show'], dir).stdout) as Frame;
+  assert.equal(frame.revision, 1);
+  assert.match(frame.body, /a reading problem/, 'the original framing survives');
+  assert.match(frame.body, /## Reframing 1/);
+  assert.match(frame.body, /c3 cannot be skimmed/);
+
+  run(['frame', 'reframe', '--to', 'three modes', '--because', 'the render showed a third'], dir);
+  const twice = JSON.parse(run(['frame', 'show'], dir).stdout) as Frame;
+  assert.equal(twice.revision, 2);
+  assert.match(twice.body, /## Reframing 1/);
+  assert.match(twice.body, /## Reframing 2/);
+});
+
+test('omd frame generator records the point of view', () => {
+  const dir = project();
+  run(['frame', 'set', '--problem', 'p', '--reframe', 'r', '--why', EVIDENCE], dir);
+  run(['frame', 'generator', '--set', 'a trustworthy accountant'], dir);
+  const frame = JSON.parse(run(['frame', 'show'], dir).stdout) as Frame;
+  assert.equal(frame.generator, 'a trustworthy accountant');
+});
+
+// ── choose records; it does not halt and wait for a human. ──
+
+test('omd choose records the pick and its reason without stopping the loop', () => {
+  const dir = project();
+  const r = run(['choose', 'c1', 'c2', 'c3', '--chose', 'c3', '--why', 'conversational fits the metaphor'], dir);
   assert.equal(r.status, 0);
+
+  const line = readFileSync(join(dir, '.omd', 'taste', 'preferences.jsonl'), 'utf8').trim();
+  const rec = JSON.parse(line) as { chose: string; among: string[]; why: string };
+  assert.equal(rec.chose, 'c3');
+  assert.deepEqual(rec.among, ['c1', 'c2', 'c3']);
+  assert.equal(rec.why, 'conversational fits the metaphor');
 });
 
-test('omd hook pre-tool FAILS CLOSED — a corrupt frame blocks rather than passes', () => {
-  const dir = project({ approved: true });
-  writeFileSync(join(dir, '.omd', 'frame.md'), '---\n: : not: yaml: [\n---\n');
-  const r = run(['hook', 'pre-tool'], { cwd: dir, input: '{}' });
-  assert.equal(r.status, 2);
-});
-
-test('omd hook pre-tool never exits with a code other than 0 or 2', () => {
-  for (const dir of [project({ approved: true }), project({ approved: false }), mkdtempSync(join(tmpdir(), 'omd-bare-'))]) {
-    const r = run(['hook', 'pre-tool'], { cwd: dir, input: 'not json at all' });
-    assert.ok([0, 2].includes(must(r.status, 'status')), `got ${r.status}; Codex would treat anything else as "hook failed" and continue`);
-  }
-});
-
-test('omd frame approve flips the gate', () => {
-  const dir = project({ approved: false });
-  assert.equal(run(['hook', 'pre-tool'], { cwd: dir, input: '{}' }).status, 2);
-  execFileSync(process.execPath, [CLI, 'frame', 'approve'], { cwd: dir, env: asHuman });
-  assert.equal(run(['hook', 'pre-tool'], { cwd: dir, input: '{}' }).status, 0);
-});
-
-// Verified against a real headless Claude Code session: told to clear the gate itself,
-// the agent ran `omd frame approve` and wrote the file. The key sat inside the gate.
-
-test('omd frame approve refuses a caller with no terminal', () => {
-  const dir = project({ approved: false });
-  const r = run(['frame', 'approve'], { cwd: dir });
+test('omd choose refuses a pick with no reason — a choice without one teaches nothing', () => {
+  const r = run(['choose', 'c1', 'c2', '--chose', 'c1'], project());
   assert.equal(r.status, 1);
-  assert.match(r.stderr, /human at a terminal/);
-  assert.equal(run(['hook', 'pre-tool'], { cwd: dir, input: '{}' }).status, 2, 'gate must still hold');
+  assert.match(r.stderr, /reason/);
 });
 
-test('omd frame approve refuses a frame with no evidence', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'omd-noevidence-'));
+test('omd decision requires a why', () => {
+  const dir = project();
+  assert.equal(run(['decision', 'rejected the green CTA'], dir).status, 1);
+  assert.equal(run(['decision', 'rejected the green CTA', '--why', 'fintech cliche'], dir).status, 0);
+  assert.match(readFileSync(join(dir, '.omd', 'decisions.md'), 'utf8'), /fintech cliche/);
+});
+
+test('omd taste profile summarises accumulated choices', () => {
+  const dir = project();
+  run(['choose', 'c1', 'c2', '--chose', 'c2', '--why', 'denser'], dir);
+  const out = run(['taste', 'profile'], dir).stdout;
+  assert.match(out, /1 choices/);
+  assert.match(out, /c2 over c1/);
+});
+
+test('frame.md survives a hand-written file with no frontmatter', () => {
+  const dir = project();
   mkdirSync(join(dir, '.omd'), { recursive: true });
-  writeFileSync(join(dir, '.omd', 'frame.md'), `---\napproved: false\n---\n\n${REAL_FRAME_BODY}\n`);
-  const r = run(['frame', 'approve'], { cwd: dir, env: asHuman });
-  assert.equal(r.status, 1);
-  assert.match(r.stderr, /no evidence/);
-});
-
-test('omd frame approve refuses to sign off on a stub', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'omd-stub-'));
-  mkdirSync(join(dir, '.omd'), { recursive: true });
-  writeFileSync(join(dir, '.omd', 'frame.md'), '---\napproved: false\nwhy: "리뷰 표본 n=240"\n---\n\n가설.\n');
-  const r = run(['frame', 'approve'], { cwd: dir, env: asHuman });
-  assert.equal(r.status, 1);
-  assert.match(r.stderr, /stub/);
-});
-
-test('approval stamps when it happened', () => {
-  const dir = project({ approved: false });
-  execFileSync(process.execPath, [CLI, 'frame', 'approve'], { cwd: dir, env: asHuman });
-  const out = JSON.parse(run(['frame', 'show'], { cwd: dir }).stdout) as Frame;
-  assert.equal(out.approved, true);
-  assert.ok(Date.parse(must(out.approvedAt, 'approvedAt')) > 0);
+  writeFileSync(join(dir, '.omd', 'frame.md'), 'just prose, no frontmatter\n');
+  const frame = JSON.parse(run(['frame', 'show'], dir).stdout) as Frame;
+  assert.match(must(frame.body), /just prose/);
 });
 
 test('omd --version and unknown commands behave', () => {
