@@ -150,6 +150,50 @@ export interface Frame {
   [key: string]: unknown;
 }
 
+/**
+ * What a reference actually is: not a picture, a set of measurements.
+ *
+ * Jansson & Smith (1991) showed that designers reproduce the features of an example even
+ * after its flaws are pointed out — across four separate tasks. Hand a model a screenshot
+ * and it will produce a knockoff, which is anonymity wearing a different coat. Hand it the
+ * numbers and the reasoning behind them, and it has to think.
+ */
+export interface Invariants {
+  /** Spacing values carrying the design, smallest first. Zero is excluded: on a real page it is ~80% of all values. */
+  spacingLadder: number[];
+  /** Corner radii carrying the design. A single rung is a monoculture. */
+  radiusLadder: number[];
+  /**
+   * Distinct box-shadows that are actually elevation. Hairline shadows (`0 0 0 1px`) are
+   * borders drawn as shadows and are not counted — Linear has five distinct shadows and
+   * four of them are hairlines.
+   */
+  elevationLevels: number;
+  /** Fraction of text-bearing nodes that are centred. 0..1 */
+  centeredRatio: number;
+  /** Of the styles that could carry a token, the fraction that do. 0..1 */
+  tokenCoverage: number;
+  /** Mean sum of the four paddings on nodes that declare any. Higher is airier. */
+  paddingWeight: number;
+}
+
+export interface Reference {
+  source: string;
+  component: string;
+  capturedAt: string;
+  invariants: Invariants;
+  /** Why it was built that way. Written by a model that saw the render *and* the numbers. */
+  principles: string[];
+}
+
+/** How close a page sits to a reference. 1 is identical; the warning threshold is 0.6. */
+export interface RefDistance {
+  reference: string;
+  similarity: number;
+  /** Which invariants drove the score, most-similar first. */
+  drivers: string[];
+}
+
 export interface Choice {
   ts: string;
   among: string[];

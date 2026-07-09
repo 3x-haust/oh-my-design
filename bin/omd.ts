@@ -23,6 +23,7 @@ interface Opts {
   chose?: string;
   to?: string;
   because?: string;
+  as?: string;
 }
 
 const FLAGS = new Set(['json']);
@@ -119,6 +120,83 @@ function cmdChoose(opts: Opts): never {
   process.exit(0);
 }
 
+async function cmdRefAdd(opts: Opts): Promise<never> {
+  const target = opts._[0];
+  if (!target || !opts.as) {
+    console.error('usage: omd ref add <url|file> --as <component>');
+    process.exit(1);
+  }
+  const { normalize } = await import('../core/ir/normalize.ts');
+  const { extractInvariants } = await import('../core/ref/invariants.ts');
+  const { saveRef } = await import('../core/ref/store.ts');
+
+  const raw = await rawIrFor(opts, target);
+  const ir = normalize(raw);
+  const invariants = extractInvariants(ir);
+  const path = saveRef(process.cwd(), {
+    source: target,
+    component: opts.as,
+    capturedAt: new Date().toISOString(),
+    invariants,
+    principles: [],
+  });
+  console.log(path);
+  console.log(JSON.stringify(invariants, null, 2));
+  process.exit(0);
+}
+
+async function cmdRefList(): Promise<never> {
+  const { loadRefs } = await import('../core/ref/store.ts');
+  const refs = loadRefs(process.cwd());
+  if (refs.length === 0) {
+    console.log('No references yet.');
+    process.exit(0);
+  }
+  for (const ref of refs) {
+    const inv = ref.invariants;
+    console.log(
+      `${ref.source}  ${ref.component}  radius=[${inv.radiusLadder.join(',')}] `
+      + `spacing=[${inv.spacingLadder.join(',')}] elevation=${inv.elevationLevels}`,
+    );
+  }
+  process.exit(0);
+}
+
+async function cmdRefDistance(opts: Opts): Promise<never> {
+  const target = opts._[0];
+  if (!target) usage();
+
+  const { loadRefs } = await import('../core/ref/store.ts');
+  const refs = loadRefs(process.cwd());
+  if (refs.length === 0) {
+    console.log('No references to compare against.');
+    process.exit(0);
+  }
+
+  const { normalize } = await import('../core/ir/normalize.ts');
+  const { extractInvariants } = await import('../core/ref/invariants.ts');
+  const { distances } = await import('../core/ref/distance.ts');
+
+  const raw = await rawIrFor(opts, target);
+  const ir = normalize(raw);
+  const invariants = extractInvariants(ir);
+  const results = distances(invariants, refs);
+
+  for (const r of results) {
+    console.log(`  ${r.similarity.toFixed(2)}  ${r.reference}   (${r.drivers.join(', ')})`);
+  }
+
+  const tooClose = results.filter((r) => r.similarity >= 0.6);
+  if (tooClose.length > 0) {
+    console.error(
+      'warning: this page resembles a reference too closely '
+      + `(${tooClose.map((r) => r.reference).join(', ')}) — assembled work should resemble none of them.`,
+    );
+    process.exit(1);
+  }
+  process.exit(0);
+}
+
 function usage(): never {
   console.error(
     'usage: omd <command>\n\n'
@@ -133,7 +211,11 @@ function usage(): never {
     + '\n'
     + '  choose c1 c2 c3 --chose c3 --why "..."\n'
     + '  decision "what" --why "why"\n'
-    + '  taste profile',
+    + '  taste profile\n'
+    + '\n'
+    + '  ref add <url|file> --as <component>         render, extract invariants, save\n'
+    + '  ref list                                    one line per saved reference\n'
+    + '  ref distance <page>                         compare a page to every saved reference',
   );
   process.exit(1);
 }
@@ -181,6 +263,14 @@ async function main(): Promise<never> {
       console.log(`generator: ${opts.set}`);
       process.exit(0);
     }
+    return usage();
+  }
+
+  if (cmd === 'ref') {
+    const opts = parseArgs(args.slice(2));
+    if (sub === 'add') return cmdRefAdd(opts);
+    if (sub === 'list') return cmdRefList();
+    if (sub === 'distance') return cmdRefDistance(opts);
     return usage();
   }
 
