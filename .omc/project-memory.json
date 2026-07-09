@@ -1,0 +1,122 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1783592632004,
+  "projectRoot": "/Users/lyu/01_Project/01_Projects/OhMyDesign",
+  "techStack": {
+    "languages": [
+      {
+        "name": "JavaScript/TypeScript",
+        "version": ">=20",
+        "confidence": "high",
+        "markers": [
+          "package.json"
+        ]
+      }
+    ],
+    "frameworks": [],
+    "packageManager": "npm",
+    "runtime": "Node.js 20"
+  },
+  "build": {
+    "buildCommand": "npm run build",
+    "testCommand": "npm test",
+    "lintCommand": null,
+    "devCommand": null,
+    "scripts": {
+      "test": "node --test 'test/*.test.mjs'",
+      "build": "node adapters/build.mjs"
+    }
+  },
+  "conventions": {
+    "namingStyle": null,
+    "importStyle": null,
+    "testPattern": null,
+    "fileOrganization": null
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [
+      "bin",
+      "src",
+      "test"
+    ],
+    "gitBranches": null
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "adapters": {
+      "path": "adapters",
+      "purpose": null,
+      "fileCount": 4,
+      "lastAccessed": 1783592631972,
+      "keyFiles": [
+        "build.mjs",
+        "claude.mjs",
+        "codex.mjs",
+        "tool-map.json"
+      ]
+    },
+    "bin": {
+      "path": "bin",
+      "purpose": "Executable scripts",
+      "fileCount": 1,
+      "lastAccessed": 1783592631973,
+      "keyFiles": [
+        "omd.mjs"
+      ]
+    },
+    "core": {
+      "path": "core",
+      "purpose": null,
+      "fileCount": 0,
+      "lastAccessed": 1783592631976,
+      "keyFiles": []
+    },
+    "dist": {
+      "path": "dist",
+      "purpose": "Distribution/build output",
+      "fileCount": 0,
+      "lastAccessed": 1783592631977,
+      "keyFiles": []
+    },
+    "src": {
+      "path": "src",
+      "purpose": "Source code",
+      "fileCount": 0,
+      "lastAccessed": 1783592631977,
+      "keyFiles": []
+    },
+    "test": {
+      "path": "test",
+      "purpose": "Test files",
+      "fileCount": 8,
+      "lastAccessed": 1783592631977,
+      "keyFiles": [
+        "adapters-regression.test.mjs",
+        "adapters.test.mjs",
+        "cli.test.mjs",
+        "frame-hook.test.mjs",
+        "install.test.mjs"
+      ]
+    },
+    "test/fixtures": {
+      "path": "test/fixtures",
+      "purpose": "Test fixtures",
+      "fileCount": 1,
+      "lastAccessed": 1783592631980,
+      "keyFiles": [
+        "ir.raw.json"
+      ]
+    }
+  },
+  "hotPaths": [
+    {
+      "path": "bin/omd.mjs",
+      "accessCount": 4,
+      "lastAccessed": 1783592691006,
+      "type": "file"
+    }
+  ],
+  "userDirectives": []
+}

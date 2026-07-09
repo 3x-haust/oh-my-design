@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { stringify } from 'yaml';
@@ -119,8 +119,65 @@ function printVersion() {
   process.exit(0);
 }
 
+const FRAME_TEMPLATE = `---
+approved: false
+why: ""
+---
+
+## 주어진 문제
+
+<의뢰받은 그대로 적는다>
+
+## 재프레이밍
+
+<이 문제가 정말 그 문제인가. 가설로 적는다.>
+
+## 근거
+
+<리뷰 인용, 티켓, 데이터. 이게 없으면 승인이 거부된다.>
+
+## 버려지는 것 / 얻어지는 것
+`;
+
+// The hook is spawned by the host, which does not necessarily hand it our PATH.
+// Resolve the interpreter and the script absolutely, once, at install time.
+function hookCommand() {
+  return `${JSON.stringify(process.execPath)} ${JSON.stringify(join(root, 'bin', 'omd.mjs'))} hook pre-tool`;
+}
+
+function cmdInit() {
+  const cwd = process.cwd();
+  const settingsPath = join(cwd, '.claude', 'settings.json');
+  const framePath = join(cwd, '.design', 'frame.md');
+
+  const settings = existsSync(settingsPath) ? JSON.parse(readFileSync(settingsPath, 'utf8')) : {};
+  settings.hooks ??= {};
+  const others = (settings.hooks.PreToolUse ?? []).filter(
+    (e) => !JSON.stringify(e).includes('omd.mjs'),
+  );
+  settings.hooks.PreToolUse = [
+    ...others,
+    { matcher: 'Write|Edit', hooks: [{ type: 'command', command: hookCommand(), timeout: 5 }] },
+  ];
+
+  mkdirSync(join(cwd, '.claude'), { recursive: true });
+  writeFileSync(settingsPath, `${JSON.stringify(settings, null, 2)}\n`);
+
+  mkdirSync(join(cwd, '.design'), { recursive: true });
+  if (existsSync(framePath)) {
+    console.log(`kept    ${framePath}`);
+  } else {
+    writeFileSync(framePath, FRAME_TEMPLATE);
+    console.log(`created ${framePath}`);
+  }
+  console.log(`wrote   ${settingsPath}`);
+  console.log('\nThe gate is live in the NEXT Claude Code session started here.');
+  console.log('Fill in .design/frame.md, then run `omd frame approve` in your terminal.');
+  process.exit(0);
+}
+
 function usage() {
-  console.error('usage: omd <--version | check | frame show | frame approve | hook pre-tool>');
+  console.error('usage: omd <--version | init | check | frame show | frame approve | hook pre-tool>');
   process.exit(1);
 }
 
@@ -129,6 +186,7 @@ async function main() {
   const [cmd, sub, ...rest] = args;
 
   if (cmd === '--version') return printVersion();
+  if (cmd === 'init') return cmdInit();
 
   if (cmd === 'check') {
     const opts = parseArgs(args.slice(1));

@@ -1,7 +1,0 @@
-{
-  "tool_name": "Bash",
-  "tool_input_preview": "{\"command\":\"ls -la /Users/lyu/01_Project/01_Projects/OhMyDesign/core/ir/normalize.mjs /Users/lyu/01_Project/01_Projects/OhMyDesign/core/rules/engine.mjs 2>&1\"}",
-  "error": "Exit code 1\nls: /Users/lyu/01_Project/01_Projects/OhMyDesign/core/ir/normalize.mjs: No such file or directory\nls: /Users/lyu/01_Project/01_Projects/OhMyDesign/core/rules/engine.mjs: No such file or directory",
-  "timestamp": "2026-07-09T10:00:13.555Z",
-  "retry_count": 3
-}
