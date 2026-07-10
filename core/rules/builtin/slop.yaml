@@ -71,10 +71,25 @@
   # (fires on legitimate privacy/policy copy like "we don't use trackers"; the self-negating
   # meta-brag case it was meant for is already covered by `no (?:fluff|jargon|nonsense) here`),
   # and the unanchored `이 (?:페이지|사이트|글)(?:에서)?는 .*(?:없습니다|않습니다)` (its greedy `.*`
-  # swallowed ordinary 404s, empty states, and privacy copy). Added a narrow replacement,
-  # `이런 내용은 없`, for the actual self-negating pattern in Korean.
-  assert: "!/\\b(seamlessly|effortlessly|unlock the power|elevate your|supercharge|game.?chang|take .* to the next level|revolutioniz|cutting.?edge|unleash|no (?:fluff|jargon|nonsense) here)\\b|결론적으로|시사하는 바가 크|주목할 만하|첫째[,，]|이런 내용은 없/i.test(value)"
-  message: "Marketing filler or self-negating meta-copy: \"{value}\". Either it fits any product and says nothing about this one, or it announces what the page refuses to do instead of just not doing it."
+  # swallowed ordinary 404s, empty states, and privacy copy). F3: moved the narrow Korean
+  # self-negating pattern `이런 내용은 없` to SLOP-PINK-ELEPHANT, which covers the full family.
+  assert: "!/\\b(seamlessly|effortlessly|unlock the power|elevate your|supercharge|game.?chang|take .* to the next level|revolutioniz|cutting.?edge|unleash|no (?:fluff|jargon|nonsense) here)\\b|결론적으로|시사하는 바가 크|주목할 만하|첫째[,，]/i.test(value)"
+  message: "Marketing filler or AI stock phrase: \"{value}\". It fits any product and says nothing about this one. Write what this product specifically gives, costs, or does."
+
+# The pink-elephant failure: a page told "no clutter" that writes "No clutter here."
+# Copy must state what IS — the positive fact the negation was hiding. This rule catches
+# the structural pattern: announcing what the page refuses to do, which is always the model
+# quoting its own instructions back to the user. Narrow patterns only; broad negation ("we
+# don't use") hits privacy and 404 copy that are entirely legitimate. Negative tests are
+# mandatory: "we don't use trackers", empty states, 404s, out-of-stock must never fire.
+- id: SLOP-PINK-ELEPHANT
+  layer: 1
+  category: slop
+  severity: warn
+  when: "Boolean(node.text) && node.text.length > 8"
+  value: "node.text"
+  assert: "!/you won't find [^.]{0,40} here|we (?:won't|will never) (?:bore|spam|waste)|\\b(?:no|zero) (?:ads|clutter|distractions|gimmicks)[,.]? just\\b|이런 (?:내용|것)[은는] 없|(?:여기|이 페이지)에는 [가-힣 ]{0,15}(?:광고|잡동사니|군더더기)[가는은]? 없/i.test(value)"
+  message: "Self-negating meta-copy: \"{value}\". The page is announcing what it refuses to do — the model quoting its own brief. Delete this sentence and write the positive fact it was hiding: what the reader gets, what it costs, what happens next."
 
 - id: SLOP-TRIPLE-CARD
   layer: 1

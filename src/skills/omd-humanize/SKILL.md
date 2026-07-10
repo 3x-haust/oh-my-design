@@ -23,19 +23,44 @@ skill removes them **without touching what the text claims.**
    (pattern → span), then rewrite exactly those spans. No freestyle "improvements".
 3. **Genre survives.** An essay stays an essay; a spec stays a spec. Do not make formal
    text chatty or chatty text formal.
-4. **Stop before you over-edit.** If more than ~30% of the text needs rewriting, say so
-   and show the worst offenders instead of silently rewriting everything — wholesale
-   rewriting is how meaning drifts.
+4. **Stop before you over-edit.** Two thresholds, not one: if more than 30% of the text
+   needs rewriting, warn and present only the worst offenders — do not proceed silently.
+   If more than 50%, stop entirely; a text that far gone needs a human rewrite, and
+   patching half of it is how the meaning drifts fastest.
+
+## Severity hierarchy
+
+Not all tells are equal. Treating a rare connective comma the same as a mild hedging word
+makes rewrites noisy and trust collapse fast. Three tiers:
+
+- **S1 — always remove.** One instance is the tell. C-11 connective commas, A-16
+  pronoun substitutions: a single 그녀 in Korean prose reads machine-written to any fluent
+  reader. Remove on first occurrence, no exceptions.
+- **S2 — 1–2 instances allowed, flag at 3+.** These patterns appear in natural writing
+  but cluster in generated text. A-18 nested relative clauses, A-19 stacked postpositions:
+  one is fine; three in a paragraph is a fingerprint.
+- **S3 — flag only when clustered.** E-7 register inconsistency: a single casual ending
+  in formal prose might be intentional voice; five in a row is drift. Name the cluster
+  and let the writer decide.
 
 ## The tells (Korean — from the im-not-ai taxonomy)
 
-- **Translation-ese**: ~를 통해, ~에 대해 살펴보다, 이중 피동(-되어지다), 그/그녀 남발,
-  왼쪽으로 긴 관형절, -에서의/-에로의 겹조사
-- **Mechanical structure**: 첫째/둘째/셋째 나열, 불릿·이모지 남발, 접속어 뒤 쉼표 기계 배치
+- **Translation-ese**: ~를 통해, ~에 대해 살펴보다, 이중 피동(-되어지다)
+- **A-16** (S1): 그/그녀/그것 기계적 대명사 매핑 — 한국어는 주어를 생략하거나 명사를
+  반복한다. 그/그녀가 나오면 삭제하거나 지시 대상 명사로 대체.
+- **A-18** (S2): 왼쪽 분기 관형절 3중첩 이상 — "~에 의해 결정된 결과로 도출된 방향성"처럼
+  명사 앞에 관형절이 3개 이상 쌓이면 분리.
+- **A-19** (S2): 겹조사 — -에서의/-에로의/-으로의 같은 조사 중첩. 문장을 쪼개거나 조사를
+  단순화.
+- **C-11** (S1): 접속어 직후 쉼표 — 그러나, / 하지만, / 또한, / 따라서, 형태. 가장 강한
+  단일 판별자. 한국어 자연문에서 접속어 뒤 쉼표는 거의 없다. 쉼표를 삭제하거나 접속어를
+  제거하고 문장을 이어라.
+- **Mechanical structure**: 첫째/둘째/셋째 나열, 불릿·이모지 남발
 - **AI stock phrases**: 결론적으로, 시사하는 바가 크다, 주목할 만하다, ~할 필요가 있다,
   중요한 것은 ~라는 점이다
-- **Uniform rhythm**: 문장 길이 분산이 없음, 같은 어미 연속(-다/-다/-다, -입니다 3연속),
-  경어 레벨 흔들림
+- **Uniform rhythm**: 문장 길이 분산이 없음, 같은 어미 연속(-다/-다/-다, -입니다 3연속)
+- **E-7** (S3): 경어법 레벨 흔들림 — 합쇼체와 해체가 단락 안에서 섞임. 대화문 안의 흔들림은
+  예외. 군집(5회+)일 때만 제거.
 - **Redundant modification**: 매우/정말/아주 습관적 사용, 유의어 쌍(명확하고 분명한),
   -적/-성/-화 접미사 남발
 - **Hedging stacks**: ~할 수 있을 것으로 보인다, ~일 수도 있다고 생각된다

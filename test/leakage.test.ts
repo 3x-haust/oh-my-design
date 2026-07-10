@@ -166,10 +166,11 @@ test('SLOP-COPY does not fire on legitimate privacy/policy and empty-state copy'
   }
 });
 
-// F2: the narrow replacement for the removed broad Korean self-negation branch.
-test('SLOP-COPY fires on the narrow self-negating Korean pattern ("이런 내용은 없습니다")', () => {
+// F3: the Korean self-negation pattern moved from SLOP-COPY to SLOP-PINK-ELEPHANT,
+// which covers the full family (이런 내용|것 + 여기/이 페이지에는 ...).
+test('SLOP-PINK-ELEPHANT fires on the Korean self-negating pattern ("이런 내용은 없습니다")', () => {
   const builtin = loadRules(new URL('../core/rules/builtin/', import.meta.url).pathname);
   const ir = normalize(irWith([textNode('n1', '이런 내용은 없습니다, 저희는 다르게 접근합니다.')]));
   const v: Violation[] = check(ir, builtin, { categories: ['slop'] });
-  assert.ok(v.some((x) => x.id === 'SLOP-COPY'), must(v[0], 'at least one slop violation').id);
+  assert.ok(v.some((x) => x.id === 'SLOP-PINK-ELEPHANT'), must(v[0], 'at least one slop violation').id);
 });

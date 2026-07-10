@@ -83,6 +83,17 @@ omd frame generator --set "a quiet library"
 From here every judgement asks *"is this what this concept would do"* — never *"is this
 good"*. A trustworthy accountant does not bounce. A 3am store does not leave whitespace.
 
+Before moving to references, name **the one memorable thing**: the single element this
+page will be remembered for six months after the user closes the tab. Not the colour
+scheme, not the layout — one concrete thing. A sentence, written now, that commits the
+concept to something distinct:
+
+> "The headline types itself in, one word at a time, in the user's own handwriting font."
+> "The pricing table collapses to a single slider that re-prices everything live."
+> "Every scroll-triggered transition moves content up, never down — the page breathes."
+
+If you cannot name it, the concept has no position yet. Name it before you open a browser.
+
 ---
 
 ## 3. REFERENCE — study real things, take the reasoning, leave the pixels
@@ -90,23 +101,30 @@ good"*. A trustworthy accountant does not bounce. A 3am store does not leave whi
 **This is the step that separates design from decoration, and the one you will be most
 tempted to skip.** A designer with a concept goes and looks at what already exists.
 
-Spawn `omd-scout` with the concept and the thing being designed. It fills a board —
-**eight captures minimum**, at several granularities:
+Spawn `omd-scout` with the concept and the thing being designed. It starts with a
+component inventory — every nav, card, form field, and footer the build will need, listed
+before the first browser opens — then fills a board of **at least eighteen captures,
+targeting twenty-five**:
 
 ```bash
-omd ref add https://linear.app --as landing                      # whole page, for feel
-omd ref add https://linear.app --as search --selector ".search"  # one component's anatomy
-omd ref add https://rsms.me --as type-study                      # chosen for its typography
-omd ref add https://stripe.com --as motion-study                 # chosen for its motion
+omd ref add https://linear.app --as landing                      # whole page, for feel (3–4 total)
+omd ref add https://linear.app --as search --selector ".search"  # one component's anatomy (one per inventory item)
+omd ref add https://rsms.me --as type-study-1                    # chosen for its typography — minimum 2
+omd ref add https://practicaltypography.com --as type-study-2    # different register, different pairing
+omd ref add https://stripe.com --as motion-study-1               # chosen for its motion — minimum 2
+omd ref add <site> --as motion-study-2                           # minimum 4 if brief mentions animation
 omd ref add https://pinterest.com/pin/... --as mood --image      # unrenderable: reasoning only
-omd ref add <reddit-thread-url> --as sidebar-debate --image      # community: what people FELT
+omd ref add <reddit-thread-url> --as sidebar-debate --image      # community: what people FELT (minimum 2)
 omd ref list
 ```
 
-Two or three famous pages is not a board; it is a reflex. The scout searches for who
-actually solved this problem in this concept's register, captures the components the
-build will need one by one, and always brings back **at least one typography study and —
-whenever the brief implies any life — one motion study.** Type and motion are measured
+Two or three famous pages is not a board; it is a reflex. The scout runs at least six
+WebSearch queries — problem domain, craft, community, typography, motion, and competitor
+— before the first capture, and logs them on the board. Famous sites may not exceed one
+third of the total. The scout searches for who actually solved this problem in this
+concept's register, captures every component the build will need, and always brings back
+**at least two typography studies and — whenever the brief implies any life — at least two
+motion studies (four if animation is explicitly requested).** Type and motion are measured
 invariants now (typeScale, fontFamilies, weightLadder, motionDurations, easingVocab), so
 "멋있는 애니메이션 넣어줘" resolves to numbers someone actually read, not to 500ms
 ease-in-out from habit.
@@ -235,6 +253,20 @@ If the page sits within 0.6 of any single reference, **you assembled nothing —
 Work built from several references should resemble none of them. Change the thing the report
 names as the driver, and run it again.
 
+Before the eye sees anything, run every visible string on the page through the humanize
+checklist. S1 violations — connective commas (C-11), mechanical pronoun substitutions
+(A-16), self-negating copy (pink elephant) — must read zero. A single "하지만," or a
+"you won't find clutter here" is the same class of defect as a contrast failure: it
+announces the work was generated. Humanize does not change what the copy says; it changes
+whether a person could have said it.
+
+```bash
+# inspect copy, then:
+omd check <page> --category slop   # SLOP-PINK-ELEPHANT and SLOP-COPY must come back clean
+```
+
+Only when the copy is clean does the eye see the page.
+
 Finally spawn `omd-eye` on the built page. It sees the screenshot and the findings and nothing
 about why you built it that way. It cannot defend your reasoning because it does not have it.
 
@@ -293,5 +325,7 @@ Everything is in `.omd/`, committed with the repo. Six months from now someone r
 - **Never let the frame speak on the page.** Rationale lives in `.omd/`; copy sells the
   thing, not the thinking.
 - **Never write copy about what the page is not.** State the positive fact instead.
+- **Never ship a font the board did not argue for.** If no type study cited it, it is a
+  default, not a decision.
 - **Never skip step 7** because the work looks finished. Looking finished is exactly when the
   frame is most likely to be wrong.

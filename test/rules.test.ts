@@ -104,3 +104,68 @@ test('SLOP-GRADIENT fires when both stops sit in the 240-290deg violet band', ()
   const v = check(synthetic, builtin, { categories: ['slop'] });
   assert.ok(v.some((x) => x.id === 'SLOP-GRADIENT'));
 });
+
+// Helpers for text-node rule tests
+function makeTextIr(text: string) {
+  const node: RawNode = {
+    id: 'txt1',
+    name: 'CopyText',
+    type: 'TEXT',
+    path: 'Screen/CopyText',
+    parent: null,
+    box: { x: 0, y: 0, w: 400, h: 24 },
+    children: [],
+    text,
+  };
+  return normalize({ nodes: [node] });
+}
+
+test('SLOP-PINK-ELEPHANT fires on English self-negating meta-copy', () => {
+  const positives = [
+    "You won't find clutter here.",
+    "We will never bore you with long sign-up forms.",
+    "We won't waste your attention.",
+    "No distractions, just the work.",
+    "Zero ads, just great content.",
+  ];
+  for (const text of positives) {
+    const v = check(makeTextIr(text), builtin, { categories: ['slop'] });
+    assert.ok(v.some((x) => x.id === 'SLOP-PINK-ELEPHANT'), `expected SLOP-PINK-ELEPHANT for: ${text}`);
+  }
+});
+
+test('SLOP-PINK-ELEPHANT fires on Korean self-negating meta-copy', () => {
+  const positives = [
+    '이런 내용은 없습니다.',
+    '이런 것은 없어요.',
+    '여기에는 광고가 없습니다.',
+    '이 페이지에는 잡동사니는 없습니다.',
+    '여기에는 군더더기 없습니다.',
+  ];
+  for (const text of positives) {
+    const v = check(makeTextIr(text), builtin, { categories: ['slop'] });
+    assert.ok(v.some((x) => x.id === 'SLOP-PINK-ELEPHANT'), `expected SLOP-PINK-ELEPHANT for: ${text}`);
+  }
+});
+
+test('SLOP-PINK-ELEPHANT does not fire on legitimate negative-statement copy', () => {
+  const negatives = [
+    // privacy / policy copy
+    "We don't use trackers or third-party analytics.",
+    "We do not sell your data.",
+    // empty states
+    "검색 결과가 없습니다.",
+    "일치하는 항목이 없습니다.",
+    // 404 / error
+    "404 — Page not found.",
+    "This page no longer exists.",
+    // out-of-stock / unavailable
+    "Out of stock. Check back next week.",
+    "No items match your current filter.",
+    "품절되어 재고가 없습니다.",
+  ];
+  for (const text of negatives) {
+    const v = check(makeTextIr(text), builtin, { categories: ['slop'] });
+    assert.ok(!v.some((x) => x.id === 'SLOP-PINK-ELEPHANT'), `unexpected SLOP-PINK-ELEPHANT for: ${text}`);
+  }
+});

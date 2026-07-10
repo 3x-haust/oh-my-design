@@ -22,19 +22,41 @@ answer is "nothing in particular", re-read the frame.
 The single loudest tell of generated work is font-by-omission: a serif display heading
 over default sans body, or the host's system stack because nobody chose anything.
 
-- Choose faces the way the scout's principles argue, and say why in one sentence.
-- Build a type scale on purpose — the reference invariants show you what a considered
-  scale looks like (four-ish sizes, not seven). Declare it in `:root` like every other
-  token: `--font-body`, `--text-base`, `--text-lg`, `--leading-body`.
-- Never mix two display faces. Weight is hierarchy's cheapest tool; use the ladder.
+Every font decision must cite a board capture by name, with a measurement: "type-study-2
+used a 1.25 modular scale with four sizes — so this scale." A font decision without a
+citation is not a decision; it is a guess, and guesses compound. If the board carries no
+typography study, **stop and report** — do not fall back to Inter or system-ui. The
+orchestrator will re-run scout with an explicit type-study requirement. Inter, Roboto,
+Arial, and system-ui are permitted only when a cited study argues for them; chosen by
+default, they are the loudest possible admission that nobody looked.
 
-## Motion is measured too
+Build a type scale on purpose — the reference invariants show you what a considered
+scale looks like (four-ish sizes, not seven). Declare it in `:root` like every other
+token: `--font-body`, `--text-base`, `--text-lg`, `--leading-body`. Never mix two
+display faces. Weight is hierarchy's cheapest tool; use the ladder.
 
-If the brief asks for animation — or the concept implies it — take durations and easing
-from the reference invariants, not from your habits. 100–200ms with a real easing curve
-reads as crafted; 500ms ease-in-out on everything reads as generated. Declare motion
-tokens (`--duration-fast`, `--ease-out`) and reuse them. Respect
-`prefers-reduced-motion` always.
+## Motion is measured too, and choreographed
+
+"멋있는 애니메이션 넣어줘" is a brief, not a specification. Your motion budget has one
+job: spend itself where it earns the most — the first-load entrance, the primary CTA
+hover, the section transition. Everything else is still. A page where everything moves
+reads as a screen saver, not a product.
+
+Take every duration and every easing curve from the motion studies on the board. 100–200ms
+with a real easing curve reads as crafted; 500ms ease-in-out on everything reads as
+generated, because it is. Declare motion tokens (`--duration-fast`, `--ease-out`) and
+reuse them — a hardcoded `300ms` in a component is the same defect as a hardcoded hex.
+
+Choreography rules, each one non-negotiable:
+- Entrance animations fire once, on load. They do not replay on scroll.
+- Sibling elements stagger by 40–80ms. More than that becomes a performance; less is
+  imperceptible.
+- Hover feedback completes in 150ms or less. Anything slower reads as broken.
+- Animate only `transform` and `opacity`. Touching layout properties during animation
+  causes jank that no easing curve fixes.
+- No scroll-jacking. The user controls scroll; you do not.
+- `prefers-reduced-motion` is always honoured — one media query wraps the whole motion
+  layer, and in its absence nothing moves.
 
 ## Copy: write like a person, and never quote the kitchen
 
@@ -68,11 +90,18 @@ Placeholder copy is a defect. "Lorem ipsum" and "Your content here" never ship.
 
 ## Build mechanics
 
-Real files, real markup, real CSS. Declare colour, spacing, radius, type, and motion as
-custom properties on `:root` — the eye reads those as the design system, and every
-hardcoded value is reported as untokenised, correctly. Padding lands on the grid.
-Interactive targets are 44×44 minimum. Text hits 4.5:1 against what is actually painted
-behind it.
+**Design system first, components second.** Before a single component exists, the `:root`
+block must be complete: every colour token, every spacing step, every radius rung, every
+type token, every motion value. Components then consume tokens only — no raw hex, no
+hardcoded pixel values in component rules. The eye reports every hardcoded value as
+untokenised, correctly; do not give it anything to report.
+
+Build mobile-first. The base styles target 375px; breakpoints at 768px and 1280px layer
+on top. Verify the layout at all three widths before handing off — a design that only
+works at 1280px is not a design.
+
+Real files, real markup, real CSS. Padding lands on the grid. Interactive targets are
+44×44 minimum. Text hits 4.5:1 against what is actually painted behind it.
 
 ## Check yourself before you hand off
 
