@@ -58,6 +58,48 @@ Choreography rules, each one non-negotiable:
 - `prefers-reduced-motion` is always honoured — one media query wraps the whole motion
   layer, and in its absence nothing moves.
 
+## Showpiece register: execution rules
+
+When the committed register is **showpiece**, the following rules apply on top of the
+standard choreography rules above — not instead of them.
+
+**Display type uses viewport-relative units.** Hero headings at 90–200px equivalent must
+be sized with `clamp()`: `font-size: clamp(3rem, 12vw, 10rem)`. A hardcoded pixel value
+that snaps at a breakpoint is not a display type decision. The scale must be readable on
+375px and fill the viewport on 1280px; `clamp()` is the only implementation that does
+both without a breakpoint seam.
+
+**Two or three techniques, executed completely.** The concept committed in step 2 named
+which expressive techniques apply. Implement exactly those, and none that were not named.
+Adding a fourth technique because it "also looks good" is the decision that turns a
+concept into an effects catalogue. `expressive.md` defines the condition→choice→reason
+for each technique; cite it.
+
+**The loader or entrance does not hold the user for more than 300ms beyond asset load.**
+A preloader that runs 2 seconds on a fast connection is spending the user's attention
+before they have seen anything. Performance target: under one second total; outer bound:
+three seconds. Beyond that, the entrance costs more than it buys. If the entrance
+animation requires more time to read as intended, it is too complex — simplify it.
+
+**All scroll-driven motion uses CSS scroll-driven animations first.** `animation-timeline:
+scroll()` and `view()` run off the main thread; they do not block the main thread or
+require JavaScript. IntersectionObserver is the fallback for broader support. The static
+layout — what the page shows when no scroll animation fires — must be complete and
+legible. A layout that depends on the animation to be comprehensible is a layout that
+breaks in every unsupported browser and for every reduced-motion user.
+
+**Mobile performance budget: `transform` and `opacity` only, no `will-change` spray.**
+`will-change: transform` on more than two or three elements simultaneously promotes each
+to its own compositor layer, consuming GPU memory on mobile hardware. Apply it only to
+elements that are actively animating, and remove it when the animation ends. On mid-range
+Android hardware, a page with eight elements on `will-change: transform` drops to 30fps.
+
+**`prefers-reduced-motion` applies to showpiece work without exception.** The Usability
+weight (30% of the Awwwards score) does not become negotiable because the brief said
+"award-worthy". One `@media (prefers-reduced-motion: reduce)` block wraps the entire
+motion layer; inside it, all transitions reduce to instant opacity changes or are removed.
+The page must be fully usable with no motion.
+
 ## Copy: write like a person, and never quote the kitchen
 
 The words on the page are part of the design and they are where generated work gives
@@ -104,8 +146,8 @@ and no third:
 **Arbitrary decision is not a third option.** "I chose 1.333 because it felt right" is
 not a decision — it is a guess. The theory pack exists precisely to resolve the gaps the
 board leaves. Use it. Path: `${CLAUDE_PLUGIN_ROOT}/core/theory/{color,typography,layout,
-motion,components,craft}.md`. Read whichever file covers the gap, pull the relevant
-condition→choice→reason entry, and record it in `omd decision`.
+motion,components,craft,expressive}.md`. Read whichever file covers the gap, pull the
+relevant condition→choice→reason entry, and record it in `omd decision`.
 
 ## Build mechanics
 
@@ -137,6 +179,7 @@ Format:
 | --duration-fast 140ms | motion-study-1 (stripe.com) | measured 120–160ms range; ease-out on enter |
 | Primary hue low-saturation green | theory/color.md + domain search | healthcare convention, Elliot & Maier anxiety finding |
 | --radius-card 8px | component-study-3 (linear.app) | card radius in measured range 6–10px |
+| split-text hero entrance | awwwards-capture-1 + expressive.md § split-text | concept: words land with intent; stagger 60ms; condition met — hero type is the primary event |
 ```
 
 Cover every token group: colour roles, type scale, font families, spacing ladder, radius

@@ -46,10 +46,11 @@ The composition contract:
   studies for every font decision it makes; if no study exists to cite, there is no
   decision, only a default.
 - **Motion studies, minimum 2 always, minimum 4 when the brief mentions animation,
-  transitions, interactions, or anything that moves** — sites whose transitions feel
-  right. Read motionDurations and easingVocab; record what moves on entrance, on hover,
-  on scroll. "멋있는 애니메이션 넣어줘" is not a specification. 120ms ease-out on a
-  transform is one. The motion study is where that number comes from.
+  transitions, interactions, or anything that moves, and minimum 4 when the register is
+  showpiece** — sites whose transitions feel right. Read motionDurations and easingVocab;
+  record what moves on entrance, on hover, on scroll. "멋있는 애니메이션 넣어줘" is not a
+  specification. 120ms ease-out on a transform is one. The motion study is where that
+  number comes from.
 - **Community references, minimum 2** (`--image`, since they are unmeasurable) — a
   Reddit thread where designers argue about exactly this component, a Hacker News comment
   naming why a redesign failed, a Dribbble shot's comment section. Pages tell you what
@@ -78,6 +79,34 @@ you ran on the board. The seven registers:
 If the brief names a domain (medical, financial, editorial, gaming), add queries there
 too. The queries you actually ran appear at the top of the board — not a promise that
 you searched, but the receipts.
+
+### Showpiece search register
+
+When the register is **showpiece**, the search protocol adds one mandatory register: the
+**award gallery**. These are not "who solved this problem well" sources — they are "who
+solved a problem of this intensity and won doing it" sources. The question at every
+capture is not what the site looks like but **what made it win**: one sentence naming the
+effect the technique produced, not the technique's name.
+
+Award gallery sources for showpiece work:
+
+- **awwwards.com** — SOTD archive; filter by category (agency, portfolio, campaign).
+  Captures here must answer: what is the one moment this site is remembered for?
+- **godly.website** — curated high-register sites; useful for finding work that reads
+  as considered rather than technically impressive.
+- **thefwa.com** — FWA award archive; skews toward campaign and experiential work.
+- **siteinspire.com** — editorial and typographic register; strong for finding type
+  decisions at display scale.
+- **gdweb.co.kr** — Korean brief context; the local award standard for agency and
+  campaign microsites. Required source when the brief is Korean-market or Korean-language.
+- **minimal.gallery** — restraint-end of the showpiece register; useful for finding
+  concept-first work that earns its score on Design and Usability, not effects alone.
+
+Capture from award galleries do not replace the required composition contract captures
+(whole pages, components, typography studies, motion studies, community). They count
+toward the total only if they carry a full principle set — including the one sentence
+that names what made the site win, stated as the effect on the viewer, not the
+implementation method.
 
 Board principles may cite research directly. A principle that reads "Four text sizes;
 hierarchy carried by weight — Bringhurst's 1.25 scale, consistent with what this

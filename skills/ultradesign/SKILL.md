@@ -78,6 +78,11 @@ background reading — they are decision tables. `color.md` maps domain conventi
 psychological reasons; `typography.md` maps scale ratios to their register. Pull the
 entries that apply to this domain and this concept, and use them as constraints.
 
+If the brief signals a showpiece register (see below), also read
+`${CLAUDE_PLUGIN_ROOT}/core/theory/expressive.md` before committing. It is the decision
+table for expressive technique: what earns its place, what does not, and the restraint
+clause that keeps showpiece work from becoming an effects catalogue.
+
 ### Run domain research
 
 Run 2–3 WebSearch queries before committing:
@@ -129,14 +134,46 @@ The commit output must include:
 - **Colour direction** — primary hue family, saturation level (high / mid / muted), and
   temperature (warm / cool / neutral), with the reason drawn from theory or domain research
 - **Type register** — serif/sans direction and scale ratio, with the reason
+- **Expressive register** — quiet / confident / showpiece, chosen from the brief signal
+  (see below), with the reason
 - **One memorable thing** — the single element this page will be remembered for
 
 ```bash
 omd decision "Committed concept: quiet library" --why "colour: muted green-grey, low \
 saturation (healthcare convention + Elliot & Maier anxiety finding); type: humanist sans \
-at 1.2 scale (quiet scale, Bringhurst minor third); memorable: the intake form collapses \
-to three questions on first visit, expands only when the user asks"
+at 1.2 scale (quiet scale, Bringhurst minor third); register: confident (informational \
+site, not a campaign); memorable: the intake form collapses to three questions on first \
+visit, expands only when the user asks"
 ```
+
+### Expressive register: quiet / confident / showpiece
+
+Read the brief for signals before deciding:
+
+**showpiece signals**: 멋지게, 쩔게, 어워드, 포트폴리오, 브랜드 캠페인, 마이크로사이트,
+"award-worthy", "make it impressive", agency site, product launch with single CTA,
+experiential brand page. The interface is part of the experience; the user came partly to
+be here.
+
+**quiet signals**: 대시보드, 문서, 도구, 관리 화면, "clean and simple", SaaS product UI,
+data-heavy, reading-first. The interface recedes; the user's work is the event.
+
+**confident** is the default when neither extreme is indicated — a position is visible but
+the interface does not perform for its own sake.
+
+> **Do not make dashboards, documentation, or tools showpiece.** Awwwards Usability is
+> 30% of the score. A dashboard with split-text entrances and sticky scroll stages does
+> not lose on creativity — it loses on usability, which is worth more. Restraint in a
+> tool context is not timidity; it is the correct reading of what the user came to do.
+
+When the register is **showpiece**:
+
+1. Read `${CLAUDE_PLUGIN_ROOT}/core/theory/expressive.md` before proceeding.
+2. The scout must source from award galleries (see step 3 for the list).
+3. **The one memorable thing must be defined as an orchestrated moment**, not a technique
+   name. "split-text hero" is a technique. "The moment mid-scroll where the entire page
+   inverts colour and the background becomes the foreground" is an orchestrated moment — it
+   names what the user experiences, not what the implementation is called.
 
 Before moving to references, name **the one memorable thing** as a sentence, written now,
 that commits the concept to something distinct:
@@ -144,6 +181,8 @@ that commits the concept to something distinct:
 > "The headline types itself in, one word at a time, in the user's own handwriting font."
 > "The pricing table collapses to a single slider that re-prices everything live."
 > "Every scroll-triggered transition moves content up, never down — the page breathes."
+> "Mid-scroll, the entire page inverts — the white ground becomes black and every heading
+>  glows, marking the turn in the narrative."
 
 If you cannot name it, the concept has no position yet. Name it before you open a browser.
 
