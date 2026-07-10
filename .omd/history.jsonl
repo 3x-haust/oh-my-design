@@ -61,3 +61,12 @@
 {"ts":"2026-07-10T04:06:51.703Z","page":"/Users/lyu/01_Project/01_Projects/OhMyDesign/test/fixtures/ir.raw.json","counts":{"CONTRAST-001":1,"HIT-002":1,"TOKEN-003":2,"SPACING-001":1},"total":5}
 {"ts":"2026-07-10T04:06:51.816Z","page":"/Users/lyu/01_Project/01_Projects/OhMyDesign/test/fixtures/ir.raw.json","counts":{"CONTRAST-001":1,"HIT-002":1,"TOKEN-003":2,"SPACING-001":1},"total":5}
 {"ts":"2026-07-10T04:06:51.933Z","page":"/var/folders/8r/rk6z1b253wvc6qm6hhqv_5xm0000gn/T/omd-cli-ByOYwX/clean.json","counts":{},"total":0}
+{"ts":"2026-07-10T04:18:40.124Z","page":"/Users/lyu/01_Project/01_Projects/OhMyDesign/test/fixtures/ir.raw.json","counts":{"CONTRAST-001":1,"HIT-002":1,"TOKEN-003":2,"SPACING-001":1},"total":5}
+{"ts":"2026-07-10T04:18:40.284Z","page":"/Users/lyu/01_Project/01_Projects/OhMyDesign/test/fixtures/ir.raw.json","counts":{"CONTRAST-001":1,"HIT-002":1,"TOKEN-003":2,"SPACING-001":1},"total":5}
+{"ts":"2026-07-10T04:18:40.362Z","page":"/var/folders/8r/rk6z1b253wvc6qm6hhqv_5xm0000gn/T/omd-cli-wtxe4l/clean.json","counts":{},"total":0}
+{"ts":"2026-07-10T08:14:30.769Z","page":"/Users/lyu/01_Project/01_Projects/OhMyDesign/test/fixtures/ir.raw.json","counts":{"CONTRAST-001":1,"HIT-002":1,"TOKEN-003":2,"SPACING-001":1},"total":5}
+{"ts":"2026-07-10T08:14:30.867Z","page":"/Users/lyu/01_Project/01_Projects/OhMyDesign/test/fixtures/ir.raw.json","counts":{"CONTRAST-001":1,"HIT-002":1,"TOKEN-003":2,"SPACING-001":1},"total":5}
+{"ts":"2026-07-10T08:14:30.972Z","page":"/var/folders/8r/rk6z1b253wvc6qm6hhqv_5xm0000gn/T/omd-cli-9YNH8b/clean.json","counts":{},"total":0}
+{"ts":"2026-07-10T08:15:29.652Z","page":"/Users/lyu/01_Project/01_Projects/OhMyDesign/test/fixtures/ir.raw.json","counts":{"CONTRAST-001":1,"HIT-002":1,"TOKEN-003":2,"SPACING-001":1},"total":5}
+{"ts":"2026-07-10T08:15:29.782Z","page":"/Users/lyu/01_Project/01_Projects/OhMyDesign/test/fixtures/ir.raw.json","counts":{"CONTRAST-001":1,"HIT-002":1,"TOKEN-003":2,"SPACING-001":1},"total":5}
+{"ts":"2026-07-10T08:15:29.905Z","page":"/var/folders/8r/rk6z1b253wvc6qm6hhqv_5xm0000gn/T/omd-cli-bXrKLE/clean.json","counts":{},"total":0}

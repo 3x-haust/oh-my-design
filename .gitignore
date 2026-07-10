@@ -1,4 +1,8 @@
 node_modules/
 dist/
+# Root skills/, agents/, .mcp.json are the published `omd` plugin flavor — commit them.
 .design/.cache/
 *.log
+.omc
+.omd
+Plan.md

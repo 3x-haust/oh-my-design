@@ -1,0 +1,13 @@
+{
+  "name": "omd",
+  "version": "0.1.0",
+  "description": "Design cognition loop for coding agents — frame the problem, study measured references, commit to a structure, look at what actually rendered, and let what you see rewrite the problem. Ships a slop linter that makes 'looks AI-generated' a checkable claim.",
+  "author": { "name": "3x-haust", "url": "https://github.com/3x-haust" },
+  "homepage": "https://github.com/3x-haust/oh-my-design",
+  "repository": "https://github.com/3x-haust/oh-my-design",
+  "license": "MIT",
+  "keywords": ["design", "ui", "slop", "lint", "references", "typography", "claude-code"],
+  "skills": "./skills/",
+  "agents": "./agents/",
+  "mcpServers": "./.mcp.json"
+}

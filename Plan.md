@@ -607,6 +607,19 @@ REST API로 읽기 전용 IR. 쓰기는 플러그인 심사 이후.
 
 ---
 
+## 13. 배포 — 정식 플러그인 전환 (2026-07-10)
+
+bare 설치(`~/.claude/skills/` 직접 복사)에서 **정식 마켓플레이스 플러그인**으로 전환했다.
+
+- 저장소 공개: `github.com/3x-haust/oh-my-design` (MIT)
+- 플러그인 이름 `omd` → 스킬이 `omd:ultradesign` 형태로 표시. 콜론 네임스페이스는
+  호스트가 플러그인에만 부여하는 문법이라, bare 스킬로는 불가능했던 표기다.
+- 저장소 루트가 곧 플러그인이다: `.claude-plugin/plugin.json` + `marketplace.json`,
+  루트 `skills/`(bare 이름) · `agents/` · `.mcp.json` — 전부 빌드 산출물이며 커밋된다.
+- 소스는 여전히 `src/` 하나. 어댑터가 두 flavor를 방출한다:
+  플러그인(루트, bare 이름 + `omd:` 참조 치환) / bare(`dist/`, `omd-` 접두사 유지 —
+  Codex 전역 디렉토리 충돌 방지).
+
 ## 부록 · 근거
 
 **디자인 인지**

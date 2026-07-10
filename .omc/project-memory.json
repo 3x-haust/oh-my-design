@@ -136,6 +136,12 @@
       "type": "file"
     },
     {
+      "path": "test/adapters.test.ts",
+      "accessCount": 15,
+      "lastAccessed": 1783657112603,
+      "type": "file"
+    },
+    {
       "path": "test/cli.test.ts",
       "accessCount": 14,
       "lastAccessed": 1783605725610,
@@ -145,12 +151,6 @@
       "path": "bin/omd.mjs",
       "accessCount": 13,
       "lastAccessed": 1783593355638,
-      "type": "file"
-    },
-    {
-      "path": "test/adapters.test.ts",
-      "accessCount": 12,
-      "lastAccessed": 1783595109549,
       "type": "file"
     },
     {
@@ -208,6 +208,12 @@
       "type": "file"
     },
     {
+      "path": "adapters/claude.ts",
+      "accessCount": 7,
+      "lastAccessed": 1783657027380,
+      "type": "file"
+    },
+    {
       "path": "core/session/index.ts",
       "accessCount": 6,
       "lastAccessed": 1783595403247,
@@ -217,12 +223,6 @@
       "path": "core/ir/dom.mjs",
       "accessCount": 5,
       "lastAccessed": 1783593260400,
-      "type": "file"
-    },
-    {
-      "path": "adapters/claude.ts",
-      "accessCount": 5,
-      "lastAccessed": 1783594989582,
       "type": "file"
     },
     {

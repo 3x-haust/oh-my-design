@@ -1,5 +1,5 @@
 ---
-name: omd-scout
+name: scout
 description: >-
   Build a measured reference board without designing anything: whole pages for feel,
   tight selectors for component anatomy, typography studies, motion studies, image refs
@@ -9,12 +9,12 @@ description: >-
   inspiration board, how do other sites do.
 ---
 
-# omd-scout
+# omd:scout
 
 A reference board, measured instead of pinned. This skill only collects and reasons — it
 designs nothing.
 
-Spawn the `omd-scout` subagent with the concept (ask one short question if none exists and
+Spawn the `omd:scout` subagent with the concept (ask one short question if none exists and
 no `.omd/frame.md` provides one) and the thing being studied. It works to a floor of
 **eight captures**:
 
@@ -35,5 +35,5 @@ justification, principles that answer **why**, and a note on what contradicts th
 
 **Never describe how a reference looks** (Jansson & Smith: shown an example, designers
 reproduce its features even after the flaws are flagged; a model is worse). Numbers and
-reasons only. The board lands in `.omd/refs/` and any later `omd-ultradesign` run picks it
+reasons only. The board lands in `.omd/refs/` and any later `omd:ultradesign` run picks it
 up automatically.

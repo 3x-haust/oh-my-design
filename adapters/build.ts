@@ -4,7 +4,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parse } from 'yaml';
 import { emitCodex } from './codex.ts';
-import { emitClaude } from './claude.ts';
+import { emitClaude, emitClaudePlugin, pluginizeSkill } from './claude.ts';
 import type { AbstractAgent, Emitted, Host } from '../core/types.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -78,6 +78,36 @@ export function build(): void {
 
     console.log(`${host}: ${Object.keys(files).length} files, ${skills.length} skills`);
   }
+
+  emitPlugin(agents, skills);
+}
+
+/**
+ * The marketplace flavor: written to <root>/skills, <root>/agents, <root>/.mcp.json —
+ * NOT dist/. This is what a marketplace install of the "omd" plugin actually loads, so
+ * unlike dist/ it must be committed. `join(root, 'skills')` is deliberately distinct from
+ * `join(root, 'src', 'skills')` (the source of truth, read by readSkills above) — this
+ * function must never wipe or write under src/.
+ */
+function emitPlugin(agents: AbstractAgent[], skills: Skill[]): void {
+  for (const dir of ['skills', 'agents']) rmSync(join(root, dir), { recursive: true, force: true });
+  rmSync(join(root, '.mcp.json'), { force: true });
+
+  const pluginized = skills.map((skill) => pluginizeSkill(skill.source));
+  for (const { name, source } of pluginized) {
+    const path = join(root, 'skills', name, 'SKILL.md');
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, source);
+  }
+
+  const { files } = emitClaudePlugin({ agents });
+  for (const [rel, content] of Object.entries(files)) {
+    const path = join(root, rel);
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, typeof content === 'string' ? content : `${JSON.stringify(content, null, 2)}\n`);
+  }
+
+  console.log(`plugin (root): ${pluginized.length} skills, ${agents.length} agents`);
 }
 
 // Run when invoked directly (`node adapters/build.ts`), not when imported by install.ts.

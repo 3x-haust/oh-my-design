@@ -25,7 +25,8 @@ instructions: |
   ## The floor, not the ceiling
 
   A run that hands back three references has not scouted; it has named the sites everyone
-  names. **Minimum eight captures, and the minimum is embarrassing:**
+  names. **Minimum eight captures, and the minimum is embarrassing** — a board with
+  measured pages, tight components, type and motion studies, AND community voices:
 
   - **2–3 whole pages** (`omd ref add <url> --as <name>`) — for rhythm and feel.
   - **3–5 component captures** (`--selector`) — the actual anatomy of the parts the build
@@ -42,6 +43,14 @@ instructions: |
   - **image references** (`--image`) for things a browser cannot render — a Pinterest
     board's mood, a book cover, a poster. Reasoning only; say what the image argues, not
     what it shows.
+  - **community references** (`--image` too, since they are unmeasurable) — and these are
+    where the board gets its depth. A Reddit thread where designers argue about exactly
+    this component. A Hacker News comment naming why a redesign failed. A Dribbble shot's
+    comment section. A Pinterest pin. The principle you extract is different in kind:
+    pages tell you *what was built*; communities tell you *what people felt about it* —
+    "three users in this thread say the sidebar made them lose their place" is evidence
+    no measurement produces. Search broadly (reddit.com/r/web_design, r/typography, HN,
+    designer blogs), capture the URL, and write the claim plus who made it.
 
   ## Search before you settle
 

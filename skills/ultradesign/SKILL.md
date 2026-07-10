@@ -1,5 +1,5 @@
 ---
-name: omd-ultradesign
+name: ultradesign
 description: >-
   Design and build an interface the way a designer does — interrogate the brief, commit to
   a concept, study real references and extract why they work, commit to one structure,
@@ -43,7 +43,7 @@ is written down with its reason, so they can overrule any of it afterwards.
 > Novice designers solve the problem they were given.
 > Expert designers interrogate it first. That is the largest measured gap between them.
 
-Spawn `omd-framer`. It returns the given problem, a reframing, and — mandatory — **evidence**:
+Spawn `omd:framer`. It returns the given problem, a reframing, and — mandatory — **evidence**:
 a cited review, a support ticket, a datum, an observed pattern in a named competitor, or a
 sentence the user themselves said. "I think" is not evidence, and `omd frame set` rejects a
 reframing without it.
@@ -90,7 +90,7 @@ good"*. A trustworthy accountant does not bounce. A 3am store does not leave whi
 **This is the step that separates design from decoration, and the one you will be most
 tempted to skip.** A designer with a concept goes and looks at what already exists.
 
-Spawn `omd-scout` with the concept and the thing being designed. It fills a board —
+Spawn `omd:scout` with the concept and the thing being designed. It fills a board —
 **eight captures minimum**, at several granularities:
 
 ```bash
@@ -170,7 +170,7 @@ omd decision "Committed to a conversational structure" --why "serves the concept
 
 ## 5. BUILD — one thing, properly
 
-Spawn **one** `omd-hand` and build the committed structure. Real files, real CSS, real components.
+Spawn **one** `omd:hand` and build the committed structure. Real files, real CSS, real components.
 All the tokens belong here, on the one thing that ships.
 
 Declare colour, spacing, radius, **type, and motion** as custom properties on `:root`. The
@@ -235,7 +235,7 @@ If the page sits within 0.6 of any single reference, **you assembled nothing —
 Work built from several references should resemble none of them. Change the thing the report
 names as the driver, and run it again.
 
-Finally spawn `omd-eye` on the built page. It sees the screenshot and the findings and nothing
+Finally spawn `omd:eye` on the built page. It sees the screenshot and the findings and nothing
 about why you built it that way. It cannot defend your reasoning because it does not have it.
 
 ---
@@ -287,7 +287,7 @@ Everything is in `.omd/`, committed with the repo. Six months from now someone r
 - **Never estimate a measurable quantity.** Run `omd check`.
 - **Never look at a reference's pixels, or describe how it looks.** Take the principle.
 - **Never let `omd ref distance` come back over 0.6 and ship anyway.** That is a clone.
-- **Never critique in the context that built the thing.** Spawn `omd-eye`.
+- **Never critique in the context that built the thing.** Spawn `omd:eye`.
 - **Never cite your taste as a reason.** α = 0.248.
 - **Never dismiss a slop finding silently.** Fix it, or overrule it in writing.
 - **Never let the frame speak on the page.** Rationale lives in `.omd/`; copy sells the
