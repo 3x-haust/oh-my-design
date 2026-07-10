@@ -36,6 +36,13 @@ came here because they did not want to do this work.
 Run the whole loop. Show them the result. Tell them what you decided and why. Every decision
 is written down with its reason, so they can overrule any of it afterwards.
 
+**The design lives where the user asked for it.** Pin the working directory before
+anything else: the directory the skill was invoked in, stated as an absolute path in
+every subagent prompt. Every `omd` command — yours and every agent's — runs from there,
+because the CLI writes `.omd/` at its own cwd. Do not drift to the git root; a repo's
+top level is where agents habitually wander, and an `.omd/` that lands one directory
+above the design belongs to nothing.
+
 ---
 
 ## 1. FRAME — doubt the brief, quietly
