@@ -2,18 +2,30 @@
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "oh-my-design",
   "description": "Design like a person, not like the mean of the training set.",
-  "owner": { "name": "3x-haust" },
-  "version": "0.1.0",
+  "owner": {
+    "name": "3x-haust"
+  },
+  "version": "0.1.1",
   "plugins": [
     {
       "name": "omd",
       "description": "The design cognition loop: doubt the brief, measure real references (type and motion included), build once, look at the render, reframe. Plus a deterministic slop linter and a de-AI copy pass.",
-      "version": "0.1.0",
-      "author": { "name": "3x-haust" },
+      "version": "0.1.1",
+      "author": {
+        "name": "3x-haust"
+      },
       "source": "./",
       "category": "design",
       "homepage": "https://github.com/3x-haust/oh-my-design",
-      "tags": ["design", "ui", "slop-linter", "references", "typography", "motion", "humanize"]
+      "tags": [
+        "design",
+        "ui",
+        "slop-linter",
+        "references",
+        "typography",
+        "motion",
+        "humanize"
+      ]
     }
   ]
 }
