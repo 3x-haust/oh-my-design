@@ -90,13 +90,25 @@ good"*. A trustworthy accountant does not bounce. A 3am store does not leave whi
 **This is the step that separates design from decoration, and the one you will be most
 tempted to skip.** A designer with a concept goes and looks at what already exists.
 
-Spawn `omd-scout` with the concept and the component. It picks two to four references that
-solved *this* problem, measures them, and writes down **why** they are the way they are.
+Spawn `omd-scout` with the concept and the thing being designed. It fills a board —
+**eight captures minimum**, at several granularities:
 
 ```bash
-omd ref add https://linear.app --as search-bar   # renders it, extracts the invariants
-omd ref list                                     # what we have learned from
+omd ref add https://linear.app --as landing                      # whole page, for feel
+omd ref add https://linear.app --as search --selector ".search"  # one component's anatomy
+omd ref add https://rsms.me --as type-study                      # chosen for its typography
+omd ref add https://stripe.com --as motion-study                 # chosen for its motion
+omd ref add https://pinterest.com/pin/... --as mood --image      # unrenderable: reasoning only
+omd ref list
 ```
+
+Two or three famous pages is not a board; it is a reflex. The scout searches for who
+actually solved this problem in this concept's register, captures the components the
+build will need one by one, and always brings back **at least one typography study and —
+whenever the brief implies any life — one motion study.** Type and motion are measured
+invariants now (typeScale, fontFamilies, weightLadder, motionDurations, easingVocab), so
+"멋있는 애니메이션 넣어줘" resolves to numbers someone actually read, not to 500ms
+ease-in-out from habit.
 
 What comes back is not a screenshot. It is a spacing ladder, a radius ladder, how many real
 elevation levels exist, how much text is centred — plus principles like:
@@ -160,8 +172,16 @@ omd decision "Committed to a conversational structure" --why "serves the concept
 Spawn **one** `omd-hand` and build the committed structure. Real files, real CSS, real components.
 All the tokens belong here, on the one thing that ships.
 
-Declare colour, spacing, and radius as CSS custom properties on `:root`. The eye reads those
-as the design system; an inline hex is reported as a defect, correctly.
+Declare colour, spacing, radius, **type, and motion** as custom properties on `:root`. The
+eye reads those as the design system; an inline hex is reported as a defect, correctly.
+Typography comes from the reference type studies — a chosen scale and faces with a reason —
+never from defaults; motion durations and easing come from the motion study.
+
+The words are part of the build, and they are where generated work confesses first. The
+hand writes copy under two absolute rules: **the frame's language never appears on the
+page** (`omd check` measures this — five consecutive words shared with `.omd/` is
+SLOP-LEAKED-RATIONALE), and **copy never states what the thing is not** — told "no
+clutter", a model writes "No clutter here"; a person writes what is actually there.
 
 If the build reveals the structure was wrong — and sometimes it will — that is what the
 reframe step is for. Rebuilding once is cheaper than generating alternatives every time on
@@ -269,5 +289,8 @@ Everything is in `.omd/`, committed with the repo. Six months from now someone r
 - **Never critique in the context that built the thing.** Spawn `omd-eye`.
 - **Never cite your taste as a reason.** α = 0.248.
 - **Never dismiss a slop finding silently.** Fix it, or overrule it in writing.
+- **Never let the frame speak on the page.** Rationale lives in `.omd/`; copy sells the
+  thing, not the thinking.
+- **Never write copy about what the page is not.** State the positive fact instead.
 - **Never skip step 7** because the work looks finished. Looking finished is exactly when the
   frame is most likely to be wrong.

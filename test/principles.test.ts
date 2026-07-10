@@ -15,7 +15,10 @@ const project = (): string => mkdtempSync(join(tmpdir(), 'omd-prin-'));
 
 const ref = (): Reference => ({
   source: 'https://linear.app', component: 'page', kind: 'page', capturedAt: new Date().toISOString(),
-  invariants: { spacingLadder: [4, 8], radiusLadder: [4, 8], elevationLevels: 3, centeredRatio: 0.09, tokenCoverage: 0.7, paddingWeight: 10 },
+  invariants: {
+    spacingLadder: [4, 8], radiusLadder: [4, 8], elevationLevels: 3, centeredRatio: 0.09, tokenCoverage: 0.7, paddingWeight: 10,
+    typeScale: [14, 16], fontFamilies: ['inter'], weightLadder: [400], motionDurations: [], easingVocab: [], animatedShare: 0,
+  },
   principles: [],
 });
 

@@ -89,6 +89,31 @@ test('extractInvariants survives an empty page', () => {
   assert.equal(inv.elevationLevels, 0);
   assert.equal(inv.centeredRatio, 0);
   assert.equal(inv.paddingWeight, 0);
+  assert.deepEqual(inv.typeScale, []);
+  assert.deepEqual(inv.fontFamilies, []);
+  assert.deepEqual(inv.weightLadder, []);
+  assert.deepEqual(inv.motionDurations, []);
+  assert.deepEqual(inv.easingVocab, []);
+  assert.equal(inv.animatedShare, 0);
+});
+
+// Typography and motion used to be invisible to the pipeline entirely — a generic
+// serif-heading dark blog could not be measured, only vibed about.
+test('extractInvariants reads type and motion fields from text and animated nodes', () => {
+  const page = ir([
+    { type: 'TEXT', text: 'a', fontFamily: 'inter', fontSize: 14, fontWeight: 400, lineHeight: 1.4 },
+    { type: 'TEXT', text: 'b', fontFamily: 'inter', fontSize: 21, fontWeight: 510, lineHeight: 1.2 },
+    { motion: { durations: [160], animationNames: [], easings: ['ease-out'] } },
+    { motion: { durations: [], animationNames: ['fade-in'], easings: ['ease'] } },
+  ]);
+  const inv = extractInvariants(page);
+
+  assert.deepEqual(inv.typeScale, [14, 21]);
+  assert.deepEqual(inv.fontFamilies, ['inter']);
+  assert.deepEqual(inv.weightLadder, [400, 510]);
+  assert.deepEqual(inv.motionDurations, [160]);
+  assert.deepEqual(inv.easingVocab, ['ease', 'ease-out']);
+  assert.equal(inv.animatedShare, 0.5, '2 of 4 nodes carry motion');
 });
 
 // ── distance: the checkable defence against fixation ──
@@ -96,6 +121,8 @@ test('extractInvariants survives an empty page', () => {
 const base: Invariants = {
   spacingLadder: [4, 8, 16, 24], radiusLadder: [4, 8, 12], elevationLevels: 3,
   centeredRatio: 0.1, tokenCoverage: 0.7, paddingWeight: 12,
+  typeScale: [13, 14, 16, 21], fontFamilies: ['inter'], weightLadder: [400, 510],
+  motionDurations: [100, 160], easingVocab: ['ease', 'ease-out'], animatedShare: 0.05,
 };
 
 test('a page identical to a reference scores 1', () => {
@@ -103,7 +130,11 @@ test('a page identical to a reference scores 1', () => {
 });
 
 test('similarity is symmetric and bounded to 0..1', () => {
-  const other: Invariants = { spacingLadder: [5, 10], radiusLadder: [20], elevationLevels: 0, centeredRatio: 0.9, tokenCoverage: 0.1, paddingWeight: 40 };
+  const other: Invariants = {
+    spacingLadder: [5, 10], radiusLadder: [20], elevationLevels: 0, centeredRatio: 0.9, tokenCoverage: 0.1, paddingWeight: 40,
+    typeScale: [16, 24, 32], fontFamilies: ['georgia'], weightLadder: [400, 700],
+    motionDurations: [], easingVocab: [], animatedShare: 0,
+  };
   const ab = similarity(base, other);
   assert.equal(ab, similarity(other, base));
   assert.ok(ab >= 0 && ab <= 1);
@@ -115,8 +146,30 @@ test('copying the ladders but not the ratios still scores high — that is the p
   assert.ok(similarity(base, clone) > 0.6, 'a knockoff must trip the warning');
 });
 
+// Typography must move the score, not just sit there unused: reproducing a page's
+// spacing and radius ladders on top of an otherwise opposite design should read as less
+// of a copy than also reproducing its type scale, families and weight ladder.
+test('copying spacing and radius plus type scores higher than copying spacing and radius alone', () => {
+  const opposite: Invariants = {
+    spacingLadder: [5, 10], radiusLadder: [20], elevationLevels: 0, centeredRatio: 0.9, tokenCoverage: 0.1, paddingWeight: 40,
+    typeScale: [16, 24, 32], fontFamilies: ['georgia'], weightLadder: [400, 700],
+    motionDurations: [], easingVocab: [], animatedShare: 0,
+  };
+  const spacingRadiusOnly: Invariants = { ...opposite, spacingLadder: base.spacingLadder, radiusLadder: base.radiusLadder };
+  const spacingRadiusType: Invariants = {
+    ...spacingRadiusOnly, typeScale: base.typeScale, fontFamilies: base.fontFamilies, weightLadder: base.weightLadder,
+  };
+  assert.ok(
+    similarity(base, spacingRadiusType) > similarity(base, spacingRadiusOnly),
+    'reproducing type on top of spacing+radius must score higher than spacing+radius alone',
+  );
+});
+
 test('an empty ladder never divides by zero', () => {
-  const empty: Invariants = { spacingLadder: [], radiusLadder: [], elevationLevels: 0, centeredRatio: 0, tokenCoverage: 1, paddingWeight: 0 };
+  const empty: Invariants = {
+    spacingLadder: [], radiusLadder: [], elevationLevels: 0, centeredRatio: 0, tokenCoverage: 1, paddingWeight: 0,
+    typeScale: [], fontFamilies: [], weightLadder: [], motionDurations: [], easingVocab: [], animatedShare: 0,
+  };
   const s = similarity(base, empty);
   assert.ok(Number.isFinite(s) && s >= 0 && s <= 1);
   assert.equal(similarity(empty, empty), 1);

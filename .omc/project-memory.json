@@ -113,8 +113,20 @@
   "hotPaths": [
     {
       "path": "bin/omd.ts",
-      "accessCount": 34,
-      "lastAccessed": 1783635500433,
+      "accessCount": 39,
+      "lastAccessed": 1783654106773,
+      "type": "file"
+    },
+    {
+      "path": "core/types.ts",
+      "accessCount": 20,
+      "lastAccessed": 1783654080012,
+      "type": "file"
+    },
+    {
+      "path": "core/ir/dom.ts",
+      "accessCount": 20,
+      "lastAccessed": 1783654220619,
       "type": "file"
     },
     {
@@ -124,21 +136,9 @@
       "type": "file"
     },
     {
-      "path": "core/types.ts",
-      "accessCount": 17,
-      "lastAccessed": 1783635632001,
-      "type": "file"
-    },
-    {
       "path": "test/cli.test.ts",
       "accessCount": 14,
       "lastAccessed": 1783605725610,
-      "type": "file"
-    },
-    {
-      "path": "core/ir/dom.ts",
-      "accessCount": 14,
-      "lastAccessed": 1783638365032,
       "type": "file"
     },
     {
@@ -169,6 +169,12 @@
       "path": "src/skills/ultradesign/SKILL.md",
       "accessCount": 9,
       "lastAccessed": 1783615031220,
+      "type": "file"
+    },
+    {
+      "path": "core/rules/builtin/slop.yaml",
+      "accessCount": 9,
+      "lastAccessed": 1783654128715,
       "type": "file"
     },
     {
@@ -238,6 +244,12 @@
       "type": "file"
     },
     {
+      "path": "core/rules/engine.ts",
+      "accessCount": 5,
+      "lastAccessed": 1783653363247,
+      "type": "file"
+    },
+    {
       "path": "test/helpers.ts",
       "accessCount": 4,
       "lastAccessed": 1783594802663,
@@ -256,12 +268,6 @@
       "type": "file"
     },
     {
-      "path": "core/rules/engine.ts",
-      "accessCount": 4,
-      "lastAccessed": 1783595111593,
-      "type": "file"
-    },
-    {
       "path": "core/rules/builtin/token.yaml",
       "accessCount": 4,
       "lastAccessed": 1783595128370,
@@ -271,12 +277,6 @@
       "path": "test/ir.test.ts",
       "accessCount": 4,
       "lastAccessed": 1783595150570,
-      "type": "file"
-    },
-    {
-      "path": "core/rules/builtin/slop.yaml",
-      "accessCount": 4,
-      "lastAccessed": 1783595354504,
       "type": "file"
     },
     {
@@ -322,6 +322,12 @@
       "type": "file"
     },
     {
+      "path": "src/agents/hand.agent.yaml",
+      "accessCount": 3,
+      "lastAccessed": 1783653410349,
+      "type": "file"
+    },
+    {
       "path": "test/eye.test.mjs",
       "accessCount": 2,
       "lastAccessed": 1783593264007,
@@ -355,12 +361,6 @@
       "path": "core/frame/write.mjs",
       "accessCount": 1,
       "lastAccessed": 1783593070912,
-      "type": "file"
-    },
-    {
-      "path": "src/agents/hand.agent.yaml",
-      "accessCount": 1,
-      "lastAccessed": 1783593157256,
       "type": "file"
     },
     {

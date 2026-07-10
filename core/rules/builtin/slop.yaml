@@ -65,8 +65,16 @@
   severity: warn
   when: "Boolean(node.text) && node.text.length > 8"
   value: "node.text"
-  assert: "!/\\b(seamlessly|effortlessly|unlock the power|elevate your|supercharge|game.?chang|take .* to the next level|revolutioniz|cutting.?edge|unleash)\\b/i.test(value)"
-  message: "Marketing filler: \"{value}\". This sentence fits any product, so it says nothing about this one."
+  # F2: removed four trigger-happy branches that fired on ordinary prose — `~?를 통해 알 수 있`
+  # (matches mid-word inside the common neutral construction "이를 통해 알 수 있다"), `매우 중요한`
+  # ("very important" — everyday, not slop), `we (?:don't|do not|never) (?:use|do|write)`
+  # (fires on legitimate privacy/policy copy like "we don't use trackers"; the self-negating
+  # meta-brag case it was meant for is already covered by `no (?:fluff|jargon|nonsense) here`),
+  # and the unanchored `이 (?:페이지|사이트|글)(?:에서)?는 .*(?:없습니다|않습니다)` (its greedy `.*`
+  # swallowed ordinary 404s, empty states, and privacy copy). Added a narrow replacement,
+  # `이런 내용은 없`, for the actual self-negating pattern in Korean.
+  assert: "!/\\b(seamlessly|effortlessly|unlock the power|elevate your|supercharge|game.?chang|take .* to the next level|revolutioniz|cutting.?edge|unleash|no (?:fluff|jargon|nonsense) here)\\b|결론적으로|시사하는 바가 크|주목할 만하|첫째[,，]|이런 내용은 없/i.test(value)"
+  message: "Marketing filler or self-negating meta-copy: \"{value}\". Either it fits any product and says nothing about this one, or it announces what the page refuses to do instead of just not doing it."
 
 - id: SLOP-TRIPLE-CARD
   layer: 1

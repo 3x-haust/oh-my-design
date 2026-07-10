@@ -89,5 +89,41 @@ export function extractInvariants(ir: Ir): Invariants {
       2,
     );
 
-  return { spacingLadder, radiusLadder, elevationLevels, centeredRatio, tokenCoverage, paddingWeight };
+  // Typography: histograms over text-bearing nodes, ladder-cut the same way spacing and
+  // radius are — a font-size used once in a footer should not dilute the scale.
+  const fontSizeHistogram: Record<string, number> = {};
+  const fontWeightHistogram: Record<string, number> = {};
+  const fontFamilies = new Set<string>();
+  for (const n of ir.nodes) {
+    if (n.fontSize != null) fontSizeHistogram[n.fontSize] = (fontSizeHistogram[n.fontSize] ?? 0) + 1;
+    if (n.fontWeight != null) fontWeightHistogram[n.fontWeight] = (fontWeightHistogram[n.fontWeight] ?? 0) + 1;
+    if (n.fontFamily) fontFamilies.add(n.fontFamily);
+  }
+  const typeScale = ladder(fontSizeHistogram);
+  const weightLadder = ladder(fontWeightHistogram);
+
+  // Motion: durations ladder-cut the same way; easings and families are the full sorted
+  // vocabulary — a design either uses `cubic-bezier(0.2,0,0,1)` or it does not, there is no
+  // 90th-percentile cut for a vocabulary.
+  const durationHistogram: Record<string, number> = {};
+  const easingVocabSet = new Set<string>();
+  let animatedNodes = 0;
+  for (const n of ir.nodes) {
+    if (!n.motion) continue;
+    animatedNodes += 1;
+    for (const d of n.motion.durations) durationHistogram[d] = (durationHistogram[d] ?? 0) + 1;
+    for (const e of n.motion.easings) easingVocabSet.add(e);
+  }
+  const motionDurations = ladder(durationHistogram);
+  const animatedShare = ir.nodes.length === 0 ? 0 : round(animatedNodes / ir.nodes.length, 4);
+
+  return {
+    spacingLadder, radiusLadder, elevationLevels, centeredRatio, tokenCoverage, paddingWeight,
+    typeScale,
+    fontFamilies: Array.from(fontFamilies).sort(),
+    weightLadder,
+    motionDurations,
+    easingVocab: Array.from(easingVocabSet).sort(),
+    animatedShare,
+  };
 }

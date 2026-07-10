@@ -129,6 +129,60 @@ export function extractInPage(maxNodes: number, selector?: string | null): RawIr
     if (isInteractive(el)) node.interactive = true;
     if (cs.display === 'inline') node.inline = true;
 
+    if (isText) {
+      const family = cs.fontFamily.split(',')[0]?.trim().replace(/^["']|["']$/g, '').toLowerCase();
+      if (family) node.fontFamily = family;
+      node.fontSize = px(cs.fontSize);
+      node.fontWeight = Number(cs.fontWeight) || 0;
+      const fontSize = parseFloat(cs.fontSize) || 0;
+      if (cs.lineHeight === 'normal') {
+        node.lineHeight = 1.2;
+      } else {
+        const lh = parseFloat(cs.lineHeight);
+        node.lineHeight = fontSize > 0 && !Number.isNaN(lh) ? Math.round((lh / fontSize) * 100) / 100 : 1.2;
+      }
+    }
+
+    // Motion: non-zero transition-durations, non-zero animation-durations, and any named
+    // animation. `transition-duration`/`transition-timing-function` and
+    // `animation-duration`/`animation-timing-function` are each parallel comma-separated
+    // lists per the spec. Both duration kinds land in one list — a page's motion rhythm
+    // does not care whether a duration came from `transition` or `@keyframes`.
+    //
+    // The duration and timing-function lists are parallel by index (cycling the shorter
+    // one per spec), so a timing function is only "in play" when its own transition's
+    // duration survives the >0 filter — a `transition: a .3s, b 0s` must not credit the
+    // page with `b`'s easing when `b` never actually transitions (F6).
+    const transitionDurationsRaw = cs.transitionDuration
+      .split(',')
+      .map((v) => Math.round((parseFloat(v) || 0) * 1000));
+    const transitionDurations = transitionDurationsRaw.filter((ms) => ms > 0);
+    const timingFns = cs.transitionTimingFunction.split(',').map((v) => v.trim()).filter((v) => v.length > 0);
+    const transitionEasings = timingFns.length > 0
+      ? transitionDurationsRaw
+        .map((ms, i) => (ms > 0 ? (timingFns[i % timingFns.length] ?? null) : null))
+        .filter((v): v is string => v !== null && v.length > 0)
+      : [];
+    const animationNames = cs.animationName
+      .split(',')
+      .map((v) => v.trim())
+      .filter((v) => v.length > 0 && v !== 'none');
+    const animationDurations = animationNames.length > 0
+      ? cs.animationDuration.split(',').map((v) => Math.round((parseFloat(v) || 0) * 1000)).filter((ms) => ms > 0)
+      : [];
+    const animationEasings = animationNames.length > 0
+      ? cs.animationTimingFunction.split(',').map((v) => v.trim()).filter((v) => v.length > 0)
+      : [];
+    const allDurations = [...transitionDurations, ...animationDurations];
+    const easings = Array.from(new Set([
+      ...transitionEasings,
+      ...animationEasings,
+    ]));
+    if (allDurations.length > 0 || animationNames.length > 0) {
+      // Renamed from `transitionDurations` (F5): this list holds animation durations too.
+      node.motion = { durations: allDurations, animationNames, easings };
+    }
+
     const text = ownText(el);
     if (text) node.text = text;
     const heading = headingOf(el);

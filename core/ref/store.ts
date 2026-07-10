@@ -1,6 +1,20 @@
 import { mkdirSync, writeFileSync, readdirSync, readFileSync, existsSync } from 'node:fs';
 import { join, basename, resolve } from 'node:path';
-import type { Reference } from '../types.ts';
+import type { Invariants, Reference } from '../types.ts';
+
+/** Backfills invariants written before typography/motion measurement existed. */
+function withInvariantDefaults(invariants: Invariants | null | undefined): Invariants | null {
+  if (invariants == null) return null;
+  return {
+    ...invariants,
+    typeScale: invariants.typeScale ?? [],
+    fontFamilies: invariants.fontFamilies ?? [],
+    weightLadder: invariants.weightLadder ?? [],
+    motionDurations: invariants.motionDurations ?? [],
+    easingVocab: invariants.easingVocab ?? [],
+    animatedShare: invariants.animatedShare ?? 0,
+  };
+}
 
 const refsDir = (cwd: string): string => join(cwd, '.omd', 'refs');
 
@@ -56,7 +70,7 @@ export function loadRefs(cwd: string): Reference[] {
           kind: parsed.kind ?? 'page',
           capturedAt: parsed.capturedAt ?? '',
           ...(parsed.selector !== undefined ? { selector: parsed.selector } : {}),
-          invariants: parsed.invariants ?? null,
+          invariants: withInvariantDefaults(parsed.invariants),
           principles: parsed.principles ?? [],
         });
       }

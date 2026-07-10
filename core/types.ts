@@ -46,6 +46,26 @@ export interface RawNode {
   /** The raw `background-image` when it is a gradient. */
   gradient?: string;
   textAlign?: 'left' | 'center' | 'right' | 'justify';
+
+  // Typography, set only on text-bearing nodes.
+  /** The first font-family in the stack, unquoted and lowercased ("inter", "georgia"). */
+  fontFamily?: string;
+  /** Computed font-size in px, rounded. */
+  fontSize?: number;
+  /** Computed font-weight, numeric. */
+  fontWeight?: number;
+  /** line-height as a ratio to font-size, 2dp. 'normal' resolves to 1.2. */
+  lineHeight?: number;
+
+  /** Set on any node with a non-zero transition-duration or a named animation. */
+  motion?: {
+    /** ms, rounded. Transition AND animation durations both land here; zero-length transitions are dropped. */
+    durations: number[];
+    /** Named (i.e. not `none`) CSS animations running on this node. */
+    animationNames: string[];
+    /** Timing functions in play on this node, e.g. "ease-out", "cubic-bezier(...)". */
+    easings: string[];
+  };
 }
 
 /**
@@ -175,6 +195,22 @@ export interface Invariants {
   tokenCoverage: number;
   /** Mean sum of the four paddings on nodes that declare any. Higher is airier. */
   paddingWeight: number;
+
+  // Measurements, not vibes: a generic serif-heading dark blog is invisible to spacing
+  // and radius ladders alone. These six catch the two things that used to slip through —
+  // typography and motion.
+  /** Distinct text font sizes carrying the design, ladder-cut, ascending. */
+  typeScale: number[];
+  /** Distinct first-families found on text, sorted. */
+  fontFamilies: string[];
+  /** Distinct text font weights carrying the design, ladder-cut, ascending. */
+  weightLadder: number[];
+  /** Distinct transition/animation durations (ms) carrying the design, ladder-cut, ascending. */
+  motionDurations: number[];
+  /** Distinct timing functions in use, sorted. */
+  easingVocab: string[];
+  /** Fraction of all nodes carrying any motion (transition or animation). 0..1, 4dp. */
+  animatedShare: number;
 }
 
 /**

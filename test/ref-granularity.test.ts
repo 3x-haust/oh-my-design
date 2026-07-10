@@ -107,6 +107,8 @@ const measured = (source: string, inv: Invariants): Reference => ({
 const INV: Invariants = {
   spacingLadder: [4, 8, 16], radiusLadder: [4, 8], elevationLevels: 2,
   centeredRatio: 0.1, tokenCoverage: 0.7, paddingWeight: 12,
+  typeScale: [14, 16], fontFamilies: ['inter'], weightLadder: [400, 600],
+  motionDurations: [150], easingVocab: ['ease-out'], animatedShare: 0.04,
 };
 
 test('distances skips unmeasured references rather than scoring them zero', () => {

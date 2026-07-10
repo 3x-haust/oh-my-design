@@ -7,7 +7,8 @@ import { readFrame } from '../core/frame/index.ts';
 import { writeFrameRecord, reframe, setGenerator, logDecision, logChoice, tasteProfile } from '../core/frame/write.ts';
 import { logRun, readHistory } from '../core/history/index.ts';
 import { analyse } from '../core/coach/index.ts';
-import type { Layer, RawIr } from '../core/types.ts';
+import { findLeakedRationale } from '../core/rules/leakage.ts';
+import type { Category, Layer, RawIr, Violation } from '../core/types.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -21,6 +22,7 @@ interface Opts {
   problem?: string;
   reframe?: string;
   why?: string;
+  category?: string;
   set?: string;
   chose?: string;
   to?: string;
@@ -88,17 +90,34 @@ async function cmdCheck(opts: Opts): Promise<never> {
   const ir = normalize(await rawIrFor(opts, opts._[0]));
   const rules = loadRules(join(root, 'core', 'rules', 'builtin'));
   const layers = opts.layer?.split(',').map((l) => Number(l.trim()) as Layer);
-  const violations = check(ir, rules, layers ? { layers } : {});
+  const categories = opts.category?.split(',').map((c) => c.trim()) as Category[] | undefined;
+  const violations = check(ir, rules, { ...(layers ? { layers } : {}), ...(categories ? { categories } : {}) });
 
-  if (opts.json) process.stdout.write(JSON.stringify(violations));
-  else for (const v of violations) console.log(`[${v.severity}] ${v.id} ${v.path}: ${v.message}`);
+  // Design rationale belongs in .omd/, never in the shipped copy. Checked separately from
+  // the YAML rules because it compares page text against these two records, not the IR alone.
+  const frameRecords: string[] = [];
+  for (const name of ['frame.md', 'decisions.md']) {
+    const path = join(process.cwd(), '.omd', name);
+    if (existsSync(path)) frameRecords.push(readFileSync(path, 'utf8'));
+  }
+  const leaks = findLeakedRationale(ir, frameRecords)
+    // F3: leaks are layer 1 (like everything in check()); honor --layer the same way
+    // check() does, not just --category, or `--layer 2` still emits leak findings.
+    .filter((v) => (!categories || categories.includes(v.category)) && (!layers || layers.includes(v.layer)));
+
+  // Code-unit order, not localeCompare — same determinism guarantee as check() itself.
+  const cmp = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+  const combined: Violation[] = [...violations, ...leaks].sort((a, b) => cmp(a.path, b.path) || cmp(a.id, b.id));
+
+  if (opts.json) process.stdout.write(JSON.stringify(combined));
+  else for (const v of combined) console.log(`[${v.severity}] ${v.id} ${v.path}: ${v.message}`);
 
   if (!opts.noLog) {
     const page = opts._[0] ?? opts.ir ?? '(unknown)';
-    logRun(process.cwd(), page, violations);
+    logRun(process.cwd(), page, combined);
   }
 
-  process.exit(violations.length > 0 ? 1 : 0);
+  process.exit(combined.length > 0 ? 1 : 0);
 }
 
 /** One decision is one block, so a rule named in both its title and its reason counts once. */
