@@ -119,10 +119,8 @@ linear.app.
 
 ## 📚 Theory pack
 
-Concept decisions — especially colour direction and type register — used to be made by
-vibe. The theory pack makes them made by evidence.
-
-Four files ship with the plugin at `core/theory/`:
+A colour is a claim about the product; the theory pack is where that claim finds its
+evidence. Seven files ship with the plugin at `core/theory/`:
 
 | File | What it answers |
 |:--|:--|
@@ -130,6 +128,9 @@ Four files ship with the plugin at `core/theory/`:
 | `typography.md` | Modular scale ratios and what each says about information distance; pairing theory and the axes of contrast; type semantics (what the form says before a word is read); optimal line length; leading system |
 | `layout.md` | Gestalt principles translated to UI decisions; visual hierarchy tool priority; F and Z scan patterns; grid and rhythm; von Restorff and the one memorable thing |
 | `motion.md` | Duration thresholds from Nielsen's 1993 research; easing semantics (what ease-out vs ease-in-out communicates); choreography rules; the motion budget |
+| `components.md` | Per-component decision guides: button hierarchy ceilings, form validation timing, navigation patterns, tables, modals and their alternatives, toast hierarchy, search |
+| `craft.md` | Working knowledge that theory books skip: layered shadows, borderless separation, opacity-tier text, optical alignment and balance, compound hover states, 60fps-safe properties |
+| `expressive.md` | Award-site anatomy: the Awwwards rubric and why usability outranks creativity there too; typographic heroes; scroll as narrative; the technique catalogue with its restraint clause |
 
 Each entry is written as a condition→choice→reason triple, not as general theory. Sources
 are cited by name — Elliot & Maier, Bringhurst, Müller-Brockmann, Nielsen, NN/g. The
