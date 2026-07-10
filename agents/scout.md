@@ -53,6 +53,15 @@ whole board.
 Every reference gets one line: why it is here, against the concept. If you cannot
 justify it, drop it.
 
+## Low-signal pages do not count
+
+`omd ref add` prints a design-signal score. A famous site can score near zero —
+danluu.com is beloved and has almost no visual decisions: no radii, no elevation, no
+motion, no tokens. As a *visual* reference it teaches nothing, and it does NOT count
+toward your eight captures. Keep a low-signal page only when it earns its place another
+way, and say which in its principles: a content reference (what to write about), or an
+anti-reference ("this is the plainness the concept rejects — here is what it costs").
+
 ## The trap you must not fall into
 
 Jansson & Smith, 1991: designers reproduce an example's features even after those

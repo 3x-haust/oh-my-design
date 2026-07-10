@@ -113,14 +113,14 @@
   "hotPaths": [
     {
       "path": "bin/omd.ts",
-      "accessCount": 39,
-      "lastAccessed": 1783654106773,
+      "accessCount": 43,
+      "lastAccessed": 1783675449544,
       "type": "file"
     },
     {
       "path": "core/types.ts",
-      "accessCount": 20,
-      "lastAccessed": 1783654080012,
+      "accessCount": 21,
+      "lastAccessed": 1783675411881,
       "type": "file"
     },
     {

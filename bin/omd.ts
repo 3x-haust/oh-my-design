@@ -213,6 +213,7 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
 
   const { normalize } = await import('../core/ir/normalize.ts');
   const { extractInvariants } = await import('../core/ref/invariants.ts');
+  const { designSignal, LOW_SIGNAL } = await import('../core/ref/signal.ts');
 
   const raw = await rawIrFor(opts, target, opts.selector);
   const ir = normalize(raw);
@@ -228,6 +229,15 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
   });
   console.log(path);
   console.log(JSON.stringify(invariants, null, 2));
+
+  const signal = designSignal(invariants);
+  if (signal.score < LOW_SIGNAL) {
+    console.error(
+      `warning: low design signal (${signal.score} — missing: ${signal.missing.join(', ')}).\n`
+      + 'This page makes almost no visual decisions; as a visual reference it teaches nothing.\n'
+      + 'Keep it only as a content or anti-reference, and say so in its principles.',
+    );
+  }
   process.exit(0);
 }
 
@@ -274,6 +284,7 @@ async function cmdRefShow(opts: Opts): Promise<never> {
 
 async function cmdRefList(): Promise<never> {
   const { loadRefs } = await import('../core/ref/store.ts');
+  const { designSignal, LOW_SIGNAL } = await import('../core/ref/signal.ts');
   const refs = loadRefs(process.cwd());
   if (refs.length === 0) {
     console.log('No references yet.');
@@ -286,9 +297,11 @@ async function cmdRefList(): Promise<never> {
       continue;
     }
     const inv = ref.invariants;
+    const signal = designSignal(inv);
+    const lowSignalNote = signal.score < LOW_SIGNAL ? `  [low-signal ${signal.score}]` : '';
     console.log(
       `${ref.source}  ${ref.component}  ${granularity}  radius=[${inv.radiusLadder.join(',')}] `
-      + `spacing=[${inv.spacingLadder.join(',')}] elevation=${inv.elevationLevels}`,
+      + `spacing=[${inv.spacingLadder.join(',')}] elevation=${inv.elevationLevels}${lowSignalNote}`,
     );
   }
   process.exit(0);

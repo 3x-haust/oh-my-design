@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Consistent hashing rings are never as balanced as the diagram — Field Notes</title>
+<meta name="description" content="Virtual nodes fix the skew in theory. In production, one bad hash function undoes all of it.">
+<link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="site-header__inner">
+    <a class="site-title" href="../index.html">Field Notes</a>
+    <p class="site-tagline">Databases, distributed systems, and the occasional postmortem.</p>
+  </div>
+</header>
+
+<main class="article">
+  <a class="article__back" href="../index.html">&larr; all posts</a>
+
+  <div class="article__header">
+    <h1 class="article__title">Consistent hashing rings are never as balanced as the diagram</h1>
+    <p class="article__meta">22 Jun 2026 · 9 min read</p>
+  </div>
+
+  <div class="article__body">
+
+    <p>Every introduction to consistent hashing draws the same picture: a circle, a handful of nodes placed evenly around it, keys falling into arcs of roughly equal size. It's a clean diagram and it's a lie about how the ring behaves with a small number of physical nodes. We ran a five-node cache cluster for over a year before checking the actual key distribution, and one node was carrying 31% of traffic while another carried 9%.</p>
+
+    <h2>Where the imbalance comes from</h2>
+
+    <p>With five points scattered on a ring by a single hash per node, the gaps between them are whatever the hash function happens to produce — there's no mechanism enforcing even spacing. Add enough nodes and the law of large numbers smooths this out, but five is nowhere near enough. The standard fix is virtual nodes: instead of hashing each physical node once, you hash it a hundred or two hundred times under different labels and place all of those points on the ring. More points means the gaps average out.</p>
+
+    <pre><code><span class="tok-kw">class</span> <span class="tok-fn">HashRing</span>:
+    <span class="tok-kw">def</span> <span class="tok-fn">__init__</span>(self, nodes, vnodes=<span class="tok-num">150</span>):
+        self.ring = {}
+        self.sorted_keys = []
+        <span class="tok-kw">for</span> node <span class="tok-kw">in</span> nodes:
+            <span class="tok-kw">for</span> i <span class="tok-kw">in</span> <span class="tok-fn">range</span>(vnodes):
+                key = self._hash(<span class="tok-str">f"{node}#{i}"</span>)
+                self.ring[key] = node
+        self.sorted_keys = <span class="tok-fn">sorted</span>(self.ring)
+
+    <span class="tok-kw">def</span> <span class="tok-fn">_hash</span>(self, s):
+        <span class="tok-kw">return</span> <span class="tok-fn">int</span>(hashlib.md5(s.encode()).hexdigest(), <span class="tok-num">16</span>)
+
+    <span class="tok-kw">def</span> <span class="tok-fn">get_node</span>(self, key):
+        h = self._hash(key)
+        idx = bisect.bisect(self.sorted_keys, h) % <span class="tok-fn">len</span>(self.sorted_keys)
+        <span class="tok-kw">return</span> self.ring[self.sorted_keys[idx]]</code></pre>
+
+    <p>This is close to what we had. 150 virtual nodes per physical node, MD5 for the hash, sorted keys with a binary search for lookup. On paper, 150 vnodes should bring the standard deviation of load across nodes down to a few percent. Ours was nowhere close, and the code above isn't wrong — the input to it was.</p>
+
+    <h2>The actual bug: key naming, not the ring</h2>
+
+    <p>Our vnode labels were <code>f"{node}#{i}"</code>, and our node names were hostnames like <code>cache-a1</code>, <code>cache-a2</code>, <code>cache-b1</code>. Four of the five hostnames were structurally similar strings differing by one or two characters at a fixed position. MD5 doesn't care about that in theory — a good hash scrambles similar inputs into unrelated outputs. But we weren't hashing the hostname alone; a config templating step had prefixed every label with the same sixteen-character environment string before it reached the ring constructor, and that shared prefix meant the effective entropy going into MD5 was smaller than it looked.</p>
+
+    <p>The tell was in the vnode placement itself, not the hash function's reputation. When we dumped the sorted ring positions, four nodes' virtual points clustered into recognizable bands instead of scattering uniformly — a symptom of low-entropy input, not a broken hash.</p>
+
+    <pre><code><span class="tok-com"># before: shared prefix compresses effective entropy</span>
+label = <span class="tok-str">f"{env_prefix}-{node}#{i}"</span>
+
+<span class="tok-com"># after: hash the variable part first, mix in the rest</span>
+label = <span class="tok-fn">hashlib</span>.sha256(<span class="tok-fn">f"{node}#{i}"</span>.encode()).hexdigest()</code></pre>
+
+    <p>Switching to SHA-256 over just the node name and vnode index, with the environment prefix dropped from the hash input entirely, fixed the clustering. Standard deviation across the five nodes dropped from around 9 percentage points to under 2 within a day of rollout — no change to the vnode count, no change to the lookup algorithm, just different bytes going into the hash.</p>
+
+    <h2>What we check now</h2>
+
+    <ul>
+      <li>Plot actual vnode positions on the ring before trusting the theoretical balance guarantee. A histogram of gap sizes takes ten minutes to build and tells you immediately whether the input entropy is doing its job.</li>
+      <li>Watch for any templating or namespacing layer between the "logical" node name and what actually gets hashed — a shared prefix or suffix is invisible in code review but visible in the distribution.</li>
+      <li>Increasing vnode count is not a fix for low-entropy labels. We tried 300 vnodes before finding the real cause; it made the imbalance marginally smaller and cost us a slower rebalance on every node add or remove.</li>
+    </ul>
+
+    <p>The ring algorithm was fine the whole time. The lesson that stuck was to distrust the diagram's promise of "roughly equal arcs" until we'd actually measured the arcs.</p>
+
+  </div>
+
+  <div class="footnotes">
+    <p>Related reading on the site:</p>
+    <ol>
+      <li><a href="connection-pool-exhaustion.html">Why the connection pool empties itself during a traffic burst</a></li>
+    </ol>
+  </div>
+</main>
+
+<footer class="site-footer">
+  <div class="site-footer__inner">
+    <span>Field Notes</span>
+    <span>Written by an engineer on the storage team.</span>
+  </div>
+</footer>
+
+</body>
+</html>

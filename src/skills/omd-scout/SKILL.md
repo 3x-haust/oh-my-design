@@ -33,6 +33,10 @@ The scout searches for who actually solved this problem in this register — fam
 must earn their place, not headline the board. Every capture gets a one-line
 justification, principles that answer **why**, and a note on what contradicts the concept.
 
+`omd ref add` prints a design-signal score; a page under 0.4 makes almost no visual
+decisions (danluu.com scores 0) and does not count toward the floor — keep it only as a
+content or anti-reference, stated in its principles.
+
 **Never describe how a reference looks** (Jansson & Smith: shown an example, designers
 reproduce its features even after the flaws are flagged; a model is worse). Numbers and
 reasons only. The board lands in `.omd/refs/` and any later `omd-ultradesign` run picks it
