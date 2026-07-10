@@ -7,7 +7,10 @@ const substitute = substituter('codex');
 // us hosting anything. Our own deterministic measurement stays in the `omd` CLI.
 const MCP_SERVERS = {
   mcpServers: {
-    'chrome-devtools': { command: 'npx', args: ['-y', 'chrome-devtools-mcp@latest'] },
+    'chrome-devtools': {
+      command: 'npx',
+      args: ['-y', 'chrome-devtools-mcp@latest', '--headless', '--isolated'],
+    },
   },
 };
 

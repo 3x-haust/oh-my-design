@@ -65,8 +65,47 @@ Mention it to the user in **one sentence, in passing.** Not as a question.
 
 ## 2. CONCEPT — commit to a point of view
 
-A design without a governing metaphor collapses toward the mean. Consider three worlds, each
-with different consequences for colour, density, corners, motion, and copy:
+A design without a governing metaphor collapses toward the mean. Before committing to one,
+do two things that take the decision out of preference and into evidence.
+
+### Read the theory pack
+
+Read `${CLAUDE_PLUGIN_ROOT}/core/theory/color.md`,
+`${CLAUDE_PLUGIN_ROOT}/core/theory/typography.md`, and
+`${CLAUDE_PLUGIN_ROOT}/core/theory/layout.md` before choosing a direction. If running
+outside the plugin, the files are at `core/theory/` in the repo root. These files are not
+background reading — they are decision tables. `color.md` maps domain conventions to their
+psychological reasons; `typography.md` maps scale ratios to their register. Pull the
+entries that apply to this domain and this concept, and use them as constraints.
+
+### Run domain research
+
+Run 2–3 WebSearch queries before committing:
+
+- `"{domain} brand color conventions why"` — what the industry reached for, and whether
+  any explanation is given
+- `"{domain} competitor visual identity"` — what the field looks like, so you know what
+  you are joining or rejecting
+- `"{domain} user trust color"` or `"{domain} UX color psychology"` — any research on
+  what this audience responds to
+
+From the results, extract the dominant visual convention and make an explicit choice: follow
+it or break it, with a reason. Following a convention because everyone else does it is not
+a reason. Breaking it because you noticed it is the right kind of reason. Record the choice:
+
+```bash
+omd decision "Muted green-grey, low saturation" --why "healthcare: Elliot & Maier \
+color-in-context — high-saturation red triggers anxiety; three competitors use blue → \
+differentiate with green, reduce saturation to stay calm"
+```
+
+This search is not a substitute for the scout's reference board. It is a hypothesis
+the board will refine — the scout measures real things; this step decides what to look for.
+
+### Commit
+
+Consider three worlds, each with different consequences for colour, density, corners,
+motion, and copy:
 
 ```
 "a trustworthy accountant"   restraint · serif · wide margins · no motion
@@ -74,7 +113,8 @@ with different consequences for colour, density, corners, motion, and copy:
 "a quiet library"            muted · generous · unhurried · nothing shouts
 ```
 
-**Choose one yourself.** Take the one the evidence supports, not the one you find prettiest.
+**Choose one yourself.** Take the one the evidence — the theory, the domain research, the
+frame — supports, not the one you find prettiest.
 
 ```bash
 omd frame generator --set "a quiet library"
@@ -83,10 +123,23 @@ omd frame generator --set "a quiet library"
 From here every judgement asks *"is this what this concept would do"* — never *"is this
 good"*. A trustworthy accountant does not bounce. A 3am store does not leave whitespace.
 
-Before moving to references, name **the one memorable thing**: the single element this
-page will be remembered for six months after the user closes the tab. Not the colour
-scheme, not the layout — one concrete thing. A sentence, written now, that commits the
-concept to something distinct:
+The commit output must include:
+
+- **Concept metaphor** — the governing world in one phrase
+- **Colour direction** — primary hue family, saturation level (high / mid / muted), and
+  temperature (warm / cool / neutral), with the reason drawn from theory or domain research
+- **Type register** — serif/sans direction and scale ratio, with the reason
+- **One memorable thing** — the single element this page will be remembered for
+
+```bash
+omd decision "Committed concept: quiet library" --why "colour: muted green-grey, low \
+saturation (healthcare convention + Elliot & Maier anxiety finding); type: humanist sans \
+at 1.2 scale (quiet scale, Bringhurst minor third); memorable: the intake form collapses \
+to three questions on first visit, expands only when the user asks"
+```
+
+Before moving to references, name **the one memorable thing** as a sentence, written now,
+that commits the concept to something distinct:
 
 > "The headline types itself in, one word at a time, in the user's own handwriting font."
 > "The pricing table collapses to a single slider that re-prices everything live."
@@ -307,8 +360,21 @@ Deliver the working site. Then, in a short paragraph — not a report — tell t
 - if the frame changed mid-loop, say so plainly. It is the most interesting sentence you will
   write.
 
+Include the attribution map. The hand wrote `.omd/attribution.md` during the build; render
+it here as a table so the user can see — at a glance — which reference or theory file each
+token decision came from, and what was left behind. This is not a decoration; it is the
+answer to "where did this come from?"
+
+> | Decision | Source | Reason |
+> |---|---|---|
+> | Type scale 1.25 / 4 sizes | type-study-2 (rsms.me) | 4 sizes; weight carries hierarchy |
+> | --duration-fast 140ms | motion-study-1 (stripe.com) | measured 120–160ms range |
+> | Primary hue muted green-grey | theory/color.md + domain search | healthcare convention, Elliot & Maier |
+> | Rejected: Raycast's snap motion | concept filter | a quiet library does not hurry |
+
 Everything is in `.omd/`, committed with the repo. Six months from now someone reads
-`decisions.md` and understands why there is no green in this product.
+`decisions.md` and `attribution.md` and understands not just why there is no green in this
+product, but exactly which reference argued for what is there instead.
 
 ---
 

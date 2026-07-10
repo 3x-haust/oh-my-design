@@ -76,6 +76,14 @@ export function build(): void {
       }
     }
 
+    // Copy theory pack so agents can read it at ${CLAUDE_PLUGIN_ROOT}/core/theory/
+    const theoryDir = join(root, 'core', 'theory');
+    if (existsSync(theoryDir)) {
+      for (const f of readdirSync(theoryDir).filter((f) => f.endsWith('.md'))) {
+        write(host, `core/theory/${f}`, readFileSync(join(theoryDir, f), 'utf8'));
+      }
+    }
+
     console.log(`${host}: ${Object.keys(files).length} files, ${skills.length} skills`);
   }
 

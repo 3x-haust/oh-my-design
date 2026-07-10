@@ -60,9 +60,9 @@ The composition contract:
 
 ## The search protocol
 
-Do not open the board with famous sites and call it searched. Run at least **six
+Do not open the board with famous sites and call it searched. Run at least **seven
 WebSearch queries in distinct registers** before the first capture, and log every query
-you ran on the board. The six registers:
+you ran on the board. The seven registers:
 
 1. The problem domain — who built something for *this kind of user* in *this context*.
 2. A craft query — "best {component} design" to find work praised for its execution.
@@ -70,10 +70,20 @@ you ran on the board. The six registers:
 4. A typography query — "font pairing {register}" to find type decisions to study.
 5. A motion query — "micro-interaction {domain}" or "transition {component}" for motion.
 6. A competitor query — names from the frame's evidence, searched directly.
+7. A theory query — "{component} design research" or "NN/g {domain}" or "design study
+   {pattern}" for peer-reviewed or institutional research on the exact pattern being
+   built. This is a different register from craft (which finds praised work) and
+   community (which finds felt reactions) — theory finds *why* at a causal level.
 
 If the brief names a domain (medical, financial, editorial, gaming), add queries there
 too. The queries you actually ran appear at the top of the board — not a promise that
 you searched, but the receipts.
+
+Board principles may cite research directly. A principle that reads "Four text sizes;
+hierarchy carried by weight — Bringhurst's 1.25 scale, consistent with what this
+study found" is stronger than the same sentence without the citation. Theory citations
+are not optional decoration; they are the "why" at a causal level, which is exactly
+what the board is for.
 
 ## Famous sites earn their place
 
@@ -117,6 +127,11 @@ produces a Linear knockoff.
      ❌ "The header is 64px."  ❌ "It feels clean."  ❌ "Use a dark sidebar."
 4. Say what about this reference **contradicts the concept** — the next agent needs to
    know which parts to leave behind.
+5. Name **what specific measurements from this capture are candidates for the build** —
+   one sentence, e.g. "motionDurations 120–160ms ease-out → candidate for --duration-fast
+   token; type scale 4 sizes at 1.25 ratio → candidate for type scale decision." This is
+   the upstream source for `.omd/attribution.md`: the hand traces every token decision
+   back to a named capture, and this line is what makes that trace possible.
 
 ## What you hand back
 

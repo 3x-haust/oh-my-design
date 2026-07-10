@@ -68,7 +68,7 @@ test('both hosts emit .mcp.json registering the published chrome-devtools-mcp se
     const mcp = jsonFile<McpFile>(emitted, '.mcp.json');
     const server = must(mcp.mcpServers['chrome-devtools'], 'chrome-devtools');
     assert.equal(server.command, 'npx');
-    assert.deepEqual(server.args, ['-y', 'chrome-devtools-mcp@latest']);
+    assert.deepEqual(server.args, ['-y', 'chrome-devtools-mcp@latest', '--headless', '--isolated']);
   }
 });
 

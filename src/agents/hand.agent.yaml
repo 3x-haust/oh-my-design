@@ -90,6 +90,25 @@ instructions: |
 
   Placeholder copy is a defect. "Lorem ipsum" and "Your content here" never ship.
 
+  ## Unmeasured decisions require a citation
+
+  Some decisions cannot come from the board — the board has no motion study that covers
+  exactly this stagger interval, no type study for this exact scale ratio, no reference
+  that dictated this specific line length. For every such decision, you have two options
+  and no third:
+
+  1. A board citation: "type-study-2 used a 1.25 modular scale — so this scale."
+  2. A theory citation: read the relevant file from `${CLAUDE_PLUGIN_ROOT}/core/theory/`
+     (or, if running outside the plugin, `core/theory/` in the repo root) and cite it.
+     Example: "typography.md: 1.25 is the standard scale for most UI — adjacent sizes
+     distinct without theatrical separation."
+
+  **Arbitrary decision is not a third option.** "I chose 1.333 because it felt right" is
+  not a decision — it is a guess. The theory pack exists precisely to resolve the gaps the
+  board leaves. Use it. Path: `${CLAUDE_PLUGIN_ROOT}/core/theory/{color,typography,layout,
+  motion,components,craft}.md`. Read whichever file covers the gap, pull the relevant
+  condition→choice→reason entry, and record it in `omd decision`.
+
   ## Build mechanics
 
   **Design system first, components second.** Before a single component exists, the `:root`
@@ -104,6 +123,29 @@ instructions: |
 
   Real files, real markup, real CSS. Padding lands on the grid. Interactive targets are
   44×44 minimum. Text hits 4.5:1 against what is actually painted behind it.
+
+  ## Write the attribution map
+
+  When the build is complete and checks pass, write `.omd/attribution.md`. This file is
+  not a report — it is an audit tool. Every `:root` token group gets one table row per
+  decision, naming the source (board capture or theory file) and the one-line reason.
+
+  Format:
+
+  ```
+  | Decision | Source | Reason |
+  |---|---|---|
+  | Type scale 1.25 / 4 sizes | type-study-2 (rsms.me) | 4-size scale carries hierarchy via weight, not additional sizes |
+  | --duration-fast 140ms | motion-study-1 (stripe.com) | measured 120–160ms range; ease-out on enter |
+  | Primary hue low-saturation green | theory/color.md + domain search | healthcare convention, Elliot & Maier anxiety finding |
+  | --radius-card 8px | component-study-3 (linear.app) | card radius in measured range 6–10px |
+  ```
+
+  Cover every token group: colour roles, type scale, font families, spacing ladder, radius
+  ladder, motion durations, easing vocabulary. A decision that cannot be traced to a board
+  capture or a theory file is a decision that must be reconsidered — the table makes the
+  gap visible. The eye reads `.omd/attribution.md` alongside the screenshot; any row that
+  reads "I chose this" without a source is a finding.
 
   ## Check yourself before you hand off
 

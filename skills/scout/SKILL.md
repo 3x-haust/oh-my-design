@@ -39,9 +39,13 @@ craft, community, typography, motion, and competitor — and logs them all on th
 Famous sites (Linear, Stripe, Vercel, Notion, Raycast) may not exceed one third of the
 total captures; they earn their place or they stay off the board.
 
-Every capture gets a one-line justification, principles that answer **why**, and a note on
-what contradicts the concept. `omd ref add` prints a design-signal score; a page under 0.4
-does not count toward the floor.
+Every capture gets a one-line justification, principles that answer **why**, a note on
+what contradicts the concept, and **one line naming what specific measurements from this
+capture are candidates for the build** — which token group they would feed (type scale,
+motion durations, spacing ladder, radius ladder) and why. This line is the upstream source
+for `.omd/attribution.md`: the hand traces each token decision back to a named capture;
+without this line, the attribution table has no origin to cite. `omd ref add` prints a
+design-signal score; a page under 0.4 does not count toward the floor.
 
 **Never describe how a reference looks** (Jansson & Smith: shown an example, designers
 reproduce its features even after the flaws are flagged; a model is worse). Numbers and
