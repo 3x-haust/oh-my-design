@@ -14,7 +14,11 @@ import type { Host } from '../types.ts';
 const pkgRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 const MARKETPLACE_URL = 'https://github.com/oh-my-design/oh-my-design.git';
-const CODEX_SKILL_NAMES = ['ultradesign', 'critique'];
+// Derived from what the build emitted, never hardcoded: a hardcoded list is how
+// omd-sketch survived its own deletion, twice.
+function shippedSkillNames(): string[] {
+  return readdirSafe(join(pkgRoot, 'dist', 'codex', 'skills'));
+}
 
 function pkgVersion(): string {
   const pkg = JSON.parse(readFileSync(join(pkgRoot, 'package.json'), 'utf8')) as { version: string };
@@ -56,8 +60,19 @@ function installClaude(d: Detected, _version: string, changes: string[]): void {
   if (existsSync(skillsSrc)) {
     const dest = join(d.home, 'skills');
     mkdirSync(dest, { recursive: true });
+    const shipped = readdirSafe(skillsSrc);
     cpSync(skillsSrc, dest, { recursive: true });
-    changes.push(`claude: installed skills -> ${dest} (${readdirSafe(skillsSrc).join(', ')})`);
+
+    // Prune skills we stopped shipping — same defect class as stale agents. Ours are
+    // omd:-prefixed now; 'ultradesign'/'critique' are the pre-namespace legacy names.
+    const LEGACY = ['ultradesign', 'critique'];
+    for (const name of readdirSafe(dest)) {
+      const ours = name.startsWith('omd:') || name.startsWith('omd-') || LEGACY.includes(name);
+      if (!ours || shipped.includes(name)) continue;
+      rmSync(join(dest, name), { recursive: true, force: true });
+      changes.push(`claude: removed stale skill ${name}`);
+    }
+    changes.push(`claude: installed skills -> ${dest} (${shipped.join(', ')})`);
   }
 
   const agentsSrc = join(pkgRoot, 'dist', 'claude', 'agents');
@@ -178,7 +193,7 @@ function uninstallCodex(d: Detected, changes: string[]): void {
 
   // NEVER delete .omd/ anywhere — only our own skill copies live under ~/.codex/skills/.
   const skillsDir = join(d.home, 'skills');
-  for (const name of CODEX_SKILL_NAMES) {
+  for (const name of shippedSkillNames()) {
     const path = join(skillsDir, name);
     if (!existsSync(path)) continue;
     rmSync(path, { recursive: true, force: true });
@@ -267,7 +282,7 @@ function doctorCodex(d: Detected): DoctorCheck[] {
   const omdAgents = readdirSafe(join(d.home, 'agents')).filter((f) => f.startsWith('omd-') && f.endsWith('.toml'));
   checks.push(check('agents registered', omdAgents.length > 0));
 
-  const skillsPresent = CODEX_SKILL_NAMES.some((name) => existsSync(join(d.home, 'skills', name)));
+  const skillsPresent = shippedSkillNames().some((name) => existsSync(join(d.home, 'skills', name)));
   checks.push(check('skills present', skillsPresent));
 
   // Not a pass/fail: we could not confirm Codex's trusted_hash key format against a real

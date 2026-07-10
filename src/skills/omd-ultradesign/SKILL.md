@@ -1,5 +1,5 @@
 ---
-name: ultradesign
+name: omd-ultradesign
 description: >-
   Design and build an interface the way a designer does — interrogate the brief, commit to
   a concept, study real references and extract why they work, commit to one structure,

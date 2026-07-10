@@ -1,5 +1,5 @@
 ---
-name: critique
+name: omd-critique
 description: >-
   Critique a design without changing it. Runs the deterministic linter, groups the
   findings by root cause, and judges the result against the project's primary generator.
