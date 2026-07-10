@@ -56,7 +56,17 @@ Nobody signs this. It records what you currently believe the problem is; step 7 
 wrong. If the reframing is weak, the brief survives interrogation — that is a successful
 frame, not a failed one.
 
+If the framer's reply comes back empty — an agent whose last act was a tool call has
+nothing left to say — do not re-spawn it or interrogate the transcript. The frame is
+already on disk: read `.omd/frame.md` and move on.
+
 Mention it to the user in **one sentence, in passing.** Not as a question.
+
+And that sentence sets the register for every status line you write: the user hears
+outcomes, never the machinery. "레퍼런스 보드를 만듭니다" — not "(18장 이상)", not a
+quota, not a rule ID, not a capture count you owe a contract. The numbers live in the
+skill and in `.omd/`; quoting them at the user is the pipeline narrating its own
+instructions, which is the same tell as copy that quotes the frame.
 
 > 리뷰를 보니 이건 "글을 쓰는 문제"가 아니라 "아무도 두 번째 글까지 안 읽는 문제"로
 > 보입니다. 그 전제로 만들었습니다.

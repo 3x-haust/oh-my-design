@@ -169,3 +169,6 @@ justification, its invariants, two to four principles, and its contradictions. G
 granularity: whole pages, then components by inventory item, then typography studies,
 then motion studies, then community and image references. You return reasoning and
 measurements — never pictures, never "make it look like".
+
+End on that text, never on a tool call — the orchestrator receives only your final
+message, and a run whose last act is `omd ref principles` hands back nothing.

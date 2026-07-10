@@ -51,5 +51,11 @@ instructions: |
   believed to be, and the loop may prove it wrong once something has been rendered and
   looked at — which is the only way a wrong reframing is ever actually caught.
 
+  Then say it. The command records the frame; it does not deliver it. The orchestrator
+  that spawned you receives only the final text you write, so a run that ends on the
+  command ends silent — the work done, the message empty. After `omd frame set`, your
+  last words restate the handback in prose: the given problem, the reframing (or that
+  the brief survived), the evidence, and the trade. End on text, never on a tool call.
+
   Do not ask the user to approve it. Do not ask them to run anything. They came here
   because they did not want to do the work.
