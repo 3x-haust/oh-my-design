@@ -117,6 +117,20 @@ export function extractInvariants(ir: Ir): Invariants {
   const motionDurations = ladder(durationHistogram);
   const animatedShare = ir.nodes.length === 0 ? 0 : round(animatedNodes / ir.nodes.length, 4);
 
+  // Interaction: read defensively. The probe (core/render/index.ts) attaches
+  // ir.meta.interaction on success and null on failure; a hand-built or pre-probe IR
+  // (fixtures, old references) has no meta.interaction at all.
+  const interaction = ir.meta?.['interaction'] as
+    | { probed: number; hoverResponsive: number; tabStops: number; focusVisible: number }
+    | null
+    | undefined;
+  const hoverCoverage = interaction && interaction.probed > 0
+    ? round(interaction.hoverResponsive / interaction.probed, 2)
+    : 0;
+  const focusCoverage = interaction && interaction.tabStops > 0
+    ? round(interaction.focusVisible / interaction.tabStops, 2)
+    : 0;
+
   return {
     spacingLadder, radiusLadder, elevationLevels, centeredRatio, tokenCoverage, paddingWeight,
     typeScale,
@@ -125,5 +139,7 @@ export function extractInvariants(ir: Ir): Invariants {
     motionDurations,
     easingVocab: Array.from(easingVocabSet).sort(),
     animatedShare,
+    hoverCoverage,
+    focusCoverage,
   };
 }

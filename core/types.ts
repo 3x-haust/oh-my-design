@@ -211,6 +211,14 @@ export interface Invariants {
   easingVocab: string[];
   /** Fraction of all nodes carrying any motion (transition or animation). 0..1, 4dp. */
   animatedShare: number;
+
+  // Interaction states are unmeasured elsewhere: a dead-on-hover button and a missing
+  // focus ring both look identical in a static screenshot. These read the page's actual
+  // behaviour, probed live (core/render/index.ts), not its resting state.
+  /** hoverResponsive / probed, 2dp. 0 when probed is 0 or the probe failed (unmeasured). */
+  hoverCoverage: number;
+  /** focusVisible / tabStops, 2dp. 0 when tabStops is 0 or the probe failed (unmeasured). */
+  focusCoverage: number;
 }
 
 /**

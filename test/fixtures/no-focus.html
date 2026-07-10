@@ -1,0 +1,23 @@
+<meta charset="utf-8">
+<title>no-focus</title>
+<style>
+  body { margin: 0; padding: 24px; background: #ffffff; color: #111111; font: 16px system-ui; }
+
+  /* every interactive element suppresses the browser's own focus indicator and never
+     defines one of its own — the classic tell of generated work. */
+  button, a {
+    display: inline-block;
+    margin: 8px;
+    padding: 10px 20px;
+    border: 1px solid #333333;
+    border-radius: 6px;
+    background: #f2f2f2;
+    color: #111111;
+    text-decoration: none;
+    outline: none;
+  }
+  button:focus, a:focus, button:focus-visible, a:focus-visible { outline: none; }
+</style>
+<button>One</button>
+<button>Two</button>
+<a href="#">Three</a>

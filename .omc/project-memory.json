@@ -119,14 +119,14 @@
     },
     {
       "path": "core/types.ts",
-      "accessCount": 21,
-      "lastAccessed": 1783675411881,
+      "accessCount": 22,
+      "lastAccessed": 1783676463921,
       "type": "file"
     },
     {
       "path": "core/ir/dom.ts",
-      "accessCount": 20,
-      "lastAccessed": 1783654220619,
+      "accessCount": 21,
+      "lastAccessed": 1783676376589,
       "type": "file"
     },
     {
@@ -136,9 +136,21 @@
       "type": "file"
     },
     {
+      "path": "test/rules.test.ts",
+      "accessCount": 17,
+      "lastAccessed": 1783689026499,
+      "type": "file"
+    },
+    {
       "path": "test/adapters.test.ts",
       "accessCount": 15,
       "lastAccessed": 1783657112603,
+      "type": "file"
+    },
+    {
+      "path": "core/rules/builtin/slop.yaml",
+      "accessCount": 15,
+      "lastAccessed": 1783678102187,
       "type": "file"
     },
     {
@@ -154,12 +166,6 @@
       "type": "file"
     },
     {
-      "path": "test/rules.test.ts",
-      "accessCount": 11,
-      "lastAccessed": 1783595354974,
-      "type": "file"
-    },
-    {
       "path": "test/regression.test.ts",
       "accessCount": 9,
       "lastAccessed": 1783594874734,
@@ -169,12 +175,6 @@
       "path": "src/skills/ultradesign/SKILL.md",
       "accessCount": 9,
       "lastAccessed": 1783615031220,
-      "type": "file"
-    },
-    {
-      "path": "core/rules/builtin/slop.yaml",
-      "accessCount": 9,
-      "lastAccessed": 1783654128715,
       "type": "file"
     },
     {
@@ -199,6 +199,12 @@
       "path": "core/install/patch-claude.ts",
       "accessCount": 8,
       "lastAccessed": 1783613503087,
+      "type": "file"
+    },
+    {
+      "path": "src/agents/hand.agent.yaml",
+      "accessCount": 8,
+      "lastAccessed": 1783678100542,
       "type": "file"
     },
     {
@@ -250,9 +256,15 @@
       "type": "file"
     },
     {
+      "path": "core/render/index.ts",
+      "accessCount": 5,
+      "lastAccessed": 1783676458827,
+      "type": "file"
+    },
+    {
       "path": "test/helpers.ts",
-      "accessCount": 4,
-      "lastAccessed": 1783594802663,
+      "accessCount": 5,
+      "lastAccessed": 1783676659006,
       "type": "file"
     },
     {
@@ -286,12 +298,6 @@
       "type": "file"
     },
     {
-      "path": "core/render/index.ts",
-      "accessCount": 4,
-      "lastAccessed": 1783635631480,
-      "type": "file"
-    },
-    {
       "path": "test/adapters-regression.test.ts",
       "accessCount": 3,
       "lastAccessed": 1783594795416,
@@ -319,12 +325,6 @@
       "path": "src/agents/framer.agent.yaml",
       "accessCount": 3,
       "lastAccessed": 1783605900252,
-      "type": "file"
-    },
-    {
-      "path": "src/agents/hand.agent.yaml",
-      "accessCount": 3,
-      "lastAccessed": 1783653410349,
       "type": "file"
     },
     {

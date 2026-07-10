@@ -123,6 +123,7 @@ const base: Invariants = {
   centeredRatio: 0.1, tokenCoverage: 0.7, paddingWeight: 12,
   typeScale: [13, 14, 16, 21], fontFamilies: ['inter'], weightLadder: [400, 510],
   motionDurations: [100, 160], easingVocab: ['ease', 'ease-out'], animatedShare: 0.05,
+  hoverCoverage: 0, focusCoverage: 0,
 };
 
 test('a page identical to a reference scores 1', () => {
@@ -134,6 +135,7 @@ test('similarity is symmetric and bounded to 0..1', () => {
     spacingLadder: [5, 10], radiusLadder: [20], elevationLevels: 0, centeredRatio: 0.9, tokenCoverage: 0.1, paddingWeight: 40,
     typeScale: [16, 24, 32], fontFamilies: ['georgia'], weightLadder: [400, 700],
     motionDurations: [], easingVocab: [], animatedShare: 0,
+    hoverCoverage: 0, focusCoverage: 0,
   };
   const ab = similarity(base, other);
   assert.equal(ab, similarity(other, base));
@@ -154,6 +156,7 @@ test('copying spacing and radius plus type scores higher than copying spacing an
     spacingLadder: [5, 10], radiusLadder: [20], elevationLevels: 0, centeredRatio: 0.9, tokenCoverage: 0.1, paddingWeight: 40,
     typeScale: [16, 24, 32], fontFamilies: ['georgia'], weightLadder: [400, 700],
     motionDurations: [], easingVocab: [], animatedShare: 0,
+    hoverCoverage: 0, focusCoverage: 0,
   };
   const spacingRadiusOnly: Invariants = { ...opposite, spacingLadder: base.spacingLadder, radiusLadder: base.radiusLadder };
   const spacingRadiusType: Invariants = {
@@ -169,6 +172,7 @@ test('an empty ladder never divides by zero', () => {
   const empty: Invariants = {
     spacingLadder: [], radiusLadder: [], elevationLevels: 0, centeredRatio: 0, tokenCoverage: 1, paddingWeight: 0,
     typeScale: [], fontFamilies: [], weightLadder: [], motionDurations: [], easingVocab: [], animatedShare: 0,
+    hoverCoverage: 0, focusCoverage: 0,
   };
   const s = similarity(base, empty);
   assert.ok(Number.isFinite(s) && s >= 0 && s <= 1);

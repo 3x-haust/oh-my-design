@@ -52,8 +52,8 @@ function logRatio(a: number, b: number): number {
 }
 
 const WEIGHTS = {
-  spacingLadder: 0.15,
-  radiusLadder: 0.15,
+  spacingLadder: 0.12,
+  radiusLadder: 0.12,
   typeScale: 0.13,
   fontFamilies: 0.09,
   weightLadder: 0.05,
@@ -64,6 +64,10 @@ const WEIGHTS = {
   centeredRatio: 0.07,
   tokenCoverage: 0.07,
   paddingWeight: 0.07,
+  // Interaction states: hover-response and focus-visible coverage. .03 each, taken from
+  // spacingLadder/radiusLadder (.15 -> .12) so the table still sums to 1.00.
+  hoverCoverage: 0.03,
+  focusCoverage: 0.03,
 } as const;
 
 type Component = keyof typeof WEIGHTS;
@@ -82,6 +86,8 @@ function componentScores(a: Invariants, b: Invariants): Record<Component, number
     centeredRatio: 1 - Math.abs(a.centeredRatio - b.centeredRatio),
     tokenCoverage: 1 - Math.abs(a.tokenCoverage - b.tokenCoverage),
     paddingWeight: logRatio(a.paddingWeight, b.paddingWeight),
+    hoverCoverage: 1 - Math.abs(a.hoverCoverage - b.hoverCoverage),
+    focusCoverage: 1 - Math.abs(a.focusCoverage - b.focusCoverage),
   };
 }
 
@@ -100,6 +106,17 @@ function arrayFor(inv: Invariants, key: (typeof ARRAY_COMPONENTS)[number]): read
 }
 
 /**
+ * Scalar components where 0 is ambiguous: a page where every interactive element truly
+ * fails to respond scores identically to a page that was never probed at all (an
+ * unmeasured pre-interaction reference, or a probe failure). Both read as `hoverCoverage:
+ * 0` / `focusCoverage: 0`. Scoring a real page against an old reference with `1 -
+ * |a-b|` would then punish it for a coverage gap that was never actually measured on the
+ * reference's side — so, like the array components above, exclude the component (and
+ * renormalise) whenever either side reads exactly 0.
+ */
+const ZERO_EXCLUDABLE_COMPONENTS = ['hoverCoverage', 'focusCoverage'] as const satisfies readonly Component[];
+
+/**
  * F1: an empty ladder is not "measured and maximally different" — it is unmeasured. A
  * pre-typography reference defaults typeScale/fontFamilies/weightLadder/motionDurations/
  * easingVocab to `[]` (core/ref/store.ts withInvariantDefaults). Scoring that against a
@@ -115,6 +132,9 @@ function excludedComponents(a: Invariants, b: Invariants): ReadonlySet<Component
   const excluded = new Set<Component>();
   for (const key of ARRAY_COMPONENTS) {
     if (arrayFor(a, key).length === 0 || arrayFor(b, key).length === 0) excluded.add(key);
+  }
+  for (const key of ZERO_EXCLUDABLE_COMPONENTS) {
+    if (a[key] === 0 || b[key] === 0) excluded.add(key);
   }
   return excluded;
 }

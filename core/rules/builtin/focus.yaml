@@ -1,0 +1,8 @@
+id: FOCUS-001
+layer: 1
+category: a11y
+severity: warn
+when: "node.parent === null && ir.meta && ir.meta.interaction && ir.meta.interaction.tabStops >= 3"
+value: "Math.round((ir.meta.interaction.focusVisible / ir.meta.interaction.tabStops) * 100)"
+assert: "value >= 50"
+message: "Only {value}% of tab stops show a visible focus indicator. Keyboard users navigate blind."

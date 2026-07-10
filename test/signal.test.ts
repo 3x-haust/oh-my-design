@@ -27,6 +27,8 @@ const LINEAR: Invariants = {
   motionDurations: [100, 160],
   easingVocab: ['ease', 'ease-out'],
   animatedShare: 0.05,
+  hoverCoverage: 0.75,
+  focusCoverage: 0.8,
 };
 
 /** danluu.com-shaped: almost no design decisions of any kind. */
@@ -43,6 +45,8 @@ const DANLUU: Invariants = {
   motionDurations: [],
   easingVocab: [],
   animatedShare: 0,
+  hoverCoverage: 0,
+  focusCoverage: 0,
 };
 
 test('a danluu-shaped page scores low and names what is missing', () => {
@@ -70,11 +74,15 @@ test('boundary: exactly meeting every threshold scores 1', () => {
     tokenCoverage: 0.2,
     spacingLadder: [4, 8, 12, 16],
     paddingWeight: 4,
+    hoverCoverage: 0.3,
   };
   assert.equal(designSignal(inv).score, 1);
   assert.deepEqual(designSignal(inv).missing, []);
 });
 
+// Forced contract change: designSignal now checks nine signals, not eight (the
+// `interaction` signal added alongside hoverCoverage/focusCoverage — see core/ref/
+// signal.ts). Failing every threshold therefore now names nine missing signals, not eight.
 test('boundary: failing every threshold scores 0', () => {
   const inv: Invariants = {
     ...LINEAR,
@@ -86,9 +94,10 @@ test('boundary: failing every threshold scores 0', () => {
     tokenCoverage: 0.1,
     spacingLadder: [8],
     paddingWeight: 3,
+    hoverCoverage: 0.29,
   };
   assert.equal(designSignal(inv).score, 0);
-  assert.equal(designSignal(inv).missing.length, 8);
+  assert.equal(designSignal(inv).missing.length, 9);
 });
 
 // ── CLI wiring ──

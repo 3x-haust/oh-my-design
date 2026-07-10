@@ -1,0 +1,29 @@
+<meta charset="utf-8">
+<title>interactive</title>
+<style>
+  body { margin: 0; padding: 24px; background: #ffffff; color: #111111; font: 16px system-ui; }
+
+  button {
+    display: inline-block;
+    margin: 8px;
+    padding: 10px 20px;
+    border: 1px solid #333333;
+    border-radius: 6px;
+    background: #f2f2f2;
+    color: #111111;
+  }
+
+  /* good1: hover changes background, keyboard focus gets a visible outline */
+  .good1:hover { background: #d0d0d0; }
+  .good1:focus-visible { outline: 3px solid #1a5fd6; outline-offset: 2px; }
+
+  /* good2: hover changes background and text colour, keyboard focus gets a box-shadow ring */
+  .good2:hover { background: #c2c2c2; color: #000000; }
+  .good2:focus-visible { box-shadow: 0 0 0 3px rgba(26, 95, 214, 0.6); }
+
+  /* dead: no hover rule at all, and focus-visible is explicitly suppressed */
+  .dead:focus-visible { outline: none; }
+</style>
+<button class="good1">One</button>
+<button class="good2">Two</button>
+<button class="dead">Three</button>

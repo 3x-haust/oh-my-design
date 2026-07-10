@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync, readdirSync, readFileSync, existsSync } from 
 import { join, basename, resolve } from 'node:path';
 import type { Invariants, Reference } from '../types.ts';
 
-/** Backfills invariants written before typography/motion measurement existed. */
+/** Backfills invariants written before typography/motion/interaction measurement existed. */
 function withInvariantDefaults(invariants: Invariants | null | undefined): Invariants | null {
   if (invariants == null) return null;
   return {
@@ -13,6 +13,8 @@ function withInvariantDefaults(invariants: Invariants | null | undefined): Invar
     motionDurations: invariants.motionDurations ?? [],
     easingVocab: invariants.easingVocab ?? [],
     animatedShare: invariants.animatedShare ?? 0,
+    hoverCoverage: invariants.hoverCoverage ?? 0,
+    focusCoverage: invariants.focusCoverage ?? 0,
   };
 }
 

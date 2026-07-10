@@ -11,7 +11,7 @@ const round = (value: number, dp: number): number => {
 };
 
 /**
- * Eight binary-ish component signals over an already-measured page. danluu.com has almost
+ * Nine binary-ish component signals over an already-measured page. danluu.com has almost
  * no design — no radii, no shadows, no motion, no tokens — so as a *visual* reference it
  * teaches nothing; this catches that deterministically instead of relying on a model to notice.
  */
@@ -25,6 +25,9 @@ export function designSignal(inv: Invariants): DesignSignal {
     ['tokens', inv.tokenCoverage >= 0.2],
     ['spacing', inv.spacingLadder.length >= 4], // a scale, not incidental values
     ['padding', inv.paddingWeight >= 4], // someone spaced things on purpose
+    // A dead-on-hover button is the classic tell of generated work; a reference that
+    // never varies on hover has nothing to teach about interaction states.
+    ['interaction', inv.hoverCoverage >= 0.3],
   ];
 
   const missing = checks.filter(([, pass]) => !pass).map(([name]) => name);
