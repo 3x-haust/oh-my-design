@@ -382,6 +382,18 @@ If the build reveals the structure was wrong — and sometimes it will — that 
 reframe step is for. Rebuilding once is cheaper than generating alternatives every time on
 the chance it might be.
 
+**Before handing off to the eye, the build is only done when the finish pass is done.**
+The finish-pass checklist lives at `${CLAUDE_PLUGIN_ROOT}/core/craft/finish-pass.md` (or
+`core/craft/finish-pass.md` in the repo root). `omd-hand` walks it after `omd check` returns
+clean: `::selection` colour derived from the accent token, focus ring via `:focus-visible`
+(not outline suppression — `A11Y-FOCUS-SUPPRESSED` fires on bare suppression), scrollbar
+styling with `scrollbar-color`/`scrollbar-width` first and `-webkit-` as the noted fallback,
+optical alignment corrections (icon baseline nudge, button padding asymmetry), inline SVG
+favicon (no asset file required — the emoji-favicon trick is the minimal variant), and OG
+meta tags whose copy passes the same SLOP-COPY rules as the page body. Each item is
+implemented or skipped with a written reason in `.omd/decisions.md`. A page without a
+favicon and `::selection` colour reads as unfinished regardless of everything else.
+
 ---
 
 ## 6. SEE — look at what actually rendered

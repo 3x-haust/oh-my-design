@@ -117,6 +117,15 @@ export function build(): void {
       }
     }
 
+    // Copy craft pack (finish-pass checklist and related craft material) so agents can read it
+    // at ${CLAUDE_PLUGIN_ROOT}/core/craft/
+    const craftDir = join(root, 'core', 'craft');
+    if (existsSync(craftDir)) {
+      for (const f of readdirSync(craftDir).filter((f) => f.endsWith('.md'))) {
+        write(host, `core/craft/${f}`, readFileSync(join(craftDir, f), 'utf8'));
+      }
+    }
+
     console.log(`${host}: ${Object.keys(files).length} files, ${skills.length} skills`);
   }
 
