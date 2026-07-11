@@ -155,3 +155,4 @@ Hangul display typography carries a specific constraint that Latin display type 
 - Awwwards, "Customize your mouse cursor" (awwwards.com/customize-your-mouse-cursor) — cursor as brand vocabulary on award-winning sites; pointer-fine scoping requirement
 - GDWEB Design Awards, About (gdweb.co.kr/sub/about.asp) — Korean award context, judge composition, selection categories dominated by agency and campaign microsites
 - Motion theory cross-reference: see `core/theory/motion.md` — duration windows, reduced-motion requirement, transform/opacity constraint, and the attention budget argument all apply in the showpiece register without exception
+- Motion cookbook: working implementations of every technique catalogued above (split-text, scroll-reveal, sticky scene, section inversion, marquee, magnetic hover, and more) are in `core/motion/recipes/`; easing token vocabulary is in `core/motion/easing.md`

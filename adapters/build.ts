@@ -84,6 +84,21 @@ export function build(): void {
       }
     }
 
+    // Copy motion pack (easing vocabulary + recipe cookbook) so agents can read it
+    // at ${CLAUDE_PLUGIN_ROOT}/core/motion/ and ${CLAUDE_PLUGIN_ROOT}/core/motion/recipes/
+    const motionDir = join(root, 'core', 'motion');
+    if (existsSync(motionDir)) {
+      for (const f of readdirSync(motionDir).filter((f) => f.endsWith('.md'))) {
+        write(host, `core/motion/${f}`, readFileSync(join(motionDir, f), 'utf8'));
+      }
+      const recipesDir = join(motionDir, 'recipes');
+      if (existsSync(recipesDir)) {
+        for (const f of readdirSync(recipesDir).filter((f) => f.endsWith('.md'))) {
+          write(host, `core/motion/recipes/${f}`, readFileSync(join(recipesDir, f), 'utf8'));
+        }
+      }
+    }
+
     console.log(`${host}: ${Object.keys(files).length} files, ${skills.length} skills`);
   }
 

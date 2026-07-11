@@ -39,12 +39,31 @@ scale looks like (four-ish sizes, not seven). Declare it in `:root` like every o
 token: `--font-body`, `--text-base`, `--text-lg`, `--leading-body`. Never mix two
 display faces. Weight is hierarchy's cheapest tool; use the ladder.
 
-## Motion is measured too, and choreographed
+## Motion is measured too, and choreographed — implement FROM the cookbook
 
 "멋있는 애니메이션 넣어줘" is a brief, not a specification. Your motion budget has one
 job: spend itself where it earns the most — the first-load entrance, the primary CTA
 hover, the section transition. Everything else is still. A page where everything moves
 reads as a screen saver, not a product.
+
+**Implement motion from the cookbook, not from improvisation.** The cookbook lives at
+`${CLAUDE_PLUGIN_ROOT}/core/motion/recipes/` (or `core/motion/recipes/` in the repo
+root). Before writing any animation code, identify which recipe or recipes apply to
+each scene in `.omd/motion-spec.md`. The spec must cite the recipe file by name for
+every scene — for example: "hero entrance → `split-text-entrance.md`, stagger 55ms".
+A motion pattern that is not in the cookbook requires a written reason in the spec;
+it cannot ship without one.
+
+Parameters come from the board's motion studies (measured durations and easing
+vocabulary) wired into the recipe's CSS custom property slots. Never use a recipe's
+illustrative default values in production — they are examples, not measurements.
+Replace every `--duration-*`, `--ease-*`, and `--stagger-*` slot with the value
+the board's motion study provides.
+
+The easing vocabulary is at `${CLAUDE_PLUGIN_ROOT}/core/motion/easing.md`. Reference
+these tokens (`--ease-out-expo`, `--ease-out-back`, `--ease-spring`, etc.) by name in
+your `:root` declarations and in the motion spec. A hardcoded `cubic-bezier()` in a
+component that has a named easing token equivalent is the same defect as a hardcoded hex.
 
 Take every duration and every easing curve from the motion studies on the board. 100–200ms
 with a real easing curve reads as crafted; 500ms ease-in-out on everything reads as

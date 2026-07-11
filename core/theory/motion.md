@@ -251,6 +251,16 @@ re-designed so that their start and end states are both in CSS, not procedurally
 
 ---
 
+## Motion cookbook
+
+The implementation primitives that put this theory into practice — split-text entrance,
+scroll-reveal, stagger orchestrator, sticky scene, section colour inversion, marquee,
+magnetic hover, page loader, number counter, image hover distortion, view transitions,
+and parallax — are in `core/motion/recipes/`. The easing token vocabulary (--ease-out-expo,
+--ease-out-back, --ease-spring, and the full curated set) is in `core/motion/easing.md`.
+Recipes reference the theory here; the hand wires the recipe parameters from the board's
+motion studies.
+
 ## Sources
 
 - Nielsen, "Response Times: The 3 Important Limits" (1993) — 0.1s / 1s / 10s thresholds
