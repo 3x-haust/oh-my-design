@@ -3,11 +3,15 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { extractInvariants, ladder, isHairline } from '../core/ref/invariants.ts';
 import { similarity, distances } from '../core/ref/distance.ts';
 import { saveRef, loadRefs } from '../core/ref/store.ts';
 import { normalize } from '../core/ir/normalize.ts';
 import type { Invariants, RawIr, Reference } from '../core/types.ts';
+
+const CLI = fileURLToPath(new URL('../bin/omd.ts', import.meta.url));
 
 const project = (): string => mkdtempSync(join(tmpdir(), 'omd-ref-'));
 
@@ -230,4 +234,40 @@ test('loadRefs skips a corrupt reference file rather than failing the whole run'
   mkdirSync(join(dir, '.omd', 'refs'), { recursive: true });
   writeFileSync(join(dir, '.omd', 'refs', 'broken.json'), '{ not json');
   assert.equal(loadRefs(dir).length, 1);
+});
+
+// ── origin: user / scout — R1 backward-compat and round-trip ──
+
+test('loadRefs treats a record without origin as scout (backward compat)', () => {
+  const dir = project();
+  // Write a record that predates the origin field — simulates an old capture on disk.
+  const old: Omit<Reference, 'origin'> = {
+    source: 'https://linear.app', component: 'legacy', kind: 'page',
+    capturedAt: new Date().toISOString(), invariants: null, principles: [],
+  };
+  mkdirSync(join(dir, '.omd', 'refs'), { recursive: true });
+  writeFileSync(join(dir, '.omd', 'refs', 'linear.app.legacy.json'), `${JSON.stringify(old, null, 2)}\n`);
+  const [loaded] = loadRefs(dir);
+  assert.equal(loaded?.origin, undefined, 'absent origin must remain absent — callers treat absence as scout');
+});
+
+test('origin: user round-trips through saveRef and loadRefs', () => {
+  const dir = project();
+  saveRef(dir, { ...ref, component: 'user-ref', origin: 'user' });
+  const [loaded] = loadRefs(dir);
+  assert.equal(loaded?.origin, 'user');
+});
+
+test('omd ref add --from-user --image sets origin: user on the saved record', () => {
+  const dir = project();
+  const r = spawnSync(
+    process.execPath,
+    [CLI, 'ref', 'add', 'https://example.com', '--as', 'brief-ref', '--image', '--from-user'],
+    { encoding: 'utf8', cwd: dir },
+  );
+  assert.equal(r.status, 0, `omd ref add failed: ${r.stderr}`);
+  const refs = loadRefs(dir);
+  assert.equal(refs.length, 1);
+  assert.equal(refs[0]?.origin, 'user');
+  assert.equal(refs[0]?.source, 'https://example.com');
 });

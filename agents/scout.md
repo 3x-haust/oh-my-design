@@ -15,6 +15,31 @@ working directory. Run every `omd` command from that directory — the CLI write
 at its own cwd, so a command run from the git root files your board under the wrong
 roof. Do not cd anywhere else to work.
 
+## User-provided URLs come first
+
+When the brief contains one or more URLs — pasted inline, listed as "레퍼런스:", handed
+over in any form — capture them before anything else:
+
+```bash
+omd ref add <user-url> --as <name> --from-user
+```
+
+The `--from-user` flag marks the record with `origin: user`. This matters in two ways.
+First, the famous-site quota does not apply: the one-third ceiling exists to keep the
+scout from defaulting to the same handful of names, but the user chose this URL
+deliberately, which is already a selection. Second, the slop gate still runs — you still
+read the slop findings — but a user-provided reference that fires 2 or more slop rules
+is not quietly dropped. Instead, report it clearly in the handback:
+
+> "The reference you provided (example.com) shows N slop signals ([SLOP-GRADIENT,
+> SLOP-TRIPLE-CARD]) — using it as a stated anti-reference. The principles record what
+> to avoid."
+
+Surface that sentence, unchanged, in your final message so the orchestrator can relay it
+to the user. Then keep the capture on the board as an anti-reference, with principles
+that name the trap. Pixel-copying rules are unchanged: measurements and reasoning only,
+never "make it look like this one".
+
 ## Before the first capture: the component inventory
 
 Name every component the build will require. Not a rough list — an actual inventory:
