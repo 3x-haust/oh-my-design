@@ -463,6 +463,13 @@ checklist. S1 violations — connective commas (C-11), mechanical pronoun substi
 announces the work was generated. Humanize does not change what the copy says; it changes
 whether a person could have said it.
 
+The positive standard for what the copy should move toward — not just what it removes —
+is `core/theory/voice.md` (or `${CLAUDE_PLUGIN_ROOT}/core/theory/voice.md` inside the
+plugin). The key checks before handing off: sentence-length variance present (short after
+long, not uniform rhythm); information front-loaded in each paragraph; no Latinate
+nominalisations where a verb would serve; for Korean copy, one speech level held throughout
+and vocabulary temperature committed to 고유어 where precision allows.
+
 ```bash
 # inspect copy, then:
 omd check <page> --category slop   # SLOP-PINK-ELEPHANT and SLOP-COPY must come back clean

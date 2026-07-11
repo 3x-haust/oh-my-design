@@ -597,7 +597,7 @@ async function cmdDoctor(): Promise<never> {
   }
 
   // Theory-pack files — resolved relative to the CLI's own root
-  const theoryFiles = ['color.md', 'typography.md', 'layout.md', 'motion.md', 'expressive.md', 'components.md', 'craft.md'];
+  const theoryFiles = ['color.md', 'typography.md', 'layout.md', 'motion.md', 'expressive.md', 'components.md', 'craft.md', 'voice.md'];
   for (const f of theoryFiles) {
     const path = join(root, 'core', 'theory', f);
     report(`theory/${f}`, existsSync(path));

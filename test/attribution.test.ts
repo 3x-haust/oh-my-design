@@ -44,7 +44,7 @@ const NESTED_COLOR_TOKENS = { color: { 'brand/primary': '#FF5A1F' } };
 const NESTED_TYPE_TOKENS = { font: { 'size-lg': '18px' } };
 
 const CAPTURE_NAMES = ['linear.com.hero', 'apple.com.global', 'stripe.com.pricing'];
-const THEORY_NAMES = ['color', 'typography', 'layout', 'motion', 'expressive', 'components', 'craft'];
+const THEORY_NAMES = ['color', 'typography', 'layout', 'motion', 'expressive', 'components', 'craft', 'voice'];
 
 // ── ATTR-MISSING ─────────────────────────────────────────────────────────────
 

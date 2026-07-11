@@ -199,6 +199,88 @@ test('SLOP-COPY-KO fires on 둘째, and 셋째, list-enumeration patterns', () =
   }
 });
 
+test('SLOP-KO-EMDASH fires when Hangul text contains a spaced em-dash or en-dash', () => {
+  const positives = [
+    '가장 흔한 답이 나와요 — 인디고에서 보라색으로 이어지는 그라디언트.',
+    '디자인은 결정이에요 — 기본값이 아니라.',
+    '모든 색은 이유가 있어요 – 브랜드가 결정한다.',
+    '우리는 다르게 생각합니다 — 평균이 아닌 입장.',
+  ];
+  for (const text of positives) {
+    const v = check(makeTextIr(text), builtin, { categories: ['slop'] });
+    assert.ok(v.some((x) => x.id === 'SLOP-KO-EMDASH'), `expected SLOP-KO-EMDASH for: ${text}`);
+  }
+});
+
+test('SLOP-KO-EMDASH does not fire on English copy even with spaced em-dash', () => {
+  const negatives = [
+    'Design is a decision — not a default.',
+    'Every color has a reason — the brand decides.',
+    'We think differently — not the average.',
+    // Korean without any spaced dash
+    '디자인은 결정이에요, 기본값이 아니라.',
+    '모든 색은 이유가 있어요: 브랜드가 결정한다.',
+  ];
+  for (const text of negatives) {
+    const v = check(makeTextIr(text), builtin, { categories: ['slop'] });
+    assert.ok(!v.some((x) => x.id === 'SLOP-KO-EMDASH'), `unexpected SLOP-KO-EMDASH for: ${text}`);
+  }
+});
+
+test('SLOP-KO-REGISTER-MIX fires when 해요체 and 합니다체 alternate in one block', () => {
+  const positives = [
+    // exact screenshot text from the task
+    '모델은 정답을 만들지 않아요. 훈련 데이터의 평균을 만듭니다.',
+    '빠르고 정확해요. 품질을 보장합니다.',
+    '사용하기 쉬워요. 전문가도 만족합니다.',
+    '나와요. 평균을 만듭니다.',
+  ];
+  for (const text of positives) {
+    const v = check(makeTextIr(text), builtin, { categories: ['slop'] });
+    assert.ok(v.some((x) => x.id === 'SLOP-KO-REGISTER-MIX'), `expected SLOP-KO-REGISTER-MIX for: ${text}`);
+  }
+});
+
+test('SLOP-KO-REGISTER-MIX does not fire on uniform-register blocks', () => {
+  const negatives = [
+    // all 해요체
+    '빠르고 정확해요. 사용하기 쉬워요. 품질이 좋아요.',
+    // all 합니다체
+    '빠르고 정확합니다. 사용하기 쉽습니다. 품질을 보장합니다.',
+    // non-Korean text
+    'Fast and accurate. Easy to use. Quality guaranteed.',
+  ];
+  for (const text of negatives) {
+    const v = check(makeTextIr(text), builtin, { categories: ['slop'] });
+    assert.ok(!v.some((x) => x.id === 'SLOP-KO-REGISTER-MIX'), `unexpected SLOP-KO-REGISTER-MIX for: ${text}`);
+  }
+});
+
+test('SLOP-KO-REGISTER-MIX stays silent when quotation marks are present', () => {
+  const negatives = [
+    // quoted dialogue legitimately mixes registers
+    '그는 "나는 좋아요"라고 했습니다.',
+    "그녀가 '정말 좋아요'라고 대답했습니다.",
+    '“빠르고 좋아요”라고 평가했습니다.',
+  ];
+  for (const text of negatives) {
+    const v = check(makeTextIr(text), builtin, { categories: ['slop'] });
+    assert.ok(!v.some((x) => x.id === 'SLOP-KO-REGISTER-MIX'), `unexpected SLOP-KO-REGISTER-MIX for: ${text}`);
+  }
+});
+
+test('SLOP-KO-EMDASH and SLOP-KO-REGISTER-MIX do not fire on English-only nodes', () => {
+  const englishNodes = [
+    'Design is a decision — not a default.',
+    'Fast. Accurate. Easy to use.',
+  ];
+  for (const text of englishNodes) {
+    const v = check(makeTextIr(text), builtin, { categories: ['slop'] });
+    assert.ok(!v.some((x) => x.id === 'SLOP-KO-EMDASH'), `unexpected SLOP-KO-EMDASH for: ${text}`);
+    assert.ok(!v.some((x) => x.id === 'SLOP-KO-REGISTER-MIX'), `unexpected SLOP-KO-REGISTER-MIX for: ${text}`);
+  }
+});
+
 test('SLOP-PINK-ELEPHANT does not fire on legitimate negative-statement copy', () => {
   const negatives = [
     // privacy / policy copy

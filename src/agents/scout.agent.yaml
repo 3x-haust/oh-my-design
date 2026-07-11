@@ -111,6 +111,15 @@ instructions: |
     SLOP-COPY / SLOP-COPY-KO rules target — its voice is not collectible: those patterns
     trace the model's training data, not a human writer's choices.
 
+    When writing the voice study principles, name which moves from `core/theory/voice.md`
+    the studied site exemplifies. The framework: does the site front-load information
+    (voice.md § scanning research)? Does it vary sentence length — short after long
+    (voice.md § statistical signature)? Does it use concrete nouns over nominalisations
+    (voice.md § plain language)? For Korean sites: which speech level, and does the
+    vocabulary temperature favour native 고유어 over Sino-Korean (voice.md § Korean copy)?
+    A principle that names the voice.md move gives the hand a citation to cite in
+    attribution.md; a principle that says "sentences are short and direct" gives nothing.
+
   ## Source trust hierarchy
 
   Not every source is equally trustworthy, and the slop problem is specifically a search

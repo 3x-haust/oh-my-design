@@ -161,6 +161,34 @@ instructions: |
   - connective abuse: consecutive sentences opening with 또한/따라서/즉/Also/Moreover
   - decoration: bold everywhere, em-dash chains, emoji in headings
 
+  Four additional tells that are deterministically AI-flavoured in Korean copy — `omd check`
+  flags the first two; the second two are yours to police before the page ships:
+
+  **No spaced em-dash or en-dash in Korean sentences.** " — " and " – " inside Hangul-bearing
+  sentences are a direct transfer from English typography and appear in Korean AI output as a
+  translation artifact. Rewrite as a comma, a colon, or a new sentence. "빠릅니다 — 정확합니다"
+  → "빠르고 정확합니다." `SLOP-KO-EMDASH` fires on this pattern.
+
+  **One speech level, chosen from the voice study, held for the whole page.** 해요체 (아요/어요/
+  에요) and 합니다체 (습니다/ㅂ니다) must not alternate within the same paragraph or across
+  paragraphs on the same page. The voice study in `.omd/` names which level this product uses;
+  every sentence conforms to it. `SLOP-KO-REGISTER-MIX` fires when both endings appear in one
+  text node.
+
+  **No `<br>` or hard newlines mid-sentence.** Line wrapping is the CSS's job. A sentence broken
+  with `<br>` reads as AI-formatted text (the model inserting visual line breaks to match its
+  training data's layout conventions) and breaks reflow at every other viewport width. Write
+  continuous prose; let `max-width` and `line-height` control the line length. This tell cannot
+  be detected by `omd check` — the IR collapses `<br>` before the linter runs — so it is your
+  responsibility to catch it in the source HTML before handoff.
+
+  **No self-explainer copy.** The page sells outcomes; it does not describe its own mechanism
+  in README cadence. "X는 Y를 잡아내는 Claude Code 플러그인이에요" is documentation, not a hero
+  line. Write what the reader gets, what changes after they use the product, what happens next
+  — not what the tool is or how it works. If you catch yourself writing "X는/은 ~하는 ~이에요/
+  입니다" as the first sentence of a section, that is the self-explainer tell; delete it and
+  write the outcome instead.
+
   Placeholder copy is a defect. "Lorem ipsum" and "Your content here" never ship.
 
   ## Unmeasured decisions require a citation
@@ -179,8 +207,12 @@ instructions: |
   **Arbitrary decision is not a third option.** "I chose 1.333 because it felt right" is
   not a decision — it is a guess. The theory pack exists precisely to resolve the gaps the
   board leaves. Use it. Path: `${CLAUDE_PLUGIN_ROOT}/core/theory/{color,typography,layout,
-  motion,components,craft,expressive}.md`. Read whichever file covers the gap, pull the
-  relevant condition→choice→reason entry, and record it in `omd decision`.
+  motion,components,craft,expressive,voice}.md`. Read whichever file covers the gap, pull
+  the relevant condition→choice→reason entry, and record it in `omd decision`. For copy
+  decisions — sentence rhythm, vocabulary temperature, register — cite `voice.md`
+  specifically: it maps the burstiness finding to practical sentence construction, the
+  Oppenheimer result to vocabulary choice, and the Toss/Mailchimp standards to the positive
+  form of each Korean and English tell.
 
   ## Write the motion spec before building anything
 
