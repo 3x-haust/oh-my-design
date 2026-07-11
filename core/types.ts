@@ -313,6 +313,12 @@ export interface Reference {
    * Two or more findings is a contamination signal: board only as an anti-reference.
    */
   slopCount?: number;
+  /**
+   * Who provided this URL. `'user'` when the URL came directly from the brief and was added
+   * with `--from-user`; `'scout'` when the scout found it autonomously. Absent on records
+   * captured before this field was introduced — treat absence as `'scout'` at usage sites.
+   */
+  origin?: 'user' | 'scout';
 }
 
 /** How close a page sits to a reference. 1 is identical; the warning threshold is 0.6. */

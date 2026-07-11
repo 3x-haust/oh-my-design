@@ -5,7 +5,8 @@ description: >-
   a concept, study real references and extract why they work, commit to one structure,
   look at what actually rendered, and let what you see rewrite the problem. Produces work
   with a position, not the average of every landing page ever scraped. Runs end to end
-  without asking the user to approve anything.
+  without asking the user to approve anything. Reference URLs included in the brief are
+  captured first and treated as first-class user-provided references.
   Use when asked to design, build, redesign, or lay out any interface, page, component,
   app, blog, dashboard, or landing page.
   Triggers: ultradesign, 울트라디자인, 디자인해줘, 만들어줘, UI, 화면, 리디자인, 페이지,
@@ -225,10 +226,19 @@ If you cannot name it, the concept has no position yet. Name it before you open 
 **This is the step that separates design from decoration, and the one you will be most
 tempted to skip.** A designer with a concept goes and looks at what already exists.
 
-Spawn `omd:scout` with the concept and the thing being designed. It starts with a
-component inventory — every nav, card, form field, and footer the build will need, listed
-before the first browser opens — then fills a board of **at least eighteen captures,
-targeting twenty-five**:
+Before spawning the scout, extract every URL the user included in the brief. Pass them to
+the scout verbatim — the scout captures them first, with `--from-user`, before running any
+of its own searches. User-provided URLs are exempt from the famous-site quota; the user
+chose them, which is already a selection. The slop gate still runs: if a user-provided URL
+fires 2 or more slop findings, the scout reports it — "the reference you provided shows N
+slop signals — using it as a stated anti-reference" — and the orchestrator surfaces that
+sentence to the user before the build begins. Pixel-copying rules are unchanged: measurements
+and reasoning only, never "make it look like this one."
+
+Spawn `omd:scout` with the concept, the thing being designed, and any user-provided URLs.
+It starts with a component inventory — every nav, card, form field, and footer the build
+will need, listed before the first browser opens — then fills a board of **at least eighteen
+captures, targeting twenty-five**:
 
 ```bash
 omd ref add https://linear.app --as landing                      # whole page, for feel (3–4 total)

@@ -34,12 +34,13 @@ interface Opts {
   selector?: string;
   image?: boolean;
   filmstrip?: boolean;
+  fromUser?: boolean;
   /** Directory of pages for cross-page site consistency check (`omd check --site <dir>`). */
   site?: string;
 }
 
-const FLAGS = new Set(['json', 'no-log', 'image', 'filmstrip']);
-const ALIASES: Record<string, keyof Opts> = { o: 'out', 'no-log': 'noLog' };
+const FLAGS = new Set(['json', 'no-log', 'image', 'filmstrip', 'from-user']);
+const ALIASES: Record<string, keyof Opts> = { o: 'out', 'no-log': 'noLog', 'from-user': 'fromUser' };
 
 function parseArgs(args: string[]): Opts {
   const opts: Opts = { _: [] };
@@ -329,6 +330,7 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
       capturedAt: new Date().toISOString(),
       invariants: null,
       principles: [],
+      ...(opts.fromUser ? { origin: 'user' as const } : {}),
     });
     console.log(path);
     process.exit(0);
@@ -357,6 +359,7 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
     invariants,
     principles: [],
     slopCount,
+    ...(opts.fromUser ? { origin: 'user' as const } : {}),
   });
   console.log(path);
   console.log(JSON.stringify(invariants, null, 2));
@@ -371,10 +374,17 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
     );
   }
   if (slopCount >= 2) {
-    console.error(
-      `warning: ${slopCount} slop findings (${slopIds.join(', ')}) — this page reproduces patterns the tool exists to avoid.\n`
-      + 'Board it only as an explicitly-stated anti-reference.',
-    );
+    if (opts.fromUser) {
+      console.error(
+        `note: the reference you provided shows ${slopCount} slop signals (${slopIds.join(', ')}) — using it as a stated anti-reference.\n`
+        + 'It is saved; mark its principles to document what to avoid.',
+      );
+    } else {
+      console.error(
+        `warning: ${slopCount} slop findings (${slopIds.join(', ')}) — this page reproduces patterns the tool exists to avoid.\n`
+        + 'Board it only as an explicitly-stated anti-reference.',
+      );
+    }
   }
   process.exit(0);
 }
@@ -431,8 +441,9 @@ async function cmdRefList(): Promise<never> {
   }
   for (const ref of refs) {
     const granularity = ref.selector ? `[${ref.kind} ${ref.selector}]` : `[${ref.kind}]`;
+    const userNote = ref.origin === 'user' ? '  [user]' : '';
     if (ref.kind === 'image' || ref.invariants === null) {
-      console.log(`${ref.source}  ${ref.component}  ${granularity}`);
+      console.log(`${ref.source}  ${ref.component}  ${granularity}${userNote}`);
       continue;
     }
     const inv = ref.invariants;
@@ -441,7 +452,7 @@ async function cmdRefList(): Promise<never> {
     const slopNote = (ref.slopCount ?? 0) >= 2 ? `  [slop:${ref.slopCount}]` : '';
     console.log(
       `${ref.source}  ${ref.component}  ${granularity}  radius=[${inv.radiusLadder.join(',')}] `
-      + `spacing=[${inv.spacingLadder.join(',')}] elevation=${inv.elevationLevels}${lowSignalNote}${slopNote}`,
+      + `spacing=[${inv.spacingLadder.join(',')}] elevation=${inv.elevationLevels}${lowSignalNote}${slopNote}${userNote}`,
     );
   }
 

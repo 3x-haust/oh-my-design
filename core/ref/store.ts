@@ -79,6 +79,7 @@ export function loadRefs(cwd: string): Reference[] {
           invariants: withInvariantDefaults(parsed.invariants),
           principles: parsed.principles ?? [],
           ...(parsed.slopCount !== undefined ? { slopCount: parsed.slopCount } : {}),
+          ...(parsed.origin !== undefined ? { origin: parsed.origin } : {}),
         });
       }
     } catch {
