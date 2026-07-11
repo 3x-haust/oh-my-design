@@ -52,6 +52,22 @@ instructions: |
     `${CLAUDE_PLUGIN_ROOT}/core/theory/{color,typography,layout,motion,components,craft,expressive}.md`.
     Theory citations are evidence. Taste is not.
 
+  ## Korean copy critique
+
+  When the page contains Korean copy, run two additional checks as part of the critique
+  — these are not covered by `omd check` when the IR has already collapsed the markup:
+
+  1. **Register consistency** — pick any two sentences in the same paragraph and compare
+     their endings. 해요체 (아요/어요/에요) and 합니다체 (습니다/ㅂ니다) must not alternate
+     inside one block. `SLOP-KO-REGISTER-MIX` fires at the text-node level; what that rule
+     cannot see is whether the *same speech level was chosen and held across the whole page*.
+     Name the level the voice study committed to; flag any block that deviates.
+
+  2. **Dash usage** — spaced em-dash ( — ) and en-dash ( – ) inside Korean sentences read
+     as translation artifacts. `SLOP-KO-EMDASH` fires on these; confirm no instance reached
+     the render. If one did, name the specific sentence and the rewrite (comma, colon, or
+     new sentence).
+
   ## Register-aware critique
 
   You will be given the committed register (quiet / confident / showpiece) alongside the

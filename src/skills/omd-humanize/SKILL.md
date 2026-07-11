@@ -61,6 +61,12 @@ makes rewrites noisy and trust collapse fast. Three tiers:
 - **Uniform rhythm**: 문장 길이 분산이 없음, 같은 어미 연속(-다/-다/-다, -입니다 3연속)
 - **E-7** (S3): 경어법 레벨 흔들림 — 합쇼체와 해체가 단락 안에서 섞임. 대화문 안의 흔들림은
   예외. 군집(5회+)일 때만 제거.
+- **E-8** (S1): 한국어 문장 안 스페이스드 대시 — " — " 또는 " – "(양옆 공백이 있는 em-dash/
+  en-dash)가 한글이 포함된 문장에 등장하면 즉시 제거. 영문 타이포그래피 관습이 번역 과정에서
+  그대로 옮겨진 패턴이다. 쉼표·콜론·새 문장으로 대체. `SLOP-KO-EMDASH` 규칙과 동일한 패턴.
+- **E-9** (S1): 경어법 혼용 — 해요체(아요/어요/예요/에요)와 합니다체(습니다/ㅂ니다)가 같은
+  단락에서 교차하면 S1으로 처리. 따옴표 안의 대화는 예외. 페이지 전체에서 보이스 스터디가
+  결정한 한 가지 어체만 사용. `SLOP-KO-REGISTER-MIX` 규칙과 동일한 패턴.
 - **Redundant modification**: 매우/정말/아주 습관적 사용, 유의어 쌍(명확하고 분명한),
   -적/-성/-화 접미사 남발
 - **Hedging stacks**: ~할 수 있을 것으로 보인다, ~일 수도 있다고 생각된다
@@ -76,6 +82,22 @@ makes rewrites noisy and trust collapse fast. Three tiers:
 - Hedging: "can potentially", "may possibly", "it could be argued"
 - Bold **key phrases** sprinkled as decoration
 
+## Four tells the linter cannot fully catch
+
+These require human judgment because the IR cannot measure them mechanically:
+
+- **Hard line breaks mid-sentence** (`<br>` or `\n` inside a paragraph, not at a sentence
+  boundary): the DOM collapses `<br>` before the linter sees the text, so `SLOP-BR-BREAK`
+  cannot be a YAML rule. Look for `<br>` in the source HTML of any paragraph or hero line.
+  Remove it; `max-width` and `line-height` control the column, not the markup. An inserted
+  break that is not at a sentence end is always an AI formatting artifact.
+
+- **Self-explainer copy** (both languages): the product describing its own mechanism in
+  README cadence instead of selling an outcome. Patterns: "X는 Y를 잡아내는 플러그인이에요",
+  "X is a tool that helps you Y", "omd detects Z and fixes it". These read as the model
+  quoting its own task description. Rewrite as the outcome: what the reader gets, what
+  changes, what happens next.
+
 ## The pink elephant (absolute, both languages)
 
 Copy must never state what the thing is NOT. Told "no clutter", a model writes "No
@@ -90,6 +112,16 @@ And **design rationale never appears in shipped copy.** If the text is page copy
 omd project, run `omd check <page>` — SLOP-LEAKED-RATIONALE fires when five consecutive
 words match `.omd/frame.md` or `decisions.md`. The frame explains the work; the page must
 never quote it.
+
+## What to write toward
+
+The tells above describe what to remove. `core/theory/voice.md` (or
+`${CLAUDE_PLUGIN_ROOT}/core/theory/voice.md` when running inside the plugin) describes
+what to write toward: sentence-length variance as the human signal, front-loading,
+concrete nouns over nominalisations, the Mailchimp plainspoken standard, the Toss "Easy
+to speak" test for Korean. The removes and the positive moves are two sides of the same
+operation — a rewrite that only strips tells without installing variance is a cleaned-up
+monotone, not a human voice.
 
 ## Procedure
 

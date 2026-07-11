@@ -1,6 +1,18 @@
-# Nothing in this file describes a defect. Every rule here describes a design that has
-# converged on the mean of everything a model has ever seen — correct, competent, and
-# indistinguishable from ten thousand others. That is the failure this tool exists for.
+# Nothing in this file describes a defect. Every rule here describes work that a model
+# produced from pattern alone, without the position of an author who built the thing and
+# speaks the language. Two families live here:
+#
+# 1. Visual convergence-to-the-mean — the gradient band, the identical radius, the triple
+#    card grid. Correct, competent, indistinguishable from ten thousand others. That is the
+#    failure this tool was first built for.
+#
+# 2. Prose that could not have been written by a person who speaks the language natively
+#    and owns the product — register drift, translation punctuation (spaced em-dash inside
+#    Korean copy), speech-level mixing within a paragraph, explainer cadence on a product
+#    page. These are not grammar errors. A fluent reader knows, immediately, that no native
+#    speaker wrote them. The IR cannot always see layout-level signals (a hard <br> inside
+#    a sentence is invisible once the DOM collapses text nodes), but it can see the text
+#    itself — and the text is where generated work gives itself away first.
 #
 # Each is a heuristic and each can be wrong about a deliberate choice. So they warn, they
 # never error, and every message says what to do instead rather than merely what is wrong.
@@ -119,6 +131,53 @@
   value: "node.text"
   assert: "!/(?:그러나|하지만|또한|따라서|즉),[ \\t]|살펴보겠습니다|알아보겠습니다|둘째[,，]|셋째[,，]/u.test(value)"
   message: "Korean AI writing pattern: \"{value}\". A connective followed by a comma (그러나,/또한,), a structural 살펴보겠습니다/알아보겠습니다opener, or a 둘째/셋째 enumeration all trace the model's essay skeleton, not the product's actual claim. Write the specific fact this sentence was hiding."
+
+# Korean translation-punctuation tell: a spaced em-dash ( — ) or en-dash ( – ) inside a
+# sentence that contains Hangul. The spaced em-dash is standard English typography and is
+# legitimate in English copy; it is not standard in Korean product writing. It appears in
+# Korean AI output because the model learned the pattern from English text and transfers it
+# directly. A native Korean copywriter uses a comma, a colon, a dash without surrounding
+# spaces, or starts a new sentence — never the spaced European em-dash construction.
+#
+# Gated on Hangul presence in the same node so English copy is never touched.
+- id: SLOP-KO-EMDASH
+  layer: 1
+  category: slop
+  severity: warn
+  when: "Boolean(node.text) && node.text.length > 8 && /[가-힣]/u.test(node.text)"
+  value: "node.text"
+  assert: "!/ [—–] /.test(value)"
+  message: "Spaced em-dash or en-dash inside Korean copy: \"{value}\". The spaced em-dash ( — ) is an English typography convention; it appears in Korean AI output as a direct transfer from English training data. Rewrite as a comma, colon, or a new sentence — the construction Korean product copy actually uses."
+
+# Korean speech-level mixing within a single text block. Korean has two formal registers
+# that must not alternate in the same paragraph outside of quoted dialogue:
+#
+#   해요체 — ALL forms end in 요 followed by sentence-final punctuation (. ! ?):
+#             아요, 어요, 예요, 에요, 해요, 봐요, 줘요, 쉬워요, and every other contracted form.
+#   합니다체 — ALL forms end in 니다 followed by sentence-final punctuation (. ! ?):
+#              습니다, and the ㅂ-absorbed forms 합니다, 됩니다, 만듭니다, 갑니다, etc.
+#              (In Unicode, the ㅂ attaches to the preceding syllable as a 받침 —
+#              "만듭니다" is 만+듭+니+다, not 만+들+ㅂ+니+다. The text "ㅂ니다" never
+#              appears; 니다[.!?] is the correct detector for the full family.)
+#
+# A native speaker writing product copy commits to one level and holds it. A model assembles
+# sentences across registers because each sentence is generated independently. The result
+# reads immediately as machine-made to any fluent reader — not as a grammar error but as
+# a sign that no single human voice was present.
+#
+# False positive guard: if the node contains quotation marks (straight or curly, Korean
+# angle brackets), stay silent — dialogue attribution legitimately mixes registers.
+#
+# Positive test: "모델은 정답을 만들지 않아요. 훈련 데이터의 평균을 만듭니다." (해요체 + 합니다체)
+# Negatives: all-해요체 block, all-합니다체 block, any block containing 따옴표.
+- id: SLOP-KO-REGISTER-MIX
+  layer: 1
+  category: slop
+  severity: warn
+  when: "Boolean(node.text) && node.text.length > 8 && /[가-힣]/u.test(node.text)"
+  value: "node.text"
+  assert: "!(/요[.!?]/.test(value) && /니다[.!?]/.test(value)) || /[\"'\\u201C\\u201D\\u2018\\u2019\\u300C\\u300D]/.test(value)"
+  message: "Mixed speech levels in one text block: \"{value}\". 해요체 endings (요.) and 합니다체 endings (니다.) alternate inside one paragraph — a sign that sentences were assembled across generation passes rather than written by one voice. Choose one level, held for the whole page, and state which in the voice study."
 
 - id: SLOP-TRIPLE-CARD
   layer: 1
