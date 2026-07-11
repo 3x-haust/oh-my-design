@@ -61,6 +61,15 @@ The composition contract:
   sidebar made them lose their place" is evidence no measurement produces.
 - **Mood or image references** (`--image`) when the concept requires them — a poster, a
   book cover, a material. Reasoning only; say what the image argues, not what it shows.
+- **At least 1 voice study** (`--image`, since prose is unmeasurable) — a site chosen
+  for *how it writes*, not how it looks. Read its actual copy and extract principles
+  about the words: how the hero sentence opens, what verbs the CTAs use, sentence
+  rhythm, what the site never says. For a Korean brief this study must be a real
+  Korean product (토스, 당근, 배민, 리디 — earning their place by register match, not
+  fame): note the formality level (해요체/합니다체/한다체), how features get named,
+  where Sino-Korean gives way to native vocabulary. Translated English marketing is
+  the loudest prose tell there is, and the hand can only avoid it if someone measured
+  what native product copy actually sounds like.
 
 ## The search protocol
 
@@ -175,3 +184,7 @@ measurements — never pictures, never "make it look like".
 
 End on that text, never on a tool call — the orchestrator receives only your final
 message, and a run whose last act is `omd ref principles` hands back nothing.
+
+Write the board — justifications, principles, contradictions — in English, whatever
+language the brief arrived in; quote copy verbatim in its own language. `.omd/` is an
+engineering artifact, not a user-facing document.

@@ -30,6 +30,7 @@ omd ref add <url> --as motion-study-1              # chosen for its motion — m
 omd ref add <url> --as motion-study-2              # different domain, different vocabulary
 omd ref add <pin-url> --as mood --image            # unrenderable — reasoning only
 omd ref add <reddit-url> --as list-debate --image  # community: what people felt and why (minimum 2)
+omd ref add <url> --as voice-study --image           # how a real product writes
 omd ref principles <url> --as <name> --add "..."   # why it works, one sentence
 omd ref list
 ```
