@@ -161,6 +161,24 @@ board leaves. Use it. Path: `${CLAUDE_PLUGIN_ROOT}/core/theory/{color,typography
 motion,components,craft,expressive}.md`. Read whichever file covers the gap, pull the
 relevant condition→choice→reason entry, and record it in `omd decision`.
 
+## Framework detection
+
+Before writing a single file, read `package.json` in the working directory if it exists.
+
+- If `react`, `next`, `vue`, `svelte`, or `@sveltejs/kit` appears in `dependencies` or
+  `devDependencies`, the project is already a framework project. Follow its conventions:
+  match the component file structure already in the tree, use the CSS approach the project
+  already uses (CSS modules, Tailwind, plain CSS — whichever is wired), and write
+  components in the same language (`.tsx`, `.vue`, `.svelte`) the project already uses.
+  If you cannot determine the pattern from package.json alone, read one existing component
+  before writing anything new.
+- If no package.json exists or it names no recognised framework, use the stack the brief
+  specifies. If the brief is silent on stack, build plain HTML + CSS + minimal vanilla JS
+  — the least infrastructure that delivers the design.
+
+The point of this step is that a React project that ships a raw `index.html` alongside its
+component tree has two design systems competing. Match what is there.
+
 ## Build mechanics
 
 **Design system first, components second.** Before a single component exists, the `:root`

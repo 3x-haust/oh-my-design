@@ -56,6 +56,15 @@ above the design belongs to nothing.
 > Novice designers solve the problem they were given.
 > Expert designers interrogate it first. That is the largest measured gap between them.
 
+Before anything else, run `omd doctor` quietly from the working directory. If any check
+fails, surface the failure lines to the user in one sentence and stop — a missing Playwright
+installation or an unwritable `.omd/` will break every subsequent step, and discovering
+that mid-loop wastes everything before it.
+
+```bash
+omd doctor
+```
+
 Spawn `omd-framer`. It returns the given problem, a reframing, and — mandatory — **evidence**:
 a cited review, a support ticket, a datum, an observed pattern in a named competitor, or a
 sentence the user themselves said. "I think" is not evidence, and `omd frame set` rejects a
@@ -306,6 +315,11 @@ omd decision "Committed to a conversational structure" --why "serves the concept
 Spawn **one** `omd-hand` and build the committed structure. Real files, real CSS, real components.
 All the tokens belong here, on the one thing that ships.
 
+`omd render` and `omd check` accept a dev-server URL just as readily as a static file path —
+pass `http://localhost:3000` (or whichever port the framework uses) wherever a page
+argument is required. For a framework project, start the dev server before running either
+command; for a static build, pass the file path directly.
+
 Declare colour, spacing, radius, **type, and motion** as custom properties on `:root`. The
 eye reads those as the design system; an inline hex is reported as a defect, correctly.
 Typography comes from the reference type studies — a chosen scale and faces with a reason —
@@ -327,10 +341,19 @@ the chance it might be.
 
 You did not make what you think you made.
 
+Render at both viewports, then hand **both** screenshots to the eye. A clamp that works at
+1280px can collapse to nothing at 375px; a margin-note that floats correctly on desktop can
+cover body text on mobile. One render is a blind spot.
+
 ```bash
-omd render <page> -o .omd/.cache/build.png    # then Read the PNG. Actually look at it.
-omd check  <page> --json                      # deterministic findings
-omd check  <page> --category slop             # the ones that matter most
+omd render <page> -o .omd/.cache/build-desktop.png --viewport 1280x800
+omd render <page> -o .omd/.cache/build-mobile.png  --viewport 375x812
+# Read both PNGs. Actually look at them.
+
+omd check  <page> --json           --viewport 1280x800   # deterministic findings, desktop
+omd check  <page> --json           --viewport 375x812    # deterministic findings, mobile
+omd check  <page> --category slop  --viewport 1280x800   # slop, desktop
+omd check  <page> --category slop  --viewport 375x812    # slop, mobile (hit-area fires here)
 ```
 
 `omd check` computes contrast ratios, hit areas, spacing, token coverage, **and slop**. Never
@@ -382,8 +405,10 @@ omd check <page> --category slop   # SLOP-PINK-ELEPHANT and SLOP-COPY must come 
 
 Only when the copy is clean does the eye see the page.
 
-Finally spawn `omd-eye` on the built page. It sees the screenshot and the findings and nothing
-about why you built it that way. It cannot defend your reasoning because it does not have it.
+Finally spawn `omd-eye` on the built page. Hand it both the desktop and mobile screenshots
+and the combined findings from both viewport runs. It sees the renders and the findings and
+nothing about why you built it that way. It cannot defend your reasoning because it does not
+have it.
 
 ---
 
