@@ -21,7 +21,8 @@
   "scripts": {
     "test": "node --test 'test/*.test.ts'",
     "typecheck": "tsc --noEmit",
-    "build": "node adapters/build.ts"
+    "build": "node adapters/build.ts",
+    "release:prep": "node scripts/bump.ts"
   },
   "dependencies": {
     "smol-toml": "^1.3.0",

@@ -1,0 +1,48 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2   # need HEAD~1 to detect the version change
+
+      - name: Detect version bump
+        id: ver
+        run: |
+          prev=$(git show HEAD~1:.claude-plugin/plugin.json 2>/dev/null | jq -r '.version // empty' || echo "")
+          curr=$(jq -r .version .claude-plugin/plugin.json)
+          echo "prev=$prev" >> "$GITHUB_OUTPUT"
+          echo "curr=$curr"  >> "$GITHUB_OUTPUT"
+          if [ "$prev" != "$curr" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Tag and create GitHub release
+        if: steps.ver.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="v${{ steps.ver.outputs.curr }}"
+
+          # Use the merge-commit body as release notes; fall back to tag name.
+          notes=$(git log -1 --format="%b" | sed '/^$/d' | head -80)
+          notes="${notes:-Release $tag}"
+
+          git tag "$tag"
+          git push origin "$tag"
+
+          gh release create "$tag" \
+            --title "$tag" \
+            --notes "$notes" \
+            --latest
