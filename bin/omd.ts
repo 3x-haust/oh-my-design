@@ -237,9 +237,16 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
   const { extractInvariants } = await import('../core/ref/invariants.ts');
   const { designSignal, LOW_SIGNAL } = await import('../core/ref/signal.ts');
 
+  const { loadRules, check } = await import('../core/rules/engine.ts');
+
   const raw = await rawIrFor(opts, target, opts.selector);
   const ir = normalize(raw);
   const invariants = extractInvariants(ir);
+
+  const slopViolations = check(ir, loadRules(join(root, 'core', 'rules', 'builtin')), { categories: ['slop'] });
+  const slopCount = slopViolations.length;
+  const slopIds = [...new Set(slopViolations.map((v) => v.id))];
+
   const path = saveRef(process.cwd(), {
     source: target,
     component: opts.as,
@@ -248,9 +255,11 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
     ...(opts.selector ? { selector: opts.selector } : {}),
     invariants,
     principles: [],
+    slopCount,
   });
   console.log(path);
   console.log(JSON.stringify(invariants, null, 2));
+  console.error(`slop findings: ${slopCount}${slopCount > 0 ? `  [${slopIds.join(', ')}]` : ''}`);
 
   const signal = designSignal(invariants);
   if (signal.score < LOW_SIGNAL) {
@@ -258,6 +267,12 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
       `warning: low design signal (${signal.score} — missing: ${signal.missing.join(', ')}).\n`
       + 'This page makes almost no visual decisions; as a visual reference it teaches nothing.\n'
       + 'Keep it only as a content or anti-reference, and say so in its principles.',
+    );
+  }
+  if (slopCount >= 2) {
+    console.error(
+      `warning: ${slopCount} slop findings (${slopIds.join(', ')}) — this page reproduces patterns the tool exists to avoid.\n`
+      + 'Board it only as an explicitly-stated anti-reference.',
     );
   }
   process.exit(0);
@@ -307,6 +322,7 @@ async function cmdRefShow(opts: Opts): Promise<never> {
 async function cmdRefList(): Promise<never> {
   const { loadRefs } = await import('../core/ref/store.ts');
   const { designSignal, LOW_SIGNAL } = await import('../core/ref/signal.ts');
+  const { topKinshipPairs } = await import('../core/ref/distance.ts');
   const refs = loadRefs(process.cwd());
   if (refs.length === 0) {
     console.log('No references yet.');
@@ -321,11 +337,25 @@ async function cmdRefList(): Promise<never> {
     const inv = ref.invariants;
     const signal = designSignal(inv);
     const lowSignalNote = signal.score < LOW_SIGNAL ? `  [low-signal ${signal.score}]` : '';
+    const slopNote = (ref.slopCount ?? 0) >= 2 ? `  [slop:${ref.slopCount}]` : '';
     console.log(
       `${ref.source}  ${ref.component}  ${granularity}  radius=[${inv.radiusLadder.join(',')}] `
-      + `spacing=[${inv.spacingLadder.join(',')}] elevation=${inv.elevationLevels}${lowSignalNote}`,
+      + `spacing=[${inv.spacingLadder.join(',')}] elevation=${inv.elevationLevels}${lowSignalNote}${slopNote}`,
     );
   }
+
+  const pairs = topKinshipPairs(refs);
+  if (pairs.length > 0) {
+    console.log('');
+    for (const p of pairs) {
+      console.log(`kinship: ${p.a}  ${p.b}  ${p.similarity.toFixed(2)}`);
+    }
+    console.error(
+      'warning: kinship cluster — references scoring ≥0.85 against each other carry the same average.\n'
+      + 'A cluster is a contamination signal; drop the duplicates or mark the weaker capture as an anti-reference.',
+    );
+  }
+
   process.exit(0);
 }
 

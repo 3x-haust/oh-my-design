@@ -245,6 +245,12 @@ export interface Reference {
   invariants: Invariants | null;
   /** Why it was built that way. Written by a model that looked, then closed the tab. */
   principles: string[];
+  /**
+   * Number of slop-category rule violations found at capture time. Absent on references
+   * captured before this field was introduced — treat absence as 0 at the usage site.
+   * Two or more findings is a contamination signal: board only as an anti-reference.
+   */
+  slopCount?: number;
 }
 
 /** How close a page sits to a reference. 1 is identical; the warning threshold is 0.6. */
