@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, unlinkSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { stringify } from 'yaml';
@@ -354,6 +354,52 @@ async function cmdRefDistance(opts: Opts): Promise<never> {
   process.exit(0);
 }
 
+async function cmdDoctor(): Promise<never> {
+  let allPass = true;
+
+  function report(label: string, pass: boolean, detail?: string): void {
+    console.log(`${pass ? 'pass' : 'fail'}  ${label}${detail ? `  (${detail})` : ''}`);
+    if (!pass) allPass = false;
+  }
+
+  // Node version: package.json engines requires >=22.18
+  const parts = process.versions.node.split('.').map(Number);
+  const [major = 0, minor = 0] = parts;
+  const nodeOk = major > 22 || (major === 22 && minor >= 18);
+  report('node >=22.18', nodeOk, process.versions.node);
+
+  // Playwright importability + chromium executable
+  try {
+    const { chromium } = await import('playwright');
+    const exePath = chromium.executablePath();
+    const exeExists = existsSync(exePath);
+    report('playwright chromium', exeExists, exeExists ? 'found' : `not found: ${exePath}`);
+  } catch {
+    report('playwright chromium', false, 'playwright not importable — run: npx playwright install chromium');
+  }
+
+  // .omd/ writability at cwd
+  const omdDir = join(process.cwd(), '.omd');
+  try {
+    mkdirSync(omdDir, { recursive: true });
+    const probe = join(omdDir, '.doctor-probe');
+    writeFileSync(probe, '');
+    try { unlinkSync(probe); } catch { /* ignore */ }
+    report('.omd/ writable', true);
+  } catch (e) {
+    report('.omd/ writable', false, e instanceof Error ? e.message : String(e));
+  }
+
+  // Theory-pack files — resolved relative to the CLI's own root
+  const theoryFiles = ['color.md', 'typography.md', 'layout.md', 'motion.md', 'expressive.md', 'components.md', 'craft.md'];
+  for (const f of theoryFiles) {
+    const path = join(root, 'core', 'theory', f);
+    report(`theory/${f}`, existsSync(path));
+  }
+
+  process.exit(allPass ? 0 : 1);
+}
+
 function usage(): never {
   console.error(
     'usage: omd <command>\n\n'
@@ -376,7 +422,9 @@ function usage(): never {
     + '  ref list                                    one line per saved reference\n'
     + '  ref distance <page>                         compare a page to every saved reference\n'
     + '  ref principles <source> --as C --add "..."   record why a reference works\n'
-    + '  ref show <source> --as C                    invariants + principles',
+    + '  ref show <source> --as C                    invariants + principles\n'
+    + '\n'
+    + '  doctor                                       check environment prerequisites',
   );
   process.exit(1);
 }
@@ -437,6 +485,8 @@ async function main(): Promise<never> {
     if (sub === 'show') return cmdRefShow(opts);
     return usage();
   }
+
+  if (cmd === 'doctor') return cmdDoctor();
 
   if (cmd === 'choose') return cmdChoose(parseArgs(args.slice(1)));
 
