@@ -91,6 +91,35 @@
   assert: "!/you won't find [^.]{0,40} here|we (?:won't|will never) (?:bore|spam|waste)|\\b(?:no|zero) (?:ads|clutter|distractions|gimmicks)[,.]? just\\b|이런 (?:내용|것)[은는] 없|(?:여기|이 페이지)에는 [가-힣 ]{0,15}(?:광고|잡동사니|군더더기)[가는은]? 없/i.test(value)"
   message: "Self-negating meta-copy: \"{value}\". The page is announcing what it refuses to do — the model quoting its own brief. Delete this sentence and write the positive fact it was hiding: what the reader gets, what it costs, what happens next."
 
+# Korean AI writing patterns promoted from the im-not-ai taxonomy.
+#
+# Three classes, all S1 (deterministically AI-flavoured in UI copy):
+#
+# C-11 — a sentence-opening connective directly followed by a comma (그러나, / 하지만, /
+# 또한, / 따라서, / 즉,). Standard Korean prose does not punctuate these with a comma;
+# the comma is a direct trace of English "However," and "Therefore," translated by a model.
+# Narrow by design: only the exact five connectives fire; the comma+space pair is required so
+# "또한 그날 밤" (ordinary adverb) passes cleanly.
+#
+# D류 — 알아보겠습니다 / 살펴보겠습니다. The "let us now examine" structural openers that
+# appear in AI-generated explanatory content. On a product page they expose the model's
+# essay skeleton. A human copywriter writes what the product does, not that we will look at
+# what the product does.
+#
+# F2 rule: drop a pattern rather than ship one that fires on legitimate prose. A-19 겹조사
+# (-에서의/-으로의) was studied and dropped: "서울에서의 하루" is unambiguous legitimate Korean
+# so the pattern is too trigger-happy to promote. "둘째,/셋째," was also studied and retained
+# in this rule rather than SLOP-COPY because it completes the 첫째-둘째-셋째 enumeration
+# family already flagged by SLOP-COPY.
+- id: SLOP-COPY-KO
+  layer: 1
+  category: slop
+  severity: warn
+  when: "Boolean(node.text) && node.text.length > 8"
+  value: "node.text"
+  assert: "!/(?:그러나|하지만|또한|따라서|즉),[ \\t]|살펴보겠습니다|알아보겠습니다|둘째[,，]|셋째[,，]/u.test(value)"
+  message: "Korean AI writing pattern: \"{value}\". A connective followed by a comma (그러나,/또한,), a structural 살펴보겠습니다/알아보겠습니다opener, or a 둘째/셋째 enumeration all trace the model's essay skeleton, not the product's actual claim. Write the specific fact this sentence was hiding."
+
 - id: SLOP-TRIPLE-CARD
   layer: 1
   category: slop
