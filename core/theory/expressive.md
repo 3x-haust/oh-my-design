@@ -142,6 +142,14 @@ Hangul display typography carries a specific constraint that Latin display type 
 
 ---
 
+## Graphics recipes
+
+The background and image treatment techniques referenced in this file — grain texture,
+gradient mesh, geometric patterns, CSS illustration primitives, duotone image presets —
+are implemented as working CSS recipes in `core/graphics/`. The placeholder policy
+(grey box is a defect; typographic block, pattern fill, or generated gradient instead)
+is documented in `core/graphics/placeholder-policy.md`.
+
 ## Sources
 
 - Awwwards, Evaluation System (awwwards.com/about-evaluation) — Design 40% / Usability 30% / Creativity 20% / Content 10%, confirmed from the official criteria page
