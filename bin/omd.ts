@@ -34,6 +34,8 @@ interface Opts {
   selector?: string;
   image?: boolean;
   filmstrip?: boolean;
+  /** Directory of pages for cross-page site consistency check (`omd check --site <dir>`). */
+  site?: string;
 }
 
 const FLAGS = new Set(['json', 'no-log', 'image', 'filmstrip']);
@@ -98,7 +100,92 @@ async function cmdRender(opts: Opts): Promise<never> {
   process.exit(0);
 }
 
+/**
+ * Cross-page site consistency check: `omd check --site <dir>`.
+ *
+ * Loads every .html file (and .json IR cache) in the given directory, extracts
+ * IR for each page, compares their design ladders and token coverage, and warns
+ * when pages disagree. The comparison logic (checkSite) is pure; only the
+ * extraction here touches the browser.
+ *
+ * CLI shape: `omd check --site ./dist` — all .html files in the directory.
+ *            Multiple positional args also work: `omd check a.html b.html`
+ *            (when --site is absent and opts._ has ≥2 entries).
+ */
+async function cmdCheckSite(opts: Opts): Promise<never> {
+  const { normalize } = await import('../core/ir/normalize.ts');
+  const { extractInvariants } = await import('../core/ref/invariants.ts');
+  const { checkSite } = await import('../core/site/index.ts');
+  const { extractIr, parseViewport } = await import('../core/render/index.ts');
+
+  // Resolve the list of page paths: either --site <dir> (glob all HTML files)
+  // or multiple positional args.
+  let pagePaths: string[] = [];
+  if (opts.site) {
+    const dir = resolve(opts.site);
+    const { readdirSync: rds } = await import('node:fs');
+    try {
+      pagePaths = rds(dir)
+        .filter((f) => f.endsWith('.html') || f.endsWith('.htm'))
+        .map((f) => join(dir, f))
+        .sort();
+    } catch (e) {
+      console.error(`cannot read directory: ${opts.site} — ${e instanceof Error ? e.message : String(e)}`);
+      process.exit(1);
+    }
+    if (pagePaths.length === 0) {
+      console.error(`no .html files found in: ${opts.site}`);
+      process.exit(1);
+    }
+  } else {
+    // Multiple positional args
+    pagePaths = opts._.map((p) => resolve(p));
+  }
+
+  if (pagePaths.length < 2) {
+    console.error('--site requires at least 2 pages to compare; use `omd check <page>` for a single-page check');
+    process.exit(1);
+  }
+
+  const viewport = parseViewport(opts.viewport);
+
+  const pages: Array<{ path: string; invariants: import('../core/types.ts').Invariants; tokens?: Record<string, string> }> = [];
+  for (const pagePath of pagePaths) {
+    try {
+      const raw = await extractIr(pagePath, { viewport, selector: null });
+      const ir = normalize(raw);
+      const invariants = extractInvariants(ir);
+      pages.push({ path: pagePath, invariants, ...(raw.tokens ? { tokens: raw.tokens } : {}) });
+      console.error(`  extracted: ${pagePath} (${ir.nodes.length} nodes)`);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error(`  skipped: ${pagePath} — ${msg}`);
+    }
+  }
+
+  if (pages.length < 2) {
+    console.error('fewer than 2 pages extracted successfully — cannot compare');
+    process.exit(1);
+  }
+
+  const violations = checkSite(pages);
+
+  if (opts.json) {
+    process.stdout.write(JSON.stringify(violations));
+  } else {
+    for (const v of violations) {
+      console.log(`[${v.severity}] ${v.id}: ${v.message}`);
+    }
+    if (violations.length === 0) console.log('ok — no cross-page drift detected');
+  }
+
+  process.exit(violations.length > 0 ? 1 : 0);
+}
+
 async function cmdCheck(opts: Opts): Promise<never> {
+  // Route to site-wide consistency check when --site is present or ≥2 positional args given.
+  if (opts.site || opts._.length >= 2) return cmdCheckSite(opts);
+
   const { normalize } = await import('../core/ir/normalize.ts');
   const { loadRules, check } = await import('../core/rules/engine.ts');
 
@@ -473,6 +560,8 @@ function usage(): never {
     + '  render <page> -o shot.png [--viewport WxH]  headless screenshot\n'
     + '  render <page> --filmstrip -o f.html [--viewport WxH]  load-time filmstrip\n'
     + '  check [<page>|--ir f] [--json] [--category slop] [--no-log]\n'
+    + '  check --site <dir>                          cross-page consistency (SITE-*)\n'
+    + '  check <page1> <page2> ...                   same, multi-page positional\n'
     + '  coach                                        trends across `omd check` history\n'
     + '\n'
     + '  frame show\n'

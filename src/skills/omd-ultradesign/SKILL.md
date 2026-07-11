@@ -452,6 +452,20 @@ step 4.**
 
 ## 8. Ship, then explain
 
+**When the build produced more than one page**, run `omd check --site <dir>` on the
+output directory before shipping. A blog and its index, a landing page and its docs page,
+a dashboard and its empty state — pages built together should read as one design system.
+`SITE-LADDER-DRIFT` fires when one page carries a 4-step type scale and another a 6-step
+one; `SITE-TOKEN-DRIFT` fires when one page uses design tokens throughout and another
+falls back to inline values. Either finding means the pages were not built from the same
+set of decisions, and the user will feel that drift before they can name it.
+
+```bash
+omd check --site ./dist   # or pass the pages explicitly: omd check index.html post.html
+```
+
+If violations appear, fix the drifting page before shipping.
+
 Deliver the working site. Then, in a short paragraph — not a report — tell the user:
 
 - what you decided the problem actually was, and what evidence pointed there

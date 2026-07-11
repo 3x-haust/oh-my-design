@@ -165,6 +165,62 @@ the concept requires.
 Every reference gets one line: why it is here, against the concept. If you cannot
 justify it, drop it.
 
+## Blocked sites: demote, don't retry
+
+`omd ref add` throws a blocked-page error when it detects a Cloudflare interstitial,
+HTTP 403/5xx, or near-empty body (< 200 visible chars). When this happens:
+
+- Do **not** retry the same URL. A site that blocks headless browsers once will block
+  again, and a retry loop is how the scout stalls without making progress.
+- Demote the URL to `--image` if you can construct useful reasoning from what you know
+  about the site's reputation and design choices without capturing its DOM. An `--image`
+  capture that honestly notes "blocked; principles from public discourse only" is more
+  honest than a hollow IR.
+- If you cannot construct useful reasoning — the site is unknown or too generic to
+  reason about without seeing it — discard it and advance to the next candidate.
+- A blocked site does not leave a slot empty. Either the `--image` demoted capture fills
+  the slot, or the replacement obligation (see below) requires a new search.
+
+## Rejection obligates replacement
+
+Every rejected capture — whether rejected for slop contamination, low signal, kinship,
+blocked access, or inadequate principles — leaves a gap in the board's composition
+contract. **That gap must be filled.** The board is made of what passed, not of what was
+available.
+
+When you reject a capture, the next action is a replacement search, not a note that the
+slot is empty. The replacement search must differ in two ways:
+
+1. **Different query.** The original query found a problematic candidate; a variant of
+   the same query will likely find the same pool. Search from a different angle: if the
+   first query was a craft query, try a domain query; if it was a competitor query, try
+   a theory query.
+2. **Different source tier.** If the rejected capture came from tier 4 (anonymous search
+   result), search tier 3 (personal portfolios) or higher. If it came from tier 3, try
+   tier 2 (live product pages) or tier 1 (human-juried curation). Moving up the trust
+   hierarchy is not optional — the rejection signal is evidence that the tier you were
+   searching was producing contaminated results.
+
+The scout does not stop until every slot in the composition contract is filled with a
+capture that passed:
+
+- **Whole pages (3–4)**: all `slopCount < 2`, all from tier 2 or above, or tier 3/4
+  with `slopCount = 0` and a named, specific design decision.
+- **Components (one per inventory item)**: clean capture with a tight selector.
+- **Typography studies (minimum 2)**: from different registers; principles name why the
+  pairing works.
+- **Motion studies (minimum 2, 4 when the brief implies animation)**: from different
+  domains; motionDurations and easingVocab were actually read.
+- **Voice study (minimum 1)**: a real product, not a template. Copy checked against
+  SLOP-COPY / SLOP-COPY-KO before the study is considered collected.
+- **Community references (minimum 2)**: `--image`, unmeasurable, from real discourse —
+  not listicles.
+
+Anti-references — captures kept explicitly to document what to avoid — do **not** count
+toward this floor. A board of eighteen anti-references is a board of zero references.
+The composition contract is satisfied only by captures that passed, and the scout does
+not stop until the slots are filled.
+
 ## Slop-contaminated captures do not go on the board
 
 `omd ref add` now prints two quality checks: a design-signal score and a slop finding
@@ -177,6 +233,8 @@ may only be kept as an explicitly-stated anti-reference: one that is on the boar
 uses the indigo-violet gradient and triple feature cards — both patterns to reject" is
 a legitimate anti-reference. Dropping it entirely is also correct. Treating it as a
 positive reference is not: you would be training the build on the mean.
+
+Rejection for slop triggers the replacement obligation above.
 
 ## Low-signal pages do not count
 
