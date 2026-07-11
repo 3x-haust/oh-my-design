@@ -335,6 +335,14 @@ eye reads those as the design system; an inline hex is reported as a defect, cor
 Typography comes from the reference type studies — a chosen scale and faces with a reason —
 never from defaults; motion durations and easing come from the motion study.
 
+The motion cookbook is at `${CLAUDE_PLUGIN_ROOT}/core/motion/` — easing vocabulary in
+`easing.md`, twelve implementation recipes in `recipes/`. The hand implements motion FROM
+the cookbook: each scene in `.omd/motion-spec.md` cites the recipe file it uses and
+documents which board-measured values fill the parameter slots. A motion pattern outside
+the cookbook requires a written reason in the spec. The hand never fills parameter slots
+from a recipe's illustrative defaults — those are examples; the board's motion studies
+are the measurements.
+
 **Before writing any animation code**, `omd:hand` writes `.omd/motion-spec.md` — a scene
 inventory that documents every animation the build will contain: trigger (load/scroll/hover),
 target selector, animated properties, duration and easing with a motion-study citation, and
