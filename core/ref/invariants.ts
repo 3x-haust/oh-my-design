@@ -131,6 +131,20 @@ export function extractInvariants(ir: Ir): Invariants {
     ? round(interaction.focusVisible / interaction.tabStops, 2)
     : 0;
 
+  // Motion probe: attached by probeMotion() in core/render/index.ts. Absent on IRs
+  // captured before the probe existed — read defensively to keep old refs loading cleanly.
+  // PROBE LIMIT: rAF-driven libs (GSAP) are not visible to getAnimations(); their absence
+  // from animatedProperties is a correct measurement, not a missing field.
+  const motionProbe = ir.meta?.['motion'] as
+    | { animatedProperties?: string[]; hasReducedMotion?: boolean; scrollChoreography?: Array<{ step: number; fired: number; entered: number }> }
+    | null
+    | undefined;
+  const animatedProperties = motionProbe?.animatedProperties
+    ? [...motionProbe.animatedProperties].sort()
+    : [];
+  const hasReducedMotion = motionProbe?.hasReducedMotion ?? false;
+  const scrollChoreography = motionProbe?.scrollChoreography ?? [];
+
   return {
     spacingLadder, radiusLadder, elevationLevels, centeredRatio, tokenCoverage, paddingWeight,
     typeScale,
@@ -141,5 +155,8 @@ export function extractInvariants(ir: Ir): Invariants {
     animatedShare,
     hoverCoverage,
     focusCoverage,
+    animatedProperties,
+    hasReducedMotion,
+    scrollChoreography,
   };
 }

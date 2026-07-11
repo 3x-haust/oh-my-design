@@ -15,6 +15,7 @@ const base: Invariants = {
   typeScale: [13, 14, 16, 21], fontFamilies: ['inter'], weightLadder: [400, 510],
   motionDurations: [100, 160], easingVocab: ['ease', 'ease-out'], animatedShare: 0.05,
   hoverCoverage: 0, focusCoverage: 0,
+  animatedProperties: [], hasReducedMotion: false, scrollChoreography: [],
 };
 
 const distinct: Invariants = {
@@ -23,6 +24,7 @@ const distinct: Invariants = {
   typeScale: [16, 24, 48], fontFamilies: ['georgia'], weightLadder: [400, 700],
   motionDurations: [], easingVocab: [], animatedShare: 0,
   hoverCoverage: 0, focusCoverage: 0,
+  animatedProperties: [], hasReducedMotion: false, scrollChoreography: [],
 };
 
 const ref: Reference = {

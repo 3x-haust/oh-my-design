@@ -19,6 +19,7 @@ const LINEAR: Invariants = {
   animatedShare: 0.05,
   hoverCoverage: 0,
   focusCoverage: 0,
+  animatedProperties: [], hasReducedMotion: false, scrollChoreography: [],
 };
 
 const WARN = 0.6;
@@ -63,6 +64,7 @@ test('identity is exactly 1 and symmetry holds after the rewrite', () => {
     typeScale: [18, 30], fontFamilies: ['georgia'], weightLadder: [400, 700],
     motionDurations: [], easingVocab: [], animatedShare: 0,
     hoverCoverage: 0, focusCoverage: 0,
+    animatedProperties: [], hasReducedMotion: false, scrollChoreography: [],
   };
   assert.equal(similarity(LINEAR, other), similarity(other, LINEAR));
 });
@@ -73,6 +75,7 @@ test('an opposite design scores far below the threshold', () => {
     typeScale: [18, 30], fontFamilies: ['georgia'], weightLadder: [400, 700],
     motionDurations: [], easingVocab: [], animatedShare: 0,
     hoverCoverage: 0, focusCoverage: 0,
+    animatedProperties: [], hasReducedMotion: false, scrollChoreography: [],
   };
   assert.ok(similarity(LINEAR, opposite) < 0.3);
 });
@@ -107,6 +110,7 @@ test('empty ladders never yield NaN', () => {
     spacingLadder: [], radiusLadder: [], elevationLevels: 0, centeredRatio: 0, tokenCoverage: 1, paddingWeight: 0,
     typeScale: [], fontFamilies: [], weightLadder: [], motionDurations: [], easingVocab: [], animatedShare: 0,
     hoverCoverage: 0, focusCoverage: 0,
+    animatedProperties: [], hasReducedMotion: false, scrollChoreography: [],
   };
   for (const s of [similarity(LINEAR, empty), similarity(empty, LINEAR), similarity(empty, empty)]) {
     assert.ok(Number.isFinite(s) && s >= 0 && s <= 1);

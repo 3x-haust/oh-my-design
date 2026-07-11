@@ -110,6 +110,7 @@ const INV: Invariants = {
   typeScale: [14, 16], fontFamilies: ['inter'], weightLadder: [400, 600],
   motionDurations: [150], easingVocab: ['ease-out'], animatedShare: 0.04,
   hoverCoverage: 0, focusCoverage: 0,
+  animatedProperties: [], hasReducedMotion: false, scrollChoreography: [],
 };
 
 test('distances skips unmeasured references rather than scoring them zero', () => {

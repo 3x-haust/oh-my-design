@@ -1,0 +1,74 @@
+# MOTION-* rules: deterministic checks for motion implementation quality.
+# Every rule warns — never errors. A deliberate choice can overrule any with `omd decision`.
+#
+# Category 'motion' is separate from 'slop': these are craft defects in animation
+# execution (missing reduced-motion support, layout thrash, uniform rhythm), not
+# design-mean convergence failures. Separate category means `omd check --category motion`
+# runs only these, leaving slop and a11y unaffected.
+#
+# Data sources available to rules:
+#   node.motion.properties  — CSS transition-property values (static IR, from dom.ts)
+#   ir.meta.motion          — live probe data (probeMotion in core/render/index.ts)
+#
+# PROBE LIMIT: GSAP and rAF-driven animation libraries are NOT visible to
+# document.getAnimations(). A GSAP-only page reads as zero live animations here —
+# that is a correct measurement of what the API can see, not a probe failure.
+# Rules that read ir.meta.motion check defensively for probe presence (ir.meta.motion
+# exists and has the expected fields) before asserting. They skip gracefully when the
+# probe was not run or returned null.
+#
+# MOTION-SLOW-HOVER was studied and dropped: node.motion.durations lists ALL transition
+# durations (entrance animations + hover transitions) without distinguishing between them.
+# A rule firing on any interactive node with duration > 200ms would have false positives
+# from entrance animations. No deterministic path exists; the rule is omitted rather than
+# faked. See Plan.md #11c for the analysis.
+
+# A page with live animations but no prefers-reduced-motion media query exposes every
+# user who prefers reduced motion to the full animation load. The fix is a single media
+# query block wrapping the entire motion layer. The rule only fires when the live probe
+# measured at least one animated property — a page with no live animations is fine either
+# way, and a pre-probe IR (no ir.meta.motion) cannot be checked.
+- id: MOTION-NO-REDUCED
+  layer: 1
+  category: motion
+  severity: warn
+  when: "node.parent === null && ir.meta && ir.meta.motion && Array.isArray(ir.meta.motion.animatedProperties) && ir.meta.motion.animatedProperties.length > 0"
+  assert: "ir.meta.motion.hasReducedMotion === true"
+  message: "Animations present but no prefers-reduced-motion media query found. Users who opt out of motion see the full animation load. Wrap the entire motion layer: @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; } }"
+
+# Animating layout properties (width, height, top, left, margin, padding) forces the
+# browser to recalculate layout on every frame — a full layout pass that triggers
+# cascading reflow through the subtree. Animate transform and opacity instead: they run
+# on the compositor thread, never touch layout, and are the only two properties that can
+# be GPU-accelerated without a layout recalculation.
+#
+# The rule reads node.motion.properties (static IR) which lists the CSS transition-property
+# values on this node, excluding 'all' and 'none'. If transition-property is 'all', the
+# specific properties are unknown and the rule does not fire — this is the conservative
+# (non-faking) path. Only explicitly named layout properties are flagged.
+- id: MOTION-LAYOUT-THRASH
+  layer: 1
+  category: motion
+  severity: warn
+  when: "node.motion && Array.isArray(node.motion.properties) && node.motion.properties.length > 0"
+  value: "node.motion.properties.filter(p => ['width','height','top','right','bottom','left','margin','margin-top','margin-right','margin-bottom','margin-left','padding','padding-top','padding-right','padding-bottom','padding-left'].includes(p))"
+  assert: "value.length === 0"
+  message: "Layout property animated: {value}. Animating width/height/top/left/margin/padding forces a full layout recalculation on every frame. Animate transform (translate, scale) and opacity instead — they run on the compositor thread and never touch layout."
+
+# Three or more animated nodes, every one with the same duration, and the easing
+# vocabulary contains only CSS keyword defaults (ease, ease-in, ease-out, ease-in-out,
+# linear). This is the signature of generated work: "500ms ease-in-out on everything."
+# A considered motion system varies duration by role (entrance is slower than hover;
+# exit is faster than entrance) and uses a measured easing curve from the motion study.
+#
+# Fires on the root node (once per page). Null return from the IIFE means "condition not
+# met" — either fewer than 3 animated nodes, or durations vary, or a real cubic-bezier
+# is in use. Any of those is sufficient to silence the rule.
+- id: MOTION-UNIFORM
+  layer: 1
+  category: motion
+  severity: warn
+  when: "node.parent === null"
+  value: "(() => { const animated = ir.nodes.filter(n => n.motion && n.motion.durations && n.motion.durations.length > 0); if (animated.length < 3) return null; const allDurations = animated.flatMap(n => n.motion.durations); const unique = [...new Set(allDurations)]; if (unique.length !== 1) return null; const allEasings = [...new Set(animated.flatMap(n => n.motion.easings))]; const defaults = new Set(['ease','linear','ease-in','ease-out','ease-in-out','step-start','step-end']); if (!allEasings.every(e => defaults.has(e))) return null; return { count: animated.length, duration: unique[0], easings: allEasings }; })()"
+  assert: "value === null"
+  message: "Motion uniform signature: {value}. Every animated node shares one duration and only CSS keyword easings. This is the generated-work signature. Vary duration by role (entrance ≠ hover ≠ exit) and use a measured easing curve (cubic-bezier) from the motion study rather than keyword defaults."

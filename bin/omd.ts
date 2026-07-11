@@ -33,9 +33,10 @@ interface Opts {
   noLog?: boolean;
   selector?: string;
   image?: boolean;
+  filmstrip?: boolean;
 }
 
-const FLAGS = new Set(['json', 'no-log', 'image']);
+const FLAGS = new Set(['json', 'no-log', 'image', 'filmstrip']);
 const ALIASES: Record<string, keyof Opts> = { o: 'out', 'no-log': 'noLog' };
 
 function parseArgs(args: string[]): Opts {
@@ -74,9 +75,22 @@ async function cmdIr(opts: Opts): Promise<never> {
 }
 
 async function cmdRender(opts: Opts): Promise<never> {
-  const { renderPage, parseViewport } = await import('../core/render/index.ts');
+  const { renderPage, renderFilmstrip, parseViewport } = await import('../core/render/index.ts');
   const target = opts._[0];
   if (!target) usage();
+
+  if (opts.filmstrip) {
+    // Filmstrip: 4–6 viewport screenshots at ~300ms intervals, plus an HTML index.
+    // The HTML index is the deliverable: eye reads it to see what appeared when.
+    const out = opts.out ?? 'filmstrip.html';
+    mkdirSync(dirname(resolve(out)), { recursive: true });
+    const frames = await renderFilmstrip(target, { viewport: parseViewport(opts.viewport), out });
+    // Report the index path (sans extension already included) alongside the frame count.
+    const indexPath = out.endsWith('.html') || out.endsWith('.htm') ? out : `${out}.html`;
+    console.log(`${indexPath}  (${frames.length} frames)`);
+    process.exit(0);
+  }
+
   const out = opts.out ?? 'shot.png';
   mkdirSync(dirname(resolve(out)), { recursive: true });
   await renderPage(target, { viewport: parseViewport(opts.viewport), out });
@@ -457,6 +471,7 @@ function usage(): never {
     'usage: omd <command>\n\n'
     + '  ir <page> [-o f]                            rendered DOM -> Design IR\n'
     + '  render <page> -o shot.png [--viewport WxH]  headless screenshot\n'
+    + '  render <page> --filmstrip -o f.html [--viewport WxH]  load-time filmstrip\n'
     + '  check [<page>|--ir f] [--json] [--category slop] [--no-log]\n'
     + '  coach                                        trends across `omd check` history\n'
     + '\n'
