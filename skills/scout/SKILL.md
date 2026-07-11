@@ -57,6 +57,19 @@ for `.omd/attribution.md`: the hand traces each token decision back to a named c
 without this line, the attribution table has no origin to cite. `omd ref add` prints a
 design-signal score; a page under 0.4 does not count toward the floor.
 
+**Rejection obligates replacement.** When a capture is rejected — for slop (2+ findings),
+for low signal, for kinship, for a blocked-page error — it does not leave a hole. The
+board is made of what passed, not of what was available. Every rejected capture triggers a
+replacement search: a different query from a different angle, a source tier at least one
+step higher in the trust hierarchy. The scout does not stop until every slot in the
+composition contract is filled with a capture that passed. Anti-references — captures kept
+to document what to avoid — do not count toward the floor: their value is in the warning
+they carry, not the slot they occupy.
+
+When `omd ref add` throws a blocked-page error, the URL is not retried. Demote to
+`--image` if you can construct honest reasoning from public discourse about the site; if
+not, discard and run the replacement search.
+
 **Never describe how a reference looks** (Jansson & Smith: shown an example, designers
 reproduce its features even after the flaws are flagged; a model is worse). Numbers and
 reasons only. The board lands in `.omd/refs/` and any later `omd:ultradesign` run picks it

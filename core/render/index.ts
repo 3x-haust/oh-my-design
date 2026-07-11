@@ -6,6 +6,93 @@ import type { MotionMeasurement, RawIr } from '../types.ts';
 
 const MAX_NODES = 4000;
 
+// ── Block detection ─────────────────────────────────────────────────────────
+
+/**
+ * Thrown by extractIr when the page is behind a bot-challenge or is otherwise
+ * unreachable. Callers (CLI, scout) should not retry the same URL — demote to
+ * `--image` or advance to the next candidate.
+ */
+export class BlockedPageError extends Error {
+  readonly reason: string;
+  constructor(reason: string) {
+    super(`blocked page: ${reason}`);
+    this.name = 'BlockedPageError';
+    this.reason = reason;
+  }
+}
+
+/** Challenge-page title patterns that indicate bot/Cloudflare/WAF blocking. */
+const CHALLENGE_TITLE_PATTERNS: RegExp[] = [
+  /^just a moment/i,
+  /^attention required/i,
+  /^access denied/i,
+  /^ddos.{0,20}protection/i,
+  /^please (verify|wait)/i,
+  /^security check/i,
+  /^cloudflare/i,
+  /^are you (a )?human/i,
+  /^checking your browser/i,
+  /^one more step/i,
+  /^403\b/,
+  /^error\s+403\b/i,
+  /^(503|502|500)\b/,
+];
+
+/**
+ * Pure heuristic, fully testable without a browser.
+ *
+ * Returns the block reason string when the signals indicate a bot-challenge or
+ * hollow page; returns null when the page looks valid.
+ *
+ * Rules, in order:
+ *   1. HTTP 403 or any 5xx → explicitly blocked or server error
+ *   2. Challenge-page title → Cloudflare / WAF interstitial
+ *   3. Near-empty body (< 200 visible chars) → hollow IR — nothing to measure
+ */
+export function detectBlockReason(
+  title: string,
+  bodyTextLength: number,
+  httpStatus: number | null,
+): string | null {
+  if (httpStatus !== null && (httpStatus === 403 || httpStatus >= 500)) {
+    return `HTTP ${httpStatus}`;
+  }
+  for (const pattern of CHALLENGE_TITLE_PATTERNS) {
+    if (pattern.test(title.trim())) {
+      return `challenge page: "${title.trim()}"`;
+    }
+  }
+  if (bodyTextLength < 200) {
+    return `near-empty body (${bodyTextLength} visible chars)`;
+  }
+  return null;
+}
+
+/**
+ * Evaluates the loaded page inside Playwright and throws BlockedPageError when
+ * blocked. Called inside withPage after navigation; never throws for probe
+ * failures (those are caught locally so capture can continue best-effort).
+ *
+ * Block detection is only meaningful for live HTTP/HTTPS targets. A file://
+ * URL cannot be challenged by Cloudflare and may have minimal body text by
+ * design (a fixture page is often all CSS, no prose). Skip all checks for
+ * local files so test fixtures are never falsely flagged.
+ */
+async function assertNotBlocked(
+  page: import('playwright').Page,
+  httpStatus: number | null,
+  resolvedUrl: string,
+): Promise<void> {
+  if (resolvedUrl.startsWith('file:')) return; // local files are never bot-challenged
+  const title = await page.title().catch(() => '');
+  const bodyTextLength = await page
+    .evaluate(() => (document.body?.innerText?.trim() ?? '').length)
+    .catch(() => 999); // can't measure → assume valid so capture still runs
+  const reason = detectBlockReason(title, bodyTextLength, httpStatus);
+  if (reason !== null) throw new BlockedPageError(reason);
+}
+
 export interface Viewport { width: number; height: number }
 
 function toUrl(target: string): string {
@@ -15,13 +102,19 @@ function toUrl(target: string): string {
   return pathToFileURL(path).href;
 }
 
-async function withPage<T>(target: string, viewport: Viewport, fn: (page: import('playwright').Page) => Promise<T>): Promise<T> {
+async function withPage<T>(
+  target: string,
+  viewport: Viewport,
+  fn: (page: import('playwright').Page, httpStatus: number | null, resolvedUrl: string) => Promise<T>,
+): Promise<T> {
   const { chromium } = await import('playwright');
   const browser = await chromium.launch();
   try {
     const page = await browser.newPage({ viewport });
-    await page.goto(toUrl(target), { waitUntil: 'networkidle' });
-    return await fn(page);
+    const resolvedUrl = toUrl(target);
+    const response = await page.goto(resolvedUrl, { waitUntil: 'networkidle' });
+    const httpStatus = response?.status() ?? null;
+    return await fn(page, httpStatus, resolvedUrl);
   } finally {
     await browser.close();
   }
@@ -34,7 +127,7 @@ export function parseViewport(s = '390x844'): Viewport {
 }
 
 export function renderPage(target: string, opts: { viewport: Viewport; out: string }): Promise<string> {
-  return withPage(target, opts.viewport, async (page) => {
+  return withPage(target, opts.viewport, async (page, _httpStatus, _resolvedUrl) => {
     await page.screenshot({ path: opts.out, fullPage: true });
     return opts.out;
   });
@@ -281,7 +374,7 @@ export async function renderFilmstrip(
   const dir = dirname(resolve(base));
   const name = basename(base);
 
-  return withPage(target, opts.viewport, async (page) => {
+  return withPage(target, opts.viewport, async (page, _httpStatus, _resolvedUrl) => {
     mkdirSync(dir, { recursive: true });
     const framePaths: string[] = [];
 
@@ -319,7 +412,13 @@ export async function renderFilmstrip(
 }
 
 export function extractIr(target: string, opts: { viewport: Viewport; selector?: string | null }): Promise<RawIr> {
-  return withPage(target, opts.viewport, async (page) => {
+  return withPage(target, opts.viewport, async (page, httpStatus, resolvedUrl) => {
+    // Fail fast on blocked/challenge pages before attempting DOM extraction.
+    // A blocked page produces a hollow IR (no tokens, near-empty nodes) that
+    // silently scores low signal — the tool reports the wrong cause. Better to
+    // name it here and let the caller (scout, CLI) choose the fallback.
+    await assertNotBlocked(page, httpStatus, resolvedUrl);
+
     // Node strips the types, so toString() yields runnable JS for the browser.
     const raw = await page.evaluate(
       `(${extractInPage.toString()})(${MAX_NODES}, ${JSON.stringify(opts.selector ?? null)})`,
