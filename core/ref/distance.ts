@@ -175,6 +175,39 @@ export function similarity(a: Invariants, b: Invariants): number {
   return Math.min(1, Math.max(0, Math.exp(logSum)));
 }
 
+export interface KinshipPair {
+  /** Source URL of the first reference. */
+  a: string;
+  /** Source URL of the second reference. */
+  b: string;
+  similarity: number;
+}
+
+/**
+ * Pairwise similarity over the board. Returns the top-N pairs whose similarity meets or
+ * exceeds `threshold`, sorted most-similar first. Image references (null invariants) are
+ * excluded — pixels have no invariants to compare.
+ *
+ * A cluster of near-identical references is not breadth: it is the same average measured
+ * multiple times. When AI-generated pages dominate a search result set, they tend to
+ * cluster here. That is the contamination signal.
+ */
+export function topKinshipPairs(refs: Reference[], threshold = 0.85, topN = 3): KinshipPair[] {
+  const measured = refs.filter(
+    (r): r is Reference & { invariants: Invariants } => r.invariants !== null,
+  );
+  const pairs: KinshipPair[] = [];
+  for (let i = 0; i < measured.length; i++) {
+    for (let j = i + 1; j < measured.length; j++) {
+      const sim = similarity(measured[i]!.invariants, measured[j]!.invariants);
+      if (sim >= threshold) {
+        pairs.push({ a: measured[i]!.source, b: measured[j]!.source, similarity: sim });
+      }
+    }
+  }
+  return pairs.sort((x, y) => y.similarity - x.similarity).slice(0, topN);
+}
+
 export function distances(page: Invariants, refs: Reference[]): RefDistance[] {
   return refs
     .filter((ref): ref is Reference & { invariants: Invariants } => ref.invariants !== null)

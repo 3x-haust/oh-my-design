@@ -69,7 +69,35 @@ The composition contract:
   fame): note the formality level (해요체/합니다체/한다체), how features get named,
   where Sino-Korean gives way to native vocabulary. Translated English marketing is
   the loudest prose tell there is, and the hand can only avoid it if someone measured
-  what native product copy actually sounds like.
+  what native product copy actually sounds like. If the candidate's text shows
+  pink-elephant or AI stock-phrase patterns — "seamlessly", "effortlessly", "unlock
+  the power", 결론적으로, 살펴보겠습니다, or the greeting-card connectives the
+  SLOP-COPY / SLOP-COPY-KO rules target — its voice is not collectible: those patterns
+  trace the model's training data, not a human writer's choices.
+
+## Source trust hierarchy
+
+Not every source is equally trustworthy, and the slop problem is specifically a search
+problem: the pages search returns increasingly *are* the AI-generated average this tool
+exists to escape. Before you trust a capture, place the source in one of four tiers:
+
+1. **Human-juried curation** — Awwwards jury selections, godly.website and
+   siteinspire.com editorial picks, GDWEB winners. A human editorial chain decided this
+   work was worth showing; the selection itself is a signal. Treat these as trustworthy
+   by default, then verify with the slop check.
+2. **Live product pages run by real companies** — Toss, Linear, Stripe, Figma, 배민,
+   당근. A real product shipped this page and users are relying on it; the decision-making
+   is accountable. Apply layer-1 scrutiny, but a low slop count here is meaningful.
+3. **Personal portfolios** — individual designers or studios. Quality varies by two
+   orders of magnitude. Apply layer-1 scrutiny strictly; a slop count of 2 or more disqualifies.
+4. **Anonymous pages met through search** — any URL you found via "best landing page 2026"
+   or equivalent listicle. These are the highest-risk tier: listicle authors optimise for
+   click-through, not quality, and the pages they collect are statistically
+   AI-generated-or-averaged. Disqualify by default; keep only if the slop count is 0 and
+   you can name a specific, non-generic decision the page made.
+
+Pages linked from "best X of [year]" listicles are distrusted by default regardless of
+what they look like. The curation chain is broken at the source.
 
 ## The search protocol
 
@@ -137,6 +165,19 @@ the concept requires.
 Every reference gets one line: why it is here, against the concept. If you cannot
 justify it, drop it.
 
+## Slop-contaminated captures do not go on the board
+
+`omd ref add` now prints two quality checks: a design-signal score and a slop finding
+count. The slop count tells you how many of the tool's own rules fire against this
+capture — SLOP-GRADIENT, SLOP-TRIPLE-CARD, SLOP-EVERYTHING-CENTERED, and the rest.
+
+**A capture with 2 or more slop findings may not join the board as a reference.** It
+may only be kept as an explicitly-stated anti-reference: one that is on the board
+*because* it shows what to avoid, with a principle that names the trap. "This page
+uses the indigo-violet gradient and triple feature cards — both patterns to reject" is
+a legitimate anti-reference. Dropping it entirely is also correct. Treating it as a
+positive reference is not: you would be training the build on the mean.
+
 ## Low-signal pages do not count
 
 `omd ref add` prints a design-signal score. A famous site can score near zero —
@@ -146,6 +187,16 @@ toward your eighteen captures. Keep a low-signal page only when it earns its pla
 another way, and say which in its principles: a content reference (what to write about),
 or an anti-reference ("this is the plainness the concept rejects — here is what it
 costs").
+
+## Board diversity: kinship is contamination
+
+`omd ref list` runs a pairwise similarity check across every measured reference on the
+board. When two captures score ≥0.85 against each other, it prints a kinship warning.
+AI-generated pages cluster: they share the same spacing grid, the same radius monoculture,
+the same centred-text ratio. A kinship cluster on the board means you have measured the
+same average twice. **When two captures are ≥0.85 similar, drop one** — keep whichever
+carries the stronger principle set, or the one from the higher trust tier. If neither
+earns its place, drop both.
 
 ## The trap you must not fall into
 
