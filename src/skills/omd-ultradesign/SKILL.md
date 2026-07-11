@@ -311,6 +311,20 @@ write down here is exactly what step 6 will probe. Record it:
 omd decision "Committed to a conversational structure" --why "serves the concept; cost: cannot be skimmed"
 ```
 
+**Name the composition recipe the structure uses.** The composition cookbook lives at
+`${CLAUDE_PLUGIN_ROOT}/core/composition/` — eight page-level layout recipes (typographic
+hero, bento grid, split-screen hero, section inversion, asymmetric grid, editorial index
+labels, sidebar margin annotation, sticky sidebar). The committed structure must cite at
+least one recipe by file name, or record the reason none applies. This is how the
+structure commit moves from intent to implementation contract: the recipe names the
+layout, the recipe's conditions confirm it was chosen correctly, and the recipe's
+responsive behaviour requirements become the build's responsive checklist.
+
+```bash
+omd decision "Hero: typographic-hero.md + section-inversion.md at the proof turn" \
+  --why "concept has no photographic identity; the narrative pivot at feature 3 earns one inversion"
+```
+
 > An earlier version of this skill generated three candidates — first as parallel subagent
 > builds, then as prose sketches — and picked one. Both were theatre: the alternatives were
 > invented in one context and judged in the same one, so nothing was actually diverged.
@@ -349,6 +363,14 @@ target selector, animated properties, duration and easing with a motion-study ci
 stagger. The build implements the spec and nothing else. An animation that does not appear
 in the spec does not ship. This is how "멋있는 애니메이션 넣어줘" resolves to a specific
 set of cited numbers rather than to 500ms ease-in-out from habit.
+
+Every image zone and background section that lacks final photography must ship as a
+deliberate alternative — never a grey placeholder box. The graphics cookbook lives at
+`${CLAUDE_PLUGIN_ROOT}/core/graphics/` — six recipes (gradient mesh, noise grain,
+SVG geometric patterns, CSS illustration primitives, duotone image presets, placeholder
+policy). `omd-hand` cites the graphics recipe covering each background treatment in
+`.omd/attribution.md`. A custom background not from the cookbook requires a written
+reason and must avoid the SLOP-GRADIENT hue bands without a brand citation.
 
 The words are part of the build, and they are where generated work confesses first. The
 hand writes copy under two absolute rules: **the frame's language never appears on the

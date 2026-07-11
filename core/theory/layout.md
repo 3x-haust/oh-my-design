@@ -305,6 +305,14 @@ and unaware of the interface.
 
 ---
 
+## Composition recipes
+
+The decision tables in this file are implemented as working HTML+CSS recipes in
+`core/composition/` — eight page-level layout primitives (typographic hero, bento grid,
+split-screen hero, section inversion, asymmetric grid, editorial index labels, sidebar
+margin annotation, sticky sidebar) each with condition gates, token slots, and responsive
+behaviour at 375/768/1280.
+
 ## Sources
 
 - Müller-Brockmann, *Grid Systems in Graphic Design* (1981) — grid, rhythm, proximity

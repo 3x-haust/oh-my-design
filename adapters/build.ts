@@ -99,6 +99,24 @@ export function build(): void {
       }
     }
 
+    // Copy composition pack (page-level composition recipes) so agents can read it
+    // at ${CLAUDE_PLUGIN_ROOT}/core/composition/
+    const compositionDir = join(root, 'core', 'composition');
+    if (existsSync(compositionDir)) {
+      for (const f of readdirSync(compositionDir).filter((f) => f.endsWith('.md'))) {
+        write(host, `core/composition/${f}`, readFileSync(join(compositionDir, f), 'utf8'));
+      }
+    }
+
+    // Copy graphics pack (background and image treatment recipes) so agents can read it
+    // at ${CLAUDE_PLUGIN_ROOT}/core/graphics/
+    const graphicsDir = join(root, 'core', 'graphics');
+    if (existsSync(graphicsDir)) {
+      for (const f of readdirSync(graphicsDir).filter((f) => f.endsWith('.md'))) {
+        write(host, `core/graphics/${f}`, readFileSync(join(graphicsDir, f), 'utf8'));
+      }
+    }
+
     console.log(`${host}: ${Object.keys(files).length} files, ${skills.length} skills`);
   }
 

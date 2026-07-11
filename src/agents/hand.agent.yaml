@@ -227,6 +227,71 @@ instructions: |
   prefers-reduced-motion accommodation, and MOTION-LAYOUT-THRASH fires when width/height/
   top/left appear in transition-property.
 
+  ## Structure and composition — implement FROM the cookbook
+
+  Every page-level layout decision is a composition decision. Before writing a single
+  grid rule or hero section, identify which composition recipe from
+  `${CLAUDE_PLUGIN_ROOT}/core/composition/` (or `core/composition/` in the repo root)
+  applies to each structural zone.
+
+  The committed structure in step 4 must cite at least one composition recipe or document
+  why none applies. The citation belongs in `.omd/decisions.md`:
+
+  ```
+  omd decision "Hero: typographic-hero.md — viewport-filling clamp display type" \
+    --why "concept has no photographic identity; the claim fills the viewport alone"
+
+  omd decision "Feature section: bento-grid.md — non-uniform cell hierarchy" \
+    --why "three capabilities with genuinely different depths; primary cell spans 2×2"
+  ```
+
+  A structure that uses none of the composition recipes is permitted only when none
+  of the eight recipes fit the committed structure — and that reason must be written
+  down. "I used a standard grid" without a recorded reason is the same defect as an
+  uncited font: a default dressed as a decision.
+
+  Composition constraints, each non-negotiable:
+  - The bento grid anti-slop rule applies without exception: equal-span cells are
+    `SLOP-TRIPLE-CARD` at layout scale. If all cells have the same span, choose a
+    different recipe and record why.
+  - Section inversion is used at most once per page. More than one inversion is a
+    rhythm, not a pivot.
+  - Typographic heroes require `clamp()` — a hardcoded pixel heading that snaps at a
+    breakpoint is not a typographic hero.
+  - Sidebar margin annotations disappear below 900px; the mobile fallback must be
+    designed, not just the desktop layout.
+
+  ## Imagery — no grey placeholder boxes, ever
+
+  Every image zone must ship with a deliberate alternative when photography is absent.
+  The graphics cookbook lives at `${CLAUDE_PLUGIN_ROOT}/core/graphics/` (or
+  `core/graphics/` in the repo root). Before writing any background or image container,
+  identify which graphics recipe applies.
+
+  **A grey box is a design defect.** `core/graphics/placeholder-policy.md` defines
+  the three permitted alternatives when real imagery is absent:
+  1. Typographic block — communicates scale and category
+  2. Pattern fill — communicates structure (`svg-geometric-patterns.md`)
+  3. Generated gradient — communicates the colour register (`gradient-mesh.md`)
+
+  Every `background: #ccc`, `background: grey`, or unstyled fixed-height container
+  that reaches the build is a defect the eye will report. Fix it before handing off.
+
+  The graphics cookbook citation follows the same rule as composition: the build must
+  name which recipe covers each graphic treatment, or record why none from the library
+  applies. A custom gradient not from the cookbook requires a written reason and must
+  avoid the SLOP-GRADIENT hue bands (indigo–violet, purple–pink) without a brand citation.
+
+  Graphics constraints, each non-negotiable:
+  - Grain texture opacity must stay between 3% and 8%. Above 15% reads as an encoding
+    artifact, not a texture decision.
+  - SLOP-GRADIENT fires on indigo→violet and purple→pink gradient stops. Record the
+    brand reason if those hue bands are genuinely the brand's colours.
+  - Geometric patterns must not dominate text — verify contrast between any overlaid
+    text and the pattern's effective luminance via `omd check`.
+  - Placeholder images must carry a meaningful `aria-label` describing the intended
+    content. An unlabelled placeholder is both a design defect and an a11y failure.
+
   ## Framework detection
 
   Before writing a single file, read `package.json` in the working directory if it exists.
