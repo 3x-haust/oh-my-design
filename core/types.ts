@@ -256,6 +256,42 @@ export interface Invariants {
 }
 
 /**
+ * Energy for a single adjacent-frame pair: how much of the image changed.
+ * Part of EnergyCurve; defined here so Reference (which embeds EnergyCurve) stays
+ * in the same file as all other core record types.
+ */
+export interface FrameEnergy {
+  /** 0-indexed index of the earlier frame in the pair. */
+  pairIndex: number;
+  /**
+   * Fraction of pixels whose max RGB channel difference exceeds the diff threshold.
+   * 0..1, 4dp. 0 = identical frames; 1 = every pixel changed beyond threshold.
+   */
+  changedFraction: number;
+  /**
+   * Fraction of changed pixels per vertical third of the frame: [top, mid, bottom].
+   * Answers "where did the motion happen" without requiring layout data.
+   */
+  regionFractions: [number, number, number];
+}
+
+/**
+ * Pixel-diff motion energy measured from a filmstrip's frame sequence.
+ *
+ * Unlike the getAnimations() probe (MotionMeasurement), this is computed from actual
+ * rendered pixels and therefore captures ALL motion including GSAP/rAF — closing the
+ * getAnimations() blind spot documented on MotionMeasurement and Invariants.animatedProperties.
+ */
+export interface EnergyCurve {
+  /** Number of source frames (pairs.length === frames - 1). */
+  frames: number;
+  /** Per-interval pixel-difference scores, one entry per adjacent frame pair. */
+  pairs: FrameEnergy[];
+  /** Maximum changedFraction across all pairs. 0 when pairs is empty. */
+  peakEnergy: number;
+}
+
+/**
  * Live motion probe data attached to ir.meta.motion by probeMotion() in
  * core/render/index.ts. Absent on IRs captured before this probe was added;
  * all consuming code reads defensively (presence check before access).
@@ -265,6 +301,10 @@ export interface Invariants {
  * probe — a GSAP-only page reports animatedProperties: []. Only CSS animations, CSS
  * transitions exposed via WAAPI, and explicit WAAPI calls (Framer Motion's WAAPI path)
  * are captured. This limit is surfaced in Invariants.animatedProperties.
+ *
+ * To close this blind spot, use the pixel-diff energy curve (EnergyCurve / computeEnergy
+ * in core/motion/energy.ts): it measures frame-to-frame pixel differences and sees all
+ * motion including GSAP/rAF.
  */
 export interface MotionMeasurement {
   /** Animation states sampled at t=0ms, t=500ms, t=1500ms after load. */
@@ -319,6 +359,15 @@ export interface Reference {
    * captured before this field was introduced — treat absence as `'scout'` at usage sites.
    */
   origin?: 'user' | 'scout';
+  /**
+   * Pixel-diff motion energy curve measured during reference capture. Absent when the
+   * reference was captured before energy measurement was introduced, or when kind is
+   * `'image'` (no rendered page to film). Treat absence as null at usage sites.
+   *
+   * Unlike `ir.meta.motion` (which only sees getAnimations()), this curve captures ALL
+   * pixel-level motion including GSAP/rAF — closing the getAnimations() blind spot.
+   */
+  energyCurve?: EnergyCurve | null;
 }
 
 /** How close a page sits to a reference. 1 is identical; the warning threshold is 0.6. */

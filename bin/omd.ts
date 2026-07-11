@@ -9,7 +9,8 @@ import { logRun, readHistory } from '../core/history/index.ts';
 import { analyse } from '../core/coach/index.ts';
 import { findLeakedRationale } from '../core/rules/leakage.ts';
 import { checkAttribution } from '../core/rules/attribution.ts';
-import type { Category, Layer, RawIr, Violation } from '../core/types.ts';
+import { checkMotionSpec } from '../core/rules/motion-spec.ts';
+import type { Category, EnergyCurve, Layer, RawIr, Violation } from '../core/types.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -229,9 +230,41 @@ async function cmdCheck(opts: Opts): Promise<never> {
     );
   }
 
+  // Motion-spec audit: only active when .omd/motion-spec.md exists. Compares the scene
+  // inventory written by omd-hand (what was planned) against the live probe data (what ran)
+  // and the filmstrip energy curve (pixel-level confirmation that catches GSAP/rAF too).
+  //
+  // Contract: check reads the most recent energy curve from .omd/.cache/ if present.
+  // The ultradesign skill runs `omd render --filmstrip` before `omd check`, which writes
+  // `<base>-energy.json` alongside the filmstrip HTML. If that file is present, it is
+  // used as a supplementary signal; if absent, probe data alone is used.
+  const motionSpecViolations: Violation[] = [];
+  const motionSpecPath = join(process.cwd(), '.omd', 'motion-spec.md');
+  if (existsSync(motionSpecPath)) {
+    const motionSpecMd = readFileSync(motionSpecPath, 'utf8');
+    const framePath = join(process.cwd(), '.omd', 'frame.md');
+    const frameMd = existsSync(framePath) ? readFileSync(framePath, 'utf8') : null;
+
+    let energyCurve: EnergyCurve | null = null;
+    const cacheDir = join(process.cwd(), '.omd', '.cache');
+    if (existsSync(cacheDir)) {
+      const energyFiles = readdirSync(cacheDir).filter((f) => f.endsWith('-energy.json'));
+      if (energyFiles.length > 0) {
+        try {
+          energyCurve = JSON.parse(readFileSync(join(cacheDir, energyFiles[0]!), 'utf8')) as EnergyCurve;
+        } catch { /* corrupt or unreadable: skip */ }
+      }
+    }
+
+    motionSpecViolations.push(
+      ...checkMotionSpec(ir, motionSpecMd, frameMd, energyCurve)
+        .filter((v) => (!categories || categories.includes(v.category)) && (!layers || layers.includes(v.layer))),
+    );
+  }
+
   // Code-unit order, not localeCompare — same determinism guarantee as check() itself.
   const cmp = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
-  const combined: Violation[] = [...violations, ...leaks, ...attrViolations].sort((a, b) => cmp(a.path, b.path) || cmp(a.id, b.id));
+  const combined: Violation[] = [...violations, ...leaks, ...attrViolations, ...motionSpecViolations].sort((a, b) => cmp(a.path, b.path) || cmp(a.id, b.id));
 
   if (opts.json) process.stdout.write(JSON.stringify(combined));
   else for (const v of combined) console.log(`[${v.severity}] ${v.id} ${v.path}: ${v.message}`);
@@ -350,6 +383,14 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
   const slopCount = slopViolations.length;
   const slopIds = [...new Set(slopViolations.map((v) => v.id))];
 
+  // Energy curve: capture pixel-diff motion energy for the reference. Uses a second
+  // Playwright session so the cost is one extra browser launch per `omd ref add`.
+  // Sees ALL motion including GSAP/rAF — closing the getAnimations() blind spot.
+  // Failure is silently ignored: a blocked page or unsupported format must not prevent
+  // the reference from being saved.
+  const { captureEnergy, parseViewport } = await import('../core/render/index.ts');
+  const energyCurve = await captureEnergy(target, { viewport: parseViewport(opts.viewport) });
+
   const path = saveRef(process.cwd(), {
     source: target,
     component: opts.as,
@@ -360,6 +401,7 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
     principles: [],
     slopCount,
     ...(opts.fromUser ? { origin: 'user' as const } : {}),
+    ...(energyCurve !== null ? { energyCurve } : {}),
   });
   console.log(path);
   console.log(JSON.stringify(invariants, null, 2));
