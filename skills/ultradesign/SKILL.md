@@ -325,6 +325,13 @@ eye reads those as the design system; an inline hex is reported as a defect, cor
 Typography comes from the reference type studies — a chosen scale and faces with a reason —
 never from defaults; motion durations and easing come from the motion study.
 
+**Before writing any animation code**, `omd:hand` writes `.omd/motion-spec.md` — a scene
+inventory that documents every animation the build will contain: trigger (load/scroll/hover),
+target selector, animated properties, duration and easing with a motion-study citation, and
+stagger. The build implements the spec and nothing else. An animation that does not appear
+in the spec does not ship. This is how "멋있는 애니메이션 넣어줘" resolves to a specific
+set of cited numbers rather than to 500ms ease-in-out from habit.
+
 The words are part of the build, and they are where generated work confesses first. The
 hand writes copy under two absolute rules: **the frame's language never appears on the
 page** (`omd check` measures this — five consecutive words shared with `.omd/` is
@@ -350,10 +357,16 @@ omd render <page> -o .omd/.cache/build-desktop.png --viewport 1280x800
 omd render <page> -o .omd/.cache/build-mobile.png  --viewport 375x812
 # Read both PNGs. Actually look at them.
 
+omd render <page> --filmstrip -o .omd/.cache/filmstrip.html --viewport 1280x800
+# Read the filmstrip HTML. Four to six frames at 300ms intervals: this is what the user
+# sees during load. The eye receives this alongside the static screenshots and can tell
+# what appeared when — something a static render cannot show.
+
 omd check  <page> --json           --viewport 1280x800   # deterministic findings, desktop
 omd check  <page> --json           --viewport 375x812    # deterministic findings, mobile
 omd check  <page> --category slop  --viewport 1280x800   # slop, desktop
 omd check  <page> --category slop  --viewport 375x812    # slop, mobile (hit-area fires here)
+omd check  <page> --category motion --viewport 1280x800  # motion: MOTION-NO-REDUCED, MOTION-LAYOUT-THRASH, MOTION-UNIFORM
 ```
 
 `omd check` computes contrast ratios, hit areas, spacing, token coverage, **and slop**. Never
@@ -405,10 +418,11 @@ omd check <page> --category slop   # SLOP-PINK-ELEPHANT and SLOP-COPY must come 
 
 Only when the copy is clean does the eye see the page.
 
-Finally spawn `omd:eye` on the built page. Hand it both the desktop and mobile screenshots
-and the combined findings from both viewport runs. It sees the renders and the findings and
-nothing about why you built it that way. It cannot defend your reasoning because it does not
-have it.
+Finally spawn `omd:eye` on the built page. Hand it the desktop screenshot, the mobile
+screenshot, the filmstrip, and the combined findings from all viewport runs (including
+motion). The filmstrip tells the eye what appeared when during load — information that a
+static render cannot carry. It sees the renders and the findings and nothing about why you
+built it that way. It cannot defend your reasoning because it does not have it.
 
 ---
 

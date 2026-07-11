@@ -29,6 +29,7 @@ const LINEAR: Invariants = {
   animatedShare: 0.05,
   hoverCoverage: 0.75,
   focusCoverage: 0.8,
+  animatedProperties: [], hasReducedMotion: false, scrollChoreography: [],
 };
 
 /** danluu.com-shaped: almost no design decisions of any kind. */
@@ -47,6 +48,7 @@ const DANLUU: Invariants = {
   animatedShare: 0,
   hoverCoverage: 0,
   focusCoverage: 0,
+  animatedProperties: [], hasReducedMotion: false, scrollChoreography: [],
 };
 
 test('a danluu-shaped page scores low and names what is missing', () => {

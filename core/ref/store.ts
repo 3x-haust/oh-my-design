@@ -15,6 +15,10 @@ function withInvariantDefaults(invariants: Invariants | null | undefined): Invar
     animatedShare: invariants.animatedShare ?? 0,
     hoverCoverage: invariants.hoverCoverage ?? 0,
     focusCoverage: invariants.focusCoverage ?? 0,
+    // Motion probe fields — absent on references captured before the live probe was added.
+    animatedProperties: invariants.animatedProperties ?? [],
+    hasReducedMotion: invariants.hasReducedMotion ?? false,
+    scrollChoreography: invariants.scrollChoreography ?? [],
   };
 }
 

@@ -65,6 +65,13 @@ export interface RawNode {
     animationNames: string[];
     /** Timing functions in play on this node, e.g. "ease-out", "cubic-bezier(...)". */
     easings: string[];
+    /**
+     * CSS properties being transitioned (from transition-property). Only specific property
+     * names are included; 'all' and 'none' are excluded so MOTION-LAYOUT-THRASH can check
+     * for named layout properties (width/height/top/left/margin) deterministically without
+     * false-positives from the 'all' shorthand.
+     */
+    properties?: string[];
   };
 }
 
@@ -128,8 +135,11 @@ export type Layer = 1 | 2;
  * `slop` is different. Nothing here is broken — the design has simply converged on the
  * mean of everything the model has seen. Each rule is a heuristic and can be wrong about
  * a deliberate choice, which is why every one of them is a warning and none is an error.
+ * `motion` covers craft defects in animation execution: missing reduced-motion support,
+ * layout thrash, uniform rhythm. Separate from `slop` because these are implementation
+ * correctness issues, not design-mean convergence failures.
  */
-export type Category = 'a11y' | 'system' | 'slop';
+export type Category = 'a11y' | 'system' | 'slop' | 'motion';
 
 export interface Rule {
   id: string;
@@ -219,6 +229,58 @@ export interface Invariants {
   hoverCoverage: number;
   /** focusVisible / tabStops, 2dp. 0 when tabStops is 0 or the probe failed (unmeasured). */
   focusCoverage: number;
+
+  /**
+   * CSS properties actually animated, collected from the live motion probe via
+   * document.getAnimations({subtree:true}). Sorted, deduplicated.
+   *
+   * NOTE: rAF-driven libraries (GSAP, Anime.js) animate via requestAnimationFrame and
+   * do not register with the browser's Animation API. A GSAP-only page reads as [] here —
+   * that is a correct measurement of what getAnimations() can see, not a probe failure.
+   * Only CSS animations, CSS transitions (WAAPI path), and explicit WAAPI calls (including
+   * Framer Motion's WAAPI path) appear here.
+   */
+  animatedProperties: string[];
+  /**
+   * True when at least one stylesheet contains a @media (prefers-reduced-motion) block.
+   * False when the probe was not run or found no such block.
+   */
+  hasReducedMotion: boolean;
+  /**
+   * Scroll choreography sampled at 25%, 50%, 75%, 100% of viewport height.
+   * step: 1-indexed scroll step; fired: running animations at that position;
+   * entered: in-viewport elements with a non-zero transition or animation at that position.
+   * Empty when the probe was not run.
+   */
+  scrollChoreography: Array<{ step: number; fired: number; entered: number }>;
+}
+
+/**
+ * Live motion probe data attached to ir.meta.motion by probeMotion() in
+ * core/render/index.ts. Absent on IRs captured before this probe was added;
+ * all consuming code reads defensively (presence check before access).
+ *
+ * PROBE LIMIT: rAF-driven libraries (GSAP, Anime.js) animate via requestAnimationFrame
+ * and do not register with document.getAnimations(). Their effects are invisible to this
+ * probe — a GSAP-only page reports animatedProperties: []. Only CSS animations, CSS
+ * transitions exposed via WAAPI, and explicit WAAPI calls (Framer Motion's WAAPI path)
+ * are captured. This limit is surfaced in Invariants.animatedProperties.
+ */
+export interface MotionMeasurement {
+  /** Animation states sampled at t=0ms, t=500ms, t=1500ms after load. */
+  snapshots: Array<{
+    t: number;
+    animations: Array<{ duration: number; easing: string; properties: string[]; playState: string }>;
+  }>;
+  /** Union of all animated CSS properties across all snapshots, sorted. */
+  animatedProperties: string[];
+  /** True when at least one stylesheet has a @media (prefers-reduced-motion) block. */
+  hasReducedMotion: boolean;
+  /**
+   * Scroll-triggered choreography: per 25%vh step, animation count and animated-element
+   * count visible at that scroll position.
+   */
+  scrollChoreography: Array<{ step: number; fired: number; entered: number }>;
 }
 
 /**

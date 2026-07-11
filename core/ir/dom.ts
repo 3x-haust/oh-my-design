@@ -163,6 +163,18 @@ export function extractInPage(maxNodes: number, selector?: string | null): RawIr
         .map((ms, i) => (ms > 0 ? (timingFns[i % timingFns.length] ?? null) : null))
         .filter((v): v is string => v !== null && v.length > 0)
       : [];
+    // CSS properties being transitioned, indexed parallel to transitionDurationsRaw.
+    // 'all' and 'none' are excluded so MOTION-LAYOUT-THRASH can match named layout
+    // properties (width/height/top/left/margin) without false-positives from 'all'.
+    const transitionPropsRaw = cs.transitionProperty
+      .split(',')
+      .map((v) => v.trim())
+      .filter((v) => v.length > 0 && v !== 'none' && v !== 'all');
+    const transitionProperties = transitionPropsRaw.length > 0
+      ? transitionDurationsRaw
+        .map((ms, i) => (ms > 0 ? (transitionPropsRaw[i % transitionPropsRaw.length] ?? null) : null))
+        .filter((v): v is string => v !== null && v.length > 0)
+      : [];
     const animationNames = cs.animationName
       .split(',')
       .map((v) => v.trim())
@@ -180,7 +192,12 @@ export function extractInPage(maxNodes: number, selector?: string | null): RawIr
     ]));
     if (allDurations.length > 0 || animationNames.length > 0) {
       // Renamed from `transitionDurations` (F5): this list holds animation durations too.
-      node.motion = { durations: allDurations, animationNames, easings };
+      node.motion = {
+        durations: allDurations,
+        animationNames,
+        easings,
+        ...(transitionProperties.length > 0 ? { properties: transitionProperties } : {}),
+      };
     }
 
     const text = ownText(el);

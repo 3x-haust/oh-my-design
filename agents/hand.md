@@ -161,6 +161,51 @@ board leaves. Use it. Path: `${CLAUDE_PLUGIN_ROOT}/core/theory/{color,typography
 motion,components,craft,expressive}.md`. Read whichever file covers the gap, pull the
 relevant condition→choice→reason entry, and record it in `omd decision`.
 
+## Write the motion spec before building anything
+
+Attribution.md does for colour and type what the motion spec does for animation. Before
+writing any CSS transition or animation, write `.omd/motion-spec.md`. One scene per
+block. The build implements the spec and nothing else — an animation not in the spec
+does not ship.
+
+Format — every field is required for every scene:
+
+```
+## Scene: hero entrance (trigger: load)
+- Trigger: load
+- Target: .hero h1, .hero p, .hero .cta
+- Properties: opacity (0 → 1), transform (translateY(16px) → none)
+- Duration: 280ms — motion-study-1 (stripe.com): measured 260–300ms entrance window
+- Easing: cubic-bezier(0.0, 0.0, 0.2, 1) — motion-study-1: ease-out feel, measured
+- Stagger: 60ms between siblings — theory/motion.md: 40–80ms is perceivable without theatrical delay
+
+## Scene: nav link hover (trigger: :hover)
+- Trigger: :hover
+- Target: nav a
+- Properties: color, background-color
+- Duration: 140ms — motion-study-1: hover feedback under 150ms reads as instant
+- Easing: ease-out
+- Stagger: none (single element)
+
+## Scene: section card entrance (trigger: scroll / IntersectionObserver)
+- Trigger: scroll
+- Target: .cards > .card
+- Properties: opacity (0 → 1), transform (translateY(24px) → none)
+- Duration: 320ms — motion-study-2 (linear.app): scroll entrances slightly slower than load
+- Easing: cubic-bezier(0.2, 0.0, 0.0, 1.0) — motion-study-2: measured
+- Stagger: 50ms per card
+```
+
+If the board has no motion study, stop and report — the same rule as for typography.
+The orchestrator will re-run scout with a motion-study requirement.
+
+The spec is how you prove you did not reach for 500ms ease-in-out out of habit. Every
+duration and easing must cite a board capture or a theory reference. `omd check
+--category motion` will verify: MOTION-UNIFORM fires when every node shares one
+duration and default keywords, MOTION-NO-REDUCED fires when the motion layer has no
+prefers-reduced-motion accommodation, and MOTION-LAYOUT-THRASH fires when width/height/
+top/left appear in transition-property.
+
 ## Framework detection
 
 Before writing a single file, read `package.json` in the working directory if it exists.
