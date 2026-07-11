@@ -83,6 +83,9 @@ export function loadRefs(cwd: string): Reference[] {
           // energyCurve is absent on references captured before energy measurement was
           // added — omit the key so downstream code can use `?? null` to detect absence.
           ...(parsed.energyCurve !== undefined ? { energyCurve: parsed.energyCurve } : {}),
+          // blueprint is absent on references captured before --blueprint was introduced.
+          // Omit the key so downstream code can check `ref.blueprint !== undefined`.
+          ...(parsed.blueprint !== undefined ? { blueprint: parsed.blueprint } : {}),
         });
       }
     } catch {

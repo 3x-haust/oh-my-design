@@ -23,19 +23,27 @@ card, form field, and footer the build will need, listed before the first captur
 works to a floor of **eighteen captures, targeting twenty-five**:
 
 ```bash
-omd ref add <user-url> --as <name> --from-user     # user-provided URL — captured first, quota-exempt
-omd ref add <url> --as <name>                      # whole page — rhythm and feel (3–4)
-omd ref add <url> --as <name> --selector ".nav"    # one component's anatomy (one per inventory item)
-omd ref add <url> --as type-study-1                # chosen for its typography — minimum 2
-omd ref add <url> --as type-study-2                # different register, different pairing
-omd ref add <url> --as motion-study-1              # chosen for its motion — minimum 2, minimum 4 if brief mentions animation or register is showpiece
-omd ref add <url> --as motion-study-2              # different domain, different vocabulary
-omd ref add <pin-url> --as mood --image            # unrenderable — reasoning only
-omd ref add <reddit-url> --as list-debate --image  # community: what people felt and why (minimum 2)
-omd ref add <url> --as voice-study --image         # how a real product writes
-omd ref principles <url> --as <name> --add "..."   # why it works, one sentence
+omd ref add <user-url> --as <name> --from-user                   # user-provided URL — captured first, quota-exempt
+omd ref add <url> --as <name>                                    # whole page — rhythm and feel (3–4)
+omd ref add <url> --as <name> --selector ".nav"                  # one component's anatomy (one per inventory item)
+omd ref add <url> --as <name> --selector ".nav" --blueprint      # full-resolution structural blueprint — max 3 per board
+omd ref add <url> --as type-study-1                              # chosen for its typography — minimum 2
+omd ref add <url> --as type-study-2                              # different register, different pairing
+omd ref add <url> --as motion-study-1                            # chosen for its motion — minimum 2, minimum 4 if brief mentions animation or register is showpiece
+omd ref add <url> --as motion-study-2                            # different domain, different vocabulary
+omd ref add <pin-url> --as mood --image                          # unrenderable — reasoning only
+omd ref add <reddit-url> --as list-debate --image                # community: what people felt and why (minimum 2)
+omd ref add <url> --as voice-study --image                       # how a real product writes
+omd ref principles <url> --as <name> --add "..."                 # why it works, one sentence
 omd ref list
 ```
+
+**Blueprints: use sparingly, max 3.** A blueprint (`--blueprint --selector`) captures the full
+node tree of one component with the skin abstracted to color roles. Use it only when the component
+solves the exact structural problem the build faces, or when the user pointed at a specific component.
+A blueprint is not pixels — it is measurement at full resolution bounded to one component, with color
+roles replacing literal values. Structure transplants; skin never does; the page-distance guard still
+fires on a clone.
 
 Before the first capture the scout runs at least six WebSearch queries — problem domain,
 craft, community, typography, motion, and competitor — and logs them all on the board.

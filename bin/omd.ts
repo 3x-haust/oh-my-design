@@ -36,11 +36,13 @@ interface Opts {
   image?: boolean;
   filmstrip?: boolean;
   fromUser?: boolean;
+  /** Capture a full-resolution structural blueprint of the selected component. */
+  blueprint?: boolean;
   /** Directory of pages for cross-page site consistency check (`omd check --site <dir>`). */
   site?: string;
 }
 
-const FLAGS = new Set(['json', 'no-log', 'image', 'filmstrip', 'from-user']);
+const FLAGS = new Set(['json', 'no-log', 'image', 'filmstrip', 'from-user', 'blueprint']);
 const ALIASES: Record<string, keyof Opts> = { o: 'out', 'no-log': 'noLog', 'from-user': 'fromUser' };
 
 function parseArgs(args: string[]): Opts {
@@ -353,6 +355,10 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
     console.error('--image and --selector cannot be used together: an image has no subtree to scope.');
     process.exit(1);
   }
+  if (opts.blueprint && !opts.selector) {
+    console.error('--blueprint requires --selector: a blueprint measures one component, not a whole page.');
+    process.exit(1);
+  }
   const { saveRef } = await import('../core/ref/store.ts');
 
   if (opts.image) {
@@ -391,6 +397,15 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
   const { captureEnergy, parseViewport } = await import('../core/render/index.ts');
   const energyCurve = await captureEnergy(target, { viewport: parseViewport(opts.viewport) });
 
+  // Blueprint: full-resolution structural snapshot with skin abstracted to color roles.
+  // Only captured when --blueprint is passed together with --selector.
+  let blueprint: import('../core/types.ts').Blueprint | undefined;
+  if (opts.blueprint && opts.selector) {
+    const { captureBlueprint } = await import('../core/ref/blueprint.ts');
+    blueprint = captureBlueprint(raw.nodes, opts.selector);
+    console.error(`blueprint: ${blueprint.nodes.length} nodes captured`);
+  }
+
   const path = saveRef(process.cwd(), {
     source: target,
     component: opts.as,
@@ -402,6 +417,7 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
     slopCount,
     ...(opts.fromUser ? { origin: 'user' as const } : {}),
     ...(energyCurve !== null ? { energyCurve } : {}),
+    ...(blueprint !== undefined ? { blueprint } : {}),
   });
   console.log(path);
   console.log(JSON.stringify(invariants, null, 2));
@@ -469,7 +485,48 @@ async function cmdRefShow(opts: Opts): Promise<never> {
     console.log('\nPrinciples:');
     for (const p of ref.principles) console.log(`  - ${p}`);
   }
+  if (ref.blueprint) {
+    printBlueprint(ref.blueprint);
+  }
   process.exit(0);
+}
+
+/**
+ * Print a blueprint as an indented, buildable spec. Each line is one node with its
+ * role, dimensions, typography, surface, color roles, and motion timings. The tree
+ * structure is reconstructed from the children arrays.
+ */
+function printBlueprint(bp: import('../core/types.ts').Blueprint): void {
+  const childIds = new Set(bp.nodes.flatMap((n) => n.children));
+  const roots = bp.nodes.filter((n) => !childIds.has(n.id));
+  const byId = new Map(bp.nodes.map((n) => [n.id, n]));
+
+  const printNode = (id: string, depth: number): void => {
+    const node = byId.get(id);
+    if (!node) return;
+    const indent = '  '.repeat(depth);
+    const parts: string[] = [node.role, `${node.box.w}×${node.box.h}`];
+    if (node.fontSize != null) parts.push(`${node.fontSize}px`);
+    if (node.fontWeight != null) parts.push(`fw:${node.fontWeight}`);
+    if (node.lineHeight != null) parts.push(`lh:${node.lineHeight}`);
+    if (node.radius != null) parts.push(`r=${node.radius}`);
+    if (node.hasShadow) parts.push('shadow');
+    if (node.fillRole) parts.push(`fill:${node.fillRole}`);
+    if (node.textRole) parts.push(`text:${node.textRole}`);
+    if (node.textLength) parts.push(`[${node.textLength}]`);
+    if (node.motionDurations?.length) parts.push(`motion:${node.motionDurations.join(',')}ms`);
+    if (node.direction) parts.push(node.direction === 'VERTICAL' ? 'col' : 'row');
+    if (node.gap != null) parts.push(`gap:${node.gap}`);
+    if (node.padding) {
+      const [t, r, b, l] = node.padding;
+      if ((t ?? 0) + (r ?? 0) + (b ?? 0) + (l ?? 0) > 0) parts.push(`p:${t}/${r}/${b}/${l}`);
+    }
+    console.log(`${indent}${parts.join('  ')}`);
+    for (const childId of node.children) printNode(childId, depth + 1);
+  };
+
+  console.log(`\nBlueprint  selector: ${bp.selector}  (${bp.nodes.length} nodes)`);
+  for (const root of roots) printNode(root.id, 0);
 }
 
 async function cmdRefList(): Promise<never> {
@@ -626,8 +683,9 @@ function usage(): never {
     + '  decision "what" --why "why"\n'
     + '  taste profile\n'
     + '\n'
-    + '  ref add <url|file> --as <component> [--selector "css"] [--image]\n'
+    + '  ref add <url|file> --as <component> [--selector "css"] [--image] [--blueprint]\n'
     + '                                                render, extract invariants, save\n'
+    + '  ref add ... --selector ".nav" --blueprint     also capture a component blueprint\n'
     + '  ref list                                    one line per saved reference\n'
     + '  ref distance <page>                         compare a page to every saved reference\n'
     + '  ref principles <source> --as C --add "..."   record why a reference works\n'

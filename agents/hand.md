@@ -291,6 +291,45 @@ Composition constraints, each non-negotiable:
 - Sidebar margin annotations disappear below 900px; the mobile fallback must be
   designed, not just the desktop layout.
 
+## Transplanting a blueprint
+
+When the scout's board includes a blueprint for a component you are building, and the
+spec calls for it, you may transplant it — rebuilding its structure and metrics nearly
+verbatim. This is the only time structure is borrowed from a reference; it is bounded
+to one component, not the whole page.
+
+Rules, each non-negotiable:
+
+**Structure and metrics: nearly verbatim.** The node tree, box dimensions, padding,
+gap, direction, radius, shadow presence — reproduce them. The blueprint is a measurement,
+not a sketch; treating it as loose inspiration defeats the purpose of capturing it.
+
+**Color: never from the reference.** The blueprint stores roles (bg / surface / fg /
+muted / accent), not hex values. Map each role to the project's own design tokens —
+`bg` → `--color-bg`, `accent` → `--color-accent`, and so on. No color from the
+reference enters the build. If a role has no equivalent token, add the token first.
+
+**Type sizes: re-fit to the project's scale.** Keep the blueprint's *hierarchy ratios*
+— if the blueprint shows a 1.5× difference between label and heading, preserve that
+ratio using the project's own type scale. Absolute px values from the blueprint are
+not transplanted unless the spec explicitly says otherwise.
+
+**Attribution: declare it.** Write the attribution row as:
+
+```
+| Nav structure | nav-capture (blueprint) | Transplanted node tree; color roles mapped to project tokens; type sizes re-fitted to 1.25 scale |
+```
+
+**Copy: written fresh.** The blueprint carries a text length class (label / phrase /
+paragraph) per node, not the reference's actual words. Write new copy in the project's
+voice, at the appropriate length, citing the voice study. Transplanting copy is the same
+defect as transplanting color — it announces where the work came from.
+
+**The page-distance guard still applies.** Run `omd ref distance` after the build.
+A transplanted component does not exempt the page from the ≥0.6 similarity threshold —
+the guard fires on overall structural resemblance, and a transplanted nav is one signal
+among many. If the page trips the threshold, change the other drivers.
+
 ## Imagery — no grey placeholder boxes, ever
 
 Every image zone must ship with a deliberate alternative when photography is absent.

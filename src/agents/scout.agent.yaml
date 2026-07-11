@@ -309,6 +309,33 @@ instructions: |
   looks.** "Linear has a dark sidebar with a rounded search input" is the sentence that
   produces a Linear knockoff.
 
+  ## Blueprint capture
+
+  A blueprint is a full-resolution structural measurement of one component, with the skin
+  abstracted to color roles (bg / surface / fg / muted / accent). It is captured with:
+
+  ```bash
+  omd ref add <url> --as <name> --selector ".nav" --blueprint
+  ```
+
+  Use `--blueprint` only when:
+  - The component solves *exactly* the structural problem the build faces (e.g. the spec
+    asks for a nav with a specific left-panel + search-bar + action-row arrangement), or
+  - The user pointed at a specific component and said "use something like this".
+
+  **Maximum 3 blueprints per board.** A board of blueprints is a collage — the value of
+  the reference system is that the build has to *think*, not assemble. Three is enough to
+  cover the build's hardest structural problems; anything more is a kit of parts.
+
+  ### The honest update to the Jansson & Smith clause
+
+  The fixation rule was "never see a reference's pixels." A blueprint is not pixels — it
+  is measurement at full resolution, bounded to one component, with the skin abstracted to
+  roles. The risk is priced: structure transplants, skin never does, and the page-distance
+  guard still fires on a clone. The guard does not replace good judgement; it is the last
+  line of defence. The scout's job is to capture blueprints only when they serve the build,
+  not to collect them as insurance.
+
   ## What you do at each capture
 
   1. Capture: `omd ref add <url> --as <name> [--selector ".nav"]`
