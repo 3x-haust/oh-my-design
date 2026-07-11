@@ -148,6 +148,57 @@ test('SLOP-PINK-ELEPHANT fires on Korean self-negating meta-copy', () => {
   }
 });
 
+test('SLOP-COPY-KO fires on C-11: sentence-opening connective followed by a comma', () => {
+  const positives = [
+    '또한, 이 제품은 빠릅니다.',
+    '그러나, 문제가 있습니다.',
+    '하지만, 우리는 다르게 접근합니다.',
+    '따라서, 결론을 도출할 수 있습니다.',
+    '즉, 핵심은 단순함입니다.',
+  ];
+  for (const text of positives) {
+    const v = check(makeTextIr(text), builtin, { categories: ['slop'] });
+    assert.ok(v.some((x) => x.id === 'SLOP-COPY-KO'), `expected SLOP-COPY-KO for: ${text}`);
+  }
+});
+
+test('SLOP-COPY-KO does not fire when the same connectives appear without a comma', () => {
+  const negatives = [
+    '또한 그날 밤 모두가 모였다.',        // 또한 as adverb, no comma
+    '그러나 이것은 다른 문제다.',          // connective without comma
+    '하지만 우리는 여기까지 왔다.',        // same
+    '따라서 이 결론은 타당하다.',          // same
+    '즉 이렇게 말할 수 있다.',             // same
+  ];
+  for (const text of negatives) {
+    const v = check(makeTextIr(text), builtin, { categories: ['slop'] });
+    assert.ok(!v.some((x) => x.id === 'SLOP-COPY-KO'), `unexpected SLOP-COPY-KO for: ${text}`);
+  }
+});
+
+test('SLOP-COPY-KO fires on AI structural openers 살펴보겠습니다 and 알아보겠습니다', () => {
+  const positives = [
+    '이번 글에서는 주요 기능을 살펴보겠습니다.',
+    '이 제품에 대해 자세히 알아보겠습니다.',
+  ];
+  for (const text of positives) {
+    const v = check(makeTextIr(text), builtin, { categories: ['slop'] });
+    assert.ok(v.some((x) => x.id === 'SLOP-COPY-KO'), `expected SLOP-COPY-KO for: ${text}`);
+  }
+});
+
+test('SLOP-COPY-KO fires on 둘째, and 셋째, list-enumeration patterns', () => {
+  const positives = [
+    '둘째, 디자인의 일관성이 중요합니다.',
+    '셋째, 사용자 경험을 최우선으로 합니다.',
+    '셋째，세 번째 이유는 다음과 같습니다.',  // ideographic comma variant
+  ];
+  for (const text of positives) {
+    const v = check(makeTextIr(text), builtin, { categories: ['slop'] });
+    assert.ok(v.some((x) => x.id === 'SLOP-COPY-KO'), `expected SLOP-COPY-KO for: ${text}`);
+  }
+});
+
 test('SLOP-PINK-ELEPHANT does not fire on legitimate negative-statement copy', () => {
   const negatives = [
     // privacy / policy copy

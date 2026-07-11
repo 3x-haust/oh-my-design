@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readFileSync, writeFileSync, mkdirSync, existsSync, unlinkSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, unlinkSync, readdirSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { stringify } from 'yaml';
@@ -8,6 +8,7 @@ import { writeFrameRecord, reframe, setGenerator, logDecision, logChoice, tasteP
 import { logRun, readHistory } from '../core/history/index.ts';
 import { analyse } from '../core/coach/index.ts';
 import { findLeakedRationale } from '../core/rules/leakage.ts';
+import { checkAttribution } from '../core/rules/attribution.ts';
 import type { Category, Layer, RawIr, Violation } from '../core/types.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -105,9 +106,30 @@ async function cmdCheck(opts: Opts): Promise<never> {
     // check() does, not just --category, or `--layer 2` still emits leak findings.
     .filter((v) => (!categories || categories.includes(v.category)) && (!layers || layers.includes(v.layer)));
 
+  // Attribution audit: only active when .omd/attribution.md exists. Verifies that every
+  // token group used on the page is accounted for, and every row's source points to a real
+  // capture or theory reference. Keeps attribution honest without requiring it of every page.
+  const attrViolations: Violation[] = [];
+  const attrPath = join(process.cwd(), '.omd', 'attribution.md');
+  if (existsSync(attrPath)) {
+    const attrMd = readFileSync(attrPath, 'utf8');
+    const refsDir = join(process.cwd(), '.omd', 'refs');
+    const captureNames = existsSync(refsDir)
+      ? readdirSync(refsDir).filter((f) => f.endsWith('.json')).map((f) => f.slice(0, -5))
+      : [];
+    const theoryDir = join(root, 'core', 'theory');
+    const theoryNames = existsSync(theoryDir)
+      ? readdirSync(theoryDir).filter((f) => f.endsWith('.md')).map((f) => f.slice(0, -3))
+      : [];
+    attrViolations.push(
+      ...checkAttribution(ir, attrMd, captureNames, theoryNames)
+        .filter((v) => (!categories || categories.includes(v.category)) && (!layers || layers.includes(v.layer))),
+    );
+  }
+
   // Code-unit order, not localeCompare — same determinism guarantee as check() itself.
   const cmp = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
-  const combined: Violation[] = [...violations, ...leaks].sort((a, b) => cmp(a.path, b.path) || cmp(a.id, b.id));
+  const combined: Violation[] = [...violations, ...leaks, ...attrViolations].sort((a, b) => cmp(a.path, b.path) || cmp(a.id, b.id));
 
   if (opts.json) process.stdout.write(JSON.stringify(combined));
   else for (const v of combined) console.log(`[${v.severity}] ${v.id} ${v.path}: ${v.message}`);
