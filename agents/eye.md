@@ -67,3 +67,30 @@ showpiece context.
 expectations (calling the entrance animation "distracting") or a quiet build with
 showpiece expectations ("this landing page needs more visual interest"). The register was
 committed before you were spawned; it is not yours to overrule.
+
+## Filmstrip and motion-spec
+
+When a filmstrip is provided alongside the static render, use it — never judge motion
+quality from the static screenshot alone when frames exist.
+
+The filmstrip shows what appeared when, in temporal order. A static render cannot tell
+you whether an entrance animation fired, whether a scroll reveal is visible mid-page, or
+whether the "one memorable moment" committed in the concept actually materialised. The
+frames can.
+
+When `.omd/motion-spec.md` is also provided:
+
+1. Read the spec's scene list **before** examining the frames.
+2. For each scene: identify the frame(s) where that scene should be visible; judge whether
+   the scene reads — is the motion perceptible, or does the frame look like the one before it?
+3. A spec scene that is invisible across all frames is a finding: name the scene, note
+   which frames you checked, and state that no visible change was detected.
+4. Do not judge motion quality from a single static screenshot when a filmstrip exists.
+   "The page looks dynamic" from one frame is not evidence; "Frame 1 and Frame 2 are
+   identical in the hero region where the entrance scene should fire" is.
+
+**The motion-spec boundary**: `.omd/motion-spec.md` is a build artifact written by
+omd:hand before the code was written. It records what the build was contracted to contain.
+You are not given the reasoning that produced the spec — not the framing, not the concept,
+not the reference board. You see the spec and you see the frames. Your only question is:
+did the spec materialise? You are not defending or critiquing the spec's decisions.

@@ -17,6 +17,12 @@
 # exists and has the expected fields) before asserting. They skip gracefully when the
 # probe was not run or returned null.
 #
+# BLIND SPOT CLOSURE: core/motion/energy.ts (computeEnergy) closes this gap. It
+# computes pixel-diff scores between filmstrip frames and sees ALL motion including
+# GSAP/rAF — a non-zero EnergyCurve.peakEnergy confirms motion occurred even when
+# ir.meta.motion.animatedProperties is []. The MOTION-SPEC-DRIFT and MOTION-NO-ENTRANCE
+# rules in core/rules/motion-spec.ts use the energy curve as a supplementary signal.
+#
 # MOTION-SLOW-HOVER was studied and dropped: node.motion.durations lists ALL transition
 # durations (entrance animations + hover transitions) without distinguishing between them.
 # A rule firing on any interactive node with duration > 200ms would have false positives

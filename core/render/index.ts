@@ -1,8 +1,9 @@
 import { pathToFileURL } from 'node:url';
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { resolve, dirname, basename, join } from 'node:path';
 import { extractInPage } from '../ir/dom.ts';
-import type { MotionMeasurement, RawIr } from '../types.ts';
+import { computeEnergy } from '../motion/energy.ts';
+import type { EnergyCurve, MotionMeasurement, RawIr } from '../types.ts';
 
 const MAX_NODES = 4000;
 
@@ -407,8 +408,54 @@ export async function renderFilmstrip(
     ].join('\n');
     writeFileSync(indexPath, html);
 
+    // Energy curve: compute pixel-diff scores between adjacent frames and write alongside
+    // the HTML index. This measurement sees ALL motion including GSAP/rAF — closing the
+    // getAnimations() blind spot documented on MotionMeasurement. Any decode failure is
+    // caught silently so a non-standard PNG format never breaks the filmstrip capture.
+    try {
+      const frameBuffers = framePaths.map((p) => readFileSync(p));
+      const energyCurve = computeEnergy(frameBuffers);
+      const energyPath = join(dir, `${name}-energy.json`);
+      writeFileSync(energyPath, `${JSON.stringify(energyCurve, null, 2)}\n`);
+    } catch {
+      // Best-effort: energy is a bonus measurement; a failure must not break capture.
+    }
+
     return framePaths;
   });
+}
+
+/**
+ * Capture a pixel-diff motion energy curve by taking frames in a live browser session.
+ *
+ * Unlike renderFilmstrip, this does not write any files — it returns the EnergyCurve
+ * directly for embedding in reference records (`omd ref add`). Uses the same
+ * Playwright capture path as renderFilmstrip but in a fresh session.
+ *
+ * Returns null on any failure: a blocked page, unsupported PNG format, or Playwright
+ * error must never prevent a reference from being saved.
+ *
+ * PROBE NOTE: like renderFilmstrip, this sees ALL pixel-level motion including GSAP/rAF,
+ * complementing the getAnimations() probe in extractIr which cannot see rAF-driven libs.
+ */
+export async function captureEnergy(
+  target: string,
+  opts: { viewport: Viewport; frames?: number; interval?: number },
+): Promise<EnergyCurve | null> {
+  const frameCount = Math.min(Math.max(opts.frames ?? 4, 2), 6);
+  const interval = opts.interval ?? 300;
+  try {
+    return await withPage(target, opts.viewport, async (page) => {
+      const buffers: Buffer[] = [];
+      for (let i = 0; i < frameCount; i++) {
+        if (i > 0) await new Promise<void>((r) => setTimeout(r, interval));
+        buffers.push(await page.screenshot({ fullPage: false }));
+      }
+      return computeEnergy(buffers);
+    });
+  } catch {
+    return null;
+  }
 }
 
 export function extractIr(target: string, opts: { viewport: Viewport; selector?: string | null }): Promise<RawIr> {

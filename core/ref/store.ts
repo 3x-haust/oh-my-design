@@ -80,6 +80,9 @@ export function loadRefs(cwd: string): Reference[] {
           principles: parsed.principles ?? [],
           ...(parsed.slopCount !== undefined ? { slopCount: parsed.slopCount } : {}),
           ...(parsed.origin !== undefined ? { origin: parsed.origin } : {}),
+          // energyCurve is absent on references captured before energy measurement was
+          // added — omit the key so downstream code can use `?? null` to detect absence.
+          ...(parsed.energyCurve !== undefined ? { energyCurve: parsed.energyCurve } : {}),
         });
       }
     } catch {

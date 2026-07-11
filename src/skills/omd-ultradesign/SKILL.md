@@ -436,11 +436,21 @@ omd check <page> --category slop   # SLOP-PINK-ELEPHANT and SLOP-COPY must come 
 
 Only when the copy is clean does the eye see the page.
 
-Finally spawn `omd-eye` on the built page. Hand it the desktop screenshot, the mobile
-screenshot, the filmstrip, and the combined findings from all viewport runs (including
-motion). The filmstrip tells the eye what appeared when during load — information that a
-static render cannot carry. It sees the renders and the findings and nothing about why you
-built it that way. It cannot defend your reasoning because it does not have it.
+Finally spawn `omd-eye` on the built page. Hand it:
+- The desktop screenshot and the mobile screenshot.
+- The filmstrip HTML (`.omd/.cache/filmstrip.html`).
+- If `.omd/motion-spec.md` exists, its content — the eye reads it as a checklist of
+  intended scenes to locate in the frames, never as reasoning to defend. The spec is a
+  build artifact: it was written by omd-hand before the code, and the eye was not in
+  the room when that decision was made. That boundary is the point — the eye judges the
+  gap between spec and frames without access to why the spec says what it says.
+- The combined findings from all viewport runs (including motion).
+
+The filmstrip tells the eye what appeared when during load — information that a static
+render cannot carry. When a filmstrip exists, the eye must not judge motion quality from
+the static screenshot alone. It sees the renders, the filmstrip, the spec checklist, and
+the findings. It does not see the frame, the concept, the reference board, or any other
+reasoning. It cannot defend what it was never shown.
 
 ---
 
