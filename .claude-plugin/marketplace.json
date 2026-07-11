@@ -5,12 +5,12 @@
   "owner": {
     "name": "3x-haust"
   },
-  "version": "0.7.0",
+  "version": "0.8.0",
   "plugins": [
     {
       "name": "omd",
       "description": "The design cognition loop: doubt the brief, measure real references (type and motion included), build once, look at the render, reframe. Plus a deterministic slop linter and a de-AI copy pass.",
-      "version": "0.7.0",
+      "version": "0.8.0",
       "author": {
         "name": "3x-haust"
       },
