@@ -4,5 +4,4 @@ dist/
 .design/.cache/
 *.log
 .omc
-.omd
 Plan.md
