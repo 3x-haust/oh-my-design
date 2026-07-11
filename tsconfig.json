@@ -21,5 +21,5 @@
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["bin", "core", "adapters", "test"]
+  "include": ["bin", "core", "adapters", "test", "scripts"]
 }

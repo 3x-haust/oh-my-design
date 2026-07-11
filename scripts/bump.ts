@@ -1,0 +1,111 @@
+#!/usr/bin/env node
+/**
+ * scripts/bump.ts — bump the version in all three manifests atomically.
+ *
+ * Usage:
+ *   node scripts/bump.ts [--dry-run] <new-version>
+ *
+ * Examples:
+ *   node scripts/bump.ts 0.6.0
+ *   node scripts/bump.ts --dry-run 0.6.0
+ *
+ * In dry-run mode, prints what would change to stdout without writing files
+ * or running build/tests.
+ */
+
+import { readFileSync, writeFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
+
+const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+
+/**
+ * Rewrite every `"version": "..."` field in a JSON string to `newVersion`.
+ * Covers both single-version files (package.json, plugin.json) and files
+ * with multiple version fields (marketplace.json top-level + plugins[0]).
+ * Preserves all other formatting.
+ */
+export function bumpJson(content: string, newVersion: string): string {
+  return content.replace(/"version"\s*:\s*"[^"]*"/g, `"version": "${newVersion}"`);
+}
+
+const MANIFESTS = [
+  'package.json',
+  '.claude-plugin/plugin.json',
+  '.claude-plugin/marketplace.json',
+] as const;
+
+function run(args: string[]): void {
+  const dryRun = args.includes('--dry-run');
+  const version = args.filter((a) => !a.startsWith('--')).at(-1);
+
+  if (!version || !/^\d+\.\d+\.\d+/.test(version)) {
+    process.stderr.write('Usage: node scripts/bump.ts [--dry-run] <new-version>\n');
+    process.stderr.write('Example: node scripts/bump.ts --dry-run 0.6.0\n');
+    process.exit(1);
+  }
+
+  const changes: Array<{ path: string; before: string; after: string }> = [];
+
+  for (const rel of MANIFESTS) {
+    const abs = join(root, rel);
+    const before = readFileSync(abs, 'utf8');
+    const after = bumpJson(before, version);
+    changes.push({ path: rel, before, after });
+  }
+
+  // Report what will change
+  for (const { path, before, after } of changes) {
+    if (before === after) {
+      process.stdout.write(`  ${path}: already at ${version} (no change)\n`);
+    } else {
+      const prevMatch = /"version"\s*:\s*"([^"]*)"/.exec(before);
+      const prev = prevMatch?.[1] ?? '?';
+      process.stdout.write(`  ${path}: ${prev} → ${version}\n`);
+    }
+  }
+
+  if (dryRun) {
+    process.stdout.write('\n[dry-run] no files written\n');
+    return;
+  }
+
+  // Write
+  for (const { path, after } of changes) {
+    writeFileSync(join(root, path), after);
+  }
+  process.stdout.write(`\nwrote ${MANIFESTS.length} manifests\n`);
+
+  // Build
+  process.stdout.write('\nrunning build...\n');
+  const build = spawnSync(process.execPath, ['adapters/build.ts'], {
+    cwd: root,
+    stdio: 'inherit',
+    encoding: 'utf8',
+  });
+  if (build.status !== 0) {
+    process.stderr.write('build failed — manifests were written, build was not.\n');
+    process.exit(build.status ?? 1);
+  }
+
+  // Test
+  process.stdout.write('\nrunning tests...\n');
+  const test = spawnSync(process.execPath, ['--test', 'test/*.test.ts'], {
+    cwd: root,
+    stdio: 'inherit',
+    encoding: 'utf8',
+    shell: true,
+  });
+  if (test.status !== 0) {
+    process.stderr.write('tests failed — version was bumped but tests did not pass.\n');
+    process.exit(test.status ?? 1);
+  }
+
+  process.stdout.write(`\nready: v${version} — commit .claude-plugin/plugin.json, .claude-plugin/marketplace.json, package.json\n`);
+}
+
+import { pathToFileURL } from 'node:url';
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
+  run(process.argv.slice(2));
+}
