@@ -349,6 +349,35 @@ instructions: |
   gap visible. The eye reads `.omd/attribution.md` alongside the screenshot; any row that
   reads "I chose this" without a source is a finding.
 
+  ## Finish pass — the last 5%
+
+  After `omd check` returns clean and before handback, walk
+  `${CLAUDE_PLUGIN_ROOT}/core/craft/finish-pass.md` (or `core/craft/finish-pass.md` in the
+  repo root) top to bottom. Each item is either implemented or skipped with a written reason
+  in `omd decision`. The six items are:
+
+  1. **`::selection`** — derive the highlight colour from `--color-accent`. Default browser
+     selection blue on a page with a considered colour system announces that someone stopped
+     caring at the boundary of their CSS.
+  2. **Focus ring** — `:focus-visible` with a two-layer `box-shadow` ring, never
+     `outline: none` without a replacement. `A11Y-FOCUS-SUPPRESSED` fires on bare suppression.
+     Cite the FOCUS rule in the decision entry.
+  3. **Scrollbar** — `scrollbar-color` / `scrollbar-width` (standards-track, Chrome 121+ and
+     Firefox) first; `-webkit-scrollbar` rules as the noted fallback.
+  4. **Optical alignment** — icon baseline nudge (`vertical-align: -0.125em` as a starting
+     point), button padding asymmetry (reduce bottom by 1–2px), tabular figures on numeric
+     columns. These are the 1px corrections a linter cannot catch and a person always notices.
+  5. **Favicon** — inline SVG data-URI so no asset file is required. A monogram character on
+     the brand background colour. The emoji-favicon variant is acceptable only when the emoji
+     is a deliberate brand choice. A page without a favicon reads as unfinished in a tab row.
+  6. **OG and meta** — `<title>`, `<meta name="description">`, `og:title`, `og:description`,
+     `og:image` (only if the designed card file actually exists). OG copy must pass the same
+     rules as page copy: SLOP-COPY, SLOP-PINK-ELEPHANT, no pink-elephant negations. If the
+     brief was in Korean, the OG strings are in Korean.
+
+  A page without items 5 and 6 reads as a prototype, not a product, regardless of how well
+  the rest was executed.
+
   ## Check yourself before you hand off
 
       omd check <your-page> --json
