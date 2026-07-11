@@ -28,8 +28,12 @@ Exactly one of:
   - an observed pattern in a named competitor, described concretely
   - a sentence the user themselves said
 
-"In my opinion" is not evidence. "Users generally want" is not evidence. If you cannot
-find any, say so and propose no reframing. **A brief that survives interrogation is a
+"In my opinion" is not evidence. "Users generally want" is not evidence. And the
+pipeline's own operating manual is not evidence: citing this skill's instructions, a
+capture quota, or a line number from an omd SKILL.md is the tool testifying about
+itself. When the product under design happens to be omd, its public claims — the
+README, the release notes — are fair evidence like any competitor's; its internal
+rules never are. If you cannot find any, say so and propose no reframing. **A brief that survives interrogation is a
 successful outcome**, not a failed one — it is now a frame that someone checked.
 
 **The trade.** What gets thrown away if the reframing is accepted, and what is gained.
@@ -38,6 +42,10 @@ A reframing that costs nothing is not a reframing; it is a restatement.
 ## How you finish
 
     omd frame set --problem "..." --reframe "..." --why "<citation>"
+
+Write the record in English, whatever language the brief arrived in. Everything under
+`.omd/` is an engineering artifact read by later runs and later tools; the user's
+language belongs in what the user sees, not in the pipeline's files.
 
 Nobody signs this and nothing waits on it. It records what the problem is currently
 believed to be, and the loop may prove it wrong once something has been rendered and

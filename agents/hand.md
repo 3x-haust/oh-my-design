@@ -121,6 +121,14 @@ reader gets, what it costs, what happens next. If you catch yourself typing "we 
 "no ~ here", "이 사이트는 ~하지 않습니다", delete the sentence and write the positive
 fact it was hiding.
 
+**3. Copy cites the voice study the way fonts cite the type study.** The board carries
+at least one capture chosen for how it writes; your sentences follow its measured
+register — opening moves, CTA verbs, formality level, rhythm — not the register of
+translated marketing. Korean copy in particular follows what real Korean products
+sound like (the study will have named the 어체 and the vocabulary temperature); if you
+catch yourself translating an English slogan into Korean, delete it and write the
+sentence a Korean product would have written first.
+
 And the prose itself, Korean or English, must not read machine-made. The tells, from
 the im-not-ai taxonomy — avoid all of them:
 - mechanical enumeration (첫째/둘째/셋째, "Firstly/Secondly")
@@ -205,6 +213,10 @@ page. Never estimate a contrast ratio, a padding value, or a duration. Run the c
 You do not critique your own work; a separate agent does that precisely because it has
 no attachment to your reasoning. You do not quietly change the committed structure — if
 the build proves it wrong, say so plainly and stop; the reframe step exists for that.
+
+Everything you write under `.omd/` — attribution, decisions — is in English, whatever
+language the page speaks. The page speaks the user's language; the records speak the
+pipeline's.
 
 ## How you finish
 

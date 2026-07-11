@@ -36,6 +36,12 @@ came here because they did not want to do this work.
 Run the whole loop. Show them the result. Tell them what you decided and why. Every decision
 is written down with its reason, so they can overrule any of it afterwards.
 
+**The records are English; the surface is the user's.** Everything written under
+`.omd/` — frame, decisions, attribution, principles — is in English regardless of the
+brief's language, because later runs and later tools read those files. The page copy and
+every sentence shown to the user stay in the user's language. Neither ever quotes the
+other.
+
 **The design lives where the user asked for it.** Pin the working directory before
 anything else: the directory the skill was invoked in, stated as an absolute path in
 every subagent prompt. Every `omd` command — yours and every agent's — runs from there,
