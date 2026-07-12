@@ -430,6 +430,77 @@ styling via CSS modules or styled-components, and gives the eye a real tree to i
 not because React is universally correct, but because the decision to use plain HTML must
 be a stated judgment, not an omission.
 
+## Design contract — cite it before every decision
+
+Before writing any component, check whether `.omd/design.md` exists.
+
+If it exists: every design decision must cite the relevant section. The format is the same
+as a board or theory citation — name the section and the specific constraint or choice:
+"design.md §Visual language — primary hue low-saturation green, healthcare trust signal."
+A decision that contradicts design.md is a reframe request, not an implementation choice —
+stop and report the contradiction rather than quietly diverging.
+
+The sections that most directly govern your work:
+- **Brand** — personality and avoid lists apply to every visual and copy choice.
+- **Visual language** — cite this before declaring any `:root` token not already in the repo.
+- **Components § States** — cross-reference Interaction states before building any component.
+- **Interaction states** — governs the six state requirements below.
+- **Content voice** — cite before writing any copy, including labels and CTAs.
+- **Accessibility** — cite before any focus or hit-area decision.
+
+If design.md does not exist: continue with the board citations and theory citations as usual.
+The design contract is optional for single one-off pages; it is established by the orchestrator
+for multi-surface products before you are spawned.
+
+After the build, run:
+
+    omd design --check
+
+Fix any DESIGN-INCOMPLETE violations before handing off.
+
+## Interaction states — implement all six, every time
+
+A page that renders correctly when everything goes right is not a finished page. The states
+that matter most to users — loading, failure, nothing to show — are what mark the difference
+between a prototype and a product. Implement all six states for every interactive surface
+before handback. If a state genuinely does not apply, record the reason:
+
+    omd decision "Login form: offline state — not applicable; auth requires connectivity" \
+      --why "offline-first auth is explicitly out of scope for v1"
+
+**Loading** — every form submit and async data fetch must show a loading signal:
+- Disable the submit button during in-flight requests.
+- Add `aria-busy="true"` on the container or `role="status"` on the indicator.
+- Show a skeleton that matches the loaded layout, not a generic spinner wherever possible.
+- Never leave the user wondering if their click registered.
+
+**Empty** — every list, feed, or result container that can hold zero items must have a
+designed empty state:
+- Say what is supposed to be here, why there is nothing, and what to do.
+- Use `role="status"` and `aria-live="polite"` so screen readers announce it.
+- A grey-box or unstyled blank space is the same defect as a grey placeholder image.
+
+**Error** — `omd check` (`DESIGN-FORM-NO-ERROR`) fires when form inputs have no error
+affordance. The minimum implementation:
+- `aria-invalid="true"` on the failed field.
+- An error message element with `role="alert"` or linked via `aria-describedby`.
+- Copy that states what went wrong and what to fix — not "Invalid input", but
+  "This email is already in use. Sign in instead."
+- Page-level errors (network failure, 403, 500) need a visible message and a retry action.
+
+**Success** — completed actions must be confirmed:
+- Prefer inline confirmation (replace the form with a success state in place).
+- Toasts: use `role="status"` and `aria-live="polite"`; dismiss after 3–5 s.
+- Copy must state the specific outcome: "Payment of ₩35,000 received" — not "Done!"
+
+**Disabled** — a greyed-out element without an explanation is an accessibility failure:
+- Either remove the element when the action is unavailable in this context, or
+- Pair the disabled state with `aria-describedby` pointing to explanatory copy.
+- Never use `disabled` as a substitute for `display: none` when the action does not exist.
+
+**Offline** — if the product has network dependencies, detect `navigator.onLine === false`
+and show a non-blocking notification. If offline use is out of scope, record it explicitly.
+
 ## Korean page defaults
 
 When the page's primary language is Korean — the brief is written in Korean, the copy is

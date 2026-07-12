@@ -233,6 +233,108 @@ The copy rules that apply to the page apply here without exception.
 
 ---
 
+## Interaction states
+
+A page that renders correctly when everything goes right is not a finished page. The states that matter most to users — loading, failure, nothing to show — are precisely the ones that never appear in a screenshot review. Every interactive surface must account for each applicable state before handoff.
+
+Walk each state in the list below. For each one: either the state is implemented, or it is explicitly not applicable with a written reason.
+
+### Loading
+
+Any action that takes time — a form submission, a data fetch, a navigation — needs a loading signal. The minimum is a disabled submit button with a spinner or text change ("제출 중…" / "Submitting…"). The ideal is a skeleton or shimmer that matches the layout of the loaded state, so the page does not jump when data arrives.
+
+Implementation checklist:
+- Form submit buttons disable and show a loading indicator during in-flight requests.
+- Data lists that load asynchronously show a skeleton with the correct number of rows.
+- Page transitions that require data fetching show a loading bar or overlay.
+- The loading state must be accessible: `aria-busy="true"` on the container or `role="status"` on the indicator.
+
+```html
+<!-- Minimum: disable + status text -->
+<button type="submit" aria-disabled="true" aria-describedby="submit-status">Submit</button>
+<span id="submit-status" role="status" aria-live="polite">Submitting…</span>
+```
+
+### Empty
+
+Every list, feed, result set, or data container that can legally contain zero items must have a designed empty state. An unstyled empty container is a layout bug that the model almost always ships and the eye almost never catches in a single-page screenshot.
+
+The empty state must communicate three things: what is supposed to be here, why there is nothing, and what the user can do about it.
+
+```html
+<!-- Minimum empty state structure -->
+<div class="list-empty" role="status" aria-live="polite">
+  <p class="list-empty__title">No results yet</p>
+  <p class="list-empty__hint">Try adjusting your filters or add your first item.</p>
+  <a href="/new" class="button">Add item</a>
+</div>
+```
+
+Condition for skipping: the list is static and never rendered with zero items (e.g., a hard-coded feature list). Record the reason.
+
+### Error
+
+Error states have two levels: field-level validation (which field failed and why) and page-level errors (network failure, permission denied, server error). Both must be implemented.
+
+Field-level requirements (checked by `DESIGN-FORM-NO-ERROR`):
+- `aria-invalid="true"` on the failed input.
+- An associated error message element with `role="alert"` or linked via `aria-describedby`.
+- Error copy that states what is wrong and what to do: "Email is already in use. Sign in instead." — not "Invalid email."
+
+```html
+<label for="email">Email</label>
+<input id="email" type="email" aria-invalid="true" aria-describedby="email-error">
+<p id="email-error" role="alert" class="field-error">
+  This email is already registered. <a href="/login">Sign in instead</a>.
+</p>
+```
+
+Page-level requirements:
+- Network failure: a visible message plus a retry action.
+- Permission error: explain what the user does not have access to and how to get it.
+- Server error: a human-readable message; never expose a stack trace to users.
+
+### Success
+
+Completed actions must be confirmed. Silent success — a form that submits and nothing visibly changes — is an interaction failure that generates support tickets.
+
+Options in order of preference:
+1. **Inline confirmation** — replace the form or button with a success state in place. No page jump.
+2. **Toast notification** — a brief (3–5s) dismissible message in a consistent screen position. Use `role="status"` and `aria-live="polite"`.
+3. **Page transition** — navigate to a confirmation page. Appropriate when the completed action is a significant milestone (account creation, order placed).
+
+The confirmation copy must state the outcome specifically: "Payment of ₩35,000 received" — not "Success!" or "Done".
+
+### Disabled
+
+A greyed-out button with no explanation is an accessibility and usability failure. Users cannot tell whether the action is temporarily unavailable, permanently removed, or a bug. The disabled state must always communicate why.
+
+Options:
+- Remove the element entirely when the action is permanently unavailable in this context.
+- Keep it visible but explain: a tooltip on hover/focus (`title` attribute minimum; `aria-describedby` preferred), or inline micro-copy.
+- Never use `disabled` as a substitute for hidden — `display: none` is the correct tool when the action does not exist.
+
+```html
+<!-- Pairing disabled state with explanatory copy -->
+<button type="button" disabled aria-describedby="publish-reason">Publish</button>
+<p id="publish-reason" class="field-hint">Add a title before publishing.</p>
+```
+
+### Offline
+
+If the product has any network dependency, there must be a plan for offline states. The minimum is detecting `navigator.onLine === false` and showing a non-blocking notification that connectivity is required.
+
+If offline capability is out of scope for this build, record it explicitly:
+
+```bash
+omd decision "Offline state: not implemented" \
+  --why "this is a connected-only tool; offline use is an explicit non-requirement for v1"
+```
+
+A decision to skip offline handling is valid. An implicit skip — never thinking about it — is not.
+
+---
+
 ## Applying the checklist
 
 Walk each item in order. For each one, write the decision into `.omd/decisions.md`:

@@ -73,7 +73,11 @@ the Claude host expresses as Opus and Sonnet 5.
   AI attribution footers to commit messages.
 - **Branch → PR → squash-merge.** Every change lands on a feature branch and merges through
   a PR; `main` is protected (one approval; the admin, 3x-haust, may bypass).
-- **Releases:** bump all three manifests with `scripts/bump.ts`, merge the bump to `main`,
-  and the release workflow tags and publishes structured notes automatically.
+- **Merge continuously, release on request only.** Feature branches merge to `main` as
+  they finish — do not cut a version for every feature. A release happens **only when the
+  user explicitly asks** for one. Work accumulates on `main` between releases.
+- **Releasing (when asked):** bump all three manifests with `scripts/bump.ts`, merge the
+  bump to `main`, and the release workflow tags and publishes structured notes
+  automatically.
 - **Definition of done for any change:** `npm test` 0 fail, `npx tsc --noEmit` clean,
   `npm run build` succeeds.

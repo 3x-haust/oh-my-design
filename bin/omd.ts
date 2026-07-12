@@ -10,6 +10,8 @@ import { analyse } from '../core/coach/index.ts';
 import { findLeakedRationale } from '../core/rules/leakage.ts';
 import { checkAttribution } from '../core/rules/attribution.ts';
 import { checkMotionSpec } from '../core/rules/motion-spec.ts';
+import { discoverEvidence, generateDesignMd, validateDesignMd } from '../core/design/index.ts';
+import { checkInteractionStates } from '../core/design/interaction-states.ts';
 import type { Category, EnergyCurve, Layer, RawIr, Violation } from '../core/types.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -46,9 +48,11 @@ interface Opts {
   fresh?: boolean;
   /** Named visual target to diff against (`omd target diff --target <name>`). */
   target?: string;
+  /** Validate design.md sections rather than discover/generate (`omd design --check`). */
+  check?: boolean;
 }
 
-const FLAGS = new Set(['json', 'no-log', 'image', 'filmstrip', 'from-user', 'blueprint', 'fresh']);
+const FLAGS = new Set(['json', 'no-log', 'image', 'filmstrip', 'from-user', 'blueprint', 'fresh', 'check']);
 const ALIASES: Record<string, keyof Opts> = { o: 'out', 'no-log': 'noLog', 'from-user': 'fromUser' };
 
 function parseArgs(args: string[]): Opts {
@@ -270,9 +274,31 @@ async function cmdCheck(opts: Opts): Promise<never> {
     );
   }
 
+  // Design contract audit: only active when .omd/design.md exists. Validates that all
+  // required sections are present and that the Interaction states section enumerates
+  // the six required states. A bare project without design.md is not nagged.
+  const designViolations: Violation[] = [];
+  const designPath = join(process.cwd(), '.omd', 'design.md');
+  if (existsSync(designPath)) {
+    const designMd = readFileSync(designPath, 'utf8');
+    designViolations.push(
+      ...validateDesignMd(designMd)
+        .filter((v) => (!categories || categories.includes(v.category)) && (!layers || layers.includes(v.layer))),
+    );
+  }
+
+  // Interaction-state rules: deterministic IR checks for measurable state gaps.
+  // Runs unconditionally (no guard file required) — a form without an error state
+  // is a defect on any page, whether or not design.md has been established.
+  const interactionViolations: Violation[] = checkInteractionStates(ir)
+    .filter((v) => (!categories || categories.includes(v.category)) && (!layers || layers.includes(v.layer)));
+
   // Code-unit order, not localeCompare — same determinism guarantee as check() itself.
   const cmp = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
-  const combined: Violation[] = [...violations, ...leaks, ...attrViolations, ...motionSpecViolations].sort((a, b) => cmp(a.path, b.path) || cmp(a.id, b.id));
+  const combined: Violation[] = [
+    ...violations, ...leaks, ...attrViolations, ...motionSpecViolations,
+    ...designViolations, ...interactionViolations,
+  ].sort((a, b) => cmp(a.path, b.path) || cmp(a.id, b.id));
 
   if (opts.json) process.stdout.write(JSON.stringify(combined));
   else for (const v of combined) console.log(`[${v.severity}] ${v.id} ${v.path}: ${v.message}`);
@@ -868,6 +894,88 @@ async function cmdFigmaDiff(opts: Opts): Promise<never> {
   process.exit(result.pass ? 0 : 1);
 }
 
+/**
+ * `omd design [--check]`
+ *
+ * Without --check: discover repo evidence, then create or refresh `.omd/design.md`.
+ * If the file already exists its preamble is preserved and only missing sections are
+ * appended; a fresh project gets the full generated template.
+ *
+ * With --check: validate the existing design.md against the required section schema
+ * and the Interaction states enumeration contract. Exits 1 when violations are found.
+ * Only active when .omd/design.md exists; a bare project is not nagged.
+ */
+async function cmdDesign(opts: Opts): Promise<never> {
+  const omdDir = join(process.cwd(), '.omd');
+  const designPath = join(omdDir, 'design.md');
+
+  if (opts.check) {
+    if (!existsSync(designPath)) {
+      console.log('No .omd/design.md found. Run `omd design` to create the design contract.');
+      process.exit(0);
+    }
+    const md = readFileSync(designPath, 'utf8');
+    const violations = validateDesignMd(md);
+    if (opts.json) {
+      process.stdout.write(JSON.stringify(violations));
+    } else {
+      for (const v of violations) {
+        console.log(`[${v.severity}] ${v.id} ${v.path}: ${v.message}`);
+      }
+      if (violations.length === 0) console.log('ok — design.md passes all section checks');
+    }
+    process.exit(violations.length > 0 ? 1 : 0);
+  }
+
+  // Discover → generate/refresh
+  const evidence = discoverEvidence(process.cwd());
+
+  if (existsSync(designPath)) {
+    // Refresh: report evidence summary and note that the file already exists.
+    // We do not overwrite the user's work; instead we report what was found so
+    // they can update the open questions manually.
+    const existing = readFileSync(designPath, 'utf8');
+    const violations = validateDesignMd(existing);
+    console.log(`design.md already exists: ${designPath}`);
+    console.log(`\nEvidence scan:`);
+    console.log(`  framework:   ${evidence.framework ?? 'unknown'}`);
+    console.log(`  surfaces:    ${evidence.surfaceCount}`);
+    console.log(`  tokens:      ${evidence.hasThemeTokens ? evidence.tokenFilePaths.join(', ') : 'none found'}`);
+    console.log(`  references:  ${evidence.captureCount}`);
+    console.log(`  frame.md:    ${evidence.frameMd ? 'present' : 'absent'}`);
+    console.log(`  motion-spec: ${evidence.hasMotionSpec ? 'present' : 'absent'}`);
+    console.log(`  voice-study: ${evidence.hasVoiceStudy ? 'present' : 'absent'}`);
+    if (violations.length > 0) {
+      console.log(`\n${violations.length} section check${violations.length === 1 ? '' : 's'} failed:`);
+      for (const v of violations) {
+        console.log(`  [${v.severity}] ${v.id}: ${v.message}`);
+      }
+      console.log('\nRun `omd design --check` to re-validate after updates.');
+    } else {
+      console.log('\nAll required sections present. Run `omd design --check` to re-validate.');
+    }
+    process.exit(0);
+  }
+
+  // Create fresh design.md
+  mkdirSync(omdDir, { recursive: true });
+  const content = generateDesignMd(evidence);
+  writeFileSync(designPath, content);
+
+  console.log(`Created: ${designPath}`);
+  console.log(`\nEvidence used:`);
+  console.log(`  framework:   ${evidence.framework ?? 'unknown'}`);
+  console.log(`  surfaces:    ${evidence.surfaceCount}`);
+  console.log(`  tokens:      ${evidence.hasThemeTokens ? evidence.tokenFilePaths.join(', ') : 'none found'}`);
+  console.log(`  references:  ${evidence.captureCount}`);
+  console.log(`  frame.md:    ${evidence.frameMd ? 'present' : 'absent'}`);
+  console.log(`\nNext steps:`);
+  console.log(`  1. Fill in the open questions in .omd/design.md`);
+  console.log(`  2. Run \`omd design --check\` to validate section coverage`);
+  console.log(`  3. Cite design.md sections in every hand decision`);
+  process.exit(0);
+}
+
 async function cmdDoctor(): Promise<never> {
   let allPass = true;
 
@@ -1086,6 +1194,9 @@ function usage(): never {
     + '  ref principles <source> --as C --add "..."   record why a reference works\n'
     + '  ref show <source> --as C                    invariants + principles\n'
     + '\n'
+    + '  design                                       discover evidence and create/refresh .omd/design.md\n'
+    + '  design --check                              validate design.md section coverage\n'
+    + '\n'
     + '  doctor                                       check environment prerequisites\n'
   + '\n'
   + '  figma pull <file-url>                        fetch Figma file -> .omd/figma/snapshot.json\n'
@@ -1157,6 +1268,7 @@ async function main(): Promise<never> {
     return usage();
   }
 
+  if (cmd === 'design') return cmdDesign(parseArgs(args.slice(1)));
   if (cmd === 'doctor') return cmdDoctor();
 
   if (cmd === 'figma') {
