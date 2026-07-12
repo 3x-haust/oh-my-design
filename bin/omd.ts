@@ -617,6 +617,97 @@ async function cmdRefDistance(opts: Opts): Promise<never> {
   process.exit(0);
 }
 
+// ── Figma commands ────────────────────────────────────────────────────────────
+
+async function cmdFigmaPull(url: string | undefined): Promise<never> {
+  if (!url) {
+    console.error('usage: omd figma pull <file-url>');
+    process.exit(1);
+  }
+
+  const token = process.env['FIGMA_TOKEN'];
+  if (!token) {
+    console.error('FIGMA_TOKEN environment variable is not set.\nSet it to a Figma personal access token to use figma pull.');
+    process.exit(1);
+  }
+
+  const { parseFileKey, fetchAndNormalize } = await import('../core/figma/client.ts');
+
+  let fileKey: string;
+  try {
+    fileKey = parseFileKey(url);
+  } catch (e) {
+    console.error(e instanceof Error ? e.message : String(e));
+    process.exit(1);
+  }
+
+  console.log(`Fetching Figma file ${fileKey} …`);
+  const snapshot = await fetchAndNormalize(fileKey, token);
+
+  const outDir = join(process.cwd(), '.omd', 'figma');
+  mkdirSync(outDir, { recursive: true });
+  const snapPath = join(outDir, 'snapshot.json');
+  writeFileSync(snapPath, JSON.stringify(snapshot, null, 2));
+
+  // Human-readable inventory
+  const totalFrames = snapshot.pages.reduce((n, p) => n + p.frames.length, 0);
+  const setCount = Object.keys(snapshot.componentSets).length;
+  console.log(`\nFile: ${snapshot.fileName}`);
+  for (const page of snapshot.pages) {
+    console.log(`  Page "${page.name}" — ${page.frames.length} frame${page.frames.length === 1 ? '' : 's'}`);
+    for (const frame of page.frames) {
+      console.log(`    • ${frame.name}`);
+    }
+  }
+  console.log(`\nTotal frames: ${totalFrames}  Component sets: ${setCount}`);
+  if (setCount > 0) {
+    for (const cs of Object.values(snapshot.componentSets)) {
+      const keys = new Set<string>();
+      for (const v of cs.variants) {
+        const { parseVariantName } = await import('../core/figma/system.ts');
+        for (const k of Object.keys(parseVariantName(v.name))) keys.add(k);
+      }
+      const desc = keys.size > 0 ? ` (${[...keys].join('×')})` : '';
+      console.log(`  • ${cs.name} — ${cs.variants.length} variant${cs.variants.length === 1 ? '' : 's'}${desc}`);
+    }
+  }
+  console.log(`\nSnapshot saved: ${snapPath}`);
+  process.exit(0);
+}
+
+async function cmdFigmaSystem(): Promise<never> {
+  const snapPath = join(process.cwd(), '.omd', 'figma', 'snapshot.json');
+  if (!existsSync(snapPath)) {
+    console.error(`No snapshot found at ${snapPath}\nRun \`omd figma pull <file-url>\` first.`);
+    process.exit(1);
+  }
+
+  const { buildComponentMatrix, extractTokens, generateCss, generateMarkdown } = await import('../core/figma/system.ts');
+  const snapshot = JSON.parse(readFileSync(snapPath, 'utf8')) as import('../core/figma/types.ts').FigmaSnapshot;
+
+  const tokens = extractTokens(snapshot);
+  const matrix = buildComponentMatrix(snapshot);
+  const css = generateCss(tokens);
+  const md = generateMarkdown(tokens, matrix, snapshot.fileName);
+
+  const outDir = join(process.cwd(), '.omd', 'figma');
+  const cssPath = join(outDir, 'tokens.css');
+  const mdPath = join(outDir, 'design-system.md');
+  writeFileSync(cssPath, css);
+  writeFileSync(mdPath, md);
+
+  console.log(`Design system synthesized from: ${snapshot.fileName}`);
+  console.log(`  Colors:     ${tokens.colors.length}`);
+  console.log(`  Type scale: ${tokens.typeScale.length} steps`);
+  console.log(`  Spacing:    ${tokens.spacing.length} values`);
+  console.log(`  Radii:      ${tokens.radii.length} values`);
+  console.log(`  Shadows:    ${tokens.shadows.length} values`);
+  console.log(`  Components: ${matrix.length} set${matrix.length === 1 ? '' : 's'}`);
+  console.log(`\n  ${cssPath}`);
+  console.log(`  ${mdPath}`);
+  process.exit(0);
+}
+
 async function cmdDoctor(): Promise<never> {
   let allPass = true;
 
@@ -660,6 +751,16 @@ async function cmdDoctor(): Promise<never> {
     report(`theory/${f}`, existsSync(path));
   }
 
+  // FIGMA_TOKEN — optional. Figma integration is unavailable without it, but
+  // absence is not a failure. Always report pass; note when not set.
+  const figmaToken = process.env['FIGMA_TOKEN'];
+  const figmaTokenSet = figmaToken !== undefined && figmaToken.length > 0;
+  report(
+    'FIGMA_TOKEN',
+    true,
+    figmaTokenSet ? 'set' : 'not set — Figma optional; export FIGMA_TOKEN to enable omd figma pull',
+  );
+
   process.exit(allPass ? 0 : 1);
 }
 
@@ -691,7 +792,10 @@ function usage(): never {
     + '  ref principles <source> --as C --add "..."   record why a reference works\n'
     + '  ref show <source> --as C                    invariants + principles\n'
     + '\n'
-    + '  doctor                                       check environment prerequisites',
+    + '  doctor                                       check environment prerequisites\n'
+  + '\n'
+  + '  figma pull <file-url>                        fetch Figma file -> .omd/figma/snapshot.json\n'
+  + '  figma system                                 synthesize design system from snapshot',
   );
   process.exit(1);
 }
@@ -754,6 +858,12 @@ async function main(): Promise<never> {
   }
 
   if (cmd === 'doctor') return cmdDoctor();
+
+  if (cmd === 'figma') {
+    if (sub === 'pull') return cmdFigmaPull(args[2]);
+    if (sub === 'system') return cmdFigmaSystem();
+    return usage();
+  }
 
   if (cmd === 'choose') return cmdChoose(parseArgs(args.slice(1)));
 
