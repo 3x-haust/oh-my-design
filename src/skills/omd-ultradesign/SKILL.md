@@ -230,6 +230,26 @@ If you cannot name it, the concept has no position yet. Name it before you open 
 **This is the step that separates design from decoration, and the one you will be most
 tempted to skip.** A designer with a concept goes and looks at what already exists.
 
+**Before the scout runs**, check whether the brief contains any image file paths or image
+URLs (file extensions `.png`, `.jpg`, `.jpeg`, `.webp`, `.gif`, or any direct image URL).
+If it does, register them as visual targets immediately:
+
+```bash
+omd target set <image-path-or-url> --as mockup
+# Multiple targets are allowed: register desktop and mobile mockups separately.
+omd target list
+```
+
+This does nothing to the reference board. It stores the image as a pixel target the build
+will converge toward in step 5. The convergence loop replaces eyeballing: an LLM judges
+spatial layout poorly by eye, so `omd target diff` measures the gap with a score and a
+6×6 cell grid that names the worst-mismatch regions — no estimation required.
+
+If the registered target itself fires slop findings (≥2 violations), report it plainly:
+> "The mockup you provided shows N slop signals (IDs) — I'll build toward the layout but
+> flag the patterns so you can decide whether to keep them."
+Do not silently "improve" beyond the linter output; the user's mockup is the specification.
+
 Before spawning the scout, extract every URL the user included in the brief. Pass them to
 the scout verbatim — the scout captures them first, with `--from-user`, before running any
 of its own searches. User-provided URLs are exempt from the famous-site quota; the user
@@ -423,6 +443,21 @@ You did not make what you think you made.
 Render at both viewports, then hand **both** screenshots to the eye. A clamp that works at
 1280px can collapse to nothing at 375px; a margin-note that floats correctly on desktop can
 cover body text on mobile. One render is a blind spot.
+
+**If visual targets were registered in step 3**, run the target diff loop before rendering
+for the eye. This loop converges the build toward the user's mockup using pixel-level
+measurement — ceiling 4 iterations:
+
+```bash
+omd target diff <page> --json          # uses first target; --target <name> if multiple
+# If pass: false — read cells[], fix the worst-mismatch region, build again, re-diff.
+# If pass: true — proceed. Maximum 4 iterations total.
+```
+
+The diff exits 0 on pass, 1 on fail. The `--json` output names the worst cells by
+row/column and pixel coordinate so each iteration has a specific region to improve, not a
+vague "make it look more like the mockup" instruction. After 4 iterations, proceed
+regardless and include the final score in the eye's brief.
 
 ```bash
 omd render <page> -o .omd/.cache/build-desktop.png --viewport 1280x800
