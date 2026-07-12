@@ -170,7 +170,7 @@ Calibrated against real work: the rules fire on a fixture that is *correct, acce
 
 ## 📚 Theory pack
 
-A colour is a claim about the product; the theory pack is where that claim finds its evidence. Seven files ship at `core/theory/`, each written as condition → choice → reason with named sources — Elliot & Maier, Bringhurst, Müller-Brockmann, Nielsen, NN/g:
+A colour is a claim about the product; the theory pack is where that claim finds its evidence. Eight files ship at `core/theory/`, each written as condition → choice → reason with named sources — Elliot & Maier, Bringhurst, Müller-Brockmann, Nielsen, NN/g:
 
 | File | What it answers |
 | --- | --- |
@@ -181,6 +181,7 @@ A colour is a claim about the product; the theory pack is where that claim finds
 | `components.md` | Button hierarchy ceilings, validation timing, navigation, tables, modals and their alternatives, toasts, search |
 | `craft.md` | What theory books skip: layered shadows, borderless separation, opacity-tier text, optical alignment, 60fps-safe properties |
 | `expressive.md` | Award-site anatomy — the Awwwards rubric weights usability over creativity even there; scroll as narrative; the technique catalogue with its restraint clause |
+| `ux.md` | Task-first framing; navigation IA decisions; flow design (steps, defaults, dead ends); feedback and the Doherty threshold; cognitive load and progressive disclosure; first-run and empty states; peak-end shaping; Nielsen's 10 heuristics as checkable questions |
 
 The concept step reads these before committing to a direction. The hand cites them whenever the reference board does not cover a decision — an uncited choice is a finding.
 
@@ -191,7 +192,7 @@ src/
   agents/                  source of truth: framer, scout, hand, eye
   skills/                  source of truth: ultradesign, scout, critique, humanize, coach
 core/
-  theory/                  the 7-file theory pack (shipped into dist/)
+  theory/                  the 8-file theory pack (shipped into dist/)
   ref/                     reference measurement, kinship, signal + slop scoring
   render/                  headless Playwright: render, filmstrip, motion/hover/focus probes
   rules/                   the linter engine + builtin rules (slop, motion, a11y, tokens)

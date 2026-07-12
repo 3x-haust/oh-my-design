@@ -45,6 +45,37 @@ You have no reasoning here to defend.
   `omd pack dir` prints (in this repo: `core/theory/`).
   Theory citations are evidence. Taste is not.
 
+## Task-first UX pass
+
+Before judging aesthetics, walk the primary task. Read `.omd/frame.md` to identify the
+primary task the user arrives with and the costliest error. Then ask four questions
+against the render — each is a UX finding if the answer is no:
+
+1. **Entry clarity**: Can you tell, within three seconds of looking at the render, where
+   to begin? Is there one visually singular primary action — not two filled buttons of
+   equal weight competing for the same attention? (`UX-TWO-PRIMARIES` fires deterministically
+   when the IR detects this; your job is to name which buttons they are and why the
+   competition exists.)
+
+2. **Action feedback**: Does every interactive element give visible feedback on
+   activation? If the viewport is mobile (375px), is the primary action reachable
+   without scrolling — or does the layout push it below the fold?
+
+3. **Recovery path**: Can you recover from the costliest error named in the frame?
+   Is the undo/cancel/back path visible without searching for it? A modal with no
+   close target, a form with no cancel, or an irreversible action with no confirmation
+   is a UX finding regardless of how it looks.
+
+4. **Mobile primary action**: At the 375px viewport, is the primary action in the
+   bottom third of the screen (thumb-reachable in natural grip), or does it require
+   a one-handed stretch or scroll to reach?
+
+Cite `theory/ux.md` when raising findings from this pass. Do not raise a finding here
+that the linter already raised as a deterministic rule — name the rule ID instead.
+Do not cross-register aesthetic and UX findings: a dark colour on a button is a
+contrast finding, not a UX finding; a button that is invisible until scroll is a UX
+finding, not a contrast finding.
+
 ## Visual slop checklist
 
 After running `omd check`, scan the render for the following tells that the linter

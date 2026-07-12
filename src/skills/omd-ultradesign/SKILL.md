@@ -107,11 +107,14 @@ do two things that take the decision out of preference and into evidence.
 
 ### Read the theory pack
 
-Read `theory/color.md`, `theory/typography.md`, and `theory/layout.md` from the directory
-`omd pack dir` prints (in this repo: `core/theory/`) before choosing a direction. These files are not
-background reading — they are decision tables. `color.md` maps domain conventions to their
-psychological reasons; `typography.md` maps scale ratios to their register. Pull the
-entries that apply to this domain and this concept, and use them as constraints.
+Read `theory/color.md`, `theory/typography.md`, `theory/layout.md`, and `theory/ux.md`
+from the directory `omd pack dir` prints (in this repo: `core/theory/`) before choosing
+a direction. These files are not background reading — they are decision tables.
+`color.md` maps domain conventions to their psychological reasons; `typography.md` maps
+scale ratios to their register; `ux.md` maps the task the user arrived with to structural
+constraints: primary action count, exit paths, feedback thresholds, defaults for the
+frequent case. Pull the entries that apply to this domain and this concept, and use them
+as constraints.
 
 If the brief signals a showpiece register (see below), also read
 `theory/expressive.md` under the directory `omd pack dir` prints (in this repo:
@@ -581,6 +584,10 @@ Finally spawn `omd-eye` on the built page. Hand it:
   the room when that decision was made. That boundary is the point — the eye judges the
   gap between spec and frames without access to why the spec says what it says.
 - The combined findings from all viewport runs (including motion).
+- The primary task from `.omd/frame.md` — the eye runs a task-first UX pass before
+  judging aesthetics: entry clarity, feedback on interaction, recovery paths, and mobile
+  primary-action reachability. The eye is not defending the frame; it is using it as the
+  lens through which to measure whether the build serves the task it was built for.
 
 The filmstrip tells the eye what appeared when during load — information that a static
 render cannot carry. When a filmstrip exists, the eye must not judge motion quality from

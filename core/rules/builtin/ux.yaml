@@ -1,0 +1,52 @@
+# UX rules — task-first structural correctness.
+#
+# These rules target measurable UX violations detectable from the IR alone.
+# They do NOT require viewport height, motion probes, or any runtime state
+# beyond the static IR snapshot.
+#
+# Category 'slop' is used here because UX convergence-to-the-mean (two identical
+# primary buttons, no exits from error states) is in the same family as visual
+# convergence-to-the-mean — correct, competent, anonymously generated. Each rule
+# is a warning; a deliberate choice can be overridden with an omd decision record.
+#
+# Candidate studied and dropped:
+#   UX-ACTION-BELOW-FOLD — the IR records node.box.y but does NOT store the
+#   viewport height at check time (ir.meta has motion and interaction probe data
+#   but no viewport dimensions). Without a reliable viewport-height anchor the
+#   threshold is undefined and the false-positive rate is unacceptable. The
+#   eye agent's task-first UX pass walks this check visually instead.
+#
+# Candidate retained:
+#   UX-TWO-PRIMARIES — two or more sibling interactive buttons sharing the same
+#   authored fill colour in the same parent container. This pattern cancels the
+#   hierarchy signal: the user cannot determine which action the design recommends.
+#   Measurable because: node.computed.isInteractive (set by the DOM reader),
+#   node.fill.authored (explicitly set by the author, not inherited), node.fill.value
+#   (computed hex), node.box.h >= 36 (button-sized, excludes icon buttons and inline
+#   links), node.parent (sibling grouping — only fires when the competing buttons
+#   share a container, not when the same colour CTA repeats across different sections).
+#
+# Theory basis: theory/ux.md §Task-first framing; theory/components.md §Buttons.
+# Material Design and Carbon Design System both specify single primary-per-view as an
+# explicit constraint, not a preference.
+
+# UX-TWO-PRIMARIES
+#
+# Fires on the root node when any parent container has 2+ interactive, button-sized
+# children with the same authored fill colour. The value is the count of competing
+# sibling groups (1+ means at least one container has this problem).
+#
+# Positive test:  two <button> siblings with identical background-color → fires
+# Negative tests:
+#   — one primary + one secondary (different fill/no-fill) → silent
+#   — two primaries in different parent containers            → silent
+#   — two small icon buttons (h < 36) with same fill         → silent
+#   — two buttons where fill.authored is false (inherited)   → silent
+- id: UX-TWO-PRIMARIES
+  layer: 1
+  category: slop
+  severity: warn
+  when: "node.parent === null"
+  value: "(() => { const grouped = {}; ir.nodes.filter(n => n.computed.isInteractive && n.fill && n.fill.authored && n.box.h >= 36).forEach(n => { const key = (n.parent ?? 'root') + ':' + String(n.fill.value); grouped[key] = (grouped[key] || 0) + 1; }); return Object.entries(grouped).filter(([,c]) => c >= 2).length; })()"
+  assert: "value === 0"
+  message: "{value} container(s) on this page have two or more interactive buttons sharing the same primary fill colour. Two filled buttons of equal visual weight cancel the hierarchy signal — the user cannot determine which action the design recommends. Demote one to secondary (outlined) or tertiary (text-only) per view. See theory/ux.md and theory/components.md."

@@ -81,6 +81,45 @@ Choreography rules, each one non-negotiable:
 - `prefers-reduced-motion` is always honoured — one media query wraps the whole motion
   layer, and in its absence nothing moves.
 
+## Flows: implementation rules
+
+The frame named the primary task, the costliest error, and the most frequent action.
+The build honours them. These are not aesthetic choices; they are structural constraints.
+
+**Defaults are chosen for the frequent case.** Every input, select, and setting that has
+a default value must default to what most users want — not what is simplest to implement
+or what covers the lowest common denominator. A country selector that defaults to a
+country where fewer than 10% of users live is a wrong default. Look at the frame for
+who the user is; set the default for them. An unset default that forces every user to
+override a value you could have predicted is extrinsic complexity pushed to the user
+(Tesler's Law: `theory/ux.md`).
+
+**No dead ends.** Every state the user can reach must have an exit. This is not optional
+and not a polish item:
+- Every modal has a close target — visible, labeled, reachable by keyboard.
+- Every multi-step flow has a back path and a cancel path.
+- Every error state has a recovery action — what to do next, not just what went wrong.
+- Every loading state longer than 400ms has a visible progress indicator.
+- Every empty state has an action — the user's next step, in the empty container.
+A state that the user can reach but cannot leave is a trap. The frame named the costliest
+error; if recovery from it is not reachable from every path that leads to it, the build
+is not done.
+
+**The primary action is visually primary once per screen.** One filled primary button per
+view — the most important action in this context. Two filled buttons of equal visual
+weight cancel each other; the user cannot tell which path the design recommends. Cross-
+reference `theory/components.md` for button hierarchy (primary/secondary/tertiary ceiling).
+If a screen appears to need two primary buttons, the screen has two tasks and must be
+split or one action must be demoted. Record the decision in `omd decision`.
+
+**Doherty threshold on every interaction (<400ms perceived).** Any action the user
+initiates must produce visible acknowledgment within 400ms — not the result, the
+acknowledgment. A button that submits a form with no immediate visual state change has
+failed before the server responds. Button pressed state: instant (<100ms). Loading
+indicator: within 200ms. Progress bar: within 400ms. Cross-reference `theory/ux.md`
+for the 1982 Doherty–Thadani research basis. Cross-reference `theory/motion.md` for
+the correct duration thresholds per interaction type.
+
 ## Showpiece register: execution rules
 
 When the committed register is **showpiece**, the following rules apply on top of the
@@ -247,7 +286,7 @@ and no third:
 **Arbitrary decision is not a third option.** "I chose 1.333 because it felt right" is
 not a decision — it is a guess. The theory pack exists precisely to resolve the gaps the
 board leaves. Use it. Path: `theory/{color,typography,layout,motion,components,craft,
-expressive,voice}.md` under the directory `omd pack dir` prints. Read whichever file
+expressive,voice,ux}.md` under the directory `omd pack dir` prints. Read whichever file
 covers the gap, pull
 the relevant condition→choice→reason entry, and record it in `omd decision`. For copy
 decisions — sentence rhythm, vocabulary temperature, register — cite `voice.md`

@@ -276,7 +276,13 @@ ${frameSummary}
        - / (home) — first impression, conversion
        - /pricing — decision
        - /docs — activation
-     Primary path: home → pricing → sign up -->
+     Primary path: home → pricing → sign up
+
+     UX decision constraints (see theory/ux.md):
+     - Name the primary task the user arrives with on each surface.
+     - Name the most frequent action per surface (defaults are set for this case).
+     - Name the costliest error per surface and confirm a recovery path exists.
+     - Every state the user can reach must have an exit (no dead ends). -->
 
 ---
 
