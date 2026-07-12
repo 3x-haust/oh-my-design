@@ -57,6 +57,25 @@ export interface RawNode {
   /** line-height as a ratio to font-size, 2dp. 'normal' resolves to 1.2. */
   lineHeight?: number;
 
+  /**
+   * Computed word-break value, captured on text-bearing nodes.
+   * 'keep-all' is required for Korean text to prevent mid-eojeol (어절) line breaks.
+   * Set only on text-bearing nodes (where `type === 'TEXT'`).
+   */
+  wordBreak?: string;
+  /**
+   * Computed text-wrap value, captured on text-bearing nodes when the browser supports it
+   * (Chrome 114+, Firefox 121+). 'balance' is the recommended value for headings to prevent
+   * orphaned syllables. Absent when the browser returns an empty or unsupported value.
+   */
+  textWrap?: string;
+  /**
+   * Computed overflow value. Absent when 'visible' (the CSS default) to save space.
+   * Used by SYS-TEXT-CLIP to identify parents that visually clip their overflowing children.
+   * Only 'hidden' and 'clip' cut off content without providing a scrollbar escape.
+   */
+  overflow?: string;
+
   /** Set on any node with a non-zero transition-duration or a named animation. */
   motion?: {
     /** ms, rounded. Transition AND animation durations both land here; zero-length transitions are dropped. */

@@ -280,6 +280,42 @@ with many strokes (e.g., 흙, 닭). At 14px, all modern Korean fonts render clea
 
 ---
 
+## Korean line-breaking: word-break: keep-all
+
+Korean text is written without spaces between syllables within a word unit (어절), but with
+spaces between word units. The CSS default `word-break: normal` treats each syllable block
+as a breakable unit, which produces splits like "동\n시접속" (simultaneous connection) or
+"확인했\n어요" (I confirmed) — a break inside a meaningful word unit that no Korean writer
+would produce and that any Korean reader registers immediately as a layout error.
+
+`word-break: keep-all` prevents the browser from breaking inside a Korean eojeol. A line
+break can occur only at the space boundaries between word units, matching how Korean readers
+expect text to wrap. This is not a style preference. It is a readability requirement — the
+W3C *Requirements for Hangul Text Layout* (klreq) explicitly defines word-boundary-aware
+line breaking as the correct behaviour for Korean text.
+
+**Implementation**: apply at the base layer, not component-by-component:
+
+    * { word-break: keep-all; overflow-wrap: break-word; }
+    h1, h2, h3, h4, h5, h6 { text-wrap: balance; }
+
+`overflow-wrap: break-word` handles long URLs and code strings that cannot break at
+word boundaries. `text-wrap: balance` on headings distributes line length evenly across
+lines, preventing a single orphaned syllable on the last line of a heading — the Korean
+equivalent of a typographic widow.
+
+**Verification at narrow viewport**: `word-break: keep-all` changes how text wraps, which
+changes the measured height of containers at narrow widths. After applying it, verify the
+layout at 375px. A `clamp()`-sized display heading that fitted comfortably at 768px may
+overflow its container at 375px after wrap behaviour changes — the last line's descender
+can be cut off by `overflow: hidden` on the container. Fixes: reduce the `clamp()` minimum
+value, add `padding-bottom` to accommodate the extra line, or set `overflow: visible` with
+enough vertical whitespace below. `KO-KEEP-ALL` in `omd check` fires once per page when any
+Hangul text node is missing `word-break: keep-all`, measuring the actual computed value from
+the live DOM.
+
+---
+
 ## Sources
 
 - Bringhurst, *The Elements of Typographic Style* (4th ed., 2012) — modular scale,

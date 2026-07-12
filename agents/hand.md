@@ -373,11 +373,54 @@ Before writing a single file, read `package.json` in the working directory if it
   If you cannot determine the pattern from package.json alone, read one existing component
   before writing anything new.
 - If no package.json exists or it names no recognised framework, use the stack the brief
-  specifies. If the brief is silent on stack, build plain HTML + CSS + minimal vanilla JS
-  — the least infrastructure that delivers the design.
+  specifies. If the brief is silent on stack, **default to React with Vite**
+  (`npm create vite@latest . -- --template react-ts`). Plain HTML + CSS + minimal vanilla
+  JS is used only when the user explicitly asked for it, or when the artifact is a single
+  static page where React buys nothing — no interactive state, no reusable components, just
+  styled markup (a single self-contained landing page, an email template, a static document).
+  If you take the plain-HTML path without explicit instruction, record the reason:
+  `omd decision "Using plain HTML — single-page static artifact; no interactive state or component reuse required"`.
 
 The point of this step is that a React project that ships a raw `index.html` alongside its
-component tree has two design systems competing. Match what is there.
+component tree has two design systems competing. Match what is there. Greenfield projects
+default to React because the component model prevents CSS bleed, enables token-based
+styling via CSS modules or styled-components, and gives the eye a real tree to inspect —
+not because React is universally correct, but because the decision to use plain HTML must
+be a stated judgment, not an omission.
+
+## Korean page defaults
+
+When the page's primary language is Korean — the brief is written in Korean, the copy is
+Korean, or `lang="ko"` is set — apply these base-layer styles before any component styles:
+
+    * { word-break: keep-all; overflow-wrap: break-word; }
+    h1, h2, h3, h4, h5, h6 { text-wrap: balance; }
+
+`word-break: keep-all` prevents Korean eojeol (어절) from splitting mid-word across line
+breaks — "동시접속" wrapping as "동\n시접속" is the single loudest AI-generated-page tell
+for Korean readers, and it is the first thing `omd check` (`KO-KEEP-ALL`) measures. Apply
+it once at the `*` level and it covers every text node on the page without per-component
+effort.
+
+`overflow-wrap: break-word` handles long URLs, code strings, and any run of characters
+without a natural break point that would otherwise cause horizontal overflow.
+
+`text-wrap: balance` on headings distributes line length evenly across lines, preventing
+a single orphaned syllable on the last line (the Korean typographic widow). Browser support:
+Chrome 114+, Firefox 121+; older browsers ignore it gracefully.
+
+**clamp() display text must be verified at 375px.** `word-break: keep-all` changes where
+lines break, which changes the measured height of text containers at narrow widths. A hero
+heading sized with `clamp(2rem, 8vw, 6rem)` that fits in two lines at 768px may wrap to
+three lines at 375px. If the container has an explicit height or `overflow: hidden`, the
+last line's descender is cut off — `SYS-TEXT-CLIP` fires on this at check time. Before
+handoff, resize to 375px in devtools and confirm no heading descender is clipped. Fix
+options: reduce the `clamp()` minimum, add `padding-bottom` to accommodate the extra line,
+or remove the explicit height and let the container size to its content.
+
+These four lines are not optional for Korean pages. Omitting them produces the same class
+of defect as omitting `prefers-reduced-motion` on an animated page — a correctness failure,
+not a style preference.
 
 ## Build mechanics
 

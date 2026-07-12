@@ -187,3 +187,35 @@
   value: "node.computed.identicalSiblings"
   assert: "false"
   message: "{value} structurally identical cards sit side by side. Three feature cards are not an information architecture; they are a confession that nobody decided what matters most. Decide, then make that one bigger."
+
+# Korean document-structure narration. These phrases announce the document's own organisation
+# rather than communicating what the product does: "아래는 그 기록이에요" (below is the record),
+# "다음은 기능 목록입니다" (the following is the feature list). On a product page, this cadence
+# exposes the model's essay or README skeleton — the AI introducing its own bullet list instead
+# of writing the bullet list. A human copywriter presents the content; they do not narrate
+# that content is about to appear.
+#
+# Two patterns, both gated on Korean text presence:
+#
+# Pattern 1: 아래는 <words> <기록|내용|목록|정리>
+#   "아래는 그 기록이에요" → fires
+#   "아래는 변경 내용이에요" → fires
+#   "아래 버튼을 누르세요" → passes (아래 without 는 particle; spatial adverb not a structure marker)
+#   "아래에서 다운로드하세요" → passes (아래에서, not 아래는)
+#
+# Pattern 2: 다음은 <words> <입니다|이에요>
+#   "다음은 기능 목록입니다" → fires
+#   "다음은 그 이유이에요" → fires
+#   "다음에 다시 시도해주세요" → passes (다음에, not 다음은)
+#
+# The .{0,30} span is deliberately short: a sentence that says "아래는 그 기록이에요" has
+# the structure word within 30 characters of 아래는. A longer span risks matching sentences
+# that happen to contain 기록 as part of an unrelated clause.
+- id: SLOP-KO-SIGNPOST
+  layer: 1
+  category: slop
+  severity: warn
+  when: "Boolean(node.text) && node.text.length > 8 && /[가-힣]/u.test(node.text)"
+  value: "node.text"
+  assert: "!/아래는\\s+.{0,30}(?:기록|내용|목록|정리)|다음은\\s+.{0,30}(?:입니다|이에요)/u.test(value)"
+  message: "Document-structure narration copy: \"{value}\". '아래는 … 기록/내용/목록' and '다음은 … 입니다/이에요' introduce the document's structure in essay cadence. On a product page, write what the product does — not that we will now look at what the product does. Delete the announcing sentence and replace it with the specific fact or action it was narrating."

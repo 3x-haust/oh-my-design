@@ -235,6 +235,51 @@ UX writer's mandate as "ensuring the text inside the app communicates clearly wi
 and protecting consistency." The register is brand-specific; the structural commitment is
 universal.
 
+### Document-structure narration: write the content, not that content is coming
+
+AI-generated Korean product copy has a structural tell: it narrates the document before
+presenting the document. "아래는 그 기록이에요" (below is the record), "다음은 기능 목록입니다"
+(the following is the feature list) — these sentences announce the organisation of what
+follows rather than delivering it. The cadence comes from the essay or README skeleton the
+model was trained on. A human copywriter does not introduce their own bullet list; they write
+the bullet list.
+
+`SLOP-KO-SIGNPOST` fires on the deterministic patterns: `아래는 … 기록/내용/목록/정리` and
+`다음은 … 입니다/이에요`. The fix is deletion: remove the announcing sentence and start with
+the content it was announcing. "아래는 그 기록이에요." → delete it; begin with the first item.
+
+The negative to hold in mind: "아래 버튼을 누르세요" does not fire. 아래 used as a spatial
+adverb (without the topic marker 는) is navigation copy, not structural narration.
+
+### Uniform sentence endings and not-X-but-Y: pre-handoff checks, not linter rules
+
+Two Korean AI tells are real but cannot be made into safe deterministic rules:
+
+**Three or more consecutive identical sentence-final endings** (이에요./이에요./이에요. or
+합니다./합니다./합니다.) are a statistical signal of AI generation — a human writer varies
+structure. However, product benefit lists deliberately use parallel endings: "빠릅니다.
+정확합니다. 쉽습니다." is valid copy that would false-positive on every legitimate feature
+section. A linter rule would fire on too much legitimate writing to be trusted.
+
+Pre-handoff check: if three or more adjacent sentences share the same final ending, vary
+at least one — rewrite to a shorter sentence, a question, or a clause that ends differently.
+The goal is not to eliminate parallel endings but to break a uniform rhythm that reads as
+output from a loop rather than from a writer.
+
+**The not-X-but-Y construction** (`~게 아니라 ~했어요` / `~이 아니라 ~입니다`) appears in
+AI output as performed contrast in response to a brief that said "be honest" or "be direct."
+It also appears in legitimate copy: a brand that deliberately contrasts itself with a
+category norm ("빠른 게 아니라 정확합니다") uses this construction with intent. No narrow
+regex distinguishes the cases reliably.
+
+Pre-handoff check: when this construction appears in the hero or opening paragraph, ask
+whether the contrast was a designed claim (cite it in decisions.md with the brand reason)
+or a model hedging its own confidence. Delete hedges; keep designed contrasts. "AI가 만든
+게 아니라, 사람이 썼어요" as a self-description of the tool is a hedge; "비싼 게 아니라
+오래 씁니다" as a product claim is a designed contrast.
+
+Neither pattern has an `omd check` rule. Both belong on the hand's pre-handoff review pass.
+
 Translated English marketing is the loudest failure mode. The sentence structure of
 English product copy — subject, action verb, object, benefit clause — does not map cleanly
 onto Korean's SOV order or its topic-comment preference. Copy that was conceived in English

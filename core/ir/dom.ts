@@ -141,7 +141,16 @@ export function extractInPage(maxNodes: number, selector?: string | null): RawIr
         const lh = parseFloat(cs.lineHeight);
         node.lineHeight = fontSize > 0 && !Number.isNaN(lh) ? Math.round((lh / fontSize) * 100) / 100 : 1.2;
       }
+      // word-break is well-supported; always capture on text nodes.
+      if (cs.wordBreak) node.wordBreak = cs.wordBreak;
+      // text-wrap (CSS text-wrap shorthand) landed in Chrome 114 / Firefox 121.
+      // Access via bracket notation to avoid TypeScript complaints on older lib versions.
+      const tw = (cs as unknown as Record<string, string>)['textWrap'];
+      if (tw) node.textWrap = tw;
     }
+    // Capture overflow when non-default so SYS-TEXT-CLIP can identify clipping parents.
+    // Skip 'visible' (the CSS default) to keep the IR sparse.
+    if (cs.overflow && cs.overflow !== 'visible') node.overflow = cs.overflow;
 
     // Motion: non-zero transition-durations, non-zero animation-durations, and any named
     // animation. `transition-duration`/`transition-timing-function` and

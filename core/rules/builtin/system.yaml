@@ -1,0 +1,42 @@
+# System-level correctness rules that do not fit the existing per-category files.
+# Category 'system' means something is measurably wrong in the implementation — not a
+# design-mean convergence failure (slop), not a user-facing access barrier (a11y), and not
+# an animation craft defect (motion).
+
+# SYS-TEXT-CLIP: detects a text node whose rendered layout box extends below its parent's
+# bottom edge when the parent clips overflow (overflow: hidden or clip). The canonical case
+# is a clamp()-sized display heading whose last-line descender is cut off at the container.
+#
+# Measurement basis: getBoundingClientRect() returns the full CSS layout rect of the text
+# element, not the visually clipped rect — so node.box.h reflects the unclipped text height
+# even when the parent hides it. If text.box.bottom > parent.box.bottom + 4px and the
+# parent clips, the descender IS visually cut off and the user sees incomplete text.
+#
+# Guard on overflow value:
+#   overflow: hidden / clip  → clips without a scroll escape → rule fires
+#   overflow: visible        → text bleeds out intentionally → silent (not stored, treated as absent)
+#   overflow: scroll / auto  → clips but provides a scrollbar → silent (content accessible)
+#
+# Vertical-only check: only bottom-edge overflow is tested. Horizontal overflow is excluded
+# to avoid false positives from marquee tracks, which extend rightward inside an
+# overflow: hidden container by design (see core/motion/recipes/marquee.md).
+#
+# Threshold: 4px. Sub-pixel rounding and browser differences can produce 1–2px mismatches
+# on legitimate layouts; 4px filters those without masking real descender clips (which
+# are typically 8–20px depending on font and size).
+#
+# Known limitation: position: absolute / fixed children that legitimately overflow a
+# clipping ancestor will false-positive here. If the false-positive rate proves significant
+# in practice, extend dom.ts to capture cs.position on each node and add the guard:
+#   !node.position || (node.position !== 'absolute' && node.position !== 'fixed')
+#
+# Positive test:  text.box.y + text.box.h > parent.box.y + parent.box.h + 4, parent.overflow === 'hidden' → fires
+# Negative tests: parent.overflow absent (visible default) → silent; overflow within threshold → silent
+- id: SYS-TEXT-CLIP
+  layer: 1
+  category: system
+  severity: warn
+  when: "Boolean(node.text) && node.parent !== null"
+  value: "(() => { const parent = ir.nodes.find(n => n.id === node.parent); if (!parent) return null; if (parent.overflow !== 'hidden' && parent.overflow !== 'clip') return null; const overflowPx = (node.box.y + node.box.h) - (parent.box.y + parent.box.h); return overflowPx > 4 ? overflowPx : null; })()"
+  assert: "value === null"
+  message: "Text overflows its clipping parent by {value}px (bottom edge). The parent has overflow: hidden — the descender or last line is visually cut off. Fix: remove the explicit height from the parent and let it size to its content, add padding-bottom to accommodate the text at the smallest clamp() value, or verify that the clamp() minimum renders without clipping at 375px viewport width."
