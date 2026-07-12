@@ -9,19 +9,18 @@ The design of this repo is that **a frontier model plans and a cheaper model exe
 because planning quality dominates outcome while most implementation is mechanical once the
 plan is precise.
 
-- **Plan with a frontier model — Opus or Fable.** Interrogating the request, choosing the
-  approach, writing the spec, and reviewing the result stay with the frontier model. It
-  decides *what* changes and *why*, and it holds the whole-repo context.
-- **Build with Sonnet.** Each planned unit of work is dispatched to a Sonnet executor with
-  a self-contained spec: the files to touch, the rule to follow, the definition of done.
-  Sonnet writes the code, the tests, and runs the gates.
-- **The frontier model does not hand-write the implementation.** It writes the spec, spawns
-  the executor, then verifies the result (tests pass, the change matches the spec, no
-  scope drift). Verification is the frontier model's job precisely because it did not write
-  the code.
+- **Plan with Opus.** Interrogating the request, choosing the approach, writing the spec,
+  and reviewing the result stay with Opus. It decides *what* changes and *why*, and it holds
+  the whole-repo context.
+- **Build with Sonnet 5.** Each planned unit of work is dispatched to a Sonnet 5 executor
+  with a self-contained spec: the files to touch, the rule to follow, the definition of
+  done. Sonnet 5 writes the code, the tests, and runs the gates.
+- **Opus does not hand-write the implementation.** It writes the spec, spawns the executor,
+  then verifies the result (tests pass, the change matches the spec, no scope drift).
+  Verification is Opus's job precisely because it did not write the code.
 
-Practically, in Claude Code: set the session model to Opus or Fable for the planning and
-orchestration turn, dispatch implementation to `oh-my-claudecode:executor` (Sonnet) with a
+Practically, in Claude Code: set the session model to Opus for the planning and
+orchestration turn, dispatch implementation to `oh-my-claudecode:executor` (Sonnet 5) with a
 written spec, and review its report against the spec before committing.
 
 A spec dispatched to Sonnet should carry: the exact files that are source-of-truth vs
