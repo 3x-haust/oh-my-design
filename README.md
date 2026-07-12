@@ -123,18 +123,37 @@ Four agents, deliberately firewalled: `omd-framer` interrogates the brief, `omd-
 
 ## 🧹 The slop linter
 
-`omd check` computes contrast, hit areas, spacing, token coverage — and **slop**, the signature of work that converged on the mean. Every slop rule warns rather than errors, because each can be wrong about a deliberate choice; overruling one requires a written reason.
+`omd check` computes contrast, hit areas, spacing, token coverage — and **slop**, the signature of work that converged on the mean. Twenty-one rules, all warnings rather than errors, because each can be wrong about a deliberate choice; overruling one requires a written reason. They split into three families.
+
+**Colour, surface, and layout** — the machine-default aesthetic, measured:
 
 | Rule | Catches |
 | --- | --- |
 | `SLOP-GRADIENT` | The indigo→violet gradient — matched by hue band, not a hex blocklist |
+| `SLOP-GRADIENT-TEXT` | Gradient headline text — hierarchy faked with `background-clip` instead of scale |
 | `SLOP-RADIUS-MONOCULTURE` | One corner radius everywhere: no material hierarchy |
+| `SLOP-NESTED-RADIUS` | Corners that don't nest — inner radius should be outer minus padding |
 | `SLOP-SHADOW-MONOCULTURE` | One shadow repeated — if everything floats, nothing floats |
+| `SLOP-OVERSIZED-SHADOW` | A 40px+ blur on a small element — elevation as decoration |
+| `SLOP-GLASSMORPHISM` | Max radius plus `backdrop-blur` translucency: depth by blur, not structure |
 | `SLOP-EVERYTHING-CENTERED` | Centring as a default instead of as emphasis |
-| `SLOP-EMOJI-HEADING` | An emoji doing the job typography failed to do |
-| `SLOP-TRIPLE-CARD` | Three identical feature cards: nobody decided what matters most |
-| `SLOP-COPY` | "Unlock the power of…" — copy that fits any product says nothing about this one |
+| `SLOP-TRIPLE-CARD` | Three identical cards — or an all-caps stat grid: nobody decided what matters most |
+| `SLOP-NESTED-CARDS` | Cards inside cards inside cards — one surface per region |
+| `SLOP-MONO-SPACING` | One gap everywhere: space by relationship, not by habit |
+| `SLOP-FLAT-TYPE` | A whole UI between 14 and 18px — a scale with no contrast |
+| `SLOP-BADGE-SPAM` | "Beta / New / Hot" pills in the chrome |
+| `SLOP-FAKE-STAT` | The invented stat row: `10k+ / 99.9% / 24/7` with no source |
+| `SLOP-EMOJI-HEADING` | An emoji doing the job typography failed to do — in a heading or a button |
+
+**Copy** — where generated work confesses first:
+
+| Rule | Catches |
+| --- | --- |
+| `SLOP-COPY` | "Unlock the power of…", "it's not just X — it's Y" — copy that fits any product |
 | `SLOP-COPY-KO` | Korean AI-prose tells: the comma after a connective, structural openers, 첫째/둘째 enumeration |
+| `SLOP-KO-EMDASH` | The spaced em-dash inside Korean copy — a translation punctuation import |
+| `SLOP-KO-REGISTER-MIX` | 해요체 and 합니다체 drifting inside one paragraph |
+| `SLOP-KO-SIGNPOST` | Copy that narrates document structure ("아래는 그 기록이에요") |
 | `SLOP-PINK-ELEPHANT` | Told "no clutter", a model writes *"No clutter here."* — self-negating meta-copy |
 | `SLOP-LEAKED-RATIONALE` | Five consecutive words shared between page copy and the design notes |
 

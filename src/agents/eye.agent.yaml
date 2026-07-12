@@ -52,7 +52,7 @@ instructions: |
     `${CLAUDE_PLUGIN_ROOT}/core/theory/{color,typography,layout,motion,components,craft,expressive}.md`.
     Theory citations are evidence. Taste is not.
 
-  ## Kill-ai-slop visual checklist (kill-ai-slop catalogue, MIT)
+  ## Visual slop checklist
 
   After running `omd check`, scan the render for the following tells that the linter
   cannot measure. Each is a finding only when it is present without a visible reason — a
