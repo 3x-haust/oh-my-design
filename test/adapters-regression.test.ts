@@ -30,7 +30,7 @@ test('codex agent toml survives quotes, colons and backslashes', () => {
   const parsed = parseToml(toml) as unknown as AgentToml;
   assert.equal(parsed.name, 'omd-eye');
   assert.equal(parsed.description, NASTY.description);
-  assert.equal(parsed.model, 'gpt-5.5');
+  assert.equal(parsed.model, 'gpt-5.6');
   assert.ok(must(parsed.developer_instructions, 'developer_instructions').includes('Quote test:'));
 });
 
