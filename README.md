@@ -65,6 +65,7 @@ One line per check — Node version, Playwright, browser binary, `.omd/` writabi
 | Skill | Type this | What happens |
 | --- | --- | --- |
 | `omd:ultradesign` | "디자인해줘", "redesign this", "landing page, make it stunning" | The whole loop, end to end, zero approval prompts. You get a working site plus a written record of every decision and why. |
+| `omd:figma` | paste a figma.com link, "피그마 그대로 구현해줘" | Pulls the file, synthesizes the design system, builds each frame with an iterative pixel-diff loop, matches responsive pairs, ships with a fidelity report table. |
 | `omd:scout` | "레퍼런스 수집해줘", "how do good sites do X" | A measured reference board — whole pages, single components, typography, motion, community threads, and how real products *write* — without designing anything. |
 | `omd:critique` | "비평해줘", "why does this feel wrong" | Reviews a design without touching it. Runs the linter, groups findings by root cause, judges against the project's own concept — not against taste. |
 | `omd:humanize` | "AI티 빼줘", "de-robot this copy" | Strips Korean and English AI prose tics — translation-ese, mechanical enumeration, stock phrases, uniform rhythm — without changing a single fact. |
@@ -200,7 +201,10 @@ omd ir     <page>                                               rendered DOM →
 omd ref    add|list|show|principles|distance                    the reference board (slop-scored at capture)
 omd frame  set|show|reframe|generator                           the problem record — nobody signs it; the loop rewrites it
 omd decision "what" --why "why"                                 the reasons file your successor will thank you for
-omd doctor                                                      environment preflight
+omd figma  pull <figma-url>                                     fetch + normalize a Figma file → .omd/figma/snapshot.json + responsive pairs
+omd figma  system                                               extract design tokens + component inventory from snapshot
+omd figma  diff <frame-id> <page> [--json]                      pixel-diff Figma export vs. build render; worst cells listed
+omd doctor                                                      environment preflight (FIGMA_TOKEN checked when figma commands are used)
 omd coach                                                       recurring weaknesses, honest trends
 ```
 
