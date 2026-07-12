@@ -1,0 +1,195 @@
+{
+  "name": "Test Design System",
+  "document": {
+    "id": "0:0",
+    "name": "Document",
+    "type": "DOCUMENT",
+    "children": [
+      {
+        "id": "1:0",
+        "name": "Page 1",
+        "type": "CANVAS",
+        "children": [
+          {
+            "id": "1:10",
+            "name": "Hero",
+            "type": "FRAME",
+            "absoluteBoundingBox": { "x": 0, "y": 0, "width": 1440, "height": 900 },
+            "fills": [
+              { "type": "SOLID", "color": { "r": 1.0, "g": 1.0, "b": 1.0, "a": 1.0 } }
+            ],
+            "effects": [],
+            "children": [
+              {
+                "id": "1:11",
+                "name": "Title",
+                "type": "TEXT",
+                "absoluteBoundingBox": { "x": 100, "y": 100, "width": 800, "height": 60 },
+                "fills": [
+                  { "type": "SOLID", "color": { "r": 0.1, "g": 0.1, "b": 0.1, "a": 1.0 } }
+                ],
+                "effects": [],
+                "style": {
+                  "fontFamily": "Inter",
+                  "fontSize": 48,
+                  "fontWeight": 700,
+                  "lineHeightPx": 56,
+                  "lineHeightUnit": "PIXELS"
+                }
+              },
+              {
+                "id": "1:12",
+                "name": "Body",
+                "type": "TEXT",
+                "absoluteBoundingBox": { "x": 100, "y": 180, "width": 600, "height": 48 },
+                "fills": [
+                  { "type": "SOLID", "color": { "r": 0.102, "g": 0.102, "b": 0.102, "a": 1.0 } }
+                ],
+                "effects": [],
+                "style": {
+                  "fontFamily": "Inter",
+                  "fontSize": 16,
+                  "fontWeight": 400,
+                  "lineHeightPx": 24,
+                  "lineHeightUnit": "PIXELS"
+                }
+              },
+              {
+                "id": "1:13",
+                "name": "CTA Button",
+                "type": "FRAME",
+                "absoluteBoundingBox": { "x": 100, "y": 260, "width": 160, "height": 48 },
+                "fills": [
+                  { "type": "SOLID", "color": { "r": 0.231, "g": 0.51, "b": 0.965, "a": 1.0 } }
+                ],
+                "effects": [
+                  {
+                    "type": "DROP_SHADOW",
+                    "visible": true,
+                    "color": { "r": 0.0, "g": 0.0, "b": 0.0, "a": 0.1 },
+                    "offset": { "x": 0, "y": 2 },
+                    "radius": 4,
+                    "spread": 0
+                  }
+                ],
+                "cornerRadius": 8,
+                "layoutMode": "HORIZONTAL",
+                "paddingTop": 12,
+                "paddingRight": 24,
+                "paddingBottom": 12,
+                "paddingLeft": 24,
+                "itemSpacing": 8,
+                "children": [
+                  {
+                    "id": "1:14",
+                    "name": "Label",
+                    "type": "TEXT",
+                    "fills": [
+                      { "type": "SOLID", "color": { "r": 1.0, "g": 1.0, "b": 1.0, "a": 1.0 } }
+                    ],
+                    "effects": [],
+                    "style": {
+                      "fontFamily": "Inter",
+                      "fontSize": 14,
+                      "fontWeight": 600,
+                      "lineHeightPx": 20,
+                      "lineHeightUnit": "PIXELS"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "1:20",
+            "name": "Card",
+            "type": "FRAME",
+            "absoluteBoundingBox": { "x": 0, "y": 920, "width": 400, "height": 320 },
+            "fills": [
+              { "type": "SOLID", "color": { "r": 1.0, "g": 1.0, "b": 1.0, "a": 1.0 } }
+            ],
+            "effects": [
+              {
+                "type": "DROP_SHADOW",
+                "visible": true,
+                "color": { "r": 0.0, "g": 0.0, "b": 0.0, "a": 0.1 },
+                "offset": { "x": 0, "y": 2 },
+                "radius": 4,
+                "spread": 0
+              }
+            ],
+            "cornerRadius": 8,
+            "layoutMode": "VERTICAL",
+            "paddingTop": 24,
+            "paddingRight": 24,
+            "paddingBottom": 24,
+            "paddingLeft": 24,
+            "itemSpacing": 16,
+            "children": [
+              {
+                "id": "1:21",
+                "name": "Card Title",
+                "type": "TEXT",
+                "fills": [
+                  { "type": "SOLID", "color": { "r": 0.102, "g": 0.102, "b": 0.102, "a": 1.0 } }
+                ],
+                "effects": [],
+                "style": {
+                  "fontFamily": "Inter",
+                  "fontSize": 24,
+                  "fontWeight": 600,
+                  "lineHeightPx": 32,
+                  "lineHeightUnit": "PIXELS"
+                }
+              },
+              {
+                "id": "1:22",
+                "name": "Card Body",
+                "type": "TEXT",
+                "fills": [
+                  { "type": "SOLID", "color": { "r": 0.357, "g": 0.373, "b": 0.416, "a": 1.0 } }
+                ],
+                "effects": [],
+                "style": {
+                  "fontFamily": "Inter",
+                  "fontSize": 14,
+                  "fontWeight": 400,
+                  "lineHeightPx": 20,
+                  "lineHeightUnit": "PIXELS"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "styles": {},
+  "components": {
+    "comp-sm-default": {
+      "key": "k1",
+      "name": "Size=sm, State=default",
+      "componentSetId": "set-button"
+    },
+    "comp-sm-hover": {
+      "key": "k2",
+      "name": "Size=sm, State=hover",
+      "componentSetId": "set-button"
+    },
+    "comp-md-default": {
+      "key": "k3",
+      "name": "Size=md, State=default",
+      "componentSetId": "set-button"
+    },
+    "comp-primary": {
+      "key": "k4",
+      "name": "Primary"
+    }
+  },
+  "componentSets": {
+    "set-button": {
+      "key": "ks1",
+      "name": "Button"
+    }
+  }
+}
