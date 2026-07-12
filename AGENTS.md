@@ -47,6 +47,16 @@ A spec handed to an executor carries: source-of-truth vs generated files, the na
 discipline for any new linter rule (positive AND negative tests), the baseline test count,
 and the definition of done (`npm test` clean, `tsc` clean, `npm run build` succeeds).
 
+### The pipeline's own agents
+
+`adapters/tool-map.json` resolves each agent's abstract tier to a concrete model per host.
+On the Codex host both tiers currently resolve to the **GPT-5.6** generation; the
+role-to-reasoning split above (Sol for orchestration/review, Terra xhigh for precise edits,
+Luna high for the cheap lane) is how a run should assign work within that generation.
+`omd-framer`, `omd-scout`, and `omd-eye` are the `@high` (plan/measure/review) agents;
+`omd-hand` is the `@medium` (build) agent — the same frontier-plans/efficient-builds split
+the Claude host expresses as Opus and Sonnet 5.
+
 ## Repository conventions
 
 - **Source of truth is `src/`.** `src/agents/*.agent.yaml` and `src/skills/omd-*/SKILL.md`

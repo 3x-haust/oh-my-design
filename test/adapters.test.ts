@@ -36,7 +36,7 @@ test('no @token survives emission', () => {
 test('agents render to toml for codex and md for claude, with the right model', () => {
   const toml = textFile(emitCodex({ agents: [AGENT] }), 'agents/omd-eye.toml');
   assert.match(toml, /^name = "omd-eye"/m);
-  assert.match(toml, /model = "gpt-5\.5"/);
+  assert.match(toml, /model = "gpt-5\.6"/);
   assert.match(toml, /model_reasoning_effort = "high"/);
   assert.match(toml, /developer_instructions = """/);
 

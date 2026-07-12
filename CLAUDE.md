@@ -28,6 +28,22 @@ generated, the narrowness discipline for any new linter rule (positive AND negat
 the baseline test count, and the definition of done (`npm test` clean, `tsc` clean,
 `npm run build` succeeds).
 
+### Role → model
+
+| Role | Model | Why |
+|---|---|---|
+| **Orchestration · architecture · high-risk review (planner/critic)** | **Opus** | Holds whole-repo context, decides what changes and why, reviews the diff it did not write. |
+| **Precise code-edit executor** | **Sonnet 5** | The builder — writes the code, the tests, and runs the gates from a written spec. |
+| **Low-cost lane** | **Haiku 4.5** | Cheaper lane for lower-risk mechanical work when quality permits. |
+
+**The pipeline's own agents already embody this.** `adapters/tool-map.json` resolves each
+agent's abstract tier to a concrete model: `@high` → `claude-opus-4-8`, `@medium` →
+`claude-sonnet-5`. So `omd-framer` (interrogates the brief), `omd-scout` (measures
+references), and `omd-eye` (critiques in a fresh context) run on Opus, while `omd-hand`
+(builds the committed structure) runs on Sonnet 5 — planning and review on the frontier
+model, building on the builder. On the Codex host the same tiers resolve to the GPT-5.6
+generation (see `AGENTS.md`).
+
 ## Repository conventions
 
 - **Source of truth is `src/`.** `src/agents/*.agent.yaml` and `src/skills/omd-*/SKILL.md`
