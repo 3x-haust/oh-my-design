@@ -169,7 +169,7 @@ omd doctor
 
 ## 📚 이론 팩
 
-색은 제품에 대한 주장이고, 이론 팩은 그 주장의 근거가 사는 곳이다. 일곱 파일이 `core/theory/`로 내장되고, 각 항목은 조건 → 선택 → 이유 구조에 실명 출처가 붙는다 — Elliot & Maier, Bringhurst, Müller-Brockmann, Nielsen, NN/g:
+색은 제품에 대한 주장이고, 이론 팩은 그 주장의 근거가 사는 곳이다. 여덟 파일이 `core/theory/`로 내장되고, 각 항목은 조건 → 선택 → 이유 구조에 실명 출처가 붙는다 — Elliot & Maier, Bringhurst, Müller-Brockmann, Nielsen, NN/g:
 
 | 파일 | 답하는 질문 |
 | --- | --- |
@@ -180,6 +180,7 @@ omd doctor
 | `components.md` | 버튼 위계 상한, 검증 타이밍, 내비게이션, 테이블, 모달과 그 대안, 토스트, 검색 |
 | `craft.md` | 이론서가 건너뛰는 것: 여러 겹 그림자, 보더 없는 구분, 투명도 계층 텍스트, 옵티컬 정렬, 60fps 안전 속성 |
 | `expressive.md` | 어워드 사이트 해부학 — Awwwards 배점표에서도 유저빌리티가 크리에이티비티를 이긴다; 내러티브로서의 스크롤; 절제 조항이 붙은 기법 카탈로그 |
+| `ux.md` | 태스크 우선 프레이밍; 내비게이션 IA 결정; 플로우 설계(단계·기본값·막다른 길); 피드백과 Doherty 임계값; 인지 부하와 점진적 공개; 첫 실행·빈 상태; peak-end 설계; Nielsen 10 휴리스틱 점검 질문 |
 
 컨셉 단계는 방향을 정하기 전에 이걸 읽는다. hand는 보드가 커버하지 않는 결정마다 이걸 인용한다 — 인용 없는 선택은 발견이다.
 
@@ -190,7 +191,7 @@ src/
   agents/                  소스 오브 트루스: framer, scout, hand, eye
   skills/                  소스 오브 트루스: ultradesign, scout, critique, humanize, coach
 core/
-  theory/                  7파일 이론 팩 (dist/로 배포)
+  theory/                  8파일 이론 팩 (dist/로 배포)
   ref/                     레퍼런스 측정, 근친 검사, signal + slop 스코어링
   render/                  headless Playwright: 렌더, 필름스트립, 모션·hover·focus 프로브
   rules/                   린터 엔진 + 내장 룰 (slop, motion, a11y, tokens)

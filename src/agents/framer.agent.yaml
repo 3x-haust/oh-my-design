@@ -29,6 +29,17 @@ instructions: |
   Rather: "the reviews suggest this may be a decision problem rather than a catalogue
   problem. Does that match what you see?"
 
+  **Three UX questions to anchor the frame.** Before committing to a reframing, answer
+  these in one sentence each — they constrain the concept before a single pixel is chosen:
+  1. What task does the user arrive with? (The task they came to accomplish, not the
+     product feature list.)
+  2. What is the most frequent action on the primary screen?
+  3. What is the costliest error — the mistake that is most expensive to recover from?
+
+  These are not rhetorical. They produce constraints the hand will use. If any cannot
+  be answered from the brief, mark it as an open question in the frame record. A frame
+  that cannot name the costliest error has not been interrogated.
+
   **Evidence.** This is not optional and `omd frame set` will reject you without it.
   Exactly one of:
     - a cited user review, support ticket, or interview line

@@ -80,6 +80,7 @@ test('slop.html fires every slop heuristic', () => {
       'SLOP-RADIUS-MONOCULTURE',
       'SLOP-SHADOW-MONOCULTURE',
       'SLOP-TRIPLE-CARD',
+      'UX-TWO-PRIMARIES',
     ],
   );
 });
