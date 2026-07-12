@@ -251,6 +251,109 @@ the content it was announcing. "아래는 그 기록이에요." → delete it; b
 The negative to hold in mind: "아래 버튼을 누르세요" does not fire. 아래 used as a spatial
 adverb (without the topic marker 는) is navigation copy, not structural narration.
 
+### Calibration evidence: what the measured gap between human and pipeline prose reveals
+
+The following lessons come from a direct calibration: a 16,000-character Korean personal tech
+essay by Evan Moon (evan-moon.github.io/2020/12/29/2020-retrospective/, published December 2020,
+fully human-authored) was used as the baseline. A parallel version covering the same facts was
+written by following voice.md and the humanize skill rules faithfully. The two versions were
+measured against the same metrics. The gaps name what our rules actively get wrong.
+
+**Measured diff table (N=26–36 sentences per version, character lengths exclude spaces):**
+
+| Metric | Human essay | Our version |
+|---|---|---|
+| Sentence length min | 8 chars | 8 chars |
+| Sentence length max | 114 chars | 48 chars |
+| Sentence length mean | 50.4 chars | 19.9 chars |
+| Sentence length σ | 26.1 | 9.8 |
+| Ending diversity (unique/total) | 0.86 | 0.96 |
+| Connective rate (per sentence) | 0.42 | 0.00 |
+| C-11 violations (connective+comma) | 1 | 0 |
+| Parenthetical asides | 6 in full article | 0 |
+| Unresolved uncertainty markers | 5 | 0 |
+
+**Lesson 1 — Register context: 해요체 is for product copy, not essays**
+
+The sampled human essay uses the informal narrative register (-다 style) throughout: 해였다,
+것 같다, 생각이었다, 모르겠다. None of these are 해요체 or 합니다체. Korean personal essays,
+회고글, and reflective blog posts are written in this register — it is the written voice of a
+person narrating their own experience, not the addressed voice of a product speaking to a user.
+
+Our rules prescribe 해요체 for Korean copy. Applied to an essay, that produces a newsletter
+register: warm, present-tense, second-person-inflected — correct for UI strings and product
+stories but wrong for first-person retrospective prose. A 회고글 in 해요체 sounds like a
+product announcement; a 회고글 in -다 register sounds like someone who was actually there.
+
+Condition → choice → reason: before applying the 해요체 standard, identify the genre. Product
+copy (UI strings, error messages, landing pages, marketing copy): 해요체, without exception.
+Personal essays, 회고글, developer blog posts: match the register the genre demands. The rule
+from voice.md applies at the product layer; it was never a claim about all Korean writing.
+
+**Lesson 2 — Connective overcorrection: the tell is the comma, not the connective**
+
+The sampled human essay uses connectives at a rate of 0.42 per sentence — 15 connectives
+across 36 sentences, including 하지만, 그래서, 그런데, 물론, 또한, 사실, 결국. Not one
+is followed by a comma (C-11 count: 1, a naturally-occurring case). The human connective
+rate is high because connectives carry logical structure; they are not AI tells by themselves.
+
+The pipeline version, shaped by the SKILL.md rule against "connector abuse," produced zero
+connectives across 26 sentences. That is not more human — it is a different kind of abnormal.
+Abrupt juxtaposition without connectives reads as choppy, clipped, produced by a sentence-by-
+sentence generator rather than a mind that knows where the paragraph is going.
+
+What the C-11 rule identifies is the specific pattern of a connective immediately followed by
+a comma — 하지만, / 그러나, / 또한, / 따라서, — which appears in Korean generated text but
+almost never in natural writing. The rule does not say: remove all connectives.
+
+Condition → choice → reason: the connective-abuse tell is clustering (3+ consecutive sentences
+opening with connectives) and the comma after the connective. A paragraph that uses 하지만 or
+그런데 once to mark a logical turn is natural. A paragraph that opens five consecutive sentences
+with 또한/따라서/즉/그리고 is the fingerprint. Eliminate the pattern, not the words.
+
+**Lesson 3 — Parenthetical asides: a positive model our rules never named**
+
+The sampled essay contains six parenthetical asides across 16,000 characters — roughly one per
+1,000 characters, or once every three to four paragraphs: "(살면서 노래방을 이렇게 안 가본 게
+처음…)", "(결국 이러다가 번아웃이 왔었지만, 습관은 잘 안 고쳐지더라…)", "(그리고 스스로 뭔가
+꼰대 같다는 생각이 들어서 이걸 깨닫고 한동안 우울했었다)". These are self-interruptions —
+second thoughts, humor, corrections — that signal a mind present on the page, not a generator
+completing a paragraph.
+
+The pipeline produces zero. The tells list names what to remove; it has no positive model for
+this form. An essay with no parenthetical asides in 3,000+ characters is measurably flatter
+than the human baseline.
+
+Condition → choice → reason: in essayistic Korean prose (blog posts, 회고글, product stories),
+if no parenthetical aside has appeared in 1,000+ characters, look for a place where a second
+thought belongs. Not as decoration — as the actual second thought being suppressed to keep the
+paragraph clean. The aside earns its position when the main sentence structure has nowhere to
+put what needs to be said.
+
+**Lesson 4 — σ and unresolved uncertainty: the most human signal is incompleteness**
+
+The human essay's sentence-length σ was 26.1; the pipeline's was 9.8. The maximum sentence
+length in the human essay was 114 characters (no spaces); the pipeline capped at 48. The
+burstiness rule in voice.md is correct in direction, but execution under the rules remains too
+controlled. "After two long sentences, write a short one" is necessary but not sufficient —
+the human also writes two long sentences after the short one, and then another 114-character
+one. The human doesn't manage rhythm; the human follows thought wherever it goes.
+
+The sampled human essay closed its mentoring section with: "하지만 아직도 잘 모르겠다." Thirteen
+characters. The pipeline produced: "이게 올해가 남긴 가장 큰 질문이에요." That is a packaged
+takeaway. It names the lesson; it does not live in the uncertainty. The human's 13-character
+sentence is more trustworthy precisely because it refuses to resolve what has not been resolved.
+
+The full article closed with: "2020년에는 결국 이렇게 답을 찾지 못한 질문으로 회고를 마무리하지만,
+내년 2021년 회고에는 이 질문과 고민에 대한 답을 찾아서 회고에 적는 것을 목표로 잡아야겠다." The
+human commits to finding the answer next year rather than having found it this year.
+
+Condition → choice → reason: when an essay section ends, ask whether a tidy conclusion is
+honest or performed. A genuine takeaway — something the writer actually learned and can state
+— earns the closure. A resolution that smoothes over ongoing uncertainty is a model completing
+its pattern. "아직도 잘 모르겠다" is human; "이게 핵심 교훈이에요" for a lesson still in progress
+is a tell. If the answer does not exist yet, state that instead.
+
 ### Uniform sentence endings and not-X-but-Y: pre-handoff checks, not linter rules
 
 Two Korean AI tells are real but cannot be made into safe deterministic rules:

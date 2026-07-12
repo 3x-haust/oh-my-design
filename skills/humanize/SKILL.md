@@ -70,7 +70,13 @@ makes rewrites noisy and trust collapse fast. Three tiers:
 - **Redundant modification**: 매우/정말/아주 습관적 사용, 유의어 쌍(명확하고 분명한),
   -적/-성/-화 접미사 남발
 - **Hedging stacks**: ~할 수 있을 것으로 보인다, ~일 수도 있다고 생각된다
-- **Connector abuse**: 또한/따라서/즉/그리고 로 연속 문장 시작
+- **Connector abuse**: 또한/따라서/즉/그리고 로 연속 문장 시작 — 3문장 이상 연속으로 접속어가 오거나,
+  C-11 패턴(접속어 직후 쉼표)이 있을 때만 처리. 접속어 자체는 삭제하지 않는다. 자연어에서 접속어
+  사용률은 문장당 0.4 수준이 정상이다. 접속어를 전부 제거하면 끊어읽기가 비인간적으로 느껴진다.
+- **Tidy closure** (S2): 에세이·회고글 등 essayistic 장르에서 아직 해결되지 않은 질문을
+  해결된 것처럼 포장하는 문단 마무리. "이게 가장 큰 교훈이에요", "올해의 핵심 수확이에요" 형태로
+  불확실성을 지운다. 인간 필자는 "하지만 아직도 잘 모르겠다" 처럼 열린 결말을 쓴다. 단, product
+  copy나 튜토리얼은 예외 — 명확한 takeaway가 정당하다. essayistic 맥락에서만 플래그.
 - **Formal-noun padding**: ~것이다, ~점이다, ~수 있다 로만 끝나는 문단
 
 ## The tells (English)
