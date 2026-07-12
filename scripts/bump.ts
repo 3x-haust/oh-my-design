@@ -17,6 +17,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { buildReleaseNotes } from './release-notes.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -103,6 +104,25 @@ function run(args: string[]): void {
   }
 
   process.stdout.write(`\nready: v${version} — commit .claude-plugin/plugin.json, .claude-plugin/marketplace.json, package.json\n`);
+
+  // Print a release notes preview so the committer can see what CI will
+  // generate.  PR list and test count are filled in by the release workflow;
+  // this preview uses the locally-available data only.
+  const prevTagResult = spawnSync('git', ['describe', '--tags', '--abbrev=0'], {
+    cwd: root,
+    encoding: 'utf8',
+  });
+  const prevTag = prevTagResult.stdout?.trim() || 'v0.0.0';
+  const preview = buildReleaseNotes({
+    version,
+    prevTag,
+    summary: `Release v${version}`,
+    prs: [],   // CI populates this from gh pr list
+    testCount: 0, // CI runs the suite and injects the real count
+  });
+  process.stdout.write('\n── release notes preview (CI fills PR list + test count) ──\n');
+  process.stdout.write(preview + '\n');
+  process.stdout.write('────────────────────────────────────────────────────────────\n');
 }
 
 import { pathToFileURL } from 'node:url';
