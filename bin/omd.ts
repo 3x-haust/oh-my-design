@@ -40,10 +40,12 @@ interface Opts {
   blueprint?: boolean;
   /** Directory of pages for cross-page site consistency check (`omd check --site <dir>`). */
   site?: string;
-  /** Similarity threshold for `omd figma diff` (0–1, default 0.97). */
+  /** Similarity threshold for `omd figma diff` / `omd target diff` (0–1, default 0.97). */
   threshold?: string;
   /** Force re-export even when a cached Figma export exists (`omd figma diff --fresh`). */
   fresh?: boolean;
+  /** Named visual target to diff against (`omd target diff --target <name>`). */
+  target?: string;
 }
 
 const FLAGS = new Set(['json', 'no-log', 'image', 'filmstrip', 'from-user', 'blueprint', 'fresh']);
@@ -922,6 +924,140 @@ async function cmdDoctor(): Promise<never> {
   process.exit(allPass ? 0 : 1);
 }
 
+// ── Target commands ──────────────────────────────────────────────────────────
+
+/**
+ * `omd target set <image-path-or-url> --as <name>`
+ *
+ * Download or copy the reference image into `.omd/target/<name>.png` and record
+ * its dimensions (the intended render viewport). Multiple named targets allowed.
+ * Accepts local file paths and HTTP/HTTPS URLs; no new dependencies — uses the
+ * built-in `fetch` for URL downloads and the in-repo decodePng for dimensions.
+ */
+async function cmdTargetSet(opts: Opts): Promise<never> {
+  const source = opts._[0];
+  if (!source || !opts.as) {
+    console.error('usage: omd target set <image-path-or-url> --as <name>');
+    process.exit(1);
+  }
+
+  let buf: Buffer;
+  if (/^https?:\/\//.test(source)) {
+    const res = await fetch(source);
+    if (!res.ok) {
+      console.error(`failed to download target image (${res.status}): ${source}`);
+      process.exit(1);
+    }
+    buf = Buffer.from(await res.arrayBuffer());
+  } else {
+    const absPath = resolve(source);
+    if (!existsSync(absPath)) {
+      console.error(`file not found: ${source}`);
+      process.exit(1);
+    }
+    buf = readFileSync(absPath);
+  }
+
+  const { registerTarget } = await import('../core/target/index.ts');
+  const entry = registerTarget(process.cwd(), opts.as, source, buf);
+
+  console.log(
+    `target "${entry.name}" registered  ${entry.viewport.width}×${entry.viewport.height}  ${entry.path}`,
+  );
+  process.exit(0);
+}
+
+/**
+ * `omd target diff <page> [--target <name>] [--viewport WxH] [--threshold N] [--json]`
+ *
+ * Renders the build page at the target's stored viewport dimensions, decodes both
+ * PNGs with the in-repo decoder, and compares them using the same algorithm and
+ * contract as `omd figma diff`. Exits 1 when the similarity score falls below the
+ * threshold (default 0.97). `--json` emits the stable DiffResult for a fix loop.
+ */
+async function cmdTargetDiff(opts: Opts): Promise<never> {
+  const page = opts._[0];
+  if (!page) {
+    console.error('usage: omd target diff <page> [--target <name>] [--viewport WxH] [--threshold N] [--json]');
+    process.exit(1);
+  }
+
+  const threshold =
+    opts.threshold !== undefined ? parseFloat(opts.threshold) : 0.97;
+  if (isNaN(threshold) || threshold < 0 || threshold > 1) {
+    console.error('--threshold must be a number between 0 and 1');
+    process.exit(1);
+  }
+
+  const jsonOut = opts.json === true;
+
+  const { listTargets, findTarget, compareAgainstTarget, formatDiffReport } = await import('../core/target/index.ts');
+  const { renderPage, parseViewport } = await import('../core/render/index.ts');
+
+  // Resolve target entry
+  let entry;
+  if (opts.target) {
+    entry = findTarget(process.cwd(), opts.target);
+    if (!entry) {
+      console.error(`target "${opts.target}" not found. Run \`omd target list\` to see registered targets.`);
+      process.exit(1);
+    }
+  } else {
+    const all = listTargets(process.cwd());
+    if (all.length === 0) {
+      console.error('no targets registered. Run `omd target set <image> --as <name>` first.');
+      process.exit(1);
+    }
+    entry = all[0]!;
+    if (!jsonOut) console.log(`using target "${entry.name}" (first registered)`);
+  }
+
+  // Render viewport: --viewport flag overrides the target's stored dimensions
+  const viewport = opts.viewport
+    ? parseViewport(opts.viewport)
+    : { width: entry.viewport.width, height: entry.viewport.height };
+
+  // Render the build
+  const rendersDir = join(process.cwd(), '.omd', 'target', '.renders');
+  mkdirSync(rendersDir, { recursive: true });
+  const safeTarget = entry.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const renderPath = join(rendersDir, `${safeTarget}.png`);
+
+  if (!jsonOut) {
+    console.log(`rendering ${page} at ${viewport.width}×${viewport.height} …`);
+  }
+  await renderPage(page, { viewport, out: renderPath });
+
+  // Compare
+  const targetBuf = readFileSync(entry.path);
+  const buildBuf = readFileSync(renderPath);
+  const result = compareAgainstTarget(targetBuf, buildBuf, threshold);
+
+  if (jsonOut) {
+    console.log(JSON.stringify(result, null, 2));
+  } else {
+    console.log('\n' + formatDiffReport(result));
+  }
+
+  process.exit(result.pass ? 0 : 1);
+}
+
+/** `omd target list` — show all registered visual targets. */
+async function cmdTargetList(): Promise<never> {
+  const { listTargets } = await import('../core/target/index.ts');
+  const targets = listTargets(process.cwd());
+  if (targets.length === 0) {
+    console.log('No targets registered. Run `omd target set <image> --as <name>`.');
+    process.exit(0);
+  }
+  for (const t of targets) {
+    console.log(
+      `${t.name}  ${t.viewport.width}×${t.viewport.height}  source: ${t.source}  registered: ${t.registeredAt.slice(0, 10)}`,
+    );
+  }
+  process.exit(0);
+}
+
 function usage(): never {
   console.error(
     'usage: omd <command>\n\n'
@@ -954,7 +1090,12 @@ function usage(): never {
   + '\n'
   + '  figma pull <file-url>                        fetch Figma file -> .omd/figma/snapshot.json\n'
   + '  figma system                                 synthesize design system from snapshot\n'
-  + '  figma diff <frame-id> <page-or-url>          pixel diff: Figma export vs build render',
+  + '  figma diff <frame-id> <page-or-url>          pixel diff: Figma export vs build render\n'
+  + '\n'
+  + '  target set <image-path-or-url> --as <name>  register a visual target (mockup / screenshot)\n'
+  + '  target list                                  show registered targets\n'
+  + '  target diff <page> [--target <name>] [--viewport WxH] [--threshold N] [--json]\n'
+  + '                                               pixel diff: target vs build render (exit 1 below threshold)',
   );
   process.exit(1);
 }
@@ -1022,6 +1163,14 @@ async function main(): Promise<never> {
     if (sub === 'pull') return cmdFigmaPull(args[2]);
     if (sub === 'system') return cmdFigmaSystem();
     if (sub === 'diff') return cmdFigmaDiff(parseArgs(args.slice(2)));
+    return usage();
+  }
+
+  if (cmd === 'target') {
+    const opts = parseArgs(args.slice(2));
+    if (sub === 'set') return cmdTargetSet(opts);
+    if (sub === 'list') return cmdTargetList();
+    if (sub === 'diff') return cmdTargetDiff(opts);
     return usage();
   }
 

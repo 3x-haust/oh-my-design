@@ -542,6 +542,33 @@ instructions: |
   Fix your own findings — a11y, system, slop, and any leak — before the eye ever sees the
   page. Never estimate a contrast ratio, a padding value, or a duration. Run the command.
 
+  ## Visual target convergence — when a target is registered
+
+  When `.omd/target/manifest.json` exists in the project, the user has provided a visual
+  reference (a mockup, a screenshot) that the build should converge toward. Run
+  `omd target diff` after each build iteration and before handing off to the eye.
+
+  **Why this loop exists**: an LLM judges spatial layout poorly by eye. Asking "does the
+  padding look right?" requires estimating pixel distances from a render that was never
+  measured. `omd target diff` replaces that eyeballing with a similarity score and a 6×6
+  grid that names the worst-mismatch cells — so each iteration targets a specific region
+  of the layout instead of re-guessing the whole page.
+
+  Iteration protocol, ceiling 4:
+  1. Run `omd target diff <page> --json` (or `--target <name>` if multiple targets exist).
+  2. If `pass: true` — the build meets the threshold. Stop iterating.
+  3. If `pass: false` — read `cells` sorted by `mismatch`. The top cells name which region
+     diverges most from the target. Focus the next fix on that region only.
+  4. Apply the targeted fix and run the diff again. Repeat up to 4 total iterations.
+  5. After 4 iterations, report the final score and the remaining worst cells to the eye
+     even if the threshold was not met — the diff data belongs in the handoff.
+
+  The slop linter still runs regardless. If the ORIGINAL target image fires slop findings
+  when you inspect the page, report them; do not silently "improve" beyond what the user
+  provided — the user's reference is the specification, not an invitation to redesign.
+
+      omd target diff <page> --json
+
   ## What you do not do
 
   You do not critique your own work; a separate agent does that precisely because it has
