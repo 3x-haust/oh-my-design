@@ -1166,6 +1166,54 @@ async function cmdTargetList(): Promise<never> {
   process.exit(0);
 }
 
+/**
+ * `omd pack dir`        — prints the absolute path of the knowledge-pack root (<root>/core).
+ * `omd pack list`       — enumerates every .md file in the pack, one relative path per line.
+ * `omd pack <relpath>`  — prints one pack file to stdout (e.g. `omd pack theory/color.md`).
+ *
+ * These three forms let any host (Claude Code, Codex, or a plain shell) resolve pack paths
+ * without knowing where the plugin was installed. A prompt that needs theory/color.md can
+ * run `omd pack dir` once and Read the file from the printed path — no env-var assumptions.
+ */
+function cmdPack(sub: string | undefined, ...rest: string[]): never {
+  const packsRoot = join(root, 'core');
+
+  if (sub === 'dir') {
+    console.log(packsRoot);
+    process.exit(0);
+  }
+
+  if (sub === 'list') {
+    function* walkMd(dir: string, rel: string): Generator<string> {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const entryRel = rel ? `${rel}/${entry.name}` : entry.name;
+        if (entry.isDirectory()) yield* walkMd(join(dir, entry.name), entryRel);
+        else if (entry.name.endsWith('.md')) yield entryRel;
+      }
+    }
+    if (!existsSync(packsRoot)) {
+      console.error(`pack root not found: ${packsRoot}`);
+      process.exit(1);
+    }
+    for (const rel of walkMd(packsRoot, '')) console.log(rel);
+    process.exit(0);
+  }
+
+  if (sub) {
+    // `omd pack <relpath>` — treat `sub` as a relative path under the pack root.
+    const target = join(packsRoot, sub, ...rest);
+    if (!existsSync(target)) {
+      console.error(`pack file not found: ${target}`);
+      process.exit(1);
+    }
+    process.stdout.write(readFileSync(target, 'utf8'));
+    process.exit(0);
+  }
+
+  console.error('usage: omd pack dir | list | <relpath>');
+  process.exit(1);
+}
+
 function usage(): never {
   console.error(
     'usage: omd <command>\n\n'
@@ -1196,6 +1244,10 @@ function usage(): never {
     + '\n'
     + '  design                                       discover evidence and create/refresh .omd/design.md\n'
     + '  design --check                              validate design.md section coverage\n'
+    + '\n'
+    + '  pack dir                                    print the knowledge-pack root path\n'
+    + '  pack list                                   list all pack .md files\n'
+    + '  pack <relpath>                              print one pack file (e.g. theory/color.md)\n'
     + '\n'
     + '  doctor                                       check environment prerequisites\n'
   + '\n'
@@ -1269,6 +1321,7 @@ async function main(): Promise<never> {
   }
 
   if (cmd === 'design') return cmdDesign(parseArgs(args.slice(1)));
+  if (cmd === 'pack') return cmdPack(sub, ...args.slice(2));
   if (cmd === 'doctor') return cmdDoctor();
 
   if (cmd === 'figma') {

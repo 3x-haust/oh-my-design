@@ -1,10 +1,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { parse as parseToml } from 'smol-toml';
 import { parse as parseYaml } from 'yaml';
 import { emitCodex } from '../adapters/codex.ts';
 import { emitClaude } from '../adapters/claude.ts';
 import { must, textFile } from './helpers.ts';
+
+const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 interface AgentToml {
   name?: string;
@@ -68,4 +73,55 @@ test('an agent with no deny list gets no denial prose', () => {
   const cfg = parseToml(toml) as unknown as AgentToml;
   const instructions = must(cfg.developer_instructions, 'developer_instructions');
   assert.ok(!/HARD CONSTRAINT/.test(instructions));
+});
+
+// ── CLAUDE_PLUGIN_ROOT must never appear in emitted output ──
+//
+// Regression gate: if any src agent or skill reintroduces ${CLAUDE_PLUGIN_ROOT},
+// the emitters for both hosts will carry a path that resolves to nothing on Codex
+// (and is fragile on Claude Code too). Both codex and claude emission are checked
+// so a host-conditional reintroduction does not slip through.
+
+function loadRealAgents(): import('../core/types.ts').AbstractAgent[] {
+  const dir = join(root, 'src', 'agents');
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir)
+    .filter((f) => f.endsWith('.agent.yaml'))
+    .map((f) => parseYaml(readFileSync(join(dir, f), 'utf8')) as import('../core/types.ts').AbstractAgent);
+}
+
+function loadRealSkillSources(): string[] {
+  const dir = join(root, 'src', 'skills');
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir)
+    .map((name) => join(dir, name, 'SKILL.md'))
+    .filter((p) => existsSync(p))
+    .map((p) => readFileSync(p, 'utf8'));
+}
+
+test('no CLAUDE_PLUGIN_ROOT in emitted codex agent output', () => {
+  const agents = loadRealAgents();
+  const dump = JSON.stringify(emitCodex({ agents }).files);
+  assert.ok(
+    !dump.includes('CLAUDE_PLUGIN_ROOT'),
+    `CLAUDE_PLUGIN_ROOT leaked into codex emission — update src agent/skill to use omd pack dir instead`,
+  );
+});
+
+test('no CLAUDE_PLUGIN_ROOT in emitted claude agent output', () => {
+  const agents = loadRealAgents();
+  const dump = JSON.stringify(emitClaude({ agents }).files);
+  assert.ok(
+    !dump.includes('CLAUDE_PLUGIN_ROOT'),
+    `CLAUDE_PLUGIN_ROOT leaked into claude emission — update src agent/skill to use omd pack dir instead`,
+  );
+});
+
+test('no CLAUDE_PLUGIN_ROOT in real skill sources', () => {
+  for (const source of loadRealSkillSources()) {
+    assert.ok(
+      !source.includes('CLAUDE_PLUGIN_ROOT'),
+      `CLAUDE_PLUGIN_ROOT found in skill source — update to use omd pack dir instead`,
+    );
+  }
 });

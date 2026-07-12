@@ -107,18 +107,17 @@ do two things that take the decision out of preference and into evidence.
 
 ### Read the theory pack
 
-Read `${CLAUDE_PLUGIN_ROOT}/core/theory/color.md`,
-`${CLAUDE_PLUGIN_ROOT}/core/theory/typography.md`, and
-`${CLAUDE_PLUGIN_ROOT}/core/theory/layout.md` before choosing a direction. If running
-outside the plugin, the files are at `core/theory/` in the repo root. These files are not
+Read `theory/color.md`, `theory/typography.md`, and `theory/layout.md` from the directory
+`omd pack dir` prints (in this repo: `core/theory/`) before choosing a direction. These files are not
 background reading — they are decision tables. `color.md` maps domain conventions to their
 psychological reasons; `typography.md` maps scale ratios to their register. Pull the
 entries that apply to this domain and this concept, and use them as constraints.
 
 If the brief signals a showpiece register (see below), also read
-`${CLAUDE_PLUGIN_ROOT}/core/theory/expressive.md` before committing. It is the decision
-table for expressive technique: what earns its place, what does not, and the restraint
-clause that keeps showpiece work from becoming an effects catalogue.
+`theory/expressive.md` under the directory `omd pack dir` prints (in this repo:
+`core/theory/expressive.md`) before committing. It is the decision table for expressive
+technique: what earns its place, what does not, and the restraint clause that keeps
+showpiece work from becoming an effects catalogue.
 
 ### Run domain research
 
@@ -205,7 +204,8 @@ the interface does not perform for its own sake.
 
 When the register is **showpiece**:
 
-1. Read `${CLAUDE_PLUGIN_ROOT}/core/theory/expressive.md` before proceeding.
+1. Read `theory/expressive.md` under the directory `omd pack dir` prints (in this repo:
+   `core/theory/expressive.md`) before proceeding.
 2. The scout must source from award galleries (see step 3 for the list).
 3. **The one memorable thing must be defined as an orchestrated moment**, not a technique
    name. "split-text hero" is a technique. "The moment mid-scroll where the entire page
@@ -375,7 +375,7 @@ omd decision "Committed to a conversational structure" --why "serves the concept
 ```
 
 **Name the composition recipe the structure uses.** The composition cookbook lives at
-`${CLAUDE_PLUGIN_ROOT}/core/composition/` — eight page-level layout recipes (typographic
+`composition/` under the directory `omd pack dir` prints (in this repo: `core/composition/`) — eight page-level layout recipes (typographic
 hero, bento grid, split-screen hero, section inversion, asymmetric grid, editorial index
 labels, sidebar margin annotation, sticky sidebar). The committed structure must cite at
 least one recipe by file name, or record the reason none applies. This is how the
@@ -421,8 +421,8 @@ and write fresh copy in the project's voice. The attribution row must read "tran
 applies after the build — a transplanted component does not exempt the page from `omd ref
 distance`.
 
-The motion cookbook is at `${CLAUDE_PLUGIN_ROOT}/core/motion/` — easing vocabulary in
-`easing.md`, twelve implementation recipes in `recipes/`. The hand implements motion FROM
+The motion cookbook is at `motion/` under the directory `omd pack dir` prints (in this
+repo: `core/motion/`) — easing vocabulary in `easing.md`, twelve implementation recipes in `recipes/`. The hand implements motion FROM
 the cookbook: each scene in `.omd/motion-spec.md` cites the recipe file it uses and
 documents which board-measured values fill the parameter slots. A motion pattern outside
 the cookbook requires a written reason in the spec. The hand never fills parameter slots
@@ -438,7 +438,7 @@ set of cited numbers rather than to 500ms ease-in-out from habit.
 
 Every image zone and background section that lacks final photography must ship as a
 deliberate alternative — never a grey placeholder box. The graphics cookbook lives at
-`${CLAUDE_PLUGIN_ROOT}/core/graphics/` — six recipes (gradient mesh, noise grain,
+`graphics/` under the directory `omd pack dir` prints (in this repo: `core/graphics/`) — six recipes (gradient mesh, noise grain,
 SVG geometric patterns, CSS illustration primitives, duotone image presets, placeholder
 policy). `omd:hand` cites the graphics recipe covering each background treatment in
 `.omd/attribution.md`. A custom background not from the cookbook requires a written
@@ -455,8 +455,8 @@ reframe step is for. Rebuilding once is cheaper than generating alternatives eve
 the chance it might be.
 
 **Before handing off to the eye, the build is only done when the finish pass is done.**
-The finish-pass checklist lives at `${CLAUDE_PLUGIN_ROOT}/core/craft/finish-pass.md` (or
-`core/craft/finish-pass.md` in the repo root). `omd:hand` walks it after `omd check` returns
+The finish-pass checklist lives at `craft/finish-pass.md` under the directory `omd pack dir`
+prints (in this repo: `core/craft/finish-pass.md`). `omd:hand` walks it after `omd check` returns
 clean: `::selection` colour derived from the accent token, focus ring via `:focus-visible`
 (not outline suppression — `A11Y-FOCUS-SUPPRESSED` fires on bare suppression), scrollbar
 styling with `scrollbar-color`/`scrollbar-width` first and `-webkit-` as the noted fallback,
@@ -559,8 +559,8 @@ announces the work was generated. Humanize does not change what the copy says; i
 whether a person could have said it.
 
 The positive standard for what the copy should move toward — not just what it removes —
-is `core/theory/voice.md` (or `${CLAUDE_PLUGIN_ROOT}/core/theory/voice.md` inside the
-plugin). The key checks before handing off: sentence-length variance present (short after
+is `theory/voice.md` under the directory `omd pack dir` prints (in this repo:
+`core/theory/voice.md`). The key checks before handing off: sentence-length variance present (short after
 long, not uniform rhythm); information front-loaded in each paragraph; no Latinate
 nominalisations where a verb would serve; for Korean copy, one speech level held throughout
 and vocabulary temperature committed to 고유어 where precision allows.

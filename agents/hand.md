@@ -47,8 +47,8 @@ hover, the section transition. Everything else is still. A page where everything
 reads as a screen saver, not a product.
 
 **Implement motion from the cookbook, not from improvisation.** The cookbook lives at
-`${CLAUDE_PLUGIN_ROOT}/core/motion/recipes/` (or `core/motion/recipes/` in the repo
-root). Before writing any animation code, identify which recipe or recipes apply to
+`motion/recipes/` under the directory `omd pack dir` prints (in this repo: `core/motion/recipes/`).
+Before writing any animation code, identify which recipe or recipes apply to
 each scene in `.omd/motion-spec.md`. The spec must cite the recipe file by name for
 every scene — for example: "hero entrance → `split-text-entrance.md`, stagger 55ms".
 A motion pattern that is not in the cookbook requires a written reason in the spec;
@@ -60,8 +60,8 @@ illustrative default values in production — they are examples, not measurement
 Replace every `--duration-*`, `--ease-*`, and `--stagger-*` slot with the value
 the board's motion study provides.
 
-The easing vocabulary is at `${CLAUDE_PLUGIN_ROOT}/core/motion/easing.md`. Reference
-these tokens (`--ease-out-expo`, `--ease-out-back`, `--ease-spring`, etc.) by name in
+The easing vocabulary is at `motion/easing.md` under the directory `omd pack dir` prints
+(in this repo: `core/motion/easing.md`). Reference these tokens (`--ease-out-expo`, `--ease-out-back`, `--ease-spring`, etc.) by name in
 your `:root` declarations and in the motion spec. A hardcoded `cubic-bezier()` in a
 component that has a named easing token equivalent is the same defect as a hardcoded hex.
 
@@ -239,15 +239,16 @@ that dictated this specific line length. For every such decision, you have two o
 and no third:
 
 1. A board citation: "type-study-2 used a 1.25 modular scale — so this scale."
-2. A theory citation: read the relevant file from `${CLAUDE_PLUGIN_ROOT}/core/theory/`
-   (or, if running outside the plugin, `core/theory/` in the repo root) and cite it.
+2. A theory citation: read the relevant file from `theory/` under the directory
+   `omd pack dir` prints (in this repo: `core/theory/`) and cite it.
    Example: "typography.md: 1.25 is the standard scale for most UI — adjacent sizes
    distinct without theatrical separation."
 
 **Arbitrary decision is not a third option.** "I chose 1.333 because it felt right" is
 not a decision — it is a guess. The theory pack exists precisely to resolve the gaps the
-board leaves. Use it. Path: `${CLAUDE_PLUGIN_ROOT}/core/theory/{color,typography,layout,
-motion,components,craft,expressive,voice}.md`. Read whichever file covers the gap, pull
+board leaves. Use it. Path: `theory/{color,typography,layout,motion,components,craft,
+expressive,voice}.md` under the directory `omd pack dir` prints. Read whichever file
+covers the gap, pull
 the relevant condition→choice→reason entry, and record it in `omd decision`. For copy
 decisions — sentence rhythm, vocabulary temperature, register — cite `voice.md`
 specifically: it maps the burstiness finding to practical sentence construction, the
@@ -303,7 +304,7 @@ top/left appear in transition-property.
 
 Every page-level layout decision is a composition decision. Before writing a single
 grid rule or hero section, identify which composition recipe from
-`${CLAUDE_PLUGIN_ROOT}/core/composition/` (or `core/composition/` in the repo root)
+`composition/` under the directory `omd pack dir` prints (in this repo: `core/composition/`)
 applies to each structural zone.
 
 The committed structure in step 4 must cite at least one composition recipe or document
@@ -375,8 +376,8 @@ among many. If the page trips the threshold, change the other drivers.
 ## Imagery — no grey placeholder boxes, ever
 
 Every image zone must ship with a deliberate alternative when photography is absent.
-The graphics cookbook lives at `${CLAUDE_PLUGIN_ROOT}/core/graphics/` (or
-`core/graphics/` in the repo root). Before writing any background or image container,
+The graphics cookbook lives at `graphics/` under the directory `omd pack dir` prints
+(in this repo: `core/graphics/`). Before writing any background or image container,
 identify which graphics recipe applies.
 
 **A grey box is a design defect.** `core/graphics/placeholder-policy.md` defines
@@ -577,8 +578,8 @@ reads "I chose this" without a source is a finding.
 ## Finish pass — the last 5%
 
 After `omd check` returns clean and before handback, walk
-`${CLAUDE_PLUGIN_ROOT}/core/craft/finish-pass.md` (or `core/craft/finish-pass.md` in the
-repo root) top to bottom. Each item is either implemented or skipped with a written reason
+`craft/finish-pass.md` under the directory `omd pack dir` prints (in this repo:
+`core/craft/finish-pass.md`) top to bottom. Each item is either implemented or skipped with a written reason
 in `omd decision`. The six items are:
 
 1. **`::selection`** — derive the highlight colour from `--color-accent`. Default browser

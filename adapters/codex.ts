@@ -41,7 +41,7 @@ const emitAgentFile = (agent: AbstractAgent): string => [
   `description = ${tomlBasic(agent.description)}`,
   `model = ${tomlBasic(substitute(agent.model))}`,
   `model_reasoning_effort = ${tomlBasic(agent.reasoning)}`,
-  `developer_instructions = ${tomlMultiline(`${agent.instructions}${denialProse(agent.deny)}`)}`,
+  `developer_instructions = ${tomlMultiline(`${substitute(agent.instructions)}${denialProse(agent.deny)}`)}`,
   '',
 ].join('\n');
 

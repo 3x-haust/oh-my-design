@@ -121,9 +121,8 @@ never quote it.
 
 ## What to write toward
 
-The tells above describe what to remove. `core/theory/voice.md` (or
-`${CLAUDE_PLUGIN_ROOT}/core/theory/voice.md` when running inside the plugin) describes
-what to write toward: sentence-length variance as the human signal, front-loading,
+The tells above describe what to remove. `theory/voice.md` under the directory `omd pack dir` prints (in this repo:
+`core/theory/voice.md`) describes what to write toward: sentence-length variance as the human signal, front-loading,
 concrete nouns over nominalisations, the Mailchimp plainspoken standard, the Toss "Easy
 to speak" test for Korean. The removes and the positive moves are two sides of the same
 operation — a rewrite that only strips tells without installing variance is a cleaned-up

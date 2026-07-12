@@ -243,7 +243,7 @@ The contract covers brand personality, product goals, personas, information arch
 - Slop rules are heuristics. A brand really can be violet. That is why they warn, and why overruling requires a written reason.
 - The motion probe sees CSS and Web Animations; rAF-driven libraries (GSAP) are invisible to it, and the docs say so where it matters.
 - Reference capture reads public pages in a real browser and stores **measurements and reasoning, never assets**. Respect the sites you study.
-- Codex CLI support exists in-tree but is less battle-tested than the Claude Code path.
+- Codex CLI support is in-tree and path resolution is now host-neutral: agents and skills locate knowledge packs via `omd pack dir` rather than a Claude-Code-specific env var, and the regression test suite covers both hosts. What remains unverified on Codex is the live install flow — how the marketplace actually loads plugin.json, skills/, and agents/ during a real session.
 
 ## 📄 License
 
