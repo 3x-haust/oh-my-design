@@ -122,18 +122,37 @@ omd doctor
 
 ## 🧹 슬롭 린터
 
-`omd check`는 대비, 터치 영역, 간격, 토큰 커버리지를 재고 — **슬롭**, 즉 평균으로 수렴한 작업의 시그니처를 잰다. 슬롭 룰은 전부 warn이다. 각각이 의도된 선택에 대해 틀릴 수 있어서고, 뒤집으려면 서면 사유가 필요하다.
+`omd check`는 대비, 터치 영역, 간격, 토큰 커버리지를 재고 — **슬롭**, 즉 평균으로 수렴한 작업의 시그니처를 잰다. 룰 스물한 개, 전부 warn이다. 각각이 의도된 선택에 대해 틀릴 수 있어서고, 뒤집으려면 서면 사유가 필요하다. 세 계열로 나뉜다.
+
+**색·표면·레이아웃** — 기계의 디폴트 미학을 측정한다:
 
 | 룰 | 잡는 것 |
 | --- | --- |
 | `SLOP-GRADIENT` | 인디고→바이올렛 그라디언트 — hex 블록리스트가 아니라 색상 대역으로 |
+| `SLOP-GRADIENT-TEXT` | 그라디언트 제목 텍스트 — 스케일 대신 `background-clip`으로 위계를 흉내 |
 | `SLOP-RADIUS-MONOCULTURE` | 모든 모서리가 한 radius: 재질 위계가 없다 |
+| `SLOP-NESTED-RADIUS` | 안 맞물리는 모서리 — 안쪽 radius는 바깥에서 패딩을 뺀 값이어야 한다 |
 | `SLOP-SHADOW-MONOCULTURE` | 같은 그림자의 반복 — 전부 떠 있으면 아무것도 떠 있지 않다 |
+| `SLOP-OVERSIZED-SHADOW` | 작은 요소에 40px 넘는 blur — 장식이 된 그림자 |
+| `SLOP-GLASSMORPHISM` | 최대 radius + `backdrop-blur` 반투명: 구조가 아니라 흐림으로 만든 깊이 |
 | `SLOP-EVERYTHING-CENTERED` | 강조가 아니라 디폴트가 된 가운데 정렬 |
-| `SLOP-EMOJI-HEADING` | 타이포그래피가 못 한 일을 대신하는 이모지 |
-| `SLOP-TRIPLE-CARD` | 똑같은 카드 세 장: 뭐가 제일 중요한지 아무도 결정 안 했다는 자백 |
-| `SLOP-COPY` | "Unlock the power of…" — 어느 제품에나 맞는 카피는 이 제품에 대해 아무 말도 안 한다 |
+| `SLOP-TRIPLE-CARD` | 똑같은 카드 세 장 — 또는 대문자 통계 그리드: 뭐가 중요한지 아무도 결정 안 했다 |
+| `SLOP-NESTED-CARDS` | 카드 안의 카드 안의 카드 — 한 영역엔 한 표면 |
+| `SLOP-MONO-SPACING` | 모든 간격이 하나: 습관이 아니라 관계로 띄운다 |
+| `SLOP-FLAT-TYPE` | UI 전체가 14–18px 사이 — 대비 없는 스케일 |
+| `SLOP-BADGE-SPAM` | 크롬에 붙은 "Beta / New / Hot" 알약 |
+| `SLOP-FAKE-STAT` | 지어낸 통계 줄: 출처 없는 `10k+ / 99.9% / 24/7` |
+| `SLOP-EMOJI-HEADING` | 타이포그래피가 못 한 일을 대신하는 이모지 — 제목이든 버튼이든 |
+
+**카피** — 생성된 작업이 가장 먼저 자백하는 곳:
+
+| 룰 | 잡는 것 |
+| --- | --- |
+| `SLOP-COPY` | "Unlock the power of…", "이건 단순한 X가 아니라 Y다" — 어느 제품에나 맞는 카피 |
 | `SLOP-COPY-KO` | 한국어 AI 문체 틱: 접속어 뒤 쉼표, "~를 살펴보겠습니다", 첫째/둘째 나열 |
+| `SLOP-KO-EMDASH` | 한글 카피 속 띄어쓴 엠대시 — 번역 문장부호의 수입 |
+| `SLOP-KO-REGISTER-MIX` | 한 문단에서 흔들리는 해요체와 합니다체 |
+| `SLOP-KO-SIGNPOST` | 문서 구조를 낭독하는 카피 ("아래는 그 기록이에요") |
 | `SLOP-PINK-ELEPHANT` | "잡동사니 없이"라고 시키면 모델은 *"잡동사니가 없습니다"*라고 쓴다 — 자기부정 메타카피 |
 | `SLOP-LEAKED-RATIONALE` | 페이지 카피와 설계 노트가 다섯 단어 이상 겹침 |
 

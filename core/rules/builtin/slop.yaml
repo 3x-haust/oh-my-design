@@ -2,15 +2,6 @@
 # produced from pattern alone, without the position of an author who built the thing and
 # speaks the language. Two families live here:
 #
-# External source: 32 design and copy tells catalogued in kill-ai-slop by Yetone et al.
-# (github.com/yetone/kill-ai-slop, MIT licence). The triage table — which tells became
-# deterministic rules here, which were absorbed into existing rules, and which went to the
-# prompt layer — lives in the commit that introduced this comment. The detection playbook
-# at skill/references/detection.md informed every pattern choice; the taxonomy.md taxonomy
-# informed the grouping and the rejection reasons.
-#
-# Rule origins from that catalogue are cited inline as "kill-ai-slop #N".
-#
 # 1. Visual convergence-to-the-mean — the gradient band, the identical radius, the triple
 #    card grid. Correct, competent, indistinguishable from ten thousand others. That is the
 #    failure this tool was first built for.
@@ -71,7 +62,7 @@
   assert: "value < 60"
   message: "{value}% of text blocks are centred. Centring is emphasis, not a default. Emphasise everything and you emphasise nothing — and only a left-aligned paragraph gives the eye somewhere to return to on each line."
 
-# kill-ai-slop #15: widened from headings-only to also cover interactive nodes (buttons,
+# Widened from headings-only to also cover interactive nodes (buttons,
 # links). A CTA that opens with 🚀 borrows excitement it has not earned as much as a heading
 # that does. The check fires only on the starting emoji — a functional arrow or chevron
 # (Unicode Arrows block U+2190–U+21FF) is NOT in either emoji range and does not fire.
@@ -98,7 +89,7 @@
   # and the unanchored `이 (?:페이지|사이트|글)(?:에서)?는 .*(?:없습니다|않습니다)` (its greedy `.*`
   # swallowed ordinary 404s, empty states, and privacy copy). F3: moved the narrow Korean
   # self-negating pattern `이런 내용은 없` to SLOP-PINK-ELEPHANT, which covers the full family.
-  # F2 widening (kill-ai-slop #14): added three phrases with near-zero false-positive risk.
+  # F2 widening: added three phrases with near-zero false-positive risk.
   # "say goodbye to" — textbook AI marketing opener; never appears in honest product copy.
   # "it['’]s not just.*it['’]s" — the classic AI antithesis formula "It's not just X — it's Y".
   # "blazing.?fast" — stock performance adjective; real benchmarks use numbers.
@@ -237,7 +228,7 @@
   assert: "!/아래는\\s+.{0,30}(?:기록|내용|목록|정리)|다음은\\s+.{0,30}(?:입니다|이에요)/u.test(value)"
   message: "Document-structure narration copy: \"{value}\". '아래는 … 기록/내용/목록' and '다음은 … 입니다/이에요' introduce the document's structure in essay cadence. On a product page, write what the product does — not that we will now look at what the product does. Delete the announcing sentence and replace it with the specific fact or action it was narrating."
 
-# ── kill-ai-slop integration (github.com/yetone/kill-ai-slop, MIT) ─────────────────────
+# ── the machine-default aesthetic, measured ────────────────────────────────────────────
 #
 # The 32-tell catalogue was triaged into three buckets. Rules below are bucket (b): tells
 # where the IR carries the signal and a deterministic check is safe enough to ship.
@@ -274,7 +265,7 @@
 # sacrifices legibility for an appearance that every generated landing page now shows.
 # The IR sets node.clipText when the browser reports background-clip:text (or the
 # -webkit- prefix) alongside a gradient on the same node.
-# kill-ai-slop #2 (gradient headline text).
+# Gradient headline text.
 - id: SLOP-GRADIENT-TEXT
   layer: 1
   category: slop
@@ -287,7 +278,7 @@
 # Real metrics are odd and specific — "847 teams migrated in Q1" carries more weight than
 # any 10× claim because nobody lies that specifically. The rule fires when two or more
 # text nodes each independently match an invented-stat pattern.
-# kill-ai-slop #27 (the invented stat row).
+# The invented stat row.
 - id: SLOP-FAKE-STAT
   layer: 1
   category: slop
@@ -302,7 +293,7 @@
 # shadows have blur proportional to their step: a card 2dp high gets ~4px, not 40px.
 # Parsed from the computed box-shadow string: browser returns offsets in px order after
 # the colour (Chrome/Firefox: "rgba(…) Xpx Ypx BLURpx SPREADpx").
-# kill-ai-slop #20 (the oversized drop shadow).
+# The oversized drop shadow.
 - id: SLOP-OVERSIZED-SHADOW
   layer: 1
   category: slop
@@ -315,7 +306,7 @@
 # Card inside a card: a surfaced node (radius + shadow) whose nearest ancestor is also
 # surfaced. Every nested container adds material depth without information. The fix is
 # one surface per region; group related content with spacing and hairline dividers.
-# kill-ai-slop #29 (cards inside cards).
+# Cards inside cards.
 - id: SLOP-NESTED-CARDS
   layer: 1
   category: slop
@@ -331,7 +322,7 @@
 # 16px radius and 16px padding should hold children with radius 0 to ~12px, not 16px+.
 # Only fires when parent radius > 4px (not micro-radii) and parent has non-zero padding
 # (confirming the child is genuinely inset, not floating adjacent to the parent).
-# kill-ai-slop #21 (corners that don't nest).
+# Corners that don't nest.
 - id: SLOP-NESTED-RADIUS
   layer: 1
   category: slop
@@ -345,7 +336,7 @@
 # page. When proximity carries no information, nothing is grouped — the layout is a grid
 # of equidistant objects. Fires on pages with ≥20 non-zero spacing samples.
 # Zero is excluded: on a real page it represents ~80% of all values and is not a decision.
-# kill-ai-slop #30 (one gap everywhere).
+# One gap everywhere.
 - id: SLOP-MONO-SPACING
   layer: 1
   category: slop
@@ -359,7 +350,7 @@
 # 2021 Dribbble aesthetic. A single frosted-glass surface can be a deliberate choice;
 # applying it to every card is a pattern inherited from training data.
 # The IR captures node.backdropFilter when the computed backdrop-filter is not 'none'.
-# kill-ai-slop #19 (max radius + glassmorphism).
+# Max radius + glassmorphism.
 - id: SLOP-GLASSMORPHISM
   layer: 1
   category: slop
@@ -373,7 +364,7 @@
 # (New / Beta / Hot / Popular / Trending / Soon / Pro) with optional leading emoji.
 # Real badges carry time-bounded or count-backed information; decoration badges erode
 # trust by the third one. Gated to short text (≤30 chars) on small nodes (height ≤36px).
-# kill-ai-slop #22 (badge and pill spam).
+# Badge and pill spam.
 - id: SLOP-BADGE-SPAM
   layer: 1
   category: slop
@@ -388,7 +379,7 @@
 # rank headings from body copy when the sizes are too close to distinguish.
 # Fires at the page level; requires ≥3 distinct sizes (a two-size page may be intentionally
 # minimal). A scale of 14/18/24px or 12/16/28px passes; 13/14/15/17px fails.
-# kill-ai-slop #12 (the flat type hierarchy).
+# The flat type hierarchy.
 - id: SLOP-FLAT-TYPE
   layer: 1
   category: slop

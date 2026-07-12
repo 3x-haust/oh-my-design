@@ -150,9 +150,8 @@ instructions: |
   catch yourself translating an English slogan into Korean, delete it and write the
   sentence a Korean product would have written first.
 
-  And the prose itself, Korean or English, must not read machine-made. The tells, from
-  the im-not-ai taxonomy and the kill-ai-slop catalogue (github.com/yetone/kill-ai-slop,
-  MIT) — avoid all of them:
+  And the prose itself, Korean or English, must not read machine-made. The tells —
+  avoid all of them:
   - mechanical enumeration (첫째/둘째/셋째, "Firstly/Secondly")
   - AI stock phrases: 결론적으로, 시사하는 바가 크다, 주목할 만하다, "in conclusion",
     "it's worth noting", "delve into", "say goodbye to", "blazing fast", "it's not just X
@@ -163,7 +162,7 @@ instructions: |
   - connective abuse: consecutive sentences opening with 또한/따라서/즉/Also/Moreover
   - decoration: bold everywhere, em-dash chains, emoji in headings or CTAs
 
-  ## Visual tells to avoid (kill-ai-slop catalogue)
+  ## Visual tells to avoid
 
   The copy tells above have visual counterparts. `omd check` catches the measurable ones
   (SLOP-GRADIENT, SLOP-TRIPLE-CARD, SLOP-SHADOW-MONOCULTURE, etc.); the following require

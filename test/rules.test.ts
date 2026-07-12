@@ -452,7 +452,7 @@ test('SLOP-KO-SIGNPOST does not fire on English-only copy', () => {
   }
 });
 
-// ── kill-ai-slop integration tests ───────────────────────────────────────────
+// ── visual-tell rules ─────────────────────────────────────────────────────────
 
 // Helpers for structural slop tests
 function makeRootNode(overrides: Partial<RawNode> = {}): RawNode {
