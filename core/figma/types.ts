@@ -148,10 +148,38 @@ export interface ComponentSetInfo {
   variants: Array<{ componentId: string; name: string }>;
 }
 
+// ── Responsive matching ───────────────────────────────────────────────────────
+
+/** Viewport band derived from frame width. */
+export type Band = 'mobile' | 'tablet' | 'desktop' | 'unknown';
+
+/** One viewport variant within a responsive breakpoint set. */
+export interface FigmaResponsiveVariant {
+  frameId: string;
+  name: string;
+  width: number;
+  band: Band;
+}
+
+/** A group of frames that are viewport variants of the same screen. */
+export interface FigmaBreakpointSet {
+  screen: string;
+  variants: FigmaResponsiveVariant[];
+}
+
 export interface FigmaSnapshot {
   fileKey: string;
   fileName: string;
   capturedAt: string;
   pages: SnapshotPage[];
   componentSets: Record<string, ComponentSetInfo>;
+  /**
+   * Responsive frame groupings computed by `matchResponsiveFrames`.
+   * Populated after `omd figma pull` and stored in the snapshot for the skill.
+   */
+  responsive?: {
+    breakpointSets: FigmaBreakpointSet[];
+    /** Frames that did not match any viewport-variant group, honestly labeled. */
+    unmatched: FigmaResponsiveVariant[];
+  };
 }

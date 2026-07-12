@@ -15,6 +15,10 @@ description: >-
 
 # Ultradesign
 
+> **Figma routing**: when the brief contains a figma.com link, hand off to `omd:figma`
+> instead of running this loop. The design decisions — concept, colour, type, layout —
+> were already made in Figma; the frame/concept/reference steps here are not needed.
+
 Generated interfaces are rarely broken. They are worse than broken: **correct and
 anonymous**. Indigo-to-violet gradient. Three feature cards with identical shadows.
 Everything centred. A heading that opens with a rocket emoji. "Unlock the power of."
