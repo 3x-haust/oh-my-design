@@ -451,3 +451,433 @@ test('SLOP-KO-SIGNPOST does not fire on English-only copy', () => {
     assert.ok(!v.some((x) => x.id === 'SLOP-KO-SIGNPOST'), `unexpected SLOP-KO-SIGNPOST for: ${text}`);
   }
 });
+
+// ── kill-ai-slop integration tests ───────────────────────────────────────────
+
+// Helpers for structural slop tests
+function makeRootNode(overrides: Partial<RawNode> = {}): RawNode {
+  return {
+    id: 'root',
+    name: 'Root',
+    type: 'FRAME',
+    path: 'Root',
+    parent: null,
+    box: { x: 0, y: 0, w: 1280, h: 800 },
+    children: [],
+    ...overrides,
+  };
+}
+
+function makeChildNode(parentId: string, overrides: Partial<RawNode> = {}, idx = 0): RawNode {
+  return {
+    id: `child${idx}`,
+    name: `Child${idx}`,
+    type: 'FRAME',
+    path: `Root/Child${idx}`,
+    parent: parentId,
+    box: { x: 0, y: idx * 50, w: 200, h: 40 },
+    children: [],
+    ...overrides,
+  };
+}
+
+// ── SLOP-EMOJI-HEADING widened to interactive nodes ───────────────────────────
+
+test('SLOP-EMOJI-HEADING fires on interactive nodes (buttons) that open with an emoji', () => {
+  const node: RawNode = {
+    id: 'btn1', name: 'CTA', type: 'TEXT', path: 'Screen/CTA',
+    parent: null, box: { x: 0, y: 0, w: 160, h: 48 }, children: [],
+    text: '🚀 Get Started', interactive: true,
+  };
+  const v = check(normalize({ nodes: [node] }), builtin, { categories: ['slop'] });
+  assert.ok(v.some((x) => x.id === 'SLOP-EMOJI-HEADING'), 'expected SLOP-EMOJI-HEADING on emoji-prefixed button');
+});
+
+test('SLOP-EMOJI-HEADING does not fire on a button with a plain arrow (not emoji)', () => {
+  const node: RawNode = {
+    id: 'btn2', name: 'CTA', type: 'TEXT', path: 'Screen/CTA',
+    parent: null, box: { x: 0, y: 0, w: 160, h: 48 }, children: [],
+    text: '→ View all', interactive: true,
+  };
+  const v = check(normalize({ nodes: [node] }), builtin, { categories: ['slop'] });
+  assert.ok(!v.some((x) => x.id === 'SLOP-EMOJI-HEADING'), 'unexpected SLOP-EMOJI-HEADING for arrow-prefixed button');
+});
+
+// ── SLOP-COPY widened phrases ─────────────────────────────────────────────────
+
+test('SLOP-COPY fires on new widened AI stock phrases', () => {
+  const positives = [
+    'Say goodbye to manual work.',
+    'Blazing fast performance for every team.',
+    "It's not just software, it's a platform.",
+  ];
+  for (const text of positives) {
+    const v = check(makeTextIr(text), builtin, { categories: ['slop'] });
+    assert.ok(v.some((x) => x.id === 'SLOP-COPY'), `expected SLOP-COPY for: ${text}`);
+  }
+});
+
+test('SLOP-COPY does not fire on legitimate uses of similar words', () => {
+  const negatives = [
+    // "goodbye" in a natural sentence
+    'We said goodbye to our old architecture in 2023.',
+    // "fast" without "blazing"
+    'Renders in under 200ms on a fast connection.',
+  ];
+  for (const text of negatives) {
+    const v = check(makeTextIr(text), builtin, { categories: ['slop'] });
+    assert.ok(!v.some((x) => x.id === 'SLOP-COPY'), `unexpected SLOP-COPY for: ${text}`);
+  }
+});
+
+// ── SLOP-GRADIENT-TEXT ────────────────────────────────────────────────────────
+
+test('SLOP-GRADIENT-TEXT fires when a node has clipText: true', () => {
+  const node: RawNode = {
+    id: 'heading1', name: 'Hero', type: 'TEXT', path: 'Screen/Hero',
+    parent: null, box: { x: 0, y: 0, w: 600, h: 80 }, children: [],
+    text: 'The future of design',
+    gradient: 'linear-gradient(135deg, #6366f1, #a855f7)',
+    clipText: true,
+  };
+  const v = check(normalize({ nodes: [node] }), builtin, { categories: ['slop'] });
+  assert.ok(v.some((x) => x.id === 'SLOP-GRADIENT-TEXT'), 'expected SLOP-GRADIENT-TEXT for clipText node');
+});
+
+test('SLOP-GRADIENT-TEXT does not fire when clipText is absent', () => {
+  const node: RawNode = {
+    id: 'hero1', name: 'HeroBg', type: 'FRAME', path: 'Screen/HeroBg',
+    parent: null, box: { x: 0, y: 0, w: 600, h: 300 }, children: [],
+    gradient: 'linear-gradient(135deg, #6366f1, #a855f7)',
+  };
+  const v = check(normalize({ nodes: [node] }), builtin, { categories: ['slop'] });
+  assert.ok(!v.some((x) => x.id === 'SLOP-GRADIENT-TEXT'), 'unexpected SLOP-GRADIENT-TEXT without clipText');
+});
+
+// ── SLOP-FAKE-STAT ────────────────────────────────────────────────────────────
+
+test('SLOP-FAKE-STAT fires when two or more heroic stat patterns appear on the page', () => {
+  const nodes: RawNode[] = [
+    makeRootNode({ children: ['n1', 'n2', 'n3'] }),
+    makeChildNode('root', { id: 'n1', type: 'TEXT', text: '10k+ users worldwide', box: { x: 0, y: 0, w: 200, h: 40 } }, 1),
+    makeChildNode('root', { id: 'n2', type: 'TEXT', text: '24/7 support included', box: { x: 200, y: 0, w: 200, h: 40 } }, 2),
+    makeChildNode('root', { id: 'n3', type: 'TEXT', text: 'Ships in 48h', box: { x: 400, y: 0, w: 200, h: 40 } }, 3),
+  ];
+  const v = check(normalize({ nodes }), builtin, { categories: ['slop'] });
+  assert.ok(v.some((x) => x.id === 'SLOP-FAKE-STAT'), 'expected SLOP-FAKE-STAT for two+ stat patterns');
+});
+
+test('SLOP-FAKE-STAT does not fire when only one stat pattern is present', () => {
+  const nodes: RawNode[] = [
+    makeRootNode({ children: ['n1'] }),
+    makeChildNode('root', { id: 'n1', type: 'TEXT', text: '99.9% uptime SLA', box: { x: 0, y: 0, w: 200, h: 40 } }, 1),
+  ];
+  const v = check(normalize({ nodes }), builtin, { categories: ['slop'] });
+  assert.ok(!v.some((x) => x.id === 'SLOP-FAKE-STAT'), 'unexpected SLOP-FAKE-STAT for single stat');
+});
+
+test('SLOP-FAKE-STAT does not fire on ordinary numeric copy', () => {
+  const nodes: RawNode[] = [
+    makeRootNode({ children: ['n1', 'n2'] }),
+    makeChildNode('root', { id: 'n1', type: 'TEXT', text: '847 teams migrated in Q1', box: { x: 0, y: 0, w: 300, h: 40 } }, 1),
+    makeChildNode('root', { id: 'n2', type: 'TEXT', text: 'Released January 12, 2025', box: { x: 0, y: 50, w: 300, h: 40 } }, 2),
+  ];
+  const v = check(normalize({ nodes }), builtin, { categories: ['slop'] });
+  assert.ok(!v.some((x) => x.id === 'SLOP-FAKE-STAT'), 'unexpected SLOP-FAKE-STAT for ordinary numbers');
+});
+
+// ── SLOP-OVERSIZED-SHADOW ─────────────────────────────────────────────────────
+
+test('SLOP-OVERSIZED-SHADOW fires when shadow blur ≥40px on a small node', () => {
+  // 30×30 icon with 60px blur — blur > element size
+  const node: RawNode = {
+    id: 'icon1', name: 'Icon', type: 'FRAME', path: 'Screen/Icon',
+    parent: null, box: { x: 0, y: 0, w: 30, h: 30 }, children: [],
+    shadow: { value: 'rgba(0, 0, 0, 0.2) 0px 0px 60px 0px', token: null },
+  };
+  const v = check(normalize({ nodes: [node] }), builtin, { categories: ['slop'] });
+  assert.ok(v.some((x) => x.id === 'SLOP-OVERSIZED-SHADOW'), 'expected SLOP-OVERSIZED-SHADOW for huge blur on small node');
+});
+
+test('SLOP-OVERSIZED-SHADOW does not fire when blur is proportional to element size', () => {
+  // 300×200 card with 8px blur — proportionate
+  const node: RawNode = {
+    id: 'card1', name: 'Card', type: 'FRAME', path: 'Screen/Card',
+    parent: null, box: { x: 0, y: 0, w: 300, h: 200 }, children: [],
+    shadow: { value: 'rgba(0, 0, 0, 0.1) 0px 4px 8px 0px', token: null },
+  };
+  const v = check(normalize({ nodes: [node] }), builtin, { categories: ['slop'] });
+  assert.ok(!v.some((x) => x.id === 'SLOP-OVERSIZED-SHADOW'), 'unexpected SLOP-OVERSIZED-SHADOW for proportionate shadow');
+});
+
+test('SLOP-OVERSIZED-SHADOW does not fire when blur is large but node is large', () => {
+  // 400×400 hero section with 40px blur — blur equals smaller dimension, but smaller is 400
+  const node: RawNode = {
+    id: 'hero1', name: 'Hero', type: 'FRAME', path: 'Screen/Hero',
+    parent: null, box: { x: 0, y: 0, w: 400, h: 400 }, children: [],
+    shadow: { value: 'rgba(0, 0, 0, 0.15) 0px 8px 40px 0px', token: null },
+  };
+  const v = check(normalize({ nodes: [node] }), builtin, { categories: ['slop'] });
+  assert.ok(!v.some((x) => x.id === 'SLOP-OVERSIZED-SHADOW'), 'unexpected SLOP-OVERSIZED-SHADOW when blur < smaller dimension');
+});
+
+// ── SLOP-NESTED-CARDS ─────────────────────────────────────────────────────────
+
+test('SLOP-NESTED-CARDS fires when a surfaced node sits inside another surfaced node', () => {
+  const outerCard: RawNode = {
+    id: 'outer', name: 'OuterCard', type: 'FRAME', path: 'Screen/OuterCard',
+    parent: null, box: { x: 0, y: 0, w: 320, h: 240 }, children: ['inner'],
+    radius: { value: 16, token: null },
+    shadow: { value: 'rgba(0, 0, 0, 0.1) 0px 4px 16px 0px', token: null },
+  };
+  const innerCard: RawNode = {
+    id: 'inner', name: 'InnerCard', type: 'FRAME', path: 'Screen/OuterCard/InnerCard',
+    parent: 'outer', box: { x: 16, y: 16, w: 288, h: 208 }, children: [],
+    radius: { value: 8, token: null },
+    shadow: { value: 'rgba(0, 0, 0, 0.05) 0px 2px 8px 0px', token: null },
+  };
+  const v = check(normalize({ nodes: [outerCard, innerCard] }), builtin, { categories: ['slop'] });
+  assert.ok(v.some((x) => x.id === 'SLOP-NESTED-CARDS'), 'expected SLOP-NESTED-CARDS for surfaced node inside surfaced parent');
+});
+
+test('SLOP-NESTED-CARDS does not fire when the inner node has no shadow', () => {
+  const outerCard: RawNode = {
+    id: 'outer', name: 'Card', type: 'FRAME', path: 'Screen/Card',
+    parent: null, box: { x: 0, y: 0, w: 320, h: 240 }, children: ['inner'],
+    radius: { value: 16, token: null },
+    shadow: { value: 'rgba(0, 0, 0, 0.1) 0px 4px 16px 0px', token: null },
+  };
+  const innerContent: RawNode = {
+    id: 'inner', name: 'CardContent', type: 'FRAME', path: 'Screen/Card/CardContent',
+    parent: 'outer', box: { x: 16, y: 16, w: 288, h: 208 }, children: [],
+    radius: { value: 8, token: null },
+    // no shadow — not a surfaced card
+  };
+  const v = check(normalize({ nodes: [outerCard, innerContent] }), builtin, { categories: ['slop'] });
+  assert.ok(!v.some((x) => x.id === 'SLOP-NESTED-CARDS'), 'unexpected SLOP-NESTED-CARDS when inner has no shadow');
+});
+
+// ── SLOP-NESTED-RADIUS ────────────────────────────────────────────────────────
+
+test('SLOP-NESTED-RADIUS fires when child radius ≥ parent radius and parent has padding', () => {
+  const parent: RawNode = {
+    id: 'card', name: 'Card', type: 'FRAME', path: 'Screen/Card',
+    parent: null, box: { x: 0, y: 0, w: 320, h: 200 }, children: ['inner'],
+    radius: { value: 16, token: null },
+    layout: { mode: 'VERTICAL', gap: 0, padding: [16, 16, 16, 16] },
+  };
+  const child: RawNode = {
+    id: 'inner', name: 'InnerButton', type: 'FRAME', path: 'Screen/Card/InnerButton',
+    parent: 'card', box: { x: 16, y: 16, w: 288, h: 48 }, children: [],
+    radius: { value: 16, token: null }, // same as parent — wrong
+  };
+  const v = check(normalize({ nodes: [parent, child] }), builtin, { categories: ['slop'] });
+  assert.ok(v.some((x) => x.id === 'SLOP-NESTED-RADIUS'), 'expected SLOP-NESTED-RADIUS for same-radius child in padded parent');
+});
+
+test('SLOP-NESTED-RADIUS does not fire when child radius is smaller than parent', () => {
+  const parent: RawNode = {
+    id: 'card', name: 'Card', type: 'FRAME', path: 'Screen/Card',
+    parent: null, box: { x: 0, y: 0, w: 320, h: 200 }, children: ['inner'],
+    radius: { value: 16, token: null },
+    layout: { mode: 'VERTICAL', gap: 0, padding: [16, 16, 16, 16] },
+  };
+  const child: RawNode = {
+    id: 'inner', name: 'InnerButton', type: 'FRAME', path: 'Screen/Card/InnerButton',
+    parent: 'card', box: { x: 16, y: 16, w: 288, h: 48 }, children: [],
+    radius: { value: 6, token: null }, // smaller — correct
+  };
+  const v = check(normalize({ nodes: [parent, child] }), builtin, { categories: ['slop'] });
+  assert.ok(!v.some((x) => x.id === 'SLOP-NESTED-RADIUS'), 'unexpected SLOP-NESTED-RADIUS when child radius is smaller');
+});
+
+test('SLOP-NESTED-RADIUS does not fire when parent has no padding', () => {
+  // A child positioned adjacent to (not inset in) its parent: padding=0 means no inset
+  const parent: RawNode = {
+    id: 'card', name: 'Card', type: 'FRAME', path: 'Screen/Card',
+    parent: null, box: { x: 0, y: 0, w: 320, h: 200 }, children: ['inner'],
+    radius: { value: 16, token: null },
+    // no layout/padding
+  };
+  const child: RawNode = {
+    id: 'inner', name: 'InnerElement', type: 'FRAME', path: 'Screen/Card/InnerElement',
+    parent: 'card', box: { x: 0, y: 0, w: 320, h: 200 }, children: [],
+    radius: { value: 16, token: null },
+  };
+  const v = check(normalize({ nodes: [parent, child] }), builtin, { categories: ['slop'] });
+  assert.ok(!v.some((x) => x.id === 'SLOP-NESTED-RADIUS'), 'unexpected SLOP-NESTED-RADIUS when parent has no padding');
+});
+
+// ── SLOP-MONO-SPACING ─────────────────────────────────────────────────────────
+
+test('SLOP-MONO-SPACING fires when one spacing value dominates ≥80% of 20+ samples', () => {
+  // 6 nodes each with padding [16,16,16,16] = 24 samples at value 16 (100% domination)
+  const nodes: RawNode[] = [
+    makeRootNode({ children: ['n0', 'n1', 'n2', 'n3', 'n4', 'n5'] }),
+    ...[0, 1, 2, 3, 4, 5].map((i) => makeChildNode('root', {
+      id: `n${i}`,
+      layout: { mode: 'VERTICAL', gap: 0, padding: [16, 16, 16, 16] },
+    }, i)),
+  ];
+  const v = check(normalize({ nodes }), builtin, { categories: ['slop'] });
+  assert.ok(v.some((x) => x.id === 'SLOP-MONO-SPACING'), 'expected SLOP-MONO-SPACING for 24-sample 16px monoculture');
+});
+
+test('SLOP-MONO-SPACING does not fire when spacing is varied', () => {
+  // Nodes with different padding values — no single value dominates
+  const nodes: RawNode[] = [
+    makeRootNode({ children: ['n0', 'n1', 'n2', 'n3', 'n4', 'n5'] }),
+    ...[
+      [8, 8, 8, 8],
+      [16, 16, 16, 16],
+      [24, 24, 24, 24],
+      [32, 32, 32, 32],
+      [8, 16, 8, 16],
+      [16, 32, 16, 32],
+    ].map((padding, i) => makeChildNode('root', {
+      id: `n${i}`,
+      layout: { mode: 'VERTICAL', gap: 0, padding: padding as [number, number, number, number] },
+    }, i)),
+  ];
+  const v = check(normalize({ nodes }), builtin, { categories: ['slop'] });
+  assert.ok(!v.some((x) => x.id === 'SLOP-MONO-SPACING'), 'unexpected SLOP-MONO-SPACING for varied spacing');
+});
+
+test('SLOP-MONO-SPACING does not fire on pages with fewer than 20 spacing samples', () => {
+  // Only 2 nodes with padding = 8 samples
+  const nodes: RawNode[] = [
+    makeRootNode({ children: ['n0', 'n1'] }),
+    makeChildNode('root', { id: 'n0', layout: { mode: 'VERTICAL', gap: 0, padding: [16, 16, 16, 16] } }, 0),
+    makeChildNode('root', { id: 'n1', layout: { mode: 'VERTICAL', gap: 0, padding: [16, 16, 16, 16] } }, 1),
+  ];
+  const v = check(normalize({ nodes }), builtin, { categories: ['slop'] });
+  assert.ok(!v.some((x) => x.id === 'SLOP-MONO-SPACING'), 'unexpected SLOP-MONO-SPACING for <20 spacing samples');
+});
+
+// ── SLOP-GLASSMORPHISM ────────────────────────────────────────────────────────
+
+test('SLOP-GLASSMORPHISM fires when three or more nodes have backdrop-filter blur', () => {
+  const nodes: RawNode[] = [
+    makeRootNode({ children: ['n0', 'n1', 'n2'] }),
+    makeChildNode('root', { id: 'n0', backdropFilter: 'blur(20px)' }, 0),
+    makeChildNode('root', { id: 'n1', backdropFilter: 'blur(16px)' }, 1),
+    makeChildNode('root', { id: 'n2', backdropFilter: 'blur(12px)' }, 2),
+  ];
+  const v = check(normalize({ nodes }), builtin, { categories: ['slop'] });
+  assert.ok(v.some((x) => x.id === 'SLOP-GLASSMORPHISM'), 'expected SLOP-GLASSMORPHISM for 3 blur nodes');
+});
+
+test('SLOP-GLASSMORPHISM does not fire for a single glassmorphism node', () => {
+  const nodes: RawNode[] = [
+    makeRootNode({ children: ['n0'] }),
+    makeChildNode('root', { id: 'n0', backdropFilter: 'blur(20px)' }, 0),
+  ];
+  const v = check(normalize({ nodes }), builtin, { categories: ['slop'] });
+  assert.ok(!v.some((x) => x.id === 'SLOP-GLASSMORPHISM'), 'unexpected SLOP-GLASSMORPHISM for single blur node');
+});
+
+test('SLOP-GLASSMORPHISM does not fire when backdropFilter is present but not blur', () => {
+  const nodes: RawNode[] = [
+    makeRootNode({ children: ['n0', 'n1', 'n2'] }),
+    makeChildNode('root', { id: 'n0', backdropFilter: 'brightness(0.8)' }, 0),
+    makeChildNode('root', { id: 'n1', backdropFilter: 'contrast(1.2)' }, 1),
+    makeChildNode('root', { id: 'n2', backdropFilter: 'saturate(1.5)' }, 2),
+  ];
+  const v = check(normalize({ nodes }), builtin, { categories: ['slop'] });
+  assert.ok(!v.some((x) => x.id === 'SLOP-GLASSMORPHISM'), 'unexpected SLOP-GLASSMORPHISM for non-blur backdropFilter');
+});
+
+// ── SLOP-BADGE-SPAM ───────────────────────────────────────────────────────────
+
+test('SLOP-BADGE-SPAM fires on small nodes whose text is solely a badge term', () => {
+  const badgeTexts = ['New', 'Beta', '🔥 Hot', 'Popular', 'trending', 'Pro', 'Soon'];
+  for (const text of badgeTexts) {
+    const node: RawNode = {
+      id: 'badge1', name: 'Badge', type: 'TEXT', path: 'Screen/Badge',
+      parent: null, box: { x: 0, y: 0, w: 60, h: 24 }, children: [], text,
+    };
+    const v = check(normalize({ nodes: [node] }), builtin, { categories: ['slop'] });
+    assert.ok(v.some((x) => x.id === 'SLOP-BADGE-SPAM'), `expected SLOP-BADGE-SPAM for: ${text}`);
+  }
+});
+
+test('SLOP-BADGE-SPAM does not fire on regular navigation or content text', () => {
+  const negatives = [
+    // nav items that contain badge-like words but in context
+    'See what is new in v2.0',
+    'Professional plan includes all features',
+    'This is a beta test environment for internal use',
+    // short labels that are not manufactured buzz
+    'Save', 'Cancel', 'View all', '3 items',
+  ];
+  for (const text of negatives) {
+    const node: RawNode = {
+      id: 'label1', name: 'Label', type: 'TEXT', path: 'Screen/Label',
+      parent: null, box: { x: 0, y: 0, w: 200, h: 24 }, children: [], text,
+    };
+    const v = check(normalize({ nodes: [node] }), builtin, { categories: ['slop'] });
+    assert.ok(!v.some((x) => x.id === 'SLOP-BADGE-SPAM'), `unexpected SLOP-BADGE-SPAM for: ${text}`);
+  }
+});
+
+test('SLOP-BADGE-SPAM does not fire on taller nodes (not badge-sized)', () => {
+  // A section heading that says "What is New" — tall enough that it is not a badge
+  const node: RawNode = {
+    id: 'h2', name: 'SectionHeading', type: 'TEXT', path: 'Screen/SectionHeading',
+    parent: null, box: { x: 0, y: 0, w: 400, h: 48 }, children: [],
+    text: 'New', heading: 2,
+  };
+  const v = check(normalize({ nodes: [node] }), builtin, { categories: ['slop'] });
+  assert.ok(!v.some((x) => x.id === 'SLOP-BADGE-SPAM'), 'unexpected SLOP-BADGE-SPAM on tall heading node');
+});
+
+// ── SLOP-FLAT-TYPE ────────────────────────────────────────────────────────────
+
+test('SLOP-FLAT-TYPE fires when three or more font sizes cluster in the 13–19px band', () => {
+  const nodes: RawNode[] = [
+    makeRootNode({ children: ['n0', 'n1', 'n2', 'n3'] }),
+    ...[13, 14, 16, 18].map((fs, i) => makeChildNode('root', {
+      id: `n${i}`, type: 'TEXT' as const,
+      text: `Text at ${fs}px`, fontSize: fs,
+    }, i)),
+  ];
+  const v = check(normalize({ nodes }), builtin, { categories: ['slop'] });
+  assert.ok(v.some((x) => x.id === 'SLOP-FLAT-TYPE'), 'expected SLOP-FLAT-TYPE for 13/14/16/18px flat hierarchy');
+});
+
+test('SLOP-FLAT-TYPE fires when adjacent scale steps differ by less than 1.15×', () => {
+  // Sizes 20, 22, 24 — ratio ≈ 1.10, below the 1.15 threshold
+  const nodes: RawNode[] = [
+    makeRootNode({ children: ['n0', 'n1', 'n2'] }),
+    ...[20, 22, 24].map((fs, i) => makeChildNode('root', {
+      id: `n${i}`, type: 'TEXT' as const,
+      text: `Text at ${fs}px`, fontSize: fs,
+    }, i)),
+  ];
+  const v = check(normalize({ nodes }), builtin, { categories: ['slop'] });
+  assert.ok(v.some((x) => x.id === 'SLOP-FLAT-TYPE'), 'expected SLOP-FLAT-TYPE for 20/22/24px flat scale');
+});
+
+test('SLOP-FLAT-TYPE does not fire when the type scale has good separation', () => {
+  // 14/18/28px — ratio 1.29 and 1.56, both above 1.15
+  const nodes: RawNode[] = [
+    makeRootNode({ children: ['n0', 'n1', 'n2'] }),
+    ...[14, 18, 28].map((fs, i) => makeChildNode('root', {
+      id: `n${i}`, type: 'TEXT' as const,
+      text: `Text at ${fs}px`, fontSize: fs,
+    }, i)),
+  ];
+  const v = check(normalize({ nodes }), builtin, { categories: ['slop'] });
+  assert.ok(!v.some((x) => x.id === 'SLOP-FLAT-TYPE'), 'unexpected SLOP-FLAT-TYPE for 14/18/28px well-separated scale');
+});
+
+test('SLOP-FLAT-TYPE does not fire on pages with fewer than three distinct font sizes', () => {
+  // A page with only two text sizes — intentionally minimal, not a hierarchy failure
+  const nodes: RawNode[] = [
+    makeRootNode({ children: ['n0', 'n1'] }),
+    makeChildNode('root', { id: 'n0', type: 'TEXT', text: 'Heading', fontSize: 16 }, 0),
+    makeChildNode('root', { id: 'n1', type: 'TEXT', text: 'Body', fontSize: 14 }, 1),
+  ];
+  const v = check(normalize({ nodes }), builtin, { categories: ['slop'] });
+  assert.ok(!v.some((x) => x.id === 'SLOP-FLAT-TYPE'), 'unexpected SLOP-FLAT-TYPE for two-size page');
+});

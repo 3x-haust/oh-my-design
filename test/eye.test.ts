@@ -76,6 +76,7 @@ test('slop.html fires every slop heuristic', () => {
       'SLOP-EMOJI-HEADING',
       'SLOP-EVERYTHING-CENTERED',
       'SLOP-GRADIENT',
+      'SLOP-NESTED-RADIUS',
       'SLOP-RADIUS-MONOCULTURE',
       'SLOP-SHADOW-MONOCULTURE',
       'SLOP-TRIPLE-CARD',

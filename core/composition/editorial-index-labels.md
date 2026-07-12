@@ -30,6 +30,16 @@ implies the user should attend to them in order; if they should not, the numberi
 decoration at display scale is noise." Also: navigation lists, card grids, or any context
 where the user is scanning rather than reading in order.
 
+This specific tell — large low-opacity ordinals on unordered sections — is catalogued in
+kill-ai-slop (github.com/yetone/kill-ai-slop, MIT, tell #28) as a signature of generated
+pages. The detection is: "text-8xl text-gray-100 section number" — giant faint numerals
+that imply sequence where none exists. The counter-condition is this recipe: ordinals on
+sections whose content has a genuine sequence (methodology phases, walkthrough steps,
+ordered chapters). When the label earns its place the ordinal confirms what the user
+already suspects; when it does not, it is decoration at display scale and should be removed.
+The SLOP-TRIPLE-CARD rule fires on the underlying grid structure that often accompanies
+unearned numbering; adding ordinals to a triple-card grid resolves neither finding.
+
 ## Parameters
 
 ```css

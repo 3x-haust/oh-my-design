@@ -219,6 +219,16 @@ export function extractInPage(maxNodes: number, selector?: string | null): RawIr
       // instead of parsing two notations, and so the IR stays byte-stable across engines.
       node.gradient = cs.backgroundImage.replace(/rgba?\([^)]+\)/g, (m) => toHex(m) ?? m);
     }
+    // background-clip: text is the gradient-text tell. The browser may prefix this as
+    // -webkit-background-clip in some engines; check both. Only set when a gradient is also
+    // present — a clipped solid colour is a different pattern entirely.
+    const bgClip = cs.backgroundClip || (cs as unknown as Record<string, string>)['webkitBackgroundClip'];
+    if (node.gradient && (bgClip === 'text' || bgClip === '-webkit-text')) node.clipText = true;
+
+    // backdrop-filter is the glassmorphism tell: blur + translucent surface. The browser
+    // may prefix this as -webkit-backdrop-filter. Absent when 'none' or not declared.
+    const bf = cs.backdropFilter || (cs as unknown as Record<string, string>)['webkitBackdropFilter'];
+    if (bf && bf !== 'none') node.backdropFilter = bf;
     if (cs.textAlign === 'left' || cs.textAlign === 'center' || cs.textAlign === 'right' || cs.textAlign === 'justify') {
       node.textAlign = cs.textAlign;
     }
