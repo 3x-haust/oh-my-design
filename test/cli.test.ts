@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -136,4 +136,42 @@ test('frame.md survives a hand-written file with no frontmatter', () => {
 test('omd --version and unknown commands behave', () => {
   assert.equal(run(['--version']).status, 0);
   assert.notEqual(run(['nonsense-command']).status, 0);
+});
+
+// ── omd pack: host-neutral pack-path resolution ──
+//
+// pack dir / list / <relpath> let any host locate knowledge-pack files without
+// knowing the installation path, and without relying on env vars like CLAUDE_PLUGIN_ROOT.
+
+test('omd pack dir prints an absolute path that exists and ends with core', () => {
+  const r = run(['pack', 'dir']);
+  assert.equal(r.status, 0);
+  const printed = r.stdout.trim();
+  assert.ok(existsSync(printed), `pack dir path does not exist: ${printed}`);
+  assert.ok(printed.endsWith('core'), `expected path ending in 'core', got: ${printed}`);
+});
+
+test('omd pack list enumerates .md files, each with a relative path', () => {
+  const r = run(['pack', 'list']);
+  assert.equal(r.status, 0);
+  const lines = r.stdout.trim().split('\n').filter(Boolean);
+  assert.ok(lines.length > 0, 'omd pack list returned no files');
+  assert.ok(lines.every((l) => l.endsWith('.md')), `non-.md line in pack list: ${lines.find((l) => !l.endsWith('.md'))}`);
+  assert.ok(lines.some((l) => l.startsWith('theory/')), 'expected at least one theory/ file in pack list');
+});
+
+test('omd pack <relpath> prints a real pack file to stdout', () => {
+  const r = run(['pack', 'theory/color.md']);
+  assert.equal(r.status, 0);
+  assert.ok(r.stdout.length > 0, 'omd pack theory/color.md returned empty output');
+});
+
+test('omd pack with no subcommand exits non-zero', () => {
+  assert.notEqual(run(['pack']).status, 0);
+});
+
+test('omd pack <missing-file> exits non-zero with an error message', () => {
+  const r = run(['pack', 'theory/does-not-exist.md']);
+  assert.notEqual(r.status, 0);
+  assert.match(r.stderr, /not found/);
 });

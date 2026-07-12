@@ -25,7 +25,7 @@ function emitAgentFile(agent: AbstractAgent): string {
   ];
   if (agent.deny?.length) frontmatter.push(`disallowedTools: ${agent.deny.join(', ')}`);
   frontmatter.push('---', '');
-  return `${frontmatter.join('\n')}\n${agent.instructions}`;
+  return `${frontmatter.join('\n')}\n${substitute(agent.instructions)}`;
 }
 
 export function emitClaude({ agents = [] }: { agents?: AbstractAgent[] } = {}): Emitted {
@@ -75,7 +75,7 @@ function emitAgentFilePlugin(agent: AbstractAgent): string {
   ];
   if (agent.deny?.length) frontmatter.push(`disallowedTools: ${agent.deny.join(', ')}`);
   frontmatter.push('---', '');
-  return `${frontmatter.join('\n')}\n${pluginizeRefs(agent.instructions)}`;
+  return `${frontmatter.join('\n')}\n${pluginizeRefs(substitute(agent.instructions))}`;
 }
 
 export function emitClaudePlugin({ agents = [] }: { agents?: AbstractAgent[] } = {}): Emitted {

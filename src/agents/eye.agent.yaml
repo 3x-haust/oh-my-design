@@ -49,7 +49,8 @@ instructions: |
   - Never write "it feels" or "I think" or "in my opinion." Those phrases disqualify a
     finding. Replace them with a measurement from `omd check`, a citation from the
     frame, or a reference to the theory pack at
-    `${CLAUDE_PLUGIN_ROOT}/core/theory/{color,typography,layout,motion,components,craft,expressive}.md`.
+    `theory/{color,typography,layout,motion,components,craft,expressive}.md` under the directory
+    `omd pack dir` prints (in this repo: `core/theory/`).
     Theory citations are evidence. Taste is not.
 
   ## Visual slop checklist

@@ -5,6 +5,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parse } from 'yaml';
 import { emitCodex } from './codex.ts';
 import { emitClaude, emitClaudePlugin, pluginizeSkill } from './claude.ts';
+import { substituter } from './tokens.ts';
 import type { AbstractAgent, Emitted, Host } from '../core/types.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -64,8 +65,9 @@ export function build(): void {
     const { files } = emitters[host]({ agents });
     for (const [rel, content] of Object.entries(files)) write(host, rel, content);
 
+    const sub = substituter(host);
     for (const skill of skills) {
-      write(host, `skills/${skill.name}/SKILL.md`, skill.source);
+      write(host, `skills/${skill.name}/SKILL.md`, sub(skill.source));
       if (host === 'codex') {
         write(host, `skills/${skill.name}/agents/openai.yaml`, [
           'interface:',
@@ -76,7 +78,7 @@ export function build(): void {
       }
     }
 
-    // Copy theory pack so agents can read it at ${CLAUDE_PLUGIN_ROOT}/core/theory/
+    // Copy theory pack so agents can read it via `omd pack dir` + /theory/
     const theoryDir = join(root, 'core', 'theory');
     if (existsSync(theoryDir)) {
       for (const f of readdirSync(theoryDir).filter((f) => f.endsWith('.md'))) {
@@ -85,7 +87,7 @@ export function build(): void {
     }
 
     // Copy motion pack (easing vocabulary + recipe cookbook) so agents can read it
-    // at ${CLAUDE_PLUGIN_ROOT}/core/motion/ and ${CLAUDE_PLUGIN_ROOT}/core/motion/recipes/
+    // via `omd pack dir` + /motion/ and /motion/recipes/
     const motionDir = join(root, 'core', 'motion');
     if (existsSync(motionDir)) {
       for (const f of readdirSync(motionDir).filter((f) => f.endsWith('.md'))) {
@@ -100,7 +102,7 @@ export function build(): void {
     }
 
     // Copy composition pack (page-level composition recipes) so agents can read it
-    // at ${CLAUDE_PLUGIN_ROOT}/core/composition/
+    // via `omd pack dir` + /composition/
     const compositionDir = join(root, 'core', 'composition');
     if (existsSync(compositionDir)) {
       for (const f of readdirSync(compositionDir).filter((f) => f.endsWith('.md'))) {
@@ -109,7 +111,7 @@ export function build(): void {
     }
 
     // Copy graphics pack (background and image treatment recipes) so agents can read it
-    // at ${CLAUDE_PLUGIN_ROOT}/core/graphics/
+    // via `omd pack dir` + /graphics/
     const graphicsDir = join(root, 'core', 'graphics');
     if (existsSync(graphicsDir)) {
       for (const f of readdirSync(graphicsDir).filter((f) => f.endsWith('.md'))) {
@@ -118,7 +120,7 @@ export function build(): void {
     }
 
     // Copy craft pack (finish-pass checklist and related craft material) so agents can read it
-    // at ${CLAUDE_PLUGIN_ROOT}/core/craft/
+    // via `omd pack dir` + /craft/
     const craftDir = join(root, 'core', 'craft');
     if (existsSync(craftDir)) {
       for (const f of readdirSync(craftDir).filter((f) => f.endsWith('.md'))) {
