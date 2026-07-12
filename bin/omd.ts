@@ -40,9 +40,13 @@ interface Opts {
   blueprint?: boolean;
   /** Directory of pages for cross-page site consistency check (`omd check --site <dir>`). */
   site?: string;
+  /** Similarity threshold for `omd figma diff` (0–1, default 0.97). */
+  threshold?: string;
+  /** Force re-export even when a cached Figma export exists (`omd figma diff --fresh`). */
+  fresh?: boolean;
 }
 
-const FLAGS = new Set(['json', 'no-log', 'image', 'filmstrip', 'from-user', 'blueprint']);
+const FLAGS = new Set(['json', 'no-log', 'image', 'filmstrip', 'from-user', 'blueprint', 'fresh']);
 const ALIASES: Record<string, keyof Opts> = { o: 'out', 'no-log': 'noLog', 'from-user': 'fromUser' };
 
 function parseArgs(args: string[]): Opts {
@@ -708,6 +712,160 @@ async function cmdFigmaSystem(): Promise<never> {
   process.exit(0);
 }
 
+async function cmdFigmaDiff(opts: Opts): Promise<never> {
+  const frameId = opts._[0];
+  const pageOrUrl = opts._[1];
+
+  if (!frameId || !pageOrUrl) {
+    console.error(
+      'usage: omd figma diff <frame-id> <page-or-url> [--threshold 0.97] [--fresh] [--json]',
+    );
+    process.exit(1);
+  }
+
+  const threshold =
+    opts.threshold !== undefined ? parseFloat(opts.threshold) : 0.97;
+  if (isNaN(threshold) || threshold < 0 || threshold > 1) {
+    console.error('--threshold must be a number between 0 and 1');
+    process.exit(1);
+  }
+
+  const fresh = opts.fresh === true;
+  const jsonOut = opts.json === true;
+
+  // Load snapshot — frame dimensions and file key live here.
+  const snapPath = join(process.cwd(), '.omd', 'figma', 'snapshot.json');
+  if (!existsSync(snapPath)) {
+    console.error(
+      `No snapshot found at ${snapPath}\nRun \`omd figma pull <file-url>\` first.`,
+    );
+    process.exit(1);
+  }
+
+  const snapshot = JSON.parse(
+    readFileSync(snapPath, 'utf8'),
+  ) as import('../core/figma/types.ts').FigmaSnapshot;
+
+  // Locate frame in snapshot.
+  let foundFrame: import('../core/figma/types.ts').SnapshotFrame | undefined;
+  for (const page of snapshot.pages) {
+    const f = page.frames.find((fr) => fr.id === frameId);
+    if (f !== undefined) { foundFrame = f; break; }
+  }
+
+  if (foundFrame === undefined) {
+    console.error(`Frame ID "${frameId}" not found in snapshot.\nKnown frames:`);
+    for (const page of snapshot.pages) {
+      for (const fr of page.frames) {
+        console.error(`  ${fr.id}  ${fr.name}`);
+      }
+    }
+    process.exit(1);
+  }
+
+  // Frame dimensions come from the root node's absoluteBoundingBox.
+  // collectNodes() always puts the frame node first (index 0).
+  const rootNode = foundFrame.nodes[0];
+  if (rootNode?.absoluteBoundingBox === undefined) {
+    console.error(
+      `Frame "${foundFrame.name}" (${frameId}) has no absoluteBoundingBox in snapshot.\n`
+      + 'Re-run `omd figma pull` to refresh the snapshot.',
+    );
+    process.exit(1);
+  }
+
+  const { width: frameW, height: frameH } = rootNode.absoluteBoundingBox;
+
+  // ── Step 1: reference PNG (cache or live export) ──────────────────────────
+
+  const safeId = frameId.replace(/[:/]/g, '_');
+  const exportsDir = join(process.cwd(), '.omd', 'figma', 'exports');
+  const cachePath = join(exportsDir, `${safeId}.png`);
+
+  if (!fresh && existsSync(cachePath)) {
+    if (!jsonOut) console.log(`Using cached export: ${cachePath}`);
+  } else {
+    const token = process.env['FIGMA_TOKEN'];
+    if (token === undefined || token.length === 0) {
+      console.error(
+        'FIGMA_TOKEN environment variable is not set.\n'
+        + 'Set it to a Figma personal access token to export frames.',
+      );
+      process.exit(1);
+    }
+
+    if (!jsonOut) console.log(`Exporting frame ${frameId} from Figma …`);
+
+    const imgRes = await fetch(
+      `https://api.figma.com/v1/images/${snapshot.fileKey}`
+      + `?ids=${encodeURIComponent(frameId)}&format=png&scale=1`,
+      { headers: { 'X-Figma-Token': token } },
+    );
+    if (!imgRes.ok) {
+      const body = await imgRes.text().catch(() => '');
+      console.error(`Figma image export failed (${imgRes.status}): ${body.slice(0, 300)}`);
+      process.exit(1);
+    }
+
+    const imgData = (await imgRes.json()) as {
+      err?: string;
+      images?: Record<string, string | null>;
+    };
+    if (imgData.err !== undefined && imgData.err !== null) {
+      console.error(`Figma image export error: ${imgData.err}`);
+      process.exit(1);
+    }
+
+    const tempUrl = imgData.images?.[frameId];
+    if (tempUrl === undefined || tempUrl === null) {
+      console.error(`No image URL returned for frame ${frameId}`);
+      process.exit(1);
+    }
+
+    const pngRes = await fetch(tempUrl);
+    if (!pngRes.ok) {
+      console.error(`Failed to download PNG (${pngRes.status}): ${tempUrl}`);
+      process.exit(1);
+    }
+
+    mkdirSync(exportsDir, { recursive: true });
+    writeFileSync(cachePath, Buffer.from(await pngRes.arrayBuffer()));
+    if (!jsonOut) console.log(`Exported: ${cachePath}`);
+  }
+
+  // ── Step 2: render build at exact frame dimensions ────────────────────────
+
+  if (!jsonOut) {
+    console.log(`Rendering ${pageOrUrl} at ${Math.round(frameW)}×${Math.round(frameH)} …`);
+  }
+
+  const { renderPage } = await import('../core/render/index.ts');
+  const rendersDir = join(process.cwd(), '.omd', 'figma', 'renders');
+  mkdirSync(rendersDir, { recursive: true });
+  const renderPath = join(rendersDir, `${safeId}.png`);
+
+  await renderPage(pageOrUrl, {
+    viewport: { width: Math.round(frameW), height: Math.round(frameH) },
+    out: renderPath,
+  });
+
+  // ── Step 3: pixel diff ────────────────────────────────────────────────────
+
+  const { compareImages, formatDiffReport } = await import('../core/figma/diff.ts');
+  const refBuf = readFileSync(cachePath);
+  const buildBuf = readFileSync(renderPath);
+
+  const result = compareImages(refBuf, buildBuf, threshold);
+
+  if (jsonOut) {
+    console.log(JSON.stringify(result, null, 2));
+  } else {
+    console.log('\n' + formatDiffReport(result));
+  }
+
+  process.exit(result.pass ? 0 : 1);
+}
+
 async function cmdDoctor(): Promise<never> {
   let allPass = true;
 
@@ -795,7 +953,8 @@ function usage(): never {
     + '  doctor                                       check environment prerequisites\n'
   + '\n'
   + '  figma pull <file-url>                        fetch Figma file -> .omd/figma/snapshot.json\n'
-  + '  figma system                                 synthesize design system from snapshot',
+  + '  figma system                                 synthesize design system from snapshot\n'
+  + '  figma diff <frame-id> <page-or-url>          pixel diff: Figma export vs build render',
   );
   process.exit(1);
 }
@@ -862,6 +1021,7 @@ async function main(): Promise<never> {
   if (cmd === 'figma') {
     if (sub === 'pull') return cmdFigmaPull(args[2]);
     if (sub === 'system') return cmdFigmaSystem();
+    if (sub === 'diff') return cmdFigmaDiff(parseArgs(args.slice(2)));
     return usage();
   }
 
