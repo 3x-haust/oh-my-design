@@ -15,6 +15,10 @@ jobs:
         with:
           fetch-depth: 2   # need HEAD~1 to detect the version change
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
       - name: Detect version bump
         id: ver
         run: |
@@ -28,6 +32,31 @@ jobs:
             echo "changed=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Install dependencies
+        if: steps.ver.outputs.changed == 'true'
+        run: npm ci
+
+      - name: Install Playwright browsers
+        if: steps.ver.outputs.changed == 'true'
+        run: npx playwright install --with-deps chromium
+
+      - name: Run tests and capture count
+        if: steps.ver.outputs.changed == 'true'
+        id: tests
+        run: |
+          raw=$(node --test 'test/*.test.ts' 2>&1 || true)
+          count=$(echo "$raw" | grep -E '^# pass' | awk '{print $NF}' | tail -1)
+          echo "count=${count:-0}" >> "$GITHUB_OUTPUT"
+
+      - name: Generate release notes
+        if: steps.ver.outputs.changed == 'true'
+        run: |
+          node scripts/release-notes.ts \
+            --version "${{ steps.ver.outputs.curr }}" \
+            --prev "v${{ steps.ver.outputs.prev }}" \
+            --test-count "${{ steps.tests.outputs.count }}" \
+            > /tmp/release-notes.md
+
       - name: Tag and create GitHub release
         if: steps.ver.outputs.changed == 'true'
         env:
@@ -35,14 +64,10 @@ jobs:
         run: |
           tag="v${{ steps.ver.outputs.curr }}"
 
-          # Use the merge-commit body as release notes; fall back to tag name.
-          notes=$(git log -1 --format="%b" | sed '/^$/d' | head -80)
-          notes="${notes:-Release $tag}"
-
           git tag "$tag"
           git push origin "$tag"
 
           gh release create "$tag" \
             --title "$tag" \
-            --notes "$notes" \
+            --notes-file /tmp/release-notes.md \
             --latest
