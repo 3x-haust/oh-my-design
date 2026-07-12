@@ -151,15 +151,58 @@ instructions: |
   sentence a Korean product would have written first.
 
   And the prose itself, Korean or English, must not read machine-made. The tells, from
-  the im-not-ai taxonomy — avoid all of them:
+  the im-not-ai taxonomy and the kill-ai-slop catalogue (github.com/yetone/kill-ai-slop,
+  MIT) — avoid all of them:
   - mechanical enumeration (첫째/둘째/셋째, "Firstly/Secondly")
   - AI stock phrases: 결론적으로, 시사하는 바가 크다, 주목할 만하다, "in conclusion",
-    "it's worth noting", "delve into"
+    "it's worth noting", "delve into", "say goodbye to", "blazing fast", "it's not just X
+    — it's Y" (the antithesis formula every generated page reaches for)
   - translation-ese: ~를 통해, ~에 대해 살펴보다, double passives, 그/그녀
   - uniform sentence rhythm — vary length; a four-word sentence after two long ones
   - hedging stacks (~할 수 있을 것으로 보인다), redundant intensifiers (매우, 정말, truly)
   - connective abuse: consecutive sentences opening with 또한/따라서/즉/Also/Moreover
-  - decoration: bold everywhere, em-dash chains, emoji in headings
+  - decoration: bold everywhere, em-dash chains, emoji in headings or CTAs
+
+  ## Visual tells to avoid (kill-ai-slop catalogue)
+
+  The copy tells above have visual counterparts. `omd check` catches the measurable ones
+  (SLOP-GRADIENT, SLOP-TRIPLE-CARD, SLOP-SHADOW-MONOCULTURE, etc.); the following require
+  judgment before the page ships:
+
+  **Typography tells** — avoid:
+  - A serif-italic word mid-headline for cheap editorial drama ("The *fastest* way to…").
+    Emphasise with weight, position, or a line break — not a typeface swap mid-sentence.
+  - A display serif (Playfair Display, Lora, Cormorant) on a developer tool or technical
+    product. The form says "trust and heritage"; a terminal does not need heritage.
+  - Decorative strikethroughs, swipe-highlighters, or underline-as-ornament on body copy.
+    Reserve each for its semantic job: strikethrough = deleted, underline = link.
+  - A reflexive uppercase kicker above every heading ("FEATURES", "HOW IT WORKS",
+    "WHY US"). If the kicker restates the heading, delete it. Use one kicker per page
+    maximum, and only when the kicker genuinely disambiguates the heading.
+  - A complete marketing sentence set at hero scale (text-6xl across 3–4 lines). The
+    headline should be a claim, not a paragraph. Compress to the key idea in a few words.
+
+  **Component tells** — avoid:
+  - Rounded left-border callouts (border-l-4 rounded-lg bg-*-50) on every list item.
+    Let a list be a list. Reserve callout styling for genuinely scarce, high-priority
+    information — one or two per page, never the default list treatment.
+  - Every icon sitting on a 10%-opacity wash of its own hue (bg-blue-500/10 behind a
+    blue icon). Icons should inherit text color or sit on a defined opaque surface.
+  - A warm amber/stone/orange palette deployed as a lazy shortcut for "friendly." Warm
+    colour is a valid choice when the domain earns it (food, education, craft); it is
+    a default when it is chosen because it feels "cozy" with no domain reason.
+  - Stock semantic color pairs: blue-50/blue-600 for info, amber-50/amber-600 for warning,
+    green-50/green-600 for success, all used together. Derive semantic colors from the
+    brand palette — most states need no background color at all.
+  - AI-drawn SVG mascots (blob shapes, dot eyes, primitive geometry) shipped as the
+    product's logo or illustration system. Commission or generate refined icons.
+
+  **Interaction tells** — avoid:
+  - `transition-all` on anything. Name the properties you are transitioning: `color`,
+    `background-color`, `transform`, `opacity`. `transition-all` means you did not decide.
+  - `hover:scale-105` or `hover:-translate-y-2` on cards, icon tiles, and navigation items
+    uniformly. Reserve spring-like hover responses for one deliberate primary interaction
+    (the main CTA, a carousel card). Uniform bounce reads as a screen saver, not a product.
 
   Four additional tells that are deterministically AI-flavoured in Korean copy — `omd check`
   flags the first two; the second two are yours to police before the page ships:

@@ -44,6 +44,53 @@ You have no reasoning here to defend.
   `${CLAUDE_PLUGIN_ROOT}/core/theory/{color,typography,layout,motion,components,craft,expressive}.md`.
   Theory citations are evidence. Taste is not.
 
+## Kill-ai-slop visual checklist (kill-ai-slop catalogue, MIT)
+
+After running `omd check`, scan the render for the following tells that the linter
+cannot measure. Each is a finding only when it is present without a visible reason — a
+deliberate choice is fine; the default is not. Source for each tell in parentheses.
+
+**Typography** (tells #7, #8, #10, #11):
+- A serif-italic word inside an otherwise sans headline for cheap editorial drama. The
+  counter-condition: a concept committed to mixed typographic texture with a written reason.
+- A display serif on a technical or developer-tool UI. The counter-condition: a brand
+  identity that deliberately claims heritage.
+- A small uppercase kicker (FEATURES / HOW IT WORKS / WHY US) above every heading. Flag
+  when the kicker restates the heading verbatim. One kicker per page as an editorial device
+  is fine; reflexive kickers on every section are not.
+- A full marketing sentence set at hero scale (five or more words across multiple lines
+  at display size). The hero claim should be a few words, not a paragraph.
+
+**Copy and content** (#13):
+- Multiple bold or coloured inline spans per sentence ("**Effortless** setup, **blazing**
+  performance, **zero** config"). When everything is emphasised, nothing is.
+
+**Components** (#4, #5, #16, #17, #24):
+- Stock semantic color boxes used together: blue-50/blue-600 for info, amber/amber for
+  warning, green/green for success. A product palette should grow semantic colours from
+  the brand; most states need no background colour.
+- A single-hue status indicator where border, text, and background are all the same hue
+  at three opacities. State should be communicated by words and weight first.
+- A pulsing animated status dot (animate-ping) with no real application state behind it.
+  A real status dot shows an actual system state; decoration dots are always off.
+- Rounded left-border callouts (colored border-l-4 card) used as the default list item
+  treatment. If every list item is a callout, none of them is.
+- Every icon sitting on a 10%-opacity wash of its own hue. Icons should inherit text
+  colour or sit on a defined opaque surface.
+
+**Layout** (#28, #32):
+- Large low-opacity ordinals (01/02/03 at text-8xl, ~10% opacity) on sections that have
+  no genuine sequence. The counter-condition is documented in
+  `core/composition/editorial-index-labels.md`: numbering earns its place only when the
+  content has a sequential order the user will perceive. Numbered feature sections where
+  the features can be read in any order are the tell. Name the specific sections and
+  whether their order is genuinely sequential.
+- The tasteful terminal aesthetic: monospace typeface, near-black background, one warm
+  accent, possible ASCII art. Ask: is this a terminal/developer product (correct
+  register) or a marketing site that borrowed the aesthetic because it reads as
+  "designed"? A non-terminal product using terminal chrome without a stated reason is
+  the tell.
+
 ## Korean copy critique
 
 When the page contains Korean copy, run two additional checks as part of the critique

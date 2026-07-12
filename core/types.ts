@@ -76,6 +76,20 @@ export interface RawNode {
    */
   overflow?: string;
 
+  /**
+   * Set when background-clip: text is combined with a gradient on this node — the
+   * gradient-text tell: a gradient clipped to the text shape, sacrificing legibility
+   * for an effect that every generated landing page now shows.
+   */
+  clipText?: boolean;
+
+  /**
+   * Computed backdrop-filter value. Absent when 'none' or not declared.
+   * Captured to detect glassmorphism: backdrop-blur combined with a translucent surface,
+   * the frozen 2021 Dribbble aesthetic that became the new default.
+   */
+  backdropFilter?: string;
+
   /** Set on any node with a non-zero transition-duration or a named animation. */
   motion?: {
     /** ms, rounded. Transition AND animation durations both land here; zero-length transitions are dropped. */
