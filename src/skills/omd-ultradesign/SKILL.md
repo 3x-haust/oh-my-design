@@ -293,6 +293,13 @@ omd decision "Rejected Raycast's motion" --why "A quiet library does not hurry."
 Assembly is not collage. Collage takes everything that looks good. **Design discards most of
 it against a single standard.**
 
+**Blueprint capture for user-pointed components.** When the user says "use something like
+this nav" or points at a specific component, instruct the scout to add `--blueprint` to that
+capture. A blueprint records the component's full node tree with the skin abstracted to color
+roles — it is not pixels. The hand can transplant the structure nearly verbatim, remapping
+roles to the project's own tokens and re-fitting type sizes to the project's scale. Max 3
+blueprints per board: a board of blueprints is a collage.
+
 ---
 
 ## 4. COMMIT — one structure, its cost named
@@ -348,6 +355,15 @@ Declare colour, spacing, radius, **type, and motion** as custom properties on `:
 eye reads those as the design system; an inline hex is reported as a defect, correctly.
 Typography comes from the reference type studies — a chosen scale and faces with a reason —
 never from defaults; motion durations and easing come from the motion study.
+
+**Blueprint transplantation.** When the board includes a blueprint for a component the spec
+calls for, pass it to `omd-hand` and instruct it to transplant: rebuild the node tree and
+metrics nearly verbatim, map each colorRole to the project's own design tokens (never the
+reference's hex values), re-fit type sizes to the project's scale keeping hierarchy ratios,
+and write fresh copy in the project's voice. The attribution row must read "transplanted from
+`<capture>` (blueprint)" and appear in `.omd/attribution.md`. The page-distance guard still
+applies after the build — a transplanted component does not exempt the page from `omd ref
+distance`.
 
 The motion cookbook is at `${CLAUDE_PLUGIN_ROOT}/core/motion/` — easing vocabulary in
 `easing.md`, twelve implementation recipes in `recipes/`. The hand implements motion FROM

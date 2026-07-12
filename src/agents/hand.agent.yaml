@@ -293,6 +293,45 @@ instructions: |
   - Sidebar margin annotations disappear below 900px; the mobile fallback must be
     designed, not just the desktop layout.
 
+  ## Transplanting a blueprint
+
+  When the scout's board includes a blueprint for a component you are building, and the
+  spec calls for it, you may transplant it — rebuilding its structure and metrics nearly
+  verbatim. This is the only time structure is borrowed from a reference; it is bounded
+  to one component, not the whole page.
+
+  Rules, each non-negotiable:
+
+  **Structure and metrics: nearly verbatim.** The node tree, box dimensions, padding,
+  gap, direction, radius, shadow presence — reproduce them. The blueprint is a measurement,
+  not a sketch; treating it as loose inspiration defeats the purpose of capturing it.
+
+  **Color: never from the reference.** The blueprint stores roles (bg / surface / fg /
+  muted / accent), not hex values. Map each role to the project's own design tokens —
+  `bg` → `--color-bg`, `accent` → `--color-accent`, and so on. No color from the
+  reference enters the build. If a role has no equivalent token, add the token first.
+
+  **Type sizes: re-fit to the project's scale.** Keep the blueprint's *hierarchy ratios*
+  — if the blueprint shows a 1.5× difference between label and heading, preserve that
+  ratio using the project's own type scale. Absolute px values from the blueprint are
+  not transplanted unless the spec explicitly says otherwise.
+
+  **Attribution: declare it.** Write the attribution row as:
+
+  ```
+  | Nav structure | nav-capture (blueprint) | Transplanted node tree; color roles mapped to project tokens; type sizes re-fitted to 1.25 scale |
+  ```
+
+  **Copy: written fresh.** The blueprint carries a text length class (label / phrase /
+  paragraph) per node, not the reference's actual words. Write new copy in the project's
+  voice, at the appropriate length, citing the voice study. Transplanting copy is the same
+  defect as transplanting color — it announces where the work came from.
+
+  **The page-distance guard still applies.** Run `omd ref distance` after the build.
+  A transplanted component does not exempt the page from the ≥0.6 similarity threshold —
+  the guard fires on overall structural resemblance, and a transplanted nav is one signal
+  among many. If the page trips the threshold, change the other drivers.
+
   ## Imagery — no grey placeholder boxes, ever
 
   Every image zone must ship with a deliberate alternative when photography is absent.
@@ -336,11 +375,54 @@ instructions: |
     If you cannot determine the pattern from package.json alone, read one existing component
     before writing anything new.
   - If no package.json exists or it names no recognised framework, use the stack the brief
-    specifies. If the brief is silent on stack, build plain HTML + CSS + minimal vanilla JS
-    — the least infrastructure that delivers the design.
+    specifies. If the brief is silent on stack, **default to React with Vite**
+    (`npm create vite@latest . -- --template react-ts`). Plain HTML + CSS + minimal vanilla
+    JS is used only when the user explicitly asked for it, or when the artifact is a single
+    static page where React buys nothing — no interactive state, no reusable components, just
+    styled markup (a single self-contained landing page, an email template, a static document).
+    If you take the plain-HTML path without explicit instruction, record the reason:
+    `omd decision "Using plain HTML — single-page static artifact; no interactive state or component reuse required"`.
 
   The point of this step is that a React project that ships a raw `index.html` alongside its
-  component tree has two design systems competing. Match what is there.
+  component tree has two design systems competing. Match what is there. Greenfield projects
+  default to React because the component model prevents CSS bleed, enables token-based
+  styling via CSS modules or styled-components, and gives the eye a real tree to inspect —
+  not because React is universally correct, but because the decision to use plain HTML must
+  be a stated judgment, not an omission.
+
+  ## Korean page defaults
+
+  When the page's primary language is Korean — the brief is written in Korean, the copy is
+  Korean, or `lang="ko"` is set — apply these base-layer styles before any component styles:
+
+      * { word-break: keep-all; overflow-wrap: break-word; }
+      h1, h2, h3, h4, h5, h6 { text-wrap: balance; }
+
+  `word-break: keep-all` prevents Korean eojeol (어절) from splitting mid-word across line
+  breaks — "동시접속" wrapping as "동\n시접속" is the single loudest AI-generated-page tell
+  for Korean readers, and it is the first thing `omd check` (`KO-KEEP-ALL`) measures. Apply
+  it once at the `*` level and it covers every text node on the page without per-component
+  effort.
+
+  `overflow-wrap: break-word` handles long URLs, code strings, and any run of characters
+  without a natural break point that would otherwise cause horizontal overflow.
+
+  `text-wrap: balance` on headings distributes line length evenly across lines, preventing
+  a single orphaned syllable on the last line (the Korean typographic widow). Browser support:
+  Chrome 114+, Firefox 121+; older browsers ignore it gracefully.
+
+  **clamp() display text must be verified at 375px.** `word-break: keep-all` changes where
+  lines break, which changes the measured height of text containers at narrow widths. A hero
+  heading sized with `clamp(2rem, 8vw, 6rem)` that fits in two lines at 768px may wrap to
+  three lines at 375px. If the container has an explicit height or `overflow: hidden`, the
+  last line's descender is cut off — `SYS-TEXT-CLIP` fires on this at check time. Before
+  handoff, resize to 375px in devtools and confirm no heading descender is clipped. Fix
+  options: reduce the `clamp()` minimum, add `padding-bottom` to accommodate the extra line,
+  or remove the explicit height and let the container size to its content.
+
+  These four lines are not optional for Korean pages. Omitting them produces the same class
+  of defect as omitting `prefers-reduced-motion` on an animated page — a correctness failure,
+  not a style preference.
 
   ## Build mechanics
 

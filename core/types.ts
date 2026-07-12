@@ -57,6 +57,25 @@ export interface RawNode {
   /** line-height as a ratio to font-size, 2dp. 'normal' resolves to 1.2. */
   lineHeight?: number;
 
+  /**
+   * Computed word-break value, captured on text-bearing nodes.
+   * 'keep-all' is required for Korean text to prevent mid-eojeol (어절) line breaks.
+   * Set only on text-bearing nodes (where `type === 'TEXT'`).
+   */
+  wordBreak?: string;
+  /**
+   * Computed text-wrap value, captured on text-bearing nodes when the browser supports it
+   * (Chrome 114+, Firefox 121+). 'balance' is the recommended value for headings to prevent
+   * orphaned syllables. Absent when the browser returns an empty or unsupported value.
+   */
+  textWrap?: string;
+  /**
+   * Computed overflow value. Absent when 'visible' (the CSS default) to save space.
+   * Used by SYS-TEXT-CLIP to identify parents that visually clip their overflowing children.
+   * Only 'hidden' and 'clip' cut off content without providing a scrollbar escape.
+   */
+  overflow?: string;
+
   /** Set on any node with a non-zero transition-duration or a named animation. */
   motion?: {
     /** ms, rounded. Transition AND animation durations both land here; zero-length transitions are dropped. */
@@ -332,6 +351,79 @@ export interface MotionMeasurement {
  */
 export type RefKind = 'page' | 'component' | 'image';
 
+// ── blueprint ────────────────────────────────────────────────────────────────
+
+/**
+ * Semantic color role assigned to a node's fill or text color.
+ * Literal hex values never appear in a blueprint; only roles do.
+ */
+export type ColorRole = 'bg' | 'surface' | 'fg' | 'muted' | 'accent';
+
+/** Structural role of a blueprint node, derived from the IR node type and computed fields. */
+export type NodeRole = 'container' | 'heading' | 'text' | 'interactive' | 'image';
+
+/**
+ * Length class of a text node's content. Copy is never transplanted, but knowing whether
+ * a slot holds a single word, a headline, or a paragraph guides reconstruction.
+ */
+export type TextLengthClass = 'label' | 'phrase' | 'paragraph';
+
+/**
+ * One node in a blueprint — a full-resolution structural measurement with the skin
+ * abstracted to color roles. Literal hex values, token names, and text content are
+ * absent; only what is measurable and transferable remains.
+ *
+ * Fields are present only when the IR extractor actually measured them — no invented
+ * values for fields the extractor cannot fill.
+ */
+export interface BlueprintNode {
+  id: string;
+  role: NodeRole;
+  /** IDs of direct children, in document order. */
+  children: string[];
+  /** Bounding box dimensions. Position is intentionally omitted (component-relative). */
+  box: { w: number; h: number };
+  // layout — present when the node declared flex/grid or any padding
+  padding?: [number, number, number, number];
+  /** Non-zero gap between children. Absent when 0 or unmeasured. */
+  gap?: number;
+  /** Flex/grid main axis direction. */
+  direction?: 'VERTICAL' | 'HORIZONTAL';
+  // typography — present only on text and heading nodes
+  fontSize?: number;
+  fontWeight?: number;
+  lineHeight?: number;
+  // surface geometry
+  /** Border-radius in px. Absent when 0. */
+  radius?: number;
+  /** True when the node has a non-none box-shadow. */
+  hasShadow?: boolean;
+  // color roles — no literal hex values
+  /** Semantic role of the node's background fill. Absent for transparent/inherited fills. */
+  fillRole?: ColorRole;
+  /** Semantic role of the node's text color. Absent for non-text nodes. */
+  textRole?: ColorRole;
+  // motion
+  motionDurations?: number[];
+  motionEasings?: string[];
+  // text length signal — no actual copy
+  /** Length class of the node's own text content. Absent for non-text nodes. */
+  textLength?: TextLengthClass;
+}
+
+/**
+ * Full-resolution structural measurement of one component, with the skin abstracted to
+ * color roles. The blueprint captures what the component IS structurally, not what it
+ * looks like. Transplanting a blueprint means rebuilding its structure and metrics nearly
+ * verbatim, remapping color roles to the project's own tokens, and writing fresh copy.
+ */
+export interface Blueprint {
+  /** The CSS selector that scoped this capture. */
+  selector: string;
+  capturedAt: string;
+  nodes: BlueprintNode[];
+}
+
 export interface Reference {
   source: string;
   component: string;
@@ -368,6 +460,18 @@ export interface Reference {
    * pixel-level motion including GSAP/rAF — closing the getAnimations() blind spot.
    */
   energyCurve?: EnergyCurve | null;
+  /**
+   * Full-resolution structural measurement of one component, skin abstracted to color
+   * roles. Present only when `--blueprint` was passed at capture time and a `--selector`
+   * was given. Absent on references captured before this field was introduced — treat
+   * absence as undefined at usage sites.
+   *
+   * Transplanting a blueprint means rebuilding its structure and metrics nearly verbatim,
+   * remapping colorRoles to the project's own tokens, re-fitting type sizes to the
+   * project's scale (keep hierarchy ratios, not absolute px), and writing fresh copy in
+   * the project's voice. The page-distance guard still fires on a clone.
+   */
+  blueprint?: Blueprint;
 }
 
 /** How close a page sits to a reference. 1 is identical; the warning threshold is 0.6. */

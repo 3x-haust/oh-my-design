@@ -302,3 +302,152 @@ test('SLOP-PINK-ELEPHANT does not fire on legitimate negative-statement copy', (
     assert.ok(!v.some((x) => x.id === 'SLOP-PINK-ELEPHANT'), `unexpected SLOP-PINK-ELEPHANT for: ${text}`);
   }
 });
+
+// ── KO-KEEP-ALL ──────────────────────────────────────────────────────────────
+
+function makeKoreanIr(wordBreak?: string) {
+  const node: RawNode = {
+    id: 'ko1',
+    name: 'KoreanText',
+    type: 'TEXT',
+    path: 'Screen/KoreanText',
+    parent: null,
+    box: { x: 0, y: 0, w: 400, h: 24 },
+    children: [],
+    text: '동시접속 확인했어요',
+    ...(wordBreak !== undefined ? { wordBreak } : {}),
+  };
+  return normalize({ nodes: [node] });
+}
+
+test('KO-KEEP-ALL fires when a Hangul text node is missing word-break: keep-all', () => {
+  // no wordBreak field → computed value is not keep-all → rule fires
+  const v = check(makeKoreanIr(), builtin, { categories: ['a11y'] });
+  assert.ok(v.some((x) => x.id === 'KO-KEEP-ALL'), 'expected KO-KEEP-ALL when wordBreak absent');
+});
+
+test('KO-KEEP-ALL fires when wordBreak is normal (browser default)', () => {
+  const v = check(makeKoreanIr('normal'), builtin, { categories: ['a11y'] });
+  assert.ok(v.some((x) => x.id === 'KO-KEEP-ALL'), 'expected KO-KEEP-ALL for wordBreak:normal');
+});
+
+test('KO-KEEP-ALL does not fire when all Korean nodes have word-break: keep-all', () => {
+  const v = check(makeKoreanIr('keep-all'), builtin, { categories: ['a11y'] });
+  assert.ok(!v.some((x) => x.id === 'KO-KEEP-ALL'), 'unexpected KO-KEEP-ALL when wordBreak is keep-all');
+});
+
+test('KO-KEEP-ALL does not fire on a page with no Hangul text', () => {
+  const v = check(makeTextIr('Design is a decision, not a default.'), builtin, { categories: ['a11y'] });
+  assert.ok(!v.some((x) => x.id === 'KO-KEEP-ALL'), 'unexpected KO-KEEP-ALL on English-only page');
+});
+
+// ── SYS-TEXT-CLIP ─────────────────────────────────────────────────────────────
+
+function makeClipIr(overflowPx: number, parentOverflow?: string) {
+  const parentH = 100;
+  const textH = parentH + overflowPx;
+  const parent: RawNode = {
+    id: 'frame1',
+    name: 'HeroContainer',
+    type: 'FRAME',
+    path: 'Screen/HeroContainer',
+    parent: null,
+    box: { x: 0, y: 0, w: 600, h: parentH },
+    children: ['text1'],
+    ...(parentOverflow !== undefined ? { overflow: parentOverflow } : {}),
+  };
+  const textNode: RawNode = {
+    id: 'text1',
+    name: 'HeroHeading',
+    type: 'TEXT',
+    path: 'Screen/HeroContainer/HeroHeading',
+    parent: 'frame1',
+    box: { x: 0, y: 0, w: 580, h: textH },
+    children: [],
+    text: '다음 세대를 위한 디자인 도구',
+  };
+  return normalize({ nodes: [parent, textNode] });
+}
+
+test('SYS-TEXT-CLIP fires when text overflows a hidden-overflow parent by more than 4px', () => {
+  const v = check(makeClipIr(20, 'hidden'), builtin, { categories: ['system'] });
+  assert.ok(v.some((x) => x.id === 'SYS-TEXT-CLIP'), 'expected SYS-TEXT-CLIP for 20px overflow with hidden parent');
+});
+
+test('SYS-TEXT-CLIP does not fire when parent overflow is visible (default)', () => {
+  // visible → text bleeds intentionally, no clip
+  const v = check(makeClipIr(20), builtin, { categories: ['system'] }); // no overflow field = visible
+  assert.ok(!v.some((x) => x.id === 'SYS-TEXT-CLIP'), 'unexpected SYS-TEXT-CLIP when parent overflow is visible');
+});
+
+test('SYS-TEXT-CLIP does not fire when text fits within the parent (overflow within threshold)', () => {
+  const v = check(makeClipIr(3, 'hidden'), builtin, { categories: ['system'] });
+  assert.ok(!v.some((x) => x.id === 'SYS-TEXT-CLIP'), 'unexpected SYS-TEXT-CLIP for 3px overflow (within threshold)');
+});
+
+test('SYS-TEXT-CLIP does not fire when parent overflow is scroll', () => {
+  // scroll provides a scrollbar escape; content is not lost
+  const v = check(makeClipIr(20, 'scroll'), builtin, { categories: ['system'] });
+  assert.ok(!v.some((x) => x.id === 'SYS-TEXT-CLIP'), 'unexpected SYS-TEXT-CLIP when parent overflow is scroll');
+});
+
+// ── SLOP-KO-SIGNPOST ─────────────────────────────────────────────────────────
+
+test('SLOP-KO-SIGNPOST fires on 아래는 … 기록/내용/목록/정리 patterns', () => {
+  const positives = [
+    '아래는 그 기록이에요.',
+    '아래는 변경 내용입니다.',
+    '아래는 전체 목록이에요.',
+    '아래는 주요 정리입니다.',
+  ];
+  for (const text of positives) {
+    const v = check(makeTextIr(text), builtin, { categories: ['slop'] });
+    assert.ok(v.some((x) => x.id === 'SLOP-KO-SIGNPOST'), `expected SLOP-KO-SIGNPOST for: ${text}`);
+  }
+});
+
+test('SLOP-KO-SIGNPOST fires on 다음은 … 입니다/이에요 patterns', () => {
+  const positives = [
+    '다음은 기능 목록입니다.',
+    '다음은 그 이유이에요.',
+    '다음은 주요 특징입니다.',
+  ];
+  for (const text of positives) {
+    const v = check(makeTextIr(text), builtin, { categories: ['slop'] });
+    assert.ok(v.some((x) => x.id === 'SLOP-KO-SIGNPOST'), `expected SLOP-KO-SIGNPOST for: ${text}`);
+  }
+});
+
+test('SLOP-KO-SIGNPOST does not fire when 아래 is used as a spatial adverb (without 는)', () => {
+  const negatives = [
+    '아래 버튼을 누르세요.',        // spatial adverb, no topic marker
+    '아래에서 다운로드하세요.',      // 아래에서, not 아래는
+    '버튼은 아래에 있습니다.',      // 아래 embedded in sentence, not 아래는 opener
+  ];
+  for (const text of negatives) {
+    const v = check(makeTextIr(text), builtin, { categories: ['slop'] });
+    assert.ok(!v.some((x) => x.id === 'SLOP-KO-SIGNPOST'), `unexpected SLOP-KO-SIGNPOST for: ${text}`);
+  }
+});
+
+test('SLOP-KO-SIGNPOST does not fire when 다음 lacks the topic marker 은', () => {
+  const negatives = [
+    '다음에 다시 시도해주세요.',     // 다음에, not 다음은
+    '다음 단계로 이동하세요.',       // 다음 as a modifier, no topic marker
+  ];
+  for (const text of negatives) {
+    const v = check(makeTextIr(text), builtin, { categories: ['slop'] });
+    assert.ok(!v.some((x) => x.id === 'SLOP-KO-SIGNPOST'), `unexpected SLOP-KO-SIGNPOST for: ${text}`);
+  }
+});
+
+test('SLOP-KO-SIGNPOST does not fire on English-only copy', () => {
+  const negatives = [
+    'Below is the full changelog.',
+    'The following is a list of features.',
+  ];
+  for (const text of negatives) {
+    const v = check(makeTextIr(text), builtin, { categories: ['slop'] });
+    assert.ok(!v.some((x) => x.id === 'SLOP-KO-SIGNPOST'), `unexpected SLOP-KO-SIGNPOST for: ${text}`);
+  }
+});
