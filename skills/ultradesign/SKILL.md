@@ -225,6 +225,38 @@ If you cannot name it, the concept has no position yet. Name it before you open 
 
 ---
 
+## 2.5 DESIGN CONTRACT — establish before the scout, when this is a product
+
+**When the build spans more than one surface, OR when the brief describes a product or
+service rather than a one-off page, establish `.omd/design.md` before the scout runs.**
+The design contract is the upstream authority for every decision the hand makes across
+all surfaces. Without it, multi-surface builds drift: the landing page and the dashboard
+disagree on radius, voice, and which components are reusable.
+
+Single one-off pages (a single landing, an email template, a static document) may skip
+this step — say so explicitly in your handback if you do.
+
+```bash
+omd design
+```
+
+`omd design` scans the project for evidence (package.json, existing components, token
+files, `.omd/frame.md`, `.omd/refs/`) and generates `.omd/design.md` with fourteen
+sections, pre-filled from evidence and marked with open questions where evidence is absent.
+The generated file passes `omd design --check` immediately; the open questions are for the
+hand to fill before the build starts.
+
+Fill in the open questions in the generated file — especially:
+- **Brand**: personality, trust signals, and what to avoid.
+- **Interaction states**: confirm which states each surface needs.
+- **Content voice**: cite the voice study capture from the board.
+
+After filling, run `omd design --check` to verify all sections are complete. The hand cites
+design.md sections for every decision; `omd check` will report `DESIGN-INCOMPLETE` for any
+section left blank.
+
+---
+
 ## 3. REFERENCE — study real things, take the reasoning, leave the pixels
 
 **This is the step that separates design from decoration, and the one you will be most
@@ -433,6 +465,14 @@ favicon (no asset file required — the emoji-favicon trick is the minimal varia
 meta tags whose copy passes the same SLOP-COPY rules as the page body. Each item is
 implemented or skipped with a written reason in `.omd/decisions.md`. A page without a
 favicon and `::selection` colour reads as unfinished regardless of everything else.
+
+**Interaction states are part of the finish pass, not an afterthought.** The finish-pass
+checklist (§ Interaction states) requires that every interactive surface has implemented or
+explicitly skipped each of the six states: loading, empty, error, success, disabled, offline.
+`omd check` reports `DESIGN-FORM-NO-ERROR` when form inputs exist with no error affordance —
+this is a `system` violation, not a `slop` warning, and it fails the check the same way a
+contrast defect does. If `.omd/design.md` was established in step 2.5, run `omd design
+--check` as part of the pre-handoff verification to confirm the design contract is complete.
 
 ---
 

@@ -213,7 +213,9 @@ scripts/bump.ts            one command, three manifests, zero drift
 ## ⌨️ CLI
 
 ```
-omd check  <page> [--json] [--category slop] [--viewport WxH]   lint: a11y, tokens, motion, slop. exit 1 on findings
+omd design                                                      scan repo evidence, create/refresh .omd/design.md (the design contract)
+omd design --check                                              validate design.md section coverage; DESIGN-INCOMPLETE on gaps
+omd check  <page> [--json] [--category slop] [--viewport WxH]   lint: a11y, tokens, motion, slop, interaction-states. exit 1 on findings
 omd check  --site <dir>                                         cross-page ladder and token drift
 omd render <page> -o shot.png [--filmstrip]                     headless screenshot, or the first seconds as frames
 omd ir     <page>                                               rendered DOM → measured node tree
@@ -226,6 +228,14 @@ omd figma  diff <frame-id> <page> [--json]                      pixel-diff Figma
 omd doctor                                                      environment preflight (FIGMA_TOKEN checked when figma commands are used)
 omd coach                                                       recurring weaknesses, honest trends
 ```
+
+### Design contract
+
+`omd design` establishes `.omd/design.md` — a persistent, fourteen-section contract that governs every surface decision across a multi-page build. Run it before the scout when the brief describes a product or service. For a single one-off page it is optional; say so in the handback.
+
+The contract covers brand personality, product goals, personas, information architecture, design principles, visual language, component inventory, accessibility targets, responsive breakpoints, **interaction states (loading / empty / error / success / disabled / offline)**, content voice, implementation constraints, and open questions. Evidence already in the repo — `package.json`, token files, `.omd/frame.md`, `.omd/refs/` — is scanned and pre-filled; the rest becomes an explicit open question rather than an invented value.
+
+`omd check` validates the contract when it is present: `DESIGN-INCOMPLETE` fires for missing sections and for an Interaction states section that enumerates no states. A form with no error-state affordance fires `DESIGN-FORM-NO-ERROR` unconditionally — no design.md required.
 
 ## 🪨 Honest limitations
 
