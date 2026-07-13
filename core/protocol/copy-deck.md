@@ -73,9 +73,20 @@ states. Never fabricate error or empty UI to satisfy a checklist.
 
 ## Humanize audit
 
-Record fact fidelity, five-second scan, one thing per surface, new information versus
-repetition, CTA prediction, terminology, read-aloud/register, emotion, and applicable
-error/empty/recovery/accessibility checks. This is a review record, not a style score.
+Record these fields for the reviewed surface:
+
+- **Input contract**: speaker; listener; situation; intended change/next move; genre/register;
+  verified facts and verbatim quotes
+- **Mode**: `local repair` | `reconstruct from facts`
+- **Fidelity**: factual-ledger diff, uncertainty retained, quote status, and claim refs
+- **Root cause**: the discourse problem repaired, or `none` with a reason
+- **Next action**: the concrete action/state the final text makes available
+- **Owner handoff**: writer changed deck -> copy check -> hand synchronizes source, or N/A
+
+Also record proposition repetition, CTA prediction, terminology, read-aloud/register,
+emotion, and applicable error/empty/recovery/accessibility checks. This is a review record,
+not a style score or detector report. Missing input-contract context is a gap for the writer,
+not permission for another agent to invent it.
 
 The deterministic gate rejects only missing structure, invalid scope/state applicability,
 unresolved exact sentinels, and broken explicit fact references. It never judges AI-ness,

@@ -7,7 +7,8 @@ reorder it:
 edit -> writer revision -> copy check -> typesetter proof -> blind type review -> type
 revision/proof pass -> structural sketches -> blind selection -> production build ->
 semantic checkpoint -> selected-container type reproof -> visual checkpoint -> squint
-glance -> sharp critique/probe -> reframe -> ship`.
+glance -> source candidate scan/triage -> sharp critique/probe -> repair/rescan -> reframe ->
+ship`.
 
 ## Stack routing
 
@@ -28,8 +29,9 @@ Durable, reviewable state lives directly under `.omd/`: `frame.md`, `copy-deck.m
 belongs here; generated screenshots and raw execution output do not.
 
 Ephemeral state lives under `.omd/.cache/`: IR, renders, filmstrips, typography specimens,
-structural candidates, probe results, and scratch output. It can be deleted without erasing
-a design decision.
+structural candidates, raw source-candidate JSON, probe results, and scratch output. It can
+be deleted without erasing a design decision. Accepted and dismissed candidate reasoning is
+durable and belongs in `.omd/decisions.md`.
 
 ## Evidence and taste precedence
 
@@ -69,7 +71,9 @@ typography rationale and never sees candidate prose, author identity, reference 
 or the production plan. The glance receives only squint renders. It never sees sharp renders,
 frame, decisions, references, or rationale. The general eye receives only a sanitized
 review brief: primary task, costliest error, generator/register, renders, and deterministic
-check/probe output. It must not read frame, decisions, references, or attribution rationale.
+check/probe output. For source-candidate judgment it additionally receives only candidate id,
+controlled signals, and review question — never path, source excerpt, authorship, or rationale.
+It must not read frame, decisions, references, or attribution rationale.
 
 ## Divergence and checkpoints
 
@@ -94,6 +98,22 @@ come only from an expected tab order or a declared post-action expectation.
 
 Squint rendering is a hierarchy-isolation aid: conservative blur plus grayscale. It is not
 a colour-vision simulation and does not reproduce a literal timed first impression.
+
+## Source candidate triage
+
+Read `protocol/slop-review.md`. After production source exists and before the final sharp
+verdict, run `omd slop scan <root> --json` into `.omd/.cache/`. Candidate presence is not a
+failed gate and is not a linter verdict. The coordinator marks every candidate `confirmed`,
+`dismissed`, or `needs-render`. `needs-render` is transitional and must resolve after the
+relevant sharp render. The final gate is zero untriaged and zero needs-render candidates. A
+fresh eye judges only sanitized candidate metadata against sharp renders. Rendered IR is authoritative when
+source and render overlap, and the two evidence streams are never merged or double-counted.
+
+The hand repairs confirmed visual/source findings, then rerenders, runs `omd check`, and
+rescans. Copy diagnosis may use humanize and a copy eye, but only the writer changes
+`.omd/copy-deck.md`; the deck passes `omd copy --check` before the hand synchronizes source.
+Changing copy, a claim, or an action invalidates the relevant blind copy review and type
+proof. Durable evidence for a confirmed repair or dismissal goes to `.omd/decisions.md`.
 
 Interaction scope in `.omd/copy-deck.md` owns applicability. `stateful` work requires
 explicit `.omd/probes/primary.json` and `.omd/probes/recovery.json`, and both run through
@@ -142,6 +162,10 @@ These gates are part of every applicable production run, not optional polish:
   Stop at the configured threshold or record the remaining measured mismatch and evidence;
   never iterate without a bound.
 - For multi-page output, run `omd check --site <dir>` and resolve cross-page drift.
+- Once production source exists, run the source-candidate scan and contextual triage before
+  the final sharp verdict. Resolve every triage item, repair and rescan confirmed current
+  candidates, and retain evidence for dismissals. Candidate presence alone never fails the
+  run; final untriaged and needs-render counts must both be zero.
 - Final evidence includes sharp desktop and mobile renders, plus applicable filmstrip,
   `omd check`, humanize review, declared probe, and project tests/build. Findings must be
   clean or deliberately overruled with written evidence; silence is not an overrule.

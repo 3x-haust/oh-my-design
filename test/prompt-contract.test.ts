@@ -87,3 +87,56 @@ test('Claude plugin reference rewriting knows omd-writer', () => {
   const claude = read('adapters/claude.ts');
   assert.match(claude, /AGENT_REF[^\n]*writer/);
 });
+
+test('source candidates are scanned, blindly triaged, repaired, and rescanned without becoming lint', () => {
+  const protocol = read('core/protocol/slop-review.md');
+  const loop = read('core/protocol/human-design-loop.md');
+  const skill = read('src/skills/omd-ultradesign/SKILL.md');
+  const eye = read('src/agents/eye.agent.yaml');
+  const hand = read('src/agents/hand.agent.yaml');
+  const writer = read('src/agents/writer.agent.yaml');
+
+  assert.ok(skill.indexOf('Production source now exists') < skill.indexOf('Now render sharp'));
+  assert.ok(skill.indexOf('Now render sharp') < skill.lastIndexOf('`omd slop scan`'));
+  assert.match(protocol, /confirmed[\s\S]*dismissed[\s\S]*needs-render/);
+  assert.match(protocol, /`needs-render` is transitional[\s\S]*both `untriaged = 0` and `needs-render = 0`[\s\S]*not `candidates = 0`/);
+  assert.match(loop, /Candidate presence is not a\s+failed gate/);
+  assert.match(skill, /Final untriaged and needs-render counts are both zero/);
+  assert.match(protocol, /never added together or\s+double-counted/i);
+  assert.match(protocol, /rendered IR is authoritative/i);
+  assert.match(eye, /candidate id, controlled signals, and review question[\s\S]*Never receive candidate path,[\s\S]*source line\/excerpt,[\s\S]*authorship/i);
+  assert.match(hand, /repair only confirmed visual\/source candidates[\s\S]*rerender[\s\S]*`omd check`[\s\S]*rescan/i);
+  assert.match(writer, /sole deck owner[\s\S]*repair the deck first[\s\S]*production\s+source to omd-hand/i);
+  assert.match(protocol, /only `omd-writer` may modify `.omd\/copy-deck\.md`/);
+});
+
+test('source-review provenance is conceptual and does not recreate an upstream catalogue', () => {
+  const protocol = read('core/protocol/slop-review.md');
+  const rules = read('core/rules/builtin/slop.yaml');
+  assert.match(protocol, /yetone\/kill-ai-slop/);
+  assert.match(protocol, /accessed\s+2026-07-13/);
+  assert.match(protocol, /no explicit licence[\s\S]*no upstream code, wording, example copy,\s+assets, catalogue, identifiers, or catalogue ordering/i);
+  assert.doesNotMatch(protocol, /32[- ]tell|#(?:[1-9]|[12]\d|3[0-2])\b/i);
+  assert.doesNotMatch(rules, /32-tell catalogue|Bucket \([abc]\)/i);
+});
+
+test('humanize uses discourse repair modes and preserves evidence without rhythm choreography', () => {
+  const humanize = read('src/skills/omd-humanize/SKILL.md');
+  const voice = read('core/theory/voice.md');
+  const copy = read('core/protocol/copy-deck.md');
+  assert.match(humanize, /Mode A — local repair[\s\S]*Mode B — reconstruct from facts/);
+  assert.match(humanize, /Speaker[\s\S]*Listener[\s\S]*Situation[\s\S]*Intended change \/ next move[\s\S]*Genre and register[\s\S]*Facts and quotes/);
+  assert.match(humanize, /Only `verified` facts may support shipped claims[\s\S]*`open` and\s+`fixture` facts cannot ship/);
+  assert.match(humanize, /quote cannot stay\s+verbatim, remove it; never paraphrase it as a quote/i);
+  assert.match(humanize, /Only\s+`omd-writer` changes `.omd\/copy-deck\.md`/);
+  assert.match(copy, /Input contract[\s\S]*Mode[\s\S]*Fidelity[\s\S]*Root cause[\s\S]*Next action[\s\S]*Owner handoff/);
+  assert.match(voice, /Static copy and live dialogue have different situations/);
+  assert.match(voice, /no individual signal establishes authorship/i);
+  assert.match(voice, /Product copy has no universal speech-level/i);
+  assert.match(voice, /Use breath as contextual evidence, not a universal sentence rule/);
+  assert.match(voice, /documentation, comparisons, and feature[\s\S]*may explain mechanism/i);
+  assert.doesNotMatch(humanize, /30%|50%|only rewrite what a rule tagged|after two long sentences|four-word one/i);
+  assert.doesNotMatch(voice, /vary deliberately|After two long sentences|dramatically short sentence/i);
+  assert.doesNotMatch(voice, /any one of these signals[\s\S]*model wrote|Product\s+copy[^.]*해요체[^.]*without exception|No human founder|mark the\s+text as generated|Two Korean AI tells are real/i);
+  assert.doesNotMatch(voice, /will not need connectives|never explains the product's own mechanism/i);
+});

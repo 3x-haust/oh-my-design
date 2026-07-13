@@ -154,6 +154,15 @@ omd render <page> --viewport 390x844 --squint -o .omd/.cache/squint-mobile.png
 Spawn `oh-my-design:glance` with only those images. Preserve its four-line report. Squint isolates
 hierarchy; never call it a colour-blind simulation or literal 50ms test.
 
+Production source now exists. Read `protocol/slop-review.md`, run `omd slop scan <root>
+--json`, and keep the raw report under `.omd/.cache/`. Triage each candidate as `confirmed`,
+`dismissed`, or `needs-render`; candidate presence is not a failed gate, while an untriaged
+candidate is. Treat `needs-render` as transitional: obtain sharp evidence and resolve it
+before ship. Final untriaged and needs-render counts are both zero. Record durable
+repair/dismissal evidence in `.omd/decisions.md`. Do not merge
+source candidates with rendered IR warnings or send them to check history/coach; rendered IR
+is authoritative where they overlap.
+
 Use the copy deck's Interaction scope. `stateful` requires explicit non-destructive
 `.omd/probes/primary.json` and `.omd/probes/recovery.json`, with both run through `omd probe`.
 `navigation-only` requires and runs only the primary probe; recovery is N/A with a reason.
@@ -166,19 +175,24 @@ controls; never probe remote production or authenticated flows.
 
 Now render sharp desktop/mobile (and filmstrip when motion matters), run deterministic
 checks, and spawn a fresh `oh-my-design:eye`. Pass only the sanitized review brief: primary task,
-costliest error, generator/register, renders, check output, probe output, and the immutable
-glance report. Do not pass frame, decisions, refs, attribution rationale, source authorship,
-or build transcript.
+costliest error, generator/register, renders, check output, probe output, the immutable
+glance report, and for source-candidate judgment only candidate id, controlled signals, and
+review question. Do not pass candidate path or excerpt, frame, decisions, refs, attribution
+rationale, source authorship, or build transcript.
 
 For showpiece only, spawn one additional fresh eye with exactly one dominant-technique lens
 chosen from typography, motion, or graphics. It reviews that technique only. Do not create
 a permanent specialist or multi-lens panel.
 
 Send prioritized findings back to the hand for the smallest repair, then rerun affected
-checks/renders/probe. If rendered evidence changes the problem, run `omd frame reframe --to
+checks/renders/probe and `omd slop scan`. Confirmed source candidates are repaired; dismissed
+ones have evidence; confirmed current candidates are rescanned; final untriaged and
+needs-render counts are zero. If rendered evidence changes the problem, run `omd frame reframe --to
 ... --because ...`; otherwise record why the frame survived.
 If a finding requests copy repair, update the deck through oh-my-design:writer first, re-run
-`omd copy --check`, and only then update source. The hand never silently rewrites shipped copy.
+`omd copy --check`, and only then update source through the hand. Copy, claim, or action
+changes invalidate the affected blind copy review and typography proof. The hand never
+silently rewrites shipped copy.
 
 ## 8. Ship
 
@@ -187,7 +201,8 @@ writer/editor pass, a blind typography proof before sketches and production-cont
 reproof before the visual checkpoint, responsive sharp/squint renders, applicable filmstrip, humanize review,
 probe, `omd craft status`, `omd design --check` when applicable,
 `omd ref distance`, bounded target convergence when a manifest exists, and `omd check --site`
-for multi-page output. Everything is clean or has an evidence-backed deliberate overrule.
+for multi-page output. Source-candidate triage has no untriaged or needs-render items and its
+scan was rerun after repairs. Everything is clean or has an evidence-backed deliberate overrule.
 Deliver the working artifact and briefly state the frame,
 concept, structural choice, what the two craft renders changed, glance/critique outcome,
 and any deliberate overruling. Do not release, deploy, or wait for further approval unless

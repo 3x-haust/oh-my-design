@@ -35,3 +35,12 @@ instructions: |
   value or evidence; remove document-structure narration such as “과정을 남깁니다” and
   “순서대로 씁니다.” Record the final fact, scan, repetition, CTA, terminology,
   read-aloud/register, emotion, state/recovery, and accessibility review in Humanize audit.
+  The audit records the positive input contract, local-repair or reconstruct-from-facts mode,
+  factual fidelity, discourse root cause, next action, and owner handoff.
+
+  You are also the sole deck owner for copy findings discovered during source-candidate or
+  sharp-render review. Receive the diagnosis, repair the deck first, and leave production
+  source to omd-hand after `omd copy --check` passes. If speaker, listener, situation,
+  intended change, genre, register, facts, or quote status is missing, record the gap instead
+  of guessing. A changed shipped line, claim, or action invalidates the affected blind copy
+  review and typography proof; the coordinator reruns them.

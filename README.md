@@ -61,8 +61,9 @@ Run the main design skill from your host after both doctor commands pass. Host U
 10. **Build once** — one selected structure becomes the production implementation. The builder does not generate another candidate set.
 11. **Reflect while building** — the builder records a semantic checkpoint, re-proves type in the selected desktop/mobile containers, then records the visual checkpoint before optional motion.
 12. **See the result** — desktop and mobile renders, squint views, applicable filmstrips, deterministic checks, and declared local probes supply the review evidence.
-13. **Critique and reframe** — a squint-only glance reports hierarchy first; a separate sharp reviewer judges craft and consequences; the coordinator records what the render changed.
-14. **Ship** — project tests, build checks, applicable design gates, and unresolved findings are reported with their evidence.
+13. **Triage source candidates** — after production source exists, a read-only scan proposes narrow candidates. The coordinator resolves each through rendered context; candidate presence alone is not a failure.
+14. **Critique, repair, and reframe** — a squint-only glance reports hierarchy first; a separate sharp reviewer judges craft and sanitized candidates, then repairs are rendered, checked, and rescanned.
+15. **Ship** — project tests, build checks, applicable design gates, and unresolved findings are reported with their evidence.
 
 Figma and explicit visual targets already supply structural decisions. The loop may skip structural divergence in those routes, but it records why.
 
@@ -80,6 +81,7 @@ Figma and explicit visual targets already supply structural decisions. The loop 
 | Production build | repository source | One builder implements one selected structure and preserves the copy deck. Separate `omd decision` entries record implementation reasons in `.omd/decisions.md`; they are not candidate-choice records. |
 | Production evidence | `.omd/attribution.md` | The builder records the sources behind shipped tokens, motion, composition, and graphics. |
 | Craft checkpoints | `.omd/craft.jsonl` | One semantic and one visual checkpoint each record an observation and the concrete change it caused. |
+| Source-candidate triage | raw JSON in `.omd/.cache/`; reasoning in `.omd/decisions.md` | `omd slop scan` exposes controlled signals without source excerpts. `needs-render` is transitional; final untriaged and needs-render counts are both zero. Confirmed current candidates are repaired/rescanned, dismissals have evidence, and rendered IR wins on overlap. |
 | Rendered review | cache renders, filmstrip, probe output | The squint reviewer sees only squint renders. The sharp reviewer receives sanitized task context plus measured outputs, never the builder’s rationale. |
 | Reframe | `.omd/frame.md` revision | `omd frame reframe` appends what the render revealed instead of erasing the original framing. |
 
@@ -111,7 +113,7 @@ These are the six user-facing skills:
 | `omd-figma` | Pull a Figma file, synthesize its system, implement frames, compare responsive pairs, and report measured fidelity. |
 | `omd-scout` | Build a standalone measured reference board without designing or implementing. This skill uses a minimum of 18 captures and targets 25. |
 | `omd-critique` | Review an existing design without changing it; group deterministic findings by root cause and judge rendered craft. |
-| `omd-humanize` | Rewrite copy while preserving facts, removing mechanical prose patterns and translation artifacts. |
+| `omd-humanize` | Preserve facts while locally repairing sound discourse or reconstructing a misshapen message from verified facts, voice, and surface action. |
 | `omd-coach` | Read accumulated check history, identify recurring problems and trends, and suggest what to practise next. It does not read taste records. |
 
 Canonical source and direct-install names use the `omd-*` prefix. Codex displays these skills as `(omd) <skill>` in its UI, for example `(omd) ultradesign`.
@@ -147,6 +149,7 @@ OMD combines deterministic checks with rendered review:
 | Typography proof | Layout-neutral desktop/mobile specimens run before sketches; selected-container reproof runs after semantic structure and before the visual checkpoint. Copy, font/file, weight/axis, or container-width changes invalidate the proof. |
 | Render evidence | `omd render` produces sharp screenshots, `--squint` isolates hierarchy with grayscale and blur, and `--filmstrip` captures load-time frames. Squint is not a timed first-impression simulator. |
 | Interaction | `omd probe` executes only a declared, safe local plan and reports expectation or tab-order failures. |
+| Source candidates | `omd slop scan [root] [--json]` reads supported production source without writing it. Candidates require contextual triage; they are not `omd check` warnings, scores, or authorship claims. |
 | Design lint | `omd check` evaluates `system`, `a11y`, `slop`, `motion`, and `ux` conditions. Contrast and hit-area rules are errors; slop and the other quality-floor rules are warnings where authored that way. |
 | Site consistency | `omd check --site <dir>` or multi-page positional checks report cross-page ladder and token drift. |
 | Reference distance | `omd ref distance <page>` compares measured invariants against saved references and helps catch overly close results. |
@@ -162,6 +165,8 @@ export FIGMA_TOKEN=...
 `omd doctor` reports a missing `FIGMA_TOKEN` as optional and still passes that check. Figma pull remains unavailable until the token is set.
 
 Slop findings are warnings and a quality floor. They do not prove that a design was generated by AI. A written overrule records workflow intent, but it does not suppress a finding or change the command status. Any `omd check` findings cause the command to exit with status 1, which makes it usable in CI.
+
+Source candidates are a separate evidence stream. Their presence exits successfully; only an operational scan failure is nonzero. Before ship, however, neither untriaged nor needs-render items may remain. Raw candidate JSON stays ephemeral, while confirmed repairs and evidence-backed dismissals are recorded durably. The protocol was conceptually informed by [`yetone/kill-ai-slop`](https://github.com/yetone/kill-ai-slop), accessed 2026-07-13; because no explicit upstream licence was present, OMD independently authors its implementation, language, examples, identifiers, and review flow rather than copying upstream material.
 
 Rendered critique remains necessary: a rule engine cannot safely judge optical balance, composition rhythm, typography craft, or whether the memorable moment belongs to the concept.
 
@@ -225,6 +230,7 @@ omd probe <page> [--plan path] [--json] [--out path]
 omd check [<page>|--ir file] [--json] [--category slop] [--no-log]
 omd check --site <dir>
 omd check <page1> <page2> ...
+omd slop scan [root] [--json]
 omd coach
 
 omd frame show

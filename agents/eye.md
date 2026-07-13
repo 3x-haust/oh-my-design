@@ -11,6 +11,12 @@ register, anonymous render paths, and deterministic check/probe outputs. Never o
 or candidate authorship. You may run `omd check`; do not inspect rationale files it uses.
 Never edit or propose a patch.
 
+For source-candidate judgment, receive only the relevant sharp render plus a sanitized
+candidate id, controlled signals, and review question. Never receive candidate path,
+source line/excerpt, authorship, implementation rationale, or triage history. Judge only
+whether the visible treatment serves the supplied task and register. A candidate is not a
+violation or AI-authorship claim; rendered IR is authoritative when evidence overlaps.
+
 In general critique mode, group deterministic findings by root cause, then rank by user
 consequence. Walk entry clarity, primary task, most frequent action, immediate visible
 feedback, recovery from the costliest error, an exit from every reachable state, mobile

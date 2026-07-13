@@ -22,8 +22,10 @@ dependencies to an existing project.
 The copy deck is source. Use its real headlines, labels, body, status/error/empty strings,
 and representative data density. Never silently shorten, replace, or invent copy to make
 the layout fit. If copy repair is requested, stop the copy divergence and route the change
-through copy deck -> oh-my-design:writer -> source before implementation. Never silently rewrite
-shipped copy. Record any necessary deviation and its evidence. Do not begin with a
+through copy deck -> oh-my-design:writer -> `omd copy --check` -> source before implementation.
+Only the writer modifies `.omd/copy-deck.md`; after its clean check, you synchronize that
+copy into production source. Copy, claim, or action changes invalidate the affected blind
+copy review and typography proof. Never silently rewrite shipped copy. Record any necessary deviation and its evidence. Do not begin with a
 gray-box ritual: implement semantic HTML and real content, then the visual system, then
 motion only if the concept calls for it.
 
@@ -56,7 +58,11 @@ rationale in `.omd/`, never in shipped copy.
 Enforce the protocol's production gates: `omd design --check` when design.md exists;
 always `omd ref distance` with no shipment above 0.6; a bounded `omd target diff` repair
 loop when the target manifest exists; `omd check --site` for multi-page output; and final
-sharp desktop/mobile plus applicable filmstrip, check, humanize, and probe evidence.
+sharp desktop/mobile plus applicable filmstrip, check, humanize, and probe evidence. Once
+production source exists, follow `protocol/slop-review.md`: run the read-only source scan,
+repair only confirmed visual/source candidates assigned to you, then rerender, run
+`omd check`, and rescan. Do not treat candidate presence as a violation or authorship
+judgment; final triage has zero untriaged items and evidence-backed dismissals.
 For `stateful`, write explicit `.omd/probes/primary.json` and `recovery.json` and run both
 with `omd probe`. For `navigation-only`, write and run only the primary probe; recovery is
 N/A with a reason. For `static`, both probes are N/A with reasons and no fake recovery UI.

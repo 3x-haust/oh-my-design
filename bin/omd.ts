@@ -14,6 +14,7 @@ import { discoverEvidence, generateDesignMd, validateDesignMd } from '../core/de
 import { validateCopyDeck } from '../core/copy/index.ts';
 import { checkInteractionStates } from '../core/design/interaction-states.ts';
 import { checkFrameUx } from '../core/frame/check-ux.ts';
+import { scanSlopSource } from '../core/slop/index.ts';
 import type { Category, EnergyCurve, Layer, RawIr, Violation } from '../core/types.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -1319,6 +1320,19 @@ function cmdPack(sub: string | undefined, ...rest: string[]): never {
   process.exit(1);
 }
 
+function cmdSlop(sub: string | undefined, opts: Opts): never {
+  if (sub !== 'scan') throw new Error('usage: omd slop scan [root] [--json]');
+  const result = scanSlopSource(opts._[0] ?? process.cwd());
+  if (opts.json) process.stdout.write(JSON.stringify(result));
+  else {
+    console.log(`source candidates: ${result.candidates.length} (${result.filesScanned} files scanned)`);
+    for (const item of result.candidates) {
+      console.log(`${item.path}:${item.line}  ${item.candidateId}  ${item.reviewQuestion}`);
+    }
+  }
+  process.exit(0);
+}
+
 function usage(): never {
   console.error(
     'usage: omd <command>\n\n'
@@ -1330,6 +1344,7 @@ function usage(): never {
     + '  check [<page>|--ir f] [--json] [--category slop] [--no-log]\n'
     + '  check --site <dir>                          cross-page consistency (SITE-*)\n'
     + '  check <page1> <page2> ...                   same, multi-page positional\n'
+    + '  slop scan [root] [--json]                   read-only source candidate scan\n'
     + '  coach                                        trends across `omd check` history\n'
     + '\n'
     + '  frame show\n'
@@ -1390,6 +1405,7 @@ async function main(): Promise<never> {
   if (cmd === 'render') return cmdRender(parseArgs(args.slice(1)));
   if (cmd === 'probe') return cmdProbe(parseArgs(args.slice(1)));
   if (cmd === 'check') return cmdCheck(parseArgs(args.slice(1)));
+  if (cmd === 'slop') return cmdSlop(sub, parseArgs(args.slice(2)));
   if (cmd === 'coach') return cmdCoach();
   if (cmd === 'config') return cmdConfig(sub, parseArgs(args.slice(2)));
   if (cmd === 'craft') return cmdCraft(sub, parseArgs(args.slice(2)));
