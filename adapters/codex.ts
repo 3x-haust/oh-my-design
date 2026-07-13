@@ -45,7 +45,7 @@ const emitAgentFile = (agent: AbstractAgent): string => [
   '',
 ].join('\n');
 
-export function emitCodex({ agents = [] }: { agents?: AbstractAgent[] } = {}): Emitted {
+export function emitCodex({ agents = [], version = '0.0.0' }: { agents?: AbstractAgent[]; version?: string } = {}): Emitted {
   const files: Record<string, unknown> = {};
 
   for (const agent of agents) files[`agents/${agent.name}.toml`] = emitAgentFile(agent);
@@ -54,6 +54,8 @@ export function emitCodex({ agents = [] }: { agents?: AbstractAgent[] } = {}): E
 
   files['.codex-plugin/plugin.json'] = {
     name: 'oh-my-design',
+    version,
+    description: 'Design cognition loop — frame, diverge, see, reframe',
     skills: './skills/',
     mcpServers: './.mcp.json',
     interface: {

@@ -56,8 +56,10 @@ export function build(): void {
   const agents = readAll<AbstractAgent>('src/agents', '.agent.yaml', (t) => parse(t) as AbstractAgent);
   const skills = readSkills();
 
+  const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { version: string };
+
   const emitters: Record<Host, (opts: { agents: AbstractAgent[] }) => Emitted> = {
-    codex: emitCodex,
+    codex: (opts) => emitCodex({ ...opts, version: pkg.version }),
     claude: emitClaude,
   };
 

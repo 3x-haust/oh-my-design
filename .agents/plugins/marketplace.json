@@ -1,0 +1,22 @@
+{
+  "name": "oh-my-design",
+  "version": "0.13.0",
+  "interface": {
+    "displayName": "Oh My Design"
+  },
+  "plugins": [
+    {
+      "name": "omd",
+      "source": {
+        "source": "local",
+        "path": "./"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_FIRST_USE"
+      },
+      "category": "design",
+      "version": "0.13.0"
+    }
+  ]
+}
