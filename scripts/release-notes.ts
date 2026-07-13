@@ -127,18 +127,17 @@ function getPrevTag(explicit: string | undefined): string {
 }
 
 function getMergedPrsSince(prevTag: string): PrEntry[] {
-  // Use the GitHub compare API over <prevTag>...HEAD — correct source of truth
-  // when running before the new tag exists. Each commit subject from a squash
-  // merge is "<title> (#N)", so we parse PR numbers directly from subjects
-  // without extra per-PR API calls.
+  // The commit range prevTag..HEAD is the exact set the release ships. Read it
+  // from local git — the release workflow fetches full history and tags
+  // (fetch-depth: 0), so `git log` resolves the range without any network call.
+  // Each squash-merge subject is "<title> (#N)", so PR numbers parse straight
+  // from the subjects. The GitHub compare API is avoided on purpose: it does not
+  // resolve a literal "HEAD" ref server-side, which silently emptied the list.
   //
-  // If prevTag is unknown/v0.0.0 and the compare call fails, exec() returns ''
-  // and we fall back gracefully to an empty list (notes will say "initial release").
-  const raw = exec('gh', [
-    'api',
-    `repos/${OWNER_REPO}/compare/${prevTag}...HEAD`,
-    '--jq', '.commits[].commit.message | split("\\n")[0]',
-  ]);
+  // A missing/unknown prevTag (first release) makes the range invalid; exec()
+  // returns '' and we fall back to an empty list ("initial release").
+  const range = prevTag && prevTag !== 'v0.0.0' ? `${prevTag}..HEAD` : 'HEAD';
+  const raw = exec('git', ['log', range, '--format=%s']);
   if (!raw) return [];
 
   const subjects = raw.split('\n').filter(Boolean);
