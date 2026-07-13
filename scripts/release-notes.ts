@@ -75,6 +75,40 @@ export function buildReleaseNotes(opts: ReleaseNotesInput): string {
   ].join('\n');
 }
 
+/**
+ * Pure helper — parses PR entries from an array of squash-merge commit subject
+ * lines. Each subject line is expected to have the form:
+ *   <title> (#N)
+ *
+ * Lines that carry no `(#N)` reference are ignored. Release commits whose
+ * titles match `chore: release` are excluded. Duplicate PR numbers are
+ * deduplicated. The result is sorted ascending by PR number.
+ *
+ * Pure function — no I/O; suitable for unit tests.
+ */
+export function parsePrsFromCommitMessages(messages: string[]): PrEntry[] {
+  const seen = new Set<number>();
+  const result: PrEntry[] = [];
+
+  for (const msg of messages) {
+    const match = msg.match(/^(.+?)\s+\(#(\d+)\)/);
+    if (!match) continue;
+
+    const title = match[1]!.trim();
+    const number = parseInt(match[2]!, 10);
+
+    // Exclude the release/bump PR itself
+    if (/^chore:\s*release/i.test(title)) continue;
+
+    if (seen.has(number)) continue;
+    seen.add(number);
+
+    result.push({ number, title });
+  }
+
+  return result.sort((a, b) => a.number - b.number);
+}
+
 // ── CLI helpers (I/O — excluded from unit tests) ─────────────────────────────
 
 function exec(cmd: string, args: string[]): string {
@@ -92,55 +126,23 @@ function getPrevTag(explicit: string | undefined): string {
   return tag || 'v0.0.0';
 }
 
-function resolveTagDate(prevTag: string): string {
-  // Primary: local git history (works with full-depth clones and local runs)
-  const gitDate = exec('git', ['log', '-1', '--format=%aI', prevTag]);
-  if (gitDate) return gitDate;
-
-  // Fallback: GitHub releases API (works in CI even when git history is
-  // shallow, as long as the tag corresponds to a published release)
-  const releaseDate = exec('gh', [
-    'api', `repos/${OWNER_REPO}/releases/tags/${prevTag}`,
-    '--jq', '.published_at',
-  ]);
-  if (releaseDate && releaseDate !== 'null') return releaseDate;
-
-  // Both paths failed — error visibly rather than returning an empty PR list
-  process.stderr.write(
-    `error: could not resolve a commit date for tag ${prevTag}.\n` +
-    `  Tried: git log -1 --format=%aI ${prevTag}  (returned empty)\n` +
-    `  Tried: gh api repos/${OWNER_REPO}/releases/tags/${prevTag}  (returned empty)\n` +
-    `Ensure the tag exists locally (fetch-depth: 0 + fetch-tags: true) or\n` +
-    `that the tag corresponds to a published GitHub release.\n`,
-  );
-  process.exit(1);
-}
-
 function getMergedPrsSince(prevTag: string): PrEntry[] {
-  // Resolve the tag to a commit date so we can filter PRs merged after it.
-  // resolveTagDate() either returns a valid ISO-8601 date string or exits.
-  const tagDate = resolveTagDate(prevTag);
-
+  // Use the GitHub compare API over <prevTag>...HEAD — correct source of truth
+  // when running before the new tag exists. Each commit subject from a squash
+  // merge is "<title> (#N)", so we parse PR numbers directly from subjects
+  // without extra per-PR API calls.
+  //
+  // If prevTag is unknown/v0.0.0 and the compare call fails, exec() returns ''
+  // and we fall back gracefully to an empty list (notes will say "initial release").
   const raw = exec('gh', [
-    'pr', 'list',
-    '--state', 'merged',
-    '--base', 'main',
-    '--json', 'number,title,mergedAt',
-    '--limit', '100',
+    'api',
+    `repos/${OWNER_REPO}/compare/${prevTag}...HEAD`,
+    '--jq', '.commits[].commit.message | split("\\n")[0]',
   ]);
   if (!raw) return [];
 
-  let items: Array<{ number: number; title: string; mergedAt: string }>;
-  try {
-    items = JSON.parse(raw) as typeof items;
-  } catch {
-    return [];
-  }
-
-  return items
-    .filter((pr) => pr.mergedAt > tagDate)
-    .sort((a, b) => a.number - b.number)
-    .map(({ number, title }) => ({ number, title }));
+  const subjects = raw.split('\n').filter(Boolean);
+  return parsePrsFromCommitMessages(subjects);
 }
 
 function run(argv: string[]): void {

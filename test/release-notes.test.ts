@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildReleaseNotes } from '../scripts/release-notes.ts';
+import { buildReleaseNotes, parsePrsFromCommitMessages } from '../scripts/release-notes.ts';
 
 const BASE = {
   version: '0.12.0',
@@ -133,6 +133,68 @@ test('Validation section mentions tsc clean and build clean', () => {
     md.split('## Validation')[1]?.split('**Full Changelog')[0] ?? '';
   assert.match(section, /tsc clean/);
   assert.match(section, /build clean/);
+});
+
+// ── parsePrsFromCommitMessages ────────────────────────────────────────────────
+
+test('parsePrsFromCommitMessages: parses a standard squash-merge subject', () => {
+  const result = parsePrsFromCommitMessages(['feat: x (#12)']);
+  assert.deepEqual(result, [{ number: 12, title: 'feat: x' }]);
+});
+
+test('parsePrsFromCommitMessages: extracts title text before (#N)', () => {
+  const result = parsePrsFromCommitMessages(['fix: correct parsing logic (#99)']);
+  assert.equal(result[0]?.title, 'fix: correct parsing logic');
+  assert.equal(result[0]?.number, 99);
+});
+
+test('parsePrsFromCommitMessages: deduplicates repeated PR numbers', () => {
+  const result = parsePrsFromCommitMessages([
+    'feat: first (#5)',
+    'feat: first (#5)',
+  ]);
+  assert.equal(result.length, 1);
+});
+
+test('parsePrsFromCommitMessages: sorts results ascending by PR number', () => {
+  const result = parsePrsFromCommitMessages([
+    'feat: c (#30)',
+    'feat: a (#10)',
+    'feat: b (#20)',
+  ]);
+  assert.deepEqual(
+    result.map((p) => p.number),
+    [10, 20, 30],
+  );
+});
+
+test('parsePrsFromCommitMessages: drops chore: release commits', () => {
+  const result = parsePrsFromCommitMessages([
+    'feat: real feature (#7)',
+    'chore: release v0.5.0 (#8)',
+  ]);
+  assert.equal(result.length, 1);
+  assert.equal(result[0]?.number, 7);
+});
+
+test('parsePrsFromCommitMessages: ignores lines with no (#N) reference', () => {
+  const result = parsePrsFromCommitMessages([
+    'chore: update deps',
+    'Initial commit',
+    'feat: actual pr (#3)',
+  ]);
+  assert.equal(result.length, 1);
+  assert.equal(result[0]?.number, 3);
+});
+
+test('parsePrsFromCommitMessages: returns empty array for empty input', () => {
+  const result = parsePrsFromCommitMessages([]);
+  assert.deepEqual(result, []);
+});
+
+test('parsePrsFromCommitMessages: handles multi-word scope in conventional commit', () => {
+  const result = parsePrsFromCommitMessages(['feat(release-notes): add compare logic (#42)']);
+  assert.deepEqual(result, [{ number: 42, title: 'feat(release-notes): add compare logic' }]);
 });
 
 // ── policy checks ─────────────────────────────────────────────────────────────
