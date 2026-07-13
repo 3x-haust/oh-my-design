@@ -370,6 +370,62 @@ test('non-interactive input-like nodes do not trigger DESIGN-FORM-NO-ERROR', () 
   assert.equal(violations.filter((v) => v.id === 'DESIGN-FORM-NO-ERROR').length, 0);
 });
 
+// ── DESIGN-FORM-NO-ERROR — ARIA signal strengthening ─────────────────────────
+
+test('DESIGN-FORM-NO-ERROR does not fire when role=alert element is present', () => {
+  // role=alert is the canonical ARIA pattern for error message containers;
+  // it should suppress the violation even without a ".error" class name.
+  const input: RawNode = {
+    id: 'n0', name: 'input.email', type: 'FRAME',
+    path: 'form/input.email', parent: null,
+    box: { x: 0, y: 0, w: 300, h: 44 }, children: [], interactive: true,
+  };
+  const alertEl: RawNode = {
+    id: 'n1', name: 'div.live-region', type: 'FRAME',
+    path: 'form/div.live-region', parent: null,
+    box: { x: 0, y: 50, w: 300, h: 24 }, children: [],
+    role: 'alert',
+  };
+  const ir = normalize({ nodes: [input, alertEl] } as RawIr);
+  const violations = checkInteractionStates(ir);
+  assert.equal(violations.filter((v) => v.id === 'DESIGN-FORM-NO-ERROR').length, 0,
+    'role=alert should suppress DESIGN-FORM-NO-ERROR');
+});
+
+test('DESIGN-FORM-NO-ERROR does not fire when ariaInvalid:true is present on a field', () => {
+  // aria-invalid=true signals a field in an error state per ARIA spec;
+  // this pattern should suppress the violation.
+  const input: RawNode = {
+    id: 'n0', name: 'input.email', type: 'FRAME',
+    path: 'form/input.email', parent: null,
+    box: { x: 0, y: 0, w: 300, h: 44 }, children: [], interactive: true,
+    ariaInvalid: true,
+  };
+  const ir = normalize({ nodes: [input] } as RawIr);
+  const violations = checkInteractionStates(ir);
+  assert.equal(violations.filter((v) => v.id === 'DESIGN-FORM-NO-ERROR').length, 0,
+    'ariaInvalid:true on an input should suppress DESIGN-FORM-NO-ERROR');
+});
+
+test('DESIGN-FORM-NO-ERROR fires when form has inputs but only role=button (not alert)', () => {
+  // role=button is not an error affordance signal — only role=alert/alertdialog suppresses
+  const input: RawNode = {
+    id: 'n0', name: 'input.email', type: 'FRAME',
+    path: 'form/input.email', parent: null,
+    box: { x: 0, y: 0, w: 300, h: 44 }, children: [], interactive: true,
+  };
+  const btnEl: RawNode = {
+    id: 'n1', name: 'div.cta', type: 'FRAME',
+    path: 'form/div.cta', parent: null,
+    box: { x: 0, y: 60, w: 120, h: 44 }, children: [],
+    role: 'button',
+  };
+  const ir = normalize({ nodes: [input, btnEl] } as RawIr);
+  const violations = checkInteractionStates(ir);
+  assert.ok(violations.some((v) => v.id === 'DESIGN-FORM-NO-ERROR'),
+    'role=button should not suppress DESIGN-FORM-NO-ERROR');
+});
+
 // ── CLI integration ───────────────────────────────────────────────────────────
 
 test('CLI: omd design creates .omd/design.md in a bare project', () => {

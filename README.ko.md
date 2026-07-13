@@ -157,8 +157,8 @@ omd doctor
 | 계열 | 잡는 것 |
 | --- | --- |
 | `MOTION-*` | `prefers-reduced-motion` 없는 애니메이션, 레이아웃 속성 스래시, 균일한 500ms ease-in-out 시그니처, 스펙이 약속했는데 렌더에 없는 모션 |
-| `UX-*` | 한 화면에서 두 버튼이 동시에 최상위를 주장 |
-| `DESIGN-*` | 필수 섹션이 빠진 `.omd/design.md`, 에러 상태 어포던스가 없는 폼 |
+| `UX-*` | 한 화면에서 두 버튼이 동시에 최상위를 주장; 모바일 뷰포트에서 인터랙티브 컨트롤 전체가 폴드 아래에 있음; 모든 인터랙티브 요소에 `tabindex="-1"` (키보드 경로 없음); 프레임 UX 심문 미완료 (`FRAME-UX-INCOMPLETE`) |
+| `DESIGN-*` | 필수 섹션이 빠진 `.omd/design.md`, 에러 상태 어포던스가 없는 폼 (클래스명, 텍스트 카피, `role=alert`, `aria-invalid`) |
 | `ATTR-*` | `.omd/attribution.md`에 출처 없이 실린 토큰 그룹 |
 | `SITE-*` | 페이지 간 드리프트. 한 페이지는 4단 타입 스케일, 다른 페이지는 6단 (`omd check --site`) |
 | `FOCUS-*` | 눈에 보이는 포커스 표시가 없는 탭 스톱. 라이브로 프로브 |

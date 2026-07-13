@@ -406,3 +406,71 @@ failure must be a deliberate choice with a recorded reason.
 
 10. **Help when needed**: When the product requires documentation, is it available in
     context at the moment the user needs it — not in a separate page they must find?
+
+---
+
+## Harness enforcement status
+
+The following principles from this file have been converted into deterministic harness
+checks that `omd check` runs on every build. Principles not listed here remain advisory
+— they require human or eye-agent judgment and cannot be reliably measured from the IR.
+
+**Enforced — fires a violation on measurable evidence:**
+
+- §Task-first framing → `UX-TWO-PRIMARIES` (slop): two or more interactive buttons sharing
+  the same authored fill in one container cancel the hierarchy signal. Measurable from
+  node.fill.authored + node.computed.isInteractive + node.box.h + node.parent grouping.
+
+- §Task-first framing → `UX-ACTION-BELOW-FOLD` (ux): the only interactive controls are
+  entirely below the fold at the capture viewport. Measurable from node.box.y vs
+  ir.meta.viewportHeight (recorded by dom.ts at capture time). Guard: silent when any
+  interactive element is within the first viewport, so long-scroll pages with a visible
+  nav do not fire.
+
+- §Accessibility as a UX floor → `UX-NO-KEYBOARD-PATH` (ux): every interactive control has
+  tabindex="-1", making the page unreachable by keyboard. Measurable from node.focusable
+  (recorded by dom.ts from el.tabIndex per node). WCAG 2.1 §2.1.1.
+
+- §Task-first framing (the three anchor questions) → `FRAME-UX-INCOMPLETE` (ux): the frame
+  artifact exists but does not record what task the user arrives with, the most frequent
+  action, or the costliest error. Measurable as field presence in the frame's YAML
+  frontmatter. Scope: artifact completeness only — the harness cannot verify the build
+  serves the named task (that requires the eye agent's task-first walk).
+
+- §Forms: error recovery → `DESIGN-FORM-NO-ERROR` (system): the page has form inputs but
+  no visible error-state affordance. Measurable from node.name class patterns, node.text
+  error vocabulary, node.role === 'alert', and node.ariaInvalid. Strengthened to detect
+  ARIA-correct implementations (role=alert, aria-invalid) that do not use class-name
+  conventions.
+
+**Still advisory — requires human or eye-agent judgment:**
+
+- §Navigation and information architecture: whether a navigation structure matches the
+  user's mental model for the domain. Requires domain knowledge the IR does not contain.
+
+- §Flows: dead ends: whether every reachable state has an exit. Requires simulating user
+  flows across states, not reading the resting DOM.
+
+- §Flows: defaults chosen for the frequent case. Requires knowing the user population's
+  preferences, not the rendered page's current value.
+
+- §Feedback and system status (Doherty Threshold, 400ms): whether every interactive
+  element changes state within 400ms. Requires timing measurements under interaction,
+  not a static IR snapshot.
+
+- §Cognitive load and progressive disclosure: whether secondary actions are visually
+  subordinate to the primary action. Requires semantic understanding of the hierarchy
+  intent, not structural measurement alone.
+
+- §First-run experience and empty states: whether empty states are designed. Requires
+  rendering the page in its empty data state, which the static IR cannot do.
+
+- §The peak-end rule: whether the end of each flow is deliberately designed. Requires
+  task simulation and emotional salience evaluation, not structural measurement.
+
+- §Korean market specifics: whether hover-first patterns are avoided on mobile. Partially
+  covered by WCAG touch-target rules (hit-area.yaml) but interaction-pattern analysis
+  requires the eye agent's task walk.
+
+- Nielsen heuristics 2, 4, 7, 8, 10 (real-world match, consistency, efficiency, minimalism,
+  help): all require semantic content understanding that the IR does not provide.

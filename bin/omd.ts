@@ -12,6 +12,7 @@ import { checkAttribution } from '../core/rules/attribution.ts';
 import { checkMotionSpec } from '../core/rules/motion-spec.ts';
 import { discoverEvidence, generateDesignMd, validateDesignMd } from '../core/design/index.ts';
 import { checkInteractionStates } from '../core/design/interaction-states.ts';
+import { checkFrameUx } from '../core/frame/check-ux.ts';
 import type { Category, EnergyCurve, Layer, RawIr, Violation } from '../core/types.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -50,10 +51,22 @@ interface Opts {
   target?: string;
   /** Validate design.md sections rather than discover/generate (`omd design --check`). */
   check?: boolean;
+  /** UX anchor: what task does the user arrive with? (`omd frame set --task "..."`) */
+  task?: string;
+  /** UX anchor: most frequent action on the primary screen. (`omd frame set --frequent-action "..."`) */
+  frequentAction?: string;
+  /** UX anchor: costliest error and its recovery path. (`omd frame set --costliest-error "..."`) */
+  costliestError?: string;
 }
 
 const FLAGS = new Set(['json', 'no-log', 'image', 'filmstrip', 'from-user', 'blueprint', 'fresh', 'check']);
-const ALIASES: Record<string, keyof Opts> = { o: 'out', 'no-log': 'noLog', 'from-user': 'fromUser' };
+const ALIASES: Record<string, keyof Opts> = {
+  o: 'out',
+  'no-log': 'noLog',
+  'from-user': 'fromUser',
+  'frequent-action': 'frequentAction',
+  'costliest-error': 'costliestError',
+};
 
 function parseArgs(args: string[]): Opts {
   const opts: Opts = { _: [] };
@@ -293,11 +306,24 @@ async function cmdCheck(opts: Opts): Promise<never> {
   const interactionViolations: Violation[] = checkInteractionStates(ir)
     .filter((v) => (!categories || categories.includes(v.category)) && (!layers || layers.includes(v.layer)));
 
+  // Frame UX audit: only active when .omd/frame.md exists. Checks that the three UX
+  // anchor questions (task, frequent-action, costliest-error) have been answered.
+  // A bare project without frame.md is not nagged — but a frame that skipped the
+  // interrogation is flagged with FRAME-UX-INCOMPLETE.
+  const frameUxViolations: Violation[] = [];
+  const frameMdPath = join(process.cwd(), '.omd', 'frame.md');
+  if (existsSync(frameMdPath)) {
+    frameUxViolations.push(
+      ...checkFrameUx(process.cwd())
+        .filter((v) => (!categories || categories.includes(v.category)) && (!layers || layers.includes(v.layer))),
+    );
+  }
+
   // Code-unit order, not localeCompare — same determinism guarantee as check() itself.
   const cmp = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
   const combined: Violation[] = [
     ...violations, ...leaks, ...attrViolations, ...motionSpecViolations,
-    ...designViolations, ...interactionViolations,
+    ...designViolations, ...interactionViolations, ...frameUxViolations,
   ].sort((a, b) => cmp(a.path, b.path) || cmp(a.id, b.id));
 
   if (opts.json) process.stdout.write(JSON.stringify(combined));
@@ -1227,6 +1253,7 @@ function usage(): never {
     + '\n'
     + '  frame show\n'
     + '  frame set --problem P --reframe R --why EVIDENCE\n'
+    + '            [--task T --frequent-action A --costliest-error E]\n'
     + '  frame reframe --to "..." --because "what the render revealed"\n'
     + '  frame generator --set "metaphor"\n'
     + '\n'
@@ -1287,6 +1314,9 @@ async function main(): Promise<never> {
         problem: opts.problem ?? '',
         reframe: opts.reframe ?? '',
         ...(opts.why ? { why: opts.why } : {}),
+        ...(opts.task ? { uxTask: opts.task } : {}),
+        ...(opts.frequentAction ? { uxFrequentAction: opts.frequentAction } : {}),
+        ...(opts.costliestError ? { uxCostliestError: opts.costliestError } : {}),
       });
       console.log(path);
       process.exit(0);

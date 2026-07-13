@@ -158,8 +158,8 @@ Beyond slop, the same engine audits what a prompt alone cannot enforce:
 | Family | Catches |
 | --- | --- |
 | `MOTION-*` | Animation with no `prefers-reduced-motion`, layout-property thrash, the uniform 500ms-ease-in-out signature, a spec that promises motion the render never shows |
-| `UX-*` | Two buttons both claiming top billing on one screen |
-| `DESIGN-*` | A `.omd/design.md` missing required sections; a form with no error-state affordance |
+| `UX-*` | Two buttons both claiming top billing on one screen; the only interactive control is entirely below the fold at mobile viewport; every interactive element has `tabindex="-1"` (no keyboard path); frame not UX-interrogated (`FRAME-UX-INCOMPLETE`) |
+| `DESIGN-*` | A `.omd/design.md` missing required sections; a form with no error-state affordance (class name, text copy, `role=alert`, or `aria-invalid`) |
 | `ATTR-*` | Token groups shipped without a source in `.omd/attribution.md` |
 | `SITE-*` | Cross-page drift: one page on a 4-step type scale, another on 6 (`omd check --site`) |
 | `FOCUS-*` | Tab stops with no visible focus indicator, probed live |

@@ -30,6 +30,79 @@
 # Material Design and Carbon Design System both specify single primary-per-view as an
 # explicit constraint, not a preference.
 
+# UX-ACTION-BELOW-FOLD
+#
+# Fires on the root node when the page has interactive controls but NONE of them are
+# within the first viewport at mobile dimensions. "Within the first viewport" means the
+# element's top edge (box.y) is less than viewportHeight — at least the top of the
+# control is visible without scrolling.
+#
+# Revived from the candidate-dropped list now that dom.ts captures scrollHeight and
+# viewportHeight in ir.meta. The earlier drop reason ("viewport height undefined,
+# threshold unanchored") is eliminated: viewportHeight is the actual window height
+# measured at capture time, so the fold is the real browser fold, not an assumed constant.
+#
+# False-positive guard: "long content pages legitimately push a CTA down."
+# The rule fires ONLY when there is NO interactive element within the first viewport.
+# A page with a nav link at y=20 and a CTA at y=1200 does not fire (nav is interactive
+# and within fold). Only a page where every control — including nav items — is below
+# the fold triggers the rule. That condition is never a deliberate choice; it is always
+# a layout bug or a missed mobile viewport regression.
+#
+# Positive test:  one interactive element at box.y=900 with viewportHeight=812 → fires
+# Negative tests:
+#   — interactive element at box.y=100 (within fold at 812) → silent
+#   — no interactive elements at all                         → silent (when guard)
+#   — interactive at y=900 AND nav at y=0 (two elements)    → silent (nav is in fold)
+#
+# The rule reads ir.meta.viewportHeight (set by dom.ts). On IRs captured without it
+# (before dom.ts was updated) the when condition is false and the rule is silent —
+# backward compatible.
+- id: UX-ACTION-BELOW-FOLD
+  layer: 1
+  category: ux
+  severity: warn
+  when: "node.parent === null && typeof (ir.meta && ir.meta.viewportHeight) === 'number' && ir.nodes.some(n => n.computed.isInteractive)"
+  value: "(() => { const vh = Number(ir.meta.viewportHeight); return ir.nodes.filter(n => n.computed.isInteractive && n.box.y < vh).length; })()"
+  assert: "value > 0"
+  message: "No interactive element is visible within the first viewport (viewportHeight={value}px measured at capture). The primary action is entirely below the fold. Place at least one interactive control — a primary button, a nav item, or a search field — within the first screen of content. See theory/ux.md §Task-first framing."
+
+# UX-NO-KEYBOARD-PATH
+#
+# Fires on the root node when the page has interactive controls but every one of them
+# has been explicitly removed from the tab order with tabindex="-1". A page in this
+# state is not keyboard-navigable: no interactive element is reachable by pressing Tab.
+#
+# Data source: node.focusable captured by dom.ts from el.tabIndex per node.
+#   true  — element is in the tab order (tabIndex >= 0)
+#   false — element is interactive but carries tabindex="-1" (removed)
+#   absent — static element, no focusability data
+#
+# Guard on when: the rule fires only when at least one interactive node has a recorded
+# focusable field. On pages where no focusable data was captured at all (old IRs, or
+# pages where the extractor produced no interactive nodes with focusable set), the when
+# condition is false and the rule is silent — preventing false positives from missing data.
+#
+# Deliberate exemption: pages that implement custom focus management (e.g., a single-page
+# app routed with a focus trap) will use tabindex="-1" on most elements intentionally.
+# This rule fires a warning; override with `omd decision` and document the focus management
+# strategy. A page with zero keyboard-reachable interactive controls is always worth
+# flagging even if the custom management turns out to be correctly implemented.
+#
+# Positive test:  button with focusable:false (tabindex="-1"), no other interactive nodes → fires
+# Negative tests:
+#   — button with focusable:true → silent
+#   — no interactive elements at all → silent (when guard)
+#   — mix: one focusable:false, one focusable:true → silent (one keyboard path exists)
+- id: UX-NO-KEYBOARD-PATH
+  layer: 1
+  category: ux
+  severity: warn
+  when: "node.parent === null && ir.nodes.some(n => n.computed.isInteractive && typeof n.focusable === 'boolean')"
+  value: "ir.nodes.filter(n => n.computed.isInteractive && n.focusable !== false).length"
+  assert: "value > 0"
+  message: "Every interactive control on this page has been removed from the keyboard tab order (tabindex=\"-1\"). Users who navigate by keyboard cannot reach any interactive element. Either remove the tabindex=\"-1\" attribute to restore native focus, or implement and document a custom keyboard focus strategy. WCAG 2.1 §2.1.1 requires all functionality to be keyboard-operable. See theory/ux.md §Accessibility as a UX floor."
+
 # UX-TWO-PRIMARIES
 #
 # Fires on the root node when any parent container has 2+ interactive, button-sized

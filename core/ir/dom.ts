@@ -66,6 +66,30 @@ export function extractInPage(maxNodes: number, selector?: string | null): RawIr
   const isInteractive = (el: Element): boolean =>
     INTERACTIVE.has(el.tagName) || el.getAttribute('role') === 'button' || el.hasAttribute('onclick');
 
+  // NATIVELY_FOCUSABLE: elements whose default tabIndex is 0 (in tab order by spec).
+  // <a> without href is NOT focusable by default; <a href="..."> is. We check tabIndex
+  // directly rather than duplicating the browser's focusability rules.
+  const NATIVELY_FOCUSABLE = new Set(['A', 'BUTTON', 'INPUT', 'SELECT', 'TEXTAREA', 'SUMMARY', 'DETAILS']);
+
+  /**
+   * Returns the focusable state for an element:
+   *   true  — in the tab order (tabIndex >= 0, either natively or via tabindex attr)
+   *   false — interactive but explicitly removed with tabindex="-1"
+   *   null  — static element, no focusability data to record
+   *
+   * Cannot capture: dynamic tabindex mutations via JS, focus() calls, or CSS :focus-visible
+   * ring visibility (that is measured by the interaction probe in core/render/).
+   */
+  const focusableState = (el: Element): boolean | null => {
+    const htmlEl = el as HTMLElement;
+    const tabIdx = htmlEl.tabIndex;
+    if (tabIdx >= 0) return true;
+    // tabIndex < 0 — only flag as false when the element is otherwise interactive,
+    // so we don't record false on every non-interactive div that has no tabindex.
+    if (isInteractive(el) || NATIVELY_FOCUSABLE.has(el.tagName)) return false;
+    return null;
+  };
+
   const hasOwnText = (el: Element): boolean =>
     Array.from(el.childNodes).some((n) => n.nodeType === 3 && (n.textContent ?? '').trim().length > 0);
 
@@ -128,6 +152,19 @@ export function extractInPage(maxNodes: number, selector?: string | null): RawIr
     if (radius > 0) node.radius = { value: radius, token: nameOf(String(radius)) };
     if (isInteractive(el)) node.interactive = true;
     if (cs.display === 'inline') node.inline = true;
+
+    // Focusability — tab-order membership, one DOM read per node.
+    const fs = focusableState(el);
+    if (fs !== null) node.focusable = fs;
+
+    // Explicit ARIA role attribute. Only the declared attribute value — implicit roles
+    // derived from tag semantics (e.g. <input> → role='textbox') are NOT captured here.
+    const explicitRole = el.getAttribute('role');
+    if (explicitRole) node.role = explicitRole;
+
+    // aria-invalid: present and not "false" → field is in an error state per ARIA spec.
+    const ariaInvalid = el.getAttribute('aria-invalid');
+    if (ariaInvalid && ariaInvalid !== 'false') node.ariaInvalid = true;
 
     if (isText) {
       const family = cs.fontFamily.split(',')[0]?.trim().replace(/^["']|["']$/g, '').toLowerCase();
@@ -287,5 +324,20 @@ export function extractInPage(maxNodes: number, selector?: string | null): RawIr
     }
   }
 
-  return { meta: { source: 'dom', url: location.href }, tokens: tokenByValue, nodes };
+  // Page-level scroll/viewport dimensions. scrollHeight is the total scrollable height
+  // of the document (including content below the fold). viewportHeight is the current
+  // window inner height — together they let rules determine whether elements are above
+  // or below the fold without needing to know the URL or viewport preset.
+  //
+  // Cannot capture: viewport dimensions when the page is rendered inside an iframe
+  // (window.innerHeight reflects the frame, not the outer viewport). The capture is
+  // correct for top-level documents, which is the only case omd check operates on.
+  const scrollHeight = document.documentElement.scrollHeight;
+  const viewportHeight = window.innerHeight;
+
+  return {
+    meta: { source: 'dom', url: location.href, scrollHeight, viewportHeight },
+    tokens: tokenByValue,
+    nodes,
+  };
 }

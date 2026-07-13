@@ -14,8 +14,20 @@ export function writeFrame(cwd: string, frontmatter: Record<string, unknown>, bo
 /**
  * Nobody signs this. The `--why` requirement is not a gate on the human — it is a gate on
  * the agent, which will otherwise reframe a brief on a hunch and call the hunch insight.
+ *
+ * The three UX anchor fields (uxTask, uxFrequentAction, uxCostliestError) are optional
+ * here for backward compatibility — old callers that do not supply them produce a frame
+ * that FRAME-UX-INCOMPLETE will flag. The framer.agent.yaml is expected to always supply
+ * all three after answering the UX interrogation questions from theory/ux.md.
  */
-export function writeFrameRecord(cwd: string, opts: { problem: string; reframe: string; why?: string }): string {
+export function writeFrameRecord(cwd: string, opts: {
+  problem: string;
+  reframe: string;
+  why?: string;
+  uxTask?: string;
+  uxFrequentAction?: string;
+  uxCostliestError?: string;
+}): string {
   if (!opts.why || opts.why.trim().length < 10) {
     throw new Error(
       'A reframing without a cited observation is a guess. Pass --why with the review, '
@@ -28,7 +40,12 @@ export function writeFrameRecord(cwd: string, opts: { problem: string; reframe: 
     '## Evidence', '', opts.why.trim(),
   ].join('\n');
 
-  writeFrame(cwd, { why: opts.why.trim(), writtenAt: new Date().toISOString() }, body);
+  const frontmatter: Record<string, unknown> = { why: opts.why.trim(), writtenAt: new Date().toISOString() };
+  if (opts.uxTask?.trim()) frontmatter['uxTask'] = opts.uxTask.trim();
+  if (opts.uxFrequentAction?.trim()) frontmatter['uxFrequentAction'] = opts.uxFrequentAction.trim();
+  if (opts.uxCostliestError?.trim()) frontmatter['uxCostliestError'] = opts.uxCostliestError.trim();
+
+  writeFrame(cwd, frontmatter, body);
   return join(designDir(cwd), 'frame.md');
 }
 

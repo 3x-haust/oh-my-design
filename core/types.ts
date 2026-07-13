@@ -84,6 +84,40 @@ export interface RawNode {
   clipText?: boolean;
 
   /**
+   * Whether this element is in the document tab order.
+   *
+   * true  — natively focusable tag (a[href], button, input, select, textarea, summary)
+   *         OR tabindex >= 0 — element is reachable by keyboard navigation.
+   * false — element is interactive (has role=button, onclick, or an INTERACTIVE tag) but
+   *         carries tabindex="-1", explicitly removing it from the tab order.
+   * absent — static non-interactive element with no tabindex attribute.
+   *
+   * Cannot capture: dynamic tabindex mutations via JS, focus management via .focus() calls,
+   * CSS :focus-visible visibility (measured separately by the interaction probe in render/).
+   */
+  focusable?: boolean;
+
+  /**
+   * Explicit ARIA role attribute value. Absent when no role="" attribute is set.
+   * Values of interest for rules: 'alert' (error message container), 'alertdialog',
+   * 'button' (non-button element acting as a button).
+   *
+   * Cannot capture: implicit/computed ARIA roles derived from HTML semantics (e.g.
+   * <input type="checkbox"> has an implicit role of 'checkbox'). Only explicit role=
+   * attribute values are recorded here.
+   */
+  role?: string;
+
+  /**
+   * True when aria-invalid is present and not "false". Absent otherwise.
+   * Signals a field that has failed validation per ARIA spec.
+   *
+   * Cannot capture: HTML5 constraint-validation state set via the Constraint Validation
+   * API (:invalid pseudo-class) without a corresponding aria-invalid attribute.
+   */
+  ariaInvalid?: boolean;
+
+  /**
    * Computed backdrop-filter value. Absent when 'none' or not declared.
    * Captured to detect glassmorphism: backdrop-blur combined with a translucent surface,
    * the frozen 2021 Dribbble aesthetic that became the new default.
@@ -171,8 +205,11 @@ export type Layer = 1 | 2;
  * `motion` covers craft defects in animation execution: missing reduced-motion support,
  * layout thrash, uniform rhythm. Separate from `slop` because these are implementation
  * correctness issues, not design-mean convergence failures.
+ * `ux` covers structural UX violations: primary action buried below the fold, no keyboard
+ * path into the interactive controls, frame not interrogated. These are correctness issues
+ * about task structure, not visual mean-convergence, which is why they are their own family.
  */
-export type Category = 'a11y' | 'system' | 'slop' | 'motion';
+export type Category = 'a11y' | 'system' | 'slop' | 'motion' | 'ux';
 
 export interface Rule {
   id: string;
@@ -210,6 +247,20 @@ export interface Frame {
   writtenAt?: string;
   reframedAt?: string;
   body: string;
+
+  /**
+   * UX interrogation answers. Set by `omd frame set --task --frequent-action --costliest-error`.
+   * Backward compatible: frames written before these fields were introduced load without them
+   * (absence is treated as incomplete by FRAME-UX-INCOMPLETE, not as an error).
+   *
+   * Scope boundary: these fields validate that the frame ARTIFACT is complete — that the
+   * three UX questions were answered before building. The harness cannot verify whether the
+   * rendered build actually serves the named task; that requires a human or the eye agent.
+   */
+  uxTask?: string;
+  uxFrequentAction?: string;
+  uxCostliestError?: string;
+
   [key: string]: unknown;
 }
 
