@@ -5,3 +5,6 @@ dist/
 *.log
 .omc
 Plan.md
+# local install targets (omd install patches these)
+.codex/
+.claude/
