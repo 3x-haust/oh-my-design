@@ -41,6 +41,14 @@ function readSkills(): Skill[] {
 
 const firstSentence = (s: string): string => (/^[^.。]*[.。]?/.exec(s.trim())?.[0] ?? '').trim();
 const titleCase = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
+export const skillDisplayName = (name: string): string => name === 'omd-ultradesign' ? '(omd) ultradesign' : titleCase(name);
+
+export const skillOpenaiMetadata = (name: string, description: string): string => [
+  'interface:',
+  `  display_name: ${JSON.stringify(skillDisplayName(name))}`,
+  `  short_description: ${JSON.stringify(firstSentence(description))}`,
+  '',
+].join('\n');
 
 function write(host: Host, rel: string, content: unknown): void {
   const path = join(root, 'dist', host, rel);
@@ -71,12 +79,7 @@ export function build(): void {
     for (const skill of skills) {
       write(host, `skills/${skill.name}/SKILL.md`, sub(skill.source));
       if (host === 'codex') {
-        write(host, `skills/${skill.name}/agents/openai.yaml`, [
-          'interface:',
-          `  display_name: ${JSON.stringify(titleCase(skill.name))}`,
-          `  short_description: ${JSON.stringify(firstSentence(skill.description))}`,
-          '',
-        ].join('\n'));
+        write(host, `skills/${skill.name}/agents/openai.yaml`, skillOpenaiMetadata(skill.name, skill.description));
       }
     }
 
@@ -156,10 +159,17 @@ function emitPlugin(agents: AbstractAgent[], skills: Skill[]): void {
   rmSync(join(root, '.mcp.json'), { force: true });
 
   const pluginized = skills.map((skill) => pluginizeSkill(skill.source));
-  for (const { name, source } of pluginized) {
+  for (let i = 0; i < pluginized.length; i += 1) {
+    const { name, source } = pluginized[i]!;
+    const canonical = skills[i]!;
     const path = join(root, 'skills', name, 'SKILL.md');
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, source);
+    if (canonical.name === 'omd-ultradesign') {
+      const metadataPath = join(root, 'skills', name, 'agents', 'openai.yaml');
+      mkdirSync(dirname(metadataPath), { recursive: true });
+      writeFileSync(metadataPath, skillOpenaiMetadata(canonical.name, canonical.description));
+    }
   }
 
   const { files } = emitClaudePlugin({ agents });
