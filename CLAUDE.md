@@ -3,27 +3,28 @@
 This file governs how Claude Code contributes to this repository. `AGENTS.md` covers the
 Codex / GPT-5.6 path; both share the repository conventions at the bottom.
 
-## Division of labour: frontier plans, Sonnet builds
+## Division of labour: stronger model plans, session model builds
 
-The design of this repo is that **a frontier model plans and a cheaper model executes**,
-because planning quality dominates outcome while most implementation is mechanical once the
-plan is precise.
+The principle is that **planning quality dominates outcome** while most implementation is
+mechanical once the plan is precise. A stronger model for planning and review; the session
+model does the building.
 
-- **Plan with Opus.** Interrogating the request, choosing the approach, writing the spec,
-  and reviewing the result stay with Opus. It decides *what* changes and *why*, and it holds
-  the whole-repo context.
-- **Build with Sonnet 5.** Each planned unit of work is dispatched to a Sonnet 5 executor
-  with a self-contained spec: the files to touch, the rule to follow, the definition of
-  done. Sonnet 5 writes the code, the tests, and runs the gates.
-- **Opus does not hand-write the implementation.** It writes the spec, spawns the executor,
-  then verifies the result (tests pass, the change matches the spec, no scope drift).
-  Verification is Opus's job precisely because it did not write the code.
+- **Plan with a strong model.** Interrogating the request, choosing the approach, writing
+  the spec, and reviewing the result benefit from a capable model. It decides *what* changes
+  and *why*, and it holds the whole-repo context.
+- **Build with the session model.** Each planned unit of work is dispatched to an executor
+  with a self-contained spec: the files to touch, the rule to follow, the definition of done.
+  The executor writes the code, the tests, and runs the gates.
+- **The planner does not hand-write the implementation.** It writes the spec, spawns the
+  executor, then verifies the result (tests pass, the change matches the spec, no scope
+  drift). Verification is the planner's job precisely because it did not write the code.
 
-Practically, in Claude Code: set the session model to Opus for the planning and
-orchestration turn, dispatch implementation to `oh-my-claudecode:executor` (Sonnet 5) with a
-written spec, and review its report against the spec before committing.
+Practically, in Claude Code: set the session model to Opus (or any strong model of your
+choice) for the planning and orchestration turn, dispatch implementation to
+`oh-my-claudecode:executor` with a written spec, and review its report against the spec
+before committing.
 
-A spec dispatched to Sonnet should carry: the exact files that are source-of-truth vs
+A spec dispatched to an executor should carry: the exact files that are source-of-truth vs
 generated, the narrowness discipline for any new linter rule (positive AND negative tests),
 the baseline test count, and the definition of done (`npm test` clean, `tsc` clean,
 `npm run build` succeeds).
@@ -32,17 +33,17 @@ the baseline test count, and the definition of done (`npm test` clean, `tsc` cle
 
 | Role | Model | Why |
 |---|---|---|
-| **Orchestration · architecture · high-risk review (planner/critic)** | **Opus** | Holds whole-repo context, decides what changes and why, reviews the diff it did not write. |
-| **Precise code-edit executor** | **Sonnet 5** | The builder — writes the code, the tests, and runs the gates from a written spec. |
-| **Low-cost lane** | **Haiku 4.5** | Cheaper lane for lower-risk mechanical work when quality permits. |
+| **Orchestration · architecture · high-risk review (planner/critic)** | **Your strongest session model (e.g. Opus)** | Holds whole-repo context, decides what changes and why, reviews the diff it did not write. |
+| **Precise code-edit executor** | **Session model (inherited)** | The builder — writes the code, the tests, and runs the gates from a written spec. |
+| **Low-cost lane** | **A lighter session model** | Cheaper lane for lower-risk mechanical work when quality permits. |
 
-**The pipeline's own agents already embody this.** `adapters/tool-map.json` resolves each
-agent's abstract tier to a concrete model: `@high` → `claude-opus-4-8`, `@medium` →
-`claude-sonnet-5`. So `omd-framer` (interrogates the brief), `omd-scout` (measures
-references), and `omd-eye` (critiques in a fresh context) run on Opus, while `omd-hand`
-(builds the committed structure) runs on Sonnet 5 — planning and review on the frontier
-model, building on the builder. On the Codex host the same tiers resolve to the GPT-5.6
-generation (see `AGENTS.md`).
+**The pipeline's own agents inherit the session model.** `omd-framer`, `omd-scout`,
+`omd-eye`, and `omd-hand` do **not** pin a model — they run on whatever model you selected
+for the session. Planning and review agents benefit most from a stronger model; `omd-hand`
+(which builds the committed structure) is the mechanical executor. The recommendation:
+run a planning-heavy session on Opus or equivalent so the framer and eye have maximum
+reasoning capacity; the model choice is yours, not the pipeline's. On the Codex host the
+same applies — see `AGENTS.md`.
 
 ## Repository conventions
 

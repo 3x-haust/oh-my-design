@@ -5,7 +5,6 @@ description: >-
   motion on their own. Never copies. Produces measurements and principles, not screenshots.
   Minimum 18 captures, target 25.
 reasoning: high
-model: "@high"
 allow:
   - Bash(omd ref:*)
   - Bash(omd render:*)

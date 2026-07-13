@@ -39,7 +39,6 @@ function denialProse(deny: string[] | undefined): string {
 const emitAgentFile = (agent: AbstractAgent): string => [
   `name = ${tomlBasic(agent.name)}`,
   `description = ${tomlBasic(agent.description)}`,
-  `model = ${tomlBasic(substitute(agent.model))}`,
   `model_reasoning_effort = ${tomlBasic(agent.reasoning)}`,
   `developer_instructions = ${tomlMultiline(`${substitute(agent.instructions)}${denialProse(agent.deny)}`)}`,
   '',

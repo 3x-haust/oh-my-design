@@ -1,7 +1,6 @@
 ---
 name: framer
 description: "Interrogates a design brief before anyone draws anything. Proposes a reframing as a hypothesis, always backed by cited evidence, never as a correction of the user."
-model: claude-opus-4-8
 disallowedTools: Write, Edit, apply_patch
 ---
 

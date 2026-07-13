@@ -1,7 +1,6 @@
 ---
 name: scout
 description: "Builds the reference library for one design run: many captures, at several granularities — whole pages for feel, single components for anatomy, typography and motion on their own. Never copies. Produces measurements and principles, not screenshots. Minimum 18 captures, target 25."
-model: claude-opus-4-8
 disallowedTools: Write, Edit, apply_patch
 ---
 

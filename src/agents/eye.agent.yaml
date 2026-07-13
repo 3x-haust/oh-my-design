@@ -3,7 +3,6 @@ description: >-
   Critiques a rendered design. Sees only the render and the linter output —
   never the reasoning that produced it. Has no permission to edit.
 reasoning: high
-model: "@high"
 allow:
   - Bash(omd check:*)
   - Bash(omd ir:*)

@@ -21,7 +21,6 @@ function emitAgentFile(agent: AbstractAgent): string {
     '---',
     `name: ${agent.name}`,
     `description: ${yamlScalar(agent.description)}`,
-    `model: ${substitute(agent.model)}`,
   ];
   if (agent.deny?.length) frontmatter.push(`disallowedTools: ${agent.deny.join(', ')}`);
   frontmatter.push('---', '');
@@ -71,7 +70,6 @@ function emitAgentFilePlugin(agent: AbstractAgent): string {
     '---',
     `name: ${stripOmdPrefix(agent.name)}`,
     `description: ${yamlScalar(pluginizeRefs(agent.description))}`,
-    `model: ${substitute(agent.model)}`,
   ];
   if (agent.deny?.length) frontmatter.push(`disallowedTools: ${agent.deny.join(', ')}`);
   frontmatter.push('---', '');

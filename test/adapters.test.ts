@@ -16,7 +16,6 @@ const AGENT = {
   name: 'omd-eye',
   description: 'Critiques the rendered result. Never edits.',
   reasoning: 'high',
-  model: '@high',
   deny: ['Write', 'Edit', 'apply_patch'],
   instructions: 'You do not know why this was built.\n',
 };
@@ -29,20 +28,20 @@ test('no @token survives emission', () => {
   const all = [emitCodex({ agents: [AGENT] }), emitClaude({ agents: [AGENT] })];
   for (const out of all) {
     const dump = JSON.stringify(out.files);
-    assert.ok(!/@fileWrite|@pluginRoot|@high/.test(dump), `unsubstituted token in ${dump.slice(0, 200)}`);
+    assert.ok(!/@fileWrite|@pluginRoot/.test(dump), `unsubstituted token in ${dump.slice(0, 200)}`);
   }
 });
 
-test('agents render to toml for codex and md for claude, with the right model', () => {
+test('agents render to toml for codex and md for claude; no pinned model (agents inherit session model)', () => {
   const toml = textFile(emitCodex({ agents: [AGENT] }), 'agents/omd-eye.toml');
   assert.match(toml, /^name = "omd-eye"/m);
-  assert.match(toml, /model = "gpt-5\.6"/);
+  assert.ok(!/^model = /m.test(toml), 'model line must be absent from codex TOML — agents inherit session model');
   assert.match(toml, /model_reasoning_effort = "high"/);
   assert.match(toml, /developer_instructions = """/);
 
   const md = textFile(emitClaude({ agents: [AGENT] }), 'agents/omd-eye.md');
   assert.match(md, /^---\n/);
-  assert.match(md, /^model: claude-opus-4-8$/m);
+  assert.ok(!/^model:/m.test(md), 'model line must be absent from claude MD — agents inherit session model');
   assert.match(md, /^name: omd-eye$/m);
   assert.ok(md.includes('You do not know why this was built.'));
 });
@@ -85,7 +84,6 @@ const PLUGIN_AGENT = {
   name: 'omd-framer',
   description: 'Interrogates a design brief. References omd-eye and omd-humanize.',
   reasoning: 'high',
-  model: '@high',
   instructions: 'Before you finish, spawn omd-eye and omd-humanize to check the result.\n',
 };
 

@@ -1,7 +1,6 @@
 ---
 name: eye
 description: "Critiques a rendered design. Sees only the render and the linter output — never the reasoning that produced it. Has no permission to edit."
-model: claude-opus-4-8
 disallowedTools: Write, Edit, apply_patch
 ---
 
