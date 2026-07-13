@@ -1,6 +1,6 @@
 {
   "name": "omd",
-  "version": "0.12.0",
+  "version": "0.13.0",
   "description": "Design cognition loop for coding agents — frame the problem, study measured references, commit to a structure, look at what actually rendered, and let what you see rewrite the problem. Ships a slop linter that makes 'looks AI-generated' a checkable claim.",
   "author": {
     "name": "3x-haust",
