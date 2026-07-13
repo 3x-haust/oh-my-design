@@ -46,6 +46,14 @@ In Claude Code:
 
 Skills appear namespaced as `omd:ultradesign`, `omd:scout`, and so on. Requires Node ≥ 22.18; the first `omd render` installs headless Chromium via Playwright on its own.
 
+### Codex
+
+The same plugin runs on Codex (GPT-5.6 generation). Agents ship as TOML files (`dist/codex/agents/`) and skills under `dist/codex/skills/`; an `.mcp.json` wires up the chrome-devtools server. The `omd` CLI is identical on both hosts — `omd check`, `omd render`, `omd pack`, and so on behave the same way regardless of where the session runs.
+
+Skills on Codex use `$` rather than `/` as their prefix: `$omd:ultradesign`, `$omd:scout`, `$omd:critique`, `$omd:humanize`, `$omd:coach`. The agents — `omd-framer`, `omd-scout`, `omd-hand`, `omd-eye` — resolve to the GPT-5.6 generation (Sol for orchestration and review, Terra xhigh for precise edits) via `adapters/tool-map.json`.
+
+**Installing on Codex.** The `omd install` CLI copies files directly into `~/.codex/agents/` and `~/.codex/skills/` and patches `~/.codex/config.toml` — the same one-command install path as Claude. What remains unverified end-to-end is the Codex marketplace flow: how the marketplace discovers and loads `dist/codex/.codex-plugin/plugin.json`, `skills/`, and `agents/` during a live session has not been tested against a running marketplace instance. The direct-copy install path (`omd install`) has been verified; the marketplace path is pending live validation.
+
 ### Verify it worked
 
 ```bash

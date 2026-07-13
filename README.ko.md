@@ -46,6 +46,14 @@ Claude Code에서:
 
 스킬은 `omd:ultradesign`, `omd:scout`처럼 네임스페이스가 붙는다. Node 22.18 이상 필요. 첫 `omd render`가 Playwright로 headless Chromium을 알아서 설치한다.
 
+### Codex
+
+같은 플러그인이 Codex(GPT-5.6 세대)에서도 동작한다. 에이전트는 TOML 파일(`dist/codex/agents/`)로, 스킬은 `dist/codex/skills/` 아래로 배포되며, `.mcp.json`이 chrome-devtools 서버를 연결한다. `omd` CLI는 두 호스트에서 동일하다 — `omd check`, `omd render`, `omd pack` 등 모든 명령이 세션이 어디서 실행되든 같은 방식으로 작동한다.
+
+Codex에서 스킬 접두사는 `/` 대신 `$`다: `$omd:ultradesign`, `$omd:scout`, `$omd:critique`, `$omd:humanize`, `$omd:coach`. 에이전트 — `omd-framer`, `omd-scout`, `omd-hand`, `omd-eye` — 는 `adapters/tool-map.json`을 통해 GPT-5.6 세대로 해석된다(오케스트레이션·리뷰는 Sol, 정밀 편집은 Terra xhigh).
+
+**Codex 설치.** `omd install` CLI는 파일을 `~/.codex/agents/`와 `~/.codex/skills/`에 직접 복사하고 `~/.codex/config.toml`을 패치한다 — Claude와 동일한 단일 명령 설치 경로다. 아직 검증되지 않은 부분은 Codex 마켓플레이스 흐름이다: 마켓플레이스가 실제 세션에서 `dist/codex/.codex-plugin/plugin.json`, `skills/`, `agents/`를 어떻게 발견하고 로드하는지는 실제 마켓플레이스 인스턴스에서 테스트된 바 없다. 직접 복사 설치 경로(`omd install`)는 검증됐고, 마켓플레이스 경로는 실 환경 검증이 남아 있다.
+
 ### 설치 확인
 
 ```bash
