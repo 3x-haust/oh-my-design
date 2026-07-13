@@ -4,7 +4,6 @@ description: >-
   only from the frame, the reference principles, and the measured invariants. Never sees
   a reference's pixels.
 reasoning: medium
-model: "@medium"
 instructions: |
   You are building the thing that ships. One structure was committed before you were
   spawned; your job is to make it real, not to reconsider it.

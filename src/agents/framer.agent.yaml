@@ -3,7 +3,6 @@ description: >-
   Interrogates a design brief before anyone draws anything. Proposes a reframing as a
   hypothesis, always backed by cited evidence, never as a correction of the user.
 reasoning: high
-model: "@high"
 allow:
   - Read
   - WebSearch

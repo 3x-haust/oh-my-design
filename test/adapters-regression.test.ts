@@ -25,7 +25,6 @@ const NASTY = {
   name: 'omd-eye',
   description: 'Critiques "rendered" output: never edits. C:\\path\\to',
   reasoning: 'high',
-  model: '@high',
   deny: ['Write', 'Edit', 'apply_patch'],
   instructions: 'Quote test: """ and a backslash \\ and a colon: here.\n',
 };
@@ -35,7 +34,7 @@ test('codex agent toml survives quotes, colons and backslashes', () => {
   const parsed = parseToml(toml) as unknown as AgentToml;
   assert.equal(parsed.name, 'omd-eye');
   assert.equal(parsed.description, NASTY.description);
-  assert.equal(parsed.model, 'gpt-5.6');
+  assert.equal(parsed.model, undefined, 'model must be absent — agents inherit session model');
   assert.ok(must(parsed.developer_instructions, 'developer_instructions').includes('Quote test:'));
 });
 
@@ -43,7 +42,7 @@ test('claude agent frontmatter survives quotes and colons', () => {
   const md = textFile(emitClaude({ agents: [NASTY] }), 'agents/omd-eye.md');
   const fm = parseYaml(must(md.split('---')[1], 'frontmatter'));
   assert.equal(fm.name, 'omd-eye');
-  assert.equal(fm.model, 'claude-opus-4-8');
+  assert.equal(fm.model, undefined, 'model must be absent — agents inherit session model');
   assert.ok(fm.description.includes('"rendered"'));
   assert.ok(md.includes('Quote test:'));
 });

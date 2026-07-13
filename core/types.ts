@@ -565,7 +565,8 @@ export interface AbstractAgent {
   name: string;
   description: string;
   reasoning: string;
-  model: string;
+  /** No longer used by the adapters — agents inherit the session model. */
+  model?: string;
   allow?: string[];
   deny?: string[];
   instructions: string;

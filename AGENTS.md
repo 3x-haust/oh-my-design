@@ -3,10 +3,10 @@
 This file governs how the Codex / GPT-5.6 path contributes to this repository. `CLAUDE.md`
 covers the Claude Code path; both share the repository conventions at the bottom.
 
-## Division of labour: a strong model plans, an efficient model executes
+## Division of labour: a strong model plans, the session model executes
 
 The principle is the same across both paths — planning quality dominates the outcome, so a
-capable model owns the plan and review while an efficient model does the mechanical
+capable model owns the plan and review while the session model handles mechanical
 implementation. On the GPT-5.6 generation (Sol / Terra / Luna), the role mapping below comes
 from a role-by-role Codex benchmark.
 
@@ -14,9 +14,9 @@ from a role-by-role Codex benchmark.
 
 | Role | Model | Why |
 |---|---|---|
-| **Orchestration · architecture · high-risk review (critic/planner)** | **Sol** | Holds whole-repo context, decides what changes and why, reviews the diff it did not write. |
-| **Precise code-edit executor** | **Terra xhigh** | The efficient default for exact-edit implementation work. |
-| **Low-cost executor** | **Luna high** | Cheaper lane for lower-risk mechanical work. |
+| **Orchestration · architecture · high-risk review (critic/planner)** | **Sol (recommended)** | Holds whole-repo context, decides what changes and why, reviews the diff it did not write. |
+| **Precise code-edit executor** | **Terra xhigh (recommended)** | The efficient default for exact-edit implementation work. |
+| **Low-cost executor** | **Luna high (recommended)** | Cheaper lane for lower-risk mechanical work. |
 
 ### Benchmark basis (limited scope — read the caveat)
 
@@ -49,13 +49,15 @@ and the definition of done (`npm test` clean, `tsc` clean, `npm run build` succe
 
 ### The pipeline's own agents
 
-`adapters/tool-map.json` resolves each agent's abstract tier to a concrete model per host.
-On the Codex host both tiers currently resolve to the **GPT-5.6** generation; the
-role-to-reasoning split above (Sol for orchestration/review, Terra xhigh for precise edits,
-Luna high for the cheap lane) is how a run should assign work within that generation.
-`omd-framer`, `omd-scout`, and `omd-eye` are the `@high` (plan/measure/review) agents;
-`omd-hand` is the `@medium` (build) agent — the same frontier-plans/efficient-builds split
-the Claude host expresses as Opus and Sonnet 5.
+**`omd-framer`, `omd-scout`, `omd-eye`, and `omd-hand` do not pin a model** — they inherit
+whatever model you selected for the session. The pipeline does not force a specific model on
+any agent. The role split above (Sol for orchestration/review, Terra xhigh for precise edits,
+Luna high for the cheap lane) is a recommendation for how to assign work within a session;
+the choice is yours. Planning-heavy sessions benefit most from a capable model like Sol;
+`omd-hand` (the mechanical build executor) is where a cheaper model is a reasonable
+trade-off. Both the `@high` (framer/scout/eye) and `@medium` (hand) tiers that appear in
+the agent source files now serve only to communicate *intent* — no concrete model name is
+emitted by the adapters.
 
 ## Repository conventions
 
