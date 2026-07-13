@@ -1,6 +1,6 @@
 {
   "name": "oh-my-design",
-  "version": "0.13.0",
+  "version": "0.14.0",
   "interface": {
     "displayName": "Oh My Design"
   },
@@ -16,7 +16,7 @@
         "authentication": "ON_FIRST_USE"
       },
       "category": "design",
-      "version": "0.13.0"
+      "version": "0.14.0"
     }
   ]
 }
