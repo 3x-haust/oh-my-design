@@ -13,11 +13,11 @@ Oh My Design (OMD) keeps the model from jumping straight from a request to polis
 The durable loop is:
 
 ```text
-brief → evidence → copy → typography proof → isolated structure → one production build
+brief → evidence → copy → typography proof → composition contract → isolated structure → one production build
       → rendered critique and interaction evidence → reframe
 ```
 
-OMD is built for Codex and Claude Code. It provides six user-facing skills, eight internal pipeline agents, a local CLI, design theory and recipe packs, and a project record under `.omd/`.
+OMD is built for Codex and Claude Code. It provides six user-facing skills, nine internal pipeline agents, a local CLI, design theory and recipe packs, and a project record under `.omd/`.
 
 ## Quick start
 
@@ -56,14 +56,15 @@ Run the main design skill from your host after both doctor commands pass. Host U
 5. **Write copy** — a dedicated writer creates a fact-traceable copy deck before layout begins.
 6. **Review copy blind** — a fresh reviewer sees the brief, copy, fact ledger, and voice evidence, but no render, code, layout, rationale, or authorship.
 7. **Prove typography blind** — a typesetter renders layout-neutral actual-copy specimens at 1280x900 and 390x844; a fresh eye reviews them without page structure or rationale, then the typesetter revises and rerenders.
-8. **Diverge structurally** — isolated agents render two low-fidelity structures by default, or three when structural uncertainty or showpiece impact warrants it.
-9. **Choose blind** — a fresh selector compares anonymous candidates against task fit, real-content accommodation, hierarchy, responsive cost, and accessibility risk.
-10. **Build once** — one selected structure becomes the production implementation. The builder does not generate another candidate set.
-11. **Reflect while building** — the builder records a semantic checkpoint, re-proves type in the selected desktop/mobile containers, then records the visual checkpoint before optional motion.
-12. **See the result** — desktop and mobile renders, squint views, applicable filmstrips, deterministic checks, and declared local probes supply the review evidence.
-13. **Triage source candidates** — after production source exists, a read-only scan proposes narrow candidates. The coordinator resolves each through rendered context; candidate presence alone is not a failure.
-14. **Critique, repair, and reframe** — a squint-only glance reports hierarchy first; a separate sharp reviewer judges craft and sanitized candidates, then repairs are rendered, checked, and rescanned.
-15. **Ship** — project tests, build checks, applicable design gates, and unresolved findings are reported with their evidence.
+8. **Compose deliberately** — a fresh composer defines the experience spine, one dominant focal anchor, mass/rhythm, a lawful mechanism carrier or explicit alternate, responsive recomposition, and candidate axes. `omd composition --check` verifies input freshness.
+9. **Diverge structurally** — isolated agents receive the same composition contract and render fixed desktop/mobile plus supplemental full-page continuity proofs for each candidate.
+10. **Choose blind** — a fresh selector scores eight frozen 0–4 dimensions, rejects contract violations or any dimension below 2, and never equates a form above fold with CTA reach.
+11. **Build once** — one selected structure becomes the production implementation. The builder does not generate another candidate set.
+12. **Reflect while building** — the builder records a semantic checkpoint, re-proves type in the selected desktop/mobile containers, then records the visual checkpoint before optional motion.
+13. **See the result** — desktop and mobile renders, squint views, applicable filmstrips, deterministic checks, and declared local probes supply the review evidence.
+14. **Triage source candidates** — after production source exists, a read-only scan proposes narrow candidates. The coordinator resolves each through rendered context; candidate presence alone is not a failure.
+15. **Critique, repair, and reframe** — a squint-only glance reports hierarchy first; a separate sharp reviewer judges craft and sanitized candidates, then repairs are rendered, checked, and rescanned.
+16. **Ship** — project tests, build checks, applicable design gates, and unresolved findings are reported with their evidence.
 
 Figma and explicit visual targets already supply structural decisions. The loop may skip structural divergence in those routes, but it records why.
 
@@ -72,11 +73,12 @@ Figma and explicit visual targets already supply structural decisions. The loop 
 | Stage | Durable output | Boundary |
 | --- | --- | --- |
 | Frame | `.omd/frame.md` | Claims need a user sentence, research line, datum, or named observation. Internal OMD instructions are not evidence. |
-| Research | `.omd/refs/*.json` | Builders receive measurements and principles, not screenshots to imitate. The standalone scout skill has its own capture floor; the pipeline scout works to coverage instead of a universal count. |
+| Research | `.omd/refs/*.json` | Builders receive measurements and principles, not screenshots to imitate. Scouting stops on decision/component coverage, independence, and source trust—not a universal capture count or gallery quota. |
 | Copy | `.omd/copy-deck.md` | Each shipped factual claim points to a `verified` fact ID. `fixture` facts test density only; `open` facts cannot support shipped claims. |
 | Blind copy review | review handoff | The reviewer cannot inspect renders, source, layout, frame, decisions, or authorship and does not edit the deck. The writer applies the review, then `omd copy --check` runs again. |
 | Typography proof | `.omd/type-proof.md`; specimens in `.omd/.cache/type-proof/` | Actual target-language copy proves roles, source/licence, glyph coverage, requested/computed family and weight, axes, fallback/loading, wraps/clips, and rejected alternatives at both viewports. Browser evidence does not identify the physical font used for each glyph. |
-| Structural sketches | `.omd/.cache/sketches/<id>/` | Each candidate sees the sanitized frame, real copy, approved type-role/family/weight/size-measure contract, one axis, and an anonymous ID. It preserves typography and varies structure only; rejected type rationale, other candidates, and production source stay hidden. |
+| Composition contract | `.omd/composition.md` | A clean-room composer receives sanitized evidence and defines a focal anchor, CTA path, mechanism carrier/alternate, and responsive relationships without requiring a photo or form above fold. Exact hashes make stale inputs fail. |
+| Structural sketches | `.omd/.cache/sketches/<id>/` | Each candidate supplies fixed 1280x900 and 390x844 acceptance renders plus full-page desktop/mobile continuity evidence. Full-page captures inform dependency/rhythm only. |
 | Blind choice | `.omd/taste/preferences.jsonl` | The selector sees anonymous renders and sanitized task context, not candidate rationale or authorship. `omd choose` stores the selected candidate and its reason as an agent choice. |
 | Production build | repository source | One builder implements one selected structure and preserves the copy deck. Separate `omd decision` entries record implementation reasons in `.omd/decisions.md`; they are not candidate-choice records. |
 | Production evidence | `.omd/attribution.md` | The builder records the sources behind shipped tokens, motion, composition, and graphics. |
@@ -84,6 +86,7 @@ Figma and explicit visual targets already supply structural decisions. The loop 
 | Source-candidate triage | raw JSON in `.omd/.cache/`; reasoning in `.omd/decisions.md` | `omd slop scan` exposes controlled signals without source excerpts. `needs-render` is transitional; final untriaged and needs-render counts are both zero. Confirmed current candidates are repaired/rescanned, dismissals have evidence, and rendered IR wins on overlap. |
 | Rendered review | cache renders, filmstrip, probe output | The squint reviewer sees only squint renders. The sharp reviewer receives sanitized task context plus measured outputs, never the builder’s rationale. |
 | Reframe | `.omd/frame.md` revision | `omd frame reframe` appends what the render revealed instead of erasing the original framing. |
+| Final source seal | `.omd/source-seal.json` | `omd source --seal` records final copy/type/composition and sorted production-source hashes; `--check` proves byte freshness only, not semantic fidelity. |
 
 Human approval checkpoints are separate from craft checkpoints. Projects default to `checkpoint: none`; concept, structure, or both can be enabled in `.omd/config.json`.
 
@@ -111,7 +114,7 @@ These are the six user-facing skills:
 | --- | --- |
 | `omd-ultradesign` | Run the complete human design loop for a page, app, dashboard, blog, landing page, or redesign. |
 | `omd-figma` | Pull a Figma file, synthesize its system, implement frames, compare responsive pairs, and report measured fidelity. |
-| `omd-scout` | Build a standalone measured reference board without designing or implementing. This skill uses a minimum of 18 captures and targets 25. |
+| `omd-scout` | Build a standalone measured reference board without designing or implementing. It closes consequential coverage gaps and reports uncertainty instead of filling quotas. |
 | `omd-critique` | Review an existing design without changing it; group deterministic findings by root cause and judge rendered craft. |
 | `omd-humanize` | Preserve facts while locally repairing sound discourse or reconstructing a misshapen message from verified facts, voice, and surface action. |
 | `omd-coach` | Read accumulated check history, identify recurring problems and trends, and suggest what to practise next. It does not read taste records. |
@@ -122,7 +125,7 @@ The verified installer copies the canonical skills directly into each detected h
 
 ## Internal pipeline agents
 
-These eight agents are implementation details of the design loop, not public commands:
+These nine agents are implementation details of the design loop, not public commands:
 
 | Agent | Responsibility | Write boundary |
 | --- | --- | --- |
@@ -130,6 +133,7 @@ These eight agents are implementation details of the design loop, not public com
 | `omd-scout` | Researches measured evidence for pipeline coverage. | Read-only; records through reference CLI commands. |
 | `omd-writer` | Writes or repairs the copy deck and fact ledger. | Only `.omd/copy-deck.md`. |
 | `omd-typesetter` | Builds and revises the pre-structure actual-copy typography proof. | `.omd/type-proof.md` and `.omd/.cache/type-proof/`. |
+| `omd-composer` | Converts sanitized evidence into the fresh composition contract before divergence. | Only `.omd/composition.md`. |
 | `omd-sketch` | Produces one isolated grayscale structural candidate with real copy. | Only its cache candidate directory. |
 | `omd-hand` | Builds the selected structure and records two craft checkpoints. | Production repository and declared OMD records. |
 | `omd-glance` | Reports hierarchy from squint renders only. | No writes. |
@@ -145,9 +149,9 @@ OMD combines deterministic checks with rendered review:
 
 | Layer | Commands and evidence |
 | --- | --- |
-| Copy and design contracts | `omd copy --check` validates deck structure and explicit fact references. `omd design --check` validates design-contract coverage. Neither proves prose quality or factual truth. |
+| Copy, composition, source, and design contracts | `omd copy --check` validates deck structure and fact references. `omd composition --check` validates composition sections and input freshness. `omd source --seal/--check` validates final approved-input/source bytes without claiming semantic fidelity. `omd design --check` validates design-contract coverage. |
 | Typography proof | Layout-neutral desktop/mobile specimens run before sketches; selected-container reproof runs after semantic structure and before the visual checkpoint. Copy, font/file, weight/axis, or container-width changes invalidate the proof. |
-| Render evidence | `omd render` produces sharp screenshots, `--squint` isolates hierarchy with grayscale and blur, and `--filmstrip` captures load-time frames. Squint is not a timed first-impression simulator. |
+| Render evidence | `omd render` captures the exact viewport by default; `--full-page` is supplementary continuity evidence. `--squint` isolates hierarchy with grayscale and blur, and `--filmstrip` captures load-time frames. Squint is not a timed first-impression simulator. |
 | Interaction | `omd probe` executes only a declared, safe local plan and reports expectation or tab-order failures. |
 | Source candidates | `omd slop scan [root] [--json]` reads supported production source without writing it. Candidates require contextual triage; they are not `omd check` warnings, scores, or authorship claims. |
 | Design lint | `omd check` evaluates `system`, `a11y`, `slop`, `motion`, and `ux` conditions. Contrast and hit-area rules are errors; slop and the other quality-floor rules are warnings where authored that way. |
@@ -188,7 +192,7 @@ Probe plans can use declared click, fill, and keypress steps with explicit expec
 
 Durable, reviewable records live directly under `.omd/`:
 
-- `frame.md`, `copy-deck.md`, `type-proof.md`, `design.md`, `decisions.md`
+- `frame.md`, `copy-deck.md`, `type-proof.md`, `composition.md`, `source-seal.json`, `design.md`, `decisions.md`
 - `attribution.md`, `motion-spec.md`, `craft.jsonl`, `config.json`
 - `refs/*.json`, declared `probes/*.json`, `taste/preferences.jsonl`, and `history.jsonl`
 
@@ -224,6 +228,7 @@ This is a compact map of `node bin/omd.ts --help`:
 ```text
 omd ir <page> [-o file]
 omd render <page> -o shot.png [--viewport WxH]
+omd render <page> --full-page -o long.png [--viewport WxH]
 omd render <page> --squint -o shot.png
 omd render <page> --filmstrip -o filmstrip.html [--viewport WxH]
 omd probe <page> [--plan path] [--json] [--out path]
@@ -232,6 +237,9 @@ omd check --site <dir>
 omd check <page1> <page2> ...
 omd slop scan [root] [--json]
 omd coach
+omd composition --check [--json]
+omd source --seal [root]
+omd source --check [root] [--json]
 
 omd frame show
 omd frame set --problem P --reframe R --why EVIDENCE [--task T --frequent-action A --costliest-error E]

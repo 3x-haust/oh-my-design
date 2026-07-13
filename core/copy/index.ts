@@ -16,6 +16,13 @@ export interface CopyViolation {
   message: string;
 }
 
+export interface CopyReviewViolation {
+  id: 'COPY-REVIEW-MISSING' | 'COPY-REVIEW-MODE' | 'COPY-REVIEW-TIME'
+    | 'COPY-REVIEW-HASH' | 'COPY-REVIEW-VERDICT' | 'COPY-REVIEW-FINDINGS';
+  path: '.omd/.cache/copy-eye.md';
+  message: string;
+}
+
 interface Fact {
   id: string;
   status: 'verified' | 'fixture' | 'open';
@@ -27,6 +34,64 @@ const issue = (id: string, message: string): CopyViolation => ({
   path: '.omd/copy-deck.md',
   message,
 });
+
+const reviewIssue = (id: CopyReviewViolation['id'], message: string): CopyReviewViolation => ({
+  id,
+  path: '.omd/.cache/copy-eye.md',
+  message,
+});
+
+function exactReviewFieldValues(md: string, label: string): string[] {
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return [...md.matchAll(new RegExp(`^${escaped}:[ \\t]*(.*?)[ \\t]*$`, 'gm'))]
+    .map((match) => match[1]?.trim() ?? '');
+}
+
+/** Validate only the preserved copy-eye report structure; never infer blindness or semantic quality. */
+export function validateCopyReviewReport(md: string): CopyReviewViolation[] {
+  if (!md.trim()) {
+    return [reviewIssue('COPY-REVIEW-MISSING', 'Copy-eye report is missing or empty.')];
+  }
+
+  const violations: CopyReviewViolation[] = [];
+  const modes = exactReviewFieldValues(md, 'Mode');
+  if (modes.length !== 1 || modes[0] !== 'copy-editor') {
+    violations.push(reviewIssue('COPY-REVIEW-MODE', 'Report must contain exactly one `Mode: copy-editor` line.'));
+  }
+
+  const times = exactReviewFieldValues(md, 'Review time');
+  const isoTime = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
+  if (times.length !== 1 || !isoTime.test(times[0] ?? '') || Number.isNaN(Date.parse(times[0] ?? ''))) {
+    violations.push(reviewIssue('COPY-REVIEW-TIME', 'Report must contain exactly one valid ISO `Review time` line.'));
+  }
+
+  const hashes = exactReviewFieldValues(md, 'Reviewed copy-deck SHA-256');
+  if (hashes.length !== 1 || !/^[0-9a-f]{64}$/.test(hashes[0] ?? '')) {
+    violations.push(reviewIssue('COPY-REVIEW-HASH', 'Report must contain exactly one reviewed copy-deck SHA-256 using 64 lowercase hex characters.'));
+  }
+
+  const verdicts = exactReviewFieldValues(md, 'Verdict');
+  if (verdicts.length !== 1 || !verdicts[0] || /^(?:TODO|TBD|N\/A)$/i.test(verdicts[0])) {
+    violations.push(reviewIssue('COPY-REVIEW-VERDICT', 'Report must contain exactly one non-empty `Verdict` line.'));
+  }
+
+  const findings = [...md.matchAll(/^Findings:[ \t]*(.*?)[ \t]*$/gm)];
+  if (findings.length !== 1) {
+    violations.push(reviewIssue('COPY-REVIEW-FINDINGS', 'Report must contain exactly one non-empty `Findings` section.'));
+  } else {
+    const match = findings[0]!;
+    const inline = match[1]?.trim() ?? '';
+    const afterHeader = md.slice((match.index ?? 0) + match[0].length)
+      .replace(/<!--[\s\S]*?-->/g, '')
+      .replace(/^[#*_`>|-]+\s*/gm, '')
+      .trim();
+    if (!(inline || afterHeader)) {
+      violations.push(reviewIssue('COPY-REVIEW-FINDINGS', 'Report must contain exactly one non-empty `Findings` section.'));
+    }
+  }
+
+  return violations;
+}
 
 export function parseCopySections(md: string): Map<string, string> {
   const sections = new Map<string, string>();

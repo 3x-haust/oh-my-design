@@ -1,5 +1,8 @@
 # Typographic hero
 
+> Candidate hypothesis only. Revalidate its condition, values, and responsive transition
+> against the current composition contract; do not transfer this page recipe unchanged.
+
 A typographic hero makes a short, concept-bearing line the primary visual event. It is an
 exceptional composition, not a large-heading preset.
 Use it with the register conditions in `core/theory/expressive.md`.

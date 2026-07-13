@@ -4,7 +4,9 @@ import { mkdtempSync, readFileSync, writeFileSync, mkdirSync, existsSync } from 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
 import { extractIr, renderPage, waitForDocumentFonts } from '../core/render/index.ts';
+import { decodePng } from '../core/motion/energy.ts';
 import { readProbePlan, runProbe, type ProbePlan } from '../core/probe/index.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
@@ -52,8 +54,27 @@ test('normal and squint renders both exist and differ at desktop and mobile', as
     await renderPage(fixture, { viewport, out: normal });
     await renderPage(fixture, { viewport, out: squint, squint: true });
     assert.ok(existsSync(normal) && existsSync(squint));
+    const dimensions = decodePng(readFileSync(normal));
+    assert.deepEqual({ width: dimensions.width, height: dimensions.height }, viewport);
     assert.notDeepEqual(readFileSync(normal), readFileSync(squint));
   }
+});
+
+test('full-page render is explicit and may exceed the fixed viewport', async () => {
+  const dir = temp();
+  const page = join(dir, 'tall.html');
+  const fixed = join(dir, 'fixed.png');
+  const full = join(dir, 'full.png');
+  const cliFull = join(dir, 'cli-full.png');
+  writeFileSync(page, '<!doctype html><style>body{margin:0}.tall{height:1500px}</style><main class="tall">Long page</main>');
+  const viewport = { width: 390, height: 844 };
+  await renderPage(page, { viewport, out: fixed });
+  await renderPage(page, { viewport, out: full, fullPage: true });
+  assert.equal(decodePng(readFileSync(fixed)).height, 844);
+  assert.ok(decodePng(readFileSync(full)).height > 844);
+  const cli = spawnSync(process.execPath, [join(root, 'bin/omd.ts'), 'render', page, '--viewport', '390x844', '--full-page', '-o', cliFull], { encoding: 'utf8' });
+  assert.equal(cli.status, 0, cli.stderr);
+  assert.ok(decodePng(readFileSync(cliFull)).height > 844);
 });
 
 test('probe warns only from declared expectations and expected tab order', async () => {
@@ -122,12 +143,14 @@ test('prompt contract keeps content-first isolation and checkpoint defaults exec
   const framer = readFileSync(join(root, 'src/agents/framer.agent.yaml'), 'utf8');
   const writer = readFileSync(join(root, 'src/agents/writer.agent.yaml'), 'utf8');
   const typesetter = readFileSync(join(root, 'src/agents/typesetter.agent.yaml'), 'utf8');
+  const composer = readFileSync(join(root, 'src/agents/composer.agent.yaml'), 'utf8');
   const sketch = readFileSync(join(root, 'src/agents/sketch.agent.yaml'), 'utf8');
   for (const phrase of ['copy deck', 'sketch', 'squint glance', 'checkpoint: none']) {
     assert.match(protocol, new RegExp(phrase.replace(/ /g, '\\s+')));
   }
   assert.ok(skill.indexOf('.omd/copy-deck.md') < skill.indexOf('omd-sketch'));
   assert.ok(skill.indexOf('omd-typesetter') < skill.indexOf('omd-sketch'), 'type proof must precede sketches');
+  assert.ok(skill.indexOf('omd-composer') < skill.indexOf('omd-sketch'), 'composition contract must precede sketches');
   assert.ok(skill.indexOf('semantic checkpoint') < skill.indexOf('re-proves typography'));
   assert.ok(skill.indexOf('re-proves typography') < skill.indexOf('visual checkpoint'));
   assert.ok(skill.indexOf('--squint') < skill.indexOf('Now render sharp'));
@@ -137,19 +160,24 @@ test('prompt contract keeps content-first isolation and checkpoint defaults exec
   assert.match(glance, /squint render paths and nothing else/);
   assert.match(scout, /domain, direct competitors, user\/community language,[\s\S]*every required component/);
   assert.match(framer, /current brief > explicit current user feedback > prior explicit project taste > agent/);
-  for (const name of ['framer', 'scout', 'sketch', 'hand', 'eye', 'writer', 'typesetter']) {
+  for (const name of ['framer', 'scout', 'sketch', 'hand', 'eye', 'writer', 'typesetter', 'composer']) {
     assert.match(readFileSync(join(root, `src/agents/${name}.agent.yaml`), 'utf8'), /Bash\(omd pack:\*\)/, `${name} needs pack permission`);
   }
   assert.match(readFileSync(join(root, 'core/install/install.ts'), 'utf8'), /'Bash\(omd pack:\*\)'/);
   assert.match(readFileSync(join(root, 'core/install/install.ts'), 'utf8'), /'Bash\(omd copy:\*\)'/);
+  assert.match(readFileSync(join(root, 'core/install/install.ts'), 'utf8'), /'Bash\(omd composition:\*\)'/);
+  assert.match(readFileSync(join(root, 'core/install/install.ts'), 'utf8'), /'Bash\(shasum:\*\)'/);
+  assert.match(readFileSync(join(root, 'core/install/install.ts'), 'utf8'), /'Bash\(omd source:\*\)'/);
   assert.match(writer, /write or revise only `.omd\/copy-deck\.md`/i);
   assert.match(typesetter, /\.omd\/type-proof\.md/);
   assert.match(typesetter, /1280x900 and 390x844/);
   assert.match(typesetter, /Do not design page composition,?\s+colour, graphics, motion/i);
   assert.match(eye, /typography-proof mode[\s\S]*fallback or tofu[\s\S]*faux/);
-  assert.match(sketch, /approved typography\s+contract derived from `.omd\/type-proof\.md`/);
-  assert.match(sketch, /Preserve the approved typography roles[\s\S]*vary structure only[\s\S]*Do not invent[\s\S]*new type\s+scale/i);
-  assert.match(eye, /sketch-selector mode[\s\S]*approved typography\s+contract[\s\S]*Reject candidates that invent a new scale/i);
+  assert.match(composer, /Own only `.omd\/composition\.md`/);
+  assert.match(composer, /SHA-256 fingerprints[\s\S]*scout\.md/);
+  assert.match(sketch, /approved typography and\s+composition contracts/);
+  assert.match(sketch, /Preserve the approved typography roles[\s\S]*both contracts exactly[\s\S]*Do not invent[\s\S]*new type\s+scale/i);
+  assert.match(eye, /sketch-selector mode[\s\S]*sanitized composition contract[\s\S]*Reject candidates that invent a new scale/i);
   const contract = protocol.replace(/\s+/g, ' ');
   assert.match(contract, /typesetter proof[\s\S]*structural sketches/);
   for (const gate of [
@@ -168,13 +196,15 @@ test('prompt contract keeps content-first isolation and checkpoint defaults exec
   assert.ok(existsSync(join(root, 'dist/claude/core/protocol/human-design-loop.md')));
   assert.ok(existsSync(join(root, 'dist/codex/agents/omd-typesetter.toml')));
   assert.ok(existsSync(join(root, 'dist/claude/agents/omd-typesetter.md')));
+  assert.ok(existsSync(join(root, 'dist/codex/agents/omd-composer.toml')));
+  assert.ok(existsSync(join(root, 'dist/claude/agents/omd-composer.md')));
 });
 
 test('typographic hero contracts are proof-based, not fixed size quotas', () => {
   const files = [
     'core/theory/expressive.md',
     'core/composition/typographic-hero.md',
-    'evals/korean-showpiece/graders/composition-recipe-cited.md',
+    'evals/korean-showpiece/graders/composition-contract-visible.md',
     'evals/korean-showpiece/graders/showpiece-register.md',
   ].map((path) => readFileSync(join(root, path), 'utf8')).join('\n');
   assert.doesNotMatch(files, /90\s*[–-]\s*200px|12vw|font-size\s*[≥>]=?\s*72px|viewport-fill(?:ing)?[^.\n]*(?:pass|success|condition)/i);

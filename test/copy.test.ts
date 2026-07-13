@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { validateCopyDeck } from '../core/copy/index.ts';
+import { validateCopyDeck, validateCopyReviewReport } from '../core/copy/index.ts';
 
 const CLI = fileURLToPath(new URL('../bin/omd.ts', import.meta.url));
 const project = (): string => mkdtempSync(join(tmpdir(), 'omd-copy-'));
@@ -69,6 +69,16 @@ function multiSurfaceDeck(): string {
 - Claim refs: F-003
 
 ## Navigation and actions`);
+}
+
+function reviewReport(hash = 'a'.repeat(64)): string {
+  return `Mode: copy-editor
+Review time: 2026-07-14T12:34:56.000Z
+Reviewed copy-deck SHA-256: ${hash}
+Verdict: revise
+Findings:
+- CTA label does not predict the next screen.
+`;
 }
 
 test('valid Korean surface copy and verified fact refs pass', () => {
@@ -173,4 +183,55 @@ test('CLI accepts a valid non-empty copy deck', () => {
   const result = spawnSync(process.execPath, [CLI, 'copy', '--check'], { cwd: dir, encoding: 'utf8' });
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.match(result.stdout, /passes all structural checks/);
+});
+
+test('copy review report gate accepts the exact format without comparing against the current deck', () => {
+  assert.deepEqual(validateCopyReviewReport(reviewReport()), []);
+  const dir = project();
+  mkdirSync(join(dir, '.omd', '.cache'), { recursive: true });
+  writeFileSync(join(dir, '.omd', 'copy-deck.md'), deck());
+  writeFileSync(join(dir, '.omd', '.cache', 'copy-eye.md'), reviewReport('b'.repeat(64)));
+  const result = spawnSync(process.execPath, [CLI, 'copy', '--review-check'], { cwd: dir, encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /report-structure checks only/);
+  assert.match(result.stdout, /blindness and semantic quality are not proven/);
+});
+
+test('forward-test shape without exact mode and reviewed-hash labels fails deterministically', () => {
+  const report = `# Copy review
+Review time: 2026-07-14T12:34:56Z
+Copy editor review completed for the supplied deck.
+Verdict: revise
+Findings:
+- CTA label does not predict the next screen.
+`;
+  const findings = validateCopyReviewReport(report);
+  assert.ok(findings.some((finding) => finding.id === 'COPY-REVIEW-MODE'));
+  assert.ok(findings.some((finding) => finding.id === 'COPY-REVIEW-HASH'));
+});
+
+test('copy review report rejects invalid time, uppercase hash, empty verdict, and empty findings', () => {
+  const invalid = `Mode: copy-editor
+Review time: yesterday
+Reviewed copy-deck SHA-256: ${'A'.repeat(64)}
+Verdict: TBD
+Findings:
+<!-- empty -->
+`;
+  const ids = validateCopyReviewReport(invalid).map((finding) => finding.id);
+  assert.ok(ids.includes('COPY-REVIEW-TIME'));
+  assert.ok(ids.includes('COPY-REVIEW-HASH'));
+  assert.ok(ids.includes('COPY-REVIEW-VERDICT'));
+  assert.ok(ids.includes('COPY-REVIEW-FINDINGS'));
+});
+
+test('copy review CLI missing report fails with stable JSON', () => {
+  const dir = project();
+  const result = spawnSync(process.execPath, [CLI, 'copy', '--review-check', '--json'], { cwd: dir, encoding: 'utf8' });
+  assert.equal(result.status, 1);
+  assert.deepEqual(JSON.parse(result.stdout), [{
+    id: 'COPY-REVIEW-MISSING',
+    path: '.omd/.cache/copy-eye.md',
+    message: 'Copy-eye report is missing or empty.',
+  }]);
 });

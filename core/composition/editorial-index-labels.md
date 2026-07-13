@@ -1,5 +1,8 @@
 # Editorial index labels (01, 02, 03)
 
+> Candidate hypothesis only. Revalidate its condition, values, and responsive transition
+> against the current composition contract; do not transfer this page recipe unchanged.
+
 A large ordinal number — set at display scale, typically 10–15% opacity — anchors each
 section to its position in a sequence. The number reads as background field before it
 reads as a numeral; it reinforces order and creates depth without competing with the

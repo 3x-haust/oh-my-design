@@ -1,5 +1,8 @@
 # Section inversion (dark ↔ light narrative turn)
 
+> Candidate hypothesis only. Revalidate its condition, values, and responsive transition
+> against the current composition contract; do not transfer this page recipe unchanged.
+
 A section inversion switches the page from a light surface to a dark one — or the
 reverse — at a specific point in the scroll narrative. The colour change is not
 decoration; it marks a conceptual pivot, a moment where what was light becomes weighty,

@@ -49,7 +49,8 @@ const OMD_ALLOW = [
   'Bash(omd frame:*)', 'Bash(omd ref:*)', 'Bash(omd choose:*)',
   'Bash(omd decision:*)', 'Bash(omd taste:*)', 'Bash(omd coach:*)',
   'Bash(omd probe:*)', 'Bash(omd config:*)', 'Bash(omd craft:*)', 'Bash(omd copy:*)',
-  'Bash(omd pack:*)',
+  'Bash(omd composition:*)',
+  'Bash(omd source:*)', 'Bash(omd pack:*)', 'Bash(shasum:*)',
 ];
 
 /**
@@ -273,6 +274,7 @@ function doctorClaude(d: Detected): DoctorCheck[] {
   const agentsMatch = shippedAgents.length > 0
     && shippedAgents.includes('omd-writer.md')
     && shippedAgents.includes('omd-typesetter.md')
+    && shippedAgents.includes('omd-composer.md')
     && JSON.stringify(installedAgents) === JSON.stringify(shippedAgents);
   checks.push(check('direct agents match shipped set', agentsMatch, `expected ${shippedAgents.length}, found ${installedAgents.length}`));
 
@@ -283,6 +285,12 @@ function doctorClaude(d: Detected): DoctorCheck[] {
 
   const copyPermission = settings?.permissions?.allow?.includes('Bash(omd copy:*)') ?? false;
   checks.push(check('copy check permission present', copyPermission));
+  const compositionPermission = settings?.permissions?.allow?.includes('Bash(omd composition:*)') ?? false;
+  checks.push(check('composition check permission present', compositionPermission));
+  const shasumPermission = settings?.permissions?.allow?.includes('Bash(shasum:*)') ?? false;
+  checks.push(check('composition hash permission present', shasumPermission));
+  const sourcePermission = settings?.permissions?.allow?.includes('Bash(omd source:*)') ?? false;
+  checks.push(check('source seal permission present', sourcePermission));
 
   return checks;
 }
@@ -305,6 +313,9 @@ function doctorCodex(d: Detected): DoctorCheck[] {
   const typesetterRegistered = config?.agents?.['omd-typesetter']?.config_file === './agents/omd-typesetter.toml'
     && existsSync(join(d.home, 'agents', 'omd-typesetter.toml'));
   checks.push(check('typesetter agent registered', typesetterRegistered));
+  const composerRegistered = config?.agents?.['omd-composer']?.config_file === './agents/omd-composer.toml'
+    && existsSync(join(d.home, 'agents', 'omd-composer.toml'));
+  checks.push(check('composer agent registered', composerRegistered));
 
   const skillsPresent = shippedSkillNames().some((name) => existsSync(join(d.home, 'skills', name)));
   checks.push(check('skills present', skillsPresent));

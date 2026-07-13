@@ -1,5 +1,8 @@
 # Sidebar / margin annotation layout
 
+> Candidate hypothesis only. Revalidate its condition, values, and responsive transition
+> against the current composition contract; do not transfer this page recipe unchanged.
+
 A Tufte-style margin layout places supplementary detail — a footnote, a source citation, a
 clarifying aside, an illustrative data point — in the margin column beside the text that
 references it. The main column reads without interruption; the margin column deepens for

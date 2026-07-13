@@ -11,16 +11,38 @@ allow:
 deny: []
 instructions: |
   Read `protocol/human-design-loop.md` under `omd pack dir` and obey its isolation boundary.
-  You receive only a sanitized frame/concept, `.omd/copy-deck.md`, an approved typography
-  contract derived from `.omd/type-proof.md`, an anonymous candidate id, and one structural
-  axis. The typography contract contains approved roles, family, weight, size/measure, and
-  wrapping constraints, without rejected-alternative rationale or authorship. Do not read
-  the full proof, another candidate, reference rationale, or production files. Write only
-  `.omd/.cache/sketches/<id>/`.
+  You receive only a sanitized frame/concept, `.omd/copy-deck.md`, approved typography and
+  composition contracts, an anonymous candidate id, and one axis assigned from the
+  composition contract's Candidate axes section. The contracts contain approved dependency,
+  alignment, density, focal hierarchy, form, media or alternate mental-model carrier,
+  responsive, type-role, family, weight, size/measure, and wrapping constraints, without
+  source rationale, rejected alternatives, URLs, or authorship.
+  Do not read the full type proof, another candidate, reference rationale, raw screenshots,
+  or production files. Write only `.omd/.cache/sketches/<id>/`.
+
+  In the single bounded replacement round, start in a fresh context with a fresh anonymous id.
+  Receive the same approved contracts and assigned axis plus only your own sanitized visible
+  failure and acceptance criteria. Never receive or infer numeric scores, the prior candidate
+  render/source, another candidate or render, or candidate/selector rationale. Produce one
+  replacement; do not revise it through another retry round.
 
   Build a cheap but renderable structural sketch using the real copy deck: semantic regions,
   representative data density, and structural boxes. Preserve the approved typography roles
-  and constraints exactly; vary structure only. Do not invent, replace, or tune a new type
-  scale to make a candidate look stronger. Use grayscale only. No production edits, colour
-  direction, motion, decorative graphics, or persuasive rationale. End with exactly the
-  render path and structural cost/tradeoff.
+  and both contracts exactly; vary only the assigned structural axis. Preserve the dominant
+  anchor's morphology and value/proof/CTA relationship at both viewports. A visible CTA and
+  predictable path to completion proves reach; do not crowd the first viewport with the
+  terminal form/control surface or treat its visibility as an advantage. Represent the
+  lawful mechanism carrier, or the approved alternate carrier and limitation, with enough
+  grayscale structure to judge its functional relationship. Do not invent, replace,
+  or tune a new type scale or composition recipe to make a candidate look stronger. Use grayscale only. No production edits, colour
+  direction, motion, polished or decorative graphics, or persuasive rationale.
+
+  Render exactly four structural proofs into your candidate directory:
+  1. fixed desktop, 1280x900;
+  2. fixed mobile, 390x844;
+  3. full-page desktop continuity, 1280x900 with `--full-page`;
+  4. full-page mobile continuity, 390x844 with `--full-page`.
+  Fixed renders are authoritative for focal hierarchy, CTA reach, responsive hierarchy,
+  type/copy, usability, and accessibility. Full-page captures are supplemental and may be
+  used only for narrative dependency and composition rhythm; they never replace fixed
+  acceptance. End with exactly the four render paths and structural cost/tradeoff.

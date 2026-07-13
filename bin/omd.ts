@@ -11,10 +11,12 @@ import { findLeakedRationale } from '../core/rules/leakage.ts';
 import { checkAttribution } from '../core/rules/attribution.ts';
 import { checkMotionSpec } from '../core/rules/motion-spec.ts';
 import { discoverEvidence, generateDesignMd, validateDesignMd } from '../core/design/index.ts';
-import { validateCopyDeck } from '../core/copy/index.ts';
+import { validateCopyDeck, validateCopyReviewReport } from '../core/copy/index.ts';
 import { checkInteractionStates } from '../core/design/interaction-states.ts';
 import { checkFrameUx } from '../core/frame/check-ux.ts';
 import { scanSlopSource } from '../core/slop/index.ts';
+import { validateCompositionContract } from '../core/composition-contract/index.ts';
+import { validateSourceSeal, writeSourceSeal } from '../core/source-seal/index.ts';
 import type { Category, EnergyCurve, Layer, RawIr, Violation } from '../core/types.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -41,6 +43,7 @@ interface Opts {
   image?: boolean;
   filmstrip?: boolean;
   squint?: boolean;
+  fullPage?: boolean;
   fromUser?: boolean;
   all?: boolean;
   plan?: string;
@@ -61,6 +64,8 @@ interface Opts {
   target?: string;
   /** Validate design.md sections rather than discover/generate (`omd design --check`). */
   check?: boolean;
+  /** Validate the preserved copy-eye report structure (`omd copy --review-check`). */
+  reviewCheck?: boolean;
   /** UX anchor: what task does the user arrive with? (`omd frame set --task "..."`) */
   task?: string;
   /** UX anchor: most frequent action on the primary screen. (`omd frame set --frequent-action "..."`) */
@@ -69,13 +74,15 @@ interface Opts {
   costliestError?: string;
 }
 
-const FLAGS = new Set(['json', 'no-log', 'image', 'filmstrip', 'squint', 'from-user', 'all', 'blueprint', 'fresh', 'check']);
+const FLAGS = new Set(['json', 'no-log', 'image', 'filmstrip', 'squint', 'full-page', 'from-user', 'all', 'blueprint', 'fresh', 'check', 'review-check']);
 const ALIASES: Record<string, keyof Opts> = {
   o: 'out',
   'no-log': 'noLog',
   'from-user': 'fromUser',
+  'full-page': 'fullPage',
   'frequent-action': 'frequentAction',
   'costliest-error': 'costliestError',
+  'review-check': 'reviewCheck',
 };
 
 function parseArgs(args: string[]): Opts {
@@ -132,7 +139,11 @@ async function cmdRender(opts: Opts): Promise<never> {
 
   const out = opts.out ?? 'shot.png';
   mkdirSync(dirname(resolve(out)), { recursive: true });
-  await renderPage(target, { viewport: parseViewport(opts.viewport), out, ...(opts.squint ? { squint: true } : {}) });
+  await renderPage(target, {
+    viewport: parseViewport(opts.viewport), out,
+    ...(opts.squint ? { squint: true } : {}),
+    ...(opts.fullPage ? { fullPage: true } : {}),
+  });
   console.log(out);
   process.exit(0);
 }
@@ -1067,9 +1078,27 @@ async function cmdDesign(opts: Opts): Promise<never> {
   process.exit(0);
 }
 
-/** `omd copy --check [--json]` — required structural gate for `.omd/copy-deck.md`. */
+/** Copy-deck or copy-eye report structure gates; neither judges prose quality or blindness. */
 function cmdCopy(opts: Opts): never {
-  if (!opts.check) throw new Error('usage: omd copy --check [--json]');
+  if (opts.check === opts.reviewCheck) {
+    throw new Error('usage: omd copy --check [--json] | omd copy --review-check [--json]');
+  }
+
+  if (opts.reviewCheck) {
+    const path = join(process.cwd(), '.omd', '.cache', 'copy-eye.md');
+    const violations = validateCopyReviewReport(existsSync(path) ? readFileSync(path, 'utf8') : '');
+    if (opts.json) process.stdout.write(JSON.stringify(violations));
+    else {
+      for (const violation of violations) {
+        console.log(`[error] ${violation.id} ${violation.path}: ${violation.message}`);
+      }
+      if (violations.length === 0) {
+        console.log('ok — copy-eye.md passes report-structure checks only; blindness and semantic quality are not proven');
+      }
+    }
+    process.exit(violations.length > 0 ? 1 : 0);
+  }
+
   const path = join(process.cwd(), '.omd', 'copy-deck.md');
   const violations = validateCopyDeck(existsSync(path) ? readFileSync(path, 'utf8') : '');
   if (opts.json) process.stdout.write(JSON.stringify(violations));
@@ -1080,6 +1109,39 @@ function cmdCopy(opts: Opts): never {
     if (violations.length === 0) console.log('ok — copy-deck.md passes all structural checks');
   }
   process.exit(violations.length > 0 ? 1 : 0);
+}
+
+/** `omd composition --check [--json]` — structural/freshness gate for composition.md. */
+function cmdComposition(opts: Opts): never {
+  if (!opts.check) throw new Error('usage: omd composition --check [--json]');
+  const findings = validateCompositionContract(process.cwd());
+  if (opts.json) process.stdout.write(JSON.stringify(findings));
+  else {
+    for (const finding of findings) console.log(`[error] ${finding.id} ${finding.path}: ${finding.message}`);
+    if (findings.length === 0) console.log('ok — composition.md passes structure and freshness checks');
+  }
+  process.exit(findings.length > 0 ? 1 : 0);
+}
+
+/** Final byte-freshness evidence only; this does not judge semantic copy/source fidelity. */
+function cmdSource(mode: string | undefined, opts: Opts): never {
+  const sourceRoot = resolve(opts._[0] ?? process.cwd());
+  if (mode === '--seal') {
+    const path = writeSourceSeal(sourceRoot);
+    if (opts.json) process.stdout.write(JSON.stringify({ path }));
+    else console.log(path);
+    process.exit(0);
+  }
+  if (mode === '--check') {
+    const findings = validateSourceSeal(sourceRoot);
+    if (opts.json) process.stdout.write(JSON.stringify(findings));
+    else {
+      for (const finding of findings) console.log(`[error] ${finding.id} ${finding.path}: ${finding.message}`);
+      if (findings.length === 0) console.log('ok — source seal matches approved inputs and production source bytes');
+    }
+    process.exit(findings.length > 0 ? 1 : 0);
+  }
+  throw new Error('usage: omd source --seal [root] | --check [root] [--json]');
 }
 
 async function cmdDoctor(): Promise<never> {
@@ -1338,6 +1400,7 @@ function usage(): never {
     'usage: omd <command>\n\n'
     + '  ir <page> [-o f]                            rendered DOM -> Design IR\n'
     + '  render <page> -o shot.png [--viewport WxH]  headless screenshot\n'
+    + '  render <page> --full-page -o shot.png         supplementary long-page capture\n'
     + '  render <page> --squint -o shot.png            grayscale + blur hierarchy isolation\n'
     + '  render <page> --filmstrip -o f.html [--viewport WxH]  load-time filmstrip\n'
     + '  probe <page> [--plan path] [--json] [--out path]  declared local interaction path\n'
@@ -1372,6 +1435,10 @@ function usage(): never {
     + '  design                                       discover evidence and create/refresh .omd/design.md\n'
     + '  design --check                              validate design.md section coverage\n'
     + '  copy --check [--json]                       validate required copy deck structure and fact refs\n'
+    + '  copy --review-check [--json]                validate copy-eye report structure only (not blindness)\n'
+    + '  composition --check [--json]                validate composition sections and input freshness\n'
+    + '  source --seal [root]                        write final approved-input/source byte seal\n'
+    + '  source --check [root] [--json]              fail when the source seal is missing or stale\n'
     + '\n'
     + '  pack dir                                    print the knowledge-pack root path\n'
     + '  pack list                                   list all pack .md files\n'
@@ -1457,6 +1524,8 @@ async function main(): Promise<never> {
 
   if (cmd === 'design') return cmdDesign(parseArgs(args.slice(1)));
   if (cmd === 'copy') return cmdCopy(parseArgs(args.slice(1)));
+  if (cmd === 'composition') return cmdComposition(parseArgs(args.slice(1)));
+  if (cmd === 'source') return cmdSource(sub, parseArgs(args.slice(2)));
   if (cmd === 'pack') return cmdPack(sub, ...args.slice(2));
   if (cmd === 'doctor') return cmdDoctor();
 

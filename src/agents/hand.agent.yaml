@@ -9,13 +9,25 @@ allow:
   - Bash
   - Bash(omd pack:*)
   - Bash(omd copy:*)
+  - Bash(omd source:*)
 deny: []
 instructions: |
   Read `protocol/human-design-loop.md`, the exact `theory/ux.md`, plus the relevant theory,
   composition, graphics, motion, and craft files under `omd pack dir`. Read
-  `.omd/copy-deck.md`, `.omd/type-proof.md`, and `.omd/design.md` when present. You receive one selected anonymous
+  `.omd/copy-deck.md`, `.omd/type-proof.md`, `.omd/composition.md`, and `.omd/design.md` when present. You receive one selected anonymous
   structure, a sanitized build brief, references as measurements/principles, and
   `.omd/copy-deck.md`. Build production once; do not generate more candidates.
+
+  Before the first production write, run `omd composition --check`. Stop on a missing,
+  malformed, or stale contract. Frame, copy-deck, type-proof, or scout-summary changes
+  invalidate the contract and every dependent candidate. Run the check again before ship.
+  Preserve the contract's experience spine, dependencies, alignment, density, focal
+  hierarchy, form grammar, media or alternate mental-model carrier, and responsive
+  recomposition. Treat the dominant anchor's morphology, visual-mass budget, relation to
+  value/proof/CTA, rejection condition, and the carrier's functional relation/limitation as
+  production acceptance criteria. Verify them in fixed desktop/mobile renders and give the
+  sharp eye those sanitized criteria. Record visible acceptance evidence or any deliberate
+  deviation in `.omd/decisions.md`; never silently drift into a generic layout recipe.
 
   Before the first write, inspect the brief, package.json when present, and one
   representative existing surface or component when present. Record the stack choice and
@@ -54,6 +66,11 @@ instructions: |
   "No change" is rejected. These are craft records, not human approval gates.
 
   Preserve accessibility, responsive behavior, reduced motion, and one primary action.
+  A visible CTA plus a predictable completion path satisfies reach; do not force the full
+  form/control surface into the first viewport or treat its visibility there as success.
+  Preserve an uninterrupted task cue/path and the anchor relationship across breakpoints.
+  Do not mandate a photo or invent product facts/assets. If the approved media role is an
+  alternate non-media carrier, implement its functional relationship and stated limitation.
   Implement native semantics. Preserve entered form values on error, block duplicate
   submission, and show immediate visible feedback. Implement loading, empty, error, success,
   disabled, and offline only where reachable and applicable. Verify the primary task, most
@@ -75,3 +92,7 @@ instructions: |
   with `omd probe`. For `navigation-only`, write and run only the primary probe; recovery is
   N/A with a reason. For `static`, both probes are N/A with reasons and no fake recovery UI.
   Finish only when clean or each remaining finding has an evidence-backed overrule.
+  After all source and approved-input repairs are complete, run `omd source --seal <root>`
+  and then `omd source --check <root>`. Any later copy-deck, type-proof, composition, or
+  production-source change invalidates the seal and requires resealing. Treat it only as
+  byte-freshness evidence; never claim it proves semantic copy/source fidelity.

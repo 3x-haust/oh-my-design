@@ -11,7 +11,7 @@ import { detectHosts } from '../core/install/detect.ts';
 import { doctor, install } from '../core/install/install.ts';
 import { must, asRecord } from './helpers.ts';
 
-const AGENTS = ['omd-framer', 'omd-eye', 'omd-writer', 'omd-typesetter'];
+const AGENTS = ['omd-framer', 'omd-eye', 'omd-writer', 'omd-typesetter', 'omd-composer'];
 
 const EXISTING_TOML = `model = "gpt-5.5"
 
@@ -36,6 +36,7 @@ interface CodexConfig {
     'omd-eye'?: { config_file?: string };
     'omd-writer'?: { config_file?: string };
     'omd-typesetter'?: { config_file?: string };
+    'omd-composer'?: { config_file?: string };
   };
 }
 
@@ -47,6 +48,7 @@ test('patchConfigToml registers agents and enables required features', () => {
   assert.equal(must(agents['omd-eye'], 'omd-eye').config_file, './agents/omd-eye.toml');
   assert.equal(must(agents['omd-writer'], 'omd-writer').config_file, './agents/omd-writer.toml');
   assert.equal(must(agents['omd-typesetter'], 'omd-typesetter').config_file, './agents/omd-typesetter.toml');
+  assert.equal(must(agents['omd-composer'], 'omd-composer').config_file, './agents/omd-composer.toml');
   const features = must(cfg.features, 'features');
   for (const f of ['hooks', 'plugins', 'plugin_hooks', 'multi_agent']) {
     assert.equal(features[f], true, `feature ${f} must be enabled`);
@@ -167,9 +169,13 @@ test('Claude direct install and doctor agree on writer, skills, permissions, and
 
     assert.ok(existsSync(join(home, 'agents', 'omd-writer.md')));
     assert.ok(existsSync(join(home, 'agents', 'omd-typesetter.md')));
+    assert.ok(existsSync(join(home, 'agents', 'omd-composer.md')));
     assert.ok(existsSync(join(home, 'skills', 'omd-ultradesign', 'SKILL.md')));
     const settings = JSON.parse(readFileSync(join(home, 'settings.json'), 'utf8')) as Settings;
     assert.ok(settings.permissions?.allow?.includes('Bash(omd copy:*)'));
+    assert.ok(settings.permissions?.allow?.includes('Bash(omd composition:*)'));
+    assert.ok(settings.permissions?.allow?.includes('Bash(shasum:*)'));
+    assert.ok(settings.permissions?.allow?.includes('Bash(omd source:*)'));
     assert.equal(
       settings.hooks?.PreToolUse?.some((entry) => entry.hooks.some((hook) => hook.command.includes('omd.ts'))) ?? false,
       false,
@@ -180,10 +186,48 @@ test('Claude direct install and doctor agree on writer, skills, permissions, and
     assert.equal(result.ok, true, result.checks.filter((check) => !check.ok).map((check) => check.name).join(', '));
     assert.ok(result.checks.every((check) => check.ok));
 
+    settings.permissions = {
+      ...settings.permissions,
+      allow: (settings.permissions?.allow ?? []).filter((entry) => entry !== 'Bash(omd composition:*)'),
+    };
+    writeFileSync(join(home, 'settings.json'), JSON.stringify(settings));
+    const missingCompositionPermission = doctor([detected])[0]!;
+    assert.equal(missingCompositionPermission.ok, false);
+    assert.equal(missingCompositionPermission.checks.find((check) => check.name === 'composition check permission present')?.ok, false);
+
+    install([detected]);
+    const restoredSettings = JSON.parse(readFileSync(join(home, 'settings.json'), 'utf8')) as Settings;
+    restoredSettings.permissions = {
+      ...restoredSettings.permissions,
+      allow: (restoredSettings.permissions?.allow ?? []).filter((entry) => entry !== 'Bash(shasum:*)'),
+    };
+    writeFileSync(join(home, 'settings.json'), JSON.stringify(restoredSettings));
+    const missingHashPermission = doctor([detected])[0]!;
+    assert.equal(missingHashPermission.ok, false);
+    assert.equal(missingHashPermission.checks.find((check) => check.name === 'composition hash permission present')?.ok, false);
+
+    install([detected]);
+    const sourceSettings = JSON.parse(readFileSync(join(home, 'settings.json'), 'utf8')) as Settings;
+    sourceSettings.permissions = {
+      ...sourceSettings.permissions,
+      allow: (sourceSettings.permissions?.allow ?? []).filter((entry) => entry !== 'Bash(omd source:*)'),
+    };
+    writeFileSync(join(home, 'settings.json'), JSON.stringify(sourceSettings));
+    const missingSourcePermission = doctor([detected])[0]!;
+    assert.equal(missingSourcePermission.ok, false);
+    assert.equal(missingSourcePermission.checks.find((check) => check.name === 'source seal permission present')?.ok, false);
+
+    install([detected]);
     rmSync(join(home, 'agents', 'omd-typesetter.md'));
     const missingTypesetter = doctor([detected])[0]!;
     assert.equal(missingTypesetter.ok, false);
     assert.equal(missingTypesetter.checks.find((check) => check.name === 'direct agents match shipped set')?.ok, false);
+
+    install([detected]);
+    rmSync(join(home, 'agents', 'omd-composer.md'));
+    const missingComposer = doctor([detected])[0]!;
+    assert.equal(missingComposer.ok, false);
+    assert.equal(missingComposer.checks.find((check) => check.name === 'direct agents match shipped set')?.ok, false);
   } finally {
     rmSync(home, { recursive: true, force: true });
   }
@@ -208,12 +252,15 @@ test('Claude doctor rejects stale plugin-only layout and a legacy OMD hook', () 
     assert.equal(result.checks.find((check) => check.name === 'legacy PreToolUse hook absent')?.ok, false);
     assert.equal(result.checks.find((check) => check.name === 'direct agents match shipped set')?.ok, false);
     assert.equal(result.checks.find((check) => check.name === 'direct skills installed')?.ok, false);
+    assert.equal(result.checks.find((check) => check.name === 'composition check permission present')?.ok, false);
+    assert.equal(result.checks.find((check) => check.name === 'composition hash permission present')?.ok, false);
+    assert.equal(result.checks.find((check) => check.name === 'source seal permission present')?.ok, false);
   } finally {
     rmSync(home, { recursive: true, force: true });
   }
 });
 
-test('Codex doctor requires the typesetter file and config registration', () => {
+test('Codex doctor requires the typesetter and composer files and config registrations', () => {
   const home = mkdtempSync(join(tmpdir(), 'omd-codex-install-'));
   const detected = { host: 'codex' as const, home };
   try {
@@ -225,6 +272,12 @@ test('Codex doctor requires the typesetter file and config registration', () => 
     const missing = doctor([detected])[0]!;
     assert.equal(missing.ok, false);
     assert.equal(missing.checks.find((check) => check.name === 'typesetter agent registered')?.ok, false);
+
+    install([detected]);
+    rmSync(join(home, 'agents', 'omd-composer.toml'));
+    const missingComposer = doctor([detected])[0]!;
+    assert.equal(missingComposer.ok, false);
+    assert.equal(missingComposer.checks.find((check) => check.name === 'composer agent registered')?.ok, false);
   } finally {
     rmSync(home, { recursive: true, force: true });
   }
