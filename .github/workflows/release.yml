@@ -13,7 +13,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 2   # need HEAD~1 to detect the version change
+          fetch-depth: 0    # full history so git log can resolve any tag date
+          fetch-tags: true  # fetch all tags (needed by release-notes tag-date lookup)
 
       - uses: actions/setup-node@v4
         with:

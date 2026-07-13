@@ -14,6 +14,7 @@ import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
 const REPO = 'https://github.com/3x-haust/oh-my-design';
+const OWNER_REPO = '3x-haust/oh-my-design';
 
 export interface PrEntry {
   number: number;
@@ -91,10 +92,34 @@ function getPrevTag(explicit: string | undefined): string {
   return tag || 'v0.0.0';
 }
 
+function resolveTagDate(prevTag: string): string {
+  // Primary: local git history (works with full-depth clones and local runs)
+  const gitDate = exec('git', ['log', '-1', '--format=%aI', prevTag]);
+  if (gitDate) return gitDate;
+
+  // Fallback: GitHub releases API (works in CI even when git history is
+  // shallow, as long as the tag corresponds to a published release)
+  const releaseDate = exec('gh', [
+    'api', `repos/${OWNER_REPO}/releases/tags/${prevTag}`,
+    '--jq', '.published_at',
+  ]);
+  if (releaseDate && releaseDate !== 'null') return releaseDate;
+
+  // Both paths failed — error visibly rather than returning an empty PR list
+  process.stderr.write(
+    `error: could not resolve a commit date for tag ${prevTag}.\n` +
+    `  Tried: git log -1 --format=%aI ${prevTag}  (returned empty)\n` +
+    `  Tried: gh api repos/${OWNER_REPO}/releases/tags/${prevTag}  (returned empty)\n` +
+    `Ensure the tag exists locally (fetch-depth: 0 + fetch-tags: true) or\n` +
+    `that the tag corresponds to a published GitHub release.\n`,
+  );
+  process.exit(1);
+}
+
 function getMergedPrsSince(prevTag: string): PrEntry[] {
-  // Resolve the tag to a commit date so we can filter PRs merged after it
-  const tagDate = exec('git', ['log', '-1', '--format=%aI', prevTag]);
-  if (!tagDate) return [];
+  // Resolve the tag to a commit date so we can filter PRs merged after it.
+  // resolveTagDate() either returns a valid ISO-8601 date string or exits.
+  const tagDate = resolveTagDate(prevTag);
 
   const raw = exec('gh', [
     'pr', 'list',
