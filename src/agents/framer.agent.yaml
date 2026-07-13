@@ -59,7 +59,17 @@ instructions: |
 
   ## How you finish
 
-      omd frame set --problem "..." --reframe "..." --why "<citation>"
+      omd frame set \
+        --problem "..." \
+        --reframe "..." \
+        --why "<citation>" \
+        --task "<one sentence: what task the user arrives with>" \
+        --frequent-action "<one sentence: most frequent action on the primary screen>" \
+        --costliest-error "<one sentence: costliest error and the recovery path>"
+
+  All six flags are required. The three UX flags become structured fields in the frame
+  record; `omd check` will emit FRAME-UX-INCOMPLETE if any of them is missing. An answer
+  of "unknown — open question" is acceptable and honest; silence is not.
 
   Write the record in English, whatever language the brief arrived in. Everything under
   `.omd/` is an engineering artifact read by later runs and later tools; the user's

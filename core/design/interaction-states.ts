@@ -1,4 +1,4 @@
-import type { Ir, Violation } from '../types.ts';
+import type { Ir, Node, Violation } from '../types.ts';
 
 /**
  * Deterministic interaction-state rules over the IR.
@@ -24,11 +24,17 @@ import type { Ir, Violation } from '../types.ts';
  *   Detection signals for error affordance (OR — any one suffices):
  *     - A node whose name contains ".error" or ".invalid" (class name evidence)
  *     - A text node whose text contains "error" / "오류" / "잘못" (copy evidence)
+ *     - A node with role="alert" (ARIA error container — the canonical accessible pattern)
+ *     - A node with aria-invalid="true" (ARIA field-level error signal)
  *
  *   False-positive mitigation: the rule fires only when form inputs are present AND
  *   no error affordance exists at all — not when an affordance exists but looks wrong.
  *   A div.error-state with empty text still counts as present; we are checking
  *   structure, not copy quality.
+ *
+ *   The ARIA signals (role=alert, aria-invalid) improve precision over class-name-only
+ *   detection: a page that correctly implements ARIA error patterns without ".error"
+ *   class names no longer produces a false positive.
  *
  * ── What stays prompt-only and why ───────────────────────────────────────────
  *
@@ -86,13 +92,23 @@ function isFormInput(name: string, interactive: boolean): boolean {
 
 /**
  * Returns true when a node carries a structural signal that an error state exists:
- *   - Class name contains "error" or "invalid" (structural evidence: the designer
- *     created an error-styled element, even if currently hidden or empty)
- *   - Text content contains common error vocabulary (copy evidence: error message text)
+ *   - Class name contains "error" or "invalid" (structural evidence)
+ *   - Text content contains common error vocabulary (copy evidence)
+ *   - node.role === 'alert' (ARIA error container — the canonical accessible pattern)
+ *   - node.ariaInvalid === true (ARIA field-level error signal)
  *
  * This is an OR check — any one signal suffices to suppress the violation.
+ * The ARIA signals were added to reduce false positives: pages that correctly use
+ * role=alert or aria-invalid without ".error" class names no longer trigger.
  */
-function hasErrorAffordance(name: string, text: string | undefined): boolean {
+function hasErrorAffordance(node: Node): boolean {
+  const { name, text, role, ariaInvalid } = node;
+
+  // ARIA evidence: role=alert is the canonical container for live error messages;
+  // aria-invalid=true is the field-level signal that a value failed validation.
+  if (role === 'alert' || role === 'alertdialog') return true;
+  if (ariaInvalid === true) return true;
+
   // Class-name evidence: "div.error", "span.invalid", "p.error-message", "input.is-invalid"
   const lower = name.toLowerCase();
   if (
@@ -146,7 +162,7 @@ export function checkInteractionStates(ir: Ir): Violation[] {
   const formInputs = ir.nodes.filter((n) => isFormInput(n.name, n.interactive === true));
 
   if (formInputs.length > 0) {
-    const anyError = ir.nodes.some((n) => hasErrorAffordance(n.name, n.text));
+    const anyError = ir.nodes.some((n) => hasErrorAffordance(n));
 
     if (!anyError) {
       // Report against the first input node's path for location context.

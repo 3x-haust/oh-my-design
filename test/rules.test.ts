@@ -16,7 +16,7 @@ test('loadRules reads every builtin rule and validates required fields', () => {
     }
     assert.ok(['error', 'warn'].includes(r.severity));
     assert.ok([1, 2].includes(r.layer));
-    assert.ok(['a11y', 'system', 'slop', 'motion'].includes(r.category));
+    assert.ok(['a11y', 'system', 'slop', 'motion', 'ux'].includes(r.category));
   }
 });
 
