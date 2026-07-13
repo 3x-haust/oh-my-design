@@ -16,4 +16,4 @@ Check that the design explicitly committed to the showpiece register before buil
 
 ## Severity
 
-FAIL if the output is indistinguishable from a default `omd:ultradesign` quiet run.
+FAIL if the output is indistinguishable from a default `oh-my-design:ultradesign` quiet run.

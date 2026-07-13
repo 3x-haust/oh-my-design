@@ -8,8 +8,7 @@
   "version": "0.14.0",
   "plugins": [
     {
-      "name": "omd",
-      "displayName": "oh-my-design",
+      "name": "oh-my-design",
       "description": "The design cognition loop: doubt the brief, measure real references (type and motion included), build once, look at the render, reframe. Plus a deterministic slop linter and a de-AI copy pass.",
       "version": "0.14.0",
       "author": {

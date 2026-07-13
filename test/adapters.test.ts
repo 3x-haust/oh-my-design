@@ -78,7 +78,7 @@ test('both plugin manifests point mcpServers at ./.mcp.json', () => {
   assert.equal(cl.mcpServers, './.mcp.json');
 });
 
-// ── marketplace plugin flavor (repo root, `omd:` namespace) ──
+// ── marketplace plugin flavor (repo root, `oh-my-design:` namespace) ──
 
 const PLUGIN_AGENT = {
   name: 'omd-framer',
@@ -96,10 +96,10 @@ test('emitClaudePlugin strips the omd- prefix from agent filename and frontmatte
   assert.ok(!md.includes('omd-framer'), `filename prefix leaked into body: ${md}`);
 });
 
-test('emitClaudePlugin rewrites subagent/skill cross-references to the omd: plugin form', () => {
+test('emitClaudePlugin rewrites subagent/skill cross-references to the oh-my-design: plugin form', () => {
   const md = textFile(emitClaudePlugin({ agents: [PLUGIN_AGENT] }), 'agents/framer.md');
-  assert.ok(md.includes('omd:eye'), `expected omd:eye in body: ${md}`);
-  assert.ok(md.includes('omd:humanize'), `expected omd:humanize in body: ${md}`);
+  assert.ok(md.includes('oh-my-design:eye'), `expected oh-my-design:eye in body: ${md}`);
+  assert.ok(md.includes('oh-my-design:humanize'), `expected oh-my-design:humanize in body: ${md}`);
 });
 
 test('emitClaudePlugin emits only agents/*.md and .mcp.json — no .claude-plugin/plugin.json', () => {
@@ -133,7 +133,12 @@ test('pluginizeSkill strips the omd- prefix from the frontmatter name', () => {
 
 test('pluginizeSkill rewrites cross-references and leaves no bare omd- token', () => {
   const { source } = pluginizeSkill(SKILL_FIXTURE);
-  assert.ok(source.includes('omd:scout'), `expected omd:scout: ${source}`);
-  assert.ok(source.includes('omd:humanize'), `expected omd:humanize: ${source}`);
+  assert.ok(source.includes('oh-my-design:scout'), `expected oh-my-design:scout: ${source}`);
+  assert.ok(source.includes('oh-my-design:humanize'), `expected oh-my-design:humanize: ${source}`);
   assert.ok(!/\bomd-/.test(source), `leftover omd- token: ${source}`);
+});
+
+test('pluginizeSkill rewrites omd-figma cross-references to the oh-my-design: plugin form', () => {
+  const { source } = pluginizeSkill('---\nname: omd-ultradesign\n---\n\nHand off to `omd-figma` for Figma links.\n');
+  assert.ok(source.includes('oh-my-design:figma'), `expected oh-my-design:figma: ${source}`);
 });

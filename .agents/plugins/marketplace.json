@@ -1,12 +1,12 @@
 {
-  "name": "oh-my-design",
+  "name": "omd",
   "version": "0.14.0",
   "interface": {
     "displayName": "Oh My Design"
   },
   "plugins": [
     {
-      "name": "omd",
+      "name": "oh-my-design",
       "source": {
         "source": "local",
         "path": "./"

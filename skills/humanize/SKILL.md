@@ -4,12 +4,12 @@ description: >-
   Rewrite text so it reads as if a person wrote it — strip AI prose tics (Korean and
   English), translation-ese, uniform rhythm, hedging stacks, and self-negating meta-copy —
   without changing a single fact. Works on any text: page copy, blog posts, READMEs,
-  marketing lines. Also used by omd:ultradesign for every word that ships.
+  marketing lines. Also used by oh-my-design:ultradesign for every word that ships.
   Triggers: humanize, 사람같이, 사람처럼 써, AI티 빼줘, 자연스럽게 바꿔, 글 다듬어,
   make it sound human, de-AI, rewrite naturally.
 ---
 
-# omd:humanize
+# oh-my-design:humanize
 
 Generated prose confesses before generated pixels do. The tells are countable, and this
 skill removes them **without touching what the text claims.**

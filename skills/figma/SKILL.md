@@ -9,7 +9,7 @@ description: >-
   Triggers: 피그마, figma link, 피그마 그대로 구현, any figma.com URL in the brief.
 ---
 
-# omd:figma
+# oh-my-design:figma
 
 When Figma exists, the design is already decided. The frame/concept/reference steps
 of the design loop are not needed — someone made those choices, and they are visible
@@ -43,7 +43,7 @@ echo $FIGMA_TOKEN
 If `FIGMA_TOKEN` is absent, tell the user exactly how to create one and where to set
 it, then stop:
 
-> To use `omd:figma`, you need a Figma personal access token.
+> To use `oh-my-design:figma`, you need a Figma personal access token.
 >
 > 1. Open Figma → **Account settings** (your avatar, top-left) → **Security** tab.
 > 2. Under **Personal access tokens**, click **Generate new token**.
@@ -227,7 +227,7 @@ Everything lands in `.omd/figma/` and `.omd/attribution.md`, committed with the 
 
 ---
 
-## Relationship to omd:ultradesign
+## Relationship to oh-my-design:ultradesign
 
 When a Figma file is in the brief, the design decisions — concept, colour, type,
 layout — were made in Figma. The ultradesign loop's frame/concept/reference steps

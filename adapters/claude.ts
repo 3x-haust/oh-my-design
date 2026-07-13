@@ -46,22 +46,23 @@ export function emitClaude({ agents = [] }: { agents?: AbstractAgent[] } = {}): 
   return { files };
 }
 
-// ── Plugin flavor (repo root, marketplace-installed as `omd`) ──
+// ── Plugin flavor (repo root, marketplace-installed as `oh-my-design`) ──
 //
 // A marketplace plugin loads skills/agents under its own namespace: an agent installed
-// from plugin "omd" is addressed as `omd:eye`, not `omd-eye`. The dist/ emission above
-// stays bare-name for direct/manual installs and must not change. This flavor is a
-// second, parallel emission: same agents, same MCP server, but names stripped of their
-// "omd-" prefix and cross-references rewritten to the "omd:" plugin form.
+// from plugin "oh-my-design" is addressed as `oh-my-design:eye`, not `omd-eye`. The dist/
+// emission above stays bare-name for direct/manual installs and must not change. This
+// flavor is a second, parallel emission: same agents, same MCP server, but names stripped
+// of their "omd-" prefix and cross-references rewritten to the "oh-my-design:" plugin form.
 
-// "omd-scout" is both an agent and a skill name; either pattern maps it to "omd:scout" —
-// harmless overlap, the contexts (subagent spawn vs. skill mention) differ. Agent pattern
-// runs first only to keep the read order obvious; running skill pattern first would be
-// equally correct since neither pattern's output can match the other's input.
+// "omd-scout" is both an agent and a skill name; either pattern maps it to
+// "oh-my-design:scout" — harmless overlap, the contexts (subagent spawn vs. skill mention)
+// differ. Agent pattern runs first only to keep the read order obvious; running skill
+// pattern first would be equally correct since neither pattern's output can match the
+// other's input. "omd-figma" is skill-only — it has no agent counterpart.
 const AGENT_REF = /\bomd-(framer|eye|hand|scout)\b/g;
-const SKILL_REF = /\bomd-(ultradesign|humanize|critique|coach)\b/g;
+const SKILL_REF = /\bomd-(ultradesign|humanize|critique|coach|figma|scout)\b/g;
 
-const pluginizeRefs = (text: string): string => text.replace(AGENT_REF, 'omd:$1').replace(SKILL_REF, 'omd:$1');
+const pluginizeRefs = (text: string): string => text.replace(AGENT_REF, 'oh-my-design:$1').replace(SKILL_REF, 'oh-my-design:$1');
 
 const stripOmdPrefix = (name: string): string => (name.startsWith('omd-') ? name.slice(4) : name);
 
@@ -90,8 +91,8 @@ export function emitClaudePlugin({ agents = [] }: { agents?: AbstractAgent[] } =
  * Rewrites one SKILL.md source for the plugin flavor: strips "omd-" from the skill's own
  * `name:` frontmatter (its own identity, stripped bare — same treatment as an agent's own
  * filename/frontmatter), then rewrites every cross-reference to another skill or agent to
- * the "omd:" plugin form. Both steps run on the whole source, so a skill's description or
- * body mentioning another skill or agent gets the plugin-resolvable form.
+ * the "oh-my-design:" plugin form. Both steps run on the whole source, so a skill's
+ * description or body mentioning another skill or agent gets the plugin-resolvable form.
  */
 export function pluginizeSkill(source: string): { name: string; source: string } {
   const nameLine = /^name:\s*(.+)$/m.exec(source);

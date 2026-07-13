@@ -1,4 +1,4 @@
-Implement the Figma design at this link as a production-ready web page. Use omd:figma.
+Implement the Figma design at this link as a production-ready web page. Use oh-my-design:figma.
 
 Figma file: https://www.figma.com/design/PLACEHOLDER_KEY/Sample-Design-System
 

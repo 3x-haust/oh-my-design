@@ -184,7 +184,7 @@ When `.omd/motion-spec.md` is also provided:
    identical in the hero region where the entrance scene should fire" is.
 
 **The motion-spec boundary**: `.omd/motion-spec.md` is a build artifact written by
-omd:hand before the code was written. It records what the build was contracted to contain.
+oh-my-design:hand before the code was written. It records what the build was contracted to contain.
 You are not given the reasoning that produced the spec — not the framing, not the concept,
 not the reference board. You see the spec and you see the frames. Your only question is:
 did the spec materialise? You are not defending or critiquing the spec's decisions.
