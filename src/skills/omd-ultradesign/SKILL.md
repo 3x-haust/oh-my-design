@@ -15,7 +15,7 @@ description: >-
 
 # Ultradesign
 
-> **Figma routing**: when the brief contains a figma.com link, hand off to `omd:figma`
+> **Figma routing**: when the brief contains a figma.com link, hand off to `omd-figma`
 > instead of running this loop. The design decisions — concept, colour, type, layout —
 > were already made in Figma; the frame/concept/reference steps here are not needed.
 

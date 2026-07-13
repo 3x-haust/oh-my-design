@@ -1,6 +1,6 @@
 # Grader: Board Composition Contract
 
-Check that the scout's reference board meets the minimum composition contract defined in the omd:scout agent spec.
+Check that the scout's reference board meets the minimum composition contract defined in the oh-my-design:scout agent spec.
 
 ## Pass criteria
 

@@ -16,7 +16,7 @@ Check that the cross-page site check was run on the output directory and produce
 
 ## Why this matters
 
-A blog and its article page were designed together. The user will feel the drift between them before they can name it. `omd check --site` is what makes cross-page consistency measurable rather than approximate. The step 8 gate in `omd:ultradesign` exists for exactly this case.
+A blog and its article page were designed together. The user will feel the drift between them before they can name it. `omd check --site` is what makes cross-page consistency measurable rather than approximate. The step 8 gate in `oh-my-design:ultradesign` exists for exactly this case.
 
 ## Severity
 

@@ -32,7 +32,7 @@ corrected in the build.
 
 ## Why this matters
 
-The user provided a Figma file. The file is their design. `omd:figma` does not have
+The user provided a Figma file. The file is their design. `oh-my-design:figma` does not have
 a mandate to improve it — it has a mandate to implement it faithfully. Silently
 fixing slop findings in the original design is the skill overriding the user's
 decisions, which is the exact behaviour that `.omd/decisions.md` and the written-

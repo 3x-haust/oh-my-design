@@ -65,7 +65,7 @@ Each host also has its own marketplace, if you prefer that route:
 /plugin install omd@oh-my-design
 ```
 
-Skills arrive with a `/` prefix — `/omd:ultradesign`, `/omd:scout`.
+Skills arrive with a `/` prefix — `/oh-my-design:ultradesign`, `/oh-my-design:scout`.
 
 **Codex**
 
@@ -73,7 +73,7 @@ Skills arrive with a `/` prefix — `/omd:ultradesign`, `/omd:scout`.
 codex plugin marketplace add 3x-haust/oh-my-design
 ```
 
-Then open `/plugins` to install `omd`. Skills arrive with a `$` prefix — `$omd:ultradesign`, `$omd:scout` — and the four pipeline agents resolve to the GPT-5.6 generation. (The marketplace manifest ships and matches Codex's plugin spec; the `oh-my-design install` path is the one verified end to end.)
+Then open `/plugins` to install `oh-my-design`. Skills arrive with a `$` prefix — `$oh-my-design:ultradesign`, `$oh-my-design:scout` — and the four pipeline agents resolve to the GPT-5.6 generation. (The marketplace manifest ships and matches Codex's plugin spec; the `oh-my-design install` path is the one verified end to end.)
 
 Both hosts need Node ≥ 22.18, and the first `omd render` pulls headless Chromium through Playwright on its own. The `omd` CLI is identical everywhere — `omd check`, `omd render`, `omd pack` do not care which host called them. Confirm a healthy setup with:
 
@@ -81,22 +81,22 @@ Both hosts need Node ≥ 22.18, and the first `omd render` pulls headless Chromi
 omd doctor
 ```
 
-One line per check: Node, Playwright, the browser binary, `.omd/` write access, the theory pack. Every `omd:ultradesign` run does this first, so a broken setup fails in the first second instead of at step five.
+One line per check: Node, Playwright, the browser binary, `.omd/` write access, the theory pack. Every `oh-my-design:ultradesign` run does this first, so a broken setup fails in the first second instead of at step five.
 
 ## ⚡ Skills
 
 | Skill | Type this | What happens |
 | --- | --- | --- |
-| `omd:ultradesign` | "디자인해줘", "redesign this", "landing page, make it stunning" | The whole loop, end to end, with no approval prompts. You get a working site and a written record of every decision and why. |
-| `omd:figma` | paste a figma.com link, "피그마 그대로 구현해줘" | Pulls the file, synthesizes the design system, builds each frame against an iterative pixel-diff loop, matches responsive pairs, and ships with a fidelity report. |
-| `omd:scout` | "레퍼런스 수집해줘", "how do good sites do X" | A measured reference board: whole pages, single components, typography, motion, community threads, and how real products *write*. It designs nothing. |
-| `omd:critique` | "비평해줘", "why does this feel wrong" | Reviews a design without touching it. Runs the linter, groups findings by root cause, and judges against the project's own concept rather than taste. |
-| `omd:humanize` | "AI티 빼줘", "de-robot this copy" | Strips Korean and English AI prose tics — translation-ese, mechanical enumeration, stock phrases, uniform rhythm — without changing a single fact. |
-| `omd:coach` | "내가 뭘 반복해서 틀리지?" | Reads your check history: what keeps recurring, what improved, what to study. It refuses to invent trends from thin data. |
+| `oh-my-design:ultradesign` | "디자인해줘", "redesign this", "landing page, make it stunning" | The whole loop, end to end, with no approval prompts. You get a working site and a written record of every decision and why. |
+| `oh-my-design:figma` | paste a figma.com link, "피그마 그대로 구현해줘" | Pulls the file, synthesizes the design system, builds each frame against an iterative pixel-diff loop, matches responsive pairs, and ships with a fidelity report. |
+| `oh-my-design:scout` | "레퍼런스 수집해줘", "how do good sites do X" | A measured reference board: whole pages, single components, typography, motion, community threads, and how real products *write*. It designs nothing. |
+| `oh-my-design:critique` | "비평해줘", "why does this feel wrong" | Reviews a design without touching it. Runs the linter, groups findings by root cause, and judges against the project's own concept rather than taste. |
+| `oh-my-design:humanize` | "AI티 빼줘", "de-robot this copy" | Strips Korean and English AI prose tics — translation-ese, mechanical enumeration, stock phrases, uniform rhythm — without changing a single fact. |
+| `oh-my-design:coach` | "내가 뭘 반복해서 틀리지?" | Reads your check history: what keeps recurring, what improved, what to study. It refuses to invent trends from thin data. |
 
 ## 🔁 The pipeline
 
-`omd:ultradesign` runs seven steps in order, with no gate between them:
+`oh-my-design:ultradesign` runs seven steps in order, with no gate between them:
 
 ```
                          ┌──────────────────────────────────────────────┐
@@ -220,7 +220,7 @@ scripts/bump.ts            one command, every manifest, zero drift
   attribution.md           which reference each token came from
   motion-spec.md           what moves, when, and on whose authority
   refs/*.json              measured references + written principles
-  history.jsonl            every check run — what omd:coach reads
+  history.jsonl            every check run — what oh-my-design:coach reads
 ```
 
 `npm run build` regenerates `agents/`, `skills/`, `dist/`, and both hosts' manifests from `src/`. Never edit the generated directories.

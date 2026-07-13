@@ -10,12 +10,12 @@ description: >-
   inspiration board, how do other sites do.
 ---
 
-# omd:scout
+# oh-my-design:scout
 
 A reference board, measured instead of pinned. This skill only collects and reasons — it
 designs nothing.
 
-Spawn the `omd:scout` subagent with the concept (ask one short question if none exists and
+Spawn the `oh-my-design:scout` subagent with the concept (ask one short question if none exists and
 no `.omd/frame.md` provides one) and the thing being studied. If the brief contains URLs,
 pass them to the subagent — they are captured first, marked as user-provided, and exempt
 from the famous-site quota. The subagent starts with a component inventory — every nav,
@@ -82,5 +82,5 @@ not, discard and run the replacement search.
 
 **Never describe how a reference looks** (Jansson & Smith: shown an example, designers
 reproduce its features even after the flaws are flagged; a model is worse). Numbers and
-reasons only. The board lands in `.omd/refs/` and any later `omd:ultradesign` run picks it
+reasons only. The board lands in `.omd/refs/` and any later `oh-my-design:ultradesign` run picks it
 up automatically.

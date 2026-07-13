@@ -9,7 +9,7 @@ description: >-
   getting wrong, design habits.
 ---
 
-# omd:coach
+# oh-my-design:coach
 
 ```bash
 omd coach
@@ -30,7 +30,7 @@ The CLI computes; you interpret. It reads `.omd/history.jsonl` (every `omd check
   is a decision holding steady. The same overrule with "it looked fine" is a habit worth
   naming.
 - **End with one thing to observe, not ten.** Pick the costliest recurring rule and give
-  one concrete study: a reference to look at (`omd:scout` can fetch it measured) and what
+  one concrete study: a reference to look at (`oh-my-design:scout` can fetch it measured) and what
   to notice there.
 
 ## The boundary

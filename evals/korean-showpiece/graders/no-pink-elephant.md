@@ -1,6 +1,6 @@
 # Grader: No Pink-Elephant Copy
 
-Check that the Korean copy does not contain AI-prose clichés that `omd:humanize` and the SLOP-COPY-KO rules are designed to eliminate.
+Check that the Korean copy does not contain AI-prose clichés that `oh-my-design:humanize` and the SLOP-COPY-KO rules are designed to eliminate.
 
 ## Pass criteria
 

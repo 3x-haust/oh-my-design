@@ -15,7 +15,7 @@ description: >-
 
 # Ultradesign
 
-> **Figma routing**: when the brief contains a figma.com link, hand off to `omd:figma`
+> **Figma routing**: when the brief contains a figma.com link, hand off to `oh-my-design:figma`
 > instead of running this loop. The design decisions — concept, colour, type, layout —
 > were already made in Figma; the frame/concept/reference steps here are not needed.
 
@@ -70,7 +70,7 @@ that mid-loop wastes everything before it.
 omd doctor
 ```
 
-Spawn `omd:framer`. It returns the given problem, a reframing, and — mandatory — **evidence**:
+Spawn `oh-my-design:framer`. It returns the given problem, a reframing, and — mandatory — **evidence**:
 a cited review, a support ticket, a datum, an observed pattern in a named competitor, or a
 sentence the user themselves said. "I think" is not evidence, and `omd frame set` rejects a
 reframing without it.
@@ -294,7 +294,7 @@ slop signals — using it as a stated anti-reference" — and the orchestrator s
 sentence to the user before the build begins. Pixel-copying rules are unchanged: measurements
 and reasoning only, never "make it look like this one."
 
-Spawn `omd:scout` with the concept, the thing being designed, and any user-provided URLs.
+Spawn `oh-my-design:scout` with the concept, the thing being designed, and any user-provided URLs.
 It starts with a component inventory — every nav, card, form field, and footer the build
 will need, listed before the first browser opens — then fills a board of **at least eighteen
 captures, targeting twenty-five**:
@@ -402,7 +402,7 @@ omd decision "Hero: typographic-hero.md + section-inversion.md at the proof turn
 
 ## 5. BUILD — one thing, properly
 
-Spawn **one** `omd:hand` and build the committed structure. Real files, real CSS, real components.
+Spawn **one** `oh-my-design:hand` and build the committed structure. Real files, real CSS, real components.
 All the tokens belong here, on the one thing that ships.
 
 `omd render` and `omd check` accept a dev-server URL just as readily as a static file path —
@@ -416,7 +416,7 @@ Typography comes from the reference type studies — a chosen scale and faces wi
 never from defaults; motion durations and easing come from the motion study.
 
 **Blueprint transplantation.** When the board includes a blueprint for a component the spec
-calls for, pass it to `omd:hand` and instruct it to transplant: rebuild the node tree and
+calls for, pass it to `oh-my-design:hand` and instruct it to transplant: rebuild the node tree and
 metrics nearly verbatim, map each colorRole to the project's own design tokens (never the
 reference's hex values), re-fit type sizes to the project's scale keeping hierarchy ratios,
 and write fresh copy in the project's voice. The attribution row must read "transplanted from
@@ -432,7 +432,7 @@ the cookbook requires a written reason in the spec. The hand never fills paramet
 from a recipe's illustrative defaults — those are examples; the board's motion studies
 are the measurements.
 
-**Before writing any animation code**, `omd:hand` writes `.omd/motion-spec.md` — a scene
+**Before writing any animation code**, `oh-my-design:hand` writes `.omd/motion-spec.md` — a scene
 inventory that documents every animation the build will contain: trigger (load/scroll/hover),
 target selector, animated properties, duration and easing with a motion-study citation, and
 stagger. The build implements the spec and nothing else. An animation that does not appear
@@ -443,7 +443,7 @@ Every image zone and background section that lacks final photography must ship a
 deliberate alternative — never a grey placeholder box. The graphics cookbook lives at
 `graphics/` under the directory `omd pack dir` prints (in this repo: `core/graphics/`) — six recipes (gradient mesh, noise grain,
 SVG geometric patterns, CSS illustration primitives, duotone image presets, placeholder
-policy). `omd:hand` cites the graphics recipe covering each background treatment in
+policy). `oh-my-design:hand` cites the graphics recipe covering each background treatment in
 `.omd/attribution.md`. A custom background not from the cookbook requires a written
 reason and must avoid the SLOP-GRADIENT hue bands without a brand citation.
 
@@ -459,7 +459,7 @@ the chance it might be.
 
 **Before handing off to the eye, the build is only done when the finish pass is done.**
 The finish-pass checklist lives at `craft/finish-pass.md` under the directory `omd pack dir`
-prints (in this repo: `core/craft/finish-pass.md`). `omd:hand` walks it after `omd check` returns
+prints (in this repo: `core/craft/finish-pass.md`). `oh-my-design:hand` walks it after `omd check` returns
 clean: `::selection` colour derived from the accent token, focus ring via `:focus-visible`
 (not outline suppression — `A11Y-FOCUS-SUPPRESSED` fires on bare suppression), scrollbar
 styling with `scrollbar-color`/`scrollbar-width` first and `-webkit-` as the noted fallback,
@@ -575,12 +575,12 @@ omd check <page> --category slop   # SLOP-PINK-ELEPHANT and SLOP-COPY must come 
 
 Only when the copy is clean does the eye see the page.
 
-Finally spawn `omd:eye` on the built page. Hand it:
+Finally spawn `oh-my-design:eye` on the built page. Hand it:
 - The desktop screenshot and the mobile screenshot.
 - The filmstrip HTML (`.omd/.cache/filmstrip.html`).
 - If `.omd/motion-spec.md` exists, its content — the eye reads it as a checklist of
   intended scenes to locate in the frames, never as reasoning to defend. The spec is a
-  build artifact: it was written by omd:hand before the code, and the eye was not in
+  build artifact: it was written by oh-my-design:hand before the code, and the eye was not in
   the room when that decision was made. That boundary is the point — the eye judges the
   gap between spec and frames without access to why the spec says what it says.
 - The combined findings from all viewport runs (including motion).
@@ -671,7 +671,7 @@ product, but exactly which reference argued for what is there instead.
 - **Never estimate a measurable quantity.** Run `omd check`.
 - **Never look at a reference's pixels, or describe how it looks.** Take the principle.
 - **Never let `omd ref distance` come back over 0.6 and ship anyway.** That is a clone.
-- **Never critique in the context that built the thing.** Spawn `omd:eye`.
+- **Never critique in the context that built the thing.** Spawn `oh-my-design:eye`.
 - **Never cite your taste as a reason.** α = 0.248.
 - **Never dismiss a slop finding silently.** Fix it, or overrule it in writing.
 - **Never let the frame speak on the page.** Rationale lives in `.omd/`; copy sells the
