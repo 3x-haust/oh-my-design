@@ -1,0 +1,3 @@
+interface:
+  display_name: "(omd) scout"
+  short_description: "Build a measured reference board without designing anything: whole pages for feel, tight selectors for component anatomy, typography studies, motion studies, image refs for the unrenderable."

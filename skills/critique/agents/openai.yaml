@@ -1,0 +1,3 @@
+interface:
+  display_name: "(omd) critique"
+  short_description: "Critique a design without changing it."

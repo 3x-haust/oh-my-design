@@ -7,31 +7,34 @@ import { parse } from 'yaml';
 import { skillDisplayName, skillOpenaiMetadata } from '../adapters/build.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+const skills = ['coach', 'critique', 'figma', 'humanize', 'scout', 'ultradesign'] as const;
 
-const metadata = (path: string): { interface: { display_name: string; short_description: string } } =>
-  parse(readFileSync(path, 'utf8')) as { interface: { display_name: string; short_description: string } };
+interface Metadata { interface: { display_name: string; short_description: string } }
+const parseMetadata = (source: string): Metadata => parse(source) as Metadata;
+const readMetadata = (path: string): Metadata => parseMetadata(readFileSync(path, 'utf8'));
 
-test('ultradesign gets the compact Codex UI label without changing canonical identity', () => {
-  assert.equal(skillDisplayName('omd-ultradesign'), '(omd) ultradesign');
+test('all OMD skills share the compact display label in direct and root plugin metadata', () => {
+  for (const skill of skills) {
+    const canonical = `omd-${skill}`;
+    const expected = `(omd) ${skill}`;
 
-  const direct = parse(skillOpenaiMetadata('omd-ultradesign', 'First sentence. Second sentence.')) as {
-    interface: { display_name: string; short_description: string };
-  };
-  const plugin = metadata(join(root, 'skills/ultradesign/agents/openai.yaml'));
-  assert.equal(direct.interface.display_name, '(omd) ultradesign');
-  assert.equal(plugin.interface.display_name, '(omd) ultradesign');
-  assert.equal(direct.interface.short_description, 'First sentence.');
+    assert.equal(skillDisplayName(canonical), expected);
+    assert.equal(
+      parseMetadata(skillOpenaiMetadata(canonical, 'First sentence. Second sentence.')).interface.display_name,
+      expected,
+    );
+    const rootMetadata = readMetadata(join(root, 'skills', skill, 'agents', 'openai.yaml'));
+    assert.equal(rootMetadata.interface.display_name, expected);
+    assert.ok(rootMetadata.interface.short_description.length > 0, `${skill} short_description must stay non-empty`);
 
-  assert.match(readFileSync(join(root, 'src/skills/omd-ultradesign/SKILL.md'), 'utf8'), /^name: omd-ultradesign$/m);
-  assert.match(readFileSync(join(root, 'skills/ultradesign/SKILL.md'), 'utf8'), /^name: ultradesign$/m);
-  assert.match(readFileSync(join(root, 'skills/ultradesign/SKILL.md'), 'utf8'), /oh-my-design:figma/);
+    assert.match(readFileSync(join(root, 'src', 'skills', canonical, 'SKILL.md'), 'utf8'), new RegExp(`^name: ${canonical}$`, 'm'));
+    assert.match(readFileSync(join(root, 'skills', skill, 'SKILL.md'), 'utf8'), new RegExp(`^name: ${skill}$`, 'm'));
+  }
 });
 
-test('other skills retain the existing titleCase display policy', () => {
-  assert.equal(skillDisplayName('omd-humanize'), 'Omd-humanize');
-  const direct = parse(skillOpenaiMetadata('omd-humanize', 'Rewrite copy. Keep facts.')) as {
-    interface: { display_name: string; short_description: string };
-  };
-  assert.equal(direct.interface.display_name, 'Omd-humanize');
-  assert.equal(direct.interface.short_description, 'Rewrite copy.');
+test('display metadata preserves descriptions and the non-OMD fallback policy', () => {
+  assert.equal(skillDisplayName('plain-skill'), 'Plain-skill');
+  const metadata = parseMetadata(skillOpenaiMetadata('plain-skill', 'First sentence. Second sentence.'));
+  assert.equal(metadata.interface.display_name, 'Plain-skill');
+  assert.equal(metadata.interface.short_description, 'First sentence.');
 });

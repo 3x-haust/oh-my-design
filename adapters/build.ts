@@ -41,7 +41,7 @@ function readSkills(): Skill[] {
 
 const firstSentence = (s: string): string => (/^[^.。]*[.。]?/.exec(s.trim())?.[0] ?? '').trim();
 const titleCase = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
-export const skillDisplayName = (name: string): string => name === 'omd-ultradesign' ? '(omd) ultradesign' : titleCase(name);
+export const skillDisplayName = (name: string): string => name.startsWith('omd-') ? `(omd) ${name.slice(4)}` : titleCase(name);
 
 export const skillOpenaiMetadata = (name: string, description: string): string => [
   'interface:',
@@ -165,11 +165,9 @@ function emitPlugin(agents: AbstractAgent[], skills: Skill[]): void {
     const path = join(root, 'skills', name, 'SKILL.md');
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, source);
-    if (canonical.name === 'omd-ultradesign') {
-      const metadataPath = join(root, 'skills', name, 'agents', 'openai.yaml');
-      mkdirSync(dirname(metadataPath), { recursive: true });
-      writeFileSync(metadataPath, skillOpenaiMetadata(canonical.name, canonical.description));
-    }
+    const metadataPath = join(root, 'skills', name, 'agents', 'openai.yaml');
+    mkdirSync(dirname(metadataPath), { recursive: true });
+    writeFileSync(metadataPath, skillOpenaiMetadata(canonical.name, canonical.description));
   }
 
   const { files } = emitClaudePlugin({ agents });

@@ -1,0 +1,3 @@
+interface:
+  display_name: "(omd) figma"
+  short_description: "Implement a Figma design end to end: pull the file, synthesize the design system, build each frame pixel-faithfully with an iterative diff loop, match responsive pairs, and ship with a fidelity report."

@@ -1,0 +1,3 @@
+interface:
+  display_name: "(omd) humanize"
+  short_description: "Rewrite text so it reads as if a person wrote it — strip AI prose tics (Korean and English), translation-ese, uniform rhythm, hedging stacks, and self-negating meta-copy — without changing a single fact."

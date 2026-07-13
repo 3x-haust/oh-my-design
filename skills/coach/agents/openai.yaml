@@ -1,0 +1,3 @@
+interface:
+  display_name: "(omd) coach"
+  short_description: "Read the project's check history and tell the user what they keep getting wrong, what is improving, and what to study next."
