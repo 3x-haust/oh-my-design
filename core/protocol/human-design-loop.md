@@ -4,9 +4,10 @@ This is the durable contract for an OMD run. Host prompts may explain it, but ma
 reorder it:
 
 `preflight -> frame -> concept -> research -> writer copy deck -> copy check -> blind copy
-edit -> writer revision -> copy check -> structural sketches -> blind
-selection -> production build -> semantic checkpoint -> visual checkpoint -> squint glance
--> sharp critique/probe -> reframe -> ship`.
+edit -> writer revision -> copy check -> typesetter proof -> blind type review -> type
+revision/proof pass -> structural sketches -> blind selection -> production build ->
+semantic checkpoint -> selected-container type reproof -> visual checkpoint -> squint
+glance -> sharp critique/probe -> reframe -> ship`.
 
 ## Stack routing
 
@@ -22,12 +23,13 @@ allowed. Existing projects receive no unnecessary dependencies.
 ## State boundary
 
 Durable, reviewable state lives directly under `.omd/`: `frame.md`, `copy-deck.md`,
-`decisions.md`, `design.md`, `attribution.md`, `motion-spec.md`, `craft.jsonl`,
+`type-proof.md`, `decisions.md`, `design.md`, `attribution.md`, `motion-spec.md`, `craft.jsonl`,
 `config.json`, `probes/*.json`, `refs/*.json`, and explicit taste records. Reusable intent
 belongs here; generated screenshots and raw execution output do not.
 
-Ephemeral state lives under `.omd/.cache/`: IR, renders, filmstrips, structural candidates,
-probe results, and scratch output. It can be deleted without erasing a design decision.
+Ephemeral state lives under `.omd/.cache/`: IR, renders, filmstrips, typography specimens,
+structural candidates, probe results, and scratch output. It can be deleted without erasing
+a design decision.
 
 ## Evidence and taste precedence
 
@@ -43,18 +45,28 @@ choice data. Coach remains taste-blind.
 
 ## Blindness and isolation
 
-Each sketch receives only a sanitized frame/concept, the copy deck, an anonymous candidate
-id, and one structural axis. It cannot read or reuse another candidate and writes only to
-`.omd/.cache/sketches/<id>/`.
+Each sketch receives only a sanitized frame/concept, the copy deck, the approved typography
+contract derived from `.omd/type-proof.md`, an anonymous candidate id, and one structural
+axis. The contract exposes approved roles, family, weight, size/measure, and wrapping
+constraints, not rejected-alternative rationale or authorship. A sketch preserves this
+contract, varies structure only, cannot invent a new type scale, cannot read or reuse another
+candidate, and writes only to `.omd/.cache/sketches/<id>/`.
 
 The copy editor is a fresh eye context and sees only the sanitized brief, copy deck/fact
 ledger, and cited voice/audience evidence. It sees no renders, layout, code, build rationale,
 frame, decisions, or authorship, and it reports without editing. The writer receives the
 report and revises the deck before another deterministic check.
 
-The selector gets a fresh context and sees anonymous renders plus the sanitized frame and
-copy deck. It never sees candidate prose, author identity, reference attribution, or the
-production plan. The glance receives only squint renders. It never sees sharp renders,
+The typesetter owns `.omd/type-proof.md` and `.omd/.cache/type-proof/`. It sees the clean
+copy deck, typography theory, and scout typography evidence, but does not design composition,
+colour, graphics, motion, or rewrite copy. A fresh eye in typography-proof mode sees only
+desktop/mobile specimens plus sanitized copy and typography requirements. It never sees
+authorship, references, rationale, page structure, colour, or code and never edits.
+
+The selector gets a fresh context and sees anonymous renders plus the sanitized frame, copy
+deck, and the same approved typography contract. It judges structural accommodation without
+typography rationale and never sees candidate prose, author identity, reference attribution,
+or the production plan. The glance receives only squint renders. It never sees sharp renders,
 frame, decisions, references, or rationale. The general eye receives only a sanitized
 review brief: primary task, costliest error, generator/register, renders, and deterministic
 check/probe output. It must not read frame, decisions, references, or attribution rationale.
@@ -66,8 +78,10 @@ use three for showpiece work or high structural uncertainty/impact. Skip only wh
 is already supplied (for example, a Figma frame or explicit visual target), and record why.
 
 The hand builds once. During that build it must render real content and record two craft
-checkpoints: semantic layout, then the visual system before motion. Each checkpoint names a
-concrete observation and the resulting change. Human approval checkpoints are separate:
+checkpoints: semantic layout, then the visual system before motion. After semantic structure
+and before the visual checkpoint, it re-proves the approved typography inside the selected
+production container at desktop and mobile. Each checkpoint names a concrete observation
+and the resulting change. Human approval checkpoints are separate:
 `.omd/config.json` defaults to `checkpoint: none`; concept, structure, or both are opt-in.
 
 ## Safe probe policy
@@ -105,6 +119,17 @@ These gates are part of every applicable production run, not optional polish:
   the deck, `omd copy --check` must pass, a fresh eye performs copy-editor mode, the writer
   revises deck-first, and `omd copy --check` passes again before any sketch. A failed check
   stops divergence and is fixed autonomously without waiting for the user.
+- After the second clean copy check and before sketches, a fresh `omd-typesetter` creates
+  actual-copy specimens at 1280x900 and 390x844 plus `.omd/type-proof.md`. A fresh eye reviews
+  only sanitized typography requirements and specimens; the typesetter revises and rerenders
+  until the proof passes. The proof records roles, source/licence, target glyph coverage,
+  requested and computed family/weight evidence, axes, fallback/loading, wraps/clips, rejected
+  alternatives, and its invalidation fingerprint.
+- Copy, font family/file, requested weight/axis, or proof container-width changes invalidate
+  typography proof and require a rerun. After structure is selected, the hand re-proves the
+  type in that real container at desktop/mobile before the visual checkpoint. OMD waits for
+  `document.fonts.ready`; computed styles and FontFace status do not identify the physical
+  font that painted each glyph.
 - Before any animation code, write `.omd/motion-spec.md`. Production implements only its
   declared scenes; every timing/easing cites measured reference or theory evidence.
 - Write `.omd/attribution.md` for the sources of shipped tokens, motion, composition, and

@@ -22,11 +22,17 @@ The error is applying showpiece technique to quiet or confident contexts. A dash
 
 ## The anatomy of award-level sites
 
-### The hero does the work typography would normally defer to images
+### A concept-bearing line can replace an image
 
-On a showpiece site, the hero is often typographic rather than photographic. Display type at 90–200px (or equivalent viewport-relative value) acts as the hero image: it fills the viewport, it sets the tone, it contains the entire conceptual gesture in one glance. The technique works when the type decision is made on purpose — a face chosen for its editorial weight, a size chosen to fill not to approximate.
+On some showpiece sites, a short actual headline becomes the visual event. The face and
+weight must carry the concept; size alone is not a concept. The pre-structure typography
+proof tests target-language glyphs, loading, fallback, wrapping, and the availability of
+secondary hierarchy and CTA at desktop and mobile.
 
-The size must be responsive. `clamp()` with viewport-relative values is the only correct implementation: `font-size: clamp(3rem, 12vw, 10rem)` scales continuously between breakpoints without the abruptness of a media query step. A hardcoded `96px` that collapses to `48px` at a breakpoint is not a display type decision — it is a pixel value with a fallback.
+Size derives from the real copy and container. `clamp()`, container queries, media queries,
+and discrete steps are all valid when specimens justify them. A moderate heading can pass;
+huge Hangul can also pass when its syllable rhythm is concept-bearing and proof-clean. A
+long heavy line that becomes a clipped mobile wall fails even if one desktop render works.
 
 ### Scroll is the narrative axis
 
@@ -134,11 +140,18 @@ The selection discipline: before adding any technique, ask whether the concept �
 
 ---
 
-## The Korean market: GDWEB and Hangul display constraints
+## Korean showpiece typography
 
 GDWEB (gdweb.co.kr), operating since 2005, is the leading Korean web design award. Winning categories skew toward agency brand sites and campaign microsites — seasonal brand launches, product campaign pages, experiential brand activations — rather than application UI. The showpiece register is the expected register on GDWEB, not the exceptional one. This means the baseline for expressive work in the Korean market is higher; mid-level expressive execution that would earn attention internationally passes unnoticed against the GDWEB field.
 
-Hangul display typography carries a specific constraint that Latin display type does not: the syllable block structure of Korean text means that each character cell already contains between one and four strokes in a fixed-width space (W3C Korean Layout Requirements, klreq). At display scale — 90px and above — Latin typefaces tolerate aggressive negative letter-spacing because the open apertures between letters benefit from compression. Korean syllable blocks have no equivalent aperture: compressing letter-spacing below −0.05em at display size causes strokes within adjacent syllables to collide visually, creating a density that reads as a typesetting error rather than a design decision. The practical limit for display Hangul is letter-spacing in the range of −0.03em to 0em; for Latin, −0.05em to −0.08em at equivalent scale is standard. This constraint is not a limitation of Korean type design — it is a consequence of the structural density that makes Hangul read efficiently at small sizes. At display scale, the density that aids legibility in body text resists compression.
+Hangul syllable blocks create a different visible rhythm from Latin letters, but they do not
+imply a fixed size or tracking limit. Inspect the chosen face's counters, stroke density,
+punctuation, mixed Latin/numerals, and wrapping with actual Korean copy. Word-based and
+character-based Hangul breaking are both documented practices; choose one from the task and
+verify it in the intended container. Huge Hangul is justified when the words are short and
+concept-bearing and the face/weight remains clean at both proof viewports. It fails when a
+heavy long sentence wraps into an undifferentiated wall, clips, falls back, or removes the
+secondary message and CTA.
 
 ---
 

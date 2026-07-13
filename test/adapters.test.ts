@@ -115,6 +115,19 @@ test('writer is emitted dynamically for both direct hosts and plugin namespace',
   assert.doesNotMatch(plugin, /\bomd-writer\b/);
 });
 
+test('typesetter is emitted dynamically for both direct hosts and plugin namespace', () => {
+  const typesetter = {
+    name: 'omd-typesetter', description: 'Proves type before omd-eye reviews it.',
+    reasoning: 'high', instructions: 'Return findings to omd-typesetter after omd-eye.\n',
+  };
+  assert.ok(emitCodex({ agents: [typesetter] }).files['agents/omd-typesetter.toml']);
+  assert.ok(emitClaude({ agents: [typesetter] }).files['agents/omd-typesetter.md']);
+  const plugin = textFile(emitClaudePlugin({ agents: [typesetter] }), 'agents/typesetter.md');
+  assert.match(plugin, /^name: typesetter$/m);
+  assert.match(plugin, /oh-my-design:typesetter[\s\S]*oh-my-design:eye/);
+  assert.doesNotMatch(plugin, /\bomd-typesetter\b/);
+});
+
 test('emitClaudePlugin emits only agents/*.md and .mcp.json — no .claude-plugin/plugin.json', () => {
   const emitted = emitClaudePlugin({ agents: [PLUGIN_AGENT] });
   assert.equal(emitted.files['.claude-plugin/plugin.json'], undefined);

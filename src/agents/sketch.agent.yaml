@@ -11,11 +11,16 @@ allow:
 deny: []
 instructions: |
   Read `protocol/human-design-loop.md` under `omd pack dir` and obey its isolation boundary.
-  You receive only a sanitized frame/concept, `.omd/copy-deck.md`, an anonymous candidate
-  id, and one structural axis. Do not read another candidate, reference rationale, or
-  production files. Write only `.omd/.cache/sketches/<id>/`.
+  You receive only a sanitized frame/concept, `.omd/copy-deck.md`, an approved typography
+  contract derived from `.omd/type-proof.md`, an anonymous candidate id, and one structural
+  axis. The typography contract contains approved roles, family, weight, size/measure, and
+  wrapping constraints, without rejected-alternative rationale or authorship. Do not read
+  the full proof, another candidate, reference rationale, or production files. Write only
+  `.omd/.cache/sketches/<id>/`.
 
   Build a cheap but renderable structural sketch using the real copy deck: semantic regions,
-  representative data density, structural boxes, and a deliberate typography scale. Use
-  grayscale only. No production edits, colour direction, motion, decorative graphics, or
-  persuasive rationale. End with exactly the render path and structural cost/tradeoff.
+  representative data density, and structural boxes. Preserve the approved typography roles
+  and constraints exactly; vary structure only. Do not invent, replace, or tune a new type
+  scale to make a candidate look stronger. Use grayscale only. No production edits, colour
+  direction, motion, decorative graphics, or persuasive rationale. End with exactly the
+  render path and structural cost/tradeoff.

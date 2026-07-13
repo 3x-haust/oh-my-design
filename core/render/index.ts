@@ -96,6 +96,37 @@ async function assertNotBlocked(
 
 export interface Viewport { width: number; height: number }
 
+const FONT_READY_TIMEOUT_MS = 5000;
+
+/**
+ * Wait for the browser's CSS Font Loading set before measuring or capturing. The timeout
+ * bounds the readiness wait; `document.fonts.ready` can still resolve after a face fails.
+ * Fallback, tofu, and failed faces remain explicit FontFace-inventory and render-review
+ * concerns. Readiness cannot identify which physical font painted an individual glyph.
+ */
+export async function waitForDocumentFonts(
+  page: Pick<import('playwright').Page, 'evaluate'>,
+  timeoutMs = FONT_READY_TIMEOUT_MS,
+): Promise<void> {
+  const outcome = await page.evaluate(async (limit) => {
+    if (!document.fonts?.ready) return 'unsupported';
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        document.fonts.ready.then(() => 'ready' as const),
+        new Promise<'timeout'>((resolveTimeout) => {
+          timer = setTimeout(() => resolveTimeout('timeout'), limit);
+        }),
+      ]);
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+    }
+  }, timeoutMs);
+  if (outcome === 'timeout') {
+    throw new Error(`document.fonts.ready timed out after ${timeoutMs}ms`);
+  }
+}
+
 function toUrl(target: string): string {
   if (/^https?:\/\//.test(target)) return target;
   const path = resolve(target);
@@ -114,6 +145,7 @@ async function withPage<T>(
     const page = await browser.newPage({ viewport });
     const resolvedUrl = toUrl(target);
     const response = await page.goto(resolvedUrl, { waitUntil: 'networkidle' });
+    await waitForDocumentFonts(page);
     const httpStatus = response?.status() ?? null;
     return await fn(page, httpStatus, resolvedUrl);
   } finally {

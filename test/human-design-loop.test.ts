@@ -4,12 +4,45 @@ import { mkdtempSync, readFileSync, writeFileSync, mkdirSync, existsSync } from 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { renderPage } from '../core/render/index.ts';
+import { extractIr, renderPage, waitForDocumentFonts } from '../core/render/index.ts';
 import { readProbePlan, runProbe, type ProbePlan } from '../core/probe/index.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const fixture = fileURLToPath(new URL('./fixtures/probe.html', import.meta.url));
 const temp = (): string => mkdtempSync(join(tmpdir(), 'omd-loop-'));
+
+test('font-ready wait accepts ready/unsupported and fails clearly on a bounded timeout', async () => {
+  const fake = (outcome: 'ready' | 'unsupported' | 'timeout') => ({
+    evaluate: async (_fn: unknown, timeout: number) => {
+      assert.equal(timeout, 37);
+      return outcome;
+    },
+  });
+  await waitForDocumentFonts(fake('ready') as never, 37);
+  await waitForDocumentFonts(fake('unsupported') as never, 37);
+  await assert.rejects(waitForDocumentFonts(fake('timeout') as never, 37), /document\.fonts\.ready timed out after 37ms/);
+});
+
+test('IR exposes declared FontFace inventory without claiming source or glyph identity', async () => {
+  const dir = temp();
+  const page = join(dir, 'font-face.html');
+  writeFileSync(page, [
+    '<!doctype html><style>',
+    '@font-face { font-family: "OMD Proof Face"; src: local("__OMD_MISSING_FACE__");',
+    'font-style: italic; font-weight: 650; font-stretch: condensed; }',
+    'body { font-family: "OMD Proof Face", sans-serif; font-weight: 650; }',
+    '</style><body>타이포그래피 Proof 123</body>',
+  ].join('\n'));
+  const ir = await extractIr(page, { viewport: { width: 390, height: 844 } });
+  const face = ir.meta?.fontFaces?.find((item) => item.family.includes('OMD Proof Face'));
+  assert.ok(face, 'declared face must be present in IR metadata even when loading fails');
+  assert.ok(['unloaded', 'loading', 'loaded', 'error'].includes(face.status));
+  assert.equal(face.style, 'italic');
+  assert.equal(face.weight, '650');
+  assert.equal(face.stretch, 'condensed');
+  assert.equal(face.source, null);
+  assert.equal(face.glyphIdentity, null);
+});
 
 test('normal and squint renders both exist and differ at desktop and mobile', async () => {
   for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 }]) {
@@ -88,8 +121,15 @@ test('prompt contract keeps content-first isolation and checkpoint defaults exec
   const scout = readFileSync(join(root, 'src/agents/scout.agent.yaml'), 'utf8');
   const framer = readFileSync(join(root, 'src/agents/framer.agent.yaml'), 'utf8');
   const writer = readFileSync(join(root, 'src/agents/writer.agent.yaml'), 'utf8');
-  for (const phrase of ['copy deck', 'sketch', 'squint glance', 'checkpoint: none']) assert.match(protocol, new RegExp(phrase));
+  const typesetter = readFileSync(join(root, 'src/agents/typesetter.agent.yaml'), 'utf8');
+  const sketch = readFileSync(join(root, 'src/agents/sketch.agent.yaml'), 'utf8');
+  for (const phrase of ['copy deck', 'sketch', 'squint glance', 'checkpoint: none']) {
+    assert.match(protocol, new RegExp(phrase.replace(/ /g, '\\s+')));
+  }
   assert.ok(skill.indexOf('.omd/copy-deck.md') < skill.indexOf('omd-sketch'));
+  assert.ok(skill.indexOf('omd-typesetter') < skill.indexOf('omd-sketch'), 'type proof must precede sketches');
+  assert.ok(skill.indexOf('semantic checkpoint') < skill.indexOf('re-proves typography'));
+  assert.ok(skill.indexOf('re-proves typography') < skill.indexOf('visual checkpoint'));
   assert.ok(skill.indexOf('--squint') < skill.indexOf('Now render sharp'));
   assert.match(skill, /showpiece only[\s\S]*exactly one dominant-technique lens/);
   assert.match(skill, /checkpoint: none[\s\S]*no approval waits/);
@@ -97,13 +137,21 @@ test('prompt contract keeps content-first isolation and checkpoint defaults exec
   assert.match(glance, /squint render paths and nothing else/);
   assert.match(scout, /domain, direct competitors, user\/community language,[\s\S]*every required component/);
   assert.match(framer, /current brief > explicit current user feedback > prior explicit project taste > agent/);
-  for (const name of ['framer', 'scout', 'sketch', 'hand', 'eye', 'writer']) {
+  for (const name of ['framer', 'scout', 'sketch', 'hand', 'eye', 'writer', 'typesetter']) {
     assert.match(readFileSync(join(root, `src/agents/${name}.agent.yaml`), 'utf8'), /Bash\(omd pack:\*\)/, `${name} needs pack permission`);
   }
   assert.match(readFileSync(join(root, 'core/install/install.ts'), 'utf8'), /'Bash\(omd pack:\*\)'/);
   assert.match(readFileSync(join(root, 'core/install/install.ts'), 'utf8'), /'Bash\(omd copy:\*\)'/);
   assert.match(writer, /write or revise only `.omd\/copy-deck\.md`/i);
+  assert.match(typesetter, /\.omd\/type-proof\.md/);
+  assert.match(typesetter, /1280x900 and 390x844/);
+  assert.match(typesetter, /Do not design page composition,?\s+colour, graphics, motion/i);
+  assert.match(eye, /typography-proof mode[\s\S]*fallback or tofu[\s\S]*faux/);
+  assert.match(sketch, /approved typography\s+contract derived from `.omd\/type-proof\.md`/);
+  assert.match(sketch, /Preserve the approved typography roles[\s\S]*vary structure only[\s\S]*Do not invent[\s\S]*new type\s+scale/i);
+  assert.match(eye, /sketch-selector mode[\s\S]*approved typography\s+contract[\s\S]*Reject candidates that invent a new scale/i);
   const contract = protocol.replace(/\s+/g, ' ');
+  assert.match(contract, /typesetter proof[\s\S]*structural sketches/);
   for (const gate of [
     /omd-writer[\s\S]*omd copy --check[\s\S]*copy-editor mode[\s\S]*writer[\s\S]*omd copy --check/i,
     /before any animation code[\s\S]*\.omd\/motion-spec\.md[\s\S]*only its\s+declared scenes/i,
@@ -118,4 +166,20 @@ test('prompt contract keeps content-first isolation and checkpoint defaults exec
   assert.match(eye, /non-deterministic hierarchy[\s\S]*theory\/craft\.md[\s\S]*theory\/expressive\.md[\s\S]*craft\/finish-pass\.md/);
   assert.ok(existsSync(join(root, 'dist/codex/core/protocol/human-design-loop.md')));
   assert.ok(existsSync(join(root, 'dist/claude/core/protocol/human-design-loop.md')));
+  assert.ok(existsSync(join(root, 'dist/codex/agents/omd-typesetter.toml')));
+  assert.ok(existsSync(join(root, 'dist/claude/agents/omd-typesetter.md')));
+});
+
+test('typographic hero contracts are proof-based, not fixed size quotas', () => {
+  const files = [
+    'core/theory/expressive.md',
+    'core/composition/typographic-hero.md',
+    'evals/korean-showpiece/graders/composition-recipe-cited.md',
+    'evals/korean-showpiece/graders/showpiece-register.md',
+  ].map((path) => readFileSync(join(root, path), 'utf8')).join('\n');
+  assert.doesNotMatch(files, /90\s*[–-]\s*200px|12vw|font-size\s*[≥>]=?\s*72px|viewport-fill(?:ing)?[^.\n]*(?:pass|success|condition)/i);
+  assert.doesNotMatch(files, /11ch|4rem|font-weight:\s*var\([^)]*,\s*700\)|0\.96/);
+  assert.match(files, /type-proof\.md|typography proof/i);
+  assert.match(files, /huge Hangul/i);
+  assert.match(files, /fallback|tofu|faux/i);
 });

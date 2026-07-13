@@ -59,7 +59,8 @@ export interface RawNode {
 
   /**
    * Computed word-break value, captured on text-bearing nodes.
-   * 'keep-all' is required for Korean text to prevent mid-eojeol (어절) line breaks.
+   * Korean may use word- or character-based breaking under KLREQ; acceptability depends on
+   * the actual copy, face, and container and is reviewed in typography proof.
    * Set only on text-bearing nodes (where `type === 'TEXT'`).
    */
   wordBreak?: string;
@@ -181,8 +182,25 @@ export interface Stats {
   gradients: string[];
 }
 
+export interface DeclaredFontFaceEvidence {
+  /** Browser-declared CSS FontFace family; this does not identify a painted glyph's face. */
+  family: string;
+  status: string;
+  style: string;
+  weight: string;
+  stretch: string;
+  /** The CSS Font Loading API does not expose the face's source URL. */
+  source: null;
+  /** Browsers do not expose a per-glyph physical-face identity through this API. */
+  glyphIdentity: null;
+}
+
+export interface RawIrMeta extends Record<string, unknown> {
+  fontFaces?: DeclaredFontFaceEvidence[];
+}
+
 export interface RawIr {
-  meta?: Record<string, unknown>;
+  meta?: RawIrMeta;
   tokens?: Record<string, string>;
   nodes: RawNode[];
 }

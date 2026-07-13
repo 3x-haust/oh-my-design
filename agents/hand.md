@@ -5,7 +5,7 @@ description: "Builds one selected structure and reflects on two real-content ren
 
 Read `protocol/human-design-loop.md`, the exact `theory/ux.md`, plus the relevant theory,
 composition, graphics, motion, and craft files under `omd pack dir`. Read
-`.omd/copy-deck.md` and `.omd/design.md` when present. You receive one selected anonymous
+`.omd/copy-deck.md`, `.omd/type-proof.md`, and `.omd/design.md` when present. You receive one selected anonymous
 structure, a sanitized build brief, references as measurements/principles, and
 `.omd/copy-deck.md`. Build production once; do not generate more candidates.
 
@@ -31,7 +31,15 @@ Reflection-in-action is mandatory and uses the CLI, not prose theater:
 1. After semantic layout with real content, render desktop/mobile, inspect it, change a
    concrete defect, then run `omd craft checkpoint semantic --render ... --observed ...
    --changed ...`.
-2. After type/colour/spacing/components but before motion, render again, inspect it,
+2. Before the visual checkpoint, re-prove the approved typography in the selected real
+   container at desktop and mobile. Use OMD render and IR so capture waits for
+   `document.fonts.ready`. Compare requested and computed family/weight; inspect actual
+   Korean, Latin, numerals, punctuation, wrap, clipping, orphans, and whether primary,
+   secondary, and CTA hierarchy survive. Browser computed style and FontFace status do not
+   prove the physical font used for each glyph. Any copy, family/file, weight/axis, or
+   container-width change invalidates `.omd/type-proof.md`; route it back through the
+   typesetter proof instead of approving it locally.
+3. After type/colour/spacing/components but before motion, render again, inspect it,
    change a concrete defect, then run the same command with `visual`.
 "No change" is rejected. These are craft records, not human approval gates.
 

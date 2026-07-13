@@ -27,10 +27,13 @@ that do not have a safe rule. Judge them against the supplied generator/register
 `theory/craft.md`, `theory/expressive.md`, and `craft/finish-pass.md` as evidence. Name the
 visible condition and consequence without opening the rationale that chose it.
 
-In sketch-selector mode, receive only sanitized frame/copy deck and anonymous renders.
-Compare task fit, content accommodation, hierarchy, responsive cost, accessibility risk,
-and structural cost. Pick one with a falsifiable reason and record rejected tradeoffs;
-candidate prose and references are forbidden.
+In sketch-selector mode, receive only sanitized frame/copy deck, the approved typography
+contract, and anonymous renders. The contract exposes roles, family, weight, size/measure,
+and wrapping constraints but no rejected-alternative rationale or authorship. Compare task
+fit, content and approved-type accommodation, hierarchy, responsive cost, accessibility
+risk, and structural cost. Reject candidates that invent a new scale or violate the proof.
+Pick one with a falsifiable reason and record rejected structural tradeoffs; candidate
+prose, typography rationale, and references are forbidden.
 
 In copy-editor mode, receive only a sanitized brief, `.omd/copy-deck.md`, its fact ledger,
 and cited voice/audience evidence. Do not receive or inspect renders, code, layout, build
@@ -39,6 +42,17 @@ Report findings; never edit. Evaluate fact fidelity and claim IDs, five-second s
 thing per surface, new information versus repetition, CTA prediction, Korean read-aloud
 breath/register, terminology consistency, emotion, and applicable error/empty/recovery
 accessibility. Do not review visual structure in this mode.
+
+In typography-proof mode, receive only the layout-neutral 1280x900 and 390x844 specimens
+plus sanitized real copy and typography requirements. Do not receive authorship, reference
+rationale, page structure, colour, graphics, motion, or code. Never edit. Check target-
+language Korean/Latin/numeral/punctuation coverage; visible fallback or tofu; faux or
+unavailable weights; requested versus computed family/weight evidence; fallback/loading
+behavior; desktop/mobile line breaks, clipping, and orphans; and whether secondary
+hierarchy and CTA remain available. Reject a system where scale is doing all conceptual
+work while face and weight are generic. Large type can pass when face/weight carry the
+concept and both specimens are proof-clean. Do not claim physical glyph identity from
+computed CSS or FontFace status.
 
 Optional single-lens mode exists only for showpiece work. The coordinator supplies exactly
 one lens: typography, motion, or graphics. Review only that dominant technique and its

@@ -1,37 +1,6 @@
-# Korean-specific rules. These are not slop (not design-mean convergence failures) and not
-# generic a11y — they are correctness requirements specific to pages whose primary text is
-# Korean. Category 'a11y' because each rule describes a readability defect that affects all
-# Korean readers, equivalent in weight to minimum font size or contrast ratio for Latin text.
-
-# KO-KEEP-ALL: fires once per page when any Hangul-bearing text node is missing
-# word-break: keep-all.
-#
-# word-break: keep-all prevents the browser from breaking Korean eojeol (어절 — the
-# space-delimited word units Korean uses) mid-word across line boundaries. The CSS default
-# 'normal' treats each syllable block as a break opportunity, which produces:
-#   "동시접속" → "동\n시접속"
-#   "확인했어요" → "확인했\n어요"
-#   "연락 주세요" → "연락 주\n세요"
-# These are the most prominent visual tells that identify an AI-generated Korean page.
-# No native Korean UI designer would ship without keep-all; applying it is the first
-# typographic act, not an afterthought.
-#
-# Fires ONCE PER PAGE (root node only), not per text node. keep-all belongs on the base
-# layer (`* { word-break: keep-all; }`) so one fix covers the whole page. Per-node
-# repetition would produce dozens of identical findings and obscure the single action needed.
-# The value reports the count of affected nodes so the engineer knows the scope.
-#
-# Category: a11y — not a style preference. Mid-eojeol breaks impair reading comprehension
-# for all Korean readers; the W3C klreq (Requirements for Hangul Text Layout) explicitly
-# requires word-boundary-aware line breaking for Korean text.
-#
-# Positive test:  node with Korean text, wordBreak !== 'keep-all' → fires
-# Negative tests: all Korean nodes have keep-all → silent; page has no Korean text → silent
-- id: KO-KEEP-ALL
-  layer: 1
-  category: a11y
-  severity: warn
-  when: "node.parent === null && ir.nodes.some(n => Boolean(n.text) && /[가-힣]/u.test(n.text))"
-  value: "ir.nodes.filter(n => Boolean(n.text) && /[가-힣]/u.test(n.text) && n.wordBreak !== 'keep-all').length"
-  assert: "value === 0"
-  message: "{value} Korean text node(s) missing word-break: keep-all. Without it, Korean eojeol (어절) break mid-word across lines — '동시접속' → '동\\n시접속', '확인했어요' → '확인했\\n어요'. This is the single loudest AI-generated-page tell for Korean readers. Fix: add `* { word-break: keep-all; overflow-wrap: break-word; }` to the base CSS layer."
+# Korean line breaking is intentionally not a deterministic rule. W3C KLREQ documents
+# word-based and character-based Hangul breaking practices, and the IR cannot judge whether
+# a contextual wrap is acceptable from `word-break` alone. `KO-KEEP-ALL` was therefore
+# removed. Route Korean wrapping to the actual-copy desktop/mobile typography proof, where
+# visible breaks, container width, copy, face, and hierarchy can be reviewed together.
+[]

@@ -272,6 +272,7 @@ function doctorClaude(d: Detected): DoctorCheck[] {
     .sort();
   const agentsMatch = shippedAgents.length > 0
     && shippedAgents.includes('omd-writer.md')
+    && shippedAgents.includes('omd-typesetter.md')
     && JSON.stringify(installedAgents) === JSON.stringify(shippedAgents);
   checks.push(check('direct agents match shipped set', agentsMatch, `expected ${shippedAgents.length}, found ${installedAgents.length}`));
 
@@ -289,8 +290,11 @@ function doctorClaude(d: Detected): DoctorCheck[] {
 function doctorCodex(d: Detected): DoctorCheck[] {
   const checks: DoctorCheck[] = [];
   const configPath = join(d.home, 'config.toml');
+  let config: { agents?: Record<string, { config_file?: string }> } | undefined;
   try {
-    if (existsSync(configPath)) parseToml(readFileSync(configPath, 'utf8'));
+    config = existsSync(configPath)
+      ? parseToml(readFileSync(configPath, 'utf8')) as { agents?: Record<string, { config_file?: string }> }
+      : {};
     checks.push(check('config.toml parses', true));
   } catch (err) {
     checks.push(check('config.toml parses', false, err instanceof Error ? err.message : String(err)));
@@ -298,6 +302,9 @@ function doctorCodex(d: Detected): DoctorCheck[] {
 
   const omdAgents = readdirSafe(join(d.home, 'agents')).filter((f) => f.startsWith('omd-') && f.endsWith('.toml'));
   checks.push(check('agents registered', omdAgents.length > 0));
+  const typesetterRegistered = config?.agents?.['omd-typesetter']?.config_file === './agents/omd-typesetter.toml'
+    && existsSync(join(d.home, 'agents', 'omd-typesetter.toml'));
+  checks.push(check('typesetter agent registered', typesetterRegistered));
 
   const skillsPresent = shippedSkillNames().some((name) => existsSync(join(d.home, 'skills', name)));
   checks.push(check('skills present', skillsPresent));

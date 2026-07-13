@@ -13,11 +13,11 @@ Oh My Design (OMD) keeps the model from jumping straight from a request to polis
 The durable loop is:
 
 ```text
-brief → evidence → copy → isolated structure → one production build
+brief → evidence → copy → typography proof → isolated structure → one production build
       → rendered critique and interaction evidence → reframe
 ```
 
-OMD is built for Codex and Claude Code. It provides six user-facing skills, seven internal pipeline agents, a local CLI, design theory and recipe packs, and a project record under `.omd/`.
+OMD is built for Codex and Claude Code. It provides six user-facing skills, eight internal pipeline agents, a local CLI, design theory and recipe packs, and a project record under `.omd/`.
 
 ## Quick start
 
@@ -55,13 +55,14 @@ Run the main design skill from your host after both doctor commands pass. Host U
 4. **Research** — collect measured references across the domain, competitors, audience language, components, typography, and relevant motion.
 5. **Write copy** — a dedicated writer creates a fact-traceable copy deck before layout begins.
 6. **Review copy blind** — a fresh reviewer sees the brief, copy, fact ledger, and voice evidence, but no render, code, layout, rationale, or authorship.
-7. **Diverge structurally** — isolated agents render two low-fidelity structures by default, or three when structural uncertainty or showpiece impact warrants it.
-8. **Choose blind** — a fresh selector compares anonymous candidates against task fit, real-content accommodation, hierarchy, responsive cost, and accessibility risk.
-9. **Build once** — one selected structure becomes the production implementation. The builder does not generate another candidate set.
-10. **Reflect while building** — the builder records a semantic checkpoint after the real-content layout and a visual checkpoint after the visual system, before optional motion.
-11. **See the result** — desktop and mobile renders, squint views, applicable filmstrips, deterministic checks, and declared local probes supply the review evidence.
-12. **Critique and reframe** — a squint-only glance reports hierarchy first; a separate sharp reviewer judges craft and consequences; the coordinator records what the render changed.
-13. **Ship** — project tests, build checks, applicable design gates, and unresolved findings are reported with their evidence.
+7. **Prove typography blind** — a typesetter renders layout-neutral actual-copy specimens at 1280x900 and 390x844; a fresh eye reviews them without page structure or rationale, then the typesetter revises and rerenders.
+8. **Diverge structurally** — isolated agents render two low-fidelity structures by default, or three when structural uncertainty or showpiece impact warrants it.
+9. **Choose blind** — a fresh selector compares anonymous candidates against task fit, real-content accommodation, hierarchy, responsive cost, and accessibility risk.
+10. **Build once** — one selected structure becomes the production implementation. The builder does not generate another candidate set.
+11. **Reflect while building** — the builder records a semantic checkpoint, re-proves type in the selected desktop/mobile containers, then records the visual checkpoint before optional motion.
+12. **See the result** — desktop and mobile renders, squint views, applicable filmstrips, deterministic checks, and declared local probes supply the review evidence.
+13. **Critique and reframe** — a squint-only glance reports hierarchy first; a separate sharp reviewer judges craft and consequences; the coordinator records what the render changed.
+14. **Ship** — project tests, build checks, applicable design gates, and unresolved findings are reported with their evidence.
 
 Figma and explicit visual targets already supply structural decisions. The loop may skip structural divergence in those routes, but it records why.
 
@@ -73,7 +74,8 @@ Figma and explicit visual targets already supply structural decisions. The loop 
 | Research | `.omd/refs/*.json` | Builders receive measurements and principles, not screenshots to imitate. The standalone scout skill has its own capture floor; the pipeline scout works to coverage instead of a universal count. |
 | Copy | `.omd/copy-deck.md` | Each shipped factual claim points to a `verified` fact ID. `fixture` facts test density only; `open` facts cannot support shipped claims. |
 | Blind copy review | review handoff | The reviewer cannot inspect renders, source, layout, frame, decisions, or authorship and does not edit the deck. The writer applies the review, then `omd copy --check` runs again. |
-| Structural sketches | `.omd/.cache/sketches/<id>/` | Each candidate sees the sanitized frame, real copy, one axis, and an anonymous ID. It cannot inspect another candidate or production source. |
+| Typography proof | `.omd/type-proof.md`; specimens in `.omd/.cache/type-proof/` | Actual target-language copy proves roles, source/licence, glyph coverage, requested/computed family and weight, axes, fallback/loading, wraps/clips, and rejected alternatives at both viewports. Browser evidence does not identify the physical font used for each glyph. |
+| Structural sketches | `.omd/.cache/sketches/<id>/` | Each candidate sees the sanitized frame, real copy, approved type-role/family/weight/size-measure contract, one axis, and an anonymous ID. It preserves typography and varies structure only; rejected type rationale, other candidates, and production source stay hidden. |
 | Blind choice | `.omd/taste/preferences.jsonl` | The selector sees anonymous renders and sanitized task context, not candidate rationale or authorship. `omd choose` stores the selected candidate and its reason as an agent choice. |
 | Production build | repository source | One builder implements one selected structure and preserves the copy deck. Separate `omd decision` entries record implementation reasons in `.omd/decisions.md`; they are not candidate-choice records. |
 | Production evidence | `.omd/attribution.md` | The builder records the sources behind shipped tokens, motion, composition, and graphics. |
@@ -118,17 +120,18 @@ The verified installer copies the canonical skills directly into each detected h
 
 ## Internal pipeline agents
 
-These seven agents are implementation details of the design loop, not public commands:
+These eight agents are implementation details of the design loop, not public commands:
 
 | Agent | Responsibility | Write boundary |
 | --- | --- | --- |
 | `omd-framer` | Questions the brief and records an evidence-backed frame. | Read-only; records through the frame CLI. |
 | `omd-scout` | Researches measured evidence for pipeline coverage. | Read-only; records through reference CLI commands. |
 | `omd-writer` | Writes or repairs the copy deck and fact ledger. | Only `.omd/copy-deck.md`. |
+| `omd-typesetter` | Builds and revises the pre-structure actual-copy typography proof. | `.omd/type-proof.md` and `.omd/.cache/type-proof/`. |
 | `omd-sketch` | Produces one isolated grayscale structural candidate with real copy. | Only its cache candidate directory. |
 | `omd-hand` | Builds the selected structure and records two craft checkpoints. | Production repository and declared OMD records. |
 | `omd-glance` | Reports hierarchy from squint renders only. | No writes. |
-| `omd-eye` | Selects anonymous structures, reviews copy blind, or critiques sharp renders. | No writes. |
+| `omd-eye` | Selects anonymous structures, reviews copy or typography proof blind, or critiques sharp renders. | No writes. |
 
 Agents do not pin a concrete model; they inherit the model selected for the session. Their `high` and `medium` reasoning fields communicate intent.
 
@@ -141,6 +144,7 @@ OMD combines deterministic checks with rendered review:
 | Layer | Commands and evidence |
 | --- | --- |
 | Copy and design contracts | `omd copy --check` validates deck structure and explicit fact references. `omd design --check` validates design-contract coverage. Neither proves prose quality or factual truth. |
+| Typography proof | Layout-neutral desktop/mobile specimens run before sketches; selected-container reproof runs after semantic structure and before the visual checkpoint. Copy, font/file, weight/axis, or container-width changes invalidate the proof. |
 | Render evidence | `omd render` produces sharp screenshots, `--squint` isolates hierarchy with grayscale and blur, and `--filmstrip` captures load-time frames. Squint is not a timed first-impression simulator. |
 | Interaction | `omd probe` executes only a declared, safe local plan and reports expectation or tab-order failures. |
 | Design lint | `omd check` evaluates `system`, `a11y`, `slop`, `motion`, and `ux` conditions. Contrast and hit-area rules are errors; slop and the other quality-floor rules are warnings where authored that way. |
@@ -179,7 +183,7 @@ Probe plans can use declared click, fill, and keypress steps with explicit expec
 
 Durable, reviewable records live directly under `.omd/`:
 
-- `frame.md`, `copy-deck.md`, `design.md`, `decisions.md`
+- `frame.md`, `copy-deck.md`, `type-proof.md`, `design.md`, `decisions.md`
 - `attribution.md`, `motion-spec.md`, `craft.jsonl`, `config.json`
 - `refs/*.json`, declared `probes/*.json`, `taste/preferences.jsonl`, and `history.jsonl`
 

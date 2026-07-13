@@ -78,7 +78,24 @@ For multi-surface products, run `omd design` and complete the durable design con
 one-surface run may skip only this design-contract artifact with a recorded reason; that
 skip never changes stack routing.
 
-## 3. Independent structural divergence and blind selection
+## 3. Typography proof before structure
+
+After the second clean copy check, spawn `omd-typesetter` with the copy deck, scout's cited
+typography evidence, `protocol/human-design-loop.md`, and `theory/typography.md`. It creates
+layout-neutral actual-copy specimens in `.omd/.cache/type-proof/`, renders 1280x900 and
+390x844, and writes `.omd/type-proof.md`. It does not design composition, colour, graphics,
+or motion and does not rewrite copy.
+
+Spawn a fresh `omd-eye` in typography-proof mode with only the two specimens plus sanitized
+copy and requirements. Do not pass authorship, reference rationale, page structure, colour,
+or code. Return the blind findings to the typesetter, require revision and both renders
+again, and start sketches only after the proof passes. Large type may pass when concept-
+bearing and proof-clean; size alone is neither success nor failure.
+
+The proof fingerprint is invalid after any copy, font family/file, requested weight/axis, or
+proof container-width change. Rerun the proof instead of carrying an obsolete approval.
+
+## 4. Independent structural divergence and blind selection
 
 Gate divergence by structural uncertainty and impact:
 
@@ -86,20 +103,26 @@ Gate divergence by structural uncertainty and impact:
 - showpiece or high uncertainty/impact: three;
 - skip only when structure is supplied (Figma/target/explicit layout), recording why.
 
-Give every sketch the same sanitized frame/concept and copy deck, plus a different anonymous
-candidate id and structural axis. They cannot see one another and write only under
+Give every sketch the same sanitized frame/concept, copy deck, and sanitized approved
+typography contract derived from `.omd/type-proof.md`, plus a different anonymous candidate
+id and structural axis. Include approved roles, family, weight, size/measure, and wrapping
+constraints; omit rejected-alternative rationale and authorship. Sketches preserve that
+contract and vary structure only. They cannot invent a new type scale, see one another, or
+read the full proof, and write only under
 `.omd/.cache/sketches/<id>/`. Their real-content low-fi renders contain structure and type
 scale, never colour, motion, graphics, production edits, or sales prose.
 
 Spawn a fresh `omd-eye` in sketch-selector mode with anonymous renders, sanitized frame,
-and copy deck only. It selects from pixels and structural cost, not candidate rationale.
+copy deck, and the same sanitized approved typography contract only. It judges whether each
+structure accommodates the approved type roles and constraints, not candidate or typography
+rationale.
 Record the winner and rejected tradeoffs. Pause only when config explicitly includes the
 structure checkpoint.
 
-## 4. Production build with reflective craft
+## 5. Production build with reflective craft
 
-Spawn `omd-hand` once with the selected structure, sanitized build brief, copy deck, and
-reference measurements/principles. The hand builds semantic real-content layout first,
+Spawn `omd-hand` once with the selected structure, sanitized build brief, copy deck,
+`.omd/type-proof.md`, and reference measurements/principles. The hand builds semantic real-content layout first,
 then the visual system, then motion. It must record two concrete reflection-in-action loops:
 
 ```bash
@@ -107,16 +130,19 @@ omd craft checkpoint semantic --render <path> --observed "..." --changed "..."
 omd craft checkpoint visual --render <path> --observed "..." --changed "..."
 ```
 
-The semantic checkpoint occurs after desktop/mobile real-content layout. The visual
-checkpoint occurs after type/colour/spacing/components and before motion. Both require a
-change; a gray-box or "no change" ritual does not count.
+The semantic checkpoint occurs after desktop/mobile real-content layout. Then the hand
+re-proves typography inside the selected production container at desktop and mobile after
+OMD render/IR waits for `document.fonts.ready`. It compares requested versus computed
+family/weight, actual Korean/Latin/numerals, wraps, clips, orphans, and hierarchy. The visual
+checkpoint occurs only after that reproof and after type/colour/spacing/components, before
+motion. Both checkpoints require a change; a gray-box or "no change" ritual does not count.
 
 The build acceptance contract verifies the primary task, most frequent action,
 costliest-error recovery, an exit from every reachable state, immediate visible feedback,
 and mobile reach. The hand uses native semantics, preserves form values on error, blocks
 duplicate submits, implements only applicable states, and honors reduced motion.
 
-## 5. Squint before sharp, then safe interaction
+## 6. Squint before sharp, then safe interaction
 
 Render desktop and mobile squint images before any sharp render is exposed to a critic:
 
@@ -136,7 +162,7 @@ inapplicable surface. Probe only local files/localhost, declared click/fill/pres
 declared expectations, and optional expected tab order. Never auto-discover and click
 controls; never probe remote production or authenticated flows.
 
-## 6. Blind critique, repair, and reframe
+## 7. Blind critique, repair, and reframe
 
 Now render sharp desktop/mobile (and filmstrip when motion matters), run deterministic
 checks, and spawn a fresh `omd-eye`. Pass only the sanitized review brief: primary task,
@@ -154,10 +180,11 @@ checks/renders/probe. If rendered evidence changes the problem, run `omd frame r
 If a finding requests copy repair, update the deck through omd-writer first, re-run
 `omd copy --check`, and only then update source. The hand never silently rewrites shipped copy.
 
-## 7. Ship
+## 8. Ship
 
 Verify project tests/build plus `omd check`, two clean copy checks around an independent
-writer/editor pass, responsive sharp/squint renders, applicable filmstrip, humanize review,
+writer/editor pass, a blind typography proof before sketches and production-container
+reproof before the visual checkpoint, responsive sharp/squint renders, applicable filmstrip, humanize review,
 probe, `omd craft status`, `omd design --check` when applicable,
 `omd ref distance`, bounded target convergence when a manifest exists, and `omd check --site`
 for multi-page output. Everything is clean or has an evidence-backed deliberate overrule.
