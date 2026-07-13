@@ -87,6 +87,25 @@ makes rewrites noisy and trust collapse fast. Three tiers:
 - Every paragraph the same length; every sentence 15–25 words
 - Hedging: "can potentially", "may possibly", "it could be argued"
 - Bold **key phrases** sprinkled as decoration
+- **Self-introductory product copy** (S1 in hero/opener): "[Product] is a [platform/tool/
+  system/solution/service] that helps you [verb]." The model is quoting its own brief.
+  Rewrite from the user's change, not the product's mechanism:
+  - ❌ "Acme is a project management platform that helps teams ship faster."
+  - ✅ "Ship the Monday build, not the Monday Slack thread."
+  The Korean form is the same pattern: "X는 Y를 도와주는 플랫폼이에요" → write what changes
+  for the user, not what the product is.
+- **Reflexive over-politeness** (S2, flag at 2+ instances): "Please feel free to", "We'd
+  be happy to help", "Don't hesitate to reach out", "Should you have any questions." These
+  phrases come from helpdesk training data. On a product page they read as a form letter.
+  Cut the reflex clause; write the direct action:
+  - ❌ "Please feel free to get started when you're ready."
+  - ✅ "Ready when you are."
+  - ❌ "We'd be happy to help you with any questions."
+  - ✅ "Something unclear? [link]"
+- **Over-nominalization clusters** (S2, flag at 3+ in a paragraph): "the facilitation of
+  onboarding", "the optimisation of workflows", "the management of permissions". Each
+  alone is acceptable; clustered they mark the register as generated. Replace with the
+  verb and the concrete subject.
 
 ## Four tells the linter cannot fully catch
 
@@ -102,7 +121,10 @@ These require human judgment because the IR cannot measure them mechanically:
   README cadence instead of selling an outcome. Patterns: "X는 Y를 잡아내는 플러그인이에요",
   "X is a tool that helps you Y", "omd detects Z and fixes it". These read as the model
   quoting its own task description. Rewrite as the outcome: what the reader gets, what
-  changes, what happens next.
+  changes, what happens next. The self-introductory product copy tell above is its hero
+  variant — same root, slightly different surface; both are pre-handoff checks, not linter
+  rules, because product comparison tables and developer docs legitimately use the same
+  construction.
 
 ## The pink elephant (absolute, both languages)
 
