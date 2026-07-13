@@ -592,10 +592,15 @@ export interface CoachReport {
 
 export interface Choice {
   ts: string;
-  among: string[];
-  chose: string;
-  why: string | null;
-  generator: string | null;
+  /** Legacy records omit actor/kind and normalize to unknown, never user. */
+  actor?: 'user' | 'agent' | 'unknown';
+  kind?: 'selection' | 'praise' | 'rejection' | 'overrule';
+  subject?: string;
+  evidence?: string;
+  among?: string[];
+  chose?: string;
+  why?: string | null;
+  generator?: string | null;
 }
 
 // ── adapters ──

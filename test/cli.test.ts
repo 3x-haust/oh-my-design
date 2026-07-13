@@ -10,6 +10,7 @@ import { must } from './helpers.ts';
 
 const CLI = fileURLToPath(new URL('../bin/omd.ts', import.meta.url));
 const FIXTURE = fileURLToPath(new URL('./fixtures/ir.raw.json', import.meta.url));
+const PROBE_FIXTURE = fileURLToPath(new URL('./fixtures/probe.html', import.meta.url));
 
 const run = (args: string[], cwd?: string) =>
   spawnSync(process.execPath, [CLI, ...args], { encoding: 'utf8', ...(cwd ? { cwd } : {}) });
@@ -19,13 +20,13 @@ const project = (): string => mkdtempSync(join(tmpdir(), 'omd-cli-'));
 const EVIDENCE = 'App store reviews, n=240: 31% say "too many choices"';
 
 test('omd check exits 1 when violations exist — usable as a CI design linter', () => {
-  const r = run(['check', '--ir', FIXTURE]);
+  const r = run(['check', '--ir', FIXTURE], project());
   assert.equal(r.status, 1);
   assert.match(r.stdout, /CONTRAST-001/);
 });
 
 test('omd check --json emits a parseable violation array', () => {
-  const parsed = JSON.parse(run(['check', '--ir', FIXTURE, '--json']).stdout) as Violation[];
+  const parsed = JSON.parse(run(['check', '--ir', FIXTURE, '--json'], project()).stdout) as Violation[];
   assert.ok(parsed.length > 0);
   assert.ok(parsed.every((v) => v.id && v.nodeId && v.path && v.severity && v.category));
 });
@@ -34,7 +35,7 @@ test('omd check exits 0 on a clean IR', () => {
   const dir = project();
   const clean = join(dir, 'clean.json');
   writeFileSync(clean, JSON.stringify({ meta: {}, tokens: {}, nodes: [] }));
-  assert.equal(run(['check', '--ir', clean]).status, 0);
+  assert.equal(run(['check', '--ir', clean], dir).status, 0);
 });
 
 // ── The frame is a record the loop keeps, not a gate a human signs. ──
@@ -117,12 +118,60 @@ test('omd decision requires a why', () => {
   assert.match(readFileSync(join(dir, '.omd', 'decisions.md'), 'utf8'), /fintech cliche/);
 });
 
-test('omd taste profile summarises accumulated choices', () => {
+test('omd choose is agent taste and the default profile excludes it', () => {
   const dir = project();
   run(['choose', 'c1', 'c2', '--chose', 'c2', '--why', 'denser'], dir);
   const out = run(['taste', 'profile'], dir).stdout;
-  assert.match(out, /1 choices/);
-  assert.match(out, /c2 over c1/);
+  assert.match(out, /No explicit user taste/);
+  const all = run(['taste', 'profile', '--all'], dir).stdout;
+  assert.match(all, /\[agent\] c2 over c1/);
+});
+
+test('omd taste record requires explicit verbatim user evidence', () => {
+  const dir = project();
+  assert.equal(run(['taste', 'record', 'serif hero', '--kind', 'praise', '--evidence', '이 타이포가 좋다'], dir).status, 1);
+  assert.equal(run(['taste', 'record', 'serif hero', '--kind', 'praise', '--evidence', '이 타이포가 좋다', '--from-user'], dir).status, 0);
+  const out = run(['taste', 'profile'], dir).stdout;
+  assert.match(out, /\[user\] praise: serif hero/);
+  assert.match(out, /이 타이포가 좋다/);
+});
+
+test('legacy choices normalize to unknown and are not injected as user taste', () => {
+  const dir = project();
+  mkdirSync(join(dir, '.omd', 'taste'), { recursive: true });
+  writeFileSync(join(dir, '.omd', 'taste', 'preferences.jsonl'), `${JSON.stringify({ ts: 'old', among: ['a', 'b'], chose: 'b', why: 'old' })}\n`);
+  assert.match(run(['taste', 'profile'], dir).stdout, /No explicit user taste/);
+  assert.match(run(['taste', 'profile', '--all'], dir).stdout, /\[unknown\] b over a/);
+});
+
+test('omd config defaults to no checkpoint and persists opt-in values', () => {
+  const dir = project();
+  assert.deepEqual(JSON.parse(run(['config', 'show'], dir).stdout), { checkpoint: 'none' });
+  assert.equal(run(['config', 'set', 'checkpoint', 'both'], dir).status, 0);
+  assert.deepEqual(JSON.parse(run(['config', 'show'], dir).stdout), { checkpoint: 'both' });
+  assert.notEqual(run(['config', 'set', 'checkpoint', 'always'], dir).status, 0);
+});
+
+test('omd craft requires an observed change and reports structured status', () => {
+  const dir = project();
+  assert.notEqual(run(['craft', 'checkpoint', 'semantic', '--render', 'a.png', '--observed', 'hero wraps', '--changed', 'no change'], dir).status, 0);
+  assert.equal(run(['craft', 'checkpoint', 'semantic', '--render', 'a.png', '--observed', 'hero wraps at mobile', '--changed', 'reduced heading max width'], dir).status, 0);
+  const records = JSON.parse(run(['craft', 'status', '--json'], dir).stdout) as Array<{ phase: string; changed: string }>;
+  assert.equal(records[0]?.phase, 'semantic');
+  assert.equal(records[0]?.changed, 'reduced heading max width');
+});
+
+test('omd probe uses the durable default plan and writes a disposable result', () => {
+  const dir = project();
+  mkdirSync(join(dir, '.omd', 'probes'), { recursive: true });
+  writeFileSync(join(dir, '.omd', 'probes', 'primary.json'), JSON.stringify({
+    name: 'primary', destructive: false,
+    steps: [{ action: 'click', selector: '#toggle', expect: [{ type: 'visible', selector: '#panel' }] }],
+  }));
+  const r = run(['probe', PROBE_FIXTURE, '--json'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual((JSON.parse(r.stdout) as { warnings: unknown[] }).warnings, []);
+  assert.ok(existsSync(join(dir, '.omd', '.cache', 'probes', 'primary.json')));
 });
 
 test('frame.md survives a hand-written file with no frontmatter', () => {

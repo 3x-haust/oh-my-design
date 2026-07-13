@@ -4,7 +4,7 @@ import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { stringify } from 'yaml';
 import { readFrame } from '../core/frame/index.ts';
-import { writeFrameRecord, reframe, setGenerator, logDecision, logChoice, tasteProfile } from '../core/frame/write.ts';
+import { writeFrameRecord, reframe, setGenerator, logDecision, logChoice, logTaste, tasteProfile } from '../core/frame/write.ts';
 import { logRun, readHistory } from '../core/history/index.ts';
 import { analyse } from '../core/coach/index.ts';
 import { findLeakedRationale } from '../core/rules/leakage.ts';
@@ -38,7 +38,15 @@ interface Opts {
   selector?: string;
   image?: boolean;
   filmstrip?: boolean;
+  squint?: boolean;
   fromUser?: boolean;
+  all?: boolean;
+  plan?: string;
+  render?: string;
+  observed?: string;
+  changed?: string;
+  kind?: string;
+  evidence?: string;
   /** Capture a full-resolution structural blueprint of the selected component. */
   blueprint?: boolean;
   /** Directory of pages for cross-page site consistency check (`omd check --site <dir>`). */
@@ -59,7 +67,7 @@ interface Opts {
   costliestError?: string;
 }
 
-const FLAGS = new Set(['json', 'no-log', 'image', 'filmstrip', 'from-user', 'blueprint', 'fresh', 'check']);
+const FLAGS = new Set(['json', 'no-log', 'image', 'filmstrip', 'squint', 'from-user', 'all', 'blueprint', 'fresh', 'check']);
 const ALIASES: Record<string, keyof Opts> = {
   o: 'out',
   'no-log': 'noLog',
@@ -122,9 +130,62 @@ async function cmdRender(opts: Opts): Promise<never> {
 
   const out = opts.out ?? 'shot.png';
   mkdirSync(dirname(resolve(out)), { recursive: true });
-  await renderPage(target, { viewport: parseViewport(opts.viewport), out });
+  await renderPage(target, { viewport: parseViewport(opts.viewport), out, ...(opts.squint ? { squint: true } : {}) });
   console.log(out);
   process.exit(0);
+}
+
+async function cmdProbe(opts: Opts): Promise<never> {
+  const target = opts._[0];
+  if (!target) throw new Error('usage: omd probe <page> [--plan path] [--json] [--out path]');
+  const { readProbePlan, runProbe, writeProbeResult } = await import('../core/probe/index.ts');
+  const planPath = resolve(opts.plan ?? join(process.cwd(), '.omd', 'probes', 'primary.json'));
+  if (!existsSync(planPath)) throw new Error(`probe plan not found: ${planPath}`);
+  const result = await runProbe(target, readProbePlan(planPath));
+  const safe = result.name.replace(/[^a-z0-9_-]+/gi, '-').replace(/^-|-$/g, '') || 'probe';
+  const out = resolve(opts.out ?? join(process.cwd(), '.omd', '.cache', 'probes', `${safe}.json`));
+  writeProbeResult(out, result);
+  if (opts.json) process.stdout.write(JSON.stringify(result));
+  else {
+    for (const warning of result.warnings) console.log(`[${warning.severity}] ${warning.id}: ${warning.message}`);
+    console.log(out);
+  }
+  process.exit(result.warnings.length ? 1 : 0);
+}
+
+async function cmdConfig(sub: string | undefined, opts: Opts): Promise<never> {
+  const { readConfig, setCheckpoint } = await import('../core/config/index.ts');
+  if (sub === 'show') {
+    console.log(JSON.stringify(readConfig(process.cwd()), null, 2));
+    process.exit(0);
+  }
+  if (sub === 'set' && opts._[0] === 'checkpoint' && opts._[1]) {
+    console.log(setCheckpoint(process.cwd(), opts._[1]));
+    process.exit(0);
+  }
+  throw new Error('usage: omd config set checkpoint none|concept|structure|both | omd config show');
+}
+
+async function cmdCraft(sub: string | undefined, opts: Opts): Promise<never> {
+  const { readCraft, recordCraft } = await import('../core/craft/index.ts');
+  if (sub === 'checkpoint') {
+    const phase = opts._[0];
+    if (phase !== 'semantic' && phase !== 'visual') {
+      throw new Error('usage: omd craft checkpoint semantic|visual --render <path> --observed "..." --changed "..."');
+    }
+    console.log(recordCraft(process.cwd(), {
+      phase, render: opts.render ?? '', observed: opts.observed ?? '', changed: opts.changed ?? '',
+    }));
+    process.exit(0);
+  }
+  if (sub === 'status') {
+    const records = readCraft(process.cwd());
+    if (opts.json) process.stdout.write(JSON.stringify(records));
+    else if (!records.length) console.log('No craft checkpoints recorded.');
+    else for (const record of records) console.log(`${record.phase}: ${record.observed} -> ${record.changed} (${record.render})`);
+    process.exit(0);
+  }
+  throw new Error('usage: omd craft checkpoint ... | omd craft status [--json]');
 }
 
 /**
@@ -399,7 +460,7 @@ function cmdChoose(opts: Opts): never {
     process.exit(1);
   }
   const path = logChoice(process.cwd(), { among, chose: opts.chose, why: opts.why });
-  console.log(`${path}  (${tasteProfile(process.cwd()).n} choices recorded)`);
+  console.log(`${path}  (${tasteProfile(process.cwd(), true).n} choices recorded)`);
   process.exit(0);
 }
 
@@ -1245,7 +1306,9 @@ function usage(): never {
     'usage: omd <command>\n\n'
     + '  ir <page> [-o f]                            rendered DOM -> Design IR\n'
     + '  render <page> -o shot.png [--viewport WxH]  headless screenshot\n'
+    + '  render <page> --squint -o shot.png            grayscale + blur hierarchy isolation\n'
     + '  render <page> --filmstrip -o f.html [--viewport WxH]  load-time filmstrip\n'
+    + '  probe <page> [--plan path] [--json] [--out path]  declared local interaction path\n'
     + '  check [<page>|--ir f] [--json] [--category slop] [--no-log]\n'
     + '  check --site <dir>                          cross-page consistency (SITE-*)\n'
     + '  check <page1> <page2> ...                   same, multi-page positional\n'
@@ -1259,7 +1322,11 @@ function usage(): never {
     + '\n'
     + '  choose c1 c2 c3 --chose c3 --why "..."\n'
     + '  decision "what" --why "why"\n'
-    + '  taste profile\n'
+    + '  taste record "subject" --kind selection|praise|rejection|overrule --evidence "verbatim" --from-user\n'
+    + '  taste profile [--all]\n'
+    + '  config set checkpoint none|concept|structure|both | config show\n'
+    + '  craft checkpoint semantic|visual --render P --observed "..." --changed "..."\n'
+    + '  craft status [--json]\n'
     + '\n'
     + '  ref add <url|file> --as <component> [--selector "css"] [--image] [--blueprint]\n'
     + '                                                render, extract invariants, save\n'
@@ -1302,8 +1369,11 @@ async function main(): Promise<never> {
 
   if (cmd === 'ir') return cmdIr(parseArgs(args.slice(1)));
   if (cmd === 'render') return cmdRender(parseArgs(args.slice(1)));
+  if (cmd === 'probe') return cmdProbe(parseArgs(args.slice(1)));
   if (cmd === 'check') return cmdCheck(parseArgs(args.slice(1)));
   if (cmd === 'coach') return cmdCoach();
+  if (cmd === 'config') return cmdConfig(sub, parseArgs(args.slice(2)));
+  if (cmd === 'craft') return cmdCraft(sub, parseArgs(args.slice(2)));
 
   if (cmd === 'frame') {
     const opts = parseArgs(args.slice(2));
@@ -1382,15 +1452,32 @@ async function main(): Promise<never> {
     process.exit(0);
   }
 
+  if (cmd === 'taste' && sub === 'record') {
+    const opts = parseArgs(args.slice(2));
+    const subject = opts._[0];
+    if (!subject || !opts.kind || !['selection', 'praise', 'rejection', 'overrule'].includes(opts.kind) || !opts.evidence) {
+      throw new Error('usage: omd taste record "subject" --kind selection|praise|rejection|overrule --evidence "verbatim" --from-user');
+    }
+    console.log(logTaste(process.cwd(), {
+      subject, kind: opts.kind as 'selection' | 'praise' | 'rejection' | 'overrule',
+      evidence: opts.evidence, fromUser: opts.fromUser === true,
+    }));
+    process.exit(0);
+  }
+
   if (cmd === 'taste' && sub === 'profile') {
-    const { n, records } = tasteProfile(process.cwd());
-    if (n === 0) console.log('No choices recorded yet.');
+    const opts = parseArgs(args.slice(2));
+    const { n, records } = tasteProfile(process.cwd(), opts.all);
+    if (n === 0) console.log(opts.all ? 'No taste records yet.' : 'No explicit user taste recorded yet.');
     else {
       const lines = records.map((r) => {
-        const over = r.among.filter((a) => a !== r.chose).join(',');
-        return `  ${r.chose} over ${over}${r.why ? ` \u2014 ${r.why}` : ''}`;
+        if (r.among && r.chose) {
+          const over = r.among.filter((a) => a !== r.chose).join(',');
+          return `  [${r.actor}] ${r.chose} over ${over}${r.why ? ` \u2014 ${r.why}` : ''}`;
+        }
+        return `  [${r.actor}] ${r.kind}: ${r.subject} \u2014 ${r.evidence}`;
       });
-      console.log(`${n} choices\n${lines.join('\n')}`);
+      console.log(`${n} taste records\n${lines.join('\n')}`);
     }
     process.exit(0);
   }

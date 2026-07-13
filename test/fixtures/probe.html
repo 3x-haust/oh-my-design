@@ -1,0 +1,11 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Probe fixture</title>
+<button id="toggle" type="button">Show details</button>
+<input id="name" aria-label="Name">
+<section id="panel" hidden>Ready</section>
+<script>
+  document.querySelector('#toggle').addEventListener('click', () => {
+    document.querySelector('#panel').hidden = false;
+  });
+</script>

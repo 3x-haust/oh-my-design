@@ -130,6 +130,14 @@ export function build(): void {
       }
     }
 
+    // Copy the host-neutral loop contract alongside the theory/cookbook packs.
+    const protocolDir = join(root, 'core', 'protocol');
+    if (existsSync(protocolDir)) {
+      for (const f of readdirSync(protocolDir).filter((f) => f.endsWith('.md'))) {
+        write(host, `core/protocol/${f}`, readFileSync(join(protocolDir, f), 'utf8'));
+      }
+    }
+
     console.log(`${host}: ${Object.keys(files).length} files, ${skills.length} skills`);
   }
 

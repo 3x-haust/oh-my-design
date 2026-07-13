@@ -98,6 +98,10 @@ export function logChoice(cwd: string, opts: { among: string[]; chose: string; w
 
   const record: Choice = {
     ts: new Date().toISOString(),
+    actor: 'agent',
+    kind: 'selection',
+    subject: opts.chose,
+    evidence: opts.why ?? '',
     among: opts.among,
     chose: opts.chose,
     why: opts.why ?? null,
@@ -107,9 +111,30 @@ export function logChoice(cwd: string, opts: { among: string[]; chose: string; w
   return path;
 }
 
-export function tasteProfile(cwd: string): { n: number; records: Choice[] } {
+export function logTaste(cwd: string, opts: {
+  subject: string;
+  kind: 'selection' | 'praise' | 'rejection' | 'overrule';
+  evidence: string;
+  fromUser: boolean;
+}): string {
+  if (!opts.fromUser) throw new Error('Taste records require --from-user; inferred preference is not user evidence.');
+  if (!opts.subject.trim() || !opts.evidence.trim()) throw new Error('Taste subject and verbatim --evidence are required.');
+  mkdirSync(join(designDir(cwd), 'taste'), { recursive: true });
+  const path = join(designDir(cwd), 'taste', 'preferences.jsonl');
+  const record: Choice = {
+    ts: new Date().toISOString(), actor: 'user', kind: opts.kind,
+    subject: opts.subject.trim(), evidence: opts.evidence.trim(),
+  };
+  appendFileSync(path, `${JSON.stringify(record)}\n`);
+  return path;
+}
+
+export function tasteProfile(cwd: string, all = false): { n: number; records: Choice[] } {
   const path = join(designDir(cwd), 'taste', 'preferences.jsonl');
   if (!existsSync(path)) return { n: 0, records: [] };
-  const records = readFileSync(path, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l) as Choice);
+  const records = readFileSync(path, 'utf8').trim().split('\n').filter(Boolean).map((l) => {
+    const raw = JSON.parse(l) as Choice;
+    return { ...raw, actor: raw.actor ?? 'unknown' as const, kind: raw.kind ?? 'selection' as const };
+  }).filter((r) => all || r.actor === 'user');
   return { n: records.length, records };
 }

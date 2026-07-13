@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OMD safe probe plan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "destructive", "steps"],
+  "properties": {
+    "name": { "type": "string", "minLength": 1 },
+    "destructive": { "const": false },
+    "expectedTabOrder": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["action"],
+        "properties": {
+          "action": { "enum": ["click", "fill", "press"] },
+          "selector": { "type": "string", "minLength": 1 },
+          "value": { "type": "string" },
+          "key": {
+            "enum": ["Tab", "Shift+Tab", "Enter", "Space", "Escape", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Home", "End", "PageUp", "PageDown"]
+          },
+          "expect": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["type"],
+              "properties": {
+                "type": { "enum": ["visible", "hidden", "text", "url", "attribute"] },
+                "selector": { "type": "string", "minLength": 1 },
+                "value": { "type": "string" },
+                "name": { "type": "string", "minLength": 1 }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -73,7 +73,7 @@ Skills arrive with a `/` prefix — `/oh-my-design:ultradesign`, `/oh-my-design:
 codex plugin marketplace add 3x-haust/oh-my-design
 ```
 
-Then open `/plugins` to install `oh-my-design`. Skills arrive with a `$` prefix — `$oh-my-design:ultradesign`, `$oh-my-design:scout` — and the four pipeline agents resolve to the GPT-5.6 generation. (The marketplace manifest ships and matches Codex's plugin spec; the `oh-my-design install` path is the one verified end to end.)
+Then open `/plugins` to install `oh-my-design`. Skills arrive with a `$` prefix — `$oh-my-design:ultradesign`, `$oh-my-design:scout` — and the pipeline agents inherit the model selected for the session. (The marketplace manifest ships and matches Codex's plugin spec; the `oh-my-design install` path is the one verified end to end.)
 
 Both hosts need Node ≥ 22.18, and the first `omd render` pulls headless Chromium through Playwright on its own. The `omd` CLI is identical everywhere — `omd check`, `omd render`, `omd pack` do not care which host called them. Confirm a healthy setup with:
 
@@ -96,19 +96,21 @@ One line per check: Node, Playwright, the browser binary, `.omd/` write access, 
 
 ## 🔁 The pipeline
 
-`oh-my-design:ultradesign` runs seven steps in order, with no gate between them:
+`oh-my-design:ultradesign` runs a human design loop in order. Human checkpoints default to off;
+`concept`, `structure`, or both can be opted into per project.
 
 ```
-                         ┌──────────────────────────────────────────────┐
-                         │                                              ▼
-  ① FRAME ──▶ ② CONCEPT ──▶ ③ REFERENCE ──▶ ④ COMMIT ──▶ ⑤ BUILD ──▶ ⑥ SEE ──▶ ⑦ REFRAME
-   doubt        read theory   omd-scout        one            omd-hand    render      what
-   the brief    + domain      measures         structure,     + motion    filmstrip   you saw
-                research      real things      cost named     spec        + measure   rewrites
-                                                                                      the frame
+ FRAME -> CONCEPT -> RESEARCH -> COPY DECK -> ISOLATED SKETCHES -> BLIND PICK
+       -> BUILD + 2 CRAFT CHECKPOINTS -> SQUINT GLANCE -> SAFE PROBE
+       -> BLIND CRITIQUE -> REFRAME -> SHIP
 ```
 
-Four agents, deliberately firewalled. `omd-framer` interrogates the brief — and asks the three UX questions that anchor it: the task the user arrives with, the most frequent action, the costliest error. `omd-scout` measures references. `omd-hand` builds the one committed structure. `omd-eye` critiques in a fresh context, walking the primary task before it judges a single pixel — it never sees the reasoning that produced the work, so it cannot defend it.
+Six agents have narrow boundaries. `oh-my-design:framer` interrogates the brief, `oh-my-design:scout`
+builds evidence coverage, isolated `oh-my-design:sketch` contexts explore structure with the real
+copy deck, `oh-my-design:hand` builds once and records what two intermediate renders changed,
+`oh-my-design:glance` sees only blurred grayscale hierarchy, and `oh-my-design:eye` selects or critiques in
+a fresh context without rationale. Interactive work follows an explicit local-only probe
+plan; it never auto-clicks discovered controls or touches production.
 
 Along the way, four things separate the output from a generic build:
 
@@ -194,7 +196,7 @@ For anything past a single page, `omd design` writes `.omd/design.md` — a pers
 
 ```
 src/
-  agents/                  source of truth: framer, scout, hand, eye
+  agents/                  source of truth: framer, scout, sketch, hand, glance, eye
   skills/                  source of truth: ultradesign, figma, scout, critique, humanize, coach
 core/
   theory/                  the 9-file theory pack
@@ -202,6 +204,8 @@ core/
   composition/             8 page-level composition recipes
   graphics/                6 CSS-only graphics treatments
   craft/                   the finish-pass checklist
+  protocol/                phase order, state, evidence, blindness, and probe contract
+  config/ craft/ probe/    checkpoint config, craft records, safe interaction runner
   design/                  the design contract + interaction-state rules
   ref/                     reference measurement, blueprints, kinship, signal + slop scoring
   render/                  headless Playwright: render, filmstrip, motion/hover/focus probes
@@ -215,12 +219,15 @@ evals/                     plugin eval cases + rubric graders
 scripts/bump.ts            one command, every manifest, zero drift
 .omd/                      per-project design record
   frame.md                 the problem as currently understood
+  copy-deck.md             real copy and representative data before structure
   design.md                the multi-surface design contract
   decisions.md             why there is no green in this product
   attribution.md           which reference each token came from
   motion-spec.md           what moves, when, and on whose authority
   refs/*.json              measured references + written principles
   history.jsonl            every check run — what oh-my-design:coach reads
+  probes/*.json            durable non-destructive interaction plans
+  .cache/                  disposable renders, sketches, IR, filmstrips, probe results
 ```
 
 `npm run build` regenerates `agents/`, `skills/`, `dist/`, and both hosts' manifests from `src/`. Never edit the generated directories.
@@ -232,11 +239,15 @@ omd design                                     scan repo evidence, create/refres
 omd design --check                             validate design.md section coverage
 omd check  <page> [--json] [--viewport WxH]    lint: a11y, tokens, motion, ux, slop. exit 1 on findings
 omd check  --site <dir>                         cross-page ladder and token drift
-omd render <page> -o shot.png [--filmstrip]     headless screenshot, or the first seconds as frames
+omd render <page> -o shot.png [--filmstrip|--squint] screenshot, motion frames, or hierarchy isolation
+omd probe  <page> [--plan path] [--json]         declared safe path; local files/loopback only
 omd ir     <page>                               rendered DOM → measured node tree
 omd ref    add|list|show|principles|distance    the reference board (slop-scored at capture)
 omd frame  set|show|reframe|generator           the problem record — nobody signs it; the loop rewrites it
 omd decision "what" --why "why"                 the reasons file your successor will thank you for
+omd taste record|profile [--all]                 explicit-user taste by default; agent/legacy excluded
+omd config set checkpoint none|concept|structure|both
+omd craft checkpoint|status                      real-content reflection-in-action records
 omd figma  pull|system|diff                     Figma file → snapshot → design system → pixel-diff loop
 omd target set|diff|list                        converge a build toward any mockup, screenshot, or URL
 omd pack   dir|list                             where the theory and recipe packs live (host-neutral)

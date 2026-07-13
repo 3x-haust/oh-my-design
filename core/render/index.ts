@@ -127,8 +127,13 @@ export function parseViewport(s = '390x844'): Viewport {
   return { width, height };
 }
 
-export function renderPage(target: string, opts: { viewport: Viewport; out: string }): Promise<string> {
+export function renderPage(target: string, opts: { viewport: Viewport; out: string; squint?: boolean }): Promise<string> {
   return withPage(target, opts.viewport, async (page, _httpStatus, _resolvedUrl) => {
+    if (opts.squint) {
+      // Hierarchy isolation only: this is neither a colour-vision simulation nor a
+      // literal recreation of a timed first impression.
+      await page.addStyleTag({ content: 'html { filter: grayscale(1) blur(6px) !important; }' });
+    }
     await page.screenshot({ path: opts.out, fullPage: true });
     return opts.out;
   });

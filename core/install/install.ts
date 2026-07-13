@@ -48,6 +48,8 @@ const OMD_ALLOW = [
   'Bash(omd check:*)', 'Bash(omd ir:*)', 'Bash(omd render:*)',
   'Bash(omd frame:*)', 'Bash(omd ref:*)', 'Bash(omd choose:*)',
   'Bash(omd decision:*)', 'Bash(omd taste:*)', 'Bash(omd coach:*)',
+  'Bash(omd probe:*)', 'Bash(omd config:*)', 'Bash(omd craft:*)',
+  'Bash(omd pack:*)',
 ];
 
 /**

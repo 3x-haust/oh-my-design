@@ -73,7 +73,7 @@ oh-my-design install
 codex plugin marketplace add 3x-haust/oh-my-design
 ```
 
-그다음 `/plugins`를 열어 `oh-my-design`을 설치한다. 스킬은 `$`가 붙고(`$oh-my-design:ultradesign`, `$oh-my-design:scout`), 파이프라인의 네 에이전트는 GPT-5.6 세대로 해석된다. (마켓 매니페스트는 Codex 플러그인 스펙에 맞게 방출되지만, 끝까지 검증된 길은 `oh-my-design install`이다.)
+그다음 `/plugins`를 열어 `oh-my-design`을 설치한다. 스킬은 `$`가 붙고(`$oh-my-design:ultradesign`, `$oh-my-design:scout`), 파이프라인 에이전트들은 세션에서 고른 모델을 상속한다. (마켓 매니페스트는 Codex 플러그인 스펙에 맞게 방출되지만, 끝까지 검증된 길은 `oh-my-design install`이다.)
 
 어느 쪽이든 Node 22.18 이상이 필요하고, 첫 `omd render`가 headless Chromium을 Playwright로 알아서 받아온다. `omd` CLI는 어디서나 똑같다. `omd check`, `omd render`, `omd pack`은 어느 호스트가 불렀는지 상관하지 않는다. 설치 상태는 이렇게 확인한다.
 
@@ -96,18 +96,21 @@ omd doctor
 
 ## 🔁 파이프라인
 
-`oh-my-design:ultradesign`은 일곱 단계를, 사이에 게이트 없이, 순서대로 돈다.
+`oh-my-design:ultradesign`은 사람 디자이너의 루프를 순서대로 돈다. 사람 체크포인트는
+기본값이 `none`이고, 프로젝트별로 컨셉·구조·둘 다를 명시적으로 켤 수 있다.
 
 ```
-                         ┌──────────────────────────────────────────────┐
-                         │                                              ▼
-  ① 프레임 ──▶ ② 컨셉 ──▶ ③ 레퍼런스 ──▶ ④ 커밋 ──▶ ⑤ 빌드 ──▶ ⑥ 관찰 ──▶ ⑦ 리프레임
-   브리프를      이론 팩 +    omd-scout이     구조 하나,    omd-hand     필름스트립    본 것이
-   의심한다      도메인       실물을 잰다     비용 명명     + 모션 스펙  + 측정        프레임을
-                리서치                                                               다시 쓴다
+ 프레임 -> 컨셉 -> 리서치 -> 카피덱 -> 격리 스케치 -> 블라인드 선택
+        -> 빌드 + 공예 체크포인트 2회 -> 스쿼트 글랜스 -> 안전 프로브
+        -> 블라인드 비평 -> 리프레임 -> 납품
 ```
 
-네 에이전트는 의도적으로 격리되어 있다. `omd-framer`는 브리프를 심문하고, 프레임을 고정하는 UX 질문 셋을 던진다. 사용자가 들고 오는 과제, 가장 잦은 액션, 가장 비싼 실수. `omd-scout`은 레퍼런스를 잰다. `omd-hand`는 커밋된 구조 하나를 짓는다. `omd-eye`는 맨 컨텍스트에서 비평하며, 픽셀을 판단하기 전에 주 과제를 직접 밟아본다. 작업을 낳은 추론을 본 적이 없으니 그걸 변호할 수도 없다.
+여섯 에이전트의 경계가 좁다. `oh-my-design:framer`는 브리프를 심문하고, `oh-my-design:scout`은
+증거 범위를 채운다. 서로 격리된 `oh-my-design:sketch`가 실제 카피덱으로 구조를 발산한다.
+`oh-my-design:hand`는 한 번만 짓고 중간 렌더 두 장이 바꾼 것을 기록한다. `oh-my-design:glance`는
+흐린 회색조 위계만 보고, `oh-my-design:eye`는 이유 파일을 모르는 새 컨텍스트에서 선택하거나
+비평한다. 인터랙션은 명시된 로컬 전용 프로브 계획만 실행하며, 컨트롤을 찾아
+자동 클릭하거나 프로덕션을 건드리지 않는다.
 
 가는 길에, 결과물을 흔한 빌드와 갈라놓는 네 가지가 있다.
 
@@ -193,7 +196,7 @@ omd doctor
 
 ```
 src/
-  agents/                  소스 오브 트루스: framer, scout, hand, eye
+  agents/                  소스 오브 트루스: framer, scout, sketch, hand, glance, eye
   skills/                  소스 오브 트루스: ultradesign, figma, scout, critique, humanize, coach
 core/
   theory/                  9파일 이론 팩
@@ -201,6 +204,8 @@ core/
   composition/             페이지 구도 레시피 8종
   graphics/                CSS-only 그래픽 6종
   craft/                   마감 패스 체크리스트
+  protocol/                단계·상태·증거·블라인드·프로브 계약
+  config/ craft/ probe/    체크포인트 설정, 공예 기록, 안전 인터랙션 실행기
   design/                  디자인 계약 + 인터랙션 상태 룰
   ref/                     레퍼런스 측정, 블루프린트, 근친 검사, signal + slop 스코어링
   render/                  headless Playwright: 렌더, 필름스트립, 모션·hover·focus 프로브
@@ -214,12 +219,15 @@ evals/                     플러그인 eval 케이스 + 루브릭 그레이더
 scripts/bump.ts            명령 하나, 모든 매니페스트, 드리프트 제로
 .omd/                      프로젝트별 디자인 기록
   frame.md                 현재 이해하고 있는 문제
+  copy-deck.md             구조보다 먼저 확정한 실제 카피와 대표 데이터
   design.md                다면 디자인 계약
   decisions.md             이 제품에 왜 초록색이 없는가
   attribution.md           각 토큰이 어느 레퍼런스에서 왔는가
   motion-spec.md           무엇이, 언제, 누구의 권위로 움직이는가
   refs/*.json              측정된 레퍼런스 + 기록된 원칙
   history.jsonl            모든 체크 실행. oh-my-design:coach가 읽는 것
+  probes/*.json            지속되는 비파괴 인터랙션 계획
+  .cache/                  지워도 되는 렌더·스케치·IR·필름스트립·프로브 결과
 ```
 
 `npm run build`가 `src/`에서 `agents/`, `skills/`, `dist/`, 두 호스트 매니페스트를 재생성한다. 생성된 디렉토리는 절대 직접 수정하지 않는다.
@@ -231,11 +239,15 @@ omd design                                     repo 증거를 스캔해 .omd/des
 omd design --check                             design.md 섹션 커버리지 검증
 omd check  <page> [--json] [--viewport WxH]    린트: a11y, 토큰, 모션, ux, 슬롭. 발견 시 exit 1
 omd check  --site <dir>                         페이지 간 사다리·토큰 드리프트
-omd render <page> -o shot.png [--filmstrip]     headless 스크린샷, 또는 첫 몇 초의 프레임
+omd render <page> -o shot.png [--filmstrip|--squint] 스크린샷·모션 프레임·위계 분리
+omd probe  <page> [--plan path] [--json]         선언된 안전 경로. 로컬·루프백 전용
 omd ir     <page>                               렌더된 DOM에서 측정된 노드 트리로
 omd ref    add|list|show|principles|distance    레퍼런스 보드 (캡처 시점에 슬롭 스코어링)
 omd frame  set|show|reframe|generator           문제 기록. 아무도 서명하지 않고, 루프가 다시 쓴다
 omd decision "무엇" --why "왜"                  후임자가 고마워할 이유 파일
+omd taste record|profile [--all]                 기본은 명시적 사용자 취향만
+omd config set checkpoint none|concept|structure|both
+omd craft checkpoint|status                      실제 콘텐츠 기반 공예 반성 기록
 omd figma  pull|system|diff                     Figma 파일에서 스냅샷, 디자인 시스템, 픽셀 diff 루프로
 omd target set|diff|list                        빌드를 목업·스크린샷·URL 무엇으로든 수렴
 omd pack   dir|list                             이론·레시피 팩이 사는 곳 (호스트 무관)

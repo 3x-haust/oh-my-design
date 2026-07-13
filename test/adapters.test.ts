@@ -117,12 +117,12 @@ test('emitClaudePlugin leaves no bare omd- token in any emitted file', () => {
 const SKILL_FIXTURE = [
   '---',
   'name: omd-ultradesign',
-  'description: Spawns omd-scout for references and omd-humanize for copy.',
+  'description: Spawns omd-scout and omd-sketch, then omd-glance and omd-humanize.',
   '---',
   '',
   '# omd-ultradesign',
   '',
-  'Spawn `omd-scout` for a reference board, then `omd-humanize` on the final copy.',
+  'Spawn `omd-scout`, `omd-sketch`, and `omd-glance`, then `omd-humanize` on the final copy.',
   '',
 ].join('\n');
 
@@ -134,6 +134,8 @@ test('pluginizeSkill strips the omd- prefix from the frontmatter name', () => {
 test('pluginizeSkill rewrites cross-references and leaves no bare omd- token', () => {
   const { source } = pluginizeSkill(SKILL_FIXTURE);
   assert.ok(source.includes('oh-my-design:scout'), `expected oh-my-design:scout: ${source}`);
+  assert.ok(source.includes('oh-my-design:sketch'), `expected oh-my-design:sketch: ${source}`);
+  assert.ok(source.includes('oh-my-design:glance'), `expected oh-my-design:glance: ${source}`);
   assert.ok(source.includes('oh-my-design:humanize'), `expected oh-my-design:humanize: ${source}`);
   assert.ok(!/\bomd-/.test(source), `leftover omd- token: ${source}`);
 });
