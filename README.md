@@ -244,14 +244,6 @@ omd doctor                                      environment preflight
 omd coach                                       recurring weaknesses, honest trends
 ```
 
-## 🪨 Honest limitations
-
-- The loop's discipline is prompt-enforced; the *measurements* are code-enforced. A model can ignore advice — it cannot fake a contrast ratio.
-- Slop rules are heuristics. A brand really can be violet. That is why they warn, and why overruling one takes a written reason.
-- The motion probe sees CSS and Web Animations. rAF-driven libraries like GSAP are invisible to it, so a pixel-energy pass over the filmstrip backs it up, and the docs say where each stops.
-- Reference capture reads public pages in a real browser and stores **measurements and reasoning, never assets**. Respect the sites you study.
-- Both hosts share one codebase, and pack resolution is host-neutral (`omd pack dir`, not a Claude-only env var), covered by tests on both flavors. The `oh-my-design install` path is verified end to end; the Codex marketplace manifest matches the documented spec but has not been run against a live marketplace instance.
-
 ## 📄 License
 
 MIT
