@@ -18,3 +18,16 @@ test('plugin.json, marketplace.json (top-level and plugins[0]), and package.json
   assert.equal(marketplace.version, pkg.version, 'marketplace.json top-level version must match package.json');
   assert.equal(marketplace.plugins[0]!.version, pkg.version, 'marketplace.json plugins[0].version must match package.json');
 });
+
+test('codex .codex-plugin/plugin.json and .agents/plugins/marketplace.json versions match package.json', () => {
+  const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { version: string };
+  const codexPlugin = JSON.parse(readFileSync(join(root, '.codex-plugin', 'plugin.json'), 'utf8')) as { version: string };
+  const codexMarketplace = JSON.parse(readFileSync(join(root, '.agents', 'plugins', 'marketplace.json'), 'utf8')) as {
+    version: string;
+    plugins: Array<{ version: string }>;
+  };
+
+  assert.equal(codexPlugin.version, pkg.version, '.codex-plugin/plugin.json version must match package.json');
+  assert.equal(codexMarketplace.version, pkg.version, '.agents/plugins/marketplace.json top-level version must match package.json');
+  assert.equal(codexMarketplace.plugins[0]!.version, pkg.version, '.agents/plugins/marketplace.json plugins[0].version must match package.json');
+});

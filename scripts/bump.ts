@@ -35,6 +35,8 @@ const MANIFESTS = [
   'package.json',
   '.claude-plugin/plugin.json',
   '.claude-plugin/marketplace.json',
+  '.codex-plugin/plugin.json',
+  '.agents/plugins/marketplace.json',
 ] as const;
 
 function run(args: string[]): void {
