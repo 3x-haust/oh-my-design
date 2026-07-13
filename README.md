@@ -100,17 +100,23 @@ One line per check: Node, Playwright, the browser binary, `.omd/` write access, 
 `concept`, `structure`, or both can be opted into per project.
 
 ```
- FRAME -> CONCEPT -> RESEARCH -> COPY DECK -> ISOLATED SKETCHES -> BLIND PICK
+ FRAME -> CONCEPT -> RESEARCH -> WRITER -> COPY CHECK -> BLIND COPY EDIT -> COPY CHECK
+       -> ISOLATED SKETCHES -> BLIND PICK
        -> BUILD + 2 CRAFT CHECKPOINTS -> SQUINT GLANCE -> SAFE PROBE
        -> BLIND CRITIQUE -> REFRAME -> SHIP
 ```
 
-Six agents have narrow boundaries. `oh-my-design:framer` interrogates the brief, `oh-my-design:scout`
-builds evidence coverage, isolated `oh-my-design:sketch` contexts explore structure with the real
+Seven agents have narrow boundaries. `oh-my-design:framer` interrogates the brief, `oh-my-design:scout`
+builds evidence coverage, `oh-my-design:writer` owns the fact-linked copy deck, an independent eye
+edits it before structure, and isolated `oh-my-design:sketch` contexts explore structure with the real
 copy deck, `oh-my-design:hand` builds once and records what two intermediate renders changed,
 `oh-my-design:glance` sees only blurred grayscale hierarchy, and `oh-my-design:eye` selects or critiques in
 a fresh context without rationale. Interactive work follows an explicit local-only probe
 plan; it never auto-clicks discovered controls or touches production.
+
+Stack routing is deterministic: an explicit user request wins, otherwise the existing repository
+stack and surfaces are preserved, and only a truly blank greenfield defaults to React + Vite +
+TypeScript. Plain HTML greenfield requires an explicit request.
 
 Along the way, four things separate the output from a generic build:
 
@@ -196,7 +202,7 @@ For anything past a single page, `omd design` writes `.omd/design.md` — a pers
 
 ```
 src/
-  agents/                  source of truth: framer, scout, sketch, hand, glance, eye
+  agents/                  source of truth: framer, scout, writer, sketch, hand, glance, eye
   skills/                  source of truth: ultradesign, figma, scout, critique, humanize, coach
 core/
   theory/                  the 9-file theory pack
@@ -204,9 +210,10 @@ core/
   composition/             8 page-level composition recipes
   graphics/                6 CSS-only graphics treatments
   craft/                   the finish-pass checklist
-  protocol/                phase order, state, evidence, blindness, and probe contract
+  protocol/                phase order, copy schema, evidence, blindness, and probe contract
   config/ craft/ probe/    checkpoint config, craft records, safe interaction runner
   design/                  the design contract + interaction-state rules
+  copy/                    pure copy-deck structure and fact-reference validator
   ref/                     reference measurement, blueprints, kinship, signal + slop scoring
   render/                  headless Playwright: render, filmstrip, motion/hover/focus probes
   rules/                   the linter engine + builtin rules (slop, motion, ux, a11y, tokens)
@@ -237,6 +244,7 @@ scripts/bump.ts            one command, every manifest, zero drift
 ```
 omd design                                     scan repo evidence, create/refresh .omd/design.md
 omd design --check                             validate design.md section coverage
+omd copy   --check [--json]                    require a non-empty, traceable copy deck
 omd check  <page> [--json] [--viewport WxH]    lint: a11y, tokens, motion, ux, slop. exit 1 on findings
 omd check  --site <dir>                         cross-page ladder and token drift
 omd render <page> -o shot.png [--filmstrip|--squint] screenshot, motion frames, or hierarchy isolation

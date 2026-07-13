@@ -87,6 +87,7 @@ test('prompt contract keeps content-first isolation and checkpoint defaults exec
   const glance = readFileSync(join(root, 'src/agents/glance.agent.yaml'), 'utf8');
   const scout = readFileSync(join(root, 'src/agents/scout.agent.yaml'), 'utf8');
   const framer = readFileSync(join(root, 'src/agents/framer.agent.yaml'), 'utf8');
+  const writer = readFileSync(join(root, 'src/agents/writer.agent.yaml'), 'utf8');
   for (const phrase of ['copy deck', 'sketch', 'squint glance', 'checkpoint: none']) assert.match(protocol, new RegExp(phrase));
   assert.ok(skill.indexOf('.omd/copy-deck.md') < skill.indexOf('omd-sketch'));
   assert.ok(skill.indexOf('--squint') < skill.indexOf('Now render sharp'));
@@ -96,13 +97,15 @@ test('prompt contract keeps content-first isolation and checkpoint defaults exec
   assert.match(glance, /squint render paths and nothing else/);
   assert.match(scout, /domain, direct competitors, user\/community language,[\s\S]*every required component/);
   assert.match(framer, /current brief > explicit current user feedback > prior explicit project taste > agent/);
-  for (const name of ['framer', 'scout', 'sketch', 'hand', 'eye']) {
+  for (const name of ['framer', 'scout', 'sketch', 'hand', 'eye', 'writer']) {
     assert.match(readFileSync(join(root, `src/agents/${name}.agent.yaml`), 'utf8'), /Bash\(omd pack:\*\)/, `${name} needs pack permission`);
   }
   assert.match(readFileSync(join(root, 'core/install/install.ts'), 'utf8'), /'Bash\(omd pack:\*\)'/);
+  assert.match(readFileSync(join(root, 'core/install/install.ts'), 'utf8'), /'Bash\(omd copy:\*\)'/);
+  assert.match(writer, /write or revise only `.omd\/copy-deck\.md`/i);
   const contract = protocol.replace(/\s+/g, ' ');
   for (const gate of [
-    /copy deck[\s\S]*theory\/voice\.md[\s\S]*humanize/i,
+    /omd-writer[\s\S]*omd copy --check[\s\S]*copy-editor mode[\s\S]*writer[\s\S]*omd copy --check/i,
     /before any animation code[\s\S]*\.omd\/motion-spec\.md[\s\S]*only its\s+declared scenes/i,
     /\.omd\/attribution\.md[\s\S]*tokens, motion, composition, and graphics/i,
     /craft\/finish-pass\.md[\s\S]*skipped item/i,

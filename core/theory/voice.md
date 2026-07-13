@@ -585,3 +585,34 @@ conclusion is about domain specialisation in attention heads, not about copy reg
   aclanthology.org/2025.sicon-1.10 — EXCLUDED: backchannels, overlap, and turn-taking in
   real-time text chatbots; findings are dialogue-system-specific and do not apply to static
   page copy
+
+---
+
+## Official evidence map and layer ownership
+
+- **Toss writing principles** — https://toss.tech/article/21022 — writer: one key message,
+  remove repeated/empty lines, make the next screen predictable, use one spoken breath,
+  preserve user choice. Eye: read aloud and test CTA prediction.
+- **Toss marketing writing** — https://toss.tech/article/Marketing_Writing — writer: connect
+  the audience's present concern to a concrete next action; do not turn a click-rate tactic
+  into an unsupported product claim.
+- **Apple Writing HIG** — https://developer.apple.com/design/human-interface-guidelines/writing
+  — writer: clear, concise, useful labels in the platform's voice. Hand: place text where it
+  explains the affected control or state.
+- **Microsoft UI text guide** — https://learn.microsoft.com/en-us/windows-server/manage/windows-admin-center/extend/guides/ui-text-style-guide
+  — writer: consistent terminology, direct action labels, sentence-style capitalization.
+- **W3C Writing for Web Accessibility** — https://www.w3.org/WAI/tips/writing/ — writer:
+  descriptive headings/link text and plain language. Hand: expose the same meaning to
+  assistive technology.
+
+Ownership is deliberate. `omd-writer` establishes facts, audience language, voice, and
+surface copy in `.omd/copy-deck.md`. Copy-editor eye judges fact fidelity, scan, repetition,
+CTA prediction, register, emotion, and recovery in context. `omd copy --check` verifies only
+explicit structure, state applicability, exact unresolved sentinels, and fact-ID links.
+
+Screenshot phrases and common connectives are prompt/eval observations, never global lint:
+legitimate brands and sentences use them. AI detectors, perplexity thresholds, and sentence-
+length distributions are forbidden as shipping gates: domain, language, accessibility copy,
+and short UI labels create false positives, and a statistical signal cannot establish
+authorship or copy quality. Use those ideas only to prompt a contextual human/eye review;
+never reject a deck because a detector score or distribution looks machine-like.

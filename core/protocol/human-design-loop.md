@@ -3,9 +3,21 @@
 This is the durable contract for an OMD run. Host prompts may explain it, but may not
 reorder it:
 
-`preflight -> frame -> concept -> research -> copy deck -> structural sketches -> blind
+`preflight -> frame -> concept -> research -> writer copy deck -> copy check -> blind copy
+edit -> writer revision -> copy check -> structural sketches -> blind
 selection -> production build -> semantic checkpoint -> visual checkpoint -> squint glance
 -> sharp critique/probe -> reframe -> ship`.
+
+## Stack routing
+
+Apply one precedence everywhere: explicit user request > existing repository stack/toolchain
+(including existing vanilla HTML) > React + Vite + TypeScript only for a truly blank
+greenfield. Plain HTML greenfield requires an explicit user request. There is no autonomous
+single-static-surface exception. Before the hand's first write it reads the brief,
+package.json when present, and one representative existing surface/component when present,
+then records the stack choice and evidence. Preserve and investigate an unrecognised package
+or toolchain; never cover it with a React scaffold. Greenfield scaffold dependencies are
+allowed. Existing projects receive no unnecessary dependencies.
 
 ## State boundary
 
@@ -34,6 +46,11 @@ choice data. Coach remains taste-blind.
 Each sketch receives only a sanitized frame/concept, the copy deck, an anonymous candidate
 id, and one structural axis. It cannot read or reuse another candidate and writes only to
 `.omd/.cache/sketches/<id>/`.
+
+The copy editor is a fresh eye context and sees only the sanitized brief, copy deck/fact
+ledger, and cited voice/audience evidence. It sees no renders, layout, code, build rationale,
+frame, decisions, or authorship, and it reports without editing. The writer receives the
+report and revises the deck before another deterministic check.
 
 The selector gets a fresh context and sees anonymous renders plus the sanitized frame and
 copy deck. It never sees candidate prose, author identity, reference attribution, or the
@@ -64,12 +81,30 @@ come only from an expected tab order or a declared post-action expectation.
 Squint rendering is a hierarchy-isolation aid: conservative blur plus grayscale. It is not
 a colour-vision simulation and does not reproduce a literal timed first impression.
 
+Interaction scope in `.omd/copy-deck.md` owns applicability. `stateful` work requires
+explicit `.omd/probes/primary.json` and `.omd/probes/recovery.json`, and both run through
+`omd probe`. `navigation-only` requires only the primary probe; recovery copy/probe are N/A
+with reasons. `static` records both probes N/A with reasons. Never add fake error, empty, or
+recovery UI to make an inapplicable gate look complete. An eye makes interaction claims only
+from supplied probe evidence.
+
+## UX acceptance contract
+
+Every applicable surface names and verifies the primary task, most frequent action,
+costliest-error recovery, an exit from every reachable state, immediate visible feedback,
+and mobile reach. The hand reads the exact `theory/ux.md`, copy deck, and design contract;
+uses native semantics; preserves form values on error; blocks duplicate submits; and honors
+reduced motion. Loading, empty, error, success, disabled, and offline exist only when the
+surface can reach them.
+
 ## Production quality gates
 
 These gates are part of every applicable production run, not optional polish:
 
-- Before structure, review the copy deck against `theory/voice.md` and the humanize
-  checklist; revise it until the real copy is ready to shape layout.
+- The coordinator never authors production copy. After scout, a fresh `omd-writer` writes
+  the deck, `omd copy --check` must pass, a fresh eye performs copy-editor mode, the writer
+  revises deck-first, and `omd copy --check` passes again before any sketch. A failed check
+  stops divergence and is fixed autonomously without waiting for the user.
 - Before any animation code, write `.omd/motion-spec.md`. Production implements only its
   declared scenes; every timing/easing cites measured reference or theory evidence.
 - Write `.omd/attribution.md` for the sources of shipped tokens, motion, composition, and

@@ -29,6 +29,13 @@ Pin the absolute working directory and run `omd doctor`. Stop on a failed prereq
 If the user supplied a Figma frame or exact visual target, route to `oh-my-design:figma`/target
 convergence for structure; this loop still uses content, craft, glance, probe, and critique.
 
+Apply stack precedence exactly: explicit user request > existing repository stack/toolchain
+(including existing vanilla HTML) > React + Vite + TypeScript only for a truly blank
+greenfield. Plain HTML greenfield requires an explicit user request; there is no autonomous
+single-static-surface exception. Preserve and investigate unrecognised package/toolchain
+evidence instead of replacing it with React. Greenfield scaffold dependencies are allowed;
+existing projects receive no unnecessary dependencies.
+
 Run `omd config show`. `checkpoint: none` is the default and means no approval waits.
 Only `concept`, `structure`, or `both` opt into a human pause at that named point.
 
@@ -54,16 +61,22 @@ directory. Require coverage across domain, competitors, user/community evidence,
 typography, voice, relevant motion, and every required component. Accept no count theater,
 pixel copying, low-trust laundering, slop contamination, or kinship.
 
-Before any structural sketch or production layout, write `.omd/copy-deck.md`. It must contain
-real candidate headline(s), every section heading, navigation and CTA labels, representative
-body copy, form labels/help, status/error/empty/success strings, and representative data at
-realistic density. State the chosen voice/register and evidence. No lorem ipsum. This file
-is the hand's copy source; later deviations require a recorded reason.
-Review it against `theory/voice.md` and the humanize checklist now; structure starts only
-after the real copy passes that review.
+The coordinator does not author copy. Spawn `oh-my-design:writer` with the brief, scout's cited
+voice/audience evidence, working directory, `protocol/copy-deck.md`, and `theory/voice.md`.
+It writes only `.omd/copy-deck.md`. Run `omd copy --check`; on failure stop divergence and
+send the deterministic findings back to the writer for autonomous repair without waiting
+for the user.
+
+After the first clean check, spawn a fresh `oh-my-design:eye` in copy-editor mode with only the
+sanitized brief, copy deck/fact ledger, and cited voice/audience evidence. Do not pass renders,
+layout, code, build rationale, frame, decisions, or authorship. Send its findings to the
+writer for deck-first revision, rerun `omd copy --check`, and start sketches only after it
+passes again. Every shipped claim traces to a verified fact ID; fixture/open facts never
+ship. Status/error/empty/recovery copy exists only where applicable.
 
 For multi-surface products, run `omd design` and complete the durable design contract. A
-single one-off surface may skip it with a recorded reason.
+one-surface run may skip only this design-contract artifact with a recorded reason; that
+skip never changes stack routing.
 
 ## 3. Independent structural divergence and blind selection
 
@@ -98,6 +111,11 @@ The semantic checkpoint occurs after desktop/mobile real-content layout. The vis
 checkpoint occurs after type/colour/spacing/components and before motion. Both require a
 change; a gray-box or "no change" ritual does not count.
 
+The build acceptance contract verifies the primary task, most frequent action,
+costliest-error recovery, an exit from every reachable state, immediate visible feedback,
+and mobile reach. The hand uses native semantics, preserves form values on error, blocks
+duplicate submits, implements only applicable states, and honors reduced motion.
+
 ## 5. Squint before sharp, then safe interaction
 
 Render desktop and mobile squint images before any sharp render is exposed to a critic:
@@ -110,10 +128,13 @@ omd render <page> --viewport 390x844 --squint -o .omd/.cache/squint-mobile.png
 Spawn `oh-my-design:glance` with only those images. Preserve its four-line report. Squint isolates
 hierarchy; never call it a colour-blind simulation or literal 50ms test.
 
-If the surface is interactive, author an explicit non-destructive `.omd/probes/*.json`
-plan for the primary path and run `omd probe`. Probe only local files/localhost, declared
-click/fill/press actions, declared expectations, and optional expected tab order. Never
-auto-discover and click controls; never probe remote production or authenticated flows.
+Use the copy deck's Interaction scope. `stateful` requires explicit non-destructive
+`.omd/probes/primary.json` and `.omd/probes/recovery.json`, with both run through `omd probe`.
+`navigation-only` requires and runs only the primary probe; recovery is N/A with a reason.
+`static` records both probes N/A with reasons. Never invent recovery/error/empty UI for an
+inapplicable surface. Probe only local files/localhost, declared click/fill/press actions,
+declared expectations, and optional expected tab order. Never auto-discover and click
+controls; never probe remote production or authenticated flows.
 
 ## 6. Blind critique, repair, and reframe
 
@@ -130,11 +151,14 @@ a permanent specialist or multi-lens panel.
 Send prioritized findings back to the hand for the smallest repair, then rerun affected
 checks/renders/probe. If rendered evidence changes the problem, run `omd frame reframe --to
 ... --because ...`; otherwise record why the frame survived.
+If a finding requests copy repair, update the deck through oh-my-design:writer first, re-run
+`omd copy --check`, and only then update source. The hand never silently rewrites shipped copy.
 
 ## 7. Ship
 
-Verify project tests/build plus `omd check`, responsive sharp/squint renders, applicable
-filmstrip, humanize review, probe, `omd craft status`, `omd design --check` when applicable,
+Verify project tests/build plus `omd check`, two clean copy checks around an independent
+writer/editor pass, responsive sharp/squint renders, applicable filmstrip, humanize review,
+probe, `omd craft status`, `omd design --check` when applicable,
 `omd ref distance`, bounded target convergence when a manifest exists, and `omd check --site`
 for multi-page output. Everything is clean or has an evidence-backed deliberate overrule.
 Deliver the working artifact and briefly state the frame,

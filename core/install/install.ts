@@ -48,7 +48,7 @@ const OMD_ALLOW = [
   'Bash(omd check:*)', 'Bash(omd ir:*)', 'Bash(omd render:*)',
   'Bash(omd frame:*)', 'Bash(omd ref:*)', 'Bash(omd choose:*)',
   'Bash(omd decision:*)', 'Bash(omd taste:*)', 'Bash(omd coach:*)',
-  'Bash(omd probe:*)', 'Bash(omd config:*)', 'Bash(omd craft:*)',
+  'Bash(omd probe:*)', 'Bash(omd config:*)', 'Bash(omd craft:*)', 'Bash(omd copy:*)',
   'Bash(omd pack:*)',
 ];
 
@@ -57,7 +57,7 @@ const OMD_ALLOW = [
  * plugin folder behind a marketplace we do not publish. A plugin registered against a
  * marketplace that does not exist never loads, and `/ultradesign` never appears.
  */
-function installClaude(d: Detected, _version: string, changes: string[]): void {
+function installClaude(d: Detected, changes: string[]): void {
   const skillsSrc = join(pkgRoot, 'dist', 'claude', 'skills');
   if (existsSync(skillsSrc)) {
     const dest = join(d.home, 'skills');
@@ -208,7 +208,7 @@ export function install(hosts: Detected[]): string[] {
   const version = pkgVersion();
   const changes: string[] = [];
   for (const d of hosts) {
-    if (d.host === 'claude') installClaude(d, version, changes);
+    if (d.host === 'claude') installClaude(d, changes);
     else installCodex(d, version, changes);
   }
   return changes;
@@ -248,7 +248,7 @@ function omdVersionRuns(): DoctorCheck {
   }
 }
 
-function doctorClaude(d: Detected, version: string): DoctorCheck[] {
+function doctorClaude(d: Detected): DoctorCheck[] {
   const checks: DoctorCheck[] = [];
   const settingsPath = join(d.home, 'settings.json');
   let settings: Settings | undefined;
@@ -259,14 +259,29 @@ function doctorClaude(d: Detected, version: string): DoctorCheck[] {
     checks.push(check('settings.json parses', false, err instanceof Error ? err.message : String(err)));
   }
 
-  const hookOk = Boolean(
-    settings?.hooks?.PreToolUse?.some((entry) => entry.hooks.some((h) => h.command.includes('omd.ts'))),
-  );
-  checks.push(check('PreToolUse hook registered', hookOk));
+  const legacyHookPresent = settings?.hooks?.PreToolUse?.some(
+    (entry) => entry.hooks.some((hook) => hook.command.includes('omd.ts')),
+  ) ?? false;
+  checks.push(check('legacy PreToolUse hook absent', settings !== undefined && !legacyHookPresent));
 
-  const pluginDir = join(d.home, 'plugins', 'omd', 'oh-my-design', version);
-  checks.push(check('agents installed', readdirSafe(join(pluginDir, 'agents')).length > 0));
-  checks.push(check('skills installed', readdirSafe(join(pluginDir, 'skills')).length > 0));
+  const shippedAgents = readdirSafe(join(pkgRoot, 'dist', 'claude', 'agents'))
+    .filter((file) => file.startsWith('omd-') && file.endsWith('.md'))
+    .sort();
+  const installedAgents = readdirSafe(join(d.home, 'agents'))
+    .filter((file) => file.startsWith('omd-') && file.endsWith('.md'))
+    .sort();
+  const agentsMatch = shippedAgents.length > 0
+    && shippedAgents.includes('omd-writer.md')
+    && JSON.stringify(installedAgents) === JSON.stringify(shippedAgents);
+  checks.push(check('direct agents match shipped set', agentsMatch, `expected ${shippedAgents.length}, found ${installedAgents.length}`));
+
+  const shippedSkills = readdirSafe(join(pkgRoot, 'dist', 'claude', 'skills')).sort();
+  const skillsPresent = shippedSkills.length > 0
+    && shippedSkills.every((name) => existsSync(join(d.home, 'skills', name, 'SKILL.md')));
+  checks.push(check('direct skills installed', skillsPresent, `expected ${shippedSkills.length} shipped skills`));
+
+  const copyPermission = settings?.permissions?.allow?.includes('Bash(omd copy:*)') ?? false;
+  checks.push(check('copy check permission present', copyPermission));
 
   return checks;
 }
@@ -299,10 +314,9 @@ function doctorCodex(d: Detected): DoctorCheck[] {
 }
 
 export function doctor(hosts: Detected[]): DoctorResult[] {
-  const version = pkgVersion();
   const versionCheck = omdVersionRuns();
   return hosts.map((d) => {
-    const checks = d.host === 'claude' ? doctorClaude(d, version) : doctorCodex(d);
+    const checks = d.host === 'claude' ? doctorClaude(d) : doctorCodex(d);
     checks.push(versionCheck);
     return { host: d.host, ok: checks.every((c) => c.ok), checks };
   });

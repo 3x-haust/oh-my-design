@@ -38,7 +38,7 @@ the baseline test count, and the definition of done (`npm test` clean, `tsc` cle
 | **Low-cost lane** | **A lighter session model** | Cheaper lane for lower-risk mechanical work when quality permits. |
 
 **The pipeline's own agents inherit the session model.** `omd-framer`, `omd-scout`,
-`omd-eye`, and `omd-hand` do **not** pin a model — they run on whatever model you selected
+`omd-writer`, `omd-eye`, and `omd-hand` do **not** pin a model — they run on whatever model you selected
 for the session. Planning and review agents benefit most from a stronger model; `omd-hand`
 (which builds the committed structure) is the mechanical executor. The recommendation:
 run a planning-heavy session on Opus or equivalent so the framer and eye have maximum

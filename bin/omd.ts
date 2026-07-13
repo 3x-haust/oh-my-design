@@ -11,6 +11,7 @@ import { findLeakedRationale } from '../core/rules/leakage.ts';
 import { checkAttribution } from '../core/rules/attribution.ts';
 import { checkMotionSpec } from '../core/rules/motion-spec.ts';
 import { discoverEvidence, generateDesignMd, validateDesignMd } from '../core/design/index.ts';
+import { validateCopyDeck } from '../core/copy/index.ts';
 import { checkInteractionStates } from '../core/design/interaction-states.ts';
 import { checkFrameUx } from '../core/frame/check-ux.ts';
 import type { Category, EnergyCurve, Layer, RawIr, Violation } from '../core/types.ts';
@@ -1027,6 +1028,7 @@ async function cmdDesign(opts: Opts): Promise<never> {
     console.log(`\nEvidence scan:`);
     console.log(`  framework:   ${evidence.framework ?? 'unknown'}`);
     console.log(`  surfaces:    ${evidence.surfaceCount}`);
+    console.log(`  app/tooling: ${evidence.appEvidencePaths.length > 0 ? evidence.appEvidencePaths.join(', ') : 'none found'}`);
     console.log(`  tokens:      ${evidence.hasThemeTokens ? evidence.tokenFilePaths.join(', ') : 'none found'}`);
     console.log(`  references:  ${evidence.captureCount}`);
     console.log(`  frame.md:    ${evidence.frameMd ? 'present' : 'absent'}`);
@@ -1053,6 +1055,7 @@ async function cmdDesign(opts: Opts): Promise<never> {
   console.log(`\nEvidence used:`);
   console.log(`  framework:   ${evidence.framework ?? 'unknown'}`);
   console.log(`  surfaces:    ${evidence.surfaceCount}`);
+  console.log(`  app/tooling: ${evidence.appEvidencePaths.length > 0 ? evidence.appEvidencePaths.join(', ') : 'none found'}`);
   console.log(`  tokens:      ${evidence.hasThemeTokens ? evidence.tokenFilePaths.join(', ') : 'none found'}`);
   console.log(`  references:  ${evidence.captureCount}`);
   console.log(`  frame.md:    ${evidence.frameMd ? 'present' : 'absent'}`);
@@ -1061,6 +1064,21 @@ async function cmdDesign(opts: Opts): Promise<never> {
   console.log(`  2. Run \`omd design --check\` to validate section coverage`);
   console.log(`  3. Cite design.md sections in every hand decision`);
   process.exit(0);
+}
+
+/** `omd copy --check [--json]` — required structural gate for `.omd/copy-deck.md`. */
+function cmdCopy(opts: Opts): never {
+  if (!opts.check) throw new Error('usage: omd copy --check [--json]');
+  const path = join(process.cwd(), '.omd', 'copy-deck.md');
+  const violations = validateCopyDeck(existsSync(path) ? readFileSync(path, 'utf8') : '');
+  if (opts.json) process.stdout.write(JSON.stringify(violations));
+  else {
+    for (const violation of violations) {
+      console.log(`[error] ${violation.id} ${violation.path}: ${violation.message}`);
+    }
+    if (violations.length === 0) console.log('ok — copy-deck.md passes all structural checks');
+  }
+  process.exit(violations.length > 0 ? 1 : 0);
 }
 
 async function cmdDoctor(): Promise<never> {
@@ -1338,6 +1356,7 @@ function usage(): never {
     + '\n'
     + '  design                                       discover evidence and create/refresh .omd/design.md\n'
     + '  design --check                              validate design.md section coverage\n'
+    + '  copy --check [--json]                       validate required copy deck structure and fact refs\n'
     + '\n'
     + '  pack dir                                    print the knowledge-pack root path\n'
     + '  pack list                                   list all pack .md files\n'
@@ -1421,6 +1440,7 @@ async function main(): Promise<never> {
   }
 
   if (cmd === 'design') return cmdDesign(parseArgs(args.slice(1)));
+  if (cmd === 'copy') return cmdCopy(parseArgs(args.slice(1)));
   if (cmd === 'pack') return cmdPack(sub, ...args.slice(2));
   if (cmd === 'doctor') return cmdDoctor();
 

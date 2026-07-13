@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parse as parseToml } from 'smol-toml';
@@ -8,9 +8,10 @@ import { patchConfigToml, unpatchConfigToml, trustedHashKey } from '../core/inst
 import { patchSettings, unpatchSettings, patchAllow, unpatchHooks } from '../core/install/patch-claude.ts';
 import type { Settings } from '../core/install/patch-claude.ts';
 import { detectHosts } from '../core/install/detect.ts';
+import { doctor, install } from '../core/install/install.ts';
 import { must, asRecord } from './helpers.ts';
 
-const AGENTS = ['omd-framer', 'omd-eye'];
+const AGENTS = ['omd-framer', 'omd-eye', 'omd-writer'];
 
 const EXISTING_TOML = `model = "gpt-5.5"
 
@@ -33,6 +34,7 @@ interface CodexConfig {
     explorer?: { config_file?: string };
     'omd-framer'?: { config_file?: string };
     'omd-eye'?: { config_file?: string };
+    'omd-writer'?: { config_file?: string };
   };
 }
 
@@ -42,6 +44,7 @@ test('patchConfigToml registers agents and enables required features', () => {
   const agents = must(cfg.agents, 'agents');
   assert.equal(must(agents['omd-framer'], 'omd-framer').config_file, './agents/omd-framer.toml');
   assert.equal(must(agents['omd-eye'], 'omd-eye').config_file, './agents/omd-eye.toml');
+  assert.equal(must(agents['omd-writer'], 'omd-writer').config_file, './agents/omd-writer.toml');
   const features = must(cfg.features, 'features');
   for (const f of ['hooks', 'plugins', 'plugin_hooks', 'multi_agent']) {
     assert.equal(features[f], true, `feature ${f} must be enabled`);
@@ -151,6 +154,55 @@ test('unpatchHooks is a no-op on settings that never had the gate', () => {
   const clean: Settings = { model: 'opus', hooks: { Stop: [FOREIGN] } };
   assert.deepEqual(unpatchHooks(clean), clean);
   assert.deepEqual(unpatchHooks({}), {});
+});
+
+test('Claude direct install and doctor agree on writer, skills, permissions, and hook removal', () => {
+  const home = mkdtempSync(join(tmpdir(), 'omd-claude-install-'));
+  const detected = { host: 'claude' as const, home };
+  try {
+    writeFileSync(join(home, 'settings.json'), JSON.stringify({ hooks: { PreToolUse: [FOREIGN, GATE] } }));
+    install([detected]);
+
+    assert.ok(existsSync(join(home, 'agents', 'omd-writer.md')));
+    assert.ok(existsSync(join(home, 'skills', 'omd-ultradesign', 'SKILL.md')));
+    const settings = JSON.parse(readFileSync(join(home, 'settings.json'), 'utf8')) as Settings;
+    assert.ok(settings.permissions?.allow?.includes('Bash(omd copy:*)'));
+    assert.equal(
+      settings.hooks?.PreToolUse?.some((entry) => entry.hooks.some((hook) => hook.command.includes('omd.ts'))) ?? false,
+      false,
+    );
+    assert.deepEqual(settings.hooks?.PreToolUse, [FOREIGN], 'foreign hooks survive legacy OMD hook removal');
+
+    const result = doctor([detected])[0]!;
+    assert.equal(result.ok, true, result.checks.filter((check) => !check.ok).map((check) => check.name).join(', '));
+    assert.ok(result.checks.every((check) => check.ok));
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('Claude doctor rejects stale plugin-only layout and a legacy OMD hook', () => {
+  const home = mkdtempSync(join(tmpdir(), 'omd-claude-stale-'));
+  const detected = { host: 'claude' as const, home };
+  try {
+    const legacyPlugin = join(home, 'plugins', 'omd', 'oh-my-design', '0.14.0');
+    mkdirSync(join(legacyPlugin, 'agents'), { recursive: true });
+    mkdirSync(join(legacyPlugin, 'skills', 'omd-ultradesign'), { recursive: true });
+    writeFileSync(join(legacyPlugin, 'agents', 'omd-writer.md'), 'legacy');
+    writeFileSync(join(legacyPlugin, 'skills', 'omd-ultradesign', 'SKILL.md'), 'legacy');
+    writeFileSync(join(home, 'settings.json'), JSON.stringify({
+      permissions: { allow: ['Bash(omd copy:*)'] },
+      hooks: { PreToolUse: [GATE] },
+    }));
+
+    const result = doctor([detected])[0]!;
+    assert.equal(result.ok, false);
+    assert.equal(result.checks.find((check) => check.name === 'legacy PreToolUse hook absent')?.ok, false);
+    assert.equal(result.checks.find((check) => check.name === 'direct agents match shipped set')?.ok, false);
+    assert.equal(result.checks.find((check) => check.name === 'direct skills installed')?.ok, false);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
 });
 
 // ── detectHosts ──

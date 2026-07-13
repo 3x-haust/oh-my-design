@@ -49,13 +49,13 @@ and the definition of done (`npm test` clean, `tsc` clean, `npm run build` succe
 
 ### The pipeline's own agents
 
-**`omd-framer`, `omd-scout`, `omd-eye`, and `omd-hand` do not pin a model** — they inherit
+**`omd-framer`, `omd-scout`, `omd-writer`, `omd-eye`, and `omd-hand` do not pin a model** — they inherit
 whatever model you selected for the session. The pipeline does not force a specific model on
 any agent. The role split above (Sol for orchestration/review, Terra xhigh for precise edits,
 Luna high for the cheap lane) is a recommendation for how to assign work within a session;
 the choice is yours. Planning-heavy sessions benefit most from a capable model like Sol;
 `omd-hand` (the mechanical build executor) is where a cheaper model is a reasonable
-trade-off. Both the `@high` (framer/scout/eye) and `@medium` (hand) tiers that appear in
+trade-off. Both the `@high` (framer/scout/writer/eye) and `@medium` (hand) tiers that appear in
 the agent source files now serve only to communicate *intent* — no concrete model name is
 emitted by the adapters.
 

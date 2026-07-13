@@ -102,6 +102,19 @@ test('emitClaudePlugin rewrites subagent/skill cross-references to the oh-my-des
   assert.ok(md.includes('oh-my-design:humanize'), `expected oh-my-design:humanize in body: ${md}`);
 });
 
+test('writer is emitted dynamically for both direct hosts and plugin namespace', () => {
+  const writer = {
+    name: 'omd-writer', description: 'Writes copy before omd-eye reviews it.',
+    reasoning: 'high', instructions: 'Return findings to omd-writer after omd-eye.\n',
+  };
+  assert.ok(emitCodex({ agents: [writer] }).files['agents/omd-writer.toml']);
+  assert.ok(emitClaude({ agents: [writer] }).files['agents/omd-writer.md']);
+  const plugin = textFile(emitClaudePlugin({ agents: [writer] }), 'agents/writer.md');
+  assert.match(plugin, /^name: writer$/m);
+  assert.match(plugin, /oh-my-design:writer[\s\S]*oh-my-design:eye/);
+  assert.doesNotMatch(plugin, /\bomd-writer\b/);
+});
+
 test('emitClaudePlugin emits only agents/*.md and .mcp.json — no .claude-plugin/plugin.json', () => {
   const emitted = emitClaudePlugin({ agents: [PLUGIN_AGENT] });
   assert.equal(emitted.files['.claude-plugin/plugin.json'], undefined);
