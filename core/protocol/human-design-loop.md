@@ -49,6 +49,28 @@ When evidence conflicts, apply this order and record the conflict:
 Never infer user taste from an agent selection, silence, an unchanged screen, or legacy
 choice data. Coach remains taste-blind.
 
+## Surface grammar
+
+The frame records a surface classification (`uxSurface`: `marketing` | `product` |
+`editorial` | `mixed`, per `theory/ux.md` §Surface types) alongside the primary task,
+frequent action, and costliest error; `FRAME-UX-INCOMPLETE` flags a frame that skipped any
+of the four. The classification selects the composition grammar downstream: a `product`
+work surface composes as a task loop over screen regions and reachable states with the
+work object as the dominant first-viewport anchor at representative density — never as a
+marketing message ladder with a hero band. A `product` or `mixed` surface always completes
+the `omd design` contract (information architecture and interaction states) before
+production. Selector and critique eyes read their frozen dimensions through the same
+grammar: on a product surface a "section" is a screen region or reachable state and the
+"CTA" is the frequent action.
+
+When user-origin references exist, the scout records per-reference structural traits as
+attributed principles, the composer writes the `Reference synthesis` plan (trait taken,
+landing, adaptation, conflict resolution, or an explicit decline per reference), and
+`omd composition --check` fails when a user reference is absent from it. The hand treats
+each synthesis entry as production acceptance criteria, and the sharp eye verifies each
+planned trait is visibly present where the plan lands it. The clean-room transfer boundary
+still governs every trait.
+
 ## Blindness and isolation
 
 The composer owns only `.omd/composition.md`. After typography approval it receives the

@@ -27,16 +27,17 @@ test('FRAME-UX-INCOMPLETE does not fire when frame.md does not exist', () => {
   assert.equal(violations.length, 0, 'no frame.md — no violation');
 });
 
-test('FRAME-UX-INCOMPLETE fires when all three UX fields are missing', () => {
+test('FRAME-UX-INCOMPLETE fires when all four UX fields are missing', () => {
   const cwd = project();
   writeRawFrame(cwd, { why: 'test evidence here', writtenAt: new Date().toISOString() });
   const violations = checkFrameUx(cwd);
   assert.ok(violations.some((v) => v.id === 'FRAME-UX-INCOMPLETE'), 'expected FRAME-UX-INCOMPLETE');
   const v = violations.find((x) => x.id === 'FRAME-UX-INCOMPLETE')!;
-  // All three fields should be listed in the value
+  // All four fields should be listed in the value
   assert.ok(String(v.value).includes('uxTask'), 'value should mention uxTask');
   assert.ok(String(v.value).includes('uxFrequentAction'), 'value should mention uxFrequentAction');
   assert.ok(String(v.value).includes('uxCostliestError'), 'value should mention uxCostliestError');
+  assert.ok(String(v.value).includes('uxSurface'), 'value should mention uxSurface');
 });
 
 test('FRAME-UX-INCOMPLETE fires for each individual missing field', () => {
@@ -50,12 +51,27 @@ test('FRAME-UX-INCOMPLETE fires for each individual missing field', () => {
   const violations = checkFrameUx(cwd);
   assert.ok(violations.some((v) => v.id === 'FRAME-UX-INCOMPLETE'));
   const v = violations.find((x) => x.id === 'FRAME-UX-INCOMPLETE')!;
-  assert.ok(!String(v.value).includes('uxTask'), 'uxTask is present — should not be in the missing list');
+  assert.ok(!String(v.value).includes('uxTask ('), 'uxTask is present — should not be in the missing list');
   assert.ok(String(v.value).includes('uxFrequentAction'), 'uxFrequentAction should be listed as missing');
   assert.ok(String(v.value).includes('uxCostliestError'), 'uxCostliestError should be listed as missing');
+  assert.ok(String(v.value).includes('uxSurface'), 'uxSurface should be listed as missing');
 });
 
-test('FRAME-UX-INCOMPLETE does not fire when all three UX fields are present', () => {
+test('FRAME-UX-INCOMPLETE does not fire when all four UX fields are present', () => {
+  const cwd = project();
+  writeRawFrame(cwd, {
+    why: 'test evidence here',
+    writtenAt: new Date().toISOString(),
+    uxTask: 'User wants to book a flight',
+    uxFrequentAction: 'Search for available routes',
+    uxCostliestError: 'Double booking — recovery path: 24h free cancellation',
+    uxSurface: 'product',
+  });
+  const violations = checkFrameUx(cwd);
+  assert.equal(violations.length, 0, 'all four fields present — no violation');
+});
+
+test('FRAME-UX-INCOMPLETE fires when only uxSurface is missing', () => {
   const cwd = project();
   writeRawFrame(cwd, {
     why: 'test evidence here',
@@ -65,7 +81,10 @@ test('FRAME-UX-INCOMPLETE does not fire when all three UX fields are present', (
     uxCostliestError: 'Double booking — recovery path: 24h free cancellation',
   });
   const violations = checkFrameUx(cwd);
-  assert.equal(violations.length, 0, 'all three fields present — no violation');
+  const v = violations.find((x) => x.id === 'FRAME-UX-INCOMPLETE');
+  assert.ok(v, 'missing uxSurface alone should fire');
+  assert.ok(String(v!.value).includes('uxSurface'), 'uxSurface should be the missing field');
+  assert.ok(!String(v!.value).includes('uxTask ('), 'uxTask present — not in missing list');
 });
 
 test('FRAME-UX-INCOMPLETE fires when a field is present but empty', () => {
@@ -76,6 +95,7 @@ test('FRAME-UX-INCOMPLETE fires when a field is present but empty', () => {
     uxTask: '   ', // whitespace-only counts as empty
     uxFrequentAction: 'Search for routes',
     uxCostliestError: 'Double booking',
+    uxSurface: 'product',
   });
   const violations = checkFrameUx(cwd);
   assert.ok(violations.some((v) => v.id === 'FRAME-UX-INCOMPLETE'), 'whitespace-only task should fire');
@@ -93,6 +113,7 @@ test('writeFrameRecord stores UX fields in frontmatter', () => {
     uxTask: 'Complete a purchase',
     uxFrequentAction: 'Add item to cart',
     uxCostliestError: 'Checkout with wrong address — recovery requires order cancellation',
+    uxSurface: 'mixed',
   });
   // After writing, checkFrameUx should find all fields complete
   const violations = checkFrameUx(cwd);

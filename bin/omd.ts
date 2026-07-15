@@ -80,6 +80,8 @@ interface Opts {
   frequentAction?: string;
   /** UX anchor: costliest error and its recovery path. (`omd frame set --costliest-error "..."`) */
   costliestError?: string;
+  /** UX anchor: surface classification — marketing | product | editorial | mixed. (`omd frame set --surface "..."`) */
+  surface?: string;
   /** Render desktop+mobile fixed and full-page proofs in one browser (`omd render <page> --proofs -o <prefix>`). */
   proofs?: boolean;
   /** Register override for `omd visual-richness --register quiet|confident|showpiece`. */
@@ -1531,7 +1533,7 @@ function usage(): never {
     + '\n'
     + '  frame show\n'
     + '  frame set --problem P --reframe R --why EVIDENCE\n'
-    + '            [--task T --frequent-action A --costliest-error E]\n'
+    + '            [--task T --frequent-action A --costliest-error E --surface S]\n'
     + '  frame reframe --to "..." --because "what the render revealed"\n'
     + '  frame generator --set "metaphor"\n'
     + '\n'
@@ -1613,6 +1615,7 @@ async function main(): Promise<never> {
         ...(opts.task ? { uxTask: opts.task } : {}),
         ...(opts.frequentAction ? { uxFrequentAction: opts.frequentAction } : {}),
         ...(opts.costliestError ? { uxCostliestError: opts.costliestError } : {}),
+        ...(opts.surface ? { uxSurface: opts.surface } : {}),
       });
       console.log(path);
       process.exit(0);

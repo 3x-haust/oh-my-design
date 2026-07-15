@@ -10,7 +10,17 @@ It does not receive or reproduce screenshots, assets, pixels, literal tokens, co
 full-page descriptions, or a source page's complete sequence. Read `theory/layout.md` and
 `theory/ux.md` exactly before writing.
 
-Use these H2 sections exactly and keep each non-empty.
+Use these H2 sections exactly and keep each non-empty. When the project has user-provided
+references (`omd ref add --from-user`), the additional `## Reference synthesis` section is
+required as well; `omd composition --check` enforces it.
+
+Before writing any section, read the frame's `uxSurface` classification. It selects the
+grammar (see `theory/ux.md` §Surface types): a `marketing` surface composes as a message
+ladder; a `product` work surface composes as a task loop over screen regions; `editorial`
+composes as a reading sequence; `mixed` names which screens follow which grammar. The
+section names below stay the same across grammars — what changes is what a "section" is:
+on a product surface it is a screen region or reachable state with a job in the task
+loop, not a scroll chapter.
 
 ## Input fingerprint
 
@@ -30,9 +40,19 @@ type-proof, or scout-summary change invalidates the contract; rerun composer and
 
 ## Experience spine
 
-For every section, record the entering user question, exactly what new answer/evidence this
-section adds, its primary action, and why the next section depends on it. This is a message
-ladder, not a list of fashionable section names.
+For a `marketing` or `editorial` surface: for every section, record the entering user
+question, exactly what new answer/evidence this section adds, its primary action, and why
+the next section depends on it. This is a message ladder, not a list of fashionable
+section names.
+
+For a `product` surface: write the spine as the task loop — orient → locate → act →
+feedback → next/recover. For every screen region (shell/navigation, work object, supporting
+panels, state surfaces), record which loop step it serves, the frequent action it carries,
+and why the region's position follows task order. Include the reachable states (loading,
+empty first-run, filtered-to-zero, error/recovery, success) as spine entries with their
+copy source; a work surface without designed states has an incomplete spine. Do not write
+a persuasion ladder for a tool: a hero section above a queue is a grammar defect, not a
+style choice.
 
 ## Section dependency
 
@@ -52,7 +72,11 @@ Relate every change to attention, evidence, action, or recovery.
 ## Focal hierarchy
 
 Define one dominant anchor in the first viewport and its visual-mass budget relative to the
-value statement, proof, and visible primary CTA. The CTA plus a predictable completion path
+value statement, proof, and visible primary CTA. On a `product` surface the dominant anchor
+is the work object itself — the table, queue, canvas, form, or data view the task loop
+operates on, at representative data density — and the "value statement" is at most one line
+of orientation; a display-scale headline or decorative hero claiming the first viewport of
+a work surface is a rejection condition, not an anchor. The CTA plus a predictable completion path
 satisfies task reach; the terminal form or control surface does not have to appear in the
 first viewport and earns no credit merely for being visible there. State a visible rejection
 condition for a candidate whose anchor loses dominance, crowds the task cue, or becomes
@@ -98,6 +122,29 @@ literal tokens, full section order, pixels, recognizable silhouette, or unique i
 and motion. An exact transplant is allowed only when the user explicitly requested that
 specific transplant; record the request and attribution.
 
-`omd composition --check` validates only section structure, fingerprint format, and freshness.
+## Reference synthesis
+
+Required exactly when user-origin references exist (`omd ref add --from-user`); omitted
+otherwise. This is the explicit synthesis plan that separates structural synthesis from
+mood imitation. For every user reference, record one row/entry:
+
+- **Source**: the reference label (hostname or file name — the validator matches it).
+- **Trait taken**: the concrete unit adopted — information architecture, navigation model,
+  page layout, content density, typography, spacing rules, color system, component anatomy,
+  search/filter interaction, form interaction, data display, feedback/state vocabulary,
+  motion, mobile behavior, or an overall design principle. "그 느낌" is not a trait.
+- **Where it lands**: the screen or component it applies to.
+- **Adaptation**: how it is reshaped for this product's content, stack, and constraints.
+- **Conflict resolution**: when two references disagree on the same unit, which wins where,
+  and why — the shipped result must still read as one product and one design system.
+- A reference the plan deliberately does not use is declined with a reason, not ignored.
+
+The transfer boundary below still governs: traits are attributed relationships, measured
+invariants, and principles — never pixels, copy, literal tokens, full section order, or a
+recognizable silhouette, unless the user explicitly requested that transplant.
+
+`omd composition --check` validates only section structure, fingerprint format, freshness,
+and — when user references exist — the presence of a Reference synthesis section that
+mentions every user reference.
 It does not score taste, aesthetics, or whether a composition is good. Completion means the
 artifact exists and the validator succeeds; a status report alone is not completion.

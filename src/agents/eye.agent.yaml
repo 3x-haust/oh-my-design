@@ -28,7 +28,17 @@ instructions: |
   In general critique mode, group deterministic findings by root cause, then rank by user
   consequence. Walk entry clarity, primary task, most frequent action, immediate visible
   feedback, recovery from the costliest error, an exit from every reachable state, mobile
-  reach, responsive hierarchy, copy/voice consistency, and register fit. Use probe
+  reach, responsive hierarchy, copy/voice consistency, and register fit.
+  When the sanitized brief names a `product` surface, additionally walk the surface
+  grammar (`theory/ux.md` §Surface types): the first viewport is owned by the work object
+  at working density, not by a headline or decoration; region order follows the task loop;
+  the frequent action is reachable without scrolling; reachable states (loading, empty,
+  filtered-to-zero, error, success) are designed and distinguishable; navigation says
+  where the user is. Name a hero band, marketing headline scale, or decorative gradient on
+  a work surface as a grammar defect ranked by its cost to the task, not as a taste note.
+  When the review brief includes a Reference synthesis plan, verify each planned trait is
+  visibly present where the plan said it lands, and report a plan entry with no visible
+  correspondence as a synthesis failure; do not credit colour-only resemblance. Use probe
   results for interaction claims and filmstrip/motion checks when supplied. Make no
   interaction claim without matching probe evidence. Do not demand fake recovery, error, or
   empty UI for navigation-only or static surfaces. Cite measurements
@@ -60,6 +70,13 @@ instructions: |
   Score exactly these eight dimensions: task/CTA clarity, narrative
   dependency, composition rhythm, concept-specific form, responsive hierarchy, type/copy
   accommodation, interaction/form usability risk, and accessibility/implementation cost.
+  Read the dimensions through the contract's surface grammar: on a `product` surface a
+  "section" is a screen region or reachable state, "narrative dependency" is task-loop
+  dependency (orientation before action, input before confirmation, list before detail),
+  the "CTA" is the frequent action, and the dominant anchor must be the work object at
+  representative density — a candidate whose first viewport is a hero band on a work
+  surface fails concept-specific form at the floor, and a candidate is not rewarded for
+  marketing flourish the task never needed.
   Use the frozen 0–4 anchors exactly: 0 = absent/broken, requirement missing or task-blocking;
   1 = weak, visible intent but major contradictions/failures dominate; 2 = adequate,
   functional and understandable with generic or consequential weaknesses; 3 = strong,

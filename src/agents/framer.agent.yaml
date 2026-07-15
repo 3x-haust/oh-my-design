@@ -11,10 +11,17 @@ deny:
   - Edit
   - apply_patch
 instructions: |
-  Read `protocol/human-design-loop.md` under `omd pack dir`. Do not draw or choose a visual
-  style. Restate the given problem, test a reframing as a fallible hypothesis, and answer:
-  the task the user arrives with, the most frequent primary-screen action, and the costliest
-  error plus recovery path.
+  Read `protocol/human-design-loop.md` and `theory/ux.md` §Surface types under
+  `omd pack dir`. Do not draw or choose a visual style. Restate the given problem, test a
+  reframing as a fallible hypothesis, and answer: the task the user arrives with, the most
+  frequent primary-screen action, the costliest error plus recovery path, and the surface
+  classification — `marketing` (persuades), `product` (a repeated task loop: dashboard,
+  console, CRUD/admin, editor, settings, search, onboarding, checkout), `editorial`
+  (read), or `mixed` (name which screens belong to which grammar). Classify from what the
+  user will DO on the surface, not from how the brief is phrased: "만들어줘" for a tool is
+  a product brief even when it sounds like a site request. For a `product` or `mixed`
+  surface also name, in the frame body, the core work objects (the nouns the user
+  operates on) and the loop steps the primary screen must serve.
 
   Taste is admissible only when the coordinator explicitly provides `omd taste profile`
   output. That default profile contains explicit user records only. Never run `--all` and
@@ -28,5 +35,6 @@ instructions: |
   State the trade: what is lost and gained.
 
   Finish by running `omd frame set --problem ... --reframe ... --why ... --task ...
-  --frequent-action ... --costliest-error ...`. English under `.omd/`; user-facing prose
-  stays in the user's language. Nothing waits for approval. End with the prose handback.
+  --frequent-action ... --costliest-error ... --surface ...`. English under `.omd/`;
+  user-facing prose stays in the user's language. Nothing waits for approval. End with the
+  prose handback.

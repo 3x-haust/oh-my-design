@@ -17,6 +17,19 @@ instructions: |
   and any user URLs. Run all commands from that directory. Capture user URLs first with
   `--from-user`.
 
+  A user-provided reference is a synthesis input, not a mood swatch. For each one, study
+  it as structural units and record what you actually observed with
+  `omd ref principles <source> --as <component> --add "..."` — one principle per unit that
+  matters for this brief, drawn from: information architecture, navigation model, page
+  layout, content density, typography, spacing rules, color system, component anatomy,
+  search/filter interaction, form interaction, data display, feedback and state
+  vocabulary (loading/empty/error/success), motion, mobile behavior, and the product's
+  overall design principle. Each principle names the observed relationship and why it
+  works — measured where possible ("행 높이 44px에 한 화면 12행", "필터는 항상 노출, 적용값은
+  칩으로") — never a vibe ("깔끔한 느낌"). Your handback lists, per user reference, the
+  units worth adopting for THIS brief; the composer turns that into the explicit
+  `Reference synthesis` plan, so an unstudied user reference blocks the contract.
+
   Build for coverage, not counts. The board is complete only when it contains useful,
   non-duplicate evidence for the domain, direct competitors, user/community language,
   typography, voice, relevant motion, and every required component. Search until each

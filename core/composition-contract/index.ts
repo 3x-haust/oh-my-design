@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
+import { loadRefs } from '../ref/store.ts';
 
 export const COMPOSITION_SECTIONS = [
   'Input fingerprint',
@@ -17,10 +18,22 @@ export const COMPOSITION_SECTIONS = [
 ] as const;
 
 export interface CompositionContractFinding {
-  id: 'COMPOSITION-MISSING' | 'COMPOSITION-SECTION' | 'COMPOSITION-HASH' | 'COMPOSITION-STALE' | 'COMPOSITION-SCOUT';
+  id: 'COMPOSITION-MISSING' | 'COMPOSITION-SECTION' | 'COMPOSITION-HASH' | 'COMPOSITION-STALE' | 'COMPOSITION-SCOUT' | 'COMPOSITION-SYNTHESIS';
   path: string;
   message: string;
 }
+
+/**
+ * The conditional section for user-supplied references. It is not in
+ * COMPOSITION_SECTIONS because it is required exactly when the project has
+ * user-origin references (`omd ref add --from-user`): references the user handed
+ * over must be synthesized as an explicit plan — per reference, the concrete
+ * trait taken (information architecture, navigation model, density, search/filter
+ * interaction, form pattern, feedback/state vocabulary, type or spacing system…),
+ * where it lands, how it is adapted, and how conflicts between references are
+ * resolved — not imitated as a mood.
+ */
+export const SYNTHESIS_SECTION = 'Reference synthesis';
 
 function sections(markdown: string): Map<string, string> {
   const result = new Map<string, string>();
@@ -44,6 +57,15 @@ export interface CompositionContractInputs {
   copyDeck?: string;
   typeProof?: string;
   scout?: string;
+  /**
+   * Short labels (hostname or file basename) of user-origin references
+   * (`origin: 'user'` records under `.omd/refs/`). When non-empty, the contract
+   * must carry a non-empty `## Reference synthesis` section and every label must
+   * be mentioned in it: each user-supplied reference is either mapped to a
+   * concrete adopted trait or explicitly declined with a reason — silence is the
+   * mood-board failure this gate exists to catch.
+   */
+  userRefLabels?: string[];
 }
 
 /** Pure validation core: callers provide contents/digests and receive findings, with no I/O. */
@@ -92,7 +114,41 @@ export function validateCompositionContractSource(inputs: CompositionContractInp
     findings.push({ id: 'COMPOSITION-SCOUT', path: '.omd/composition.md#Input fingerprint', message: 'absent scout.md requires `N/A — <reason>` instead of a hash or empty value' });
   }
 
+  const userRefLabels = inputs.userRefLabels ?? [];
+  if (userRefLabels.length > 0) {
+    const synthesis = parsed.get(SYNTHESIS_SECTION)?.trim() ?? '';
+    if (synthesis === '') {
+      findings.push({
+        id: 'COMPOSITION-SYNTHESIS',
+        path: `.omd/composition.md#${SYNTHESIS_SECTION}`,
+        message: `user-provided references exist but the ${SYNTHESIS_SECTION} section is missing or empty: name, per reference, the concrete trait adopted (IA, navigation, density, search/filter interaction, form pattern, state feedback, type/spacing), where it lands, the adaptation, and conflict resolution — or decline the reference with a reason`,
+      });
+    } else {
+      const lower = synthesis.toLowerCase();
+      for (const label of userRefLabels) {
+        if (!lower.includes(label.toLowerCase())) {
+          findings.push({
+            id: 'COMPOSITION-SYNTHESIS',
+            path: `.omd/composition.md#${SYNTHESIS_SECTION}`,
+            message: `user reference "${label}" is not mentioned in ${SYNTHESIS_SECTION}: map a concrete trait from it or decline it with a reason`,
+          });
+        }
+      }
+    }
+  }
+
   return findings.sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+}
+
+/** Hostname of a URL, or the basename (without extension) of a file path. */
+function refLabel(source: string): string {
+  try {
+    const url = new URL(source);
+    if (url.protocol === 'file:') return basename(url.pathname).replace(/\.[^.]+$/, '');
+    return url.hostname.replace(/^www\./, '');
+  } catch {
+    return basename(source).replace(/\.[^.]+$/, '');
+  }
 }
 
 /** Filesystem adapter used by the CLI; validation itself remains pure above. */
@@ -107,11 +163,15 @@ export function validateCompositionContract(root: string): CompositionContractFi
   const copyDeck = readHash('copy-deck.md');
   const typeProof = readHash('type-proof.md');
   const scout = readHash('scout.md');
+  const userRefLabels = [...new Set(
+    loadRefs(root).filter((ref) => ref.origin === 'user').map((ref) => refLabel(ref.source)),
+  )].sort();
   return validateCompositionContractSource({
     ...(existsSync(contractPath) ? { contract: readFileSync(contractPath, 'utf8') } : {}),
     ...(frame ? { frame } : {}),
     ...(copyDeck ? { copyDeck } : {}),
     ...(typeProof ? { typeProof } : {}),
     ...(scout ? { scout } : {}),
+    ...(userRefLabels.length > 0 ? { userRefLabels } : {}),
   });
 }

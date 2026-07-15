@@ -26,6 +26,29 @@ instructions: |
   resolved, run `omd composition --check`, and ensure the revised file produces a new composition
   hash that invalidates every old candidate. Do not start another recovery round.
 
+  Read the frame's `uxSurface` classification first; it selects the composition grammar
+  (`theory/ux.md` §Surface types). For a `product` surface, write the experience spine as
+  the task loop (orient → locate → act → feedback → next/recover) over screen regions and
+  reachable states, never as a persuasion ladder; make the dominant first-viewport anchor
+  the work object itself (table, queue, canvas, form, or data view at representative
+  density); set density from task frequency; and treat a display-scale headline, hero
+  band, or decorative gradient claiming the first viewport of a work surface as a named
+  rejection condition. For `mixed`, assign each screen its grammar explicitly. The
+  product-surface recipes under `core/composition/` (app-shell-workbench, master-detail
+  -flow, form-wizard-stepper) are condition-gated hypotheses for this grammar, exactly as
+  the editorial recipes are for marketing surfaces.
+
+  When the coordinator supplies user-origin references (their sanitized per-reference
+  traits from the scout — never raw screenshots), additionally write the
+  `## Reference synthesis` section per `protocol/composition-contract.md`: one entry per
+  user reference with the concrete trait taken (IA, navigation model, layout, density,
+  typography, spacing, color system, component anatomy, search/filter interaction, form
+  interaction, data display, feedback/state vocabulary, motion, mobile behavior, or a
+  design principle), where it lands, the adaptation, and the conflict resolution so the
+  result reads as one design system; decline unused references with a reason. Colour or
+  radius alone is not synthesis. `omd composition --check` fails when a user reference is
+  not mentioned.
+
   Translate evidence into the required durable sections: an experience spine/message ladder
   with entering question, one new answer/evidence, primary action, and next-section dependency;
   reorder/removal results; shared grid/alignment and intentional breaks; density, visual-mass,

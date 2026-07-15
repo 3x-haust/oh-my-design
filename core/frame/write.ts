@@ -27,6 +27,7 @@ export function writeFrameRecord(cwd: string, opts: {
   uxTask?: string;
   uxFrequentAction?: string;
   uxCostliestError?: string;
+  uxSurface?: string;
 }): string {
   if (!opts.why || opts.why.trim().length < 10) {
     throw new Error(
@@ -44,6 +45,7 @@ export function writeFrameRecord(cwd: string, opts: {
   if (opts.uxTask?.trim()) frontmatter['uxTask'] = opts.uxTask.trim();
   if (opts.uxFrequentAction?.trim()) frontmatter['uxFrequentAction'] = opts.uxFrequentAction.trim();
   if (opts.uxCostliestError?.trim()) frontmatter['uxCostliestError'] = opts.uxCostliestError.trim();
+  if (opts.uxSurface?.trim()) frontmatter['uxSurface'] = opts.uxSurface.trim();
 
   writeFrame(cwd, frontmatter, body);
   return join(designDir(cwd), 'frame.md');

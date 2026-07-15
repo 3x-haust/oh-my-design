@@ -47,6 +47,75 @@ search field must reach the top of the page at every viewport, not hide behind a
 
 ---
 
+## Surface types: a work surface is not a landing page
+
+The fourth anchor question, answered at frame time and recorded as `uxSurface`: what kind
+of surface is this? The taxonomy has four values, and the choice selects the composition
+grammar for everything downstream.
+
+- **marketing** — the surface persuades. A visitor arrives undecided; the page argues a
+  proposition with evidence and asks for one action. The scroll IS the experience: a
+  message ladder where each section answers the question the previous one raised.
+- **product** — the surface serves a repeated task loop. The user arrives with work to do,
+  often for the hundredth time; the screen is a tool they operate, not an argument they
+  read. Dashboards, consoles, CRUD and admin screens, editors, settings, search results,
+  inboxes, checkout steps.
+- **editorial** — the surface is read. Documentation, articles, long-form content. Reading
+  order, measure, and typographic rhythm dominate.
+- **mixed** — a real product with a marketing shell (a landing page plus an app; a docs
+  site with a signup path). Name which screens belong to which grammar instead of applying
+  one grammar to all of them.
+
+The misclassification failure is one-directional in practice: generated products default
+to the marketing grammar everywhere, because most public web pages a model has seen are
+marketing pages. The result is documented in every heuristic audit of AI-generated
+"apps": a hero section above an admin table, decorative gradients on data screens, all
+information atomized into equal-weight cards, a giant value proposition where the user
+needed their queue. Nielsen's eighth heuristic (aesthetic and minimalist design) states
+the standard: every element competes with the elements that serve the user's current
+task. A hero on a work surface is not neutral decoration — it costs one full viewport of
+queue visibility on every single visit.
+
+**Product-surface grammar.** When `uxSurface` is `product`, these conditions replace the
+marketing defaults:
+
+1. **The dominant first-viewport anchor is the work object itself** — the table, queue,
+   canvas, form, or data view the task loop operates on. Real (or representative fixture)
+   data at realistic density is the hero. A value statement is at most one line of
+   orientation, never a display-scale headline.
+2. **The spine is a task loop, not a message ladder**: orient (where am I, what changed)
+   → locate (find the object: navigation, search, filters) → act (the frequent action,
+   reachable within the first viewport) → feedback (visible state change within 400ms,
+   see §Feedback) → next/recover (the loop restarts, or the costliest error is undone).
+   Sections are screen regions with jobs in this loop; their order follows task order,
+   not persuasion order.
+3. **Density follows task frequency, not whitespace fashion** (see layout.md §Density):
+   an expert repeated-scan surface earns compact rows and visible volume; onboarding and
+   first-run earn air. Marketing whitespace on a queue screen hides the user's work.
+4. **Navigation is the model of the product** (§Navigation below): persistent, labeled by
+   the user's nouns, marking where the user is. A marketing page can hide navigation
+   behind a CTA; a product cannot.
+5. **Reachable states are part of the surface, not an appendix**: loading, empty (first
+   run AND filtered-to-zero are different states with different copy), error with
+   recovery, success confirmation, disabled-with-reason. The empty state is the first
+   thing a new user sees — design it as the front door (§First-run below).
+6. **Chrome is quiet, data is loud.** Persuasive typography scale belongs to marketing;
+   on a work surface the type scale serves scanning (see components.md on tables and
+   forms), and one accent color marks the primary action, not the decoration.
+
+**Editor/canvas surfaces** add: the canvas owns the viewport; panels collapse; tool state
+is always visible. **Settings surfaces** add: grouped by user intent, one column, each
+change confirmed or explicitly saved, destructive actions separated and guarded
+(§Flows: dead ends). **Onboarding** add: pull-based, minimum viable configuration to first
+value (§First-run), progress visible, every step escapable.
+
+Condition → choice → reason: name `uxSurface` at frame time; if the brief mixes surfaces,
+split screens by grammar and record the split. A composer or reviewer who receives
+`product` and still reaches for a hero-plus-feature-cards structure is not making a taste
+choice; it is a classification defect with a named cause.
+
+---
+
 ## Navigation and information architecture
 
 Navigation communicates structure before the label is read. The hierarchy of a navigation
@@ -431,11 +500,12 @@ checks that `omd check` runs on every build. Principles not listed here remain a
   tabindex="-1", making the page unreachable by keyboard. Measurable from node.focusable
   (recorded by dom.ts from el.tabIndex per node). WCAG 2.1 §2.1.1.
 
-- §Task-first framing (the three anchor questions) → `FRAME-UX-INCOMPLETE` (ux): the frame
-  artifact exists but does not record what task the user arrives with, the most frequent
-  action, or the costliest error. Measurable as field presence in the frame's YAML
-  frontmatter. Scope: artifact completeness only — the harness cannot verify the build
-  serves the named task (that requires the eye agent's task-first walk).
+- §Task-first framing + §Surface types (the four anchor questions) → `FRAME-UX-INCOMPLETE`
+  (ux): the frame artifact exists but does not record what task the user arrives with, the
+  most frequent action, the costliest error, or the surface classification. Measurable as
+  field presence in the frame's YAML frontmatter. Scope: artifact completeness only — the
+  harness cannot verify the build serves the named task or fits the named surface (that
+  requires the eye agent's task-first walk).
 
 - §Forms: error recovery → `DESIGN-FORM-NO-ERROR` (system): the page has form inputs but
   no visible error-state affordance. Measurable from node.name class patterns, node.text

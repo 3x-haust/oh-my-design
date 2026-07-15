@@ -6,7 +6,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { COMPOSITION_SECTIONS, validateCompositionContract, validateCompositionContractSource } from '../core/composition-contract/index.ts';
+import { COMPOSITION_SECTIONS, SYNTHESIS_SECTION, validateCompositionContract, validateCompositionContractSource } from '../core/composition-contract/index.ts';
 
 const cli = fileURLToPath(new URL('../bin/omd.ts', import.meta.url));
 const temp = (): string => mkdtempSync(join(tmpdir(), 'omd-composition-'));
@@ -116,4 +116,101 @@ test('CLI exits zero for a fresh contract and emits an empty JSON array', () => 
   assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(JSON.parse(result.stdout), []);
   assert.ok(readFileSync(join(root, '.omd', 'composition.md'), 'utf8').includes('## Transfer boundary'));
+});
+
+// ── Reference synthesis (conditional on user-origin references) ───────────────
+
+const baseInputs = () => {
+  const values = {
+    'frame.md': 'frame-v1',
+    'copy-deck.md': 'copy-v1',
+    'type-proof.md': 'type-v1',
+    'scout.md': 'scout-v1',
+  };
+  return {
+    values,
+    digests: {
+      frame: hash(values['frame.md']),
+      copyDeck: hash(values['copy-deck.md']),
+      typeProof: hash(values['type-proof.md']),
+      scout: hash(values['scout.md']),
+    },
+  };
+};
+
+test('no user references means no synthesis requirement', () => {
+  const { values, digests } = baseInputs();
+  assert.deepEqual(validateCompositionContractSource({ contract: artifact(values), ...digests }), []);
+});
+
+test('user references without a Reference synthesis section fail', () => {
+  const { values, digests } = baseInputs();
+  const findings = validateCompositionContractSource({
+    contract: artifact(values),
+    ...digests,
+    userRefLabels: ['linear.app'],
+  });
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0]!.id, 'COMPOSITION-SYNTHESIS');
+  assert.match(findings[0]!.message, /missing or empty/);
+});
+
+test('an empty Reference synthesis section fails the same way', () => {
+  const { values, digests } = baseInputs();
+  const contract = `${artifact(values)}\n\n## ${SYNTHESIS_SECTION}\n\n`;
+  const findings = validateCompositionContractSource({
+    contract,
+    ...digests,
+    userRefLabels: ['linear.app'],
+  });
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0]!.id, 'COMPOSITION-SYNTHESIS');
+});
+
+test('every user reference must be mentioned in the synthesis plan', () => {
+  const { values, digests } = baseInputs();
+  const contract = `${artifact(values)}\n\n## ${SYNTHESIS_SECTION}\n\n- linear.app: 내비게이션 모델 — 좌측 레일과 현재 위치 마킹을 받은함 셸에 적용.`;
+  const findings = validateCompositionContractSource({
+    contract,
+    ...digests,
+    userRefLabels: ['linear.app', 'notion.so'],
+  });
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0]!.id, 'COMPOSITION-SYNTHESIS');
+  assert.match(findings[0]!.message, /notion\.so/);
+});
+
+test('a synthesis plan naming every user reference passes, case-insensitively', () => {
+  const { values, digests } = baseInputs();
+  const contract = `${artifact(values)}\n\n## ${SYNTHESIS_SECTION}\n\n- Linear.app: 내비게이션 모델을 셸에 적용.\n- NOTION.SO: 콘텐츠 밀도 규칙은 사용하지 않기로 함 — 문서형 밀도가 큐 스캔과 충돌 (decline).`;
+  const findings = validateCompositionContractSource({
+    contract,
+    ...digests,
+    userRefLabels: ['linear.app', 'notion.so'],
+  });
+  assert.deepEqual(findings, []);
+});
+
+test('filesystem adapter derives user reference labels from origin: user records', () => {
+  const { root, values } = setup();
+  const refsDir = join(root, '.omd', 'refs');
+  mkdirSync(refsDir, { recursive: true });
+  writeFileSync(join(refsDir, 'linear.app.page.json'), JSON.stringify({
+    source: 'https://linear.app/features', component: 'page', kind: 'page', capturedAt: '2026-01-01',
+    invariants: null, principles: [], origin: 'user',
+  }));
+  writeFileSync(join(refsDir, 'stripe.com.page.json'), JSON.stringify({
+    source: 'https://stripe.com', component: 'page', kind: 'page', capturedAt: '2026-01-01',
+    invariants: null, principles: [], origin: 'scout',
+  }));
+  // No synthesis section: only the user ref (linear.app) should be demanded, not the scout ref.
+  writeFileSync(join(root, '.omd', 'composition.md'), artifact(values));
+  const findings = validateCompositionContract(root);
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0]!.id, 'COMPOSITION-SYNTHESIS');
+  assert.match(findings[0]!.message, /missing or empty/);
+
+  const withPlan = `${artifact(values)}\n\n## ${SYNTHESIS_SECTION}\n\n- linear.app: 검색·필터 인터랙션을 목록 툴바에 적용.`;
+  writeFileSync(join(root, '.omd', 'composition.md'), withPlan);
+  assert.deepEqual(validateCompositionContract(root), []);
 });

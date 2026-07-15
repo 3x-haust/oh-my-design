@@ -4,15 +4,21 @@ import { readFrame } from './index.ts';
 /**
  * Validate that the frame artifact has been fully UX-interrogated.
  *
- * FRAME-UX-INCOMPLETE warns when `.omd/frame.md` exists but any of the three
+ * FRAME-UX-INCOMPLETE warns when `.omd/frame.md` exists but any of the four
  * UX anchor questions is unanswered:
- *   1. uxTask          — what task does the user arrive with?
+ *   1. uxTask           — what task does the user arrive with?
  *   2. uxFrequentAction — what is the most frequent action on the primary screen?
  *   3. uxCostliestError — what is the costliest error, and what is the recovery path?
+ *   4. uxSurface        — what kind of surface is this? `marketing` persuades,
+ *      `product` serves a repeated task loop, `editorial` is read, `mixed` names
+ *      both parts. The classification selects the downstream composition grammar
+ *      (theory/ux.md §Surface types); skipping it is how a CRUD console ends up
+ *      with a hero section.
  *
- * These map to the three questions in theory/ux.md §Task-first framing and in
- * src/agents/framer.agent.yaml. The framer is expected to answer all three and
- * emit them via `omd frame set --task ... --frequent-action ... --costliest-error ...`.
+ * These map to the anchor questions in theory/ux.md §Task-first framing and
+ * §Surface types and in src/agents/framer.agent.yaml. The framer is expected to
+ * answer all four and emit them via `omd frame set --task ... --frequent-action ...
+ * --costliest-error ... --surface ...`.
  *
  * ── Scope boundary ───────────────────────────────────────────────────────────
  * This validator checks that the frame ARTIFACT is complete — that someone answered
@@ -45,6 +51,9 @@ export function checkFrameUx(cwd: string): Violation[] {
   if (!frame.uxCostliestError || String(frame.uxCostliestError).trim().length === 0) {
     missing.push('uxCostliestError (--costliest-error)');
   }
+  if (!frame.uxSurface || String(frame.uxSurface).trim().length === 0) {
+    missing.push('uxSurface (--surface)');
+  }
 
   if (missing.length === 0) return [];
 
@@ -61,8 +70,8 @@ export function checkFrameUx(cwd: string): Violation[] {
         `The frame exists but the following UX anchor question${missing.length === 1 ? ' is' : 's are'} unanswered: `
         + `${missing.join('; ')}. `
         + 'A frame that cannot name the costliest error has not been interrogated. '
-        + 'Run `omd frame set --task "..." --frequent-action "..." --costliest-error "..."` to complete it. '
-        + 'See theory/ux.md §Task-first framing.',
+        + 'Run `omd frame set --task "..." --frequent-action "..." --costliest-error "..." --surface "..."` to complete it. '
+        + 'See theory/ux.md §Task-first framing and §Surface types.',
     },
   ];
 }

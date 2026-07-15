@@ -70,8 +70,13 @@ prior explicit taste, which beats agent choices. Record conflicts.
 ## 1. Frame and concept hypothesis
 
 Spawn `omd-framer` with the brief, explicit-user taste profile, and working directory. It
-records the primary task, frequent action, costliest error/recovery, evidence, hypothesis,
-and trade in `.omd/frame.md`.
+records the primary task, frequent action, costliest error/recovery, the surface
+classification (`marketing` | `product` | `editorial` | `mixed`, per `theory/ux.md`
+§Surface types), evidence, hypothesis, and trade in `.omd/frame.md`. The surface
+classification routes every later stage's grammar: pass it explicitly to the composer,
+sketches, hand, and eyes. A brief that asks for a tool (dashboard, console, CRUD/admin,
+editor, settings, onboarding, search) is a `product` surface even when phrased like a
+site request — do not let the marketing grammar be the silent default.
 
 Read the frame and relevant theory. Form one concept hypothesis: generator/metaphor,
 colour direction, typography register, quiet/confident/showpiece register, and one memorable
@@ -87,8 +92,12 @@ explicitly requested showpiece ambition is honored at all.
 
 ## 2. Research and copy before structure
 
-Spawn `omd-scout` with the concept, component inventory, user references first, and working
-directory. Require coverage across domain, competitors, user/community evidence,
+Spawn `omd-scout` with the concept, surface classification, component inventory, user
+references first, and working directory. When the user supplied references, require the
+scout's per-reference structural traits (IA, navigation, layout, density, typography,
+spacing, color, component anatomy, search/filter and form interaction, data display,
+state feedback, motion, mobile) recorded as attributed principles — they are the
+composer's Reference synthesis inputs. Require coverage across domain, competitors, user/community evidence,
 typography, voice, relevant motion, and every required component. Accept no count theater,
 pixel copying, low-trust laundering, slop contamination, or kinship.
 The scout returns a sanitized summary — measured invariants, principles, coverage, and source
@@ -127,9 +136,12 @@ deck. The writer's changed deck and final `omd copy --check` are separate eviden
 overwrite the report with the final deck hash or claim that the eye reviewed the revised
 bytes.
 
-For multi-surface products, run `omd design` and complete the durable design contract. A
-one-surface run may skip only this design-contract artifact with a recorded reason; that
-skip never changes stack routing.
+For a `product` or `mixed` surface, and for any multi-surface output, run `omd design`
+and complete the durable design contract — its Information architecture and Interaction
+states sections are the state discipline (loading, empty, error, success, disabled,
+offline: implemented or explicitly skipped with a reason) that keeps a work surface from
+shipping happy-path-only. Only a single-surface `marketing`/`editorial` run may skip this
+artifact with a recorded reason; that skip never changes stack routing.
 
 ## 3. Typography proof before structure
 
@@ -150,9 +162,14 @@ proof container-width change. Rerun the proof instead of carrying an obsolete ap
 
 ## 4. Composition contract before divergence
 
-Spawn a fresh `omd-composer` with only the sanitized frame/concept, clean copy deck,
-approved type proof, durable scout summary when present, `protocol/composition-contract.md`,
-and `theory/layout.md`. Do not pass raw screenshots, page source, assets, pixel samples,
+Spawn a fresh `omd-composer` with only the sanitized frame/concept (including the surface
+classification), clean copy deck, approved type proof, durable scout summary when present
+— including the scout's per-reference traits for user references — plus
+`protocol/composition-contract.md` and `theory/layout.md`. For a `product` surface the
+composer writes the spine as a task loop over screen regions and reachable states with the
+work object as the dominant anchor; when user references exist it also writes the
+`Reference synthesis` plan, and `omd composition --check` fails if a user reference is
+missing from it. Do not pass raw screenshots, page source, assets, pixel samples,
 URLs, candidate renders, rejected alternatives, authorship, or production rationale. The
 composer writes only `.omd/composition.md` and records exact SHA-256 fingerprints for the
 frame, copy deck, type proof, and scout summary. When no durable scout summary exists it
@@ -360,8 +377,11 @@ controls; never probe remote production or authenticated flows.
 
 Now render sharp desktop/mobile (and filmstrip when motion matters), run deterministic
 checks, and spawn a fresh `omd-eye`. Pass only the sanitized review brief: primary task,
-costliest error, generator/register, renders, check output, probe output, the immutable
-glance report, the composition contract's acceptance criteria without source rationale, and
+costliest error, generator/register, the surface classification, renders, check output,
+probe output, the immutable glance report, the composition contract's acceptance criteria
+without source rationale — including, when present, the Reference synthesis plan's
+trait-to-landing rows (labels and traits, never capture rationale or screenshots) so the
+eye can verify each planned trait is visibly present — and
 for source-candidate judgment only candidate id, controlled signals, and
 review question. Do not pass candidate path or excerpt, frame, decisions, refs, attribution
 rationale, source authorship, or build transcript.

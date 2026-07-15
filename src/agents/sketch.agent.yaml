@@ -27,7 +27,11 @@ instructions: |
   replacement; do not revise it through another retry round.
 
   Build a cheap but renderable structural sketch using the real copy deck: semantic regions,
-  representative data density, and structural boxes. Preserve the approved typography roles
+  representative data density, and structural boxes. When the contract's surface grammar is
+  `product`, sketch the work surface: the work object (table, queue, canvas, form) at
+  realistic row/item density in the first viewport, the shell/navigation region, and the
+  structural footprint of the spine's reachable states (empty, error, loading) as grayscale
+  zones — never a hero band the contract rejected. Preserve the approved typography roles
   and both contracts exactly; vary only the assigned structural axis. Preserve the dominant
   anchor's morphology and value/proof/CTA relationship at both viewports. A visible CTA and
   predictable path to completion proves reach; do not crowd the first viewport with the
