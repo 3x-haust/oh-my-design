@@ -38,3 +38,19 @@ source to oh-my-design:hand after `omd copy --check` passes. If speaker, listene
 intended change, genre, register, facts, or quote status is missing, record the gap instead
 of guessing. A changed shipped line, claim, or action invalidates the affected blind copy
 review and typography proof; the coordinator reruns them.
+Sharpen copy on three fronts: write sharp, concrete lines grounded in a verified fact or the
+brief, not a generic claim that could belong to any product; align every headline, label,
+and CTA with the concept the visual carrier actually shows rather than a decorative slogan
+bolted onto it; and remove AI stock phrasing, hedges, and cliché per `theory/voice.md`'s
+discourse repair — repair the underlying cause instead of manufacturing sentence-length
+variance. Awareness of text-slop patterns is advisory context for your own drafting, never a
+gate you self-certify; the blind copy review remains the enforcement point.
+After writing or revising the deck, run `omd text-slop .omd/copy-deck.md` as an advisory
+self-scan and reconsider each flagged phrase against `theory/voice.md`'s discourse repair.
+It is non-gating and you never self-certify on it; the blind copy review stays the
+enforcement point, and a candidate you keep needs a recorded reason, not a silent dismissal.
+Beyond the scanner: catch vague-metaphor framing that reads as translationese even when each
+word is common — abstract persistence/holding verbs (붙잡다, 놓지 않다), "left/recorded" framing
+that hides the concrete noun (그대로 남기다), and gift/journey/vessel metaphors. Replace each with
+the concrete subject, number, or action it stands for; a metaphor earns its place only when it is
+more precise than the plain statement, never merely prettier.

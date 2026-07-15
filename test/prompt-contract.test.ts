@@ -134,7 +134,7 @@ test('focal hierarchy, carrier, four-proof sketches, and selector floor share on
     assert.match(source, /none because\s+no approved photo/i);
   }
 
-  assert.match(sketch, /exactly four structural proofs[\s\S]*1280x900[\s\S]*390x844[\s\S]*full-page desktop[\s\S]*full-page mobile/i);
+  assert.match(sketch, /four structural proofs[\s\S]*1280x900[\s\S]*390x844[\s\S]*full-page desktop[\s\S]*full-page mobile/i);
   assert.match(sketch, /Full-page captures[\s\S]*only for narrative dependency and composition rhythm/i);
   assert.match(skill, /Every candidate renders exactly four proofs[\s\S]*--full-page/i);
 

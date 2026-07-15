@@ -134,23 +134,44 @@ function toUrl(target: string): string {
   return pathToFileURL(path).href;
 }
 
+type Browser = import('playwright').Browser;
+
+/** Launch one chromium, run fn, close it. Batch capture reuses a single browser across many pages. */
+export async function withBrowser<T>(fn: (browser: Browser) => Promise<T>): Promise<T> {
+  const { chromium } = await import('playwright');
+  // Always headless — OMD never opens a visible browser window in any situation.
+  const browser = await chromium.launch({ headless: true });
+  try {
+    return await fn(browser);
+  } finally {
+    await browser.close();
+  }
+}
+
+/** Open one page in an existing browser, navigate, wait for fonts, run fn, close the page. */
+export async function onPage<T>(
+  browser: Browser,
+  target: string,
+  viewport: Viewport,
+  fn: (page: import('playwright').Page, httpStatus: number | null, resolvedUrl: string) => Promise<T>,
+): Promise<T> {
+  const page = await browser.newPage({ viewport });
+  try {
+    const resolvedUrl = toUrl(target);
+    const response = await page.goto(resolvedUrl, { waitUntil: 'networkidle' });
+    await waitForDocumentFonts(page);
+    return await fn(page, response?.status() ?? null, resolvedUrl);
+  } finally {
+    await page.close();
+  }
+}
+
 async function withPage<T>(
   target: string,
   viewport: Viewport,
   fn: (page: import('playwright').Page, httpStatus: number | null, resolvedUrl: string) => Promise<T>,
 ): Promise<T> {
-  const { chromium } = await import('playwright');
-  const browser = await chromium.launch();
-  try {
-    const page = await browser.newPage({ viewport });
-    const resolvedUrl = toUrl(target);
-    const response = await page.goto(resolvedUrl, { waitUntil: 'networkidle' });
-    await waitForDocumentFonts(page);
-    const httpStatus = response?.status() ?? null;
-    return await fn(page, httpStatus, resolvedUrl);
-  } finally {
-    await browser.close();
-  }
+  return withBrowser((browser) => onPage(browser, target, viewport, fn));
 }
 
 export function parseViewport(s = '390x844'): Viewport {
@@ -167,6 +188,48 @@ export function renderPage(target: string, opts: { viewport: Viewport; out: stri
       await page.addStyleTag({ content: 'html { filter: grayscale(1) blur(6px) !important; }' });
     }
     await page.screenshot({ path: opts.out, fullPage: opts.fullPage === true });
+    return opts.out;
+  });
+}
+
+/**
+ * Render the four sketch/craft proofs — fixed and full-page, at desktop and mobile — over ONE
+ * browser, two navigations (one per viewport, each yielding its fixed and full-page shot). Writes
+ * `<prefix>-desktop.png`, `-mobile.png`, `-desktop-full.png`, `-mobile-full.png`. Byte-identical to
+ * four separate `renderPage` calls, at one browser launch instead of four.
+ */
+export async function renderProofs(
+  target: string,
+  outPrefix: string,
+  opts?: { desktop?: Viewport; mobile?: Viewport },
+): Promise<string[]> {
+  const desktop = opts?.desktop ?? { width: 1280, height: 900 };
+  const mobile = opts?.mobile ?? { width: 390, height: 844 };
+  const written: string[] = [];
+  await withBrowser(async (browser) => {
+    await Promise.all(([['desktop', desktop], ['mobile', mobile]] as const).map(([name, vp]) =>
+      onPage(browser, target, vp, async (page) => {
+        const fixed = `${outPrefix}-${name}.png`;
+        const full = `${outPrefix}-${name}-full.png`;
+        await page.screenshot({ path: fixed, fullPage: false });
+        await page.screenshot({ path: full, fullPage: true });
+        written.push(fixed, full);
+      })));
+  });
+  return written.sort();
+}
+
+/**
+ * Screenshot a single element clipped to its bounding box. Used by
+ * `omd ref add --selector … --shot` to pair a component's pixels with its
+ * blueprint on one reference record. Throws when the selector matches nothing,
+ * the same fail-closed contract as a scoped IR capture.
+ */
+export function renderElement(target: string, opts: { viewport: Viewport; selector: string; out: string }): Promise<string> {
+  return withPage(target, opts.viewport, async (page) => {
+    const el = await page.$(opts.selector);
+    if (!el) throw new Error(`no element matches selector: ${opts.selector}`);
+    await el.screenshot({ path: opts.out });
     return opts.out;
   });
 }
@@ -495,20 +558,50 @@ export async function captureEnergy(
   }
 }
 
-export function extractIr(target: string, opts: { viewport: Viewport; selector?: string | null }): Promise<RawIr> {
-  return withPage(target, opts.viewport, async (page, httpStatus, resolvedUrl) => {
-    // Fail fast on blocked/challenge pages before attempting DOM extraction.
-    // A blocked page produces a hollow IR (no tokens, near-empty nodes) that
-    // silently scores low signal — the tool reports the wrong cause. Better to
-    // name it here and let the caller (scout, CLI) choose the fallback.
-    await assertNotBlocked(page, httpStatus, resolvedUrl);
+/** Page-level IR extraction: block check, DOM extract, interaction/motion probes. */
+async function extractIrCore(
+  page: import('playwright').Page,
+  httpStatus: number | null,
+  resolvedUrl: string,
+  selector: string | null,
+): Promise<RawIr> {
+  // Fail fast on blocked/challenge pages before attempting DOM extraction.
+  await assertNotBlocked(page, httpStatus, resolvedUrl);
+  // Node strips the types, so toString() yields runnable JS for the browser.
+  const raw = await page.evaluate(
+    `(${extractInPage.toString()})(${MAX_NODES}, ${JSON.stringify(selector ?? null)})`,
+  ) as RawIr;
+  const interaction = await probeInteraction(page);
+  const motion = await probeMotion(page);
+  return { ...raw, meta: { ...(raw.meta ?? {}), interaction, motion } };
+}
 
-    // Node strips the types, so toString() yields runnable JS for the browser.
-    const raw = await page.evaluate(
-      `(${extractInPage.toString()})(${MAX_NODES}, ${JSON.stringify(opts.selector ?? null)})`,
-    ) as RawIr;
-    const interaction = await probeInteraction(page);
-    const motion = await probeMotion(page);
-    return { ...raw, meta: { ...(raw.meta ?? {}), interaction, motion } };
+export function extractIr(target: string, opts: { viewport: Viewport; selector?: string | null }): Promise<RawIr> {
+  return withPage(target, opts.viewport, (page, httpStatus, resolvedUrl) =>
+    extractIrCore(page, httpStatus, resolvedUrl, opts.selector ?? null));
+}
+
+/**
+ * One navigation on a shared browser: extract the IR and, optionally, a scoped element screenshot.
+ * Doing both on a single page is the per-reference win for batch capture — one launch, one
+ * navigation, instead of a separate browser per IR/energy/shot.
+ */
+export async function capturePageForRef(
+  browser: Browser,
+  target: string,
+  viewport: Viewport,
+  opts: { selector?: string | null; shotOut?: string },
+): Promise<{ raw: RawIr; shotSaved: boolean }> {
+  return onPage(browser, target, viewport, async (page, httpStatus, resolvedUrl) => {
+    const raw = await extractIrCore(page, httpStatus, resolvedUrl, opts.selector ?? null);
+    let shotSaved = false;
+    if (opts.shotOut && opts.selector) {
+      const el = await page.$(opts.selector);
+      if (el) {
+        await el.screenshot({ path: opts.shotOut });
+        shotSaved = true;
+      }
+    }
+    return { raw, shotSaved };
   });
 }

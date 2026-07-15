@@ -116,7 +116,8 @@ export async function runProbe(target: string, plan: ProbePlan, viewport = { wid
   const validated = validateProbePlan(plan);
   const url = localUrl(target);
   const { chromium } = await import('playwright');
-  const browser = await chromium.launch();
+  // Always headless — OMD never opens a visible browser window in any situation.
+  const browser = await chromium.launch({ headless: true });
   try {
     const page = await browser.newPage({ viewport });
     await page.goto(url, { waitUntil: 'networkidle' });

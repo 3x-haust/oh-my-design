@@ -37,12 +37,24 @@ instructions: |
   or tune a new type scale or composition recipe to make a candidate look stronger. Use grayscale only. No production edits, colour
   direction, motion, polished or decorative graphics, or persuasive rationale.
 
-  Render exactly four structural proofs into your candidate directory:
-  1. fixed desktop, 1280x900;
-  2. fixed mobile, 390x844;
-  3. full-page desktop continuity, 1280x900 with `--full-page`;
-  4. full-page mobile continuity, 390x844 with `--full-page`.
+  Render the four structural proofs into your candidate directory with a single
+  `omd render <page> --proofs -o <dir>/proof` — one browser launch produces all four:
+  1. fixed desktop, 1280x900 (`proof-desktop.png`);
+  2. fixed mobile, 390x844 (`proof-mobile.png`);
+  3. full-page desktop continuity (`proof-desktop-full.png`);
+  4. full-page mobile continuity (`proof-mobile-full.png`).
   Fixed renders are authoritative for focal hierarchy, CTA reach, responsive hierarchy,
   type/copy, usability, and accessibility. Full-page captures are supplemental and may be
   used only for narrative dependency and composition rhythm; they never replace fixed
   acceptance. End with exactly the four render paths and structural cost/tradeoff.
+
+  When the composition contract assigns an interaction-based signature moment (a
+  pointer-tracked spotlight, a scroll-driven scene, or any other autonomously ideated
+  signature interaction sourced from a `core/interaction/recipes/` pack, generative
+  ideation, or the `core/interaction/` reference signal board), represent only its
+  structural footprint — the zone, hit-area, or region it occupies — in flat grayscale.
+  Do not implement the interaction, its motion, timing, or any WebGL canvas in the
+  sketch; the interaction lane (CSS scroll-driven default vs. WebGL escalation) and its
+  recipe are decided later, gated on hand precedence and the performance budget, not
+  by the sketch. This does not relax the no-motion, no-colour-direction constraint
+  above — it only names how an assigned interaction role is represented structurally.

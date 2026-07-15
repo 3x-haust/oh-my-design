@@ -20,6 +20,11 @@ production acceptance criteria. Verify them in fixed desktop/mobile renders and 
 sharp eye those sanitized criteria. Record visible acceptance evidence or any deliberate
 deviation in `.omd/decisions.md`; never silently drift into a generic layout recipe.
 
+Before the first write, run `omd stack`: it computes the stack deterministically from folder
+evidence, and you build in exactly the stack it names — it exists because a blank greenfield, or
+your own leftover `index.html` from a prior run, must never be misread as an existing vanilla-HTML
+project. When it reports `react-vite-typescript`, build React + Vite + TypeScript; the only lawful
+override to plain HTML is a verbatim explicit user request for HTML, recorded with `omd decision`.
 Before the first write, inspect the brief, package.json when present, and one
 representative existing surface or component when present. Record the stack choice and
 concrete evidence with `omd decision`. Apply this precedence exactly: explicit user
@@ -29,6 +34,10 @@ only when the user explicitly requests it; there is no autonomous single-static-
 exception. Investigate and preserve an unrecognised package/toolchain instead of replacing
 it with React. Greenfield scaffold dependencies are allowed; do not add unnecessary
 dependencies to an existing project.
+An existing stack means a real user project (a package manifest, a build config, or files the
+user points at). A bare `index.html`/`.css`/`.js` with no manifest, beside an `.omd/` from a
+prior OMD run, is your own leftover output — not a user stack; a fresh brief there is a greenfield
+(React + Vite + TypeScript by default). Never let your previous output pin the stack to vanilla.
 
 The copy deck is source. Use its real headlines, labels, body, status/error/empty strings,
 and representative data density. Never silently shorten, replace, or invent copy to make
@@ -71,6 +80,20 @@ declared scenes. Write `.omd/attribution.md` covering token, motion, composition
 graphics sources. Walk `craft/finish-pass.md`, recording why any item is skipped. Keep
 rationale in `.omd/`, never in shipped copy.
 
+Use a purposeful visual carrier, not a bare gray box or unstyled default: pick from
+`graphics/gradient-mesh.md`, `graphics/noise-grain-texture.md`,
+`graphics/svg-geometric-patterns.md`, `graphics/css-illustration-primitives.md`,
+`theory/expressive.md`, and `motion/recipes/` under `omd pack dir`, matched to the
+register (quiet/confident/showpiece) and the dominant anchor's domain mechanism.
+Exercise restraint: implement at most one signature moment per surface, matched to the
+register (quiet surfaces may carry none), never a catalogue of techniques.
+Before you implement a signature interaction, confirm all five gates hold — register-fit, a
+declared performance budget, slop-clean, hand precedence, and a non-canvas semantic fallback — and
+build it only when every one is satisfied. A missing gate names what to fix first and never
+authorises a bypass.
+Never fabricate assets, data, or product facts to justify a
+carrier; ground every carrier in the approved contract and real evidence.
+
 Enforce the protocol's production gates: `omd design --check` when design.md exists;
 always `omd ref distance` with no shipment above 0.6; a bounded `omd target diff` repair
 loop when the target manifest exists; `omd check --site` for multi-page output; and final
@@ -87,3 +110,37 @@ After all source and approved-input repairs are complete, run `omd source --seal
 and then `omd source --check <root>`. Any later copy-deck, type-proof, composition, or
 production-source change invalidates the seal and requires resealing. Treat it only as
 byte-freshness evidence; never claim it proves semantic copy/source fidelity.
+
+Source the visual carrier's underlying asset with OMD's asset sourcing precedence,
+which selects *how* an approved carrier is fulfilled and never overrides the carrier
+or restraint rules above. (default) A user-provided asset, optionally treated with
+the duotone filter from `graphics/duotone-image-presets.md`, for visual unification.
+(conditional) AI-generated imagery, only when the host environment declares
+image-generation capability, and only for an abstract or atmospheric zone; a
+factual carrier — a team photo, product screenshot, real person, or logo — may
+never be satisfied by AI-generated imagery regardless of host capability. Any
+shipped AI-generated image requires committed provenance (the prompt and the
+provider) recorded with `omd decision`. (additive) WebGL/3D, gated on hand
+precedence (an explicit user request or a greenfield concept necessity), a
+declared performance budget, and a non-canvas semantic fallback that ships and
+degrades cleanly regardless of WebGL support. When none of these apply — no user
+asset, no eligible AI-image zone or host capability, and no authorised WebGL
+escalation — fall back to a user asset if one exists, otherwise the existing
+CSS/SVG graphics recipes, per `graphics/placeholder-policy.md`: a grey box is a
+defect, never the final answer.
+Resolve the sourcing path by the precedence above and record the decision and its reason with
+`omd decision`. An abstract/atmospheric AI-image carrier ships only when the host declares
+image-generation capability, the zone is genuinely abstract or atmospheric (never a factual
+carrier — team photo, product screenshot, real person, logo), and provenance (prompt and provider)
+is committed; a WebGL/3D escalation ships only on hand precedence plus a declared performance
+budget plus a non-canvas semantic fallback. The precedence rules above, `omd ref distance`, and the
+slop gates are the enforcement points.
+When the composer committed an image-first concept draft (see `theory/imagegen.md`, drafts under
+`.omd/.cache/imagegen/`), implement against it with image-to-code fidelity: extract its exact
+tokens, layout geometry, spacing rhythm, type-scale relationships, component anatomy, and section
+jobs into real reusable primitives — never a screenshot-matched one-off, and never ship the draft
+image itself. If a section or detail is not readable enough to build from, regenerate that one
+section fresh at larger scale rather than cropping the old draft. Any abstract/atmospheric shipped
+image you generate is a real asset — abstract or atmospheric zone only, never a factual carrier,
+with committed provenance recorded via `omd decision`. `omd ref distance` still gates the shipped
+build regardless of how the draft was seeded.

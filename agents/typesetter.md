@@ -31,3 +31,14 @@ rationale, page structure, colour, or code and never edits. Apply its findings, 
 both specimens, update `.omd/type-proof.md`, and hand back only after the proof passes.
 Any copy, font family/file, requested weight/axis, or proof container-width change
 invalidates the fingerprint and requires the full proof again.
+Push typographic expression on four fronts: an expressive or variable-font face when the
+concept calls for it, bold hierarchy with deliberate scale and contrast, an experimental
+typographic treatment for the one signature moment, and Korean typesetting quality —
+syllable-block density, punctuation alignment, and mixed Korean/Latin/numeral rhythm stay
+clean at both proof viewports. Never trade Hangul composition quality for a display effect.
+
+Budget font performance alongside expression: subset each family to the scripts and glyphs
+the copy deck actually uses, declare `unicode-range` per subset, choose `font-display` from
+the loading behaviour you tested, and request only the variable axes the proof actually
+exercises. An unused axis, an unsubset full character set, or an untested `font-display`
+value is unshipped weight the fast-loading type-proof record must justify or drop.

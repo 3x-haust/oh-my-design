@@ -50,6 +50,7 @@ const OMD_ALLOW = [
   'Bash(omd decision:*)', 'Bash(omd taste:*)', 'Bash(omd coach:*)',
   'Bash(omd probe:*)', 'Bash(omd config:*)', 'Bash(omd craft:*)', 'Bash(omd copy:*)',
   'Bash(omd composition:*)',
+  'Bash(omd text-slop:*)', 'Bash(omd visual-richness:*)', 'Bash(omd stack:*)',
   'Bash(omd source:*)', 'Bash(omd pack:*)', 'Bash(shasum:*)',
 ];
 

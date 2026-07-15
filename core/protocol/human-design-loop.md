@@ -20,6 +20,10 @@ package.json when present, and one representative existing surface/component whe
 then records the stack choice and evidence. Preserve and investigate an unrecognised package
 or toolchain; never cover it with a React scaffold. Greenfield scaffold dependencies are
 allowed. Existing projects receive no unnecessary dependencies.
+An "existing repository stack" is a real project the user brought — a package manifest, a build
+config, or files the user points at. A bare `index.html`/`.css`/`.js` with no manifest, next to an
+`.omd/` from a prior OMD run, is OMD's own leftover output, not a user stack: a fresh brief there is
+a greenfield (React + Vite + TypeScript by default), and a prior run's output never pins the stack.
 
 ## State boundary
 
@@ -292,6 +296,15 @@ These gates are part of every applicable production run, not optional polish:
   Stop at the configured threshold or record the remaining measured mismatch and evidence;
   never iterate without a bound.
 - For multi-page output, run `omd check --site <dir>` and resolve cross-page drift.
+- For a confident/showpiece register, and always when the brief signals awards-level ambition, the
+  first shippable build begins a bounded RED/GREEN refinement loop, not the ship. Acceptance
+  criteria written from the frame and `theory/expressive.md` are the GREEN target; any unmet one is
+  RED. Each round leaves evidence (sharp renders under `.omd/.cache/rounds/round-<N>/`, measured
+  gate results, and the blind-choose verdict) — a round with no evidence does not count. The loop
+  advances only on measured improvement (blind-choose after beats before), targets one RED criterion
+  per round, and stops on GREEN, a
+  regression (revert), a plateau, or the round budget (default 3). This is a deliberate convergence
+  loop, never an unbounded automatic retry, and it never overrides the gates above.
 - Once production source exists, run the source-candidate scan and contextual triage before
   the final sharp verdict. Resolve every triage item, repair and rescan confirmed current
   candidates, and retain evidence for dismissals. Candidate presence alone never fails the

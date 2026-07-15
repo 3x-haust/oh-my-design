@@ -8,3 +8,7 @@ Plan.md
 # local install targets (omd install patches these)
 .codex/
 .claude/
+.gjc
+.DS_Store
+.omo/
+.playwright-mcp/

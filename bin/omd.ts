@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { readFileSync, writeFileSync, mkdirSync, existsSync, unlinkSync, readdirSync } from 'node:fs';
-import { join, dirname, resolve } from 'node:path';
+import { join, dirname, resolve, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { stringify } from 'yaml';
 import { readFrame } from '../core/frame/index.ts';
@@ -17,6 +17,10 @@ import { checkFrameUx } from '../core/frame/check-ux.ts';
 import { scanSlopSource } from '../core/slop/index.ts';
 import { validateCompositionContract } from '../core/composition-contract/index.ts';
 import { validateSourceSeal, writeSourceSeal } from '../core/source-seal/index.ts';
+import { computeStack } from '../core/stack/index.ts';
+import { scanTextSlop } from '../core/slop/text-slop.ts';
+import { evaluateVisualRichness } from '../core/composition-contract/visual-richness.ts';
+import type { VisualRichnessRegister } from '../core/composition-contract/visual-richness.ts';
 import type { Category, EnergyCurve, Layer, RawIr, Violation } from '../core/types.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -39,6 +43,8 @@ interface Opts {
   as?: string;
   add?: string;
   noLog?: boolean;
+  /** Skip the energy (motion) capture on `omd ref add` — one fewer browser launch for non-motion refs. */
+  noEnergy?: boolean;
   selector?: string;
   image?: boolean;
   filmstrip?: boolean;
@@ -54,6 +60,8 @@ interface Opts {
   evidence?: string;
   /** Capture a full-resolution structural blueprint of the selected component. */
   blueprint?: boolean;
+  /** Persist a scoped component screenshot alongside its blueprint (`omd ref add --selector … --shot`). */
+  shot?: boolean;
   /** Directory of pages for cross-page site consistency check (`omd check --site <dir>`). */
   site?: string;
   /** Similarity threshold for `omd figma diff` / `omd target diff` (0–1, default 0.97). */
@@ -72,12 +80,17 @@ interface Opts {
   frequentAction?: string;
   /** UX anchor: costliest error and its recovery path. (`omd frame set --costliest-error "..."`) */
   costliestError?: string;
+  /** Render desktop+mobile fixed and full-page proofs in one browser (`omd render <page> --proofs -o <prefix>`). */
+  proofs?: boolean;
+  /** Register override for `omd visual-richness --register quiet|confident|showpiece`. */
+  register?: string;
 }
 
-const FLAGS = new Set(['json', 'no-log', 'image', 'filmstrip', 'squint', 'full-page', 'from-user', 'all', 'blueprint', 'fresh', 'check', 'review-check']);
+const FLAGS = new Set(['json', 'no-log', 'no-energy', 'image', 'filmstrip', 'squint', 'full-page', 'from-user', 'all', 'blueprint', 'shot', 'proofs', 'fresh', 'check', 'review-check']);
 const ALIASES: Record<string, keyof Opts> = {
   o: 'out',
   'no-log': 'noLog',
+  'no-energy': 'noEnergy',
   'from-user': 'fromUser',
   'full-page': 'fullPage',
   'frequent-action': 'frequentAction',
@@ -121,7 +134,7 @@ async function cmdIr(opts: Opts): Promise<never> {
 }
 
 async function cmdRender(opts: Opts): Promise<never> {
-  const { renderPage, renderFilmstrip, parseViewport } = await import('../core/render/index.ts');
+  const { renderPage, renderProofs, renderFilmstrip, parseViewport } = await import('../core/render/index.ts');
   const target = opts._[0];
   if (!target) usage();
 
@@ -134,6 +147,14 @@ async function cmdRender(opts: Opts): Promise<never> {
     // Report the index path (sans extension already included) alongside the frame count.
     const indexPath = out.endsWith('.html') || out.endsWith('.htm') ? out : `${out}.html`;
     console.log(`${indexPath}  (${frames.length} frames)`);
+    process.exit(0);
+  }
+
+  if (opts.proofs) {
+    // One browser launch produces all four sketch/craft proofs (fixed + full-page, desktop + mobile).
+    const prefix = opts.out ?? 'proof';
+    mkdirSync(dirname(resolve(prefix)), { recursive: true });
+    for (const p of await renderProofs(target, prefix)) console.log(p);
     process.exit(0);
   }
 
@@ -477,6 +498,38 @@ function cmdChoose(opts: Opts): never {
   process.exit(0);
 }
 
+/**
+ * `omd ref add-batch <manifest.json>` — capture many references concurrently over ONE browser.
+ * The manifest is a JSON array of `{ source, as, selector?, blueprint?, shot?, fromUser?, viewport? }`.
+ * Same per-reference result as `omd ref add`, minus the energy pass, at a fraction of the wall time.
+ */
+async function cmdRefAddBatch(opts: Opts): Promise<never> {
+  const manifestPath = opts._[0];
+  if (!manifestPath) {
+    console.error('usage: omd ref add-batch <manifest.json>  (JSON array of { source, as, selector?, blueprint?, shot?, fromUser?, viewport? })');
+    process.exit(1);
+  }
+  const { addRefsBatch } = await import('../core/ref/batch.ts');
+  const specs = JSON.parse(readFileSync(resolve(manifestPath), 'utf8')) as import('../core/ref/batch.ts').RefSpec[];
+  if (!Array.isArray(specs) || specs.length === 0) throw new Error('manifest must be a non-empty JSON array of reference specs');
+  for (const s of specs) {
+    if (!s || typeof s.source !== 'string' || typeof s.as !== 'string') {
+      throw new Error('each manifest entry needs a string `source` and `as`');
+    }
+  }
+  const result = await addRefsBatch(process.cwd(), specs, { rulesRoot: join(root, 'core', 'rules', 'builtin') });
+  if (opts.json) process.stdout.write(JSON.stringify(result));
+  else {
+    const ok = result.outcomes.filter((o) => o.ok).length;
+    console.log(`ref add-batch: ${ok}/${result.outcomes.length} captured (concurrency ${result.concurrency})`);
+    for (const o of result.outcomes) {
+      if (o.ok) console.log(`  ok   ${o.as}  <- ${o.source}${o.slopCount ? `  (${o.slopCount} slop)` : ''}`);
+      else console.error(`  FAIL ${o.as}  <- ${o.source}: ${o.error}`);
+    }
+  }
+  process.exit(result.outcomes.some((o) => !o.ok) ? 1 : 0);
+}
+
 async function cmdRefAdd(opts: Opts): Promise<never> {
   const target = opts._[0];
   if (!target || !opts.as) {
@@ -489,6 +542,10 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
   }
   if (opts.blueprint && !opts.selector) {
     console.error('--blueprint requires --selector: a blueprint measures one component, not a whole page.');
+    process.exit(1);
+  }
+  if (opts.shot && !opts.selector) {
+    console.error('--shot requires --selector: a scoped screenshot captures one component, not a whole page.');
     process.exit(1);
   }
   const { saveRef } = await import('../core/ref/store.ts');
@@ -527,7 +584,7 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
   // Failure is silently ignored: a blocked page or unsupported format must not prevent
   // the reference from being saved.
   const { captureEnergy, parseViewport } = await import('../core/render/index.ts');
-  const energyCurve = await captureEnergy(target, { viewport: parseViewport(opts.viewport) });
+  const energyCurve = opts.noEnergy ? null : await captureEnergy(target, { viewport: parseViewport(opts.viewport) });
 
   // Blueprint: full-resolution structural snapshot with skin abstracted to color roles.
   // Only captured when --blueprint is passed together with --selector.
@@ -536,6 +593,23 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
     const { captureBlueprint } = await import('../core/ref/blueprint.ts');
     blueprint = captureBlueprint(raw.nodes, opts.selector);
     console.error(`blueprint: ${blueprint.nodes.length} nodes captured`);
+  }
+
+  // Scoped screenshot: pair the component's pixels with its blueprint/invariants on one
+  // record so image-first art direction can seed from both (see core/theory/imagegen.md).
+  // A render failure must not lose the reference — warn and continue.
+  let imagePath: string | undefined;
+  if (opts.shot && opts.selector) {
+    const { renderElement } = await import('../core/render/index.ts');
+    const { refImagePath } = await import('../core/ref/store.ts');
+    const absShot = refImagePath(process.cwd(), { source: target, component: opts.as });
+    try {
+      await renderElement(target, { viewport: parseViewport(opts.viewport), selector: opts.selector, out: absShot });
+      imagePath = relative(process.cwd(), absShot);
+      console.error(`shot: ${imagePath}`);
+    } catch (err) {
+      console.error(`shot skipped: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   const path = saveRef(process.cwd(), {
@@ -550,6 +624,7 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
     ...(opts.fromUser ? { origin: 'user' as const } : {}),
     ...(energyCurve !== null ? { energyCurve } : {}),
     ...(blueprint !== undefined ? { blueprint } : {}),
+    ...(imagePath !== undefined ? { imagePath } : {}),
   });
   console.log(path);
   console.log(JSON.stringify(invariants, null, 2));
@@ -1395,6 +1470,48 @@ function cmdSlop(sub: string | undefined, opts: Opts): never {
   process.exit(0);
 }
 
+/** Advisory AI-cliche scan of copy-deck / rendered copy. Non-gating; always exit 0. */
+function cmdTextSlop(opts: Opts): never {
+  const file = opts._[0] ?? join(process.cwd(), '.omd', 'copy-deck.md');
+  const text = existsSync(file) ? readFileSync(file, 'utf8') : '';
+  const candidates = scanTextSlop(text);
+  if (opts.json) process.stdout.write(JSON.stringify({ file, candidates }));
+  else {
+    console.log(`text-slop candidates: ${candidates.length} (${file})`);
+    for (const c of candidates) console.log(`${file}:${c.line}  ${c.candidateId}  ${c.reviewQuestion}`);
+    if (candidates.length === 0) console.log('ok — no AI-cliche phrase candidates (advisory only; not proof of good prose)');
+  }
+  process.exit(0);
+}
+
+/** Advisory carrier / visual-richness read of composition.md. Non-gating; always exit 0. */
+function cmdVisualRichness(opts: Opts): never {
+  const file = opts._[0] ?? join(process.cwd(), '.omd', 'composition.md');
+  const contract = existsSync(file) ? readFileSync(file, 'utf8') : '';
+  const valid = ['quiet', 'confident', 'showpiece'];
+  const register = valid.includes(opts.register ?? '') ? (opts.register as VisualRichnessRegister) : undefined;
+  const findings = evaluateVisualRichness(register ? { contract, register } : { contract });
+  if (opts.json) process.stdout.write(JSON.stringify({ file, register: register ?? null, findings }));
+  else {
+    console.log(`visual-richness advisories: ${findings.length} (${file}${register ? `, register=${register}` : ''})`);
+    for (const f of findings) console.log(`[advisory] ${f.id} ${f.section}: ${f.message}`);
+    if (findings.length === 0) console.log('ok — every content section names a purposeful visual carrier (advisory only)');
+  }
+  process.exit(0);
+}
+
+/** `omd stack` — deterministic stack routing from folder evidence; the hand builds exactly what it names. */
+function cmdStack(opts: Opts): never {
+  const d = computeStack(process.cwd());
+  if (opts.json) process.stdout.write(JSON.stringify(d));
+  else {
+    console.log(`stack: ${d.stack}${d.framework ? ` (${d.framework})` : ''}`);
+    console.log(`  reason: ${d.reason}`);
+    console.log(`  greenfield: ${d.greenfield}; plain-HTML allowed only with a verbatim user request: ${d.htmlOverrideAllowed}`);
+  }
+  process.exit(0);
+}
+
 function usage(): never {
   console.error(
     'usage: omd <command>\n\n'
@@ -1402,12 +1519,14 @@ function usage(): never {
     + '  render <page> -o shot.png [--viewport WxH]  headless screenshot\n'
     + '  render <page> --full-page -o shot.png         supplementary long-page capture\n'
     + '  render <page> --squint -o shot.png            grayscale + blur hierarchy isolation\n'
+    + '  render <page> --proofs -o <prefix>            all four proofs (fixed+full, desktop+mobile) in one browser\n'
     + '  render <page> --filmstrip -o f.html [--viewport WxH]  load-time filmstrip\n'
     + '  probe <page> [--plan path] [--json] [--out path]  declared local interaction path\n'
     + '  check [<page>|--ir f] [--json] [--category slop] [--no-log]\n'
     + '  check --site <dir>                          cross-page consistency (SITE-*)\n'
     + '  check <page1> <page2> ...                   same, multi-page positional\n'
     + '  slop scan [root] [--json]                   read-only source candidate scan\n'
+    + '  stack [--json]                              deterministic stack routing (blank greenfield -> React+Vite+TS)\n'
     + '  coach                                        trends across `omd check` history\n'
     + '\n'
     + '  frame show\n'
@@ -1427,6 +1546,8 @@ function usage(): never {
     + '  ref add <url|file> --as <component> [--selector "css"] [--image] [--blueprint]\n'
     + '                                                render, extract invariants, save\n'
     + '  ref add ... --selector ".nav" --blueprint     also capture a component blueprint\n'
+    + '  ref add ... --selector ".nav" --blueprint --shot  also save the component screenshot beside its blueprint\n'
+    + '  ref add-batch <manifest.json>               capture many references in parallel over one browser\n'
     + '  ref list                                    one line per saved reference\n'
     + '  ref distance <page>                         compare a page to every saved reference\n'
     + '  ref principles <source> --as C --add "..."   record why a reference works\n'
@@ -1439,6 +1560,9 @@ function usage(): never {
     + '  composition --check [--json]                validate composition sections and input freshness\n'
     + '  source --seal [root]                        write final approved-input/source byte seal\n'
     + '  source --check [root] [--json]              fail when the source seal is missing or stale\n'
+    + '\n'
+    + '  text-slop [file] [--json]                   advisory AI-cliche scan of copy (default .omd/copy-deck.md)\n'
+    + '  visual-richness [file] [--register R] [--json]  advisory carrier read of composition (default .omd/composition.md)\n'
     + '\n'
     + '  pack dir                                    print the knowledge-pack root path\n'
     + '  pack list                                   list all pack .md files\n'
@@ -1515,6 +1639,7 @@ async function main(): Promise<never> {
   if (cmd === 'ref') {
     const opts = parseArgs(args.slice(2));
     if (sub === 'add') return cmdRefAdd(opts);
+    if (sub === 'add-batch') return cmdRefAddBatch(opts);
     if (sub === 'list') return cmdRefList();
     if (sub === 'distance') return cmdRefDistance(opts);
     if (sub === 'principles') return cmdRefPrinciples(opts);
@@ -1526,6 +1651,9 @@ async function main(): Promise<never> {
   if (cmd === 'copy') return cmdCopy(parseArgs(args.slice(1)));
   if (cmd === 'composition') return cmdComposition(parseArgs(args.slice(1)));
   if (cmd === 'source') return cmdSource(sub, parseArgs(args.slice(2)));
+  if (cmd === 'stack') return cmdStack(parseArgs(args.slice(1)));
+  if (cmd === 'text-slop') return cmdTextSlop(parseArgs(args.slice(1)));
+  if (cmd === 'visual-richness') return cmdVisualRichness(parseArgs(args.slice(1)));
   if (cmd === 'pack') return cmdPack(sub, ...args.slice(2));
   if (cmd === 'doctor') return cmdDoctor();
 

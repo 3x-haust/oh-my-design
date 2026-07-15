@@ -555,6 +555,14 @@ export interface Reference {
    * the project's voice. The page-distance guard still fires on a clone.
    */
   blueprint?: Blueprint;
+  /**
+   * Path (relative to cwd) of the scoped component screenshot captured with
+   * `omd ref add --selector … --shot`. Pairs the component's pixels with its
+   * blueprint/invariants on one record so image-first art direction can seed
+   * from both the picture and the structural data — see `core/theory/imagegen.md`.
+   * The kinship gate (`ref distance <= 0.6`) still gates the shipped build.
+   */
+  imagePath?: string;
 }
 
 /** How close a page sits to a reference. 1 is identical; the warning threshold is 0.6. */

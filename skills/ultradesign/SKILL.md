@@ -35,9 +35,33 @@ greenfield. Plain HTML greenfield requires an explicit user request; there is no
 single-static-surface exception. Preserve and investigate unrecognised package/toolchain
 evidence instead of replacing it with React. Greenfield scaffold dependencies are allowed;
 existing projects receive no unnecessary dependencies.
+Plain HTML/CSS/JS for a blank greenfield requires the explicit user request quoted verbatim in the
+stack `omd decision`. Absent a matching verbatim user quote, a truly blank greenfield is React +
+Vite + TypeScript — never infer, assume, or paraphrase a pre-authorization. A decision that claims
+the brief "pre-authorized plain HTML" without a verbatim user quote that actually says so is a
+stack-routing defect, not a lawful shortcut.
+"Existing repository stack" means a real project the user brought: a package manifest, a framework
+or build config (`vite.config`, `next.config`, `package.json`, etc.), or files the user explicitly
+points at. A bare `index.html`/`.css`/`.js` with no manifest and no build config, sitting next to an
+`.omd/` directory from a prior OMD run, is OMD's own leftover output — not a user stack. A fresh
+design brief in that folder is a greenfield (React + Vite + TypeScript by default), not a
+continuation of the leftover HTML; do not let your own previous output pin the stack to vanilla.
+Testing repeatedly in one directory reuses the `.omd/refs/` board (fine, output-neutral) but never
+reclassifies a greenfield as an existing HTML project.
+The hand runs `omd stack` before its first production write and builds in exactly the stack it
+computes from folder evidence — a blank greenfield resolves to React + Vite + TypeScript
+deterministically, so the model never talks itself into plain HTML for a one-page site. The only
+lawful override is a verbatim explicit user request for HTML.
 
 Run `omd config show`. `checkpoint: none` is the default and means no approval waits.
 Only `concept`, `structure`, or `both` opt into a human pause at that named point.
+Speed comes only from output-neutral structure, never from degrading the result. Two levers, both
+of which leave the full-fidelity output unchanged: reuse a coverage-complete `.omd/refs/` board when
+this working directory already has one for the concept (scout only the missing categories rather
+than rebuilding it), and let the scout capture references in parallel with `omd ref add-batch` — one
+browser instead of one per reference. The first run in a fresh directory is the slowest because it
+builds the board; later runs in the same directory are much faster and still full-fidelity. There is
+no reduced-quality mode: every run is the real result.
 
 Run `omd taste profile` and pass only that explicit-user profile to the framer. Never use
 `--all` for design decisions. Current brief beats current explicit feedback, which beats
@@ -53,6 +77,13 @@ Read the frame and relevant theory. Form one concept hypothesis: generator/metap
 colour direction, typography register, quiet/confident/showpiece register, and one memorable
 moment. Ground it in the brief/evidence and record it with `omd frame generator` plus
 `omd decision`. Pause only when config explicitly includes the concept checkpoint.
+When the brief explicitly signals visual ambition — 개쩔게, 죽여주게, 미쳤다, 어워드/awards-level,
+killer, wow, showpiece — treat it as an explicit user request for the showpiece register and at
+least one genuinely novel signature moment, and record it as such. Do not reframe an explicit
+ambition brief down into restraint: substance-over-spectacle is the default only when the brief is
+silent on ambition; the current brief beats the agent's own taste for restraint. Restraint still
+governs *how many* techniques ship (one signature moment, never a catalogue), never *whether* the
+explicitly requested showpiece ambition is honored at all.
 
 ## 2. Research and copy before structure
 
@@ -60,12 +91,20 @@ Spawn `oh-my-design:scout` with the concept, component inventory, user reference
 directory. Require coverage across domain, competitors, user/community evidence,
 typography, voice, relevant motion, and every required component. Accept no count theater,
 pixel copying, low-trust laundering, slop contamination, or kinship.
+The scout returns a sanitized summary — measured invariants, principles, coverage, and source
+trust — never raw transcripts or screenshots, and captures its reference board in parallel with
+`omd ref add-batch` (one browser). Its voice/audience evidence is the writer's only dependency; the
+browser-heavy visual board is not, so the scout delivers voice/audience evidence first.
 
-The coordinator does not author copy. Spawn `oh-my-design:writer` with the brief, scout's cited
-voice/audience evidence, working directory, `protocol/copy-deck.md`, and `theory/voice.md`.
+The coordinator does not author copy. Once the scout's voice/audience evidence is in hand, spawn
+`oh-my-design:writer` concurrently with the scout's remaining board capture — the writer drafts the copy deck
+while the board finishes building. Give it the brief, that cited voice/audience evidence, working
+directory, `protocol/copy-deck.md`, and `theory/voice.md`.
 It writes only `.omd/copy-deck.md`. Run `omd copy --check`; on failure stop divergence and
 send the deterministic findings back to the writer for autonomous repair without waiting
 for the user.
+The writer additionally runs `omd text-slop .omd/copy-deck.md` as an advisory self-scan; it is
+non-gating and never replaces the blind copy review, but a kept candidate carries a recorded reason.
 
 After the first clean check, spawn a fresh `oh-my-design:eye` in copy-editor mode with only the
 sanitized brief, copy deck/fact ledger, and cited voice/audience evidence. Do not pass renders,
@@ -127,11 +166,22 @@ media, explanatory graphics, real interaction/data, or concept-bearing typograph
 mandatory photo or invented fact/asset. When mechanism/material/workflow is central, Media
 roles assigns a lawful carrier or an explicit alternate non-media mental-model carrier with
 its limitation; `none because no approved photo` is insufficient.
+For a confident/showpiece register where the composition is the deliverable, and when the host
+provides an image-generation capability, the composer runs the image-first art direction in
+`theory/imagegen.md`: it directs 2-3 art-directed concept-draft mockups seeded by the clean-room
+structural grammar (measured principles and skin-abstracted blueprints) plus the committed
+palette/type/material, picks the strongest, and records it as the reference-fidelity direction the
+contract implements against. Drafts are design references stored under `.omd/.cache/imagegen/`, never
+shipped page assets; `omd ref distance` still gates the shipped build. A quiet register or a host with
+no image capability skips this and records why.
 
 Run `omd composition --check`. Missing sections, malformed fingerprints, or stale inputs
 stop divergence and return to the composer. A later change to frame, copy, type proof, or
 scout summary invalidates all dependent sketches and the production build until the contract
 is recomposed and passes again.
+The composer also runs `omd visual-richness .omd/composition.md` as an advisory carrier read;
+`CARRIER-ADVISORY` findings are non-gating prompts to name a purposeful carrier for a content
+section, and a `quiet` register legitimately yields none.
 
 ## 5. Independent structural divergence and blind selection
 
@@ -140,6 +190,12 @@ Gate divergence by structural uncertainty and impact:
 - default: two independent `oh-my-design:sketch` contexts;
 - showpiece or high uncertainty/impact: three;
 - skip only when structure is supplied (Figma/target/explicit layout), recording why.
+
+Skipping the composer or the sketch divergence is a protocol violation, not a shortcut: an
+`.omd/composition.md` that passes `omd composition --check` and the blind sketch-selection record
+are mandatory ship evidence. Never collapse frame → composition → divergence → blind-select into a
+single inline build; a production write with no composition contract and no selected sketch is
+redone, not accepted.
 
 Give every sketch the same sanitized frame/concept, copy deck, sanitized approved typography
 contract, and sanitized composition contract, plus a different anonymous candidate id and
@@ -335,6 +391,36 @@ probe, `omd craft status`, a fresh `omd composition --check`, `omd design --chec
 `omd ref distance`, bounded target convergence when a manifest exists, and `omd check --site`
 for multi-page output. Source-candidate triage has no untriaged or needs-render items and its
 scan was rerun after repairs. Everything is clean or has an evidence-backed deliberate overrule.
+When the run is an iteration with a before/after pair, form the pairwise blind-choose verdict:
+blind-choose is the sole gating signal, with quantitative and Awwwards reads as advisories only.
+Record the comparison; it never replaces the blind typography, copy, or critique gates above.
+
+### Refinement rounds (RED/GREEN, evidence-driven)
+
+For a confident/showpiece register — and always when the brief signals awards-level ambition — the
+first shippable build is not the ship: it is round 0 of a bounded RED/GREEN loop. First write the
+acceptance criteria (the GREEN target) from the frame and `theory/expressive.md` § "Slop-free is not
+the same as distinctive": for example, names the template it resembles and departs from it; no two
+competing primary masses; one clear first-read; slop scan clean; `omd ref distance` <= 0.6; carrier
+present and register-fit; and the blind-choose after beats before. Any unmet criterion is RED.
+
+Then iterate, leaving evidence every round — a round with no evidence does not count:
+1. The hand makes one concrete change, then captures sharp desktop/mobile renders into
+   `.omd/.cache/rounds/round-<N>/` and measures each criterion (glance hierarchy, `omd check`/slop
+   scan, `omd ref distance`, carrier read).
+2. Spawn a fresh `oh-my-design:eye` — never the hand that built it — with only the sanitized acceptance
+   criteria and the two anonymized renders (this round's after and the previous build). It forms the
+   blind-choose and reports which criteria are still RED. Record its verdict, the still-RED criteria,
+   and the evidence paths with `omd decision`. Build and judgment stay separate.
+3. Decide continue or stop from the round evidence. CONTINUE only while the blind-choose favors the
+   after AND RED criteria remain AND the round budget (default 3) is not spent — then fix the single
+   highest-leverage RED target with the same one-concrete-change discipline as the craft checkpoints
+   and re-measure. STOP on GREEN (every acceptance criterion met — done), a regression (revert to the
+   previous build), a plateau (blind-choose tie while still RED), or the budget (keep the best build
+   and report the remaining RED). A round with no evidence does not count.
+
+The loop is bounded and never an automatic retry: it advances only on measured improvement and
+converges on GREEN or the budget. A quiet register may ship after one pass with a recorded reason.
 After final source and approved inputs stop changing, run `omd source --seal <root>` and
 immediately `omd source --check <root>`. The seal is byte-freshness evidence for copy deck,
 type proof, composition, and the sorted production source set; it does not prove semantic
