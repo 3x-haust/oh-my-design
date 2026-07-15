@@ -31,3 +31,12 @@ test('codex .codex-plugin/plugin.json and .agents/plugins/marketplace.json versi
   assert.equal(codexMarketplace.version, pkg.version, '.agents/plugins/marketplace.json top-level version must match package.json');
   assert.equal(codexMarketplace.plugins[0]!.version, pkg.version, '.agents/plugins/marketplace.json plugins[0].version must match package.json');
 });
+
+test('npm package includes both README files linked from the primary README', () => {
+  const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { files: string[] };
+  const readme = readFileSync(join(root, 'README.md'), 'utf8');
+
+  assert.match(readme, /\[한국어\]\(README\.ko\.md\)/, 'README.md must keep the Korean README link');
+  assert.ok(pkg.files.includes('README.md'), 'package files must include README.md');
+  assert.ok(pkg.files.includes('README.ko.md'), 'package files must include README.ko.md');
+});

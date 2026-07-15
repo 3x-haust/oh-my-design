@@ -13,6 +13,7 @@
     "adapters",
     "src",
     "README.md",
+    "README.ko.md",
     "LICENSE"
   ],
   "engines": {
