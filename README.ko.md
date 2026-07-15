@@ -1,248 +1,314 @@
-<div align="center">
+# Oh My Design
 
-<h1>oh-my-design</h1>
+브리프를 묻고, 근거를 모으고, 실제 문구와 구조를 따로 검토한 뒤, 한 번 구현하고 렌더를 보고 다시 정의합니다.
 
-**사람처럼 디자인한다. 훈련 데이터의 평균처럼 말고.**
+[English](README.md)
 
-<p>
-<a href="https://github.com/3x-haust/oh-my-design/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/3x-haust/oh-my-design?style=flat-square" /></a>
-<a href="https://github.com/3x-haust/oh-my-design/releases"><img alt="Release" src="https://img.shields.io/github/v/release/3x-haust/oh-my-design?style=flat-square" /></a>
-<a href="./LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" /></a>
-<img alt="Node" src="https://img.shields.io/badge/node-%E2%89%A522.18-brightgreen?style=flat-square" />
-</p>
+## ‘사람처럼 디자인한다’는 뜻
 
-<a href="#-이게-뭔가">이게 뭔가?</a>
-·
-<a href="#-설치">설치</a>
-·
-<a href="#-스킬">스킬</a>
-·
-<a href="#-슬롭-린터">슬롭 린터</a>
-·
-<a href="./README.md">English</a>
+여기서 ‘사람처럼’은 특정한 결과 스타일이 아니라 근거를 남기는 판단 과정을 뜻합니다.
 
-<br />
+Oh My Design(OMD)은 요청을 받자마자 완성 화면으로 뛰어드는 흐름을 막습니다. 어떤 문제를 푸는지 먼저 묻고, 판단 근거를 기록하고, 글과 레이아웃을 분리합니다. 서로의 작업을 볼 수 없는 상태에서 구조를 비교하고, 구현자의 의도를 모르는 리뷰어가 실제 렌더를 비평합니다. 결과는 차분할 수도, 과감할 수도, 익숙하거나 낯설 수도 있습니다. 일관되는 것은 결과의 생김새가 아니라 결정의 흐름입니다.
 
-</div>
+전체 흐름은 다음과 같습니다.
 
-<hr />
+```text
+브리프 → 근거 → 카피 → 타이포그래피 proof → 구성 계약 → 격리된 구조안 → 프로덕션 구현 1회
+       → 렌더 비평과 인터랙션 증거 → 문제 재정의
+```
 
-> [!NOTE]
-> **2023년 이후 AI가 만든 랜딩페이지는 전부 닮았다. 인디고 그라디언트, 똑같은 카드 세 장, 제목 옆 로켓 이모지. `omd`는 그걸 린트 에러로 만든다.**
+OMD는 Codex와 Claude Code에서 동작합니다. 사용자용 스킬 6개, 내부 파이프라인 에이전트 9개, 로컬 CLI, 디자인 이론·레시피 팩, `.omd/` 프로젝트 기록으로 구성됩니다.
 
-## 💤 이게 뭔가?
+## 빠른 시작
 
-[DesignPref](https://arxiv.org/abs/2511.20513)에서 프로 디자이너 스무 명이 UI를 12,000번 짝지어 비교했다. 일치도는 **크리펜도르프 α = 0.248**에 그쳤다. "좋은 디자인"의 보편적 보상 함수는 존재하지 않는다. 그래서 평균 취향에 최적화된 모델이 익명적인 결과물을 내놓는 건 버그가 아니라 *목적 함수의 논리적 귀결*이다.
+필요한 환경:
 
-`omd`는 Claude Code와 Codex에서 도는 디자인 스킬이다. 더 좋은 모델이 되려 하지 않는다. 사람 디자이너가 밟는 루프를 밟고, 모델이 틀리는 부분을 기계가 잴 수 있는 것으로 바꾼다.
-
-> ESLint를 생각하면 된다. 다만 룰셋이 "이거 AI가 만든 것 같은데"이고, 모든 룰은 서면 사유가 있으면 뒤집을 수 있다.
-
-프롬프트 하나로는 못 하는 다섯 가지:
-
-1. **평균을 검출한다.** 슬롭은 체크 가능하다. 정확하지만 익명적인 작업에 발화하고, 관점 있는 작업엔 침묵하는 결정론적 룰.
-2. **관점을 강제한다.** 컨셉 은유가 모든 결정을 거른다. 정직한 회계사는 통통 튀지 않고, 새벽 3시 편의점은 여백을 남기지 않는다.
-3. **실물에서 안전하게 배운다.** 측정값은 들어오고 픽셀은 절대 안 들어온다. 스크린샷을 본 모델은 그걸 다시 그리지만, 숫자를 받은 모델은 배운다.
-4. **렌더된 걸 실제로 본다.** 대비율, 터치 영역, 모션 타이밍을 headless 브라우저에서 계산하지, 추정하지 않는다.
-5. **작업을 연구에 접지한다.** 색, 타입, 레이아웃, 모션, UX 결정은 내장 이론 팩을 인용한 뒤에 내려진다.
-
-## 🚀 설치
-
-`omd`는 두 호스트에서 돈다. 인스톨러 하나가 둘 다 덮는다. `~/.claude`와 `~/.codex`를 감지해 각각에 플러그인을 복사하고 config를 패치한다.
+- Node.js 22.18 이상
+- Codex, Claude Code 또는 둘 다. 사용할 호스트의 설정 디렉터리가 먼저 존재해야 합니다.
 
 ```bash
+npm install -g oh-my-design
 oh-my-design install
-```
-
-`oh-my-design uninstall`은 install이 한 일을 정확히 되돌리고, `.omd/` 기록은 건드리지 않는다. `--host codex`로 한 호스트만 지정할 수 있다.
-
-각 호스트의 마켓플레이스를 쓰는 길도 있다.
-
-**Claude Code**
-
-```
-/plugin marketplace add 3x-haust/oh-my-design
-/plugin install omd@oh-my-design
-```
-
-스킬은 `/`가 붙어 들어온다. `/oh-my-design:ultradesign`, `/oh-my-design:scout`.
-
-**Codex**
-
-```
-codex plugin marketplace add 3x-haust/oh-my-design
-```
-
-그다음 `/plugins`를 열어 `oh-my-design`을 설치한다. 스킬은 `$`가 붙고(`$oh-my-design:ultradesign`, `$oh-my-design:scout`), 파이프라인의 네 에이전트는 GPT-5.6 세대로 해석된다. (마켓 매니페스트는 Codex 플러그인 스펙에 맞게 방출되지만, 끝까지 검증된 길은 `oh-my-design install`이다.)
-
-어느 쪽이든 Node 22.18 이상이 필요하고, 첫 `omd render`가 headless Chromium을 Playwright로 알아서 받아온다. `omd` CLI는 어디서나 똑같다. `omd check`, `omd render`, `omd pack`은 어느 호스트가 불렀는지 상관하지 않는다. 설치 상태는 이렇게 확인한다.
-
-```bash
+oh-my-design doctor
 omd doctor
 ```
 
-체크당 한 줄. Node, Playwright, 브라우저 바이너리, `.omd/` 쓰기 권한, 이론 팩. `oh-my-design:ultradesign`은 매번 이걸 먼저 돌려서, 망가진 환경이 5단계째가 아니라 첫 1초에 죽게 한다.
+`oh-my-design doctor`는 호스트에 파일과 설정이 제대로 설치됐는지 확인합니다. `omd doctor`는 런타임, Chromium 존재 여부, 현재 프로젝트의 쓰기 권한, 내장 이론 팩을 확인합니다.
 
-## ⚡ 스킬
+설치 프로그램은 Chromium을 설치하지 않습니다. `omd doctor`가 Playwright 또는 Chromium 실행 파일을 찾지 못했다면 출력에 나온 항목을 설치하고 다시 검사하세요. 전역 설치 환경에서는 보통 아래 명령을 사용합니다.
 
-| 스킬 | 이렇게 말하면 | 이렇게 된다 |
+```bash
+npm install -g playwright
+npx playwright install chromium
+omd doctor
+```
+
+두 doctor가 통과하면 호스트에서 메인 디자인 스킬을 실행합니다. 스킬이 보이는 방식은 호스트마다 다릅니다. 자세한 내용은 [스킬과 호출 방식](#스킬과-호출-방식)을 참고하세요.
+
+## 사람 디자이너의 작업 루프
+
+`omd-ultradesign`은 아래 순서를 지킵니다.
+
+1. **사전 점검**: 프로젝트 절대 경로를 고정하고 `omd doctor`를 실행합니다. 저장소를 살펴보고 Figma 링크가 있는 작업은 `omd-figma`로 보냅니다.
+2. **프레임**: 브리프를 캐묻고 문제, 재정의 가설, 핵심 과업, 가장 자주 하는 행동, 가장 큰 비용을 만드는 오류를 근거와 함께 기록합니다.
+3. **콘셉트**: 생성 원리, 시각적 레지스터, 타이포그래피 방향, 기억에 남길 장면을 정합니다.
+4. **리서치**: 도메인, 경쟁 제품, 사용자 언어, 필요한 컴포넌트, 타이포그래피, 관련 모션을 측정 가능한 레퍼런스로 모읍니다.
+5. **카피 작성**: 레이아웃을 잡기 전에 전담 writer가 사실 근거를 추적할 수 있는 카피 덱을 만듭니다.
+6. **블라인드 카피 리뷰**: 새 리뷰어는 브리프, 카피, 사실 원장, 보이스 근거만 봅니다. 렌더, 코드, 레이아웃, 선택 이유, 작성자는 볼 수 없습니다.
+7. **타이포그래피 블라인드 proof**: typesetter가 실제 카피를 1280x900과 390x844의 중립 specimen으로 렌더합니다. 새 eye가 구조와 선택 이유를 모른 채 리뷰하고 typesetter가 고쳐 다시 렌더합니다.
+8. **구성을 계약으로 확정**: 새 composer가 경험 흐름, 첫 화면의 지배적 anchor, 질량·리듬, 합법적인 메커니즘 carrier 또는 명시적 대안, 반응형 재구성, 후보 축을 정합니다. `omd composition --check`로 입력 최신성을 검사합니다.
+9. **구조 발산**: 각 후보는 고정 데스크톱·모바일과 보조 full-page 연속성 렌더를 모두 만듭니다.
+10. **블라인드 선택**: 새 선택 담당자가 고정된 0–4의 8개 축으로 채점하고 계약 위반이나 2점 미만 축이 있는 후보를 탈락시킵니다. 폼이 첫 화면에 있다는 이유만으로 CTA 도달성을 높게 보지 않습니다.
+11. **한 번 구현**: 선택한 구조 하나만 프로덕션 코드로 만듭니다. 구현 담당자는 후보를 다시 늘리지 않습니다.
+12. **만들면서 성찰**: semantic checkpoint 뒤 선택된 데스크톱·모바일 컨테이너에서 글꼴을 다시 증명한 다음, 모션 전에 visual checkpoint를 남깁니다.
+13. **결과 관찰**: 데스크톱·모바일 렌더, squint 렌더, 필요한 filmstrip, 규칙 검사, 선언된 로컬 probe가 리뷰 증거가 됩니다.
+14. **소스 후보 분류**: 프로덕션 소스가 생기면 읽기 전용 scan이 좁은 후보를 제안합니다. 진행 담당자가 렌더 맥락에서 각 후보를 판정하며, 후보가 있다는 사실만으로 실패하지 않습니다.
+15. **비평·수리·재정의**: squint 전담 glance가 위계를 먼저 적고, 별도의 sharp 리뷰어가 완성도와 정제된 후보를 판단합니다. 수리 뒤에는 렌더·check·rescan을 다시 실행합니다.
+16. **인계**: 프로젝트 테스트와 빌드, 적용 가능한 디자인 게이트, 남은 검사 결과와 근거를 함께 보고합니다.
+
+Figma나 명시적인 비주얼 타깃에는 이미 구조 결정이 들어 있습니다. 이런 경로에서는 구조 발산을 생략할 수 있으며, 생략 이유를 기록합니다.
+
+## 단계별 산출물과 증거 경계
+
+| 단계 | 지속되는 산출물 | 경계 |
 | --- | --- | --- |
-| `oh-my-design:ultradesign` | "디자인해줘", "랜딩 쩔게 만들어줘" | 루프 전체가 승인 요청 없이 끝까지 돈다. 동작하는 사이트와 함께, 모든 결정과 그 이유가 기록으로 남는다. |
-| `oh-my-design:figma` | figma.com 링크를 붙여넣거나 "피그마 그대로 구현해줘" | 파일을 가져와 디자인 시스템을 합성하고, 프레임별 픽셀 비교 루프로 짓고, 반응형 쌍을 맞추고, 충실도 리포트와 함께 납품한다. |
-| `oh-my-design:scout` | "레퍼런스 수집해줘", "좋은 사이트들은 X를 어떻게 해?" | 측정된 레퍼런스 보드. 전체 페이지, 단일 컴포넌트, 타이포와 모션 스터디, 커뮤니티 스레드, 실제 프로덕트의 *글투*까지. 디자인은 하지 않는다. |
-| `oh-my-design:critique` | "비평해줘", "왜 이 화면 별로지" | 손대지 않고 리뷰한다. 린터를 돌리고, 발견을 근본 원인으로 묶고, 취향이 아니라 프로젝트 자신의 컨셉에 대고 판단한다. |
-| `oh-my-design:humanize` | "AI티 빼줘", "사람이 쓴 것처럼" | 한국어와 영어 AI 문체 틱을 걷어낸다. 번역투, 기계적 나열, 상투구, 균일한 리듬. 사실은 한 글자도 바꾸지 않는다. |
-| `oh-my-design:coach` | "내가 뭘 반복해서 틀리지?" | 체크 히스토리를 읽는다. 뭐가 반복되고, 뭐가 나아졌고, 뭘 공부할지. 데이터가 얇으면 추세를 지어내지 않고 그렇다고 말한다. |
+| 프레임 | `.omd/frame.md` | 사용자 문장, 조사·인터뷰 문장, 데이터, 이름을 밝힌 경쟁 제품 관찰 중 하나가 근거로 필요합니다. OMD 내부 지침은 근거가 아닙니다. |
+| 리서치 | `.omd/refs/*.json` | 구현 담당자는 베낄 화면 대신 측정값과 원리를 받습니다. scout는 개수나 갤러리 할당량이 아니라 결정·컴포넌트 범위, 독립성, 출처 신뢰를 채우고 남은 불확실성을 보고합니다. |
+| 카피 | `.omd/copy-deck.md` | 실제로 나가는 사실 문구는 모두 `verified` 팩트 ID를 참조합니다. `fixture`는 밀도 테스트 전용이고 `open`은 실제 문구의 근거로 쓸 수 없습니다. |
+| 블라인드 카피 리뷰 | 리뷰 handoff | 리뷰어는 렌더, 소스, 레이아웃, frame, decisions, 작성자를 보지 않고 카피도 직접 고치지 않습니다. writer가 리뷰를 반영한 뒤 `omd copy --check`를 다시 실행합니다. |
+| 타이포그래피 proof | `.omd/type-proof.md`, `.omd/.cache/type-proof/` specimen | 실제 언어의 카피로 역할, 출처·라이선스, 글리프 범위, 요청·계산된 family와 weight, axis, fallback·loading, wrap·clip, 탈락 대안을 두 viewport에서 증명합니다. 브라우저 증거만으로 각 글리프를 그린 물리 글꼴을 식별하지 않습니다. |
+| 구성 계약 | `.omd/composition.md` | clean-room composer가 사진이나 첫 화면의 전체 폼을 강제하지 않고 focal anchor, CTA 경로, 메커니즘 carrier/대안, 반응형 관계를 정합니다. 정확한 hash가 오래된 입력을 막습니다. |
+| 구조 스케치 | `.omd/.cache/sketches/<id>/` | 각 후보는 고정 1280x900·390x844 acceptance 렌더와 full-page 데스크톱·모바일 연속성 증거를 만듭니다. Full-page는 의존성과 리듬 판단에만 씁니다. |
+| 블라인드 선택 | `.omd/taste/preferences.jsonl` | 선택 담당자는 익명 렌더와 정제된 과업 정보만 봅니다. 후보의 설명과 작성자는 가립니다. `omd choose`는 선택한 후보와 이유를 에이전트 선택 기록으로 저장합니다. |
+| 프로덕션 구현 | 저장소 소스 | 구현 담당자 한 명이 선택한 구조 하나를 구현하고 카피 덱을 보존합니다. 별도의 `omd decision` 항목은 구현 이유를 `.omd/decisions.md`에 기록하며 후보 선택 기록과 구분됩니다. |
+| 프로덕션 근거 | `.omd/attribution.md` | 구현 담당자가 실제로 사용한 토큰, 모션, 구성, 그래픽의 출처를 기록합니다. |
+| Craft checkpoint | `.omd/craft.jsonl` | semantic과 visual checkpoint에서 관찰한 문제와 그 때문에 바꾼 내용을 각각 기록합니다. |
+| 소스 후보 분류 | raw JSON은 `.omd/.cache/`, 판단 근거는 `.omd/decisions.md` | `omd slop scan`은 원문 excerpt 없이 통제된 signal만 냅니다. `needs-render`는 임시 상태이며 최종 untriaged와 needs-render가 모두 0이어야 합니다. 현재 confirmed 후보는 수리·rescan하고 dismissed에는 근거를 남기며, 겹치는 경우 rendered IR이 우선합니다. |
+| 렌더 리뷰 | 임시 렌더, filmstrip, probe 출력 | squint 전담 리뷰어는 squint 렌더만 봅니다. 고해상도 렌더 리뷰어도 구현자의 선택 이유 대신 정제된 과업과 측정 결과를 받습니다. |
+| 재정의 | `.omd/frame.md` revision | `omd frame reframe`은 처음 frame을 지우지 않고 렌더가 드러낸 내용을 덧붙입니다. |
+| 최종 소스 seal | `.omd/source-seal.json` | `omd source --seal`이 최종 copy/type/composition과 정렬된 production source hash를 기록하고 `--check`가 바이트 최신성만 증명합니다. 의미 충실도 판정은 아닙니다. |
 
-## 🔁 파이프라인
+사람의 승인 시점과 craft checkpoint는 다른 개념입니다. 기본값은 `checkpoint: none`이고, `.omd/config.json`에서 concept, structure, both 중 하나를 선택할 수 있습니다.
 
-`oh-my-design:ultradesign`은 일곱 단계를, 사이에 게이트 없이, 순서대로 돈다.
+## 스택 선택 순서
 
+모든 구현 담당자는 아래 우선순위를 따릅니다.
+
+```text
+사용자의 명시적인 요청
+  > 기존 저장소의 스택과 툴체인
+  > 완전히 빈 새 프로젝트에서만 React + Vite + TypeScript
 ```
-                         ┌──────────────────────────────────────────────┐
-                         │                                              ▼
-  ① 프레임 ──▶ ② 컨셉 ──▶ ③ 레퍼런스 ──▶ ④ 커밋 ──▶ ⑤ 빌드 ──▶ ⑥ 관찰 ──▶ ⑦ 리프레임
-   브리프를      이론 팩 +    omd-scout이     구조 하나,    omd-hand     필름스트립    본 것이
-   의심한다      도메인       실물을 잰다     비용 명명     + 모션 스펙  + 측정        프레임을
-                리서치                                                               다시 쓴다
-```
 
-네 에이전트는 의도적으로 격리되어 있다. `omd-framer`는 브리프를 심문하고, 프레임을 고정하는 UX 질문 셋을 던진다. 사용자가 들고 오는 과제, 가장 잦은 액션, 가장 비싼 실수. `omd-scout`은 레퍼런스를 잰다. `omd-hand`는 커밋된 구조 하나를 짓는다. `omd-eye`는 맨 컨텍스트에서 비평하며, 픽셀을 판단하기 전에 주 과제를 직접 밟아본다. 작업을 낳은 추론을 본 적이 없으니 그걸 변호할 수도 없다.
+기존 vanilla HTML도 보존해야 할 스택입니다. 알아보지 못한 패키지나 툴체인은 빈 저장소로 취급하지 않고 먼저 조사합니다. 새 프로젝트에 plain HTML을 쓰는 경우는 사용자가 직접 요청했을 때뿐입니다.
 
-가는 길에, 결과물을 흔한 빌드와 갈라놓는 네 가지가 있다.
+빈 프로젝트의 기본 scaffold에 필요한 의존성은 추가할 수 있습니다. 기존 프로젝트에는 필요 없는 의존성을 넣지 않습니다.
 
-- **scout은 AI가 만든 레퍼런스를 거른다.** 모든 캡처가 빌드가 통과해야 할 그 슬롭 린터를 먼저 지난다. 발화 2건이면 보드에 못 올라오고, 떨어진 캡처는 대체 검색을 의무로 남긴다. 보드는 *통과한 것*으로 만들지, 있던 것으로 만들지 않는다. 서로 0.85 이상 닮은 레퍼런스 쌍은 근친으로 떨궈진다. 그렇게 닮은 페이지들은 같은 평균을 실어 나른다.
-- **eye는 스크린샷이 아니라 움직임을 본다.** `omd render --filmstrip`이 첫 몇 초를 프레임으로 찍고, 라이브 프로브가 로드와 스크롤 중 `document.getAnimations()`를 읽어 등장 타이밍과 스크롤 안무를 숫자로 만든다. hand는 모션 스펙을 먼저 쓰고, 스펙에 없는 애니메이션은 실리지 않는다.
-- **모션, 구도, 그래픽은 즉흥이 아니라 쿡북에서 온다.** 모션 레시피 12종, 페이지 구도 8종, 그래픽 6종. 각각 동작하는 코드, 언제 쓰는지 조건, 보드 측정값이 채우는 슬롯을 갖는다. 즉흥은 평균으로 수렴하지만, 검증된 레시피를 파라미터화하는 건 그러지 않는다.
-- **모든 토큰에 출처가 남는다.** `.omd/attribution.md`가 토큰 그룹마다 어느 레퍼런스나 이론에서 왔는지 기록하고, `omd check`가 감사한다. 아무도 출처를 못 대는 색은 감성이 아니라 발견이다.
+`omd design`은 저장소 근거를 찾고 `.omd/design.md`가 없을 때만 새 파일을 만듭니다. 이미 파일이 있다면 내용을 보존하고 근거 탐색과 검증 요약만 출력합니다.
 
-## 🧹 슬롭 린터
+## 스킬과 호출 방식
 
-`omd check`는 대비, 터치 영역, 간격, 토큰 커버리지를 재고, **슬롭**, 즉 평균으로 수렴한 작업의 시그니처를 잰다. 룰 스물한 개, 전부 warn이다. 각각이 의도된 선택에 대해 틀릴 수 있어서고, 뒤집으려면 서면 사유가 필요하다. 두 계열로 나뉜다.
+사용자가 직접 쓰는 공개 스킬은 6개입니다.
 
-**색·표면·레이아웃**, 기계의 디폴트 미학을 측정한다.
-
-| 룰 | 잡는 것 |
+| 정식 이름 | 용도 |
 | --- | --- |
-| `SLOP-GRADIENT` | 인디고에서 바이올렛으로 흐르는 그라디언트를 hex 블록리스트가 아니라 색상 대역으로 |
-| `SLOP-GRADIENT-TEXT` | 그라디언트 제목 텍스트. 스케일 대신 `background-clip`으로 위계를 흉내 |
-| `SLOP-RADIUS-MONOCULTURE` | 모든 모서리가 한 radius. 재질 위계가 없다 |
-| `SLOP-NESTED-RADIUS` | 안 맞물리는 모서리. 안쪽 radius는 바깥에서 패딩을 뺀 값이어야 한다 |
-| `SLOP-SHADOW-MONOCULTURE` | 같은 그림자의 반복. 전부 떠 있으면 아무것도 떠 있지 않다 |
-| `SLOP-OVERSIZED-SHADOW` | 작은 요소에 40px 넘는 blur. 장식이 된 그림자 |
-| `SLOP-GLASSMORPHISM` | 최대 radius에 `backdrop-blur` 반투명. 구조가 아니라 흐림으로 만든 깊이 |
-| `SLOP-EVERYTHING-CENTERED` | 강조가 아니라 디폴트가 된 가운데 정렬 |
-| `SLOP-TRIPLE-CARD` | 똑같은 카드 세 장, 또는 대문자 통계 그리드. 뭐가 중요한지 아무도 결정 안 했다 |
-| `SLOP-NESTED-CARDS` | 카드 안의 카드 안의 카드. 한 영역엔 한 표면 |
-| `SLOP-MONO-SPACING` | 모든 간격이 하나. 습관이 아니라 관계로 띄운다 |
-| `SLOP-FLAT-TYPE` | UI 전체가 14에서 18px 사이. 대비 없는 스케일 |
-| `SLOP-BADGE-SPAM` | 크롬에 붙은 "Beta / New / Hot" 알약 |
-| `SLOP-FAKE-STAT` | 지어낸 통계 줄. 출처 없는 `10k+ / 99.9% / 24/7` |
-| `SLOP-EMOJI-HEADING` | 타이포그래피가 못 한 일을 대신하는 이모지. 제목이든 버튼이든 |
+| `omd-ultradesign` | 페이지, 앱, 대시보드, 블로그, 랜딩 페이지, 리디자인에 전체 사람 디자인 루프를 실행합니다. |
+| `omd-figma` | Figma 파일을 가져와 시스템을 추출하고, 프레임과 반응형 쌍을 구현한 뒤 측정한 충실도를 보고합니다. |
+| `omd-scout` | 디자인이나 구현 없이 독립적인 측정 레퍼런스 보드를 만듭니다. 수량을 채우는 대신 중요한 근거 범위를 닫고 불확실성을 보고합니다. |
+| `omd-critique` | 기존 디자인을 고치지 않고 리뷰합니다. 검사 결과를 원인별로 묶고 렌더 완성도를 판단합니다. |
+| `omd-humanize` | 사실을 보존하면서 구조가 맞는 글은 국소 수리하고, 담화 구조가 망가진 글은 검증된 사실·보이스·실제 행동에서 재구성합니다. |
+| `omd-coach` | 누적된 check history에서 반복 문제와 추세를 읽고 다음 연습 항목을 제안합니다. 취향 기록은 읽지 않습니다. |
 
-**카피**, 생성된 작업이 가장 먼저 자백하는 곳.
+소스와 direct install에서 쓰는 정식 이름에는 `omd-*` 접두사가 붙습니다. Codex UI에서는 `(omd) <skill>` 형태로 보입니다. 예를 들면 `(omd) ultradesign`입니다.
 
-| 룰 | 잡는 것 |
+검증된 installer는 정식 이름의 스킬을 감지한 호스트에 직접 복사합니다. 각 호스트 화면에 표시되는 이름으로 선택하세요. slash command 모양은 호스트가 정합니다. Marketplace용 manifest도 함께 배포되며, Claude marketplace flavor의 plugin 참조는 `oh-my-design:<skill>` namespace를 씁니다. Marketplace가 검증된 direct install 경로와 완전히 같다고 단정하지 않습니다.
+
+## 내부 파이프라인 에이전트
+
+아래 9개는 사용자가 호출하는 공개 명령이 아니라 디자인 루프 내부 역할입니다.
+
+| 에이전트 | 역할 | 쓰기 경계 |
+| --- | --- | --- |
+| `omd-framer` | 브리프를 질문하고 근거가 있는 frame을 기록합니다. | 읽기 전용이며 frame CLI로만 기록합니다. |
+| `omd-scout` | 파이프라인에 필요한 범위를 채우도록 측정 근거를 조사합니다. | 읽기 전용이며 ref CLI로만 기록합니다. |
+| `omd-writer` | 카피 덱과 사실 원장을 작성하거나 고칩니다. | `.omd/copy-deck.md`만 씁니다. |
+| `omd-typesetter` | 구조 전에 실제 카피 타이포그래피 proof를 만들고 수정합니다. | `.omd/type-proof.md`와 `.omd/.cache/type-proof/`만 다룹니다. |
+| `omd-composer` | 정제된 근거를 구조 발산 전의 최신 구성 계약으로 바꿉니다. | `.omd/composition.md`만 씁니다. |
+| `omd-sketch` | 실제 카피로 격리된 grayscale 구조안 하나를 만듭니다. | 자기 임시 후보 디렉터리만 씁니다. |
+| `omd-hand` | 선택된 구조를 구현하고 craft checkpoint 두 개를 기록합니다. | 프로덕션 저장소와 선언된 OMD 기록을 다룹니다. |
+| `omd-glance` | squint 렌더만 보고 즉각적인 위계를 적습니다. | 쓰지 않습니다. |
+| `omd-eye` | 익명 구조를 고르거나, 카피·타이포그래피 proof를 블라인드 리뷰하거나, sharp 렌더를 비평합니다. | 쓰지 않습니다. |
+
+에이전트는 구체적인 모델을 고정하지 않고 세션에서 선택한 모델을 상속합니다. `high`와 `medium` reasoning 값은 역할의 의도를 전달합니다.
+
+Claude Code는 agent metadata의 denied tool을 선언적으로 적용할 수 있습니다. Codex agent 파일에는 같은 용도의 tool restriction 필드가 없어 읽기 전용 제한을 prompt contract로 전달합니다. 따라서 Codex 쪽 제한을 파일시스템 hard sandbox라고 표현하지 않습니다.
+
+## 검증 체계
+
+OMD는 규칙 검사와 렌더 리뷰를 함께 씁니다.
+
+| 층 | 명령과 증거 |
 | --- | --- |
-| `SLOP-COPY` | "Unlock the power of…", "이건 단순한 X가 아니라 Y다". 어느 제품에나 맞는 카피 |
-| `SLOP-COPY-KO` | 한국어 AI 문체 틱. 접속어 뒤 쉼표, "~를 살펴보겠습니다", 첫째/둘째 나열 |
-| `SLOP-KO-EMDASH` | 한글 카피 속 띄어쓴 엠대시. 번역 문장부호의 수입 |
-| `SLOP-KO-REGISTER-MIX` | 한 문단에서 흔들리는 해요체와 합니다체 |
-| `SLOP-KO-SIGNPOST` | 문서 구조를 낭독하는 카피 ("아래는 그 기록이에요") |
-| `SLOP-PINK-ELEPHANT` | "잡동사니 없이"라고 시키면 모델은 *"잡동사니가 없습니다"*라고 쓴다. 자기부정 메타카피 |
-| `SLOP-LEAKED-RATIONALE` | 페이지 카피와 설계 노트가 다섯 단어 이상 겹침 |
+| 카피·구성·소스·디자인 계약 | `omd copy --check`는 덱 구조와 팩트 참조를, `omd composition --check`는 구성 섹션과 입력 최신성을, `omd source --seal/--check`는 최종 승인 입력·소스 바이트 최신성을 검사합니다. 의미 충실도를 주장하지 않습니다. `omd design --check`는 디자인 계약 범위를 검사합니다. |
+| 타이포그래피 proof | 구조안 전에 중립 데스크톱·모바일 specimen을 검토하고, semantic 구조 뒤 visual checkpoint 전에 실제 컨테이너에서 다시 증명합니다. 카피, font family/file, weight/axis, container width가 바뀌면 proof는 무효입니다. |
+| 렌더 증거 | `omd render`는 기본적으로 요청한 viewport만 정확히 캡처하고 `--full-page`는 보조적인 연속성 증거에만 씁니다. `--squint`는 grayscale과 blur로 위계를 분리하고 `--filmstrip`은 로드 중 프레임을 남깁니다. |
+| 인터랙션 | `omd probe`는 선언된 안전한 로컬 plan만 실행하고 expectation 또는 tab order 실패를 보고합니다. |
+| 소스 후보 | `omd slop scan [root] [--json]`은 지원하는 프로덕션 소스를 수정 없이 읽습니다. 후보는 맥락 분류가 필요하며 `omd check` warning, 점수, 작성 주체 판정이 아닙니다. |
+| 디자인 lint | `omd check`는 `system`, `a11y`, `slop`, `motion`, `ux` 조건을 검사합니다. contrast와 hit-area 규칙은 error이며, slop과 다른 품질 하한 규칙은 각 규칙 정의에 따라 warning으로 보고됩니다. |
+| 사이트 일관성 | `omd check --site <dir>` 또는 페이지 경로를 여러 개 넘기는 방식으로 페이지 간 ladder와 token drift를 찾습니다. |
+| 레퍼런스 거리 | `omd ref distance <page>`는 저장된 레퍼런스와 측정 특성을 비교해 결과가 지나치게 가까운지 살핍니다. |
+| Figma 충실도 | `omd figma pull`, `system`, `diff`가 Figma snapshot과 구현 결과를 측정 보고서로 연결합니다. |
+| 비주얼 타깃 | `omd target set <이미지-경로-또는-URL> --as <name>`과 `omd target diff`로 등록한 PNG 타깃을 정해진 범위 안에서 비교합니다. URL은 임의 웹페이지가 아니라 HTTP(S) 이미지 직접 URL이어야 합니다. |
 
-슬롭 너머, 프롬프트만으로는 강제할 수 없는 것들도 같은 엔진이 감사한다.
+`omd figma pull`에는 Figma personal access token이 필요합니다.
 
-| 계열 | 잡는 것 |
+```bash
+export FIGMA_TOKEN=...
+```
+
+`omd doctor`는 `FIGMA_TOKEN`이 없어도 선택 기능으로 보고 해당 항목을 통과시킵니다. 토큰을 설정하기 전에는 Figma pull을 사용할 수 없습니다.
+
+Slop 검사 결과는 warning이자 품질 하한입니다. AI가 만들었다는 사실을 판정하지 않습니다. 이유를 적은 overrule는 작업 의도를 기록할 뿐 검사 결과를 숨기거나 명령의 종료 상태를 바꾸지 않습니다. `omd check`는 검사 결과가 하나라도 있으면 exit status 1을 반환하므로 CI에 연결할 수 있습니다.
+
+소스 후보는 별도의 증거 흐름입니다. 후보가 있어도 명령은 성공하며, 실제 scan 수행 오류만 nonzero입니다. 단, 인계 전에는 untriaged와 needs-render가 모두 0이어야 합니다. Raw JSON은 임시 기록으로 두고 confirmed 수리와 근거 있는 dismissed 판단만 오래 남깁니다. 이 프로토콜은 2026-07-13에 확인한 [`yetone/kill-ai-slop`](https://github.com/yetone/kill-ai-slop)을 개념 연구에만 참고했습니다. upstream에 명시적인 라이선스가 없었으므로 구현, 문구, 예시, 식별자, 리뷰 흐름은 복사하지 않고 OMD에서 독립적으로 작성했습니다.
+
+규칙만으로는 optical balance, 구성 리듬, 타이포그래피 완성도, 기억에 남길 장면이 콘셉트에 맞는지 안전하게 판정할 수 없습니다. 그래서 렌더 비평이 필요합니다.
+
+## 인터랙션 적용 범위
+
+카피 덱은 interaction scope를 정확히 하나 선언합니다.
+
+| 범위 | 필요한 증거 |
 | --- | --- |
-| `MOTION-*` | `prefers-reduced-motion` 없는 애니메이션, 레이아웃 속성 스래시, 균일한 500ms ease-in-out 시그니처, 스펙이 약속했는데 렌더에 없는 모션 |
-| `UX-*` | 한 화면에서 두 버튼이 동시에 최상위를 주장; 모바일 뷰포트에서 인터랙티브 컨트롤 전체가 폴드 아래에 있음; 모든 인터랙티브 요소에 `tabindex="-1"` (키보드 경로 없음); 프레임 UX 심문 미완료 (`FRAME-UX-INCOMPLETE`) |
-| `DESIGN-*` | 필수 섹션이 빠진 `.omd/design.md`, 에러 상태 어포던스가 없는 폼 (클래스명, 텍스트 카피, `role=alert`, `aria-invalid`) |
-| `ATTR-*` | `.omd/attribution.md`에 출처 없이 실린 토큰 그룹 |
-| `SITE-*` | 페이지 간 드리프트. 한 페이지는 4단 타입 스케일, 다른 페이지는 6단 (`omd check --site`) |
-| `FOCUS-*` | 눈에 보이는 포커스 표시가 없는 탭 스톱. 라이브로 프로브 |
+| `stateful` | Primary·recovery copy, `.omd/probes/primary.json`, `.omd/probes/recovery.json`가 필요하며 두 probe를 모두 실행합니다. |
+| `navigation-only` | Primary copy와 primary probe가 필요합니다. Recovery copy와 recovery probe에는 구체적인 이유와 함께 `N/A`를 적습니다. |
+| `static` | Primary copy가 필요합니다. Recovery copy와 두 probe에는 구체적인 이유와 함께 `N/A`를 적습니다. |
 
-실물로 캘리브레이션했다. 룰들은 *정확하고 접근성 있고 익명적인* 픽스처에 발화하고, 같은 내용에 관점이 실리면 침묵하며, linear.app은 잡지 않는다. `omd check`는 발견이 있으면 exit 1이라, 그대로 **CI 디자인 린터**가 된다.
+Loading, empty, error, success, disabled, offline, recovery state는 실제로 도달할 수 있는 화면에만 설계합니다. 체크리스트를 채우기 위해 가짜 상태를 만들지 않습니다. 리뷰어는 전달받은 probe 증거가 있을 때만 인터랙션에 관해 판단합니다.
 
-## 📚 이론 팩
+Probe plan에는 expectation이 붙은 click, fill, keypress 단계만 선언할 수 있습니다. 로컬 파일과 localhost·loopback URL만 허용하며, 로그인·인증 정보·원격·파괴적·미선언 동작은 거부합니다. 화면의 컨트롤을 찾아 자동으로 클릭하지 않습니다.
 
-색은 제품에 대한 주장이고, 이론 팩은 그 주장의 근거가 사는 곳이다. 아홉 파일이 `core/theory/`로 내장되며, 각 항목은 조건에서 선택으로, 선택에서 이유로 쓰이고 실명 출처가 붙는다. Elliot & Maier, Bringhurst, Müller-Brockmann, Nielsen, NN/g, Baymard.
+## 프로젝트 상태
 
-| 파일 | 답하는 질문 |
+오래 남고 리뷰할 수 있어야 하는 기록은 `.omd/` 바로 아래에 둡니다.
+
+- `frame.md`, `copy-deck.md`, `type-proof.md`, `composition.md`, `source-seal.json`, `design.md`, `decisions.md`
+- `attribution.md`, `motion-spec.md`, `craft.jsonl`, `config.json`
+- `refs/*.json`, 선언한 `probes/*.json`, `taste/preferences.jsonl`, `history.jsonl`
+
+생성한 IR, 렌더, filmstrip, sketch 후보, probe 결과, 임시 출력은 `.omd/.cache/`에 둡니다. 임시 저장소를 지워도 디자인 의도는 남아야 합니다.
+
+단일 페이지 `omd check`를 끝냈고 `--no-log`를 쓰지 않았을 때만 `.omd/history.jsonl`에 기록을 덧붙입니다. Site 검사와 여러 페이지 검사는 history에 남기지 않습니다.
+
+`oh-my-design uninstall`은 설치한 OMD 파일과 설정 변경을 제거하지만 프로젝트의 `.omd/`는 보존합니다.
+
+## 설치 방식
+
+Direct installer가 지원되고 회귀 테스트로 검증된 경로입니다.
+
+| 호스트 | Direct install |
 | --- | --- |
-| `color.md` | 도메인별 색 관습과 그 이유, 조화 스킴, 60-30-10, 채도의 레지스터 신호, 다크모드 감채도 |
-| `typography.md` | 스케일 비율의 의미, 페어링 이론, 한글 타이포그래피(행간, 국·영 혼용, Pretendard 대 Noto 기준) |
-| `layout.md` | 게슈탈트의 UI 번역, 위계 도구 우선순위, 폼 연구, 빈·로딩·에러 상태, 정보 밀도 |
-| `motion.md` | 지각 연구 기반 지속시간 임계값, 이징 의미론, 안무, 스켈레톤 대 스피너 근거 |
-| `components.md` | 버튼 위계 상한, 검증 타이밍, 내비게이션, 테이블, 모달과 그 대안, 토스트, 검색 |
-| `craft.md` | 이론서가 건너뛰는 것. 여러 겹 그림자, 보더 없는 구분, 투명도 계층 텍스트, 옵티컬 정렬, 60fps 안전 속성 |
-| `expressive.md` | 어워드 사이트 해부학. Awwwards 배점표에서도 유저빌리티가 크리에이티비티를 이긴다. 내러티브로서의 스크롤, 절제 조항이 붙은 기법 카탈로그 |
-| `ux.md` | 과제 우선 프레이밍, 내비게이션과 플로우, 피드백과 Doherty 임계값, 인지 부하와 점진적 공개, 첫 실행과 빈 상태, 피크엔드 설계, 체크 가능한 질문으로 바꾼 Nielsen 휴리스틱 |
-| `voice.md` | 사람이 쓴 웹 카피가 실제로 어떻게 읽히는가. 문장 길이 분산, 앞에 싣기, 하나의 어체, 리뷰 마이닝. 측정된 사람 기준선에 맞춰 보정 |
+| Claude Code | 스킬은 `~/.claude/skills`, 에이전트는 `~/.claude/agents`에 복사합니다. `settings.json` 권한을 수정하고 예전 OMD `PreToolUse` hook을 제거합니다. |
+| Codex | versioned plugin cache, direct skill, agent TOML을 `~/.codex` 아래에 복사하고 `config.toml`을 수정합니다. Codex hook trust는 확인됐다고 과장하지 않고 doctor에서 unverified로 표시합니다. |
 
-컨셉 단계는 방향을 정하기 전에 이걸 읽는다. hand는 보드가 커버하지 않는 결정마다 이걸 인용한다. 인용 없는 선택은 발견이다.
+감지한 호스트 하나만 설치·검사·제거하려면 `--host claude` 또는 `--host codex`를 씁니다.
 
-## 📐 디자인 계약
-
-한 페이지를 넘는 무엇이든, `omd design`이 `.omd/design.md`를 쓴다. 모든 서피스를 지배하는 지속적인 14섹션 계약이다. 브랜드 성격, 제품 목표, 페르소나, 정보 구조, 디자인 원칙, 비주얼 언어, 컴포넌트 인벤토리, 접근성 목표, 반응형 브레이크포인트, **인터랙션 상태(로딩·빈·에러·성공·비활성·오프라인)**, 콘텐츠 보이스, 구현 제약, 열린 질문. 리포지토리에 이미 있는 증거(`package.json`, 토큰 파일, `.omd/frame.md`, `.omd/refs/`)를 스캔해 채우고, 채울 수 없는 건 임의값 대신 명시적 열린 질문으로 남긴다.
-
-`omd check`는 계약이 있으면 검증한다. `DESIGN-INCOMPLETE`는 빠진 섹션과 상태를 하나도 안 적은 인터랙션 상태 섹션에 발화하고, 에러 상태 없는 폼은 `DESIGN-FORM-NO-ERROR`를 단독으로 띄운다.
-
-## 🏗 아키텍처
-
-```
-src/
-  agents/                  소스 오브 트루스: framer, scout, hand, eye
-  skills/                  소스 오브 트루스: ultradesign, figma, scout, critique, humanize, coach
-core/
-  theory/                  9파일 이론 팩
-  motion/                  모션 레시피 12종 + 이징 어휘
-  composition/             페이지 구도 레시피 8종
-  graphics/                CSS-only 그래픽 6종
-  craft/                   마감 패스 체크리스트
-  design/                  디자인 계약 + 인터랙션 상태 룰
-  ref/                     레퍼런스 측정, 블루프린트, 근친 검사, signal + slop 스코어링
-  render/                  headless Playwright: 렌더, 필름스트립, 모션·hover·focus 프로브
-  rules/                   린터 엔진 + 내장 룰 (slop, motion, ux, a11y, tokens)
-  figma/                   파일 pull, 디자인 시스템 합성, 픽셀 diff, 반응형 매칭
-  target/                  일반 시각 타깃 루프 (목업·스크린샷·URL 무엇이든)
-  site/                    페이지 간 드리프트 비교
-  install/                 Claude·Codex 호스트 감지 + config 패치
-adapters/build.ts          src/에서 agents/, skills/, dist/, 두 호스트 매니페스트를 생성
-evals/                     플러그인 eval 케이스 + 루브릭 그레이더
-scripts/bump.ts            명령 하나, 모든 매니페스트, 드리프트 제로
-.omd/                      프로젝트별 디자인 기록
-  frame.md                 현재 이해하고 있는 문제
-  design.md                다면 디자인 계약
-  decisions.md             이 제품에 왜 초록색이 없는가
-  attribution.md           각 토큰이 어느 레퍼런스에서 왔는가
-  motion-spec.md           무엇이, 언제, 누구의 권위로 움직이는가
-  refs/*.json              측정된 레퍼런스 + 기록된 원칙
-  history.jsonl            모든 체크 실행. oh-my-design:coach가 읽는 것
+```bash
+oh-my-design install --host codex
+oh-my-design doctor --host codex
+oh-my-design uninstall --host codex
 ```
 
-`npm run build`가 `src/`에서 `agents/`, `skills/`, `dist/`, 두 호스트 매니페스트를 재생성한다. 생성된 디렉토리는 절대 직접 수정하지 않는다.
+저장소에는 Claude와 Codex marketplace packaging을 위한 manifest도 생성됩니다. 배포 산출물이지만 direct installer와 같은 수준의 end-to-end parity를 주장하지 않습니다.
 
-## ⌨️ CLI
+## CLI 빠른 참조
 
+`node bin/omd.ts --help`의 명령을 간단히 묶으면 다음과 같습니다.
+
+```text
+omd ir <page> [-o file]
+omd render <page> -o shot.png [--viewport WxH]
+omd render <page> --full-page -o long.png [--viewport WxH]
+omd render <page> --squint -o shot.png
+omd render <page> --filmstrip -o filmstrip.html [--viewport WxH]
+omd probe <page> [--plan path] [--json] [--out path]
+omd check [<page>|--ir file] [--json] [--category slop] [--no-log]
+omd check --site <dir>
+omd check <page1> <page2> ...
+omd slop scan [root] [--json]
+omd coach
+omd composition --check [--json]
+omd source --seal [root]
+omd source --check [root] [--json]
+
+omd frame show
+omd frame set --problem P --reframe R --why EVIDENCE [--task T --frequent-action A --costliest-error E]
+omd frame reframe --to "..." --because "..."
+omd frame generator --set "metaphor"
+omd choose c1 c2 --chose c2 --why "..."
+omd decision "what" --why "why"
+omd taste record "subject" --kind selection|praise|rejection|overrule --evidence "verbatim" --from-user
+omd taste profile [--all]
+omd config set checkpoint none|concept|structure|both
+omd config show
+omd craft checkpoint semantic|visual --render path --observed "..." --changed "..."
+omd craft status [--json]
+
+omd ref add <url|file> --as <component> [--selector "css"] [--image] [--blueprint]
+omd ref list
+omd ref distance <page>
+omd ref principles <source> --as <component> --add "..."
+omd ref show <source> --as <component>
+
+omd design
+omd design --check
+omd copy --check [--json]
+omd pack dir
+omd pack list
+omd pack <relpath>
+omd doctor
+
+omd figma pull <file-url>
+omd figma system
+omd figma diff <frame-id> <page-or-url>
+omd target set <이미지-경로-또는-URL> --as <name>
+omd target list
+omd target diff <page> [--target <name>] [--viewport WxH] [--threshold N] [--json]
 ```
-omd design                                     repo 증거를 스캔해 .omd/design.md 생성·갱신
-omd design --check                             design.md 섹션 커버리지 검증
-omd check  <page> [--json] [--viewport WxH]    린트: a11y, 토큰, 모션, ux, 슬롭. 발견 시 exit 1
-omd check  --site <dir>                         페이지 간 사다리·토큰 드리프트
-omd render <page> -o shot.png [--filmstrip]     headless 스크린샷, 또는 첫 몇 초의 프레임
-omd ir     <page>                               렌더된 DOM에서 측정된 노드 트리로
-omd ref    add|list|show|principles|distance    레퍼런스 보드 (캡처 시점에 슬롭 스코어링)
-omd frame  set|show|reframe|generator           문제 기록. 아무도 서명하지 않고, 루프가 다시 쓴다
-omd decision "무엇" --why "왜"                  후임자가 고마워할 이유 파일
-omd figma  pull|system|diff                     Figma 파일에서 스냅샷, 디자인 시스템, 픽셀 diff 루프로
-omd target set|diff|list                        빌드를 목업·스크린샷·URL 무엇으로든 수렴
-omd pack   dir|list                             이론·레시피 팩이 사는 곳 (호스트 무관)
-omd doctor                                      환경 사전 점검
-omd coach                                       반복되는 약점, 정직한 추세
+
+## 구조와 기여 방법
+
+Prompt 원본:
+
+- `src/agents/*.agent.yaml`
+- `src/skills/omd-*/SKILL.md`
+
+생성되는 산출물:
+
+- `agents/`
+- `skills/`
+- `dist/`
+
+생성 파일은 직접 수정하지 않습니다. Build가 direct host와 plugin packaging용 파일을 다시 만듭니다.
+
+직접 수정하는 경로는 `core/`, `bin/`, `adapters/`, `test/`, `evals/`, `scripts/`, `README.md`, `README.ko.md`와 `core/` 아래 이론·레시피 팩입니다.
+
+변경을 제출하기 전에 아래 검사를 실행합니다.
+
+```bash
+npm test
+npx tsc --noEmit
+npm run build
 ```
 
-## 📄 라이선스
+새 linter rule은 범위를 좁게 잡고 positive·negative test를 함께 두며 예외 없이 warning으로 추가합니다.
 
-MIT
+## 한계와 신뢰 범위
+
+- Prompt는 판단 절차를 정합니다. 실제 프로젝트 근거, 쓸 수 있는 카피, 렌더 확인, 프로젝트별 검증이 부족하면 좋은 디자인을 보장할 수 없습니다.
+- Probe는 로컬, 비인증, 비파괴 경로만 다룹니다. 범용 브라우저 자동화 도구가 아닙니다.
+- Copy validator는 필수 구조, 인터랙션 적용 범위, 미해결 자리표시자, 명시적인 사실 ID 참조를 검사합니다. 문장 완성도와 사실 확인은 사람이 맡습니다.
+- Reference distance, lint, image diff는 측정값입니다. 판단을 돕지만 대신하지 않습니다.
+- Marketplace manifest도 제공하지만 install-to-doctor 회귀 테스트가 다루는 경로는 direct installer입니다.
+
+[MIT License](LICENSE)로 배포됩니다.

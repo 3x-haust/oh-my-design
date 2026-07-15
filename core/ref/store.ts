@@ -47,6 +47,11 @@ export function saveRef(cwd: string, ref: Reference): string {
   return resolve(path);
 }
 
+/** Path of the scoped component screenshot for a reference (`omd ref add … --shot`). */
+export function refImagePath(cwd: string, ref: Pick<Reference, 'source' | 'component'>): string {
+  return join(refsDir(cwd), `${slugFor(ref)}.png`);
+}
+
 function isReference(value: unknown): value is Partial<Reference> & Pick<Reference, 'source' | 'component'> {
   return (
     typeof value === 'object'
@@ -86,6 +91,8 @@ export function loadRefs(cwd: string): Reference[] {
           // blueprint is absent on references captured before --blueprint was introduced.
           // Omit the key so downstream code can check `ref.blueprint !== undefined`.
           ...(parsed.blueprint !== undefined ? { blueprint: parsed.blueprint } : {}),
+          // imagePath is absent on references captured before --shot was introduced.
+          ...(parsed.imagePath !== undefined ? { imagePath: parsed.imagePath } : {}),
         });
       }
     } catch {

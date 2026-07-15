@@ -49,12 +49,15 @@ export type InteractionState = (typeof INTERACTION_STATES)[number];
 // ── Evidence scanner ──────────────────────────────────────────────────────────
 
 export interface Evidence {
+  hasPackageJson: boolean;
+  packageJsonReadable: boolean;
   framework: string | null;
   dependencies: string[];
   hasThemeTokens: boolean;
   tokenFilePaths: string[];
   surfaceCount: number;
   surfacePaths: string[];
+  appEvidencePaths: string[];
   frameMd: string | null;
   decisionsMd: string | null;
   attributionMd: string | null;
@@ -71,12 +74,15 @@ export interface Evidence {
  */
 export function discoverEvidence(cwd: string): Evidence {
   const evidence: Evidence = {
+    hasPackageJson: false,
+    packageJsonReadable: false,
     framework: null,
     dependencies: [],
     hasThemeTokens: false,
     tokenFilePaths: [],
     surfaceCount: 0,
     surfacePaths: [],
+    appEvidencePaths: [],
     frameMd: null,
     decisionsMd: null,
     attributionMd: null,
@@ -89,6 +95,7 @@ export function discoverEvidence(cwd: string): Evidence {
   // package.json — framework and dependency fingerprint
   const pkgPath = join(cwd, 'package.json');
   if (existsSync(pkgPath)) {
+    evidence.hasPackageJson = true;
     try {
       const pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as {
         dependencies?: Record<string, string>;
@@ -99,6 +106,7 @@ export function discoverEvidence(cwd: string): Evidence {
         ...pkg.devDependencies,
       };
       const names = Object.keys(all);
+      evidence.packageJsonReadable = true;
       evidence.dependencies = names;
 
       if (names.some((n) => n === 'next' || n === '@next/core-web-vitals')) evidence.framework = 'next';
@@ -107,6 +115,23 @@ export function discoverEvidence(cwd: string): Evidence {
       else if (names.some((n) => n === 'svelte' || n === '@sveltejs/kit')) evidence.framework = 'svelte';
     } catch { /* corrupt package.json — skip */ }
   }
+
+  // Fixed, high-signal application entries and build configs. These are evidence that a
+  // repository is not blank even when it has no package.json or conventional page file yet.
+  const appEvidenceCandidates = [
+    'src/main.js', 'src/main.ts', 'src/main.jsx', 'src/main.tsx',
+    'src/App.js', 'src/App.ts', 'src/App.jsx', 'src/App.tsx',
+    'src/app.js', 'src/app.ts', 'src/app.jsx', 'src/app.tsx',
+    'app.js', 'app.ts', 'app.jsx', 'app.tsx',
+    'main.js', 'main.ts', 'main.jsx', 'main.tsx',
+    'vite.config.js', 'vite.config.ts', 'vite.config.mjs', 'vite.config.cjs',
+    'webpack.config.js', 'webpack.config.ts', 'rollup.config.js', 'rollup.config.ts',
+    'next.config.js', 'next.config.mjs', 'next.config.ts',
+    'nuxt.config.js', 'nuxt.config.ts', 'svelte.config.js', 'svelte.config.ts',
+    'astro.config.js', 'astro.config.mjs', 'astro.config.ts',
+    'vue.config.js', 'angular.json', 'gatsby-config.js', 'gatsby-config.ts',
+  ];
+  evidence.appEvidencePaths = appEvidenceCandidates.filter((rel) => existsSync(join(cwd, rel)));
 
   // Token / theme files — CSS custom properties, tailwind config
   const tokenCandidates = [
@@ -207,7 +232,7 @@ export function generateDesignMd(evidence: Evidence): string {
 
   const surfaceSummary = evidence.surfaceCount > 0
     ? `${evidence.surfaceCount} surface${evidence.surfaceCount === 1 ? '' : 's'} detected: ${evidence.surfacePaths.slice(0, 5).join(', ')}${evidence.surfaceCount > 5 ? ` (+${evidence.surfaceCount - 5} more)` : ''}`
-    : 'No surfaces detected — add routes or HTML files';
+    : 'No existing surface detected';
 
   const frameSummary = evidence.frameMd
     ? `Derived from .omd/frame.md:\n  ${evidence.frameMd.split('\n').slice(0, 3).join('\n  ')}`
@@ -215,9 +240,29 @@ export function generateDesignMd(evidence: Evidence): string {
 
   const frameworkNote = evidence.framework
     ? `${evidence.framework} (detected via package.json)`
-    : evidence.dependencies.length > 0
-      ? 'No recognised framework — plain HTML or unknown stack'
-      : 'No package.json found — unknown stack';
+    : evidence.hasPackageJson
+      ? `Unrecognised package/toolchain (${evidence.packageJsonReadable ? 'package.json inspected' : 'package.json unreadable'})`
+      : evidence.surfaceCount > 0
+        ? 'Existing surface without package.json'
+        : evidence.appEvidencePaths.length > 0
+          ? `Existing application/toolchain evidence: ${evidence.appEvidencePaths.join(', ')}`
+          : 'No existing repository stack detected';
+
+  // The generator has repository evidence, not the user's brief. It therefore records
+  // the build-time precedence instead of pretending to know whether the brief overrides it.
+  const stackPolicy = evidence.surfaceCount > 0
+    ? 'Preserve the existing surface and repository toolchain; inspect before changing it and do not replace it with a new scaffold.'
+    : evidence.framework
+      ? `Preserve the detected ${evidence.framework} repository stack/toolchain.`
+      : evidence.hasPackageJson
+        ? 'Inspect and preserve the existing unrecognised package/toolchain; do not replace it with React or another scaffold.'
+        : evidence.appEvidencePaths.length > 0
+          ? 'Inspect and preserve the existing application/toolchain evidence; do not replace it with a new scaffold.'
+          : 'React + Vite + TypeScript default unless explicit brief override. Plain HTML requires an explicit user request.';
+
+  const dependencyPolicy = evidence.surfaceCount > 0 || evidence.hasPackageJson || evidence.appEvidencePaths.length > 0
+    ? 'Do not add unnecessary dependencies to this existing project.'
+    : 'Greenfield scaffold dependencies for React + Vite + TypeScript are allowed.';
 
   const tokenNote = evidence.hasThemeTokens
     ? `Token files found: ${evidence.tokenFilePaths.join(', ')}`
@@ -240,6 +285,7 @@ export function generateDesignMd(evidence: Evidence): string {
 - **Status**: draft
 - **Date**: ${now}
 - **Surfaces**: ${surfaceSummary}
+- **Repository app/toolchain evidence**: ${evidence.appEvidencePaths.length > 0 ? evidence.appEvidencePaths.join(', ') : 'none detected'}
 - **Evidence**: ${referenceNote}
 - **Framework**: ${frameworkNote}
 - **Tokens**: ${tokenNote}
@@ -389,7 +435,9 @@ ${evidence.hasVoiceStudy
 
 ## Implementation constraints
 
-- **No new dependencies**: except those already declared in package.json
+- **Stack precedence**: explicit user request > existing repository stack/toolchain (including existing vanilla HTML) > React + Vite + TypeScript only for a truly blank greenfield
+- **Build-time stack policy**: ${stackPolicy}
+- **Dependencies**: ${dependencyPolicy}
 - **Browser targets**: last 2 major versions of Chrome, Firefox, Safari, Edge
 - **Performance**: <!-- any specific performance budget? LCP target, bundle size limit? -->
 - **Frameworks/libraries already in use**: ${frameworkNote}

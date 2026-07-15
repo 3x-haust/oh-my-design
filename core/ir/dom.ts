@@ -334,9 +334,18 @@ export function extractInPage(maxNodes: number, selector?: string | null): RawIr
   // correct for top-level documents, which is the only case omd check operates on.
   const scrollHeight = document.documentElement.scrollHeight;
   const viewportHeight = window.innerHeight;
+  const fontFaces = Array.from(document.fonts).map((face) => ({
+    family: face.family,
+    status: face.status,
+    style: face.style,
+    weight: face.weight,
+    stretch: face.stretch,
+    source: null,
+    glyphIdentity: null,
+  }));
 
   return {
-    meta: { source: 'dom', url: location.href, scrollHeight, viewportHeight },
+    meta: { source: 'dom', url: location.href, scrollHeight, viewportHeight, fontFaces },
     tokens: tokenByValue,
     nodes,
   };

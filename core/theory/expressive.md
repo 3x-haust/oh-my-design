@@ -22,11 +22,17 @@ The error is applying showpiece technique to quiet or confident contexts. A dash
 
 ## The anatomy of award-level sites
 
-### The hero does the work typography would normally defer to images
+### A concept-bearing line can replace an image
 
-On a showpiece site, the hero is often typographic rather than photographic. Display type at 90–200px (or equivalent viewport-relative value) acts as the hero image: it fills the viewport, it sets the tone, it contains the entire conceptual gesture in one glance. The technique works when the type decision is made on purpose — a face chosen for its editorial weight, a size chosen to fill not to approximate.
+On some showpiece sites, a short actual headline becomes the visual event. The face and
+weight must carry the concept; size alone is not a concept. The pre-structure typography
+proof tests target-language glyphs, loading, fallback, wrapping, and the availability of
+secondary hierarchy and CTA at desktop and mobile.
 
-The size must be responsive. `clamp()` with viewport-relative values is the only correct implementation: `font-size: clamp(3rem, 12vw, 10rem)` scales continuously between breakpoints without the abruptness of a media query step. A hardcoded `96px` that collapses to `48px` at a breakpoint is not a display type decision — it is a pixel value with a fallback.
+Size derives from the real copy and container. `clamp()`, container queries, media queries,
+and discrete steps are all valid when specimens justify them. A moderate heading can pass;
+huge Hangul can also pass when its syllable rhythm is concept-bearing and proof-clean. A
+long heavy line that becomes a clipped mobile wall fails even if one desktop render works.
 
 ### Scroll is the narrative axis
 
@@ -45,6 +51,40 @@ What the entrance must do in those seconds: commit the palette, declare the type
 ### The concept must survive to the footer
 
 A showpiece site that loses its nerve in the footer — reverting to small-print-grey, default columns, four generic links — reveals that the expressive register was applied to the hero and nowhere else. Applied design covers the whole surface. The footer is a scene. It may be quieter than the hero, but it is not absent.
+
+---
+
+## Slop-free is not the same as distinctive
+
+Passing every slop gate proves the absence of a known defect. It does not prove the presence of a design. A layout can be measurably clean — correct contrast, no triple-radius, no gradient-mesh cliché, one primary action — and still read as AI-made, because the composition itself is the most predictable arrangement of its parts. Distinction is a positive property the gates cannot supply; it has to be committed on purpose.
+
+The AI-made feel is not one slop pattern. It is the sum of safe defaults: symmetric balance, boxed regions, evenly-weighted columns, and the single most common arrangement for the content type. A skeptical viewer reads it in one second — "a model produced the reasonable layout" — and that read is the failure, independent of any individual clean metric.
+
+### Template tells (clean, but generic)
+
+Each is a layout that survives the slop scan and still announces a template. Treat a match as a distinction failure to break, not a pass.
+
+- **Symmetric hero split**: oversized headline on the left, a bordered panel or card on the right, balanced masses. Two competing primary masses is the usual side effect — the eye cannot find the one thing that matters first.
+- **Triple feature-cards with arrows**: three equal-weight boxes (SIGNAL → SYSTEM → PROOF, or any A → B → C) joined by arrows. The single most templated way to show a process; recognizable as generated at a glance.
+- **Trend-decoration as identity**: an offset drop-shadow, a glassmorphism blur, or a gradient border used as *the* idea rather than in service of one. A dated trend applied evenly is not art direction.
+- **Boxed everything**: every region gets a border, a radius, and equal padding, so nothing dominates and the grid never breaks. Uniform containment reads as a system, not a composition.
+- **Unused real material**: the brief supplies photographs, slides, a portrait, or data, and the layout still leads with text-in-boxes. Authentic material left out of the composition is the clearest tell that the layout was reasoned in the abstract.
+
+### The one-risk requirement
+
+A distinctive composition commits at least one genuine risk a template would not take, grounded in the concept and never in decoration: a deliberate asymmetry that directs the eye to one mass; a scale or weight contrast large enough to read as a decision, not a default; a grid break at the one moment that matters; or the real supplied material (image, portrait, slide, dataset) made structural rather than illustrative. One committed risk beats five safe refinements. If a candidate reads as "the reasonable layout," it has not earned the register — name the template it resembles and depart from it once, on purpose.
+
+### The AI-SaaS landing tells (the specific template to break)
+
+The most common generic result is the AI-SaaS landing page. Every item below is a tell to avoid, not a default to reach for — a design that matches the checklist reads as machine-made in one second regardless of polish.
+
+- **Layout**: a centered hero (big one-line headline, short subhead, prompt box), a logo wall, then every section as a 3-column card grid with a small eyebrow label ("Features", "Use cases", "Testimonials"); sections divided only by gradient blobs; everything floating centered with left/right balance but no tension; more whitespace than the content earns; the same card component repeated down the page.
+- **Fabricated proof**: a pretty UI mockup instead of a real product screenshot, with invented dashboard data and cliché figures (98%, 10x, 24/7). This is also a fabrication violation — never ship invented numbers or a fake product screen (see `graphics/placeholder-policy.md`).
+- **Type**: a safe SaaS sans (Inter/Geist/Satoshi feel), an over-formal size hierarchy, grey body, a slightly faded subhead, one word (usually "AI") set in a purple gradient, keywords in pills, every sentence the same length — pretty type with no brand voice.
+- **Copy**: the phrases in `theory/voice.md` and the `omd text-slop` scanner — "Supercharge your workflow", "Work smarter not harder", "Unlock your creativity", "AI-powered", "10x", "No code required", "The future of", "Next-generation", "let AI do the heavy lifting", "effortless".
+- **UX (product surfaces)**: the tool suggests before the user acts; empty states full of "Try asking…" chips; a bigger Regenerate than Edit; "shorter / longer / change tone" buttons; thumbs up/down and "Was this helpful?"; "Option 1, 2, 3" instead of one committed answer; "Analyzing… / Generating…" theatre. These make the product feel like a demo of AI, not a tool that solves a problem.
+
+The underlying failure — why designers call it "AI slop" — is mood before function, no brand specificity, seen-it-before, unaudited details, visual density high but information density low, no tension or rhythm or contrast, no human life, too average, too safe. The fix is never more effects; it is one concrete, brand-specific, evidence-grounded decision a template would not make.
 
 ---
 
@@ -134,11 +174,18 @@ The selection discipline: before adding any technique, ask whether the concept �
 
 ---
 
-## The Korean market: GDWEB and Hangul display constraints
+## Korean showpiece typography
 
 GDWEB (gdweb.co.kr), operating since 2005, is the leading Korean web design award. Winning categories skew toward agency brand sites and campaign microsites — seasonal brand launches, product campaign pages, experiential brand activations — rather than application UI. The showpiece register is the expected register on GDWEB, not the exceptional one. This means the baseline for expressive work in the Korean market is higher; mid-level expressive execution that would earn attention internationally passes unnoticed against the GDWEB field.
 
-Hangul display typography carries a specific constraint that Latin display type does not: the syllable block structure of Korean text means that each character cell already contains between one and four strokes in a fixed-width space (W3C Korean Layout Requirements, klreq). At display scale — 90px and above — Latin typefaces tolerate aggressive negative letter-spacing because the open apertures between letters benefit from compression. Korean syllable blocks have no equivalent aperture: compressing letter-spacing below −0.05em at display size causes strokes within adjacent syllables to collide visually, creating a density that reads as a typesetting error rather than a design decision. The practical limit for display Hangul is letter-spacing in the range of −0.03em to 0em; for Latin, −0.05em to −0.08em at equivalent scale is standard. This constraint is not a limitation of Korean type design — it is a consequence of the structural density that makes Hangul read efficiently at small sizes. At display scale, the density that aids legibility in body text resists compression.
+Hangul syllable blocks create a different visible rhythm from Latin letters, but they do not
+imply a fixed size or tracking limit. Inspect the chosen face's counters, stroke density,
+punctuation, mixed Latin/numerals, and wrapping with actual Korean copy. Word-based and
+character-based Hangul breaking are both documented practices; choose one from the task and
+verify it in the intended container. Huge Hangul is justified when the words are short and
+concept-bearing and the face/weight remains clean at both proof viewports. It fails when a
+heavy long sentence wraps into an undifferentiated wall, clips, falls back, or removes the
+secondary message and CTA.
 
 ---
 

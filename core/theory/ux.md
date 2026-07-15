@@ -474,3 +474,37 @@ checks that `omd check` runs on every build. Principles not listed here remain a
 
 - Nielsen heuristics 2, 4, 7, 8, 10 (real-world match, consistency, efficiency, minimalism,
   help): all require semantic content understanding that the IR does not provide.
+
+---
+
+## Official evidence map and layer ownership
+
+- **W3C form notifications** — https://www.w3.org/WAI/tutorials/forms/notifications/ —
+  writer supplies specific error/success text; hand associates messages with fields and
+  exposes status changes; probes exercise primary and recovery paths.
+- **GOV.UK error messages** — https://design-system.service.gov.uk/components/error-message/
+  — writer says what went wrong and how to fix it without blame; hand preserves input and
+  keeps the message adjacent to the field.
+- **Carbon buttons** — https://carbondesignsystem.com/components/button/usage/ — hand keeps
+  one clear primary action and uses button hierarchy consistently; eye checks whether the
+  frequent action remains reachable on mobile.
+- **Carbon empty states** — https://carbondesignsystem.com/patterns/empty-states-pattern/ —
+  writer supplies a cause and useful next action only when an empty state is reachable;
+  hand does not fabricate emptiness for static or navigation-only surfaces.
+- **WCAG 2.2** — https://www.w3.org/TR/WCAG22/ — hand owns native semantics, keyboard/focus,
+  target size, status announcements, and reduced-motion implementation; probes provide
+  evidence for reachable paths; eye makes no interaction claim without those results.
+- **web.dev INP** — https://web.dev/articles/inp — hand produces immediate visible feedback
+  and prevents delayed duplicate actions; performance measurement covers click, tap, and
+  keyboard interactions across the page lifecycle.
+- **web.dev offline data** — https://web.dev/learn/pwa/offline-data — hand implements offline
+  storage/recovery only when the product actually supports an offline path; otherwise the
+  copy deck records offline as inapplicable with a reason.
+
+The acceptance split is: frame names the primary task, frequent action, and costliest error;
+writer supplies primary/recovery language; hand implements native behavior, visible feedback,
+value preservation, duplicate-submit protection, reachable exits, and mobile reach; explicit
+primary/recovery probes measure applicable paths; eye interprets only supplied evidence.
+Static IR rules cannot safely decide task success, semantic recovery, emotional consequence,
+or whether a state applies, so those remain prompt/probe/eval responsibilities rather than
+broad regex gates.

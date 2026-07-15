@@ -230,36 +230,11 @@
 
 # ── the machine-default aesthetic, measured ────────────────────────────────────────────
 #
-# The 32-tell catalogue was triaged into three buckets. Rules below are bucket (b): tells
-# where the IR carries the signal and a deterministic check is safe enough to ship.
-#
-# Bucket (a) — tells already covered by existing rules (no new rule needed):
-#   #1  indigo→violet gradient         → SLOP-GRADIENT
-#   #6  gradients as atmosphere         → SLOP-GRADIENT (violet-band glows)
-#   #14 AI copywriting voice            → SLOP-COPY (widened above)
-#   #15 emoji everywhere                → SLOP-EMOJI-HEADING (widened above)
-#   #18 rounded-square icon tile grids  → SLOP-TRIPLE-CARD
-#   #26 all-caps card grid              → SLOP-TRIPLE-CARD
-#   #31 Inter everywhere                → hand.agent.yaml prompt layer (font-by-omission)
-#
-# Bucket (c) — tells routed to the prompt layer (hand/eye agents, theory files):
-#   #3  warm cozy palette  (too many legitimate warm brands; reject on combinatorial risk)
-#   #4  default semantic palette        (intent-dependent; eye checklist)
-#   #5  one-hue status box              (complex; eye checklist)
-#   #7  serif-italic mid-headline       (no fontStyle in IR; hand.agent.yaml)
-#   #8  serif on dev tools              (context-dependent; hand.agent.yaml)
-#   #9  decorative strikes/highlights   (no text-decoration in IR; hand.agent.yaml)
-#   #10 kicker above every heading      (structural; eye checklist)
-#   #11 full-sentence display headline  (high false-positive risk; eye checklist)
-#   #13 highlighted keywords in copy    (inline styling; hand.agent.yaml)
-#   #16 glowing status dot              (animate-ping excluded from IR by design; eye)
-#   #17 rounded card left border        (no border props in IR; eye checklist)
-#   #23 AI-drawn SVG icons              (visual inspection only; eye checklist)
-#   #24 icon in tint of itself          (complex opacity analysis; eye checklist)
-#   #25 springy hover / transition-all  (transition-all excluded from IR by design)
-#   #28 01/02/03 section markers        (conflict with editorial-index recipe; resolved in
-#                                        editorial-index-labels.md — warnc + overrule)
-#   #32 tasteful terminal               (aesthetic judgment; eye checklist)
+# These rules remain only where rendered IR supports a narrow, repeatable warning. Source
+# compounds and contextual visual judgments follow `protocol/slop-review.md`: `omd slop scan`
+# reports candidates for triage, not linter verdicts, severity, score, history, coach data, or
+# an AI-authorship claim. Unsafe source cues do not become broad YAML regexes. Rendered IR is
+# authoritative when source and render evidence overlap.
 
 # Gradient-clipped text: background-clip: text combined with a gradient. The effect
 # sacrifices legibility for an appearance that every generated landing page now shows.

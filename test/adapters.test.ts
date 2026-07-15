@@ -102,6 +102,32 @@ test('emitClaudePlugin rewrites subagent/skill cross-references to the oh-my-des
   assert.ok(md.includes('oh-my-design:humanize'), `expected oh-my-design:humanize in body: ${md}`);
 });
 
+test('writer is emitted dynamically for both direct hosts and plugin namespace', () => {
+  const writer = {
+    name: 'omd-writer', description: 'Writes copy before omd-eye reviews it.',
+    reasoning: 'high', instructions: 'Return findings to omd-writer after omd-eye.\n',
+  };
+  assert.ok(emitCodex({ agents: [writer] }).files['agents/omd-writer.toml']);
+  assert.ok(emitClaude({ agents: [writer] }).files['agents/omd-writer.md']);
+  const plugin = textFile(emitClaudePlugin({ agents: [writer] }), 'agents/writer.md');
+  assert.match(plugin, /^name: writer$/m);
+  assert.match(plugin, /oh-my-design:writer[\s\S]*oh-my-design:eye/);
+  assert.doesNotMatch(plugin, /\bomd-writer\b/);
+});
+
+test('typesetter is emitted dynamically for both direct hosts and plugin namespace', () => {
+  const typesetter = {
+    name: 'omd-typesetter', description: 'Proves type before omd-eye reviews it.',
+    reasoning: 'high', instructions: 'Return findings to omd-typesetter after omd-eye.\n',
+  };
+  assert.ok(emitCodex({ agents: [typesetter] }).files['agents/omd-typesetter.toml']);
+  assert.ok(emitClaude({ agents: [typesetter] }).files['agents/omd-typesetter.md']);
+  const plugin = textFile(emitClaudePlugin({ agents: [typesetter] }), 'agents/typesetter.md');
+  assert.match(plugin, /^name: typesetter$/m);
+  assert.match(plugin, /oh-my-design:typesetter[\s\S]*oh-my-design:eye/);
+  assert.doesNotMatch(plugin, /\bomd-typesetter\b/);
+});
+
 test('emitClaudePlugin emits only agents/*.md and .mcp.json — no .claude-plugin/plugin.json', () => {
   const emitted = emitClaudePlugin({ agents: [PLUGIN_AGENT] });
   assert.equal(emitted.files['.claude-plugin/plugin.json'], undefined);
@@ -117,12 +143,12 @@ test('emitClaudePlugin leaves no bare omd- token in any emitted file', () => {
 const SKILL_FIXTURE = [
   '---',
   'name: omd-ultradesign',
-  'description: Spawns omd-scout for references and omd-humanize for copy.',
+  'description: Spawns omd-scout and omd-sketch, then omd-glance and omd-humanize.',
   '---',
   '',
   '# omd-ultradesign',
   '',
-  'Spawn `omd-scout` for a reference board, then `omd-humanize` on the final copy.',
+  'Spawn `omd-scout`, `omd-sketch`, and `omd-glance`, then `omd-humanize` on the final copy.',
   '',
 ].join('\n');
 
@@ -134,6 +160,8 @@ test('pluginizeSkill strips the omd- prefix from the frontmatter name', () => {
 test('pluginizeSkill rewrites cross-references and leaves no bare omd- token', () => {
   const { source } = pluginizeSkill(SKILL_FIXTURE);
   assert.ok(source.includes('oh-my-design:scout'), `expected oh-my-design:scout: ${source}`);
+  assert.ok(source.includes('oh-my-design:sketch'), `expected oh-my-design:sketch: ${source}`);
+  assert.ok(source.includes('oh-my-design:glance'), `expected oh-my-design:glance: ${source}`);
   assert.ok(source.includes('oh-my-design:humanize'), `expected oh-my-design:humanize: ${source}`);
   assert.ok(!/\bomd-/.test(source), `leftover omd- token: ${source}`);
 });

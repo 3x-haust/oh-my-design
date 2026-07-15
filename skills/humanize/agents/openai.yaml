@@ -1,0 +1,3 @@
+interface:
+  display_name: "(omd) humanize"
+  short_description: "Rewrite chat, assistant replies, UI copy, pages, essays, and documentation into natural, situation-aware discourse without changing facts."

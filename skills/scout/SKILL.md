@@ -5,82 +5,73 @@ description: >-
   tight selectors for component anatomy, typography studies, motion studies, image refs
   for the unrenderable. Use when the user asks for references, inspiration, benchmarks,
   or "how do good sites do X" — standalone, before or without a build.
-  Minimum 18 captures, target 25.
   Triggers: 레퍼런스 찾아줘, 레퍼런스 수집, 참고 사이트, 벤치마킹, find references,
   inspiration board, how do other sites do.
 ---
 
 # oh-my-design:scout
 
-A reference board, measured instead of pinned. This skill only collects and reasons — it
-designs nothing.
+A reference board, measured instead of pinned. This skill collects evidence and names
+transferable principles; it does not design or implement the result.
 
-Spawn the `oh-my-design:scout` subagent with the concept (ask one short question if none exists and
-no `.omd/frame.md` provides one) and the thing being studied. If the brief contains URLs,
-pass them to the subagent — they are captured first, marked as user-provided, and exempt
-from the famous-site quota. The subagent starts with a component inventory — every nav,
-card, form field, and footer the build will need, listed before the first capture — then
-works to a floor of **eighteen captures, targeting twenty-five**:
+Spawn `oh-my-design:scout` with the concept (ask one short question only when neither the request nor
+`.omd/frame.md` supplies one), the component inventory, working directory, and user URLs.
+User URLs are captured first and marked `--from-user`.
+
+## Coverage contract
+
+Build for decision coverage, not capture counts. Before searching, list the decisions the
+later design must make and the components it must support. The board is complete only when
+it contains useful, non-duplicate evidence for every applicable category:
+
+- domain conventions and user expectations;
+- direct competitors and meaningful alternatives;
+- first-party or user/community language;
+- typography and voice;
+- motion when the concept or interaction actually needs it;
+- every required component or state whose anatomy is uncertain.
+
+There is no minimum query count, capture quota, famous-site quota, or mandatory award
+gallery. A small board with complete, independent evidence is better than a large gallery of
+near-duplicates. If a category is irrelevant, record why. If evidence remains weak or
+contradictory, report the gap and uncertainty instead of filling a slot with decoration.
+
+Use the narrowest useful capture:
 
 ```bash
-omd ref add <user-url> --as <name> --from-user                   # user-provided URL — captured first, quota-exempt
-omd ref add <url> --as <name>                                    # whole page — rhythm and feel (3–4)
-omd ref add <url> --as <name> --selector ".nav"                  # one component's anatomy (one per inventory item)
-omd ref add <url> --as <name> --selector ".nav" --blueprint      # full-resolution structural blueprint — max 3 per board
-omd ref add <url> --as type-study-1                              # chosen for its typography — minimum 2
-omd ref add <url> --as type-study-2                              # different register, different pairing
-omd ref add <url> --as motion-study-1                            # chosen for its motion — minimum 2, minimum 4 if brief mentions animation or register is showpiece
-omd ref add <url> --as motion-study-2                            # different domain, different vocabulary
-omd ref add <pin-url> --as mood --image                          # unrenderable — reasoning only
-omd ref add <reddit-url> --as list-debate --image                # community: what people felt and why (minimum 2)
-omd ref add <url> --as voice-study --image                       # how a real product writes
-omd ref principles <url> --as <name> --add "..."                 # why it works, one sentence
+omd ref add <user-url> --as <name> --from-user
+omd ref add <url> --as <name>
+omd ref add <url> --as <name> --selector ".component"
+omd ref add <url> --as <name> --selector ".component" --blueprint
+omd ref add <image-url> --as <name> --image
+omd ref principles <url> --as <name> --add "..."
 omd ref list
 ```
 
-**Blueprints: use sparingly, max 3.** A blueprint (`--blueprint --selector`) captures the full
-node tree of one component with the skin abstracted to color roles. Use it only when the component
-solves the exact structural problem the build faces, or when the user pointed at a specific component.
-A blueprint is not pixels — it is measurement at full resolution bounded to one component, with color
-roles replacing literal values. Structure transplants; skin never does; the page-distance guard still
-fires on a clone.
+Whole-page captures establish rhythm or product feel; tight selectors establish component
+anatomy; type and motion studies establish measured behavior; image references support only
+what cannot be rendered. A blueprint is allowed only for an explicitly requested exact
+component transplant or a structurally equivalent component problem. Structure may
+transfer; skin and pixels do not.
 
-Before the first capture the scout runs at least six WebSearch queries — problem domain,
-craft, community, typography, motion, and competitor — and logs them all on the board.
-Famous sites (Linear, Stripe, Vercel, Notion, Raycast) may not exceed one third of the
-total captures; they earn their place or they stay off the board.
+## Evidence quality and contamination
 
-When the register is **showpiece**, the board must also draw from award galleries — these
-are "who solved a problem of this intensity and won doing it" sources, not just "who built
-this well" sources. Mandatory showpiece sources: **awwwards.com** (SOTD archive),
-**godly.website**, **thefwa.com**, **siteinspire.com**, **minimal.gallery**. For Korean
-briefs, add **gdweb.co.kr**. Each award-gallery capture must include a one-sentence
-answer to "what made this site win" — stated as the effect on the viewer, not the name of
-the technique used. Award gallery captures count toward the floor only when they carry
-this sentence plus the full principle set.
+Prefer first-party product sources and direct user/community evidence over SEO summaries.
+Label source trust, uncertainty, and whether evidence is independent or derivative. Reject
+a non-user source with two or more slop signals. Keep a user-provided contaminated source
+only as a named anti-reference. Drop kin at similarity `>= .85`; a cluster of related pages
+is one evidence family, not independent corroboration. A blocked page is not retried; use an
+honest image/discourse fallback or discard it.
 
-Every capture gets a one-line justification, principles that answer **why**, a note on
-what contradicts the concept, and **one line naming what specific measurements from this
-capture are candidates for the build** — which token group they would feed (type scale,
-motion durations, spacing ladder, radius ladder) and why. This line is the upstream source
-for `.omd/attribution.md`: the hand traces each token decision back to a named capture;
-without this line, the attribution table has no origin to cite. `omd ref add` prints a
-design-signal score; a page under 0.4 does not count toward the floor.
+Every retained capture records:
 
-**Rejection obligates replacement.** When a capture is rejected — for slop (2+ findings),
-for low signal, for kinship, for a blocked-page error — it does not leave a hole. The
-board is made of what passed, not of what was available. Every rejected capture triggers a
-replacement search: a different query from a different angle, a source tier at least one
-step higher in the trust hierarchy. The scout does not stop until every slot in the
-composition contract is filled with a capture that passed. Anti-references — captures kept
-to document what to avoid — do not count toward the floor: their value is in the warning
-they carry, not the slot they occupy.
+- the decision or coverage gap it answers;
+- measured invariants and the reason they matter;
+- what contradicts the concept;
+- source trust and uncertainty;
+- the token, component, motion, voice, or composition question it may inform.
 
-When `omd ref add` throws a blocked-page error, the URL is not retried. Demote to
-`--image` if you can construct honest reasoning from public discourse about the site; if
-not, discard and run the replacement search.
-
-**Never describe how a reference looks** (Jansson & Smith: shown an example, designers
-reproduce its features even after the flaws are flagged; a model is worse). Numbers and
-reasons only. The board lands in `.omd/refs/` and any later `oh-my-design:ultradesign` run picks it
-up automatically.
+Never describe a page for imitation, show reference screenshots to the builder, copy visual
+skin, or turn award status into evidence. Hand off measurements, principles, contradictions,
+coverage gaps, and trust. Raw captures remain under `.omd/refs/`; downstream agents receive
+only the sanitized evidence summary required for their decision.

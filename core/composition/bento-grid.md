@@ -1,5 +1,8 @@
 # Bento grid
 
+> Candidate hypothesis only. Revalidate its condition, values, and responsive transition
+> against the current composition contract; do not transfer this page recipe unchanged.
+
 A bento grid divides a section into cells of intentionally different sizes, arranged as a
 mosaic. The cell size hierarchy communicates content hierarchy: the largest cell holds
 the most important content, and the eye reads that before anything else. The grid earns

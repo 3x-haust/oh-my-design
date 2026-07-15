@@ -59,7 +59,8 @@ export interface RawNode {
 
   /**
    * Computed word-break value, captured on text-bearing nodes.
-   * 'keep-all' is required for Korean text to prevent mid-eojeol (어절) line breaks.
+   * Korean may use word- or character-based breaking under KLREQ; acceptability depends on
+   * the actual copy, face, and container and is reviewed in typography proof.
    * Set only on text-bearing nodes (where `type === 'TEXT'`).
    */
   wordBreak?: string;
@@ -181,8 +182,25 @@ export interface Stats {
   gradients: string[];
 }
 
+export interface DeclaredFontFaceEvidence {
+  /** Browser-declared CSS FontFace family; this does not identify a painted glyph's face. */
+  family: string;
+  status: string;
+  style: string;
+  weight: string;
+  stretch: string;
+  /** The CSS Font Loading API does not expose the face's source URL. */
+  source: null;
+  /** Browsers do not expose a per-glyph physical-face identity through this API. */
+  glyphIdentity: null;
+}
+
+export interface RawIrMeta extends Record<string, unknown> {
+  fontFaces?: DeclaredFontFaceEvidence[];
+}
+
 export interface RawIr {
-  meta?: Record<string, unknown>;
+  meta?: RawIrMeta;
   tokens?: Record<string, string>;
   nodes: RawNode[];
 }
@@ -537,6 +555,14 @@ export interface Reference {
    * the project's voice. The page-distance guard still fires on a clone.
    */
   blueprint?: Blueprint;
+  /**
+   * Path (relative to cwd) of the scoped component screenshot captured with
+   * `omd ref add --selector … --shot`. Pairs the component's pixels with its
+   * blueprint/invariants on one record so image-first art direction can seed
+   * from both the picture and the structural data — see `core/theory/imagegen.md`.
+   * The kinship gate (`ref distance <= 0.6`) still gates the shipped build.
+   */
+  imagePath?: string;
 }
 
 /** How close a page sits to a reference. 1 is identical; the warning threshold is 0.6. */
@@ -592,10 +618,15 @@ export interface CoachReport {
 
 export interface Choice {
   ts: string;
-  among: string[];
-  chose: string;
-  why: string | null;
-  generator: string | null;
+  /** Legacy records omit actor/kind and normalize to unknown, never user. */
+  actor?: 'user' | 'agent' | 'unknown';
+  kind?: 'selection' | 'praise' | 'rejection' | 'overrule';
+  subject?: string;
+  evidence?: string;
+  among?: string[];
+  chose?: string;
+  why?: string | null;
+  generator?: string | null;
 }
 
 // ── adapters ──

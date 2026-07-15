@@ -1,18 +1,26 @@
 #!/usr/bin/env node
 import { readFileSync, writeFileSync, mkdirSync, existsSync, unlinkSync, readdirSync } from 'node:fs';
-import { join, dirname, resolve } from 'node:path';
+import { join, dirname, resolve, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { stringify } from 'yaml';
 import { readFrame } from '../core/frame/index.ts';
-import { writeFrameRecord, reframe, setGenerator, logDecision, logChoice, tasteProfile } from '../core/frame/write.ts';
+import { writeFrameRecord, reframe, setGenerator, logDecision, logChoice, logTaste, tasteProfile } from '../core/frame/write.ts';
 import { logRun, readHistory } from '../core/history/index.ts';
 import { analyse } from '../core/coach/index.ts';
 import { findLeakedRationale } from '../core/rules/leakage.ts';
 import { checkAttribution } from '../core/rules/attribution.ts';
 import { checkMotionSpec } from '../core/rules/motion-spec.ts';
 import { discoverEvidence, generateDesignMd, validateDesignMd } from '../core/design/index.ts';
+import { validateCopyDeck, validateCopyReviewReport } from '../core/copy/index.ts';
 import { checkInteractionStates } from '../core/design/interaction-states.ts';
 import { checkFrameUx } from '../core/frame/check-ux.ts';
+import { scanSlopSource } from '../core/slop/index.ts';
+import { validateCompositionContract } from '../core/composition-contract/index.ts';
+import { validateSourceSeal, writeSourceSeal } from '../core/source-seal/index.ts';
+import { computeStack } from '../core/stack/index.ts';
+import { scanTextSlop } from '../core/slop/text-slop.ts';
+import { evaluateVisualRichness } from '../core/composition-contract/visual-richness.ts';
+import type { VisualRichnessRegister } from '../core/composition-contract/visual-richness.ts';
 import type { Category, EnergyCurve, Layer, RawIr, Violation } from '../core/types.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -35,12 +43,25 @@ interface Opts {
   as?: string;
   add?: string;
   noLog?: boolean;
+  /** Skip the energy (motion) capture on `omd ref add` — one fewer browser launch for non-motion refs. */
+  noEnergy?: boolean;
   selector?: string;
   image?: boolean;
   filmstrip?: boolean;
+  squint?: boolean;
+  fullPage?: boolean;
   fromUser?: boolean;
+  all?: boolean;
+  plan?: string;
+  render?: string;
+  observed?: string;
+  changed?: string;
+  kind?: string;
+  evidence?: string;
   /** Capture a full-resolution structural blueprint of the selected component. */
   blueprint?: boolean;
+  /** Persist a scoped component screenshot alongside its blueprint (`omd ref add --selector … --shot`). */
+  shot?: boolean;
   /** Directory of pages for cross-page site consistency check (`omd check --site <dir>`). */
   site?: string;
   /** Similarity threshold for `omd figma diff` / `omd target diff` (0–1, default 0.97). */
@@ -51,21 +72,30 @@ interface Opts {
   target?: string;
   /** Validate design.md sections rather than discover/generate (`omd design --check`). */
   check?: boolean;
+  /** Validate the preserved copy-eye report structure (`omd copy --review-check`). */
+  reviewCheck?: boolean;
   /** UX anchor: what task does the user arrive with? (`omd frame set --task "..."`) */
   task?: string;
   /** UX anchor: most frequent action on the primary screen. (`omd frame set --frequent-action "..."`) */
   frequentAction?: string;
   /** UX anchor: costliest error and its recovery path. (`omd frame set --costliest-error "..."`) */
   costliestError?: string;
+  /** Render desktop+mobile fixed and full-page proofs in one browser (`omd render <page> --proofs -o <prefix>`). */
+  proofs?: boolean;
+  /** Register override for `omd visual-richness --register quiet|confident|showpiece`. */
+  register?: string;
 }
 
-const FLAGS = new Set(['json', 'no-log', 'image', 'filmstrip', 'from-user', 'blueprint', 'fresh', 'check']);
+const FLAGS = new Set(['json', 'no-log', 'no-energy', 'image', 'filmstrip', 'squint', 'full-page', 'from-user', 'all', 'blueprint', 'shot', 'proofs', 'fresh', 'check', 'review-check']);
 const ALIASES: Record<string, keyof Opts> = {
   o: 'out',
   'no-log': 'noLog',
+  'no-energy': 'noEnergy',
   'from-user': 'fromUser',
+  'full-page': 'fullPage',
   'frequent-action': 'frequentAction',
   'costliest-error': 'costliestError',
+  'review-check': 'reviewCheck',
 };
 
 function parseArgs(args: string[]): Opts {
@@ -104,7 +134,7 @@ async function cmdIr(opts: Opts): Promise<never> {
 }
 
 async function cmdRender(opts: Opts): Promise<never> {
-  const { renderPage, renderFilmstrip, parseViewport } = await import('../core/render/index.ts');
+  const { renderPage, renderProofs, renderFilmstrip, parseViewport } = await import('../core/render/index.ts');
   const target = opts._[0];
   if (!target) usage();
 
@@ -120,11 +150,76 @@ async function cmdRender(opts: Opts): Promise<never> {
     process.exit(0);
   }
 
+  if (opts.proofs) {
+    // One browser launch produces all four sketch/craft proofs (fixed + full-page, desktop + mobile).
+    const prefix = opts.out ?? 'proof';
+    mkdirSync(dirname(resolve(prefix)), { recursive: true });
+    for (const p of await renderProofs(target, prefix)) console.log(p);
+    process.exit(0);
+  }
+
   const out = opts.out ?? 'shot.png';
   mkdirSync(dirname(resolve(out)), { recursive: true });
-  await renderPage(target, { viewport: parseViewport(opts.viewport), out });
+  await renderPage(target, {
+    viewport: parseViewport(opts.viewport), out,
+    ...(opts.squint ? { squint: true } : {}),
+    ...(opts.fullPage ? { fullPage: true } : {}),
+  });
   console.log(out);
   process.exit(0);
+}
+
+async function cmdProbe(opts: Opts): Promise<never> {
+  const target = opts._[0];
+  if (!target) throw new Error('usage: omd probe <page> [--plan path] [--json] [--out path]');
+  const { readProbePlan, runProbe, writeProbeResult } = await import('../core/probe/index.ts');
+  const planPath = resolve(opts.plan ?? join(process.cwd(), '.omd', 'probes', 'primary.json'));
+  if (!existsSync(planPath)) throw new Error(`probe plan not found: ${planPath}`);
+  const result = await runProbe(target, readProbePlan(planPath));
+  const safe = result.name.replace(/[^a-z0-9_-]+/gi, '-').replace(/^-|-$/g, '') || 'probe';
+  const out = resolve(opts.out ?? join(process.cwd(), '.omd', '.cache', 'probes', `${safe}.json`));
+  writeProbeResult(out, result);
+  if (opts.json) process.stdout.write(JSON.stringify(result));
+  else {
+    for (const warning of result.warnings) console.log(`[${warning.severity}] ${warning.id}: ${warning.message}`);
+    console.log(out);
+  }
+  process.exit(result.warnings.length ? 1 : 0);
+}
+
+async function cmdConfig(sub: string | undefined, opts: Opts): Promise<never> {
+  const { readConfig, setCheckpoint } = await import('../core/config/index.ts');
+  if (sub === 'show') {
+    console.log(JSON.stringify(readConfig(process.cwd()), null, 2));
+    process.exit(0);
+  }
+  if (sub === 'set' && opts._[0] === 'checkpoint' && opts._[1]) {
+    console.log(setCheckpoint(process.cwd(), opts._[1]));
+    process.exit(0);
+  }
+  throw new Error('usage: omd config set checkpoint none|concept|structure|both | omd config show');
+}
+
+async function cmdCraft(sub: string | undefined, opts: Opts): Promise<never> {
+  const { readCraft, recordCraft } = await import('../core/craft/index.ts');
+  if (sub === 'checkpoint') {
+    const phase = opts._[0];
+    if (phase !== 'semantic' && phase !== 'visual') {
+      throw new Error('usage: omd craft checkpoint semantic|visual --render <path> --observed "..." --changed "..."');
+    }
+    console.log(recordCraft(process.cwd(), {
+      phase, render: opts.render ?? '', observed: opts.observed ?? '', changed: opts.changed ?? '',
+    }));
+    process.exit(0);
+  }
+  if (sub === 'status') {
+    const records = readCraft(process.cwd());
+    if (opts.json) process.stdout.write(JSON.stringify(records));
+    else if (!records.length) console.log('No craft checkpoints recorded.');
+    else for (const record of records) console.log(`${record.phase}: ${record.observed} -> ${record.changed} (${record.render})`);
+    process.exit(0);
+  }
+  throw new Error('usage: omd craft checkpoint ... | omd craft status [--json]');
 }
 
 /**
@@ -399,8 +494,40 @@ function cmdChoose(opts: Opts): never {
     process.exit(1);
   }
   const path = logChoice(process.cwd(), { among, chose: opts.chose, why: opts.why });
-  console.log(`${path}  (${tasteProfile(process.cwd()).n} choices recorded)`);
+  console.log(`${path}  (${tasteProfile(process.cwd(), true).n} choices recorded)`);
   process.exit(0);
+}
+
+/**
+ * `omd ref add-batch <manifest.json>` — capture many references concurrently over ONE browser.
+ * The manifest is a JSON array of `{ source, as, selector?, blueprint?, shot?, fromUser?, viewport? }`.
+ * Same per-reference result as `omd ref add`, minus the energy pass, at a fraction of the wall time.
+ */
+async function cmdRefAddBatch(opts: Opts): Promise<never> {
+  const manifestPath = opts._[0];
+  if (!manifestPath) {
+    console.error('usage: omd ref add-batch <manifest.json>  (JSON array of { source, as, selector?, blueprint?, shot?, fromUser?, viewport? })');
+    process.exit(1);
+  }
+  const { addRefsBatch } = await import('../core/ref/batch.ts');
+  const specs = JSON.parse(readFileSync(resolve(manifestPath), 'utf8')) as import('../core/ref/batch.ts').RefSpec[];
+  if (!Array.isArray(specs) || specs.length === 0) throw new Error('manifest must be a non-empty JSON array of reference specs');
+  for (const s of specs) {
+    if (!s || typeof s.source !== 'string' || typeof s.as !== 'string') {
+      throw new Error('each manifest entry needs a string `source` and `as`');
+    }
+  }
+  const result = await addRefsBatch(process.cwd(), specs, { rulesRoot: join(root, 'core', 'rules', 'builtin') });
+  if (opts.json) process.stdout.write(JSON.stringify(result));
+  else {
+    const ok = result.outcomes.filter((o) => o.ok).length;
+    console.log(`ref add-batch: ${ok}/${result.outcomes.length} captured (concurrency ${result.concurrency})`);
+    for (const o of result.outcomes) {
+      if (o.ok) console.log(`  ok   ${o.as}  <- ${o.source}${o.slopCount ? `  (${o.slopCount} slop)` : ''}`);
+      else console.error(`  FAIL ${o.as}  <- ${o.source}: ${o.error}`);
+    }
+  }
+  process.exit(result.outcomes.some((o) => !o.ok) ? 1 : 0);
 }
 
 async function cmdRefAdd(opts: Opts): Promise<never> {
@@ -415,6 +542,10 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
   }
   if (opts.blueprint && !opts.selector) {
     console.error('--blueprint requires --selector: a blueprint measures one component, not a whole page.');
+    process.exit(1);
+  }
+  if (opts.shot && !opts.selector) {
+    console.error('--shot requires --selector: a scoped screenshot captures one component, not a whole page.');
     process.exit(1);
   }
   const { saveRef } = await import('../core/ref/store.ts');
@@ -453,7 +584,7 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
   // Failure is silently ignored: a blocked page or unsupported format must not prevent
   // the reference from being saved.
   const { captureEnergy, parseViewport } = await import('../core/render/index.ts');
-  const energyCurve = await captureEnergy(target, { viewport: parseViewport(opts.viewport) });
+  const energyCurve = opts.noEnergy ? null : await captureEnergy(target, { viewport: parseViewport(opts.viewport) });
 
   // Blueprint: full-resolution structural snapshot with skin abstracted to color roles.
   // Only captured when --blueprint is passed together with --selector.
@@ -462,6 +593,23 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
     const { captureBlueprint } = await import('../core/ref/blueprint.ts');
     blueprint = captureBlueprint(raw.nodes, opts.selector);
     console.error(`blueprint: ${blueprint.nodes.length} nodes captured`);
+  }
+
+  // Scoped screenshot: pair the component's pixels with its blueprint/invariants on one
+  // record so image-first art direction can seed from both (see core/theory/imagegen.md).
+  // A render failure must not lose the reference — warn and continue.
+  let imagePath: string | undefined;
+  if (opts.shot && opts.selector) {
+    const { renderElement } = await import('../core/render/index.ts');
+    const { refImagePath } = await import('../core/ref/store.ts');
+    const absShot = refImagePath(process.cwd(), { source: target, component: opts.as });
+    try {
+      await renderElement(target, { viewport: parseViewport(opts.viewport), selector: opts.selector, out: absShot });
+      imagePath = relative(process.cwd(), absShot);
+      console.error(`shot: ${imagePath}`);
+    } catch (err) {
+      console.error(`shot skipped: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   const path = saveRef(process.cwd(), {
@@ -476,6 +624,7 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
     ...(opts.fromUser ? { origin: 'user' as const } : {}),
     ...(energyCurve !== null ? { energyCurve } : {}),
     ...(blueprint !== undefined ? { blueprint } : {}),
+    ...(imagePath !== undefined ? { imagePath } : {}),
   });
   console.log(path);
   console.log(JSON.stringify(invariants, null, 2));
@@ -966,6 +1115,7 @@ async function cmdDesign(opts: Opts): Promise<never> {
     console.log(`\nEvidence scan:`);
     console.log(`  framework:   ${evidence.framework ?? 'unknown'}`);
     console.log(`  surfaces:    ${evidence.surfaceCount}`);
+    console.log(`  app/tooling: ${evidence.appEvidencePaths.length > 0 ? evidence.appEvidencePaths.join(', ') : 'none found'}`);
     console.log(`  tokens:      ${evidence.hasThemeTokens ? evidence.tokenFilePaths.join(', ') : 'none found'}`);
     console.log(`  references:  ${evidence.captureCount}`);
     console.log(`  frame.md:    ${evidence.frameMd ? 'present' : 'absent'}`);
@@ -992,6 +1142,7 @@ async function cmdDesign(opts: Opts): Promise<never> {
   console.log(`\nEvidence used:`);
   console.log(`  framework:   ${evidence.framework ?? 'unknown'}`);
   console.log(`  surfaces:    ${evidence.surfaceCount}`);
+  console.log(`  app/tooling: ${evidence.appEvidencePaths.length > 0 ? evidence.appEvidencePaths.join(', ') : 'none found'}`);
   console.log(`  tokens:      ${evidence.hasThemeTokens ? evidence.tokenFilePaths.join(', ') : 'none found'}`);
   console.log(`  references:  ${evidence.captureCount}`);
   console.log(`  frame.md:    ${evidence.frameMd ? 'present' : 'absent'}`);
@@ -1000,6 +1151,72 @@ async function cmdDesign(opts: Opts): Promise<never> {
   console.log(`  2. Run \`omd design --check\` to validate section coverage`);
   console.log(`  3. Cite design.md sections in every hand decision`);
   process.exit(0);
+}
+
+/** Copy-deck or copy-eye report structure gates; neither judges prose quality or blindness. */
+function cmdCopy(opts: Opts): never {
+  if (opts.check === opts.reviewCheck) {
+    throw new Error('usage: omd copy --check [--json] | omd copy --review-check [--json]');
+  }
+
+  if (opts.reviewCheck) {
+    const path = join(process.cwd(), '.omd', '.cache', 'copy-eye.md');
+    const violations = validateCopyReviewReport(existsSync(path) ? readFileSync(path, 'utf8') : '');
+    if (opts.json) process.stdout.write(JSON.stringify(violations));
+    else {
+      for (const violation of violations) {
+        console.log(`[error] ${violation.id} ${violation.path}: ${violation.message}`);
+      }
+      if (violations.length === 0) {
+        console.log('ok — copy-eye.md passes report-structure checks only; blindness and semantic quality are not proven');
+      }
+    }
+    process.exit(violations.length > 0 ? 1 : 0);
+  }
+
+  const path = join(process.cwd(), '.omd', 'copy-deck.md');
+  const violations = validateCopyDeck(existsSync(path) ? readFileSync(path, 'utf8') : '');
+  if (opts.json) process.stdout.write(JSON.stringify(violations));
+  else {
+    for (const violation of violations) {
+      console.log(`[error] ${violation.id} ${violation.path}: ${violation.message}`);
+    }
+    if (violations.length === 0) console.log('ok — copy-deck.md passes all structural checks');
+  }
+  process.exit(violations.length > 0 ? 1 : 0);
+}
+
+/** `omd composition --check [--json]` — structural/freshness gate for composition.md. */
+function cmdComposition(opts: Opts): never {
+  if (!opts.check) throw new Error('usage: omd composition --check [--json]');
+  const findings = validateCompositionContract(process.cwd());
+  if (opts.json) process.stdout.write(JSON.stringify(findings));
+  else {
+    for (const finding of findings) console.log(`[error] ${finding.id} ${finding.path}: ${finding.message}`);
+    if (findings.length === 0) console.log('ok — composition.md passes structure and freshness checks');
+  }
+  process.exit(findings.length > 0 ? 1 : 0);
+}
+
+/** Final byte-freshness evidence only; this does not judge semantic copy/source fidelity. */
+function cmdSource(mode: string | undefined, opts: Opts): never {
+  const sourceRoot = resolve(opts._[0] ?? process.cwd());
+  if (mode === '--seal') {
+    const path = writeSourceSeal(sourceRoot);
+    if (opts.json) process.stdout.write(JSON.stringify({ path }));
+    else console.log(path);
+    process.exit(0);
+  }
+  if (mode === '--check') {
+    const findings = validateSourceSeal(sourceRoot);
+    if (opts.json) process.stdout.write(JSON.stringify(findings));
+    else {
+      for (const finding of findings) console.log(`[error] ${finding.id} ${finding.path}: ${finding.message}`);
+      if (findings.length === 0) console.log('ok — source seal matches approved inputs and production source bytes');
+    }
+    process.exit(findings.length > 0 ? 1 : 0);
+  }
+  throw new Error('usage: omd source --seal [root] | --check [root] [--json]');
 }
 
 async function cmdDoctor(): Promise<never> {
@@ -1240,15 +1457,76 @@ function cmdPack(sub: string | undefined, ...rest: string[]): never {
   process.exit(1);
 }
 
+function cmdSlop(sub: string | undefined, opts: Opts): never {
+  if (sub !== 'scan') throw new Error('usage: omd slop scan [root] [--json]');
+  const result = scanSlopSource(opts._[0] ?? process.cwd());
+  if (opts.json) process.stdout.write(JSON.stringify(result));
+  else {
+    console.log(`source candidates: ${result.candidates.length} (${result.filesScanned} files scanned)`);
+    for (const item of result.candidates) {
+      console.log(`${item.path}:${item.line}  ${item.candidateId}  ${item.reviewQuestion}`);
+    }
+  }
+  process.exit(0);
+}
+
+/** Advisory AI-cliche scan of copy-deck / rendered copy. Non-gating; always exit 0. */
+function cmdTextSlop(opts: Opts): never {
+  const file = opts._[0] ?? join(process.cwd(), '.omd', 'copy-deck.md');
+  const text = existsSync(file) ? readFileSync(file, 'utf8') : '';
+  const candidates = scanTextSlop(text);
+  if (opts.json) process.stdout.write(JSON.stringify({ file, candidates }));
+  else {
+    console.log(`text-slop candidates: ${candidates.length} (${file})`);
+    for (const c of candidates) console.log(`${file}:${c.line}  ${c.candidateId}  ${c.reviewQuestion}`);
+    if (candidates.length === 0) console.log('ok — no AI-cliche phrase candidates (advisory only; not proof of good prose)');
+  }
+  process.exit(0);
+}
+
+/** Advisory carrier / visual-richness read of composition.md. Non-gating; always exit 0. */
+function cmdVisualRichness(opts: Opts): never {
+  const file = opts._[0] ?? join(process.cwd(), '.omd', 'composition.md');
+  const contract = existsSync(file) ? readFileSync(file, 'utf8') : '';
+  const valid = ['quiet', 'confident', 'showpiece'];
+  const register = valid.includes(opts.register ?? '') ? (opts.register as VisualRichnessRegister) : undefined;
+  const findings = evaluateVisualRichness(register ? { contract, register } : { contract });
+  if (opts.json) process.stdout.write(JSON.stringify({ file, register: register ?? null, findings }));
+  else {
+    console.log(`visual-richness advisories: ${findings.length} (${file}${register ? `, register=${register}` : ''})`);
+    for (const f of findings) console.log(`[advisory] ${f.id} ${f.section}: ${f.message}`);
+    if (findings.length === 0) console.log('ok — every content section names a purposeful visual carrier (advisory only)');
+  }
+  process.exit(0);
+}
+
+/** `omd stack` — deterministic stack routing from folder evidence; the hand builds exactly what it names. */
+function cmdStack(opts: Opts): never {
+  const d = computeStack(process.cwd());
+  if (opts.json) process.stdout.write(JSON.stringify(d));
+  else {
+    console.log(`stack: ${d.stack}${d.framework ? ` (${d.framework})` : ''}`);
+    console.log(`  reason: ${d.reason}`);
+    console.log(`  greenfield: ${d.greenfield}; plain-HTML allowed only with a verbatim user request: ${d.htmlOverrideAllowed}`);
+  }
+  process.exit(0);
+}
+
 function usage(): never {
   console.error(
     'usage: omd <command>\n\n'
     + '  ir <page> [-o f]                            rendered DOM -> Design IR\n'
     + '  render <page> -o shot.png [--viewport WxH]  headless screenshot\n'
+    + '  render <page> --full-page -o shot.png         supplementary long-page capture\n'
+    + '  render <page> --squint -o shot.png            grayscale + blur hierarchy isolation\n'
+    + '  render <page> --proofs -o <prefix>            all four proofs (fixed+full, desktop+mobile) in one browser\n'
     + '  render <page> --filmstrip -o f.html [--viewport WxH]  load-time filmstrip\n'
+    + '  probe <page> [--plan path] [--json] [--out path]  declared local interaction path\n'
     + '  check [<page>|--ir f] [--json] [--category slop] [--no-log]\n'
     + '  check --site <dir>                          cross-page consistency (SITE-*)\n'
     + '  check <page1> <page2> ...                   same, multi-page positional\n'
+    + '  slop scan [root] [--json]                   read-only source candidate scan\n'
+    + '  stack [--json]                              deterministic stack routing (blank greenfield -> React+Vite+TS)\n'
     + '  coach                                        trends across `omd check` history\n'
     + '\n'
     + '  frame show\n'
@@ -1259,11 +1537,17 @@ function usage(): never {
     + '\n'
     + '  choose c1 c2 c3 --chose c3 --why "..."\n'
     + '  decision "what" --why "why"\n'
-    + '  taste profile\n'
+    + '  taste record "subject" --kind selection|praise|rejection|overrule --evidence "verbatim" --from-user\n'
+    + '  taste profile [--all]\n'
+    + '  config set checkpoint none|concept|structure|both | config show\n'
+    + '  craft checkpoint semantic|visual --render P --observed "..." --changed "..."\n'
+    + '  craft status [--json]\n'
     + '\n'
     + '  ref add <url|file> --as <component> [--selector "css"] [--image] [--blueprint]\n'
     + '                                                render, extract invariants, save\n'
     + '  ref add ... --selector ".nav" --blueprint     also capture a component blueprint\n'
+    + '  ref add ... --selector ".nav" --blueprint --shot  also save the component screenshot beside its blueprint\n'
+    + '  ref add-batch <manifest.json>               capture many references in parallel over one browser\n'
     + '  ref list                                    one line per saved reference\n'
     + '  ref distance <page>                         compare a page to every saved reference\n'
     + '  ref principles <source> --as C --add "..."   record why a reference works\n'
@@ -1271,6 +1555,14 @@ function usage(): never {
     + '\n'
     + '  design                                       discover evidence and create/refresh .omd/design.md\n'
     + '  design --check                              validate design.md section coverage\n'
+    + '  copy --check [--json]                       validate required copy deck structure and fact refs\n'
+    + '  copy --review-check [--json]                validate copy-eye report structure only (not blindness)\n'
+    + '  composition --check [--json]                validate composition sections and input freshness\n'
+    + '  source --seal [root]                        write final approved-input/source byte seal\n'
+    + '  source --check [root] [--json]              fail when the source seal is missing or stale\n'
+    + '\n'
+    + '  text-slop [file] [--json]                   advisory AI-cliche scan of copy (default .omd/copy-deck.md)\n'
+    + '  visual-richness [file] [--register R] [--json]  advisory carrier read of composition (default .omd/composition.md)\n'
     + '\n'
     + '  pack dir                                    print the knowledge-pack root path\n'
     + '  pack list                                   list all pack .md files\n'
@@ -1302,8 +1594,12 @@ async function main(): Promise<never> {
 
   if (cmd === 'ir') return cmdIr(parseArgs(args.slice(1)));
   if (cmd === 'render') return cmdRender(parseArgs(args.slice(1)));
+  if (cmd === 'probe') return cmdProbe(parseArgs(args.slice(1)));
   if (cmd === 'check') return cmdCheck(parseArgs(args.slice(1)));
+  if (cmd === 'slop') return cmdSlop(sub, parseArgs(args.slice(2)));
   if (cmd === 'coach') return cmdCoach();
+  if (cmd === 'config') return cmdConfig(sub, parseArgs(args.slice(2)));
+  if (cmd === 'craft') return cmdCraft(sub, parseArgs(args.slice(2)));
 
   if (cmd === 'frame') {
     const opts = parseArgs(args.slice(2));
@@ -1343,6 +1639,7 @@ async function main(): Promise<never> {
   if (cmd === 'ref') {
     const opts = parseArgs(args.slice(2));
     if (sub === 'add') return cmdRefAdd(opts);
+    if (sub === 'add-batch') return cmdRefAddBatch(opts);
     if (sub === 'list') return cmdRefList();
     if (sub === 'distance') return cmdRefDistance(opts);
     if (sub === 'principles') return cmdRefPrinciples(opts);
@@ -1351,6 +1648,12 @@ async function main(): Promise<never> {
   }
 
   if (cmd === 'design') return cmdDesign(parseArgs(args.slice(1)));
+  if (cmd === 'copy') return cmdCopy(parseArgs(args.slice(1)));
+  if (cmd === 'composition') return cmdComposition(parseArgs(args.slice(1)));
+  if (cmd === 'source') return cmdSource(sub, parseArgs(args.slice(2)));
+  if (cmd === 'stack') return cmdStack(parseArgs(args.slice(1)));
+  if (cmd === 'text-slop') return cmdTextSlop(parseArgs(args.slice(1)));
+  if (cmd === 'visual-richness') return cmdVisualRichness(parseArgs(args.slice(1)));
   if (cmd === 'pack') return cmdPack(sub, ...args.slice(2));
   if (cmd === 'doctor') return cmdDoctor();
 
@@ -1382,15 +1685,32 @@ async function main(): Promise<never> {
     process.exit(0);
   }
 
+  if (cmd === 'taste' && sub === 'record') {
+    const opts = parseArgs(args.slice(2));
+    const subject = opts._[0];
+    if (!subject || !opts.kind || !['selection', 'praise', 'rejection', 'overrule'].includes(opts.kind) || !opts.evidence) {
+      throw new Error('usage: omd taste record "subject" --kind selection|praise|rejection|overrule --evidence "verbatim" --from-user');
+    }
+    console.log(logTaste(process.cwd(), {
+      subject, kind: opts.kind as 'selection' | 'praise' | 'rejection' | 'overrule',
+      evidence: opts.evidence, fromUser: opts.fromUser === true,
+    }));
+    process.exit(0);
+  }
+
   if (cmd === 'taste' && sub === 'profile') {
-    const { n, records } = tasteProfile(process.cwd());
-    if (n === 0) console.log('No choices recorded yet.');
+    const opts = parseArgs(args.slice(2));
+    const { n, records } = tasteProfile(process.cwd(), opts.all);
+    if (n === 0) console.log(opts.all ? 'No taste records yet.' : 'No explicit user taste recorded yet.');
     else {
       const lines = records.map((r) => {
-        const over = r.among.filter((a) => a !== r.chose).join(',');
-        return `  ${r.chose} over ${over}${r.why ? ` \u2014 ${r.why}` : ''}`;
+        if (r.among && r.chose) {
+          const over = r.among.filter((a) => a !== r.chose).join(',');
+          return `  [${r.actor}] ${r.chose} over ${over}${r.why ? ` \u2014 ${r.why}` : ''}`;
+        }
+        return `  [${r.actor}] ${r.kind}: ${r.subject} \u2014 ${r.evidence}`;
       });
-      console.log(`${n} choices\n${lines.join('\n')}`);
+      console.log(`${n} taste records\n${lines.join('\n')}`);
     }
     process.exit(0);
   }

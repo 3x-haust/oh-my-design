@@ -59,7 +59,7 @@ export function emitClaude({ agents = [] }: { agents?: AbstractAgent[] } = {}): 
 // differ. Agent pattern runs first only to keep the read order obvious; running skill
 // pattern first would be equally correct since neither pattern's output can match the
 // other's input. "omd-figma" is skill-only — it has no agent counterpart.
-const AGENT_REF = /\bomd-(framer|eye|hand|scout)\b/g;
+const AGENT_REF = /\bomd-(composer|framer|eye|glance|hand|scout|sketch|typesetter|writer)\b/g;
 const SKILL_REF = /\bomd-(ultradesign|humanize|critique|coach|figma|scout)\b/g;
 
 const pluginizeRefs = (text: string): string => text.replace(AGENT_REF, 'oh-my-design:$1').replace(SKILL_REF, 'oh-my-design:$1');

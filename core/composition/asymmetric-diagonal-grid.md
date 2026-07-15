@@ -1,5 +1,8 @@
 # Asymmetric / diagonal grid
 
+> Candidate hypothesis only. Revalidate its condition, values, and responsive transition
+> against the current composition contract; do not transfer this page recipe unchanged.
+
 A grid where one or more elements break from the column structure — rotated, offset, or
 overlapping — to create tension and signal editorial intent. The effect reads as deliberate
 when the deviation is singular; a page full of diagonal elements is not tension, it is noise.

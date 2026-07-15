@@ -5,7 +5,10 @@ Check that the design explicitly committed to the showpiece register before buil
 ## Pass criteria
 
 - `.omd/frame.md` or the run transcript shows the agent explicitly named the register: "showpiece", "expressive", or an equivalent Korean term ("쇼피스", "표현적") before writing code.
-- The rendered page uses at least one of the canonical showpiece techniques: display-scale typography (font-size ≥ 72px on a heading), deliberate negative space (padding or margin ≥ 80px on a section), or a scroll-triggered entrance animation.
+- The rendered page uses at least one concept-bearing showpiece technique whose visible
+  conditions are evidenced. For typography, `.omd/type-proof.md` and desktop/mobile
+  specimens show that actual Korean copy, chosen face/weight, loading, fallback, wrapping,
+  secondary hierarchy, and CTA pass; no pixel or viewport-fill quota substitutes for proof.
 - If `.omd/motion-spec.md` exists, it references the register decision with a cited reference or theory file.
 
 ## Fail criteria

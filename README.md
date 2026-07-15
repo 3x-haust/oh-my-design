@@ -1,249 +1,314 @@
-<div align="center">
+# Oh My Design
 
-<h1>oh-my-design</h1>
+Make the model earn its design decisions: question the brief, gather evidence, write real copy, compare structures, build once, inspect the render, and reframe.
 
-**Design like a person, not like the mean of the training set.**
+[한국어](README.ko.md)
 
-<p>
-<a href="https://github.com/3x-haust/oh-my-design/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/3x-haust/oh-my-design?style=flat-square" /></a>
-<a href="https://github.com/3x-haust/oh-my-design/releases"><img alt="Release" src="https://img.shields.io/github/v/release/3x-haust/oh-my-design?style=flat-square" /></a>
-<a href="./LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" /></a>
-<img alt="Node" src="https://img.shields.io/badge/node-%E2%89%A522.18-brightgreen?style=flat-square" />
-</p>
+## What “design like a human” means
 
-<a href="#-what-is-this">What is this?</a>
-·
-<a href="#-install">Install</a>
-·
-<a href="#-skills">Skills</a>
-·
-<a href="#-the-slop-linter">The slop linter</a>
-·
-<a href="./README.ko.md">한국어</a>
+Here, “human” means accountable judgment. The goal is a design process, not a signature visual style.
 
-<br />
+Oh My Design (OMD) keeps the model from jumping straight from a request to polished UI. It asks what problem is being solved, records evidence, separates writing from layout, compares anonymous structures, and critiques rendered output without exposing the reviewer to the builder’s rationale. The result can be quiet, expressive, conventional, or strange. What stays consistent is the chain of decisions behind it.
 
-</div>
+The durable loop is:
 
-<hr />
+```text
+brief → evidence → copy → typography proof → composition contract → isolated structure → one production build
+      → rendered critique and interaction evidence → reframe
+```
 
-> [!NOTE]
-> **Every AI-generated landing page since 2023 looks the same: indigo gradient, three identical cards, a rocket emoji in the heading. `omd` turns that into a lint error.**
+OMD is built for Codex and Claude Code. It provides six user-facing skills, nine internal pipeline agents, a local CLI, design theory and recipe packs, and a project record under `.omd/`.
 
-## 💤 What is this?
+## Quick start
 
-In [DesignPref](https://arxiv.org/abs/2511.20513), twenty professional designers made 12,000 pairwise UI judgements. Their agreement came to **Krippendorff's α = 0.248**. There is no universal reward function for "good design," so a model optimised for average taste produces anonymous output *as a logical consequence of its objective*, not as a bug.
+Requirements:
 
-`omd` is a design skill for Claude Code and Codex. It does not try to be a better model. It runs the loop a human designer runs, and it turns the parts a model gets wrong into things a machine can measure.
-
-> Think ESLint, but the rule set is "this looks AI-generated," and every rule can be overruled with a written reason.
-
-Five things it does that a raw prompt cannot:
-
-1. **Detect the mean.** Slop is checkable. Deterministic rules fire on correct, anonymous work and stay quiet on work that has a position.
-2. **Force a point of view.** A concept metaphor filters every decision — a trustworthy accountant does not bounce; a 3am convenience store does not leave whitespace.
-3. **Learn from real things, safely.** Measurements go in, pixels never. A model shown a screenshot reproduces it; a model handed the numbers learns from them.
-4. **Look at what actually rendered.** Contrast ratios, hit areas, and motion timings are computed from a headless browser, never estimated.
-5. **Ground the work in research.** Colour, type, layout, motion, and UX decisions cite a built-in theory pack before they are made.
-
-## 🚀 Install
-
-`omd` runs on two hosts. One installer covers both — it detects `~/.claude` and `~/.codex`, copies the plugin into each, and patches the config:
+- Node.js 22.18 or newer
+- Codex, Claude Code, or both, with its config directory already present
 
 ```bash
+npm install -g oh-my-design
 oh-my-design install
-```
-
-`oh-my-design uninstall` reverses exactly what it did and never touches your `.omd/` records. Target one host with `--host codex`.
-
-Each host also has its own marketplace, if you prefer that route:
-
-**Claude Code**
-
-```
-/plugin marketplace add 3x-haust/oh-my-design
-/plugin install omd@oh-my-design
-```
-
-Skills arrive with a `/` prefix — `/oh-my-design:ultradesign`, `/oh-my-design:scout`.
-
-**Codex**
-
-```
-codex plugin marketplace add 3x-haust/oh-my-design
-```
-
-Then open `/plugins` to install `oh-my-design`. Skills arrive with a `$` prefix — `$oh-my-design:ultradesign`, `$oh-my-design:scout` — and the four pipeline agents resolve to the GPT-5.6 generation. (The marketplace manifest ships and matches Codex's plugin spec; the `oh-my-design install` path is the one verified end to end.)
-
-Both hosts need Node ≥ 22.18, and the first `omd render` pulls headless Chromium through Playwright on its own. The `omd` CLI is identical everywhere — `omd check`, `omd render`, `omd pack` do not care which host called them. Confirm a healthy setup with:
-
-```bash
+oh-my-design doctor
 omd doctor
 ```
 
-One line per check: Node, Playwright, the browser binary, `.omd/` write access, the theory pack. Every `oh-my-design:ultradesign` run does this first, so a broken setup fails in the first second instead of at step five.
+`oh-my-design doctor` verifies the host installation. `omd doctor` checks the runtime, Chromium availability, project write access, and the bundled theory pack.
 
-## ⚡ Skills
+The installer does not install Chromium. If `omd doctor` reports that Playwright is unavailable or its Chromium executable is missing, install what the report names, then run the check again. A typical global setup is:
 
-| Skill | Type this | What happens |
+```bash
+npm install -g playwright
+npx playwright install chromium
+omd doctor
+```
+
+Run the main design skill from your host after both doctor commands pass. Host UIs expose skills differently; see [Skills and invocation](#skills-and-invocation).
+
+## The human design loop
+
+`omd-ultradesign` coordinates this order:
+
+1. **Preflight** — pin the project directory, run `omd doctor`, inspect the repository, and route Figma briefs to `omd-figma`.
+2. **Frame** — interrogate the brief and record the problem, reframe hypothesis, primary task, frequent action, and costliest error with cited evidence.
+3. **Concept** — choose a generator, visual register, typography direction, and the intended memorable moment.
+4. **Research** — collect measured references across the domain, competitors, audience language, components, typography, and relevant motion.
+5. **Write copy** — a dedicated writer creates a fact-traceable copy deck before layout begins.
+6. **Review copy blind** — a fresh reviewer sees the brief, copy, fact ledger, and voice evidence, but no render, code, layout, rationale, or authorship.
+7. **Prove typography blind** — a typesetter renders layout-neutral actual-copy specimens at 1280x900 and 390x844; a fresh eye reviews them without page structure or rationale, then the typesetter revises and rerenders.
+8. **Compose deliberately** — a fresh composer defines the experience spine, one dominant focal anchor, mass/rhythm, a lawful mechanism carrier or explicit alternate, responsive recomposition, and candidate axes. `omd composition --check` verifies input freshness.
+9. **Diverge structurally** — isolated agents receive the same composition contract and render fixed desktop/mobile plus supplemental full-page continuity proofs for each candidate.
+10. **Choose blind** — a fresh selector scores eight frozen 0–4 dimensions, rejects contract violations or any dimension below 2, and never equates a form above fold with CTA reach.
+11. **Build once** — one selected structure becomes the production implementation. The builder does not generate another candidate set.
+12. **Reflect while building** — the builder records a semantic checkpoint, re-proves type in the selected desktop/mobile containers, then records the visual checkpoint before optional motion.
+13. **See the result** — desktop and mobile renders, squint views, applicable filmstrips, deterministic checks, and declared local probes supply the review evidence.
+14. **Triage source candidates** — after production source exists, a read-only scan proposes narrow candidates. The coordinator resolves each through rendered context; candidate presence alone is not a failure.
+15. **Critique, repair, and reframe** — a squint-only glance reports hierarchy first; a separate sharp reviewer judges craft and sanitized candidates, then repairs are rendered, checked, and rescanned.
+16. **Ship** — project tests, build checks, applicable design gates, and unresolved findings are reported with their evidence.
+
+Figma and explicit visual targets already supply structural decisions. The loop may skip structural divergence in those routes, but it records why.
+
+## Evidence boundaries and artifacts
+
+| Stage | Durable output | Boundary |
 | --- | --- | --- |
-| `oh-my-design:ultradesign` | "디자인해줘", "redesign this", "landing page, make it stunning" | The whole loop, end to end, with no approval prompts. You get a working site and a written record of every decision and why. |
-| `oh-my-design:figma` | paste a figma.com link, "피그마 그대로 구현해줘" | Pulls the file, synthesizes the design system, builds each frame against an iterative pixel-diff loop, matches responsive pairs, and ships with a fidelity report. |
-| `oh-my-design:scout` | "레퍼런스 수집해줘", "how do good sites do X" | A measured reference board: whole pages, single components, typography, motion, community threads, and how real products *write*. It designs nothing. |
-| `oh-my-design:critique` | "비평해줘", "why does this feel wrong" | Reviews a design without touching it. Runs the linter, groups findings by root cause, and judges against the project's own concept rather than taste. |
-| `oh-my-design:humanize` | "AI티 빼줘", "de-robot this copy" | Strips Korean and English AI prose tics — translation-ese, mechanical enumeration, stock phrases, uniform rhythm — without changing a single fact. |
-| `oh-my-design:coach` | "내가 뭘 반복해서 틀리지?" | Reads your check history: what keeps recurring, what improved, what to study. It refuses to invent trends from thin data. |
+| Frame | `.omd/frame.md` | Claims need a user sentence, research line, datum, or named observation. Internal OMD instructions are not evidence. |
+| Research | `.omd/refs/*.json` | Builders receive measurements and principles, not screenshots to imitate. Scouting stops on decision/component coverage, independence, and source trust—not a universal capture count or gallery quota. |
+| Copy | `.omd/copy-deck.md` | Each shipped factual claim points to a `verified` fact ID. `fixture` facts test density only; `open` facts cannot support shipped claims. |
+| Blind copy review | review handoff | The reviewer cannot inspect renders, source, layout, frame, decisions, or authorship and does not edit the deck. The writer applies the review, then `omd copy --check` runs again. |
+| Typography proof | `.omd/type-proof.md`; specimens in `.omd/.cache/type-proof/` | Actual target-language copy proves roles, source/licence, glyph coverage, requested/computed family and weight, axes, fallback/loading, wraps/clips, and rejected alternatives at both viewports. Browser evidence does not identify the physical font used for each glyph. |
+| Composition contract | `.omd/composition.md` | A clean-room composer receives sanitized evidence and defines a focal anchor, CTA path, mechanism carrier/alternate, and responsive relationships without requiring a photo or form above fold. Exact hashes make stale inputs fail. |
+| Structural sketches | `.omd/.cache/sketches/<id>/` | Each candidate supplies fixed 1280x900 and 390x844 acceptance renders plus full-page desktop/mobile continuity evidence. Full-page captures inform dependency/rhythm only. |
+| Blind choice | `.omd/taste/preferences.jsonl` | The selector sees anonymous renders and sanitized task context, not candidate rationale or authorship. `omd choose` stores the selected candidate and its reason as an agent choice. |
+| Production build | repository source | One builder implements one selected structure and preserves the copy deck. Separate `omd decision` entries record implementation reasons in `.omd/decisions.md`; they are not candidate-choice records. |
+| Production evidence | `.omd/attribution.md` | The builder records the sources behind shipped tokens, motion, composition, and graphics. |
+| Craft checkpoints | `.omd/craft.jsonl` | One semantic and one visual checkpoint each record an observation and the concrete change it caused. |
+| Source-candidate triage | raw JSON in `.omd/.cache/`; reasoning in `.omd/decisions.md` | `omd slop scan` exposes controlled signals without source excerpts. `needs-render` is transitional; final untriaged and needs-render counts are both zero. Confirmed current candidates are repaired/rescanned, dismissals have evidence, and rendered IR wins on overlap. |
+| Rendered review | cache renders, filmstrip, probe output | The squint reviewer sees only squint renders. The sharp reviewer receives sanitized task context plus measured outputs, never the builder’s rationale. |
+| Reframe | `.omd/frame.md` revision | `omd frame reframe` appends what the render revealed instead of erasing the original framing. |
+| Final source seal | `.omd/source-seal.json` | `omd source --seal` records final copy/type/composition and sorted production-source hashes; `--check` proves byte freshness only, not semantic fidelity. |
 
-## 🔁 The pipeline
+Human approval checkpoints are separate from craft checkpoints. Projects default to `checkpoint: none`; concept, structure, or both can be enabled in `.omd/config.json`.
 
-`oh-my-design:ultradesign` runs seven steps in order, with no gate between them:
+## Stack routing
 
+Every builder follows the same precedence:
+
+```text
+explicit user request
+  > existing repository stack and toolchain
+  > React + Vite + TypeScript for a truly blank greenfield
 ```
-                         ┌──────────────────────────────────────────────┐
-                         │                                              ▼
-  ① FRAME ──▶ ② CONCEPT ──▶ ③ REFERENCE ──▶ ④ COMMIT ──▶ ⑤ BUILD ──▶ ⑥ SEE ──▶ ⑦ REFRAME
-   doubt        read theory   omd-scout        one            omd-hand    render      what
-   the brief    + domain      measures         structure,     + motion    filmstrip   you saw
-                research      real things      cost named     spec        + measure   rewrites
-                                                                                      the frame
-```
 
-Four agents, deliberately firewalled. `omd-framer` interrogates the brief — and asks the three UX questions that anchor it: the task the user arrives with, the most frequent action, the costliest error. `omd-scout` measures references. `omd-hand` builds the one committed structure. `omd-eye` critiques in a fresh context, walking the primary task before it judges a single pixel — it never sees the reasoning that produced the work, so it cannot defend it.
+Existing vanilla HTML is an existing stack. An unrecognized package or toolchain is investigated and preserved. It is not treated as an empty repository. Plain HTML for a new greenfield project is used only when the user explicitly asks for it.
 
-Along the way, four things separate the output from a generic build:
+Greenfield scaffold dependencies are allowed. Existing projects should not receive unnecessary dependencies.
 
-- **The scout refuses AI-generated references.** Every capture runs through the same slop linter the build will face. Two or more findings bars a page from the board, and a rejected capture obliges a replacement search, so the board is made of what *passed*, not of what was available. Kinship detection drops reference pairs that score ≥ 0.85 against each other — pages that similar carry the same average.
-- **The eye sees motion, not just a screenshot.** `omd render --filmstrip` captures the first seconds as frames, and a live probe reads `document.getAnimations()` during load and scroll, so entrance timing and scroll choreography become numbers. The hand writes a motion spec first, and an animation that is not in the spec does not ship.
-- **Motion, composition, and graphics come from a cookbook, not improvisation.** Twelve motion recipes, eight page compositions, six graphics treatments — each with working code, a condition clause, and slots the board's measurements fill. Improvisation converges on the mean; parameterising a vetted recipe does not.
-- **Every token has a paper trail.** `.omd/attribution.md` maps each token group to the reference or theory entry it came from, and `omd check` audits it: a colour nobody can source is a finding, not a vibe.
+`omd design` discovers repository evidence and creates `.omd/design.md` only when the file is absent. If the file already exists, it preserves the file and prints an evidence and validation summary.
 
-## 🧹 The slop linter
+## Skills and invocation
 
-`omd check` computes contrast, hit areas, spacing, and token coverage — and **slop**, the signature of work that converged on the mean. Twenty-one rules, all warnings rather than errors, because each can be wrong about a deliberate choice; overruling one takes a written reason. They fall in two families.
+These are the six user-facing skills:
 
-**Colour, surface, and layout** — the machine-default aesthetic, measured:
-
-| Rule | Catches |
+| Canonical name | Use it for |
 | --- | --- |
-| `SLOP-GRADIENT` | The indigo→violet gradient, matched by hue band rather than a hex blocklist |
-| `SLOP-GRADIENT-TEXT` | Gradient headline text — hierarchy faked with `background-clip` instead of scale |
-| `SLOP-RADIUS-MONOCULTURE` | One corner radius everywhere: no material hierarchy |
-| `SLOP-NESTED-RADIUS` | Corners that don't nest — inner radius should be outer minus padding |
-| `SLOP-SHADOW-MONOCULTURE` | One shadow repeated: if everything floats, nothing floats |
-| `SLOP-OVERSIZED-SHADOW` | A 40px+ blur on a small element — elevation as decoration |
-| `SLOP-GLASSMORPHISM` | Max radius plus `backdrop-blur` translucency: depth by blur, not structure |
-| `SLOP-EVERYTHING-CENTERED` | Centring as a default instead of as emphasis |
-| `SLOP-TRIPLE-CARD` | Three identical cards, or an all-caps stat grid: nobody decided what matters most |
-| `SLOP-NESTED-CARDS` | Cards inside cards inside cards: one surface per region |
-| `SLOP-MONO-SPACING` | One gap everywhere: space by relationship, not by habit |
-| `SLOP-FLAT-TYPE` | A whole UI between 14 and 18px: a scale with no contrast |
-| `SLOP-BADGE-SPAM` | "Beta / New / Hot" pills in the chrome |
-| `SLOP-FAKE-STAT` | The invented stat row, `10k+ / 99.9% / 24/7`, with no source |
-| `SLOP-EMOJI-HEADING` | An emoji doing the job typography failed to do — in a heading or a button |
+| `omd-ultradesign` | Run the complete human design loop for a page, app, dashboard, blog, landing page, or redesign. |
+| `omd-figma` | Pull a Figma file, synthesize its system, implement frames, compare responsive pairs, and report measured fidelity. |
+| `omd-scout` | Build a standalone measured reference board without designing or implementing. It closes consequential coverage gaps and reports uncertainty instead of filling quotas. |
+| `omd-critique` | Review an existing design without changing it; group deterministic findings by root cause and judge rendered craft. |
+| `omd-humanize` | Preserve facts while locally repairing sound discourse or reconstructing a misshapen message from verified facts, voice, and surface action. |
+| `omd-coach` | Read accumulated check history, identify recurring problems and trends, and suggest what to practise next. It does not read taste records. |
 
-**Copy** — where generated work confesses first:
+Canonical source and direct-install names use the `omd-*` prefix. Codex displays these skills as `(omd) <skill>` in its UI, for example `(omd) ultradesign`.
 
-| Rule | Catches |
+The verified installer copies the canonical skills directly into each detected host. Select them by the name shown by that host; slash-command presentation is host-dependent. Marketplace manifests also ship. In the Claude marketplace flavor, plugin references use the `oh-my-design:<skill>` namespace. Marketplace end-to-end behavior is not claimed to be identical to the verified direct-install path.
+
+## Internal pipeline agents
+
+These nine agents are implementation details of the design loop, not public commands:
+
+| Agent | Responsibility | Write boundary |
+| --- | --- | --- |
+| `omd-framer` | Questions the brief and records an evidence-backed frame. | Read-only; records through the frame CLI. |
+| `omd-scout` | Researches measured evidence for pipeline coverage. | Read-only; records through reference CLI commands. |
+| `omd-writer` | Writes or repairs the copy deck and fact ledger. | Only `.omd/copy-deck.md`. |
+| `omd-typesetter` | Builds and revises the pre-structure actual-copy typography proof. | `.omd/type-proof.md` and `.omd/.cache/type-proof/`. |
+| `omd-composer` | Converts sanitized evidence into the fresh composition contract before divergence. | Only `.omd/composition.md`. |
+| `omd-sketch` | Produces one isolated grayscale structural candidate with real copy. | Only its cache candidate directory. |
+| `omd-hand` | Builds the selected structure and records two craft checkpoints. | Production repository and declared OMD records. |
+| `omd-glance` | Reports hierarchy from squint renders only. | No writes. |
+| `omd-eye` | Selects anonymous structures, reviews copy or typography proof blind, or critiques sharp renders. | No writes. |
+
+Agents do not pin a concrete model; they inherit the model selected for the session. Their `high` and `medium` reasoning fields communicate intent.
+
+Claude Code can enforce declared denied tools in agent metadata. Codex agent files do not have an equivalent tool-restriction field, so read-only limits are prompt contracts there rather than a hard sandbox. OMD does not describe those contracts as filesystem isolation.
+
+## Verification stack
+
+OMD combines deterministic checks with rendered review:
+
+| Layer | Commands and evidence |
 | --- | --- |
-| `SLOP-COPY` | "Unlock the power of…", "it's not just X, it's Y" — copy that fits any product |
-| `SLOP-COPY-KO` | Korean AI-prose tells: the comma after a connective, structural openers, 첫째/둘째 enumeration |
-| `SLOP-KO-EMDASH` | The spaced em-dash inside Korean copy, a translation punctuation import |
-| `SLOP-KO-REGISTER-MIX` | 해요체 and 합니다체 drifting inside one paragraph |
-| `SLOP-KO-SIGNPOST` | Copy that narrates document structure ("아래는 그 기록이에요") |
-| `SLOP-PINK-ELEPHANT` | Told "no clutter", a model writes *"No clutter here."* — self-negating meta-copy |
-| `SLOP-LEAKED-RATIONALE` | Five consecutive words shared between page copy and the design notes |
+| Copy, composition, source, and design contracts | `omd copy --check` validates deck structure and fact references. `omd composition --check` validates composition sections and input freshness. `omd source --seal/--check` validates final approved-input/source bytes without claiming semantic fidelity. `omd design --check` validates design-contract coverage. |
+| Typography proof | Layout-neutral desktop/mobile specimens run before sketches; selected-container reproof runs after semantic structure and before the visual checkpoint. Copy, font/file, weight/axis, or container-width changes invalidate the proof. |
+| Render evidence | `omd render` captures the exact viewport by default; `--full-page` is supplementary continuity evidence. `--squint` isolates hierarchy with grayscale and blur, and `--filmstrip` captures load-time frames. Squint is not a timed first-impression simulator. |
+| Interaction | `omd probe` executes only a declared, safe local plan and reports expectation or tab-order failures. |
+| Source candidates | `omd slop scan [root] [--json]` reads supported production source without writing it. Candidates require contextual triage; they are not `omd check` warnings, scores, or authorship claims. |
+| Design lint | `omd check` evaluates `system`, `a11y`, `slop`, `motion`, and `ux` conditions. Contrast and hit-area rules are errors; slop and the other quality-floor rules are warnings where authored that way. |
+| Site consistency | `omd check --site <dir>` or multi-page positional checks report cross-page ladder and token drift. |
+| Reference distance | `omd ref distance <page>` compares measured invariants against saved references and helps catch overly close results. |
+| Figma fidelity | `omd figma pull`, `system`, and `diff` connect a Figma snapshot to a measured implementation report. |
+| Visual target | `omd target set <image-path-or-url> --as <name>` and `omd target diff` run a bounded image comparison against a registered PNG target. A URL must be a direct HTTP(S) image URL, not an arbitrary web page. |
 
-Beyond slop, the same engine audits what a prompt alone cannot enforce:
+`omd figma pull` requires a Figma personal access token:
 
-| Family | Catches |
+```bash
+export FIGMA_TOKEN=...
+```
+
+`omd doctor` reports a missing `FIGMA_TOKEN` as optional and still passes that check. Figma pull remains unavailable until the token is set.
+
+Slop findings are warnings and a quality floor. They do not prove that a design was generated by AI. A written overrule records workflow intent, but it does not suppress a finding or change the command status. Any `omd check` findings cause the command to exit with status 1, which makes it usable in CI.
+
+Source candidates are a separate evidence stream. Their presence exits successfully; only an operational scan failure is nonzero. Before ship, however, neither untriaged nor needs-render items may remain. Raw candidate JSON stays ephemeral, while confirmed repairs and evidence-backed dismissals are recorded durably. The protocol was conceptually informed by [`yetone/kill-ai-slop`](https://github.com/yetone/kill-ai-slop), accessed 2026-07-13; because no explicit upstream licence was present, OMD independently authors its implementation, language, examples, identifiers, and review flow rather than copying upstream material.
+
+Rendered critique remains necessary: a rule engine cannot safely judge optical balance, composition rhythm, typography craft, or whether the memorable moment belongs to the concept.
+
+## Interaction applicability
+
+The copy deck declares exactly one interaction scope:
+
+| Scope | Required evidence |
 | --- | --- |
-| `MOTION-*` | Animation with no `prefers-reduced-motion`, layout-property thrash, the uniform 500ms-ease-in-out signature, a spec that promises motion the render never shows |
-| `UX-*` | Two buttons both claiming top billing on one screen; the only interactive control is entirely below the fold at mobile viewport; every interactive element has `tabindex="-1"` (no keyboard path); frame not UX-interrogated (`FRAME-UX-INCOMPLETE`) |
-| `DESIGN-*` | A `.omd/design.md` missing required sections; a form with no error-state affordance (class name, text copy, `role=alert`, or `aria-invalid`) |
-| `ATTR-*` | Token groups shipped without a source in `.omd/attribution.md` |
-| `SITE-*` | Cross-page drift: one page on a 4-step type scale, another on 6 (`omd check --site`) |
-| `FOCUS-*` | Tab stops with no visible focus indicator, probed live |
+| `stateful` | Primary and recovery copy, `.omd/probes/primary.json`, and `.omd/probes/recovery.json`. Both probes run. |
+| `navigation-only` | Primary copy and the primary probe. Recovery copy and recovery probe are `N/A` with concrete reasons. |
+| `static` | Primary copy. Recovery copy and both probes are `N/A` with concrete reasons. |
 
-Calibrated against real work: the rules fire on a fixture that is *correct, accessible, and anonymous*, stay silent on the same content with a point of view, and do not flag linear.app. `omd check` exits 1 on findings, so it doubles as a **design linter in CI**.
+Loading, empty, error, success, disabled, offline, and recovery states are designed only when the surface can reach them. The harness does not add fake states to satisfy a checklist. Reviewers make interaction claims only from supplied probe evidence.
 
-## 📚 Theory pack
+Probe plans can use declared click, fill, and keypress steps with explicit expectations. They are limited to local files and localhost or loopback URLs, reject authenticated or credentialed flows, and reject remote, destructive, or undeclared actions. OMD never discovers controls and clicks them automatically.
 
-A colour is a claim about the product; the theory pack is where that claim finds its evidence. Nine files ship at `core/theory/`, each written as condition → choice → reason with named sources — Elliot & Maier, Bringhurst, Müller-Brockmann, Nielsen, NN/g, Baymard:
+## Project state
 
-| File | What it answers |
+Durable, reviewable records live directly under `.omd/`:
+
+- `frame.md`, `copy-deck.md`, `type-proof.md`, `composition.md`, `source-seal.json`, `design.md`, `decisions.md`
+- `attribution.md`, `motion-spec.md`, `craft.jsonl`, `config.json`
+- `refs/*.json`, declared `probes/*.json`, `taste/preferences.jsonl`, and `history.jsonl`
+
+Generated IR, renders, filmstrips, sketch candidates, probe results, and scratch output live under `.omd/.cache/`. Deleting the cache should not erase design intent.
+
+A completed single-page `omd check` appends a record to `.omd/history.jsonl` only when `--no-log` is absent. Site and multi-page checks do not append history.
+
+`oh-my-design uninstall` removes installed OMD files and config changes while preserving the project’s `.omd/` directory.
+
+## Installation modes
+
+The direct installer is the supported, regression-tested path:
+
+| Host | Direct installation |
 | --- | --- |
-| `color.md` | Domain colour conventions and why they exist; harmony schemes; 60-30-10; saturation as a register signal; dark-mode desaturation |
-| `typography.md` | Scale ratios and what each says; pairing theory; Korean typography — 한글 line-height, 국·영 혼용, Pretendard vs Noto criteria |
-| `layout.md` | Gestalt as UI decisions; hierarchy tool priority; form research; empty, loading, and error states; information density |
-| `motion.md` | Duration thresholds from perception research; easing semantics; choreography; skeleton vs spinner evidence |
-| `components.md` | Button hierarchy ceilings, validation timing, navigation, tables, modals and their alternatives, toasts, search |
-| `craft.md` | What theory books skip: layered shadows, borderless separation, opacity-tier text, optical alignment, 60fps-safe properties |
-| `expressive.md` | Award-site anatomy: the Awwwards rubric weights usability over creativity even there; scroll as narrative; the technique catalogue and its restraint clause |
-| `ux.md` | Task-first framing; navigation and flow; feedback and the Doherty threshold; cognitive load and progressive disclosure; first-run and empty states; peak-end shaping; Nielsen's heuristics as checkable questions |
-| `voice.md` | How human web copy actually reads: sentence-length variance, front-loading, one register, the review-mining move — calibrated against a measured human baseline |
+| Claude Code | Copies skills to `~/.claude/skills` and agents to `~/.claude/agents`, patches `settings.json` permissions, and removes the legacy OMD `PreToolUse` hook. |
+| Codex | Copies the versioned plugin cache, direct skills, and agent TOML files under `~/.codex`, then patches `config.toml`. Doctor reports Codex hook trust as unverified rather than claiming it was confirmed. |
 
-The concept step reads these before committing to a direction. The hand cites them whenever the reference board does not cover a decision — an uncited choice is a finding.
+Use `--host claude` or `--host codex` to limit install, doctor, or uninstall to one detected host:
 
-## 📐 The design contract
-
-For anything past a single page, `omd design` writes `.omd/design.md` — a persistent, fourteen-section contract that governs every surface: brand personality, product goals, personas, information architecture, design principles, visual language, component inventory, accessibility targets, responsive breakpoints, **interaction states (loading / empty / error / success / disabled / offline)**, content voice, implementation constraints, and open questions. Evidence already in the repo — `package.json`, token files, `.omd/frame.md`, `.omd/refs/` — is scanned and pre-filled; whatever cannot be answered becomes an explicit open question rather than an invented value.
-
-`omd check` validates the contract when it exists. `DESIGN-INCOMPLETE` fires for missing sections and for an interaction-states section that lists no states, and a form with no error state fires `DESIGN-FORM-NO-ERROR` on its own.
-
-## 🏗 Architecture
-
-```
-src/
-  agents/                  source of truth: framer, scout, hand, eye
-  skills/                  source of truth: ultradesign, figma, scout, critique, humanize, coach
-core/
-  theory/                  the 9-file theory pack
-  motion/                  12 motion recipes + an easing vocabulary
-  composition/             8 page-level composition recipes
-  graphics/                6 CSS-only graphics treatments
-  craft/                   the finish-pass checklist
-  design/                  the design contract + interaction-state rules
-  ref/                     reference measurement, blueprints, kinship, signal + slop scoring
-  render/                  headless Playwright: render, filmstrip, motion/hover/focus probes
-  rules/                   the linter engine + builtin rules (slop, motion, ux, a11y, tokens)
-  figma/                   file pull, design-system synthesis, pixel-diff, responsive matching
-  target/                  the general visual-target loop (any mockup, screenshot, or URL)
-  site/                    cross-page drift comparison
-  install/                 host detection + config patching for Claude and Codex
-adapters/build.ts          generates agents/, skills/, dist/, and both marketplace manifests from src/
-evals/                     plugin eval cases + rubric graders
-scripts/bump.ts            one command, every manifest, zero drift
-.omd/                      per-project design record
-  frame.md                 the problem as currently understood
-  design.md                the multi-surface design contract
-  decisions.md             why there is no green in this product
-  attribution.md           which reference each token came from
-  motion-spec.md           what moves, when, and on whose authority
-  refs/*.json              measured references + written principles
-  history.jsonl            every check run — what oh-my-design:coach reads
+```bash
+oh-my-design install --host codex
+oh-my-design doctor --host codex
+oh-my-design uninstall --host codex
 ```
 
-`npm run build` regenerates `agents/`, `skills/`, `dist/`, and both hosts' manifests from `src/`. Never edit the generated directories.
+Repository manifests are emitted for Claude and Codex marketplace packaging. They are shipped artifacts, but this README does not claim marketplace parity with the direct installer.
 
-## ⌨️ CLI
+## CLI reference
 
+This is a compact map of `node bin/omd.ts --help`:
+
+```text
+omd ir <page> [-o file]
+omd render <page> -o shot.png [--viewport WxH]
+omd render <page> --full-page -o long.png [--viewport WxH]
+omd render <page> --squint -o shot.png
+omd render <page> --filmstrip -o filmstrip.html [--viewport WxH]
+omd probe <page> [--plan path] [--json] [--out path]
+omd check [<page>|--ir file] [--json] [--category slop] [--no-log]
+omd check --site <dir>
+omd check <page1> <page2> ...
+omd slop scan [root] [--json]
+omd coach
+omd composition --check [--json]
+omd source --seal [root]
+omd source --check [root] [--json]
+
+omd frame show
+omd frame set --problem P --reframe R --why EVIDENCE [--task T --frequent-action A --costliest-error E]
+omd frame reframe --to "..." --because "..."
+omd frame generator --set "metaphor"
+omd choose c1 c2 --chose c2 --why "..."
+omd decision "what" --why "why"
+omd taste record "subject" --kind selection|praise|rejection|overrule --evidence "verbatim" --from-user
+omd taste profile [--all]
+omd config set checkpoint none|concept|structure|both
+omd config show
+omd craft checkpoint semantic|visual --render path --observed "..." --changed "..."
+omd craft status [--json]
+
+omd ref add <url|file> --as <component> [--selector "css"] [--image] [--blueprint]
+omd ref list
+omd ref distance <page>
+omd ref principles <source> --as <component> --add "..."
+omd ref show <source> --as <component>
+
+omd design
+omd design --check
+omd copy --check [--json]
+omd pack dir
+omd pack list
+omd pack <relpath>
+omd doctor
+
+omd figma pull <file-url>
+omd figma system
+omd figma diff <frame-id> <page-or-url>
+omd target set <image-path-or-url> --as <name>
+omd target list
+omd target diff <page> [--target <name>] [--viewport WxH] [--threshold N] [--json]
 ```
-omd design                                     scan repo evidence, create/refresh .omd/design.md
-omd design --check                             validate design.md section coverage
-omd check  <page> [--json] [--viewport WxH]    lint: a11y, tokens, motion, ux, slop. exit 1 on findings
-omd check  --site <dir>                         cross-page ladder and token drift
-omd render <page> -o shot.png [--filmstrip]     headless screenshot, or the first seconds as frames
-omd ir     <page>                               rendered DOM → measured node tree
-omd ref    add|list|show|principles|distance    the reference board (slop-scored at capture)
-omd frame  set|show|reframe|generator           the problem record — nobody signs it; the loop rewrites it
-omd decision "what" --why "why"                 the reasons file your successor will thank you for
-omd figma  pull|system|diff                     Figma file → snapshot → design system → pixel-diff loop
-omd target set|diff|list                        converge a build toward any mockup, screenshot, or URL
-omd pack   dir|list                             where the theory and recipe packs live (host-neutral)
-omd doctor                                      environment preflight
-omd coach                                       recurring weaknesses, honest trends
+
+## Architecture and contributing
+
+Prompt source of truth:
+
+- `src/agents/*.agent.yaml`
+- `src/skills/omd-*/SKILL.md`
+
+Generated outputs:
+
+- `agents/`
+- `skills/`
+- `dist/`
+
+Do not edit generated outputs directly. The build regenerates them for direct hosts and plugin packaging.
+
+These paths are edited directly: `core/`, `bin/`, `adapters/`, `test/`, `evals/`, `scripts/`, `README.md`, `README.ko.md`, and the theory and recipe packs under `core/`.
+
+Before submitting a change:
+
+```bash
+npm test
+npx tsc --noEmit
+npm run build
 ```
 
-## 📄 License
+New linter rules must remain narrow, include positive and negative tests, and always use warning severity.
 
-MIT
+## Limits and trust
+
+- The prompts define a disciplined workflow; they do not guarantee strong design without real project evidence, usable copy, rendered inspection, and project-specific validation.
+- Probes are for local, non-authenticated, non-destructive paths. They are not a general browser automation layer.
+- The copy validator checks required structure, interaction applicability, unresolved sentinels, and explicit fact references. Human review owns prose quality and factual verification.
+- Reference distance, lint, and image diff are measurements. They inform judgment rather than replace it.
+- Marketplace manifests are available, while the direct installer is the path covered by install-to-doctor regression tests.
+
+Licensed under the [MIT License](LICENSE).

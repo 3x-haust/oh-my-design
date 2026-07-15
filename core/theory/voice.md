@@ -1,40 +1,25 @@
 # Voice — decision material
 
-Copy gives away its origin before a pixel does. A line break mid-sentence, three consecutive
-sentences of the same length, a hedge that adds no information — any one of these signals
-that a model wrote this faster than a person could have. The tells are measurable. The
-repairs are learnable. This file records both.
+Copy reveals whether its language fits the speaker, listener, surface, and task before visual
+polish can rescue it. A forced line break, repeated cadence, or empty hedge can prompt a
+contextual review, but no individual signal establishes authorship. This file records the
+jobs those patterns can obstruct and the repairs that preserve evidence.
 
 ---
 
-## The statistical signature of generated prose
+## Statistical observations are not writing instructions
 
-Research into detecting AI-generated text consistently identifies two statistical
-properties that separate human writing from model output: perplexity and burstiness.
-Perplexity measures how predictable each word choice is — models select high-probability
-tokens by construction, producing text that is smoother than any human writer's. Burstiness
-measures how much sentence length and complexity vary across a document — humans interrupt
-long sequences with short ones, shift register unexpectedly, and write sentences that range
-widely in structure; models produce text at a more uniform cadence because they optimise the
-same way at every position.
+Generated-text studies have measured aggregate differences in predictability, sentence
+length, and paragraph complexity within particular datasets. Those distributions can
+describe a corpus; they cannot establish who wrote an individual passage or whether it does
+its job. Genre, language, accessibility needs, short UI labels, and technical constraints can
+all produce the same measurements.
 
-A 2025 feature-based detection study in *AI and Ethics* (Springer) confirmed that human
-writers demonstrate greater variability in sentence length — wider distribution, higher
-standard deviation — while model-generated text concentrates around a narrower range. A PMC
-study on academic writing achieved over 99% detection accuracy using four feature categories,
-with sentence-level diversity in length and paragraph complexity as primary signals.
-An arXiv analysis (2408.04647) found that GPT-generated sentences are typically longer on
-average while human-written sentences have a wider range — meaning human writing is not
-consistently shorter, just consistently more varied.
-
-The practical instruction is not "write shorter sentences." It is: vary deliberately. After
-two long sentences, write a short one. After a clause-heavy paragraph, write a paragraph of
-one sentence. The variation is the signal of a person.
-
-Condition → choice → reason: when copy reads flat or rhythmically identical across
-paragraphs, it is not a style problem — it is a burstiness deficit. Introduce one
-dramatically short sentence in every three to four long ones. Not as ornament, but as a
-factual break: the claim that deserves the white space gets it.
+Do not manufacture sentence-length variance, surprise, typos, asides, or roughness to imitate
+a distribution. Rhythm follows the speaker's thought and the surface's job. When prose feels
+mechanical, inspect the discourse: repeated propositions, abstract agency, prompt mirroring,
+misplaced caveats, or a register that does not fit the relationship. Repair that cause and
+let sentence shape follow. Detector scores and stylometric thresholds never gate shipping.
 
 ---
 
@@ -158,18 +143,17 @@ captures record the phrases the audience already uses for the problem.
 
 ## Korean copy: 한국어 카피의 목소리
 
-Korean product copy has a distinct set of decisions that have no equivalent in English
-writing advice. Applying English-language principles to Korean prose — even translated ones
-— produces copy that reads as translated, which is among the loudest tells.
+Korean product copy requires decisions that English-language guidance does not settle.
+Literal transfer can produce translation-shaped prose, so judge the result against its Korean
+speaker, listener, situation, and register rather than inferring its origin.
 
 ### Speech-level commitment: choose one and hold it
 
-The two dominant written registers in Korean product copy are 해요체 (하다 → 해요, 됩니다
-→ 돼요) and 합니다체 (하다 → 합니다, 됩니다 → 됩니다). These are not style choices on a
-spectrum; they make categorically different claims about the relationship between the
-product and the user. 합니다체 signals institutional formality — the bank teller, the
-government notice, the press release. 해요체 signals a person speaking to a person —
-warmer, more accessible, without the distance formal endings create.
+Two common written registers in Korean product copy are 해요체 (하다 → 해요, 됩니다 → 돼요)
+and 합니다체 (하다 → 합니다, 됩니다 → 됩니다). They can imply different relationships:
+합니다체 often supports institutional precision, while 해요체 often supports conversational
+warmth. Neither is a universal product default; choose from the voice contract, audience,
+situation, and required authority.
 
 Toss committed to 해요체 across every string in its product and published the rule
 explicitly: all copy uses 해요체, without exception, regardless of context or screen.
@@ -177,15 +161,14 @@ Their stated reason is consistency of experience — 합니다체 anywhere break
 the rest of the product has established. The rule also extends to avoiding over-polite forms
 (~시겠어요?, ~께) that amplify formality past what the relationship calls for.
 
-What the `SLOP-KO-REGISTER-MIX` rule detects — 해요체 and 합니다체 alternating within the
-same text node — is not stylistic inconsistency. It is an absence of commitment. The product
-has not decided what its relationship with the user is, and the mixed endings make that
-indecision visible.
+What the `SLOP-KO-REGISTER-MIX` rule detects — 해요체 and 합니다체 alternating within one
+text node — is a review candidate. It may expose unplanned register drift, or it may be
+required by quoted speech or a deliberate change of speaker. Context decides.
 
-Condition → choice → reason: before writing a single string in Korean, record the speech
-level in the voice study. Then hold it for every string, including error messages, empty
-states, and button labels. A button that reads "확인합니다" on a screen where the hero reads
-"지금 시작해요" is two products, not one.
+Condition → choice → reason: before writing Korean surface copy, record its speech level in
+the voice contract. Hold it across strings that share one speaker and relationship, including
+applicable error, empty, and action states. When the register changes, identify the changed
+speaker or situation rather than treating inconsistency as personality.
 
 ### Vocabulary temperature: 고유어 over 한자어 where precision allows
 
@@ -208,25 +191,25 @@ construction and replace it with the native equivalent. "결제 진행" → "결
 가능합니다" → "쓸 수 있어요". "확인 후 진행하세요" → "확인하고 다음으로 가세요". Each
 substitution costs no precision and removes the institutional chill that Sino-Korean carries.
 
-### One sentence, one idea
+### One sentence, one useful job
 
-Toss's principle 4 — Focus on key message — is a sentence construction rule as much as an
-editing rule: one sentence carries one message, read in a single breath. Korean's
+Toss's principle 4 — Focus on key message — is a useful test for compact product surfaces:
+one short UI string usually carries one primary job that can be read in a breath. Korean's
 agglutinative structure tempts long sentences because each extension costs only a morpheme,
 and the grammatical seams are invisible in a way that English subordination is not. The
-sentence that says three things when read carefully says nothing when scanned.
+more jobs a compact string carries, the harder it becomes to scan.
 
-The test is breath, not grammar: if the sentence runs past one breath when read aloud at
-normal pace, it carries more than one idea. Split at the clause boundary where the idea
-changes. The two shorter sentences will not need connectives (또한, 따라서, 그리고) to join
-them — the natural juxtaposition carries the relationship without naming it.
+Use breath as contextual evidence, not a universal sentence rule. A legal notice, tutorial,
+or technical explanation may need a longer sentence. When a compact surface combines
+unrelated jobs, split at the change; retain a connective when it carries a real logical
+relationship that juxtaposition would lose.
 
 ### What Korean products actually sound like
 
-The native register of successful Korean consumer products — Toss, 당근, Kakao — is not
-informal. It is committed to one register and precise within it. The sentences are short.
-The verbs are native. The formality level is consistent from hero to error message. The copy
-never explains the product's own mechanism; it describes what changes for the user.
+Successful Korean consumer products such as Toss, 당근, and Kakao show that consistency is
+not the same as informality. Their compact action and state copy is precise within its chosen
+register. Heroes often lead with the user's change; documentation, comparisons, and feature
+details may explain mechanism when mechanism is the useful fact.
 
 배민 (Baemin) operates in a distinct creative register — warm, witty, deliberately playful —
 but the underlying commitment is the same: a consistent voice that was designed and held,
@@ -237,12 +220,11 @@ universal.
 
 ### Document-structure narration: write the content, not that content is coming
 
-AI-generated Korean product copy has a structural tell: it narrates the document before
-presenting the document. "아래는 그 기록이에요" (below is the record), "다음은 기능 목록입니다"
+Korean product copy can lose its job when it narrates the document before presenting it.
+"아래는 그 기록이에요" (below is the record), "다음은 기능 목록입니다"
 (the following is the feature list) — these sentences announce the organisation of what
-follows rather than delivering it. The cadence comes from the essay or README skeleton the
-model was trained on. A human copywriter does not introduce their own bullet list; they write
-the bullet list.
+follows rather than delivering it. A tutorial or long document may need signposting; a small
+product surface usually benefits from starting with the fact or action itself.
 
 `SLOP-KO-SIGNPOST` fires on the deterministic patterns: `아래는 … 기록/내용/목록/정리` and
 `다음은 … 입니다/이에요`. The fix is deletion: remove the announcing sentence and start with
@@ -273,22 +255,20 @@ measured against the same metrics. The gaps name what our rules actively get wro
 | Parenthetical asides | 6 in full article | 0 |
 | Unresolved uncertainty markers | 5 | 0 |
 
-**Lesson 1 — Register context: 해요체 is for product copy, not essays**
+**Lesson 1 — Register context comes before a speech-level default**
 
 The sampled human essay uses the informal narrative register (-다 style) throughout: 해였다,
 것 같다, 생각이었다, 모르겠다. None of these are 해요체 or 합니다체. Korean personal essays,
 회고글, and reflective blog posts are written in this register — it is the written voice of a
 person narrating their own experience, not the addressed voice of a product speaking to a user.
 
-Our rules prescribe 해요체 for Korean copy. Applied to an essay, that produces a newsletter
-register: warm, present-tense, second-person-inflected — correct for UI strings and product
-stories but wrong for first-person retrospective prose. A 회고글 in 해요체 sounds like a
-product announcement; a 회고글 in -다 register sounds like someone who was actually there.
+Applying 해요체 to every Korean genre can produce a newsletter register: warm,
+present-tense, and second-person-inflected, which may fit one UI voice but not a formal
+service, first-person retrospective, or developer note.
 
-Condition → choice → reason: before applying the 해요체 standard, identify the genre. Product
-copy (UI strings, error messages, landing pages, marketing copy): 해요체, without exception.
-Personal essays, 회고글, developer blog posts: match the register the genre demands. The rule
-from voice.md applies at the product layer; it was never a claim about all Korean writing.
+Condition → choice → reason: identify speaker, listener, situation, genre, and authority,
+then choose 해요체, 합니다체, -다 style, or another evidenced register in the voice contract.
+Product copy has no universal speech-level exception to that decision.
 
 **Lesson 2 — Connective overcorrection: the tell is the comma, not the connective**
 
@@ -302,14 +282,13 @@ connectives across 26 sentences. That is not more human — it is a different ki
 Abrupt juxtaposition without connectives reads as choppy, clipped, produced by a sentence-by-
 sentence generator rather than a mind that knows where the paragraph is going.
 
-What the C-11 rule identifies is the specific pattern of a connective immediately followed by
-a comma — 하지만, / 그러나, / 또한, / 따라서, — which appears in Korean generated text but
-almost never in natural writing. The rule does not say: remove all connectives.
+What the C-11 rule identifies is the narrow pattern of a connective immediately followed by
+a comma — 하지만, / 그러나, / 또한, / 따라서, — for contextual review. The rule does not
+say that the author is known or that all connectives should be removed.
 
-Condition → choice → reason: the connective-abuse tell is clustering (3+ consecutive sentences
-opening with connectives) and the comma after the connective. A paragraph that uses 하지만 or
-그런데 once to mark a logical turn is natural. A paragraph that opens five consecutive sentences
-with 또한/따라서/즉/그리고 is the fingerprint. Eliminate the pattern, not the words.
+Condition → choice → reason: clustering and punctuation can make connective use feel
+mechanical, while one connective may mark a necessary logical turn. Ask whether each opening
+expresses a real relationship. Repair redundant structure, not the words as a class.
 
 **Lesson 3 — Parenthetical asides: a positive model our rules never named**
 
@@ -317,27 +296,24 @@ The sampled essay contains six parenthetical asides across 16,000 characters —
 1,000 characters, or once every three to four paragraphs: "(살면서 노래방을 이렇게 안 가본 게
 처음…)", "(결국 이러다가 번아웃이 왔었지만, 습관은 잘 안 고쳐지더라…)", "(그리고 스스로 뭔가
 꼰대 같다는 생각이 들어서 이걸 깨닫고 한동안 우울했었다)". These are self-interruptions —
-second thoughts, humor, corrections — that signal a mind present on the page, not a generator
-completing a paragraph.
+second thoughts, humor, and corrections that carry information the main sentence cannot.
 
 The pipeline produces zero. The tells list names what to remove; it has no positive model for
 this form. An essay with no parenthetical asides in 3,000+ characters is measurably flatter
 than the human baseline.
 
-Condition → choice → reason: in essayistic Korean prose (blog posts, 회고글, product stories),
-if no parenthetical aside has appeared in 1,000+ characters, look for a place where a second
-thought belongs. Not as decoration — as the actual second thought being suppressed to keep the
-paragraph clean. The aside earns its position when the main sentence structure has nowhere to
-put what needs to be said.
+Condition → choice → reason: in essayistic Korean prose, preserve a supplied second thought
+when it changes the meaning or carries honest uncertainty. Do not add an aside merely because
+the passage lacks one; a manufactured interruption is no more natural than a manufactured
+cadence.
 
-**Lesson 4 — σ and unresolved uncertainty: the most human signal is incompleteness**
+**Lesson 4 — σ and unresolved uncertainty: preserve what remains unresolved**
 
 The human essay's sentence-length σ was 26.1; the pipeline's was 9.8. The maximum sentence
-length in the human essay was 114 characters (no spaces); the pipeline capped at 48. The
-burstiness rule in voice.md is correct in direction, but execution under the rules remains too
-controlled. "After two long sentences, write a short one" is necessary but not sufficient —
-the human also writes two long sentences after the short one, and then another 114-character
-one. The human doesn't manage rhythm; the human follows thought wherever it goes.
+length in the human essay was 114 characters (no spaces); the pipeline capped at 48. The old
+burstiness instruction was the wrong abstraction. The human passage follows thought instead
+of managing a sentence-length pattern; its measurements describe one sample and are not a
+recipe to reproduce.
 
 The sampled human essay closed its mentoring section with: "하지만 아직도 잘 모르겠다." Thirteen
 characters. The pipeline produced: "이게 올해가 남긴 가장 큰 질문이에요." That is a packaged
@@ -350,34 +326,33 @@ human commits to finding the answer next year rather than having found it this y
 
 Condition → choice → reason: when an essay section ends, ask whether a tidy conclusion is
 honest or performed. A genuine takeaway — something the writer actually learned and can state
-— earns the closure. A resolution that smoothes over ongoing uncertainty is a model completing
-its pattern. "아직도 잘 모르겠다" is human; "이게 핵심 교훈이에요" for a lesson still in progress
-is a tell. If the answer does not exist yet, state that instead.
+— earns the closure. A resolution that smoothes over ongoing uncertainty changes the claim.
+If the answer does not exist yet, retain that uncertainty instead of packaging a lesson.
 
 ### Uniform sentence endings and not-X-but-Y: pre-handoff checks, not linter rules
 
-Two Korean AI tells are real but cannot be made into safe deterministic rules:
+Two Korean patterns require contextual pre-handoff review and cannot become safe
+deterministic rules:
 
 **Three or more consecutive identical sentence-final endings** (이에요./이에요./이에요. or
-합니다./합니다./합니다.) are a statistical signal of AI generation — a human writer varies
-structure. However, product benefit lists deliberately use parallel endings: "빠릅니다.
+합니다./합니다./합니다.) may make prose feel mechanically parallel in context. However,
+product benefit lists deliberately use parallel endings: "빠릅니다.
 정확합니다. 쉽습니다." is valid copy that would false-positive on every legitimate feature
 section. A linter rule would fire on too much legitimate writing to be trusted.
 
-Pre-handoff check: if three or more adjacent sentences share the same final ending, vary
-at least one — rewrite to a shorter sentence, a question, or a clause that ends differently.
-The goal is not to eliminate parallel endings but to break a uniform rhythm that reads as
-output from a loop rather than from a writer.
+Pre-handoff check: if adjacent sentences share an ending, ask whether the ideas are truly
+parallel. Keep the form when it supports comparison or recall. If sameness hides a change in
+communicative job, repair that sentence's job rather than forcing a different ending.
 
-**The not-X-but-Y construction** (`~게 아니라 ~했어요` / `~이 아니라 ~입니다`) appears in
-AI output as performed contrast in response to a brief that said "be honest" or "be direct."
-It also appears in legitimate copy: a brand that deliberately contrasts itself with a
+**The not-X-but-Y construction** (`~게 아니라 ~했어요` / `~이 아니라 ~입니다`) can become
+performed contrast when no real distinction supports it. It also appears in legitimate copy:
+a brand that deliberately contrasts itself with a
 category norm ("빠른 게 아니라 정확합니다") uses this construction with intent. No narrow
 regex distinguishes the cases reliably.
 
 Pre-handoff check: when this construction appears in the hero or opening paragraph, ask
-whether the contrast was a designed claim (cite it in decisions.md with the brand reason)
-or a model hedging its own confidence. Delete hedges; keep designed contrasts. "AI가 만든
+whether the contrast is a designed claim (cite it in decisions.md with the brand reason)
+or a hedge that weakens the useful claim. Delete empty hedges; keep designed contrasts. "AI가 만든
 게 아니라, 사람이 썼어요" as a self-description of the tool is a hedge; "비싼 게 아니라
 오래 씁니다" as a product claim is a designed contrast.
 
@@ -394,13 +369,11 @@ appeared on an English-language version of the same screen.
 
 ---
 
-## Register: the robotic-formal tell
+## Register: diagnose fit, not origin
 
-Web and product copy generated by language models falls into a register with no single
-name but immediate recognisability: it sounds like a support FAQ edited by a committee.
-The mechanism is the same one that makes LLM dialogue feel mechanical — models learn the
-safe formal register from their training data and apply it uniformly, regardless of what
-register the product actually calls for.
+Web, product, and assistant copy can drift into a medium-formal register that sounds like a
+support FAQ edited by a committee. The useful question is not who wrote it, but whether that
+register fits this speaker, listener, situation, and surface.
 
 A 2025 study that fine-tuned Llama, Qwen, and Mistral-Nemo models toward natural
 responses (arxiv 2501.05032v1, "Enhancing Human-Like Responses in Large Language Models")
@@ -423,16 +396,15 @@ and less authoritative, not more.
 
 ### The self-introduction cadence
 
-The loudest English tell in product hero copy is the self-introduction: "X is a platform
-that helps teams Y and Z." This is the model quoting its own task description — it was
-told "write a hero for a project management tool" and produced the lexical equivalent of
-its brief. No human founder writes their own hero this way. They write what changes for
-the user.
+In product hero copy, "X is a platform that helps teams Y and Z" can merely restate the
+brief instead of giving the reader a useful change or distinction. The construction is not
+an authorship signal and remains appropriate when a comparison, documentation page, tooltip,
+or feature detail genuinely needs category and mechanism.
 
-Condition → choice → reason: when hero copy opens with "[Product] is a [category noun]
-that [verb]s you", delete the sentence and rewrite from the user's gain. "Ship the Monday
-build, not the Monday Slack thread" is where the register lives. The self-introduction
-announces the product exists; the replacement describes what it does to the reader's world.
+Condition → choice → reason: when a hero opens with "[Product] is a [category noun] that
+[verb]s you", ask whether category or mechanism is the useful fact. If not, lead with the
+verified user change or distinction. Keep the mechanism where it answers the reader's real
+question.
 
 The same cadence appears in Korean as "X는 Y를 도와주는 플랫폼이에요" or "X는 Z를 관리할 수
 있는 도구예요". The pattern is identical: the product introduces itself by naming its own
@@ -441,14 +413,14 @@ mechanism. Rewrite from the user's change: "월요일 빌드는 제때 나가요
 
 ### Reflexive over-politeness
 
-Generated copy inherits the assistant register from instruction tuning: "Please feel free
-to", "We'd be happy to help", "Don't hesitate to reach out." These phrases come from the
-training data they best fit — customer support macros, email templates, helpdesk responses.
-On a product page they are the register of a form letter, not a product with a voice.
+Reflexive politeness such as "Please feel free to", "We'd be happy to help", and "Don't
+hesitate to reach out" can import a helpdesk register into a surface that needs direct
+action. Support contexts may need care and an escalation route; decorative politeness does
+not replace either.
 
-Condition → choice → reason: cut the reflex polite clause and write the action directly.
-"Ready when you are." over "Please feel free to get started when you're ready." The
-information content is the same; the register signals a person, not a policy.
+Condition → choice → reason: when the polite clause adds no relationship or safety value,
+write the action directly. Keep specific care or escalation language when the situation
+requires it.
 
 ### Uniform formality regardless of product voice
 
@@ -472,12 +444,10 @@ instructive text that appear below the level of word choice: over-nominalization
 (converting verbs to abstract nouns — "the facilitation of onboarding", "the
 optimisation of workflows") and present-participle clause stacking ("a platform for
 managing, tracking, and reviewing your pipeline"). Both are addressed individually in the
-plain-language section of this document. They are named here as register signals too:
-in isolation each is acceptable; clustered in a hero or feature section they mark the
-text as generated. The test is whether a human writer, drafting from scratch without a
-brief, would have reached for the same construction — or whether the nominal and the
-present-participle are carrying weight that a direct verb or concrete noun would carry
-better.
+plain-language section of this document. They are named here as register signals too: in
+isolation each is acceptable; clustered in a hero or feature section they can obscure actor,
+action, and consequence. Test whether a direct verb or concrete noun carries the same fact
+more clearly in the chosen register.
 
 ### Deterministic rule: declined
 
@@ -491,12 +461,19 @@ in the same category as the not-X-but-Y construction documented above under Kore
 
 ---
 
-## Scope: what this section does not cover
+## Static copy and live dialogue have different situations
 
-omd's voice system governs static web and product copy: landing pages, UI strings,
-marketing lines, help text, product stories. The research below studies conversational
-and spoken dialogue systems. Their findings do not transfer to page copy and should not be
-imported here.
+OMD's voice system covers static product writing and conversational replies without
+collapsing them into one register. A page has no shared turn history: its headline, body,
+state, and action must stand on their own. A live reply has a speaker, listener, prior turn,
+and immediate purpose; it should use established context instead of repeating the request or
+narrating the answer before answering. Acknowledgement belongs in dialogue when it repairs a
+relationship, confirms a consequential instruction, or responds to an observed event. It is
+not a generic opening.
+
+The dialogue-system research below concerns timing, overlap, and assistant evaluation. Those
+mechanisms do not transfer to static page copy. The broader requirement that register fit the
+speaker, listener, and situation applies to both surfaces.
 
 **Text Overlap / OverlapBot** (aclanthology.org/2025.sicon-1.10): studies backchannels,
 overlapping responses, and turn-taking timing in real-time text chatbots. The paper
@@ -585,3 +562,34 @@ conclusion is about domain specialisation in attention heads, not about copy reg
   aclanthology.org/2025.sicon-1.10 — EXCLUDED: backchannels, overlap, and turn-taking in
   real-time text chatbots; findings are dialogue-system-specific and do not apply to static
   page copy
+
+---
+
+## Official evidence map and layer ownership
+
+- **Toss writing principles** — https://toss.tech/article/21022 — writer: one key message,
+  remove repeated/empty lines, make the next screen predictable, use one spoken breath,
+  preserve user choice. Eye: read aloud and test CTA prediction.
+- **Toss marketing writing** — https://toss.tech/article/Marketing_Writing — writer: connect
+  the audience's present concern to a concrete next action; do not turn a click-rate tactic
+  into an unsupported product claim.
+- **Apple Writing HIG** — https://developer.apple.com/design/human-interface-guidelines/writing
+  — writer: clear, concise, useful labels in the platform's voice. Hand: place text where it
+  explains the affected control or state.
+- **Microsoft UI text guide** — https://learn.microsoft.com/en-us/windows-server/manage/windows-admin-center/extend/guides/ui-text-style-guide
+  — writer: consistent terminology, direct action labels, sentence-style capitalization.
+- **W3C Writing for Web Accessibility** — https://www.w3.org/WAI/tips/writing/ — writer:
+  descriptive headings/link text and plain language. Hand: expose the same meaning to
+  assistive technology.
+
+Ownership is deliberate. `omd-writer` establishes facts, audience language, voice, and
+surface copy in `.omd/copy-deck.md`. Copy-editor eye judges fact fidelity, scan, repetition,
+CTA prediction, register, emotion, and recovery in context. `omd copy --check` verifies only
+explicit structure, state applicability, exact unresolved sentinels, and fact-ID links.
+
+Screenshot phrases and common connectives are prompt/eval observations, never global lint:
+legitimate brands and sentences use them. AI detectors, perplexity thresholds, and sentence-
+length distributions are forbidden as shipping gates: domain, language, accessibility copy,
+and short UI labels create false positives, and a statistical signal cannot establish
+authorship or copy quality. Use those ideas only to prompt a contextual human/eye review;
+never reject a deck because a detector score or distribution looks machine-like.

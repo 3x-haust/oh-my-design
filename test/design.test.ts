@@ -188,8 +188,18 @@ test('validateDesignMd state detection is case-insensitive', () => {
 test('discoverEvidence returns null framework when no package.json exists', () => {
   const dir = project();
   const evidence = discoverEvidence(dir);
+  assert.equal(evidence.hasPackageJson, false);
   assert.equal(evidence.framework, null);
   assert.equal(evidence.dependencies.length, 0);
+});
+
+test('discoverEvidence distinguishes package existence from recognised framework', () => {
+  const dir = project();
+  writeFileSync(join(dir, 'package.json'), JSON.stringify({ scripts: { build: 'custom-build' } }));
+  const evidence = discoverEvidence(dir);
+  assert.equal(evidence.hasPackageJson, true);
+  assert.equal(evidence.packageJsonReadable, true);
+  assert.equal(evidence.framework, null);
 });
 
 test('discoverEvidence detects react from package.json', () => {
@@ -237,6 +247,39 @@ test('discoverEvidence detects token files', () => {
   assert.ok(evidence.tokenFilePaths.includes('tokens.css'));
 });
 
+test('discoverEvidence records existing app entries and build configs outside page directories', () => {
+  const dir = project();
+  mkdirSync(join(dir, 'src'));
+  writeFileSync(join(dir, 'src', 'main.ts'), 'startApp();');
+  writeFileSync(join(dir, 'vite.config.ts'), 'export default {};');
+  const evidence = discoverEvidence(dir);
+  assert.equal(evidence.surfaceCount, 0);
+  assert.deepEqual(evidence.appEvidencePaths, ['src/main.ts', 'vite.config.ts']);
+  const md = generateDesignMd(evidence);
+  assert.match(md, /Inspect and preserve the existing application\/toolchain evidence/);
+  assert.doesNotMatch(md, /Build-time stack policy\*\*: React \+ Vite \+ TypeScript default/);
+});
+
+test('common framework config without package.json is existing toolchain evidence', () => {
+  for (const config of ['next.config.mjs', 'svelte.config.js', 'angular.json']) {
+    const dir = project();
+    writeFileSync(join(dir, config), '{}');
+    const evidence = discoverEvidence(dir);
+    assert.deepEqual(evidence.appEvidencePaths, [config]);
+    assert.match(generateDesignMd(evidence), /Inspect and preserve the existing application\/toolchain evidence/);
+  }
+});
+
+test('README-only repository remains a truly blank greenfield', () => {
+  const dir = project();
+  writeFileSync(join(dir, 'README.md'), '# Notes');
+  const evidence = discoverEvidence(dir);
+  assert.equal(evidence.hasPackageJson, false);
+  assert.equal(evidence.surfaceCount, 0);
+  assert.deepEqual(evidence.appEvidencePaths, []);
+  assert.match(generateDesignMd(evidence), /React \+ Vite \+ TypeScript default unless explicit brief override/);
+});
+
 // ── generateDesignMd ─────────────────────────────────────────────────────────
 
 test('generateDesignMd produces a document with all required h2 sections', () => {
@@ -273,6 +316,42 @@ test('generateDesignMd includes framework evidence when package.json is present'
   const evidence = discoverEvidence(dir);
   const md = generateDesignMd(evidence);
   assert.ok(md.includes('react'));
+});
+
+test('bare greenfield records React Vite TypeScript build-time default without HTML bias', () => {
+  const md = generateDesignMd(discoverEvidence(project()));
+  assert.match(md, /React \+ Vite \+ TypeScript default unless explicit brief override/);
+  assert.match(md, /Plain HTML requires an explicit user request/);
+  assert.match(md, /Greenfield scaffold dependencies .* allowed/);
+  assert.doesNotMatch(md, /add routes or HTML files/i);
+});
+
+test('existing root HTML is preserved as repository surface evidence', () => {
+  const dir = project();
+  writeFileSync(join(dir, 'index.html'), '<main>existing</main>');
+  const evidence = discoverEvidence(dir);
+  assert.deepEqual(evidence.surfacePaths, ['index.html']);
+  const md = generateDesignMd(evidence);
+  assert.match(md, /Preserve the existing surface and repository toolchain/);
+  assert.doesNotMatch(md, /Build-time stack policy\*\*: React \+ Vite/);
+});
+
+test('unrecognised package toolchain is inspected and preserved rather than replaced', () => {
+  const dir = project();
+  writeFileSync(join(dir, 'package.json'), JSON.stringify({ scripts: { build: 'eleventy' }, devDependencies: { '@11ty/eleventy': '^3' } }));
+  const md = generateDesignMd(discoverEvidence(dir));
+  assert.match(md, /Inspect and preserve the existing unrecognised package\/toolchain/);
+  assert.match(md, /do not replace it with React/);
+});
+
+test('React, Vue, Next, and Svelte package stacks are preserved', () => {
+  for (const [dependency, expected] of [['react', 'react'], ['vue', 'vue'], ['next', 'next'], ['svelte', 'svelte']] as const) {
+    const dir = project();
+    writeFileSync(join(dir, 'package.json'), JSON.stringify({ dependencies: { [dependency]: '^1' } }));
+    const md = generateDesignMd(discoverEvidence(dir));
+    assert.match(md, new RegExp(`Preserve the detected ${expected} repository stack/toolchain`));
+    assert.doesNotMatch(md, /Build-time stack policy\*\*: React \+ Vite \+ TypeScript default/);
+  }
 });
 
 test('validateDesignMd passes for the output of generateDesignMd', () => {

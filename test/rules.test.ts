@@ -303,42 +303,12 @@ test('SLOP-PINK-ELEPHANT does not fire on legitimate negative-statement copy', (
   }
 });
 
-// ── KO-KEEP-ALL ──────────────────────────────────────────────────────────────
-
-function makeKoreanIr(wordBreak?: string) {
-  const node: RawNode = {
-    id: 'ko1',
-    name: 'KoreanText',
-    type: 'TEXT',
-    path: 'Screen/KoreanText',
-    parent: null,
-    box: { x: 0, y: 0, w: 400, h: 24 },
-    children: [],
-    text: '동시접속 확인했어요',
-    ...(wordBreak !== undefined ? { wordBreak } : {}),
-  };
-  return normalize({ nodes: [node] });
-}
-
-test('KO-KEEP-ALL fires when a Hangul text node is missing word-break: keep-all', () => {
-  // no wordBreak field → computed value is not keep-all → rule fires
-  const v = check(makeKoreanIr(), builtin, { categories: ['a11y'] });
-  assert.ok(v.some((x) => x.id === 'KO-KEEP-ALL'), 'expected KO-KEEP-ALL when wordBreak absent');
-});
-
-test('KO-KEEP-ALL fires when wordBreak is normal (browser default)', () => {
-  const v = check(makeKoreanIr('normal'), builtin, { categories: ['a11y'] });
-  assert.ok(v.some((x) => x.id === 'KO-KEEP-ALL'), 'expected KO-KEEP-ALL for wordBreak:normal');
-});
-
-test('KO-KEEP-ALL does not fire when all Korean nodes have word-break: keep-all', () => {
-  const v = check(makeKoreanIr('keep-all'), builtin, { categories: ['a11y'] });
-  assert.ok(!v.some((x) => x.id === 'KO-KEEP-ALL'), 'unexpected KO-KEEP-ALL when wordBreak is keep-all');
-});
-
-test('KO-KEEP-ALL does not fire on a page with no Hangul text', () => {
-  const v = check(makeTextIr('Design is a decision, not a default.'), builtin, { categories: ['a11y'] });
-  assert.ok(!v.some((x) => x.id === 'KO-KEEP-ALL'), 'unexpected KO-KEEP-ALL on English-only page');
+test('KO-KEEP-ALL is absent because Korean wrapping requires contextual typography proof', () => {
+  for (const wordBreak of ['normal', 'keep-all']) {
+    const ir = makeTextIr('동시접속 확인했어요');
+    ir.nodes[0]!.wordBreak = wordBreak;
+    assert.ok(!check(ir, builtin, { categories: ['a11y'] }).some((x) => x.id === 'KO-KEEP-ALL'));
+  }
 });
 
 // ── SYS-TEXT-CLIP ─────────────────────────────────────────────────────────────

@@ -1,5 +1,8 @@
 # Sticky sidebar + scrolling content
 
+> Candidate hypothesis only. Revalidate its condition, values, and responsive transition
+> against the current composition contract; do not transfer this page recipe unchanged.
+
 A sticky sidebar remains anchored in view while the main content column scrolls past it.
 The sidebar holds content that gains from staying visible — navigation, a table of contents,
 a reference panel, a summary of options while the user reads detail. The main column holds

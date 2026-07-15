@@ -1,5 +1,8 @@
 # Split-screen hero
 
+> Candidate hypothesis only. Revalidate its condition, values, and responsive transition
+> against the current composition contract; do not transfer this page recipe unchanged.
+
 A split-screen hero divides the viewport vertically into two panels. One panel holds the
 primary statement — headline, copy, and CTA. The other holds a counterpart — an image,
 a graphic, a live demo, or a contrasting visual element. The division is the design
