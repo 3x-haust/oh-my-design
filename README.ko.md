@@ -4,6 +4,12 @@
 
 [English](README.md)
 
+## OMD로 만든 결과 — 원샷 프롬프트
+
+[![OMD가 생성한 랜딩 페이지](docs/omd-landing.png)](https://3x-haust.github.io/oh-my-design/)
+
+위 랜딩 페이지는 OMD가 단일 원샷 프롬프트로 직접 생성한 결과물입니다 — 시각 출력은 손으로 다듬지 않았습니다. **[3x-haust.github.io/oh-my-design](https://3x-haust.github.io/oh-my-design/)** 에 배포되어 있으며, 소스는 [`example/`](example/) 에 있습니다.
+
 ## ‘사람처럼 디자인한다’는 뜻
 
 여기서 ‘사람처럼’은 특정한 결과 스타일이 아니라 근거를 남기는 판단 과정을 뜻합니다.
