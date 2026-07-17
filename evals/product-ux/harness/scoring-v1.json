@@ -1,0 +1,50 @@
+{
+  "schemaVersion": "product-ux-scoring-v1",
+  "version": "v1",
+  "weights": { "ux": 60, "synthesis": 25, "visual": 15 },
+  "dimensions": {
+    "ux": {
+      "taskCompletion": 15,
+      "informationArchitecture": 10,
+      "discoverability": 10,
+      "interactionFeedback": 10,
+      "errorPreventionRecovery": 5,
+      "mobileResponsive": 5,
+      "accessibility": 5
+    },
+    "visual": { "typographySpacingConsistency": 5, "purposeFit": 5, "nonTemplateFinish": 5 }
+  },
+  "synthesis": {
+    "extraction": 5,
+    "multipleReferenceReflection": 10,
+    "coherentIntegration": 10,
+    "verdictUnits": { "found": 2, "partial": 1, "absent": 0 }
+  },
+  "automaticFloors": [
+    { "id": "task-failure", "when": "authenticated transcript has task failures", "maximum": 59 },
+    { "id": "mobile-failure", "when": "authenticated transcript has 390px or 320px failures", "maximum": 69 },
+    { "id": "missing-evidence", "when": "authenticated transcript lacks required sealed evidence", "maximum": 49 },
+    { "id": "reference-distance", "when": "any reference distance is >= 3/5", "maximum": 74 }
+  ],
+  "referenceDistance": { "pass": "< 3/5", "strict": true },
+  "publicRegression": {
+    "minimum": 60,
+    "candidateNonRegression": 0,
+    "publicFixtureNonRegression": 0,
+    "marketingNonRegression": 0,
+    "required": ["sealedBefore", "sealedAfter", "publicFixtureBefore", "publicFixtureAfter", "marketingGuard"]
+  },
+  "identityMapping": { "policy": "anonymized", "labels": ["A", "B"] },
+  "anchors": {
+    "taskCompletion": "0 blocked; 5 blocked-task maximum; 15 every core task completes efficiently",
+    "informationArchitecture": "0 nouns/navigation fail; 10 grouping, location, and adjacency are clear",
+    "discoverability": "0 task is obscured; 10 primary action and purpose are immediately legible",
+    "interactionFeedback": "0 no acknowledgement/state; 10 every action acknowledges within 400ms with explicit states",
+    "errorPreventionRecovery": "0 costly errors unguarded; 5 guarded, recoverable errors preserve values",
+    "mobileResponsive": "0 core task fails at mobile; 5 completes at 390 and reflows at 320 without overflow",
+    "accessibility": "0 inaccessible primary path; 5 keyboard, focus, labels, targets, contrast verified",
+    "typographySpacingConsistency": "0 inconsistent; 5 one working scale and spacing system",
+    "purposeFit": "0 mismatched register; 5 aesthetic fits the surface",
+    "nonTemplateFinish": "0 generic/template; 5 product-specific finished surface"
+  }
+}

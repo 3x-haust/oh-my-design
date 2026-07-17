@@ -24,9 +24,10 @@ test('the RED/GREEN loop judges with a fresh eye, never the hand that built it',
   assert.match(skill, /[Bb]uild and judgment stay separate/);
 });
 
-test('image-first concept drafts are generated concurrently', () => {
+test('image-first concept drafts keep independent concurrent host generation', () => {
   const imagegen = read('core/theory/imagegen.md');
   assert.match(imagegen, /concurrently \(they are independent — do not\s+serialize them\)/i);
   const composer = read('agents/composer.md');
-  assert.match(composer, /generated concurrently \(they are independent\)/i);
+  assert.match(composer, /host\/coordinator owns concurrent clean-room draft generation/i);
+  assert.match(composer, /composer[\s\S]*supplies\s+art\s+direction[\s\S]*lineage-attested\s+results/i);
 });

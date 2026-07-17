@@ -1,4 +1,4 @@
-# Scenario 02 — 현장 설비 점검 기록 (held-out)
+# Scenario 02 — 현장 설비 점검 기록 (public regression fixture)
 
 건물 설비 점검 기사 12명이 쓰는 점검 기록 도구를 만들어줘. 기사는 현장에서 휴대폰으로 쓴다:
 오늘 배정된 점검지 목록 확인 → 점검지 선택 → 항목별 점검 결과 입력(정상/이상/보류 + 메모)
@@ -21,6 +21,6 @@
 - 모바일이 1차 뷰포트다: 데스크톱 레이아웃의 축소가 아니라 모바일 태스크 동선이 기준.
 - 부분 입력 상태(10개 중 7개)가 별도 상태로 설계되어야 한다.
 
-## Held-out discipline
+## Public regression fixture
 
-This scenario stays sealed during harness development. See ../heldout.md.
+This repository-visible scenario is a versioned public regression fixture. See ../heldout.md.

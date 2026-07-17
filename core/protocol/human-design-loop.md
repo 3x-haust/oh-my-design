@@ -24,18 +24,27 @@ An "existing repository stack" is a real project the user brought — a package 
 config, or files the user points at. A bare `index.html`/`.css`/`.js` with no manifest, next to an
 `.omd/` from a prior OMD run, is OMD's own leftover output, not a user stack: a fresh brief there is
 a greenfield (React + Vite + TypeScript by default), and a prior run's output never pins the stack.
+Immediately after scaffold/dependency resolution, resolve every newly introduced import/export
+against the exact installed versions, parse generated configuration with its owning tool, and run
+focused typecheck, build, and test-discovery. Repeat this smoke verification after every
+dependency, dependency-API, or configuration change; retain the full final verification.
 
 ## State boundary
 
-Durable, reviewable state lives directly under `.omd/`: `frame.md`, `scout.md`, `copy-deck.md`,
+Durable, reviewable state lives under `.omd/`: `frame.md`, `scout.md`, `copy-deck.md`,
 `type-proof.md`, `composition.md`, `decisions.md`, `design.md`, `attribution.md`, `motion-spec.md`, `craft.jsonl`,
-`source-seal.json`, `config.json`, `probes/*.json`, `refs/*.json`, and explicit taste records. Reusable intent
-belongs here; generated screenshots and raw execution output do not.
+`source-seal.json`, `task-evidence.json`, `task-evidence-runs/*.json`, `final-evidence.json`,
+`final-evidence-runs/<runId>.json`, `config.json`, `probes/*.json`, `refs/*.json`, and explicit
+taste records. `task-evidence.json` and `final-evidence.json` are validated current indexes; their
+run records preserve immutable prior publications. Reusable intent and final evidence identity
+belong there, while generated screenshots and raw execution output do not.
 
-Ephemeral state lives under `.omd/.cache/`: IR, renders, filmstrips, typography specimens,
-structural candidates, raw source-candidate JSON, probe results, and scratch output. It can
-be deleted without erasing a design decision. Accepted and dismissed candidate reasoning is
-durable and belongs in `.omd/decisions.md`.
+Ephemeral state lives under `.omd/.cache/`: raw build/check/test/probe/render output, renders,
+filmstrips, typography specimens, structural candidates, raw source-candidate JSON, and scratch
+output. All ordinary evidence artifacts are cache-local; the deliberate published
+`.omd/task-evidence.json` index is the sole artifact-path exception. It can be deleted without
+erasing a design decision or the durable final-evidence index. Accepted and dismissed candidate
+reasoning is durable and belongs in `.omd/decisions.md`.
 
 ## Evidence and taste precedence
 
@@ -62,22 +71,91 @@ the `omd design` contract (information architecture and interaction states) befo
 production. Selector and critique eyes read their frozen dimensions through the same
 grammar: on a product surface a "section" is a screen region or reachable state and the
 "CTA" is the frequent action.
+## Feature-level reference research and transfer
 
-When user-origin references exist, the scout records per-reference structural traits as
-attributed principles, the composer writes the `Reference synthesis` plan (trait taken,
-landing, adaptation, conflict resolution, or an explicit decline per reference), and
-`omd composition --check` fails when a user reference is absent from it. The hand treats
-each synthesis entry as production acceptance criteria, and the sharp eye verifies each
-planned trait is visibly present where the plan lands it. The clean-room transfer boundary
-still governs every trait.
+Reference synthesis starts from function, not mood. Field names, record shape, axis vocabulary, and validation belong exclusively to `protocol/composition-contract.md`. This protocol governs only when synthesis applies and how it flows: select **Branch A — explicit functions** when the user named detailed features, preserving each feature and deriving its interaction primitives directly; add only indispensable connective or recovery primitives, marked as inferred with an assumption. Select **Branch B — product goal only** only for `product` work and product screens of `mixed` work when detailed functions are absent; first record the smallest task-complete feature set and every assumption. Explicit details always win. An inferred addition needs a task-completion dependency and may not add optional analytics, AI, collaboration, personalization, admin, export, or adjacent capability. Pure `marketing`, `editorial`, and static work does not infer CRUD, state machinery, probes, or task evidence; it transfers only explicit applicable content or interaction primitives. User-origin references receive a concrete canonical synthesis record or an explicit decline individually; scout-found sources cannot satisfy an omitted user-reference mention. Source identity stays scout-side: downstream receives only stable source keys/labels, trust, uncertainty, and sanitized rules—not URLs, screenshots, pixels, or source-page descriptions. Synthesis records never issue `T#`, create probes, alter task coverage, or redefine task/final-evidence contracts.
+## Visual reference gallery and concept exploration
+
+Function fixes structure; a production-grade result also needs a deliberate visual system, so visual reference discovery is a first-class research obligation, not optional polish. For every surface the scout treats curated design galleries and inspiration sources — for example Pinterest, Dribbble, Mobbin, Behance, Land-book, Godly, Savee, and equivalent boards — as an admissible visual reference category alongside domain and competitor evidence, and captures enough high-craft main-screen references for the product's domain and register to support a visual decision. It sanitizes each into the canonical multi-axis synthesis (macro layout, density, typography, spacing/rhythm, component anatomy, surface/material, colour role, motion). Gallery evidence obeys the same clean-room boundary as every other source: no raw URL, screenshot, pixel sample, or source-page description travels downstream, and no gallery image is copied — only measured, sanitized principles transfer. Build for coverage, not counts, and report no capture quota.
+
+Concept selection is exploratory, not a single guess. Grounded in that gallery and domain evidence, the concept stage enumerates multiple distinct main-screen visual directions — each a named generator/metaphor, colour and typographic register, surface/material stance, density posture, and one memorable moment — then blind-selects the strongest direction and records it durably with its rejected alternatives. The number of directions scales with ambition and uncertainty; an awards-level or explicitly ambitious brief explores more. This visual-direction selection is a direction signal only: it never replaces the structural sketch divergence, the task/accessibility/viewport UX gates, the blind copy/type/critique gates, or the clean-room boundary, and the chosen direction still passes `omd composition --check` and every downstream gate. A result whose visual system is a generic default — unstyled or stock controls, flat undifferentiated fields, weak typographic hierarchy, arbitrary whitespace, or no distinctive surface/material and colour system — fails the visual acceptance gate even when every task succeeds; beautiful production-grade UI and sound UX are co-equal requirements.
+## Support-chat conditional regression
+A support-ticket conversation is a conditional primitive regression, never a default grammar. When explicitly requested or task-completely inferred, its transfer requires customer-left/agent-right direction, intrinsic content width with a max-width cap, machine-readable timestamps, a declared temporal compatibility window, temporal grouping that merges consecutive same-sender messages within that window and splits an expired-window reply into a new group with fresh sender/time metadata, distinct internal-note treatment and vocabulary, an anchored composer, and deliberate mobile recomposition. Generic full-width message slabs fail. Production probes/tests prove both temporal boundaries: a same-sender reply within the declared window merges without a duplicate sender/time group, and an expired-window same-sender reply splits into a new group with fresh metadata. After commit, the new bubble must be visibly revealed in the desktop and mobile conversation viewport; a toast or offscreen DOM text alone fails. Require immediate repeated-send regression and visible-last-bubble evidence. Do not apply these conversation traits to non-conversation, marketing, editorial, or static surfaces.
+
+## Task coverage matrix
+
+For `product` and the product screens of `mixed` surfaces, the frame owns `Task coverage matrix`
+as a durable section. It is the only issuer of stable rows `T1`, `T2`, and so
+on; rows cover every explicit user core task and invariant, not merely the primary
+task, frequent action, or costliest error. Each row records the user-visible goal,
+start state, minimal actions, success observable, applicable error/recovery, and
+required viewport(s). `N/A` is valid only with evidence that the field or task is
+inapplicable. These are production tasks and production-reachable states: a component
+showcase or gallery is never evidence that a task or state is reachable. `marketing`,
+`editorial`, and static-only work does not invent a matrix, tasks, states, or probes;
+`mixed` records rows only for its product screens.
+For a requested or task-completely inferred list→detail workspace with two or more work objects, the frame includes a production `T#` whose actions open a non-default, non-first object and whose success observable asserts that detail's identity and object-local state. Selection is keyed to the work-object identity, never a fixture identifier or list position; the bound production locator/probe exercises that same non-primary selection. This rule is conditional on that workspace shape and does not impose list-detail tasks on non-list-detail product, marketing, editorial, or static surfaces.
+
+## UX task coverage
+This protocol exclusively owns the exact `## UX task coverage` schema, including row syntax,
+cardinality, applicability, and locator semantics. Roles may state their mapping responsibility
+and point here, but must not restate that schema.
+
+For every applicable frame-owned `T#`, the composer preserves that id and maps it 1:1
+into a named `## UX task coverage` section. Each nonblank row in that section uses this
+exact syntax: `T# | production: /route | locator: selector |`. There is exactly one row
+per applicable `T#` and no showcase, gallery, demo, fixture, or additional prose row.
+`/route` is the local production-reachable path; `selector` is the unique stable semantic
+action locator for that task at every required viewport. Repeated controls include their
+operated work-object identity in the locator contract, and accessible names remain stable
+across responsive hiding unless the action itself changes. The mapping realizes the frame
+row's goal, actions, success observable, applicable recovery, required viewports, and
+`requirements` field through the bound production path, probes, and renders. The hand
+consumes these existing mappings; it never creates a new `T#` or a row merely because a
+state is reachable. Showcase-only controls and gallery states do not count.
+
+A user-requested invalid submit remains attemptable when it is part of a task: its
+production evidence proves an actionable error and preserved entered values. Preventing the
+attempt with a disabled control is acceptable only when that prevention matches the user
+contract and the row explains why; it must not make a requested invalid-submit path
+unreachable. `requirements: invalid-submit` requires an invalid-submit probe; `requirements:
+transient` requires settled or reduced-motion PNG pixels for the transient state; `none`
+requires neither.
+
+## Task evidence index
+
+For `product` and `mixed` only, the hand writes
+`.omd/.cache/task-evidence-manifest.json` from actual production probe plans/results and
+desktop/mobile renders, then runs `omd evidence tasks --input
+.omd/.cache/task-evidence-manifest.json` followed by `omd evidence tasks-check --json`.
+The manifest is schema version `1` with exactly `schemaVersion`, `surface`, `frame`,
+`composition`, and `tasks`. `surface` equals the frame's `uxSurface`; `frame` and `composition`
+bind their canonical `.omd` paths and SHA-256 values. Every task has `id`, `context: production`,
+`production` (`route`, `locator`, `workObject`), actual `probes`, and actual `renders`; optional
+`invalidSubmit` and `transient` evidence are present exactly when the frame row's `requirements`
+demands them. Every probe record, including `invalidSubmit`, has `role`, `viewport`, plan/result
+cache paths, and SHA-256 values. For every viewport required by the frame row, a task has exactly
+one `primary` probe; when recovery applies, it has exactly one distinct `recovery` probe for that
+same viewport. A probe result must be a successful local production route run. Its activation
+step uses the task's production locator, and that same step's declared successful expectations
+prove the task outcome. Invalid-submit evidence orders a fill of one field and an enabled
+production-locator activation; that activation step's expectations prove the actionable error and
+preservation of that same field's entered value.
+
+Each render is a decoded PNG at exactly `1280x900` for `desktop` or `390x844` for `mobile`; it
+uses the fixed viewport named by its role, never a full-page substitute. A transient record has
+`probeRole`, `viewport`, `stepIndex`, `stateSelector`, `path`, `sha256`, and `captureMode`; it
+binds its probe role and exact viewport to the successful activation step at `stepIndex` and its
+successful state selector, uses `settled` or `reduced-motion`, and is a decoded fixed-viewport PNG
+with a coherent visible state region rather than merely non-uniform pixels. The published
+`.omd/task-evidence.json` is the validated immutable production index, not a hand-written
+substitute. `marketing`, `editorial`, and static-only runs omit this manifest and index entirely.
+
+When user-origin references exist, the scout records sanitized multi-axis feature/primitive transfers, and the composer preserves each in the canonical `Reference synthesis` plan at its declared destination or explicitly declines it; `omd composition --check` still fails when a user reference is absent. The hand implements each accepted transfer at that landing or records an evidence-backed deviation. The sharp eye verifies visible structural/behavioral correspondence across every applicable accepted axis at the named landing, not token resemblance; interaction correspondence requires matching probe evidence. The clean-room transfer boundary still governs every trait; a reference landing never creates or replaces a frame `T#` task locator.
 
 ## Blindness and isolation
 
-The composer owns only `.omd/composition.md`. After typography approval it receives the
-sanitized frame/concept, clean copy deck, approved type proof, and durable scout summary when
-present. It receives no raw screenshots, source files, pixel samples, URLs, candidate
-renders, rejected alternatives, or authorship. It turns evidence into a structural contract,
-records exact SHA-256 fingerprints, and runs `omd composition --check` before divergence.
+The composer owns only `.omd/composition.md`. After typography approval it receives the sanitized frame/concept, clean copy deck, approved type proof, and durable scout summary when present. Reference transfer input is limited to stable source keys/labels, trust, uncertainty, and sanitized multi-axis feature/primitive rules, adaptations, token variation, conflicts, and destination criteria; it receives no raw screenshots, source files, pixel samples, URLs, source-page descriptions, candidate renders, rejected alternatives, or authorship. It turns evidence into a structural contract, records exact SHA-256 fingerprints, and runs `omd composition --check` before divergence.
 
 Each sketch receives only a sanitized frame/concept, the copy deck, the approved typography
 contract derived from `.omd/type-proof.md`, the same sanitized `.omd/composition.md`, an
@@ -93,7 +171,11 @@ merely for being there. A photo is never mandatory.
 
 The copy editor is a fresh eye context and sees only the sanitized brief, copy deck/fact
 ledger, and cited voice/audience evidence. It sees no renders, layout, code, build rationale,
-frame, decisions, or authorship, and it reports without editing. The coordinator first
+frame, decisions, or authorship, and it reports without editing.
+This protocol exclusively owns the exact copy-eye report format, including its fields and
+cardinality. Roles may state their review or preservation responsibility and point here, but
+must not restate that format.
+The coordinator first
 preserves the report verbatim at `.omd/.cache/copy-eye.md` with exact `Mode: copy-editor`,
 `Review time: <ISO 8601 timestamp>`, `Reviewed copy-deck SHA-256: <64 lowercase hex>`,
 `Verdict: <non-empty verdict>`, and a non-empty `Findings:` section. It immediately runs
@@ -208,6 +290,7 @@ or alternate-carrier criteria—renders, and deterministic check/probe
 output. For source-candidate judgment it additionally receives only candidate id,
 controlled signals, and review question — never path, source excerpt, authorship, or rationale.
 It must not read frame, decisions, references, or attribution rationale.
+The sharp eye receives only sanitized multi-axis observed rules, adaptations, and destination landing criteria—never source identity, rationale, URL, screenshot, pixels, or source description. It verifies visible or probe-supported correspondence at the landing rather than destination tokens; interaction correspondence requires matching probe evidence. It fails a feature synthesis reduced to interaction-only or token-only treatment when applicable layout or visual-system axes lack an observed rule, adaptation, or reasoned `N/A`; it does not invent axes irrelevant to the feature.
 
 ## Divergence and checkpoints
 
@@ -231,6 +314,7 @@ proof, or scout summary invalidates the contract and stops dependent work until 
 The hand treats focal hierarchy and the lawful mechanism carrier or explicit alternate
 mental-model carrier as production acceptance, preserves them responsively, and records
 visible evidence or an evidence-backed deviation before the sharp eye judges them.
+The hand receives only accepted sanitized transfer criteria, never raw URLs, screenshots, pixels, or source descriptions. It implements each criterion at its destination screen/route and unique semantic reference-landing selector, or records an evidence-backed deviation; transfer records do not create tasks or probes.
 
 ## Safe probe policy
 
@@ -318,26 +402,45 @@ These gates are part of every applicable production run, not optional polish:
   Stop at the configured threshold or record the remaining measured mismatch and evidence;
   never iterate without a bound.
 - For multi-page output, run `omd check --site <dir>` and resolve cross-page drift.
-- For a confident/showpiece register, and always when the brief signals awards-level ambition, the
-  first shippable build begins a bounded RED/GREEN refinement loop, not the ship. Acceptance
-  criteria written from the frame and `theory/expressive.md` are the GREEN target; any unmet one is
-  RED. Each round leaves evidence (sharp renders under `.omd/.cache/rounds/round-<N>/`, measured
-  gate results, and the blind-choose verdict) — a round with no evidence does not count. The loop
-  advances only on measured improvement (blind-choose after beats before), targets one RED criterion
-  per round, and stops on GREEN, a
-  regression (revert), a plateau, or the round budget (default 3). This is a deliberate convergence
-  loop, never an unbounded automatic retry, and it never overrides the gates above.
+- For a confident/showpiece register, and always when the brief signals awards-level ambition, the first shippable build begins a bounded RED/GREEN refinement loop, not the ship. Acceptance criteria written from the frame and `theory/expressive.md` are the GREEN target; any unmet one is RED. Each round leaves evidence (sharp renders under `.omd/.cache/rounds/round-<N>/`, measured gate results, and the blind-choose verdict) — a round with no evidence does not count. Before accepting a round, rerun every applicable declared task probe, accessibility check, and required-viewport task evidence; all must remain passing or the round rolls back. Blind-choose distinguishes visual quality only and cannot overrule those UX invariants. The loop advances only on measured visual improvement (blind-choose after beats before), targets one RED criterion per round, and stops on GREEN, a regression (revert), a plateau, or the round budget (default 3). This is a deliberate convergence loop, never an unbounded automatic retry, and it never overrides the gates above.
 - Once production source exists, run the source-candidate scan and contextual triage before
   the final sharp verdict. Resolve every triage item, repair and rescan confirmed current
   candidates, and retain evidence for dismissals. Candidate presence alone never fails the
   run; final untriaged and needs-render counts must both be zero.
-- Final evidence includes sharp desktop and mobile renders, plus applicable filmstrip,
-  `omd check`, humanize review, declared probe, and project tests/build. Findings must be
-  clean or deliberately overruled with written evidence; silence is not an overrule.
-- After all production source and approved inputs stop changing, run `omd source --seal
-  <root>` and then `omd source --check <root>`. `.omd/source-seal.json` proves byte freshness
-  for copy deck, type proof, composition, and sorted production source files only; it does
-  not claim semantic copy/source fidelity.
+- Final evidence includes sharp desktop and mobile renders, plus an applicable filmstrip for
+  motion, `omd check`, humanize review, declared/applicable probes, and project tests/build.
+  Findings must be clean or deliberately overruled with written evidence; silence is not an overrule.
+- After all production source and approved inputs stop changing, run `omd source --seal <root>`
+  and then `omd source --check <root>`. Build and collect every final check, test,
+  declared/applicable probes, fixed-viewport screenshot/render, and applicable motion filmstrip
+  from that sealed source; run `omd source --check <root>` again. The hand then writes the
+  strict metadata manifest at `.omd/.cache/final-evidence-manifest.json`, runs
+  `omd evidence finalize --input .omd/.cache/final-evidence-manifest.json`, and runs
+  `omd evidence check --json`. Never write `.omd/final-evidence.json` directly: only
+  `omd evidence finalize` publishes it. Each successful finalize creates the immutable per-run
+  record `.omd/final-evidence-runs/<runId>.json` and atomically publishes the full current
+  manifest at `.omd/final-evidence.json`.
+  This protocol is the canonical final-evidence ABI and owns the manifest schema. The manifest
+  has exactly `schemaVersion`, `runId`, `sourceSeal`, `build`, `tools`, `interaction`, and
+  `artifacts`; `sourceSeal` is canonical `.omd/source-seal.json` plus its SHA-256, `build`
+  records target, fingerprint, and served target, and `tools` records non-empty versions and
+`interaction` is exactly `{scope: stateful|navigation-only|static, motion:boolean,
+surface: marketing|product|editorial|mixed}`; `surface` must equal the frame's `uxSurface`.
+Every ordinary artifact has a globally unique cache-local path under `.omd/.cache/` and a
+SHA-256; the deliberate `task-evidence` artifact alone is `.omd/task-evidence.json`. Check and
+test are required; probes use strict `primary`/`recovery` roles (`stateful`: exactly one of each;
+`navigation-only`: exactly one primary and no recovery; `static`: none); screenshot/render
+records carry desktop/mobile viewport roles and include both; and a filmstrip is present exactly
+when motion is true. Raw artifacts remain in `.omd/.cache/` and are never embedded in the durable
+index. Any source or build mutation invalidates the bundle and forces resealing, rebuilding,
+rerunning, and reindexing.
+  To recover a stale bundle, do that sequence again with a new `runId`, write a new manifest, then
+  finalize and check it: a different `runId` after reseal, rebuild, or rerun may supersede the
+  current manifest while preserving every prior run record. An existing same `runId` is an
+  `EEXIST` conflict that fails closed; never retry it by manually deleting either the current
+  manifest or a per-run record. The seal proves byte freshness for copy deck, type proof,
+  composition, and sorted production source files only; it does not claim semantic copy/source
+  fidelity.
 
 `omd render` captures the exact requested viewport by default. Use `--full-page` only as
 supplementary continuity evidence; it never replaces the fixed desktop/mobile viewport

@@ -4,14 +4,17 @@ description: "Builds one selected structure and reflects on two real-content ren
 ---
 
 Read `protocol/human-design-loop.md`, the exact `theory/ux.md`, plus the relevant theory,
-composition, graphics, motion, and craft files under `omd pack dir`. Read
-`.omd/copy-deck.md`, `.omd/type-proof.md`, `.omd/composition.md`, and `.omd/design.md` when present. You receive one selected anonymous
-structure, a sanitized build brief, references as measurements/principles, and
-`.omd/copy-deck.md`. Build production once; do not generate more candidates.
-
-Before the first production write, run `omd composition --check`. Stop on a missing,
-malformed, or stale contract. Frame, copy-deck, type-proof, or scout-summary changes
-invalidate the contract and every dependent candidate. Run the check again before ship.
+composition, graphics, motion, and craft files under `omd pack dir`. Read `.omd/copy-deck.md`,
+`.omd/type-proof.md`, and `.omd/design.md` when present. On the normal graph, also read
+`.omd/composition.md` and receive accepted sanitized transfer criteria. Run
+`omd composition --check` before the first production write and again before ship; stop on a
+missing, malformed, or stale contract. On the Figma structural-bypass route, instead read
+`.omd/figma/snapshot.json`, `.omd/figma/design-system.md`, `.omd/attribution.md`, and the selected
+frame inventory; require them to match the supplied frame before writing, then require a fresh
+passing `omd figma diff <frame-id> <rendered-page> --json` before ship. You receive one structure,
+a sanitized build brief, and `.omd/copy-deck.md`. Build production once; do not generate more
+candidates. Frame, copy-deck, type-proof, scout-summary, or Figma snapshot changes invalidate
+their graph's dependent build and require its corresponding check again.
 Preserve the contract's experience spine, dependencies, alignment, density, focal
 hierarchy, form grammar, media or alternate mental-model carrier, and responsive
 recomposition. Treat the dominant anchor's morphology, visual-mass budget, relation to
@@ -76,6 +79,10 @@ entry as production acceptance criteria — the named trait must be visibly pres
 the plan lands it — and record the correspondence in `.omd/attribution.md`.
 Client-rendered stacks must paint real content without artificial latency so IR/render
 evidence captures the working surface, not a skeleton.
+Immediately after scaffold/dependency resolution, resolve every newly introduced import/export
+against the exact installed versions, parse generated configuration with its owning tool, and run
+focused typecheck, build, and test-discovery. Repeat this smoke verification after every
+dependency, dependency API, or build-config change; retain the full final verification.
 
 Preserve accessibility, responsive behavior, reduced motion, and one primary action.
 A visible CTA plus a predictable completion path satisfies reach; do not force the full
@@ -91,6 +98,22 @@ reach. Before animation, write `.omd/motion-spec.md` and implement only its
 declared scenes. Write `.omd/attribution.md` covering token, motion, composition, and
 graphics sources. Walk `craft/finish-pass.md`, recording why any item is skipped. Keep
 rationale in `.omd/`, never in shipped copy.
+For `product` or `mixed` surfaces, consume the frame-owned `Task coverage matrix` and the
+composer's 1:1 `UX task coverage` mappings before interaction evidence. `protocol/human-design-loop.md`
+exclusively owns task-evidence fields, cardinality, cache locations, applicability, and validation.
+Your duty is to bind each existing production-reachable task to its semantic production locator and
+work-object identity, execute the declared applicable probes and required-viewport renders against
+production, and publish actual evidence with `omd evidence tasks --input
+.omd/.cache/task-evidence-manifest.json` followed by `omd evidence tasks-check --json`. Never create
+a `T#` or coverage row because a state is reachable or hand-write `.omd/task-evidence.json`. Do not
+invent product task/state/probe evidence for `marketing`, `editorial`, or `static` runs. A user-required
+invalid submit remains attemptable and proves an actionable error with the entered value preserved;
+transient evidence is captured only at the successful reached state after settlement or reduced motion.
+For an applicable list→detail `T#`, implement selection keyed by work-object item id, not a fixed
+fixture or list position. Its bound production locator/probe must select the required non-primary item
+and prove its detail identity and object-local state. Do not add list-detail selection to
+non-list-detail, marketing, editorial, or static surfaces.
+
 
 Use a purposeful visual carrier, not a bare gray box or unstyled default: pick from
 `graphics/gradient-mesh.md`, `graphics/noise-grain-texture.md`,
@@ -117,11 +140,21 @@ judgment; final triage has zero untriaged items and evidence-backed dismissals.
 For `stateful`, write explicit `.omd/probes/primary.json` and `recovery.json` and run both
 with `omd probe`. For `navigation-only`, write and run only the primary probe; recovery is
 N/A with a reason. For `static`, both probes are N/A with reasons and no fake recovery UI.
+For `marketing`, `editorial`, or `static` runs, do not invent product `Task coverage matrix`,
+`UX task coverage`, product states, probe evidence, or a task-evidence manifest; record only applicable evidence.
 Finish only when clean or each remaining finding has an evidence-backed overrule.
-After all source and approved-input repairs are complete, run `omd source --seal <root>`
-and then `omd source --check <root>`. Any later copy-deck, type-proof, composition, or
-production-source change invalidates the seal and requires resealing. Treat it only as
-byte-freshness evidence; never claim it proves semantic copy/source fidelity.
+After all source and approved-input repairs are complete, freeze and collect final evidence in the
+order required by `protocol/human-design-loop.md`: run `omd source --seal <root>`, then `omd source
+--check <root>`; build and collect every final check, test, declared/applicable probes,
+fixed-viewport screenshot/render, and applicable motion filmstrip from sealed source; then run
+`omd source --check <root>` again. For `product` or `mixed`, publish the task index with
+`omd evidence tasks --input .omd/.cache/task-evidence-manifest.json`, then `omd evidence
+tasks-check --json`. The protocol exclusively owns final-evidence fields, artifact roles/cardinality,
+cache locations, publication behavior, and stale-bundle handling. Your duty is to write its required
+manifest input at `.omd/.cache/final-evidence-manifest.json`, run `omd evidence finalize --input
+.omd/.cache/final-evidence-manifest.json`, then `omd evidence check --json`, and never directly
+write `.omd/final-evidence.json`. Any source or build mutation requires the protocol's reseal,
+rebuild, rerun, and reindex sequence; the seal proves byte freshness only and does not prove semantic copy/source fidelity.
 
 Source the visual carrier's underlying asset with OMD's asset sourcing precedence,
 which selects *how* an approved carrier is fulfilled and never overrides the carrier

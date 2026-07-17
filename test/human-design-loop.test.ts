@@ -91,6 +91,11 @@ test('probe warns only from declared expectations and expected tab order', async
     ],
   });
   assert.deepEqual(expected.warnings, []);
+  assert.deepEqual(expected.viewport, { width: 390, height: 844 });
+  assert.deepEqual(expected.steps[1], {
+    action: 'fill', selector: '#name', ok: true,
+    expectations: [{ type: 'attribute', selector: '#name', name: 'value', value: 'Ada', ok: true }],
+  });
 
   const pressed = await runProbe(fixture, {
     name: 'keyboard', destructive: false,
@@ -189,7 +194,7 @@ test('prompt contract keeps content-first isolation and checkpoint defaults exec
     /always run `omd ref distance <page>`[\s\S]*above `0\.6` does not ship/i,
     /\.omd\/target\/manifest\.json[\s\S]*bounded `omd target diff` repair loop/i,
     /multi-page output[\s\S]*omd check --site/i,
-    /sharp desktop and mobile[\s\S]*filmstrip[\s\S]*humanize review[\s\S]*declared probe/i,
+    /sharp desktop and mobile[\s\S]*filmstrip[\s\S]*humanize review[\s\S]*declared(?:\/applicable)? probe/i,
   ]) assert.match(contract, gate);
   assert.match(eye, /non-deterministic hierarchy[\s\S]*theory\/craft\.md[\s\S]*theory\/expressive\.md[\s\S]*craft\/finish-pass\.md/);
   assert.ok(existsSync(join(root, 'dist/codex/core/protocol/human-design-loop.md')));

@@ -13,28 +13,42 @@ deny:
   - apply_patch
 instructions: |
   Read `protocol/human-design-loop.md` and the relevant theory/cookbook files under
-  `omd pack dir`. Receive the concept, product, working directory, component inventory,
-  and any user URLs. Run all commands from that directory. Capture user URLs first with
-  `--from-user`.
+  `omd pack dir`. Receive the concept, product, working directory, component inventory, explicit
+  functions or product goal, surface classification, and any user URLs. Run all commands from that
+  directory. Capture user URLs first with `--from-user`.
 
-  A user-provided reference is a synthesis input, not a mood swatch. For each one, study
-  it as structural units and record what you actually observed with
-  `omd ref principles <source> --as <component> --add "..."` — one principle per unit that
-  matters for this brief, drawn from: information architecture, navigation model, page
-  layout, content density, typography, spacing rules, color system, component anatomy,
-  search/filter interaction, form interaction, data display, feedback and state
-  vocabulary (loading/empty/error/success), motion, mobile behavior, and the product's
-  overall design principle. Each principle names the observed relationship and why it
-  works — measured where possible ("행 높이 44px에 한 화면 12행", "필터는 항상 노출, 적용값은
-  칩으로") — never a vibe ("깔끔한 느낌"). Your handback lists, per user reference, the
-  units worth adopting for THIS brief; the composer turns that into the explicit
-  `Reference synthesis` plan, so an unstudied user reference blocks the contract.
-
+  Reference synthesis starts from function, not mood. Select the canonical Branch A/B decision
+  in `protocol/human-design-loop.md` before research. For every primitive, emit one sanitized
+  record that is serializable without reinterpretation by the strict `## Reference synthesis`
+  Markdown ABI in `protocol/composition-contract.md`. That protocol exclusively owns the exact axis keys,
+  dispositions, required reasons, selector rules, and record shape: use them exactly,
+  do not rename, omit, duplicate, or locally redefine them. Record each applicable axis's
+  concrete structural/behavioral observed rule and deliberate destination adaptation or decline;
+  record reasoned `N/A` only when the canonical ABI permits it. Preserve one concrete record or
+  explicit decline per user reference, merge duplicate primitives, and never let interaction or
+  tokens substitute for applicable layout or visual evidence. Include only stable source
+  keys/labels, trust, uncertainty, destination criteria, and mobile coverage; keep source
+  identity scout-side and pass downstream only sanitized records.
+  Record accepted evidence with `omd ref principles`. Never pass raw URLs, screenshots, pixels,
+  or source-page descriptions to composer, hand, or eye. Record the navigation model, density,
+  and state behavior. Only for an applicable list-detail workspace, apply the canonical
+  non-primary-object identity and object-local-state evidence boundary in
+  `protocol/human-design-loop.md`. Separately, only for an applicable support-ticket conversation,
+  apply its canonical temporal-window evidence boundary. Neither conditional regression applies
+  elsewhere; general multi-axis transfer review remains required for every admissible product transfer.
   Build for coverage, not counts. The board is complete only when it contains useful,
   non-duplicate evidence for the domain, direct competitors, user/community language,
-  typography, voice, relevant motion, and every required component. Search until each
-  category has enough evidence to support a decision; do not report query/capture quotas.
-  If motion is irrelevant, state why rather than manufacturing a motion study.
+  typography, voice, relevant motion, every required component, and — per
+  `protocol/human-design-loop.md` §Visual reference gallery and concept exploration —
+  curated design-gallery visual references. Treat inspiration galleries (Pinterest, Dribbble,
+  Mobbin, Behance, Land-book, Godly, Savee, and equivalents) as a first-class visual category:
+  gather enough high-craft main-screen references for this domain and register to support a
+  visual decision, and sanitize each into the canonical multi-axis synthesis (macro layout,
+  density, typography, spacing/rhythm, component anatomy, surface/material, colour role, motion).
+  A gallery image is never copied and never travels downstream — only measured sanitized
+  principles do. Search until each category has enough evidence to support a decision; do not
+  report query/capture quotas. If motion is irrelevant, state why rather than manufacturing a
+  motion study.
   Two output-neutral ways to save time, neither of which changes what the board teaches: reuse a
   coverage-complete `.omd/refs/` board when this directory already has one for the concept (capture
   only the missing categories rather than rebuilding it), and capture references in parallel with
@@ -45,15 +59,13 @@ instructions: |
 
   Preserve contamination defenses: reject sources with two or more slop signals unless
   user-provided (retain those as named anti-references); drop kinship at similarity >= .85;
-  prefer first-party/product evidence and direct user/community sources over SEO summaries;
-  label source trust and uncertainty. Never show reference screenshots to a builder, copy
-  pixels/copy, or describe a page for imitation. Return measured invariants, principles,
-  coverage gaps, and source trust. Use tight selectors for component anatomy, and capture
-  `--blueprint --shot` for a component the composer's image-first art direction will seed from —
-  that pairs the component's screenshot with its skin-abstracted structural grammar on one
-  reference record (see `theory/imagegen.md`) — or `--blueprint` alone when an exact component
-  transplant was explicitly requested. Those captured component references are the seed material
-  for image-first drafts: the composer art-directs from them, the builder never sees them and works
-  from the generated draft, and `omd ref distance` gates the shipped build regardless. The
-  "never show reference screenshots to a builder" rule above is about the build step, not this
-  seed capture.
+  prefer first-party/product evidence and direct user/community sources over SEO summaries.
+  Return measured invariants, sanitized rules, coverage gaps, stable source keys/labels, trust,
+  and uncertainty. Use tight selectors for component anatomy. A source screenshot remains
+  scout-local: never pass it, its URL, pixels, or a source-derived render downstream. When image
+  art direction needs a component seed (see `theory/imagegen.md`), pass only sanitized measured
+  principles and a skin-abstracted blueprint. Make the draft lineage explicit: it must name those
+  sanitized inputs and the clean-room boundary, never a source capture or its visual likeness.
+  Never show reference screenshots to a builder. The builder never sees the capture, and `omd ref
+  distance` still gates the shipped build. The clean-room boundary forbids copying pixels/copy or
+  describing a page for imitation.

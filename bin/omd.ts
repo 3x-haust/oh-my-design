@@ -17,6 +17,8 @@ import { checkFrameUx } from '../core/frame/check-ux.ts';
 import { scanSlopSource } from '../core/slop/index.ts';
 import { validateCompositionContract } from '../core/composition-contract/index.ts';
 import { validateSourceSeal, writeSourceSeal } from '../core/source-seal/index.ts';
+import { checkFinalEvidence, finalizeFinalEvidence } from '../core/evidence/final.ts';
+import { checkTaskEvidence, publishTaskEvidence } from '../core/evidence/task.ts';
 import { computeStack } from '../core/stack/index.ts';
 import { scanTextSlop } from '../core/slop/text-slop.ts';
 import { evaluateVisualRichness } from '../core/composition-contract/visual-richness.ts';
@@ -58,6 +60,7 @@ interface Opts {
   changed?: string;
   kind?: string;
   evidence?: string;
+  input?: string;
   /** Capture a full-resolution structural blueprint of the selected component. */
   blueprint?: boolean;
   /** Persist a scoped component screenshot alongside its blueprint (`omd ref add --selector … --shot`). */
@@ -82,6 +85,8 @@ interface Opts {
   costliestError?: string;
   /** UX anchor: surface classification — marketing | product | editorial | mixed. (`omd frame set --surface "..."`) */
   surface?: string;
+  /** Task coverage matrix rows for product or mixed surfaces. (`omd frame set --task-matrix "T1 …"`) */
+  taskMatrix?: string;
   /** Render desktop+mobile fixed and full-page proofs in one browser (`omd render <page> --proofs -o <prefix>`). */
   proofs?: boolean;
   /** Register override for `omd visual-richness --register quiet|confident|showpiece`. */
@@ -98,6 +103,7 @@ const ALIASES: Record<string, keyof Opts> = {
   'frequent-action': 'frequentAction',
   'costliest-error': 'costliestError',
   'review-check': 'reviewCheck',
+  'task-matrix': 'taskMatrix',
 };
 
 function parseArgs(args: string[]): Opts {
@@ -1220,6 +1226,41 @@ function cmdSource(mode: string | undefined, opts: Opts): never {
   }
   throw new Error('usage: omd source --seal [root] | --check [root] [--json]');
 }
+/**
+ * `omd evidence tasks --input .omd/.cache/task-evidence-manifest.json` validates and atomically publishes task evidence.
+ * `omd evidence tasks-check --json` re-verifies its exact files and immutable publication.
+ */
+function cmdEvidence(mode: string | undefined, opts: Opts): never {
+  if (mode === 'finalize') {
+    if (!opts.input || opts._.length > 0) throw new Error('usage: omd evidence finalize --input <manifest.json>');
+    const path = finalizeFinalEvidence(process.cwd(), opts.input);
+    if (opts.json) process.stdout.write(JSON.stringify({ path }));
+    else console.log(path);
+    process.exit(0);
+  }
+  if (mode === 'check') {
+    if (opts._.length > 0) throw new Error('usage: omd evidence check [--json]');
+    const evidence = checkFinalEvidence(process.cwd());
+    if (opts.json) process.stdout.write(JSON.stringify(evidence));
+    else console.log('ok — final evidence matches current source seal, build target, and artifacts');
+    process.exit(0);
+  }
+  if (mode === 'tasks') {
+    if (!opts.input || opts._.length > 0) throw new Error('usage: omd evidence tasks --input .omd/.cache/task-evidence-manifest.json');
+    const path = publishTaskEvidence(process.cwd(), opts.input);
+    if (opts.json) process.stdout.write(JSON.stringify({ path }));
+    else console.log(path);
+    process.exit(0);
+  }
+  if (mode === 'tasks-check') {
+    if (opts._.length > 0) throw new Error('usage: omd evidence tasks-check [--json]');
+    const evidence = checkTaskEvidence(process.cwd());
+    if (opts.json) process.stdout.write(JSON.stringify(evidence));
+    else console.log('ok — task evidence matches bound frame, composition, probes, and renders');
+    process.exit(0);
+  }
+  throw new Error('usage: omd evidence finalize --input <manifest.json> | check [--json] | tasks --input .omd/.cache/task-evidence-manifest.json | tasks-check [--json]');
+}
 
 async function cmdDoctor(): Promise<never> {
   let allPass = true;
@@ -1533,7 +1574,7 @@ function usage(): never {
     + '\n'
     + '  frame show\n'
     + '  frame set --problem P --reframe R --why EVIDENCE\n'
-    + '            [--task T --frequent-action A --costliest-error E --surface S]\n'
+    + '            [--task T --frequent-action A --costliest-error E --surface S --task-matrix "T1 …"]\n'
     + '  frame reframe --to "..." --because "what the render revealed"\n'
     + '  frame generator --set "metaphor"\n'
     + '\n'
@@ -1562,6 +1603,10 @@ function usage(): never {
     + '  composition --check [--json]                validate composition sections and input freshness\n'
     + '  source --seal [root]                        write final approved-input/source byte seal\n'
     + '  source --check [root] [--json]              fail when the source seal is missing or stale\n'
+    + '  evidence finalize --input manifest.json      immutably record this run and atomically supersede current evidence\n'
+    + '  evidence check [--json]                     re-hash final evidence source seal, build target, and artifacts\n'
+    + '  evidence tasks --input .omd/.cache/task-evidence-manifest.json  publish strict production task evidence\n'
+    + '  evidence tasks-check [--json]               revalidate strict production task evidence\n'
     + '\n'
     + '  text-slop [file] [--json]                   advisory AI-cliche scan of copy (default .omd/copy-deck.md)\n'
     + '  visual-richness [file] [--register R] [--json]  advisory carrier read of composition (default .omd/composition.md)\n'
@@ -1616,6 +1661,7 @@ async function main(): Promise<never> {
         ...(opts.frequentAction ? { uxFrequentAction: opts.frequentAction } : {}),
         ...(opts.costliestError ? { uxCostliestError: opts.costliestError } : {}),
         ...(opts.surface ? { uxSurface: opts.surface } : {}),
+        ...(opts.taskMatrix ? { taskCoverageMatrix: opts.taskMatrix } : {}),
       });
       console.log(path);
       process.exit(0);
@@ -1654,6 +1700,7 @@ async function main(): Promise<never> {
   if (cmd === 'copy') return cmdCopy(parseArgs(args.slice(1)));
   if (cmd === 'composition') return cmdComposition(parseArgs(args.slice(1)));
   if (cmd === 'source') return cmdSource(sub, parseArgs(args.slice(2)));
+  if (cmd === 'evidence') return cmdEvidence(sub, parseArgs(args.slice(2)));
   if (cmd === 'stack') return cmdStack(parseArgs(args.slice(1)));
   if (cmd === 'text-slop') return cmdTextSlop(parseArgs(args.slice(1)));
   if (cmd === 'visual-richness') return cmdVisualRichness(parseArgs(args.slice(1)));

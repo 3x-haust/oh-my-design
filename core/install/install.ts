@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { parse as parseToml } from 'smol-toml';
 import { build } from '../../adapters/build.ts';
 import type { Detected } from './detect.ts';
-import { unpatchSettings, patchAllow, unpatchHooks } from './patch-claude.ts';
+import { unpatchSettings, patchSettings, unpatchHooks } from './patch-claude.ts';
 import type { Settings } from './patch-claude.ts';
 import { patchConfigToml, unpatchConfigToml } from './patch-codex.ts';
 import type { Host } from '../types.ts';
@@ -13,7 +13,7 @@ import type { Host } from '../types.ts';
 // core/install/install.ts -> core/install -> core -> package root
 const pkgRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
-const MARKETPLACE_URL = 'https://github.com/oh-my-design/oh-my-design.git';
+const MARKETPLACE_URL = 'https://github.com/3x-haust/oh-my-design.git';
 // Derived from what the build emitted, never hardcoded: a hardcoded list is how
 // omd-sketch survived its own deletion, twice.
 function shippedSkillNames(): string[] {
@@ -54,47 +54,32 @@ const OMD_ALLOW = [
   'Bash(omd source:*)', 'Bash(omd pack:*)', 'Bash(shasum:*)',
 ];
 
+// Pre-namespace skill directory names that predate the `omd-` prefix. Pruned on install so a
+// legacy bare directory cannot shadow the `oh-my-design:` plugin.
+const LEGACY_SKILLS = ['ultradesign', 'critique'];
+
 /**
- * Skills and agents are copied into the directories the host actually reads, not into a
- * plugin folder behind a marketplace we do not publish. A plugin registered against a
- * marketplace that does not exist never loads, and `/ultradesign` never appears.
+ * Claude Code loads OMD as the marketplace plugin `oh-my-design@omd` (marketplace `omd` ->
+ * github `3x-haust/oh-my-design`). Everything resolves under the `oh-my-design:` namespace,
+ * so the installer registers the plugin in settings.json and prunes any bare-name `omd-*`
+ * skills/agents a previous direct install left behind — one surface, never a duplicate.
  */
 function installClaude(d: Detected, changes: string[]): void {
-  const skillsSrc = join(pkgRoot, 'dist', 'claude', 'skills');
-  if (existsSync(skillsSrc)) {
-    const dest = join(d.home, 'skills');
-    mkdirSync(dest, { recursive: true });
-    const shipped = readdirSafe(skillsSrc);
-    cpSync(skillsSrc, dest, { recursive: true });
-
-    // Prune skills we stopped shipping — same defect class as stale agents. Ours are
-    // omd:-prefixed now; 'ultradesign'/'critique' are the pre-namespace legacy names.
-    const LEGACY = ['ultradesign', 'critique'];
-    for (const name of readdirSafe(dest)) {
-      const ours = name.startsWith('omd:') || name.startsWith('omd-') || LEGACY.includes(name);
-      if (!ours || shipped.includes(name)) continue;
-      rmSync(join(dest, name), { recursive: true, force: true });
-      changes.push(`claude: removed stale skill ${name}`);
-    }
-    changes.push(`claude: installed skills -> ${dest} (${shipped.join(', ')})`);
+  // Claude Code installs OMD as the marketplace plugin `oh-my-design@omd`, so every skill and
+  // agent resolves under the `oh-my-design:` namespace (e.g. `oh-my-design:ultradesign`). The
+  // older bare-name copy under ~/.claude/skills and ~/.claude/agents is pruned here so a stale
+  // `omd-*` surface can never shadow the plugin with a duplicate.
+  const skillsDest = join(d.home, 'skills');
+  for (const name of readdirSafe(skillsDest)) {
+    if (!name.startsWith('omd-') && !LEGACY_SKILLS.includes(name)) continue;
+    rmSync(join(skillsDest, name), { recursive: true, force: true });
+    changes.push(`claude: removed direct skill ${name}`);
   }
-
-  const agentsSrc = join(pkgRoot, 'dist', 'claude', 'agents');
-  if (existsSync(agentsSrc)) {
-    const dest = join(d.home, 'agents');
-    mkdirSync(dest, { recursive: true });
-    const shipped = readdirSafe(agentsSrc);
-    for (const file of shipped) cpSync(join(agentsSrc, file), join(dest, file));
-
-    // An agent we stopped shipping must stop being installed. Copying without pruning left
-    // `omd-sketch` registered long after it was deleted — the same defect as a stale dist/
-    // and a permission for a subcommand that no longer exists.
-    for (const file of readdirSafe(dest)) {
-      if (!file.startsWith('omd-') || shipped.includes(file)) continue;
-      rmSync(join(dest, file), { force: true });
-      changes.push(`claude: removed stale agent ${file}`);
-    }
-    changes.push(`claude: installed agents -> ${dest} (${shipped.length})`);
+  const agentsDest = join(d.home, 'agents');
+  for (const file of readdirSafe(agentsDest)) {
+    if (!file.startsWith('omd-')) continue;
+    rmSync(join(agentsDest, file), { force: true });
+    changes.push(`claude: removed direct agent ${file}`);
   }
 
   const settingsPath = join(d.home, 'settings.json');
@@ -102,11 +87,11 @@ function installClaude(d: Detected, changes: string[]): void {
   const current: Settings = existsSync(settingsPath)
     ? (JSON.parse(readFileSync(settingsPath, 'utf8')) as Settings)
     : {};
-  // unpatchHooks clears the PreToolUse gate that older versions installed.
-  const next = unpatchHooks(patchAllow(current, OMD_ALLOW));
+  // Register the marketplace + enable the plugin (patchSettings) and clear the legacy gate.
+  const next = unpatchHooks(patchSettings(current, { marketplaceUrl: MARKETPLACE_URL, allow: OMD_ALLOW }));
   mkdirSync(d.home, { recursive: true });
   writeFileSync(settingsPath, `${JSON.stringify(next, null, 2)}\n`);
-  changes.push(`claude: patched ${settingsPath}`);
+  changes.push(`claude: registered oh-my-design@omd plugin and patched ${settingsPath}`);
 }
 
 function uninstallClaude(d: Detected, changes: string[]): void {
@@ -118,13 +103,13 @@ function uninstallClaude(d: Detected, changes: string[]): void {
     changes.push(`claude: unpatched ${settingsPath}`);
   }
 
-  // Remove only the skills we shipped, by name. The user's own skills live beside them.
-  const skillsSrc = join(pkgRoot, 'dist', 'claude', 'skills');
-  for (const name of readdirSafe(skillsSrc)) {
-    const installed = join(d.home, 'skills', name);
-    if (!existsSync(installed)) continue;
-    rmSync(installed, { recursive: true, force: true });
-    changes.push(`claude: removed ${installed}`);
+  // Remove any bare-name skill directory a previous direct install left, by prefix. The
+  // user's own skills (no omd- prefix) live beside them and are never touched.
+  const skillsDir = join(d.home, 'skills');
+  for (const name of readdirSafe(skillsDir)) {
+    if (!name.startsWith('omd-') && !LEGACY_SKILLS.includes(name)) continue;
+    rmSync(join(skillsDir, name), { recursive: true, force: true });
+    changes.push(`claude: removed ${join(skillsDir, name)}`);
   }
 
   for (const file of readdirSafe(join(d.home, 'agents'))) {
@@ -266,23 +251,17 @@ function doctorClaude(d: Detected): DoctorCheck[] {
   ) ?? false;
   checks.push(check('legacy PreToolUse hook absent', settings !== undefined && !legacyHookPresent));
 
-  const shippedAgents = readdirSafe(join(pkgRoot, 'dist', 'claude', 'agents'))
-    .filter((file) => file.startsWith('omd-') && file.endsWith('.md'))
-    .sort();
-  const installedAgents = readdirSafe(join(d.home, 'agents'))
-    .filter((file) => file.startsWith('omd-') && file.endsWith('.md'))
-    .sort();
-  const agentsMatch = shippedAgents.length > 0
-    && shippedAgents.includes('omd-writer.md')
-    && shippedAgents.includes('omd-typesetter.md')
-    && shippedAgents.includes('omd-composer.md')
-    && JSON.stringify(installedAgents) === JSON.stringify(shippedAgents);
-  checks.push(check('direct agents match shipped set', agentsMatch, `expected ${shippedAgents.length}, found ${installedAgents.length}`));
+  const pluginEnabled = settings?.enabledPlugins?.['oh-my-design@omd'] === true;
+  checks.push(check('oh-my-design@omd plugin enabled', pluginEnabled));
 
-  const shippedSkills = readdirSafe(join(pkgRoot, 'dist', 'claude', 'skills')).sort();
-  const skillsPresent = shippedSkills.length > 0
-    && shippedSkills.every((name) => existsSync(join(d.home, 'skills', name, 'SKILL.md')));
-  checks.push(check('direct skills installed', skillsPresent, `expected ${shippedSkills.length} shipped skills`));
+  const marketplaces = settings?.extraKnownMarketplaces as Record<string, unknown> | undefined;
+  checks.push(check('omd marketplace registered', Boolean(marketplaces && marketplaces['omd'])));
+
+  const strayAgents = readdirSafe(join(d.home, 'agents')).filter((file) => file.startsWith('omd-') && file.endsWith('.md')).sort();
+  checks.push(check('no duplicate direct agents', strayAgents.length === 0, strayAgents.length ? `found ${strayAgents.join(', ')}` : undefined));
+
+  const straySkills = readdirSafe(join(d.home, 'skills')).filter((name) => name.startsWith('omd-') || LEGACY_SKILLS.includes(name)).sort();
+  checks.push(check('no duplicate direct skills', straySkills.length === 0, straySkills.length ? `found ${straySkills.join(', ')}` : undefined));
 
   const copyPermission = settings?.permissions?.allow?.includes('Bash(omd copy:*)') ?? false;
   checks.push(check('copy check permission present', copyPermission));

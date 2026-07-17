@@ -160,18 +160,25 @@ test('unpatchHooks is a no-op on settings that never had the gate', () => {
   assert.deepEqual(unpatchHooks({}), {});
 });
 
-test('Claude direct install and doctor agree on writer, skills, permissions, and hook removal', () => {
+test('Claude plugin install registers the plugin, prunes any direct duplicate, and clears the legacy gate', () => {
   const home = mkdtempSync(join(tmpdir(), 'omd-claude-install-'));
   const detected = { host: 'claude' as const, home };
   try {
+    // A previous direct install left bare-name omd-* skills/agents and a legacy gate.
+    mkdirSync(join(home, 'agents'), { recursive: true });
+    mkdirSync(join(home, 'skills', 'omd-ultradesign'), { recursive: true });
+    writeFileSync(join(home, 'agents', 'omd-writer.md'), 'stale direct');
+    writeFileSync(join(home, 'skills', 'omd-ultradesign', 'SKILL.md'), 'stale direct');
     writeFileSync(join(home, 'settings.json'), JSON.stringify({ hooks: { PreToolUse: [FOREIGN, GATE] } }));
+
     install([detected]);
 
-    assert.ok(existsSync(join(home, 'agents', 'omd-writer.md')));
-    assert.ok(existsSync(join(home, 'agents', 'omd-typesetter.md')));
-    assert.ok(existsSync(join(home, 'agents', 'omd-composer.md')));
-    assert.ok(existsSync(join(home, 'skills', 'omd-ultradesign', 'SKILL.md')));
+    // The direct duplicate is gone; only the plugin registration remains.
+    assert.ok(!existsSync(join(home, 'agents', 'omd-writer.md')), 'direct agent pruned');
+    assert.ok(!existsSync(join(home, 'skills', 'omd-ultradesign')), 'direct skill pruned');
     const settings = JSON.parse(readFileSync(join(home, 'settings.json'), 'utf8')) as Settings;
+    assert.equal(settings.enabledPlugins?.['oh-my-design@omd'], true);
+    assert.ok(settings.extraKnownMarketplaces?.['omd']);
     assert.ok(settings.permissions?.allow?.includes('Bash(omd copy:*)'));
     assert.ok(settings.permissions?.allow?.includes('Bash(omd composition:*)'));
     assert.ok(settings.permissions?.allow?.includes('Bash(shasum:*)'));
@@ -186,62 +193,50 @@ test('Claude direct install and doctor agree on writer, skills, permissions, and
     assert.equal(result.ok, true, result.checks.filter((check) => !check.ok).map((check) => check.name).join(', '));
     assert.ok(result.checks.every((check) => check.ok));
 
-    settings.permissions = {
-      ...settings.permissions,
-      allow: (settings.permissions?.allow ?? []).filter((entry) => entry !== 'Bash(omd composition:*)'),
-    };
-    writeFileSync(join(home, 'settings.json'), JSON.stringify(settings));
-    const missingCompositionPermission = doctor([detected])[0]!;
-    assert.equal(missingCompositionPermission.ok, false);
-    assert.equal(missingCompositionPermission.checks.find((check) => check.name === 'composition check permission present')?.ok, false);
+    // Missing each required permission fails the matching doctor check.
+    for (const [perm, checkName] of [
+      ['Bash(omd composition:*)', 'composition check permission present'],
+      ['Bash(shasum:*)', 'composition hash permission present'],
+      ['Bash(omd source:*)', 'source seal permission present'],
+    ] as const) {
+      install([detected]);
+      const s = JSON.parse(readFileSync(join(home, 'settings.json'), 'utf8')) as Settings;
+      s.permissions = { ...s.permissions, allow: (s.permissions?.allow ?? []).filter((entry) => entry !== perm) };
+      writeFileSync(join(home, 'settings.json'), JSON.stringify(s));
+      const missing = doctor([detected])[0]!;
+      assert.equal(missing.ok, false);
+      assert.equal(missing.checks.find((check) => check.name === checkName)?.ok, false);
+    }
 
+    // A stray direct agent appearing beside the plugin is flagged as a duplicate.
     install([detected]);
-    const restoredSettings = JSON.parse(readFileSync(join(home, 'settings.json'), 'utf8')) as Settings;
-    restoredSettings.permissions = {
-      ...restoredSettings.permissions,
-      allow: (restoredSettings.permissions?.allow ?? []).filter((entry) => entry !== 'Bash(shasum:*)'),
-    };
-    writeFileSync(join(home, 'settings.json'), JSON.stringify(restoredSettings));
-    const missingHashPermission = doctor([detected])[0]!;
-    assert.equal(missingHashPermission.ok, false);
-    assert.equal(missingHashPermission.checks.find((check) => check.name === 'composition hash permission present')?.ok, false);
+    mkdirSync(join(home, 'agents'), { recursive: true });
+    writeFileSync(join(home, 'agents', 'omd-typesetter.md'), 'stray');
+    const dupAgent = doctor([detected])[0]!;
+    assert.equal(dupAgent.ok, false);
+    assert.equal(dupAgent.checks.find((check) => check.name === 'no duplicate direct agents')?.ok, false);
 
+    // A stray direct skill is flagged the same way.
     install([detected]);
-    const sourceSettings = JSON.parse(readFileSync(join(home, 'settings.json'), 'utf8')) as Settings;
-    sourceSettings.permissions = {
-      ...sourceSettings.permissions,
-      allow: (sourceSettings.permissions?.allow ?? []).filter((entry) => entry !== 'Bash(omd source:*)'),
-    };
-    writeFileSync(join(home, 'settings.json'), JSON.stringify(sourceSettings));
-    const missingSourcePermission = doctor([detected])[0]!;
-    assert.equal(missingSourcePermission.ok, false);
-    assert.equal(missingSourcePermission.checks.find((check) => check.name === 'source seal permission present')?.ok, false);
-
-    install([detected]);
-    rmSync(join(home, 'agents', 'omd-typesetter.md'));
-    const missingTypesetter = doctor([detected])[0]!;
-    assert.equal(missingTypesetter.ok, false);
-    assert.equal(missingTypesetter.checks.find((check) => check.name === 'direct agents match shipped set')?.ok, false);
-
-    install([detected]);
-    rmSync(join(home, 'agents', 'omd-composer.md'));
-    const missingComposer = doctor([detected])[0]!;
-    assert.equal(missingComposer.ok, false);
-    assert.equal(missingComposer.checks.find((check) => check.name === 'direct agents match shipped set')?.ok, false);
+    mkdirSync(join(home, 'skills', 'omd-scout'), { recursive: true });
+    const dupSkill = doctor([detected])[0]!;
+    assert.equal(dupSkill.ok, false);
+    assert.equal(dupSkill.checks.find((check) => check.name === 'no duplicate direct skills')?.ok, false);
   } finally {
     rmSync(home, { recursive: true, force: true });
   }
 });
 
-test('Claude doctor rejects stale plugin-only layout and a legacy OMD hook', () => {
+test('Claude doctor rejects a duplicate direct install and a legacy OMD hook', () => {
   const home = mkdtempSync(join(tmpdir(), 'omd-claude-stale-'));
   const detected = { host: 'claude' as const, home };
   try {
-    const legacyPlugin = join(home, 'plugins', 'omd', 'oh-my-design', '0.14.0');
-    mkdirSync(join(legacyPlugin, 'agents'), { recursive: true });
-    mkdirSync(join(legacyPlugin, 'skills', 'omd-ultradesign'), { recursive: true });
-    writeFileSync(join(legacyPlugin, 'agents', 'omd-writer.md'), 'legacy');
-    writeFileSync(join(legacyPlugin, 'skills', 'omd-ultradesign', 'SKILL.md'), 'legacy');
+    // A direct install left bare-name omd-* skills/agents; the plugin is not registered and a
+    // legacy gate is still wired.
+    mkdirSync(join(home, 'agents'), { recursive: true });
+    mkdirSync(join(home, 'skills', 'omd-ultradesign'), { recursive: true });
+    writeFileSync(join(home, 'agents', 'omd-writer.md'), 'stale');
+    writeFileSync(join(home, 'skills', 'omd-ultradesign', 'SKILL.md'), 'stale');
     writeFileSync(join(home, 'settings.json'), JSON.stringify({
       permissions: { allow: ['Bash(omd copy:*)'] },
       hooks: { PreToolUse: [GATE] },
@@ -250,8 +245,10 @@ test('Claude doctor rejects stale plugin-only layout and a legacy OMD hook', () 
     const result = doctor([detected])[0]!;
     assert.equal(result.ok, false);
     assert.equal(result.checks.find((check) => check.name === 'legacy PreToolUse hook absent')?.ok, false);
-    assert.equal(result.checks.find((check) => check.name === 'direct agents match shipped set')?.ok, false);
-    assert.equal(result.checks.find((check) => check.name === 'direct skills installed')?.ok, false);
+    assert.equal(result.checks.find((check) => check.name === 'oh-my-design@omd plugin enabled')?.ok, false);
+    assert.equal(result.checks.find((check) => check.name === 'omd marketplace registered')?.ok, false);
+    assert.equal(result.checks.find((check) => check.name === 'no duplicate direct agents')?.ok, false);
+    assert.equal(result.checks.find((check) => check.name === 'no duplicate direct skills')?.ok, false);
     assert.equal(result.checks.find((check) => check.name === 'composition check permission present')?.ok, false);
     assert.equal(result.checks.find((check) => check.name === 'composition hash permission present')?.ok, false);
     assert.equal(result.checks.find((check) => check.name === 'source seal permission present')?.ok, false);

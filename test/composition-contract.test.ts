@@ -6,11 +6,12 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { COMPOSITION_SECTIONS, SYNTHESIS_SECTION, validateCompositionContract, validateCompositionContractSource } from '../core/composition-contract/index.ts';
+import { COMPOSITION_SECTIONS, SYNTHESIS_AXES, SYNTHESIS_SECTION, validateCompositionContract, validateCompositionContractSource } from '../core/composition-contract/index.ts';
 
 const cli = fileURLToPath(new URL('../bin/omd.ts', import.meta.url));
 const temp = (): string => mkdtempSync(join(tmpdir(), 'omd-composition-'));
 const hash = (value: string): string => createHash('sha256').update(value).digest('hex');
+const refKey = (source: string, component: string): string => `ref-${createHash('sha256').update(`${source}\0${component}`).digest('hex').slice(0, 16)}`;
 
 function setup(withScout = true): { root: string; values: Record<string, string> } {
   const root = temp();
@@ -34,6 +35,27 @@ function artifact(values: Record<string, string>, scoutNA?: string): string {
     scoutNA ? `- Scout SHA-256: N/A — ${scoutNA}` : `- Scout SHA-256: ${hash(values['scout.md']!)}`,
   ].join('\n');
   return COMPOSITION_SECTIONS.map((section) => `## ${section}\n\n${section === 'Input fingerprint' ? fingerprint : `Decision for ${section}.`}`).join('\n\n');
+}
+function synthesis(feature = 'Inbox triage workspace', sourceRef = 'LIN-LAYOUT', selector = '[data-region="inbox"]', route = '/inbox'): string {
+  const axes = SYNTHESIS_AXES.map((axis, index) => `- ${axis} | ${index === 1 ? 'adapt' : 'N/A'} | ${index === 1 ? 'Queue and detail panel remain visible together.' : 'N/A'} | ${index === 1 ? 'Fit the relationship to the current task flow.' : 'This reference has no evidence for this axis.'}`).join('\n');
+  return `## ${SYNTHESIS_SECTION}
+
+### Feature: ${feature}
+- Origin: explicit
+- Assumption: N/A
+- Primitive: Triage and inspect a queue item
+- Source ref: ${sourceRef}
+- Trust: Directly observed stable reference
+- Uncertainty: Content changes may alter the exact density.
+- Structural rule: Queue and detail regions maintain a deliberate relationship.
+- Adaptation: Map the relationship into the destination task model.
+- Token variation: Use destination system tokens rather than source values.
+- Conflict resolution: Current task flow and accessibility constraints take precedence.
+- Destination route: ${route}
+- Destination selector: ${selector}
+- Mobile behavior: Recompose queue and detail into a focused drill-in flow.
+#### Axes
+${axes}`;
 }
 
 test('complete matching composition contract passes', () => {
@@ -167,26 +189,50 @@ test('an empty Reference synthesis section fails the same way', () => {
   assert.equal(findings[0]!.id, 'COMPOSITION-SYNTHESIS');
 });
 
+test('synthesis ABI rejects missing axes, malformed values, duplicate selectors, and interaction-only transfer', () => {
+  const { values, digests } = baseInputs();
+  const complete = `${artifact(values)}\n\n${synthesis()}`;
+  assert.deepEqual(validateCompositionContractSource({ contract: complete, ...digests }), []);
+  for (const axis of SYNTHESIS_AXES) {
+    const missing = complete.replace(new RegExp(`^- ${axis.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} \\|[^\\n]*\\n?`, 'm'), '');
+    assert.ok(validateCompositionContractSource({ contract: missing, ...digests }).some((finding) => finding.message.includes(`axis "${axis}"`)));
+  }
+  const duplicateAxis = `${complete}\n- Information architecture/navigation | N/A | N/A | Duplicate axis must be rejected.`;
+  assert.ok(validateCompositionContractSource({ contract: duplicateAxis, ...digests }).some((finding) => finding.message.includes('Information architecture/navigation')));
+  assert.deepEqual(validateCompositionContractSource({ contract: `${artifact(values)}\n\n${synthesis('Root workspace', 'LIN-LAYOUT', '[data-region="root"]', '/')}`, ...digests }), []);
+  const malformed = complete.replace('Macro layout and panel/region geometry | adapt', 'Macro layout and panel/region geometry | copy');
+  assert.ok(validateCompositionContractSource({ contract: malformed, ...digests }).some((finding) => finding.message.includes('invalid disposition')));
+  const reasonless = complete.replace('- Content density | N/A | N/A | This reference has no evidence for this axis.', '- Content density | N/A | N/A | N/A');
+  assert.ok(validateCompositionContractSource({ contract: reasonless, ...digests }).some((finding) => finding.message.includes('N/A reason')));
+  const duplicateSelector = `${complete}\n\n${synthesis('Secondary triage workspace', 'NOTION-LAYOUT').replace(/^## Reference synthesis\n+/, '')}`;
+  assert.ok(validateCompositionContractSource({ contract: duplicateSelector, ...digests }).some((finding) => finding.message.includes('duplicated')));
+  const interactionOnly = complete.replace('Macro layout and panel/region geometry | adapt | Queue and detail panel remain visible together. | Fit the relationship to the current task flow.', 'Macro layout and panel/region geometry | N/A | N/A | No structural transfer is adopted here.');
+  assert.ok(validateCompositionContractSource({ contract: interactionOnly, ...digests }).some((finding) => finding.message.includes('interaction-only')));
+});
 test('every user reference must be mentioned in the synthesis plan', () => {
   const { values, digests } = baseInputs();
-  const contract = `${artifact(values)}\n\n## ${SYNTHESIS_SECTION}\n\n- linear.app: 내비게이션 모델 — 좌측 레일과 현재 위치 마킹을 받은함 셸에 적용.`;
+  const contract = `${artifact(values)}\n\n${synthesis('Inbox triage workspace', 'LIN-LAYOUT')}`;
   const findings = validateCompositionContractSource({
     contract,
     ...digests,
-    userRefLabels: ['linear.app', 'notion.so'],
+    userRefLabels: ['LIN-LAYOUT', 'NOTION-LAYOUT'],
   });
   assert.equal(findings.length, 1);
   assert.equal(findings[0]!.id, 'COMPOSITION-SYNTHESIS');
-  assert.match(findings[0]!.message, /notion\.so/);
+  assert.match(findings[0]!.message, /NOTION-LAYOUT/);
 });
 
-test('a synthesis plan naming every user reference passes, case-insensitively', () => {
+test('a synthesis plan naming every exact reference identity passes', () => {
   const { values, digests } = baseInputs();
-  const contract = `${artifact(values)}\n\n## ${SYNTHESIS_SECTION}\n\n- Linear.app: 내비게이션 모델을 셸에 적용.\n- NOTION.SO: 콘텐츠 밀도 규칙은 사용하지 않기로 함 — 문서형 밀도가 큐 스캔과 충돌 (decline).`;
+  const contract = `${artifact(values)}\n\n${synthesis('Inbox triage workspace', 'LIN-LAYOUT')}\n\n### Decline: Notion document density\n- Origin: explicit
+- Source ref: NOTION-LAYOUT
+- Trust: User supplied reference
+- Uncertainty: Scope is limited to the supplied page.
+- Reason: Document density conflicts with rapid queue scanning.`;
   const findings = validateCompositionContractSource({
     contract,
     ...digests,
-    userRefLabels: ['linear.app', 'notion.so'],
+    userRefLabels: ['LIN-LAYOUT', 'NOTION-LAYOUT'],
   });
   assert.deepEqual(findings, []);
 });
@@ -210,7 +256,96 @@ test('filesystem adapter derives user reference labels from origin: user records
   assert.equal(findings[0]!.id, 'COMPOSITION-SYNTHESIS');
   assert.match(findings[0]!.message, /missing or empty/);
 
-  const withPlan = `${artifact(values)}\n\n## ${SYNTHESIS_SECTION}\n\n- linear.app: 검색·필터 인터랙션을 목록 툴바에 적용.`;
+  const withPlan = `${artifact(values)}\n\n${synthesis('Inbox search workspace', refKey('https://linear.app/features', 'page'))}`;
   writeFileSync(join(root, '.omd', 'composition.md'), withPlan);
   assert.deepEqual(validateCompositionContract(root), []);
+});
+test('closed parser rejects unknown or duplicate H2 sections and fingerprint keys', () => {
+  const { values, digests } = baseInputs();
+  const complete = artifact(values);
+  for (const contract of [
+    `${complete}\n\n## Surprise\n\nNo unowned section.`,
+    `${complete}\n\n## Media roles\n\nA duplicate section.`,
+    complete.replace('- Frame SHA-256:', `- Frame SHA-256: ${hash(values['frame.md']!)}\n- Frame SHA-256:`),
+    `${complete.replace('- Scout SHA-256:', '- Scout SHA-256: deadbeef\n- Scout SHA-256:')}\n`,
+    complete.replace('- Type proof SHA-256:', '- Extra SHA-256: ignored\n- Type proof SHA-256:'),
+  ]) {
+    assert.ok(validateCompositionContractSource({ contract, ...digests }).some((finding) => /unknown|duplicate H2|exactly once/.test(finding.message)));
+  }
+});
+
+test('UX task coverage is an allowed auxiliary section and Unicode separators fail closed', () => {
+  const { values, digests } = baseInputs();
+  const complete = artifact(values);
+  const withCoverage = `${complete}\n\n## UX task coverage\n\nT1 | production: / | locator: [data-task="save"] |\n`;
+  assert.deepEqual(validateCompositionContractSource({ contract: withCoverage, ...digests }), []);
+  const hidden = `${complete}\n\nTask evidence binding:\u2028## UX task coverage\n\nT1 | production: / | locator: [data-task="save"] |\n`;
+  assert.ok(validateCompositionContractSource({ contract: hidden, ...digests }).some((finding) => /Unicode line or paragraph separator/.test(finding.message)));
+  for (const separator of ['\u2028', '\u2029', '\u0085', '\u000B', '\u000C']) {
+    const injected = complete.replace('## Experience spine', `## Experience spine${separator}`);
+    assert.ok(validateCompositionContractSource({ contract: injected, ...digests }).some((finding) => /Unicode line or paragraph separator/.test(finding.message)));
+  }
+});
+
+test('closed synthesis parser rejects unknown fields, stray prose, headings, and malformed cardinality', () => {
+  const { values, digests } = baseInputs();
+  const complete = `${artifact(values)}\n\n${synthesis()}`;
+  for (const contract of [
+    complete.replace('- Primitive:', '- Invented field: unexpected\n- Primitive:'),
+    complete.replace('- Trust:', 'This is stray prose.\n- Trust:'),
+    complete.replace('#### Axes', '#### Unrecognized heading\n#### Axes'),
+    complete.replace('- Mobile behavior:', '- Mobile behavior:\n- Mobile behavior:'),
+  ]) {
+    assert.ok(validateCompositionContractSource({ contract, ...digests }).some((finding) => finding.id === 'COMPOSITION-SYNTHESIS'));
+  }
+});
+
+test('coverage uses exact Source ref fields, retains same-host references, and allows short labels', () => {
+  const { values, digests } = baseInputs();
+  const first = refKey('https://linear.app/one', 'page');
+  const second = refKey('https://linear.app/two', 'page');
+  const contract = `${artifact(values)}\n\n${synthesis('UI', first)}\n\n${synthesis('OK', second, '[data-region="secondary"]').replace(/^## Reference synthesis\n+/, '')}`;
+  assert.deepEqual(validateCompositionContractSource({ contract, ...digests, userRefLabels: [first, second] }), []);
+  const proseOnly = contract.replace(second, 'unmapped-ref').replace('This reference has no evidence for this axis.', `This reference mentions ${second} only in prose.`);
+  const findings = validateCompositionContractSource({ contract: proseOnly, ...digests, userRefLabels: [first, second] });
+  assert.ok(findings.some((finding) => finding.message.includes(second) && finding.message.includes('exact Source ref')));
+});
+
+test('routes and selectors are local, stable, normalized, and diagnostic records identify themselves', () => {
+  const { values, digests } = baseInputs();
+  const complete = `${artifact(values)}\n\n${synthesis('Triage', 'FIRST-REF')}`;
+  for (const contract of [
+    complete.replace('- Destination route: /inbox', '- Destination route: https://example.com'),
+    complete.replace('- Destination route: /inbox', '- Destination route: TODO route'),
+    complete.replace('- Destination route: /inbox', '- Destination route: //example.com'),
+    complete.replace('- Destination route: /inbox', '- Destination route: /todo'),
+    complete.replace('[data-region="inbox"]', '.inbox-card'),
+    `${complete}\n\n${synthesis('Second', 'SECOND-REF', '[data-region="inbox"]').replace(/^## Reference synthesis\n+/, '')}`,
+  ]) {
+    const findings = validateCompositionContractSource({ contract, ...digests });
+    assert.ok(findings.some((finding) => finding.message.includes('Feature "') && /Destination route|Destination selector/.test(finding.message)));
+  }
+});
+
+test('source refs and axis rows reject hostname prose and extra columns', () => {
+  const { values, digests } = baseInputs();
+  const complete = `${artifact(values)}\n\n${synthesis()}`;
+  const hostname = complete.replace('- Source ref: LIN-LAYOUT', '- Source ref: linear.app');
+  const extraColumn = complete.replace(
+    '- Content density | N/A | N/A | This reference has no evidence for this axis.',
+    '- Content density | N/A | N/A | This reference has no evidence for this axis. | injected',
+  );
+  for (const contract of [hostname, extraColumn]) {
+    assert.ok(validateCompositionContractSource({ contract, ...digests }).some((finding) => finding.id === 'COMPOSITION-SYNTHESIS'));
+  }
+});
+
+test('long junk and unknown axes cannot be scavenged into valid records', () => {
+  const { values, digests } = baseInputs();
+  const complete = `${artifact(values)}\n\n${synthesis()}`;
+  const longJunk = `${complete}\n${'unstructured junk '.repeat(20)}`;
+  const unknownAxis = complete.replace('- Motion/transition | N/A | N/A | This reference has no evidence for this axis.', '- Spatial spectacle | adapt | A long observed rule. | A long adaptation rule.');
+  for (const contract of [longJunk, unknownAxis]) {
+    assert.ok(validateCompositionContractSource({ contract, ...digests }).some((finding) => finding.id === 'COMPOSITION-SYNTHESIS'));
+  }
 });

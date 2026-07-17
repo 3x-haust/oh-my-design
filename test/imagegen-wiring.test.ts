@@ -45,9 +45,9 @@ test('composer runs image-first seeded by clean-room grammar, gated by register 
   assert.match(c, /image-first/i);
   assert.match(c, /theory\/imagegen\.md/);
   assert.match(c, /skin-abstracted\s+blueprint/i);
-  assert.match(c, /--shot/);
-  assert.match(c, /image-generation capability/i);
-  assert.match(c, /never (one )?reference'?s? pixels|not reference pixels/i);
+  assert.doesNotMatch(c, /--shot/);
+  assert.match(c, /host\/coordinator-produced\s+clean-room\s+draft\s+reference/i);
+  assert.match(c, /no\s+source screenshot, URL, pixels, or visual likeness/i);
 });
 
 test('hand implements against the draft with image-to-code fidelity and never ships the draft', () => {
@@ -65,9 +65,10 @@ test('scout still forbids screenshot imitation while providing blueprint seed ma
   assert.match(s, /theory\/imagegen\.md/);
 });
 
-test('ultradesign SKILL wires the image-first composition step', () => {
+test('ultradesign SKILL wires host-owned clean-room draft generation', () => {
   const skill = read('skills/ultradesign/SKILL.md');
-  assert.match(skill, /image-first/i);
-  assert.match(skill, /theory\/imagegen\.md/);
-  assert.match(skill, /\.omd\/\.cache\/imagegen\//);
+  assert.match(skill, /clean-room art-direction directions/i);
+  assert.match(skill, /host\/coordinator owns concurrent draft generation/i);
+  assert.match(skill, /cache\s+management,\s+blind\s+selection,\s+and\s+provenance\/decision\s+recording/i);
+  assert.match(skill, /no source screenshot, URL,[\s\S]*pixels, or visual likeness/i);
 });

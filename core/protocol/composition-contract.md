@@ -124,27 +124,69 @@ specific transplant; record the request and attribution.
 
 ## Reference synthesis
 
-Required exactly when user-origin references exist (`omd ref add --from-user`); omitted
-otherwise. This is the explicit synthesis plan that separates structural synthesis from
-mood imitation. For every user reference, record one row/entry:
+Required when user-origin references exist, and structurally validated whenever it is non-empty.
+`omd composition --check` parses this section as a closed Markdown ABI: prose, headings,
+fields, or axis rows outside the forms below are rejected.
 
-- **Source**: the reference label (hostname or file name — the validator matches it).
-- **Trait taken**: the concrete unit adopted — information architecture, navigation model,
-  page layout, content density, typography, spacing rules, color system, component anatomy,
-  search/filter interaction, form interaction, data display, feedback/state vocabulary,
-  motion, mobile behavior, or an overall design principle. "그 느낌" is not a trait.
-- **Where it lands**: the screen or component it applies to.
-- **Adaptation**: how it is reshaped for this product's content, stack, and constraints.
-- **Conflict resolution**: when two references disagree on the same unit, which wins where,
-  and why — the shipped result must still read as one product and one design system.
-- A reference the plan deliberately does not use is declined with a reason, not ignored.
+An adopted transfer is one `### Feature: <specific feature>` record:
 
-The transfer boundary below still governs: traits are attributed relationships, measured
-invariants, and principles — never pixels, copy, literal tokens, full section order, or a
-recognizable silhouette, unless the user explicitly requested that transplant.
+```md
+### Feature: Inbox triage workspace
+- Origin: explicit
+- Assumption: N/A
+- Primitive: Triage and inspect a queue item
+- Source ref: ref-<first 16 lowercase hex of SHA-256(source + NUL + component)>
+- Trust: Directly observed stable reference
+- Uncertainty: Content changes may alter exact density.
+- Structural rule: Queue and detail panels remain visible together.
+- Adaptation: Fit that relationship to the current task flow.
+- Token variation: Use destination tokens, not source values.
+- Conflict resolution: Task, accessibility, mobile, then one destination system win.
+- Destination route: /inbox
+- Destination selector: [data-region="inbox"]
+- Mobile behavior: Recompose into a focused drill-in flow.
+#### Axes
+- Information architecture/navigation | adapt | Queue navigation exposes current work. | Fit it to destination routes.
+- Macro layout and panel/region geometry | adapt | Queue and detail remain paired. | Preserve the relationship at the work surface.
+- Content density | N/A | N/A | The source has no usable density evidence.
+- Typography/hierarchy | N/A | N/A | The source has no usable type evidence.
+- Spacing/rhythm | N/A | N/A | The source has no usable rhythm evidence.
+- Component anatomy | N/A | N/A | The source has no reusable anatomy evidence.
+- Interaction/state/feedback | adapt | Selecting an item updates detail. | Use destination state vocabulary.
+- Responsive/mobile recomposition | adapt | Detail becomes focused on narrow screens. | Preserve return to the queue.
+- Motion/transition | N/A | N/A | The source has no transferable motion evidence.
+```
 
-`omd composition --check` validates only section structure, fingerprint format, freshness,
-and — when user references exist — the presence of a Reference synthesis section that
-mentions every user reference.
-It does not score taste, aesthetics, or whether a composition is good. Completion means the
-artifact exists and the validator succeeds; a status report alone is not completion.
+Use every axis exactly once: information architecture/navigation; macro layout and panel/region
+geometry; content density; typography/hierarchy; spacing/rhythm; component anatomy;
+interaction/state/feedback; responsive/mobile recomposition; motion/transition. Disposition is
+exactly `accept`, `adapt`, `decline`, or `N/A`. Applicable axes require a substantive observed
+rule and adaptation or decline rationale. `N/A` uses `N/A` as its observed rule and a substantive
+reason. An adopted record must accept or adapt at least one structural or visual-system axis
+(the first six); interaction-only or token-only transfer is invalid.
+
+`Source ref` is the exact stable reference identity, not a hostname or prose mention. For a stored
+user reference it is `ref-` plus the first 16 lowercase hexadecimal characters of
+`SHA-256(source + NUL + component)`. This preserves two user references from the same host as
+separate obligations. The checker compares normalized `Source ref` field values only; text
+elsewhere in the section never satisfies reference coverage. A scout-origin reference instead
+uses an uppercase hyphenated key matching `[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)+`; hostnames and
+free-form prose are invalid identities. Feature labels may be short when
+specific; explanatory fields need substantive content. Destination routes must be non-placeholder
+local routes beginning with `/` (including `/` itself). Destination selectors must be unique after
+whitespace normalization and use only a stable `[data-*="…"]` selector or an accessible semantic
+element/role selector.
+
+A whole explicit feature may instead be declined without pretending it is an adopted transfer:
+
+```md
+### Decline: Document density
+- Origin: explicit
+- Source ref: ref-<first 16 lowercase hex of SHA-256(source + NUL + component)>
+- Trust: User supplied reference
+- Uncertainty: Scope is limited to the supplied page.
+- Reason: Document density conflicts with rapid queue scanning.
+```
+
+`omd composition --check` validates this ABI, section structure, fingerprint format, freshness,
+and every user-reference mention. It does not score taste or aesthetics.

@@ -37,18 +37,39 @@ instructions: |
   product-surface recipes under `core/composition/` (app-shell-workbench, master-detail
   -flow, form-wizard-stepper) are condition-gated hypotheses for this grammar, exactly as
   the editorial recipes are for marketing surfaces.
+  For a `product` or `mixed` surface, map every applicable stable `T#` row from the frame's
+  `Task coverage matrix` into `## UX task coverage` using the canonical schema in
+  `protocol/human-design-loop.md`; do not restate or alter that protocol-owned schema. Preserve
+  the frame row id and bind its goal, minimal
+  actions, success observable, applicable recovery, required viewports, and `requirements` to
+  a production-reachable local path and unique stable semantic action locator. The frame's
+  `uxSurface` is canonical for this mapping and downstream task evidence. Repeated controls
+  include the operated work-object identity in the locator contract, and accessible names
+  remain stable across responsive hiding unless the action itself changes. A component showcase
+  or gallery cannot satisfy production state, task, probe, or render evidence. For `mixed`,
+  map only product-screen rows; `marketing`, `editorial`, and static-only work neither invents
+  task rows/states/probes nor receives this requirement. Run `omd composition --check` to
+  validate the canonical mapping.
 
-  When the coordinator supplies user-origin references (their sanitized per-reference
-  traits from the scout — never raw screenshots), additionally write the
-  `## Reference synthesis` section per `protocol/composition-contract.md`: one entry per
-  user reference with the concrete trait taken (IA, navigation model, layout, density,
-  typography, spacing, color system, component anatomy, search/filter interaction, form
-  interaction, data display, feedback/state vocabulary, motion, mobile behavior, or a
-  design principle), where it lands, the adaptation, and the conflict resolution so the
-  result reads as one design system; decline unused references with a reason. Colour or
-  radius alone is not synthesis. `omd composition --check` fails when a user reference is
-  not mentioned.
-
+  Use the scout's canonical Branch A/B decision in `protocol/human-design-loop.md`.
+  Serialize supplied sanitized records into the strict `## Reference synthesis` Markdown ABI.
+  Do not define, reinterpret, or supplement a parallel schema. Preserve the canonical exact axis
+  keys, dispositions, reasons, source keys, destination
+  screen/route, and unique semantic selector without omissions or duplicates. Preserve or
+  deliberately adapt every supplied record in that existing section without adding another
+  heading, including explicit declines and mobile coverage. Translate every applicable accepted
+  axis into coherent composition; do not reduce applicable layout or visual evidence to
+  interaction or tokens, issue new task rows, or receive source material beyond the sanitized
+  record. Keep explicit features unchanged, label inferred ones, merge duplicate primitives, and
+  preserve supplied transfer identity while adapting it to the destination composition contract.
+  Accepted layout lands in the destination composition contract. Receive sanitized records, not raw
+  URLs, screenshots, pixels, or source-page descriptions. A reference landing never creates or
+  replaces a frame `T#` task locator. Only for an applicable list-detail workspace, carry the
+  canonical non-primary-object identity and object-local-state evidence boundary from
+  `protocol/human-design-loop.md`. Separately, only for an applicable support-ticket conversation,
+  carry its canonical temporal-window evidence boundary. Do not hardcode fixture content or leak
+  either regression to other surfaces; general multi-axis transfer review remains required for every
+  admissible product transfer.
   Translate evidence into the required durable sections: an experience spine/message ladder
   with entering question, one new answer/evidence, primary action, and next-section dependency;
   reorder/removal results; shared grid/alignment and intentional breaks; density, visual-mass,
@@ -86,18 +107,18 @@ instructions: |
   carrier, not text-in-boxes with the material unused; unused authentic material is a
   distinction failure. Record the named template and the departure in the contract rationale.
   Image-first art direction (read `theory/imagegen.md`): for a confident/showpiece register where
-  the composition is the deliverable, and when the host provides an image-generation capability,
-  direct 2-3 art-directed concept-draft mockups generated concurrently (they are independent),
-  seeded with the committed palette/type/material
-  plus the scout's paired component references (each a screenshot beside its skin-abstracted
-  blueprint from `omd ref add … --shot`) and measured principles as multi-source input — then pick
-  the strongest and record it as the reference-fidelity direction the contract implements against.
-  Generated drafts are design references (like a Figma export), never shipped page assets, and the
-  `omd ref distance` kinship gate on the shipped build remains the anti-laundering backstop, so seed
-  from 2-3 references synthesized, never one reference's pixels. Store drafts under
-  `.omd/.cache/imagegen/` and record the paths and the pick with `omd decision`. A quiet register or
-  a host with no image capability skips this and records why, falling back to the reference board and
-  the CSS/SVG graphics recipes.
+  the composition is the deliverable, specify 2–3 independent art-directed concept-draft directions
+  from the committed palette/type/material, sanitized measured principles, and skin-abstracted
+  blueprints. The host/coordinator owns concurrent clean-room draft generation, cache
+  management, blind selection, and provenance/decision recording; the composer supplies art
+  direction and consumes only lineage-attested results. The composer does not generate images,
+  inspect source screenshots, manage a draft cache, select a draft, or record a decision. It
+  may consume a host/coordinator-produced clean-room draft reference solely as art-direction
+  input when its lineage explicitly identifies only those sanitized inputs and confirms no
+  source screenshot, URL, pixels, or visual likeness entered the draft. Drafts are design
+  references, never shipped page assets; `omd ref distance` still gates the
+  shipped build. A quiet register or unavailable host image capability uses the reference board and
+  CSS/SVG graphics recipes instead.
 
   Record SHA-256 fingerprints for `.omd/frame.md`, `.omd/copy-deck.md`,
   `.omd/type-proof.md`, and `.omd/scout.md` when present. If scout.md is absent, record the

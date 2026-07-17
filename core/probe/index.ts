@@ -15,7 +15,20 @@ export interface ProbePlan {
   steps: Step[];
 }
 export interface ProbeWarning { id: 'PROBE-TAB-DISORDER' | 'PROBE-DEAD-CONTROL'; severity: 'warn'; message: string }
-export interface ProbeResult { name: string; target: string; steps: Array<{ action: string; ok: boolean; expectations: boolean[] }>; warnings: ProbeWarning[]; tabOrder?: string[] }
+export interface ProbeResult {
+  name: string;
+  target: string;
+  viewport: { width: number; height: number };
+  steps: Array<{
+    action: 'click' | 'fill' | 'press';
+    selector?: string;
+    key?: string;
+    ok: boolean;
+    expectations: Array<{ type: Expectation['type']; selector?: string; name?: string; value?: string; ok: boolean }>;
+  }>;
+  warnings: ProbeWarning[];
+  tabOrder?: string[];
+}
 
 const PRESS_KEYS = new Set([
   'Tab', 'Shift+Tab', 'Enter', 'Space', 'Escape',
@@ -121,7 +134,7 @@ export async function runProbe(target: string, plan: ProbePlan, viewport = { wid
   try {
     const page = await browser.newPage({ viewport });
     await page.goto(url, { waitUntil: 'networkidle' });
-    const result: ProbeResult = { name: validated.name, target: url, steps: [], warnings: [] };
+    const result: ProbeResult = { name: validated.name, target: url, viewport: { ...viewport }, steps: [], warnings: [] };
 
     if (validated.expectedTabOrder) {
       const actual: string[] = [];
@@ -151,10 +164,12 @@ export async function runProbe(target: string, plan: ProbePlan, viewport = { wid
         else if (step.selector) await page.locator(step.selector).press(step.key!);
         else await page.keyboard.press(step.key!);
       } catch { actionOk = false; }
-      const expectations: boolean[] = [];
-      for (const exp of step.expect ?? []) expectations.push(await checkExpectation(page, exp));
-      result.steps.push({ action: step.action, ok: actionOk, expectations });
-      if (step.expect?.length && (!actionOk || expectations.some((ok) => !ok))) {
+      const expectations: ProbeResult['steps'][number]['expectations'] = [];
+      for (const exp of step.expect ?? []) {
+        expectations.push({ ...exp, ok: await checkExpectation(page, exp) });
+      }
+      result.steps.push({ action: step.action, ...(step.selector ? { selector: step.selector } : {}), ...(step.key ? { key: step.key } : {}), ok: actionOk, expectations });
+      if (step.expect?.length && (!actionOk || expectations.some((expectation) => !expectation.ok))) {
         result.warnings.push({ id: 'PROBE-DEAD-CONTROL', severity: 'warn', message: `${step.action} failed a declared expectation` });
       }
     }

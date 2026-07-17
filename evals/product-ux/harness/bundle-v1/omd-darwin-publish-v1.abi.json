@@ -1,0 +1,33 @@
+{
+  "schemaVersion": "omd-darwin-publish-v1",
+  "platform": "darwin",
+  "binary": "scripts/benchmark/native/omd-darwin-publish-v1.c",
+  "commands": {
+    "publish-file-exclusive": {
+      "argv": ["<binary>", "publish-file-exclusive", "<source-basename>", "<destination-basename>"],
+      "sourceType": "regular-file",
+      "sourceNlink": 1,
+      "postconditions": ["destination is the source inode", "destination is a regular file with nlink 1", "destination bytes equal inherited source FD bytes"]
+    },
+    "publish-directory-exclusive": {
+      "argv": ["<binary>", "publish-directory-exclusive", "<source-basename>", "<destination-basename>"],
+      "sourceType": "directory",
+      "postconditions": ["destination is the source inode", "destination is a directory", "caller verifies deterministic tree root before and after publication"]
+    }
+  },
+  "fileDescriptors": {
+    "3": "inherited read-only parent directory FD; source and destination names are resolved relative to it",
+    "4": "inherited read-only source FD; fstat must equal fstatat(parent, source, AT_SYMLINK_NOFOLLOW)"
+  },
+  "argumentRules": ["source and destination are nonempty basenames", "source and destination are not . or ..", "source and destination contain no slash"],
+  "invariants": ["all source and destination lookups are no-follow", "destination must be absent before publication", "publication uses renameatx_np with RENAME_EXCL", "there is no rename, renameat, link, copy, or replacement fallback", "source identity is checked before publication", "file content identity is checked after publication", "directory tree identity is supplied and checked by the caller", "parent directory is fsynced by the caller after success"],
+  "exits": {
+    "0": "success",
+    "64": "USAGE",
+    "65": "SOURCE_INVALID",
+    "66": "DESTINATION_EXISTS",
+    "67": "EXCLUSIVE_RENAME_UNSUPPORTED",
+    "68": "RENAME_FAILED",
+    "69": "POSTCHECK_FAILED"
+  }
+}

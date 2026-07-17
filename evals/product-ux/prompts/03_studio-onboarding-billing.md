@@ -1,4 +1,4 @@
-# Scenario 03 — 사진 스튜디오 예약 관리: 온보딩 + 설정/결제 (held-out)
+# Scenario 03 — 사진 스튜디오 예약 관리: 온보딩 + 설정/결제 (public regression fixture)
 
 1인 사진 스튜디오 예약 관리 서비스의 신규 가입 온보딩과 설정 화면을 만들어줘. 신규 사용자는
 가입 직후: 스튜디오 이름/주소 입력 → 촬영 상품 1개 이상 등록(이름·소요시간·가격) → 예약
@@ -22,6 +22,6 @@
   그룹, 저장 피드백, 파괴적 행동 격리)을 따라야 한다.
 - 신규 사용자(온보딩)와 재방문 사용자(설정)의 경험이 달라야 한다.
 
-## Held-out discipline
+## Public regression fixture
 
-This scenario stays sealed during harness development. See ../heldout.md.
+This repository-visible scenario is a versioned public regression fixture. See ../heldout.md.

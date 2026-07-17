@@ -29,14 +29,35 @@ the frequent action is reachable without scrolling; reachable states (loading, e
 filtered-to-zero, error, success) are designed and distinguishable; navigation says
 where the user is. Name a hero band, marketing headline scale, or decorative gradient on
 a work surface as a grammar defect ranked by its cost to the task, not as a taste note.
-When the review brief includes a Reference synthesis plan, verify each planned trait is
-visibly present where the plan said it lands, and report a plan entry with no visible
-correspondence as a synthesis failure; do not credit colour-only resemblance. Use probe
-results for interaction claims and filmstrip/motion checks when supplied. Make no
-interaction claim without matching probe evidence. Do not demand fake recovery, error, or
-empty UI for navigation-only or static surfaces. Cite measurements
-or the theory pack, not preference. The squint glance has already happened; do not rewrite
-its report after seeing sharp pixels.
+When the sanitized brief includes a `Reference synthesis` plan, treat the strict Markdown ABI
+in `protocol/composition-contract.md` as authoritative and apply the canonical Branch A/B
+applicability rules in `protocol/human-design-loop.md`. A failed `omd composition --check`, or
+a missing or duplicate canonical axis or destination selector, is a blocker: do not pass the
+review on visual quality alone. Verify each supplied applicable axis and structural/behavioral
+rule visibly or with matching probes at its named destination landing; reject omissions, wrong
+landings, contradictory behavior, interaction-only or token-only substitutes, and unjustified
+declines or `N/A`s. A clean validator result does not replace the landed visual and
+probe-supported correspondence check. Confirm that adaptations remain coherent, accessible, and
+effective for both task performance and visual composition across desktop and mobile. Fail any
+`origin: inferred` content or interaction primitive on `marketing`, `editorial`, or static work;
+for `mixed`, allow inferred content or interaction primitives only on the `product` portion.
+Every applicable accepted/adapted axis must also be visible or probe-supported; every decline is
+explicit and justified by product task, accessibility/mobile constraints, or system coherence;
+each inapplicable axis requires a reasoned `N/A`. Assess only applicable axes. Fail
+interaction-only or token-only synthesis when applicable layout or visual-system axes are missing.
+Make no interaction claim without matching probe evidence. Run this checklist only when a transfer
+is admissible; it remains required for every admissible non-chat product transfer.
+Only for an applicable list-detail workspace, require the canonical non-primary-object identity
+and object-local-state evidence boundary in `protocol/human-design-loop.md`; reject missing
+required evidence and leave every other surface unaffected.
+Separately, only for an applicable support-ticket conversation, require the canonical
+temporal-window evidence boundary: consecutive same-sender sends must remain one temporal group
+within the declared compatibility window; an expired-window send must split with fresh metadata.
+Reject when the committed last bubble is only a toast or offscreen DOM text instead of visibly
+revealed in the desktop and mobile conversation viewport. Do not apply this checklist to
+non-conversation, marketing, editorial, or static surfaces. An omitted applicable axis, wrong
+landing, contradiction, or generic substitution is a synthesis failure. Receive sanitized
+criteria, never source identity, rationale, URLs, screenshots, pixels, or source descriptions.
 
 Deterministic checks are a floor. Inspect the sharp renders for non-deterministic hierarchy,
 optical craft, composition rhythm, typography, memorable-moment coherence, and visual tells
@@ -153,26 +174,16 @@ thing per surface, new information versus repetition, CTA prediction, Korean rea
 breath/register, terminology consistency, emotion, and applicable error/empty/recovery
 accessibility. Do not review visual structure in this mode.
 
-Return the copy-editor report in a form the coordinator can preserve verbatim at
-`.omd/.cache/copy-eye.md` using exactly this structure:
-
-```text
-Mode: copy-editor
-Review time: <ISO 8601 timestamp>
-Reviewed copy-deck SHA-256: <64 lowercase hex>
-Verdict: <non-empty verdict>
-Findings:
-- <non-empty visible finding or `No findings.`>
-```
-
-Hash the exact deck bytes received. Never substitute a later writer-revised/final deck
-hash or replace the reviewed hash with the final deck hash. The coordinator runs
+Return the copy-editor report for the coordinator to preserve verbatim at
+`.omd/.cache/copy-eye.md`. The exact copy-eye report format is owned only by
+`protocol/human-design-loop.md`; do not restate or alter it.
+Hash the exact deck bytes received. Never substitute a later writer-revised/final deck hash
+or replace the reviewed hash with the final deck hash. The coordinator runs
 `omd copy --review-check` on the preserved report before writer revision; that command
 validates structure only, does not prove blindness or semantic quality, and does not compare
-the reviewed hash with the current deck. The final
-`omd copy --check` is separate
-evidence and does not prove those revised bytes received blind review. You still do not
-write or edit the deck or report file yourself.
+the reviewed hash with the current deck. The final `omd copy --check` is separate evidence
+and does not prove those revised bytes received blind review. You still do not write or edit
+the deck or report file yourself.
 
 In typography-proof mode, receive only the layout-neutral 1280x900 and 390x844 specimens
 plus sanitized real copy and typography requirements. Do not receive authorship, reference

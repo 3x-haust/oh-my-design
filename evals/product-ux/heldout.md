@@ -1,11 +1,13 @@
-# Held-out protocol — product-ux
+# Public regression fixture protocol — product-ux
 
-Use Scenario 01 as the development task. Keep Scenarios 02 and 03 sealed as held-out
-tasks: never tune prompts, rules, recipes, or theory against their observed outputs.
-A release evaluation runs all three once with fresh generation and fresh blind-review
-contexts. A held-out scenario may move into development only when a new generic
-product-surface task replaces it and the replacement is frozen before results are
-observed.
+Scenario 01 is the development task. The repository-visible Scenarios 02 and 03 are public
+regression fixtures: they may be read, run, and updated as ordinary versioned fixtures, and
+must not be described as sealed or unseen held-outs.
+
+True held-outs, when used, live outside implementer context. Identify them only with opaque
+IDs or content hashes; keep their prompts, generated outputs, and scorer feedback sealed from
+implementers. If no such external held-out run exists, report that absence explicitly rather
+than claiming repository-visible fixtures are held out.
 
 Score with graders/blind-rubric.md at `1280x900` and `390x844`, walking the scenario's
 Core user tasks in a real browser (probe plans or manual interaction), never from a
