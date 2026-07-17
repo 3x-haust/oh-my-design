@@ -1,0 +1,684 @@
+/* ============================================================
+   Layout / section styles. Structure is Candidate A
+   (.omd/.cache/sketch-selection.md winner) rebuilt with production
+   tokens — not the sketch's grayscale values. See .omd/attribution.md.
+   ============================================================ */
+
+/* Default CJK line-breaking allows a split inside any 어절 (word unit);
+   keep-all restricts breaks to spaces, matching how Korean is actually
+   read. Applied page-wide rather than per-selector since every ch-based
+   measure below (13ch, 68ch, ...) was sized for Latin text. */
+html:lang(ko) {
+  word-break: keep-all;
+}
+
+.site-nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  height: 56px;
+  padding: 0 var(--space-6);
+  background: color-mix(in srgb, var(--color-bg) 92%, transparent);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--color-rule);
+}
+.nav-word {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+.nav-links {
+  display: flex;
+  gap: var(--space-6);
+  margin-right: auto;
+}
+.nav-links a {
+  font-size: var(--text-sm);
+  text-decoration: none;
+  color: var(--color-ink-muted);
+}
+.nav-links a:hover {
+  color: var(--color-ink);
+}
+/* Secondary (outlined), not filled: the hero .cta below is this page's one
+   filled primary action. Repeating a filled black button in the persistent
+   nav — the same weight as the hero and footer CTAs — cancels the hierarchy
+   signal (theory/components.md button-hierarchy ceiling; theory/ux.md). The
+   nav CTA still reaches the same #install target, just demoted a tier. */
+.nav-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  text-decoration: none;
+  padding: 0 var(--space-5);
+  border-radius: var(--radius-md);
+  background: transparent;
+  border: 1px solid var(--color-rule-strong);
+  color: var(--color-ink);
+}
+.nav-cta:hover {
+  border-color: var(--color-ink);
+  background: var(--color-surface);
+}
+.nav-lang {
+  font-size: var(--text-sm);
+  text-decoration: none;
+  color: var(--color-ink-muted);
+  white-space: nowrap;
+}
+.nav-lang:hover {
+  color: var(--color-ink);
+}
+
+main {
+  padding-top: 56px;
+}
+
+/* ---------- 1. hero — lowest density, dominant anchor ---------- */
+.hero {
+  padding-top: var(--space-11);
+  padding-bottom: var(--space-10);
+}
+.hero h1 {
+  /* type-proof.md fixes exact px roles at desktop (64px) and mobile (34px)
+     rather than a fluid scale — this is a measured two-step citation, not an
+     omission of clamp(). See .omd/attribution.md. */
+  font-size: var(--text-display);
+  line-height: var(--lh-display);
+  max-width: 13ch;
+  letter-spacing: -0.01em;
+}
+/* Korean text: `ch` is a Latin digit-width unit, so 13ch reads as roughly
+   half as many full-width Korean characters — far narrower than intended —
+   and default CJK line-breaking allows a split inside any 어절. keep-all
+   restricts breaks to spaces; the widened max-width restores a natural
+   two-line wrap instead of a cramped four-line one. */
+html:lang(ko) .hero h1 {
+  max-width: 11em;
+  word-break: keep-all;
+  letter-spacing: normal;
+}
+.hero-body {
+  margin-top: var(--space-7);
+  max-width: var(--measure-body);
+  font-size: var(--text-base);
+  font-weight: var(--weight-regular);
+  color: var(--color-ink-muted);
+}
+.cta {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  margin-top: var(--space-7);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  text-decoration: none;
+  color: var(--color-paper);
+  background: var(--color-ink);
+  padding: 0 var(--space-6);
+  border-radius: var(--radius-lg);
+}
+.cta:hover {
+  background: var(--color-accent);
+  transform: translateY(-1px);
+}
+.cta code {
+  font-size: var(--text-xs);
+  color: inherit;
+}
+
+/* ---------- 2. loop — Axis A: pinned anchor + vertical stage list ---------- */
+.loop {
+  padding-top: var(--space-10);
+  padding-bottom: var(--space-11);
+  border-top: 1px solid var(--color-rule);
+}
+.loop h2 {
+  font-size: var(--text-xl);
+  line-height: var(--lh-tight);
+  margin-bottom: var(--space-8);
+}
+
+/* The one alignment break on the page: the timeline exceeds the shared
+   text-measure width, up to full viewport width at desktop.
+   composition.md: justified as the one alignment break; theory/layout.md
+   supports a single deliberate break as a focal signal, not a rhythm. */
+.timeline {
+  max-width: none;
+  width: 100vw;
+  position: relative;
+  left: 50%;
+  right: 50%;
+  margin-left: -50vw;
+  margin-right: -50vw;
+  padding: 0 max(var(--space-6), calc((100vw - var(--section-max)) / 2));
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: var(--space-9);
+  align-items: start;
+}
+
+.anchor-track {
+  position: sticky;
+  top: 96px;
+  align-self: start;
+}
+.anchor {
+  border: 1px solid var(--color-ink);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+  background: var(--color-surface);
+}
+.anchor-num {
+  font-family: var(--font-mono);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-medium);
+  color: var(--color-accent);
+}
+.anchor-label {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+  margin-top: var(--space-1);
+}
+.anchor-state {
+  display: inline-block;
+  margin-top: var(--space-4);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border: 1px solid var(--color-accent);
+  color: var(--color-accent);
+  border-radius: var(--radius-pill);
+  padding: 3px 10px;
+}
+.anchor-connector {
+  margin-top: var(--space-5);
+  height: 2px;
+  background: repeating-linear-gradient(to right, var(--color-rule-strong) 0 6px, transparent 6px 12px);
+}
+.anchor-caption {
+  display: block;
+  margin-top: var(--space-4);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  color: var(--color-ink-faint);
+}
+
+.stage-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.stage {
+  display: grid;
+  grid-template-columns: 56px 1fr;
+  gap: var(--space-5);
+  padding: var(--space-8) 0;
+  border-bottom: 1px solid var(--color-rule);
+}
+.stage:first-child {
+  padding-top: 0;
+}
+.stage:last-child {
+  border-bottom: none;
+}
+
+.stage-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+}
+.stage-num {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  color: var(--color-ink-faint);
+}
+.stage-state {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--color-rule-strong);
+  background: var(--color-paper);
+}
+/* domain grammar: pending / current / checked — never simultaneous "checked" */
+.stage[data-state="checked"] .stage-state {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+}
+.stage[data-state="current"] .stage-state {
+  border-color: var(--color-ink);
+  background: var(--color-surface-strong);
+}
+.stage[data-state="checked"] .stage-num,
+.stage[data-state="current"] .stage-num {
+  color: var(--color-ink);
+}
+
+.stage-body h3 {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+  line-height: var(--lh-tight);
+}
+.stage-body p {
+  margin: var(--space-3) 0 0;
+  font-size: var(--text-base);
+  max-width: var(--measure-narrow);
+  color: var(--color-ink-muted);
+}
+.stage-body .chip {
+  display: inline-block;
+  margin-top: var(--space-4);
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-rule);
+  border-radius: var(--radius-sm);
+}
+
+/* mobile-only inline anchor restatement — hidden at desktop, since the sticky
+   column already communicates the current stage there. Required production
+   fix from the blind selection: attached inline to the current stage item,
+   never floating above/before the list. */
+.anchor-inline {
+  display: none;
+}
+
+/* ---------- 3. evidence table — highest density, deliberately ---------- */
+.evidence {
+  padding-top: var(--space-10);
+  padding-bottom: var(--space-11);
+  border-top: 1px solid var(--color-rule);
+}
+.evidence h2 {
+  font-size: var(--text-xl);
+  line-height: var(--lh-tight);
+  margin-bottom: var(--space-7);
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+th,
+td {
+  text-align: left;
+  vertical-align: top;
+  padding: var(--space-4) var(--space-5) var(--space-4) 0;
+  border-bottom: 1px solid var(--color-rule);
+}
+th {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-ink-faint);
+}
+td:first-child {
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+}
+td code {
+  font-size: var(--text-xs);
+}
+
+/* ---------- 4. skills ---------- */
+.skills {
+  padding-top: var(--space-10);
+  padding-bottom: var(--space-11);
+  border-top: 1px solid var(--color-rule);
+}
+.skills h2 {
+  font-size: var(--text-xl);
+  line-height: var(--lh-tight);
+  margin-bottom: var(--space-7);
+}
+.skill-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.skill-list li {
+  padding: var(--space-5) 0;
+  border-bottom: 1px solid var(--color-rule);
+  font-size: var(--text-base);
+  max-width: 68ch;
+}
+.skill-list li:last-child {
+  border-bottom: none;
+}
+
+/* ---------- 5. install / quick start ---------- */
+.install {
+  padding-top: var(--space-10);
+  padding-bottom: var(--space-11);
+  border-top: 1px solid var(--color-rule);
+}
+.install h2 {
+  font-size: var(--text-xl);
+  line-height: var(--lh-tight);
+}
+.install > p {
+  margin-top: var(--space-5);
+  font-size: var(--text-base);
+  max-width: var(--measure-body);
+  color: var(--color-ink-muted);
+}
+.code-block-wrap {
+  position: relative;
+  margin: var(--space-6) 0;
+}
+.code-block {
+  margin: 0;
+  padding: var(--space-6);
+  background: var(--color-mono-panel);
+  color: var(--color-mono-ink);
+  border-radius: var(--radius-xl);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: var(--lh-mono-block);
+  overflow-x: auto;
+  font-variant-numeric: tabular-nums;
+}
+.code-copy {
+  position: absolute;
+  top: var(--space-4);
+  right: var(--space-4);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  font-family: var(--font-sans);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-medium);
+  /* Solid, opaque background + solid foreground — not a translucent overlay
+     relying on the dark .code-block showing through. The button is a DOM
+     sibling of .code-block (absolutely positioned over it), so any contrast
+     check that resolves background against the actual ancestor chain (not
+     the visual stacking) sees the light page background, not the dark
+     panel — a translucent bg there reads as near-invisible text on paper.
+     Solid colors make the button's contrast correct regardless of DOM
+     position. */
+  color: var(--color-mono-ink);
+  background: var(--color-mono-panel-raised);
+  border: 1px solid rgba(238, 242, 238, 0.24);
+  border-radius: var(--radius-md);
+  padding: 0 var(--space-3);
+  cursor: pointer;
+}
+.code-copy:hover {
+  color: var(--color-mono-panel);
+  background: var(--color-accent-bright);
+  border-color: var(--color-accent-bright);
+}
+.copy-status:empty {
+  margin: 0;
+}
+.copy-status {
+  margin-top: var(--space-3);
+  font-size: var(--text-2xs);
+  color: var(--color-accent);
+  min-height: 1em;
+}
+.copy-error {
+  margin-top: var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--color-ink);
+  background: var(--color-surface);
+  border: 1px solid var(--color-rule-strong);
+  border-radius: var(--radius-md);
+  padding: var(--space-4) var(--space-5);
+  max-width: var(--measure-body);
+}
+.fine {
+  font-size: var(--text-2xs);
+  color: var(--color-ink-faint);
+  max-width: var(--measure-body);
+}
+
+/* ---------- 6. footer ---------- */
+.site-footer {
+  padding-top: var(--space-10);
+  padding-bottom: var(--space-11);
+  border-top: 1px solid var(--color-rule);
+}
+.site-footer h2 {
+  font-size: var(--text-xl);
+  line-height: var(--lh-tight);
+}
+.site-footer > p {
+  margin-top: var(--space-5);
+  font-size: var(--text-base);
+  color: var(--color-ink-muted);
+}
+.footer-actions {
+  margin-top: var(--space-7);
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  flex-wrap: wrap;
+}
+/* The hero .cta is this page's one filled primary action (theory/components.md
+   button-hierarchy ceiling). The footer repeats the identical install command
+   as a closing nudge, not a second task — demoted to outline so it reads as
+   "still here if you need it" rather than competing with the hero's filled
+   button for primacy. Fixes UX-TWO-PRIMARIES. */
+.site-footer .cta {
+  background: transparent;
+  border: 1px solid var(--color-ink);
+  color: var(--color-ink);
+}
+.site-footer .cta:hover {
+  background: var(--color-ink);
+  color: var(--color-paper);
+}
+/* .footer-links is a plain (non-flex) span so the two anchors inside stay true
+   inline text links (computed display: inline), not flex items — .footer-actions
+   being display:flex would otherwise blockify any direct child regardless of its
+   own authored display value. WCAG 2.5.5/2.5.8 exempt inline text links from the
+   44x44 target-size minimum (words in a line, not controls); hit-area.yaml encodes
+   the same exception via `!node.inline`. Keeping these two as inline footnote
+   links — rather than 44px flex-item buttons — also keeps the hero .cta as this
+   page's one filled primary action (theory/ux.md UX-TWO-PRIMARIES): two same-fill,
+   same-parent 44px links previously collided with it. */
+.footer-links a {
+  font-size: var(--text-sm);
+  text-decoration: underline;
+  color: var(--color-ink-muted);
+  margin-right: var(--space-6);
+}
+.footer-links a:last-child {
+  margin-right: 0;
+}
+.footer-links a:hover {
+  color: var(--color-ink);
+}
+
+/* ---------- stagger delay ladders (per motion-spec.md scene) ---------- */
+@media (prefers-reduced-motion: no-preference) {
+  .hero.stagger > *:nth-child(1) {
+    transition-delay: 0ms;
+  }
+  .hero.stagger > *:nth-child(2) {
+    transition-delay: calc(var(--stagger-hero) * 1);
+  }
+  .hero.stagger > *:nth-child(3) {
+    transition-delay: calc(var(--stagger-hero) * 2);
+  }
+
+  .stagger--list > *:nth-child(1) {
+    transition-delay: 0ms;
+  }
+  /* explicit per-index delays: CSS cannot read nth-child index into a
+     variable, so the list length (6 skills, capped at the recipe's 8-10
+     item ceiling) is spelled out directly. */
+  .stagger--list > *:nth-child(2) {
+    transition-delay: calc(var(--stagger-list) * 1);
+  }
+  .stagger--list > *:nth-child(3) {
+    transition-delay: calc(var(--stagger-list) * 2);
+  }
+  .stagger--list > *:nth-child(4) {
+    transition-delay: calc(var(--stagger-list) * 3);
+  }
+  .stagger--list > *:nth-child(5) {
+    transition-delay: calc(var(--stagger-list) * 4);
+  }
+  .stagger--list > *:nth-child(6) {
+    transition-delay: calc(var(--stagger-list) * 5);
+  }
+
+  .stagger--table > *:nth-child(1) {
+    transition-delay: 0ms;
+  }
+  .stagger--table > *:nth-child(2) {
+    transition-delay: calc(var(--stagger-table) * 1);
+  }
+  .stagger--table > *:nth-child(3) {
+    transition-delay: calc(var(--stagger-table) * 2);
+  }
+  .stagger--table > *:nth-child(4) {
+    transition-delay: calc(var(--stagger-table) * 3);
+  }
+  .stagger--table > *:nth-child(5) {
+    transition-delay: calc(var(--stagger-table) * 4);
+  }
+  .stagger--table > *:nth-child(6) {
+    transition-delay: calc(var(--stagger-table) * 5);
+  }
+  .stagger--table > *:nth-child(7) {
+    transition-delay: calc(var(--stagger-table) * 6);
+  }
+  .stagger--table > *:nth-child(8) {
+    transition-delay: calc(var(--stagger-table) * 7);
+  }
+  .stagger--table > *:nth-child(9) {
+    transition-delay: calc(var(--stagger-table) * 8);
+  }
+  .stagger--table > *:nth-child(10) {
+    transition-delay: calc(var(--stagger-table) * 9);
+  }
+}
+
+/* ============================================================
+   Responsive recomposition — composition.md: sidebar/pinned-column
+   patterns disappear below 900px; mobile fallback is designed, not
+   just the desktop layout collapsing.
+   ============================================================ */
+@media (max-width: 900px) {
+  .timeline {
+    width: auto;
+    left: auto;
+    right: auto;
+    margin: 0;
+    padding: 0;
+    grid-template-columns: 1fr;
+    gap: var(--space-7);
+  }
+  /* the required production fix: no global floating anchor on mobile */
+  .anchor-track {
+    display: none;
+  }
+  .anchor-inline {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-3);
+    margin-top: var(--space-4);
+  }
+  .anchor-inline-badge {
+    font-family: var(--font-mono);
+    font-size: var(--text-2xs);
+    font-weight: var(--weight-medium);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-accent);
+    border: 1px solid var(--color-accent);
+    border-radius: var(--radius-pill);
+    padding: 3px 10px;
+  }
+  .anchor-inline-caption {
+    font-size: var(--text-2xs);
+    color: var(--color-ink-faint);
+  }
+}
+
+@media (max-width: 768px) {
+  .hero {
+    padding-top: var(--space-11);
+  }
+  .hero h1 {
+    font-size: var(--text-display-mobile);
+    max-width: 15ch;
+  }
+  html:lang(ko) .hero h1 {
+    max-width: 11em;
+  }
+  .nav-links {
+    display: none;
+  }
+  .stage {
+    grid-template-columns: 40px 1fr;
+    padding: var(--space-7) 0;
+  }
+
+  /* evidence table recomposes to stacked per-stage blocks */
+  table,
+  thead,
+  tbody,
+  th,
+  td,
+  tr {
+    display: block;
+  }
+  thead {
+    display: none;
+  }
+  tr {
+    padding: var(--space-5) 0;
+    border-bottom: 1px solid var(--color-rule);
+  }
+  td {
+    padding: var(--space-1) 0;
+    border-bottom: none;
+  }
+  td:first-child {
+    font-weight: var(--weight-semibold);
+  }
+  td:nth-child(2)::before {
+    content: "Artifact — ";
+    color: var(--color-ink-faint);
+    font-size: var(--text-2xs);
+  }
+  td:nth-child(3)::before {
+    content: "Boundary — ";
+    color: var(--color-ink-faint);
+    font-size: var(--text-2xs);
+  }
+  html:lang(ko) td:nth-child(2)::before {
+    content: "산출물 — ";
+  }
+  html:lang(ko) td:nth-child(3)::before {
+    content: "경계 — ";
+  }
+
+  .footer-actions {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-5);
+  }
+}
