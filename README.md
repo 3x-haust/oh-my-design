@@ -33,7 +33,18 @@ OMD runs inside **Codex** and **Claude Code**. It ships six user-facing skills, 
 
 ## Install
 
-> **Not on npm.** The `oh-my-design` name on npmjs.com belongs to an unrelated project (`O-Pencil/skills`). Do not `npm install -g oh-my-design` — install from this repository instead.
+### npm — global CLI (recommended)
+
+```bash
+npm install -g @3xhaust/oh-my-design
+oh-my-design install    # copy skills + agents into every detected host and patch its config
+oh-my-design doctor     # verify the host install
+omd doctor              # verify the runtime, Chromium, project write access, and the theory pack
+```
+
+`oh-my-design install --host claude|codex` scopes install, doctor, and uninstall to one host. `uninstall` reverses exactly what `install` did and never touches your `.omd/` directory.
+
+> Install the **scoped** package `@3xhaust/oh-my-design`. The unscoped `oh-my-design` on npm is an unrelated project.
 
 ### Claude Code — plugin marketplace
 
@@ -44,29 +55,15 @@ OMD runs inside **Codex** and **Claude Code**. It ships six user-facing skills, 
 
 Then open a session and run `/ultradesign`.
 
-### From source — Claude Code and Codex (regression-tested)
+### From source (contributors)
 
 ```bash
 git clone https://github.com/3x-haust/oh-my-design
 cd oh-my-design
 npm install
-
-node bin/omd-install.ts install    # copy skills + agents into every detected host and patch its config
-node bin/omd-install.ts doctor     # verify the host install
-node bin/omd.ts doctor             # verify the runtime, Chromium, project write access, and the theory pack
+node bin/omd-install.ts install    # copy skills + agents into detected hosts
+node bin/omd.ts doctor
 ```
-
-Run `npm link` if you want the short `omd` and `oh-my-design` commands on your PATH; otherwise call them as `node bin/omd.ts …` and `node bin/omd-install.ts …`.
-
-Scope any command to a single host with `--host claude` or `--host codex`:
-
-```bash
-node bin/omd-install.ts install --host codex
-node bin/omd-install.ts doctor --host codex
-node bin/omd-install.ts uninstall --host codex
-```
-
-`uninstall` reverses exactly what `install` did and never touches your `.omd/` directory.
 
 ### Chromium
 
