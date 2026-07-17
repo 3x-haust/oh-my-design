@@ -107,7 +107,52 @@ test('composition is fresh, isolated, and shared before structural divergence', 
   assert.match(composer, /raw screenshots[\s\S]*URLs[\s\S]*candidate renders/i);
   assert.match(sketch, /approved typography and\s+composition contracts[\s\S]*one axis assigned/i);
   assert.match(eye, /task\/CTA clarity[\s\S]*accessibility\/implementation cost/i);
-  assert.match(hand, /Frame, copy-deck, type-proof, or scout-summary changes[\s\S]*invalidate/i);
+  assert.match(hand, /Frame, copy-deck, type-proof,[\s\S]*changes invalidate/i);
+});
+test('reference synthesis ABI has one owner and roles route sanitized multi-axis records', () => {
+  const composition = read('core/protocol/composition-contract.md');
+  const loop = read('core/protocol/human-design-loop.md');
+  const skill = read('src/skills/omd-ultradesign/SKILL.md');
+  const scout = read('src/agents/scout.agent.yaml');
+  const composer = read('src/agents/composer.agent.yaml');
+  const eye = read('src/agents/eye.agent.yaml');
+
+  assert.match(composition, /^## Reference synthesis$/m);
+  assert.match(composition, /structurally\s+validated[\s\S]*closed\s+Markdown\s+ABI/i);
+  assert.match(composition, /Use every axis exactly once[\s\S]*Disposition is\s+exactly/i);
+  for (const source of [scout, composer, eye, skill]) {
+    assert.match(source, /protocol\/composition-contract\.md/);
+  }
+  assert.match(scout, /Never pass raw URLs, screenshots, pixels/i);
+  assert.match(composer, /raw screenshots[\s\S]*pixels[\s\S]*reference URLs/i);
+  assert.match(eye, /never source identity, rationale, URLs, screenshots, pixels, or source descriptions/i);
+  assert.match(skill, /raw URLs, screenshots, pixels/i);
+  assert.match(scout, /emit one sanitized[\s\S]*strict `## Reference synthesis`[\s\S]*exact axis keys[\s\S]*dispositions[\s\S]*reasons/i);
+  assert.match(scout, /do not rename, omit, duplicate, or locally redefine/i);
+  assert.match(composer, /Serialize[\s\S]*strict `## Reference synthesis` Markdown ABI[\s\S]*do not define, reinterpret, or supplement a parallel schema/i);
+  assert.match(composer, /without omissions or duplicates/i);
+  assert.match(eye, /failed `omd composition --check`[\s\S]*missing or duplicate canonical axis or destination selector[\s\S]*blocker/i);
+  assert.match(eye, /clean validator result does not replace[\s\S]*visual and[\s\S]*probe-supported correspondence/i);
+  assert.match(skill, /composition protocol alone[\s\S]*strict `## Reference synthesis` Markdown ABI[\s\S]*no duplicate schema, heading, axis, or selector/i);
+  assert.match(loop, /list→detail workspace[\s\S]*non-default, non-first object[\s\S]*object-local state/i);
+  assert.match(loop, /declared temporal compatibility window[\s\S]*within that window[\s\S]*expired-window reply/i);
+});
+test('roles preserve clean-room draft lineage without granting composer unavailable image duties', () => {
+  const scout = read('src/agents/scout.agent.yaml');
+  const composer = read('src/agents/composer.agent.yaml');
+  const eye = read('src/agents/eye.agent.yaml');
+
+  const normalizedScout = scout.replace(/\s+/g, ' ');
+  const normalizedComposer = composer.replace(/\s+/g, ' ');
+  const normalizedEye = eye.replace(/\s+/g, ' ');
+
+  assert.match(normalizedScout, /source screenshot remains scout-local: never pass it, its URL, pixels, or a source-derived render downstream/i);
+  assert.match(normalizedScout, /only sanitized measured principles and a skin-abstracted blueprint\. Make the draft lineage explicit/i);
+  assert.match(normalizedComposer, /does not generate images, inspect source screenshots, manage a draft cache, select a draft, or record a decision\./i);
+  assert.match(normalizedComposer, /host\/coordinator-produced clean-room draft reference solely as art-direction input when its lineage explicitly identifies only those sanitized inputs and confirms no source screenshot, URL, pixels, or visual likeness entered the draft/i);
+  assert.doesNotMatch(normalizedComposer, /omd ref add .+--shot|\.omd\/\.cache\/imagegen|record the paths and the pick/i);
+  assert.match(normalizedEye, /protocol\/composition-contract\.md.*authoritative/i);
+  assert.match(normalizedEye, /both task performance and visual composition across desktop and mobile/i);
 });
 
 test('focal hierarchy, carrier, four-proof sketches, and selector floor share one contract', () => {
@@ -156,31 +201,67 @@ test('focal hierarchy, carrier, four-proof sketches, and selector floor share on
   assert.match(eye, /concept-specific-form credit only[\s\S]*functional\s+relationship/i);
 });
 
-test('copy-eye evidence and final source seal preserve byte provenance without fidelity claims', () => {
+test('copy-eye provenance has one canonical format owner and role pointers', () => {
   const loop = read('core/protocol/human-design-loop.md');
   const skill = read('src/skills/omd-ultradesign/SKILL.md');
   const eye = read('src/agents/eye.agent.yaml');
   const hand = read('src/agents/hand.agent.yaml');
-  for (const source of [loop, skill, eye]) {
+  const roles = [skill, eye];
+  const exactFormat = /Mode: copy-editor[\s\S]*Review time: <ISO 8601 timestamp>[\s\S]*Reviewed copy-deck SHA-256: <64 lowercase hex>[\s\S]*Verdict: <non-empty verdict>[\s\S]*Findings:/;
+
+  assert.match(loop, /exclusively owns the exact copy-eye report format/i);
+  assert.match(loop, exactFormat);
+  assert.equal([loop, ...roles].filter((source) => exactFormat.test(source)).length, 1);
+
+  for (const source of roles) {
+    assert.match(source, /(?:protocol\/human-design-loop\.md[\s\S]*exact copy-eye report format|exact copy-eye report format[\s\S]*protocol\/human-design-loop\.md)/i);
+    assert.doesNotMatch(source, exactFormat);
     assert.match(source, /\.omd\/\.cache\/copy-eye\.md/);
-    assert.match(source, /Mode: copy-editor/);
-    assert.match(source, /Review time: <ISO 8601 timestamp>/);
-    assert.match(source, /Reviewed copy-deck SHA-256: <64 lowercase hex>/);
-    assert.match(source, /Verdict: <non-empty verdict>[\s\S]*Findings:/);
     assert.match(source, /omd copy --review-check/);
-    assert.match(source, /structure only[\s\S]*(?:does not\s+prove|neither proves)[\s\S]*blindness/i);
-    assert.match(source, /(?:does not|must not|nor) (?:requires?|compare)[\s\S]*reviewed hash[\s\S]*current\s+deck/i);
-    assert.match(source, /final\s+`?omd copy --check`?[\s\S]*(?:separate\s+evidence|does not prove)/i);
+    assert.match(source, /structure only[\s\S]*does not\s+prove[\s\S]*blindness/i);
+    assert.match(source, /(?:does not|must not) compare[\s\S]*reviewed hash[\s\S]*current\s+deck/i);
+    assert.match(source, /final\s+`?omd copy --check`?[\s\S]*separate evidence/i);
     assert.match(source, /never\s+(?:replace|overwrite|substitute)[\s\S]*(?:final\s+deck hash|later writer-revised\/final deck hash)/i);
   }
-  for (const source of [loop, skill]) {
-    assert.match(source, /preserv[\s\S]*omd copy --review-check[\s\S]*writer revision/i);
-  }
+
+  assert.match(loop, /preserv[\s\S]*omd copy --review-check[\s\S]*writer revision/i);
+  assert.match(skill, /preserv[\s\S]*omd copy --review-check[\s\S]*writer revision/i);
   for (const source of [loop, skill, hand]) {
     assert.match(source, /omd source --seal[\s\S]*omd source --check/);
-    assert.match(source, /byte-freshness evidence|byte freshness/i);
-    assert.match(source, /(?:does\s+not\s+(?:claim|prove)|never\s+claim\s+it\s+proves) semantic/i);
+    assert.match(source, /byte-freshness\s+evidence|byte freshness/i);
+    assert.match(source, /(?:does\s+not\s+(?:claim|prove)|never\s+claim\s+it\s+proves)\s+semantic/i);
   }
+});
+
+test('UX task coverage schema has one canonical owner and mapping pointers', () => {
+  const loop = read('core/protocol/human-design-loop.md');
+  const composer = read('src/agents/composer.agent.yaml');
+  const skill = read('src/skills/omd-ultradesign/SKILL.md');
+  const roles = [composer, skill];
+  const exactRow = /T# \| production: \/route \| locator: selector \|/;
+
+  assert.match(loop, /exclusively owns the exact `## UX task coverage` schema/i);
+  assert.match(loop, exactRow);
+  assert.equal([loop, ...roles].filter((source) => exactRow.test(source)).length, 1);
+
+  for (const source of roles) {
+    assert.match(source, /protocol\/human-design-loop\.md[\s\S]*do not restate or alter that protocol-owned schema/i);
+    assert.doesNotMatch(source, exactRow);
+  }
+  assert.match(composer, /map every applicable stable `T#` row[\s\S]*`Task coverage matrix`[\s\S]*omd composition --check/i);
+});
+test('image-first ownership keeps generation and selection with the host coordinator', () => {
+  const skill = read('src/skills/omd-ultradesign/SKILL.md');
+  const composer = read('src/agents/composer.agent.yaml');
+
+  for (const source of [skill, composer]) {
+    assert.match(source, /(?:composer\s+)?(?:specifies|supplies|specify)[\s\S]*2(?:–|-| )3[\s\S]*(?:art-directed|art-direction)/i);
+    assert.match(source, /clean-room/i);
+    assert.match(source, /host\/coordinator owns[\s\S]*concurrent[\s\S]*cache[\s\S]*blind selection[\s\S]*provenance\/decision recording/i);
+    assert.match(source, /only lineage-attested[\s\S]*(?:results|draft)|lineage attests/i);
+    assert.match(source, /composer does not generate(?: images| drafts)?[\s\S]*cache[\s\S]*select a draft[\s\S]*record (?:a|that) decision/i);
+  }
+  assert.doesNotMatch(skill, /composer runs the image-first|picks the strongest/i);
 });
 
 test('all-rejected structural selection has one isolated no-winner recovery round', () => {

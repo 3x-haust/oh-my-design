@@ -20,7 +20,7 @@ const REQUIRED_HEADINGS = [
   '## Do not combine with',
 ];
 
-// ── Exactly 8 recipe files ────────────────────────────────────────────────────
+// ── Exactly 11 recipe files: 8 editorial/marketing + 3 product-surface ────────
 const EXPECTED_RECIPES = [
   'typographic-hero.md',
   'asymmetric-diagonal-grid.md',
@@ -30,25 +30,28 @@ const EXPECTED_RECIPES = [
   'bento-grid.md',
   'split-screen-hero.md',
   'sticky-sidebar-scroll.md',
+  'app-shell-workbench.md',
+  'master-detail-flow.md',
+  'form-wizard-stepper.md',
 ];
 
 test('core/composition/ directory exists', () => {
   assert.ok(existsSync(recipesDir), `composition directory not found at ${recipesDir}`);
 });
 
-test('all 8 expected composition recipe files exist', () => {
+test('all 11 expected composition recipe files exist', () => {
   for (const name of EXPECTED_RECIPES) {
     const path = join(recipesDir, name);
     assert.ok(existsSync(path), `missing composition recipe: ${name}`);
   }
 });
 
-test('composition directory contains exactly 8 .md files', () => {
+test('composition directory contains exactly 11 .md files', () => {
   const files = readdirSync(recipesDir).filter((f) => f.endsWith('.md'));
   assert.equal(
     files.length,
-    8,
-    `expected 8 composition recipe files, found ${files.length}: ${files.join(', ')}`
+    11,
+    `expected 11 composition recipe files, found ${files.length}: ${files.join(', ')}`
   );
 });
 

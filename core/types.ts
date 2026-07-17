@@ -278,6 +278,14 @@ export interface Frame {
   uxTask?: string;
   uxFrequentAction?: string;
   uxCostliestError?: string;
+  /**
+   * Surface classification. Set by `omd frame set --surface`. One of `marketing`,
+   * `product`, `editorial`, or `mixed` (free text is accepted; those four are the
+   * documented taxonomy — see theory/ux.md §Surface types). It selects the
+   * composition grammar downstream: a `product` work surface composes as a task
+   * loop over screen regions, never as a marketing message ladder.
+   */
+  uxSurface?: string;
 
   [key: string]: unknown;
 }

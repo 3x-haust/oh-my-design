@@ -2,6 +2,7 @@ import { mkdirSync, writeFileSync, appendFileSync, existsSync, readFileSync } fr
 import { join } from 'node:path';
 import { stringify } from 'yaml';
 import { readFrame } from './index.ts';
+import { normalizeUxSurface, validateTaskCoverageMatrix } from './check-ux.ts';
 import type { Choice } from '../types.ts';
 
 const designDir = (cwd: string): string => join(cwd, '.omd');
@@ -15,10 +16,10 @@ export function writeFrame(cwd: string, frontmatter: Record<string, unknown>, bo
  * Nobody signs this. The `--why` requirement is not a gate on the human — it is a gate on
  * the agent, which will otherwise reframe a brief on a hunch and call the hunch insight.
  *
- * The three UX anchor fields (uxTask, uxFrequentAction, uxCostliestError) are optional
- * here for backward compatibility — old callers that do not supply them produce a frame
- * that FRAME-UX-INCOMPLETE will flag. The framer.agent.yaml is expected to always supply
- * all three after answering the UX interrogation questions from theory/ux.md.
+ * UX fields remain optional for backward compatibility. When a surface or matrix is
+ * supplied, this writer validates it before writing: surfaces are normalized to the four
+ * supported values; product or mixed surfaces require a valid seven-field task coverage
+ * matrix, while marketing and editorial surfaces reject one.
  */
 export function writeFrameRecord(cwd: string, opts: {
   problem: string;
@@ -27,6 +28,8 @@ export function writeFrameRecord(cwd: string, opts: {
   uxTask?: string;
   uxFrequentAction?: string;
   uxCostliestError?: string;
+  uxSurface?: unknown;
+  taskCoverageMatrix?: unknown;
 }): string {
   if (!opts.why || opts.why.trim().length < 10) {
     throw new Error(
@@ -34,16 +37,41 @@ export function writeFrameRecord(cwd: string, opts: {
       + 'ticket, datum, or user sentence it rests on.',
     );
   }
+  const normalizedSurface = opts.uxSurface === undefined ? undefined : normalizeUxSurface(opts.uxSurface);
+  if (opts.uxSurface !== undefined && !normalizedSurface) {
+    throw new Error('uxSurface must be marketing, product, editorial, or mixed.');
+  }
+
+  if (opts.taskCoverageMatrix !== undefined && typeof opts.taskCoverageMatrix !== 'string') {
+    throw new Error('taskCoverageMatrix must be a string.');
+  }
+  const taskCoverageMatrix = opts.taskCoverageMatrix === undefined
+    ? undefined
+    : opts.taskCoverageMatrix.replace(/^## Task coverage matrix[ \t]*$/gm, '').trim();
+  if (taskCoverageMatrix !== undefined) {
+    const matrixErrors = validateTaskCoverageMatrix(taskCoverageMatrix);
+    if (matrixErrors.length > 0) {
+      throw new Error(`Invalid task coverage matrix: ${matrixErrors.join('; ')}`);
+    }
+  }
+  if ((normalizedSurface === 'marketing' || normalizedSurface === 'editorial') && taskCoverageMatrix !== undefined) {
+    throw new Error('Marketing and editorial surfaces must not include a task coverage matrix.');
+  }
+  if ((normalizedSurface === 'product' || normalizedSurface === 'mixed') && taskCoverageMatrix === undefined) {
+    throw new Error('Product and mixed surfaces require a valid task coverage matrix.');
+  }
   const body = [
     '## The given problem', '', opts.problem.trim(), '',
     '## The reframing', '', opts.reframe.trim(), '',
     '## Evidence', '', opts.why.trim(),
+    ...(taskCoverageMatrix ? ['', '', '## Task coverage matrix', '', taskCoverageMatrix] : []),
   ].join('\n');
 
   const frontmatter: Record<string, unknown> = { why: opts.why.trim(), writtenAt: new Date().toISOString() };
   if (opts.uxTask?.trim()) frontmatter['uxTask'] = opts.uxTask.trim();
   if (opts.uxFrequentAction?.trim()) frontmatter['uxFrequentAction'] = opts.uxFrequentAction.trim();
   if (opts.uxCostliestError?.trim()) frontmatter['uxCostliestError'] = opts.uxCostliestError.trim();
+  if (normalizedSurface) frontmatter['uxSurface'] = normalizedSurface;
 
   writeFrame(cwd, frontmatter, body);
   return join(designDir(cwd), 'frame.md');

@@ -1,34 +1,121 @@
 import type { Violation } from '../types.ts';
 import { readFrame } from './index.ts';
 
+export type UxSurface = 'marketing' | 'product' | 'editorial' | 'mixed';
+
+const UX_SURFACES = new Set<UxSurface>(['marketing', 'product', 'editorial', 'mixed']);
+const TASK_COVERAGE_VIEWPORTS = new Set(['desktop', 'mobile']);
+const TASK_COVERAGE_REQUIREMENTS = new Set(['invalid-submit', 'transient']);
+const TASK_COVERAGE_FIELDS = ['goal', 'start', 'actions', 'success', 'recovery', 'viewports', 'requirements'] as const;
+const TASK_COVERAGE_MATRIX_HEADING = /^## Task coverage matrix[ \t]*$/gm;
+
+/** Return the normalized supported UX surface, or null for a missing or invalid value. */
+export function normalizeUxSurface(value: unknown): UxSurface | null {
+  if (typeof value !== 'string') return null;
+
+  const surface = value.trim().toLowerCase();
+  return UX_SURFACES.has(surface as UxSurface) ? surface as UxSurface : null;
+}
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+function validateUniqueCsvSubset(
+  id: string,
+  field: 'viewports' | 'requirements',
+  value: string,
+  allowed: ReadonlySet<string>,
+  allowsNone: boolean,
+): string | null {
+  const values = value.split(',').map((item) => item.trim());
+  if (values.some((item) => !item)) {
+    return `${id} ${field} must be a comma-separated list`;
+  }
+  if (allowsNone && values.includes('none')) {
+    return values.length === 1 ? null : `${id} requirements none cannot be combined with other values`;
+  }
+
+  const seen = new Set<string>();
+  for (const item of values) {
+    if (!allowed.has(item)) return `${id} ${field} contains unknown value: ${item}`;
+    if (seen.has(item)) return `${id} ${field} contains duplicate value: ${item}`;
+    seen.add(item);
+  }
+  return null;
+}
+
+
+
 /**
- * Validate that the frame artifact has been fully UX-interrogated.
+ * `T1 | goal: … | start: … | actions: … | success: … | recovery: … | viewports: … | requirements: …`
  *
- * FRAME-UX-INCOMPLETE warns when `.omd/frame.md` exists but any of the three
- * UX anchor questions is unanswered:
- *   1. uxTask          — what task does the user arrive with?
- *   2. uxFrequentAction — what is the most frequent action on the primary screen?
- *   3. uxCostliestError — what is the costliest error, and what is the recovery path?
+ * IDs must be unique. Every field must be non-empty. Only recovery may use
+ * `N/A: <reason>` or `N/A — <reason>`. Viewports are a unique subset of
+ * `desktop,mobile`; requirements are `none` or a unique subset of
+ * `invalid-submit,transient`.
+ */
+export function validateTaskCoverageMatrix(matrix: string): string[] {
+  const rows = matrix.split('\n').map((row) => row.trim()).filter(Boolean);
+  const errors: string[] = [];
+  const ids = new Set<string>();
+
+  if (rows.length === 0) return ['task coverage matrix has no rows'];
+
+  for (const row of rows) {
+    const columns = row.split('|').map((column) => column.trim());
+    const id = columns.shift();
+    if (!id || !/^T[1-9]\d*$/.test(id)) {
+      errors.push(`malformed task coverage row: ${row}`);
+      continue;
+    }
+    if (ids.has(id)) {
+      errors.push(`duplicate task coverage id: ${id}`);
+      continue;
+    }
+    ids.add(id);
+
+    if (columns.length !== TASK_COVERAGE_FIELDS.length) {
+      errors.push(`malformed task coverage row: ${row}`);
+      continue;
+    }
+
+    for (const [index, field] of TASK_COVERAGE_FIELDS.entries()) {
+      const column = columns[index] ?? '';
+      const match = new RegExp(`^${field}:\\s*(.+)$`).exec(column);
+      const value = match?.[1]?.trim() ?? '';
+      if (!value) {
+        errors.push(`${id} is missing ${field}`);
+      } else if (/^N\/A\b/i.test(value)) {
+        if (field !== 'recovery') {
+          errors.push(`${id} ${field} must not be N/A`);
+        } else if (!/^N\/A\s*(?::|—)\s*\S/.test(value)) {
+          errors.push(`${id} recovery N/A requires a reason`);
+        }
+      } else if (field === 'viewports') {
+        const error = validateUniqueCsvSubset(id, field, value, TASK_COVERAGE_VIEWPORTS, false);
+        if (error) errors.push(error);
+      } else if (field === 'requirements') {
+        const error = validateUniqueCsvSubset(id, field, value, TASK_COVERAGE_REQUIREMENTS, true);
+        if (error) errors.push(error);
+      }
+    }
+  }
+
+  return errors;
+}
+
+function taskCoverageMatrixSections(body: string): string[] {
+  return body
+    .split(TASK_COVERAGE_MATRIX_HEADING)
+    .slice(1)
+    .map((section) => section.split(/^## /m)[0] ?? '');
+}
+
+/**
+ * Validate that the frame artifact has answered the UX anchor questions.
  *
- * These map to the three questions in theory/ux.md §Task-first framing and in
- * src/agents/framer.agent.yaml. The framer is expected to answer all three and
- * emit them via `omd frame set --task ... --frequent-action ... --costliest-error ...`.
- *
- * ── Scope boundary ───────────────────────────────────────────────────────────
- * This validator checks that the frame ARTIFACT is complete — that someone answered
- * the three questions before building. It does NOT verify that the rendered build
- * actually serves the named task: "does the page fulfil the user's task?" is a fuzzy
- * semantic judgment that requires the eye agent's task-first walk, not a string check.
- * Determining task-fulfillment from the IR alone would require reading the page copy,
- * understanding the user's domain context, and evaluating whether the named task is
- * achievable — all beyond deterministic measurement.
- *
- * What IS deterministic: whether the three fields are present and non-empty in the
- * frame's YAML frontmatter. A field absent or set to an empty string is a signal that
- * the framer skipped the question — which theory/ux.md §Task-first framing identifies
- * as the frame not being done.
- *
- * Only called when `.omd/frame.md` exists (the caller guards that).
+ * `uxSurface` is one of marketing, product, editorial, or mixed. Product and mixed
+ * frames require exactly one valid `## Task coverage matrix`; marketing and editorial
+ * frames reject task coverage matrix contamination. Unsupported non-empty surfaces fail closed.
  */
 export function checkFrameUx(cwd: string): Violation[] {
   const frame = readFrame(cwd);
@@ -36,14 +123,38 @@ export function checkFrameUx(cwd: string): Violation[] {
 
   const missing: string[] = [];
 
-  if (!frame.uxTask || String(frame.uxTask).trim().length === 0) {
-    missing.push('uxTask (--task)');
-  }
-  if (!frame.uxFrequentAction || String(frame.uxFrequentAction).trim().length === 0) {
+  if (!isNonEmptyString(frame.uxTask)) missing.push('uxTask (--task)');
+  if (!isNonEmptyString(frame.uxFrequentAction)) {
     missing.push('uxFrequentAction (--frequent-action)');
   }
-  if (!frame.uxCostliestError || String(frame.uxCostliestError).trim().length === 0) {
+  if (!isNonEmptyString(frame.uxCostliestError)) {
     missing.push('uxCostliestError (--costliest-error)');
+  }
+
+  const rawSurface = frame.uxSurface;
+  const surface = normalizeUxSurface(rawSurface);
+  const hasSurface = typeof rawSurface === 'string' && rawSurface.trim().length > 0;
+  if (rawSurface === undefined || (typeof rawSurface === 'string' && !hasSurface)) {
+    missing.push('uxSurface (--surface)');
+  } else if (!surface) {
+    missing.push('uxSurface (--surface: marketing|product|editorial|mixed)');
+  }
+
+  const matrixSections = taskCoverageMatrixSections(frame.body);
+  const requiresTaskCoverageMatrix = surface === 'product' || surface === 'mixed'
+    || (hasSurface && !surface)
+    || (rawSurface !== undefined && typeof rawSurface !== 'string');
+  if (requiresTaskCoverageMatrix) {
+    if (matrixSections.length !== 1) {
+      missing.push(`taskCoverageMatrix (--task-matrix: requires exactly one section; found ${matrixSections.length})`);
+    } else {
+      const matrixErrors = validateTaskCoverageMatrix(matrixSections[0] ?? '');
+      if (matrixErrors.length > 0) {
+        missing.push(`taskCoverageMatrix (--task-matrix: ${matrixErrors.join('; ')})`);
+      }
+    }
+  } else if ((surface === 'marketing' || surface === 'editorial') && matrixSections.length > 0) {
+    missing.push('taskCoverageMatrix (--task-matrix: not allowed for marketing or editorial surfaces)');
   }
 
   if (missing.length === 0) return [];
@@ -61,8 +172,9 @@ export function checkFrameUx(cwd: string): Violation[] {
         `The frame exists but the following UX anchor question${missing.length === 1 ? ' is' : 's are'} unanswered: `
         + `${missing.join('; ')}. `
         + 'A frame that cannot name the costliest error has not been interrogated. '
-        + 'Run `omd frame set --task "..." --frequent-action "..." --costliest-error "..."` to complete it. '
-        + 'See theory/ux.md §Task-first framing.',
+        + 'Run `omd frame set --task "..." --frequent-action "..." --costliest-error "..." --surface "..."'
+        + `${requiresTaskCoverageMatrix ? ' --task-matrix "T1 | goal: … | start: … | actions: … | success: … | recovery: … | viewports: … | requirements: …"' : ''}`
+        + '` to complete it. See theory/ux.md §Task-first framing and §Surface types.',
     },
   ];
 }

@@ -10,7 +10,17 @@ It does not receive or reproduce screenshots, assets, pixels, literal tokens, co
 full-page descriptions, or a source page's complete sequence. Read `theory/layout.md` and
 `theory/ux.md` exactly before writing.
 
-Use these H2 sections exactly and keep each non-empty.
+Use these H2 sections exactly and keep each non-empty. When the project has user-provided
+references (`omd ref add --from-user`), the additional `## Reference synthesis` section is
+required as well; `omd composition --check` enforces it.
+
+Before writing any section, read the frame's `uxSurface` classification. It selects the
+grammar (see `theory/ux.md` §Surface types): a `marketing` surface composes as a message
+ladder; a `product` work surface composes as a task loop over screen regions; `editorial`
+composes as a reading sequence; `mixed` names which screens follow which grammar. The
+section names below stay the same across grammars — what changes is what a "section" is:
+on a product surface it is a screen region or reachable state with a job in the task
+loop, not a scroll chapter.
 
 ## Input fingerprint
 
@@ -30,9 +40,19 @@ type-proof, or scout-summary change invalidates the contract; rerun composer and
 
 ## Experience spine
 
-For every section, record the entering user question, exactly what new answer/evidence this
-section adds, its primary action, and why the next section depends on it. This is a message
-ladder, not a list of fashionable section names.
+For a `marketing` or `editorial` surface: for every section, record the entering user
+question, exactly what new answer/evidence this section adds, its primary action, and why
+the next section depends on it. This is a message ladder, not a list of fashionable
+section names.
+
+For a `product` surface: write the spine as the task loop — orient → locate → act →
+feedback → next/recover. For every screen region (shell/navigation, work object, supporting
+panels, state surfaces), record which loop step it serves, the frequent action it carries,
+and why the region's position follows task order. Include the reachable states (loading,
+empty first-run, filtered-to-zero, error/recovery, success) as spine entries with their
+copy source; a work surface without designed states has an incomplete spine. Do not write
+a persuasion ladder for a tool: a hero section above a queue is a grammar defect, not a
+style choice.
 
 ## Section dependency
 
@@ -52,7 +72,11 @@ Relate every change to attention, evidence, action, or recovery.
 ## Focal hierarchy
 
 Define one dominant anchor in the first viewport and its visual-mass budget relative to the
-value statement, proof, and visible primary CTA. The CTA plus a predictable completion path
+value statement, proof, and visible primary CTA. On a `product` surface the dominant anchor
+is the work object itself — the table, queue, canvas, form, or data view the task loop
+operates on, at representative data density — and the "value statement" is at most one line
+of orientation; a display-scale headline or decorative hero claiming the first viewport of
+a work surface is a rejection condition, not an anchor. The CTA plus a predictable completion path
 satisfies task reach; the terminal form or control surface does not have to appear in the
 first viewport and earns no credit merely for being visible there. State a visible rejection
 condition for a candidate whose anchor loses dominance, crowds the task cue, or becomes
@@ -98,6 +122,71 @@ literal tokens, full section order, pixels, recognizable silhouette, or unique i
 and motion. An exact transplant is allowed only when the user explicitly requested that
 specific transplant; record the request and attribution.
 
-`omd composition --check` validates only section structure, fingerprint format, and freshness.
-It does not score taste, aesthetics, or whether a composition is good. Completion means the
-artifact exists and the validator succeeds; a status report alone is not completion.
+## Reference synthesis
+
+Required when user-origin references exist, and structurally validated whenever it is non-empty.
+`omd composition --check` parses this section as a closed Markdown ABI: prose, headings,
+fields, or axis rows outside the forms below are rejected.
+
+An adopted transfer is one `### Feature: <specific feature>` record:
+
+```md
+### Feature: Inbox triage workspace
+- Origin: explicit
+- Assumption: N/A
+- Primitive: Triage and inspect a queue item
+- Source ref: ref-<first 16 lowercase hex of SHA-256(source + NUL + component)>
+- Trust: Directly observed stable reference
+- Uncertainty: Content changes may alter exact density.
+- Structural rule: Queue and detail panels remain visible together.
+- Adaptation: Fit that relationship to the current task flow.
+- Token variation: Use destination tokens, not source values.
+- Conflict resolution: Task, accessibility, mobile, then one destination system win.
+- Destination route: /inbox
+- Destination selector: [data-region="inbox"]
+- Mobile behavior: Recompose into a focused drill-in flow.
+#### Axes
+- Information architecture/navigation | adapt | Queue navigation exposes current work. | Fit it to destination routes.
+- Macro layout and panel/region geometry | adapt | Queue and detail remain paired. | Preserve the relationship at the work surface.
+- Content density | N/A | N/A | The source has no usable density evidence.
+- Typography/hierarchy | N/A | N/A | The source has no usable type evidence.
+- Spacing/rhythm | N/A | N/A | The source has no usable rhythm evidence.
+- Component anatomy | N/A | N/A | The source has no reusable anatomy evidence.
+- Interaction/state/feedback | adapt | Selecting an item updates detail. | Use destination state vocabulary.
+- Responsive/mobile recomposition | adapt | Detail becomes focused on narrow screens. | Preserve return to the queue.
+- Motion/transition | N/A | N/A | The source has no transferable motion evidence.
+```
+
+Use every axis exactly once: information architecture/navigation; macro layout and panel/region
+geometry; content density; typography/hierarchy; spacing/rhythm; component anatomy;
+interaction/state/feedback; responsive/mobile recomposition; motion/transition. Disposition is
+exactly `accept`, `adapt`, `decline`, or `N/A`. Applicable axes require a substantive observed
+rule and adaptation or decline rationale. `N/A` uses `N/A` as its observed rule and a substantive
+reason. An adopted record must accept or adapt at least one structural or visual-system axis
+(the first six); interaction-only or token-only transfer is invalid.
+
+`Source ref` is the exact stable reference identity, not a hostname or prose mention. For a stored
+user reference it is `ref-` plus the first 16 lowercase hexadecimal characters of
+`SHA-256(source + NUL + component)`. This preserves two user references from the same host as
+separate obligations. The checker compares normalized `Source ref` field values only; text
+elsewhere in the section never satisfies reference coverage. A scout-origin reference instead
+uses an uppercase hyphenated key matching `[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)+`; hostnames and
+free-form prose are invalid identities. Feature labels may be short when
+specific; explanatory fields need substantive content. Destination routes must be non-placeholder
+local routes beginning with `/` (including `/` itself). Destination selectors must be unique after
+whitespace normalization and use only a stable `[data-*="…"]` selector or an accessible semantic
+element/role selector.
+
+A whole explicit feature may instead be declined without pretending it is an adopted transfer:
+
+```md
+### Decline: Document density
+- Origin: explicit
+- Source ref: ref-<first 16 lowercase hex of SHA-256(source + NUL + component)>
+- Trust: User supplied reference
+- Uncertainty: Scope is limited to the supplied page.
+- Reason: Document density conflicts with rapid queue scanning.
+```
+
+`omd composition --check` validates this ABI, section structure, fingerprint format, freshness,
+and every user-reference mention. It does not score taste or aesthetics.
