@@ -1,8 +1,11 @@
 {
-  "name": "oh-my-design",
+  "name": "@3xhaust/oh-my-design",
   "version": "0.16.1",
   "description": "Design cognition loop for Codex and Claude Code — frame, diverge, see, reframe",
   "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
   "bin": {
     "omd": "./bin/omd.ts",
     "oh-my-design": "./bin/omd-install.ts"

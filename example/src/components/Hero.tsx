@@ -15,7 +15,7 @@ export function Hero({ locale }: { locale: Locale }) {
       <p className="hero-body">{t.hero.body}</p>
       <a className="cta" href="#install">
         {t.hero.ctaPrefix}
-        <code>npm install -g oh-my-design</code>
+        <code>npm install -g @3xhaust/oh-my-design</code>
       </a>
     </section>
   );

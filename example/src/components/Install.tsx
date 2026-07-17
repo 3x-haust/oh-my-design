@@ -3,7 +3,7 @@ import { useReveal } from "../hooks/useReveal";
 import type { Locale } from "../data/content";
 import { getCopy } from "../data/i18n";
 
-const INSTALL_COMMANDS = `npm install -g oh-my-design
+const INSTALL_COMMANDS = `npm install -g @3xhaust/oh-my-design
 oh-my-design install
 oh-my-design doctor
 omd doctor`;

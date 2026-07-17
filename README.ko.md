@@ -33,7 +33,18 @@ OMD는 **Codex**와 **Claude Code** 안에서 동작합니다. 여섯 개의 사
 
 ## 설치
 
-> **npm에 없습니다.** npmjs.com의 `oh-my-design` 이름은 무관한 다른 프로젝트(`O-Pencil/skills`)의 것입니다. `npm install -g oh-my-design` 을 실행하지 말고, 이 저장소에서 설치하세요.
+### npm — 전역 CLI (권장)
+
+```bash
+npm install -g @3xhaust/oh-my-design
+oh-my-design install    # 감지된 모든 호스트에 스킬+에이전트를 복사하고 설정을 패치
+oh-my-design doctor     # 호스트 설치 검증
+omd doctor              # 런타임, Chromium, 프로젝트 쓰기 권한, 이론 팩 검증
+```
+
+`oh-my-design install --host claude|codex` 로 install·doctor·uninstall 을 한 호스트로 한정할 수 있습니다. `uninstall` 은 `install` 이 한 일을 정확히 되돌리며, `.omd/` 디렉터리는 절대 건드리지 않습니다.
+
+> 반드시 **스코프** 패키지 `@3xhaust/oh-my-design` 를 설치하세요. 스코프 없는 `oh-my-design` 은 무관한 다른 프로젝트입니다.
 
 ### Claude Code — 플러그인 마켓플레이스
 
@@ -44,29 +55,15 @@ OMD는 **Codex**와 **Claude Code** 안에서 동작합니다. 여섯 개의 사
 
 이후 세션을 열고 `/ultradesign` 을 실행합니다.
 
-### 소스에서 설치 — Claude Code와 Codex (회귀 테스트 대상 경로)
+### 소스에서 설치 (기여자)
 
 ```bash
 git clone https://github.com/3x-haust/oh-my-design
 cd oh-my-design
 npm install
-
-node bin/omd-install.ts install    # 감지된 모든 호스트에 스킬+에이전트를 복사하고 설정을 패치
-node bin/omd-install.ts doctor      # 호스트 설치 검증
-node bin/omd.ts doctor              # 런타임, Chromium, 프로젝트 쓰기 권한, 이론 팩 검증
+node bin/omd-install.ts install    # 감지된 호스트에 스킬+에이전트 복사
+node bin/omd.ts doctor
 ```
-
-짧은 `omd`·`oh-my-design` 명령을 PATH에 올리고 싶으면 `npm link` 를 실행합니다. 그렇지 않으면 `node bin/omd.ts …`, `node bin/omd-install.ts …` 로 호출합니다.
-
-`--host claude` 또는 `--host codex` 로 명령을 한 호스트로 한정할 수 있습니다.
-
-```bash
-node bin/omd-install.ts install --host codex
-node bin/omd-install.ts doctor --host codex
-node bin/omd-install.ts uninstall --host codex
-```
-
-`uninstall` 은 `install` 이 한 일을 정확히 되돌리며, `.omd/` 디렉터리는 절대 건드리지 않습니다.
 
 ### Chromium
 
