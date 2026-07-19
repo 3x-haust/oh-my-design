@@ -15,6 +15,10 @@ sequence in `protocol/reference-assembly.md`. That protocol owns its owners, art
 boundaries, chat presentation, browser fallback, and stop conditions; this protocol does
 not create a parallel reference flow.
 
+A request to fix or improve the UX of an existing surface is a reference-worthy run: research how
+strong products solve that same UX problem — the specific flow, state, or component — before proposing
+changes, rather than applying generic UX rules from memory alone.
+
 ## Stack routing
 
 Apply one precedence everywhere: explicit user request > existing repository stack/toolchain

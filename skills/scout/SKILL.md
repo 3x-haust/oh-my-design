@@ -4,9 +4,12 @@ description: >-
   Build a measured LEGO reference inventory without designing anything: whole pages for feel,
   tight selectors for component anatomy, typography studies, motion studies, image refs
   for the unrenderable. Use when the user asks for references, inspiration, benchmarks,
-  or "how do good sites do X" — standalone, before or without a build.
-  Triggers: 레퍼런스 찾아줘, 레퍼런스 수집, 참고 사이트, 벤치마킹, find references,
-  inspiration board, how do other sites do.
+  or "how do good sites do X" — standalone, before or without a build — and also when the
+  request is to fix or improve the UX of an existing surface: research how strong products
+  solve that same UX problem before proposing changes, instead of applying generic rules from
+  memory.
+  Triggers: 레퍼런스 찾아줘, 레퍼런스 수집, 참고 사이트, 벤치마킹, UX 고쳐줘, UX 개선,
+  이 페이지 UX 개선해줘, find references, inspiration board, how do other sites do, fix/improve the UX.
 ---
 
 # oh-my-design:scout
