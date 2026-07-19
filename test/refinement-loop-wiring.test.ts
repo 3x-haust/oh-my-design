@@ -19,12 +19,13 @@ test('ultradesign SKILL wires the RED/GREEN refinement rounds with evidence and 
   assert.match(s, /On GREEN/i);
 });
 
-test('the human-design-loop protocol carries the bounded RED/GREEN loop and forbids unbounded retry', () => {
+test('the human-design-loop protocol carries an unbounded, evidence-driven RED/GREEN loop', () => {
   const p = read('core/protocol/human-design-loop.md');
   assert.match(p, /RED\/GREEN refinement loop/);
-  assert.match(p, /advances only on measured (?:visual )?improvement/);
+  assert.match(p, /no fixed round budget/i);
+  assert.match(p, /may run as many rounds as it takes to reach GREEN/i);
   assert.match(p, /a round with no evidence does not count/i);
-  assert.match(p, /never an unbounded automatic retry/i);
+  assert.match(p, /not a blind automatic retry/i);
 });
 
 test('the protocol keeps the loop subordinate to the existing gates', () => {

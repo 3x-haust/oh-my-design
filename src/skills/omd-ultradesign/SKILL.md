@@ -506,12 +506,16 @@ replaces the blind typography, copy, or critique gates above.
 
 ### Refinement rounds (RED/GREEN, evidence-driven)
 
-For a confident/showpiece register — and always when the brief signals awards-level ambition — the
-first shippable build is not the ship: it is round 0 of a bounded RED/GREEN loop. First write the
-acceptance criteria (the GREEN target) from the frame and `theory/expressive.md` § "Slop-free is not
-the same as distinctive": for example, names the template it resembles and departs from it; no two
-competing primary masses; one clear first-read; slop scan clean; `omd ref distance` recorded (advisory, never a gate); carrier
-present and register-fit; and the blind-choose after beats before. Any unmet criterion is RED.
+Every `product`, `marketing`, and `mixed` surface — and any `editorial`/`static` surface with a real
+visual system — runs a mandatory RED/GREEN loop: the first shippable build is round 0, never the ship.
+Only a trivial content-only surface may ship after one pass, and only with a recorded reason and a clean
+slop scan. Write the acceptance criteria (the strict GREEN target) from the frame and
+`theory/expressive.md` § "Slop-free is not the same as distinctive": it names the template it resembles
+and departs from it; one clear first-read with no two competing primary masses; `omd slop scan` has zero
+confirmed candidates and `omd check --category slop` is clean; no reality-depth tell (a form that never
+submits, timing theatre standing in for real work, or self-referential in-page trust); `omd ref
+distance` recorded (advisory); carrier present and register-fit; and the blind-choose after beats before.
+Any unmet criterion is RED.
 
 Then iterate, leaving evidence every round — a round with no evidence does not count:
 1. The hand makes one concrete change, then captures sharp desktop/mobile renders into
@@ -526,15 +530,17 @@ Then iterate, leaving evidence every round — a round with no evidence does not
    still-RED criteria, and the evidence paths with `omd decision`; blind-choose cannot overrule a UX
    invariant.
 3. Decide continue or stop from the round evidence. CONTINUE only while the applicable UX invariants
-   pass, blind-choose favors the after, RED criteria remain, and the round budget (default 3) is not
-   spent — then fix the single highest-leverage RED target with the same one-concrete-change discipline
+   pass, blind-choose favors the after, and RED criteria remain — there is no fixed round budget — then
+   fix the single highest-leverage RED target with the same one-concrete-change discipline
    as the craft checkpoints and re-measure. STOP on GREEN (every acceptance criterion met — done), a
    UX regression (rollback), a visual regression (revert to the previous build), a plateau
-   (blind-choose tie while still RED), or the budget (keep the best valid build and report the
-   remaining RED). A round with no evidence does not count.
-The loop is bounded and never an automatic retry: it advances only on measured visual improvement
-while UX and beautiful UI remain coequal, and converges on GREEN or the budget. A quiet register may
-ship after one pass with a recorded reason.
+   (blind-choose tie while still RED). On a plateau, keep the best valid build and report the
+   remaining RED. A round with no evidence does not count.
+It is not a blind automatic retry: it advances only on measured visual improvement while UX and
+beautiful UI remain coequal, and it may run as many rounds as it takes to converge on GREEN — there is
+no fixed budget. Round 0 is almost never GREEN
+— do not ship the first AI-shaped pass. A one-pass ship is allowed only for a trivial content-only
+surface, with a recorded reason and a clean slop scan.
   After all source and approved inputs stop changing, freeze and collect final evidence in the order
   required by `protocol/human-design-loop.md`: run `omd source --seal <root>`, then `omd source
   --check <root>`; build and collect every final check, test, declared/applicable probes,

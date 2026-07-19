@@ -161,7 +161,7 @@ export interface RefinementRound {
 
 export interface RefinementLoopInputs {
   rounds: RefinementRound[];
-  /** Hard upper bound on rounds — the loop is never unbounded. Default 3. */
+  /** Optional hard cap on rounds. Omit for an unbounded run that stops only on GREEN, a regression, or a plateau. */
   maxRounds?: number;
   /** Rounds to run before a plateau/GREEN stop is honored. Default 1. */
   minRounds?: number;
@@ -187,15 +187,15 @@ export interface RefinementLoopDecision {
 }
 
 /**
- * Bounded RED/GREEN refinement-loop controller. It is NOT an automatic retry loop. Each round
- * MUST leave evidence; the loop continues only while the build is still RED (acceptance criteria
- * unmet) AND blind-choose shows the latest round genuinely improved it AND the round budget
- * remains. It stops on the first of — GREEN (all criteria met = done), a regression (revert), a
- * plateau (tie while still RED), a budget exhaustion, or missing evidence. This is the deliberate,
+ * RED/GREEN refinement-loop controller. It is NOT a blind automatic retry: each round MUST leave
+ * evidence, and the loop continues only while the build is still RED (acceptance criteria unmet)
+ * AND blind-choose shows the latest round genuinely improved it. By default it is unbounded — it
+ * runs until GREEN (all criteria met = done), a regression (revert), a plateau (tie while still
+ * RED), or missing evidence. An optional `maxRounds` adds a hard cap on top. This is the deliberate,
  * evidence-driven convergence loop `protocol/human-design-loop.md` permits.
  */
 export function evaluateRefinementLoop(inputs: RefinementLoopInputs): RefinementLoopDecision {
-  const maxRounds = inputs.maxRounds ?? 3;
+  const maxRounds = inputs.maxRounds;
   const minRounds = inputs.minRounds ?? 1;
   const rounds = inputs.rounds;
   const n = rounds.length;
@@ -215,7 +215,7 @@ export function evaluateRefinementLoop(inputs: RefinementLoopInputs): Refinement
   if (last.redCriteria.length === 0 && n >= minRounds) {
     return { status: 'green', continueLoop: false, converged: true, reason: `round ${last.round} is GREEN — every acceptance criterion is met; stop`, roundsRun: n, nextTarget: null };
   }
-  if (n >= maxRounds) {
+  if (maxRounds !== undefined && n >= maxRounds) {
     return { status: 'budget-exhausted', continueLoop: false, converged: false, reason: `round budget reached (${maxRounds}) — stop with the best build so far; still RED: ${last.redCriteria.join(', ') || '(none reported)'}`, roundsRun: n, nextTarget: null };
   }
   if (last.blindChoose === 'tie' && n >= minRounds) {
