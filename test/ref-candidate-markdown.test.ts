@@ -25,4 +25,5 @@ test('candidate Markdown is deterministic, Korean-first, and escapes table and H
   const second = formatReferenceCandidates(raw, assembly);
 
   assert.equal(second, first); assert.match(first, /출처 사이트\/페이지 \(Source site\/page\)/); assert.match(first, /안전 \\| &lt;script&gt;/); assert.match(first, /card\\|tile/); assert.match(first, /hero\\|&lt;svg&gt;/); assert.match(first, /\\\[bad\\\]\\\(javascript:alert\\\(1\\\)\\\)/); assert.doesNotMatch(first, /<script>|<svg>|\[bad\]\(javascript:/);
+  assert.match(first, /로컬 캡쳐 \(Local capture\)/); assert.match(first, /\.omd\/refs\/card\.png/);
 });

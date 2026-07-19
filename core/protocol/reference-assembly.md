@@ -28,9 +28,14 @@ new agent, service, provider, or runtime.
 
 The scout runs `omd ref check` and then `omd ref candidates`. It pastes the command's
 Markdown table directly into the Codex or Claude conversation. That table is the only
-candidate presentation surface and names the source site/page, exact captured UI or image
-region, proposed target, take, avoid, and adaptation. The coordinator records the selected
-candidate with the existing `omd ref select` command behind the conversation.
+candidate presentation surface and names, per component slot, the source site/page, exact
+captured UI or image region, the local part-image capture path, proposed target, take, avoid,
+and adaptation. The local capture column lets the human open and attach the exact per-component
+part-image — the referenced button, card, or region — while selecting and building; it is a
+selection-stage aid on the raw scout surface only. Downstream composer, eye, and hand still
+receive only the sanitized selected assembly, never the source part-image, path, or pixels.
+The coordinator records the selected candidate with the existing `omd ref select` command
+behind the conversation.
 
 Never direct a user to open a board UI, standalone HTML, PNG, showcase, or `omd-board`.
 Local screenshots may help a scout and may be attached to a conversation when useful, but

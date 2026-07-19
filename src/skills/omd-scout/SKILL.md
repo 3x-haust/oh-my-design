@@ -76,6 +76,12 @@ surface: do not make a board UI, HTML, PNG, showcase, or `omd-board` command. Th
 records the user's exact candidate id with `omd ref select`; if interaction is unavailable,
 the coordinator records a clearly disclosed agent selection instead. Downstream receives only
 the resulting hash-bound sanitized selected assembly and checked clean-room lineage.
+Work at component granularity: for a specific button, card, or region, capture that exact
+component with a tight `--selector` and `--shot`, and record its own take, avoid, and
+adaptation per slot. The candidate table's local-capture column carries each part-image's
+local path, so attach the precise per-component capture in chat while the user selects and
+builds. That attachment is a selection-stage aid only; downstream composer, eye, and hand
+still receive the sanitized assembly, never the source part-image, path, or pixels.
 
 ## Evidence quality and contamination
 
