@@ -373,18 +373,20 @@ test('scout rejects derivative or convergent references, not premium sites using
   }
 });
 
-test('hand transplants a user-directed component from its local part-image, page clone still gated', () => {
+test('hand builds a user-directed reference to fidelity; ref distance is advisory', () => {
   const hand = read('src/agents/hand.agent.yaml');
   const skill = read('src/skills/omd-scout/SKILL.md');
   const protocol = read('core/protocol/reference-assembly.md');
   for (const raw of [hand, skill, protocol]) {
     const source = raw.replace(/\s+/g, ' ');
-    // The hand opens the selected slot's local part-image and builds against it image-to-code.
+    // The hand opens the selected reference's local part-image and builds against it image-to-code.
     assert.match(source, /local part-image/i);
     assert.match(source, /\.omd\/refs\//);
     assert.match(source, /image-to-code fidelity/i);
-    assert.match(source, /per-component transplant/i);
-    // The page-level anti-clone gate survives (mix sources; do not clone one page whole).
+    // ref distance no longer blocks shipping — it is advisory.
     assert.match(source, /omd ref distance/i);
+    assert.match(source, /advisory/i);
+    assert.match(source, /never blocks shipping/i);
+    assert.doesNotMatch(source, /omd ref distance` still (?:gates|blocks|guards)/i);
   }
 });

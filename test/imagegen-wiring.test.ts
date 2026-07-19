@@ -24,13 +24,13 @@ test('imagegen theory keeps a generated image as a design reference, never a shi
   assert.match(t, /factual carrier[\s\S]*never (be )?AI-generated|NEVER AI-generated/i);
 });
 
-test('imagegen theory names the kinship gate as the anti-laundering backstop for reference seeding', () => {
+test('imagegen ref distance is advisory while the draft stage stays clean-room', () => {
   const t = read('core/theory/imagegen.md');
   assert.match(t, /ref distance/);
-  assert.match(t, /0\.6/);
-  assert.match(t, /backstop/i);
-  // The builder never sees reference screenshots; seeds are synthesized, not single-reference pixels.
-  assert.match(t, /never target a specific reference'?s? pixels|builder\s+never sees these reference screenshots/i);
+  assert.match(t, /advisory/i);
+  assert.match(t, /never blocks shipping/i);
+  // The imagegen draft-generation stage still never targets a specific reference's pixels.
+  assert.match(t, /never targets a specific\s+reference's pixels/i);
 });
 
 test('imagegen theory carries the variation engine and the anti-AI-default tells', () => {
@@ -57,16 +57,14 @@ test('hand implements against the draft with image-to-code fidelity and never sh
   assert.match(h, /ref distance/);
 });
 
-test('scout allows a per-component transplant but still forbids whole-page imitation', () => {
+test('scout routes reference fidelity to the hand with an advisory distance signal', () => {
   const s = read('agents/scout.md');
-  // The page-level clean-room invariant must survive: no whole-page imitation, distance still gates.
-  assert.match(s, /Do not hand a builder a whole page or a source-page description to imitate/i);
-  assert.match(s, /forbids whole-page copying/i);
-  assert.match(s, /omd ref distance/);
-  // A user-directed component transplant from the local part-image is intended.
-  assert.match(s, /per-component transplant is intended/i);
+  assert.match(s, /the hand builds from its local part-image/i);
   assert.match(s, /\.omd\/refs\//);
-  // The imagegen draft-seed path (blueprint, synthesized seeds) still exists.
+  assert.match(s, /image-to-code fidelity/i);
+  assert.match(s, /omd ref distance` is advisory/i);
+  assert.match(s, /never blocks shipping/i);
+  // The imagegen draft-seed path (blueprint) still exists for the composer route.
   assert.match(s, /blueprint/i);
   assert.match(s, /theory\/imagegen\.md/);
 });

@@ -75,10 +75,11 @@ art direction needs a component seed (see `theory/imagegen.md`), pass only sanit
 principles and a skin-abstracted blueprint. Make the draft lineage explicit: the coordinator, not
 composer, records it from those permitted inputs and the clean-room boundary, never from a source
 capture or its visual likeness.
-For a user-directed selected component, the hand builds that one component from its local part-image
-capture under `.omd/refs/`; that per-component transplant is intended, and `omd ref distance` still
-gates the shipped build. Do not hand a builder a whole page or a source-page description to imitate.
-The clean-room boundary still forbids whole-page copying and copying source copy.
+For a user-directed selected reference, the hand builds from its local part-image capture under
+`.omd/refs/` with image-to-code fidelity; component-level and whole-surface fidelity are both intended,
+and `omd ref distance` is advisory — it reports closeness and never blocks shipping. Record attribution
+for every used reference, write the product's own copy rather than lifting source copy, and never ship
+the source capture itself as an asset.
 
 Turn the validated inventory into sanitized bricks in `.omd/scout.md`, then create two or more
 viable candidate assemblies in the internal `.omd/reference-board.json`. Run `omd ref check`, then

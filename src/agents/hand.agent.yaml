@@ -18,11 +18,11 @@ instructions: |
   `.omd/composition.md` and receive accepted sanitized transfer criteria. When reference assembly
   applies, start only after the coordinator's successful checked clean-room lineage: receive the
   hash-bound sanitized selected assembly plus its chosen generated draft, or its checked unavailable
-  lineage plus CSS/SVG evidence path. For a user-directed selected component slot, also open that
-  slot's local part-image capture under `.omd/refs/` (resolved through `.omd/reference-selection.json`)
-  and build that one component against it with image-to-code fidelity. Do not take another slot's
-  capture, a source URL/hostname, or source-page prose to imitate a whole page; `omd ref distance`
-  still blocks shipping a page that clones a single source. Run
+  lineage plus CSS/SVG evidence path. For a user-directed selected reference, also open its local
+  part-image capture under `.omd/refs/` (resolved through `.omd/reference-selection.json`) and build
+  against it with image-to-code fidelity; component-level and whole-surface fidelity are both allowed.
+  `omd ref distance` is advisory and never blocks shipping; record attribution for every used reference
+  and write the product's own copy rather than lifting source copy. Run
   `omd composition --check` before the first production write and again before ship; stop on a
   missing, malformed, or stale contract. On the Figma structural-bypass route, instead read
   `.omd/figma/snapshot.json`, `.omd/figma/design-system.md`, `.omd/attribution.md`, and the selected
@@ -146,7 +146,7 @@ instructions: |
   carrier; ground every carrier in the approved contract and real evidence.
 
   Enforce the protocol's production gates: `omd design --check` when design.md exists;
-  always `omd ref distance` with no shipment above 0.6; a bounded `omd target diff` repair
+  always `omd ref distance` as an advisory fidelity signal that never blocks shipping; a bounded `omd target diff` repair
   loop when the target manifest exists; `omd check --site` for multi-page output; and final
   sharp desktop/mobile plus applicable filmstrip, check, humanize, and probe evidence. Once
   production source exists, follow `protocol/slop-review.md`: run the read-only source scan,
@@ -209,11 +209,12 @@ instructions: |
   image itself. If a section or detail is not readable enough to build from, regenerate that one
   section fresh at larger scale rather than cropping the old draft. Any abstract/atmospheric shipped
   image you generate is a real asset — abstract or atmospheric zone only, never a factual carrier,
-  with committed provenance recorded via `omd decision`. `omd ref distance` still gates the shipped
-  build regardless of how the draft was seeded.
-  For a user-directed selected component slot, apply the same image-to-code discipline to that slot's
-  local part-image capture under `.omd/refs/`: reproduce that one component's anatomy, geometry,
-  spacing rhythm, and type relationships faithfully into a reusable primitive, and record the outcome
-  with `recordReferenceUsage`. This is a per-component transplant, not whole-page imitation — vary the
-  source across components and keep the shipped page under the `omd ref distance` ceiling, and never
-  ship the source capture itself as an asset.
+  with committed provenance recorded via `omd decision`. `omd ref distance` reports the shipped build's
+  closeness to each reference as an advisory signal regardless of how the draft was seeded; it never blocks shipping.
+  For a user-directed selected reference, apply the same image-to-code discipline to that slot's
+  local part-image capture under `.omd/refs/`: reproduce its anatomy, geometry, spacing rhythm, and
+  type relationships faithfully into reusable primitives, and record the outcome with
+  `recordReferenceUsage` plus attribution. Component-level and whole-surface fidelity are both allowed;
+  `omd ref distance` is advisory — it reports closeness to each reference and never blocks shipping. Do
+  not ship the source capture itself as an asset, and write the product's own copy rather than lifting
+  source copy verbatim.

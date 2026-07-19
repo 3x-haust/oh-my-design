@@ -33,9 +33,10 @@ input classes. A missing capability records the explicit unavailable state inste
 it carries no composite, provider, or image fields. This is provenance for a generated design
 reference, never a provider implementation or API-key workflow.
 
-`omd ref distance` still measures the SHIPPED build against every saved reference and nothing at or
-above 0.6 kinship ships. The kinship gate remains the anti-laundering backstop for the final build,
-but it does not relax the clean-room input boundary. Never target a specific reference's pixels.
+`omd ref distance` measures the SHIPPED build against every saved reference as an advisory fidelity
+signal — it reports closeness and never blocks shipping. The imagegen draft still consumes only the
+declared clean-room input classes above, and the draft-generation stage never targets a specific
+reference's pixels, even though the hand may build the final surface to reference fidelity.
 
 ## When image-first applies
 

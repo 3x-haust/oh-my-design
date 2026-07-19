@@ -32,11 +32,11 @@ candidate presentation surface and names, per component slot, the source site/pa
 captured UI or image region, the local part-image capture path, proposed target, take, avoid,
 and adaptation. The local capture column lets the human open and attach the exact per-component
 part-image — the referenced button, card, or region — while selecting and building. For a
-user-directed selected component, the hand opens that slot's local part-image under `.omd/refs/`
-and builds that one component against it with image-to-code fidelity: a per-component transplant,
-not whole-page imitation. Composer and eye stay clean-room and receive only the sanitized selected
-assembly; `omd ref distance` still blocks a shipped page that clones a single source, so components
-are transplanted from varied sources rather than one page reproduced whole.
+user-directed selected reference, the hand opens its local part-image under `.omd/refs/` and builds
+against it with image-to-code fidelity. Component-level and whole-surface fidelity are both allowed;
+`omd ref distance` is advisory — it reports how close the shipped build is to each reference and never
+blocks shipping — and every used reference is recorded with attribution. Eye reviews against the
+composition contract and task/visual evidence, not source pixels.
 The coordinator records the selected candidate with the existing `omd ref select` command
 behind the conversation.
 
@@ -86,8 +86,10 @@ flow, or runtime.
 The internal raw evidence record is scout-only. Composer starts only after a successful checked
 lineage: on the capable route it receives the current hash-bound sanitized selected assembly and
 the coordinator-chosen clean-room draft; on the unavailable route it receives the selected
-assembly and CSS/SVG fallback. Eye and hand are downstream of that checked state. None receives
-the raw record, source URL/hostname, screenshot, pixel, capture path, provenance, source-page
-prose, or visual likeness. They preserve real copy, task traceability, responsive proofs,
-attribution, measured transfer, reduced motion, and the distance gate. A clean-room composite is
-design-reference material only and never a shipped source asset.
+assembly and CSS/SVG fallback. Eye and composer are downstream of that checked state and receive no
+raw record, source URL/hostname, screenshot, pixel, capture path, provenance, source-page prose, or
+visual likeness — they work from the sanitized synthesis. The hand may additionally open a user-directed
+selected reference's local part-image under `.omd/refs/` and build against it for fidelity. Every role
+preserves real copy, task traceability, responsive proofs, attribution, measured transfer, and reduced
+motion. `omd ref distance` is advisory and never blocks shipping; a source capture is a design reference
+only and is never shipped as an asset.

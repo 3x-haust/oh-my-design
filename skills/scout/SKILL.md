@@ -80,11 +80,10 @@ Work at component granularity: for a specific button, card, or region, capture t
 component with a tight `--selector` and `--shot`, and record its own take, avoid, and
 adaptation per slot. The candidate table's local-capture column carries each part-image's
 local path, so attach the precise per-component capture in chat while the user selects and
-builds. For a user-directed selected component, the hand then opens that slot's local part-image
-capture under `.omd/refs/` and builds that one component against it with image-to-code fidelity —
-a per-component transplant, not whole-page imitation. Composer and eye stay clean-room; `omd ref
-distance` still blocks a shipped page that clones a single source, so vary the source across
-components.
+builds. For a user-directed selected reference, the hand then opens that slot's local part-image
+capture under `.omd/refs/` and builds against it with image-to-code fidelity. Component-level and
+whole-surface fidelity are both allowed; `omd ref distance` is advisory — it reports closeness and
+never blocks shipping. Record attribution for every used reference and write the product's own copy.
 
 ## Evidence quality and contamination
 
@@ -107,9 +106,9 @@ Every retained capture records:
 - source trust and uncertainty;
 - the token, component, motion, voice, or composition question it may inform.
 
-Never describe a whole page for imitation, hand off a source-page description for imitation, copy a
-whole page's visual skin, or turn award status into evidence. The hand may open a user-directed
-selected component's local part-image under `.omd/refs/` and build that one component to match; that
-per-component transplant is intended and `omd ref distance` still guards a page that clones a single
-source. Hand off measurements, principles, contradictions, coverage gaps, and trust; composer and eye
-receive only the sanitized evidence summary required for their decision.
+Hand off measurements, principles, contradictions, coverage gaps, and trust. The hand may open a
+user-directed selected reference's local part-image under `.omd/refs/` and build against it with
+image-to-code fidelity; component-level and whole-surface fidelity are both intended, and `omd ref
+distance` is advisory (it reports closeness, never blocks shipping). Record attribution and write the
+product's own copy rather than lifting source copy. Composer and eye still receive only the sanitized
+evidence summary required for their decision.
