@@ -39,6 +39,16 @@ frame or exact visual target uses the single Figma structural-bypass route decla
 content, craft, glance, probe, critique, and all UX evidence rather than handing the run off or
 terminating this loop.
 
+There is exactly one structural-skip route: the Figma structural-bypass above. A full multi-feature
+app, an ERP/dashboard/console/CRUD/admin/editor, a data-dense internal tool, or a quiet/product
+register is NOT a skip route — it is a `product` surface (the framer classifies "만들어줘 for a tool"
+as a product brief even when it sounds like a site request) that runs the entire loop: framing with a
+task coverage matrix, scout, copy, compose, isolated sketches, hand, glance, blind eye, and the
+mandatory RED/GREEN refinement loop. A register selects how "distinctive" is judged — a functional
+advantage on a quiet surface — never whether the loop runs. "It is real engineering, a data tool, or
+too big for the loop, so build it directly" is a routing defect, not a lawful shortcut — the same class
+of error as inferring plain HTML without a verbatim user request.
+
 Apply stack precedence exactly: explicit user request > existing repository stack/toolchain
 (including existing vanilla HTML) > React + Vite + TypeScript only for a truly blank
 greenfield. Plain HTML greenfield requires an explicit user request; there is no autonomous
