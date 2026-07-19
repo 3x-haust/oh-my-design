@@ -161,6 +161,11 @@ Their stated reason is consistency of experience — 합니다체 anywhere break
 the rest of the product has established. The rule also extends to avoiding over-polite forms
 (~시겠어요?, ~께) that amplify formality past what the relationship calls for.
 
+Cite Toss (and 당근, Kakao) as documented examples of register discipline, never as a voice to copy. The
+register rules are already stated above — do not web-search a product's copy strings to imitate "토스식
+해요체" reflexively, which reproduces one company's register across every Korean product. This product's
+voice is chosen from its own audience, situation, and authority, not from a famous app's strings.
+
 What the `SLOP-KO-REGISTER-MIX` rule detects — 해요체 and 합니다체 alternating within one
 text node — is a review candidate. It may expose unplanned register drift, or it may be
 required by quoted speech or a deliberate change of speaker. Context decides.

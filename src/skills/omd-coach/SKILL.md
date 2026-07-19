@@ -9,7 +9,7 @@ description: >-
   getting wrong, design habits.
 ---
 
-# omd-coach
+# OMD-coach
 
 ```bash
 omd coach

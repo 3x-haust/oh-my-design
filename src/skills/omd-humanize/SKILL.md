@@ -8,7 +8,7 @@ description: >-
   make it sound human, de-AI, rewrite naturally.
 ---
 
-# omd-humanize
+# OMD-humanize
 
 Natural writing is not text with detector bait removed. It is a person, in a specific
 situation, trying to change what a specific listener knows, feels able to do, or does next.

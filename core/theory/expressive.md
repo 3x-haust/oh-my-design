@@ -74,6 +74,8 @@ Each is a layout that survives the slop scan and still announces a template. Tre
 
 A distinctive composition commits at least one genuine risk a template would not take, grounded in the concept and never in decoration: a deliberate asymmetry that directs the eye to one mass; a scale or weight contrast large enough to read as a decision, not a default; a grid break at the one moment that matters; or the real supplied material (image, portrait, slide, dataset) made structural rather than illustrative. One committed risk beats five safe refinements. If a candidate reads as "the reasonable layout," it has not earned the register — name the template it resembles and depart from it once, on purpose.
 
+On a `product` or quiet surface the risk is functional, not thematic. The template to break is the generic admin/dashboard — evenly-weighted panels, decorative chrome, a hero band on a work surface — and the departure is a real operating advantage a template ignores: higher information density, faster scanning, fewer errors, keyboard/bulk efficiency, or a domain workflow the generic tool omits. A named theme, a decorative metaphor, or a "memorable moment" is the wrong risk here. A product's distinction is that it is faster and clearer to operate; the best work surface is closer to forgettable than memorable. "Memorable" is a marketing goal — never import it into a tool.
+
 ### The AI-SaaS landing tells (the specific template to break)
 
 The most common generic result is the AI-SaaS landing page. Every item below is a tell to avoid, not a default to reach for — a design that matches the checklist reads as machine-made in one second regardless of polish.

@@ -12,7 +12,7 @@ description: >-
   이 페이지 UX 개선해줘, find references, inspiration board, how do other sites do, fix/improve the UX.
 ---
 
-# oh-my-design:scout
+# OMD-scout
 
 A LEGO reference assembly, measured instead of pinned. Read
 `protocol/reference-assembly.md` under `omd pack dir`; it owns the exact eight stages,
@@ -68,6 +68,13 @@ omd ref list
 omd ref check
 omd ref candidates
 ```
+
+Do not reflexively web-search the same famous benchmarks (토스/Toss, Linear, Stripe, Vercel, 당근) on
+every brief — that reflex is the reference-grammar homogenization this tool removes. Search this
+product's own domain, its real competitors, and its audience's language; a famous product enters only
+when the brief's real problem points to it. Run independent searches and captures in parallel — batch
+captures with `omd ref add-batch <manifest.json>`, never a sequential `omd ref add` per reference when
+several are already known.
 
 Whole-page captures establish rhythm or product feel; tight selectors establish component
 anatomy; type and motion studies establish measured behavior; image references support only
