@@ -48,6 +48,12 @@ There is no minimum query count, capture quota, famous-site quota, or mandatory 
 gallery. A small inventory with complete, independent evidence is better than a large gallery of
 near-duplicates. If a category is irrelevant, record why. If evidence remains weak or
 contradictory, report the gap and uncertainty instead of filling a slot with decoration.
+Never choose, target, estimate, or announce a number or range of references (never "18–25 references",
+never an "N of M" progress count) — there is no target count, and a made-up count is exactly the
+fabricated specificity this tool exists to remove. Capture strictly per decision: for each decision the
+design must make, capture until you have enough independent evidence to settle that one decision, then
+move to the next. Stop when another capture would not change any remaining decision. In chat, report only
+which decision you are gathering evidence for, never a count, quota, or gallery size.
 
 Use the narrowest useful capture:
 

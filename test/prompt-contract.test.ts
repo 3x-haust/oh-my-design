@@ -390,3 +390,17 @@ test('hand builds a user-directed reference to fidelity; ref distance is advisor
     assert.doesNotMatch(source, /omd ref distance` still (?:gates|blocks|guards)/i);
   }
 });
+
+test('scout captures by decision coverage, never by a targeted or announced reference count', () => {
+  const skill = read('src/skills/omd-scout/SKILL.md');
+  const agent = read('src/agents/scout.agent.yaml');
+  for (const raw of [skill, agent]) {
+    const source = raw.replace(/\s+/g, ' ');
+    // Capture is per-decision and stops on convergence, not at a number.
+    assert.match(source, /Capture strictly per decision/i);
+    assert.match(source, /stop when another capture would not change any remaining decision/i);
+    // A targeted, estimated, or announced reference count is forbidden as fabricated specificity.
+    assert.match(source, /never choose, target, estimate, or announce a number or range of references/i);
+    assert.match(source, /fabricated specificity|fake specificity/i);
+  }
+});

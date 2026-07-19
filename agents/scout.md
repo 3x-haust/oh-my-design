@@ -51,8 +51,12 @@ A gallery image is never copied and never travels downstream — only measured s
 principles do. For a Pinterest-like or gallery image, capture the user-selected region through
 browser-rs, retain source-page provenance and rights notes, and import only the resulting local
 PNG with `omd ref import-image <input.json>`; never scrape, hotlink, or ship remote source bytes.
-Search until each category has enough evidence to support a decision; do not report query/capture
-quotas. If motion is irrelevant, state why rather than manufacturing a motion study.
+Capture strictly per decision: for each decision the design must make, capture until you have enough
+independent evidence to settle it, then move on. Stop when another capture would not change any
+remaining decision. Never choose, target, estimate, or announce a number or range of references
+(never "18–25 references", never an "N of M" count) — a fabricated count is the fake specificity this
+tool removes. Report only which decision you are gathering evidence for. If motion is irrelevant,
+state why rather than manufacturing a motion study.
 Two output-neutral ways to save time, neither of which changes what the fragment inventory teaches: reuse a
 coverage-complete `.omd/refs/` inventory when this directory already has one for the concept (capture
 only the missing categories rather than rebuilding it), and capture references in parallel with
