@@ -60,9 +60,14 @@ reference. Capture a motion study (the default energy pass) only where motion ma
 typography, layout, colour, and voice references set `noEnergy` (or `omd ref add --no-energy`) to
 skip the second browser launch — it does not affect a non-motion reference's usefulness.
 
-Preserve contamination defenses: reject sources with two or more slop signals unless
-user-provided (retain those as named anti-references); drop kinship at similarity >= .85;
-prefer first-party/product evidence and direct user/community sources over SEO summaries.
+Preserve contamination defenses: reject a non-user source only when it is derivative or
+convergent — an SEO/content-farm summary, a near-duplicate, or a page whose repeated
+patterns are unauthored defaults — not a premium, first-party, intentional design that
+uses a common pattern (a gradient, a card grid, a common sans) with a point of view. Slop
+is convergence without an author, not any use of a familiar pattern; a well-made source is
+a reference to measure, not slop to drop. Retain a user-provided contaminated source as a
+named anti-reference; drop kinship at similarity >= .85; prefer first-party/product
+evidence and direct user/community sources over SEO summaries.
 Return measured invariants, sanitized rules, coverage gaps, stable source keys/labels, trust,
 and uncertainty. Use tight selectors for component anatomy. A source screenshot remains
 scout-local: never pass it, its URL, pixels, or a source-derived render downstream. When image
