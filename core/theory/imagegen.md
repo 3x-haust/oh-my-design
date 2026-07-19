@@ -56,6 +56,11 @@ When the host provides an image-generation capability and image-first applies, t
    section for a multi-section page — never one tall board with unreadable text. Do not crop an old
    image for a detail view; regenerate that section fresh, keeping the same
    palette/type/radius/treatment.
+   A project-owned rough — a quick pass built on the committed design system — is a permitted
+   generation seed: feed it plus the committed palette/type/material as the project-owned inputs so the
+   draft fleshes out ("구체화") that rough rather than inventing an unrelated look. The build then
+   redesigns the draft back onto the design system's tokens, spacing, and component rules; the draft is
+   a reference, never shipped, and the shipped surface obeys the system, not the raw draft.
 2. **Analyze** — only after the coordinator has checked the selected generated lineage, composer
    analyzes and translates that draft into the composition contract: extract tokens, layout geometry,
    spacing rhythm, type-scale relationships, component anatomy, interaction affordances, and each

@@ -35,6 +35,13 @@ instructions: |
   identity, never a fixture identifier or list position. This conditional branch does not impose
   list-detail tasks on non-list-detail product, marketing, editorial, or static surfaces.
 
+  For a multi-screen product or mixed surface, map the flow before any drawing: list the features
+  and, for each, the pages it needs; then list the pages and, for each, the features each must carry.
+  Name the primary flow(s) as an ordered step sequence from entry to task completion. Prune steps and
+  screens that do not serve the task — fewer screens and fewer steps to the same outcome is better UX;
+  record each removed step and why. Keep this map and flow in the frame body (not the task matrix), and
+  let it decide which screens exist and which `T#` rows the matrix carries.
+
   Taste is admissible only when the coordinator explicitly provides `omd taste profile`
   output. That default profile contains explicit user records only. Never run `--all` and
   never treat an agent/legacy choice as user preference. Apply precedence exactly:
