@@ -12,6 +12,7 @@ export type SlopSourceCandidateId =
   | 'rounded-accent-callout'
   | 'decorative-ordinal-run'
   | 'default-font-pair'
+  | 'fake-submit'
   | 'global-terminal-styling';
 
 export interface SlopSourceCandidate {
@@ -74,6 +75,10 @@ const REASONS: Record<SlopSourceCandidateId, Pick<SlopSourceCandidate, 'reason' 
   'global-terminal-styling': {
     reason: 'Monospace terminal styling is applied to a global or primary interface surface.',
     reviewQuestion: 'Is terminal language intrinsic to the product, or should monospace stay with code content?',
+  },
+  'fake-submit': {
+    reason: 'A form submit prevents default and fakes a success state on a timer, but the file makes no network call — the request never leaves the page.',
+    reviewQuestion: 'Does this submit actually deliver the request (API, form action, mailto, waitlist), or is it a success animation with no delivery? Wire it, or label it a UI-state demo.',
   },
 };
 
@@ -348,6 +353,21 @@ function detectTerminalChrome(source: string, path: string): SlopSourceCandidate
   return null;
 }
 
+function detectFakeSubmit(source: string, path: string): SlopSourceCandidate | null {
+  // A JS-handled form submit that fakes success on a timer and never touches the network.
+  const network = /\b(?:fetch|axios|XMLHttpRequest|useMutation|useSWRMutation|useActionState)\b|fetcher\.(?:submit|load|Form)|navigator\.sendBeacon|mailto:|method\s*=\s*['"]?post|(?:^|[\s{;(=])(?:form)?action\s*[:=]/mi;
+  if (network.test(source)) return null;
+  if (!/preventDefault\s*\(/.test(source)) return null;
+  const success = /(['"`])(?:success|submitted|sent|done|complete)\1|set(?:Submitted|Success|Sent)\s*\(/i;
+  for (const match of source.matchAll(/setTimeout\s*\(/g)) {
+    const region = source.slice(match.index!, match.index! + 320);
+    if (success.test(region)) {
+      return candidate('fake-submit', path, source, match.index!, ['submit:preventDefault', 'transition:setTimeout->success', 'network:none']);
+    }
+  }
+  return null;
+}
+
 function detectCandidates(source: string, path: string, extension: string): SlopSourceCandidate[] {
   const masked = maskComments(source, extension);
   const candidates = [
@@ -359,6 +379,7 @@ function detectCandidates(source: string, path: string, extension: string): Slop
     detectOrdinalRun(masked, path),
     detectFontPair(masked, path),
     detectTerminalChrome(masked, path),
+    detectFakeSubmit(masked, path),
   ];
   return candidates.filter((item): item is SlopSourceCandidate => item !== null);
 }

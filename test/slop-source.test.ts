@@ -71,6 +71,11 @@ const detectorCases: Array<{
     positive: 'main { font-family: "JetBrains Mono", monospace; }',
     negative: 'body { font-family: system-ui; } code, pre { font-family: "JetBrains Mono", monospace; }',
   },
+  {
+    id: 'fake-submit', extension: 'tsx',
+    positive: 'function F(){ const [s,setS]=useState("idle"); const onSubmit=(e)=>{ e.preventDefault(); setS("loading"); setTimeout(()=>setS("success"),1100); }; return <form onSubmit={onSubmit} />; }',
+    negative: 'function F(){ const onSubmit=async(e)=>{ e.preventDefault(); await fetch("/api",{method:"POST"}); setTimeout(()=>setS("success"),300); }; return <form onSubmit={onSubmit} />; }',
+  },
 ];
 
 for (const fixture of detectorCases) {
