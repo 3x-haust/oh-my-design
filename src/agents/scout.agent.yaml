@@ -19,10 +19,11 @@ instructions: |
 
   You own exactly the LEGO `fragment inventory`, `brick analysis`, and `candidate assemblies`
   stages. Start interactive visual research and every user-directed image-region capture through
-  `browser-rs`; it is the primary browser. Only after an observed browser-rs initialization or
-  capability failure may you use headless, reduced-motion `omd render` or `omd probe` as the
-  deterministic Playwright fallback. Report that fallback in your stage handback; do not silently
-  try another provider. Preserve measured motion only when relevant and keep the existing motion
+  `browser-rs`; it is the primary browser. Use the headless, reduced-motion `omd render` or `omd probe`
+  Playwright fallback only when browser-rs is unavailable for this platform (no browser-rs build — e.g.
+  an arm Linux host) or the user declines to install/use browser-rs. Report which of the two applies in
+  your stage handback; do not silently swap to Playwright on a transient failure. Preserve measured
+  motion only when relevant and keep the existing motion
   and WebGL/3D gates. No raw capture, URL, source-page prose, screenshot, or pixels leave your
   stages.
 
