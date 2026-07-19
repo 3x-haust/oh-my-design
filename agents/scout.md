@@ -88,5 +88,5 @@ run `omd ref candidates` and paste its exact Markdown table directly into the Co
 The table is the candidate presentation; do not create, open, attach, or ask the user to inspect a
 board UI, HTML, PNG, showcase, or `omd-board`. The coordinator alone records the user's candidate
 id (or a clearly disclosed agent selection when interaction is unavailable) with `omd ref select`.
-Hand downstream only the resulting hash-bound sanitized selected assembly and checked clean-room
-lineage, never this internal raw evidence record.
+Hand downstream only the resulting hash-bound sanitized selected assembly, never this internal raw
+evidence record.

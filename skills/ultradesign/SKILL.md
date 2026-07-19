@@ -140,15 +140,13 @@ then run `omd ref check` again. If interaction is unavailable under the run conf
 agent selection only with a clear disclosure and reason in `.omd/decisions.md`; never imply that
 the user selected it. Do not invoke composer, eye, or hand yet. Once each applicable
 project-owned brief/copy/type/register/palette/material input has its normal clean check, the
-coordinator/host derives the two-to-three independent clean-room art-direction directions directly
-from the selected assembly and its sanitized principles/blueprints. It does not read
-`.omd/composition.md` or ask composer for a prompt. With capability, generate the drafts
-concurrently, select one, record the selection decision, then call
-`recordReferenceCompositeLineage(root, input)` and `checkReferenceCompositeLineage(root)`. Without
-capability, record and check explicit unavailable lineage. Only then invoke composer: pass its
-selected sanitized assembly plus the chosen clean-room draft on the generated route, or the checked
-unavailable lineage plus CSS/SVG evidence path on the fallback. Never pass raw records, source URLs,
-screenshots, pixels, or source-page prose.
+coordinator/host derives the two-to-three independent image-first art-direction directions directly
+from the selected assembly, the selected references, any project rough, and permitted project-owned
+inputs. It does not read `.omd/composition.md` or ask composer for a prompt. With image capability,
+generate the drafts concurrently and select one. Without capability, take the CSS/SVG path. Only then
+invoke composer: pass its selected sanitized assembly plus the chosen draft, or the selected assembly
+plus the CSS/SVG evidence path on the fallback. Never pass raw records, source URLs, screenshots,
+pixels, or source-page prose.
 
 
 The coordinator does not author copy. The scout's voice/audience evidence is the writer's only dependency;
@@ -221,9 +219,9 @@ proof container-width change. Rerun the proof instead of carrying an obsolete ap
 
 ## 4. Composition contract before divergence
 
-  Before spawning composer, require the coordinator's `checkReferenceCompositeLineage(root)` to
-  pass. On a generated route, give composer the coordinator-chosen lineage-attested draft; on an
-  unavailable route, give it the checked unavailable lineage and CSS/SVG evidence path. The
+  Before spawning composer, the coordinator generates and chooses its image-first draft (when a draft
+  is available) or takes the CSS/SVG path. Give composer the coordinator-chosen draft, or the selected
+  assembly plus the CSS/SVG evidence path. The
   coordinator has already derived prompts and selected/recorded the draft from permitted inputs;
   composer must not supply or revise those upstream directions. Then spawn a fresh `oh-my-design:composer`
   with the sanitized frame/concept (including surface classification), clean copy deck, approved
@@ -247,15 +245,13 @@ mandatory photo or invented fact/asset. When mechanism/material/workflow is cent
 roles assigns a lawful carrier or an explicit alternate non-media mental-model carrier with
 its limitation; `none because no approved photo` is insufficient.
 For a confident/showpiece register where the composition is the deliverable, the
-host/coordinator derives 2–3 independent clean-room art-direction directions from the committed
-palette/type/material, sanitized measured principles, skin-abstracted blueprints, and other
-permitted project-owned inputs before composer starts. The host/coordinator owns concurrent draft generation,
-cache management, blind selection, and provenance/decision recording. The composer
-may consume only the coordinator-chosen draft whose checked lineage attests that it used only those
-sanitized inputs and no source screenshot, URL, pixels, or visual likeness. Composer neither
-generates nor supplies/revises prompts, inspects raw source material, manages the cache, selects a
-draft, or records that decision. Drafts are design references, never shipped page assets; `omd ref
-distance` still gates the shipped build. A quiet register or unavailable host image capability uses
+host/coordinator derives 2–3 independent image-first art-direction directions from the committed
+palette/type/material, sanitized measured principles, the selected references, any project rough, and
+other permitted project-owned inputs before composer starts. The host/coordinator owns concurrent
+draft generation, cache management, and blind selection. The composer may consume only the
+coordinator-chosen draft as art-direction input. Composer neither generates nor supplies/revises
+prompts, inspects raw source material, manages the cache, or selects a draft. Drafts are design references, never shipped page assets; `omd ref
+distance` still reports fidelity as an advisory signal. A quiet register or unavailable host image capability uses
 the selected sanitized assembly and CSS/SVG graphics recipes instead.
 
 Run `omd composition --check`. Missing sections, malformed fingerprints, or stale inputs

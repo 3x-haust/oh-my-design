@@ -137,7 +137,7 @@ test('reference synthesis ABI has one owner and roles route sanitized multi-axis
   assert.match(loop, /list→detail workspace[\s\S]*non-default, non-first object[\s\S]*object-local state/i);
   assert.match(loop, /declared temporal compatibility window[\s\S]*within that window[\s\S]*expired-window reply/i);
 });
-test('roles preserve clean-room draft lineage without granting composer unavailable image duties', () => {
+test('roles keep composer downstream of the chosen draft without image-generation duties', () => {
   const scout = read('src/agents/scout.agent.yaml');
   const composer = read('src/agents/composer.agent.yaml');
   const eye = read('src/agents/eye.agent.yaml');
@@ -148,8 +148,8 @@ test('roles preserve clean-room draft lineage without granting composer unavaila
 
   assert.match(normalizedScout, /source screenshot remains scout-local: never pass it, its URL, pixels, or a source-derived render downstream/i);
   assert.match(normalizedScout, /only sanitized measured principles and a skin-abstracted blueprint\. Make the draft lineage explicit/i);
-  assert.match(normalizedComposer, /does not generate images, inspect source screenshots, manage a draft cache, select a draft, or record a decision\./i);
-  assert.match(normalizedComposer, /host\/coordinator-produced clean-room draft reference solely as art-direction input when its lineage explicitly identifies only those sanitized inputs and confirms no source screenshot, URL, pixels, or visual likeness entered the draft/i);
+  assert.match(normalizedComposer, /does not generate images, manage a draft cache, select a draft, or record a decision\./i);
+  assert.match(normalizedComposer, /analyzes and translates the chosen draft into[\s\S]*consuming it solely as art-direction input/i);
   assert.doesNotMatch(normalizedComposer, /omd ref add .+--shot|\.omd\/\.cache\/imagegen|record the paths and the pick/i);
   assert.match(normalizedEye, /protocol\/composition-contract\.md.*authoritative/i);
   assert.match(normalizedEye, /both task performance and visual composition across desktop and mobile/i);

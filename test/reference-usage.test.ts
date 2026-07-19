@@ -6,7 +6,6 @@ import { join, relative } from 'node:path';
 import test, { type TestContext } from 'node:test';
 import { persistImageFragment } from '../core/ref/image-fragment.ts';
 import { refIdentity } from '../core/ref/identity.ts';
-import { recordReferenceCompositeLineage } from '../core/ref/composite-lineage.ts';
 import { selectReferenceCandidate } from '../core/ref/reference-selection.ts';
 import { parseReferenceUsage, recordReferenceUsage, validateReferenceUsage } from '../core/ref/reference-usage.ts';
 import { generateReferenceReport, referenceReportPath } from '../core/ref/reference-report.ts';
@@ -40,19 +39,16 @@ const fixture = (context: TestContext): Fixture => {
   const footer = addComponent('https://ui.example/catalog', 'footer links', '[data-footer]', 34);
   const fragment = persistImageFragment(root, { inputPath: relative(root, refImagePath(root, { source: 'https://ui.example/catalog', component: 'product card' })), provenance: { sourcePage: 'https://pinterest.example/pin/handmade-tiles', captureRegion: 'warm tile mosaic, top-right image fragment', licenseStatus: 'unknown', rightsNotes: 'Verify rights before publication.', capturedAt: '2026-07-18T00:00:00.000Z' }, transfer: { visualRole: 'atmosphere', principles: ['Use only colour density, never the source composition.'] } });
   writeFileSync(join(root, '.omd', 'reference-board.json'), JSON.stringify({ schemaVersion: 'reference-board-v1', frameSha256: 'a'.repeat(64), candidates: [{ id: 'selected', label: 'Selected clean-room assembly', route: '/shop', rationale: 'Use measured structure with independent implementation.', pieces: [{ slotId: 'hero-card', sourceKind: 'component-capture', referenceId: hero, targetComponent: 'ShopHero', targetSelector: '[data-omd="shop-hero"]', taskIds: ['T1'], reason: 'Carry only hierarchy.', take: ['structure'], avoid: 'Do not reproduce source copy.', adaptation: 'Use local spacing.', grid: { column: 1, span: 6, order: 0 } }, { slotId: 'mosaic-fragment', sourceKind: 'image-fragment', referenceId: fragment.id, targetComponent: 'ShopHero', targetSelector: '[data-omd="shop-hero"]', taskIds: ['T1'], reason: 'Study colour density.', take: ['density'], avoid: 'Do not use source pixels.', adaptation: 'Use generated local gradient.', grid: { column: 7, span: 6, order: 1 } }, { slotId: 'footer-links', sourceKind: 'component-capture', referenceId: footer, targetComponent: 'ShopFooter', targetSelector: '[data-omd="shop-footer"]', taskIds: ['T2'], reason: 'Study link grouping.', take: ['rhythm'], avoid: 'Do not copy labels.', adaptation: 'Use local content.', grid: { column: 1, span: 12, order: 2 } }] }] }) + '\n');
-  selectReferenceCandidate(root, 'selected'); mkdirSync(join(root, '.omd', '.cache', 'imagegen'), { recursive: true });
-  const composite = join(root, '.omd', '.cache', 'imagegen', 'draft.png'); const prompt = join(root, '.omd', '.cache', 'imagegen', 'draft.prompt.txt'); writeFileSync(composite, png(56)); writeFileSync(prompt, 'Create a clean-room local design concept.');
-  recordReferenceCompositeLineage(root, { state: 'generated', compositePath: composite, promptPath: prompt, provider: 'host-imagegen', hostCapability: 'image-generation', permittedInputClasses: ['sanitized-selected-assembly', 'sanitized-principles', 'sanitized-blueprints', 'project-owned-concept-material'] });
+  selectReferenceCandidate(root, 'selected');
   writeFileSync(join(root, '.omd', 'attribution.md'), '| Group | Source |\n|---|---|\n| color | theory/local |\n'); writeFileSync(join(root, 'src', 'shop.ts'), 'export const shop = true;\n');
   return { root };
 };
 const usageRows = () => [{ slotId: 'hero-card', status: 'used' as const, target: { route: '/shop', component: 'ShopHero', selector: '[data-omd="shop-hero"]' }, borrowedProperties: ['vertical hierarchy'], nonBorrowedProperties: ['source copy'], transformation: 'Rebuilt with local tokens.', evidence: { path: 'src/shop.ts', selector: '[data-omd="shop-hero"]' }, verificationNote: 'Rendered hero is independently implemented.' }, { slotId: 'mosaic-fragment', status: 'rejected' as const, target: { route: '/shop', component: 'ShopHero', selector: '[data-omd="shop-hero"]' }, borrowedProperties: [], nonBorrowedProperties: ['source pixels and composition'], transformation: 'Used a local generated gradient instead.', evidence: { path: 'src/shop.ts', selector: '[data-omd="shop-hero"]' }, verificationNote: 'No captured image bytes ship.' }, { slotId: 'footer-links', status: 'anti-reference' as const, target: { route: '/shop', component: 'ShopFooter', selector: '[data-omd="shop-footer"]' }, borrowedProperties: [], nonBorrowedProperties: ['dense source grouping'], transformation: 'Deliberately expanded local link spacing.', evidence: { path: 'src/shop.ts', selector: '[data-omd="shop-footer"]' }, verificationNote: 'The final footer rejects the observed grouping.' }];
-type Carrier = 'board' | 'selection' | 'lineage' | 'attribution' | 'usage' | 'evidence';
+type Carrier = 'board' | 'selection' | 'attribution' | 'usage' | 'evidence';
 const pathFor = (root: string, carrier: Carrier): string => {
   switch (carrier) {
     case 'board': return join(root, '.omd', 'reference-board.json');
     case 'selection': return join(root, '.omd', 'reference-selection.json');
-    case 'lineage': return join(root, '.omd', 'reference-composite-lineage.json');
     case 'attribution': return join(root, '.omd', 'attribution.md');
     case 'usage': return join(root, '.omd', 'reference-usage.json');
     case 'evidence': return join(root, 'src', 'shop.ts');
@@ -63,7 +59,6 @@ const replacement = (root: string, carrier: Carrier): void => {
     switch (carrier) {
       case 'board': return before.replace('Selected clean-room assembly', 'Generation B assembly');
       case 'selection':
-      case 'lineage':
       case 'attribution': return `${before.trimEnd()}\n\n`;
       case 'usage': return before.replace('Rendered hero is independently implemented.', 'Generation B verification note.');
       case 'evidence': return 'export const shop = false;\n';
@@ -137,23 +132,13 @@ test('usage validation survives bounded atomic replacement stress without mixing
   assert.deepEqual(checked.usage.rows, recorded.rows); assert.ok(reads > 6);
 });
 
-test('usage validation rejects a checked lineage result from a different generation', (context) => {
-  // Given: generation-A board, selection, lineage bytes, and usage with an injected generation-B lineage result.
-  const value = fixture(context); recordReferenceUsage(value.root, { rows: usageRows() });
-  const readers = { checkLineage: () => ({ schemaVersion: 'reference-composite-lineage-v1' as const, state: 'unavailable' as const, reason: 'Generation B has no image capability.' }) };
-
-  // When / Then: a validated result that does not derive from exact sampled lineage bytes must fail closed.
-  assert.throws(() => validateReferenceUsage(value.root, readers));
-});
-
-test('usage validation rejects generation-B artifact and lineage carriers against generation-A bytes', (context) => {
-  // Given: exact generation-A files plus a reader that supplies generation-B manifest and lineage values.
+test('usage validation rejects a generation-B artifact carrier against generation-A bytes', (context) => {
+  // Given: exact generation-A files plus a reader that supplies a generation-B manifest.
   const value = fixture(context); recordReferenceUsage(value.root, { rows: usageRows() }); const artifacts = readReferenceBoardArtifacts(value.root); const first = artifacts.manifest.candidates[0];
   if (first === undefined) throw new Error('fixture must include a selected board candidate');
   const generationBArtifacts = { ...artifacts, manifest: { ...artifacts.manifest, candidates: [{ ...first, label: 'Generation B manifest' }, ...artifacts.manifest.candidates.slice(1)] } };
   const readers = {
     readArtifacts: () => generationBArtifacts,
-    checkLineage: () => ({ schemaVersion: 'reference-composite-lineage-v1' as const, state: 'unavailable' as const, reason: 'Generation B lineage.' }),
   };
 
   // When / Then: no checked result can be accepted unless both values derive from sampled generation-A bytes.
@@ -162,7 +147,7 @@ test('usage validation rejects generation-B artifact and lineage carriers agains
 
 test('usage validation does not accept an initial generation after last-evidence carrier replacement', (context) => {
   // Given: a valid generation A and a real atomic replacement triggered by the sixth evidence read.
-  for (const carrier of ['board', 'selection', 'lineage', 'attribution', 'usage', 'evidence'] as const) {
+  for (const carrier of ['board', 'selection', 'attribution', 'usage', 'evidence'] as const) {
     const value = fixture(context); recordReferenceUsage(value.root, { rows: usageRows() }); const mutation = mutateAtLastEvidenceRead(value.root, carrier);
 
     // When: validation reaches the final evidence callback after binding generation A.
@@ -180,15 +165,18 @@ test('usage validation does not accept an initial generation after last-evidence
 
 test('usage preparation does not write an initial generation after last-evidence carrier replacement', (context) => {
   // Given: input rows and replacements that occur after all initial evidence checks.
-  for (const carrier of ['board', 'selection', 'lineage', 'attribution', 'evidence'] as const) {
+  for (const carrier of ['board', 'selection', 'attribution', 'evidence'] as const) {
     const value = fixture(context); const mutation = mutateAtLastEvidenceRead(value.root, carrier);
 
     // When: preparation derives hashes before the last evidence callback mutates one carrier.
-    if (carrier === 'board' || carrier === 'selection') assert.throws(() => prepareReferenceUsage(value.root, { rows: usageRows() }, mutation.readers));
+    // A board replacement changes boardSha256, so the bound selection can never match — it fails closed.
+    // A whitespace-only selection change now settles and is retried into a coherent new generation
+    // (without composite lineage nothing pins the exact prior selection bytes).
+    if (carrier === 'board') assert.throws(() => prepareReferenceUsage(value.root, { rows: usageRows() }, mutation.readers));
     else {
       const prepared = prepareReferenceUsage(value.root, { rows: usageRows() }, mutation.readers);
       switch (carrier) {
-        case 'lineage': assert.equal(prepared.compositeLineageSha256, sha256(readFileSync(pathFor(value.root, carrier)))); break;
+        case 'selection': assert.equal(prepared.selectionSha256, sha256(readFileSync(pathFor(value.root, carrier)))); break;
         case 'attribution': assert.equal(prepared.attributionSha256, sha256(readFileSync(pathFor(value.root, carrier)))); break;
         case 'evidence': assert.ok(mutation.reads() > 6); break;
       }

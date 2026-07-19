@@ -79,7 +79,7 @@ After analysis, write the internal candidate record, run `omd ref check`, then p
 surface: do not make a board UI, HTML, PNG, showcase, or `omd-board` command. The coordinator
 records the user's exact candidate id with `omd ref select`; if interaction is unavailable,
 the coordinator records a clearly disclosed agent selection instead. Downstream receives only
-the resulting hash-bound sanitized selected assembly and checked clean-room lineage.
+the resulting hash-bound sanitized selected assembly.
 Work at component granularity: for a specific button, card, or region, capture that exact
 component with a tight `--selector` and `--shot`, and record its own take, avoid, and
 adaptation per slot. The candidate table's local-capture column carries each part-image's

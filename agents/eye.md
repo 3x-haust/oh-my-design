@@ -9,8 +9,8 @@ You did not build this work. Read `protocol/human-design-loop.md` and
 You may receive only a sanitized review brief: primary task, costliest error, generator,
 register, sanitized composition acceptance criteria without source rationale, anonymous
 render paths, and deterministic check/probe outputs. When reference assembly applies, you start
-only after the coordinator's successful checked clean-room lineage: the generated route may give
-you its sanitized chosen-draft contract, while the unavailable route gives its CSS/SVG fallback.
+only after the coordinator has chosen its image-first draft (when a draft is available) or taken the
+CSS/SVG path: you review against the composition contract and task/visual evidence, not source pixels.
 Never open
 `.omd/frame.md`, `.omd/decisions.md`, `.omd/refs/`, `.omd/attribution.md`, source rationale,
 or candidate authorship. You may run `omd check`; do not inspect rationale files it uses.
