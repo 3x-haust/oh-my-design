@@ -80,6 +80,21 @@ function run(args: string[]): void {
   }
   process.stdout.write(`\nwrote ${MANIFESTS.length} manifests\n`);
 
+  // Keep package-lock.json's version field in sync with package.json.
+  // MANIFESTS deliberately excludes the lockfile (bumpJson's global regex
+  // would rewrite every dependency version), so resync it via npm here.
+  process.stdout.write('\nsyncing package-lock.json...\n');
+  const lockSync = spawnSync('npm', ['install', '--package-lock-only', '--no-audit', '--no-fund'], {
+    cwd: root,
+    stdio: 'inherit',
+    encoding: 'utf8',
+    shell: true,
+  });
+  if (lockSync.status !== 0) {
+    process.stderr.write('package-lock sync failed — manifests were written.\n');
+    process.exit(lockSync.status ?? 1);
+  }
+
   // Build
   process.stdout.write('\nrunning build...\n');
   const build = spawnSync(process.execPath, ['adapters/build.ts'], {
