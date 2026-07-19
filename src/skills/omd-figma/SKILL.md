@@ -9,7 +9,7 @@ description: >-
   Triggers: 피그마, figma link, 피그마 그대로 구현, any figma.com URL in the brief.
 ---
 
-# omd-figma
+# OMD-figma
 
 When Figma exists, the design is already decided. The frame/concept/reference steps
 of the design loop are not needed — someone made those choices, and they are visible

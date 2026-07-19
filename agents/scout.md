@@ -57,6 +57,12 @@ remaining decision. Never choose, target, estimate, or announce a number or rang
 (never "18–25 references", never an "N of M" count) — a fabricated count is the fake specificity this
 tool removes. Report only which decision you are gathering evidence for. If motion is irrelevant,
 state why rather than manufacturing a motion study.
+Do not reflexively web-search the same famous benchmarks on every brief (토스/Toss, Linear, Stripe,
+Vercel, 당근, Kakao). They are documented examples, not a default reference set; reaching for them every
+time is the reference-grammar homogenization this tool exists to remove. Search this product's own domain,
+its real competitors, and its audience's language; a famous product enters only when this brief's actual
+problem points to it, and even then it is one measured source among the domain's own evidence, never the
+starting point. Issue the independent searches for a research pass in parallel, not one at a time.
 Two output-neutral ways to save time, neither of which changes what the fragment inventory teaches: reuse a
 coverage-complete `.omd/refs/` inventory when this directory already has one for the concept (capture
 only the missing categories rather than rebuilding it), and capture references in parallel with

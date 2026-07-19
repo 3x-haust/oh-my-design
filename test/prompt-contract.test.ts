@@ -404,3 +404,29 @@ test('scout captures by decision coverage, never by a targeted or announced refe
     assert.match(source, /fabricated specificity|fake specificity/i);
   }
 });
+
+test('the one-risk requirement is functional, not thematic, on a product surface', () => {
+  const expressive = read('core/theory/expressive.md');
+  const source = expressive.replace(/\s+/g, ' ');
+  assert.match(source, /On a `product` or quiet surface the risk is functional, not thematic/i);
+  assert.match(source, /A named theme, a decorative metaphor, or a "memorable moment" is the wrong risk/i);
+  assert.match(source, /"Memorable" is a marketing goal/i);
+});
+
+test('scout does not reflexively reach for famous benchmarks and searches in parallel', () => {
+  const skill = read('src/skills/omd-scout/SKILL.md');
+  const agent = read('src/agents/scout.agent.yaml');
+  for (const raw of [skill, agent]) {
+    const source = raw.replace(/\s+/g, ' ');
+    assert.match(source, /reflexively web-search the same famous benchmarks/i);
+    assert.match(source, /reference-grammar homogenization/i);
+    assert.match(source, /Linear/);
+    assert.match(source, /in parallel/i);
+  }
+});
+
+test('voice cites Toss as a documented example, never a voice to copy', () => {
+  const voice = read('core/theory/voice.md').replace(/\s+/g, ' ');
+  assert.match(voice, /documented examples of register discipline, never as a voice to copy/i);
+  assert.match(voice, /do not web-search a product's copy strings to imitate/i);
+});
