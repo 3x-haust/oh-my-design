@@ -205,7 +205,7 @@ test('refinement loop: a round with no evidence does not count — the loop bloc
 
 test('refinement loop: GREEN is honored only after minRounds', () => {
   const d = evaluateRefinementLoop({ minRounds: 2, rounds: [round(1, 'after', [])] });
-  // 1 round, GREEN criteria but minRounds=2 → not yet a GREEN stop; budget (default 3) not hit → continue.
+  // 1 round, GREEN criteria but minRounds=2 → not yet a GREEN stop; no maxRounds → unbounded → continue.
   assert.equal(d.continueLoop, true);
   assert.notEqual(d.status, 'green');
 });
