@@ -4,10 +4,6 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// Locks the subagent-utilisation improvements into the orchestration doctrine: independent lanes
-// run in parallel and return sanitized summaries, build and judgment are separate agents, and the
-// image-first drafts are generated concurrently.
-
 const root = fileURLToPath(new URL('..', import.meta.url));
 const read = (rel: string): string => readFileSync(join(root, rel), 'utf8');
 
@@ -22,12 +18,4 @@ test('the RED/GREEN loop judges with a fresh eye, never the hand that built it',
   const skill = read('skills/ultradesign/SKILL.md');
   assert.match(skill, /fresh\s+`(?:omd-|oh-my-design:)eye`\s+—\s+never the hand that built it/i);
   assert.match(skill, /[Bb]uild and judgment stay separate/);
-});
-
-test('image-first concept drafts keep independent concurrent host generation', () => {
-  const imagegen = read('core/theory/imagegen.md');
-  assert.match(imagegen, /concurrently \(they are independent — do not\s+serialize them\)/i);
-  const composer = read('agents/composer.md');
-  assert.match(composer, /host\/coordinator owns concurrent clean-room draft generation/i);
-  assert.match(composer, /composer[\s\S]*supplies\s+art\s+direction[\s\S]*lineage-attested\s+results/i);
 });

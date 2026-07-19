@@ -1,6 +1,6 @@
 {
   "name": "oh-my-design",
-  "version": "0.16.1",
+  "version": "0.17.0",
   "description": "Design cognition loop for coding agents — frame the problem, study measured references, commit to a structure, look at what actually rendered, and let what you see rewrite the problem.",
   "author": {
     "name": "3x-haust",

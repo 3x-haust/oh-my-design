@@ -1,0 +1,8 @@
+Task 15 cleanup record
+
+- The task-owned temporary offline-package directory was removed after verification.
+- The task-owned browser smoke profile was removed after the browser exited.
+- No Task 15 browser or installer process remains active.
+- The pre-existing foreign global installation and foreign browser executable were preserved.
+- The pre-existing unrelated Threads browser profile was not touched.
+- `independent-qa-run.log` is intentionally absent.

@@ -3,12 +3,22 @@ import { join, dirname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { parse as parseToml } from 'smol-toml';
-import { build } from '../../adapters/build.ts';
 import type { Detected } from './detect.ts';
 import { unpatchSettings, patchSettings, unpatchHooks } from './patch-claude.ts';
 import type { Settings } from './patch-claude.ts';
 import { patchConfigToml, unpatchConfigToml } from './patch-codex.ts';
+import { requirePrebuiltDist } from './prebuilt-dist.ts';
+export { PrebuiltDistError } from './prebuilt-dist.ts';
 import type { Host } from '../types.ts';
+import {
+  installBrowserRs,
+  uninstallBrowserRs,
+  type BrowserRsDependencies,
+  type BrowserRsInstallDependencies,
+  type BrowserRsInstallResult,
+  type BrowserRsUninstallResult,
+} from './browser-rs.ts';
+import { doctorBrowserProvider, type BrowserProviderDoctorOptions, type BrowserProviderHealth } from './browser-provider.ts';
 
 // core/install/install.ts -> core/install -> core -> package root
 const pkgRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -126,15 +136,15 @@ function uninstallClaude(d: Detected, changes: string[]): void {
   }
 }
 
-function installCodex(d: Detected, version: string, changes: string[]): void {
+function installCodex(d: Detected, version: string, distributionRoot: string, changes: string[]): void {
   const pluginDir = join(d.home, 'plugins', 'cache', 'omd', 'oh-my-design', version);
   mkdirSync(pluginDir, { recursive: true });
-  cpSync(join(pkgRoot, 'dist', 'codex'), pluginDir, { recursive: true });
+  cpSync(join(distributionRoot, 'dist', 'codex'), pluginDir, { recursive: true });
   changes.push(`codex: installed plugin -> ${pluginDir}`);
 
   const agentsDir = join(d.home, 'agents');
   mkdirSync(agentsDir, { recursive: true });
-  const srcAgentsDir = join(pkgRoot, 'dist', 'codex', 'agents');
+  const srcAgentsDir = join(distributionRoot, 'dist', 'codex', 'agents');
   const agentNames: string[] = [];
   for (const file of readdirSafe(srcAgentsDir)) {
     if (!file.endsWith('.toml')) continue;
@@ -143,7 +153,7 @@ function installCodex(d: Detected, version: string, changes: string[]): void {
   }
   changes.push(`codex: registered agents -> ${agentsDir} (${agentNames.join(', ') || 'none'})`);
 
-  const skillsSrc = join(pkgRoot, 'dist', 'codex', 'skills');
+  const skillsSrc = join(distributionRoot, 'dist', 'codex', 'skills');
   const skillsDest = join(d.home, 'skills');
   if (existsSync(skillsSrc)) {
     mkdirSync(skillsDest, { recursive: true });
@@ -190,24 +200,56 @@ function uninstallCodex(d: Detected, changes: string[]): void {
   }
 }
 
-export function install(hosts: Detected[]): string[] {
-  build();
+export type InstallOptions = {
+  readonly browser?: BrowserRsInstallDependencies;
+  readonly prebuiltRoot?: string;
+};
+
+export async function install(hosts: Detected[], options: InstallOptions = {}): Promise<string[]> {
+  const distributionRoot = options.prebuiltRoot ?? pkgRoot;
+  requirePrebuiltDist({ distributionRoot, sourceRoot: pkgRoot, hosts });
   const version = pkgVersion();
   const changes: string[] = [];
   for (const d of hosts) {
     if (d.host === 'claude') installClaude(d, changes);
-    else installCodex(d, version, changes);
+    else installCodex(d, version, distributionRoot, changes);
   }
+  changes.push(browserInstallChange(await installBrowserRs(options.browser)));
   return changes;
 }
 
-export function uninstall(hosts: Detected[]): string[] {
+export type UninstallOptions = { readonly browser?: BrowserRsDependencies };
+
+export function uninstall(hosts: Detected[], options: UninstallOptions = {}): string[] {
   const changes: string[] = [];
   for (const d of hosts) {
     if (d.host === 'claude') uninstallClaude(d, changes);
     else uninstallCodex(d, changes);
   }
+  changes.push(browserUninstallChange(uninstallBrowserRs(options.browser)));
   return changes;
+}
+
+function browserInstallChange(result: BrowserRsInstallResult): string {
+  switch (result.kind) {
+    case 'present':
+      return `browser-rs: present (${result.source}: ${result.path})`;
+    case 'installed':
+      return `browser-rs: installed (${result.path})`;
+    case 'unsupported':
+      return `browser-rs: unsupported (${result.platform}/${result.arch})`;
+    case 'failed':
+      return `browser-rs: failed (${result.reason})`;
+  }
+}
+
+function browserUninstallChange(result: BrowserRsUninstallResult): string {
+  switch (result.kind) {
+    case 'removed':
+      return `browser-rs: removed (${result.path})`;
+    case 'preserved':
+      return `browser-rs: preserved (${result.reason}: ${result.path})`;
+  }
 }
 
 export interface DoctorCheck {
@@ -228,7 +270,7 @@ function check(name: string, ok: boolean, detail?: string): DoctorCheck {
 
 function omdVersionRuns(): DoctorCheck {
   try {
-    execFileSync(process.execPath, [join(pkgRoot, 'bin', 'omd.ts'), '--version'], { stdio: 'pipe' });
+    execFileSync(process.execPath, [join(pkgRoot, 'bin', 'omd.mjs'), '--version'], { stdio: 'pipe' });
     return check('omd --version runs', true);
   } catch (err) {
     return check('omd --version runs', false, err instanceof Error ? err.message : String(err));
@@ -311,11 +353,36 @@ function doctorCodex(d: Detected): DoctorCheck[] {
   return checks;
 }
 
-export function doctor(hosts: Detected[]): DoctorResult[] {
+export type DoctorOptions = { readonly browser?: BrowserProviderDoctorOptions };
+
+function browserProviderCheck(result: BrowserProviderHealth): DoctorCheck {
+  if ('fallback' in result) {
+    const detail = result.fallback.kind === 'ready'
+      ? `browser-rs unsupported (${result.browser.platform}/${result.browser.arch}); Playwright Chromium ${result.fallback.path}`
+      : `browser-rs unsupported (${result.browser.platform}/${result.browser.arch}); Playwright ${result.fallback.reason}${result.fallback.detail === undefined ? '' : `: ${result.fallback.detail}`}`;
+    return check('browser provider fallback', result.healthy, detail);
+  }
+  switch (result.browser.kind) {
+    case 'healthy':
+      return check('browser-rs provider', true, `${result.browser.source}: ${result.browser.path} (${result.browser.version})`);
+    case 'unhealthy':
+      return check(
+        'browser-rs provider',
+        false,
+        result.browser.reason === 'missing'
+          ? 'browser-rs is not resolved; run: oh-my-design browser install'
+          : result.browser.detail ?? result.browser.reason,
+      );
+  }
+}
+
+export async function doctor(hosts: Detected[], options: DoctorOptions = {}): Promise<DoctorResult[]> {
   const versionCheck = omdVersionRuns();
+  const browserCheck = browserProviderCheck(await doctorBrowserProvider(options.browser));
   return hosts.map((d) => {
     const checks = d.host === 'claude' ? doctorClaude(d) : doctorCodex(d);
     checks.push(versionCheck);
+    checks.push(browserCheck);
     return { host: d.host, ok: checks.every((c) => c.ok), checks };
   });
 }

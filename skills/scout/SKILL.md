@@ -1,7 +1,7 @@
 ---
 name: scout
 description: >-
-  Build a measured reference board without designing anything: whole pages for feel,
+  Build a measured LEGO reference inventory without designing anything: whole pages for feel,
   tight selectors for component anatomy, typography studies, motion studies, image refs
   for the unrenderable. Use when the user asks for references, inspiration, benchmarks,
   or "how do good sites do X" — standalone, before or without a build.
@@ -11,17 +11,26 @@ description: >-
 
 # oh-my-design:scout
 
-A reference board, measured instead of pinned. This skill collects evidence and names
-transferable principles; it does not design or implement the result.
+A LEGO reference assembly, measured instead of pinned. Read
+`protocol/reference-assembly.md` under `omd pack dir`; it owns the exact eight stages,
+their single owners, and their artifact/stop boundaries. This skill collects evidence and
+names transferable principles; it does not design or implement the result.
 
 Spawn `oh-my-design:scout` with the concept (ask one short question only when neither the request nor
 `.omd/frame.md` supplies one), the component inventory, working directory, and user URLs.
 User URLs are captured first and marked `--from-user`.
 
+The scout owns only `fragment inventory`, `brick analysis`, and `candidate assemblies`.
+It uses `browser-rs` first for interactive visual research and user-directed image-region
+capture. Only an observed browser-rs initialization/capability failure permits the headless,
+reduced-motion `omd render` or `omd probe` Playwright fallback; report that fallback rather
+than trying another provider. Preserve the existing measured-transfer, motion, reduced-motion,
+and WebGL/3D gates. Do not scrape, hotlink, or ship source pixels.
+
 ## Coverage contract
 
 Build for decision coverage, not capture counts. Before searching, list the decisions the
-later design must make and the components it must support. The board is complete only when
+later design must make and the components it must support. The inventory is complete only when
 it contains useful, non-duplicate evidence for every applicable category:
 
 - domain conventions and user expectations;
@@ -32,7 +41,7 @@ it contains useful, non-duplicate evidence for every applicable category:
 - every required component or state whose anatomy is uncertain.
 
 There is no minimum query count, capture quota, famous-site quota, or mandatory award
-gallery. A small board with complete, independent evidence is better than a large gallery of
+gallery. A small inventory with complete, independent evidence is better than a large gallery of
 near-duplicates. If a category is irrelevant, record why. If evidence remains weak or
 contradictory, report the gap and uncertainty instead of filling a slot with decoration.
 
@@ -43,9 +52,11 @@ omd ref add <user-url> --as <name> --from-user
 omd ref add <url> --as <name>
 omd ref add <url> --as <name> --selector ".component"
 omd ref add <url> --as <name> --selector ".component" --blueprint
-omd ref add <image-url> --as <name> --image
+omd ref import-image <local-capture-input.json>
 omd ref principles <url> --as <name> --add "..."
 omd ref list
+omd ref check
+omd ref candidates
 ```
 
 Whole-page captures establish rhythm or product feel; tight selectors establish component
@@ -53,6 +64,18 @@ anatomy; type and motion studies establish measured behavior; image references s
 what cannot be rendered. A blueprint is allowed only for an explicitly requested exact
 component transplant or a structurally equivalent component problem. Structure may
 transfer; skin and pixels do not.
+
+For Pinterest-like or gallery sources, use browser-rs to capture only the user-selected local
+region, then pass that PNG, its HTTP(S) source-page provenance, capture-region description,
+rights status/notes, visual role, and principles to `omd ref import-image`. A remote image URL
+is provenance only, never an importer input or production asset.
+
+After analysis, write the internal candidate record, run `omd ref check`, then paste the exact
+`omd ref candidates` Markdown table directly into Codex/Claude chat. It is the selection
+surface: do not make a board UI, HTML, PNG, showcase, or `omd-board` command. The coordinator
+records the user's exact candidate id with `omd ref select`; if interaction is unavailable,
+the coordinator records a clearly disclosed agent selection instead. Downstream receives only
+the resulting hash-bound sanitized selected assembly and checked clean-room lineage.
 
 ## Evidence quality and contamination
 

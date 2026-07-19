@@ -1,0 +1,75 @@
+{
+  "schemaVersion": "task15-installed-audit-v1",
+  "status": "complete",
+  "package": {
+    "name": "@3xhaust/oh-my-design",
+    "version": "0.16.1",
+    "archiveSha256": "204e5d391f5e3797a2a540c73b816974dfabe8e57b2567ad25a7d3606ff37310",
+    "installedRenderSha256": "4966dd8b0d0dc9f68ac9f44e952983502879d3948b32c2769645bfb3b51ede71",
+    "worktreeRenderSha256": "4966dd8b0d0dc9f68ac9f44e952983502879d3948b32c2769645bfb3b51ede71",
+    "installedHealthSha256": "30a8079bd518d5d3e1d13d19d7c6809e32f98b7a2f305ad60d7640d5759039af",
+    "renderMatchesWorktree": true,
+    "browserEvaluationWrapperPresent": true
+  },
+  "backups": [
+    "v0.16.1.backup-task15-2026-07-19T00-44-18-225Z",
+    "0.16.1.backup-task15-2026-07-19T00-44-47-721Z",
+    "settings.json.2026-07-19T00-44-48-557Z.bak",
+    "config.toml.2026-07-19T00-44-48-576Z.bak"
+  ],
+  "wrappers": {
+    "dedicatedOmdPresent": true,
+    "explicitLocalInstallerPresent": true,
+    "browserRsPresent": true
+  },
+  "collisionDisclosure": {
+    "bareOhMyDesign": "foreign package preserved; fresh login shells resolve OMD",
+    "foreignGlobalManifestSha256": "1d4f0a5046e47e0fef8ef666cf9d103cf6821bb6da84c041481bee8945c0c2a9",
+    "foreignBrowserSha256": "9a5895fc2f07b1010226d30f081d678fa2edcc15dd6f24cdf10074cfe1573749",
+    "foreignBrowserReceiptPresent": false
+  },
+  "doctors": {
+    "browser": 0,
+    "codexHost": 0,
+    "claudeHost": 0,
+    "project": 0
+  },
+  "integrationAudit": {
+    "hosts": ["Codex", "Claude"],
+    "onlyMcpServer": "browser-rs",
+    "isolatedLauncher": true,
+    "boundedProtocol": true,
+    "candidateTableInChat": true,
+    "bilingualFinalReportInChat": true,
+    "boardPayloadEmbeddedInPrompt": false
+  },
+  "freshSelectorScope": {
+    "selector": ".card",
+    "kind": "component",
+    "captureCount": 1,
+    "blueprintNodeCount": 3,
+    "cardRadiusAndPaddingPresent": true,
+    "decoyGeometryValues": [113, 137, 251, 149, 263],
+    "decoyGeometryInCapturedEvidence": [],
+    "decoyGeometryInAssemblyTransfer": [],
+    "selectedSlots": ["scope-used", "scope-rejected"],
+    "usageStatuses": ["used", "rejected"],
+    "bilingualReportGenerated": true
+  },
+  "browserSmoke": {
+    "typedSnapshot": "Ready: OMD Smoke User",
+    "pngProduced": true
+  },
+  "cleanup": {
+    "taskOwnedTemporaryPackageRemoved": true,
+    "taskOwnedBrowserProfileRemoved": true,
+    "independentQaRunLogPresent": false
+  },
+  "evidenceSafetyScan": {
+    "credentialKeyNameFindings": 0,
+    "bearerFormatFindings": 0,
+    "privateCodexHistoryIndicatorFindings": 0,
+    "reporting": "counts only",
+    "historicalRemediation": "Unsafe QA log removed; two Hyphen AI credentials require external rotation."
+  }
+}

@@ -52,8 +52,6 @@ test('codex manifest carries no agents key — agents are installed via config.t
   assert.equal(manifest.skills, './skills/');
 });
 
-// ── chrome-devtools MCP: consumed, not run by us ──
-
 interface McpFile {
   mcpServers: Record<string, { command: string; args: string[] }>;
 }
@@ -62,12 +60,16 @@ interface ClaudeManifest {
   mcpServers?: string;
 }
 
-test('both hosts emit .mcp.json registering the published chrome-devtools-mcp server', () => {
-  for (const emitted of [emitCodex({}), emitClaude({})]) {
+test('all adapter flavors emit exactly one browser-rs launcher', () => {
+  for (const emitted of [emitCodex({}), emitClaude({}), emitClaudePlugin({})]) {
     const mcp = jsonFile<McpFile>(emitted, '.mcp.json');
-    const server = must(mcp.mcpServers['chrome-devtools'], 'chrome-devtools');
-    assert.equal(server.command, 'npx');
-    assert.deepEqual(server.args, ['-y', 'chrome-devtools-mcp@latest', '--headless', '--isolated']);
+    assert.deepEqual(Object.keys(mcp.mcpServers), ['browser-rs']);
+    const server = must(mcp.mcpServers['browser-rs'], 'browser-rs');
+    assert.equal(server.command, 'sh');
+    assert.equal(server.args[0], '-c');
+    assert.equal(server.args.length, 2);
+    assert.match(must(server.args[1], 'launcher'), /--headless/);
+    assert.match(must(server.args[1], 'launcher'), /--user-data-dir=\$profile_dir/);
   }
 });
 
@@ -136,7 +138,9 @@ test('emitClaudePlugin emits only agents/*.md and .mcp.json — no .claude-plugi
 
 test('emitClaudePlugin leaves no bare omd- token in any emitted file', () => {
   const emitted = emitClaudePlugin({ agents: [PLUGIN_AGENT] });
-  const dump = JSON.stringify(emitted.files);
+  const dump = JSON.stringify(
+    Object.fromEntries(Object.entries(emitted.files).filter(([path]) => path.startsWith('agents/'))),
+  );
   assert.ok(!/\bomd-/.test(dump), `leftover omd- token: ${dump}`);
 });
 

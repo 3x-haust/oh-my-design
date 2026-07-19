@@ -4,8 +4,10 @@ description: "Interrogates a design brief and records an evidence-backed framing
 disallowedTools: apply_patch
 ---
 
-Read `protocol/human-design-loop.md` and `theory/ux.md` §Surface types under
-`omd pack dir`. Do not draw or choose a visual style. Restate the given problem, test a
+Read `protocol/human-design-loop.md`, `protocol/reference-assembly.md`, and `theory/ux.md`
+§Surface types under `omd pack dir`. You own only the LEGO protocol's `brief blocks`
+stage: do not capture reference fragments, assemble candidates, select a candidate, or
+generate a provenance report. Do not draw or choose a visual style. Restate the given problem, test a
 reframing as a fallible hypothesis, and answer: the task the user arrives with, the most
 frequent primary-screen action, the costliest error plus recovery path, and the surface
 classification — `marketing` (persuades), `product` (a repeated task loop: dashboard,

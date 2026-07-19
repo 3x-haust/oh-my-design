@@ -12,10 +12,14 @@ allow:
   - Bash(omd source:*)
 deny: []
 instructions: |
-  Read `protocol/human-design-loop.md`, the exact `theory/ux.md`, plus the relevant theory,
+  Read `protocol/human-design-loop.md`, `protocol/reference-assembly.md`, the exact `theory/ux.md`, plus the relevant theory,
   composition, graphics, motion, and craft files under `omd pack dir`. Read `.omd/copy-deck.md`,
   `.omd/type-proof.md`, and `.omd/design.md` when present. On the normal graph, also read
-  `.omd/composition.md` and receive accepted sanitized transfer criteria. Run
+  `.omd/composition.md` and receive accepted sanitized transfer criteria. When reference assembly
+  applies, start only after the coordinator's successful checked clean-room lineage: receive the
+  hash-bound sanitized selected assembly plus its chosen generated draft, or its checked unavailable
+  lineage plus CSS/SVG evidence path. Never receive the internal raw evidence record, source
+  URL/hostname, screenshot, pixels, capture path, provenance, or source-page prose. Run
   `omd composition --check` before the first production write and again before ship; stop on a
   missing, malformed, or stale contract. On the Figma structural-bypass route, instead read
   `.omd/figma/snapshot.json`, `.omd/figma/design-system.md`, `.omd/attribution.md`, and the selected
@@ -162,7 +166,12 @@ instructions: |
   cache locations, publication behavior, and stale-bundle handling. Your duty is to write its required
   manifest input at `.omd/.cache/final-evidence-manifest.json`, run `omd evidence finalize --input
   .omd/.cache/final-evidence-manifest.json`, then `omd evidence check --json`, and never directly
-  write `.omd/final-evidence.json`. Any source or build mutation requires the protocol's reseal,
+  write `.omd/final-evidence.json`. When reference assembly applies, record every selected slot's actual
+  `used`, `rejected`, or `anti-reference` outcome during this real build with
+  `recordReferenceUsage(root, { rows })`, including its exact target, borrowed and explicitly
+  non-borrowed properties, transformation, production evidence, and verification note. Run
+  `validateReferenceUsage(root)` before handing the ledger to the finalizer. Never write the final
+  report yourself or claim influence without a validated `used` row. Any source or build mutation requires the protocol's reseal,
   rebuild, rerun, and reindex sequence; the seal proves byte freshness only and does not prove semantic copy/source fidelity.
 
   Source the visual carrier's underlying asset with OMD's asset sourcing precedence,
@@ -189,8 +198,9 @@ instructions: |
   is committed; a WebGL/3D escalation ships only on hand precedence plus a declared performance
   budget plus a non-canvas semantic fallback. The precedence rules above, `omd ref distance`, and the
   slop gates are the enforcement points.
-  When the composer committed an image-first concept draft (see `theory/imagegen.md`, drafts under
-  `.omd/.cache/imagegen/`), implement against it with image-to-code fidelity: extract its exact
+  When the coordinator's checked generated lineage names the chosen image-first concept draft (see
+  `theory/imagegen.md`, drafts under `.omd/.cache/imagegen/`), implement against it with
+  image-to-code fidelity: extract its exact
   tokens, layout geometry, spacing rhythm, type-scale relationships, component anatomy, and section
   jobs into real reusable primitives — never a screenshot-matched one-off, and never ship the draft
   image itself. If a section or detail is not readable enough to build from, regenerate that one

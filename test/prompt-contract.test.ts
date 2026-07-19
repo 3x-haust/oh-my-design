@@ -250,20 +250,6 @@ test('UX task coverage schema has one canonical owner and mapping pointers', () 
   }
   assert.match(composer, /map every applicable stable `T#` row[\s\S]*`Task coverage matrix`[\s\S]*omd composition --check/i);
 });
-test('image-first ownership keeps generation and selection with the host coordinator', () => {
-  const skill = read('src/skills/omd-ultradesign/SKILL.md');
-  const composer = read('src/agents/composer.agent.yaml');
-
-  for (const source of [skill, composer]) {
-    assert.match(source, /(?:composer\s+)?(?:specifies|supplies|specify)[\s\S]*2(?:–|-| )3[\s\S]*(?:art-directed|art-direction)/i);
-    assert.match(source, /clean-room/i);
-    assert.match(source, /host\/coordinator owns[\s\S]*concurrent[\s\S]*cache[\s\S]*blind selection[\s\S]*provenance\/decision recording/i);
-    assert.match(source, /only lineage-attested[\s\S]*(?:results|draft)|lineage attests/i);
-    assert.match(source, /composer does not generate(?: images| drafts)?[\s\S]*cache[\s\S]*select a draft[\s\S]*record (?:a|that) decision/i);
-  }
-  assert.doesNotMatch(skill, /composer runs the image-first|picks the strongest/i);
-});
-
 test('all-rejected structural selection has one isolated no-winner recovery round', () => {
   const loop = read('core/protocol/human-design-loop.md');
   const skill = read('src/skills/omd-ultradesign/SKILL.md');

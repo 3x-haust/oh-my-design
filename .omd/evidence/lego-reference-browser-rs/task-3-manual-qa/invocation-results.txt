@@ -1,0 +1,10 @@
+Surface: local CLI `omd ref`.
+
+1. `node bin/omd.ts ref add <temp>/source.html --as card --selector .card --blueprint --shot --no-energy` -> status 0; component JSON and PNG created.
+2. `node bin/omd.ts ref import-image <temp>/fragment-input.json --json` -> status 0; Pinterest provenance fragment persisted.
+3. `node bin/omd.ts ref check --json` -> status 0; output `[]`.
+4. `node bin/omd.ts ref candidates` -> status 0; two Korean-first Markdown candidate tables emitted.
+5. `node bin/omd.ts ref select atmosphere --json` -> status 0; hash-bound selection persisted.
+6. Mutated fragment provenance -> `ref check` status 1: `board hash does not match the current validated board`.
+7. Replaced fragment with a valid PNG of different bytes -> `ref check` status 1: `PNG digest mismatch`.
+8. `test ! -e bin/omd-board.ts && test ! -e bin/omd-board.mjs && ! rg omd-board package.json bin` -> status 0.

@@ -29,7 +29,7 @@ OMD runs inside **Codex** and **Claude Code**. It ships six user-facing skills, 
 
 - **Node.js 22.18 or newer** (the CLI runs the TypeScript entrypoints directly)
 - **Claude Code, Codex, or both**, with the host config directory already present
-- **Chromium via Playwright** for rendering, probing, and typography proofs (installed separately — see below)
+- A browser provider: **browser-rs v0.1.10** is preferred on its two supported platforms; **Playwright + Chromium** remains the required fallback for rendering, probing, and typography proofs (see below)
 
 ## Install
 
@@ -42,7 +42,7 @@ oh-my-design doctor     # verify the host install
 omd doctor              # verify the runtime, Chromium, project write access, and the theory pack
 ```
 
-`oh-my-design install --host claude|codex` scopes install, doctor, and uninstall to one host. `uninstall` reverses exactly what `install` did and never touches your `.omd/` directory.
+`oh-my-design install --host claude|codex` scopes install, doctor, and uninstall to one host. `uninstall` reverses exactly what `install` did and never touches your `.omd/` directory. Host installation also attempts browser-rs afterward and reports `present`, `installed`, `unsupported`, or `failed`; a browser-rs failure does not roll back an otherwise healthy OMD/Playwright host installation.
 
 > Install the **scoped** package `@3xhaust/oh-my-design`. The unscoped `oh-my-design` on npm is an unrelated project.
 
@@ -65,7 +65,40 @@ node bin/omd-install.ts install    # copy skills + agents into detected hosts
 node bin/omd.ts doctor
 ```
 
-### Chromium
+### Browser provider and Chromium (after global installation)
+
+After globally installing `@3xhaust/oh-my-design`, OMD prefers the `browser-rs` MCP provider for interactive reference research, user-directed region captures, and visual QA. It is a deliberately narrow v0.1.10 integration, not a claim of universal browser compatibility:
+
+| Platform | browser-rs state | Exact SHA-256 |
+| --- | --- | --- |
+| Darwin arm64 | Supported; default interactive provider when healthy | `9a5895fc2f07b1010226d30f081d678fa2edcc15dd6f24cdf10074cfe1573749` |
+| Linux x64 | Supported; default interactive provider when healthy | `792ca76e5ce0423968763556e110900a3aa65737fc6227724914aa137e972589` |
+| Any other platform | Unsupported; no browser-rs download | Use the Playwright + Chromium fallback below. |
+
+The managed binary, when installed, is `$HOME/.local/share/oh-my-design/browser-rs/v0.1.10/browser-rs` with a verified `receipt.json`. OMD verifies the exact checksum before publishing it. Resolution is `OMD_BROWSER_RS_BIN`, then `browser-rs` on `PATH`, then that receipt-owned target. OMD never overwrites a foreign override/PATH binary or an unreceipted/tampered managed-target file, and `oh-my-design browser uninstall` removes only matching OMD-owned receipt-and-digest bytes.
+
+```bash
+# Explicit provider lifecycle. `doctor` exits 1 when the selected provider is not healthy.
+oh-my-design browser install
+oh-my-design browser doctor --json
+
+# After global package installation, provide your own equivalent local HTML fixture.
+oh-my-design browser smoke --fixture /absolute/path/to/local-probe.html --out /tmp/omd-browser-rs-smoke.png
+
+# Preserves foreign, unreceipted, or tampered bytes rather than deleting them.
+oh-my-design browser uninstall
+```
+
+From a source checkout, use the proven TypeScript entrypoint instead of assuming a global bin:
+
+```bash
+node bin/omd-install.ts browser install
+node bin/omd-install.ts browser doctor --json
+node bin/omd-install.ts browser smoke --fixture test/fixtures/probe.html --out /tmp/omd-browser-rs-smoke.png
+node bin/omd-install.ts browser uninstall
+```
+
+On a supported platform, missing, unowned, or bad browser-rs is unhealthy; first repair the intended binary/ownership (or intentionally set `OMD_BROWSER_RS_BIN`), then rerun `browser doctor`. On an unsupported platform, provider health is good only when the Playwright module and Chromium fallback are both available. Existing `omd render` and `omd probe` are the deterministic Playwright fallback after browser-rs initialization or capability failure.
 
 The installer does not install Chromium. If `omd doctor` reports Playwright unavailable or its Chromium executable missing, install what the report names, then re-check:
 
@@ -74,6 +107,41 @@ npm install -g playwright
 npx playwright install chromium
 node bin/omd.ts doctor
 ```
+
+## Chat-first LEGO reference assembly
+
+OMD treats a reference as a set of traceable bricks selected for the approved brief, not as a whole-site style to copy. The canonical sequence is:
+
+```text
+brief blocks → fragment inventory → brick analysis → candidate assemblies
+→ selected assembly → clean-room composite → production usage ledger → final provenance report
+```
+
+The conversation is the interface. Codex/Claude shows the candidate table and the final Korean/English provenance table directly in chat. There is no `omd-board` executable, DESIGN UI, HTML board, or PNG board. `reference-board-v1` is only an internal, validated `.omd/reference-board.json` record; the package exposes only the public `omd` and `oh-my-design` bins.
+
+Behind the conversation, an agent can capture a component, validate the evidence, render the chat-ready candidates, and bind the user’s chat choice:
+
+```bash
+# Internal agent operations; the person reviews the resulting Markdown in chat.
+omd ref add <url-or-local-page> --as <component> --selector '<css>' --blueprint --shot
+omd ref import-image ./local-fragment-input.json
+omd ref check
+omd ref candidates
+omd ref select <candidate-id>
+omd ref check
+```
+
+`omd ref candidates` emits a Korean-first Markdown table with source site/page, captured UI or image part, proposed route/component, take, avoid, and adaptation. It does not open a board. The selection is hash-bound to both validated raw evidence and a sanitized `reference-assembly-v1` projection.
+
+### Captures, clean-room composition, and final traceability
+
+A component brick is a selector-scoped blueprint plus a local PNG. For Pinterest-like galleries and similar sources, browser-rs performs the **user-directed** region capture and `omd ref import-image` imports that local PNG. The input records absolute HTTP(S) `sourcePage`, optional `sourceImage`, human-readable `captureRegion`, optional `cropBox`, `licenseStatus` (`allowed`, `restricted`, or `unknown`), rights notes, visual role/principles, and canonical provenance time. OMD does not scrape, hotlink, download remote source images, or ship their pixels.
+
+The composer receives only the sanitized selected assembly: transferable structure/principles/geometry, never a source URL, **source selector**, provenance, screenshot, local source image, or raw pixels. The assembly intentionally retains its **target `targetSelector`** so implementation can map a selected part to its destination. `.omd/reference-composite-lineage.json` records either a hash-bound `generated` clean-room composite or an `unavailable` reason. When host image generation is available, two or three independent concept drafts may be generated concurrently and compared; no image-provider or API-key layer is added. When unavailable, use a CSS/SVG/evidence fallback. Existing motion, `prefers-reduced-motion`, and WebGL/3D gates are unchanged.
+
+During implementation, each selected source part receives a `used`, `rejected`, or `anti-reference` row in `.omd/reference-usage.json`. `.omd/reference-report.md` and the final chat response contain Korean and English tables with: status; source site/page; exact captured UI/image region; shipped route/component/selector; borrowed properties; explicitly non-borrowed properties; transformation; and production evidence path, selector, and verification note.
+
+See [`docs/lego-reference-audit.md`](docs/lego-reference-audit.md) for the code-backed Korean/English capability audit, source paths, provider limitations, and verification evidence.
 
 ## The human design loop
 
@@ -106,7 +174,7 @@ Six user-facing skills. Canonical names use the `omd-` prefix; Codex shows them 
 | --- | --- |
 | `omd-ultradesign` | Run the complete human design loop for a page, app, dashboard, blog, landing page, or redesign. |
 | `omd-figma` | Pull a Figma file, synthesize its system, implement frames, compare responsive pairs, and report measured fidelity. |
-| `omd-scout` | Build a standalone measured reference board without designing or implementing. It closes consequential coverage gaps and reports uncertainty instead of filling quotas. |
+| `omd-scout` | Build a measured LEGO fragment inventory and chat-ready Markdown candidate/usage tables without designing or implementing. It closes consequential coverage gaps and reports uncertainty instead of filling quotas. |
 | `omd-critique` | Review an existing design without changing it; group deterministic findings by root cause and judge rendered craft. |
 | `omd-humanize` | Preserve facts while locally repairing sound discourse or reconstructing a misshapen message from verified facts, voice, and surface action. |
 | `omd-coach` | Read accumulated check history, identify recurring problems and trends, and suggest what to practise next. It does not read taste records. |
@@ -200,7 +268,7 @@ Durable, reviewable records live directly under `.omd/`:
 
 - `frame.md`, `copy-deck.md`, `type-proof.md`, `composition.md`, `source-seal.json`, `design.md`, `decisions.md`
 - `attribution.md`, `motion-spec.md`, `craft.jsonl`, `config.json`
-- `refs/*.json`, declared `probes/*.json`, `taste/preferences.jsonl`, and `history.jsonl`
+- `refs/*.json`, `reference-board.json`, `reference-selection.json`, `reference-composite-lineage.json`, `reference-usage.json`, `reference-report.md`, declared `probes/*.json`, `taste/preferences.jsonl`, and `history.jsonl`
 
 Generated IR, renders, filmstrips, sketch candidates, probe results, and scratch output live under `.omd/.cache/`; deleting the cache should not erase design intent. `oh-my-design uninstall` removes installed OMD files and config changes while preserving the project’s `.omd/` directory.
 
@@ -236,6 +304,10 @@ omd ref add <url|file> --as <component> [--selector "css"] [--image] [--blueprin
 omd ref list  |  omd ref distance <page>
 omd ref principles <source> --as <component> --add "..."
 omd ref show <source> --as <component>
+omd ref check [manifest] [--json]
+omd ref import-image <input.json> [--json]
+omd ref candidates [manifest]                 # chat-ready Korean-first Markdown; no board UI
+omd ref select <candidate-id> [--json]
 
 omd design  |  omd design --check
 omd copy --check [--json]
