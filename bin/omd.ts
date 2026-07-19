@@ -21,6 +21,7 @@ import { checkFinalEvidence, finalizeFinalEvidence } from '../core/evidence/fina
 import { checkTaskEvidence, publishTaskEvidence } from '../core/evidence/task.ts';
 import { computeStack } from '../core/stack/index.ts';
 import { scanTextSlop } from '../core/slop/text-slop.ts';
+import { evaluateLighthouse, type LighthouseBudget } from '../core/perf/lighthouse.ts';
 import { evaluateVisualRichness } from '../core/composition-contract/visual-richness.ts';
 import type { VisualRichnessRegister } from '../core/composition-contract/visual-richness.ts';
 import type { Category, EnergyCurve, Layer, RawIr, Violation } from '../core/types.ts';
@@ -91,6 +92,11 @@ interface Opts {
   proofs?: boolean;
   /** Register override for `omd visual-richness --register quiet|confident|showpiece`. */
   register?: string;
+  /** Lighthouse performance gate budget (`omd lighthouse <report.json> --min-performance 0.9 --max-lcp 2500 --max-tbt 200 --max-cls 0.1`). */
+  minPerformance?: string;
+  maxLcp?: string;
+  maxTbt?: string;
+  maxCls?: string;
 }
 
 const FLAGS = new Set(['json', 'no-log', 'no-energy', 'image', 'filmstrip', 'squint', 'full-page', 'from-user', 'all', 'blueprint', 'shot', 'proofs', 'fresh', 'check', 'review-check']);
@@ -104,6 +110,10 @@ const ALIASES: Record<string, keyof Opts> = {
   'costliest-error': 'costliestError',
   'review-check': 'reviewCheck',
   'task-matrix': 'taskMatrix',
+  'min-performance': 'minPerformance',
+  'max-lcp': 'maxLcp',
+  'max-tbt': 'maxTbt',
+  'max-cls': 'maxCls',
 };
 
 function parseArgs(args: string[]): Opts {
@@ -1551,6 +1561,28 @@ function cmdSlop(sub: string | undefined, opts: Opts): never {
   process.exit(0);
 }
 
+/** Performance gate over a Lighthouse JSON report (the agent runs Lighthouse; OMD gates it). */
+function cmdLighthouse(opts: Opts): never {
+  const file = opts._[0];
+  if (!file) {
+    throw new Error('usage: omd lighthouse <lighthouse-report.json> [--json] [--min-performance 0.9] [--max-lcp 2500] [--max-tbt 200] [--max-cls 0.1]');
+  }
+  const report: unknown = JSON.parse(readFileSync(file, 'utf8'));
+  const budget: LighthouseBudget = {};
+  if (opts.minPerformance !== undefined) budget.minPerformance = Number(opts.minPerformance);
+  if (opts.maxLcp !== undefined) budget.maxLcpMs = Number(opts.maxLcp);
+  if (opts.maxTbt !== undefined) budget.maxTbtMs = Number(opts.maxTbt);
+  if (opts.maxCls !== undefined) budget.maxCls = Number(opts.maxCls);
+  const result = evaluateLighthouse(report, budget);
+  if (opts.json) process.stdout.write(JSON.stringify(result));
+  else {
+    const score = result.metrics.performance;
+    console.log(`lighthouse: ${result.pass ? 'PASS' : 'FAIL'} — performance ${score === null ? 'n/a' : Math.round(score * 100)}`);
+    for (const finding of result.findings) console.log(`  - ${finding}`);
+  }
+  process.exit(result.pass ? 0 : 1);
+}
+
 /** Advisory AI-cliche scan of copy-deck / rendered copy. Non-gating; always exit 0. */
 function cmdTextSlop(opts: Opts): never {
   const file = opts._[0] ?? join(process.cwd(), '.omd', 'copy-deck.md');
@@ -1686,6 +1718,7 @@ async function main(): Promise<never> {
   if (cmd === 'probe') return cmdProbe(parseArgs(args.slice(1)));
   if (cmd === 'check') return cmdCheck(parseArgs(args.slice(1)));
   if (cmd === 'slop') return cmdSlop(sub, parseArgs(args.slice(2)));
+  if (cmd === 'lighthouse') return cmdLighthouse(parseArgs(args.slice(1)));
   if (cmd === 'coach') return cmdCoach();
   if (cmd === 'config') return cmdConfig(sub, parseArgs(args.slice(2)));
   if (cmd === 'craft') return cmdCraft(sub, parseArgs(args.slice(2)));

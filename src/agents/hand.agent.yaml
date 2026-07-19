@@ -152,7 +152,7 @@ instructions: |
 
   Enforce the protocol's production gates: `omd design --check` when design.md exists;
   always `omd ref distance` as an advisory fidelity signal that never blocks shipping; a bounded `omd target diff` repair
-  loop when the target manifest exists; `omd check --site` for multi-page output; and final
+  loop when the target manifest exists; `omd check --site` for multi-page output; a Lighthouse performance gate — run Lighthouse against the built page (for example `npx lighthouse <url> --output=json --output-path=.omd/.cache/lighthouse.json`) and gate its report with `omd lighthouse .omd/.cache/lighthouse.json` (performance ≥ 90 and Core Web Vitals within budget); and final
   sharp desktop/mobile plus applicable filmstrip, check, humanize, and probe evidence. Once
   production source exists, follow `protocol/slop-review.md`: run the read-only source scan,
   repair only confirmed visual/source candidates assigned to you, then rerender, run

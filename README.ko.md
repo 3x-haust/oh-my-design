@@ -247,6 +247,7 @@ OMD는 결정적 검사와 렌더 리뷰를 결합합니다.
 | 레퍼런스 거리 | `omd ref distance <page>` 가 측정 불변량을 저장된 레퍼런스와 비교해 빌드가 얼마나 가까운지 보고하는 자문(advisory) 충실도 신호입니다 — 배포를 막지 않습니다. |
 | Figma 충실도 | `omd figma pull`, `system`, `diff` 가 Figma 스냅샷을 측정된 구현 보고와 연결합니다. `export FIGMA_TOKEN=…` 이 필요하며, `omd doctor` 는 토큰 부재를 선택 사항으로 처리합니다. |
 | 시각 타깃 | `omd target set <이미지-경로-또는-URL> --as <name>` 과 `omd target diff` 가 등록된 PNG 타깃에 대해 경계 있는 이미지 비교를 실행합니다. URL은 직접 HTTP(S) 이미지 URL이어야 합니다. |
+| 성능 | `omd lighthouse <lighthouse-report.json>` 가 Lighthouse JSON 리포트를 성능 예산(기본값: 성능 ≥ 90, Core Web Vitals가 Google "good" 기준 이내)에 대해 게이트합니다. Lighthouse 실행은 사용자가(`npx lighthouse <url> --output=json`), OMD는 그 리포트를 게이트하고 위반 시 비정상 종료합니다. |
 
 slop 발견은 품질 하한이자 경고이며, 디자인이 AI로 생성되었음을 증명하지 않습니다. 서면 오버룰은 의도를 기록하지만 발견을 억제하거나 명령 상태를 바꾸지 않습니다. 렌더 비평은 여전히 필요합니다 — 규칙 엔진은 광학적 균형, 컴포지션 리듬, 타이포그래피 크래프트, 또는 기억에 남을 순간이 컨셉의 것인지를 안전하게 판단할 수 없습니다.
 
