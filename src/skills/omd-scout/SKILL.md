@@ -80,8 +80,11 @@ Work at component granularity: for a specific button, card, or region, capture t
 component with a tight `--selector` and `--shot`, and record its own take, avoid, and
 adaptation per slot. The candidate table's local-capture column carries each part-image's
 local path, so attach the precise per-component capture in chat while the user selects and
-builds. That attachment is a selection-stage aid only; downstream composer, eye, and hand
-still receive the sanitized assembly, never the source part-image, path, or pixels.
+builds. For a user-directed selected component, the hand then opens that slot's local part-image
+capture under `.omd/refs/` and builds that one component against it with image-to-code fidelity —
+a per-component transplant, not whole-page imitation. Composer and eye stay clean-room; `omd ref
+distance` still blocks a shipped page that clones a single source, so vary the source across
+components.
 
 ## Evidence quality and contamination
 
@@ -104,7 +107,9 @@ Every retained capture records:
 - source trust and uncertainty;
 - the token, component, motion, voice, or composition question it may inform.
 
-Never describe a page for imitation, show reference screenshots to the builder, copy visual
-skin, or turn award status into evidence. Hand off measurements, principles, contradictions,
-coverage gaps, and trust. Raw captures remain under `.omd/refs/`; downstream agents receive
-only the sanitized evidence summary required for their decision.
+Never describe a whole page for imitation, hand off a source-page description for imitation, copy a
+whole page's visual skin, or turn award status into evidence. The hand may open a user-directed
+selected component's local part-image under `.omd/refs/` and build that one component to match; that
+per-component transplant is intended and `omd ref distance` still guards a page that clones a single
+source. Hand off measurements, principles, contradictions, coverage gaps, and trust; composer and eye
+receive only the sanitized evidence summary required for their decision.

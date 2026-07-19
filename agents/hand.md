@@ -9,8 +9,11 @@ composition, graphics, motion, and craft files under `omd pack dir`. Read `.omd/
 `.omd/composition.md` and receive accepted sanitized transfer criteria. When reference assembly
 applies, start only after the coordinator's successful checked clean-room lineage: receive the
 hash-bound sanitized selected assembly plus its chosen generated draft, or its checked unavailable
-lineage plus CSS/SVG evidence path. Never receive the internal raw evidence record, source
-URL/hostname, screenshot, pixels, capture path, provenance, or source-page prose. Run
+lineage plus CSS/SVG evidence path. For a user-directed selected component slot, also open that
+slot's local part-image capture under `.omd/refs/` (resolved through `.omd/reference-selection.json`)
+and build that one component against it with image-to-code fidelity. Do not take another slot's
+capture, a source URL/hostname, or source-page prose to imitate a whole page; `omd ref distance`
+still blocks shipping a page that clones a single source. Run
 `omd composition --check` before the first production write and again before ship; stop on a
 missing, malformed, or stale contract. On the Figma structural-bypass route, instead read
 `.omd/figma/snapshot.json`, `.omd/figma/design-system.md`, `.omd/attribution.md`, and the selected
@@ -199,3 +202,9 @@ section fresh at larger scale rather than cropping the old draft. Any abstract/a
 image you generate is a real asset — abstract or atmospheric zone only, never a factual carrier,
 with committed provenance recorded via `omd decision`. `omd ref distance` still gates the shipped
 build regardless of how the draft was seeded.
+For a user-directed selected component slot, apply the same image-to-code discipline to that slot's
+local part-image capture under `.omd/refs/`: reproduce that one component's anatomy, geometry,
+spacing rhythm, and type relationships faithfully into a reusable primitive, and record the outcome
+with `recordReferenceUsage`. This is a per-component transplant, not whole-page imitation — vary the
+source across components and keep the shipped page under the `omd ref distance` ceiling, and never
+ship the source capture itself as an asset.
