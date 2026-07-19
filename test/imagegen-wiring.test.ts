@@ -57,10 +57,16 @@ test('hand implements against the draft with image-to-code fidelity and never sh
   assert.match(h, /ref distance/);
 });
 
-test('scout still forbids screenshot imitation while providing blueprint seed material', () => {
+test('scout allows a per-component transplant but still forbids whole-page imitation', () => {
   const s = read('agents/scout.md');
-  // The clean-room invariant must survive.
-  assert.match(s, /Never show reference screenshots to a builder/);
+  // The page-level clean-room invariant must survive: no whole-page imitation, distance still gates.
+  assert.match(s, /Do not hand a builder a whole page or a source-page description to imitate/i);
+  assert.match(s, /forbids whole-page copying/i);
+  assert.match(s, /omd ref distance/);
+  // A user-directed component transplant from the local part-image is intended.
+  assert.match(s, /per-component transplant is intended/i);
+  assert.match(s, /\.omd\/refs\//);
+  // The imagegen draft-seed path (blueprint, synthesized seeds) still exists.
   assert.match(s, /blueprint/i);
   assert.match(s, /theory\/imagegen\.md/);
 });

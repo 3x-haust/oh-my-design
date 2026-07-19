@@ -31,9 +31,12 @@ Markdown table directly into the Codex or Claude conversation. That table is the
 candidate presentation surface and names, per component slot, the source site/page, exact
 captured UI or image region, the local part-image capture path, proposed target, take, avoid,
 and adaptation. The local capture column lets the human open and attach the exact per-component
-part-image — the referenced button, card, or region — while selecting and building; it is a
-selection-stage aid on the raw scout surface only. Downstream composer, eye, and hand still
-receive only the sanitized selected assembly, never the source part-image, path, or pixels.
+part-image — the referenced button, card, or region — while selecting and building. For a
+user-directed selected component, the hand opens that slot's local part-image under `.omd/refs/`
+and builds that one component against it with image-to-code fidelity: a per-component transplant,
+not whole-page imitation. Composer and eye stay clean-room and receive only the sanitized selected
+assembly; `omd ref distance` still blocks a shipped page that clones a single source, so components
+are transplanted from varied sources rather than one page reproduced whole.
 The coordinator records the selected candidate with the existing `omd ref select` command
 behind the conversation.
 
