@@ -422,7 +422,7 @@ These gates are part of every applicable production run, not optional polish:
 - Walk `craft/finish-pass.md`. Complete applicable items and record a concrete reason for
   every skipped item.
 - When `.omd/design.md` exists, run `omd design --check` and resolve its findings.
-- Always run `omd ref distance <page>`; a similarity above `0.6` does not ship.
+- Always run `omd ref distance <page>` as an advisory fidelity signal: it reports closeness to each saved reference and never blocks shipping. High similarity to a chosen reference can be intended; record attribution.
 - When `.omd/target/manifest.json` exists, run a bounded `omd target diff` repair loop.
   Stop at the configured threshold or record the remaining measured mismatch and evidence;
   never iterate without a bound.

@@ -510,7 +510,7 @@ For a confident/showpiece register — and always when the brief signals awards-
 first shippable build is not the ship: it is round 0 of a bounded RED/GREEN loop. First write the
 acceptance criteria (the GREEN target) from the frame and `theory/expressive.md` § "Slop-free is not
 the same as distinctive": for example, names the template it resembles and departs from it; no two
-competing primary masses; one clear first-read; slop scan clean; `omd ref distance` <= 0.6; carrier
+competing primary masses; one clear first-read; slop scan clean; `omd ref distance` recorded (advisory, never a gate); carrier
 present and register-fit; and the blind-choose after beats before. Any unmet criterion is RED.
 
 Then iterate, leaving evidence every round — a round with no evidence does not count:

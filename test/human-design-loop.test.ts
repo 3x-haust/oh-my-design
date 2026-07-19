@@ -191,7 +191,7 @@ test('prompt contract keeps content-first isolation and checkpoint defaults exec
     /\.omd\/attribution\.md[\s\S]*tokens, motion, composition, and graphics/i,
     /craft\/finish-pass\.md[\s\S]*skipped item/i,
     /\.omd\/design\.md[\s\S]*omd design --check/i,
-    /always run `omd ref distance <page>`[\s\S]*above `0\.6` does not ship/i,
+    /always run `omd ref distance <page>`[\s\S]*advisory[\s\S]*never blocks shipping/i,
     /\.omd\/target\/manifest\.json[\s\S]*bounded `omd target diff` repair loop/i,
     /multi-page output[\s\S]*omd check --site/i,
     /sharp desktop and mobile[\s\S]*filmstrip[\s\S]*humanize review[\s\S]*declared(?:\/applicable)? probe/i,

@@ -244,7 +244,7 @@ OMD combines deterministic checks with rendered review.
 | Source candidates | `omd slop scan [root] [--json]` reads supported production source without writing it. Candidates require contextual triage; they are not `omd check` warnings, scores, or authorship claims. |
 | Design lint | `omd check` evaluates `system`, `a11y`, `slop`, `motion`, and `ux` conditions. Contrast and hit-area rules are errors; slop and other quality-floor rules are warnings where authored that way. Any finding exits 1, so it is usable in CI. |
 | Site consistency | `omd check --site <dir>` or multi-page positional checks report cross-page ladder and token drift. |
-| Reference distance | `omd ref distance <page>` compares measured invariants against saved references and helps catch overly close results. |
+| Reference distance | `omd ref distance <page>` compares measured invariants against saved references and reports how close the build is, as an advisory fidelity signal — it never blocks shipping. |
 | Figma fidelity | `omd figma pull`, `system`, and `diff` connect a Figma snapshot to a measured implementation report. Requires `export FIGMA_TOKEN=…`; `omd doctor` treats a missing token as optional. |
 | Visual target | `omd target set <image-path-or-url> --as <name>` and `omd target diff` run a bounded image comparison against a registered PNG target. A URL must be a direct HTTP(S) image URL. |
 
