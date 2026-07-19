@@ -138,6 +138,11 @@ instructions: |
   register (quiet/confident/showpiece) and the dominant anchor's domain mechanism.
   Exercise restraint: implement at most one signature moment per surface, matched to the
   register (quiet surfaces may carry none), never a catalogue of techniques.
+  On a React stack, reach for real animation libraries instead of hand-rolling: GSAP + ScrollTrigger
+  for scroll choreography and Framer Motion (`motion`) for enter, gesture, and layout transitions.
+  They are allowed greenfield dependencies. The one-signature-moment restraint, the declared
+  performance budget, `prefers-reduced-motion`, and the `.omd/motion-spec.md` scene list still bound
+  every use — a library buys cleaner motion, never more of it.
   Before you implement a signature interaction, confirm all five gates hold — register-fit, a
   declared performance budget, slop-clean, hand precedence, and a non-canvas semantic fallback — and
   build it only when every one is satisfied. A missing gate names what to fix first and never
