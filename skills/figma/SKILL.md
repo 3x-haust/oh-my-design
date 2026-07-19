@@ -17,6 +17,14 @@ in the file. The job here is different: read what was designed, build it faithfu
 systematize it so the implementation can be maintained, and tell the user honestly
 how close the build got.
 
+Read `protocol/reference-assembly.md` under `omd pack dir` to preserve its boundary:
+the Figma structural-bypass route is not a substitute reference assembly. Figma snapshot
+frames and their attribution are the supplied design source, not LEGO fragments; do not
+create candidate assemblies, a chat candidate table, a selection record, a clean-room
+composite, or a reference-usage report for them. If the user separately asks for external
+visual reference research, run that work through the normal chat-first LEGO protocol rather
+than mixing raw external captures into the Figma route.
+
 The slop linter still runs. If the *original Figma design* fires slop rules, report
 that to the user as information — never silently "fix" their design. The user hired
 a faithful implementation, not a corrected one.
@@ -32,6 +40,12 @@ omd doctor
 Run `omd doctor` first, quietly. If any check fails, surface the failure in one
 sentence and stop. A missing Playwright installation or an unwritable `.omd/` will
 break every subsequent step, and discovering that mid-loop is wasteful.
+
+`omd figma pull` is the Figma API path, not interactive visual research. If a separate
+user-directed external-region capture is needed, initialize `browser-rs` first; only an
+observed initialization/capability failure permits headless, reduced-motion `omd render`
+or `omd probe` as the deterministic Playwright fallback. Never open a reference board UI,
+HTML, PNG, showcase, or `omd-board` for this route.
 
 `omd figma pull` requires a Figma personal access token. This is the **one allowed
 user interaction** in the skill. Check for it before pulling:

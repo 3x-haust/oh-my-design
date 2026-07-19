@@ -6,6 +6,9 @@
 <section id="panel" hidden>Ready</section>
 <script>
   document.querySelector('#toggle').addEventListener('click', () => {
-    document.querySelector('#panel').hidden = false;
+    const name = document.querySelector('#name').value;
+    const panel = document.querySelector('#panel');
+    panel.textContent = `Ready: ${name}`;
+    panel.hidden = false;
   });
 </script>

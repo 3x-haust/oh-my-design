@@ -12,20 +12,30 @@ still obeys `asset-sourcing`: a factual carrier (team photo, product screenshot,
 is NEVER AI-generated; only an abstract or atmospheric zone may ship generated imagery, and only with
 committed provenance recorded via `omd decision`.
 
-## The safety backstop makes reference-seeding safe
+## The clean-room composite boundary
 
-Seed the concept drafts from the real reference board — the scout's measured principles and the
-component references it captured with `omd ref add … --selector … --blueprint --shot`, which pair
-each component's screenshot with its skin-abstracted structural grammar on one record, plus the
-committed palette/type/material. This is the composer's art-direction step, not a build step: feed
-the paired screenshots and blueprints to the image tool as multi-source references, but the builder
-never sees these reference screenshots — it implements from the generated draft. Combining
-multiple references into a NEW synthesis is the whole point, and it is safe here
-for one specific reason: `omd ref distance` still measures the SHIPPED build against every saved
-reference and nothing at or above 0.6 kinship ships. The kinship gate is the anti-laundering backstop,
-so imagegen may be seeded richly without risking a copy — the final build is gated regardless of how
-the mockup was seeded. Never seed a draft from a single reference alone and never target a specific
-reference's pixels; synthesize 2–3 references' grammar plus the project's own concept.
+The raw reference board is scout-only evidence. Its source pages, component identities, provenance,
+captures, screenshots, pixels, and rendered board material never enter a prompt, composite, lineage
+record, composer, hand, or eye. They are not image-generation inputs.
+
+Image generation may consume only four declared clean-room input classes: the selected
+`reference-assembly-v1`, its sanitized measured principles, its skin-abstracted blueprints, and
+project-owned concept material (the brief, real product content, committed palette/type/material, and
+local design decisions). The selected assembly is the authority: use the one candidate bound by the
+current hash-bound selection, not the raw board or another candidate. Do not add an undeclared input
+carrier, source image, URL, screenshot, pixels, visual likeness, or `imageReference` field.
+
+When a host produces a clean-room draft, retain an internal `reference-composite-lineage-v1` record.
+Its generated state binds one coherent validated assembly/selection/candidate snapshot, local
+composite path and bytes, and the exact bytes of a declared project-owned, regular prompt file under
+`.omd/.cache/imagegen/`, plus provider, host image-generation capability, and the four permitted
+input classes. A missing capability records the explicit unavailable state instead;
+it carries no composite, provider, or image fields. This is provenance for a generated design
+reference, never a provider implementation or API-key workflow.
+
+`omd ref distance` still measures the SHIPPED build against every saved reference and nothing at or
+above 0.6 kinship ships. The kinship gate remains the anti-laundering backstop for the final build,
+but it does not relax the clean-room input boundary. Never target a specific reference's pixels.
 
 ## When image-first applies
 
@@ -37,20 +47,23 @@ is the event and a mockup adds nothing. Skip it and record why.
 When the host provides an image-generation capability and image-first applies, the order is
 **mandatory**:
 
-1. **Generate** 2–3 art-directed concept-draft mockups concurrently (they are independent — do not
-   serialize them), each seeded with the committed concept's palette, type register, and material
-   PLUS the scout's paired component references (screenshot + skin-abstracted blueprint from
-   `omd ref add … --shot`) and measured principles as multi-source input. One horizontal image per
-   section for a multi-section page — never one tall board
-   with unreadable text. Do not crop an old image for a detail view; regenerate that section fresh,
-   keeping the same palette/type/radius/treatment. Store drafts under `.omd/.cache/imagegen/` and
-   record their paths + the pick with `omd decision`.
-2. **Analyze** the chosen draft cleanly, not vibe-only: extract tokens, layout geometry, spacing
-   rhythm, type-scale relationships, component anatomy, interaction affordances, and each section's job.
-3. **Feed** the chosen draft into `.omd/composition.md` as the reference-fidelity direction, then build
-   against it and run `omd ref distance` as usual. If the host has no image capability, fall back to
-   the evidence-based composition path — the reference board, `theory/expressive.md`, and the CSS/SVG
-   graphics recipes — and record the fallback.
+1. **Generate** — before composer starts, the coordinator/host derives the clean-room generation
+   directions and 2–3 independent prompts from the hash-bound selected sanitized assembly and the
+   permitted project-owned inputs. It generates those drafts concurrently, chooses one, stores the
+   drafts under `.omd/.cache/imagegen/`, and records then checks the chosen generated lineage. The
+   composer never contributes an upstream prompt or art-direction decision. One horizontal image per
+   section for a multi-section page — never one tall board with unreadable text. Do not crop an old
+   image for a detail view; regenerate that section fresh, keeping the same
+   palette/type/radius/treatment.
+2. **Analyze** — only after the coordinator has checked the selected generated lineage, composer
+   analyzes and translates that draft into the composition contract: extract tokens, layout geometry,
+   spacing rhythm, type-scale relationships, component anatomy, interaction affordances, and each
+   section's job.
+3. **Feed** the selected lineage-attested draft into `.omd/composition.md` as the reference-fidelity
+   direction, then build against it and run `omd ref distance` as usual. If the host has no image
+   capability, the coordinator records and checks the explicit unavailable lineage before composer
+   starts; composer follows the evidence-based CSS/SVG composition path using the selected sanitized
+   assembly, `theory/expressive.md`, and the graphics recipes.
 
 Reasoning the layout in the abstract is exactly what produces the symmetric, boxed, template output
 `expressive.md` § "Slop-free is not the same as distinctive" warns about. A generated draft forces a

@@ -1,0 +1,5 @@
+Observed adversarial attempts during the same flow:
+- `<script>alert(1)</script>` in piece.reason -> status 1: reason must not include source, pixel, markup, or control payloads.
+- `<b>safe</b>` in candidate.label -> status 1: label must not include source, pixel, markup, or control payloads.
+- slash-bearing adaptation/label payloads -> status 1 with the same contamination-boundary rejection.
+Final safe Korean/English manifest then passed ref check and candidates formatting.

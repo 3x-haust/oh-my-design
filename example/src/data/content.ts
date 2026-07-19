@@ -259,7 +259,7 @@ const skillsEn: Skill[] = [
   },
   {
     name: "omd-scout",
-    body: "Build a standalone measured reference board without designing or implementing.",
+    body: "Build a measured LEGO fragment inventory and chat-ready Markdown candidate/usage tables without designing or implementing.",
   },
   {
     name: "omd-critique",
@@ -286,7 +286,7 @@ const skillsKo: Skill[] = [
   },
   {
     name: "omd-scout",
-    body: "디자인이나 구현 없이 독립적인 측정 레퍼런스 보드를 만듭니다.",
+    body: "디자인이나 구현 없이 측정된 LEGO 조각 인벤토리와 채팅용 Markdown 후보·사용 표를 만듭니다.",
   },
   {
     name: "omd-critique",

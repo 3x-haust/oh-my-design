@@ -1,17 +1,43 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, lstatSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { parse as parseToml } from 'smol-toml';
 import { patchConfigToml, unpatchConfigToml, trustedHashKey } from '../core/install/patch-codex.ts';
 import { patchSettings, unpatchSettings, patchAllow, unpatchHooks } from '../core/install/patch-claude.ts';
 import type { Settings } from '../core/install/patch-claude.ts';
 import { detectHosts } from '../core/install/detect.ts';
-import { doctor, install } from '../core/install/install.ts';
+import { BROWSER_RS_RELEASES } from '../core/install/browser-rs.ts';
+import { doctor, install, type DoctorOptions, type InstallOptions } from '../core/install/install.ts';
+import { browserRsTestDependencies, browserRsTestInstallDependencies, unavailableBrowserRsDownload } from './browser-rs-test-support.ts';
 import { must, asRecord } from './helpers.ts';
 
 const AGENTS = ['omd-framer', 'omd-eye', 'omd-writer', 'omd-typesetter', 'omd-composer'];
+const TEST_BROWSER_HOME = '/omd-test-browser-rs-home';
+const UNSUPPORTED_BROWSER = {
+  browser: browserRsTestInstallDependencies({
+    home: TEST_BROWSER_HOME,
+    platform: 'unsupported',
+    arch: 'unsupported',
+    releases: [],
+    downloader: unavailableBrowserRsDownload,
+  }),
+} satisfies InstallOptions;
+const UNSUPPORTED_BROWSER_DOCTOR = {
+  browser: {
+    browser: browserRsTestDependencies({
+      home: TEST_BROWSER_HOME,
+      platform: 'unsupported',
+      arch: 'unsupported',
+      releases: [],
+    }),
+    fallback: async () => ({ kind: 'ready', path: '/test/playwright-chromium' }),
+  },
+} satisfies DoctorOptions;
+const PACKAGE_ROOT = fileURLToPath(new URL('..', import.meta.url));
+const REPOSITORY_ARTIFACTS = ['src', 'dist', 'agents', 'skills', '.mcp.json'] as const;
 
 const EXISTING_TOML = `model = "gpt-5.5"
 
@@ -160,7 +186,7 @@ test('unpatchHooks is a no-op on settings that never had the gate', () => {
   assert.deepEqual(unpatchHooks({}), {});
 });
 
-test('Claude plugin install registers the plugin, prunes any direct duplicate, and clears the legacy gate', () => {
+test('Claude plugin install registers the plugin, prunes any direct duplicate, and clears the legacy gate', async () => {
   const home = mkdtempSync(join(tmpdir(), 'omd-claude-install-'));
   const detected = { host: 'claude' as const, home };
   try {
@@ -171,7 +197,7 @@ test('Claude plugin install registers the plugin, prunes any direct duplicate, a
     writeFileSync(join(home, 'skills', 'omd-ultradesign', 'SKILL.md'), 'stale direct');
     writeFileSync(join(home, 'settings.json'), JSON.stringify({ hooks: { PreToolUse: [FOREIGN, GATE] } }));
 
-    install([detected]);
+    await install([detected], UNSUPPORTED_BROWSER);
 
     // The direct duplicate is gone; only the plugin registration remains.
     assert.ok(!existsSync(join(home, 'agents', 'omd-writer.md')), 'direct agent pruned');
@@ -189,7 +215,7 @@ test('Claude plugin install registers the plugin, prunes any direct duplicate, a
     );
     assert.deepEqual(settings.hooks?.PreToolUse, [FOREIGN], 'foreign hooks survive legacy OMD hook removal');
 
-    const result = doctor([detected])[0]!;
+    const result = (await doctor([detected], UNSUPPORTED_BROWSER_DOCTOR))[0]!;
     assert.equal(result.ok, true, result.checks.filter((check) => !check.ok).map((check) => check.name).join(', '));
     assert.ok(result.checks.every((check) => check.ok));
 
@@ -199,27 +225,27 @@ test('Claude plugin install registers the plugin, prunes any direct duplicate, a
       ['Bash(shasum:*)', 'composition hash permission present'],
       ['Bash(omd source:*)', 'source seal permission present'],
     ] as const) {
-      install([detected]);
+      await install([detected], UNSUPPORTED_BROWSER);
       const s = JSON.parse(readFileSync(join(home, 'settings.json'), 'utf8')) as Settings;
       s.permissions = { ...s.permissions, allow: (s.permissions?.allow ?? []).filter((entry) => entry !== perm) };
       writeFileSync(join(home, 'settings.json'), JSON.stringify(s));
-      const missing = doctor([detected])[0]!;
+      const missing = (await doctor([detected], UNSUPPORTED_BROWSER_DOCTOR))[0]!;
       assert.equal(missing.ok, false);
       assert.equal(missing.checks.find((check) => check.name === checkName)?.ok, false);
     }
 
     // A stray direct agent appearing beside the plugin is flagged as a duplicate.
-    install([detected]);
+    await install([detected], UNSUPPORTED_BROWSER);
     mkdirSync(join(home, 'agents'), { recursive: true });
     writeFileSync(join(home, 'agents', 'omd-typesetter.md'), 'stray');
-    const dupAgent = doctor([detected])[0]!;
+    const dupAgent = (await doctor([detected], UNSUPPORTED_BROWSER_DOCTOR))[0]!;
     assert.equal(dupAgent.ok, false);
     assert.equal(dupAgent.checks.find((check) => check.name === 'no duplicate direct agents')?.ok, false);
 
     // A stray direct skill is flagged the same way.
-    install([detected]);
+    await install([detected], UNSUPPORTED_BROWSER);
     mkdirSync(join(home, 'skills', 'omd-scout'), { recursive: true });
-    const dupSkill = doctor([detected])[0]!;
+    const dupSkill = (await doctor([detected], UNSUPPORTED_BROWSER_DOCTOR))[0]!;
     assert.equal(dupSkill.ok, false);
     assert.equal(dupSkill.checks.find((check) => check.name === 'no duplicate direct skills')?.ok, false);
   } finally {
@@ -227,7 +253,7 @@ test('Claude plugin install registers the plugin, prunes any direct duplicate, a
   }
 });
 
-test('Claude doctor rejects a duplicate direct install and a legacy OMD hook', () => {
+test('Claude doctor rejects a duplicate direct install and a legacy OMD hook', async () => {
   const home = mkdtempSync(join(tmpdir(), 'omd-claude-stale-'));
   const detected = { host: 'claude' as const, home };
   try {
@@ -242,7 +268,7 @@ test('Claude doctor rejects a duplicate direct install and a legacy OMD hook', (
       hooks: { PreToolUse: [GATE] },
     }));
 
-    const result = doctor([detected])[0]!;
+    const result = (await doctor([detected], UNSUPPORTED_BROWSER_DOCTOR))[0]!;
     assert.equal(result.ok, false);
     assert.equal(result.checks.find((check) => check.name === 'legacy PreToolUse hook absent')?.ok, false);
     assert.equal(result.checks.find((check) => check.name === 'oh-my-design@omd plugin enabled')?.ok, false);
@@ -257,22 +283,22 @@ test('Claude doctor rejects a duplicate direct install and a legacy OMD hook', (
   }
 });
 
-test('Codex doctor requires the typesetter and composer files and config registrations', () => {
+test('Codex doctor requires the typesetter and composer files and config registrations', async () => {
   const home = mkdtempSync(join(tmpdir(), 'omd-codex-install-'));
   const detected = { host: 'codex' as const, home };
   try {
-    install([detected]);
-    const installed = doctor([detected])[0]!;
+    await install([detected], UNSUPPORTED_BROWSER);
+    const installed = (await doctor([detected], UNSUPPORTED_BROWSER_DOCTOR))[0]!;
     assert.equal(installed.ok, true, installed.checks.filter((check) => !check.ok).map((check) => check.name).join(', '));
 
     rmSync(join(home, 'agents', 'omd-typesetter.toml'));
-    const missing = doctor([detected])[0]!;
+    const missing = (await doctor([detected], UNSUPPORTED_BROWSER_DOCTOR))[0]!;
     assert.equal(missing.ok, false);
     assert.equal(missing.checks.find((check) => check.name === 'typesetter agent registered')?.ok, false);
 
-    install([detected]);
+    await install([detected], UNSUPPORTED_BROWSER);
     rmSync(join(home, 'agents', 'omd-composer.toml'));
-    const missingComposer = doctor([detected])[0]!;
+    const missingComposer = (await doctor([detected], UNSUPPORTED_BROWSER_DOCTOR))[0]!;
     assert.equal(missingComposer.ok, false);
     assert.equal(missingComposer.checks.find((check) => check.name === 'composer agent registered')?.ok, false);
   } finally {
@@ -346,4 +372,66 @@ test('patchAllow is idempotent and preserves foreign permissions', () => {
   const once = patchAllow(base, ['Bash(omd check:*)']);
   assert.deepEqual(patchAllow(once, ['Bash(omd check:*)']), once);
   assert.equal(once.permissions?.['defaultMode'], 'acceptEdits');
+});
+
+test('Given a valid distinct prebuilt payload When Codex install runs Then it consumes that payload without changing repository artifacts', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'omd-install-prebuilt-consumer-'));
+  const prebuiltRoot = join(root, 'prebuilt');
+  const home = join(root, 'codex');
+  const prebuiltAgent = join(prebuiltRoot, 'dist', 'codex', 'agents', 'omd-eye.toml');
+  try {
+    cpSync(join(PACKAGE_ROOT, 'dist'), join(prebuiltRoot, 'dist'), { recursive: true });
+    const expectedAgent = readFileSync(prebuiltAgent, 'utf8');
+    const before = repositoryArtifactSnapshot();
+
+    await install(
+      [{ host: 'codex', home }],
+      { prebuiltRoot, browser: UNSUPPORTED_BROWSER.browser } satisfies InstallOptions,
+    );
+
+    assert.equal(readFileSync(join(home, 'agents', 'omd-eye.toml'), 'utf8'), expectedAgent);
+    assert.deepEqual(repositoryArtifactSnapshot(), before);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+function repositoryArtifactSnapshot(): readonly string[] {
+  return REPOSITORY_ARTIFACTS.flatMap((entry) => snapshotPath(join(PACKAGE_ROOT, entry), entry));
+}
+
+function snapshotPath(path: string, relativePath: string): readonly string[] {
+  const metadata = lstatSync(path, { bigint: true });
+  const summary = `${relativePath}:${metadata.mode}:${metadata.size}:${metadata.mtimeNs}`;
+  if (metadata.isDirectory()) {
+    return [summary, ...readdirSync(path).sort().flatMap((entry) => snapshotPath(join(path, entry), join(relativePath, entry)))];
+  }
+  if (metadata.isFile()) return [`${summary}:${statSync(path).size}:${readFileSync(path, 'utf8')}`];
+  return [summary];
+}
+
+test('Given a healthy host and explicit browser provider When install runs Then it reports the provider without undoing host installation', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'omd-install-provider-'));
+  const home = join(root, 'claude');
+  const browser = join(root, 'browser-rs');
+  try {
+    writeFileSync(browser, '#!/bin/sh\nprintf "browser-rs test\\n"\n');
+    chmodSync(browser, 0o755);
+    const changes = await install([{ host: 'claude', home }], {
+      browser: browserRsTestInstallDependencies({
+        home: join(root, 'browser-home'),
+        platform: 'darwin',
+        arch: 'arm64',
+        releases: BROWSER_RS_RELEASES,
+        env: { PATH: '', OMD_BROWSER_RS_BIN: browser },
+        downloader: unavailableBrowserRsDownload,
+      }),
+    });
+
+    assert.ok(changes.some((line) => line.startsWith('browser-rs: present')));
+    const settings = JSON.parse(readFileSync(join(home, 'settings.json'), 'utf8')) as Settings;
+    assert.equal(settings.enabledPlugins?.['oh-my-design@omd'], true);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

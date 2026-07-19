@@ -1,0 +1,56 @@
+{
+  "remediation": {
+    "timestamp": "2026-07-19T06:25:33+09:00",
+    "build": {
+      "command": "npm run build",
+      "successfulRuns": 1,
+      "exit": 0,
+      "rawTranscript": "build-remediation-raw.log",
+      "rawTranscriptSha256": "3941bb29697780704f325c6c046dde0c5e8bc3b54f7435e4e1502da4ab7f1a07",
+      "generatedFilesHandEdited": false
+    },
+    "promptTestRemediation": {
+      "removed": [
+        "test/prompt-contract.test.ts: human-only reference-assembly Markdown table parser/assertion",
+        "test/subagent-parallelism.test.ts: image-first natural-language regex assertion"
+      ],
+      "replacementPromptProseAssertionAdded": false
+    }
+  },
+  "focusedChecks": {
+    "command": "node --test test/ref-composite-lineage.test.ts test/reference-selection.test.ts test/prompt-contract.test.ts test/subagent-parallelism.test.ts",
+    "exit": 0,
+    "tests": 33,
+    "pass": 33,
+    "fail": 0,
+    "skipped": 0
+  },
+  "fullTest": {
+    "command": "npm test",
+    "exit": 0,
+    "tests": 1351,
+    "pass": 1350,
+    "fail": 0,
+    "skipped": 1,
+    "rawTranscript": "full-test-remediation-raw.log",
+    "rawTranscriptSha256": "b7a049feb7a8ad518108f56d1198ad04a57b143ea3be4b4061e3aa737f4020f5",
+    "rawTranscriptBytes": 112326
+  },
+  "sourceGeneratedParity": {
+    "method": "in-memory reconstruction from src agents/skills, adapter emitters, token substitution, and copied pack sources; compared byte-for-byte without writing",
+    "rootPlugin": { "expectedFiles": 22, "actualFiles": 22, "missing": [], "extra": [], "mismatched": [], "equal": true },
+    "distCodex": { "expectedFiles": 69, "actualFiles": 69, "missing": [], "extra": [], "mismatched": [], "equal": true },
+    "distClaude": { "expectedFiles": 63, "actualFiles": 63, "missing": [], "extra": [], "mismatched": [], "equal": true }
+  },
+  "machineChecks": {
+    "typecheck": { "command": "npx tsc --noEmit", "exit": 0 },
+    "diffCheck": { "command": "git diff --check", "exit": 0 }
+  },
+  "mcpServers": {
+    ".mcp.json": ["browser-rs"],
+    "dist/codex/.mcp.json": ["browser-rs"],
+    "dist/claude/.mcp.json": ["browser-rs"]
+  },
+  "staleChromeDevtoolsFiles": [],
+  "result": "PASS"
+}

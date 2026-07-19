@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { refIdentity } from '../ref/identity.ts';
 import { loadRefs } from '../ref/store.ts';
 
 export const COMPOSITION_SECTIONS = [
@@ -216,11 +217,6 @@ export function validateCompositionContractSource(inputs: CompositionContractInp
   if (userRefs.length > 0 && !synthesis) findings.push(synthesisFinding(`user-provided references exist but the ${SYNTHESIS_SECTION} section is missing or empty`));
   else for (const ref of userRefs) if (!result.sourceRefs.includes(normalize(ref))) findings.push(synthesisFinding(`user reference "${ref}" is not mapped by an exact Source ref field in ${SYNTHESIS_SECTION}`));
   return findings.sort((a, b) => a.path.localeCompare(b.path) || a.id.localeCompare(b.id) || a.message.localeCompare(b.message));
-}
-
-/** Stable authoring identity: deterministic, safe, and distinct for same-host references. */
-function refIdentity(source: string, component: string): string {
-  return `ref-${createHash('sha256').update(`${source}\0${component}`).digest('hex').slice(0, 16)}`;
 }
 
 export function validateCompositionContract(root: string): CompositionContractFinding[] {

@@ -1,0 +1,5 @@
+Final reinstall cleanup record
+
+- The task-owned package archive and its temporary packaging directory were removed after parity and doctor validation.
+- The current backup prefix `v0.16.1.backup-task15-health-2026-07-19T08-55-43-278Z` is intentionally retained.
+- Existing wrappers, unrelated packages, plugins, profiles, and the foreign browser binary were not removed or modified.

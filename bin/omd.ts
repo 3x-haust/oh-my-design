@@ -832,6 +832,44 @@ async function cmdRefDistance(opts: Opts): Promise<never> {
   process.exit(0);
 }
 
+const boardPath = (opts: Opts, command: string): string | undefined => {
+  if (opts.out !== undefined) throw new Error(`${command} does not accept --out`);
+  if (opts._.length > 1) throw new Error(`${command} accepts at most one manifest path`);
+  return opts._[0] === undefined ? undefined : resolve(opts._[0]);
+};
+async function cmdRefCheck(opts: Opts): Promise<never> {
+  const { readReferenceBoardArtifacts } = await import('../core/ref/board-artifacts.ts');
+  const { referenceSelectionExists, validateReferenceSelection } = await import('../core/ref/reference-selection.ts');
+  const manifest = boardPath(opts, 'omd ref check'); readReferenceBoardArtifacts(process.cwd(), manifest);
+  if (referenceSelectionExists(process.cwd())) validateReferenceSelection(process.cwd(), manifest);
+  if (opts.json) process.stdout.write('[]\n'); else console.log('ok');
+  process.exit(0);
+}
+async function cmdRefImportImage(opts: Opts): Promise<never> {
+  if (opts.out !== undefined) throw new Error('omd ref import-image does not accept --out');
+  const input = opts._[0]; if (input === undefined || opts._[1] !== undefined) throw new Error('usage: omd ref import-image <input.json> [--json]');
+  const { persistImageFragment } = await import('../core/ref/image-fragment.ts');
+  const record = persistImageFragment(process.cwd(), JSON.parse(readFileSync(resolve(input), 'utf8')));
+  if (opts.json) process.stdout.write(`${JSON.stringify(record)}\n`); else console.log(record.id);
+  process.exit(0);
+}
+async function cmdRefCandidates(opts: Opts): Promise<never> {
+  if (opts.json) throw new Error('omd ref candidates emits chat-ready Markdown and does not accept --json');
+  const { readReferenceBoardArtifacts } = await import('../core/ref/board-artifacts.ts');
+  const { formatReferenceCandidates } = await import('../core/ref/candidate-markdown.ts');
+  const artifacts = readReferenceBoardArtifacts(process.cwd(), boardPath(opts, 'omd ref candidates'));
+  process.stdout.write(formatReferenceCandidates(artifacts.raw, artifacts.assembly));
+  process.exit(0);
+}
+async function cmdRefSelect(opts: Opts): Promise<never> {
+  if (opts.out !== undefined) throw new Error('omd ref select does not accept --out');
+  const candidateId = opts._[0]; if (candidateId === undefined || opts._[1] !== undefined) throw new Error('usage: omd ref select <candidate-id> [--json]');
+  const { selectReferenceCandidate } = await import('../core/ref/reference-selection.ts');
+  const selection = selectReferenceCandidate(process.cwd(), candidateId);
+  if (opts.json) process.stdout.write(`${JSON.stringify(selection)}\n`); else console.log(`selected ${selection.candidateId}`);
+  process.exit(0);
+}
+
 // ── Figma commands ────────────────────────────────────────────────────────────
 
 async function cmdFigmaPull(url: string | undefined): Promise<never> {
@@ -1595,6 +1633,10 @@ function usage(): never {
     + '  ref distance <page>                         compare a page to every saved reference\n'
     + '  ref principles <source> --as C --add "..."   record why a reference works\n'
     + '  ref show <source> --as C                    invariants + principles\n'
+    + '  ref check [manifest] [--json]               validate board evidence and any saved selection\n'
+    + '  ref import-image <input.json> [--json]      save a provenance-bound image fragment\n'
+    + '  ref candidates [manifest]                   print chat-ready Korean-first candidate Markdown\n'
+    + '  ref select <candidate-id> [--json]          bind a closed candidate selection to its evidence\n'
     + '\n'
     + '  design                                       discover evidence and create/refresh .omd/design.md\n'
     + '  design --check                              validate design.md section coverage\n'
@@ -1693,6 +1735,10 @@ async function main(): Promise<never> {
     if (sub === 'distance') return cmdRefDistance(opts);
     if (sub === 'principles') return cmdRefPrinciples(opts);
     if (sub === 'show') return cmdRefShow(opts);
+    if (sub === 'check') return cmdRefCheck(opts);
+    if (sub === 'import-image') return cmdRefImportImage(opts);
+    if (sub === 'candidates') return cmdRefCandidates(opts);
+    if (sub === 'select') return cmdRefSelect(opts);
     return usage();
   }
 

@@ -1,0 +1,47 @@
+{
+  "schemaVersion": "task15-final-reinstall-v1",
+  "status": "complete",
+  "package": {
+    "name": "@3xhaust/oh-my-design",
+    "version": "0.16.1",
+    "archiveSha256": "204e5d391f5e3797a2a540c73b816974dfabe8e57b2567ad25a7d3606ff37310",
+    "offlineInstall": true,
+    "lifecycleScriptsDisabled": true
+  },
+  "backup": "v0.16.1.backup-task15-health-2026-07-19T08-55-43-278Z",
+  "installedSourceParity": {
+    "browserRsHealthSha256": "30a8079bd518d5d3e1d13d19d7c6809e32f98b7a2f305ad60d7640d5759039af",
+    "browserRsHealthMatchesWorktree": true,
+    "browserRsInstallSha256": "53c953a9c5fdad8a78c33ee81336d46ca9c75c04e71d9a90791bf6a60bd75fb4",
+    "browserRsStdioSha256": "d943d6e0a70955ffd24cd48189a4b32630ac84590b91fb92951a41c84e759739",
+    "englishReadmeMatches": true,
+    "koreanReadmeMatches": true,
+    "detachedSpawnPresent": true,
+    "processGroupSigkillCleanupPresent": true,
+    "directChildSigkillFallbackPresent": true,
+    "orphanReceiptConflictGuardPresent": true
+  },
+  "publicWrappers": {
+    "omd": true,
+    "ohMyDesign": true,
+    "browserRs": true
+  },
+  "freshShellResolution": {
+    "login": "0.16.1",
+    "interactiveLogin": "0.16.1"
+  },
+  "installedChecks": {
+    "omdVersion": 0,
+    "browserDoctorJson": 0,
+    "browserProviderHelp": 0,
+    "codexHostDoctor": 0,
+    "claudeHostDoctor": 0,
+    "projectDoctor": 0
+  },
+  "foreignPreservation": {
+    "miseVersion": "0.4.1",
+    "miseManifestSha256": "1d4f0a5046e47e0fef8ef666cf9d103cf6821bb6da84c041481bee8945c0c2a9",
+    "browserBinarySha256": "9a5895fc2f07b1010226d30f081d678fa2edcc15dd6f24cdf10074cfe1573749",
+    "browserReceiptPresent": false
+  }
+}

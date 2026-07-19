@@ -7,6 +7,10 @@ import type { EnergyCurve, MotionMeasurement, RawIr } from '../types.ts';
 
 const MAX_NODES = 4000;
 
+export function browserEvaluationExpression(source: string, argumentExpression: string): string {
+  return `(() => { const __name = (callback) => callback; return (${source})(${argumentExpression}); })()`;
+}
+
 // ── Block detection ─────────────────────────────────────────────────────────
 
 /**
@@ -391,18 +395,20 @@ function checkReducedMotionInPage(): boolean {
  */
 async function probeMotion(page: import('playwright').Page): Promise<MotionMeasurement | null> {
   const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+  const snapshotExpression = browserEvaluationExpression(captureMotionSnapshot.toString(), '');
+  const reducedMotionExpression = browserEvaluationExpression(checkReducedMotionInPage.toString(), '');
   try {
     type Snap = Array<{ duration: number; easing: string; properties: string[]; playState: string }>;
 
     // Three-snapshot timeline: capture animation state at load, 500ms, and 1500ms.
     // Entrance animations typically complete within this window; scroll-triggered ones do not.
-    const snap0 = await page.evaluate(`(${captureMotionSnapshot.toString()})()`) as Snap;
+    const snap0 = await page.evaluate(snapshotExpression) as Snap;
     await sleep(500);
-    const snap500 = await page.evaluate(`(${captureMotionSnapshot.toString()})()`) as Snap;
+    const snap500 = await page.evaluate(snapshotExpression) as Snap;
     await sleep(1000); // 1500ms total
-    const snap1500 = await page.evaluate(`(${captureMotionSnapshot.toString()})()`) as Snap;
+    const snap1500 = await page.evaluate(snapshotExpression) as Snap;
 
-    const hasReducedMotion = await page.evaluate(`(${checkReducedMotionInPage.toString()})()`) as boolean;
+    const hasReducedMotion = await page.evaluate(reducedMotionExpression) as boolean;
 
     // Scroll choreography: step by 25% viewport height, record animation and element counts.
     const viewportHeight = page.viewportSize()?.height ?? 800;
@@ -567,9 +573,8 @@ async function extractIrCore(
 ): Promise<RawIr> {
   // Fail fast on blocked/challenge pages before attempting DOM extraction.
   await assertNotBlocked(page, httpStatus, resolvedUrl);
-  // Node strips the types, so toString() yields runnable JS for the browser.
   const raw = await page.evaluate(
-    `(${extractInPage.toString()})(${MAX_NODES}, ${JSON.stringify(selector ?? null)})`,
+    browserEvaluationExpression(extractInPage.toString(), `${MAX_NODES}, ${JSON.stringify(selector ?? null)}`),
   ) as RawIr;
   const interaction = await probeInteraction(page);
   const motion = await probeMotion(page);

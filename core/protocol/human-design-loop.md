@@ -10,6 +10,11 @@ semantic checkpoint -> selected-container type reproof -> visual checkpoint -> s
 glance -> source candidate scan/triage -> sharp critique/probe -> repair/rescan -> reframe ->
 ship`.
 
+When a run uses visual references, the reference branch follows the exact eight-stage
+sequence in `protocol/reference-assembly.md`. That protocol owns its owners, artifact
+boundaries, chat presentation, browser fallback, and stop conditions; this protocol does
+not create a parallel reference flow.
+
 ## Stack routing
 
 Apply one precedence everywhere: explicit user request > existing repository stack/toolchain
@@ -35,7 +40,10 @@ Durable, reviewable state lives under `.omd/`: `frame.md`, `scout.md`, `copy-dec
 `type-proof.md`, `composition.md`, `decisions.md`, `design.md`, `attribution.md`, `motion-spec.md`, `craft.jsonl`,
 `source-seal.json`, `task-evidence.json`, `task-evidence-runs/*.json`, `final-evidence.json`,
 `final-evidence-runs/<runId>.json`, `config.json`, `probes/*.json`, `refs/*.json`, and explicit
-taste records. `task-evidence.json` and `final-evidence.json` are validated current indexes; their
+taste records. When reference assembly applies, `.omd/reference-board.json`,
+`.omd/reference-selection.json`, `.omd/reference-composite-lineage.json`,
+`.omd/reference-usage.json`, and `.omd/reference-report.md` are likewise durable bound
+records; their raw evidence is scout-only. `task-evidence.json` and `final-evidence.json` are validated current indexes; their
 run records preserve immutable prior publications. Reusable intent and final evidence identity
 belong there, while generated screenshots and raw execution output do not.
 
@@ -79,6 +87,19 @@ Reference synthesis starts from function, not mood. Field names, record shape, a
 Function fixes structure; a production-grade result also needs a deliberate visual system, so visual reference discovery is a first-class research obligation, not optional polish. For every surface the scout treats curated design galleries and inspiration sources — for example Pinterest, Dribbble, Mobbin, Behance, Land-book, Godly, Savee, and equivalent boards — as an admissible visual reference category alongside domain and competitor evidence, and captures enough high-craft main-screen references for the product's domain and register to support a visual decision. It sanitizes each into the canonical multi-axis synthesis (macro layout, density, typography, spacing/rhythm, component anatomy, surface/material, colour role, motion). Gallery evidence obeys the same clean-room boundary as every other source: no raw URL, screenshot, pixel sample, or source-page description travels downstream, and no gallery image is copied — only measured, sanitized principles transfer. Build for coverage, not counts, and report no capture quota.
 
 Concept selection is exploratory, not a single guess. Grounded in that gallery and domain evidence, the concept stage enumerates multiple distinct main-screen visual directions — each a named generator/metaphor, colour and typographic register, surface/material stance, density posture, and one memorable moment — then blind-selects the strongest direction and records it durably with its rejected alternatives. The number of directions scales with ambition and uncertainty; an awards-level or explicitly ambitious brief explores more. This visual-direction selection is a direction signal only: it never replaces the structural sketch divergence, the task/accessibility/viewport UX gates, the blind copy/type/critique gates, or the clean-room boundary, and the chosen direction still passes `omd composition --check` and every downstream gate. A result whose visual system is a generic default — unstyled or stock controls, flat undifferentiated fields, weak typographic hierarchy, arbitrary whitespace, or no distinctive surface/material and colour system — fails the visual acceptance gate even when every task succeeds; beautiful production-grade UI and sound UX are co-equal requirements.
+
+Visual-reference assembly is chat-first. The scout presents the exact `omd ref candidates`
+Markdown in the conversation; the coordinator records the user choice (or an explicitly
+disclosed agent choice when interaction is unavailable) through `omd ref select` and
+`omd ref check`. No stage opens or asks the user to open a board UI, HTML, PNG, or
+`omd-board`. Interactive browsing and user-directed gallery-region capture use browser-rs
+first. Only an observed initialization/capability failure permits headless, reduced-motion
+`omd render`/`omd probe` Playwright fallback. Before composer begins, the coordinator/host—not
+composer—derives prompts from the hash-bound selected assembly and already-permitted
+project-owned brief/copy/type/register material, creates and selects two-to-three independent
+clean-room drafts when capable, then records and checks lineage. An unavailable capability is
+recorded and checked before composer takes the CSS/SVG path. The rest of the reference workflow,
+including the final bilingual report, is governed by `protocol/reference-assembly.md`.
 ## Support-chat conditional regression
 A support-ticket conversation is a conditional primitive regression, never a default grammar. When explicitly requested or task-completely inferred, its transfer requires customer-left/agent-right direction, intrinsic content width with a max-width cap, machine-readable timestamps, a declared temporal compatibility window, temporal grouping that merges consecutive same-sender messages within that window and splits an expired-window reply into a new group with fresh sender/time metadata, distinct internal-note treatment and vocabulary, an anchored composer, and deliberate mobile recomposition. Generic full-width message slabs fail. Production probes/tests prove both temporal boundaries: a same-sender reply within the declared window merges without a duplicate sender/time group, and an expired-window same-sender reply splits into a new group with fresh metadata. After commit, the new bubble must be visibly revealed in the desktop and mobile conversation viewport; a toast or offscreen DOM text alone fails. Require immediate repeated-send regression and visible-last-bubble evidence. Do not apply these conversation traits to non-conversation, marketing, editorial, or static surfaces.
 
@@ -155,7 +176,7 @@ When user-origin references exist, the scout records sanitized multi-axis featur
 
 ## Blindness and isolation
 
-The composer owns only `.omd/composition.md`. After typography approval it receives the sanitized frame/concept, clean copy deck, approved type proof, and durable scout summary when present. Reference transfer input is limited to stable source keys/labels, trust, uncertainty, and sanitized multi-axis feature/primitive rules, adaptations, token variation, conflicts, and destination criteria; it receives no raw screenshots, source files, pixel samples, URLs, source-page descriptions, candidate renders, rejected alternatives, or authorship. It turns evidence into a structural contract, records exact SHA-256 fingerprints, and runs `omd composition --check` before divergence.
+The composer owns only `.omd/composition.md`. After typography approval it receives the sanitized frame/concept, clean copy deck, approved type proof, and durable scout summary when present. When reference assembly applies, it starts only after the coordinator has checked lineage: it receives the current hash-bound sanitized selected assembly plus the coordinator-chosen clean-room draft on the generated route, or the checked unavailable lineage plus CSS/SVG evidence path on the unavailable route. It never supplies a draft prompt or upstream art-direction direction, and never receives the internal raw evidence record. Reference transfer input is limited to stable source keys/labels, trust, uncertainty, and sanitized multi-axis feature/primitive rules, adaptations, token variation, conflicts, and destination criteria; it receives no raw screenshots, source files, pixel samples, URLs, source-page descriptions, candidate renders, rejected alternatives, or authorship. It turns evidence into a structural contract, records exact SHA-256 fingerprints, and runs `omd composition --check` before divergence.
 
 Each sketch receives only a sanitized frame/concept, the copy deck, the approved typography
 contract derived from `.omd/type-proof.md`, the same sanitized `.omd/composition.md`, an
@@ -394,6 +415,10 @@ These gates are part of every applicable production run, not optional polish:
   declared scenes; every timing/easing cites measured reference or theory evidence.
 - Write `.omd/attribution.md` for the sources of shipped tokens, motion, composition, and
   graphics. A deliberate theory choice is still a source; an arbitrary choice is not.
+- When reference assembly applies, the hand records the complete production usage ledger and
+  the finalizer runs the validator-backed report formatter from
+  `protocol/reference-assembly.md` before the final chat handback. The finalizer pastes the
+  formatter's exact bilingual Markdown and does not replace it with a vague inspiration claim.
 - Walk `craft/finish-pass.md`. Complete applicable items and record a concrete reason for
   every skipped item.
 - When `.omd/design.md` exists, run `omd design --check` and resolve its findings.

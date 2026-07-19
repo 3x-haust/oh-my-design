@@ -20,15 +20,21 @@ Give the user the working interface they asked for. Do not expose internal quota
 them to operate the harness. Run host-native agents in fresh contexts; do not create a
 workflow engine, queue, model router, or session runtime.
 
-Read `protocol/human-design-loop.md` from `omd pack dir` first. It owns phase order, state,
-evidence precedence, blindness, isolation, checkpoints, and probe safety. Use the relevant
+Read `protocol/human-design-loop.md` from `omd pack dir` first. Then read
+`protocol/reference-assembly.md`. The reference protocol owns the exact chat-first LEGO stage
+order, single owners, artifact boundaries, browser fallback, and final reporting; the human-design
+loop owns the remaining phase order, state, evidence precedence, blindness, isolation,
+checkpoints, and probe safety. Use the relevant
 theory/cookbook files (`theory/`, `composition/`, `graphics/`, `motion/`, `craft/`) instead
 of duplicating their rules here. `.omd/` records are English; the interface and handback use
 the user's language.
 
 ## 0. Preflight and routing
 
-Run `omd doctor`. Stop on a failed prerequisite. Pin the absolute working directory first. A Figma
+Run `omd doctor`. Stop on a failed prerequisite. For interactive visual research or user-directed
+region capture, initialize `browser-rs` first. Only an observed initialization/capability failure
+permits headless, reduced-motion `omd render` or `omd probe` as the deterministic Playwright
+fallback; record the failure and do not add or try another provider. Pin the absolute working directory first. A Figma
 frame or exact visual target uses the single Figma structural-bypass route declared above; it retains
 content, craft, glance, probe, critique, and all UX evidence rather than handing the run off or
 terminating this loop.
@@ -50,7 +56,7 @@ points at. A bare `index.html`/`.css`/`.js` with no manifest and no build config
 `.omd/` directory from a prior OMD run, is OMD's own leftover output — not a user stack. A fresh
 design brief in that folder is a greenfield (React + Vite + TypeScript by default), not a
 continuation of the leftover HTML; do not let your own previous output pin the stack to vanilla.
-Testing repeatedly in one directory reuses the `.omd/refs/` board (fine, output-neutral) but never
+Testing repeatedly in one directory reuses the `.omd/refs/` inventory (fine, output-neutral) but never
 reclassifies a greenfield as an existing HTML project.
 The hand runs `omd stack` before its first production write and builds in exactly the stack it
 computes from folder evidence — a blank greenfield resolves to React + Vite + TypeScript
@@ -60,11 +66,11 @@ lawful override is a verbatim explicit user request for HTML.
 Run `omd config show`. `checkpoint: none` is the default and means no approval waits.
 Only `concept`, `structure`, or `both` opt into a human pause at that named point.
 Speed comes only from output-neutral structure, never from degrading the result. Two levers, both
-of which leave the full-fidelity output unchanged: reuse a coverage-complete `.omd/refs/` board when
+of which leave the full-fidelity output unchanged: reuse a coverage-complete `.omd/refs/` inventory when
 this working directory already has one for the concept (scout only the missing categories rather
 than rebuilding it), and let the scout capture references in parallel with `omd ref add-batch` — one
 browser instead of one per reference. The first run in a fresh directory is the slowest because it
-builds the board; later runs in the same directory are much faster and still full-fidelity. There is
+builds the inventory; later runs in the same directory are much faster and still full-fidelity. There is
 no reduced-quality mode: every run is the real result.
 
 Run `omd taste profile` and pass only that explicit-user profile to the framer. Never use
@@ -106,7 +112,8 @@ explicitly requested showpiece ambition is honored at all.
 
 Spawn `omd-scout` with the concept, explicit functions or product goal, surface classification,
 user references first, and working directory; also pass the component inventory. Require the canonical branch decision before research.
-`protocol/composition-contract.md` exclusively
+`protocol/reference-assembly.md` requires the scout to complete its fragment inventory, brick
+analysis, and candidate assemblies before the coordinator continues. `protocol/composition-contract.md` exclusively
   owns the strict `## Reference synthesis` Markdown ABI; require scout to emit sanitized records
   that use its exact axis keys, dispositions, reasons, and selector rules without a role-local
   schema. Scout preserves explicit user-reference coverage, stable source keys/labels, trust,
@@ -126,11 +133,28 @@ user references first, and working directory; also pass the component inventory.
   support-ticket conversation, apply the canonical temporal-window merge/split and visible-last-bubble
   regressions in `protocol/human-design-loop.md`; it never applies conversation behavior elsewhere.
 
+After `omd ref check` passes, paste the exact `omd ref candidates` Markdown table directly into
+the Codex/Claude chat. It is the sole candidate presentation: never direct the user to a board UI,
+HTML, PNG, showcase, or `omd-board`. Record the user's exact candidate id with `omd ref select`,
+then run `omd ref check` again. If interaction is unavailable under the run configuration, make one
+agent selection only with a clear disclosure and reason in `.omd/decisions.md`; never imply that
+the user selected it. Do not invoke composer, eye, or hand yet. Once each applicable
+project-owned brief/copy/type/register/palette/material input has its normal clean check, the
+coordinator/host derives the two-to-three independent clean-room art-direction directions directly
+from the selected assembly and its sanitized principles/blueprints. It does not read
+`.omd/composition.md` or ask composer for a prompt. With capability, generate the drafts
+concurrently, select one, record the selection decision, then call
+`recordReferenceCompositeLineage(root, input)` and `checkReferenceCompositeLineage(root)`. Without
+capability, record and check explicit unavailable lineage. Only then invoke composer: pass its
+selected sanitized assembly plus the chosen clean-room draft on the generated route, or the checked
+unavailable lineage plus CSS/SVG evidence path on the fallback. Never pass raw records, source URLs,
+screenshots, pixels, or source-page prose.
+
 
 The coordinator does not author copy. The scout's voice/audience evidence is the writer's only dependency;
-remaining board capture is independent. Once that evidence is in hand, spawn
-`omd-writer` concurrently with the scout's remaining board capture — the writer drafts the copy deck
-while the board finishes building. Give it the brief, that cited voice/audience evidence, working
+remaining fragment capture is independent. Once that evidence is in hand, spawn
+`omd-writer` concurrently with the scout's remaining fragment capture — the writer drafts the copy deck
+while the inventory completes. Give it the brief, that cited voice/audience evidence, working
 directory, `protocol/copy-deck.md`, and `theory/voice.md`.
 It writes only `.omd/copy-deck.md`. Run `omd copy --check`; on failure stop divergence and
 send the deterministic findings back to the writer for autonomous repair without waiting
@@ -197,8 +221,13 @@ proof container-width change. Rerun the proof instead of carrying an obsolete ap
 
 ## 4. Composition contract before divergence
 
-  Spawn a fresh `omd-composer` with only the sanitized frame/concept (including surface
-  classification), clean copy deck, approved type proof, scout transfer records,
+  Before spawning composer, require the coordinator's `checkReferenceCompositeLineage(root)` to
+  pass. On a generated route, give composer the coordinator-chosen lineage-attested draft; on an
+  unavailable route, give it the checked unavailable lineage and CSS/SVG evidence path. The
+  coordinator has already derived prompts and selected/recorded the draft from permitted inputs;
+  composer must not supply or revise those upstream directions. Then spawn a fresh `omd-composer`
+  with the sanitized frame/concept (including surface classification), clean copy deck, approved
+  type proof, scout transfer records,
   `protocol/composition-contract.md`, and `theory/layout.md`. The composition protocol alone
   owns the strict `## Reference synthesis` Markdown ABI: the composer serializes the scout's
   sanitized records exactly in that section, with no duplicate schema, heading, axis, or selector.
@@ -217,16 +246,17 @@ media, explanatory graphics, real interaction/data, or concept-bearing typograph
 mandatory photo or invented fact/asset. When mechanism/material/workflow is central, Media
 roles assigns a lawful carrier or an explicit alternate non-media mental-model carrier with
 its limitation; `none because no approved photo` is insufficient.
-For a confident/showpiece register where the composition is the deliverable, the composer
-specifies 2–3 independent clean-room art-direction directions from the committed
-palette/type/material, sanitized measured principles, and skin-abstracted blueprints. The
-host/coordinator owns concurrent draft generation, cache management, blind selection, and
-provenance/decision recording. The composer may consume only a host/coordinator-produced draft
-whose lineage attests that it used only those sanitized inputs and no source screenshot, URL,
-pixels, or visual likeness. The composer does not generate drafts, inspect raw source material,
-manage the cache, select a draft, or record that decision. Drafts are design references, never shipped
-page assets; `omd ref distance` still gates the shipped build. A quiet register or unavailable
-host image capability uses the reference board and CSS/SVG graphics recipes instead.
+For a confident/showpiece register where the composition is the deliverable, the
+host/coordinator derives 2–3 independent clean-room art-direction directions from the committed
+palette/type/material, sanitized measured principles, skin-abstracted blueprints, and other
+permitted project-owned inputs before composer starts. The host/coordinator owns concurrent draft generation,
+cache management, blind selection, and provenance/decision recording. The composer
+may consume only the coordinator-chosen draft whose checked lineage attests that it used only those
+sanitized inputs and no source screenshot, URL, pixels, or visual likeness. Composer neither
+generates nor supplies/revises prompts, inspects raw source material, manages the cache, selects a
+draft, or records that decision. Drafts are design references, never shipped page assets; `omd ref
+distance` still gates the shipped build. A quiet register or unavailable host image capability uses
+the selected sanitized assembly and CSS/SVG graphics recipes instead.
 
 Run `omd composition --check`. Missing sections, malformed fingerprints, or stale inputs
 stop divergence and return to the composer. A later change to frame, copy, type proof, or
@@ -465,7 +495,10 @@ convergence when a manifest exists, and `omd check --site` for multi-page output
 requires a fresh `omd composition --check`; the Figma structural-bypass route instead requires the
 supplied snapshot/design-system/attribution artifacts plus a fresh passing `omd figma diff` for every
 selected frame. Source-candidate triage has no untriaged or needs-render items and its
-scan was rerun after repairs. Everything is clean or has an evidence-backed deliberate overrule.
+scan was rerun after repairs. When reference assembly applies, hand off the passing
+`reference-usage-v1` ledger to the finalizer, which calls `generateReferenceReport(root)`, persists
+`.omd/reference-report.md`, and pastes the formatter's exact Korean-first bilingual Markdown into
+the final chat. Everything is clean or has an evidence-backed deliberate overrule.
 When the run is an iteration with a before/after pair, form the pairwise blind-choose verdict:
 blind-choose is the visual distinction signal only; applicable task probes, accessibility checks, and
 declared viewport task evidence remain independent passing UX gates. Record the comparison; it never

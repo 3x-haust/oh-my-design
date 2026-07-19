@@ -1,0 +1,20 @@
+{
+  "schemaVersion": "image-fragment-v1",
+  "id": "fragment-e2b3a6c439a88c2e",
+  "sha256": "2b93bac57bbaae99a1a64a22674b27ad269ad230a15530c212b4e73b47d3a7f2",
+  "imagePath": ".omd/refs/fragments/2b93bac57bbaae99a1a64a22674b27ad269ad230a15530c212b4e73b47d3a7f2.png",
+  "provenance": {
+    "sourcePage": "https://www.pinterest.com/pin/987654321",
+    "sourceImage": "https://i.pinimg.com/example/crop.png",
+    "captureRegion": "upper-left panel",
+    "licenseStatus": "unknown",
+    "rightsNotes": "검토 필요; do not ship source pixels.",
+    "capturedAt": "2026-07-19T02:00:00.000Z"
+  },
+  "transfer": {
+    "visualRole": "hero texture",
+    "principles": [
+      "Use density only; adapt to local tokens."
+    ]
+  }
+}

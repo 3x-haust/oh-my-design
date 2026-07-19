@@ -1,18 +1,8 @@
 import { substituter } from './tokens.ts';
+import { browserRsMcpConfig } from './browser-mcp.ts';
 import type { AbstractAgent, Emitted } from '../core/types.ts';
 
 const substitute = substituter('claude');
-
-// Published server, not one we run: gives the model eyes (navigate/screenshot) without
-// us hosting anything. Our own deterministic measurement stays in the `omd` CLI.
-const MCP_SERVERS = {
-  mcpServers: {
-    'chrome-devtools': {
-      command: 'npx',
-      args: ['-y', 'chrome-devtools-mcp@latest', '--headless', '--isolated'],
-    },
-  },
-};
 
 const yamlScalar = (s: string): string => JSON.stringify(s.replace(/\s*\n\s*/g, ' ').trim());
 
@@ -33,7 +23,7 @@ export function emitClaude({ agents = [] }: { agents?: AbstractAgent[] } = {}): 
 
   for (const agent of agents) files[`agents/${agent.name}.md`] = emitAgentFile(agent);
 
-  files['.mcp.json'] = MCP_SERVERS;
+  files['.mcp.json'] = browserRsMcpConfig();
 
   files['.claude-plugin/plugin.json'] = {
     name: 'oh-my-design',
@@ -82,7 +72,7 @@ export function emitClaudePlugin({ agents = [] }: { agents?: AbstractAgent[] } =
 
   for (const agent of agents) files[`agents/${stripOmdPrefix(agent.name)}.md`] = emitAgentFilePlugin(agent);
 
-  files['.mcp.json'] = MCP_SERVERS;
+  files['.mcp.json'] = browserRsMcpConfig();
 
   return { files };
 }

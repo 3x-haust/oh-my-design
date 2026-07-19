@@ -1,18 +1,8 @@
 import { substituter } from './tokens.ts';
+import { browserRsMcpConfig } from './browser-mcp.ts';
 import type { AbstractAgent, Emitted } from '../core/types.ts';
 
 const substitute = substituter('codex');
-
-// Published server, not one we run: gives the model eyes (navigate/screenshot) without
-// us hosting anything. Our own deterministic measurement stays in the `omd` CLI.
-const MCP_SERVERS = {
-  mcpServers: {
-    'chrome-devtools': {
-      command: 'npx',
-      args: ['-y', 'chrome-devtools-mcp@latest', '--headless', '--isolated'],
-    },
-  },
-};
 
 const tomlBasic = (s: string): string =>
   `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n')}"`;
@@ -49,7 +39,7 @@ export function emitCodex({ agents = [], version = '0.0.0' }: { agents?: Abstrac
 
   for (const agent of agents) files[`agents/${agent.name}.toml`] = emitAgentFile(agent);
 
-  files['.mcp.json'] = MCP_SERVERS;
+  files['.mcp.json'] = browserRsMcpConfig();
 
   files['.codex-plugin/plugin.json'] = {
     name: 'oh-my-design',
