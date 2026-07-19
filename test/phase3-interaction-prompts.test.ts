@@ -20,8 +20,10 @@ test('composer names the three autonomous signature-interaction mechanisms and k
   assert.match(composer, /separate collection surface from `core\/ref\/distance\.ts`/);
   assert.match(composer, /never imitate a\s+reference screenshot/i);
 
-  // Default lane is CSS scroll-driven; WebGL is escalation-only.
-  assert.match(composer, /default interaction lane is CSS scroll-driven/i);
+  // Lanes in order: CSS scroll-driven, then React animation libraries (GSAP/ScrollTrigger, Framer Motion), WebGL escalation-only.
+  assert.match(composer, /interaction lanes are, in order: CSS scroll-driven/i);
+  assert.match(composer, /GSAP with ScrollTrigger[\s\S]*Framer Motion \(`motion`\)/i);
+  assert.match(composer, /first-class lane preferred over hand-rolled rAF/i);
   assert.match(composer, /escalating to WebGL is an escalation, not a default/i);
 
   // Autonomy never bypasses the existing gates.

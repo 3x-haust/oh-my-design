@@ -164,8 +164,10 @@ signal board of collected reference interaction patterns. The signal board is a
 separate collection surface from `core/ref/distance.ts` scoring — never ground a
 reference interaction pattern against the distance gate, and never imitate a
 reference screenshot; only its transferable principle transfers, per the clean-room
-transfer boundary above. The default interaction lane is CSS scroll-driven (pointer-
-or scroll-tracked custom properties, `radial-gradient`, `animation-timeline`);
+transfer boundary above. The interaction lanes are, in order: CSS scroll-driven (pointer-/scroll-
+tracked custom properties, `radial-gradient`, `animation-timeline`); then, on a React stack, real
+animation libraries — GSAP with ScrollTrigger for scroll choreography and Framer Motion (`motion`)
+for enter/gesture/layout transitions — as a first-class lane preferred over hand-rolled rAF;
 escalating to WebGL is an escalation, not a default, and remains gated on hand
 precedence, a declared performance budget, and a non-canvas semantic fallback, exactly
 as for the WebGL/3D media-role precedence above — autonomous ideation never bypasses
