@@ -22,9 +22,10 @@ User URLs are captured first and marked `--from-user`.
 
 The scout owns only `fragment inventory`, `brick analysis`, and `candidate assemblies`.
 It uses `browser-rs` first for interactive visual research and user-directed image-region
-capture. Only an observed browser-rs initialization/capability failure permits the headless,
-reduced-motion `omd render` or `omd probe` Playwright fallback; report that fallback rather
-than trying another provider. Preserve the existing measured-transfer, motion, reduced-motion,
+capture. Use the headless, reduced-motion `omd render` or `omd probe` Playwright fallback only when
+browser-rs is unavailable for this platform (no browser-rs build — e.g. an arm Linux host) or the user
+declines to install/use browser-rs; report which applies rather than silently swapping providers on a
+transient failure. Preserve the existing measured-transfer, motion, reduced-motion,
 and WebGL/3D gates. Do not scrape, hotlink, or ship source pixels.
 
 ## Coverage contract
