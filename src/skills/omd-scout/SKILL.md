@@ -81,8 +81,12 @@ the resulting hash-bound sanitized selected assembly and checked clean-room line
 
 Prefer first-party product sources and direct user/community evidence over SEO summaries.
 Label source trust, uncertainty, and whether evidence is independent or derivative. Reject
-a non-user source with two or more slop signals. Keep a user-provided contaminated source
-only as a named anti-reference. Drop kin at similarity `>= .85`; a cluster of related pages
+a non-user source only when it is derivative or convergent — an SEO/content-farm summary, a
+near-duplicate, or a page whose repeated patterns are unauthored defaults. A premium,
+first-party, intentional design is not slop for using a common pattern (a gradient, a card
+grid, a common sans) with a point of view; measure it. Slop is convergence without an
+author, not any use of a familiar pattern. Keep a user-provided contaminated source only as
+a named anti-reference. Drop kin at similarity `>= .85`; a cluster of related pages
 is one evidence family, not independent corroboration. A blocked page is not retried; use an
 honest image/discourse fallback or discard it.
 

@@ -356,3 +356,19 @@ test('humanize uses discourse repair modes and preserves evidence without rhythm
   assert.doesNotMatch(voice, /any one of these signals[\s\S]*model wrote|Product\s+copy[^.]*해요체[^.]*without exception|No human founder|mark the\s+text as generated|Two Korean AI tells are real/i);
   assert.doesNotMatch(voice, /will not need connectives|never explains the product's own mechanism/i);
 });
+
+test('scout rejects derivative or convergent references, not premium sites using common patterns', () => {
+  const scout = read('src/agents/scout.agent.yaml');
+  const skill = read('src/skills/omd-scout/SKILL.md');
+  for (const raw of [scout, skill]) {
+    const source = raw.replace(/\s+/g, ' ');
+    // The blunt "tally two or more slop signals and drop" heuristic over-rejected premium,
+    // first-party references (e.g. a violet-brand SaaS like Linear) and is gone.
+    assert.doesNotMatch(source, /two or more slop signals/i);
+    // Rejection now targets derivative/convergent sources...
+    assert.match(source, /reject[\s\S]*only when it is derivative or convergent/i);
+    // ...while premium, intentional design using common patterns is explicitly protected.
+    assert.match(source, /premium, first-party, intentional/i);
+    assert.match(source, /convergence without an author/i);
+  }
+});
