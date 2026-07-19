@@ -430,3 +430,13 @@ test('voice cites Toss as a documented example, never a voice to copy', () => {
   assert.match(voice, /documented examples of register discipline, never as a voice to copy/i);
   assert.match(voice, /do not web-search a product's copy strings to imitate/i);
 });
+
+test('there is no direct-build escape; register gates distinctive, never whether the loop runs', () => {
+  const skill = read('src/skills/omd-ultradesign/SKILL.md').replace(/\s+/g, ' ');
+  assert.match(skill, /exactly one structural-skip route/i);
+  assert.match(skill, /is NOT a skip route/);
+  assert.match(skill, /never whether the loop runs/i);
+  assert.match(skill, /routing defect, not a lawful shortcut/i);
+  const expressive = read('core/theory/expressive.md').replace(/\s+/g, ' ');
+  assert.match(expressive, /gates how "distinctive" is judged, never whether the loop runs/i);
+});
