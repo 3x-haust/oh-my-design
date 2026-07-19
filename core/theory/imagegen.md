@@ -2,41 +2,27 @@
 
 Adapted for OMD from the image-direction discipline in lazycodex's `frontend` skill
 (`imagegen-frontend-web`, `image-to-code`; Apache-2.0, github.com/code-yeongyu/lazycodex). This is
-an OMD-native synthesis bound to OMD's evidence, clean-room, and anti-fabrication rules — not a copy.
+an OMD-native synthesis bound to OMD's evidence and anti-fabrication rules — not a copy.
 
 **A generated image is a design reference, never a shipped asset.** It plays the exact role a Figma
-export or a hand mockup plays: a visual contract the build implements against. It obeys the clean-room
-boundary (`protocol/human-design-loop.md`) — you transfer layout grammar, token relationships, and
+export or a hand mockup plays: a visual contract the build implements against. You transfer its layout
+grammar, token relationships, and
 composition decisions, not pixels. A generated mockup never ships as a page `<img>`. Shipped imagery
 still obeys `asset-sourcing`: a factual carrier (team photo, product screenshot, real person, logo)
 is NEVER AI-generated; only an abstract or atmospheric zone may ship generated imagery, and only with
 committed provenance recorded via `omd decision`.
 
-## The clean-room composite boundary
+## Draft seeding and the shipped surface
 
-The raw reference board is scout-only evidence. Its source pages, component identities, provenance,
-captures, screenshots, pixels, and rendered board material never enter a prompt, composite, lineage
-record, composer, hand, or eye. They are not image-generation inputs.
-
-Image generation may consume only four declared clean-room input classes: the selected
-`reference-assembly-v1`, its sanitized measured principles, its skin-abstracted blueprints, and
-project-owned concept material (the brief, real product content, committed palette/type/material, and
-local design decisions). The selected assembly is the authority: use the one candidate bound by the
-current hash-bound selection, not the raw board or another candidate. Do not add an undeclared input
-carrier, source image, URL, screenshot, pixels, visual likeness, or `imageReference` field.
-
-When a host produces a clean-room draft, retain an internal `reference-composite-lineage-v1` record.
-Its generated state binds one coherent validated assembly/selection/candidate snapshot, local
-composite path and bytes, and the exact bytes of a declared project-owned, regular prompt file under
-`.omd/.cache/imagegen/`, plus provider, host image-generation capability, and the four permitted
-input classes. A missing capability records the explicit unavailable state instead;
-it carries no composite, provider, or image fields. This is provenance for a generated design
-reference, never a provider implementation or API-key workflow.
+The raw reference board is scout-only evidence. An image-first draft may be seeded from the selected
+`reference-assembly-v1`, the selected references, a project rough built on the committed design system,
+and project-owned concept material (the brief, real product content, committed palette/type/material,
+and local design decisions). The selected assembly is the authority: use the candidate bound by the
+current hash-bound selection. Drafts live under `.omd/.cache/imagegen/` and are design references only.
 
 `omd ref distance` measures the SHIPPED build against every saved reference as an advisory fidelity
-signal — it reports closeness and never blocks shipping. The imagegen draft still consumes only the
-declared clean-room input classes above, and the draft-generation stage never targets a specific
-reference's pixels, even though the hand may build the final surface to reference fidelity.
+signal — it reports closeness and never blocks shipping. The shipped surface obeys the committed design
+system, not the raw draft, and a factual carrier is never AI-generated.
 
 ## When image-first applies
 
@@ -48,28 +34,24 @@ is the event and a mockup adds nothing. Skip it and record why.
 When the host provides an image-generation capability and image-first applies, the order is
 **mandatory**:
 
-1. **Generate** — before composer starts, the coordinator/host derives the clean-room generation
-   directions and 2–3 independent prompts from the hash-bound selected sanitized assembly and the
-   permitted project-owned inputs. It generates those drafts concurrently, chooses one, stores the
-   drafts under `.omd/.cache/imagegen/`, and records then checks the chosen generated lineage. The
-   composer never contributes an upstream prompt or art-direction decision. One horizontal image per
-   section for a multi-section page — never one tall board with unreadable text. Do not crop an old
-   image for a detail view; regenerate that section fresh, keeping the same
-   palette/type/radius/treatment.
-   A project-owned rough — a quick pass built on the committed design system — is a permitted
-   generation seed: feed it plus the committed palette/type/material as the project-owned inputs so the
-   draft fleshes out ("구체화") that rough rather than inventing an unrelated look. The build then
-   redesigns the draft back onto the design system's tokens, spacing, and component rules; the draft is
-   a reference, never shipped, and the shipped surface obeys the system, not the raw draft.
-2. **Analyze** — only after the coordinator has checked the selected generated lineage, composer
-   analyzes and translates that draft into the composition contract: extract tokens, layout geometry,
-   spacing rhythm, type-scale relationships, component anatomy, interaction affordances, and each
-   section's job.
-3. **Feed** the selected lineage-attested draft into `.omd/composition.md` as the reference-fidelity
-   direction, then build against it and run `omd ref distance` as usual. If the host has no image
-   capability, the coordinator records and checks the explicit unavailable lineage before composer
-   starts; composer follows the evidence-based CSS/SVG composition path using the selected sanitized
-   assembly, `theory/expressive.md`, and the graphics recipes.
+1. **Generate** — before composer starts, the coordinator/host derives the generation directions and
+   2–3 independent prompts from the hash-bound selected assembly, the selected references, any project
+   rough, and the permitted project-owned inputs. It generates those drafts concurrently, chooses one,
+   and stores them under `.omd/.cache/imagegen/`. The composer never contributes an upstream prompt or
+   art-direction decision. One horizontal image per section for a multi-section page — never one tall
+   board with unreadable text. Do not crop an old image for a detail view; regenerate that section
+   fresh, keeping the same palette/type/radius/treatment.
+   A project-owned rough — a quick pass built on the committed design system — is a permitted seed:
+   feed it plus the committed palette/type/material so the draft fleshes out ("구체화") that rough. The
+   build then redesigns the draft back onto the design system's tokens, spacing, and component rules;
+   the draft is a reference, never shipped, and the shipped surface obeys the system, not the raw draft.
+2. **Analyze** — after the coordinator has chosen the draft, composer analyzes and translates it into
+   the composition contract: extract tokens, layout geometry, spacing rhythm, type-scale relationships,
+   component anatomy, interaction affordances, and each section's job.
+3. **Feed** the chosen draft into `.omd/composition.md` as the reference-fidelity direction, then build
+   against it and run `omd ref distance` as an advisory signal. If the host has no image capability,
+   composer follows the evidence-based CSS/SVG composition path using the selected sanitized assembly,
+   `theory/expressive.md`, and the graphics recipes.
 
 Reasoning the layout in the abstract is exactly what produces the symmetric, boxed, template output
 `expressive.md` § "Slop-free is not the same as distinctive" warns about. A generated draft forces a

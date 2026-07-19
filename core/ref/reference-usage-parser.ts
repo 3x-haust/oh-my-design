@@ -21,7 +21,7 @@ export type ReferenceUsage = {
   readonly rawBoardSha256: string;
   readonly assemblySha256: string;
   readonly selectionSha256: string;
-  readonly compositeLineageSha256: string;
+
   readonly attributionSha256: string;
   readonly rows: readonly ReferenceUsageRow[];
 };
@@ -117,7 +117,7 @@ export function parseReferenceUsageInput(value: unknown): ReferenceUsageInput {
 
 export function parseReferenceUsage(value: unknown): ReferenceUsage {
   const parsed = record(value, 'reference usage');
-  exactKeys(parsed, ['schemaVersion', 'rawBoardSha256', 'assemblySha256', 'selectionSha256', 'compositeLineageSha256', 'attributionSha256', 'rows'], 'reference usage');
+  exactKeys(parsed, ['schemaVersion', 'rawBoardSha256', 'assemblySha256', 'selectionSha256', 'attributionSha256', 'rows'], 'reference usage');
   if (parsed['schemaVersion'] !== REFERENCE_USAGE_SCHEMA_VERSION) fail(`schemaVersion must be ${REFERENCE_USAGE_SCHEMA_VERSION}`);
-  return { schemaVersion: REFERENCE_USAGE_SCHEMA_VERSION, rawBoardSha256: hash(parsed['rawBoardSha256'], 'rawBoardSha256'), assemblySha256: hash(parsed['assemblySha256'], 'assemblySha256'), selectionSha256: hash(parsed['selectionSha256'], 'selectionSha256'), compositeLineageSha256: hash(parsed['compositeLineageSha256'], 'compositeLineageSha256'), attributionSha256: hash(parsed['attributionSha256'], 'attributionSha256'), rows: rows(parsed['rows']) };
+  return { schemaVersion: REFERENCE_USAGE_SCHEMA_VERSION, rawBoardSha256: hash(parsed['rawBoardSha256'], 'rawBoardSha256'), assemblySha256: hash(parsed['assemblySha256'], 'assemblySha256'), selectionSha256: hash(parsed['selectionSha256'], 'selectionSha256'), attributionSha256: hash(parsed['attributionSha256'], 'attributionSha256'), rows: rows(parsed['rows']) };
 }

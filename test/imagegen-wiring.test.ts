@@ -24,13 +24,13 @@ test('imagegen theory keeps a generated image as a design reference, never a shi
   assert.match(t, /factual carrier[\s\S]*never (be )?AI-generated|NEVER AI-generated/i);
 });
 
-test('imagegen ref distance is advisory while the draft stage stays clean-room', () => {
+test('imagegen ref distance is advisory and drafts may seed from the selected references', () => {
   const t = read('core/theory/imagegen.md');
   assert.match(t, /ref distance/);
   assert.match(t, /advisory/i);
   assert.match(t, /never blocks shipping/i);
-  // The imagegen draft-generation stage still never targets a specific reference's pixels.
-  assert.match(t, /never targets a specific\s+reference's pixels/i);
+  // Drafts may now seed from the selected references (clean-room input-class gating removed).
+  assert.match(t, /seeded from the selected/i);
 });
 
 test('imagegen theory carries the variation engine and the anti-AI-default tells', () => {
@@ -40,14 +40,14 @@ test('imagegen theory carries the variation engine and the anti-AI-default tells
   assert.match(t, /at least 3 different anchors/i);
 });
 
-test('composer runs image-first seeded by clean-room grammar, gated by register and host capability', () => {
+test('composer runs image-first from the chosen draft, gated by register and host capability', () => {
   const c = read('agents/composer.md');
   assert.match(c, /image-first/i);
   assert.match(c, /theory\/imagegen\.md/);
   assert.match(c, /skin-abstracted\s+blueprint/i);
   assert.doesNotMatch(c, /--shot/);
-  assert.match(c, /host\/coordinator-produced\s+clean-room\s+draft\s+reference/i);
-  assert.match(c, /no\s+source screenshot, URL, pixels, or visual likeness/i);
+  assert.match(c, /coordinator-chosen draft/i);
+  assert.match(c, /does not generate images,[\s\S]*manage a draft cache, select a draft, or record a decision/i);
 });
 
 test('hand implements against the draft with image-to-code fidelity and never ships the draft', () => {
@@ -69,10 +69,10 @@ test('scout routes reference fidelity to the hand with an advisory distance sign
   assert.match(s, /theory\/imagegen\.md/);
 });
 
-test('ultradesign SKILL wires host-owned clean-room draft generation', () => {
+test('ultradesign SKILL wires host-owned image-first draft generation', () => {
   const skill = read('skills/ultradesign/SKILL.md');
-  assert.match(skill, /clean-room art-direction directions/i);
-  assert.match(skill, /host\/coordinator owns concurrent draft generation/i);
-  assert.match(skill, /cache\s+management,\s+blind\s+selection,\s+and\s+provenance\/decision\s+recording/i);
-  assert.match(skill, /no source screenshot, URL,[\s\S]*pixels, or visual likeness/i);
+  assert.match(skill, /image-first art-direction directions/i);
+  assert.match(skill, /host\/coordinator owns concurrent[\s\S]*draft generation/i);
+  assert.match(skill, /cache management,? and blind selection/i);
+  assert.match(skill, /coordinator-chosen draft as art-direction input/i);
 });

@@ -8,15 +8,15 @@ Own only `.omd/composition.md`. Read `protocol/human-design-loop.md`,
 `protocol/composition-contract.md`, `theory/layout.md`, and `theory/ux.md` under
 `omd pack dir`. Receive only the sanitized frame/concept, clean copy deck, sanitized
 approved typography contract, and the scout's distilled transferable principles,
-invariants, coverage, and source-trust summary. When reference assembly applies, begin only after
-the coordinator has checked clean-room lineage. On the generated route, receive the hash-bound
-sanitized selected assembly and the coordinator-chosen, host/coordinator-produced clean-room draft
-reference, then analyze and translate that lineage-attested draft into the composition contract. On
-the unavailable route, receive the selected assembly, checked unavailable lineage, and CSS/SVG
-evidence path, then compose from them. The coordinator/host alone derives generation directions and
+invariants, coverage, and source-trust summary. When reference assembly applies, begin after the
+coordinator/host has generated its image-first drafts and chosen one. When a draft is available,
+receive the hash-bound sanitized selected assembly and the coordinator-chosen draft reference, then
+analyze and translate that draft into the composition contract. When the host has no image
+capability, receive the selected assembly and the CSS/SVG evidence path, then compose from them.
+The coordinator/host alone derives generation directions and
 prompts from the assembly's sanitized measured principles and skin-abstracted blueprints plus
 permitted project-owned inputs, generates independent drafts, chooses the draft, manages the
-generation cache, and records/checks lineage. Never supply a provider prompt, upstream art
+generation cache. Never supply a provider prompt, upstream art
 direction, or a draft selection. Do not receive or inspect raw screenshots, pixels, reference URLs,
 candidate renders, the internal raw evidence record, source-page descriptions, assets, rejected
 alternatives, authorship, or production rationale.
@@ -108,19 +108,16 @@ material — photographs, slides, a portrait, data — assign it as a first-clas
 carrier, not text-in-boxes with the material unused; unused authentic material is a
 distinction failure. Record the named template and the departure in the contract rationale.
 Image-first composition (read `theory/imagegen.md`): for a confident/showpiece register where the
-composition is the deliverable, wait for the coordinator/host to complete its clean-room generation
-phase before composing. The coordinator/host derives generation directions and prompts from only
-the selected sanitized assembly and permitted project-owned inputs, generates 2–3 independent
-drafts concurrently, chooses one, manages the cache, and records/checks its lineage. The composer
-has no upstream prompt or art-direction role: it analyzes and translates the selected
-lineage-attested draft into `.omd/composition.md`. It may consume the host/coordinator-produced
-clean-room draft reference solely as art-direction input when its lineage explicitly identifies only
-those sanitized inputs and confirms no source screenshot, URL, pixels, or visual likeness entered
-the draft. It does not generate images, inspect source screenshots, manage a draft cache, select a
-draft, or record a decision. The generated draft is a design reference, never a shipped page asset;
-`omd ref distance` still gates the shipped build. For a quiet register or unavailable host image
-capability, begin after the checked unavailable lineage and use the selected sanitized assembly with
-CSS/SVG graphics recipes instead. Never request or inspect the raw evidence record.
+composition is the deliverable, wait for the coordinator/host to finish generating and choosing its
+image-first draft before composing. The coordinator/host derives generation directions and prompts
+from the selected assembly, the selected references, any project rough, and permitted project-owned
+inputs, generates 2–3 independent drafts concurrently, chooses one, and manages the cache. The
+composer has no upstream prompt or art-direction role: it analyzes and translates the chosen draft
+into `.omd/composition.md`, consuming it solely as art-direction input. It does not generate images,
+manage a draft cache, select a draft, or record a decision. The chosen draft is a design reference,
+never a shipped page asset; `omd ref distance` still reports fidelity as an advisory signal. For a
+quiet register or a host with no image capability, use the selected assembly with CSS/SVG graphics
+recipes instead. Never request or inspect the internal raw evidence record.
 
 Record SHA-256 fingerprints for `.omd/frame.md`, `.omd/copy-deck.md`,
 `.omd/type-proof.md`, and `.omd/scout.md` when present. If scout.md is absent, record the

@@ -11,7 +11,7 @@ export type ReferenceReportRow = {
   readonly transformation: string;
   readonly evidence: string;
 };
-export type ReferenceReportSnapshot = { readonly attributionSha256: string; readonly compositeLineageState: 'generated' | 'unavailable'; readonly rows: readonly ReferenceReportRow[] };
+export type ReferenceReportSnapshot = { readonly attributionSha256: string; readonly rows: readonly ReferenceReportRow[] };
 
 const inertCell = (value: string): string => value.normalize('NFC')
   .replace(/[\u0000-\u001f\u007f-\u009f\u061c\u200e-\u200f\u202a-\u202e\u2066-\u2069]/g, ' ')
@@ -49,22 +49,16 @@ const table = (snapshot: ReferenceReportSnapshot, korean: boolean): string => {
     : '| Status | Source site / page | Exact source UI / image region | Shipped target | Borrowed properties | Explicitly not borrowed | Transformation | Evidence path / selector / verification |';
   return `${header}\n|---|---|---|---|---|---|---|---|\n${snapshot.rows.map((piece) => row(piece, korean)).join('\n')}`;
 };
-const lineageState = (snapshot: ValidatedReferenceUsage): 'generated' | 'unavailable' => {
-  switch (snapshot.compositeLineage.state) {
-    case 'generated': return 'generated';
-    case 'unavailable': return 'unavailable';
-  }
-};
 
 export function referenceReportSnapshot(value: ValidatedReferenceUsage): ReferenceReportSnapshot {
-  return { attributionSha256: value.usage.attributionSha256, compositeLineageState: lineageState(value), rows: value.pieces.map((piece) => {
+  return { attributionSha256: value.usage.attributionSha256, rows: value.pieces.map((piece) => {
     const origin = source(piece);
     return { status: piece.usage.status, sourcePage: origin.page, sourceRegion: origin.region, target: target(piece), borrowedProperties: piece.usage.borrowedProperties, nonBorrowedProperties: piece.usage.nonBorrowedProperties, transformation: [piece.usage.transformation, `Selected-assembly rationale: ${piece.assembly.reason}`, `Adaptation: ${piece.assembly.adaptation}`].join(' '), evidence: evidence(piece) };
   }) };
 }
 
 export function formatReferenceReport(snapshot: ReferenceReportSnapshot): string {
-  return `## 참조 사용 보고서\n\n- 귀속 기록 결속: \`${snapshot.attributionSha256}\`\n- 클린룸 복합 계보: \`${snapshot.compositeLineageState}\`\n\n${table(snapshot, true)}\n\n## Reference usage report\n\n- Attribution record binding: \`${snapshot.attributionSha256}\`\n- Clean-room composite lineage: \`${snapshot.compositeLineageState}\`\n\n${table(snapshot, false)}\n`;
+  return `## 참조 사용 보고서\n\n- 귀속 기록 결속: \`${snapshot.attributionSha256}\`\n\n${table(snapshot, true)}\n\n## Reference usage report\n\n- Attribution record binding: \`${snapshot.attributionSha256}\`\n\n${table(snapshot, false)}\n`;
 }
 
 export function generateReferenceReport(root: string): string {

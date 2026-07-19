@@ -4,7 +4,7 @@ This protocol is the sole authority for reference-work ownership and the eight-s
 LEGO assembly order. It is a chat-first workflow, not a board application. The exact
 order is:
 
-`brief blocks -> fragment inventory -> brick analysis -> candidate assemblies -> selected assembly -> clean-room composite -> production usage ledger -> final provenance report`
+`brief blocks -> fragment inventory -> brick analysis -> candidate assemblies -> selected assembly -> production usage ledger -> final provenance report`
 
 Each stage has exactly one owner. A later stage must consume its validated predecessor,
 not reconstruct it from a source page, a screenshot, or an earlier conversation. The
@@ -20,9 +20,8 @@ new agent, service, provider, or runtime.
 | brick analysis | `omd-scout` | The validated fragment inventory, measured invariants/blueprints, rights/provenance, task blocks, and coverage gaps | Durable sanitized brick principles in the retained `.omd/refs/*.json` records plus `.omd/scout.md`; source identities and raw pixels remain only in the fragment inventory | `omd ref principles …` refuses an unmeasured source; candidate `omd ref check` rejects an empty or contaminated transferable brick | A contaminated, duplicate, rights-unclear-for-use, or unmeasurable fragment is a rejected or anti-reference brick. If no lawful sanitized brick can answer a required decision, stop candidate assembly for that decision and report the gap. |
 | candidate assemblies | `omd-scout` | Validated fragment inventory, sanitized brick analysis, and frame/task targets | Durable `.omd/reference-board.json` as internal raw evidence; deterministic raw evidence and sanitized `reference-assembly-v1` exist only behind the reference commands; the exact candidate Markdown table is pasted in chat | `omd ref check`; then `omd ref candidates` | A failed check, stale PNG/provenance, contaminated selector/text, or no viable candidate stops before chat presentation. Do not open, emit, or ask the user to inspect an HTML, PNG, or board UI; never run `omd-board`. |
 | selected assembly | `coordinator` | Passing candidate table, current `.omd/reference-board.json`, and the user's exact candidate id; when interaction is unavailable, an explicit disclosed agent choice and reason | Durable hash-bound `.omd/reference-selection.json` plus the user-choice or disclosed-agent-choice entry in `.omd/decisions.md` | `omd ref select <candidate-id>` followed by `omd ref check` | An unknown, stale, or unconfirmed id stops downstream use. When no interaction is available, the coordinator may choose one candidate only after disclosing that it is an agent selection; it must not imply user approval. |
-| clean-room composite | `coordinator` | Passing hash-bound selected assembly; its sanitized principles and skin-abstracted blueprints; and permitted project-owned material already available without composer output: sanitized brief/frame/concept, clean copy deck, approved type proof, committed palette/type/material, and local design decisions | Durable `.omd/reference-composite-lineage.json`; two-to-three generated draft/prompt cache entries only under `.omd/.cache/imagegen/`; coordinator decision naming the chosen draft, or an explicit unavailable lineage record | The coordinator/host derives prompts directly from these permitted inputs, generates 2–3 independent drafts concurrently, selects one, records `recordReferenceCompositeLineage(root, input)`, then requires `checkReferenceCompositeLineage(root)` before invoking composer | With no declared image-generation capability, record and check `unavailable` before invoking composer, which follows the selected assembly plus CSS/SVG evidence recipes. No `.omd/composition.md`, composer prompt, or composer art-direction output may enter this stage. A stale selection, forbidden source carrier, unchosen draft, or bad lineage stops every downstream consumer. |
-| production usage ledger | `omd-hand` | Passing selected assembly; a checked generated lineage plus its coordinator-chosen clean-room draft, or a checked unavailable lineage; actual production source/render/probe evidence; and attribution | Durable `.omd/reference-usage.json` with exactly one `used`, `rejected`, or `anti-reference` row for every selected slot | `recordReferenceUsage(root, { rows })` then `validateReferenceUsage(root)` | Missing, unselected, duplicate, or unsupported rows, absent production evidence, or stale bindings stop finalization. Do not replace real evidence with a claimed influence. |
-| final provenance report | `finalizer` | A passing usage ledger, current selected assembly, checked lineage, and `.omd/attribution.md` | Durable `.omd/reference-report.md` and the exact deterministic bilingual Markdown pasted into the final chat | `generateReferenceReport(root)` validates usage and atomically persists the returned Markdown | Any validation failure stops the final report. Do not hand-write, paraphrase, or claim a replacement report; repair the owning earlier stage and regenerate. |
+| production usage ledger | `omd-hand` | Passing selected assembly; the coordinator-chosen image-first draft when a draft was generated; actual production source/render/probe evidence; and attribution | Durable `.omd/reference-usage.json` with exactly one `used`, `rejected`, or `anti-reference` row for every selected slot | `recordReferenceUsage(root, { rows })` then `validateReferenceUsage(root)` | Missing, unselected, duplicate, or unsupported rows, absent production evidence, or stale bindings stop finalization. Do not replace real evidence with a claimed influence. |
+| final provenance report | `finalizer` | A passing usage ledger, current selected assembly, and `.omd/attribution.md` | Durable `.omd/reference-report.md` and the exact deterministic bilingual Markdown pasted into the final chat | `generateReferenceReport(root)` validates usage and atomically persists the returned Markdown | Any validation failure stops the final report. Do not hand-write, paraphrase, or claim a replacement report; repair the owning earlier stage and regenerate. |
 
 ## Chat-first presentation and selection
 
@@ -53,28 +52,27 @@ exact UI/image part; shipped route/component/selector; borrowed and explicitly n
 properties; transformation; status; and production evidence. `used`, `rejected`, and
 `anti-reference` are all reportable outcomes; only a validated `used` row may claim influence.
 
-## Executable, acyclic composite handoff
+## Executable, acyclic composition handoff
 
 The capable-host route is a strict topological order, not a dialogue loop:
 
-`selected assembly -> coordinator derives permitted-input prompts -> 2–3 concurrent clean-room drafts -> coordinator chooses one -> record/check generated lineage -> composer -> sketches/eye -> hand`
+`selected assembly -> coordinator derives prompts -> 2–3 concurrent drafts -> coordinator chooses one -> composer -> sketches/eye -> hand`
 
 The coordinator derives the prompt directions directly from the selected sanitized assembly and
 the permitted project-owned inputs in the stage table. It must not solicit or read
 `.omd/composition.md`, a composer prompt, or composer art-direction directions to create a draft
-that composer must later receive. The chosen draft is only a clean-room design-reference input;
-the coordinator records its choice and checks lineage before composer starts.
+that composer must later receive. The chosen draft is only a design-reference input; the coordinator
+records its choice before composer starts.
 
 The unavailable route is likewise closed before composition:
 
-`selected assembly -> coordinator records/checks unavailable lineage -> composer CSS/SVG path -> sketches/eye -> hand`
+`selected assembly -> composer CSS/SVG path -> sketches/eye -> hand`
 
-Composer has no outgoing edge to either composite route. It starts only after the coordinator has
-checked a generated lineage and hands it the chosen draft, or has checked the explicit unavailable
-lineage and hands it the CSS/SVG fallback. This permits real brief, copy, register, palette, type,
-and other project-owned material in coordinator prompts without granting composer an upstream role.
+Composer has no outgoing edge to either route. It starts only after the coordinator has chosen a draft
+and hands it over, or has taken the CSS/SVG fallback. This permits real brief, copy, register, palette,
+type, and other project-owned material in coordinator prompts without granting composer an upstream role.
 
-## Browser and clean-room boundary
+## Browser boundary
 
 For interactive visual research and user-directed region capture, use `browser-rs` first.
 Use the deterministic Playwright paths `omd render` and `omd probe` only when browser-rs is unavailable
@@ -84,10 +82,10 @@ The fallback remains headless and reduced-motion. Preserve measured motion only 
 relevant, honor the existing motion and WebGL/3D gates, and do not add a provider, API-key
 flow, or runtime.
 
-The internal raw evidence record is scout-only. Composer starts only after a successful checked
-lineage: on the capable route it receives the current hash-bound sanitized selected assembly and
-the coordinator-chosen clean-room draft; on the unavailable route it receives the selected
-assembly and CSS/SVG fallback. Eye and composer are downstream of that checked state and receive no
+The internal raw evidence record is scout-only. Composer starts after the coordinator has chosen its
+image-first draft: on the capable route it receives the current hash-bound sanitized selected assembly
+and the coordinator-chosen draft; on the unavailable route it receives the selected assembly and
+CSS/SVG fallback. Eye and composer receive no
 raw record, source URL/hostname, screenshot, pixel, capture path, provenance, source-page prose, or
 visual likeness — they work from the sanitized synthesis. The hand may additionally open a user-directed
 selected reference's local part-image under `.omd/refs/` and build against it for fidelity. Every role

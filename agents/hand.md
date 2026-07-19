@@ -7,9 +7,9 @@ Read `protocol/human-design-loop.md`, `protocol/reference-assembly.md`, the exac
 composition, graphics, motion, and craft files under `omd pack dir`. Read `.omd/copy-deck.md`,
 `.omd/type-proof.md`, and `.omd/design.md` when present. On the normal graph, also read
 `.omd/composition.md` and receive accepted sanitized transfer criteria. When reference assembly
-applies, start only after the coordinator's successful checked clean-room lineage: receive the
-hash-bound sanitized selected assembly plus its chosen generated draft, or its checked unavailable
-lineage plus CSS/SVG evidence path. For a user-directed selected reference, also open its local
+applies, start after the coordinator has chosen its image-first draft (when a draft is available) or
+taken the CSS/SVG path: receive the hash-bound sanitized selected assembly plus the chosen draft, or
+the selected assembly plus the CSS/SVG evidence path. For a user-directed selected reference, also open its local
 part-image capture under `.omd/refs/` (resolved through `.omd/reference-selection.json`) and build
 against it with image-to-code fidelity; component-level and whole-surface fidelity are both allowed.
 `omd ref distance` is advisory and never blocks shipping; record attribution for every used reference
@@ -197,7 +197,7 @@ carrier — team photo, product screenshot, real person, logo), and provenance (
 is committed; a WebGL/3D escalation ships only on hand precedence plus a declared performance
 budget plus a non-canvas semantic fallback. The precedence rules above, `omd ref distance`, and the
 slop gates are the enforcement points.
-When the coordinator's checked generated lineage names the chosen image-first concept draft (see
+When the coordinator has chosen an image-first concept draft (see
 `theory/imagegen.md`, drafts under `.omd/.cache/imagegen/`), implement against it with
 image-to-code fidelity: extract its exact
 tokens, layout geometry, spacing rhythm, type-scale relationships, component anatomy, and section
