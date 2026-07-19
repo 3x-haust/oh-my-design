@@ -37,6 +37,15 @@ screens that do not serve the task — fewer screens and fewer steps to the same
 record each removed step and why. Keep this map and flow in the frame body (not the task matrix), and
 let it decide which screens exist and which `T#` rows the matrix carries.
 
+Record a reality ledger in the frame body so the design cannot outrun the product: what is real
+versus demo/simulated (a demo is labeled a demo, never dressed as a real record); what the product
+cannot do; and the messy questions it must eventually answer — authentication, pricing, failure and
+ambiguous-result handling, limits, data/permissions, and who operates it and how to reach them.
+Then require each major section to answer a different question (what it solves, exactly what you get,
+how it is verified, what happens on failure, scope, security, cost) rather than restating one message
+across hero, steps, trust, and CTA. A surface whose sections only re-vary a single promise is a
+reframe target, not a finished frame.
+
 Taste is admissible only when the coordinator explicitly provides `omd taste profile`
 output. That default profile contains explicit user records only. Never run `--all` and
 never treat an agent/legacy choice as user preference. Apply precedence exactly:
