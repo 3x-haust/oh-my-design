@@ -448,3 +448,12 @@ test('expressive distills FWA distinctly and gates the horizontal gallery to sho
   assert.match(source, /### Horizontal scroll gallery/);
   assert.match(source, /composition\/horizontal-scroll-gallery\.md/);
 });
+
+test('the loop and eye gate colour strategy (60-30-10 / reserved accent)', () => {
+  const loop = read('core/protocol/human-design-loop.md').replace(/\s+/g, ' ');
+  assert.match(loop, /Colour strategy is part of the GREEN target/i);
+  assert.match(loop, /SLOP-DIFFUSE-ACCENT/);
+  const eye = read('src/agents/eye.agent.yaml').replace(/\s+/g, ' ');
+  assert.match(eye, /verify a legible 60-30-10 distribution/i);
+  assert.match(eye, /diffuse or multi-hue accent/i);
+});

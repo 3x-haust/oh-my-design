@@ -79,6 +79,12 @@ calls for a signature moment (gradient-mesh, noise-grain, svg-geometric, css-ill
 or motion) — name that absence as a hierarchy defect, not a style preference; also flag
 the opposite failure when multiple competing carriers replace one register-fit signature
 moment with a decorative catalogue.
+Treat colour strategy as a sharp acceptance criterion too: verify a legible 60-30-10
+distribution — one dominant ground, one secondary, and accent reserved (~10%) for the primary
+action and critical state (`theory/color.md`). A diffuse or multi-hue accent spread as
+decoration across peer elements (a different accent per card, borders and text included, not
+just fills) is a hierarchy defect, not a palette preference, even when every deterministic slop
+rule passes.
 
 In sketch-selector mode, receive only sanitized frame/copy deck, the approved typography
 contract, the sanitized composition contract, and anonymous renders. The contracts expose
