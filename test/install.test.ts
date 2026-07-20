@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { chmodSync, cpSync, existsSync, lstatSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, lstatSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, readlinkSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -433,5 +433,99 @@ test('Given a healthy host and explicit browser provider When install runs Then 
     assert.equal(settings.enabledPlugins?.['oh-my-design@omd'], true);
   } finally {
     rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// ── CLI symlink + plugin freshness ──
+
+const OMD_SHIM = join(PACKAGE_ROOT, 'bin', 'omd.mjs');
+const INSTALL_SHIM = join(PACKAGE_ROOT, 'bin', 'omd-install.mjs');
+const BUILD_VERSION = (JSON.parse(readFileSync(join(PACKAGE_ROOT, 'package.json'), 'utf8')) as { version: string }).version;
+
+test('install links the omd CLI to this build so omd pack dir serves the current core', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'omd-cli-home-'));
+  const binDir = mkdtempSync(join(tmpdir(), 'omd-cli-bin-'));
+  const detected = { host: 'codex' as const, home };
+  try {
+    const changes = await install([detected], { browser: UNSUPPORTED_BROWSER.browser, cliBinDir: binDir });
+    assert.ok(lstatSync(join(binDir, 'omd')).isSymbolicLink(), 'omd is a symlink');
+    assert.ok(lstatSync(join(binDir, 'oh-my-design')).isSymbolicLink(), 'oh-my-design is a symlink');
+    assert.equal(readlinkSync(join(binDir, 'omd')), OMD_SHIM);
+    assert.equal(readlinkSync(join(binDir, 'oh-my-design')), INSTALL_SHIM);
+    assert.ok(changes.some((c) => c.startsWith('cli: linked omd -> ') && c.endsWith('omd.mjs')));
+
+    const result = (await doctor([detected], { ...UNSUPPORTED_BROWSER_DOCTOR, cliBinDir: binDir }))[0]!;
+    assert.equal(result.checks.find((c) => c.name === 'omd CLI links to this build')?.ok, true);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+    rmSync(binDir, { recursive: true, force: true });
+  }
+});
+
+test('install relinks a stale omd symlink and reports the previous target', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'omd-cli-home-'));
+  const binDir = mkdtempSync(join(tmpdir(), 'omd-cli-bin-'));
+  const stale = join(binDir, 'stale-omd.mjs');
+  writeFileSync(stale, '// stale');
+  symlinkSync(stale, join(binDir, 'omd'));
+  const detected = { host: 'codex' as const, home };
+  try {
+    const changes = await install([detected], { browser: UNSUPPORTED_BROWSER.browser, cliBinDir: binDir });
+    assert.equal(readlinkSync(join(binDir, 'omd')), OMD_SHIM);
+    assert.ok(changes.some((c) => c.includes('relinked omd ->') && c.includes(`(was ${stale})`)));
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+    rmSync(binDir, { recursive: true, force: true });
+  }
+});
+
+test('install without a cli bin dir never touches the user PATH', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'omd-cli-home-'));
+  const binDir = mkdtempSync(join(tmpdir(), 'omd-cli-bin-'));
+  const detected = { host: 'codex' as const, home };
+  try {
+    const changes = await install([detected], UNSUPPORTED_BROWSER);
+    assert.ok(!existsSync(join(binDir, 'omd')), 'no symlink created without cliBinDir');
+    assert.ok(!changes.some((c) => c.startsWith('cli:')), 'no cli change reported');
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+    rmSync(binDir, { recursive: true, force: true });
+  }
+});
+
+test('a Claude plugin cache older than the build is surfaced as a /plugin update advisory', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'omd-claude-stale-plugin-'));
+  const detected = { host: 'claude' as const, home };
+  try {
+    mkdirSync(join(home, 'plugins'), { recursive: true });
+    const write = (version: string) => writeFileSync(
+      join(home, 'plugins', 'installed_plugins.json'),
+      JSON.stringify({ plugins: { 'oh-my-design@omd': [{ version }] } }),
+    );
+    write('0.0.1');
+    const stale = await install([detected], UNSUPPORTED_BROWSER);
+    assert.ok(stale.some((c) => c.includes('loaded plugin is 0.0.1') && c.includes('/plugin')));
+
+    write(BUILD_VERSION);
+    const fresh = await install([detected], UNSUPPORTED_BROWSER);
+    assert.ok(!fresh.some((c) => c.startsWith('claude: loaded plugin')), 'no advisory when versions match');
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('a second install with the same cli bin dir leaves the omd symlink in place', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'omd-cli-home-'));
+  const binDir = mkdtempSync(join(tmpdir(), 'omd-cli-bin-'));
+  const detected = { host: 'codex' as const, home };
+  try {
+    await install([detected], { browser: UNSUPPORTED_BROWSER.browser, cliBinDir: binDir });
+    const changes = await install([detected], { browser: UNSUPPORTED_BROWSER.browser, cliBinDir: binDir });
+    assert.ok(lstatSync(join(binDir, 'omd')).isSymbolicLink(), 'omd symlink survives a repeat install');
+    assert.equal(readlinkSync(join(binDir, 'omd')), OMD_SHIM);
+    assert.ok(changes.some((c) => c === `cli: omd -> ${OMD_SHIM} (already current)`));
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+    rmSync(binDir, { recursive: true, force: true });
   }
 });

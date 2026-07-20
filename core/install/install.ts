@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync, cpSync, rmSync, readdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, cpSync, rmSync, readdirSync, symlinkSync, lstatSync, readlinkSync, unlinkSync, chmodSync } from 'node:fs';
 import { join, dirname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
@@ -203,6 +203,7 @@ function uninstallCodex(d: Detected, changes: string[]): void {
 export type InstallOptions = {
   readonly browser?: BrowserRsInstallDependencies;
   readonly prebuiltRoot?: string;
+  readonly cliBinDir?: string;
 };
 
 export async function install(hosts: Detected[], options: InstallOptions = {}): Promise<string[]> {
@@ -211,11 +212,95 @@ export async function install(hosts: Detected[], options: InstallOptions = {}): 
   const version = pkgVersion();
   const changes: string[] = [];
   for (const d of hosts) {
-    if (d.host === 'claude') installClaude(d, changes);
-    else installCodex(d, version, distributionRoot, changes);
+    if (d.host === 'claude') {
+      installClaude(d, changes);
+      claudePluginFreshnessNote(d, changes);
+    } else {
+      installCodex(d, version, distributionRoot, changes);
+    }
   }
+  if (options.cliBinDir !== undefined) linkCli(options.cliBinDir, changes);
   changes.push(browserInstallChange(await installBrowserRs(options.browser)));
   return changes;
+}
+
+/**
+ * Point the user's `omd` / `oh-my-design` CLI at THIS build's bin shims. `omd pack dir`
+ * resolves the knowledge pack relative to the running binary, and every skill reads its
+ * theory/protocol files through `omd pack dir`. If the CLI symlink is left pointing at an
+ * older install, the plugin can update while the whole core pack the agents actually read
+ * stays frozen — every core/ change is invisible at runtime. Linking here keeps the CLI, its
+ * pack dir, and the freshly installed plugin on one build. Only runs when a bin dir is given
+ * (the command-line entry supplies ~/.local/bin); a hermetic caller opts out by omitting it.
+ */
+export function linkCli(binDir: string, changes: string[]): void {
+  mkdirSync(binDir, { recursive: true });
+  const links: ReadonlyArray<readonly [string, string]> = [
+    ['omd', join(pkgRoot, 'bin', 'omd.mjs')],
+    ['oh-my-design', join(pkgRoot, 'bin', 'omd-install.mjs')],
+  ];
+  for (const [name, target] of links) {
+    try {
+      chmodSync(target, 0o755);
+    } catch {
+      // A read-only target still resolves through the symlink; the exec bit is best-effort.
+    }
+    const linkPath = join(binDir, name);
+    let existing: 'absent' | 'symlink' | 'file' = 'absent';
+    let previous: string | undefined;
+    try {
+      const stat = lstatSync(linkPath);
+      if (stat.isSymbolicLink()) {
+        existing = 'symlink';
+        previous = readlinkSync(linkPath);
+      } else {
+        existing = 'file';
+      }
+    } catch {
+      // Nothing linked yet.
+    }
+    if (existing === 'symlink' && previous === target) {
+      changes.push(`cli: ${name} -> ${target} (already current)`);
+      continue;
+    }
+    if (existing === 'symlink') {
+      unlinkSync(linkPath);
+    } else if (existing === 'file') {
+      backupFile(linkPath, binDir);
+      rmSync(linkPath, { force: true });
+    }
+    symlinkSync(target, linkPath);
+    changes.push(
+      existing === 'symlink'
+        ? `cli: relinked ${name} -> ${target} (was ${previous})`
+        : `cli: linked ${name} -> ${target}`,
+    );
+  }
+}
+
+/**
+ * Read-only advisory. Claude Code loads OMD from its own versioned plugin cache, not from what
+ * this installer writes; when that cache is older than the build, the skill/agent wrappers are
+ * stale even though the marketplace is registered and the CLI is freshly linked. Surface it so
+ * the user runs /plugin to update — core/theory is already current through the linked omd CLI.
+ */
+function claudePluginFreshnessNote(d: Detected, changes: string[]): void {
+  const installedPath = join(d.home, 'plugins', 'installed_plugins.json');
+  if (!existsSync(installedPath)) return;
+  try {
+    const data = JSON.parse(readFileSync(installedPath, 'utf8')) as {
+      plugins?: Record<string, ReadonlyArray<{ version?: string }>>;
+    };
+    const installed = data.plugins?.['oh-my-design@omd']?.[0]?.version;
+    const build = pkgVersion();
+    if (installed !== undefined && installed !== build) {
+      changes.push(
+        `claude: loaded plugin is ${installed}, this build is ${build} — run /plugin in Claude and update oh-my-design so the skill/agent wrappers match (core/theory is already live via the omd CLI link)`,
+      );
+    }
+  } catch {
+    // installed_plugins.json unreadable — skip the advisory rather than fail the install.
+  }
 }
 
 export type UninstallOptions = { readonly browser?: BrowserRsDependencies };
@@ -353,7 +438,7 @@ function doctorCodex(d: Detected): DoctorCheck[] {
   return checks;
 }
 
-export type DoctorOptions = { readonly browser?: BrowserProviderDoctorOptions };
+export type DoctorOptions = { readonly browser?: BrowserProviderDoctorOptions; readonly cliBinDir?: string };
 
 function browserProviderCheck(result: BrowserProviderHealth): DoctorCheck {
   if ('fallback' in result) {
@@ -376,12 +461,27 @@ function browserProviderCheck(result: BrowserProviderHealth): DoctorCheck {
   }
 }
 
+function cliLinkCheck(binDir: string): DoctorCheck {
+  const linkPath = join(binDir, 'omd');
+  const expected = join(pkgRoot, 'bin', 'omd.mjs');
+  try {
+    const stat = lstatSync(linkPath);
+    if (!stat.isSymbolicLink()) return check('omd CLI links to this build', false, `${linkPath} is not a symlink`);
+    const actual = readlinkSync(linkPath);
+    return check('omd CLI links to this build', actual === expected, actual === expected ? undefined : `omd -> ${actual}, expected ${expected}`);
+  } catch {
+    return check('omd CLI links to this build', false, `${linkPath} not found`);
+  }
+}
+
 export async function doctor(hosts: Detected[], options: DoctorOptions = {}): Promise<DoctorResult[]> {
   const versionCheck = omdVersionRuns();
   const browserCheck = browserProviderCheck(await doctorBrowserProvider(options.browser));
+  const cliCheck = options.cliBinDir === undefined ? undefined : cliLinkCheck(options.cliBinDir);
   return hosts.map((d) => {
     const checks = d.host === 'claude' ? doctorClaude(d) : doctorCodex(d);
     checks.push(versionCheck);
+    if (cliCheck !== undefined) checks.push(cliCheck);
     checks.push(browserCheck);
     return { host: d.host, ok: checks.every((c) => c.ok), checks };
   });
