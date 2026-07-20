@@ -91,7 +91,7 @@ test('core/interaction/recipes/ does not disturb the composition recipe count', 
   const files = readdirSync(compositionDir).filter((f) => f.endsWith('.md'));
   assert.equal(
     files.length,
-    11,
-    `expected composition recipes to remain 11 (8 editorial + 3 product-surface), found ${files.length}`
+    12,
+    `expected composition recipes to remain 12 (9 editorial + 3 product-surface), found ${files.length}`
   );
 });

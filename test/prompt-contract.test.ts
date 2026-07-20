@@ -440,3 +440,11 @@ test('there is no direct-build escape; register gates distinctive, never whether
   const expressive = read('core/theory/expressive.md').replace(/\s+/g, ' ');
   assert.match(expressive, /gates how "distinctive" is judged, never whether the loop runs/i);
 });
+
+test('expressive distills FWA distinctly and gates the horizontal gallery to showpiece', () => {
+  const source = read('core/theory/expressive.md').replace(/\s+/g, ' ');
+  assert.match(source, /FWA \(thefwa\.com\) rewards a different axis than Awwwards/i);
+  assert.match(source, /not as permission to abandon usability/i);
+  assert.match(source, /### Horizontal scroll gallery/);
+  assert.match(source, /composition\/horizontal-scroll-gallery\.md/);
+});

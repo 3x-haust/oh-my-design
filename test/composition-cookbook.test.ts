@@ -20,7 +20,7 @@ const REQUIRED_HEADINGS = [
   '## Do not combine with',
 ];
 
-// ── Exactly 11 recipe files: 8 editorial/marketing + 3 product-surface ────────
+// ── Exactly 12 recipe files: 9 editorial/marketing + 3 product-surface ────────
 const EXPECTED_RECIPES = [
   'typographic-hero.md',
   'asymmetric-diagonal-grid.md',
@@ -30,6 +30,7 @@ const EXPECTED_RECIPES = [
   'bento-grid.md',
   'split-screen-hero.md',
   'sticky-sidebar-scroll.md',
+  'horizontal-scroll-gallery.md',
   'app-shell-workbench.md',
   'master-detail-flow.md',
   'form-wizard-stepper.md',
@@ -39,19 +40,19 @@ test('core/composition/ directory exists', () => {
   assert.ok(existsSync(recipesDir), `composition directory not found at ${recipesDir}`);
 });
 
-test('all 11 expected composition recipe files exist', () => {
+test('all 12 expected composition recipe files exist', () => {
   for (const name of EXPECTED_RECIPES) {
     const path = join(recipesDir, name);
     assert.ok(existsSync(path), `missing composition recipe: ${name}`);
   }
 });
 
-test('composition directory contains exactly 11 .md files', () => {
+test('composition directory contains exactly 12 .md files', () => {
   const files = readdirSync(recipesDir).filter((f) => f.endsWith('.md'));
   assert.equal(
     files.length,
-    11,
-    `expected 11 composition recipe files, found ${files.length}: ${files.join(', ')}`
+    12,
+    `expected 12 composition recipe files, found ${files.length}: ${files.join(', ')}`
   );
 });
 
@@ -164,4 +165,14 @@ test('every composition recipe has substantive Implementation section', () => {
       `${name}: Implementation section contains no code block`
     );
   }
+});
+
+// ── horizontal-scroll-gallery.md must gate its own accessibility failure modes ──
+
+test('horizontal-scroll-gallery.md gates against product/quiet and forbids scroll-hijack on task paths', () => {
+  const path = join(recipesDir, 'horizontal-scroll-gallery.md');
+  assert.ok(existsSync(path), 'horizontal-scroll-gallery.md not found');
+  const content = readFileSync(path, 'utf8').replace(/\s+/g, ' ');
+  assert.ok(content.includes('Do not use it on a `product` or quiet surface'), 'must gate out product/quiet');
+  assert.ok(content.includes('hijack vertical scroll into horizontal'), 'must forbid scroll-hijack on a task path');
 });
