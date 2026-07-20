@@ -105,6 +105,39 @@ test('SLOP-GRADIENT fires when both stops sit in the 240-290deg violet band', ()
   assert.ok(v.some((x) => x.id === 'SLOP-GRADIENT'));
 });
 
+const accentRoot = (children: string[]): RawNode => ({
+  id: 'root', name: 'Root', type: 'FRAME', path: 'Root', parent: null,
+  box: { x: 0, y: 0, w: 100, h: 100 }, children,
+});
+const accentCard = (id: string, fill: string): RawNode => ({
+  id, name: 'Card', type: 'FRAME', path: `Root/${id}`, parent: 'root',
+  box: { x: 0, y: 0, w: 50, h: 50 }, children: [], fill: { value: fill, token: null },
+});
+
+test('SLOP-DIFFUSE-ACCENT fires on three or more distinct saturated accent fills', () => {
+  const ir = normalize({ nodes: [
+    accentRoot(['a', 'b', 'c']),
+    accentCard('a', '#2E5AAC'), // blue ~219
+    accentCard('b', '#7B4BB7'), // purple ~267
+    accentCard('c', '#1F8A8A'), // teal ~180
+  ] });
+  const v = check(ir, builtin, { categories: ['slop'] });
+  assert.ok(v.some((x) => x.id === 'SLOP-DIFFUSE-ACCENT'), 'expected SLOP-DIFFUSE-ACCENT on 3 accent hue families');
+});
+
+test('SLOP-DIFFUSE-ACCENT does not fire on one accent plus status colours and neutrals', () => {
+  const ir = normalize({ nodes: [
+    accentRoot(['a', 'b', 'c', 'd', 'e']),
+    accentCard('a', '#2E5AAC'), // one accent (blue)
+    accentCard('b', '#C0392B'), // status red — excluded
+    accentCard('c', '#2E8B57'), // status green — excluded
+    accentCard('d', '#F7F3EC'), // cream neutral — excluded
+    accentCard('e', '#1A1A1A'), // near-black — excluded
+  ] });
+  const v = check(ir, builtin, { categories: ['slop'] });
+  assert.ok(!v.some((x) => x.id === 'SLOP-DIFFUSE-ACCENT'), 'one accent + status + neutrals must not fire');
+});
+
 // Helpers for text-node rule tests
 function makeTextIr(text: string) {
   const node: RawNode = {
