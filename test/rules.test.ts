@@ -138,6 +138,49 @@ test('SLOP-DIFFUSE-ACCENT does not fire on one accent plus status colours and ne
   assert.ok(!v.some((x) => x.id === 'SLOP-DIFFUSE-ACCENT'), 'one accent + status + neutrals must not fire');
 });
 
+const richText = (id: string, over: Partial<RawNode>): RawNode => ({
+  id, name: 'T', type: 'TEXT', path: `Root/${id}`, parent: 'root',
+  box: { x: 0, y: 0, w: 320, h: 20 }, children: [], text: 'Some readable body text here.', ...over,
+});
+const runSlop = (nodes: RawNode[]) => check(normalize({ nodes }), builtin, { categories: ['slop'] });
+const runA11y = (nodes: RawNode[]) => check(normalize({ nodes }), builtin, { categories: ['a11y'] });
+
+test('SLOP-FONT-CIRCUS fires at four or more distinct font families, not three', () => {
+  const four = runSlop([accentRoot(['a', 'b', 'c', 'd']),
+    richText('a', { fontFamily: 'inter' }), richText('b', { fontFamily: 'georgia' }),
+    richText('c', { fontFamily: 'jetbrains mono' }), richText('d', { fontFamily: 'arial' })]);
+  assert.ok(four.some((x) => x.id === 'SLOP-FONT-CIRCUS'), 'four families should fire');
+  const three = runSlop([accentRoot(['a', 'b', 'c']),
+    richText('a', { fontFamily: 'inter' }), richText('b', { fontFamily: 'georgia' }),
+    richText('c', { fontFamily: 'jetbrains mono' })]);
+  assert.ok(!three.some((x) => x.id === 'SLOP-FONT-CIRCUS'), 'text + display + mono (three) must not fire');
+});
+
+test('SLOP-JUSTIFIED-TEXT fires on a justified prose block, not on left-aligned', () => {
+  const long = 'This is a real paragraph of body copy long enough to justify.';
+  const yes = runSlop([accentRoot(['a']), richText('a', { text: long, textAlign: 'justify' })]);
+  assert.ok(yes.some((x) => x.id === 'SLOP-JUSTIFIED-TEXT'));
+  const no = runSlop([accentRoot(['a']), richText('a', { text: long, textAlign: 'left' })]);
+  assert.ok(!no.some((x) => x.id === 'SLOP-JUSTIFIED-TEXT'));
+});
+
+test('SLOP-TINY-TEXT fires on sub-11px prose, not on mid-teens body', () => {
+  const long = 'This is a body sentence with more than thirty characters of prose.';
+  const yes = runSlop([accentRoot(['a']), richText('a', { text: long, fontSize: 9 })]);
+  assert.ok(yes.some((x) => x.id === 'SLOP-TINY-TEXT'));
+  const no = runSlop([accentRoot(['a']), richText('a', { text: long, fontSize: 14 })]);
+  assert.ok(!no.some((x) => x.id === 'SLOP-TINY-TEXT'));
+});
+
+test('A11Y-HEADING-SKIP fires on a skipped heading level, not on a contiguous outline', () => {
+  const skip = runA11y([accentRoot(['a', 'b']),
+    richText('a', { heading: 1, text: 'Title' }), richText('b', { heading: 3, text: 'Sub' })]);
+  assert.ok(skip.some((x) => x.id === 'A11Y-HEADING-SKIP'));
+  const ok = runA11y([accentRoot(['a', 'b', 'c']),
+    richText('a', { heading: 1 }), richText('b', { heading: 2 }), richText('c', { heading: 3 })]);
+  assert.ok(!ok.some((x) => x.id === 'A11Y-HEADING-SKIP'));
+});
+
 // Helpers for text-node rule tests
 function makeTextIr(text: string) {
   const node: RawNode = {
