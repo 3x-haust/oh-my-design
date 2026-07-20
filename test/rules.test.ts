@@ -181,6 +181,14 @@ test('A11Y-HEADING-SKIP fires on a skipped heading level, not on a contiguous ou
   assert.ok(!ok.some((x) => x.id === 'A11Y-HEADING-SKIP'));
 });
 
+test('SLOP-TIGHT-LEADING fires on a crammed paragraph, not on well-led body', () => {
+  const para = 'This is a genuinely long paragraph of body copy, long enough to exceed eighty characters and need real leading.';
+  const tight = runSlop([accentRoot(['a']), richText('a', { text: para, lineHeight: 1.15 })]);
+  assert.ok(tight.some((x) => x.id === 'SLOP-TIGHT-LEADING'));
+  const roomy = runSlop([accentRoot(['a']), richText('a', { text: para, lineHeight: 1.5 })]);
+  assert.ok(!roomy.some((x) => x.id === 'SLOP-TIGHT-LEADING'));
+});
+
 // Helpers for text-node rule tests
 function makeTextIr(text: string) {
   const node: RawNode = {
