@@ -52,6 +52,10 @@ What the entrance must do in those seconds: commit the palette, declare the type
 
 A showpiece site that loses its nerve in the footer — reverting to small-print-grey, default columns, four generic links — reveals that the expressive register was applied to the hero and nowhere else. Applied design covers the whole surface. The footer is a scene. It may be quieter than the hero, but it is not absent.
 
+### FWA — the experimental / technical bias
+
+FWA (thefwa.com) rewards a different axis than Awwwards. Its Site/App of the Day skews to technical and interactive ambition — WebGL and shader work, physics and generative systems, bespoke interaction models, and "does this push what the medium can do" — where Awwwards balances that against its 30% usability weight and GDWEB against Korean campaign craft. Treat FWA as evidence of the ceiling for interactive/technical concepts, not as permission to abandon usability: an immersive scene still owes the user reach, orientation, a way out, and a reduced-motion path. Import the ambition of the mechanism, not the excuse to make the surface unusable.
+
 ---
 
 ## Slop-free is not the same as distinctive
@@ -165,6 +169,14 @@ Each entry names the condition under which the technique earns its place and the
 
 **Condition against**: Static backgrounds where the contrast can be calculated and set directly — `difference` on a static background produces a predictable result that could be a fixed colour choice, but with more browser overhead. Not appropriate for body copy (the visual complexity of difference blending at small sizes degrades legibility).
 
+### Horizontal scroll gallery
+
+**Condition for use**: A `marketing`/showpiece surface where a set of equal peers reads as a sequence and the sideways travel is the concept — a portfolio index, a lookbook, a product reel. The affordance is explicit: a visible scrollbar, a progress rail, prev/next controls, or a peeking next panel. See `composition/horizontal-scroll-gallery.md`.
+
+**Condition against**: `product`/quiet surfaces and any content the user scans, compares, or searches. Horizontal rows hide items behind a gesture many users never discover and defeat find-in-page. Never hijack vertical scroll into horizontal translation on a required-task path — it strands keyboard and screen-reader users.
+
+**Implementation constraint**: Native `overflow-x` with `scroll-snap-type: x`; DOM order equals reading order so keyboard, Home/End, and find-in-page work; the scrollbar stays visible and controls are enhancement over a natively scrollable region, never the only way to advance. Reduced-motion disables smooth scroll.
+
 ---
 
 ## The restraint clause
@@ -212,5 +224,6 @@ is documented in `core/graphics/placeholder-policy.md`.
 - W3C, Requirements for Hangul Text Layout and Typography (w3.org/TR/klreq/) — syllable block structure; spacing constraints and the fixed-width character cell at display scale
 - Awwwards, "Customize your mouse cursor" (awwwards.com/customize-your-mouse-cursor) — cursor as brand vocabulary on award-winning sites; pointer-fine scoping requirement
 - GDWEB Design Awards, About (gdweb.co.kr/sub/about.asp) — Korean award context, judge composition, selection categories dominated by agency and campaign microsites
+- FWA (thefwa.com/awards) — Site/App of the Day bias toward technical and interactive ambition (WebGL, generative systems, bespoke interaction); the interactive/technical ceiling reference, distinct from Awwwards' usability-weighted and GDWEB's campaign-craft criteria
 - Motion theory cross-reference: see `core/theory/motion.md` — duration windows, reduced-motion requirement, transform/opacity constraint, and the attention budget argument all apply in the showpiece register without exception
 - Motion cookbook: working implementations of every technique catalogued above (split-text, scroll-reveal, sticky scene, section inversion, marquee, magnetic hover, and more) are in `core/motion/recipes/`; easing token vocabulary is in `core/motion/easing.md`
