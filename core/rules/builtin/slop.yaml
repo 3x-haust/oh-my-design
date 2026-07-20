@@ -378,3 +378,40 @@
   value: "(() => { const sizes = [...new Set(ir.nodes.filter(n => n.fontSize && n.fontSize > 0).map(n => n.fontSize))].sort((a, b) => a - b); if (sizes.length < 3) return null; const allFlat = sizes.every(s => s >= 13 && s <= 19); const ratios = sizes.slice(1).map((s, i) => s / sizes[i]); const minR = ratios.reduce((a, b) => Math.min(a, b), 99); const flatCount = ratios.filter(r => r < 1.15).length; return (allFlat || flatCount >= 2) ? { sizes, minRatio: Math.round(minR * 100) / 100 } : null; })()"
   assert: "value === null"
   message: "Flat type hierarchy: {value}. Font sizes all cluster between 13–19px or adjacent steps differ by less than 1.15×. Size stops carrying hierarchy. Establish at least three steps at 1.25× minimum (e.g. 14/18/24px). Use weight — not colour shade — to differentiate content at the same size."
+
+# Type circus: three faces can be a display + text + monospace-numeral system; four or more
+# distinct font families on one page is almost always accidental font soup — a system default,
+# a pasted-in Google Font, a component library's face, and a brand face fighting each other.
+# Refactoring UI: one or two typefaces, a third only for a real role. Fires at four.
+- id: SLOP-FONT-CIRCUS
+  layer: 1
+  category: slop
+  severity: warn
+  when: "node.parent === null"
+  value: "[...new Set(ir.nodes.filter(n => n.text && n.fontFamily).map(n => n.fontFamily))]"
+  assert: "value.length < 4"
+  message: "Type circus: {value} — four or more typefaces on one page. A page reads as one system with one or two faces (a third only for a real role, such as monospace tabular numbers). Four families fighting is font soup: pick a text face, at most one display face, and drop the rest. See theory/typography.md §Role map."
+
+# Justified body on the web: without fine hyphenation control, full justification opens uneven
+# word gaps ('rivers') that slow reading. Left-aligned (ragged-right) is the web default for
+# prose. Fires on a real text block (>40 chars), not a one-word cell or heading.
+- id: SLOP-JUSTIFIED-TEXT
+  layer: 1
+  category: slop
+  severity: warn
+  when: "node.type === 'TEXT' && Boolean(node.text) && node.text.length > 40"
+  value: "node.textAlign"
+  assert: "value !== 'justify'"
+  message: "Justified body text. On the web, without fine hyphenation control, full justification opens uneven word gaps ('rivers') that slow reading. Use left-aligned (ragged-right) for prose. See theory/typography.md."
+
+# Unreadable body: prose (>30 chars, not a label or numeral) rendered below 11px breaches the
+# readability floor on any screen. Fine print is not an exception — legal and caption text
+# still has to be readable. Short labels and numbers are excluded by the length gate.
+- id: SLOP-TINY-TEXT
+  layer: 1
+  category: slop
+  severity: warn
+  when: "node.type === 'TEXT' && Boolean(node.text) && node.text.length > 30 && typeof node.fontSize === 'number'"
+  value: "node.fontSize"
+  assert: "value >= 11"
+  message: "Body text at {value}px is below the readability floor. Prose under ~11px is hard to read on any screen; fine print is not an exception. Set body copy near the mid-teens and secondary text no smaller than 12px. See theory/typography.md §Size, measure, and line height."

@@ -1,0 +1,20 @@
+# A11Y-HEADING-SKIP — heading levels must not skip a level going down (h1 -> h3 with no h2).
+# Screen-reader users navigate by heading level; a skipped level breaks the document outline
+# and hides the missing rank. WCAG 2.1 §1.3.1 (Info and Relationships) and §2.4.6 (Headings
+# and Labels). Fires at the page level, reading node.heading (1-6) in document order. Going
+# back up (h3 -> h2) is fine — only a downward jump greater than one level is a defect.
+#
+# Positive test:  headings [1, 3]        -> fires ("1->3")
+# Negative tests:
+#   — [1, 2, 3]        -> silent
+#   — [1, 2, 2, 3]     -> silent
+#   — [2, 1]           -> silent (upward jump)
+#   — no headings      -> silent
+id: A11Y-HEADING-SKIP
+layer: 1
+category: a11y
+severity: warn
+when: "node.parent === null"
+value: "(() => { const hs = ir.nodes.filter(n => typeof n.heading === 'number').map(n => n.heading); const skips = []; for (let i = 1; i < hs.length; i++) { if (hs[i] > hs[i-1] + 1) skips.push(hs[i-1] + '->' + hs[i]); } return skips; })()"
+assert: "value.length === 0"
+message: "Heading level skipped: {value}. A heading jumps down more than one level (e.g. h1 -> h3 with no h2), breaking the document outline screen-reader users navigate by. Use the next level down, or restructure. WCAG 2.1 §1.3.1 and §2.4.6. See theory/ux.md §Accessibility as a UX floor."
