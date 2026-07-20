@@ -545,6 +545,12 @@ checks that `omd check` runs on every build. Principles not listed here remain a
 - Nielsen heuristics 2, 4, 7, 8, 10 (real-world match, consistency, efficiency, minimalism,
   help): all require semantic content understanding that the IR does not provide.
 
+- §Accessibility as a UX floor: whether every interactive control has a discernible accessible
+  name. The static IR captures `text`, `role`, and `ariaInvalid` but not the computed accessible
+  name (aria-label, aria-labelledby, title, or visually-hidden descendant text), so an icon-only
+  control cannot be judged deterministically without false positives. The eye agent flags a
+  control whose only content is an icon glyph with no text alternative. WCAG 2.1 §4.1.2.
+
 ---
 
 ## Official evidence map and layer ownership

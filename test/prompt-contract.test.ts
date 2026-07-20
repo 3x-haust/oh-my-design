@@ -457,3 +457,10 @@ test('the loop and eye gate colour strategy (60-30-10 / reserved accent)', () =>
   assert.match(eye, /verify a legible 60-30-10 distribution/i);
   assert.match(eye, /diffuse or multi-hue accent/i);
 });
+
+test('the eye gates the accessible name of icon-only controls the IR cannot see', () => {
+  const eye = read('src/agents/eye.agent.yaml').replace(/\s+/g, ' ');
+  assert.match(eye, /Every interactive control needs a discernible accessible name/i);
+  const ux = read('core/theory/ux.md').replace(/\s+/g, ' ');
+  assert.match(ux, /icon-only control cannot be judged deterministically without false positives/i);
+});

@@ -415,3 +415,15 @@
   value: "node.fontSize"
   assert: "value >= 11"
   message: "Body text at {value}px is below the readability floor. Prose under ~11px is hard to read on any screen; fine print is not an exception. Set body copy near the mid-teens and secondary text no smaller than 12px. See theory/typography.md §Size, measure, and line height."
+
+# Crammed body leading: a real paragraph (>80 chars, not a heading) at line-height below ~1.3
+# crowds its lines and slows reading. The browser 'normal' default resolves to ~1.2, so this
+# also catches prose that never set a leading. Headings may be tighter and are excluded.
+- id: SLOP-TIGHT-LEADING
+  layer: 1
+  category: slop
+  severity: warn
+  when: "node.type === 'TEXT' && !node.heading && Boolean(node.text) && node.text.length > 80 && typeof node.lineHeight === 'number'"
+  value: "node.lineHeight"
+  assert: "value >= 1.3"
+  message: "Body leading {value} is too tight for a paragraph. Long prose at line-height below ~1.3 (the browser 'normal' default is ~1.2) crowds the lines and slows reading; set body leading around 1.4–1.6. Headings may be tighter. See theory/typography.md §Size, measure, and line height."
