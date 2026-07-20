@@ -2,6 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { homedir } from 'node:os';
 import { detectHosts } from '../core/install/detect.ts';
 import { install, uninstall, doctor } from '../core/install/install.ts';
 import { installBrowserRs, resolveBrowserRs, uninstallBrowserRs } from '../core/install/browser-rs.ts';
@@ -9,6 +10,7 @@ import { doctorBrowserProvider } from '../core/install/browser-provider.ts';
 import { runBrowserRsSmoke } from '../core/install/browser-rs-smoke.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+const cliBinDir = join(homedir(), '.local', 'bin');
 
 function usage(): never {
   console.error(
@@ -161,7 +163,7 @@ async function main(): Promise<void> {
   }
 
   if (cmd === 'install') {
-    for (const line of await install(hosts)) console.log(line);
+    for (const line of await install(hosts, { cliBinDir })) console.log(line);
     console.log(`\nInstalled for: ${hosts.map((h) => h.host).join(', ')}.`);
     console.log('Open a session there and type /ultradesign.');
     return;
@@ -173,7 +175,7 @@ async function main(): Promise<void> {
   }
 
   // doctor
-  const results = await doctor(hosts);
+  const results = await doctor(hosts, { cliBinDir });
   let failed = false;
   for (const r of results) {
     console.log(`${r.host}:`);
