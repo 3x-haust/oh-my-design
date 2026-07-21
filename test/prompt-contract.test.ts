@@ -555,3 +555,10 @@ test('the scout audits capture parallelism with omd ref audit', () => {
   const skill = read('src/skills/omd-scout/SKILL.md').replace(/\s+/g, ' ');
   assert.match(skill, /After capture, run `omd ref audit`/i);
 });
+
+test('the framer and the loop require research gathering to run in parallel', () => {
+  const framer = read('src/agents/framer.agent.yaml').replace(/\s+/g, ' ');
+  assert.match(framer, /Run your own research in parallel, not one at a time/i);
+  const loop = read('core/protocol/human-design-loop.md').replace(/\s+/g, ' ');
+  assert.match(loop, /issues its independent searches, captures, and lookups in parallel, not one at a time/i);
+});
