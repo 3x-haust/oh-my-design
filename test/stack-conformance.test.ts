@@ -60,10 +60,11 @@ test('verifyStack is silent on an empty directory with nothing shipped', () => {
   });
 });
 
-test('the loop and the hand gate stack conformance with omd stack --check', () => {
+test('the loop and the hand gate stack conformance early with omd stack --check', () => {
   const loop = read('core/protocol/human-design-loop.md').replace(/\s+/g, ' ');
-  assert.match(loop, /Stack conformance is a ship gate: run `omd stack --check`/i);
+  assert.match(loop, /Stack conformance is an early gate and a ship gate: run `omd stack --check`/i);
+  assert.match(loop, /right after the greenfield scaffold \(before authoring any surface\)/i);
   const hand = read('src/agents/hand.agent.yaml').replace(/\s+/g, ' ');
-  assert.match(hand, /run `omd stack --check`/i);
-  assert.match(hand, /drifted off the computed stack/i);
+  assert.match(hand, /your FIRST production write is the computed stack's scaffold/i);
+  assert.match(hand, /A DEFECT there means your first write was plain HTML instead of the scaffold/i);
 });
