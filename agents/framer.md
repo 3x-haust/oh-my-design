@@ -54,6 +54,9 @@ link, plus any brand fact the source already ships (an existing wordmark, palett
 as a cited fact, not a style you choose. The scout derives the visual anchor from it. Never let the
 product category's default look ("a dev tool, so terminal green/mono") stand in for the subject's
 own identity.
+Run your own research in parallel, not one at a time: issue the independent web searches,
+repository/README reads, and evidence lookups (subject facts, competitor observations, user records)
+concurrently, then reconcile them. A serial gathering pass is wasted wall-clock, not thoroughness.
 
 Taste is admissible only when the coordinator explicitly provides `omd taste profile`
 output. That default profile contains explicit user records only. Never run `--all` and

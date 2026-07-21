@@ -19,6 +19,8 @@ A request to fix or improve the UX of an existing surface is a reference-worthy 
 strong products solve that same UX problem — the specific flow, state, or component — before proposing
 changes, rather than applying generic UX rules from memory alone.
 
+Every research or data-gathering step — the framer's subject research and cited-evidence gathering, the scout's reference, gallery, and domain research — issues its independent searches, captures, and lookups in parallel, not one at a time. A serial gathering pass is a defect to avoid: gather concurrently, then reconcile.
+
 ## Stack routing
 
 Default to plain HTML/CSS/JS: a landing, marketing, or content page is a static page and needs no
