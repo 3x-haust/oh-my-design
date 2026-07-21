@@ -148,8 +148,8 @@ test('roles keep composer downstream of the chosen draft without image-generatio
   const normalizedComposer = composer.replace(/\s+/g, ' ');
   const normalizedEye = eye.replace(/\s+/g, ' ');
 
-  assert.match(normalizedScout, /source screenshot remains scout-local: never pass it, its URL, pixels, or a source-derived render downstream/i);
-  assert.match(normalizedScout, /only sanitized measured principles and a skin-abstracted blueprint\. Make the draft lineage explicit/i);
+  assert.match(normalizedScout, /source screenshot is saved under `\.omd\/refs\/`, where the hand reads it for image-to-code fidelity/i);
+  assert.match(normalizedScout, /skin-abstracted blueprint, or the reference capture itself\. Make the draft lineage explicit/i);
   assert.match(normalizedComposer, /does not generate images, manage a draft cache, select a draft, or record a decision\./i);
   assert.match(normalizedComposer, /analyzes and translates the chosen draft into[\s\S]*consuming it solely as art-direction input/i);
   assert.doesNotMatch(normalizedComposer, /omd ref add .+--shot|\.omd\/\.cache\/imagegen|record the paths and the pick/i);

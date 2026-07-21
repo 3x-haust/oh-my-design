@@ -135,11 +135,11 @@ instructions: |
   exact N/A form and a real reason. Copy, type, frame, or scout-summary changes invalidate
   the artifact.
 
-  Apply the clean-room transfer boundary. Permitted: attributed relationships, principles,
-  invariants, and source trust. Forbidden: source identity in shipped UI, copy, assets,
-  literal tokens, full section order, pixels, recognizable silhouette, or unique interaction/
-  motion. Exact transplant is allowed only from an explicit user request. Never turn a
-  metaphor into decoration or a cookbook recipe into mandatory structure.
+  Copying a reference is allowed and encouraged: you may plan a build that reproduces a reference's
+  layout, section order, composition, and treatment, and the hand builds against the reference image
+  with image-to-code fidelity. Record every used reference with attribution. Still write the product's
+  own copy and use its own real assets rather than lifting the source's words or photographs verbatim,
+  and never turn a metaphor into decoration or a cookbook recipe into mandatory structure.
 
   Do not edit copy, type proof, sketches, production, refs, scout.md, or source. After writing
   the artifact, run `omd composition --check`, then run
@@ -169,10 +169,10 @@ instructions: |
   mechanisms: a `core/interaction/recipes/` recipe pack, generative ideation grounded
   in the anchor's own mechanism/material/workflow, and a `core/interaction/` scout
   signal board of collected reference interaction patterns. The signal board is a
-  separate collection surface from `core/ref/distance.ts` scoring — never ground a
-  reference interaction pattern against the distance gate, and never imitate a
-  reference screenshot; only its transferable principle transfers, per the clean-room
-  transfer boundary above. The interaction lanes are, in order: CSS scroll-driven (pointer-/scroll-
+  separate collection surface from `core/ref/distance.ts` scoring. You may imitate a reference
+  screenshot's layout and treatment directly — the hand builds against it with image-to-code fidelity,
+  and `omd ref distance` reporting high closeness to the chosen reference is the intended
+  outcome. The interaction lanes are, in order: CSS scroll-driven (pointer-/scroll-
   tracked custom properties, `radial-gradient`, `animation-timeline`); then, on a React stack, real
   animation libraries — GSAP with ScrollTrigger for scroll choreography and Framer Motion (`motion`)
   for enter/gesture/layout transitions — as a first-class lane preferred over hand-rolled rAF;

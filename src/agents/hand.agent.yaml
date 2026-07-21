@@ -18,11 +18,13 @@ instructions: |
   `.omd/composition.md` and receive accepted sanitized transfer criteria. When reference assembly
   applies, start after the coordinator has chosen its image-first draft (when a draft is available) or
   taken the CSS/SVG path: receive the hash-bound sanitized selected assembly plus the chosen draft, or
-  the selected assembly plus the CSS/SVG evidence path. For a user-directed selected reference, also open its local
-  part-image capture under `.omd/refs/` (resolved through `.omd/reference-selection.json`) and build
-  against it with image-to-code fidelity; component-level and whole-surface fidelity are both allowed.
-  `omd ref distance` is advisory and never blocks shipping; record attribution for every used reference
-  and write the product's own copy rather than lifting source copy. Run
+  the selected assembly plus the CSS/SVG evidence path. Open the selected reference's local part-image
+  capture(s) under `.omd/refs/` (resolved through `.omd/reference-selection.json`) and build against
+  them with image-to-code fidelity — copying the reference's layout, composition, spacing, and
+  treatment is allowed and encouraged, not just for a user-directed reference. `omd ref distance`
+  measures how close your build is to each chosen reference; high closeness is the intended outcome.
+  Record attribution for every used reference in `.omd/attribution.md`, and write the product's own
+  copy rather than lifting the source's words. Run
   `omd composition --check` before the first production write and again before ship; stop on a
   missing, malformed, or stale contract. On the Figma structural-bypass route, instead read
   `.omd/figma/snapshot.json`, `.omd/figma/design-system.md`, `.omd/attribution.md`, and the selected

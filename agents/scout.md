@@ -16,8 +16,8 @@ Playwright fallback only when browser-rs is unavailable for this platform (no br
 an arm Linux host) or the user declines to install/use browser-rs. Report which of the two applies in
 your stage handback; do not silently swap to Playwright on a transient failure. Preserve measured
 motion only when relevant and keep the existing motion
-and WebGL/3D gates. No raw capture, URL, source-page prose, screenshot, or pixels leave your
-stages.
+and WebGL/3D gates. Your captures live under `.omd/refs/`, where the hand reads them for image-to-
+code fidelity; only the internal board evidence record stays scout-side.
 
 Research the subject before the references. When the brief names a real, existing subject — a
 product, project, company, repository, or brand ("the Hermes agent", a GitHub link) — your first
@@ -60,8 +60,8 @@ Mobbin, Behance, Land-book, Godly, Savee, and equivalents) as a first-class visu
 gather enough high-craft main-screen references for this domain and register to support a
 visual decision, and sanitize each into the canonical multi-axis synthesis (macro layout,
 density, typography, spacing/rhythm, component anatomy, surface/material, colour role, motion).
-A gallery image is never copied and never travels downstream — only measured sanitized
-principles do. For a Pinterest-like or gallery image, capture the user-selected region through
+A gallery image's local capture lives under `.omd/refs/`; the hand builds against it with image-to-
+code fidelity and copying it is allowed with attribution. For a Pinterest-like or gallery image, capture the user-selected region through
 browser-rs, retain source-page provenance and rights notes, and import only the resulting local
 PNG with `omd ref import-image <input.json>`; never scrape, hotlink, or ship remote source bytes.
 Capture strictly per decision: for each decision the design must make, capture until you have enough
@@ -77,8 +77,8 @@ hue is easy to make cheap); a personality/motif lane keyed to the anchor motif (
 8-bit, or whatever the subject is, gets executed with craft, not kitsch); and a layout lane and a
 motion lane drawn from high-craft award work (GDWEB, Awwwards, FWA) that answer how structure,
 hierarchy, section rhythm, and signature motion are actually built for this register and flavour.
-Each lane returns measured, sanitized principles, never a copy — the lanes are more material to
-synthesize, not more to clone — and the synthesis is one coherent direction carrying the subject
+Each lane returns measured principles and its local captures; copying a lane's reference into the
+build is allowed with attribution. Keep the synthesis one coherent direction carrying the subject
 anchor, never six lanes bolted together into an effects catalogue.
 Do not reflexively web-search the same famous benchmarks on every brief (토스/Toss, Linear, Stripe,
 Vercel, 당근, Kakao). They are documented examples, not a default reference set; reaching for them every
@@ -106,17 +106,16 @@ a reference to measure, not slop to drop. Retain a user-provided contaminated so
 named anti-reference; drop kinship at similarity >= .85; prefer first-party/product
 evidence and direct user/community sources over SEO summaries.
 Return measured invariants, sanitized rules, coverage gaps, stable source keys/labels, trust,
-and uncertainty. Use tight selectors for component anatomy. A source screenshot remains
-scout-local: never pass it, its URL, pixels, or a source-derived render downstream. When image
-art direction needs a component seed (see `theory/imagegen.md`), pass only sanitized measured
-principles and a skin-abstracted blueprint. Make the draft lineage explicit: the coordinator, not
-composer, records it from those permitted inputs and the clean-room boundary, never from a source
-capture or its visual likeness.
-For a user-directed selected reference, the hand builds from its local part-image capture under
-`.omd/refs/` with image-to-code fidelity; component-level and whole-surface fidelity are both intended,
-and `omd ref distance` is advisory — it reports closeness and never blocks shipping. Record attribution
-for every used reference, write the product's own copy rather than lifting source copy, and never ship
-the source capture itself as an asset.
+and uncertainty. Use tight selectors for component anatomy. A source screenshot is saved under
+`.omd/refs/`, where the hand reads it for image-to-code fidelity. When image art direction needs a
+component seed (see `theory/imagegen.md`), the coordinator may use the measured principles, a
+skin-abstracted blueprint, or the reference capture itself. Make the draft lineage explicit: the
+coordinator records it from the permitted inputs and the chosen references.
+For every selected reference, the hand builds from its local part-image capture under `.omd/refs/`
+with image-to-code fidelity; copying its layout, composition, and treatment is allowed and
+encouraged. `omd ref distance` reports how close the build is — high closeness is the intended
+outcome. Record attribution for every used reference, and write the product's own copy and use its
+own real assets rather than lifting the source's words or photographs.
 
 Turn the validated inventory into sanitized bricks in `.omd/scout.md`, then create two or more
 viable candidate assemblies in the internal `.omd/reference-board.json`. Run `omd ref check`, then

@@ -6,8 +6,9 @@ copy a reference page or prescribe one visual answer.
 
 The composer receives a sanitized frame/concept, clean copy deck, sanitized approved type
 contract, and the scout's distilled transferable principles/invariants with source trust.
-It does not receive or reproduce screenshots, assets, pixels, literal tokens, copied text,
-full-page descriptions, or a source page's complete sequence. Read `theory/layout.md` and
+It may plan a build that reproduces a reference's layout, section order, and treatment — the hand
+builds against the reference image with image-to-code fidelity. It still writes the product's own copy
+and uses its own real assets rather than lifting the source's literal text or photographs. Read `theory/layout.md` and
 `theory/ux.md` exactly before writing.
 
 Use these H2 sections exactly and keep each non-empty. When the project has user-provided
@@ -98,8 +99,7 @@ For each section, assign media one job: evidence, explanation, orientation, or a
 the domain mechanism, material, or workflow is central, assign a lawful carrier for it or
 name an explicit alternate non-media mental-model carrier and its limitation. `none because
 no approved photo` is insufficient: a photo is not required, and absent assets do not excuse
-an absent mental model. Do not invent product facts/assets or weaken the clean-room transfer
-boundary.
+an absent mental model. Do not invent product facts or assets.
 
 ## Responsive recomposition
 

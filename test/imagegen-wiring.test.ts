@@ -62,8 +62,8 @@ test('scout routes reference fidelity to the hand with an advisory distance sign
   assert.match(s, /the hand builds from its local part-image/i);
   assert.match(s, /\.omd\/refs\//);
   assert.match(s, /image-to-code fidelity/i);
-  assert.match(s, /omd ref distance` is advisory/i);
-  assert.match(s, /never blocks shipping/i);
+  assert.match(s, /omd ref distance` reports how close the build is/i);
+  assert.match(s, /high closeness is the intended\s+outcome/i);
   // The imagegen draft-seed path (blueprint) still exists for the composer route.
   assert.match(s, /blueprint/i);
   assert.match(s, /theory\/imagegen\.md/);
