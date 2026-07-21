@@ -19,7 +19,7 @@ import { validateCompositionContract } from '../core/composition-contract/index.
 import { validateSourceSeal, writeSourceSeal } from '../core/source-seal/index.ts';
 import { checkFinalEvidence, finalizeFinalEvidence } from '../core/evidence/final.ts';
 import { checkTaskEvidence, publishTaskEvidence } from '../core/evidence/task.ts';
-import { computeStack } from '../core/stack/index.ts';
+import { computeStack, verifyStack } from '../core/stack/index.ts';
 import { scanTextSlop } from '../core/slop/text-slop.ts';
 import { evaluateLighthouse, type LighthouseBudget } from '../core/perf/lighthouse.ts';
 import { evaluateVisualRichness } from '../core/composition-contract/visual-richness.ts';
@@ -1615,6 +1615,12 @@ function cmdVisualRichness(opts: Opts): never {
 
 /** `omd stack` — deterministic stack routing from folder evidence; the hand builds exactly what it names. */
 function cmdStack(opts: Opts): never {
+  if (opts.check) {
+    const c = verifyStack(process.cwd());
+    if (opts.json) process.stdout.write(JSON.stringify(c));
+    else console.log(`stack conformance: ${c.ok ? 'OK' : 'DEFECT'} (${c.actual}) — ${c.reason}`);
+    process.exit(c.ok ? 0 : 1);
+  }
   const d = computeStack(process.cwd());
   if (opts.json) process.stdout.write(JSON.stringify(d));
   else {
