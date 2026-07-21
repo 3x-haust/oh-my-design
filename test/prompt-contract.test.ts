@@ -17,20 +17,22 @@ test('durable protocol, coordinator, and hand share the same stack precedence', 
   ];
   for (const source of sources) {
     const contract = source.replace(/\s+/g, ' ');
-    assert.match(contract, /explicit user request > existing repository stack\/toolchain.*React \+ Vite \+ TypeScript only for a truly blank greenfield/);
-    assert.match(contract, /Plain HTML greenfield.*(?:explicit user request|user explicitly requests)/i);
-    assert.match(source, /no autonomous single-static|no autonomous single-static-page|There is no autonomous\s+single-static-surface/i);
-    assert.match(source, /unrecognised package\/toolchain|unrecognised package\s+or toolchain/i);
-    assert.doesNotMatch(source, /plain HTML (?:is|as) the (?:greenfield )?default/i);
+    assert.match(contract, /plain HTML\/CSS\/JS/);
+    assert.match(contract, /only when the user explicitly asks for one or the surface is a genuinely stateful application/i);
+    assert.match(contract, /build in an existing (?:project's|repository's) stack/i);
+    assert.match(contract, /never pins the stack/i);
+    // the React-forcing default was removed
+    assert.doesNotMatch(contract, /React \+ Vite \+ TypeScript only for a truly blank greenfield/);
+    assert.doesNotMatch(contract, /Plain HTML greenfield requires an explicit user request/i);
   }
 });
 
 test('hand records stack evidence before first write and preserves existing surfaces', () => {
-  const hand = read('src/agents/hand.agent.yaml');
-  assert.match(hand, /Before the first write[\s\S]*brief[\s\S]*package\.json[\s\S]*representative existing surface or component/);
-  assert.match(hand, /Record the stack choice and[\s\S]*evidence/);
-  assert.match(hand, /existing vanilla HTML/);
-  assert.match(hand, /Greenfield scaffold dependencies are allowed[\s\S]*do not add unnecessary\s+dependencies to an existing project/);
+  const hand = read('src/agents/hand.agent.yaml').replace(/\s+/g, ' ');
+  assert.match(hand, /Before the first write, run `omd stack`/);
+  assert.match(hand, /Record the stack choice and concrete evidence with `omd decision`/);
+  assert.match(hand, /Always build in an existing project's stack instead of replacing it/);
+  assert.match(hand, /a static page and needs no framework/);
 });
 
 test('copy is an isolated writer-editor boundary before sketches', () => {

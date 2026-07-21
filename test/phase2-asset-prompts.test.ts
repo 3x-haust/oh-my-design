@@ -65,7 +65,7 @@ test('the asset sourcing additions do not weaken hand/composer G1 carrier, restr
   const composer = read('src/agents/composer.agent.yaml');
 
   // G0 stack precedence + no-unnecessary-dependencies lock (hand only).
-  assert.match(hand, /Greenfield scaffold dependencies are allowed[\s\S]*do not add unnecessary\s+dependencies to an existing project/);
+  assert.match(hand, /Framework scaffold dependencies[\s\S]*are allowed[\s\S]*do not add unnecessary dependencies to an existing project/);
 
   // G1 media/carrier locks preserved verbatim on both agents.
   assert.match(hand, /Do not mandate a photo or invent product facts\/assets/);

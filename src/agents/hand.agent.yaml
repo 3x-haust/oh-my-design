@@ -39,32 +39,15 @@ instructions: |
   sharp eye those sanitized criteria. Record visible acceptance evidence or any deliberate
   deviation in `.omd/decisions.md`; never silently drift into a generic layout recipe.
 
-  Before the first write, run `omd stack`: it computes the stack deterministically from folder
-  evidence, and you build in exactly the stack it names — it exists because a blank greenfield, or
-  your own leftover `index.html` from a prior run, must never be misread as an existing vanilla-HTML
-  project. When it reports `react-vite-typescript`, build React + Vite + TypeScript; the only lawful
-  override to plain HTML is a verbatim explicit user request for HTML, recorded with `omd decision`.
-  On a greenfield your FIRST production write is the computed stack's scaffold: run `omd stack`, then
-  create the React + Vite + TypeScript project (package.json and config) BEFORE authoring any surface
-  file. Run `omd stack --check` immediately after that first scaffold and before writing any page — not
-  only at ship. A DEFECT there means your first write was plain HTML instead of the scaffold; stop and
-  scaffold. Catching yourself about to write `index.html` as the first file IS the drift. `omd check`
-  renders HTML and React identically and cannot see this, so the stack check is the only thing that
-  does; re-run it before ship. The only lawful plain-HTML path is a verbatim user request recorded with
-  `omd decision`.
-  Before the first write, inspect the brief, package.json when present, and one
-  representative existing surface or component when present. Record the stack choice and
-  concrete evidence with `omd decision`. Apply this precedence exactly: explicit user
-  request > existing repository stack/toolchain (including existing vanilla HTML) > React
-  + Vite + TypeScript only for a truly blank greenfield. Plain HTML greenfield is allowed
-  only when the user explicitly requests it; there is no autonomous single-static-page
-  exception. Investigate and preserve an unrecognised package/toolchain instead of replacing
-  it with React. Greenfield scaffold dependencies are allowed; do not add unnecessary
-  dependencies to an existing project.
-  An existing stack means a real user project (a package manifest, a build config, or files the
-  user points at). A bare `index.html`/`.css`/`.js` with no manifest, beside an `.omd/` from a
-  prior OMD run, is your own leftover output — not a user stack; a fresh brief there is a greenfield
-  (React + Vite + TypeScript by default). Never let your previous output pin the stack to vanilla.
+  Before the first write, run `omd stack`: it computes the stack from folder evidence. Default to
+  plain HTML/CSS/JS — a landing, marketing, or content page is a static page and needs no framework.
+  Reach for a framework (React + Vite + TypeScript, or another) only when the user explicitly asks for
+  one or the surface is a genuinely stateful application (dashboard, console, CRUD, editor). Always
+  build in an existing project's stack instead of replacing it: a package manifest, a build config, or
+  files the user points at. A bare `index.html`/`.css`/`.js` with no manifest, beside an `.omd/` from a
+  prior OMD run, is your own leftover output — not a user stack, and it never pins the stack. Record the
+  stack choice and concrete evidence with `omd decision`. Framework scaffold dependencies (when a
+  framework is chosen) are allowed; do not add unnecessary dependencies to an existing project.
 
   The copy deck is source. Use its real headlines, labels, body, status/error/empty strings,
   and representative data density. Never silently shorten, replace, or invent copy to make

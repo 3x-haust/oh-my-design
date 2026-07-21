@@ -46,32 +46,19 @@ as a product brief even when it sounds like a site request) that runs the entire
 task coverage matrix, scout, copy, compose, isolated sketches, hand, glance, blind eye, and the
 mandatory RED/GREEN refinement loop. A register selects how "distinctive" is judged — a functional
 advantage on a quiet surface — never whether the loop runs. "It is real engineering, a data tool, or
-too big for the loop, so build it directly" is a routing defect, not a lawful shortcut — the same class
-of error as inferring plain HTML without a verbatim user request.
+too big for the loop, so build it directly" is a routing defect, not a lawful shortcut.
 
-Apply stack precedence exactly: explicit user request > existing repository stack/toolchain
-(including existing vanilla HTML) > React + Vite + TypeScript only for a truly blank
-greenfield. Plain HTML greenfield requires an explicit user request; there is no autonomous
-single-static-surface exception. Preserve and investigate unrecognised package/toolchain
-evidence instead of replacing it with React. Greenfield scaffold dependencies are allowed;
-existing projects receive no unnecessary dependencies.
-Plain HTML/CSS/JS for a blank greenfield requires the explicit user request quoted verbatim in the
-stack `omd decision`. Absent a matching verbatim user quote, a truly blank greenfield is React +
-Vite + TypeScript — never infer, assume, or paraphrase a pre-authorization. A decision that claims
-the brief "pre-authorized plain HTML" without a verbatim user quote that actually says so is a
-stack-routing defect, not a lawful shortcut.
-"Existing repository stack" means a real project the user brought: a package manifest, a framework
-or build config (`vite.config`, `next.config`, `package.json`, etc.), or files the user explicitly
-points at. A bare `index.html`/`.css`/`.js` with no manifest and no build config, sitting next to an
-`.omd/` directory from a prior OMD run, is OMD's own leftover output — not a user stack. A fresh
-design brief in that folder is a greenfield (React + Vite + TypeScript by default), not a
-continuation of the leftover HTML; do not let your own previous output pin the stack to vanilla.
-Testing repeatedly in one directory reuses the `.omd/refs/` inventory (fine, output-neutral) but never
-reclassifies a greenfield as an existing HTML project.
-The hand runs `omd stack` before its first production write and builds in exactly the stack it
-computes from folder evidence — a blank greenfield resolves to React + Vite + TypeScript
-deterministically, so the model never talks itself into plain HTML for a one-page site. The only
-lawful override is a verbatim explicit user request for HTML.
+Stack routing defaults to plain HTML/CSS/JS. A landing, marketing, or content surface is a static
+page and needs no framework, so a blank greenfield resolves to plain HTML/CSS/JS. Reach for a
+framework (React + Vite + TypeScript, or another) only when the user explicitly asks for one or the
+surface is a genuinely stateful application (dashboard, console, CRUD, editor). Always build in an
+existing project's stack — a package manifest, a framework/build config (`vite.config`, `next.config`,
+`package.json`), or files the user points at — instead of replacing it. A bare
+`index.html`/`.css`/`.js` with no manifest, sitting next to an `.omd/` directory from a prior OMD run,
+is OMD's own leftover output — not a user stack, and it never pins the stack. The hand runs `omd stack`
+before its first production write, records the choice and evidence with `omd decision`, and builds
+accordingly. Framework scaffold dependencies (when a framework is chosen) are allowed; existing
+projects receive no unnecessary dependencies.
 
 Run `omd config show`. `checkpoint: none` is the default and means no approval waits.
 Only `concept`, `structure`, or `both` opt into a human pause at that named point.
