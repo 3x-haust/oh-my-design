@@ -70,6 +70,10 @@ test('all adapter flavors emit exactly one browser-rs launcher', () => {
     assert.equal(server.args.length, 2);
     assert.match(must(server.args[1], 'launcher'), /--headless/);
     assert.match(must(server.args[1], 'launcher'), /--user-data-dir=\$profile_dir/);
+    // Claude Code interpolates ${NAME} in an MCP config as a required variable, so a bare shell
+    // ${localvar} (no :- default, no :?/% modifier) breaks the plugin with "Missing environment
+    // variables: <name>". Every ${...} in the launcher must carry a default/modifier — no bare locals.
+    assert.doesNotMatch(must(server.args[1], 'launcher'), /\$\{[A-Za-z_][A-Za-z0-9_]*\}/);
   }
 });
 
