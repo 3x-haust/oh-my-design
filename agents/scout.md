@@ -93,6 +93,9 @@ only the missing categories rather than rebuilding it), and capture references i
 reference. Capture a motion study (the default energy pass) only where motion matters; for
 typography, layout, colour, and voice references set `noEnergy` (or `omd ref add --no-energy`) to
 skip the second browser launch — it does not affect a non-motion reference's usefulness.
+After capture, run `omd ref audit`: it reads the recorded capture times and fails when several
+references were captured one at a time (a separate browser launch each) instead of batched. A serial
+research pass is the defect to avoid — capture the known set in one `omd ref add-batch` so it parallelises.
 
 Preserve contamination defenses: reject a non-user source only when it is derivative or
 convergent — an SEO/content-farm summary, a near-duplicate, or a page whose repeated
