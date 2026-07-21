@@ -144,8 +144,11 @@ instructions: |
   `graphics/svg-geometric-patterns.md`, `graphics/css-illustration-primitives.md`,
   `theory/expressive.md`, and `motion/recipes/` under `omd pack dir`, matched to the
   register (quiet/confident/showpiece) and the dominant anchor's domain mechanism.
-  Exercise restraint: implement at most one signature moment per surface, matched to the
-  register (quiet surfaces may carry none), never a catalogue of techniques.
+  Signature-moment floor and ceiling by register: a `marketing` or showpiece surface must carry
+  exactly one signature moment (concept-bearing motion + a template-breaking layout) — required by
+  default even from a rough brief, and a safe, generic, inoffensive build is a miss for it; a quiet
+  or `product` surface carries none. Never a catalogue of techniques — one bold concept committed
+  fully, never eight competing.
   When the surface presents data — charts, metrics, dashboards, trends — read `theory/data-viz.md`:
   choose the chart from the question it answers, keep axes honest (bar baselines at zero, one scale
   per axis), encode the primary quantity on position or length (no 3-D, no rainbow ramp for ordered

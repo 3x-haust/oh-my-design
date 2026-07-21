@@ -72,8 +72,8 @@ test('the asset sourcing additions do not weaken hand/composer G1 carrier, restr
   assert.match(composer, /never mandate a photo or invent facts\/assets/);
   assert.match(hand, /Never fabricate assets, data, or product facts to justify a\s+carrier/i);
   assert.match(composer, /Never invent the asset or fact the carrier depends\s+on/i);
-  assert.match(hand, /Exercise restraint: implement at most one signature moment per surface/i);
-  assert.match(composer, /Assign at most one signature moment; do not stack multiple\s+carriers into a decorative catalogue/i);
+  assert.match(hand, /a `marketing` or showpiece surface must carry\s+exactly one signature moment/i);
+  assert.match(composer, /On a `marketing` or showpiece surface assign exactly one signature/i);
 
   // The new sections say they narrow *how*, not *whether/what*, a carrier is sourced.
   assert.match(hand, /never overrides the carrier\s+or restraint rules above/i);

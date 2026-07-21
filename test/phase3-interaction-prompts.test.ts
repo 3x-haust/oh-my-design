@@ -41,7 +41,7 @@ test('composer additive does not weaken the pre-existing one-signature-moment an
   const composer = read('src/agents/composer.agent.yaml');
   assert.match(
     composer,
-    /Assign at most one signature moment; do not stack multiple\s+carriers into a decorative catalogue/i
+    /On a `marketing` or showpiece surface assign exactly one signature/i
   );
   assert.match(composer, /never overrides the media-role or restraint rules above/i);
 });
