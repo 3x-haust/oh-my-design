@@ -425,6 +425,7 @@ These gates are part of every applicable production run, not optional polish:
   the finalizer runs the validator-backed report formatter from
   `protocol/reference-assembly.md` before the final chat handback. The finalizer pastes the
   formatter's exact bilingual Markdown and does not replace it with a vague inspiration claim.
+- Close the final chat handback with this run's usage: run `omd usage` and include its elapsed-time and token total in the final message. It reads the host session log (Claude Code or Codex) and sums the run's threads; when no log is found it prints a short unavailable note that is simply omitted, never replaced by a fabricated number.
 - Walk `craft/finish-pass.md`. Complete applicable items and record a concrete reason for
   every skipped item.
 - When `.omd/design.md` exists, run `omd design --check` and resolve its findings.

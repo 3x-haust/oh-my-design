@@ -516,3 +516,11 @@ test('scout researches the real subject first and lets its identity anchor gover
   assert.match(proto, /## Subject anchor/i);
   assert.match(proto, /it governs the colour and motif every other lane serves/i);
 });
+
+test('the run closes by reporting usage (elapsed + tokens) in the final chat, never fabricated', () => {
+  const loop = read('core/protocol/human-design-loop.md').replace(/\s+/g, ' ');
+  assert.match(loop, /Close the final chat handback with this run's usage: run `omd usage`/i);
+  assert.match(loop, /never replaced by a fabricated number/i);
+  const skill = read('src/skills/omd-ultradesign/SKILL.md').replace(/\s+/g, ' ');
+  assert.match(skill, /close the final chat response with this run's usage: run `omd usage`/i);
+});

@@ -505,6 +505,7 @@ scan was rerun after repairs. When reference assembly applies, hand off the pass
 `reference-usage-v1` ledger to the finalizer, which calls `generateReferenceReport(root)`, persists
 `.omd/reference-report.md`, and pastes the formatter's exact Korean-first bilingual Markdown into
 the final chat. Everything is clean or has an evidence-backed deliberate overrule.
+Regardless of whether reference assembly applied, close the final chat response with this run's usage: run `omd usage` and include its elapsed-time and token total in your final message to the user. It reads the host session log (Claude Code or Codex); if no log is found it prints a short unavailable note, which you simply omit rather than fabricating a number.
 When the run is an iteration with a before/after pair, form the pairwise blind-choose verdict:
 blind-choose is the visual distinction signal only; applicable task probes, accessibility checks, and
 declared viewport task evidence remain independent passing UX gates. Record the comparison; it never
