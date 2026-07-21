@@ -529,3 +529,35 @@ test('a second install with the same cli bin dir leaves the omd symlink in place
     rmSync(binDir, { recursive: true, force: true });
   }
 });
+
+test('install refreshes an already-installed Claude plugin cache in place', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'omd-claude-cache-'));
+  const cacheDir = join(home, 'plugins', 'cache', 'omd', 'oh-my-design', '0.17.0');
+  try {
+    mkdirSync(join(cacheDir, 'skills', 'ultradesign'), { recursive: true });
+    writeFileSync(join(cacheDir, 'skills', 'ultradesign', 'SKILL.md'), 'STALE');
+    writeFileSync(
+      join(home, 'plugins', 'installed_plugins.json'),
+      JSON.stringify({ plugins: { 'oh-my-design@omd': [{ version: '0.17.0', installPath: cacheDir }] } }),
+    );
+    const changes = await install([{ host: 'claude', home }], UNSUPPORTED_BROWSER);
+    const skill = readFileSync(join(cacheDir, 'skills', 'ultradesign', 'SKILL.md'), 'utf8');
+    assert.notEqual(skill, 'STALE', 'stale SKILL.md must be overwritten with the freshly built one');
+    assert.match(skill, /Ultradesign/);
+    assert.ok(existsSync(join(cacheDir, '.mcp.json')), 'the built .mcp.json is copied into the cache');
+    assert.ok(changes.some((c) => c.includes('refreshed plugin cache in place')));
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('install does not fabricate a Claude plugin cache when none is installed', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'omd-claude-nocache-'));
+  try {
+    const changes = await install([{ host: 'claude', home }], UNSUPPORTED_BROWSER);
+    assert.ok(!existsSync(join(home, 'plugins', 'cache')), 'no cache is fabricated on a fresh host');
+    assert.ok(!changes.some((c) => c.includes('refreshed plugin cache')));
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
