@@ -149,7 +149,7 @@ export function extractInPage(maxNodes: number, selector?: string | null): RawIr
       const color = toHex(cs.color);
       if (color) node.color = color;
     }
-    if (radius > 0) node.radius = { value: radius, token: nameOf(String(radius)) };
+    if (radius > 0) node.radius = { value: radius, token: nameOf(String(radius) + 'PX') };
     if (isInteractive(el)) node.interactive = true;
     if (cs.display === 'inline') node.inline = true;
 

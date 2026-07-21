@@ -1,8 +1,25 @@
-id: TOKEN-003
-layer: 1
-category: system
-severity: warn
-when: "Boolean(node.fill) && !node.fill.inherited && node.fill.authored !== false"
-value: "node.fill.token"
-assert: "value !== null"
-message: "Fill is not tokenised (got {value})"
+# Tokenisation checks: a value that is not tied to a named token is a one-off — the same
+# convergence problem as any monoculture, one node at a time. Fill and radius are matched by
+# value against the :root token table (dom.ts nameOf). Shadow is NOT checked here: its computed
+# form (colour-first, expanded 0px/spread) never string-matches an authored `--elevation` var,
+# so a shadow-token rule would be a universal false positive; shadow consistency is covered by
+# SLOP-SHADOW-MONOCULTURE instead. All warn.
+- id: TOKEN-003
+  layer: 1
+  category: system
+  severity: warn
+  when: "Boolean(node.fill) && !node.fill.inherited && node.fill.authored !== false"
+  value: "node.fill.token"
+  assert: "value !== null"
+  message: "Fill is not tokenised (got {value})"
+
+# Radius is always author-set when present (dom.ts records it only when radius > 0), so there is
+# no inherited/authored guard — a present radius with no matching token is a hardcoded corner.
+- id: TOKEN-004
+  layer: 1
+  category: system
+  severity: warn
+  when: "Boolean(node.radius)"
+  value: "node.radius.token"
+  assert: "value !== null"
+  message: "Corner radius is not tokenised (got {value}). A one-off radius is a decision made outside the system; map it to a radius token so the corner scale stays coherent."

@@ -34,7 +34,7 @@ test('loadRules rejects a rule with a duplicate id', () => {
 test('check finds exactly the seeded violations', () => {
   const v = check(ir, builtin);
   const ids = v.map((x) => x.id).sort();
-  assert.deepEqual(ids, ['CONTRAST-001', 'HIT-002', 'SPACING-001', 'TOKEN-003', 'TOKEN-003']);
+  assert.deepEqual(ids, ['CONTRAST-001', 'HIT-002', 'SPACING-001', 'TOKEN-003', 'TOKEN-003', 'TOKEN-004', 'TOKEN-004', 'TOKEN-004', 'TOKEN-004']);
 });
 
 test('violations carry nodeId, path, value and an interpolated message', () => {
@@ -56,7 +56,7 @@ test('check output is deterministic — sorted by path then id', () => {
 
 test('layer filter selects rules by layer', () => {
   assert.equal(check(ir, builtin, { layers: [2] }).length, 0);
-  assert.equal(check(ir, builtin, { layers: [1] }).length, 5);
+  assert.equal(check(ir, builtin, { layers: [1] }).length, 9);
 });
 
 test('category filter selects rules by category', () => {
@@ -187,6 +187,18 @@ test('SLOP-TIGHT-LEADING fires on a crammed paragraph, not on well-led body', ()
   assert.ok(tight.some((x) => x.id === 'SLOP-TIGHT-LEADING'));
   const roomy = runSlop([accentRoot(['a']), richText('a', { text: para, lineHeight: 1.5 })]);
   assert.ok(!roomy.some((x) => x.id === 'SLOP-TIGHT-LEADING'));
+});
+
+test('TOKEN-004 fires on a hardcoded radius, not on a tokenised one', () => {
+  const frame = (id: string, over: Partial<RawNode>): RawNode => ({
+    id, name: 'Card', type: 'FRAME', path: `Root/${id}`, parent: 'root',
+    box: { x: 0, y: 0, w: 50, h: 50 }, children: [], ...over,
+  });
+  const sys = (nodes: RawNode[]) => check(normalize({ nodes }), builtin, { categories: ['system'] });
+  const hard = sys([accentRoot(['a']), frame('a', { radius: { value: 10, token: null } })]);
+  assert.ok(hard.some((x) => x.id === 'TOKEN-004'), 'untokenised radius fires');
+  const soft = sys([accentRoot(['a']), frame('a', { radius: { value: 10, token: 'radius-md' } })]);
+  assert.ok(!soft.some((x) => x.id === 'TOKEN-004'), 'tokenised radius silent');
 });
 
 // Helpers for text-node rule tests
