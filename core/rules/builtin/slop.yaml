@@ -123,7 +123,7 @@
   severity: warn
   when: "Boolean(node.text) && node.text.length > 8"
   value: "node.text"
-  assert: "!/you won't find [^.]{0,40} here|we (?:won't|will never) (?:bore|spam|waste)|\\b(?:no|zero) (?:ads|clutter|distractions|gimmicks)[,.]? just\\b|이런 (?:내용|것)[은는] 없|(?:여기|이 페이지)에는 [가-힣 ]{0,15}(?:광고|잡동사니|군더더기)[가는은]? 없/i.test(value)"
+  assert: "!/you won't find [^.]{0,40} here|we (?:won't|will never) (?:bore|spam|waste)|\\b(?:no|zero) (?:ads|clutter|distractions|gimmicks)[,.]? just\\b|\\bnot (?:a |an |just a )?(?:hypothetical ?)?(?:demo|mock-?up|mockup|prototype|placeholder|simulation|wireframe|dummy|proof.?of.?concept|hypothetical)s?\\b|이런 (?:내용|것)[은는] 없|(?:여기|이 페이지)에는 [가-힣 ]{0,15}(?:광고|잡동사니|군더더기)[가는은]? 없|(?:가상\\s*)?(?:데모|목업|시안|시제품|프로토타입|플레이스홀더|더미|샘플)(?:이|가|은|는)?\\s*아(?:닙니다|니에요|니라)/i.test(value)"
   message: "Self-negating meta-copy: \"{value}\". The page is announcing what it refuses to do — the model quoting its own brief. Delete this sentence and write the positive fact it was hiding: what the reader gets, what it costs, what happens next."
 
 # Korean AI writing patterns promoted from the im-not-ai taxonomy.

@@ -223,6 +223,8 @@ test('SLOP-PINK-ELEPHANT fires on English self-negating meta-copy', () => {
     "We won't waste your attention.",
     "No distractions, just the work.",
     "Zero ads, just great content.",
+    'This page is not a hypothetical demo.',
+    "It is not a mockup.",
   ];
   for (const text of positives) {
     const v = check(makeTextIr(text), builtin, { categories: ['slop'] });
@@ -237,6 +239,8 @@ test('SLOP-PINK-ELEPHANT fires on Korean self-negating meta-copy', () => {
     '여기에는 광고가 없습니다.',
     '이 페이지에는 잡동사니는 없습니다.',
     '여기에는 군더더기 없습니다.',
+    '이 페이지는 가상 데모가 아닙니다.',
+    '목업이 아니에요.',
   ];
   for (const text of positives) {
     const v = check(makeTextIr(text), builtin, { categories: ['slop'] });
