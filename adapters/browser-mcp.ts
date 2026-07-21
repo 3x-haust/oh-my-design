@@ -41,6 +41,11 @@ const BROWSER_RS_OWNED_VALIDATOR = [
 ].join(';');
 
 export const BROWSER_RS_MCP_LAUNCHER = [
+  // Claude spawns MCP servers with a minimal PATH (often just /usr/bin:/bin) that has neither
+  // ~/.local/bin (where the OMD installer symlinks browser-rs) nor a mise/nvm-managed `node`.
+  // Put the OMD bin dir on PATH first so `command -v browser-rs` resolves the installed symlink
+  // and we never fall to the node-dependent integrity fallback in a nodeless environment.
+  'export PATH="$HOME/.local/bin:$PATH"',
   'if ! profile_dir="$(mktemp -d "${TMPDIR:-/tmp}/omd-browser-rs.XXXXXX")"; then',
   "  printf '%s\\n' 'browser-rs: unable to create temporary profile' >&2",
   '  exit 1',
