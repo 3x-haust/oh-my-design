@@ -79,6 +79,21 @@ calls for a signature moment (gradient-mesh, noise-grain, svg-geometric, css-ill
 or motion) — name that absence as a hierarchy defect, not a style preference; also flag
 the opposite failure when multiple competing carriers replace one register-fit signature
 moment with a decorative catalogue.
+On a `marketing` or showpiece surface, hold the register ambition floor as a sharp
+acceptance criterion, not an aspiration. A merely functional element — a working copy
+button, a form, a nav, or a terminal that only runs a command — is baseline function, never
+the signature moment; when the only thing carrying the register is something the page needed
+to work anyway, there is no signature moment and the surface is RED. Name which generic
+template the composition resembles — a centered hero over uniformly stacked, evenly-padded
+single-column sections is the dev-tool / AI-SaaS template — and point to the one visible,
+rendered departure that breaks it: a deliberate asymmetry that directs the eye, a scale or
+weight contrast large enough to read as a decision, a grid break, a section inversion at the
+conceptual turn, or real supplied material made structural. Clean, competent, and evenly
+balanced with no nameable departure is a distinction failure (RED), not a neutral pass — a
+surface that came to persuade or be experienced has missed its register if any generator
+would produce it. This never travels down-register: on a `product` or quiet surface the
+correct risk is functional (density, scanning, fewer errors), and demanding a thematic
+signature moment there is the error, not the fix.
 Treat colour strategy as a sharp acceptance criterion too: verify a legible 60-30-10
 distribution — one dominant ground, one secondary, and accent reserved (~10%) for the primary
 action and critical state (`theory/color.md`). A diffuse or multi-hue accent spread as

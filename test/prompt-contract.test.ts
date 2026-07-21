@@ -482,9 +482,19 @@ test('marketing/showpiece commits to a signature moment by default; product stay
   assert.match(expr, /never travels down-register: a `product` or quiet surface stays quiet/i);
   const loop = read('core/protocol/human-design-loop.md').replace(/\s+/g, ' ');
   assert.match(loop, /Register ambition is part of the GREEN target/i);
-  assert.match(loop, /A safe, evenly-spaced, inoffensive result any generator would produce is RED/i);
+  assert.match(loop, /A safe, evenly-spaced, inoffensive result any generator would produce .* is RED for that register/i);
   const hand = read('src/agents/hand.agent.yaml').replace(/\s+/g, ' ');
   assert.match(hand, /a `marketing` or showpiece surface must carry exactly one signature moment/i);
   const composer = read('src/agents/composer.agent.yaml').replace(/\s+/g, ' ');
   assert.match(composer, /On a `marketing` or showpiece surface assign exactly one signature/i);
+});
+
+test('the eye rejects a merely functional element as a marketing signature moment and demands a named departure', () => {
+  const eye = read('src/agents/eye.agent.yaml').replace(/\s+/g, ' ');
+  assert.match(eye, /A merely functional element — a working copy button, a form, a nav, or a terminal that only runs a command — is baseline function, never the signature moment/i);
+  assert.match(eye, /Clean, competent, and evenly balanced with no nameable departure is a distinction failure \(RED\)/i);
+  // register scoping preserved — product/quiet is exempt from the thematic floor
+  assert.match(eye, /on a `product` or quiet surface the correct risk is functional/i);
+  const loop = read('core/protocol/human-design-loop.md').replace(/\s+/g, ' ');
+  assert.match(loop, /a merely functional element .* is baseline function, never the signature moment/i);
 });
