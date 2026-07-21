@@ -74,7 +74,7 @@ const LEGACY_SKILLS = ['ultradesign', 'critique'];
  * so the installer registers the plugin in settings.json and prunes any bare-name `omd-*`
  * skills/agents a previous direct install left behind — one surface, never a duplicate.
  */
-function installClaude(d: Detected, changes: string[]): void {
+function installClaude(d: Detected, distributionRoot: string, changes: string[]): void {
   // Claude Code installs OMD as the marketplace plugin `oh-my-design@omd`, so every skill and
   // agent resolves under the `oh-my-design:` namespace (e.g. `oh-my-design:ultradesign`). The
   // older bare-name copy under ~/.claude/skills and ~/.claude/agents is pruned here so a stale
@@ -102,6 +102,35 @@ function installClaude(d: Detected, changes: string[]): void {
   mkdirSync(d.home, { recursive: true });
   writeFileSync(settingsPath, `${JSON.stringify(next, null, 2)}\n`);
   changes.push(`claude: registered oh-my-design@omd plugin and patched ${settingsPath}`);
+  refreshClaudePluginCache(d, distributionRoot, changes);
+}
+
+/**
+ * Claude loads OMD from a versioned plugin cache, and a marketplace update cannot tell one
+ * `0.17.0` build from another (this project pins the version across many builds). So `install`
+ * refreshes the cache in place — the same thing installCodex does for Codex — by copying the freshly
+ * built plugin (skills, agents, `.mcp.json`, manifest) over the installed copy. Only when the plugin
+ * is already installed; the first install still comes from the marketplace. After this, `/reload-plugins`
+ * in Claude applies the change without a version bump.
+ */
+function refreshClaudePluginCache(d: Detected, distributionRoot: string, changes: string[]): void {
+  const installedPath = join(d.home, 'plugins', 'installed_plugins.json');
+  if (!existsSync(installedPath)) return;
+  let cacheDir: string | undefined;
+  try {
+    const data = JSON.parse(readFileSync(installedPath, 'utf8')) as {
+      plugins?: Record<string, ReadonlyArray<{ installPath?: string }>>;
+    };
+    cacheDir = data.plugins?.['oh-my-design@omd']?.[0]?.installPath;
+  } catch {
+    return;
+  }
+  if (cacheDir === undefined || !existsSync(cacheDir)) return;
+  for (const item of ['skills', 'agents', '.mcp.json', '.claude-plugin']) {
+    const src = join(distributionRoot, item);
+    if (existsSync(src)) cpSync(src, join(cacheDir, item), { recursive: true });
+  }
+  changes.push(`claude: refreshed plugin cache in place -> ${cacheDir} (run /reload-plugins)`);
 }
 
 function uninstallClaude(d: Detected, changes: string[]): void {
@@ -213,7 +242,7 @@ export async function install(hosts: Detected[], options: InstallOptions = {}): 
   const changes: string[] = [];
   for (const d of hosts) {
     if (d.host === 'claude') {
-      installClaude(d, changes);
+      installClaude(d, distributionRoot, changes);
       claudePluginFreshnessNote(d, changes);
     } else {
       installCodex(d, version, distributionRoot, changes);
