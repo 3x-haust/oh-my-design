@@ -240,6 +240,19 @@ async function cmdCraft(sub: string | undefined, opts: Opts): Promise<never> {
   throw new Error('usage: omd craft checkpoint ... | omd craft status [--json]');
 }
 
+async function cmdUsage(opts: Opts): Promise<never> {
+  const { computeRunUsage, formatRunUsage } = await import('../core/usage/index.ts');
+  const u = computeRunUsage(process.cwd());
+  if (!u) {
+    if (opts.json) process.stdout.write('null');
+    else console.log('실행 사용량: 호스트 세션 로그를 찾지 못했습니다 (Claude Code / Codex 세션 로그 없음).');
+    process.exit(0);
+  }
+  if (opts.json) process.stdout.write(JSON.stringify(u));
+  else console.log(formatRunUsage(u));
+  process.exit(0);
+}
+
 /**
  * Cross-page site consistency check: `omd check --site <dir>`.
  *
@@ -1641,6 +1654,7 @@ function usage(): never {
     + '  slop scan [root] [--json]                   read-only source candidate scan\n'
     + '  stack [--json]                              deterministic stack routing (blank greenfield -> plain HTML/CSS/JS)\n'
     + '  coach                                        trends across `omd check` history\n'
+    + '  usage [--json]                              this run\'s elapsed time + token total (host session log)\n'
     + '\n'
     + '  frame show\n'
     + '  frame set --problem P --reframe R --why EVIDENCE\n'
@@ -1720,6 +1734,7 @@ async function main(): Promise<never> {
   if (cmd === 'slop') return cmdSlop(sub, parseArgs(args.slice(2)));
   if (cmd === 'lighthouse') return cmdLighthouse(parseArgs(args.slice(1)));
   if (cmd === 'coach') return cmdCoach();
+  if (cmd === 'usage') return cmdUsage(parseArgs(args.slice(1)));
   if (cmd === 'config') return cmdConfig(sub, parseArgs(args.slice(2)));
   if (cmd === 'craft') return cmdCraft(sub, parseArgs(args.slice(2)));
 
