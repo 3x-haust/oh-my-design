@@ -18,6 +18,8 @@ Every brief implies a register. The register is not the visual style — it is t
 
 The error is applying showpiece technique to quiet or confident contexts. A dashboard with split-text entrances is not ambitious; it is misread. The thirty-percent Usability weight does not become a thirty-percent weight only when the judges disagree with your taste — it applies regardless of intent. Usability 30% is the reason showpiece technique must still serve navigation and clarity, not just aesthetic ambition.
 
+On a `marketing` or showpiece surface, ambition is the default state, not an upgrade the user has to request. The register commits to at least one signature moment — a motion that carries the concept and a layout that departs from the generic template — even when the brief is a single rough line. A competent, evenly-weighted, inoffensive result that any generator would produce is a MISS here, not a neutral outcome: a surface that came to persuade or to be experienced has failed if it is merely safe. This never licenses an effects catalogue (see The restraint clause): the ceiling is one bold concept committed fully — the GDWEB / Awwwards way — never a pile of techniques. And it never travels down-register: a `product` or quiet surface stays quiet no matter how rough the brief, where ambition means density, scanning, and fewer errors, not motion.
+
 ---
 
 ## The anatomy of award-level sites

@@ -475,3 +475,16 @@ test('data-viz theory gates chart honesty and is wired into hand and eye', () =>
   const eye = read('src/agents/eye.agent.yaml').replace(/\s+/g, ' ');
   assert.match(eye, /data visualization, verify it does not lie/i);
 });
+
+test('marketing/showpiece commits to a signature moment by default; product stays quiet', () => {
+  const expr = read('core/theory/expressive.md').replace(/\s+/g, ' ');
+  assert.match(expr, /On a `marketing` or showpiece surface, ambition is the default state/i);
+  assert.match(expr, /never travels down-register: a `product` or quiet surface stays quiet/i);
+  const loop = read('core/protocol/human-design-loop.md').replace(/\s+/g, ' ');
+  assert.match(loop, /Register ambition is part of the GREEN target/i);
+  assert.match(loop, /A safe, evenly-spaced, inoffensive result any generator would produce is RED/i);
+  const hand = read('src/agents/hand.agent.yaml').replace(/\s+/g, ' ');
+  assert.match(hand, /a `marketing` or showpiece surface must carry exactly one signature moment/i);
+  const composer = read('src/agents/composer.agent.yaml').replace(/\s+/g, ' ');
+  assert.match(composer, /On a `marketing` or showpiece surface assign exactly one signature/i);
+});

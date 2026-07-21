@@ -93,8 +93,10 @@ When assigning a media role or alternate carrier, prefer an actively purposeful 
 carrier over a bare placeholder: name a candidate from gradient-mesh, noise-grain
 texture, svg-geometric patterns, css-illustration primitives, `theory/expressive.md`,
 or a `motion/recipes/` entry, fitted to the register (quiet/confident/showpiece) and the
-anchor's domain mechanism. Assign at most one signature moment; do not stack multiple
-carriers into a decorative catalogue. Never invent the asset or fact the carrier depends
+anchor's domain mechanism. On a `marketing` or showpiece surface assign exactly one signature
+moment — required by default, not optional; a safe, carrierless, evenly-spaced composition that
+any generator would produce is a miss for that register, even from a rough brief. On a quiet or
+`product` surface assign none. Never stack multiple carriers into a decorative catalogue. Never invent the asset or fact the carrier depends
 on — ground the role in the sanitized evidence you actually received.
 Slop-free is not the same as distinctive (see `theory/expressive.md` § "Slop-free is not
 the same as distinctive"). Before committing the contract, name the generic template your

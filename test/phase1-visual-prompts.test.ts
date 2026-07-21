@@ -34,10 +34,12 @@ test('hand, composer, and eye require restraint to exactly one signature moment 
   const composer = read('src/agents/composer.agent.yaml');
   const eye = read('src/agents/eye.agent.yaml');
 
-  assert.match(hand, /Exercise restraint: implement at most one signature moment per surface/i);
+  assert.match(hand, /a `marketing` or showpiece surface must carry\s+exactly one signature moment/i);
+  assert.match(hand, /Never a catalogue of techniques — one bold concept committed/i);
   assert.match(hand, /Never fabricate assets, data, or product facts to justify a\s+carrier/i);
 
-  assert.match(composer, /Assign at most one signature moment; do not stack multiple\s+carriers into a decorative catalogue/i);
+  assert.match(composer, /On a `marketing` or showpiece surface assign exactly one signature/i);
+  assert.match(composer, /Never stack multiple carriers into a decorative catalogue/i);
   assert.match(composer, /Never invent the asset or fact the carrier depends\s+on/i);
 
   assert.match(eye, /one register-fit signature\s+moment with a decorative catalogue/i);
