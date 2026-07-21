@@ -75,6 +75,8 @@ product's own domain, its real competitors, and its audience's language; a famou
 when the brief's real problem points to it. Run independent searches and captures in parallel — batch
 captures with `omd ref add-batch <manifest.json>`, never a sequential `omd ref add` per reference when
 several are already known.
+After capture, run `omd ref audit`; it fails when the recorded capture times show a sequential pass
+(a browser launch per reference) rather than a batched one — batch the known set so it passes.
 
 Whole-page captures establish rhythm or product feel; tight selectors establish component
 anatomy; type and motion studies establish measured behavior; image references support only

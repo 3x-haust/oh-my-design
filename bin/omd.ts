@@ -884,6 +884,14 @@ async function cmdRefCandidates(opts: Opts): Promise<never> {
   process.stdout.write(formatReferenceCandidates(artifacts.raw, artifacts.assembly));
   process.exit(0);
 }
+
+async function cmdRefAudit(opts: Opts): Promise<never> {
+  const { auditCaptureParallelism } = await import('../core/ref/capture-audit.ts');
+  const a = auditCaptureParallelism(process.cwd());
+  if (opts.json) process.stdout.write(`${JSON.stringify(a)}\n`);
+  else console.log(`capture audit: ${a.ok ? 'OK' : 'SEQUENTIAL'} (${a.refs} refs) — ${a.reason}`);
+  process.exit(a.ok ? 0 : 1);
+}
 async function cmdRefSelect(opts: Opts): Promise<never> {
   if (opts.out !== undefined) throw new Error('omd ref select does not accept --out');
   const candidateId = opts._[0]; if (candidateId === undefined || opts._[1] !== undefined) throw new Error('usage: omd ref select <candidate-id> [--json]');
@@ -1683,6 +1691,7 @@ function usage(): never {
     + '  ref import-image <input.json> [--json]      save a provenance-bound image fragment\n'
     + '  ref candidates [manifest]                   print chat-ready Korean-first candidate Markdown\n'
     + '  ref select <candidate-id> [--json]          bind a closed candidate selection to its evidence\n'
+    + '  ref audit [--json]                          warn when references were captured sequentially (use ref add-batch)\n'
     + '\n'
     + '  design                                       discover evidence and create/refresh .omd/design.md\n'
     + '  design --check                              validate design.md section coverage\n'
@@ -1787,6 +1796,7 @@ async function main(): Promise<never> {
     if (sub === 'import-image') return cmdRefImportImage(opts);
     if (sub === 'candidates') return cmdRefCandidates(opts);
     if (sub === 'select') return cmdRefSelect(opts);
+    if (sub === 'audit') return cmdRefAudit(opts);
     return usage();
   }
 

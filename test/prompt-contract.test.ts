@@ -548,3 +548,10 @@ test('a landing page for a tool is classified marketing, not product', () => {
   assert.match(framer, /OMD's own landing is `marketing`/i);
   assert.match(framer, /A tool's operating UI — the dashboard, console, or editor the user works in after adopting it — is `product`/i);
 });
+
+test('the scout audits capture parallelism with omd ref audit', () => {
+  const scout = read('src/agents/scout.agent.yaml').replace(/\s+/g, ' ');
+  assert.match(scout, /After capture, run `omd ref audit`/i);
+  const skill = read('src/skills/omd-scout/SKILL.md').replace(/\s+/g, ' ');
+  assert.match(skill, /After capture, run `omd ref audit`/i);
+});
