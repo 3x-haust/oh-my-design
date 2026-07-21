@@ -23,6 +23,10 @@ new agent, service, provider, or runtime.
 | production usage ledger | `omd-hand` | Passing selected assembly; the coordinator-chosen image-first draft when a draft was generated; actual production source/render/probe evidence; and attribution | Durable `.omd/reference-usage.json` with exactly one `used`, `rejected`, or `anti-reference` row for every selected slot | `recordReferenceUsage(root, { rows })` then `validateReferenceUsage(root)` | Missing, unselected, duplicate, or unsupported rows, absent production evidence, or stale bindings stop finalization. Do not replace real evidence with a claimed influence. |
 | final provenance report | `finalizer` | A passing usage ledger, current selected assembly, and `.omd/attribution.md` | Durable `.omd/reference-report.md` and the exact deterministic bilingual Markdown pasted into the final chat | `generateReferenceReport(root)` validates usage and atomically persists the returned Markdown | Any validation failure stops the final report. Do not hand-write, paraphrase, or claim a replacement report; repair the owning earlier stage and regenerate. |
 
+## Subject anchor
+
+When the brief names a real, existing subject — a product, project, company, repository, or brand, or supplies its link — the scout's fragment-inventory stage first establishes what that subject actually is (a web search plus the linked repository/README and any wordmark or brand the source already ships) and fixes the subject's own identity anchor: its real palette and motif. This anchor is not one measured reference among many; it governs the colour and motif every other lane serves, and is never outvoted by category evidence. A palette or motif taken from the product category's default instead of the subject's own identity is a rejected, not a shippable, synthesis.
+
 ## Chat-first presentation and selection
 
 The scout runs `omd ref check` and then `omd ref candidates`. It pastes the command's

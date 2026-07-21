@@ -45,6 +45,12 @@ Then require each major section to answer a different question (what it solves, 
 how it is verified, what happens on failure, scope, security, cost) rather than restating one message
 across hero, steps, trust, and CTA. A surface whose sections only re-vary a single promise is a
 reframe target, not a finished frame.
+When the brief names a real, existing subject — a product, project, company, repository, or brand,
+or supplies its link — record it in the frame as a research target: the exact name and any source
+link, plus any brand fact the source already ships (an existing wordmark, palette, or motif) kept
+as a cited fact, not a style you choose. The scout derives the visual anchor from it. Never let the
+product category's default look ("a dev tool, so terminal green/mono") stand in for the subject's
+own identity.
 
 Taste is admissible only when the coordinator explicitly provides `omd taste profile`
 output. That default profile contains explicit user records only. Never run `--all` and
