@@ -74,7 +74,11 @@ export const BROWSER_RS_MCP_LAUNCHER = [
   '    exit 1',
   '  fi',
   'fi',
-  '"$browser_bin" --headless "--user-data-dir=$profile_dir" &',
+  // Reconnect stdin with `<&0`: a POSIX background job (`&`) gets /dev/null on stdin by default,
+  // which silently cuts an stdio MCP server off from the client's JSON-RPC — the browser starts but
+  // never receives `initialize`, so the host reports the server as failed. `<&0` keeps the client
+  // pipe on stdin while preserving the background + trap-cleanup structure.
+  '"$browser_bin" --headless "--user-data-dir=$profile_dir" <&0 &',
   'child_pid=$!',
   'if wait "$child_pid"; then',
   '  status=0',

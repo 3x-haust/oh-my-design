@@ -70,6 +70,10 @@ test('all adapter flavors emit exactly one browser-rs launcher', () => {
     assert.equal(server.args.length, 2);
     assert.match(must(server.args[1], 'launcher'), /--headless/);
     assert.match(must(server.args[1], 'launcher'), /--user-data-dir=\$profile_dir/);
+    // A background stdio MCP server must keep the client pipe on stdin (`<&0`); a bare `&`
+    // redirects stdin to /dev/null so the server never receives `initialize` and the host marks
+    // it failed. Lock the stdin reconnection on the launch line.
+    assert.match(must(server.args[1], 'launcher'), /--user-data-dir=\$profile_dir" <&0 &/);
     // Claude Code interpolates ${NAME} in an MCP config as a required variable, so a bare shell
     // ${localvar} (no :- default, no :?/% modifier) breaks the plugin with "Missing environment
     // variables: <name>". Every ${...} in the launcher must carry a default/modifier — no bare locals.
