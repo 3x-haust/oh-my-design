@@ -41,9 +41,7 @@ const BROWSER_RS_OWNED_VALIDATOR = [
 ].join(';');
 
 export const BROWSER_RS_MCP_LAUNCHER = [
-  'profile_root="${TMPDIR:-/tmp}"',
-  'profile_root="${profile_root%/}"',
-  'if ! profile_dir="$(mktemp -d "${profile_root}/omd-browser-rs.XXXXXX")"; then',
+  'if ! profile_dir="$(mktemp -d "${TMPDIR:-/tmp}/omd-browser-rs.XXXXXX")"; then',
   "  printf '%s\\n' 'browser-rs: unable to create temporary profile' >&2",
   '  exit 1',
   'fi',
