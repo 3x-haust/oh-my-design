@@ -379,6 +379,21 @@
   assert: "value === null"
   message: "Flat type hierarchy: {value}. Font sizes all cluster between 13–19px or adjacent steps differ by less than 1.15×. Size stops carrying hierarchy. Establish at least three steps at 1.25× minimum (e.g. 14/18/24px). Use weight — not colour shade — to differentiate content at the same size."
 
+# The flat vertical stack — the layout counterpart to SLOP-FLAT-TYPE. On a tall multi-section page,
+# four or more full-bleed sections all share one background (no dark<->light inversion) AND the largest
+# text is barely above body size (no display-scale moment). That is the "safe generic stack": correct
+# restraint on a quiet product, but the slop-free-but-not-distinctive failure on a marketing/showpiece
+# surface. Register-agnostic warn — the eye owns the register verdict. Guarded by >=4 sections and page
+# height >=2000 so it never fires on a short or single-viewport page.
+- id: SLOP-FLAT-STACK
+  layer: 1
+  category: slop
+  severity: warn
+  when: "node.parent === null"
+  value: "(() => { const nodes = ir.nodes; const pageH = nodes.reduce((m, n) => Math.max(m, n.box.y + n.box.h), 0); if (pageH < 2000) return null; const bodyW = nodes.reduce((m, n) => Math.max(m, n.box.w), 0); const sections = nodes.filter(n => n.type === 'FRAME' && n.box.w >= bodyW * 0.9 && n.box.h >= 320); if (sections.length < 4) return null; const fills = new Set(sections.filter(n => n.fill).map(n => n.fill.value)); const texts = nodes.filter(n => n.type === 'TEXT' && typeof n.fontSize === 'number' && n.text && n.text.trim().length > 0); if (texts.length < 8) return null; const sizes = texts.map(n => n.fontSize).sort((a, b) => a - b); const maxSize = sizes[sizes.length - 1]; const bodyPool = sizes.filter(s => s >= 12 && s <= 20); const pool = bodyPool.length ? bodyPool : sizes; const body = pool[Math.floor(pool.length / 2)] || 16; const ratio = maxSize / body; return (fills.size <= 1 && ratio < 3) ? { sections: sections.length, sectionBackgrounds: fills.size, maxText: maxSize, body, ratio: Math.round(ratio * 10) / 10 } : null; })()"
+  assert: "value === null"
+  message: "Flat vertical stack: {value}. Several full-bleed sections share one background (no inversion) and the largest text is barely above body size (no display-scale moment) — an evenly-weighted stack any generator would produce. On a quiet product surface this restraint is correct; on a marketing or showpiece surface it is the slop-free-but-not-distinctive failure (theory/expressive.md § The register decision): commit one display-scale type moment, a section inversion at the conceptual turn, or a real layout break — or record why this surface is quiet."
+
 # Type circus: three faces can be a display + text + monospace-numeral system; four or more
 # distinct font families on one page is almost always accidental font soup — a system default,
 # a pasted-in Google Font, a component library's face, and a brand face fighting each other.
