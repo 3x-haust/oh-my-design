@@ -92,9 +92,10 @@ When the brief names a real, existing subject, reference research begins by esta
 
 Concept selection is exploratory, not a single guess. Grounded in that gallery and domain evidence, the concept stage enumerates multiple distinct main-screen visual directions — each a named generator/metaphor, colour and typographic register, surface/material stance, density posture, and one memorable moment — then blind-selects the strongest direction and records it durably with its rejected alternatives. The number of directions scales with ambition and uncertainty; an awards-level or explicitly ambitious brief explores more. This visual-direction selection is a direction signal only: it never replaces the structural sketch divergence, the task/accessibility/viewport UX gates, the blind copy/type/critique gates, or the clean-room boundary, and the chosen direction still passes `omd composition --check` and every downstream gate. A result whose visual system is a generic default — unstyled or stock controls, flat undifferentiated fields, weak typographic hierarchy, arbitrary whitespace, or no distinctive surface/material and colour system — fails the visual acceptance gate even when every task succeeds; beautiful production-grade UI and sound UX are co-equal requirements.
 
-Visual-reference assembly is chat-first. The scout presents the exact `omd ref candidates`
-Markdown in the conversation; the coordinator records the user choice (or an explicitly
-disclosed agent choice when interaction is unavailable) through `omd ref select` and
+Visual-reference assembly is chat-first (no board UI). The scout records the candidates; the
+coordinator selects the strongest itself, disclosing its choice and reason — it does not ask the user
+to pick a candidate, and a candidate the user explicitly named still wins. It records the selection
+through `omd ref select` and
 `omd ref check`. No stage opens or asks the user to open a board UI, HTML, PNG, or
 `omd-board`. Interactive browsing and user-directed gallery-region capture use browser-rs
 first. Only an observed initialization/capability failure permits headless, reduced-motion

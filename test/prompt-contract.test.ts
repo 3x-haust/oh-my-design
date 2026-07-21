@@ -526,3 +526,18 @@ test('the run closes by reporting usage (elapsed + tokens) in the final chat, ne
   const skill = read('src/skills/omd-ultradesign/SKILL.md').replace(/\s+/g, ' ');
   assert.match(skill, /close the final chat response with this run's usage: run `omd usage`/i);
 });
+
+test('the coordinator auto-selects the strongest reference candidate and never asks the user to pick', () => {
+  const proto = read('core/protocol/reference-assembly.md').replace(/\s+/g, ' ');
+  assert.match(proto, /The coordinator selects the strongest candidate itself/i);
+  assert.match(proto, /never pauses to ask the user to pick a candidate/i);
+  const loop = read('core/protocol/human-design-loop.md').replace(/\s+/g, ' ');
+  assert.match(loop, /the coordinator selects the strongest itself/i);
+  assert.match(loop, /does not ask the user to pick a candidate/i);
+  const skill = read('src/skills/omd-ultradesign/SKILL.md').replace(/\s+/g, ' ');
+  assert.match(skill, /The coordinator selects the strongest candidate itself and records it with `omd ref select`/i);
+  assert.match(skill, /does not pause to ask the user to pick a candidate/i);
+  const scout = read('src/agents/scout.agent.yaml').replace(/\s+/g, ' ');
+  assert.match(scout, /The coordinator selects the strongest candidate itself/i);
+  assert.match(scout, /never asks the user to pick a candidate/i);
+});
