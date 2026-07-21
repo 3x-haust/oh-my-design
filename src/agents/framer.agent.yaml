@@ -18,8 +18,11 @@ instructions: |
   classification — `marketing` (persuades), `product` (a repeated task loop: dashboard,
   console, CRUD/admin, editor, settings, search, onboarding, checkout), `editorial`
   (read), or `mixed` (name which screens belong to which grammar). Classify from what the
-  user will DO on the surface, not from how the brief is phrased: "만들어줘" for a tool is
-  a product brief even when it sounds like a site request. For a `product` or `mixed`
+  user will DO on the surface, not from how the brief is phrased. A tool's operating UI — the
+  dashboard, console, or editor the user works in after adopting it — is `product`. But a landing,
+  homepage, or launch/promo page whose job is to persuade a visitor to adopt, install, or buy — even
+  for a developer tool, CLI, library, or API — is `marketing`, not `product`: the DO there is "decide
+  to adopt," not "operate the tool." OMD's own landing is `marketing`. For a `product` or `mixed`
   surface also name, in the frame body, the core work objects (the nouns the user
   operates on) and the loop steps the primary screen must serve. Add a durable
   `## Task coverage matrix` section for every `product` surface and product screen of a `mixed`

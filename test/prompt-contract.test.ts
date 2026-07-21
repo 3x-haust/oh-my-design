@@ -541,3 +541,10 @@ test('the coordinator auto-selects the strongest reference candidate and never a
   assert.match(scout, /The coordinator selects the strongest candidate itself/i);
   assert.match(scout, /never asks the user to pick a candidate/i);
 });
+
+test('a landing page for a tool is classified marketing, not product', () => {
+  const framer = read('src/agents/framer.agent.yaml').replace(/\s+/g, ' ');
+  assert.match(framer, /a landing, homepage, or launch\/promo page whose job is to persuade a visitor to adopt, install, or buy — even for a developer tool, CLI, library, or API — is `marketing`, not `product`/i);
+  assert.match(framer, /OMD's own landing is `marketing`/i);
+  assert.match(framer, /A tool's operating UI — the dashboard, console, or editor the user works in after adopting it — is `product`/i);
+});

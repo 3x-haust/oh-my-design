@@ -947,3 +947,39 @@ test('SLOP-FLAT-TYPE does not fire on pages with fewer than three distinct font 
   const v = check(normalize({ nodes }), builtin, { categories: ['slop'] });
   assert.ok(!v.some((x) => x.id === 'SLOP-FLAT-TYPE'), 'unexpected SLOP-FLAT-TYPE for two-size page');
 });
+
+// ── SLOP-FLAT-STACK ───────────────────────────────────────────────────────────
+const flatStackNodes = (over: { fills?: string[]; maxText?: number } = {}): RawNode[] => {
+  const fills = over.fills ?? ['#FFFFFF', '#FFFFFF', '#FFFFFF', '#FFFFFF'];
+  const sections = fills.map((f, i) => makeChildNode('root', {
+    id: `sec${i}`, type: 'FRAME', box: { x: 0, y: i * 520, w: 1280, h: 500 }, fill: { value: f, token: null },
+  }, i));
+  const textSizes = [over.maxText ?? 36, 16, 16, 16, 16, 16, 16, 16];
+  const texts = textSizes.map((fs, i) => makeChildNode('root', {
+    id: `t${i}`, type: 'TEXT', text: `Section copy line number ${i}`, fontSize: fs, box: { x: 0, y: i * 30, w: 480, h: 24 },
+  }, i + 20));
+  const root = makeRootNode({ children: [...sections.map((s) => s.id), ...texts.map((t) => t.id)], box: { x: 0, y: 0, w: 1280, h: 2100 } });
+  return [root, ...sections, ...texts];
+};
+
+test('SLOP-FLAT-STACK fires on a tall single-background stack with no display-scale type', () => {
+  const v = runSlop(flatStackNodes());
+  assert.ok(v.some((x) => x.id === 'SLOP-FLAT-STACK'), 'expected SLOP-FLAT-STACK on a flat uniform stack');
+});
+
+test('SLOP-FLAT-STACK does not fire when a section inversion is present', () => {
+  const v = runSlop(flatStackNodes({ fills: ['#FFFFFF', '#111111', '#FFFFFF', '#111111'] }));
+  assert.ok(!v.some((x) => x.id === 'SLOP-FLAT-STACK'), 'two section backgrounds (inversion) should not fire');
+});
+
+test('SLOP-FLAT-STACK does not fire when a display-scale type moment is present', () => {
+  const v = runSlop(flatStackNodes({ maxText: 72 })); // 72/16 = 4.5x, well above the 3x floor
+  assert.ok(!v.some((x) => x.id === 'SLOP-FLAT-STACK'), 'a display-scale headline should not fire');
+});
+
+test('SLOP-FLAT-STACK does not fire on a short single-viewport page', () => {
+  const root = makeRootNode({ children: ['sec0'], box: { x: 0, y: 0, w: 1280, h: 700 } });
+  const sec = makeChildNode('root', { id: 'sec0', type: 'FRAME', box: { x: 0, y: 0, w: 1280, h: 500 }, fill: { value: '#FFFFFF', token: null } }, 0);
+  const v = runSlop([root, sec]);
+  assert.ok(!v.some((x) => x.id === 'SLOP-FLAT-STACK'), 'a short page (pageH < 2000) should not fire');
+});
