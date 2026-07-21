@@ -89,9 +89,10 @@ is provenance only, never an importer input or production asset.
 
 After analysis, write the internal candidate record, run `omd ref check`, then paste the exact
 `omd ref candidates` Markdown table directly into Codex/Claude chat. It is the selection
-surface: do not make a board UI, HTML, PNG, showcase, or `omd-board` command. The coordinator
-records the user's exact candidate id with `omd ref select`; if interaction is unavailable,
-the coordinator records a clearly disclosed agent selection instead. Downstream receives only
+surface: do not make a board UI, HTML, PNG, showcase, or `omd-board` command. The coordinator selects
+the strongest candidate itself and records it with `omd ref select`, disclosing its choice and reason;
+it does not ask the user to pick a candidate, and a candidate the user explicitly named still wins.
+Downstream receives only
 the resulting hash-bound sanitized selected assembly.
 Work at component granularity: for a specific button, card, or region, capture that exact
 component with a tight `--selector` and `--shot`, and record its own take, avoid, and

@@ -132,10 +132,10 @@ analysis, and candidate assemblies before the coordinator continues. `protocol/c
 
 After `omd ref check` passes, paste the exact `omd ref candidates` Markdown table directly into
 the Codex/Claude chat. It is the sole candidate presentation: never direct the user to a board UI,
-HTML, PNG, showcase, or `omd-board`. Record the user's exact candidate id with `omd ref select`,
-then run `omd ref check` again. If interaction is unavailable under the run configuration, make one
-agent selection only with a clear disclosure and reason in `.omd/decisions.md`; never imply that
-the user selected it. Do not invoke composer, eye, or hand yet. Once each applicable
+HTML, PNG, showcase, or `omd-board`. The coordinator selects the strongest candidate itself and records
+it with `omd ref select`, then runs `omd ref check` again, disclosing its choice and reason in
+`.omd/decisions.md`; it does not pause to ask the user to pick a candidate, and a candidate the user
+explicitly named still wins. Do not invoke composer, eye, or hand yet. Once each applicable
 project-owned brief/copy/type/register/palette/material input has its normal clean check, the
 coordinator/host derives the two-to-three independent image-first art-direction directions directly
 from the selected assembly, the selected references, any project rough, and permitted project-owned
