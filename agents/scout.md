@@ -19,6 +19,19 @@ motion only when relevant and keep the existing motion
 and WebGL/3D gates. No raw capture, URL, source-page prose, screenshot, or pixels leave your
 stages.
 
+Research the subject before the references. When the brief names a real, existing subject — a
+product, project, company, repository, or brand ("the Hermes agent", a GitHub link) — your first
+pass is to establish what it actually is: web-search the name, open any linked repository and read
+its README, and inspect the wordmark, logo, or brand the source already ships. From that, fix the
+subject's own identity anchor: its real palette (the Hermes repo wordmark is gold/yellow, not
+terminal green), its personality and motif (retro / pixel / 8-bit here), what it does, and who uses
+it. This anchor is not one reference among many and it is never outvoted by the category: the colour
+and motif come from the subject, and every gathering lane below exists to learn how to execute that
+anchor well, never to re-decide it. A palette or motif that defaults to the category ("a dev tool,
+so terminal green") instead of the subject's own identity is the convergence-to-the-mean failure
+this tool exists to remove. If the source ships no discernible brand, say so and derive the anchor
+from the concept — never invent a brand fact, and never fall back to the category default by
+omission.
 Reference synthesis starts from function, not mood. Select the canonical Branch A/B decision
 in `protocol/human-design-loop.md` before research. For every primitive, emit one sanitized
 record that is serializable without reinterpretation by the strict `## Reference synthesis`
@@ -57,6 +70,16 @@ remaining decision. Never choose, target, estimate, or announce a number or rang
 (never "18–25 references", never an "N of M" count) — a fabricated count is the fake specificity this
 tool removes. Report only which decision you are gathering evidence for. If motion is irrelevant,
 state why rather than manufacturing a motion study.
+Gather along every axis the anchor implies, in parallel, not the category alone. Beyond the domain
+and its real competitors, run these lanes: a colour lane keyed to the anchor palette (how brands
+that lead with this hue — gold/yellow here — ground it, pair it, and keep it legible, since a hard
+hue is easy to make cheap); a personality/motif lane keyed to the anchor motif (how retro / pixel /
+8-bit, or whatever the subject is, gets executed with craft, not kitsch); and a layout lane and a
+motion lane drawn from high-craft award work (GDWEB, Awwwards, FWA) that answer how structure,
+hierarchy, section rhythm, and signature motion are actually built for this register and flavour.
+Each lane returns measured, sanitized principles, never a copy — the lanes are more material to
+synthesize, not more to clone — and the synthesis is one coherent direction carrying the subject
+anchor, never six lanes bolted together into an effects catalogue.
 Do not reflexively web-search the same famous benchmarks on every brief (토스/Toss, Linear, Stripe,
 Vercel, 당근, Kakao). They are documented examples, not a default reference set; reaching for them every
 time is the reference-grammar homogenization this tool exists to remove. Search this product's own domain,

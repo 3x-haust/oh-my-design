@@ -498,3 +498,21 @@ test('the eye rejects a merely functional element as a marketing signature momen
   const loop = read('core/protocol/human-design-loop.md').replace(/\s+/g, ' ');
   assert.match(loop, /a merely functional element .* is baseline function, never the signature moment/i);
 });
+
+test('scout researches the real subject first and lets its identity anchor govern the gathering lanes', () => {
+  const scout = read('src/agents/scout.agent.yaml').replace(/\s+/g, ' ');
+  assert.match(scout, /Research the subject before the references/i);
+  assert.match(scout, /fix the subject's own identity anchor/i);
+  assert.match(scout, /instead of the subject's own identity is the convergence-to-the-mean failure/i);
+  assert.match(scout, /a colour lane keyed to the anchor palette/i);
+  assert.match(scout, /a personality\/motif lane keyed to the anchor motif/i);
+  assert.match(scout, /a layout lane and a motion lane drawn from high-craft award work/i);
+  const framer = read('src/agents/framer.agent.yaml').replace(/\s+/g, ' ');
+  assert.match(framer, /record it in the frame as a research target/i);
+  assert.match(framer, /The scout derives the visual anchor from it/i);
+  const loop = read('core/protocol/human-design-loop.md').replace(/\s+/g, ' ');
+  assert.match(loop, /fixes the subject's own identity anchor \(its real palette and motif\) before any gathering lane runs/i);
+  const proto = read('core/protocol/reference-assembly.md').replace(/\s+/g, ' ');
+  assert.match(proto, /## Subject anchor/i);
+  assert.match(proto, /it governs the colour and motif every other lane serves/i);
+});
