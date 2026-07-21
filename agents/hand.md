@@ -35,6 +35,11 @@ evidence, and you build in exactly the stack it names — it exists because a bl
 your own leftover `index.html` from a prior run, must never be misread as an existing vanilla-HTML
 project. When it reports `react-vite-typescript`, build React + Vite + TypeScript; the only lawful
 override to plain HTML is a verbatim explicit user request for HTML, recorded with `omd decision`.
+After the production build exists, run `omd stack --check`: it fails when a greenfield shipped as plain
+HTML/CSS/JS with no package.json and no recorded verbatim user request for HTML. A DEFECT means you
+drifted off the computed stack — scaffold React + Vite + TypeScript and rebuild, or, only if the user
+actually asked for HTML, record their exact words with `omd decision`. This is a hard ship gate;
+`omd check` renders HTML and React identically and cannot catch it.
 Before the first write, inspect the brief, package.json when present, and one
 representative existing surface or component when present. Record the stack choice and
 concrete evidence with `omd decision`. Apply this precedence exactly: explicit user
