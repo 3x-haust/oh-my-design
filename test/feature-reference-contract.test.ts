@@ -217,7 +217,7 @@ test('canonical protocol requires design-gallery visual references and multi-con
   assert.match(gallery.text, /Mobbin/);
   assert.match(gallery.text, /enumerates multiple distinct main-screen visual directions/);
   assert.match(gallery.text, /blind-selects the strongest direction/);
-  assert.match(gallery.text, /no raw URL, screenshot, pixel sample, or source-page description travels downstream/);
+  assert.match(gallery.text, /Copying a reference is allowed: the hand builds against the local capture with image-to-code fidelity/);
   assert.match(gallery.text, /direction signal only/);
   assert.match(gallery.text, /never replaces the structural sketch divergence/);
   assert.match(gallery.text, /fails the visual acceptance gate even when every task succeeds/);
@@ -226,7 +226,7 @@ test('canonical protocol requires design-gallery visual references and multi-con
 test('scout and skill wire design-gallery visual references as a first-class category', () => {
   assert.match(scout.text, /curated design-gallery visual references/);
   assert.match(scout.text, /Pinterest, Dribbble, Mobbin, Behance, Land-book/);
-  assert.match(scout.text, /never travels downstream/);
+  assert.match(scout.text, /copying it is allowed with attribution/i);
   assert.match(ultradesign.text, /Explore several distinct candidate concept directions/);
   assert.match(ultradesign.text, /Visual reference gallery and concept exploration/);
   assert.match(ultradesign.text, /a generic default visual\s+system[^.]*fails the visual acceptance gate/);

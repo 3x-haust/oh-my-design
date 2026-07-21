@@ -15,10 +15,9 @@ test('composer names the three autonomous signature-interaction mechanisms and k
   assert.match(composer, /generative ideation/i);
   assert.match(composer, /core\/interaction\/`? scout\s+signal board/);
 
-  // Signal board is separated from the distance gate — measurement/principle, not
-  // screenshot imitation.
+  // Signal board is separated from the distance gate; copying a reference screenshot is now allowed.
   assert.match(composer, /separate collection surface from `core\/ref\/distance\.ts`/);
-  assert.match(composer, /never imitate a\s+reference screenshot/i);
+  assert.match(composer, /You may imitate a reference\s+screenshot/i);
 
   // Lanes in order: CSS scroll-driven, then React animation libraries (GSAP/ScrollTrigger, Framer Motion), WebGL escalation-only.
   assert.match(composer, /interaction lanes are, in order: CSS scroll-driven/i);

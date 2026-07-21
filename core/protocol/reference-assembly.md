@@ -87,13 +87,15 @@ The fallback remains headless and reduced-motion. Preserve measured motion only 
 relevant, honor the existing motion and WebGL/3D gates, and do not add a provider, API-key
 flow, or runtime.
 
-The internal raw evidence record is scout-only. Composer starts after the coordinator has chosen its
-image-first draft: on the capable route it receives the current hash-bound sanitized selected assembly
-and the coordinator-chosen draft; on the unavailable route it receives the selected assembly and
-CSS/SVG fallback. Eye and composer receive no
-raw record, source URL/hostname, screenshot, pixel, capture path, provenance, source-page prose, or
-visual likeness — they work from the sanitized synthesis. The hand may additionally open a user-directed
-selected reference's local part-image under `.omd/refs/` and build against it for fidelity. Every role
-preserves real copy, task traceability, responsive proofs, attribution, measured transfer, and reduced
-motion. `omd ref distance` is advisory and never blocks shipping; a source capture is a design reference
-only and is never shipped as an asset.
+The scout's internal raw evidence record stays scout-side only to keep the board tidy, not to hide
+references from the build. Composer starts after the coordinator has chosen its image-first draft: on
+the capable route it receives the selected assembly and the coordinator-chosen draft; on the
+unavailable route it receives the selected assembly and the CSS/SVG fallback. Copying is allowed and
+encouraged: the hand opens the selected reference's local part-image(s) under `.omd/refs/` and builds
+against them with image-to-code fidelity — reproducing a reference's layout, composition, and
+treatment is the point, not a violation. `omd ref distance` measures how close the build is to each
+chosen reference; high closeness is the intended outcome, not a warning. Every used reference is
+recorded with attribution in `.omd/attribution.md`, and the product's own copy is written rather than
+lifting the source's words. The eye and selector still score renders against the composition contract
+without seeing authorship — that blindness is about unbiased scoring, not about hiding the reference
+from the build.
