@@ -1,22 +1,22 @@
-import { useReveal } from "../hooks/useReveal";
-import type { Locale } from "../data/content";
-import { getCopy } from "../data/i18n";
-
-// Copy verbatim from .omd/copy-deck.md Hero section. Focal hierarchy per
-// composition.md: hero carries ~90% of first-viewport visual mass, no diagram.
-export function Hero({ locale }: { locale: Locale }) {
-  const t = getCopy(locale);
-  // Gated on document.fonts.ready, not an immediate reveal — see useReveal.ts.
-  const ref = useReveal<HTMLElement>(0.2, true);
-
+export default function Hero() {
   return (
-    <section className="hero stagger" ref={ref} id="top">
-      <h1>{t.hero.title}</h1>
-      <p className="hero-body">{t.hero.body}</p>
-      <a className="cta" href="#install">
-        {t.hero.ctaPrefix}
-        <code>npm install -g @3xhaust/oh-my-design</code>
-      </a>
-    </section>
-  );
+    <div className="grid hero">
+      <div className="prose">
+        <h1>Confident output is not the same as accountable output.</h1>
+        <p className="subhead">
+          A coding agent can generate a UI that looks finished in one prompt. It cannot tell you
+          why it chose that layout, that copy, or that color, because nothing recorded the
+          choice. Oh My Design (OMD) makes the agent write down every decision — before, during,
+          and after the build — so the reasoning survives the run.
+        </p>
+        <a className="cta" href="#ledger">
+          Read the stage record below
+        </a>
+        <nav className="gate-links" data-region="gate-links" aria-label="Fast credibility checks">
+          <a href="#cli-proof">See the actual commands that enforce this gate</a>
+          <a href="#footer">View the source on GitHub</a>
+        </nav>
+      </div>
+    </div>
+  )
 }

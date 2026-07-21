@@ -1,25 +1,32 @@
-import "./app.css";
-import type { Locale } from "./data/content";
-import { Nav } from "./components/Nav";
-import { Hero } from "./components/Hero";
-import { Loop } from "./components/Loop";
-import { EvidenceTable } from "./components/EvidenceTable";
-import { Skills } from "./components/Skills";
-import { Install } from "./components/Install";
-import { Footer } from "./components/Footer";
+import Hero from './components/Hero'
+import Ledger from './components/Ledger'
+import DiffBand from './components/DiffBand'
+import BlindReview from './components/BlindReview'
+import Lego from './components/Lego'
+import CliProof from './components/CliProof'
+import Install from './components/Install'
+import Footer from './components/Footer'
 
-export default function App({ locale = "en" }: { locale?: Locale }) {
+function App() {
   return (
     <>
-      <Nav locale={locale} />
+      <a className="skip-link" href="#ledger">
+        Skip to the stage record
+      </a>
       <main>
-        <Hero locale={locale} />
-        <Loop locale={locale} />
-        <EvidenceTable locale={locale} />
-        <Skills locale={locale} />
-        <Install locale={locale} />
+        <Hero />
+        <Ledger />
+        <DiffBand />
+        <BlindReview />
+        <Lego />
+        <CliProof />
+        <Install />
       </main>
-      <Footer locale={locale} />
+      <footer>
+        <Footer />
+      </footer>
     </>
-  );
+  )
 }
+
+export default App

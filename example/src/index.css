@@ -1,306 +1,505 @@
-/* ============================================================
-   Design tokens — every value below cites a board capture or a
-   theory file. See .omd/attribution.md for the full table.
-   ============================================================ */
+/* Oh My Design — production landing page
+   Type system: IBM Plex Sans (variable, self-hosted) + IBM Plex Mono, per .omd/type-proof.md
+   Structure: candidate-b (blind-selection winner), per .omd/.cache/sketches/candidate-b/index.html
+   Composition contract: .omd/composition.md (hash-bound, `omd composition --check` clean) */
+
+@font-face {
+  font-family: 'Plex Sans';
+  src:
+    url('./assets/fonts/PlexSans-var.woff2') format('woff2-variations'),
+    url('./assets/fonts/PlexSans-var.woff2') format('woff2');
+  font-weight: 400 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Plex Mono';
+  src: url('./assets/fonts/PlexMono-400.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Plex Mono';
+  src: url('./assets/fonts/PlexMono-500.woff2') format('woff2');
+  font-weight: 500;
+  font-display: swap;
+}
+
 :root {
-  /* ---- color ----
-     theory/color.md: developer tools read as dark-mode-by-genre, but the same file
-     names the explicit exception — "Colour the UI dark and the marketing light" for
-     products (Vercel, Linear) positioned at technical users who read a light
-     marketing surface before ever opening the dark tool. OMD's own font citation
-     (Geist Sans/Mono) IS Vercel's own design system, so this page follows Vercel's
-     own marketing register: light, cool-neutral, cool background says "focus" per
-     theory/color.md's background-temperature section. Accent is a single
-     low-saturation green (not indigo/violet or purple/pink — SLOP-GRADIENT hue
-     bands avoided) — chosen because the domain grammar's "checked" stage state is
-     the one semantically loaded moment on the page, and theory/color.md: low
-     saturation reads authoritative/premium, appropriate for an enterprise/process
-     tool whose whole thesis is rigor-before-hype (copy-deck.md voice contract). */
-  --color-bg: #fafbfa;
-  --color-surface: #f1f4f2;
-  --color-surface-strong: #e5eae6;
-  --color-ink: #10160f;
-  --color-ink-muted: rgba(16, 22, 15, 0.62);
-  --color-ink-faint: rgba(16, 22, 15, 0.4);
-  --color-rule: rgba(16, 22, 15, 0.14);
-  --color-rule-strong: rgba(16, 22, 15, 0.32);
-  --color-accent: #1f7a52;
-  --color-accent-bright: #52e0a8;
-  --color-mono-panel: #10160f;
-  /* theory/color.md: dark-surface elevation is a white-tint overlay (Material's
-     4/8/12/16/24% ladder), never a lighter flat hex. #2d322c is #10160f flattened
-     with 12% white pre-computed to a literal solid value (not color-mix()) so
-     every consumer — including static analysis that does not evaluate CSS color
-     functions — resolves the same opaque color. Used for the code-copy button so
-     it reads as a distinct, lower elevation than the page's one filled primary
-     (.hero .cta). */
-  --color-mono-panel-raised: #2d322c;
-  --color-mono-ink: #eef2ee;
-  --color-mono-ink-muted: rgba(238, 242, 238, 0.64);
-  --color-paper: #ffffff;
+  --ink: #111111;
+  --paper: #ffffff;
+  --line: #bbbbbb;
+  --gray-1: #f2f2f2;
+  --gray-2: #e2e2e2;
+  --gray-3: #cfcfcf;
+  --gray-dark: #2b2b2b;
+  --gray-dark-line: #555555;
 
-  /* ---- type ----
-     Family citation: vercel.com.geist-design-system.json (fontFamilies
-     ["geist","geist mono","geistsans"]) corroborated by
-     ui.shadcn.com.shadcn-docs-components.json and
-     ui.shadcn.com.shadcn-codeblock-anatomy.json — three independent captures name
-     the same family pair (.omd/type-proof.md). Korean-capable fallback added after
-     Geist Sans per .omd/decisions.md (Geist Sans's unicode-range false-positives
-     document.fonts.check() for Hangul it has no glyphs for). */
-  --font-sans: "Geist Sans", "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR",
-    ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "Geist Mono", "Apple SD Gothic Neo", "Malgun Gothic", ui-monospace,
-    "SFMono-Regular", Menlo, Consolas, monospace;
+  /* Reserved accent: "stamp ink" — used only for the primary CTA per section and the
+     ledger's stage-index numerals, so it reads as the literal ink of the provenance
+     stamp the copy describes, never as scattered decoration. ~8.2:1 contrast on white. */
+  --color-stamp: #8f2d18;
+  --color-focus-ring: var(--ink);
+  --color-selection-bg: rgba(17, 17, 17, 0.14);
+  --color-selection-text: var(--ink);
 
-  /* type scale — .omd/type-proof.md 10-role map, reused exactly */
-  --text-2xs: 12px;
-  --text-xs: 13px;
-  --text-sm: 15px;
-  --text-base: 17px;
-  --text-lg: 22px;
-  --text-xl: 30px;
-  --text-display: 64px;
-  --text-display-mobile: 34px;
-
-  --lh-body: 1.55;
-  --lh-display: 1.08;
-  --lh-tight: 1.25;
-  --lh-mono-block: 1.7;
-
-  --weight-regular: 400;
-  --weight-medium: 500;
-  --weight-semibold: 600;
-
-  /* ---- spacing ladder ----
-     vercel.com.geist-design-system.json spacingLadder [4,6,8,12,16,24,32] (the
-     type/font citation source) extended with 40/48 from
-     linear.app.linear-pipeline-motion-study.json spacingLadder (…40,48) and 96 from
-     apple.com.apple-scroll-motion-study.json spacingLadder (…96) for section-level
-     rhythm — .omd/composition.md's density arc needs a larger step than the
-     component-level ladder provides. */
-  --space-1: 4px;
-  --space-2: 6px;
-  --space-3: 8px;
-  --space-4: 12px;
-  --space-5: 16px;
-  --space-6: 24px;
-  --space-7: 32px;
-  --space-8: 40px;
-  --space-9: 48px;
-  --space-10: 64px;
-  --space-11: 96px;
-
-  /* ---- radius ladder ----
-     linear.app.linear-pipeline-motion-study.json radiusLadder
-     [4,6,8,12,16,50,9999] corroborated by vercel.com.geist-design-system.json
-     radiusLadder [6,50,pill]. */
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 8px;
-  --radius-xl: 12px;
-  --radius-pill: 9999px;
-
-  /* ---- motion ---- see .omd/motion-spec.md for the full per-scene citation table */
-  --duration-instant: 150ms; /* warp.dev.warp-nav-anatomy + resend.com.resend-motion-study */
-  --duration-fast: 200ms; /* vercel.com.geist-design-system */
-  --duration-base: 250ms; /* apple.com.apple-scroll-motion-study */
-  --duration-scene: 320ms; /* apple.com.apple-scroll-motion-study (scroll-tied capture) */
-  --duration-list: 280ms; /* core/motion/recipes/stagger-orchestrator.md */
-  --duration-hero-entrance: 800ms; /* stripe.com.stripe-motion-study — the one 800ms
-    value in that capture's duration set, reserved for the single first-load moment;
-    every other duration on the page stays in the 150-320ms band. See motion-spec.md. */
-
-  --ease-standard: cubic-bezier(0.2, 0, 0, 1); /* core/motion/easing.md */
-  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1); /* core/motion/easing.md */
-  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1); /* core/motion/easing.md */
-  --ease-in-out-quint: cubic-bezier(0.83, 0, 0.17, 1); /* core/motion/easing.md */
-
-  --stagger-hero: 60ms;
-  --stagger-list: 55ms;
-  --stagger-table: 28ms;
-
-  --measure-body: 62ch;
-  --measure-narrow: 58ch;
-  --section-max: 920px;
+  --color-scrollbar-thumb: rgba(17, 17, 17, 0.3);
+  --color-scrollbar-track: transparent;
 }
 
 * {
   box-sizing: border-box;
 }
 
-html {
-  -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--paper);
+  color: var(--ink);
 }
 
 body {
-  margin: 0;
-  background: var(--color-bg);
-  color: var(--color-ink);
-  font-family: var(--font-sans);
-  font-size: var(--text-base);
-  line-height: var(--lh-body);
+  font-family: 'Plex Sans', 'Helvetica Neue', Arial, sans-serif;
+  font-weight: 400;
+  font-size: 16px;
+  line-height: 1.6;
+  scrollbar-color: var(--color-scrollbar-thumb) var(--color-scrollbar-track);
+  scrollbar-width: thin;
 }
 
-h1,
-h2,
-h3 {
-  margin: 0;
-  font-weight: var(--weight-semibold);
+#root {
+  min-height: 100vh;
 }
 
-/* Korean text nodes exist (footer language link) — apply the base rule locally
-   rather than project-wide, since English is the primary language (copy-deck.md
-   F-010) and *-level keep-all would be a no-op everywhere else. */
-[lang="ko"],
-.i18n-ko {
-  word-break: keep-all;
-  overflow-wrap: break-word;
+/* ---- Finish pass: selection, focus, scrollbar ---- */
+
+::selection {
+  background-color: var(--color-selection-bg);
+  color: var(--color-selection-text);
+}
+
+:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--paper),
+    0 0 0 4px var(--color-focus-ring);
+  border-radius: 1px;
+}
+
+.section--inverted :focus-visible {
+  box-shadow:
+    0 0 0 2px var(--gray-dark),
+    0 0 0 4px var(--paper);
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-scrollbar-track);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-scrollbar-thumb);
+  border-radius: 999px;
 }
 
 a {
   color: inherit;
 }
 
-code {
-  font-family: var(--font-mono);
+code,
+pre {
+  font-family: 'Plex Mono', 'Courier New', monospace;
 }
 
-::selection {
-  /* finish-pass.md item 1: derive from --color-accent, never default browser blue */
-  background: var(--color-accent);
-  color: var(--color-paper);
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  background: var(--ink);
+  color: var(--paper);
+  padding: 12px 20px;
+  z-index: 100;
+  font-family: 'Plex Sans', sans-serif;
+  font-weight: 700;
+}
+.skip-link:focus {
+  left: 16px;
+  top: 16px;
 }
 
-:focus {
-  outline: none;
-}
+/* ---- Grid ---- */
 
-:focus-visible {
-  /* finish-pass.md item 2: two-layer box-shadow ring, never bare outline suppression */
-  outline: none;
-  box-shadow:
-    0 0 0 2px var(--color-bg),
-    0 0 0 4px var(--color-accent);
-  border-radius: var(--radius-sm);
-}
-
-/* finish-pass.md item 3: standards-track scrollbar styling first, webkit fallback */
-html {
-  scrollbar-color: var(--color-rule-strong) transparent;
-  scrollbar-width: thin;
-}
-::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-::-webkit-scrollbar-thumb {
-  background: var(--color-rule-strong);
-  border-radius: var(--radius-pill);
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-section,
-footer.site-footer {
-  max-width: var(--section-max);
+.grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  max-width: 1100px;
   margin: 0 auto;
-  padding: 0 var(--space-6);
+  padding: 0 24px;
+  gap: 0 16px;
 }
+
+.prose {
+  grid-column: 2 / 12;
+}
+
+.full {
+  grid-column: 1 / 13;
+}
+
+section {
+  padding: 64px 0;
+}
+
+/* ---- Hero ---- */
+
+.hero {
+  padding-top: 56px;
+  padding-bottom: 40px;
+}
+.hero h1 {
+  font-family: 'Plex Sans', sans-serif;
+  font-weight: 600;
+  font-size: 44px;
+  line-height: 1.12;
+  margin: 0 0 24px;
+  max-width: 62ch;
+}
+.hero .subhead {
+  font-size: 16px;
+  max-width: 62ch;
+  margin: 0 0 32px;
+  color: #333333;
+}
+.hero .cta {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  color: var(--color-stamp);
+  margin: -14px 0 14px -4px;
+  padding: 4px;
+}
+.gate-links {
+  display: flex;
+  gap: 32px;
+  font-size: 14px;
+  font-weight: 500;
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+  list-style: none;
+  margin: 0;
+}
+.gate-links a {
+  color: #333333;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  padding: 4px;
+  margin: -4px;
+}
+
+/* ---- Ledger (dominant anchor) ---- */
+
+.ledger {
+  padding-bottom: 40px;
+}
+.ledger h2,
+.diff-band h2,
+.blind h2,
+.lego h2,
+.cli h2,
+.install h2,
+.footer h2 {
+  font-family: 'Plex Sans', sans-serif;
+  font-weight: 600;
+  font-size: 22px;
+  margin: 0 0 12px;
+}
+.ledger .lede,
+.diff-band .lede {
+  max-width: 68ch;
+  margin: 0 0 8px;
+}
+.ledger .fact {
+  max-width: 68ch;
+  color: #333333;
+  margin: 0 0 32px;
+}
+.ledger-table {
+  border-top: 1px solid var(--ink);
+  margin: 0;
+}
+.ledger-row {
+  display: grid;
+  grid-template-columns: 200px 220px 1fr;
+  gap: 24px;
+  font-family: 'Plex Mono', monospace;
+  font-size: 18px;
+  line-height: 2.2;
+  border-bottom: 1px solid var(--line);
+  padding: 16px 0;
+  margin: 0;
+}
+.ledger-row:last-child {
+  border-bottom: 1px solid var(--ink);
+}
+.ledger-row .label {
+  font-weight: 500;
+}
+.ledger-row .path {
+  color: #444444;
+}
+.ledger-row .desc {
+  color: #444444;
+}
+.ledger .caption {
+  font-size: 13px;
+  color: #555555;
+  margin-top: 16px;
+  max-width: 68ch;
+}
+
+/* ---- Diff: dramatic full-width interstitial band (assigned axis 2) ---- */
+
+.diff-band {
+  background: var(--gray-dark);
+  color: var(--paper);
+  padding: 72px 0;
+  margin: 0;
+}
+.diff-band .grid {
+  max-width: 1100px;
+}
+.diff-band h2 {
+  color: var(--paper);
+}
+.diff-band .lede {
+  color: var(--paper);
+}
+.diff-band .fact {
+  max-width: 68ch;
+  color: #cccccc;
+  margin: 0 0 40px;
+}
+.diff-panels {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.diff-panel {
+  border: 1px solid #777777;
+  padding: 24px;
+  background: var(--gray-dark);
+}
+.diff-panel .stamp {
+  display: inline-block;
+  font-family: 'Plex Mono', monospace;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: 1px solid #999999;
+  padding: 3px 8px;
+  margin-bottom: 16px;
+  color: #dddddd;
+}
+.diff-panel.rejected {
+  border-color: #666666;
+}
+.diff-panel.selected {
+  border-color: #cccccc;
+}
+.diff-panel p {
+  font-family: 'Plex Mono', monospace;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #dddddd;
+  margin: 0;
+}
+.diff-band .caption {
+  font-size: 13px;
+  color: #999999;
+  margin-top: 32px;
+  max-width: 68ch;
+}
+
+/* ---- Blind review / LEGO (return to low density) ---- */
+
+.blind,
+.lego {
+  padding: 64px 0;
+}
+.blind p,
+.lego p {
+  max-width: 68ch;
+  margin: 0;
+}
+
+/* ---- CLI proof (second mass) ---- */
+
+.cli {
+  padding: 64px 0;
+}
+.cli .fact {
+  max-width: 68ch;
+  color: #333333;
+  margin: 0 0 24px;
+}
+.terminal {
+  font-family: 'Plex Mono', monospace;
+  font-size: 15px;
+  line-height: 2;
+  background: var(--gray-1);
+  border: 1px solid var(--line);
+  padding: 24px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+}
+.terminal .prompt {
+  font-weight: 500;
+}
+.terminal .comment {
+  color: #666666;
+}
+.cli .label {
+  font-size: 13px;
+  color: #555555;
+  margin-top: 16px;
+}
+
+/* ---- Install ---- */
+
+.install {
+  padding: 64px 0;
+}
+.install .body-copy {
+  max-width: 68ch;
+  margin: 0 0 16px;
+}
+.install .req {
+  font-size: 14px;
+  color: #444444;
+  margin: 0 0 24px;
+}
+.install-blocks {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.install-block h3 {
+  font-family: 'Plex Sans', sans-serif;
+  font-weight: 500;
+  font-size: 15px;
+  margin: 0 0 8px;
+}
+.install-block .then-run {
+  font-size: 14px;
+  color: #444444;
+  margin: 8px 0 0;
+}
+.install .cta-label {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  margin: 12px 0 0 -4px;
+  padding: 4px;
+  font-weight: 700;
+  font-size: 15px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  color: var(--color-stamp);
+}
+
+/* ---- Footer ---- */
+
+.footer {
+  padding: 56px 0 72px;
+  border-top: 1px solid var(--line);
+}
+.footer p {
+  max-width: 68ch;
+  margin: 0 0 16px;
+}
+.footer .cta-label {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  color: var(--color-stamp);
+  padding: 4px;
+  margin: -4px;
+}
+
+/* ---- Responsive: type-proof's proven mobile treatment ---- */
 
 @media (max-width: 480px) {
-  section,
-  footer.site-footer {
-    padding: 0 var(--space-5);
+  .grid {
+    grid-template-columns: 1fr;
+    padding: 0 20px;
   }
-}
-
-/* ============================================================
-   Motion layer — prefers-reduced-motion wraps everything.
-   In its absence nothing moves outside this block's rules.
-   ============================================================ */
-@media (prefers-reduced-motion: no-preference) {
-  .reveal {
-    opacity: 0;
-    transform: translateY(16px);
-    transition:
-      opacity var(--duration-base) var(--ease-out-expo),
-      transform var(--duration-base) var(--ease-out-expo);
-  }
-  .reveal.is-visible {
-    opacity: 1;
-    transform: none;
+  .prose,
+  .full {
+    grid-column: 1 / 1;
   }
 
-  .stagger > * {
-    opacity: 0;
-    transform: translateY(16px);
-    transition:
-      opacity var(--duration-list) var(--ease-out-quint),
-      transform var(--duration-list) var(--ease-out-quint);
+  .hero h1 {
+    font-size: 44px;
+    max-width: 100%;
   }
-  .stagger.is-visible > * {
-    opacity: 1;
-    transform: none;
+  .gate-links {
+    flex-direction: column;
+    gap: 0;
   }
-
-  /* The hero is the one first-load moment the motion budget is spent on
-     (system prompt: "spend itself where it earns the most — the first-load
-     entrance"). Every other stagger scene on the page stays on --duration-list
-     (280ms); the hero alone gets the slower, deliberate --duration-hero-entrance
-     (800ms, stripe.com.stripe-motion-study). More specific selector overrides
-     the shared .stagger > * rule above. */
-  .hero.stagger > * {
-    transition:
-      opacity var(--duration-hero-entrance) var(--ease-out-expo),
-      transform var(--duration-hero-entrance) var(--ease-out-expo);
+  .gate-links a {
+    display: block;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--line);
+    min-height: 44px;
   }
 
-  .anchor-swap {
-    transition: opacity var(--duration-scene) var(--ease-in-out-quint);
+  .ledger-row {
+    display: block;
+    font-size: 14px;
+    white-space: pre-wrap;
+    line-height: 1.6;
+    padding: 12px 0;
+  }
+  .ledger-row .label {
+    display: block;
+    font-weight: 500;
+    margin-bottom: 2px;
+  }
+  .ledger-row .path {
+    display: block;
+  }
+  .ledger-row .desc {
+    display: block;
   }
 
-  .stage-state,
-  .stage-num {
-    transition:
-      background-color var(--duration-fast) var(--ease-standard),
-      border-color var(--duration-fast) var(--ease-standard),
-      color var(--duration-fast) var(--ease-standard);
+  .diff-panels {
+    grid-template-columns: 1fr;
   }
 
-  .cta,
-  .nav-cta,
-  .chip,
-  .code-copy {
-    transition:
-      background-color var(--duration-instant) var(--ease-standard),
-      color var(--duration-instant) var(--ease-standard),
-      border-color var(--duration-instant) var(--ease-standard),
-      transform var(--duration-instant) var(--ease-standard);
-  }
-
-  .copy-label-swap {
-    transition: opacity var(--duration-instant) var(--ease-standard);
+  .install-blocks {
+    grid-template-columns: 1fr;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .reveal,
-  .stagger > *,
-  .anchor-swap,
-  .stage-state,
-  .stage-num,
-  .cta,
-  .nav-cta,
-  .chip,
-  .code-copy,
-  .copy-label-swap {
-    transition: none !important;
-    opacity: 1 !important;
-    transform: none !important;
-  }
-  .anchor-track {
-    position: static !important;
+  * {
+    scroll-behavior: auto !important;
   }
 }

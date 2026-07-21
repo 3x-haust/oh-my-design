@@ -1,66 +1,46 @@
-import { useRef, useState } from "react";
-import { useReveal } from "../hooks/useReveal";
-import type { Locale } from "../data/content";
-import { getCopy } from "../data/i18n";
-
-const INSTALL_COMMANDS = `npm install -g @3xhaust/oh-my-design
-oh-my-design install
-oh-my-design doctor
-omd doctor`;
-
-type CopyState = "idle" | "success" | "error";
-
-// The one interactive surface on an otherwise static page. Implements the two
-// interaction states that actually apply here: success (Doherty threshold —
-// acknowledgment inside 400ms, here effectively instant) and error (clipboard
-// permission can be denied by the browser). Loading/empty/disabled/offline are
-// recorded as not-applicable via `omd decision` — see .omd/decisions.md.
-export function Install({ locale }: { locale: Locale }) {
-  const t = getCopy(locale);
-  const ref = useReveal<HTMLElement>();
-  const [copyState, setCopyState] = useState<CopyState>("idle");
-  const timeoutRef = useRef<number | undefined>(undefined);
-
-  async function handleCopy() {
-    try {
-      await navigator.clipboard.writeText(INSTALL_COMMANDS);
-      setCopyState("success");
-    } catch {
-      setCopyState("error");
-    } finally {
-      window.clearTimeout(timeoutRef.current);
-      timeoutRef.current = window.setTimeout(() => setCopyState("idle"), 3000);
-    }
-  }
-
+export default function Install() {
   return (
-    <section className="install" id="install" ref={ref}>
-      <h2>{t.install.heading}</h2>
-      <p>{t.install.requires}</p>
-
-      <div className="code-block-wrap">
-        <pre className="code-block">
-          <code>{INSTALL_COMMANDS}</code>
-        </pre>
-        <button type="button" className="code-copy" onClick={handleCopy} aria-label={t.install.copyAriaLabel}>
-          <span className="copy-label-swap" key={copyState}>
-            {copyState === "success" ? t.install.copiedLabel : copyState === "error" ? t.install.copyErrorLabel : t.install.copyLabel}
-          </span>
-        </button>
-      </div>
-
-      <p role="status" aria-live="polite" className="copy-status">
-        {copyState === "success" && t.install.copySuccessStatus}
-      </p>
-      {copyState === "error" && (
-        <p role="alert" className="copy-error">
-          {t.install.copyErrorStatus}
+    <div className="grid install" id="install">
+      <div className="prose">
+        <h2>Install: the two supported paths</h2>
+        <p className="body-copy">
+          Two install paths, same tool underneath. <code>omd check</code> and{' '}
+          <code>omd doctor</code>, above, are this package's project-level CLI, run inside a
+          project once it is installed; <code>oh-my-design install</code> and{' '}
+          <code>oh-my-design doctor</code>, below, are the same package's host-install CLI, run
+          once to set the tool up in the first place.
         </p>
-      )}
-
-      <p className="fine">
-        <code>oh-my-design doctor</code> {t.install.fineHostDoctor} <code>omd doctor</code> {t.install.fineRuntimeDoctor}
-      </p>
-    </section>
-  );
+        <p className="req">Needs Node.js 22.18 or newer, and Claude Code or Codex already configured.</p>
+      </div>
+      <div className="full">
+        <div className="install-blocks">
+          <div className="install-block">
+            <h3>npm — global CLI</h3>
+            <pre className="terminal">{`npm install -g @3xhaust/oh-my-design
+oh-my-design install
+oh-my-design doctor`}</pre>
+            <a
+              className="cta-label"
+              href="https://www.npmjs.com/package/@3xhaust/oh-my-design"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Install via npm — installs the CLI, runs the host install, then verifies with doctor
+            </a>
+          </div>
+          <div className="install-block">
+            <h3>Claude Code — plugin marketplace</h3>
+            <pre className="terminal">{`/plugin marketplace add 3x-haust/oh-my-design
+/plugin install oh-my-design@omd`}</pre>
+            <p className="then-run">
+              Then run <code>/ultradesign</code> in a session.
+            </p>
+            <a className="cta-label" href="#install">
+              Add the plugin marketplace — then run /ultradesign
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
 }
