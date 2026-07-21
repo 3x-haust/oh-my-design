@@ -15,7 +15,7 @@ const violations = check(ir, rules);
 const at = (cls: string) => violations.filter((v) => v.path.endsWith(cls));
 
 test('the eye reads CSS custom properties as design tokens', () => {
-  assert.deepEqual(seen.tokens, { surface: '#FFFFFF', ink: '#111111', brand: '#FF5A1F' });
+  assert.deepEqual(seen.tokens, { surface: '#FFFFFF', ink: '#111111', brand: '#FF5A1F', radius: '8PX' });
 });
 
 test('a tokenised, on-grid, accessible card produces no findings', () => {

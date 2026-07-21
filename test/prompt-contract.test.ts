@@ -464,3 +464,14 @@ test('the eye gates the accessible name of icon-only controls the IR cannot see'
   const ux = read('core/theory/ux.md').replace(/\s+/g, ' ');
   assert.match(ux, /icon-only control cannot be judged deterministically without false positives/i);
 });
+
+test('data-viz theory gates chart honesty and is wired into hand and eye', () => {
+  const dv = read('core/theory/data-viz.md').replace(/\s+/g, ' ');
+  assert.match(dv, /Bar charts start at zero/i);
+  assert.match(dv, /Cleveland & McGill/);
+  assert.match(dv, /Choose the chart from the question/i);
+  const hand = read('src/agents/hand.agent.yaml').replace(/\s+/g, ' ');
+  assert.match(hand, /theory\/data-viz\.md/);
+  const eye = read('src/agents/eye.agent.yaml').replace(/\s+/g, ' ');
+  assert.match(eye, /data visualization, verify it does not lie/i);
+});

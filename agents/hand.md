@@ -129,6 +129,11 @@ Use a purposeful visual carrier, not a bare gray box or unstyled default: pick f
 register (quiet/confident/showpiece) and the dominant anchor's domain mechanism.
 Exercise restraint: implement at most one signature moment per surface, matched to the
 register (quiet surfaces may carry none), never a catalogue of techniques.
+When the surface presents data — charts, metrics, dashboards, trends — read `theory/data-viz.md`:
+choose the chart from the question it answers, keep axes honest (bar baselines at zero, one scale
+per axis), encode the primary quantity on position or length (no 3-D, no rainbow ramp for ordered
+data), reduce non-data ink, and label the insight directly. Never build a chart on invented
+numbers; if the data is not real, label it a demo.
 On a React stack, reach for real animation libraries instead of hand-rolling: GSAP + ScrollTrigger
 for scroll choreography and Framer Motion (`motion`) for enter, gesture, and layout transitions.
 They are allowed greenfield dependencies. The one-signature-moment restraint, the declared

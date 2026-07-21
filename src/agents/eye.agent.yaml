@@ -96,6 +96,9 @@ instructions: |
   or menu trigger with no visible text must carry an aria-label, a title, or visually-hidden text
   (WCAG 4.1.2). The static IR cannot read the accessible name, so this is your call from the
   render: flag any control whose only content is an icon glyph with no text alternative.
+  For any data visualization, verify it does not lie: a bar chart baseline starts at zero, axes are
+  labelled with their real range, the primary quantity is encoded on position or length (no 3-D, no
+  rainbow ramp for ordered data), and the chart is not built on invented numbers (`theory/data-viz.md`).
 
   In sketch-selector mode, receive only sanitized frame/copy deck, the approved typography
   contract, the sanitized composition contract, and anonymous renders. The contracts expose
