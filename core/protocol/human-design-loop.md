@@ -33,6 +33,7 @@ stack. Before the hand's first write it reads the brief, package.json when prese
 representative existing surface/component when present, then records the stack choice and evidence
 with `omd decision`. Framework scaffold dependencies (when a framework is chosen) are allowed; existing
 projects receive no unnecessary dependencies.
+Deciding the stack is not permission to build it: no production write — including creating `package.json`, `tsconfig`, `vite.config`, or any framework skeleton — happens before framing and the scout's research are complete. An explicit stack request records the `omd stack`/`omd decision` choice only; scaffolding and every other production write remain owned by the hand phase, after the frame, copy, composition, and sketch selection. Building or scaffolding first because the stack is pre-named is a routing defect, not a lawful shortcut.
 Immediately after scaffold/dependency resolution, resolve every newly introduced import/export
 against the exact installed versions, parse generated configuration with its owning tool, and run
 focused typecheck, build, and test-discovery. Repeat this smoke verification after every

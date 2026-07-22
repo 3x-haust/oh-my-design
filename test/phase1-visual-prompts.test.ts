@@ -60,6 +60,19 @@ test('a restrained-colour marketing surface carries its register through scale, 
   assert.match(composer, /One systematic detail layer may reinforce the anchor[\s\S]*never a decorative catalogue and never a substitute for the one signature moment/i);
 });
 
+test('deciding the stack is not permission to build before framing and research', () => {
+  const skill = read('src/skills/omd-ultradesign/SKILL.md');
+  const protocol = read('core/protocol/human-design-loop.md');
+  for (const source of [skill, protocol]) {
+    // No production write — scaffolding included — before the frame and the scout's research.
+    assert.match(source, /Deciding the stack is not permission to build it/i);
+    assert.match(source, /no production write[\s\S]*before[\s\S]*fram/i);
+    // An explicit stack request records the decision only; it never licenses building first.
+    assert.match(source, /explicit stack request[\s\S]*omd decision/i);
+    assert.match(source, /routing defect, not a lawful shortcut/i);
+  }
+});
+
 test('art direction is evidence-bound autonomous none|one with carrier and decision-fit floors', () => {
   const protocol = read('core/protocol/human-design-loop.md');
   const hand = read('src/agents/hand.agent.yaml');

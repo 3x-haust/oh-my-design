@@ -59,6 +59,14 @@ is OMD's own leftover output — not a user stack, and it never pins the stack. 
 before its first production write, records the choice and evidence with `omd decision`, and builds
 accordingly. Framework scaffold dependencies (when a framework is chosen) are allowed; existing
 projects receive no unnecessary dependencies.
+**Deciding the stack is not permission to build it.** No production write happens before the frame
+is set and the scout's research is gathered. Creating `package.json`, `tsconfig`, `vite.config`, or
+any framework skeleton is a production write owned by the hand phase, never a setup step you run
+first. An explicit stack request — even a precise one like `React + Vite + TypeScript` — only records
+the `omd stack`/`omd decision` choice; it never licenses scaffolding or building ahead of framing and
+research. The framer and the scout always run first: interrogate the brief and gather evidence before
+a single file is written. "The stack is already decided, so let me scaffold the project now" is a
+routing defect, not a lawful shortcut.
 
 Run `omd config show`. `checkpoint: none` is the default and means no approval waits.
 Only `concept`, `structure`, or `both` opt into a human pause at that named point.
