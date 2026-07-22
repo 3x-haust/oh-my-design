@@ -41,10 +41,11 @@
  *   }
  */
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { decodePng } from '../motion/energy.ts';
 import { compareImages, formatDiffReport } from '../figma/diff.ts';
+import { type ProjectWriteAdapter, requireProjectWriteAdapter } from '../runtime/project-write.ts';
 
 // ── Re-exports (stable contract) ─────────────────────────────────────────────
 
@@ -91,9 +92,9 @@ function loadManifest(cwd: string): TargetManifest {
   return JSON.parse(readFileSync(p, 'utf8')) as TargetManifest;
 }
 
-function saveManifest(cwd: string, manifest: TargetManifest): void {
-  mkdirSync(targetDir(cwd), { recursive: true });
-  writeFileSync(manifestPath(cwd), JSON.stringify(manifest, null, 2));
+function saveManifest(cwd: string, manifest: TargetManifest, adapter: ProjectWriteAdapter): void {
+  requireProjectWriteAdapter(cwd, adapter)
+    .write('.omd/target/manifest.json', JSON.stringify(manifest, null, 2));
 }
 
 /** Sanitise a target name into a safe file basename. */
@@ -119,12 +120,10 @@ export function registerTarget(
   name: string,
   source: string,
   buf: Buffer,
+  adapter: ProjectWriteAdapter,
 ): TargetEntry {
-  const dir = targetDir(cwd);
-  mkdirSync(dir, { recursive: true });
-
-  const pngPath = join(dir, `${safeName(name)}.png`);
-  writeFileSync(pngPath, buf);
+  const writer = requireProjectWriteAdapter(cwd, adapter);
+  const pngPath = writer.write(`.omd/target/${safeName(name)}.png`, buf);
 
   // Decode to get dimensions — decodePng from core/motion/energy.ts, no new dep.
   const { width, height } = decodePng(buf);
@@ -144,7 +143,7 @@ export function registerTarget(
   } else {
     manifest.targets.push(entry);
   }
-  saveManifest(cwd, manifest);
+  saveManifest(cwd, manifest, writer);
 
   return entry;
 }

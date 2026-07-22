@@ -1,5 +1,7 @@
 import { validateReferenceUsage, type ReferenceUsageStatus, type ValidatedReferenceUsage, type ValidatedReferenceUsagePiece } from './reference-usage.ts';
-import { referenceReportPath, writeReferenceReport } from './reference-usage-snapshot.ts';
+import { referenceReportPath } from './reference-usage-snapshot.ts';
+import { writeReferenceUsageRecord } from './reference-usage-files.ts';
+import { requireProjectWriteAdapter, type ProjectWriteAdapter } from '../runtime/project-write.ts';
 
 export type ReferenceReportRow = {
   readonly status: ReferenceUsageStatus;
@@ -61,9 +63,11 @@ export function formatReferenceReport(snapshot: ReferenceReportSnapshot): string
   return `## 참조 사용 보고서\n\n- 귀속 기록 결속: \`${snapshot.attributionSha256}\`\n\n${table(snapshot, true)}\n\n## Reference usage report\n\n- Attribution record binding: \`${snapshot.attributionSha256}\`\n\n${table(snapshot, false)}\n`;
 }
 
-export function generateReferenceReport(root: string): string {
+/** Formats validated provenance purely; persistence requires host-authorized project-write authority. */
+export function generateReferenceReport(root: string, writer: ProjectWriteAdapter): string {
+  requireProjectWriteAdapter(root, writer);
   const markdown = formatReferenceReport(referenceReportSnapshot(validateReferenceUsage(root)));
-  writeReferenceReport(root, markdown);
+  writeReferenceUsageRecord(root, 'reference-report.md', markdown, 'reference report', writer);
   return markdown;
 }
 

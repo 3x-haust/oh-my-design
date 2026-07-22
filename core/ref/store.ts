@@ -1,6 +1,7 @@
-import { mkdirSync, writeFileSync, readdirSync, readFileSync, existsSync } from 'node:fs';
-import { join, basename, resolve } from 'node:path';
+import { readdirSync, readFileSync, existsSync } from 'node:fs';
+import { join, basename } from 'node:path';
 import type { Invariants, Reference } from '../types.ts';
+import { type ProjectWriteAdapter, requireProjectWriteAdapter } from '../runtime/project-write.ts';
 
 /** Backfills invariants written before typography/motion/interaction measurement existed. */
 function withInvariantDefaults(invariants: Invariants | null | undefined): Invariants | null {
@@ -39,12 +40,9 @@ function slugFor(ref: Pick<Reference, 'source' | 'component'>): string {
   return `${hostPart(ref.source)}.${ref.component}`;
 }
 
-export function saveRef(cwd: string, ref: Reference): string {
-  const dir = refsDir(cwd);
-  mkdirSync(dir, { recursive: true });
-  const path = join(dir, `${slugFor(ref)}.json`);
-  writeFileSync(path, `${JSON.stringify(ref, null, 2)}\n`);
-  return resolve(path);
+export function saveRef(cwd: string, ref: Reference, adapter: ProjectWriteAdapter): string {
+  return requireProjectWriteAdapter(cwd, adapter)
+    .write(`.omd/refs/${slugFor(ref)}.json`, `${JSON.stringify(ref, null, 2)}\n`);
 }
 
 /** Path of the scoped component screenshot for a reference (`omd ref add … --shot`). */
@@ -107,7 +105,13 @@ export function loadRefs(cwd: string): Reference[] {
  * Appends principles to an existing reference. Throws if none exists: a principle without
  * measurements is an opinion, not a record.
  */
-export function addPrinciples(cwd: string, source: string, component: string, principles: string[]): void {
+export function addPrinciples(
+  cwd: string,
+  source: string,
+  component: string,
+  principles: string[],
+  adapter: ProjectWriteAdapter,
+): void {
   const path = join(refsDir(cwd), `${slugFor({ source, component })}.json`);
   if (!existsSync(path)) {
     throw new Error(`no reference found for ${source} (${component})`);
@@ -118,5 +122,6 @@ export function addPrinciples(cwd: string, source: string, component: string, pr
     if (!ref.principles.includes(principle)) ref.principles.push(principle);
   }
 
-  writeFileSync(path, `${JSON.stringify(ref, null, 2)}\n`);
+  requireProjectWriteAdapter(cwd, adapter)
+    .write(`.omd/refs/${slugFor({ source, component })}.json`, `${JSON.stringify(ref, null, 2)}\n`);
 }

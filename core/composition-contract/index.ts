@@ -3,6 +3,9 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { refIdentity } from '../ref/identity.ts';
 import { loadRefs } from '../ref/store.ts';
+import { artDirectionSha256, validateArtDirectionPointer, validateArtDirectionRecord } from '../art-direction/schema.ts';
+import { parseReferenceHandoffReceipt } from '../ref/reference-handoff.ts';
+import { motionResolutionProjectionSha256, parseReferenceSelectionV2, referenceSelectionV2Sha256, validateMotionResolutionProjection } from '../ref/reference-selection.ts';
 
 export const COMPOSITION_SECTIONS = [
   'Input fingerprint', 'Experience spine', 'Section dependency', 'Grid and alignment',
@@ -67,7 +70,7 @@ function validateFingerprint(lines: string[], inputs: CompositionContractInputs)
   const values = new Map<string, string>();
   for (const line of lines) {
     if (line.trim() === '') continue;
-    const match = /^- (Frame SHA-256|Copy deck SHA-256|Type proof SHA-256|Scout SHA-256): (.+)$/.exec(line);
+    const match = /^- (Frame SHA-256|Copy deck SHA-256|Type proof SHA-256|Scout SHA-256|Art direction record SHA-256|Motion resolution projection SHA-256|Settled selection SHA-256|Composer handoff SHA-256): (.+)$/.exec(line);
     if (!match) { findings.push({ id: 'COMPOSITION-HASH', path: '.omd/composition.md#Input fingerprint', message: 'Input fingerprint contains an unknown or malformed line' }); continue; }
     const key = match[1]!;
     if (values.has(key)) findings.push({ id: 'COMPOSITION-HASH', path: '.omd/composition.md#Input fingerprint', message: `${key} must appear exactly once` });
@@ -75,12 +78,16 @@ function validateFingerprint(lines: string[], inputs: CompositionContractInputs)
   }
   const required: Array<[string, string, string | undefined]> = [
     ['Frame', 'frame.md', inputs.frame], ['Copy deck', 'copy-deck.md', inputs.copyDeck], ['Type proof', 'type-proof.md', inputs.typeProof],
+    ['Art direction record', 'art-direction.json', inputs.artDirectionRecord],
+    ['Motion resolution projection', 'motion resolution projection', inputs.motionResolutionProjection],
+    ['Settled selection', 'settled-reference-selections', inputs.settledSelection],
+    ['Composer handoff', 'reference-handoffs/composer.json', inputs.composerHandoff],
   ];
   for (const [label, filename, actual] of required) {
     const value = values.get(`${label} SHA-256`);
     if (!value || !/^[0-9a-f]{64}$/.test(value)) findings.push({ id: 'COMPOSITION-HASH', path: '.omd/composition.md#Input fingerprint', message: `${label} SHA-256 must be exactly 64 lowercase hex characters` });
     else if (actual === undefined) findings.push({ id: 'COMPOSITION-STALE', path: `.omd/${filename}`, message: `${filename} is missing; composition cannot be current` });
-    else if (value !== actual) findings.push({ id: 'COMPOSITION-STALE', path: `.omd/${filename}`, message: `${filename} changed after composition was written` });
+    else if (actual !== undefined && value !== actual) findings.push({ id: 'COMPOSITION-STALE', path: `.omd/${filename}`, message: `${filename} changed after composition was written` });
   }
   const scout = values.get('Scout SHA-256');
   if (inputs.scout !== undefined) {
@@ -199,6 +206,7 @@ function sha256(path: string): string { return createHash('sha256').update(readF
 
 export interface CompositionContractInputs {
   contract?: string; frame?: string; copyDeck?: string; typeProof?: string; scout?: string;
+  artDirectionRecord?: string; motionResolutionProjection?: string; settledSelection?: string; composerHandoff?: string;
   /** Exact normalized Source ref identities for user-origin refs, not host labels. */
   userRefLabels?: string[];
 }
@@ -221,9 +229,93 @@ export function validateCompositionContractSource(inputs: CompositionContractInp
 
 export function validateCompositionContract(root: string): CompositionContractFinding[] {
   const omd = join(root, '.omd');
-  const readHash = (filename: string): string | undefined => { const path = join(omd, filename); return existsSync(path) ? sha256(path) : undefined; };
+  const readHash = (filename: string): string | undefined => {
+    const path = join(omd, filename);
+    return existsSync(path) ? sha256(path) : undefined;
+  };
+  const lineage: CompositionContractFinding[] = [];
+  const stale = (path: string, message: string): void => {
+    lineage.push({ id: 'COMPOSITION-STALE', path: `.omd/${path}`, message });
+  };
+  const readJson = (path: string): unknown | undefined => {
+    const absolutePath = join(omd, path);
+    if (!existsSync(absolutePath)) {
+      stale(path, `${path} is missing; composition cannot be current`);
+      return undefined;
+    }
+    try {
+      return JSON.parse(readFileSync(absolutePath, 'utf8'));
+    } catch {
+      stale(path, `${path} is invalid; composition cannot be current`);
+      return undefined;
+    }
+  };
   const contractPath = join(omd, 'composition.md');
   const frame = readHash('frame.md'); const copyDeck = readHash('copy-deck.md'); const typeProof = readHash('type-proof.md'); const scout = readHash('scout.md');
   const userRefLabels = loadRefs(root).filter((ref) => ref.origin === 'user').map((ref) => refIdentity(ref.source, ref.component)).sort();
-  return validateCompositionContractSource({ ...(existsSync(contractPath) ? { contract: readFileSync(contractPath, 'utf8') } : {}), ...(frame ? { frame } : {}), ...(copyDeck ? { copyDeck } : {}), ...(typeProof ? { typeProof } : {}), ...(scout ? { scout } : {}), ...(userRefLabels.length ? { userRefLabels } : {}) });
+  const derived: Omit<CompositionContractInputs, 'contract' | 'frame' | 'copyDeck' | 'typeProof' | 'scout' | 'userRefLabels'> = {};
+  let record: ReturnType<typeof validateArtDirectionRecord> | undefined;
+  const pointerValue = readJson('art-direction.json');
+  if (pointerValue !== undefined) {
+    try {
+      const pointer = validateArtDirectionPointer(pointerValue);
+      const recordValue = readJson(pointer.record);
+      if (recordValue !== undefined) {
+        const candidate = validateArtDirectionRecord(recordValue);
+        if (pointer.sha256 !== artDirectionSha256(candidate)) stale('art-direction.json', 'art-direction.json points to a stale record; composition cannot be current');
+        else {
+          derived.artDirectionRecord = pointer.sha256;
+          record = candidate;
+        }
+      }
+    } catch {
+      stale('art-direction.json', 'art-direction.json is invalid; composition cannot be current');
+    }
+  }
+  if (record !== undefined) {
+    const motionPath = `motion-resolutions/sha256-${record.decision.motionResolutionProjectionSha256}.json`;
+    const motionValue = readJson(motionPath);
+    if (motionValue !== undefined) {
+      try {
+        const motion = validateMotionResolutionProjection(motionValue);
+        if (motionResolutionProjectionSha256(motion) !== record.decision.motionResolutionProjectionSha256) stale(motionPath, `${motionPath} is stale; composition cannot be current`);
+        else derived.motionResolutionProjection = record.decision.motionResolutionProjectionSha256;
+      } catch {
+        stale(motionPath, `${motionPath} is invalid; composition cannot be current`);
+      }
+    }
+    const settledPath = `settled-reference-selections/sha256-${record.decision.settledSelectionSha256}.json`;
+    const settledValue = readJson(settledPath);
+    if (settledValue !== undefined) {
+      try {
+        const settled = parseReferenceSelectionV2(settledValue);
+        if (referenceSelectionV2Sha256(settled) !== record.decision.settledSelectionSha256) stale(settledPath, `${settledPath} is stale; composition cannot be current`);
+        else derived.settledSelection = record.decision.settledSelectionSha256;
+      } catch {
+        stale(settledPath, `${settledPath} is invalid; composition cannot be current`);
+      }
+    }
+    const composerPath = 'reference-handoffs/composer.json';
+    const composerValue = readJson(composerPath);
+    if (composerValue !== undefined) {
+      try {
+        const composer = parseReferenceHandoffReceipt(composerValue);
+        if (composer.artDirectionSha256 !== derived.artDirectionRecord
+          || composer.motionResolutionProjectionSha256 !== derived.motionResolutionProjection
+          || composer.settledSelectionSha256 !== derived.settledSelection) stale(composerPath, 'reference-handoffs/composer.json is stale; composition cannot be current');
+        else derived.composerHandoff = composer.payloadSha256;
+      } catch {
+        stale(composerPath, 'reference-handoffs/composer.json is invalid; composition cannot be current');
+      }
+    }
+  }
+  return [...validateCompositionContractSource({
+    ...(existsSync(contractPath) ? { contract: readFileSync(contractPath, 'utf8') } : {}),
+    ...(frame ? { frame } : {}),
+    ...(copyDeck ? { copyDeck } : {}),
+    ...(typeProof ? { typeProof } : {}),
+    ...(scout ? { scout } : {}),
+    ...derived,
+    ...(userRefLabels.length ? { userRefLabels } : {}),
+  }), ...lineage].sort((a, b) => a.path.localeCompare(b.path) || a.id.localeCompare(b.id) || a.message.localeCompare(b.message));
 }

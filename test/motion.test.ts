@@ -9,6 +9,7 @@ import { loadRules, check } from '../core/rules/engine.ts';
 import { extractInvariants } from '../core/ref/invariants.ts';
 import { saveRef, loadRefs } from '../core/ref/store.ts';
 import type { Invariants, RawIr, RawNode, Reference } from '../core/types.ts';
+import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
 
 const BUILTIN_DIR = fileURLToPath(new URL('../core/rules/builtin/', import.meta.url)).replace(/\/$/, '');
 const project = (): string => mkdtempSync(join(tmpdir(), 'omd-motion-'));
@@ -236,7 +237,7 @@ test('loadRefs backfills new motion fields on references saved before the probe 
     } as Invariants,
     principles: [],
   };
-  saveRef(dir, oldRef);
+  saveRef(dir, oldRef, createTestProjectWriteAdapter(dir));
   const [loaded] = loadRefs(dir);
   assert.ok(loaded, 'reference should load without error');
   assert.deepEqual(loaded?.invariants?.animatedProperties, [], 'animatedProperties backfilled to []');
@@ -272,7 +273,7 @@ test('loadRefs preserves existing motion probe fields if present', () => {
     },
     principles: [],
   };
-  saveRef(dir, newRef);
+  saveRef(dir, newRef, createTestProjectWriteAdapter(dir));
   const [loaded] = loadRefs(dir);
   assert.deepEqual(loaded?.invariants?.animatedProperties, ['opacity', 'transform']);
   assert.equal(loaded?.invariants?.hasReducedMotion, true);

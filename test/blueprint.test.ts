@@ -15,6 +15,7 @@ import {
 import { saveRef, loadRefs } from '../core/ref/store.ts';
 import type { Blueprint, BlueprintNode, Reference } from '../core/types.ts';
 import type { RawNode } from '../core/types.ts';
+import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
 
 const project = (): string => mkdtempSync(join(tmpdir(), 'omd-bp-'));
 
@@ -385,7 +386,7 @@ test('blueprint round-trips through saveRef and loadRefs intact', () => {
     principles: ['Navigation uses HORIZONTAL layout with 24px horizontal padding.'],
     blueprint: sampleBlueprint,
   };
-  saveRef(dir, ref);
+  saveRef(dir, ref, createTestProjectWriteAdapter(dir));
   const [loaded] = loadRefs(dir);
   assert.ok(loaded?.blueprint, 'blueprint must be present after round-trip');
   assert.equal(loaded?.blueprint?.selector, '.nav');
@@ -472,7 +473,7 @@ test('saveRef/loadRefs preserves blueprint nodes with all optional fields', () =
     principles: [],
     blueprint: complexBlueprint,
   };
-  saveRef(dir, ref);
+  saveRef(dir, ref, createTestProjectWriteAdapter(dir));
   const [loaded] = loadRefs(dir);
   const bp = loaded?.blueprint;
   assert.ok(bp, 'blueprint must be present');

@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { addPrinciples, loadRefs, saveRef } from '../core/ref/store.ts';
 import { must } from './helpers.ts';
+import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
 import type { Reference } from '../core/types.ts';
 
 const CLI = fileURLToPath(new URL('../bin/omd.ts', import.meta.url));
@@ -30,14 +31,14 @@ const ref = (): Reference => ({
 
 test('a freshly captured reference has no principles — nothing has looked at it yet', () => {
   const dir = project();
-  saveRef(dir, ref());
+  saveRef(dir, ref(), createTestProjectWriteAdapter(dir));
   assert.deepEqual(must(loadRefs(dir)[0]).principles, []);
 });
 
 test('addPrinciples attaches reasoning to an existing reference', () => {
   const dir = project();
-  saveRef(dir, ref());
-  addPrinciples(dir, 'https://linear.app', 'page', ['Radii split into rungs, so an input and a card are different materials.']);
+  saveRef(dir, ref(), createTestProjectWriteAdapter(dir));
+  addPrinciples(dir, 'https://linear.app', 'page', ['Radii split into rungs, so an input and a card are different materials.'], createTestProjectWriteAdapter(dir));
 
   const loaded = must(loadRefs(dir)[0]);
   assert.equal(loaded.principles.length, 1);
@@ -47,19 +48,20 @@ test('addPrinciples attaches reasoning to an existing reference', () => {
 
 test('addPrinciples appends rather than replacing, and never duplicates', () => {
   const dir = project();
-  saveRef(dir, ref());
-  addPrinciples(dir, 'https://linear.app', 'page', ['first']);
-  addPrinciples(dir, 'https://linear.app', 'page', ['second', 'first']);
+  saveRef(dir, ref(), createTestProjectWriteAdapter(dir));
+  addPrinciples(dir, 'https://linear.app', 'page', ['first'], createTestProjectWriteAdapter(dir));
+  addPrinciples(dir, 'https://linear.app', 'page', ['second', 'first'], createTestProjectWriteAdapter(dir));
   assert.deepEqual(must(loadRefs(dir)[0]).principles, ['first', 'second']);
 });
 
 test('addPrinciples on an unknown reference throws rather than silently creating one', () => {
-  assert.throws(() => addPrinciples(project(), 'https://nope.com', 'page', ['x']), /no reference/i);
+  const dir = project();
+  assert.throws(() => addPrinciples(dir, 'https://nope.com', 'page', ['x'], createTestProjectWriteAdapter(dir)), /no reference/i);
 });
 
 test('omd ref principles wires the same behaviour through the CLI', () => {
   const dir = project();
-  saveRef(dir, ref());
+  saveRef(dir, ref(), createTestProjectWriteAdapter(dir));
   const r = run(['ref', 'principles', 'https://linear.app', '--as', 'page', '--add', 'Centring is used for emphasis only.'], dir);
   assert.equal(r.status, 0);
   assert.match(must(must(loadRefs(dir)[0]).principles[0]), /emphasis only/);
@@ -67,14 +69,14 @@ test('omd ref principles wires the same behaviour through the CLI', () => {
 
 test('omd ref principles needs something to add', () => {
   const dir = project();
-  saveRef(dir, ref());
+  saveRef(dir, ref(), createTestProjectWriteAdapter(dir));
   assert.equal(run(['ref', 'principles', 'https://linear.app', '--as', 'page'], dir).status, 1);
 });
 
 test('omd ref show prints the invariants and principles an agent needs to read', () => {
   const dir = project();
-  saveRef(dir, ref());
-  addPrinciples(dir, 'https://linear.app', 'page', ['Three levels of elevation, so height means something.']);
+  saveRef(dir, ref(), createTestProjectWriteAdapter(dir));
+  addPrinciples(dir, 'https://linear.app', 'page', ['Three levels of elevation, so height means something.'], createTestProjectWriteAdapter(dir));
 
   const out = run(['ref', 'show', 'https://linear.app', '--as', 'page'], dir);
   assert.equal(out.status, 0);

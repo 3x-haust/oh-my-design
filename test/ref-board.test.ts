@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import test, { type TestContext } from 'node:test';
-import { validateCompositionContract } from '../core/composition-contract/index.ts';
+import { COMPOSITION_SECTIONS, validateCompositionContractSource } from '../core/composition-contract/index.ts';
 import { loadReferenceBoard, projectReferenceAssembly, resolveReferenceBoard, type ImageFragmentProvenance, type ImageFragmentResolver, type ImageFragmentTransfer } from '../core/ref/board.ts';
 import { parseReferenceBoard } from '../core/ref/board-parser.ts';
 import { similarity } from '../core/ref/distance.ts';
@@ -12,6 +12,7 @@ import { refIdentity } from '../core/ref/identity.ts';
 import { refImagePath, saveRef } from '../core/ref/store.ts';
 import { persistImageFragment } from '../core/ref/image-fragment.ts';
 import type { Blueprint, Invariants, Reference, RefKind } from '../core/types.ts';
+import { createTestProjectRunInvocation, createTestProjectWriteAdapter } from './helpers/project-write.ts';
 
 const root = (context: TestContext): string => {
   const directory = mkdtempSync(join(tmpdir(), 'omd-ref-board-'));
@@ -44,16 +45,34 @@ const capture = (directory: string, component: string, kind: RefKind = 'componen
     source, component, kind, capturedAt: '2026-07-18T00:00:00.000Z', invariants: MEASURED, principles: ['Keep hierarchy distinct.'],
     ...(selector === undefined ? {} : { selector }), ...(capturedBlueprint === undefined ? {} : { blueprint: capturedBlueprint }), ...(imagePath === undefined ? {} : { imagePath }),
   };
-  saveRef(directory, ref);
+  saveRef(directory, ref, createTestProjectWriteAdapter(directory));
   if (ref.imagePath !== undefined && ref.imagePath === relative(directory, image)) writeFileSync(image, png());
   return { ref, referenceId: refIdentity(source, component), image };
 };
 const piece = (referenceId: string, patch: Record<string, unknown> = {}): Record<string, unknown> => ({
-  slotId: 'hero', sourceKind: 'component-capture', referenceId, targetComponent: 'hero', targetSelector: 'main > [data-board="hero"]', taskIds: ['T1'], reason: 'Establish the primary reading path.', take: ['structure'], avoid: 'Do not reproduce source copy.', adaptation: 'Use local spacing tokens.', grid: { column: 1, span: 6, order: 0 }, ...patch,
+  slotId: 'hero', sourceKind: 'component-capture', referenceId, targetComponent: 'hero', targetSelector: 'main > [data-board="hero"]', taskIds: ['T1'], reason: 'Establish the primary reading path.', take: ['structure'], avoid: 'Do not reproduce source copy.', adaptation: 'Use local spacing tokens.', grid: { column: 1, span: 6, order: 0 }, evidenceAxes: { rights: 'lawful', signal: 'high-visual-system', staticAxis: 'available', motionAxis: 'absent' }, ...patch,
 });
 const candidate = (id: string, referenceId: string, pieces: readonly Record<string, unknown>[] = [piece(referenceId)]): Record<string, unknown> => ({ id, label: `Candidate ${id}`, route: '/work', rationale: 'A measured structure for local adaptation.', pieces });
 const manifest = (candidates: readonly Record<string, unknown>[], patch: Record<string, unknown> = {}): Record<string, unknown> => ({ schemaVersion: 'reference-board-v1', frameSha256: 'a'.repeat(64), candidates, ...patch });
 const writeBoard = (directory: string, value: unknown): void => writeFileSync(join(directory, '.omd', 'reference-board.json'), JSON.stringify(value));
+const validCompositionInputs = (): Parameters<typeof validateCompositionContractSource>[0] => {
+  const digest = 'a'.repeat(64);
+  const fingerprint = [
+    'Frame', 'Copy deck', 'Type proof', 'Scout', 'Art direction record',
+    'Motion resolution projection', 'Settled selection', 'Composer handoff',
+  ].map((label) => `- ${label} SHA-256: ${digest}`).join('\n');
+  return {
+    contract: COMPOSITION_SECTIONS.map((section) => `## ${section}\n\n${section === 'Input fingerprint' ? fingerprint : `Decision for ${section}.`}`).join('\n\n'),
+    frame: digest,
+    copyDeck: digest,
+    typeProof: digest,
+    scout: digest,
+    artDirectionRecord: digest,
+    motionResolutionProjection: digest,
+    settledSelection: digest,
+    composerHandoff: digest,
+  };
+};
 
 test('reference board resolves multiple component captures and emits deterministic sanitized assembly bytes', (context) => {
   // Given: two captured components whose manifest order differs from canonical identity order.
@@ -90,13 +109,30 @@ test('reference board rejects closed-key, candidate, source, and grid contract v
     ...['http://outside.example/target', 'https://outside.example/target', '//outside.example/target', 'data:text/html,poison', 'file:///secret', 'blob:https://source.example/x', 'www.source.example', '  ', '<img src=x>', '[data-board="x"]\u0000'].map((targetSelector) => manifest([candidate('one', component.referenceId, [piece(component.referenceId, { targetSelector })])])),
     manifest([candidate('one', 'ref-0000000000000000')]),
     manifest([candidate('one', component.referenceId, [piece(component.referenceId, { sourceKind: 'page' })])]),
+    manifest([candidate('one', component.referenceId, [piece(component.referenceId, { evidenceAxes: { rights: 'lawful', signal: 'high-visual-system', staticAxis: 'available' } })])]),
+    manifest([candidate('one', component.referenceId, [piece(component.referenceId, { evidenceAxes: { rights: 'lawful', signal: 'high-visual-system', staticAxis: 'available', motionAxis: 'absent', unexpected: true } })])]),
+    manifest([candidate('one', component.referenceId, [piece(component.referenceId, { evidenceAxes: { rights: 'unlicensed', signal: 'high-visual-system', staticAxis: 'available', motionAxis: 'absent' } })])]),
     manifest([candidate('one', component.referenceId, [piece(component.referenceId, { grid: { column: 0, span: 6, order: 0 } })])]),
     manifest([candidate('one', component.referenceId, [piece(component.referenceId, { grid: { column: 8, span: 6, order: 0 } })])]),
     manifest([], { candidates: [] }),
   ];
+  const missingAxes = piece(component.referenceId); delete missingAxes['evidenceAxes']; invalid.push(manifest([candidate('one', component.referenceId, [missingAxes])]));
 
   // When / Then: each boundary violation fails before an assembly is returned.
   for (const value of invalid) { writeBoard(directory, value); assert.throws(() => loadReferenceBoard(directory)); }
+});
+test('reference board preserves explicit evidence axes for component and image pieces', () => {
+  const axes = [
+    { rights: 'lawful', signal: 'high-motion', staticAxis: 'absent', motionAxis: 'available' },
+    { rights: 'unknown', signal: 'anti-reference', staticAxis: 'available', motionAxis: 'absent' },
+    { rights: 'restricted', signal: 'supporting-content', staticAxis: 'available', motionAxis: 'absent' },
+  ];
+  const parsed = parseReferenceBoard(manifest([candidate('axes', 'component-1', [
+    piece('component-1', { slotId: 'motion', take: ['motion'], evidenceAxes: axes[0] }),
+    piece('component-2', { slotId: 'anti', grid: { column: 7, span: 6, order: 1 }, evidenceAxes: axes[1] }),
+    piece('fragment-1', { slotId: 'texture', sourceKind: 'image-fragment', grid: { column: 1, span: 6, order: 2 }, evidenceAxes: axes[2] }),
+  ])]));
+  assert.deepEqual(parsed.candidates[0]?.pieces.map((entry) => entry.evidenceAxes), axes);
 });
 
 test('reference board rejects page/image captures and incomplete component capture joins', (context) => {
@@ -119,12 +155,12 @@ test('reference board rejects untrusted image paths, symlinks, and forged PNG by
   const attacks = ['../escape.png', '.omd/refs/../escape.png', '%2e%2e/escape.png', '/tmp/escape.png', '.omd/refs/missing.png', '.omd/refs/not-a-png.jpg'];
 
   // When / Then: lexical path attacks are rejected before any projection.
-  for (const imagePath of attacks) { saveRef(directory, { ...entry.ref, imagePath }); writeBoard(directory, manifest([candidate('one', entry.referenceId)])); assert.throws(() => loadReferenceBoard(directory)); }
-  saveRef(directory, { ...entry.ref, imagePath: relative(directory, entry.image) }); writeFileSync(entry.image, Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+  for (const imagePath of attacks) { saveRef(directory, { ...entry.ref, imagePath }, createTestProjectWriteAdapter(directory)); writeBoard(directory, manifest([candidate('one', entry.referenceId)])); assert.throws(() => loadReferenceBoard(directory)); }
+  saveRef(directory, { ...entry.ref, imagePath: relative(directory, entry.image) }, createTestProjectWriteAdapter(directory)); writeFileSync(entry.image, Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
   writeBoard(directory, manifest([candidate('one', entry.referenceId)])); assert.throws(() => loadReferenceBoard(directory));
   writeFileSync(entry.image, png(0)); assert.doesNotThrow(() => loadReferenceBoard(directory));
   writeFileSync(entry.image, png()); const linked = join(directory, '.omd', 'refs', 'linked.png'); symlinkSync(entry.image, linked);
-  saveRef(directory, { ...entry.ref, imagePath: relative(directory, linked) }); assert.throws(() => loadReferenceBoard(directory));
+  saveRef(directory, { ...entry.ref, imagePath: relative(directory, linked) }, createTestProjectWriteAdapter(directory)); assert.throws(() => loadReferenceBoard(directory));
 });
 
 test('reference board requires each image fragment to exist in the persisted record store', (context) => {
@@ -172,12 +208,12 @@ test('reference board rejects contaminated fragment transfer text and invalid ra
 
 test('public persistence-to-assembly boundary rejects local carriers across fragment component and manifest surfaces', (context) => {
   // Given: one persisted fragment and one component capture in a two-candidate reference board.
-  const directory = root(context); const component = capture(directory, 'assembly-component');
+  const directory = root(context); const invocation = createTestProjectRunInvocation(directory); const component = capture(directory, 'assembly-component');
   const fragment = persistImageFragment(directory, {
     inputPath: relative(directory, component.image),
     provenance: { sourcePage: 'https://source.example/fragment', captureRegion: 'hero texture', licenseStatus: 'unknown', rightsNotes: 'Verify rights before publication.', capturedAt: '2026-07-18T00:00:00.000Z' },
     transfer: { visualRole: 'atmosphere', principles: ['Use a local abstract accent.'] },
-  });
+  }, invocation);
   const good = manifest([
     candidate('alpha', fragment.id, [piece(fragment.id, { slotId: 'texture', sourceKind: 'image-fragment' })]),
     candidate('beta', component.referenceId, [piece(component.referenceId, { slotId: 'hero' })]),
@@ -191,9 +227,9 @@ test('public persistence-to-assembly boundary rejects local carriers across frag
     inputPath: relative(directory, component.image),
     provenance: { sourcePage: 'https://source.example/fragment', captureRegion: 'hero texture', licenseStatus: 'unknown', rightsNotes: 'Verify rights before publication.', capturedAt: '2026-07-18T00:00:00.000Z' },
     transfer: { visualRole, principles: ['Use a local abstract accent.'] },
-  }));
-  for (const principle of payloads) { saveRef(directory, { ...component.ref, principles: [principle] }); assert.throws(() => loadReferenceBoard(directory)); }
-  saveRef(directory, component.ref);
+  }, invocation));
+  for (const principle of payloads) { saveRef(directory, { ...component.ref, principles: [principle] }, createTestProjectWriteAdapter(directory)); assert.throws(() => loadReferenceBoard(directory)); }
+  saveRef(directory, component.ref, createTestProjectWriteAdapter(directory));
   for (const reason of payloads) {
     writeBoard(directory, manifest([
       candidate('alpha', fragment.id, [piece(fragment.id, { slotId: 'texture', sourceKind: 'image-fragment', reason })]),
@@ -204,22 +240,24 @@ test('public persistence-to-assembly boundary rejects local carriers across frag
 });
 
 test('reference board is a readonly side artifact for composition and distance', (context) => {
-  // Given: a component board alongside existing composition and similarity inputs.
+  // Given: a component board alongside a complete, explicitly supplied composition lineage.
   const directory = root(context); const entry = capture(directory, 'isolated');
-  const compositionBefore = validateCompositionContract(directory); const distanceBefore = similarity(MEASURED, MEASURED);
+  const composition = validCompositionInputs();
+  assert.deepEqual(validateCompositionContractSource(composition), []);
+  const distanceBefore = similarity(MEASURED, MEASURED);
   writeBoard(directory, manifest([candidate('one', entry.referenceId)]));
 
   // When: the board is loaded through its public API.
   loadReferenceBoard(directory);
 
-  // Then: existing composition and distance behavior remains unchanged.
-  assert.deepEqual(validateCompositionContract(directory), compositionBefore); assert.equal(similarity(MEASURED, MEASURED), distanceBefore);
+  // Then: the board cannot affect independently supplied composition or distance inputs.
+  assert.deepEqual(validateCompositionContractSource(composition), []); assert.equal(similarity(MEASURED, MEASURED), distanceBefore);
 });
 
 test('reference board rejects component captures without measured invariants', (context) => {
   // Given: a captured component whose persisted measurements are absent.
   const directory = root(context); const entry = capture(directory, 'unmeasured');
-  saveRef(directory, { ...entry.ref, invariants: null }); writeBoard(directory, manifest([candidate('one', entry.referenceId)]));
+  saveRef(directory, { ...entry.ref, invariants: null }, createTestProjectWriteAdapter(directory)); writeBoard(directory, manifest([candidate('one', entry.referenceId)]));
 
   // When / Then: a transfer cannot be assembled from unmeasured source data.
   assert.throws(() => loadReferenceBoard(directory), /measured invariants/);

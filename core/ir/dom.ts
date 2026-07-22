@@ -121,6 +121,85 @@ export function extractInPage(maxNodes: number, selector?: string | null): RawIr
     return parts.join('/');
   };
 
+  type RenderedBeat = {
+    id: string;
+    tag: string;
+    path: string;
+    box: { x: number; y: number; w: number; h: number };
+    boundary: boolean;
+    distinctRegions: number;
+    responsiveDuplicate: boolean;
+    viewport: string | null;
+    ancestorBeatIds: string[];
+    rendered: boolean;
+  };
+
+  const viewportRange = (value: string | null): string | null => value?.trim() || null;
+  const isRendered = (el: Element): boolean => {
+    const rect = el.getBoundingClientRect();
+    const style = getComputedStyle(el);
+    return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
+  };
+  const hasRepeatedAnatomy = (el: Element): boolean => {
+    const counts = new Map<string, number>();
+    for (const child of Array.from(el.children)) {
+      const key = `${child.tagName}:${child.getAttribute('class') ?? ''}`;
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    return Array.from(counts.values()).some((count) => count >= 2);
+  };
+  const segmentBoundary = (el: Element): boolean => {
+    const rect = el.getBoundingClientRect();
+    const style = getComputedStyle(el);
+    const tag = el.tagName;
+    const role = el.getAttribute('role') ?? '';
+    const landmark = new Set(['HEADER', 'MAIN', 'NAV', 'ASIDE', 'FOOTER', 'SECTION', 'ARTICLE']).has(tag)
+      || new Set(['banner', 'navigation', 'main', 'complementary', 'contentinfo', 'region', 'form', 'search']).has(role);
+    const fullWidth = rect.width >= window.innerWidth * 0.9;
+    const viewportSized = rect.height >= window.innerHeight * 0.75;
+    const painted = style.backgroundColor !== 'rgba(0, 0, 0, 0)'
+      || style.backgroundImage !== 'none'
+      || Number.parseFloat(style.borderTopWidth) > 0
+      || Number.parseFloat(style.borderBottomWidth) > 0;
+    const separated = Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom) >= 32
+      || Number.parseFloat(style.marginTop) + Number.parseFloat(style.marginBottom) >= 32;
+    const band = /(?:cta|install|proof|footer)/i.test(`${el.className} ${el.id} ${el.textContent ?? ''}`)
+      && (fullWidth || separated);
+    return landmark || hasRepeatedAnatomy(el) || fullWidth || viewportSized || painted || separated || band;
+  };
+  const distinctRegions = (el: Element): number => {
+    const regions: Element[] = [];
+    const visit = (candidate: Element): void => {
+      if (candidate !== el && segmentBoundary(candidate)) {
+        regions.push(candidate);
+        return;
+      }
+      for (const child of Array.from(candidate.children)) visit(child);
+    };
+    for (const child of Array.from(el.children)) visit(child);
+    return regions.length;
+  };
+  const renderedBeats: RenderedBeat[] = Array.from(document.querySelectorAll('[data-omd-beat]')).map((el) => {
+    const rect = el.getBoundingClientRect();
+    const ancestorBeatIds: string[] = [];
+    for (let ancestor = el.parentElement; ancestor; ancestor = ancestor.parentElement) {
+      const beatId = ancestor.getAttribute('data-omd-beat');
+      if (beatId) ancestorBeatIds.push(beatId.trim());
+    }
+    return {
+      id: el.getAttribute('data-omd-beat')?.trim() ?? '',
+      tag: el.tagName.toLowerCase(),
+      path: pathOf(el),
+      box: { x: Math.round(rect.x), y: Math.round(rect.y), w: Math.round(rect.width), h: Math.round(rect.height) },
+      boundary: segmentBoundary(el),
+      distinctRegions: distinctRegions(el),
+      responsiveDuplicate: el.hasAttribute('data-omd-responsive-duplicate'),
+      viewport: viewportRange(el.getAttribute('data-omd-viewport')),
+      ancestorBeatIds,
+      rendered: isRendered(el),
+    };
+  });
+
   const nodes: RawIr['nodes'] = [];
   const walk = (el: Element, parentId: string | null): void => {
     if (nodes.length >= maxNodes) return;
@@ -345,7 +424,7 @@ export function extractInPage(maxNodes: number, selector?: string | null): RawIr
   }));
 
   return {
-    meta: { source: 'dom', url: location.href, scrollHeight, viewportHeight, fontFaces },
+    meta: { source: 'dom', url: location.href, scrollHeight, viewportHeight, fontFaces, renderedBeats },
     tokens: tokenByValue,
     nodes,
   };

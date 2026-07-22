@@ -4,6 +4,10 @@ import {
   ReferenceBoardValidationError,
   type BoardSourceKind,
   type BoardTake,
+  type ReferenceAxis,
+  type ReferenceEvidenceAxes,
+  type ReferenceRights,
+  type ReferenceSignal,
   type ReferenceBoardCandidate,
   type ReferenceBoardGrid,
   type ReferenceBoardManifest,
@@ -55,6 +59,41 @@ const take = (value: unknown, label: string): BoardTake => {
     default: return fail(`${label} must be one of ${BOARD_TAKE_VALUES.join(', ')}`);
   }
 };
+const rights = (value: unknown, label: string): ReferenceRights => {
+  switch (value) {
+    case 'lawful': return value;
+    case 'restricted': return value;
+    case 'unknown': return value;
+    default: return fail(`${label} must be a supported rights value`);
+  }
+};
+const signal = (value: unknown, label: string): ReferenceSignal => {
+  switch (value) {
+    case 'high-visual-system': return value;
+    case 'high-motion': return value;
+    case 'supporting-component': return value;
+    case 'supporting-content': return value;
+    case 'anti-reference': return value;
+    default: return fail(`${label} must be a supported signal value`);
+  }
+};
+const axis = (value: unknown, label: string): ReferenceAxis => {
+  switch (value) {
+    case 'available': return value;
+    case 'absent': return value;
+    default: return fail(`${label} must be a supported axis value`);
+  }
+};
+const evidenceAxes = (value: unknown, label: string): ReferenceEvidenceAxes => {
+  const parsed = record(value, label);
+  exactKeys(parsed, ['rights', 'signal', 'staticAxis', 'motionAxis'], label);
+  return {
+    rights: rights(parsed['rights'], `${label}.rights`),
+    signal: signal(parsed['signal'], `${label}.signal`),
+    staticAxis: axis(parsed['staticAxis'], `${label}.staticAxis`),
+    motionAxis: axis(parsed['motionAxis'], `${label}.motionAxis`),
+  };
+};
 const strings = (value: unknown, label: string, required: boolean, emitted = false): readonly string[] => {
   const entries = array(value, label);
   if (required && entries.length === 0) fail(`${label} must be a non-empty array`);
@@ -74,7 +113,7 @@ const grid = (value: unknown, label: string): ReferenceBoardGrid => {
 
 const piece = (value: unknown, label: string): ReferenceBoardPiece => {
   const parsed = record(value, label);
-  exactKeys(parsed, ['slotId', 'sourceKind', 'referenceId', 'targetComponent', 'targetSelector', 'taskIds', 'reason', 'take', 'avoid', 'adaptation', 'grid'], label);
+  exactKeys(parsed, ['slotId', 'sourceKind', 'referenceId', 'targetComponent', 'targetSelector', 'taskIds', 'reason', 'take', 'avoid', 'adaptation', 'grid', 'evidenceAxes'], label);
   const kind = sourceKind(parsed['sourceKind'], `${label}.sourceKind`);
   const takes = strings(parsed['take'], `${label}.take`, true).map((entry, index) => take(entry, `${label}.take[${index}]`));
   if (new Set(takes).size !== takes.length) fail(`${label}.take must not contain duplicates`);
@@ -83,6 +122,7 @@ const piece = (value: unknown, label: string): ReferenceBoardPiece => {
     targetComponent: assemblyText(parsed['targetComponent'], `${label}.targetComponent`), targetSelector: localTargetSelector(parsed['targetSelector'], `${label}.targetSelector`),
     taskIds: strings(parsed['taskIds'], `${label}.taskIds`, true, true), reason: assemblyText(parsed['reason'], `${label}.reason`),
     take: takes, avoid: assemblyText(parsed['avoid'], `${label}.avoid`), adaptation: assemblyText(parsed['adaptation'], `${label}.adaptation`), grid: grid(parsed['grid'], `${label}.grid`),
+    evidenceAxes: evidenceAxes(parsed['evidenceAxes'], `${label}.evidenceAxes`),
   };
   switch (kind) {
     case 'component-capture': return { ...base, sourceKind: kind };

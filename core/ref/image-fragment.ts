@@ -1,10 +1,12 @@
-import { createHash, randomUUID } from 'node:crypto';
-import { linkSync, lstatSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { lstatSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ImageFragmentProvenance, ImageFragmentResolver, ImageFragmentTransfer, ReferenceBoardImageFragmentPiece, ResolvedImageFragmentPiece } from './board-contract.ts';
 import { ReferenceBoardResolutionError } from './board-contract.ts';
 import { trustedReferenceDirectory, trustedReferenceImage } from './board-security.ts';
 import { imageFragmentRecordId, parseImageFragmentInput, parseImageFragmentRecord } from './image-fragment-parser.ts';
+import type { ProjectRunInvocation } from '../runtime/invocation.ts';
+import { ProjectWriteError, createProjectDirectory, writeImmutableProjectFile } from '../runtime/project-write.ts';
 
 export const IMAGE_FRAGMENT_SCHEMA_VERSION = 'image-fragment-v1' as const;
 const FRAGMENT_DIRECTORY = '.omd/refs/fragments';
@@ -30,25 +32,15 @@ const fragmentId = (sha256: string, provenance: ImageFragmentProvenance): string
 const imagePath = (sha256: string): string => `${FRAGMENT_DIRECTORY}/${sha256}.png`;
 const recordPath = (directory: string, id: string): string => join(directory, `${id}.json`);
 const sameRecord = (left: ImageFragmentRecord, right: ImageFragmentRecord): boolean => JSON.stringify(left) === JSON.stringify(right);
-const errorCode = (error: unknown, code: string): boolean => error instanceof Error && 'code' in error && error.code === code;
+const errorCode = (error: unknown, code: string): boolean =>
+  (error instanceof Error && 'code' in error && error.code === code)
+  || (code === 'EEXIST' && error instanceof ProjectWriteError && error.reason.startsWith('immutable project artifact already exists: '));
 const entryExists = (path: string): boolean => {
   try { lstatSync(path); return true; } catch (error) { if (errorCode(error, 'ENOENT')) return false; throw error; }
 };
 
-const writeExclusively = (path: string, content: Buffer | string): void => {
-  const temporary = `${path}.${randomUUID()}.tmp`;
-  try {
-    writeFileSync(temporary, content, { flag: 'wx' });
-    linkSync(temporary, path);
-  } finally {
-    rmSync(temporary, { force: true });
-  }
-};
-
-const ensureFragmentDirectory = (root: string): string => {
-  const refs = trustedReferenceDirectory(root, '.omd/refs');
-  const directory = join(refs, 'fragments');
-  mkdirSync(directory, { recursive: true });
+const ensureFragmentDirectory = (root: string, invocation: ProjectRunInvocation): string => {
+  createProjectDirectory(root, FRAGMENT_DIRECTORY, invocation);
   return trustedReferenceDirectory(root, FRAGMENT_DIRECTORY);
 };
 
@@ -73,12 +65,12 @@ const validateExistingImage = (root: string, record: ImageFragmentRecord, bytes:
   if (digest(existing) !== record.sha256 || !existing.equals(bytes)) fail(`image ${record.sha256} already exists with different bytes`);
 };
 
-const writeImageIfMissing = (root: string, record: ImageFragmentRecord, bytes: Buffer): boolean => {
+const writeImageIfMissing = (root: string, record: ImageFragmentRecord, bytes: Buffer, invocation: ProjectRunInvocation): boolean => {
   const directory = trustedReferenceDirectory(root, FRAGMENT_DIRECTORY);
   const path = join(directory, `${record.sha256}.png`);
   if (entryExists(path)) { validateExistingImage(root, record, bytes); return false; }
   try {
-    writeExclusively(path, bytes);
+    writeImmutableProjectFile({ projectRoot: root, relativePath: record.imagePath, content: bytes, invocation });
     return true;
   } catch (error) {
     if (!errorCode(error, 'EEXIST')) throw error;
@@ -87,7 +79,7 @@ const writeImageIfMissing = (root: string, record: ImageFragmentRecord, bytes: B
   }
 };
 
-export function persistImageFragment(root: string, value: unknown): ImageFragmentRecord {
+export function persistImageFragment(root: string, value: unknown, invocation: ProjectRunInvocation): ImageFragmentRecord {
   const input = parseImageFragmentInput(value);
   const sourcePath = trustedReferenceImage(root, input.inputPath);
   const bytes = readFileSync(sourcePath);
@@ -100,16 +92,21 @@ export function persistImageFragment(root: string, value: unknown): ImageFragmen
     provenance: input.provenance,
     transfer: input.transfer,
   };
-  const directory = ensureFragmentDirectory(root);
+  const directory = ensureFragmentDirectory(root, invocation);
   const target = recordPath(directory, record.id);
   if (entryExists(target)) {
     const existing = readRecord(root, record.id);
     if (!sameRecord(existing, record)) fail(`record ${record.id} already exists with different metadata`);
     return existing;
   }
-  writeImageIfMissing(root, record, bytes);
+  writeImageIfMissing(root, record, bytes, invocation);
   try {
-    writeExclusively(target, `${JSON.stringify(record, null, 2)}\n`);
+    writeImmutableProjectFile({
+      projectRoot: root,
+      relativePath: `${FRAGMENT_DIRECTORY}/${record.id}.json`,
+      content: `${JSON.stringify(record, null, 2)}\n`,
+      invocation,
+    });
     return record;
   } catch (error) {
     if (errorCode(error, 'EEXIST')) {

@@ -1,11 +1,27 @@
+import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
-import { existsSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
-import { resolve, dirname, basename, join } from 'node:path';
+import { existsSync, readFileSync, realpathSync } from 'node:fs';
+import { resolve, dirname, basename, join, relative } from 'node:path';
 import { extractInPage } from '../ir/dom.ts';
 import { computeEnergy } from '../motion/energy.ts';
 import type { EnergyCurve, MotionMeasurement, RawIr } from '../types.ts';
-
+import { type ProjectWriteAdapter, requireProjectWriteAdapter } from '../runtime/project-write.ts';
+import type { RenderedBeat, RenderedBeatProof } from '../copy/index.ts';
 const MAX_NODES = 4000;
+const reducedMotionRemovalThreshold = (noiseFloor: number): number => noiseFloor * 2;
+
+const projectOutputPath = (adapter: ProjectWriteAdapter, output: string): string => {
+  const outputPath = resolve(output);
+  const canonicalOutput = join(realpathSync(dirname(outputPath)), basename(outputPath));
+  const path = relative(adapter.projectRoot, canonicalOutput).split('\\').join('/');
+  if (path === '..' || path.startsWith('../')) throw new Error('render output must be inside the adapter project root');
+  return path;
+};
+const writeScreenshot = async (
+  capture: () => Promise<Buffer>,
+  adapter: ProjectWriteAdapter,
+  output: string,
+): Promise<string> => adapter.write(projectOutputPath(adapter, output), await capture());
 
 export function browserEvaluationExpression(source: string, argumentExpression: string): string {
   return `(() => { const __name = (callback) => callback; return (${source})(${argumentExpression}); })()`;
@@ -184,14 +200,14 @@ export function parseViewport(s = '390x844'): Viewport {
   return { width, height };
 }
 
-export function renderPage(target: string, opts: { viewport: Viewport; out: string; squint?: boolean; fullPage?: boolean }): Promise<string> {
+export function renderPage(target: string, opts: { viewport: Viewport; out: string; squint?: boolean; fullPage?: boolean; adapter: ProjectWriteAdapter }): Promise<string> {
   return withPage(target, opts.viewport, async (page, _httpStatus, _resolvedUrl) => {
     if (opts.squint) {
       // Hierarchy isolation only: this is neither a colour-vision simulation nor a
       // literal recreation of a timed first impression.
       await page.addStyleTag({ content: 'html { filter: grayscale(1) blur(6px) !important; }' });
     }
-    await page.screenshot({ path: opts.out, fullPage: opts.fullPage === true });
+    await writeScreenshot(() => page.screenshot({ fullPage: opts.fullPage === true }), requireProjectWriteAdapter(opts.adapter.projectRoot, opts.adapter), opts.out);
     return opts.out;
   });
 }
@@ -205,7 +221,7 @@ export function renderPage(target: string, opts: { viewport: Viewport; out: stri
 export async function renderProofs(
   target: string,
   outPrefix: string,
-  opts?: { desktop?: Viewport; mobile?: Viewport },
+  opts: { desktop?: Viewport; mobile?: Viewport; adapter: ProjectWriteAdapter },
 ): Promise<string[]> {
   const desktop = opts?.desktop ?? { width: 1280, height: 900 };
   const mobile = opts?.mobile ?? { width: 390, height: 844 };
@@ -215,8 +231,8 @@ export async function renderProofs(
       onPage(browser, target, vp, async (page) => {
         const fixed = `${outPrefix}-${name}.png`;
         const full = `${outPrefix}-${name}-full.png`;
-        await page.screenshot({ path: fixed, fullPage: false });
-        await page.screenshot({ path: full, fullPage: true });
+        await writeScreenshot(() => page.screenshot({ fullPage: false }), requireProjectWriteAdapter(opts.adapter.projectRoot, opts.adapter), fixed);
+        await writeScreenshot(() => page.screenshot({ fullPage: true }), requireProjectWriteAdapter(opts.adapter.projectRoot, opts.adapter), full);
         written.push(fixed, full);
       })));
   });
@@ -229,11 +245,11 @@ export async function renderProofs(
  * blueprint on one reference record. Throws when the selector matches nothing,
  * the same fail-closed contract as a scoped IR capture.
  */
-export function renderElement(target: string, opts: { viewport: Viewport; selector: string; out: string }): Promise<string> {
+export function renderElement(target: string, opts: { viewport: Viewport; selector: string; out: string; adapter: ProjectWriteAdapter }): Promise<string> {
   return withPage(target, opts.viewport, async (page) => {
     const el = await page.$(opts.selector);
     if (!el) throw new Error(`no element matches selector: ${opts.selector}`);
-    await el.screenshot({ path: opts.out });
+    await writeScreenshot(() => el.screenshot(), requireProjectWriteAdapter(opts.adapter.projectRoot, opts.adapter), opts.out);
     return opts.out;
   });
 }
@@ -341,8 +357,7 @@ async function probeInteraction(page: import('playwright').Page): Promise<Intera
 // Invariants.animatedProperties so callers are never surprised.
 
 function captureMotionSnapshot(): Array<{ duration: number; easing: string; properties: string[]; playState: string }> {
-  const doc = document as unknown as { getAnimations?: (opts?: { subtree: boolean }) => unknown[] };
-  const anims: unknown[] = doc.getAnimations?.({ subtree: true }) ?? [];
+  const anims: unknown[] = document.getAnimations();
   const result: Array<{ duration: number; easing: string; properties: string[]; playState: string }> = [];
   for (const anim of anims) {
     const a = anim as { effect?: unknown; playState: string };
@@ -387,11 +402,10 @@ function checkReducedMotionInPage(): boolean {
 }
 
 /**
- * Live animation probe. Reads document.getAnimations({subtree:true}) at three timepoints
- * and steps through scroll positions to record per-step choreography data.
- *
- * A probe failure (no Animation API, page error, or Playwright timeout) returns null
- * rather than throwing — capture must never break because motion could not be measured.
+ * Live animation probe. Reads document.getAnimations({subtree:true}) only in the fixed load
+ * window (0ms, 500ms, 1500ms). The canonical observable scene is load-only: this probe never
+ * scrolls, hovers, clicks, or otherwise manufactures an interaction trigger. A probe failure
+ * (no Animation API, page error, or Playwright timeout) returns null rather than throwing.
  */
 async function probeMotion(page: import('playwright').Page): Promise<MotionMeasurement | null> {
   const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
@@ -400,45 +414,17 @@ async function probeMotion(page: import('playwright').Page): Promise<MotionMeasu
   try {
     type Snap = Array<{ duration: number; easing: string; properties: string[]; playState: string }>;
 
-    // Three-snapshot timeline: capture animation state at load, 500ms, and 1500ms.
-    // Entrance animations typically complete within this window; scroll-triggered ones do not.
+    // Fixed load-window timeline. A selected `one` scene must begin at load and settle here.
     const snap0 = await page.evaluate(snapshotExpression) as Snap;
     await sleep(500);
     const snap500 = await page.evaluate(snapshotExpression) as Snap;
-    await sleep(1000); // 1500ms total
+    await sleep(1000);
     const snap1500 = await page.evaluate(snapshotExpression) as Snap;
 
     const hasReducedMotion = await page.evaluate(reducedMotionExpression) as boolean;
 
-    // Scroll choreography: step by 25% viewport height, record animation and element counts.
-    const viewportHeight = page.viewportSize()?.height ?? 800;
-    const scrollStep = Math.round(viewportHeight * 0.25);
+    // Keep the legacy field empty: scroll scenes are not part of the observable motion contract.
     const scrollChoreography: MotionMeasurement['scrollChoreography'] = [];
-
-    for (let step = 1; step <= 4; step++) {
-      await page.evaluate((y: number) => window.scrollTo({ top: y, behavior: 'instant' }), step * scrollStep);
-      await sleep(150); // brief settle for scroll-triggered animations to start
-      const stepData = await page.evaluate(() => {
-        const doc = document as unknown as { getAnimations?: (opts?: { subtree: boolean }) => Array<{ playState: string }> };
-        const anims = doc.getAnimations?.({ subtree: true }) ?? [];
-        const fired = anims.filter((a) => a.playState === 'running').length;
-        const vH = window.innerHeight;
-        const entered = Array.from(document.querySelectorAll('*')).filter((el) => {
-          const rect = el.getBoundingClientRect();
-          if (rect.top < 0 || rect.bottom > vH || rect.width === 0 || rect.height === 0) return false;
-          const cs = getComputedStyle(el);
-          const transDur = parseFloat(cs.transitionDuration) || 0;
-          const animDur = parseFloat(cs.animationDuration) || 0;
-          const hasAnim = cs.animationName !== 'none' && animDur > 0;
-          return transDur > 0 || hasAnim;
-        }).length;
-        return { fired, entered };
-      }) as { fired: number; entered: number };
-      scrollChoreography.push({ step, fired: stepData.fired, entered: stepData.entered });
-    }
-
-    // Reset scroll so subsequent operations (e.g. screenshot) see the top of the page.
-    await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
 
     const allProps = [...snap0, ...snap500, ...snap1500].flatMap((a) => a.properties);
     const animatedProperties = [...new Set(allProps)].sort();
@@ -473,7 +459,7 @@ async function probeMotion(page: import('playwright').Page): Promise<MotionMeasu
  */
 export async function renderFilmstrip(
   target: string,
-  opts: { viewport: Viewport; out: string; frames?: number; interval?: number },
+  opts: { viewport: Viewport; out: string; frames?: number; interval?: number; adapter: ProjectWriteAdapter },
 ): Promise<string[]> {
   const frameCount = Math.min(Math.max(opts.frames ?? 5, 4), 6);
   const interval = opts.interval ?? 300;
@@ -481,8 +467,10 @@ export async function renderFilmstrip(
   const dir = dirname(resolve(base));
   const name = basename(base);
 
+  const adapter = requireProjectWriteAdapter(opts.adapter.projectRoot, opts.adapter);
   return withPage(target, opts.viewport, async (page, _httpStatus, _resolvedUrl) => {
-    mkdirSync(dir, { recursive: true });
+    const outputDirectory = projectOutputPath(adapter, dir);
+    if (outputDirectory) adapter.mkdir(outputDirectory);
     const framePaths: string[] = [];
 
     for (let i = 0; i < frameCount; i++) {
@@ -490,7 +478,7 @@ export async function renderFilmstrip(
       const framePath = join(dir, `${name}-frame-${i}.png`);
       // Viewport screenshot (not fullPage) so each frame shows the same viewport region
       // and the temporal sequence is directly comparable.
-      await page.screenshot({ path: framePath, fullPage: false });
+      await writeScreenshot(() => page.screenshot({ fullPage: false }), adapter, framePath);
       framePaths.push(framePath);
     }
 
@@ -512,7 +500,7 @@ export async function renderFilmstrip(
       '</style>',
       ...figures,
     ].join('\n');
-    writeFileSync(indexPath, html);
+    adapter.write(projectOutputPath(adapter, indexPath), html);
 
     // Energy curve: compute pixel-diff scores between adjacent frames and write alongside
     // the HTML index. This measurement sees ALL motion including GSAP/rAF — closing the
@@ -522,7 +510,7 @@ export async function renderFilmstrip(
       const frameBuffers = framePaths.map((p) => readFileSync(p));
       const energyCurve = computeEnergy(frameBuffers);
       const energyPath = join(dir, `${name}-energy.json`);
-      writeFileSync(energyPath, `${JSON.stringify(energyCurve, null, 2)}\n`);
+      adapter.write(projectOutputPath(adapter, energyPath), `${JSON.stringify(energyCurve, null, 2)}\n`);
     } catch {
       // Best-effort: energy is a bonus measurement; a failure must not break capture.
     }
@@ -595,7 +583,7 @@ export async function capturePageForRef(
   browser: Browser,
   target: string,
   viewport: Viewport,
-  opts: { selector?: string | null; shotOut?: string },
+  opts: { selector?: string | null; shotOut?: string; adapter?: ProjectWriteAdapter },
 ): Promise<{ raw: RawIr; shotSaved: boolean }> {
   return onPage(browser, target, viewport, async (page, httpStatus, resolvedUrl) => {
     const raw = await extractIrCore(page, httpStatus, resolvedUrl, opts.selector ?? null);
@@ -603,10 +591,358 @@ export async function capturePageForRef(
     if (opts.shotOut && opts.selector) {
       const el = await page.$(opts.selector);
       if (el) {
-        await el.screenshot({ path: opts.shotOut });
+        if (!opts.adapter) throw new Error('scoped reference screenshot requires a project-write adapter');
+        await writeScreenshot(() => el.screenshot(), requireProjectWriteAdapter(opts.adapter.projectRoot, opts.adapter), opts.shotOut);
         shotSaved = true;
       }
     }
     return { raw, shotSaved };
   });
+}
+/**
+ * Executes one real browser trigger and saves ROI screenshots as independently
+ * verifiable receipts. Callers supply immutable run/build/reference bindings.
+ */
+export async function captureMotionEvidenceV2(
+  target: string,
+  opts: {
+    viewport: Viewport; outDir: string; runId: string; buildHash: string; artDirectionHash: string;
+    referenceSlotId?: string; sourceInfluence?: MotionSourceInfluence; selector: string; adapter: ProjectWriteAdapter;
+    trigger: 'load'; intervalMs?: number;
+  },
+): Promise<MotionEvidenceV2> {
+  const interval = opts.intervalMs ?? 150;
+  const adapter = requireProjectWriteAdapter(opts.adapter.projectRoot, opts.adapter);
+  const outputDirectory = projectOutputPath(adapter, opts.outDir);
+  if (outputDirectory) adapter.mkdir(outputDirectory);
+  return withBrowser((browser) => onPage(browser, target, opts.viewport, async (page) => {
+    const transcript: { event: 'load'; timestampMs: number }[] = [{ event: 'load', timestampMs: 0 }];
+    const started = Date.now();
+    const element = await page.$(opts.selector);
+    if (!element) throw new Error(`no element matches ROI selector: ${opts.selector}`);
+    const activeAnimations = await page.evaluate(() => document.getAnimations()
+      .filter((animation) => animation.playState === 'running')
+      .map((animation) => {
+        const effect = animation.effect;
+        const target = typeof KeyframeEffect !== 'undefined' && effect instanceof KeyframeEffect
+          ? effect.target
+          : null;
+        const rect = target instanceof Element ? target.getBoundingClientRect() : null;
+        return {
+          name: (animation as CSSAnimation).animationName || animation.id || 'unnamed',
+          targetIsDocument: target === document.documentElement || target === document.body
+            || (rect !== null && rect.left <= 0 && rect.top <= 0 && rect.right >= innerWidth && rect.bottom >= innerHeight),
+        };
+      }));
+    if (activeAnimations.length > 1) throw new Error('one motion decision rejects multiple concurrent load concepts');
+    if (activeAnimations.some((animation) => !animation.targetIsDocument)) throw new Error('motion scene contains an unrelated sibling animation rather than a whole-page production boundary');
+    const roi = { x: 0, y: 0, width: opts.viewport.width, height: opts.viewport.height };
+    const receipt = async (name: string): Promise<ObservedCaptureReceipt> => {
+      const output = join(opts.outDir, `${opts.runId}-${name}.png`);
+      const bytes = await page.screenshot({ fullPage: false });
+      const path = adapter.write(projectOutputPath(adapter, output), bytes);
+      return { path, bytesBase64: bytes.toString('base64'), sha256: createHash('sha256').update(bytes).digest('hex') };
+    };
+    const baseline = await receipt('baseline');
+    await new Promise<void>((resolveInterval) => setTimeout(resolveInterval, Math.max(1, Math.floor(interval / 3))));
+    const start = await receipt('start');
+    const startTimestampMs = Date.now() - started;
+    const noiseFloor = Math.max(computeEnergy([Buffer.from(baseline.bytesBase64, 'base64'), Buffer.from(start.bytesBase64, 'base64')]).peakEnergy, Number.EPSILON);
+    if (opts.trigger !== 'load') throw new Error('positive motion evidence only accepts an observed load scene; scroll and pointer affordances cannot satisfy it');
+    await new Promise<void>((resolveInterval) => setTimeout(resolveInterval, interval));
+    const mid = await receipt('mid');
+    const midTimestampMs = Date.now() - started;
+    await new Promise<void>((resolveInterval) => setTimeout(resolveInterval, interval));
+    const end = await receipt('end');
+    const endTimestampMs = Date.now() - started;
+    const energy = computeEnergy([Buffer.from(start.bytesBase64, 'base64'), Buffer.from(mid.bytesBase64, 'base64'), Buffer.from(end.bytesBase64, 'base64')]);
+    if (energy.peakEnergy <= noiseFloor) throw new Error('selector-local ROI did not exceed its measured noise floor');
+    const reducedPage = await browser.newPage({ viewport: opts.viewport });
+    let reduced: ObservedCaptureReceipt;
+    let reducedEnergy: number;
+    try {
+      await reducedPage.emulateMedia({ reducedMotion: 'reduce' });
+      await reducedPage.goto(toUrl(target), { waitUntil: 'networkidle' });
+      await waitForDocumentFonts(reducedPage);
+      const reducedElement = await reducedPage.$(opts.selector);
+      if (!reducedElement) throw new Error(`reduced-motion page has no ROI selector: ${opts.selector}`);
+      const reducedBox = await reducedElement.boundingBox();
+      if (!reducedBox) throw new Error(`reduced-motion ROI selector is not visible: ${opts.selector}`);
+      const reducedRoi = { x: Math.max(0, reducedBox.x), y: Math.max(0, reducedBox.y), width: Math.min(reducedBox.width, opts.viewport.width - Math.max(0, reducedBox.x)), height: Math.min(reducedBox.height, opts.viewport.height - Math.max(0, reducedBox.y)) };
+      if (reducedRoi.width <= 1 || reducedRoi.height <= 1) throw new Error(`reduced-motion ROI selector is outside viewport: ${opts.selector}`);
+      const stableFrames: Buffer[] = [];
+      for (let frame = 0; frame < 3; frame++) {
+        if (frame > 0) await new Promise<void>((resolveInterval) => setTimeout(resolveInterval, interval));
+        stableFrames.push(await reducedPage.screenshot({ clip: reducedRoi }));
+      }
+      if (computeEnergy(stableFrames).peakEnergy > noiseFloor) throw new Error('fresh reduced-motion page did not remain stable across three frames');
+      const bytes = stableFrames[2]!;
+      const path = adapter.write(projectOutputPath(adapter, join(opts.outDir, `${opts.runId}-reduced.png`)), bytes);
+      reduced = { path, bytesBase64: bytes.toString('base64'), sha256: createHash('sha256').update(bytes).digest('hex') };
+      reducedEnergy = computeEnergy([Buffer.from(end.bytesBase64, 'base64'), bytes]).peakEnergy;
+    } finally {
+      await reducedPage.close();
+    }
+    const reducedMotionBehavior = reducedEnergy <= reducedMotionRemovalThreshold(noiseFloor) ? 'removed' : 'static-equivalent';
+    return {
+      schema: MOTION_EVIDENCE_V2_SCHEMA, artDirectionHash: opts.artDirectionHash, motionDecision: 'one',
+      observed: {
+        browser: { name: 'chromium', version: browser.version() }, runId: opts.runId, buildHash: opts.buildHash, viewport: opts.viewport,
+        triggerTranscript: transcript, sourceInfluence: opts.sourceInfluence ?? (opts.referenceSlotId ? { kind: 'reference-slot', referenceSlotId: opts.referenceSlotId } : (() => { throw new Error('motion evidence requires a source reference slot or approved recipe'); })()),
+      },
+      scenes: [{
+        trigger: opts.trigger, roiSelector: opts.selector, roi, boundary: 'viewport', activeAnimationCount: activeAnimations.length,
+        calibration: { noiseFloor, roiEnergy: energy.peakEnergy },
+        start: { timestampMs: startTimestampMs, capture: start }, mid: { timestampMs: midTimestampMs, capture: mid }, end: { timestampMs: endTimestampMs, capture: end },
+        reducedMotion: { capture: reduced, behavior: reducedMotionBehavior },
+      }],
+    };
+  }));
+}
+export const MOTION_EVIDENCE_V2_SCHEMA = 'motion-evidence-v2' as const;
+
+export type ObservedCaptureReceipt = {
+  readonly path: string;
+  readonly bytesBase64: string;
+  readonly sha256: string;
+};
+
+export type MotionSourceInfluence =
+  | { readonly kind: 'reference-slot'; readonly referenceSlotId: string }
+  | { readonly kind: 'approved-recipe'; readonly recipeId: string; readonly recipeSha256: string };
+
+export type MotionEvidenceV2 = {
+  readonly schema: typeof MOTION_EVIDENCE_V2_SCHEMA;
+  readonly artDirectionHash: string;
+  readonly motionDecision: 'one';
+  readonly observed: {
+    readonly browser: { readonly name: 'chromium'; readonly version: string };
+    readonly runId: string;
+    readonly buildHash: string;
+    readonly viewport: Viewport;
+    readonly triggerTranscript: readonly { readonly event: 'load'; readonly timestampMs: number }[];
+    readonly sourceInfluence: MotionSourceInfluence;
+  };
+  readonly scenes: readonly [{
+    readonly trigger: 'load';
+    readonly roiSelector: string;
+    readonly roi: { readonly x: number; readonly y: number; readonly width: number; readonly height: number };
+    readonly boundary: 'viewport';
+    readonly activeAnimationCount: number;
+    readonly calibration: { readonly noiseFloor: number; readonly roiEnergy: number };
+    readonly start: { readonly timestampMs: number; readonly capture: ObservedCaptureReceipt };
+    readonly mid: { readonly timestampMs: number; readonly capture: ObservedCaptureReceipt };
+    readonly end: { readonly timestampMs: number; readonly capture: ObservedCaptureReceipt };
+    readonly reducedMotion: {
+      readonly capture: ObservedCaptureReceipt;
+      readonly behavior: 'removed' | 'static-equivalent';
+    };
+  }];
+};
+
+export class MotionEvidenceValidationError extends Error {
+  override readonly name = 'MotionEvidenceValidationError';
+  readonly reason: string;
+
+  constructor(reason: string) {
+    super(`motion evidence is invalid: ${reason}`);
+    this.reason = reason;
+  }
+}
+
+const EVIDENCE_SHA256 = /^[a-f0-9]{64}$/;
+
+function motionFail(reason: string): never { throw new MotionEvidenceValidationError(reason); }
+function motionObject(value: unknown, field: string): Record<string, unknown> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) motionFail(`${field} must be an object`);
+  return value as Record<string, unknown>;
+}
+function motionExact(value: Record<string, unknown>, keys: readonly string[], field: string): void {
+  const actual = Object.keys(value).sort();
+  const expected = [...keys].sort();
+  if (actual.length !== expected.length || actual.some((key, index) => key !== expected[index])) motionFail(`${field} has unexpected keys`);
+}
+function motionHash(value: unknown, field: string): void {
+  if (typeof value !== 'string' || !EVIDENCE_SHA256.test(value)) motionFail(`${field} must be a lowercase SHA-256 hash`);
+}
+function motionText(value: unknown, field: string): string {
+  if (typeof value !== 'string' || value.trim() === '') motionFail(`${field} must be non-empty text`);
+  return value;
+}
+function motionPositive(value: unknown, field: string): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) motionFail(`${field} must be positive`);
+  return value;
+}
+function motionReceipt(value: unknown, field: string): ObservedCaptureReceipt {
+  const receipt = motionObject(value, field);
+  motionExact(receipt, ['path', 'bytesBase64', 'sha256'], field);
+  const path = motionText(receipt.path, `${field}.path`);
+  const bytesBase64 = motionText(receipt.bytesBase64, `${field}.bytesBase64`);
+  motionHash(receipt.sha256, `${field}.sha256`);
+  let bytes: Buffer;
+  try {
+    bytes = Buffer.from(bytesBase64, 'base64');
+  } catch {
+    motionFail(`${field}.bytesBase64 must decode`);
+  }
+  if (bytes.length === 0 || bytes.toString('base64') !== bytesBase64 || createHash('sha256').update(bytes).digest('hex') !== receipt.sha256) {
+    motionFail(`${field} bytes do not match sha256`);
+  }
+  if (!existsSync(path) || !readFileSync(path).equals(bytes)) motionFail(`${field} path does not contain captured bytes`);
+  return receipt as ObservedCaptureReceipt;
+}
+function motionTimestamp(value: unknown, field: string): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) motionFail(`${field} must be a non-negative finite number`);
+  return value;
+}
+
+/**
+ * Validates the single meaningful motion scene allowed for a `one` direction.
+ * Hover/focus affordances and tiny decorative pulses are deliberately absent from
+ * the trigger vocabulary, so they cannot be promoted into a motion obligation.
+ */
+/**
+ * Validates an execution receipt rather than declarative frame hashes. Every frame
+ * must be recoverable from its path and its digest is recomputed from the captured
+ * bytes, so opaque or forged hashes cannot satisfy a scene obligation.
+ */
+export function validateMotionEvidenceV2(
+  value: unknown,
+  decision?: { readonly motionDecision: 'none' | 'one'; readonly buildHash?: string; readonly artDirectionHash?: string },
+): MotionEvidenceV2 {
+  const evidence = motionObject(value, 'evidence');
+  motionExact(evidence, ['schema', 'artDirectionHash', 'motionDecision', 'observed', 'scenes'], 'evidence');
+  if (evidence.schema !== MOTION_EVIDENCE_V2_SCHEMA) motionFail('unsupported schema');
+  motionHash(evidence.artDirectionHash, 'artDirectionHash');
+  if (evidence.motionDecision !== 'one') motionFail('motionDecision must be one');
+  if (decision?.artDirectionHash !== undefined && evidence.artDirectionHash !== decision.artDirectionHash) motionFail('motion evidence art direction is not current');
+  if (decision?.motionDecision !== undefined && decision.motionDecision !== 'one') motionFail('cannot bind motion evidence to a none decision');
+  if (!Array.isArray(evidence.scenes) || evidence.scenes.length !== 1) motionFail('one requires exactly one whole-page load scene');
+
+  const observed = motionObject(evidence.observed, 'observed');
+  motionExact(observed, ['browser', 'runId', 'buildHash', 'viewport', 'triggerTranscript', 'sourceInfluence'], 'observed');
+  const browser = motionObject(observed.browser, 'observed.browser');
+  motionExact(browser, ['name', 'version'], 'observed.browser');
+  if (browser.name !== 'chromium') motionFail('observed browser must be chromium');
+  motionText(browser.version, 'observed.browser.version');
+  motionText(observed.runId, 'observed.runId');
+  motionHash(observed.buildHash, 'observed.buildHash');
+  if (decision?.buildHash !== undefined && observed.buildHash !== decision.buildHash) motionFail('observed build does not match decision build');
+  const viewport = motionObject(observed.viewport, 'observed.viewport');
+  motionExact(viewport, ['width', 'height'], 'observed.viewport');
+  for (const dimension of ['width', 'height'] as const) {
+    if (!Number.isInteger(viewport[dimension]) || (viewport[dimension] as number) <= 0) motionFail(`observed.viewport.${dimension} must be positive integer`);
+  }
+  if (!Array.isArray(observed.triggerTranscript) || observed.triggerTranscript.length === 0) motionFail('trigger transcript requires observed events');
+  let lastTranscriptTime = -1;
+  const transcriptEvents = new Set<string>();
+  for (const [index, entry] of observed.triggerTranscript.entries()) {
+    const transcript = motionObject(entry, `observed.triggerTranscript[${index}]`);
+    motionExact(transcript, ['event', 'timestampMs'], `observed.triggerTranscript[${index}]`);
+    if (transcript.event !== 'load') motionFail('trigger transcript contains unsupported event');
+    const timestamp = motionTimestamp(transcript.timestampMs, `observed.triggerTranscript[${index}].timestampMs`);
+    if (timestamp < lastTranscriptTime) motionFail('trigger transcript timestamps must be monotonic');
+    lastTranscriptTime = timestamp;
+    transcriptEvents.add(transcript.event as string);
+  }
+  if (!transcriptEvents.has('load')) motionFail('trigger transcript must include load');
+  const influence = motionObject(observed.sourceInfluence, 'observed.sourceInfluence');
+  if (influence.kind === 'reference-slot') {
+    motionExact(influence, ['kind', 'referenceSlotId'], 'observed.sourceInfluence');
+    motionText(influence.referenceSlotId, 'observed.sourceInfluence.referenceSlotId');
+  } else if (influence.kind === 'approved-recipe') {
+    motionExact(influence, ['kind', 'recipeId', 'recipeSha256'], 'observed.sourceInfluence');
+    motionText(influence.recipeId, 'observed.sourceInfluence.recipeId');
+    motionHash(influence.recipeSha256, 'observed.sourceInfluence.recipeSha256');
+  } else {
+    motionFail('source influence must bind a reference slot or approved recipe');
+  }
+
+  const scene = motionObject(evidence.scenes[0], 'scenes[0]');
+  motionExact(scene, ['trigger', 'roiSelector', 'roi', 'boundary', 'activeAnimationCount', 'calibration', 'start', 'mid', 'end', 'reducedMotion'], 'scenes[0]');
+  if (scene.trigger !== 'load') motionFail('scenes[0].trigger must be a declared load scene');
+  if (scene.boundary !== 'viewport') motionFail('motion scene must declare the whole viewport production boundary');
+  if (!Number.isInteger(scene.activeAnimationCount) || (scene.activeAnimationCount as number) < 0 || (scene.activeAnimationCount as number) > 1) motionFail('motion scene must inventory zero or one active production animation');
+  if (!transcriptEvents.has(scene.trigger)) motionFail('scene trigger is absent from observed transcript');
+  motionText(scene.roiSelector, 'scenes[0].roiSelector');
+  const roi = motionObject(scene.roi, 'scenes[0].roi');
+  motionExact(roi, ['x', 'y', 'width', 'height'], 'scenes[0].roi');
+  for (const dimension of ['x', 'y', 'width', 'height'] as const) {
+    if (typeof roi[dimension] !== 'number' || !Number.isFinite(roi[dimension])) motionFail(`scenes[0].roi.${dimension} must be finite`);
+  }
+  if ((roi.width as number) <= 1 || (roi.height as number) <= 1 || (roi.x as number) < 0 || (roi.y as number) < 0
+    || (roi.x as number) + (roi.width as number) > (viewport.width as number) || (roi.y as number) + (roi.height as number) > (viewport.height as number)) motionFail('scene must be a visible non-trivial viewport rectangle');
+  if ((roi.x as number) !== 0 || (roi.y as number) !== 0 || (roi.width as number) !== (viewport.width as number) || (roi.height as number) !== (viewport.height as number)) motionFail('motion scene must inventory the whole viewport, not a caller-selected ROI');
+  const calibration = motionObject(scene.calibration, 'scenes[0].calibration');
+  motionExact(calibration, ['noiseFloor', 'roiEnergy'], 'scenes[0].calibration');
+  const noise = motionPositive(calibration.noiseFloor, 'scenes[0].calibration.noiseFloor');
+  const energy = motionPositive(calibration.roiEnergy, 'scenes[0].calibration.roiEnergy');
+  if (energy <= noise) motionFail('ROI energy must exceed calibrated noise floor');
+
+  const timestamps: number[] = [];
+  const captures: ObservedCaptureReceipt[] = [];
+  for (const stage of ['start', 'mid', 'end'] as const) {
+    const frame = motionObject(scene[stage], `scenes[0].${stage}`);
+    motionExact(frame, ['timestampMs', 'capture'], `scenes[0].${stage}`);
+    timestamps.push(motionTimestamp(frame.timestampMs, `scenes[0].${stage}.timestampMs`));
+    captures.push(motionReceipt(frame.capture, `scenes[0].${stage}.capture`));
+  }
+  const observedEnergy = computeEnergy(captures.map((capture) => Buffer.from(capture.bytesBase64, 'base64'))).peakEnergy;
+  if (energy !== observedEnergy) motionFail('ROI energy does not match captured pixel evidence');
+  if (!(timestamps[0]! < timestamps[1]! && timestamps[1]! < timestamps[2]!)) motionFail('ROI timestamps must be strictly start < mid < end');
+  const reduced = motionObject(scene.reducedMotion, 'scenes[0].reducedMotion');
+  motionExact(reduced, ['capture', 'behavior'], 'scenes[0].reducedMotion');
+  const reducedReceipt = motionReceipt(reduced.capture, 'scenes[0].reducedMotion.capture');
+  if (reduced.behavior !== 'removed' && reduced.behavior !== 'static-equivalent') motionFail('reduced-motion counterpart must remove motion or show a static equivalent');
+  const observedReducedEnergy = computeEnergy([
+    Buffer.from(captures[2]!.bytesBase64, 'base64'),
+    Buffer.from(reducedReceipt.bytesBase64, 'base64'),
+  ]).peakEnergy;
+  const observedBehavior = observedReducedEnergy <= reducedMotionRemovalThreshold(noise) ? 'removed' : 'static-equivalent';
+  if (reduced.behavior !== observedBehavior) motionFail('reduced-motion behavior does not match captured pixel evidence');
+  return evidence as MotionEvidenceV2;
+}
+/**
+ * Host-observed Beat receipt. The collector never accepts caller-provided Beat
+ * entries: it extracts the live DOM at both fixed harness viewports.
+ */
+export async function captureRenderedBeatReceipt(
+  target: string,
+  opts: { readonly adapter: ProjectWriteAdapter; readonly out: string; readonly artDirectionHash: string; readonly copyDeckSha256: string; readonly beatIds: readonly string[] },
+): Promise<RenderedBeatProof> {
+  const adapter = requireProjectWriteAdapter(opts.adapter.projectRoot, opts.adapter);
+  const viewports = [{ width: 1280, height: 900 }, { width: 390, height: 844 }] as const;
+  const renderedBeats: RenderedBeat[] = [];
+  await withBrowser(async (browser) => {
+    for (const viewport of viewports) {
+      await onPage(browser, target, viewport, async (page, httpStatus, resolvedUrl) => {
+        await assertNotBlocked(page, httpStatus, resolvedUrl);
+        const observed = await page.evaluate((observedViewport) => [...document.querySelectorAll<HTMLElement>('[data-omd-beat]')].map((element) => {
+          const style = getComputedStyle(element);
+          const rect = element.getBoundingClientRect();
+          const parent = element.parentElement?.closest<HTMLElement>('[data-omd-beat]');
+          return {
+            id: element.dataset.omdBeat ?? '',
+            boundary: style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity) > 0
+              && rect.width > 1 && rect.height > 1,
+            distinctRegions: element.querySelectorAll('[data-omd-beat]').length,
+            ancestorBeatIds: parent?.dataset.omdBeat ? [parent.dataset.omdBeat] : [],
+            rendered: true as const,
+            observedViewport,
+          };
+        }), viewport);
+        renderedBeats.push(...observed);
+      });
+    }
+  });
+  const proof: RenderedBeatProof = {
+    schema: 'rendered-beat-receipt-v1',
+    artDirectionHash: opts.artDirectionHash,
+    copyDeckSha256: opts.copyDeckSha256,
+    beatIds: [...opts.beatIds],
+    renderedBeats,
+    captureViewports: viewports,
+  };
+  adapter.write(projectOutputPath(adapter, opts.out), `${JSON.stringify(proof)}\n`);
+  return proof;
 }

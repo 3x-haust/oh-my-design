@@ -478,17 +478,18 @@ test('data-viz theory gates chart honesty and is wired into hand and eye', () =>
   assert.match(eye, /data visualization, verify it does not lie/i);
 });
 
-test('marketing/showpiece commits to a signature moment by default; product stays quiet', () => {
-  const expr = read('core/theory/expressive.md').replace(/\s+/g, ' ');
-  assert.match(expr, /On a `marketing` or showpiece surface, ambition is the default state/i);
-  assert.match(expr, /never travels down-register: a `product` or quiet surface stays quiet/i);
+test('marketing art direction is silently resolved from evidence instead of defaulting to one motion direction', () => {
   const loop = read('core/protocol/human-design-loop.md').replace(/\s+/g, ' ');
-  assert.match(loop, /Register ambition is part of the GREEN target/i);
-  assert.match(loop, /A safe, evenly-spaced, inoffensive result any generator would produce .* is RED for that register/i);
-  const hand = read('src/agents/hand.agent.yaml').replace(/\s+/g, ' ');
-  assert.match(hand, /a `marketing` or showpiece surface must carry exactly one signature moment/i);
-  const composer = read('src/agents/composer.agent.yaml').replace(/\s+/g, ' ');
-  assert.match(composer, /On a `marketing` or showpiece surface assign exactly one signature/i);
+  assert.match(loop, /explicit current-user register or motion instruction is a lock/i);
+  assert.match(loop, /For `marketing`, compare exactly three evidence-grounded directions silently/i);
+  assert.match(loop, /do not ask the user to choose or approve a direction/i);
+  assert.match(loop, /`none` is legal when the selected direction has adequate static proof/i);
+  assert.match(loop, /`one` is legal only when one declared motion hypothesis is eligible and activated by the selected direction/i);
+  assert.doesNotMatch(loop, /motion defaults to `one`/i);
+  assert.match(loop, /before the composer receives inputs/i);
+  assert.match(loop, /only the selected, hash-bound decision, selected capture visibility, and applicable evidence bindings/i);
+  assert.match(loop, /separate blind-quality and fidelity reviewers in isolated lanes/i);
+  assert.match(loop, /never literalized into shipped copy/i);
 });
 
 test('the eye rejects a merely functional element as a marketing signature moment and demands a named departure', () => {

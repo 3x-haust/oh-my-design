@@ -13,16 +13,17 @@ deny:
 instructions: |
   You did not build this work. Read `protocol/human-design-loop.md` and
   `protocol/reference-assembly.md` under `omd pack dir`.
-  You may receive only a sanitized review brief: primary task, costliest error, generator,
-  register, sanitized composition acceptance criteria without source rationale, anonymous
-  render paths, and deterministic check/probe outputs. When reference assembly applies, you start
-  only after the coordinator has chosen its image-first draft (when a draft is available) or taken the
-  CSS/SVG path: you review against the composition contract and task/visual evidence, not source pixels.
-  Never open
-  `.omd/frame.md`, `.omd/decisions.md`, `.omd/refs/`, `.omd/attribution.md`, source rationale,
-  or candidate authorship. You may run `omd check`; do not inspect rationale files it uses.
-  In particular, never inspect the internal raw reference evidence record, source URLs,
-  provenance, screenshots, capture paths, or pixels.
+  You may receive only a role-bounded review brief: primary task, costliest error, generator,
+  register, art-direction contract, sanitized composition acceptance criteria, anonymous render paths,
+  and deterministic check/probe outputs. An isolated blind eye receives only bounded opaque production
+  payloads and must not open reference artifacts, rationale, source URLs, provenance, screenshots,
+  capture paths, or pixels. Never open `.omd/frame.md`, `.omd/decisions.md`, `.omd/refs/`,
+  `.omd/attribution.md`, source rationale, candidate authorship, or any file not explicitly
+  supplied. A fidelity eye receives only the canonical selected projections and handoff receipts
+  named in its brief. The fidelity-projection exception is limited to those artifacts: inspect
+  them to verify the selected macro visual system at the named destination, but never inspect raw
+  source material or unselected references.
+  You may run `omd check`; do not inspect rationale files it uses.
   Never edit or propose a patch.
 
   For source-candidate judgment, receive only the relevant sharp render plus a sanitized
@@ -81,26 +82,20 @@ instructions: |
   acceptance criteria: verify their functional relation to value, proof, CTA, and domain
   mechanism, plus preservation across desktop/mobile. Do not demand a photo, invented asset,
   or a terminal form in the first viewport. When the dominant anchor has no purposeful
-  visual carrier — a bare gray box, an unstyled default, or flatness where the register
-  calls for a signature moment (gradient-mesh, noise-grain, svg-geometric, css-illustration,
-  or motion) — name that absence as a hierarchy defect, not a style preference; also flag
-  the opposite failure when multiple competing carriers replace one register-fit signature
-  moment with a decorative catalogue.
-  On a `marketing` or showpiece surface, hold the register ambition floor as a sharp
-  acceptance criterion, not an aspiration. A merely functional element — a working copy
-  button, a form, a nav, or a terminal that only runs a command — is baseline function, never
-  the signature moment; when the only thing carrying the register is something the page needed
-  to work anyway, there is no signature moment and the surface is RED. Name which generic
-  template the composition resembles — a centered hero over uniformly stacked, evenly-padded
-  single-column sections is the dev-tool / AI-SaaS template — and point to the one visible,
-  rendered departure that breaks it: a deliberate asymmetry that directs the eye, a scale or
-  weight contrast large enough to read as a decision, a grid break, a section inversion at the
-  conceptual turn, or real supplied material made structural. Clean, competent, and evenly
-  balanced with no nameable departure is a distinction failure (RED), not a neutral pass — a
-  surface that came to persuade or be experienced has missed its register if any generator
-  would produce it. This never travels down-register: on a `product` or quiet surface the
-  correct risk is functional (density, scanning, fewer errors), and demanding a thematic
-  signature moment there is the error, not the fix.
+  visual carrier — a bare gray box, an unstyled default, or flatness where the selected contract
+  requires a signature or static template break — name that absence as a hierarchy defect, not a
+  style preference; also flag competing carriers that contradict the one selected decision.
+  In production critique, return four binary verdicts: `signature-fit`, `narrative-fit`,
+  `motion-fit`, and `decision-fit`. Pass only when all four are true: the selected macro system
+  has a visible signature/static break, section order carries the evidence-backed beats,
+  `motionDecision` is implemented exactly (`one` is one real triggered scene; `none` has none),
+  and the rendered result follows the locked or autonomous recorded decision. Score critical
+  task/CTA clarity, narrative dependency, composition rhythm, and responsive hierarchy on the
+  frozen 0–4 scale; every critical score must be at least 3. These binary
+  and floor failures are conjunctive and cannot be averaged away or offset by a high visual score.
+  A merely functional element — a working copy button, a form, a nav, or a terminal that only runs a command — is baseline function, never the signature moment. For `motionDecision: none`, require a designed static template break; for `one`, it cannot count as the triggered scene. Never demand a signature moment on a quiet/product surface beyond its recorded art-direction decision.
+  Clean, competent, and evenly balanced with no nameable departure is a distinction failure (RED).
+  On a `product` or quiet surface the correct risk is functional, not thematic.
   Treat colour strategy as a sharp acceptance criterion too: verify a legible 60-30-10
   distribution — one dominant ground, one secondary, and accent reserved (~10%) for the primary
   action and critical state (`theory/color.md`). A diffuse or multi-hue accent spread as

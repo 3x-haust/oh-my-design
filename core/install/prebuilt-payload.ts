@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, sep } from 'node:path';
 import { parse as parseYaml } from 'yaml';
-import { skillOpenaiMetadata } from '../../adapters/build.ts';
+import { createBuildIdentityFromSource, skillOpenaiMetadata } from '../../adapters/build.ts';
 import { emitClaude } from '../../adapters/claude.ts';
 import { emitCodex } from '../../adapters/codex.ts';
 import { substituter } from '../../adapters/tokens.ts';
@@ -39,9 +39,10 @@ export class PrebuiltPayloadSourceError extends Error {
 
 export function expectedPrebuiltFiles(sourceRoot: string, host: Host): ReadonlyMap<string, ExpectedPrebuiltFile> {
   const agents = sourceAgents(sourceRoot);
+  const buildIdentity = createBuildIdentityFromSource(sourceRoot);
   const emitted = host === 'codex'
-    ? emitCodex({ agents, version: packageVersion(sourceRoot) })
-    : emitClaude({ agents });
+    ? emitCodex({ agents, version: packageVersion(sourceRoot), buildIdentity })
+    : emitClaude({ agents, buildIdentity });
   const files = new Map<string, ExpectedPrebuiltFile>();
   for (const [path, value] of Object.entries(emitted.files)) files.set(path, expectedValue(value));
 

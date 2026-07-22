@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { analyse } from '../core/coach/index.ts';
 import { logRun } from '../core/history/index.ts';
 import { must } from './helpers.ts';
+import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
 import type { Run, Violation } from '../core/types.ts';
 
 const CLI = fileURLToPath(new URL('../bin/omd.ts', import.meta.url));
@@ -37,9 +38,9 @@ test('no baseline means no percentage — the direction is reported, the magnitu
 
 test('the CLI prints "appeared" rather than a fabricated percentage', () => {
   const dir = project();
-  for (const day of [1, 2]) logRun(dir, `p${day}.html`, [], new Date(Date.UTC(2026, 0, day)).toISOString());
+  for (const day of [1, 2]) logRun(dir, `p${day}.html`, [], createTestProjectWriteAdapter(dir), new Date(Date.UTC(2026, 0, day)).toISOString());
   for (const day of [3, 4]) {
-    logRun(dir, `p${day}.html`, [violation('SLOP-COPY'), violation('SLOP-COPY')], new Date(Date.UTC(2026, 0, day)).toISOString());
+    logRun(dir, `p${day}.html`, [violation('SLOP-COPY'), violation('SLOP-COPY')], createTestProjectWriteAdapter(dir), new Date(Date.UTC(2026, 0, day)).toISOString());
   }
   const out = spawnSync(process.execPath, [CLI, 'coach'], { cwd: dir, encoding: 'utf8' });
   assert.equal(out.status, 0);
@@ -63,7 +64,7 @@ test('the CLI counts a real decisions.md the same way', () => {
   const dir = project();
   const omd = (args: string[]) => spawnSync(process.execPath, [CLI, ...args], { cwd: dir, encoding: 'utf8' });
   omd(['decision', 'Kept the violet gradient (SLOP-GRADIENT)', '--why', 'SLOP-GRADIENT is wrong here: brand primary is #7C3AED']);
-  for (const day of [1, 2, 3, 4]) logRun(dir, 'p.html', [], new Date(Date.UTC(2026, 0, day)).toISOString());
+  for (const day of [1, 2, 3, 4]) logRun(dir, 'p.html', [], createTestProjectWriteAdapter(dir), new Date(Date.UTC(2026, 0, day)).toISOString());
 
   const out = omd(['coach']);
   assert.match(out.stdout, /SLOP-GRADIENT\s+x1/, `counted more than once:\n${out.stdout}`);

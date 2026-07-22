@@ -1,6 +1,7 @@
-import { mkdirSync, appendFileSync, existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Run, Violation } from '../types.ts';
+import { type ProjectWriteAdapter, requireProjectWriteAdapter } from '../runtime/project-write.ts';
 
 const historyPath = (cwd: string): string => join(cwd, '.omd', 'history.jsonl');
 
@@ -8,14 +9,20 @@ const historyPath = (cwd: string): string => join(cwd, '.omd', 'history.jsonl');
  * Appends one run to the history log, creating `.omd/` if needed. A run with zero
  * violations is still recorded — zero findings is the evidence that the user improved.
  */
-export function logRun(cwd: string, page: string, violations: Violation[], ts?: string): void {
+export function logRun(
+  cwd: string,
+  page: string,
+  violations: Violation[],
+  adapter: ProjectWriteAdapter,
+  ts?: string,
+): void {
   const counts: Record<string, number> = {};
   for (const v of violations) counts[v.id] = (counts[v.id] ?? 0) + 1;
 
   const run: Run = { ts: ts ?? new Date().toISOString(), page, counts, total: violations.length };
-
-  mkdirSync(join(cwd, '.omd'), { recursive: true });
-  appendFileSync(historyPath(cwd), `${JSON.stringify(run)}\n`);
+  const path = historyPath(cwd);
+  const existing = existsSync(path) ? readFileSync(path, 'utf8') : '';
+  requireProjectWriteAdapter(cwd, adapter).write('.omd/history.jsonl', `${existing}${JSON.stringify(run)}\n`);
 }
 
 /**

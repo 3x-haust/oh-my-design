@@ -1,6 +1,6 @@
-import { randomUUID } from 'node:crypto';
-import { lstatSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { lstatSync, readFileSync, realpathSync } from 'node:fs';
+import { extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { requireProjectWriteAdapter, type ProjectWriteAdapter } from '../runtime/project-write.ts';
 import { ReferenceUsageValidationError } from './reference-usage-parser.ts';
 
 const prohibitedEvidenceRoots = new Set(['.git', '.omd', '.omo', 'coverage', 'dist', 'node_modules', 'test', 'tests']);
@@ -21,7 +21,6 @@ const inside = (parent: string, child: string): boolean => {
   const path = relative(parent, child);
   return path !== '' && path !== '..' && !path.startsWith(`..${sep}`) && !isAbsolute(path);
 };
-const code = (error: unknown, expected: string): boolean => error instanceof Error && 'code' in error && error.code === expected;
 const rootDirectory = (rootInput: string): string => {
   const root = resolve(rootInput); const stat = lstatSync(root);
   if (!stat.isDirectory() || stat.isSymbolicLink()) return fail('project root must be a real directory');
@@ -72,10 +71,15 @@ export const readTrustedProductionEvidence = (root: string, path: string): Refer
   return readTrustedReferenceUsageSnapshot(root, path, 'production evidence');
 };
 
-export const writeReferenceUsageRecord = (root: string, filename: string, body: string, label: string): void => {
-  const omd = dirname(trustedReferenceUsageFile(root, '.omd/reference-board.json', 'reference board')); const target = join(omd, filename);
-  const existing = (() => { try { return lstatSync(target); } catch (error) { if (code(error, 'ENOENT')) return undefined; throw error; } })();
-  if (existing !== undefined && (existing.isSymbolicLink() || !existing.isFile())) fail(`${label} target must be a regular non-symlink file`);
-  const temporary = join(omd, `.${filename}.${randomUUID()}.tmp`);
-  try { writeFileSync(temporary, body, { flag: 'wx' }); renameSync(temporary, target); } finally { rmSync(temporary, { force: true }); }
+export const writeReferenceUsageRecord = (
+  root: string,
+  filename: string,
+  body: string,
+  label: string,
+  adapter?: ProjectWriteAdapter,
+): void => {
+  if (!/^[a-z0-9][a-z0-9.-]*$/i.test(filename)) fail(`${label} filename is invalid`);
+  const canonicalRoot = rootDirectory(root);
+  trustedReferenceUsageFile(canonicalRoot, '.omd/reference-board.json', 'reference board');
+  requireProjectWriteAdapter(canonicalRoot, adapter).write(join('.omd', filename), body);
 };

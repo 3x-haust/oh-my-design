@@ -6,6 +6,20 @@ export const BOARD_TAKE_VALUES = ['structure', 'proportion', 'density', 'rhythm'
 export type BoardTake = (typeof BOARD_TAKE_VALUES)[number];
 export type BoardSourceKind = 'component-capture' | 'image-fragment';
 
+export const REFERENCE_RIGHTS_VALUES = ['lawful', 'restricted', 'unknown'] as const;
+export const REFERENCE_SIGNAL_VALUES = ['high-visual-system', 'high-motion', 'supporting-component', 'supporting-content', 'anti-reference'] as const;
+export const REFERENCE_AXIS_VALUES = ['available', 'absent'] as const;
+export type ReferenceRights = (typeof REFERENCE_RIGHTS_VALUES)[number];
+export type ReferenceSignal = (typeof REFERENCE_SIGNAL_VALUES)[number];
+export type ReferenceAxis = (typeof REFERENCE_AXIS_VALUES)[number];
+
+export type ReferenceEvidenceAxes = {
+  readonly rights: ReferenceRights;
+  readonly signal: ReferenceSignal;
+  readonly staticAxis: ReferenceAxis;
+  readonly motionAxis: ReferenceAxis;
+};
+
 export type ReferenceBoardGrid = {
   readonly column: number;
   readonly span: number;
@@ -23,6 +37,7 @@ type ReferenceBoardPieceBase = {
   readonly avoid: string;
   readonly adaptation: string;
   readonly grid: ReferenceBoardGrid;
+  readonly evidenceAxes: ReferenceEvidenceAxes;
 };
 
 export type ReferenceBoardComponentPiece = ReferenceBoardPieceBase & {

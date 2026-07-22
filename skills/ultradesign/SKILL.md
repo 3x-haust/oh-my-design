@@ -73,6 +73,18 @@ no reduced-quality mode: every run is the real result.
 Run `omd taste profile` and pass only that explicit-user profile to the framer. Never use
 `--all` for design decisions. Current brief beats current explicit feedback, which beats
 prior explicit taste, which beats agent choices. Record conflicts.
+  The coordinator owns the complete art-direction sequence and does not delegate direction to
+  the writer: (1) receive any host-authorized current-user intent, including either no Beat
+  exception or an explicit typed `current-user-beat-exception` event; (2) obtain the evaluator's
+  exact-three register assessments; (3) run the host-authorized evaluator-to-art-direction
+  check and resolve the selected register/motion; (4) settle every motion obligation and write
+  the selected-reference or approved-recipe handoffs; (5) create the immutable
+  `art-direction-v1` record; then (6) hand only that finalized record to writer, composer, and
+  hand. Writer never compares alternatives or chooses direction. A null Beat-exception receipt
+  is the explicit no-exception state; an over-budget Beat set is permitted only when the record
+  carries the exact hash of a host-authorized typed exception event. The selected register and
+  `motionDecision: none|one` control the macro visual system; quiet or restraint never
+  authorizes a generic template or skipped visual work.
 
 ## 1. Frame and concept hypothesis
 
@@ -106,6 +118,10 @@ governs *how many* techniques ship (one signature moment, never a catalogue), ne
 explicitly requested showpiece ambition is honored at all.
 
 ## 2. Research and copy before structure
+  Every research or gathering role fans out its independent source, artifact, and evidence work in
+  parallel before joining its findings into the canonical sanitized handoff. A role may not serialize
+  independent collection merely to inherit another role's interpretation; join only after each
+  applicable branch has produced its own bounded evidence.
 
 Spawn `oh-my-design:scout` with the concept, explicit functions or product goal, surface classification,
 user references first, and working directory; also pass the component inventory. Require the canonical branch decision before research.
@@ -146,16 +162,22 @@ plus the CSS/SVG evidence path on the fallback. Never pass raw records, source U
 pixels, or source-page prose.
 
 
-The coordinator does not author copy. The scout's voice/audience evidence is the writer's only dependency;
-remaining fragment capture is independent. Once that evidence is in hand, spawn
-`oh-my-design:writer` concurrently with the scout's remaining fragment capture — the writer drafts the copy deck
-while the inventory completes. Give it the brief, that cited voice/audience evidence, working
-directory, `protocol/copy-deck.md`, and `theory/voice.md`.
-It writes only `.omd/copy-deck.md`. Run `omd copy --check`; on failure stop divergence and
-send the deterministic findings back to the writer for autonomous repair without waiting
-for the user.
-The writer additionally runs `omd text-slop .omd/copy-deck.md` as an advisory self-scan; it is
-non-gating and never replaces the blind copy review, but a kept candidate carries a recorded reason.
+  The coordinator does not author copy. The scout's voice/audience evidence is the writer's only dependency;
+  remaining fragment capture is independent. Before writer receives an art-direction contract, the coordinator
+  completes the host-authorized evaluator → art-direction check → motion settlement →
+  selected-reference/recipe handoffs sequence and creates the immutable record. Then spawn `oh-my-design:writer`
+  concurrently with remaining independent fragment capture, with the brief, cited voice/audience evidence,
+  working directory, `protocol/copy-deck.md`, `theory/voice.md`, and the finalized record. It writes only
+  `.omd/copy-deck.md`, copying rather than selecting its Register, motionDecision, Beat IDs, and
+  Beat-exception receipt. The writer's `Current-user exception` is exactly `N/A — no
+  host-authorized Beat exception` for the canonical no-exception marker, or exactly
+  `current-user: host-authorized Beat exception` for the exact host receipt; it cannot quote,
+  infer, or mint an exception. Quiet permits five Beats and confident/showpiece seven unless that
+  exact receipt authorizes more. Run `omd copy --check`; on failure return deterministic findings
+  to the writer for autonomous repair. The writer additionally runs `omd text-slop
+  .omd/copy-deck.md` as an advisory self-scan; it is non-gating and never replaces the blind copy
+  review, but a kept candidate carries a recorded reason. Use affirmative product language; never
+  put internal negative instructions into visible copy (for example, “not a hypothetical demo”).
 
 After the first clean check, spawn a fresh `oh-my-design:eye` in copy-editor mode with only the
 sanitized brief, copy deck/fact ledger, and cited voice/audience evidence. Do not pass renders,
@@ -241,15 +263,15 @@ media, explanatory graphics, real interaction/data, or concept-bearing typograph
 mandatory photo or invented fact/asset. When mechanism/material/workflow is central, Media
 roles assigns a lawful carrier or an explicit alternate non-media mental-model carrier with
 its limitation; `none because no approved photo` is insufficient.
-For a confident/showpiece register where the composition is the deliverable, the
-host/coordinator derives 2–3 independent image-first art-direction directions from the committed
-palette/type/material, sanitized measured principles, the selected references, any project rough, and
-other permitted project-owned inputs before composer starts. The host/coordinator owns concurrent
-draft generation, cache management, and blind selection. The composer may consume only the
-coordinator-chosen draft as art-direction input. Composer neither generates nor supplies/revises
-prompts, inspects raw source material, manages the cache, or selects a draft. Drafts are design references, never shipped page assets; `omd ref
-distance` still reports fidelity as an advisory signal. A quiet register or unavailable host image capability uses
-the selected sanitized assembly and CSS/SVG graphics recipes instead.
+For the selected art-direction contract, the host/coordinator derives 2–3 independent image-first
+directions from the committed palette/type/material, sanitized measured principles, the selected
+references, any project rough, and other permitted project-owned inputs before composer starts.
+The host/coordinator owns concurrent draft generation, cache management, and blind selection. The
+composer may consume only the coordinator-chosen draft as art-direction input. Composer neither
+generates nor supplies/revises prompts, inspects raw source material, manages the cache, or selects
+a draft. Drafts are design references, never shipped page assets; `omd ref distance` still reports
+fidelity as an advisory signal. When image capability is unavailable, use the selected sanitized
+assembly and CSS/SVG graphics recipes while still implementing the selected macro visual system.
 
 Run `omd composition --check`. Missing sections, malformed fingerprints, or stale inputs
 stop divergence and return to the composer. A later change to frame, copy, type proof, or
@@ -257,7 +279,7 @@ scout summary invalidates all dependent sketches and the production build until 
 is recomposed and passes again.
 The composer also runs `omd visual-richness .omd/composition.md` as an advisory carrier read;
 `CARRIER-ADVISORY` findings are non-gating prompts to name a purposeful carrier for a content
-section, and a `quiet` register legitimately yields none.
+section; the selected art-direction contract determines the carrier and static/motion treatment.
 
 ## 5. Independent structural divergence and blind selection
 
@@ -375,14 +397,16 @@ the winner and rejected tradeoffs only when a candidate actually passes.
 ## 6. Production build with reflective craft
 
 On the normal graph, spawn `oh-my-design:hand` once with the selected structure, sanitized build brief,
-copy deck, `.omd/type-proof.md`, `.omd/composition.md`, and accepted sanitized transfer criteria;
-require `omd composition --check` before its first production write. On the Figma structural-bypass
-route, supply `.omd/figma/snapshot.json`, `.omd/figma/design-system.md`, `.omd/attribution.md`, and
-the selected frame inventory instead of composition/transfer inputs; require those artifacts to exist
-and match the supplied frame before the first production write. The hand implements normal-graph
-criteria at their destination screen/route and unique semantic reference-landing selector, or records
-an evidence-backed deviation; it never receives raw URLs, screenshots, pixels, or source descriptions.
-Transfer records never create tasks or probes. The hand builds semantic
+copy deck, `.omd/type-proof.md`, `.omd/composition.md`, accepted sanitized transfer criteria, and
+the selected lawful local capture projections plus handoff receipts resolved from the current
+reference selection. On the normal graph, require `omd composition --check` before its first production write.
+The hand must run it and a failure blocks production. The hand must inspect those selected artifacts and implement their selected
+macro visual system at the named destination; it never receives raw URLs or unselected source
+material. The Figma structural-bypass route is the sole structural-bypass exception: supply
+`.omd/figma/snapshot.json`, `.omd/figma/design-system.md`, `.omd/attribution.md`, and the selected
+frame inventory instead of composition/transfer inputs; require those artifacts to exist and match the
+supplied frame before the first production write. Transfer records never create tasks or probes.
+The hand builds semantic
 real-content layout first,
 then the visual system, then motion. It must record two concrete reflection-in-action loops:
 
@@ -449,20 +473,21 @@ is authoritative where they overlap.
 
 ## 8. Blind critique, repair, and reframe
 
-  Now render sharp desktop/mobile (and filmstrip when motion matters), run deterministic checks,
-  and spawn a fresh `oh-my-design:eye`. Pass only the sanitized review brief required by
-  `protocol/human-design-loop.md`. On the normal graph, include applicable reference-landing criteria
-  and the `omd composition --check` result, never source identity or material; the eye treats validator
-  failure or missing/duplicate canonical axes or selectors as a blocker and verifies visible/probe-
-  supported landed correspondence. On the Figma structural-bypass route, pass the supplied frame
-  identity, snapshot/design-system/attribution hashes, and fresh `omd figma diff <frame-id>
-  <rendered-page> --json` result instead of composition/reference-synthesis evidence. A validator pass
-  never replaces visual/probe review. Reject wrong landings, interaction-only or token-only substitutes,
-  or contradictory behavior; UX task performance and visual composition remain co-equal. Route only
-  the canonical conditional list-detail non-primary-task and support-ticket temporal-window regressions
-  when applicable, with no leakage to other surfaces.
-The sharp eye explicitly judges focal hierarchy and the lawful media/alternate mental-model
-carrier across desktop/mobile, without demanding a photo, invented asset, or form above fold.
+Now render sharp desktop/mobile (and filmstrip when motion matters), run deterministic checks, and
+spawn an isolated fresh `oh-my-design:eye` with only bounded opaque production payload, never references or
+source identity. For reference fidelity, separately spawn a fidelity eye with only canonical
+selected projections, handoff receipts, the named landing criteria, and sharp/probe evidence. The
+fidelity eye verifies the selected macro system at its named destination; neither eye receives raw
+source material. Both treat a failed `omd composition --check`, missing/duplicate canonical axes,
+or wrong landing as a blocker; validator pass never replaces visual/probe review.
+The sharp production review is conjunctive: `signature-fit`, `narrative-fit`, `motion-fit`, and
+`decision-fit` must all pass, and every critical 0–4 score (task/CTA clarity, narrative dependency,
+composition rhythm, responsive hierarchy) must be at least 3. Neither a mean nor a
+high score can average away a binary or floor failure. `motionDecision: one` is exactly one
+load-triggered scene observed from page load through its 1500ms settlement window; `none` is no
+temporal scene plus a designed static template break. The sharp eye
+judges focal hierarchy and the lawful media/alternate mental-model carrier across desktop/mobile,
+without demanding a photo, invented asset, or form above fold.
 
 For showpiece only, spawn one additional fresh eye with exactly one dominant-technique lens
 chosen from typography, motion, or graphics. It reviews that technique only. Do not create
@@ -488,10 +513,14 @@ convergence when a manifest exists, and `omd check --site` for multi-page output
 requires a fresh `omd composition --check`; the Figma structural-bypass route instead requires the
 supplied snapshot/design-system/attribution artifacts plus a fresh passing `omd figma diff` for every
 selected frame. Source-candidate triage has no untriaged or needs-render items and its
-scan was rerun after repairs. When reference assembly applies, hand off the passing
-`reference-usage-v1` ledger to the finalizer, which calls `generateReferenceReport(root)`, persists
-`.omd/reference-report.md`, and pastes the formatter's exact Korean-first bilingual Markdown into
-the final chat. Everything is clean or has an evidence-backed deliberate overrule.
+  scan was rerun after repairs. When reference assembly applies, hand off the passing
+  `.omd/reference-usage-v2.json` ledger, current `.omd/reference-selection-v2.json`, settled
+  `.omd/motion-resolutions/sha256-<digest>.json`, and decision-bound composer/hand
+  `reference-handoff-v2` receipts to the finalizer. The finalizer calls
+  `generateReferenceReport(root, writer)` with host-authorized `ProjectWriteAdapter`, which alone
+  persists `.omd/reference-report.md`; paste the pure formatter's exact Korean-first bilingual
+  Markdown unchanged into the final chat. Everything is clean or has an evidence-backed deliberate
+  overrule.
 Regardless of whether reference assembly applied, close the final chat response with this run's usage: run `omd usage` and include its elapsed-time and token total in your final message to the user. It reads the host session log (Claude Code or Codex); if no log is found it prints a short unavailable note, which you simply omit rather than fabricating a number.
 When the run is an iteration with a before/after pair, form the pairwise blind-choose verdict:
 blind-choose is the visual distinction signal only; applicable task probes, accessibility checks, and
@@ -537,17 +566,24 @@ no fixed budget. Round 0 is almost never GREEN
 surface, with a recorded reason and a clean slop scan.
   After all source and approved inputs stop changing, freeze and collect final evidence in the order
   required by `protocol/human-design-loop.md`: run `omd source --seal <root>`, then `omd source
-  --check <root>`; build and collect every final check, test, declared/applicable probes,
+  --check <root>`; build and collect every final check, test, declared/applicable probe,
   fixed-viewport screenshot/render, and applicable motion filmstrip from sealed source; then run
-  `omd source --check <root>` again. For `product` or `mixed`, publish the task index with
-  `omd evidence tasks --input .omd/.cache/task-evidence-manifest.json`, then `omd evidence
-  tasks-check --json`. The protocol exclusively owns final-evidence fields, artifact roles/cardinality,
-  cache locations, publication behavior, and stale-bundle handling. The hand writes the required
-  manifest input at `.omd/.cache/final-evidence-manifest.json`, runs `omd evidence finalize --input
-  .omd/.cache/final-evidence-manifest.json`, then `omd evidence check --json`, and never directly
-  writes `.omd/final-evidence.json`. Any source or build mutation requires the protocol's reseal,
-  rebuild, rerun, and reindex sequence; the seal proves byte freshness only and does not prove
-  semantic copy/source fidelity.
+  `omd source --check <root>` again. For `product` or `mixed`, publish the task index with `omd
+  evidence tasks --input .omd/.cache/task-evidence-manifest.json`, then `omd evidence tasks-check
+  --json`. Write the `final-evidence-v2` manifest at
+  `.omd/.cache/final-evidence-v2-manifest.json`; it binds the immutable art-direction record,
+  `.omd/reference-selection-v2.json`, settled motion projection, copy receipt, source seal, and
+  exactly one branch: `motionDecision: none` with `static-direction-evidence-v1`, or
+  `motionDecision: one` with exactly one `motion-evidence-v2`. It contains no unselected
+  direction or raw evidence. Publish only with
+  `omd evidence v2 finalize --input .omd/.cache/final-evidence-v2-manifest.json --activation
+  <host-issued-invocation.json>`, using a final-reviewer-authorized activation. Then run
+  `omd evidence v2 check --activation <host-issued-invocation.json> --json`. The sole publication
+  marker is `.omd/final-evidence-v2.json`, pointing at one immutable
+  `.omd/final-evidence-v2-runs/sha256-<digest>.json` record. Never invoke the v1 finalizer/checker
+  or write `.omd/final-evidence.json`; any source or build mutation requires the protocol's
+  reseal, rebuild, rerun, and v2 republish sequence. The seal proves byte freshness only and does
+  not prove semantic copy/source fidelity.
 Deliver the working artifact and briefly state the frame,
 concept, structural choice, what the two craft renders changed, glance/critique outcome,
 and any deliberate overruling. Do not release, deploy, or wait for further approval unless

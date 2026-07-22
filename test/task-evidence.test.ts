@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { deflateSync, crc32 } from 'node:zlib';
 import { test } from 'node:test';
 import { checkTaskEvidence, publishTaskEvidence } from '../core/evidence/task.ts';
+import { createTestProjectRunInvocation } from './helpers/project-write.ts';
 
 type Viewport = 'desktop' | 'mobile';
 type ProbeRole = 'primary' | 'recovery' | 'invalid-submit';
@@ -21,7 +22,7 @@ interface ResultStep { action: PlanStep['action']; selector?: string; key?: stri
 interface ProbeResultFixture { name: string; target: string; viewport: { width: number; height: number }; steps: ResultStep[]; warnings: [] }
 interface TaskFixture { id: string; context: 'production'; production: { route: string; locator: string; workObject: string }; probes: ProbeEvidence[]; renders: [RenderEvidence, RenderEvidence]; invalidSubmit?: ProbeEvidence; transient?: TransientEvidence[] }
 interface ManifestFixture { schemaVersion: 1; surface: 'product' | 'mixed'; frame: Artifact; composition: Artifact; tasks: [TaskFixture] }
-interface Fixture { root: string; input: string; manifest: ManifestFixture; frame: string; snapshot(): void; restore(): void; cleanup(): void }
+interface Fixture { root: string; input: string; writer: ReturnType<typeof createTestProjectRunInvocation>; manifest: ManifestFixture; frame: string; snapshot(): void; restore(): void; cleanup(): void }
 
 const hash = (value: Buffer | string): string => createHash('sha256').update(value).digest('hex');
 const taskOf = (manifest: ManifestFixture): TaskFixture => manifest.tasks[0];
@@ -77,6 +78,7 @@ function png(width: number, height: number, options: { transparent?: boolean; no
 }
 function fixture(surface: 'product' | 'mixed' = 'product'): Fixture {
   const root = mkdtempSync(join(tmpdir(), 'omd-task-evidence-'));
+  const writer = createTestProjectRunInvocation(root);
   const cache = join(root, '.omd/.cache');
   mkdirSync(cache, { recursive: true });
   const frame = `---\nuxSurface: ${surface}\n---\n\n## Task coverage matrix\n\nT1 | goal: save | start: editor | actions: edit | success: saved | recovery: retry | viewports: desktop, mobile | requirements: none\n`;
@@ -110,7 +112,7 @@ function fixture(surface: 'product' | 'mixed' = 'product'): Fixture {
   const snapshot = () => { artifacts.clear(); for (const name of readdirSync(cache)) artifacts.set(name, readFileSync(join(cache, name))); };
   const restore = () => { for (const [name, bytes] of artifacts) writeFileSync(join(cache, name), bytes); };
   snapshot();
-  return { root, input, manifest, frame, snapshot, restore, cleanup: () => rmSync(root, { recursive: true, force: true }) };
+  return { root, input, writer, manifest, frame, snapshot, restore, cleanup: () => rmSync(root, { recursive: true, force: true }) };
 }
 function writeArtifact<T>(item: Fixture, path: string, value: T): Artifact {
   const bytes = Buffer.isBuffer(value) ? value : Buffer.from(JSON.stringify(value));
@@ -125,7 +127,7 @@ function fail(item: Fixture, mutate: (manifest: ManifestFixture) => void, patter
   const manifest = structuredClone(item.manifest);
   mutate(manifest);
   writeFileSync(item.input, JSON.stringify(manifest));
-  assert.throws(() => publishTaskEvidence(item.root, item.input), pattern);
+  assert.throws(() => publishTaskEvidence(item.root, item.input, item.writer), pattern);
 }
 function bindProductionTarget(item: Fixture, manifest: ManifestFixture, production: TaskFixture['production']): void {
   const task = taskOf(manifest);
@@ -147,7 +149,7 @@ function bindProductionTarget(item: Fixture, manifest: ManifestFixture, producti
 test('task evidence publishes and rechecks exact product and mixed production bindings', () => {
   for (const surface of ['product', 'mixed'] as const) {
     const item = fixture(surface);
-    try { assert.match(publishTaskEvidence(item.root, item.input), /\.omd\/task-evidence\.json$/); assert.equal(checkTaskEvidence(item.root).surface, surface); } finally { item.cleanup(); }
+    try { assert.match(publishTaskEvidence(item.root, item.input, item.writer), /\.omd\/task-evidence\.json$/); assert.equal(checkTaskEvidence(item.root).surface, surface); } finally { item.cleanup(); }
   }
 });
 test('task evidence reserves explicit fixture namespaces without rejecting product-domain vocabulary', () => {
@@ -157,7 +159,7 @@ test('task evidence reserves explicit fixture namespaces without rejecting produ
       const manifest = structuredClone(item.manifest);
       bindProductionTarget(item, manifest, { route, locator: '#demographics-save', workObject: 'gallery item' });
       writeFileSync(item.input, JSON.stringify(manifest));
-      assert.doesNotThrow(() => publishTaskEvidence(item.root, item.input));
+      assert.doesNotThrow(() => publishTaskEvidence(item.root, item.input, item.writer));
     } finally { item.cleanup(); }
   }
   const item = fixture();
@@ -234,7 +236,7 @@ test('invalid submit requires ordered same-field fill, production activation, an
     const planArtifact = writeArtifact(item, '.omd/.cache/invalid-plan.json', plan);
     const resultArtifact = writeArtifact(item, '.omd/.cache/invalid-result.json', result);
     taskOf(item.manifest).invalidSubmit = { planPath: planArtifact.path, planSha256: planArtifact.sha256, resultPath: resultArtifact.path, resultSha256: resultArtifact.sha256, role: 'invalid-submit', viewport: 'mobile' };
-    writeFileSync(item.input, JSON.stringify(item.manifest)); item.snapshot(); publishTaskEvidence(item.root, item.input);
+    writeFileSync(item.input, JSON.stringify(item.manifest)); item.snapshot(); publishTaskEvidence(item.root, item.input, item.writer);
     fail(item, manifest => {
       const probe = invalidOf(taskOf(manifest));
       const invalidPlan = readArtifact<ProbePlanFixture>(item, probe.planPath);
@@ -272,7 +274,7 @@ test('renders and transient captures require decoded exact pixels and bound visi
     const frame = item.frame.replace('requirements: none', 'requirements: transient'); writeFileSync(join(item.root, '.omd/frame.md'), frame); item.manifest.frame.sha256 = hash(frame);
     const good = png(1280, 900); writeFileSync(join(item.root, '.omd/.cache/transient.png'), good);
     taskOf(item.manifest).transient = [{ path: '.omd/.cache/transient.png', sha256: hash(good), captureMode: 'settled', probeRole: 'primary', stateSelector: '#saved', stepIndex: 0, viewport: 'desktop' }];
-    writeFileSync(item.input, JSON.stringify(item.manifest)); item.snapshot(); publishTaskEvidence(item.root, item.input);
+    writeFileSync(item.input, JSON.stringify(item.manifest)); item.snapshot(); publishTaskEvidence(item.root, item.input, item.writer);
     fail(item, manifest => { const bytes = png(1280, 900, { transparent: true }); writeFileSync(join(item.root, '.omd/.cache/transient.png'), bytes); transientOf(taskOf(manifest)).sha256 = hash(bytes); }, /meaningful coherent visible/);
     fail(item, manifest => { const bytes = png(1280, 900, { flat: true, noise: true }); writeFileSync(join(item.root, '.omd/.cache/transient.png'), bytes); transientOf(taskOf(manifest)).sha256 = hash(bytes); }, /meaningful coherent visible/);
     fail(item, manifest => { const bytes = png(1280, 900, { flat: true, scattered: true }); writeFileSync(join(item.root, '.omd/.cache/transient.png'), bytes); transientOf(taskOf(manifest)).sha256 = hash(bytes); }, /meaningful coherent visible/);
@@ -284,9 +286,9 @@ test('publication rejects directory and symlink current records and preserves im
   const item = fixture();
   try {
     const current = join(item.root, '.omd/task-evidence.json');
-    mkdirSync(current); assert.throws(() => publishTaskEvidence(item.root, item.input), /current record must be a regular/); rmSync(current, { recursive: true, force: true });
-    symlinkSync('/tmp', current); assert.throws(() => publishTaskEvidence(item.root, item.input), /current record must be a regular/); rmSync(current, { recursive: true, force: true });
-    publishTaskEvidence(item.root, item.input);
+    mkdirSync(current); assert.throws(() => publishTaskEvidence(item.root, item.input, item.writer), /current record must be a regular/); rmSync(current, { recursive: true, force: true });
+    symlinkSync('/tmp', current); assert.throws(() => publishTaskEvidence(item.root, item.input, item.writer), /current record must be a regular/); rmSync(current, { recursive: true, force: true });
+    publishTaskEvidence(item.root, item.input, item.writer);
     const published = readFileSync(current); writeFileSync(join(item.root, '.omd/task-evidence-runs', `${hash(published)}.json`), 'tampered');
     assert.throws(() => checkTaskEvidence(item.root), /does not match immutable/);
   } finally { item.cleanup(); }

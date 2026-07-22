@@ -9,6 +9,7 @@ import test from 'node:test';
 import { checkFinalEvidence, computeBuildFingerprint, finalizeFinalEvidence, type FinalEvidenceArtifact, type FinalEvidenceInteraction, type FinalEvidenceManifest } from '../core/evidence/final.ts';
 import { writeSourceSeal } from '../core/source-seal/index.ts';
 import { publishTaskEvidence } from '../core/evidence/task.ts';
+import { createTestProjectRunInvocation } from './helpers/project-write.ts';
 
 const sha256 = (value: string | Buffer): string => createHash('sha256').update(value).digest('hex');
 function chunk(type: string, data: Buffer): Buffer { const length = Buffer.alloc(4); length.writeUInt32BE(data.length); const body = Buffer.concat([Buffer.from(type), data]); const checksum = Buffer.alloc(4); checksum.writeUInt32BE(crc32(body) >>> 0); return Buffer.concat([length, body, checksum]); }
@@ -79,7 +80,7 @@ function publishValidTaskEvidence(root: string, surface: 'product' | 'mixed'): v
   const evidence = { schemaVersion: 1, surface, frame: { path: '.omd/frame.md', sha256: sha256(frame) }, composition: { path: '.omd/composition.md', sha256: sha256(composition) }, tasks: [{ id: 'T1', context: 'production', production: { route: '/editor', locator: '#save', workObject: 'document' }, probes: [primaryDesktop, primaryMobile, recoveryDesktop, recoveryMobile], renders: [{ ...desktop, viewport: 'desktop' }, { ...mobile, viewport: 'mobile' }] }] };
   const input = join(root, '.omd', '.cache', 'task-evidence-manifest.json');
   writeFileSync(input, JSON.stringify(evidence));
-  publishTaskEvidence(root, input);
+  publishTaskEvidence(root, input, createTestProjectRunInvocation(root));
 }
 
 function artifact(root: string, kind: FinalEvidenceArtifact['kind'], name: string, extra: Record<string, string> = {}): FinalEvidenceArtifact {
@@ -104,7 +105,7 @@ function fixture(interaction: FinalEvidenceInteraction = { scope: 'stateful', mo
   }
   writeFileSync(join(root, 'app.js'), 'export const app = true;');
   writeFileSync(join(root, 'dist', 'app.js'), 'build-v1');
-  writeSourceSeal(root);
+  writeSourceSeal(root, createTestProjectRunInvocation(root));
   const artifacts: FinalEvidenceArtifact[] = [
     artifact(root, 'check', 'check.json'),
     artifact(root, 'test', 'test.json'),
@@ -136,36 +137,54 @@ function mutate(item: ReturnType<typeof fixture>, change: (value: Record<string,
   change(value);
   writeFileSync(item.manifest, JSON.stringify(value));
 }
+function assertLegacyFinalizationDisabled(item: ReturnType<typeof fixture>): void {
+  assert.throws(() => finalizeFinalEvidence(item.root, item.manifest), (error: unknown) => {
+    assert.equal((error as Error & { code?: string }).code, 'LEGACY_PUBLICATION_DISABLED');
+    return true;
+  });
+}
+function assertLegacyPublicationDisabled(item: ReturnType<typeof fixture>): void {
+  assertLegacyFinalizationDisabled(item);
+  assert.equal(existsSync(join(item.root, '.omd', '.final-evidence.lock')), false);
+  assert.equal(existsSync(join(item.root, '.omd', 'final-evidence.json')), false);
+  assert.equal(existsSync(join(item.root, '.omd', 'final-evidence-runs')), false);
+}
+function seedHistoricalFinalEvidence(item: ReturnType<typeof fixture>): void {
+  const bytes = readFileSync(item.manifest);
+  const { runId } = JSON.parse(bytes.toString('utf8')) as FinalEvidenceManifest;
+  const runs = join(item.root, '.omd', 'final-evidence-runs');
+  mkdirSync(runs, { recursive: true });
+  writeFileSync(join(runs, `${runId}.json`), bytes);
+  writeFileSync(join(item.root, '.omd', 'final-evidence.json'), bytes);
+}
 
-test('final evidence round trips and exclusively publishes the bound record', () => {
+test('v1 final evidence publication is disabled before any publication write', () => {
   const item = fixture();
   try {
-    assert.match(finalizeFinalEvidence(item.root, item.manifest), /\.omd\/final-evidence\.json$/);
-    assert.equal(checkFinalEvidence(item.root).runId, 'run-1');
-    assert.throws(() => finalizeFinalEvidence(item.root, item.manifest), /already exists/);
+    assertLegacyPublicationDisabled(item);
   } finally { cleanup(item.root); }
 });
 
-test('final evidence accepts each applicable interaction scope', () => {
+test('v1 final evidence rejects every interaction scope before publication', () => {
   for (const interaction of [{ scope: 'stateful', motion: false, surface: 'product' }, { scope: 'navigation-only', motion: false, surface: 'mixed' }, { scope: 'static', motion: true, surface: 'marketing' }] as const) {
     const item = fixture(interaction);
-    try { assert.doesNotThrow(() => finalizeFinalEvidence(item.root, item.manifest)); } finally { cleanup(item.root); }
+    try { assertLegacyPublicationDisabled(item); } finally { cleanup(item.root); }
   }
 });
-test('final evidence accepts valid product and marketing flows', () => {
+test('v1 final evidence rejects product and marketing flows before publication', () => {
   for (const interaction of [
     { scope: 'stateful', motion: false, surface: 'product' },
     { scope: 'static', motion: false, surface: 'marketing' },
   ] as const) {
     const item = fixture(interaction);
-    try { assert.doesNotThrow(() => finalizeFinalEvidence(item.root, item.manifest)); } finally { cleanup(item.root); }
+    try { assertLegacyPublicationDisabled(item); } finally { cleanup(item.root); }
   }
 });
-test('final evidence binds task-index applicability to the sealed frame surface before caller metadata', () => {
+test('v1 finalization is disabled before task-index surface binding validation', () => {
   const relabeled = fixture();
   try {
     mutate(relabeled, value => { (value.interaction as Record<string, unknown>).surface = 'marketing'; });
-    assert.throws(() => finalizeFinalEvidence(relabeled.root, relabeled.manifest), /frame uxSurface does not match/);
+    assertLegacyPublicationDisabled(relabeled);
   } finally { cleanup(relabeled.root); }
 
   const omitted = fixture();
@@ -174,11 +193,11 @@ test('final evidence binds task-index applicability to the sealed frame surface 
       (value.interaction as Record<string, unknown>).surface = 'marketing';
       value.artifacts = (value.artifacts as Array<Record<string, unknown>>).filter(artifact => artifact.kind !== 'task-evidence');
     });
-    assert.throws(() => finalizeFinalEvidence(omitted.root, omitted.manifest), /frame uxSurface does not match/);
+    assertLegacyPublicationDisabled(omitted);
   } finally { cleanup(omitted.root); }
 });
 
-test('final evidence rejects missing, malformed, and unknown frame surfaces', () => {
+test('v1 finalization is disabled before frame-surface validation', () => {
   const cases: Array<{ frame: string; pattern: RegExp }> = [
     { frame: '# Frame\n', pattern: /YAML frontmatter/ },
     { frame: '---\nuxSurface: [\n---\n', pattern: /frontmatter is malformed/ },
@@ -188,39 +207,39 @@ test('final evidence rejects missing, malformed, and unknown frame surfaces', ()
     const item = fixture({ scope: 'static', motion: false, surface: 'marketing' });
     try {
       writeFileSync(join(item.root, '.omd', 'frame.md'), entry.frame);
-      assert.throws(() => finalizeFinalEvidence(item.root, item.manifest), entry.pattern);
+      assertLegacyPublicationDisabled(item);
     } finally { cleanup(item.root); }
   }
 });
 
 
-test('final evidence requires a current production-bound task index for product and mixed surfaces', () => {
+test('v1 finalization is disabled before task-index validation', () => {
   const missing = fixture();
   try {
     mutate(missing, value => { value.artifacts = (value.artifacts as Array<Record<string, unknown>>).filter(artifact => artifact.kind !== 'task-evidence'); });
-    assert.throws(() => finalizeFinalEvidence(missing.root, missing.manifest), /require exactly one task-evidence/);
+    assertLegacyPublicationDisabled(missing);
   } finally { cleanup(missing.root); }
 
   const extra = fixture();
   try {
     mutate(extra, value => { const artifact = (value.artifacts as Array<Record<string, unknown>>).find(entry => entry.kind === 'task-evidence')!; (value.artifacts as Array<Record<string, unknown>>).push({ ...artifact }); });
-    assert.throws(() => finalizeFinalEvidence(extra.root, extra.manifest), /duplicate artifact path/);
+    assertLegacyPublicationDisabled(extra);
   } finally { cleanup(extra.root); }
 
   const wrongPath = fixture();
   try {
     mutate(wrongPath, value => { ((value.artifacts as Array<Record<string, unknown>>).find(artifact => artifact.kind === 'task-evidence')!).path = '.omd/.cache/task-evidence.json'; });
-    assert.throws(() => finalizeFinalEvidence(wrongPath.root, wrongPath.manifest), /task-evidence artifact path/);
+    assertLegacyPublicationDisabled(wrongPath);
   } finally { cleanup(wrongPath.root); }
 });
 
-test('final evidence rejects hand-written, malformed, and stale task indexes', () => {
+test('v1 finalization is disabled before task-index integrity validation', () => {
   const handwritten = fixture();
   try {
     const path = join(handwritten.root, '.omd', 'task-evidence.json');
     writeFileSync(path, `${readFileSync(path, 'utf8')}\n`);
     mutate(handwritten, value => { ((value.artifacts as Array<Record<string, unknown>>).find(artifact => artifact.kind === 'task-evidence')!).sha256 = sha256(readFileSync(path)); });
-    assert.throws(() => finalizeFinalEvidence(handwritten.root, handwritten.manifest), /immutable publication/);
+    assertLegacyPublicationDisabled(handwritten);
   } finally { cleanup(handwritten.root); }
 
   const malformed = fixture();
@@ -228,64 +247,64 @@ test('final evidence rejects hand-written, malformed, and stale task indexes', (
     const path = join(malformed.root, '.omd', 'task-evidence.json');
     writeFileSync(path, '{');
     mutate(malformed, value => { ((value.artifacts as Array<Record<string, unknown>>).find(artifact => artifact.kind === 'task-evidence')!).sha256 = sha256('{'); });
-    assert.throws(() => finalizeFinalEvidence(malformed.root, malformed.manifest));
+    assertLegacyPublicationDisabled(malformed);
   } finally { cleanup(malformed.root); }
 
   const stale = fixture();
   try {
     const frame = join(stale.root, '.omd', 'frame.md');
     writeFileSync(frame, `${readFileSync(frame, 'utf8')}\n`);
-    writeSourceSeal(stale.root);
+    writeSourceSeal(stale.root, createTestProjectRunInvocation(stale.root));
     mutate(stale, value => { (value.sourceSeal as Record<string, unknown>).sha256 = sha256(readFileSync(join(stale.root, '.omd', 'source-seal.json'))); });
-    assert.throws(() => finalizeFinalEvidence(stale.root, stale.manifest), /frame or composition digest mismatch/);
+    assertLegacyPublicationDisabled(stale);
   } finally { cleanup(stale.root); }
 });
 
-test('final evidence rejects task-index surface mismatches, static product, and non-product contamination', () => {
+test('v1 finalization is disabled before interaction applicability validation', () => {
   const mismatch = fixture();
   try {
     mutate(mismatch, value => { (value.interaction as Record<string, unknown>).surface = 'mixed'; });
-    assert.throws(() => finalizeFinalEvidence(mismatch.root, mismatch.manifest), /surface.*does not match/i);
+    assertLegacyPublicationDisabled(mismatch);
   } finally { cleanup(mismatch.root); }
 
   const staticProduct = fixture();
   try {
     mutate(staticProduct, value => { (value.interaction as Record<string, unknown>).scope = 'static'; });
-    assert.throws(() => finalizeFinalEvidence(staticProduct.root, staticProduct.manifest), /must not be static/);
+    assertLegacyPublicationDisabled(staticProduct);
   } finally { cleanup(staticProduct.root); }
 
   const contamination = fixture({ scope: 'static', motion: false, surface: 'marketing' });
   try {
     mutate(contamination, value => { (value.artifacts as Array<Record<string, unknown>>).push({ kind: 'task-evidence', path: '.omd/task-evidence.json', sha256: '0'.repeat(64) }); });
-    assert.throws(() => finalizeFinalEvidence(contamination.root, contamination.manifest), /must not include task-evidence/);
+    assertLegacyPublicationDisabled(contamination);
   } finally { cleanup(contamination.root); }
 });
 
-test('final evidence rejects a non-canonical source seal, raw payloads, and bad hashes', () => {
+test('v1 finalization is disabled before manifest schema and hash validation', () => {
   for (const change of [
     (value: Record<string, unknown>) => { (value.sourceSeal as Record<string, unknown>).path = '.omd/other-seal.json'; },
     (value: Record<string, unknown>) => { value.raw = 'artifact bytes'; },
     (value: Record<string, unknown>) => { ((value.artifacts as Array<Record<string, unknown>>)[0]!).sha256 = '0'.repeat(64); },
   ]) {
     const item = fixture();
-    try { mutate(item, change); assert.throws(() => finalizeFinalEvidence(item.root, item.manifest)); } finally { cleanup(item.root); }
+    try { mutate(item, change); assertLegacyPublicationDisabled(item); } finally { cleanup(item.root); }
   }
 });
 
-test('final evidence rejects paths reused across kinds and files outside the cache', () => {
+test('v1 finalization is disabled before artifact path validation', () => {
   const duplicate = fixture();
   try {
     mutate(duplicate, value => { const artifacts = value.artifacts as Array<Record<string, unknown>>; artifacts[1]!.path = artifacts[0]!.path; });
-    assert.throws(() => finalizeFinalEvidence(duplicate.root, duplicate.manifest), /duplicate artifact path/);
+    assertLegacyPublicationDisabled(duplicate);
   } finally { cleanup(duplicate.root); }
   const outside = fixture();
   try {
     mutate(outside, value => { ((value.artifacts as Array<Record<string, unknown>>)[0]!).path = '.omd/check.json'; });
-    assert.throws(() => finalizeFinalEvidence(outside.root, outside.manifest), /under .omd/);
+    assertLegacyPublicationDisabled(outside);
   } finally { cleanup(outside.root); }
 });
 
-test('final evidence rejects missing and extra probe roles for each interaction scope', () => {
+test('v1 finalization is disabled before probe-role validation', () => {
   const cases: Array<{ interaction: FinalEvidenceInteraction; change: (root: string, artifacts: Array<Record<string, unknown>>) => void }> = [
     { interaction: { scope: 'stateful', motion: false, surface: 'product' }, change: (_root, artifacts) => { artifacts.splice(5, 1); } },
     { interaction: { scope: 'stateful', motion: false, surface: 'product' }, change: (_root, artifacts) => { artifacts.push({ ...artifacts[4]!, path: '.omd/.cache/extra-primary.json' }); } },
@@ -297,67 +316,67 @@ test('final evidence rejects missing and extra probe roles for each interaction 
     const item = fixture(entry.interaction);
     try {
       mutate(item, value => entry.change(item.root, value.artifacts as Array<Record<string, unknown>>));
-      assert.throws(() => finalizeFinalEvidence(item.root, item.manifest));
+      assertLegacyPublicationDisabled(item);
     } finally { cleanup(item.root); }
   }
 });
 
-test('final evidence requires both viewports and motion-matched filmstrips', () => {
+test('v1 finalization is disabled before viewport and motion validation', () => {
   const missingViewport = fixture();
   try {
     mutate(missingViewport, value => { ((value.artifacts as Array<Record<string, unknown>>)[3]!).viewport = 'desktop'; });
-    assert.throws(() => finalizeFinalEvidence(missingViewport.root, missingViewport.manifest), /desktop and mobile/);
+    assertLegacyPublicationDisabled(missingViewport);
   } finally { cleanup(missingViewport.root); }
   const missingFilmstrip = fixture({ scope: 'static', motion: true, surface: 'marketing' });
   try {
     mutate(missingFilmstrip, value => { (value.artifacts as Array<Record<string, unknown>>).pop(); });
-    assert.throws(() => finalizeFinalEvidence(missingFilmstrip.root, missingFilmstrip.manifest), /requires a filmstrip/);
+    assertLegacyPublicationDisabled(missingFilmstrip);
   } finally { cleanup(missingFilmstrip.root); }
   const extraFilmstrip = fixture();
   try {
     writeFileSync(join(extraFilmstrip.root, '.omd/.cache/filmstrip.png'), 'filmstrip.png');
     mutate(extraFilmstrip, value => { (value.artifacts as Array<Record<string, unknown>>).push({ kind: 'filmstrip', path: '.omd/.cache/filmstrip.png', sha256: sha256('filmstrip.png') }); });
-    assert.throws(() => finalizeFinalEvidence(extraFilmstrip.root, extraFilmstrip.manifest), /must not include filmstrips/);
+    assertLegacyPublicationDisabled(extraFilmstrip);
   } finally { cleanup(extraFilmstrip.root); }
 });
 
-test('final evidence rejects unknown applicability and artifact variant keys, traversal, symlinks, and special files', () => {
+test('v1 finalization is disabled before filesystem safety validation', () => {
   const unknownApplicabilityKey = fixture();
   try {
     mutate(unknownApplicabilityKey, value => { (value.interaction as Record<string, unknown>).label = 'stateful'; });
-    assert.throws(() => finalizeFinalEvidence(unknownApplicabilityKey.root, unknownApplicabilityKey.manifest), /unknown or missing keys/);
+    assertLegacyPublicationDisabled(unknownApplicabilityKey);
   } finally { cleanup(unknownApplicabilityKey.root); }
   const unknownKey = fixture();
   try {
     mutate(unknownKey, value => { ((value.artifacts as Array<Record<string, unknown>>)[0]!).role = 'primary'; });
-    assert.throws(() => finalizeFinalEvidence(unknownKey.root, unknownKey.manifest), /unknown or missing keys/);
+    assertLegacyPublicationDisabled(unknownKey);
   } finally { cleanup(unknownKey.root); }
   const traversal = fixture();
   try {
     mutate(traversal, value => { ((value.artifacts as Array<Record<string, unknown>>)[0]!).path = '../outside'; });
-    assert.throws(() => finalizeFinalEvidence(traversal.root, traversal.manifest), /safe project-relative/);
+    assertLegacyPublicationDisabled(traversal);
   } finally { cleanup(traversal.root); }
   const linked = fixture();
   try {
     symlinkSync(linked.artifact, join(linked.root, '.omd', '.cache', 'linked.png'));
     mutate(linked, value => { const artifact = (value.artifacts as Array<Record<string, unknown>>)[2]!; artifact.path = '.omd/.cache/linked.png'; artifact.sha256 = sha256('desktop.png'); });
-    assert.throws(() => finalizeFinalEvidence(linked.root, linked.manifest), /symlink/);
+    assertLegacyPublicationDisabled(linked);
   } finally { cleanup(linked.root); }
   const special = fixture();
   try {
     const fifo = join(special.root, '.omd', '.cache', 'evidence.fifo'); execFileSync('mkfifo', [fifo]);
     mutate(special, value => { ((value.artifacts as Array<Record<string, unknown>>)[2]!).path = '.omd/.cache/evidence.fifo'; });
     assert.equal(lstatSync(fifo).isFIFO(), true);
-    assert.throws(() => finalizeFinalEvidence(special.root, special.manifest), /regular file/);
+    assertLegacyPublicationDisabled(special);
   } finally { cleanup(special.root); }
 });
-test('final evidence decodes viewport artifacts and requires non-uniform PNG filmstrips', () => {
+test('v1 finalization is disabled before media validation', () => {
   const fake = fixture({ scope: 'static', motion: false, surface: 'marketing' });
   try {
     const path = join(fake.root, '.omd', '.cache', 'desktop.png');
     writeFileSync(path, 'not a PNG');
     mutate(fake, value => { ((value.artifacts as Array<Record<string, unknown>>)[2]!).sha256 = sha256('not a PNG'); });
-    assert.throws(() => finalizeFinalEvidence(fake.root, fake.manifest), /structurally valid PNG/);
+    assertLegacyPublicationDisabled(fake);
   } finally { cleanup(fake.root); }
 
   const wrongSize = fixture({ scope: 'static', motion: false, surface: 'marketing' });
@@ -366,7 +385,7 @@ test('final evidence decodes viewport artifacts and requires non-uniform PNG fil
     const image = png(2, 1);
     writeFileSync(path, image);
     mutate(wrongSize, value => { ((value.artifacts as Array<Record<string, unknown>>)[2]!).sha256 = sha256(image); });
-    assert.throws(() => finalizeFinalEvidence(wrongSize.root, wrongSize.manifest), /must be 1280x900/);
+    assertLegacyPublicationDisabled(wrongSize);
   } finally { cleanup(wrongSize.root); }
 
   const uniformFilmstrip = fixture({ scope: 'static', motion: true, surface: 'marketing' });
@@ -378,34 +397,35 @@ test('final evidence decodes viewport artifacts and requires non-uniform PNG fil
       const artifact = (value.artifacts as Array<Record<string, unknown>>).find(entry => entry.kind === 'filmstrip')!;
       artifact.sha256 = sha256(image);
     });
-    assert.throws(() => finalizeFinalEvidence(uniformFilmstrip.root, uniformFilmstrip.manifest), /must be non-uniform/);
+    assertLegacyPublicationDisabled(uniformFilmstrip);
   } finally { cleanup(uniformFilmstrip.root); }
 });
-test('final evidence keeps immutable per-run history while a later run atomically supersedes current', () => {
+test('final evidence reads immutable per-run history when current is superseded', () => {
   const item = fixture();
   try {
-    finalizeFinalEvidence(item.root, item.manifest);
+    seedHistoricalFinalEvidence(item);
     const first = readFileSync(join(item.root, '.omd', 'final-evidence-runs', 'run-1.json'));
     mutate(item, value => { value.runId = 'run-2'; });
-    finalizeFinalEvidence(item.root, item.manifest);
+    seedHistoricalFinalEvidence(item);
     assert.equal(checkFinalEvidence(item.root).runId, 'run-2');
     assert.deepEqual(readFileSync(join(item.root, '.omd', 'final-evidence-runs', 'run-1.json')), first);
     assert.equal(JSON.parse(readFileSync(join(item.root, '.omd', 'final-evidence-runs', 'run-2.json'), 'utf8')).runId, 'run-2');
   } finally { cleanup(item.root); }
 });
 
-test('final evidence never overwrites an existing run record or current record after a failed publication', () => {
+test('v1 final evidence remains disabled when historical records and locks exist', () => {
   const item = fixture();
   try {
-    finalizeFinalEvidence(item.root, item.manifest);
+    assertLegacyPublicationDisabled(item);
+    seedHistoricalFinalEvidence(item);
     const record = join(item.root, '.omd', 'final-evidence-runs', 'run-1.json');
     const current = readFileSync(join(item.root, '.omd', 'final-evidence.json'));
     mutate(item, value => { (value.build as Record<string, unknown>).servedTarget = 'http://127.0.0.1:5173/'; });
-    assert.throws(() => finalizeFinalEvidence(item.root, item.manifest), /run already exists/);
+    assertLegacyFinalizationDisabled(item);
     assert.deepEqual(readFileSync(record), current);
     writeFileSync(join(item.root, '.omd', '.final-evidence.lock'), 'held');
     mutate(item, value => { value.runId = 'run-2'; });
-    assert.throws(() => finalizeFinalEvidence(item.root, item.manifest), /already in progress/);
+    assertLegacyFinalizationDisabled(item);
     assert.deepEqual(readFileSync(join(item.root, '.omd', 'final-evidence.json')), current);
     assert.equal(existsSync(join(item.root, '.omd', 'final-evidence-runs', 'run-2.json')), false);
   } finally { cleanup(item.root); }
@@ -413,21 +433,44 @@ test('final evidence never overwrites an existing run record or current record a
 test('final evidence requires the immutable run record to match the current manifest', () => {
   const missing = fixture();
   try {
-    finalizeFinalEvidence(missing.root, missing.manifest);
+    seedHistoricalFinalEvidence(missing);
     rmSync(join(missing.root, '.omd', 'final-evidence-runs', 'run-1.json'));
     assert.throws(() => checkFinalEvidence(missing.root));
   } finally { cleanup(missing.root); }
 
   const divergent = fixture();
   try {
-    finalizeFinalEvidence(divergent.root, divergent.manifest);
+    seedHistoricalFinalEvidence(divergent);
     const current = join(divergent.root, '.omd', 'final-evidence.json');
     writeFileSync(current, `${readFileSync(current, 'utf8')}\n`);
     assert.throws(() => checkFinalEvidence(divergent.root), /does not match immutable run record/);
   } finally { cleanup(divergent.root); }
 });
+test('final evidence checker revalidates historical schema, bindings, and filesystem safety', () => {
+  const malformed = fixture();
+  try {
+    mutate(malformed, value => { value.raw = 'artifact bytes'; });
+    seedHistoricalFinalEvidence(malformed);
+    assert.throws(() => checkFinalEvidence(malformed.root), /unknown or missing keys/);
+  } finally { cleanup(malformed.root); }
 
-test('final evidence rejects whitespace metadata, unsafe run IDs, and canonical duplicate commands', () => {
+  const fingerprint = fixture();
+  try {
+    seedHistoricalFinalEvidence(fingerprint);
+    writeFileSync(fingerprint.build, 'build-v2');
+    assert.throws(() => checkFinalEvidence(fingerprint.root), /build fingerprint mismatch/);
+  } finally { cleanup(fingerprint.root); }
+
+  const linked = fixture();
+  try {
+    symlinkSync(linked.artifact, join(linked.root, '.omd', '.cache', 'linked.png'));
+    mutate(linked, value => { ((value.artifacts as Array<Record<string, unknown>>)[2]!).path = '.omd/.cache/linked.png'; });
+    seedHistoricalFinalEvidence(linked);
+    assert.throws(() => checkFinalEvidence(linked.root), /symlink/);
+  } finally { cleanup(linked.root); }
+});
+
+test('v1 finalization is disabled before metadata validation', () => {
   const cases: Array<(value: Record<string, unknown>) => void> = [
     value => { value.runId = ' run-1'; },
     value => { value.runId = 'run-1 '; },
@@ -441,12 +484,12 @@ test('final evidence rejects whitespace metadata, unsafe run IDs, and canonical 
     const item = fixture();
     try {
       mutate(item, change);
-      assert.throws(() => finalizeFinalEvidence(item.root, item.manifest));
+      assertLegacyPublicationDisabled(item);
     } finally { cleanup(item.root); }
   }
 });
 
-test('final evidence detects post-publication source, source seal, build, and artifact mutations', () => {
+test('final evidence detects historical source, source seal, build, and artifact mutations', () => {
   const mutations: Array<(item: ReturnType<typeof fixture>) => void> = [
     item => { writeFileSync(join(item.root, 'app.js'), 'export const app = false;'); },
     item => { writeFileSync(join(item.root, '.omd', 'source-seal.json'), '{}'); },
@@ -456,19 +499,19 @@ test('final evidence detects post-publication source, source seal, build, and ar
   for (const change of mutations) {
     const item = fixture();
     try {
-      finalizeFinalEvidence(item.root, item.manifest);
+      seedHistoricalFinalEvidence(item);
       change(item);
       assert.throws(() => checkFinalEvidence(item.root));
     } finally { cleanup(item.root); }
   }
 });
 
-test('final evidence supports stale-source recovery through a new immutable run', () => {
+test('final evidence reads stale-source recovery through historical immutable runs', () => {
   const item = fixture();
   try {
-    finalizeFinalEvidence(item.root, item.manifest);
+    seedHistoricalFinalEvidence(item);
     writeFileSync(join(item.root, 'app.js'), 'export const app = false;');
-    writeSourceSeal(item.root);
+    writeSourceSeal(item.root, createTestProjectRunInvocation(item.root));
     writeFileSync(item.build, 'build-v2');
     const desktop = png(1280, 900);
     writeFileSync(item.artifact, desktop);
@@ -479,18 +522,25 @@ test('final evidence supports stale-source recovery through a new immutable run'
       build.fingerprint = computeBuildFingerprint(item.root, String(build.target));
       ((value.artifacts as Array<Record<string, unknown>>)[2]!).sha256 = sha256(desktop);
     });
-    finalizeFinalEvidence(item.root, item.manifest);
+    assertLegacyFinalizationDisabled(item);
+    seedHistoricalFinalEvidence(item);
     assert.equal(checkFinalEvidence(item.root).runId, 'run-2');
     assert.equal(JSON.parse(readFileSync(join(item.root, '.omd', 'final-evidence-runs', 'run-1.json'), 'utf8')).runId, 'run-1');
   } finally { cleanup(item.root); }
 });
 
-test('the CLI finalizes and checks the current manifest as JSON', () => {
+test('the CLI rejects v1 finalization and checks a historical manifest as JSON', () => {
   const item = fixture();
   try {
     const cli = join(process.cwd(), 'bin', 'omd.ts');
-    const finalized = JSON.parse(execFileSync(process.execPath, [cli, 'evidence', 'finalize', '--input', item.manifest, '--json'], { cwd: item.root, encoding: 'utf8' })) as { path: string };
-    assert.match(finalized.path, /\.omd\/final-evidence\.json$/);
+    assert.throws(
+      () => execFileSync(process.execPath, [cli, 'evidence', 'finalize', '--input', item.manifest, '--json'], { cwd: item.root, encoding: 'utf8' }),
+      /LEGACY_PUBLICATION_DISABLED/,
+    );
+    assert.equal(existsSync(join(item.root, '.omd', '.final-evidence.lock')), false);
+    assert.equal(existsSync(join(item.root, '.omd', 'final-evidence.json')), false);
+    assert.equal(existsSync(join(item.root, '.omd', 'final-evidence-runs')), false);
+    seedHistoricalFinalEvidence(item);
     const checked = JSON.parse(execFileSync(process.execPath, [cli, 'evidence', 'check', '--json'], { cwd: item.root, encoding: 'utf8' })) as FinalEvidenceManifest;
     assert.equal(checked.runId, 'run-1');
   } finally { cleanup(item.root); }

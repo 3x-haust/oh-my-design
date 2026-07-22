@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto';
-import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
-import { dirname, extname, join, relative, resolve, sep } from 'node:path';
+import { closeSync, constants as fsConstants, existsSync, fstatSync, lstatSync, openSync, readFileSync, readdirSync } from 'node:fs';
+import { extname, join, relative, resolve, sep } from 'node:path';
+import type { ProjectRunInvocation } from '../runtime/invocation.ts';
+import { replaceProjectFileAtomically } from '../runtime/project-write.ts';
 
 export const SOURCE_SEAL_SCHEMA_VERSION = 1;
 
@@ -66,15 +68,62 @@ function isSourceSealArtifact(value: unknown): value is SourceSealArtifact {
   ));
 }
 
+function requireRealSourcePath(root: string, path: string, leaf: 'file' | 'directory'): void {
+  const rootStat = lstatSync(root);
+  if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) {
+    throw new Error(`source root must be a non-symlink directory: ${root}`);
+  }
+  const relativePath = relative(root, path);
+  if (relativePath.startsWith('..') || resolve(root, relativePath) !== path) {
+    throw new Error(`source path escapes root: ${path}`);
+  }
+  if (relativePath === '') return;
+  let current = root;
+  const segments = relativePath.split('/');
+  for (const [index, segment] of segments.entries()) {
+    current = join(current, segment);
+    const stat = lstatSync(current);
+    if (stat.isSymbolicLink() || (index === segments.length - 1
+      ? leaf === 'file' ? !stat.isFile() : !stat.isDirectory()
+      : !stat.isDirectory())) {
+      throw new Error(`source path must not contain symlinks or non-${index === segments.length - 1 ? leaf : 'directory'} entries: ${slash(relative(root, current))}`);
+    }
+  }
+}
+function readStableSourceFile(root: string, path: string): Buffer {
+  requireRealSourcePath(root, path, 'file');
+  const descriptor = openSync(path, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
+  try {
+    const opened = fstatSync(descriptor);
+    const entry = lstatSync(path);
+    if (!opened.isFile() || entry.isSymbolicLink() || !entry.isFile()
+      || opened.dev !== entry.dev || opened.ino !== entry.ino) {
+      throw new Error(`source file changed or is not a regular non-symlink file: ${slash(relative(root, path))}`);
+    }
+    const bytes = readFileSync(descriptor);
+    const current = lstatSync(path);
+    if (current.isSymbolicLink() || !current.isFile()
+      || opened.dev !== current.dev || opened.ino !== current.ino) {
+      throw new Error(`source file changed while reading: ${slash(relative(root, path))}`);
+    }
+    return bytes;
+  } finally {
+    closeSync(descriptor);
+  }
+}
 export function listProductionSourceFiles(rootInput: string): string[] {
   const root = resolve(rootInput);
+  requireRealSourcePath(root, root, 'directory');
   const files: string[] = [];
   const walk = (directory: string): void => {
+    requireRealSourcePath(root, directory, 'directory');
     const entries = readdirSync(directory, { withFileTypes: true })
       .sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
     for (const entry of entries) {
-      if (entry.isSymbolicLink()) continue;
       const absolute = join(directory, entry.name);
+      if (entry.isSymbolicLink()) {
+        throw new Error(`source production tree contains a symlink: ${slash(relative(root, absolute))}`);
+      }
       if (entry.isDirectory()) {
         if (entry.name.startsWith('.') || EXCLUDED_DIRECTORIES.has(entry.name)) continue;
         walk(absolute);
@@ -82,6 +131,7 @@ export function listProductionSourceFiles(rootInput: string): string[] {
       }
       if (!entry.isFile() || EXCLUDED_FILES.has(entry.name.toLowerCase())) continue;
       if (!SOURCE_EXTENSIONS.has(extname(entry.name).toLowerCase())) continue;
+      requireRealSourcePath(root, absolute, 'file');
       files.push(slash(relative(root, absolute)));
     }
   };
@@ -100,7 +150,8 @@ function inputHashes(root: string): SourceSealArtifact['inputs'] {
   for (const [key, filename] of required) {
     const path = join(omd, filename);
     if (!existsSync(path)) throw new Error(`cannot seal source: missing .omd/${filename}`);
-    values[key] = hashBytes(readFileSync(path));
+    requireRealSourcePath(root, path, 'file');
+    values[key] = hashBytes(readStableSourceFile(root, path));
   }
   return values as SourceSealArtifact['inputs'];
 }
@@ -115,17 +166,19 @@ export function createSourceSeal(rootInput: string, sealedAt = new Date().toISOS
     inputs: inputHashes(root),
     sources: listProductionSourceFiles(root).map((path) => ({
       path,
-      sha256: hashBytes(readFileSync(join(root, path))),
+      sha256: hashBytes(readStableSourceFile(root, join(root, path))),
     })),
   };
 }
 
-export function writeSourceSeal(rootInput: string): string {
+export function writeSourceSeal(rootInput: string, invocation: ProjectRunInvocation): string {
   const root = resolve(rootInput);
-  const path = join(root, '.omd', 'source-seal.json');
-  mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, `${JSON.stringify(createSourceSeal(root), null, 2)}\n`);
-  return path;
+  return replaceProjectFileAtomically({
+    projectRoot: root,
+    relativePath: '.omd/source-seal.json',
+    content: `${JSON.stringify(createSourceSeal(root), null, 2)}\n`,
+    invocation,
+  });
 }
 
 export function validateSourceSeal(rootInput: string): SourceSealFinding[] {
@@ -137,9 +190,10 @@ export function validateSourceSeal(rootInput: string): SourceSealFinding[] {
 
   let parsed: unknown;
   try {
-    parsed = JSON.parse(readFileSync(path, 'utf8')) as unknown;
+    requireRealSourcePath(root, path, 'file');
+    parsed = JSON.parse(readStableSourceFile(root, path).toString('utf8')) as unknown;
   } catch {
-    return [{ id: 'SOURCE-SEAL-STALE', path: '.omd/source-seal.json', message: 'source seal is not valid JSON' }];
+    return [{ id: 'SOURCE-SEAL-STALE', path: '.omd/source-seal.json', message: 'source seal is not a real regular JSON file' }];
   }
   if (!isSourceSealArtifact(parsed)) {
     return [{ id: 'SOURCE-SEAL-STALE', path: '.omd/source-seal.json', message: 'source seal schema is invalid' }];

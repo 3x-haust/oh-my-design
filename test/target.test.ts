@@ -23,6 +23,7 @@ import {
   findTarget,
   safeName,
 } from '../core/target/index.ts';
+import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
 
 // ── PNG creation helpers (mirrors test/figma-diff.test.ts) ────────────────────
 
@@ -231,9 +232,10 @@ function makeTempDir(): string {
 
 test('registerTarget: creates .omd/target/<name>.png and manifest', () => {
   const cwd = makeTempDir();
+  const adapter = createTestProjectWriteAdapter(cwd);
   try {
     const img = uniformRgb(120, 80, 255, 0, 0);
-    const entry = registerTarget(cwd, 'hero', 'file:///mock.png', img);
+    const entry = registerTarget(cwd, 'hero', 'file:///mock.png', img, adapter);
 
     assert.equal(entry.name, 'hero');
     assert.equal(entry.source, 'file:///mock.png');
@@ -248,9 +250,10 @@ test('registerTarget: creates .omd/target/<name>.png and manifest', () => {
 
 test('registerTarget: decodes viewport dimensions from the PNG', () => {
   const cwd = makeTempDir();
+  const adapter = createTestProjectWriteAdapter(cwd);
   try {
     const img = uniformRgb(1280, 800, 0, 128, 255);
-    const entry = registerTarget(cwd, 'desktop', 'https://example.com/mock.png', img);
+    const entry = registerTarget(cwd, 'desktop', 'https://example.com/mock.png', img, adapter);
     assert.equal(entry.viewport.width, 1280);
     assert.equal(entry.viewport.height, 800);
   } finally {
@@ -260,11 +263,12 @@ test('registerTarget: decodes viewport dimensions from the PNG', () => {
 
 test('registerTarget: upserts when same name registered twice', () => {
   const cwd = makeTempDir();
+  const adapter = createTestProjectWriteAdapter(cwd);
   try {
     const img1 = uniformRgb(100, 100, 255, 0, 0);
     const img2 = uniformRgb(200, 150, 0, 255, 0);
-    registerTarget(cwd, 'hero', 'source1.png', img1);
-    registerTarget(cwd, 'hero', 'source2.png', img2);
+    registerTarget(cwd, 'hero', 'source1.png', img1, adapter);
+    registerTarget(cwd, 'hero', 'source2.png', img2, adapter);
 
     const targets = listTargets(cwd);
     assert.equal(targets.length, 1, 'upsert should not create a duplicate');
@@ -287,10 +291,11 @@ test('listTargets: returns empty array when no manifest exists', () => {
 
 test('listTargets: returns all registered targets in insertion order', () => {
   const cwd = makeTempDir();
+  const adapter = createTestProjectWriteAdapter(cwd);
   try {
-    registerTarget(cwd, 'hero', 'a.png', uniformRgb(10, 10, 255, 0, 0));
-    registerTarget(cwd, 'mobile', 'b.png', uniformRgb(20, 20, 0, 255, 0));
-    registerTarget(cwd, 'tablet', 'c.png', uniformRgb(30, 30, 0, 0, 255));
+    registerTarget(cwd, 'hero', 'a.png', uniformRgb(10, 10, 255, 0, 0), adapter);
+    registerTarget(cwd, 'mobile', 'b.png', uniformRgb(20, 20, 0, 255, 0), adapter);
+    registerTarget(cwd, 'tablet', 'c.png', uniformRgb(30, 30, 0, 0, 255), adapter);
 
     const targets = listTargets(cwd);
     assert.equal(targets.length, 3);
@@ -304,9 +309,10 @@ test('listTargets: returns all registered targets in insertion order', () => {
 
 test('findTarget: returns the matching entry by name', () => {
   const cwd = makeTempDir();
+  const adapter = createTestProjectWriteAdapter(cwd);
   try {
-    registerTarget(cwd, 'hero', 'a.png', uniformRgb(10, 10, 255, 0, 0));
-    registerTarget(cwd, 'mobile', 'b.png', uniformRgb(20, 20, 0, 255, 0));
+    registerTarget(cwd, 'hero', 'a.png', uniformRgb(10, 10, 255, 0, 0), adapter);
+    registerTarget(cwd, 'mobile', 'b.png', uniformRgb(20, 20, 0, 255, 0), adapter);
 
     const found = findTarget(cwd, 'mobile');
     assert.ok(found !== undefined);
@@ -318,8 +324,9 @@ test('findTarget: returns the matching entry by name', () => {
 
 test('findTarget: returns undefined when name not found', () => {
   const cwd = makeTempDir();
+  const adapter = createTestProjectWriteAdapter(cwd);
   try {
-    registerTarget(cwd, 'hero', 'a.png', uniformRgb(10, 10, 0, 0, 0));
+    registerTarget(cwd, 'hero', 'a.png', uniformRgb(10, 10, 0, 0, 0), adapter);
     const found = findTarget(cwd, 'nonexistent');
     assert.equal(found, undefined);
   } finally {
@@ -329,9 +336,10 @@ test('findTarget: returns undefined when name not found', () => {
 
 test('registerTarget: name with special chars uses safe filename but preserves name field', () => {
   const cwd = makeTempDir();
+  const adapter = createTestProjectWriteAdapter(cwd);
   try {
     const img = uniformRgb(100, 100, 0, 0, 0);
-    const entry = registerTarget(cwd, 'hero mockup', 'a.png', img);
+    const entry = registerTarget(cwd, 'hero mockup', 'a.png', img, adapter);
     assert.equal(entry.name, 'hero mockup', 'name field preserves original');
     assert.ok(entry.path.includes('hero_mockup'), 'file path uses safe name');
   } finally {

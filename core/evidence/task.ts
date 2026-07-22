@@ -1,10 +1,12 @@
-import { createHash, randomBytes } from 'node:crypto';
-import { closeSync, linkSync, lstatSync, mkdirSync, openSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { lstatSync, readFileSync } from 'node:fs';
 import { relative, resolve, sep } from 'node:path';
 import { parse } from 'yaml';
 import { validateTaskCoverageMatrix } from '../frame/check-ux.ts';
 import { decodePng } from '../motion/energy.ts';
 import { validateProbePlan, type ProbePlan, type ProbeResult } from '../probe/index.ts';
+import type { ProjectRunInvocation } from '../runtime/invocation.ts';
+import { acquireProjectLock, createProjectDirectory, replaceProjectFileAtomically, writeImmutableProjectFile } from '../runtime/project-write.ts';
 
 export const TASK_EVIDENCE_SCHEMA_VERSION = 1;
 export interface TaskEvidence { schemaVersion: 1; surface: 'product' | 'mixed'; frame: Bound; composition: Bound; tasks: Task[]; }
@@ -320,120 +322,78 @@ function verify(root: string, evidence: TaskEvidence): void {
     verifyTransient(root, task, results);
   }
 }
-function readManifest(input: string): unknown {
-  regularFile(input, 'manifest');
-  return JSON.parse(readFileSync(input, 'utf8'));
-}
-function lstatMissing(pathname: string): boolean {
-  try {
-    lstatSync(pathname);
-    return false;
-  } catch (error: unknown) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return true;
-    throw error;
-  }
-}
 function regularFile(pathname: string, label: string): void {
   const stat = lstatSync(pathname);
   if (!stat.isFile() || stat.isSymbolicLink()) throw new Error(`${label} must be a regular non-symlink file`);
 }
-function ensureDirectory(root: string, projectPath: string): string {
-  let current = root;
-  for (const part of projectPath.split('/')) {
-    current = resolve(current, part);
-    if (lstatMissing(current)) {
-      try {
-        mkdirSync(current, { mode: 0o700 });
-      } catch (error: unknown) {
-        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
-      }
-    }
-    const stat = lstatSync(current);
-    if (!stat.isDirectory() || stat.isSymbolicLink()) {
-      throw new Error(`publication directory must be a non-symlink directory: ${projectPath}`);
-    }
-  }
-  return current;
+function projectRelative(root: string, pathname: string): string {
+  const result = relative(root, pathname).split(sep).join('/');
+  return path(result, 'project write path');
 }
-function cleanupTemporary(pathname: string): void {
-  if (lstatMissing(pathname)) return;
-  regularFile(pathname, 'task evidence temporary record');
-  unlinkSync(pathname);
-}
-function acquirePublicationLock(lock: string): number {
-  if (!lstatMissing(lock)) throw new Error('task evidence publication lock already exists');
+function acquirePublicationLock(root: string, invocation: ProjectRunInvocation): () => void {
   try {
-    const fd = openSync(lock, 'wx', 0o600);
-    regularFile(lock, 'task evidence publication lock');
-    return fd;
+    return acquireProjectLock({ projectRoot: root, relativePath: '.omd/.task-evidence.lock', invocation });
   } catch (error: unknown) {
-    if ((error as NodeJS.ErrnoException).code === 'EEXIST') throw new Error('task evidence publication lock already exists');
+    if (error instanceof Error && error.message.includes('project lock already exists:')) {
+      throw new Error('task evidence publication lock already exists');
+    }
     throw error;
   }
 }
-function publishImmutable(pathname: string, bytes: Buffer): void {
-  if (lstatMissing(pathname)) {
-    try {
-      writeFileSync(pathname, bytes, { flag: 'wx', mode: 0o600 });
-    } catch (error: unknown) {
-      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
-    }
+function publishImmutable(root: string, pathname: string, bytes: Buffer, invocation: ProjectRunInvocation): void {
+  try {
+    writeImmutableProjectFile({ projectRoot: root, relativePath: projectRelative(root, pathname), content: bytes, invocation });
+  } catch (error: unknown) {
+    if (!(error instanceof Error && error.message.includes('immutable project artifact already exists:'))) throw error;
   }
   regularFile(pathname, 'task evidence immutable record');
   if (!readFileSync(pathname).equals(bytes)) throw new Error('task evidence immutable record bytes differ');
 }
-function publishCurrent(omd: string, output: string, bytes: Buffer): void {
-  const temporary = resolve(omd, `.task-evidence.${process.pid}.${randomBytes(12).toString('hex')}.tmp`);
-  if (!lstatMissing(temporary)) throw new Error('task evidence temporary record already exists');
+function requireCurrentRecord(pathname: string): void {
   try {
-    writeFileSync(temporary, bytes, { flag: 'wx', mode: 0o600 });
-    regularFile(temporary, 'task evidence temporary record');
-
-    if (!lstatMissing(output)) regularFile(output, 'task evidence current record');
-    if (lstatMissing(output)) {
-      try {
-        linkSync(temporary, output);
-      } catch (error: unknown) {
-        if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
-          throw new Error('task evidence current record appeared during publication');
-        }
-        throw error;
-      }
-    } else {
-      renameSync(temporary, output);
-    }
-
-    regularFile(output, 'task evidence current record');
-    if (!readFileSync(output).equals(bytes)) throw new Error('task evidence current record bytes differ');
-  } finally {
-    cleanupTemporary(temporary);
+    regularFile(pathname, 'current record');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
   }
 }
-function releasePublicationLock(lock: string, fd: number): void {
-  closeSync(fd);
-  regularFile(lock, 'task evidence publication lock');
-  unlinkSync(lock);
+
+function publishCurrent(root: string, output: string, bytes: Buffer, invocation: ProjectRunInvocation): void {
+  requireCurrentRecord(output);
+  replaceProjectFileAtomically({ projectRoot: root, relativePath: projectRelative(root, output), content: bytes, invocation });
+  regularFile(output, 'task evidence current record');
+  if (!readFileSync(output).equals(bytes)) throw new Error('task evidence current record bytes differ');
 }
-export function publishTaskEvidence(rootInput: string, input: string): string {
+export function publishTaskEvidence(rootInput: string, input: string, invocation: ProjectRunInvocation): string {
   const root = rootOf(rootInput);
   const relativeInput = relative(root, resolve(input)).split(sep).join('/');
   if (!relativeInput.startsWith(CACHE)) throw new Error(`task evidence manifest must be cache-only: ${CACHE}`);
-
-  const evidence = parseManifest(readManifest(file(root, relativeInput)));
-  verify(root, evidence);
-  const bytes = Buffer.from(`${canonical(evidence)}\n`);
-  const omd = ensureDirectory(root, '.omd');
-  const runs = ensureDirectory(root, '.omd/task-evidence-runs');
-  const immutable = resolve(runs, `${digest(bytes)}.json`);
-  const output = resolve(omd, 'task-evidence.json');
-  const lock = resolve(omd, '.task-evidence.lock');
-  const lockFd = acquirePublicationLock(lock);
+  const releasePublicationLock = acquirePublicationLock(root, invocation);
   try {
-    publishImmutable(immutable, bytes);
-    publishCurrent(omd, output, bytes);
+    const manifest = file(root, relativeInput);
+    const manifestBytes = readFileSync(manifest);
+    const evidence = parseManifest(JSON.parse(manifestBytes.toString('utf8')));
+    verify(root, evidence);
+    const bytes = Buffer.from(`${canonical(evidence)}\n`);
+    createProjectDirectory(root, '.omd', invocation);
+    createProjectDirectory(root, '.omd/task-evidence-runs', invocation);
+    const omd = resolve(root, '.omd');
+    const runs = resolve(root, '.omd/task-evidence-runs');
+    const immutable = resolve(runs, `${digest(bytes)}.json`);
+    const output = resolve(omd, 'task-evidence.json');
+    publishImmutable(root, immutable, bytes, invocation);
+
+    regularFile(manifest, 'manifest');
+    if (!readFileSync(manifest).equals(manifestBytes)) {
+      throw new Error('task evidence manifest changed during publication');
+    }
+    const currentEvidence = parseManifest(JSON.parse(manifestBytes.toString('utf8')));
+    verify(root, currentEvidence);
+    const currentBytes = Buffer.from(`${canonical(currentEvidence)}\n`);
+    if (!currentBytes.equals(bytes)) throw new Error('task evidence bindings changed during publication');
+    publishCurrent(root, output, currentBytes, invocation);
     return output;
   } finally {
-    releasePublicationLock(lock, lockFd);
+    releasePublicationLock();
   }
 }
 export function checkTaskEvidence(rootInput: string): TaskEvidence {
