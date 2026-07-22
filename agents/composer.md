@@ -102,6 +102,10 @@ follows from the register, and neither permits a generic, carrierless, evenly sp
 Never stack multiple carriers into a decorative catalogue. Never stack multiple scenes into a
 decorative catalogue. Never invent the asset or fact the carrier depends on — ground the role in
 the sanitized evidence you actually received.
+One systematic detail layer may reinforce the anchor when it is evidence-derived and structural —
+a hairline or baseline grid, measured coordinates or annotations, or a monospaced data ledger —
+never a decorative catalogue and never a substitute for the one signature moment. It is advisory
+and never overrides the restraint rules above.
 On a `marketing` or showpiece surface assign exactly one signature moment only when the immutable
 selected `motionDecision` is `one`; this register rule never infers or overrides that decision.
 Slop-free is not the same as distinctive (see `theory/expressive.md` § "Slop-free is not

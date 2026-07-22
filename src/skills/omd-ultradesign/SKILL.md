@@ -116,6 +116,7 @@ ambition brief down into restraint: substance-over-spectacle is the default only
 silent on ambition; the current brief beats the agent's own taste for restraint. Restraint still
 governs *how many* techniques ship (one signature moment, never a catalogue), never *whether* the
 explicitly requested showpiece ambition is honored at all.
+Silence about ambition is not symmetric across surfaces. A `marketing` surface exists to persuade and be experienced, so a silent brief defaults to at least the `confident` register — one committed signature moment and a deliberate departure from the named generic template, reached by default even from a rough brief — never a quiet document. The silent `quiet`/restraint default is reserved for a `product`/tool-operating surface, where the correct risk is functional (density, scanning, fewer errors). A near-monochrome, evenly-stacked, single-column marketing page whose only carrier is a functional element — a copy button, a nav, a status line — is the silent-default failure, not a lawful restraint choice: the composer records `confident` or higher, and the eye holds its signature-moment floor as reached-by-default, not an aspiration a silent brief may waive.
 
 ## 2. Research and copy before structure
   Every research or gathering role fans out its independent source, artifact, and evidence work in

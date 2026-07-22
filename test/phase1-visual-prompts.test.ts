@@ -30,6 +30,36 @@ test('hand, composer, and eye actively steer toward register-fit visual carriers
   assert.match(eye, /signature or static template break/i);
 });
 
+test('a marketing surface defaults to the confident register even from a silent brief', () => {
+  const skill = read('src/skills/omd-ultradesign/SKILL.md');
+  const protocol = read('core/protocol/human-design-loop.md');
+  const eye = read('src/agents/eye.agent.yaml');
+
+  // The silent-brief default is asymmetric: marketing/landing defaults up to confident
+  // (one committed signature moment + a template departure), never a quiet document.
+  for (const source of [skill, protocol]) {
+    assert.match(source, /`marketing` surface[\s\S]*defaults to at least the `confident` register/i);
+    assert.match(source, /silent `quiet`\/restraint default is reserved for a `product`\/tool-operating surface/i);
+    assert.match(source, /single-column marketing page whose only carrier is a functional element[\s\S]*silent-default failure/i);
+  }
+  // It must not invert the product default: quiet stays correct on a product/tool surface.
+  assert.match(eye, /On a `product` or quiet surface the correct risk is functional/i);
+});
+
+test('a restrained-colour marketing surface carries its register through scale, with a systematic craft advisory', () => {
+  const protocol = read('core/protocol/human-design-loop.md');
+  const composer = read('src/agents/composer.agent.yaml');
+
+  // Monochrome/restrained palette must be carried by scale + structure, not uniform body type.
+  assert.match(protocol, /Restrained-colour ambition is part of the GREEN target[\s\S]*carried by scale and structure[\s\S]*display-scale type moment/i);
+  assert.match(protocol, /Uniform body-scale type across an evenly-stacked monochrome marketing page is the silent-default failure \(RED\)/i);
+  // Product/quiet stays exempt — no over-application down-register.
+  assert.match(protocol, /A `product`\/quiet surface is exempt — its clarity comes from density, not a display moment/i);
+
+  // Craft detail is advisory and must never become a decorative catalogue.
+  assert.match(composer, /One systematic detail layer may reinforce the anchor[\s\S]*never a decorative catalogue and never a substitute for the one signature moment/i);
+});
+
 test('art direction is evidence-bound autonomous none|one with carrier and decision-fit floors', () => {
   const protocol = read('core/protocol/human-design-loop.md');
   const hand = read('src/agents/hand.agent.yaml');
