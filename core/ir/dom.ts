@@ -16,6 +16,15 @@ export function extractInPage(maxNodes: number, selector?: string | null): RawIr
     return `#${h(r)}${h(g)}${h(b)}`.toUpperCase();
   };
 
+  // A minifier (e.g. Vite/esbuild in a production build) shortens a 6-digit hex custom
+  // property to its 3-digit form when the channels repeat (#ffffff -> #fff). The computed
+  // background-color of a consumer always resolves to the full 6-digit form via toHex, so
+  // comparing the two without expanding the shorthand first produces a false token mismatch.
+  const expandHex = (v: string): string => {
+    const m = /^#([0-9a-fA-F])([0-9a-fA-F])([0-9a-fA-F])$/.exec(v);
+    return m ? `#${m[1]}${m[1]}${m[2]}${m[2]}${m[3]}${m[3]}` : v;
+  };
+
   // A design token is a CSS custom property on :root. Inverting value -> name is what
   // lets us tell `background: var(--surface)` apart from a hand-typed #FEFEFE.
   const tokenByValue: Record<string, string> = {};
@@ -23,7 +32,7 @@ export function extractInPage(maxNodes: number, selector?: string | null): RawIr
   for (const prop of Array.from(rootStyle)) {
     if (!prop.startsWith('--')) continue;
     const raw = rootStyle.getPropertyValue(prop).trim();
-    const value = raw.startsWith('rgb') ? toHex(raw) : raw.toUpperCase();
+    const value = raw.startsWith('rgb') ? toHex(raw) : expandHex(raw).toUpperCase();
     if (value && !(value in tokenByValue)) tokenByValue[prop.slice(2)] = value;
   }
   const nameOf = (value: string): string | null =>
