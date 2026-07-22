@@ -30,6 +30,22 @@ test('hand, composer, and eye actively steer toward register-fit visual carriers
   assert.match(eye, /signature or static template break/i);
 });
 
+test('a marketing surface defaults to the confident register even from a silent brief', () => {
+  const skill = read('src/skills/omd-ultradesign/SKILL.md');
+  const protocol = read('core/protocol/human-design-loop.md');
+  const eye = read('src/agents/eye.agent.yaml');
+
+  // The silent-brief default is asymmetric: marketing/landing defaults up to confident
+  // (one committed signature moment + a template departure), never a quiet document.
+  for (const source of [skill, protocol]) {
+    assert.match(source, /`marketing` surface[\s\S]*defaults to at least the `confident` register/i);
+    assert.match(source, /silent `quiet`\/restraint default is reserved for a `product`\/tool-operating surface/i);
+    assert.match(source, /single-column marketing page whose only carrier is a functional element[\s\S]*silent-default failure/i);
+  }
+  // It must not invert the product default: quiet stays correct on a product/tool surface.
+  assert.match(eye, /On a `product` or quiet surface the correct risk is functional/i);
+});
+
 test('art direction is evidence-bound autonomous none|one with carrier and decision-fit floors', () => {
   const protocol = read('core/protocol/human-design-loop.md');
   const hand = read('src/agents/hand.agent.yaml');
