@@ -46,6 +46,20 @@ test('a marketing surface defaults to the confident register even from a silent 
   assert.match(eye, /On a `product` or quiet surface the correct risk is functional/i);
 });
 
+test('a restrained-colour marketing surface carries its register through scale, with a systematic craft advisory', () => {
+  const protocol = read('core/protocol/human-design-loop.md');
+  const composer = read('src/agents/composer.agent.yaml');
+
+  // Monochrome/restrained palette must be carried by scale + structure, not uniform body type.
+  assert.match(protocol, /Restrained-colour ambition is part of the GREEN target[\s\S]*carried by scale and structure[\s\S]*display-scale type moment/i);
+  assert.match(protocol, /Uniform body-scale type across an evenly-stacked monochrome marketing page is the silent-default failure \(RED\)/i);
+  // Product/quiet stays exempt — no over-application down-register.
+  assert.match(protocol, /A `product`\/quiet surface is exempt — its clarity comes from density, not a display moment/i);
+
+  // Craft detail is advisory and must never become a decorative catalogue.
+  assert.match(composer, /One systematic detail layer may reinforce the anchor[\s\S]*never a decorative catalogue and never a substitute for the one signature moment/i);
+});
+
 test('art direction is evidence-bound autonomous none|one with carrier and decision-fit floors', () => {
   const protocol = read('core/protocol/human-design-loop.md');
   const hand = read('src/agents/hand.agent.yaml');
