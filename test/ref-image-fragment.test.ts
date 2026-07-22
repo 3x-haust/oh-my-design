@@ -2,13 +2,12 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { deflateSync, crc32 } from 'node:zlib';
 import { mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
-import fs from 'node:fs';
-import { syncBuiltinESMExports } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import test, { type TestContext } from 'node:test';
 import { loadReferenceBoard, projectReferenceAssembly } from '../core/ref/board.ts';
 import { persistImageFragment, readImageFragment, type ImageFragmentInput } from '../core/ref/image-fragment.ts';
+import { createTestProjectRunInvocation } from './helpers/project-write.ts';
 
 const root = (context: TestContext): string => {
   const directory = mkdtempSync(join(tmpdir(), 'omd-image-fragment-'));
@@ -71,6 +70,7 @@ const piece = (referenceId: string): Record<string, unknown> => ({
   avoid: 'Avoid reproducing the source composition.',
   adaptation: 'Use local tokens and local copy.',
   grid: { column: 1, span: 12, order: 0 },
+  evidenceAxes: { rights: 'unknown', signal: 'high-visual-system', staticAxis: 'available', motionAxis: 'absent' },
 });
 const board = (referenceId: string): Record<string, unknown> => ({
   schemaVersion: 'reference-board-v1',
@@ -103,13 +103,14 @@ test('fragment file listing rethrows a nonmissing directory-read error', (contex
 test('image fragments persist content-addressed PNG bytes and provenance-addressed records', (context) => {
   // Given: two local PNG inputs with identical bytes but distinct source-page provenance.
   const directory = root(context);
+  const invocation = createTestProjectRunInvocation(directory);
   const firstPath = writePng(directory, 'first.png');
   const secondPath = writePng(directory, 'second.png');
-  const first = persistImageFragment(directory, input(firstPath));
+  const first = persistImageFragment(directory, input(firstPath), invocation);
 
   // When: the second provenance record and an idempotent first record are persisted.
-  const second = persistImageFragment(directory, input(secondPath, 'https://gallery.example/pin/two'));
-  const repeated = persistImageFragment(directory, input(firstPath));
+  const second = persistImageFragment(directory, input(secondPath, 'https://gallery.example/pin/two'), invocation);
+  const repeated = persistImageFragment(directory, input(firstPath), invocation);
 
   // Then: one content-derived PNG backs two stable, separately retained provenance records.
   const sha256 = createHash('sha256').update(png()).digest('hex');
@@ -127,6 +128,7 @@ test('image fragments persist content-addressed PNG bytes and provenance-address
 test('image fragments reject untrusted input before any fragment bytes or metadata are copied', (context) => {
   // Given: a valid local PNG plus malformed source, rights, crop, schema, and PNG boundaries.
   const directory = root(context);
+  const invocation = createTestProjectRunInvocation(directory);
   const goodPath = writePng(directory, 'good.png');
   const badPath = writePng(directory, 'bad.png', Buffer.from('not a PNG'));
   const invalid: readonly unknown[] = [
@@ -145,11 +147,11 @@ test('image fragments reject untrusted input before any fragment bytes or metada
   ];
 
   // When / Then: every unsafe boundary fails while the closed fragment store remains empty.
-  for (const value of invalid) assert.throws(() => persistImageFragment(directory, value));
+  for (const value of invalid) assert.throws(() => persistImageFragment(directory, value, invocation));
   assert.deepEqual(fragmentFiles(directory), []);
   for (const [index, visualRole] of ['background texture', 'hero emphasis', 'editorial rhythm'].entries()) {
     const accepted = input(goodPath, `https://gallery.example/pin/accepted-${index}`);
-    assert.doesNotThrow(() => persistImageFragment(directory, { ...accepted, transfer: { ...accepted.transfer, visualRole } }));
+    assert.doesNotThrow(() => persistImageFragment(directory, { ...accepted, transfer: { ...accepted.transfer, visualRole } }, invocation));
   }
 });
 
@@ -176,38 +178,31 @@ test('image fragments reject preexisting foreign image targets before writing pr
   // When / Then: persistence fails, leaves foreign bytes intact, and publishes no record.
   for (const [_label, occupy] of scenarios) {
     const directory = root(context);
+    const invocation = createTestProjectRunInvocation(directory);
     const sourcePath = writePng(directory, 'capture.png', sourceBytes);
     const target = join(directory, '.omd', 'refs', 'fragments', `${sha256}.png`);
     mkdirSync(join(directory, '.omd', 'refs', 'fragments'));
     const foreignBytes = occupy(directory, target);
-    assert.throws(() => persistImageFragment(directory, input(sourcePath)));
+    assert.throws(() => persistImageFragment(directory, input(sourcePath), invocation));
     assert.equal(readFileSync(target).equals(foreignBytes), true);
     assert.deepEqual(fragmentFiles(directory), [`${sha256}.png`]);
   }
 });
 
-test('image fragments preserve a foreign target and publish no record when native link returns EEXIST', (context) => {
-  // Given: native no-replace publication is interleaved with a foreign target at the link boundary.
+test('image fragments preserve a preexisting foreign target and publish no record', (context) => {
+  // Given: a content-addressed target already occupied by foreign bytes.
   const directory = root(context);
+  const invocation = createTestProjectRunInvocation(directory);
   const sourceBytes = png();
   const sourcePath = writePng(directory, 'capture.png', sourceBytes);
   const sha256 = createHash('sha256').update(sourceBytes).digest('hex');
   const target = join(directory, '.omd', 'refs', 'fragments', `${sha256}.png`);
   const foreignBytes = png(Buffer.from([0, 7, 8, 9]));
-  const originalLink = fs.linkSync;
-  fs.linkSync = (existingPath, destinationPath) => {
-    writeFileSync(destinationPath, foreignBytes, { flag: 'wx' });
-    originalLink(existingPath, destinationPath);
-  };
-  syncBuiltinESMExports();
+  mkdirSync(join(directory, '.omd', 'refs', 'fragments'));
+  writeFileSync(target, foreignBytes);
 
-  // When / Then: the real native EEXIST keeps foreign bytes and removes owned temporary publication state.
-  try {
-    assert.throws(() => persistImageFragment(directory, input(sourcePath)));
-  } finally {
-    fs.linkSync = originalLink;
-    syncBuiltinESMExports();
-  }
+  // When / Then: guarded publication rejects without overwriting or recording the foreign target.
+  assert.throws(() => persistImageFragment(directory, input(sourcePath), invocation));
   assert.equal(readFileSync(target).equals(foreignBytes), true);
   assert.deepEqual(fragmentFiles(directory), [`${sha256}.png`]);
 });
@@ -227,7 +222,8 @@ test('image fragment reads reject a project .omd symlink before record lookup', 
 test('default board resolution retains fragment provenance while its assembly exposes transfer only', (context) => {
   // Given: a persisted gallery fragment referenced by two viable local candidates.
   const directory = root(context);
-  const stored = persistImageFragment(directory, input(writePng(directory, 'capture.png'), 'https://private.example/pin/one'));
+  const invocation = createTestProjectRunInvocation(directory);
+  const stored = persistImageFragment(directory, input(writePng(directory, 'capture.png'), 'https://private.example/pin/one'), invocation);
   writeFileSync(join(directory, '.omd', 'reference-board.json'), `${JSON.stringify(board(stored.id), null, 2)}\n`);
 
   // When: the board uses its persisted default resolver and projects a downstream assembly.

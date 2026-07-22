@@ -6,7 +6,7 @@ type BoardFixture = { readonly board: Record<string, unknown>; readonly candidat
 
 const fixture = (): BoardFixture => {
   const taskIds = ['T1'];
-  const piece: Record<string, unknown> = { slotId: 'hero', sourceKind: 'component-capture', referenceId: 'ref-0000000000000000', targetComponent: 'hero', targetSelector: '.hero', taskIds, reason: 'Establish hierarchy.', take: ['structure'], avoid: 'Avoid copied copy.', adaptation: 'Use local tokens.', grid: { column: 1, span: 6, order: 0 } };
+  const piece: Record<string, unknown> = { slotId: 'hero', sourceKind: 'component-capture', referenceId: 'ref-0000000000000000', targetComponent: 'hero', targetSelector: '.hero', taskIds, reason: 'Establish hierarchy.', take: ['structure'], avoid: 'Avoid copied copy.', adaptation: 'Use local tokens.', grid: { column: 1, span: 6, order: 0 }, evidenceAxes: { rights: 'lawful', signal: 'high-visual-system', staticAxis: 'available', motionAxis: 'absent' } };
   const candidate: Record<string, unknown> = { id: 'alpha', label: 'Alpha', route: '/work', rationale: 'A local composition.', pieces: [piece] };
   return { board: { schemaVersion: 'reference-board-v1', frameSha256: 'a'.repeat(64), candidates: [candidate] }, candidate, piece, taskIds };
 };

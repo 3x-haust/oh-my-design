@@ -5,12 +5,13 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, unlinkSync, 
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, relative } from 'node:path';
 import test, { type TestContext } from 'node:test';
-import { readReferenceBoardArtifacts } from '../core/ref/board-artifacts.ts';
+import { readReferenceBoardArtifacts, sha256 } from '../core/ref/board-artifacts.ts';
 import { refIdentity } from '../core/ref/identity.ts';
 import { persistImageFragment } from '../core/ref/image-fragment.ts';
-import { selectReferenceCandidate, validateReferenceSelection } from '../core/ref/reference-selection.ts';
+import { parseReferenceSelectionV2, selectReferenceCandidate, validateReferenceSelection, validateReferenceSelectionV2 } from '../core/ref/reference-selection.ts';
 import { refImagePath, saveRef } from '../core/ref/store.ts';
 import type { Blueprint, Invariants, Reference } from '../core/types.ts';
+import { createTestProjectRunInvocation, createTestProjectWriteAdapter } from './helpers/project-write.ts';
 
 const CLI = new URL('../bin/omd.ts', import.meta.url).pathname;
 
@@ -31,15 +32,15 @@ const png = (red: number): Buffer => {
 };
 const invariants: Invariants = { spacingLadder: [8], radiusLadder: [4], elevationLevels: 0, centeredRatio: 0, tokenCoverage: 1, paddingWeight: 8, typeScale: [], fontFamilies: [], weightLadder: [], motionDurations: [], easingVocab: [], animatedShare: 0, hoverCoverage: 0, focusCoverage: 0, animatedProperties: [], hasReducedMotion: false, scrollChoreography: [] };
 const blueprint = (selector: string): Blueprint => ({ selector, capturedAt: '2026-07-18T00:00:00.000Z', nodes: [{ id: 'node', role: 'container', children: [], box: { w: 160, h: 40 } }] });
-type Fixture = { readonly component: Reference; readonly componentImage: string; readonly fragmentRecord: string; readonly root: string };
+type Fixture = { readonly component: Reference; readonly componentImage: string; readonly fragmentRecord: string; readonly root: string; readonly invocation: ReturnType<typeof createTestProjectRunInvocation>; readonly writer: ReturnType<typeof createTestProjectWriteAdapter> };
 const fixture = (context: TestContext): Fixture => {
-  const directory = root(context); const source = 'https://capture.example/card'; const component = 'card'; const componentImage = refImagePath(directory, { source, component });
+  const directory = root(context); const writer = createTestProjectWriteAdapter(directory); const invocation = createTestProjectRunInvocation(directory); const source = 'https://capture.example/card'; const component = 'card'; const componentImage = refImagePath(directory, { source, component });
   const reference: Reference = { source, component, kind: 'component', capturedAt: '2026-07-18T00:00:00.000Z', selector: '[data-card]', invariants, principles: ['Keep hierarchy distinct.'], blueprint: blueprint('[data-card]'), imagePath: relative(directory, componentImage) };
-  saveRef(directory, reference); writeFileSync(componentImage, png(12));
-  const fragment = persistImageFragment(directory, { inputPath: relative(directory, componentImage), provenance: { sourcePage: 'https://gallery.example/reference', captureRegion: 'hero image', licenseStatus: 'unknown', rightsNotes: 'Verify rights before publication.', capturedAt: '2026-07-18T00:00:00.000Z' }, transfer: { visualRole: 'atmosphere', principles: ['Use only as a local abstract accent.'] } });
+  saveRef(directory, reference, writer); writeFileSync(componentImage, png(12));
+  const fragment = persistImageFragment(directory, { inputPath: relative(directory, componentImage), provenance: { sourcePage: 'https://gallery.example/reference', captureRegion: 'hero image', licenseStatus: 'allowed', rightsNotes: 'Licensed for the declared local abstract study.', capturedAt: '2026-07-18T00:00:00.000Z' }, transfer: { visualRole: 'atmosphere', principles: ['Use only as a local abstract accent.'] } }, invocation);
   const componentId = refIdentity(source, component);
-  writeFileSync(join(directory, '.omd', 'reference-board.json'), JSON.stringify({ schemaVersion: 'reference-board-v1', frameSha256: 'a'.repeat(64), candidates: [{ id: 'candidate', label: 'Candidate', route: '/work', rationale: 'Raw evidence must bind local capture changes.', pieces: [{ slotId: 'component', sourceKind: 'component-capture', referenceId: componentId, targetComponent: 'hero', targetSelector: '[data-board="hero"]', taskIds: ['T1'], reason: 'Use measured hierarchy.', take: ['structure'], avoid: 'Do not reproduce source copy.', adaptation: 'Use local spacing tokens.', grid: { column: 1, span: 6, order: 0 } }, { slotId: 'fragment', sourceKind: 'image-fragment', referenceId: fragment.id, targetComponent: 'hero', targetSelector: '[data-board="hero"]', taskIds: ['T1'], reason: 'Keep a local color study.', take: ['density'], avoid: 'Do not reproduce source composition.', adaptation: 'Use local spacing tokens.', grid: { column: 7, span: 6, order: 1 } }] }] }));
-  return { component: reference, componentImage, fragmentRecord: join(directory, '.omd', 'refs', 'fragments', `${fragment.id}.json`), root: directory };
+  writeFileSync(join(directory, '.omd', 'reference-board.json'), JSON.stringify({ schemaVersion: 'reference-board-v1', frameSha256: 'a'.repeat(64), candidates: [{ id: 'candidate', label: 'Candidate', route: '/work', rationale: 'Raw evidence must bind local capture changes.', pieces: [{ slotId: 'component', sourceKind: 'component-capture', referenceId: componentId, targetComponent: 'hero', targetSelector: '[data-board="hero"]', taskIds: ['T1'], reason: 'Use measured hierarchy.', take: ['structure'], avoid: 'Do not reproduce source copy.', adaptation: 'Use local spacing tokens.', evidenceAxes: { rights: 'lawful', signal: 'high-visual-system', staticAxis: 'available', motionAxis: 'absent' }, grid: { column: 1, span: 6, order: 0 } }, { slotId: 'fragment', sourceKind: 'image-fragment', referenceId: fragment.id, targetComponent: 'hero', targetSelector: '[data-board="hero"]', taskIds: ['T1'], reason: 'Keep a local color study.', take: ['density'], avoid: 'Do not reproduce source composition.', adaptation: 'Use local spacing tokens.', evidenceAxes: { rights: 'lawful', signal: 'high-visual-system', staticAxis: 'available', motionAxis: 'absent' }, grid: { column: 7, span: 6, order: 1 } }] }] }));
+  return { component: reference, componentImage, fragmentRecord: join(directory, '.omd', 'refs', 'fragments', `${fragment.id}.json`), root: directory, invocation, writer };
 };
 
 test('raw board artifacts bind resolved provenance and capture bytes without leaking assembly fields', (context) => {
@@ -61,13 +62,13 @@ test('raw board artifacts bind resolved provenance and capture bytes without lea
 
 test('selection rejects component and fragment raw-evidence mutations', (context) => {
   // Given: a selected board with trusted capture, component metadata, and fragment provenance.
-  const value = fixture(context); const selected = (): void => { selectReferenceCandidate(value.root, 'candidate'); };
+  const value = fixture(context); const selected = (): void => { selectReferenceCandidate(value.root, 'candidate', value.invocation); };
 
   // When: each raw evidence source changes without changing the manifest shape.
   selected(); writeFileSync(value.componentImage, png(34)); assert.throws(() => validateReferenceSelection(value.root), /board hash/);
-  writeFileSync(value.componentImage, png(12)); selected(); saveRef(value.root, { ...value.component, capturedAt: '2026-07-19T00:00:00.000Z' }); assert.throws(() => validateReferenceSelection(value.root), /board hash/);
-  saveRef(value.root, value.component); const alternate = join(value.root, '.omd', 'refs', 'alternate.png'); writeFileSync(alternate, png(12)); selected(); saveRef(value.root, { ...value.component, imagePath: relative(value.root, alternate) }); assert.throws(() => validateReferenceSelection(value.root), /board hash/);
-  saveRef(value.root, value.component); selected(); writeFileSync(value.fragmentRecord, readFileSync(value.fragmentRecord, 'utf8').replace('hero image', 'secondary texture')); assert.throws(() => validateReferenceSelection(value.root), /board hash/);
+  writeFileSync(value.componentImage, png(12)); selected(); saveRef(value.root, { ...value.component, capturedAt: '2026-07-19T00:00:00.000Z' }, value.writer); assert.throws(() => validateReferenceSelection(value.root), /board hash/);
+  saveRef(value.root, value.component, value.writer); const alternate = join(value.root, '.omd', 'refs', 'alternate.png'); writeFileSync(alternate, png(12)); selected(); saveRef(value.root, { ...value.component, imagePath: relative(value.root, alternate) }, value.writer); assert.throws(() => validateReferenceSelection(value.root), /board hash/);
+  saveRef(value.root, value.component, value.writer); selected(); writeFileSync(value.fragmentRecord, readFileSync(value.fragmentRecord, 'utf8').replace('hero image', 'secondary texture')); assert.throws(() => validateReferenceSelection(value.root), /board hash/);
 
   // Then: any raw capture identity, bytes, or provenance change makes the closed selection stale.
   assert.equal(readReferenceBoardArtifacts(value.root).assembly.candidates[0]?.id, 'candidate');
@@ -82,12 +83,18 @@ test('board artifacts canonicalize an ancestor-symlink project alias after CLI s
   // When: the CLI selects the candidate from the real root while a parent validates from the alias root.
   const cli = spawnSync(process.execPath, [CLI, 'ref', 'select', 'candidate', '--json'], { cwd: value.root, encoding: 'utf8' });
   const real = readReferenceBoardArtifacts(value.root); const alias = readReferenceBoardArtifacts(aliasRoot);
+  const selection = parseReferenceSelectionV2(JSON.parse(readFileSync(join(aliasRoot, '.omd', 'reference-selection-v2.json'), 'utf8')));
+  const realSelection = validateReferenceSelectionV2(value.root); const aliasSelection = validateReferenceSelectionV2(aliasRoot);
 
-  // Then: canonical artifacts remain byte-identical and the selection validates from either spelling of the root.
+  // Then: canonical artifacts remain byte-identical and the v2 selection binds the real-root artifacts from either spelling.
   assert.equal(cli.status, 0, cli.stderr);
   assert.equal(alias.boardBytes, real.boardBytes);
   assert.equal(alias.assemblyBytes, real.assemblyBytes);
-  assert.doesNotThrow(() => validateReferenceSelection(aliasRoot));
+  assert.equal(selection.captureSha256, sha256(real.boardBytes));
+  assert.equal(selection.assemblySha256, sha256(real.assemblyBytes));
+  assert.equal(selection.projectionSha256, sha256(real.projectionBytes));
+  assert.deepEqual(realSelection, selection);
+  assert.deepEqual(aliasSelection, selection);
 });
 
 test('board artifacts reject direct-symlink, missing, and non-directory project roots', (context) => {

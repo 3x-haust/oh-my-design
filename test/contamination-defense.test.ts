@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { saveRef, loadRefs } from '../core/ref/store.ts';
 import { topKinshipPairs } from '../core/ref/distance.ts';
 import type { Invariants, Reference } from '../core/types.ts';
+import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
 
 const project = (): string => mkdtempSync(join(tmpdir(), 'omd-contamination-'));
 
@@ -36,14 +37,14 @@ const ref: Reference = {
 
 test('saveRef round-trips slopCount', () => {
   const dir = project();
-  saveRef(dir, { ...ref, slopCount: 3 });
+  saveRef(dir, { ...ref, slopCount: 3 }, createTestProjectWriteAdapter(dir));
   const [loaded] = loadRefs(dir);
   assert.equal(loaded?.slopCount, 3);
 });
 
 test('saveRef round-trips slopCount of 0', () => {
   const dir = project();
-  saveRef(dir, { ...ref, slopCount: 0 });
+  saveRef(dir, { ...ref, slopCount: 0 }, createTestProjectWriteAdapter(dir));
   const [loaded] = loadRefs(dir);
   assert.equal(loaded?.slopCount, 0);
 });
@@ -62,7 +63,7 @@ test('loadRefs backward compat: a ref saved without slopCount loads without the 
 
 test('usage site treats absent slopCount as 0 via nullish coalescing', () => {
   const dir = project();
-  saveRef(dir, ref);
+  saveRef(dir, ref, createTestProjectWriteAdapter(dir));
   const [loaded] = loadRefs(dir);
   assert.equal((loaded?.slopCount ?? 0) >= 2, false, 'no slop findings → not flagged as contaminated');
 });

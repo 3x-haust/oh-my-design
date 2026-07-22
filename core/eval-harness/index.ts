@@ -223,3 +223,65 @@ export function evaluateRefinementLoop(inputs: RefinementLoopInputs): Refinement
   }
   return { status: 'continue', continueLoop: true, converged: false, reason: `round ${last.round} improved (blind-choose favored the after) and is still RED — run another round`, roundsRun: n, nextTarget: last.redCriteria[0] ?? null };
 }
+export type QualitySignal = 'GREEN' | 'RED';
+
+export interface HarnessV2QualityInputs {
+  motionDecision: 'none' | 'one';
+  /** Protocol and UX are jointly required; neither can compensate for the other. */
+  protocolUx: { protocol: QualitySignal; ux: QualitySignal };
+  blind: {
+    signature: QualitySignal;
+    narrative: QualitySignal;
+    motionFit: QualitySignal;
+  };
+  fidelity: { decisionFit: QualitySignal };
+  critical: {
+    conceptSpecificForm: { score: number; verdict: QualitySignal };
+    compositionRhythm: { score: number; verdict: QualitySignal };
+    narrativeDependency: { score: number; verdict: QualitySignal };
+    macroVisualLanding: { score: number; verdict: QualitySignal };
+    motionInfluence?: { score: number; verdict: QualitySignal };
+    staticReferenceInfluence?: { score: number; verdict: QualitySignal };
+    templateInfluence?: { score: number; verdict: QualitySignal };
+  };
+}
+
+export interface HarnessV2QualityVerdict {
+  gate: 'pass' | 'fail';
+  failedCriteria: string[];
+}
+
+/**
+ * V2 quality gate. This intentionally does not average scores: critical elements
+ * are product commitments, not a pool in which a strong visual can hide a missing
+ * narrative dependency or a template-shaped macro landing.
+ */
+export function evaluateHarnessV2Quality(inputs: HarnessV2QualityInputs): HarnessV2QualityVerdict {
+  const failedCriteria: string[] = [];
+  const requireGreen = (signal: QualitySignal, name: string): void => {
+    if (signal !== 'GREEN') failedCriteria.push(name);
+  };
+  requireGreen(inputs.protocolUx.protocol, 'protocol');
+  requireGreen(inputs.protocolUx.ux, 'ux');
+  requireGreen(inputs.blind.signature, 'blind signature');
+  requireGreen(inputs.blind.narrative, 'blind narrative');
+  requireGreen(inputs.blind.motionFit, 'blind motion-fit');
+  requireGreen(inputs.fidelity.decisionFit, 'fidelity decision-fit');
+
+  const requireCritical = (criterion: { score: number; verdict: QualitySignal } | undefined, name: string): void => {
+    if (!criterion || criterion.verdict === 'RED' || !Number.isFinite(criterion.score) || criterion.score < 3) {
+      failedCriteria.push(name);
+    }
+  };
+  requireCritical(inputs.critical.conceptSpecificForm, 'concept-specific form');
+  requireCritical(inputs.critical.compositionRhythm, 'composition rhythm');
+  requireCritical(inputs.critical.narrativeDependency, 'narrative dependency');
+  requireCritical(inputs.critical.macroVisualLanding, 'macro visual landing');
+  if (inputs.motionDecision === 'one') {
+    requireCritical(inputs.critical.motionInfluence, 'motion influence');
+  } else {
+    requireCritical(inputs.critical.staticReferenceInfluence, 'static reference influence');
+    requireCritical(inputs.critical.templateInfluence, 'template influence');
+  }
+  return { gate: failedCriteria.length === 0 ? 'pass' : 'fail', failedCriteria };
+}

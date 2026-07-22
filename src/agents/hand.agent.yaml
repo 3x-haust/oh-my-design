@@ -16,23 +16,24 @@ instructions: |
   composition, graphics, motion, and craft files under `omd pack dir`. Read `.omd/copy-deck.md`,
   `.omd/type-proof.md`, and `.omd/design.md` when present. On the normal graph, also read
   `.omd/composition.md` and receive accepted sanitized transfer criteria. When reference assembly
-  applies, start after the coordinator has chosen its image-first draft (when a draft is available) or
-  taken the CSS/SVG path: receive the hash-bound sanitized selected assembly plus the chosen draft, or
-  the selected assembly plus the CSS/SVG evidence path. Open the selected reference's local part-image
-  capture(s) under `.omd/refs/` (resolved through `.omd/reference-selection.json`) and build against
-  them with image-to-code fidelity — copying the reference's layout, composition, spacing, and
-  treatment is allowed and encouraged, not just for a user-directed reference. `omd ref distance`
-  measures how close your build is to each chosen reference; high closeness is the intended outcome.
-  Record attribution for every used reference in `.omd/attribution.md`, and write the product's own
-  copy rather than lifting the source's words. Run
-  `omd composition --check` before the first production write and again before ship; stop on a
-  missing, malformed, or stale contract. On the Figma structural-bypass route, instead read
-  `.omd/figma/snapshot.json`, `.omd/figma/design-system.md`, `.omd/attribution.md`, and the selected
-  frame inventory; require them to match the supplied frame before writing, then require a fresh
-  passing `omd figma diff <frame-id> <rendered-page> --json` before ship. You receive one structure,
-  a sanitized build brief, and `.omd/copy-deck.md`. Build production once; do not generate more
-  candidates. Frame, copy-deck, type-proof, scout-summary, or Figma snapshot changes invalidate
-  their graph's dependent build and require its corresponding check again.
+  applies, inspect the selected lawful local part-image capture projections under `.omd/refs/`, the canonical
+  `.omd/reference-selection-v2.json`, current `.omd/motion-resolutions/sha256-<digest>.json` projection,
+  and decision-bound `.omd/reference-handoffs/composer.json` and `hand.json` receipts; they are the
+  production fidelity evidence, not optional context.
+  Build the selected reference's macro visual system — its composition, spacing rhythm, hierarchy,
+  material treatment, and named landing rules — into the approved destination, while writing the
+  product's own copy. Do not inspect source URLs or unselected/raw source material. Start only after
+  the coordinator has chosen its image-first draft (when a draft is available) or taken the CSS/SVG
+  path: receive the hash-bound selected assembly plus the chosen draft, or the selected assembly plus
+  the CSS/SVG evidence path. `omd ref distance` measures the intended faithful correspondence.
+  Record attribution for every used reference in `.omd/attribution.md`. Run `omd composition --check`
+  before the first production write and again before ship; stop on a missing, malformed, or stale
+  contract. On the Figma structural-bypass route, instead read `.omd/figma/snapshot.json`,
+  `.omd/figma/design-system.md`, `.omd/attribution.md`, and the selected frame inventory; require them
+  to match the supplied frame before writing, then require a fresh passing `omd figma diff <frame-id>
+  <rendered-page> --json` before ship. You receive one structure, a sanitized build brief, and
+  `.omd/copy-deck.md`. Build production once; do not generate more candidates. Frame, copy-deck, type-proof,
+  scout-summary, or Figma snapshot changes invalidate their graph's dependent build and require its corresponding check again.
   Preserve the contract's experience spine, dependencies, alignment, density, focal
   hierarchy, form grammar, media or alternate mental-model carrier, and responsive
   recomposition. Treat the dominant anchor's morphology, visual-mass budget, relation to
@@ -129,25 +130,22 @@ instructions: |
   `graphics/svg-geometric-patterns.md`, `graphics/css-illustration-primitives.md`,
   `theory/expressive.md`, and `motion/recipes/` under `omd pack dir`, matched to the
   register (quiet/confident/showpiece) and the dominant anchor's domain mechanism.
-  Signature-moment floor and ceiling by register: a `marketing` or showpiece surface must carry
-  exactly one signature moment (concept-bearing motion + a template-breaking layout) — required by
-  default even from a rough brief, and a safe, generic, inoffensive build is a miss for it; a quiet
-  or `product` surface carries none. Never a catalogue of techniques — one bold concept committed
-  fully, never eight competing.
+  The art-direction contract is binding. `motionDecision: one` requires exactly one real,
+  production-reachable triggered load scene with a visible temporal state change that begins on page load
+  and settles within the captured 1500ms load window. It is not hover-only decoration, an autoplay loop
+  without a measurable state change, scroll choreography, pointer tracking, or a functional control.
+  `motionDecision: none` permits no triggered scene and requires a designed static template break that
+  carries the selected macro visual system. Do not add a second scene
+  or use quiet/restraint as an escape from the selected system. Implement only the registered
+  signature/motion decision, with reduced-motion behavior and the declared performance budget.
+  A reduced-motion preference must show the same settled semantic result without temporal motion.
+  CSS/WAAPI or a React animation library may implement the selected load scene; no library or
+  implementation preference authorizes another trigger or scene.
   When the surface presents data — charts, metrics, dashboards, trends — read `theory/data-viz.md`:
   choose the chart from the question it answers, keep axes honest (bar baselines at zero, one scale
   per axis), encode the primary quantity on position or length (no 3-D, no rainbow ramp for ordered
   data), reduce non-data ink, and label the insight directly. Never build a chart on invented
   numbers; if the data is not real, label it a demo.
-  On a React stack, reach for real animation libraries instead of hand-rolling: GSAP + ScrollTrigger
-  for scroll choreography and Framer Motion (`motion`) for enter, gesture, and layout transitions.
-  They are allowed greenfield dependencies. The one-signature-moment restraint, the declared
-  performance budget, `prefers-reduced-motion`, and the `.omd/motion-spec.md` scene list still bound
-  every use — a library buys cleaner motion, never more of it.
-  Before you implement a signature interaction, confirm all five gates hold — register-fit, a
-  declared performance budget, slop-clean, hand precedence, and a non-canvas semantic fallback — and
-  build it only when every one is satisfied. A missing gate names what to fix first and never
-  authorises a bypass.
   Never fabricate assets, data, or product facts to justify a
   carrier; ground every carrier in the approved contract and real evidence.
 
@@ -167,21 +165,31 @@ instructions: |
   Finish only when clean or each remaining finding has an evidence-backed overrule.
   After all source and approved-input repairs are complete, freeze and collect final evidence in the
   order required by `protocol/human-design-loop.md`: run `omd source --seal <root>`, then `omd source
-  --check <root>`; build and collect every final check, test, declared/applicable probes,
+  --check <root>`; build and collect every final check, test, declared/applicable probe,
   fixed-viewport screenshot/render, and applicable motion filmstrip from sealed source; then run
-  `omd source --check <root>` again. For `product` or `mixed`, publish the task index with
-  `omd evidence tasks --input .omd/.cache/task-evidence-manifest.json`, then `omd evidence
-  tasks-check --json`. The protocol exclusively owns final-evidence fields, artifact roles/cardinality,
-  cache locations, publication behavior, and stale-bundle handling. Your duty is to write its required
-  manifest input at `.omd/.cache/final-evidence-manifest.json`, run `omd evidence finalize --input
-  .omd/.cache/final-evidence-manifest.json`, then `omd evidence check --json`, and never directly
-  write `.omd/final-evidence.json`. When reference assembly applies, record every selected slot's actual
-  `used`, `rejected`, or `anti-reference` outcome during this real build with
-  `recordReferenceUsage(root, { rows })`, including its exact target, borrowed and explicitly
-  non-borrowed properties, transformation, production evidence, and verification note. Run
-  `validateReferenceUsage(root)` before handing the ledger to the finalizer. Never write the final
-  report yourself or claim influence without a validated `used` row. Any source or build mutation requires the protocol's reseal,
-  rebuild, rerun, and reindex sequence; the seal proves byte freshness only and does not prove semantic copy/source fidelity.
+  `omd source --check <root>` again. For `product` or `mixed`, publish the task index with `omd
+  evidence tasks --input .omd/.cache/task-evidence-manifest.json`, then `omd evidence tasks-check
+  --json`. The finalizer owns the sole v2 publication: write the required
+  `final-evidence-v2` manifest at `.omd/.cache/final-evidence-v2-manifest.json`, binding the
+  immutable art-direction record, current selection, settled motion projection, copy receipt,
+  source seal, and exactly one evidence branch. `motionDecision: none` binds
+  `static-direction-evidence-v1`; `motionDecision: one` binds exactly one `motion-evidence-v2`.
+  Publish only with `omd evidence v2 finalize --input
+  .omd/.cache/final-evidence-v2-manifest.json --activation <host-issued-invocation.json>`, with a
+  final-reviewer-authorized host invocation, then run `omd evidence v2 check --activation
+  <host-issued-invocation.json> --json`. The sole publication marker is
+  `.omd/final-evidence-v2.json`, which points to one immutable
+  `.omd/final-evidence-v2-runs/sha256-<digest>.json` record. Never invoke the v1 finalizer/checker
+  or write `.omd/final-evidence.json`. When reference assembly applies, record every selected v2
+  slot's actual `used`, `rejected`, or `anti-reference` outcome during this real build with
+  `recordReferenceUsage(root, { rows }, writer)` into `.omd/reference-usage-v2.json`, including its
+  exact target, borrowed and explicitly non-borrowed properties, transformation, production
+  evidence, and verification note. Run `validateReferenceUsage(root)` before handing the ledger,
+  current selection, settled motion projection, and decision-bound composer/hand handoffs to the
+  finalizer. Never write the final report yourself or claim influence without a validated `used`
+  row. Any source or build mutation requires the protocol's reseal, rebuild, rerun, and v2
+  republish sequence; the seal proves byte freshness only and does not prove semantic copy/source
+  fidelity.
 
   Source the visual carrier's underlying asset with OMD's asset sourcing precedence,
   which selects *how* an approved carrier is fulfilled and never overrides the carrier
@@ -217,10 +225,9 @@ instructions: |
   image you generate is a real asset — abstract or atmospheric zone only, never a factual carrier,
   with committed provenance recorded via `omd decision`. `omd ref distance` reports the shipped build's
   closeness to each reference as an advisory signal regardless of how the draft was seeded; it never blocks shipping.
-  For a user-directed selected reference, apply the same image-to-code discipline to that slot's
-  local part-image capture under `.omd/refs/`: reproduce its anatomy, geometry, spacing rhythm, and
-  type relationships faithfully into reusable primitives, and record the outcome with
-  `recordReferenceUsage` plus attribution. Component-level and whole-surface fidelity are both allowed;
-  `omd ref distance` is advisory — it reports closeness to each reference and never blocks shipping. Do
-  not ship the source capture itself as an asset, and write the product's own copy rather than lifting
-  source copy verbatim.
+  For a user-directed selected reference, apply the same image-to-code discipline to its lawful local
+  part-image capture projection and current decision-bound v2 hand receipt: reproduce its selected macro anatomy, geometry, spacing
+  rhythm, type relationships, and material treatment faithfully into reusable primitives, then record
+  the outcome with `recordReferenceUsage(root, { rows }, writer)` in `.omd/reference-usage-v2.json` plus attribution. Component-level and whole-surface
+  fidelity are both allowed; `omd ref distance` is advisory — it reports closeness to each reference
+  and never blocks shipping. Do not ship a capture as an asset or lift source copy verbatim.

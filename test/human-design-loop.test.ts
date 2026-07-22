@@ -8,6 +8,7 @@ import { spawnSync } from 'node:child_process';
 import { extractIr, renderPage, waitForDocumentFonts } from '../core/render/index.ts';
 import { decodePng } from '../core/motion/energy.ts';
 import { readProbePlan, runProbe, type ProbePlan } from '../core/probe/index.ts';
+import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const fixture = fileURLToPath(new URL('./fixtures/probe.html', import.meta.url));
@@ -51,8 +52,9 @@ test('normal and squint renders both exist and differ at desktop and mobile', as
     const dir = temp();
     const normal = join(dir, `normal-${viewport.width}.png`);
     const squint = join(dir, `squint-${viewport.width}.png`);
-    await renderPage(fixture, { viewport, out: normal });
-    await renderPage(fixture, { viewport, out: squint, squint: true });
+    const adapter = createTestProjectWriteAdapter(dir);
+    await renderPage(fixture, { viewport, out: normal, adapter });
+    await renderPage(fixture, { viewport, out: squint, squint: true, adapter });
     assert.ok(existsSync(normal) && existsSync(squint));
     const dimensions = decodePng(readFileSync(normal));
     assert.deepEqual({ width: dimensions.width, height: dimensions.height }, viewport);
@@ -68,11 +70,12 @@ test('full-page render is explicit and may exceed the fixed viewport', async () 
   const cliFull = join(dir, 'cli-full.png');
   writeFileSync(page, '<!doctype html><style>body{margin:0}.tall{height:1500px}</style><main class="tall">Long page</main>');
   const viewport = { width: 390, height: 844 };
-  await renderPage(page, { viewport, out: fixed });
-  await renderPage(page, { viewport, out: full, fullPage: true });
+  const adapter = createTestProjectWriteAdapter(dir);
+  await renderPage(page, { viewport, out: fixed, adapter });
+  await renderPage(page, { viewport, out: full, fullPage: true, adapter });
   assert.equal(decodePng(readFileSync(fixed)).height, 844);
   assert.ok(decodePng(readFileSync(full)).height > 844);
-  const cli = spawnSync(process.execPath, [join(root, 'bin/omd.ts'), 'render', page, '--viewport', '390x844', '--full-page', '-o', cliFull], { encoding: 'utf8' });
+  const cli = spawnSync(process.execPath, [join(root, 'bin/omd.ts'), 'render', page, '--viewport', '390x844', '--full-page', '-o', cliFull], { cwd: dir, encoding: 'utf8' });
   assert.equal(cli.status, 0, cli.stderr);
   assert.ok(decodePng(readFileSync(cliFull)).height > 844);
 });
@@ -161,7 +164,8 @@ test('prompt contract keeps content-first isolation and checkpoint defaults exec
   assert.ok(skill.indexOf('--squint') < skill.indexOf('Now render sharp'));
   assert.match(skill, /showpiece only[\s\S]*exactly one dominant-technique lens/);
   assert.match(skill, /checkpoint: none[\s\S]*no approval waits/);
-  assert.match(eye, /Never open[\s\S]*\.omd\/frame\.md/);
+  assert.match(eye, /Never open `\.omd\/frame\.md`[\s\S]*\.omd\/decisions\.md[\s\S]*\.omd\/refs\//);
+  assert.match(eye, /fidelity-projection exception is limited to those artifacts[\s\S]*never inspect raw\s+source material or\s+unselected references/i);
   assert.match(glance, /squint render paths and nothing else/);
   assert.match(scout, /domain, direct competitors, user\/community language,[\s\S]*every required component/);
   assert.match(framer, /current brief > explicit current user feedback > prior explicit project taste > agent/);

@@ -1,5 +1,5 @@
-import { createHash, randomBytes } from 'node:crypto';
-import { closeSync, linkSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { lstatSync, readFileSync, readdirSync } from 'node:fs';
 import { relative, resolve, sep } from 'node:path';
 import { parse } from 'yaml';
 import { crc32 } from 'node:zlib';
@@ -362,71 +362,16 @@ function readManifestFile(path: string): unknown {
 }
 
 /** Validates a caller manifest and atomically publishes an immutable bound final evidence record. */
+function legacyPublicationDisabled(): never {
+  const error = new Error('LEGACY_PUBLICATION_DISABLED') as Error & { code?: string };
+  error.code = 'LEGACY_PUBLICATION_DISABLED';
+  throw error;
+}
+
 export function finalizeFinalEvidence(rootInput: string, manifestPath: string): string {
-  const root = projectRoot(rootInput);
-  const manifest = parseManifest(readManifestFile(resolve(manifestPath)));
-  verifyBindings(root, manifest);
-  const omd = resolve(root, '.omd');
-  const runs = resolve(omd, 'final-evidence-runs');
-  const output = resolve(omd, 'final-evidence.json');
-  const lock = resolve(omd, '.final-evidence.lock');
-  const record = resolve(runs, `${manifest.runId}.json`);
-  const bytes = `${canonicalJson(manifest)}\n`;
-
-  mkdirSync(omd, { recursive: true });
-  const omdStat = lstatSync(omd);
-  if (!omdStat.isDirectory() || omdStat.isSymbolicLink()) throw new Error(`final evidence directory must be a non-symlink directory: ${omd}`);
-  mkdirSync(runs, { recursive: true });
-  const runsStat = lstatSync(runs);
-  if (!runsStat.isDirectory() || runsStat.isSymbolicLink()) throw new Error(`final evidence directory must be a non-symlink directory: ${runs}`);
-
-  let lockFd: number | undefined;
-  try {
-    try {
-      lockFd = openSync(lock, 'wx', 0o600);
-    } catch (error: unknown) {
-      if ((error as NodeJS.ErrnoException).code === 'EEXIST') throw new Error('final evidence publication is already in progress');
-      throw error;
-    }
-
-    try {
-      writeFileSync(record, bytes, { flag: 'wx', mode: 0o600 });
-    } catch (error: unknown) {
-      if ((error as NodeJS.ErrnoException).code === 'EEXIST') throw new Error(`final evidence run already exists: ${manifest.runId}`);
-      throw error;
-    }
-
-    const current = (() => {
-      try { return lstatSync(output); } catch (error: unknown) {
-        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
-        throw error;
-      }
-    })();
-    if (current && (!current.isFile() || current.isSymbolicLink())) throw new Error(`final evidence current record must be a regular non-symlink file: ${output}`);
-
-    const temporary = resolve(omd, `.final-evidence.${process.pid}.${randomBytes(12).toString('hex')}.tmp`);
-    try {
-      writeFileSync(temporary, bytes, { flag: 'wx', mode: 0o600 });
-      if (current) renameSync(temporary, output);
-      else linkSync(temporary, output);
-    } catch (error: unknown) {
-      if (!current && (error as NodeJS.ErrnoException).code === 'EEXIST') throw new Error('final evidence current record appeared during publication');
-      throw error;
-    } finally {
-      try { unlinkSync(temporary); } catch (error: unknown) {
-        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-      }
-    }
-    return output;
-  } finally {
-    if (lockFd !== undefined) {
-      try { closeSync(lockFd); } finally {
-        try { unlinkSync(lock); } catch (error: unknown) {
-          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-        }
-      }
-    }
-  }
+  void rootInput;
+  void manifestPath;
+  return legacyPublicationDisabled();
 }
 
 /** Re-reads the published record and verifies all bound source, build, and artifact bytes. */

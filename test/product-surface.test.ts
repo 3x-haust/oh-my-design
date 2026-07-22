@@ -246,25 +246,22 @@ test('task and final evidence schemas remain protocol-owned while roles execute 
   }
 });
 
-test('final evidence schemas remain protocol-owned while roles finalize and check', () => {
+test('final evidence has sole v2 publisher and schema ownership', () => {
   const protocol = markdownSection(read('core/protocol/human-design-loop.md'), 'Production quality gates').replace(/\s+/g, ' ');
-  const hand = read('src/agents/hand.agent.yaml').replace(/\s+/g, ' ');
-  const skill = read('src/skills/omd-ultradesign/SKILL.md').replace(/\s+/g, ' ');
 
-  assert.match(protocol, /canonical final-evidence ABI and owns the manifest schema/);
-  assert.match(protocol, /exactly `schemaVersion`, `runId`, `sourceSeal`, `build`, `tools`, `interaction`, and `artifacts`/);
-  assert.match(protocol, /ordinary artifact[\s\S]*cache-local path under `?\.omd\/\.cache\/`/);
-  assert.match(protocol, /source or build mutation invalidates the bundle and forces resealing, rebuilding, rerunning, and reindexing/);
-  assert.match(protocol, /does not claim semantic copy\/source fidelity/);
-
-  for (const source of [hand, skill]) {
-    assert.match(source, /protocol\/human-design-loop\.md[\s\S]*final-evidence fields, artifact roles\/cardinality, cache locations, publication behavior, and stale-bundle handling/i);
-    assert.match(source, /omd source --seal <root>[\s\S]*omd source --check <root>/);
-    assert.match(source, /omd evidence finalize --input \.omd\/\.cache\/final-evidence-manifest\.json[\s\S]*omd evidence check --json/);
-    assert.match(source, /never directly write(?:s)? `?\.omd\/final-evidence\.json`?/i);
-    assert.match(source, /seal proves byte freshness only[\s\S]*does not prove semantic copy\/source fidelity/i);
-    assert.doesNotMatch(source, /exactly `schemaVersion`, `runId`, `sourceSeal`, `build`, `tools`, `interaction`, and `artifacts`/);
-  }
+  assert.match(protocol, /Final evidence is published only by the v2 pointer publisher/i);
+  assert.match(protocol, /legacy v1 writer is disabled before it opens, validates, or writes a manifest/i);
+  assert.match(protocol, /no v1 lock, run record, current record, or temporary artifact may be created/i);
+  assert.match(protocol, /v2 manifest binds the activation decision and exactly one applicable evidence branch/i);
+  assert.match(protocol, /`motionDecision: none` binds static-direction evidence[\s\S]*`motionDecision: one` binds exactly one activated motion-evidence binding/i);
+  assert.match(protocol, /contains no unselected directions or raw evidence/i);
+  assert.match(protocol, /`omd evidence v2 finalize` is the sole publisher/i);
+  assert.match(protocol, /one immutable content-addressed record and then one pointer[\s\S]*pointer is the sole publication marker/i);
+  assert.match(protocol, /v2 exclusive lock[\s\S]*fail closed on an existing, live, malformed, or ambiguous lock/i);
+  assert.match(protocol, /`omd evidence v2 check` follows only that pointer to its immutable record and verifies its hashes/i);
+  assert.match(protocol, /v1 checker is historical-only[\s\S]*never writes, repairs, migrates, or republishes/i);
+  assert.match(protocol, /`final-v2` is the canonical final-evidence ABI and owns the manifest schema/i);
+  assert.doesNotMatch(protocol, /exactly `schemaVersion`, `runId`, `sourceSeal`, `build`, `tools`, `interaction`, and `artifacts`/);
 });
 test('conditional list-detail and support-chat regressions are independent and generic', () => {
   const loop = read('core/protocol/human-design-loop.md').replace(/\s+/g, ' ');
@@ -300,7 +297,7 @@ test('Figma uses one retained/skipped structural-bypass graph and refinement pre
   assert.doesNotMatch(skill, /hand off to `omd-figma`[\s\S]*instead of running this loop/);
   assert.match(skill, /normal graph[\s\S]*require `omd composition --check` before its first production write/i);
   assert.match(skill, /Figma structural-bypass[\s\S]*\.omd\/figma\/snapshot\.json[\s\S]*\.omd\/figma\/design-system\.md[\s\S]*\.omd\/attribution\.md/i);
-  assert.match(skill, /Figma structural-bypass route[\s\S]*omd figma diff <frame-id>[\s\S]*<rendered-page> --json/i);
+  assert.match(skill, /Figma structural-bypass[\s\S]*fresh passing `omd figma diff`/i);
   assert.match(skill, /normal graph also[\s\S]*fresh `omd composition --check`[\s\S]*Figma structural-bypass[\s\S]*fresh passing `omd figma diff`/i);
   assert.match(hand, /normal graph[\s\S]*omd composition\s+--check[\s\S]*before the first production write[\s\S]*before ship/i);
   assert.match(hand, /Figma structural-bypass route[\s\S]*\.omd\/figma\/snapshot\.json[\s\S]*omd figma diff[\s\S]*before ship/i);

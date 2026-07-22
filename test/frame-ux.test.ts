@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { stringify } from 'yaml';
 import { checkFrameUx } from '../core/frame/check-ux.ts';
 import { writeFrameRecord } from '../core/frame/write.ts';
+import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -347,7 +348,7 @@ test('writeFrameRecord writes one durable task coverage matrix section', () => {
     uxCostliestError: 'Checkout with wrong address — recovery requires order cancellation',
     uxSurface: 'MiXeD',
     taskCoverageMatrix: `## Task coverage matrix\n\n${validTaskMatrix}`,
-  });
+  }, createTestProjectWriteAdapter(cwd));
   const frame = readFileSync(join(cwd, '.omd', 'frame.md'), 'utf8');
   assert.equal((frame.match(/^## Task coverage matrix$/gm) ?? []).length, 1);
   assert.match(frame, /^uxSurface: mixed$/m);
@@ -361,13 +362,16 @@ test('writeFrameRecord rejects supplied invalid UX surface and task coverage mat
     why: 'Support tickets show 40% of users ask "where do I pay" (Zendesk Q3)',
   };
 
-  assert.throws(() => writeFrameRecord(project(), { ...base, uxSurface: 'prodcut' }), /uxSurface must be/);
-  assert.throws(() => writeFrameRecord(project(), {
+  const invalidSurfaceRoot = project();
+  assert.throws(() => writeFrameRecord(invalidSurfaceRoot, { ...base, uxSurface: 'prodcut' }, createTestProjectWriteAdapter(invalidSurfaceRoot)), /uxSurface must be/);
+  const invalidMatrixRoot = project();
+  assert.throws(() => writeFrameRecord(invalidMatrixRoot, {
     ...base,
     uxSurface: 'product',
     taskCoverageMatrix: 'T1',
-  }), /Invalid task coverage matrix/);
-  assert.throws(() => writeFrameRecord(project(), { ...base, uxSurface: 'mixed' }), /require a valid task coverage matrix/);
+  }, createTestProjectWriteAdapter(invalidMatrixRoot)), /Invalid task coverage matrix/);
+  const missingMatrixRoot = project();
+  assert.throws(() => writeFrameRecord(missingMatrixRoot, { ...base, uxSurface: 'mixed' }, createTestProjectWriteAdapter(missingMatrixRoot)), /require a valid task coverage matrix/);
 });
 test('writeFrameRecord rejects matrices on non-product surfaces and non-string surfaces', () => {
   const base = {
@@ -377,14 +381,16 @@ test('writeFrameRecord rejects matrices on non-product surfaces and non-string s
   };
 
   for (const uxSurface of ['marketing', 'editorial']) {
-    assert.throws(() => writeFrameRecord(project(), {
+    const cwd = project();
+    assert.throws(() => writeFrameRecord(cwd, {
       ...base,
       uxSurface,
       taskCoverageMatrix: validTaskMatrix,
-    }), /must not include a task coverage matrix/);
+    }, createTestProjectWriteAdapter(cwd)), /must not include a task coverage matrix/);
   }
   for (const uxSurface of [['product'], { toString: () => 'product' }]) {
-    assert.throws(() => writeFrameRecord(project(), { ...base, uxSurface }), /uxSurface must be/);
+    const cwd = project();
+    assert.throws(() => writeFrameRecord(cwd, { ...base, uxSurface }, createTestProjectWriteAdapter(cwd)), /uxSurface must be/);
   }
 });
 

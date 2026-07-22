@@ -3,6 +3,9 @@ import type {
   ImageFragmentTransfer,
   ResolvedReferenceBoard,
   ResolvedReferenceBoardPiece,
+  ReferenceAxis,
+  ReferenceRights,
+  ReferenceSignal,
 } from './board-contract.ts';
 import { copyImageFragmentTransfer } from './board-fragment.ts';
 import { copyComponentCaptureTransfer } from './board-transfer.ts';
@@ -33,6 +36,33 @@ export type ReferenceAssembly = {
   }[];
 };
 
+export const REFERENCE_EVIDENCE_PROJECTION_SCHEMA_VERSION = 'reference-evidence-projection-v2' as const;
+export {
+  REFERENCE_AXIS_VALUES,
+  REFERENCE_RIGHTS_VALUES,
+  REFERENCE_SIGNAL_VALUES,
+} from './board-contract.ts';
+export type {
+  ReferenceAxis,
+  ReferenceEvidenceAxes,
+  ReferenceRights,
+  ReferenceSignal,
+} from './board-contract.ts';
+
+export type ReferenceEvidenceProjectionPiece = {
+  readonly slotId: string;
+  readonly rights: ReferenceRights;
+  readonly signal: ReferenceSignal;
+  readonly staticAxis: ReferenceAxis;
+  readonly motionAxis: ReferenceAxis;
+};
+
+export type ReferenceEvidenceProjection = {
+  readonly schemaVersion: typeof REFERENCE_EVIDENCE_PROJECTION_SCHEMA_VERSION;
+  readonly frameSha256: string;
+  readonly candidates: readonly { readonly id: string; readonly pieces: readonly ReferenceEvidenceProjectionPiece[] }[];
+};
+
 const compareCodeUnits = (left: string, right: string): number => left < right ? -1 : left > right ? 1 : 0;
 const comparePieces = (left: ResolvedReferenceBoardPiece, right: ResolvedReferenceBoardPiece): number => left.grid.order - right.grid.order || compareCodeUnits(left.slotId, right.slotId);
 const projectPiece = (piece: ResolvedReferenceBoardPiece): ReferenceAssemblyPiece => {
@@ -47,6 +77,11 @@ const projectPiece = (piece: ResolvedReferenceBoardPiece): ReferenceAssemblyPiec
   }
 };
 
+const projectEvidencePiece = (piece: ResolvedReferenceBoardPiece): ReferenceEvidenceProjectionPiece => ({
+  slotId: piece.slotId,
+  ...piece.evidenceAxes,
+});
+
 export function projectReferenceAssembly(board: ResolvedReferenceBoard): ReferenceAssembly {
   return {
     schemaVersion: REFERENCE_ASSEMBLY_SCHEMA_VERSION,
@@ -54,5 +89,15 @@ export function projectReferenceAssembly(board: ResolvedReferenceBoard): Referen
     candidates: [...board.candidates]
       .sort((left, right) => compareCodeUnits(left.id, right.id))
       .map((candidate) => ({ id: candidate.id, label: candidate.label, route: candidate.route, rationale: candidate.rationale, pieces: [...candidate.pieces].sort(comparePieces).map(projectPiece) })),
+  };
+}
+
+export function projectReferenceEvidence(board: ResolvedReferenceBoard): ReferenceEvidenceProjection {
+  return {
+    schemaVersion: REFERENCE_EVIDENCE_PROJECTION_SCHEMA_VERSION,
+    frameSha256: board.frameSha256,
+    candidates: [...board.candidates]
+      .sort((left, right) => compareCodeUnits(left.id, right.id))
+      .map((candidate) => ({ id: candidate.id, pieces: [...candidate.pieces].sort(comparePieces).map(projectEvidencePiece) })),
   };
 }

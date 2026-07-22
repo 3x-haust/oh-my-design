@@ -12,6 +12,7 @@ import { distances } from '../core/ref/distance.ts';
 import { loadRefs, saveRef } from '../core/ref/store.ts';
 import { must } from './helpers.ts';
 import type { Invariants, Reference } from '../core/types.ts';
+import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
 
 const CLI = fileURLToPath(new URL('../bin/omd.ts', import.meta.url));
 const SLOP = fileURLToPath(new URL('./fixtures/slop.html', import.meta.url));
@@ -125,7 +126,7 @@ test('distances skips unmeasured references rather than scoring them zero', () =
 
 test('omd ref distance says how many references it could not compare', () => {
   const dir = project();
-  saveRef(dir, measured('https://linear.app', INV));
+  saveRef(dir, measured('https://linear.app', INV), createTestProjectWriteAdapter(dir));
   run(['ref', 'add', './pin.png', '--as', 'mood', '--image'], dir);
 
   const out = run(['ref', 'distance', SLOP], dir);

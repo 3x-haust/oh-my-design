@@ -10,6 +10,7 @@ import { similarity, distances } from '../core/ref/distance.ts';
 import { saveRef, loadRefs } from '../core/ref/store.ts';
 import { normalize } from '../core/ir/normalize.ts';
 import type { Invariants, RawIr, Reference } from '../core/types.ts';
+import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
 
 const CLI = fileURLToPath(new URL('../bin/omd.ts', import.meta.url));
 
@@ -209,7 +210,7 @@ const ref: Reference = {
 
 test('saveRef writes under .omd/refs and loadRefs reads it back', () => {
   const dir = project();
-  const path = saveRef(dir, ref);
+  const path = saveRef(dir, ref, createTestProjectWriteAdapter(dir));
   assert.match(path, /\.omd\/refs\/linear\.app\.search-bar\.json$/);
   const [loaded] = loadRefs(dir);
   assert.deepEqual(loaded, ref);
@@ -217,8 +218,9 @@ test('saveRef writes under .omd/refs and loadRefs reads it back', () => {
 
 test('saveRef overwrites the same source+component rather than accumulating duplicates', () => {
   const dir = project();
-  saveRef(dir, ref);
-  saveRef(dir, { ...ref, principles: ['revised'] });
+  const adapter = createTestProjectWriteAdapter(dir);
+  saveRef(dir, ref, adapter);
+  saveRef(dir, { ...ref, principles: ['revised'] }, adapter);
   const all = loadRefs(dir);
   assert.equal(all.length, 1);
   assert.deepEqual(all[0]?.principles, ['revised']);
@@ -230,7 +232,7 @@ test('loadRefs on a project with no references returns empty, not a crash', () =
 
 test('loadRefs skips a corrupt reference file rather than failing the whole run', () => {
   const dir = project();
-  saveRef(dir, ref);
+  saveRef(dir, ref, createTestProjectWriteAdapter(dir));
   mkdirSync(join(dir, '.omd', 'refs'), { recursive: true });
   writeFileSync(join(dir, '.omd', 'refs', 'broken.json'), '{ not json');
   assert.equal(loadRefs(dir).length, 1);
@@ -253,7 +255,7 @@ test('loadRefs treats a record without origin as scout (backward compat)', () =>
 
 test('origin: user round-trips through saveRef and loadRefs', () => {
   const dir = project();
-  saveRef(dir, { ...ref, component: 'user-ref', origin: 'user' });
+  saveRef(dir, { ...ref, component: 'user-ref', origin: 'user' }, createTestProjectWriteAdapter(dir));
   const [loaded] = loadRefs(dir);
   assert.equal(loaded?.origin, 'user');
 });

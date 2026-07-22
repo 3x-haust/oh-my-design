@@ -2,10 +2,10 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { parseReferenceBoard } from './board-parser.ts';
-import { projectReferenceAssembly } from './board-projection.ts';
+import { projectReferenceAssembly, projectReferenceEvidence } from './board-projection.ts';
 import { trustedProjectRoot } from './board-security.ts';
 import { resolveReferenceBoard } from './board.ts';
-import type { ReferenceAssembly } from './board-projection.ts';
+import type { ReferenceAssembly, ReferenceEvidenceProjection } from './board-projection.ts';
 import type { ReferenceBoardManifest, ResolvedReferenceBoard, ResolvedReferenceBoardPiece } from './board-contract.ts';
 
 export const REFERENCE_BOARD_EVIDENCE_SCHEMA_VERSION = 'reference-board-evidence-v1';
@@ -40,8 +40,10 @@ export type ReferenceBoardArtifacts = {
   readonly resolved: ResolvedReferenceBoard;
   readonly raw: RawReferenceBoard;
   readonly assembly: ReferenceAssembly;
+  readonly projection: ReferenceEvidenceProjection;
   readonly boardBytes: string;
   readonly assemblyBytes: string;
+  readonly projectionBytes: string;
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -95,5 +97,9 @@ export function readReferenceBoardArtifacts(root: string, manifestPath = join(ro
   const resolved = resolveReferenceBoard(canonicalRoot, manifest);
   const raw = projectRawReferenceBoard(canonicalRoot, resolved);
   const assembly = projectReferenceAssembly(resolved);
-  return { manifest, resolved, raw, assembly, boardBytes: canonicalJson(raw), assemblyBytes: canonicalJson(assembly) };
+  const projection = projectReferenceEvidence(resolved);
+  return {
+    manifest, resolved, raw, assembly, projection,
+    boardBytes: canonicalJson(raw), assemblyBytes: canonicalJson(assembly), projectionBytes: canonicalJson(projection),
+  };
 }

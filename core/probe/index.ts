@@ -1,5 +1,6 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { type ProjectWriteAdapter, requireProjectWriteAdapter } from '../runtime/project-write.ts';
 import { pathToFileURL } from 'node:url';
 
 type Expectation =
@@ -179,8 +180,12 @@ export async function runProbe(target: string, plan: ProbePlan, viewport = { wid
   }
 }
 
-export function writeProbeResult(path: string, result: ProbeResult): string {
-  mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, `${JSON.stringify(result, null, 2)}\n`);
-  return path;
+export function writeProbeResult(
+  cwd: string,
+  relativePath: string,
+  result: ProbeResult,
+  adapter: ProjectWriteAdapter,
+): string {
+  return requireProjectWriteAdapter(cwd, adapter)
+    .write(relativePath, `${JSON.stringify(result, null, 2)}\n`);
 }

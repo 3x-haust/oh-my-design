@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { logRun, readHistory } from '../core/history/index.ts';
 import { analyse } from '../core/coach/index.ts';
 import { must } from './helpers.ts';
+import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
 import type { Run, Violation } from '../core/types.ts';
 
 const project = (): string => mkdtempSync(join(tmpdir(), 'omd-coach-'));
@@ -20,7 +21,7 @@ const violation = (id: string, nodeId: string): Violation => ({
 function seed(dir: string, rule: string, perRun: number[]): void {
   perRun.forEach((n, i) => {
     const vs = Array.from({ length: n }, (_, k) => violation(rule, `n${k}`));
-    logRun(dir, `page-${i}.html`, vs, new Date(Date.UTC(2026, 0, i + 1)).toISOString());
+    logRun(dir, `page-${i}.html`, vs, createTestProjectWriteAdapter(dir), new Date(Date.UTC(2026, 0, i + 1)).toISOString());
   });
 }
 
@@ -28,8 +29,8 @@ function seed(dir: string, rule: string, perRun: number[]): void {
 
 test('logRun appends one line per run and readHistory reads them back in order', () => {
   const dir = project();
-  logRun(dir, 'a.html', [violation('CONTRAST-001', 'n1'), violation('CONTRAST-001', 'n2')]);
-  logRun(dir, 'b.html', [violation('SLOP-COPY', 'n1')]);
+  logRun(dir, 'a.html', [violation('CONTRAST-001', 'n1'), violation('CONTRAST-001', 'n2')], createTestProjectWriteAdapter(dir));
+  logRun(dir, 'b.html', [violation('SLOP-COPY', 'n1')], createTestProjectWriteAdapter(dir));
 
   const history = readHistory(dir);
   assert.equal(history.length, 2);
@@ -41,7 +42,7 @@ test('logRun appends one line per run and readHistory reads them back in order',
 
 test('logRun records a clean run too — zero findings is the signal that you improved', () => {
   const dir = project();
-  logRun(dir, 'clean.html', []);
+  logRun(dir, 'clean.html', [], createTestProjectWriteAdapter(dir));
   const run = must(readHistory(dir)[0]) as Run;
   assert.equal(run.total, 0);
   assert.deepEqual(run.counts, {});
@@ -53,7 +54,7 @@ test('readHistory on a project with no history returns empty, not a crash', () =
 
 test('readHistory skips a corrupt line rather than losing the whole log', () => {
   const dir = project();
-  logRun(dir, 'a.html', [violation('HIT-002', 'n1')]);
+  logRun(dir, 'a.html', [violation('HIT-002', 'n1')], createTestProjectWriteAdapter(dir));
   mkdirSync(join(dir, '.omd'), { recursive: true });
   const path = join(dir, '.omd', 'history.jsonl');
   writeFileSync(path, `${readFileSync(path, 'utf8')}{ not json\n`);
@@ -122,10 +123,10 @@ test('a rule appearing for the first time is worsening, with no percentage claim
 
 test('a one-off finding is not called recurring', () => {
   const dir = project();
-  logRun(dir, 'a.html', [violation('SLOP-COPY', 'n1')]);
-  logRun(dir, 'b.html', []);
-  logRun(dir, 'c.html', []);
-  logRun(dir, 'd.html', []);
+  logRun(dir, 'a.html', [violation('SLOP-COPY', 'n1')], createTestProjectWriteAdapter(dir));
+  logRun(dir, 'b.html', [], createTestProjectWriteAdapter(dir));
+  logRun(dir, 'c.html', [], createTestProjectWriteAdapter(dir));
+  logRun(dir, 'd.html', [], createTestProjectWriteAdapter(dir));
   assert.deepEqual(analyse(readHistory(dir), []).recurring, []);
 });
 

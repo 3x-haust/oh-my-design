@@ -92,3 +92,8 @@ test('stats.centeredTextRatio is the fraction of text-bearing nodes that are cen
 test('stats.gradients lists distinct gradients in first-seen order', () => {
   assert.deepEqual(ir.stats.gradients, ['linear-gradient(90deg, #FF5A1F, #FFB199)']);
 });
+test('normalize preserves rendered Beat proof metadata from DOM extraction', () => {
+  const proof = [{ id: 'B-1', boundary: true, distinctRegions: 0, responsiveDuplicate: false, viewport: null, ancestorBeatIds: [], rendered: true }];
+  const normalized = normalize({ nodes: [], meta: { renderedBeats: proof } });
+  assert.deepEqual(normalized.meta?.renderedBeats, proof);
+});

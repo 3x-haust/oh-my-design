@@ -1,5 +1,7 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+import { type ProjectWriteAdapter, requireProjectWriteAdapter } from '../runtime/project-write.ts';
 
 export type Checkpoint = 'none' | 'concept' | 'structure' | 'both';
 export interface OmdConfig { checkpoint: Checkpoint }
@@ -16,12 +18,10 @@ export function readConfig(cwd: string): OmdConfig {
   return { checkpoint: value.checkpoint! };
 }
 
-export function setCheckpoint(cwd: string, checkpoint: string): string {
+export function setCheckpoint(cwd: string, checkpoint: string, adapter?: ProjectWriteAdapter): string {
   if (!['none', 'concept', 'structure', 'both'].includes(checkpoint)) {
     throw new Error('checkpoint must be none, concept, structure, or both');
   }
-  const path = pathFor(cwd);
-  mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, `${JSON.stringify({ checkpoint }, null, 2)}\n`);
-  return path;
+  return requireProjectWriteAdapter(cwd, adapter)
+    .write('.omd/config.json', `${JSON.stringify({ checkpoint }, null, 2)}\n`);
 }

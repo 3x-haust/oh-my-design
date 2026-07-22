@@ -5,7 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { validateCopyDeck, validateCopyReviewReport } from '../core/copy/index.ts';
+import { validateCopyDeck, validateCopyDeckV2, validateCopyDeckV2AgainstSelectedArtDirection, validateCopyReviewReport, type RenderedBeat, type RenderedBeatProof } from '../core/copy/index.ts';
+import { NO_CURRENT_USER_BEAT_EXCEPTION_RECEIPT_SHA256 } from '../core/art-direction/decision.ts';
 
 const CLI = fileURLToPath(new URL('../bin/omd.ts', import.meta.url));
 const project = (): string => mkdtempSync(join(tmpdir(), 'omd-copy-'));
@@ -59,6 +60,86 @@ ${stateFields}
 
 - 소리 내어 읽었고 해요체를 유지했습니다.
 `;
+}
+function v2Deck(): string {
+  return `${deck()}
+
+## Art direction contract
+
+- Schema: art-direction-v1
+- Register: confident
+- motionDecision: none
+- Evidence IDs: F-001
+- Current-user exception: N/A — no host-authorized Beat exception
+- Current-user Beat-exception receipt SHA-256: ${NO_CURRENT_USER_BEAT_EXCEPTION_RECEIPT_SHA256}
+
+| Beat ID | Evidence IDs |
+| --- | --- |
+| B-1 | F-001 |
+| B-2 | F-003 |
+`;
+}
+test('v2 canonical no-exception and typed positive exception schemas agree with selected direction', () => {
+  const noExceptionSelected = {
+    selectedRegister: 'confident' as const,
+    motionDecision: 'none' as const,
+    beatIds: ['B-1', 'B-2'],
+    currentUserBeatExceptionReceiptSha256: NO_CURRENT_USER_BEAT_EXCEPTION_RECEIPT_SHA256,
+  };
+  const canonical = v2Deck().replace('# Copy deck', '# Copy');
+  assert.deepEqual(validateCopyDeckV2(canonical), []);
+  assert.deepEqual(validateCopyDeckV2AgainstSelectedArtDirection(canonical, noExceptionSelected), []);
+
+  const receipt = 'c'.repeat(64);
+  const positive = canonical
+    .replace('N/A — no host-authorized Beat exception', 'current-user: host-authorized Beat exception')
+    .replace(NO_CURRENT_USER_BEAT_EXCEPTION_RECEIPT_SHA256, receipt);
+  const positiveSelected = { ...noExceptionSelected, currentUserBeatExceptionReceiptSha256: receipt };
+  assert.deepEqual(validateCopyDeckV2(positive), []);
+  assert.deepEqual(validateCopyDeckV2AgainstSelectedArtDirection(positive, positiveSelected), []);
+
+  const mismatchedReceipt = validateCopyDeckV2AgainstSelectedArtDirection(
+    positive.replace(receipt, NO_CURRENT_USER_BEAT_EXCEPTION_RECEIPT_SHA256),
+    positiveSelected,
+  );
+  assert.equal(mismatchedReceipt.length, 1);
+  assert.equal(mismatchedReceipt[0]?.id, 'COPY-ART-DIRECTION-BEAT-EXCEPTION');
+
+  const mismatchedDeclaration = validateCopyDeckV2AgainstSelectedArtDirection(
+    positive.replace('current-user: host-authorized Beat exception', 'N/A — no host-authorized Beat exception'),
+    positiveSelected,
+  );
+  assert.equal(mismatchedDeclaration.length, 1);
+  assert.equal(mismatchedDeclaration[0]?.id, 'COPY-ART-DIRECTION-BEAT-EXCEPTION');
+});
+
+const CAPTURE_VIEWPORTS = [{ width: 1280, height: 900 }, { width: 390, height: 844 }] as const;
+
+type RenderedBeatFixture = Partial<Omit<RenderedBeat, 'observedViewport'>> & {
+  observedViewport?: RenderedBeat['observedViewport'];
+};
+
+function renderedBeats(...beats: RenderedBeatFixture[]): RenderedBeatProof {
+  const renderedBeats = beats.flatMap((beat) => (beat.observedViewport ? [beat] : CAPTURE_VIEWPORTS.map((observedViewport) => ({
+    ...beat,
+    observedViewport,
+  })))).map((beat) => ({
+    id: 'B-1',
+    boundary: true,
+    distinctRegions: 0,
+    ancestorBeatIds: [],
+    rendered: true,
+    ...beat,
+  }));
+
+  return {
+    schema: 'rendered-beat-receipt-v1',
+    artDirectionHash: 'a'.repeat(64),
+    copyDeckSha256: 'b'.repeat(64),
+    beatIds: ['B-1', 'B-2'],
+    renderedBeats,
+    captureViewports: CAPTURE_VIEWPORTS,
+  };
 }
 
 function multiSurfaceDeck(): string {
@@ -234,4 +315,56 @@ test('copy review CLI missing report fails with stable JSON', () => {
     path: '.omd/.cache/copy-eye.md',
     message: 'Copy-eye report is missing or empty.',
   }]);
+});
+test('v2 rendered Beat proof rejects nested structures and wrapper-only visual merges', () => {
+  const nested = validateCopyDeckV2(v2Deck(), renderedBeats(
+    { id: 'B-1' },
+    { id: 'B-1', ancestorBeatIds: ['B-1'], observedViewport: { width: 390, height: 844 } },
+    { id: 'B-2' },
+  ));
+  assert.ok(nested.some((violation) => violation.id === 'COPY-RENDERED-BEAT-SEGMENT'));
+
+  const merged = validateCopyDeckV2(v2Deck(), renderedBeats(
+    { id: 'B-1' },
+    { id: 'B-1', boundary: false, distinctRegions: 2, observedViewport: { width: 390, height: 844 } },
+    { id: 'B-2' },
+  ));
+  assert.ok(merged.some((violation) => violation.id === 'COPY-RENDERED-BEAT-SEGMENT'));
+});
+
+test('v2 rendered Beat proof accepts repeated anatomy and isolated bands as separate regions', () => {
+  const proof = renderedBeats(
+    { id: 'B-1', boundary: true, distinctRegions: 0 },
+    { id: 'B-2', boundary: true, distinctRegions: 0 },
+  );
+  assert.deepEqual(validateCopyDeckV2(v2Deck().replace('# Copy deck', '# Copy'), proof), []);
+});
+
+test('v2 rendered Beat proof requires exactly the copy-deck IDs', () => {
+  const violations = validateCopyDeckV2(v2Deck(), renderedBeats({ id: 'B-1' }, { id: 'B-3' }));
+  assert.ok(violations.some((violation) => violation.id === 'COPY-RENDERED-BEAT-MISSING'));
+  assert.ok(violations.some((violation) => violation.id === 'COPY-RENDERED-BEAT-EXTRA'));
+});
+
+test('v2 rendered Beat proof rejects simultaneous duplicates and accepts browser-observed mutually exclusive viewports', () => {
+  const simultaneous = validateCopyDeckV2(v2Deck(), renderedBeats(
+    { id: 'B-1' },
+    { id: 'B-1', observedViewport: { width: 390, height: 844 } },
+    { id: 'B-2' },
+  ));
+  assert.ok(simultaneous.some((violation) => violation.id === 'COPY-RENDERED-BEAT-DUPLICATE'));
+
+  const exclusive = renderedBeats(
+    { id: 'B-1', observedViewport: { width: 390, height: 844 } },
+    { id: 'B-1', observedViewport: { width: 1280, height: 900 } },
+    { id: 'B-2' },
+  );
+  assert.deepEqual(validateCopyDeckV2(v2Deck().replace('# Copy deck', '# Copy'), exclusive), []);
+});
+test('v2 rendered Beat proof rejects hidden or unobserved Beat entries', () => {
+  const hidden = renderedBeats(
+    { id: 'B-1', rendered: false as never },
+    { id: 'B-2' },
+  );
+  assert.ok(validateCopyDeckV2(v2Deck(), hidden).some((violation) => violation.id === 'COPY-RENDERED-BEAT-PROOF'));
 });

@@ -54,3 +54,18 @@ word is common — abstract persistence/holding verbs (붙잡다, 놓지 않다)
 that hides the concrete noun (그대로 남기다), and gift/journey/vessel metaphors. Replace each with
 the concrete subject, number, or action it stands for; a metaphor earns its place only when it is
 more precise than the plain statement, never merely prettier.
+The coordinator owns art direction; you never compare alternatives, select a register, select
+motion, choose a Beat exception, or ask the user to choose direction. Before composition, receive
+the immutable coordinator-authored `art-direction-v1` decision only after the host has authorized
+evaluator evidence, checked the selected art direction, and settled motion. Copy its selected
+`Register`, `motionDecision`, immutable Beat IDs, and exact Beat-exception receipt into
+`## Art direction contract`; do not reinterpret them. When the receipt is the canonical
+no-exception marker, write `Current-user exception: N/A — no host-authorized Beat exception`.
+When it is a host-authorized current-user Beat-exception receipt, write exactly
+`Current-user exception: current-user: host-authorized Beat exception`. Every beat cites verified
+fact IDs and uses a unique `B-<number>` ID. Quiet has at most five beats and
+confident/showpiece at most seven unless that exact host receipt authorizes the selected
+over-budget Beat set. The writer cannot mint, quote, or infer an exception.
+Write affirmative, concrete interface language. Do not literalize harness negatives in
+user-facing copy or UI strings (for example, “not a hypothetical demo”); state the positive
+product action or evidence instead.

@@ -7,18 +7,21 @@ Own only `.omd/composition.md`. Read `protocol/human-design-loop.md`,
 `protocol/reference-assembly.md`, the exact
 `protocol/composition-contract.md`, `theory/layout.md`, and `theory/ux.md` under
 `omd pack dir`. Receive only the sanitized frame/concept, clean copy deck, sanitized
-approved typography contract, and the scout's distilled transferable principles,
-invariants, coverage, and source-trust summary. When reference assembly applies, begin after the
-coordinator/host has generated its image-first drafts and chosen one. When a draft is available,
-receive the hash-bound sanitized selected assembly and the coordinator-chosen draft reference, then
-analyze and translate that draft into the composition contract. When the host has no image
-capability, receive the selected assembly and the CSS/SVG evidence path, then compose from them.
-The coordinator/host alone derives generation directions and
-prompts from the assembly's sanitized measured principles and skin-abstracted blueprints plus
-permitted project-owned inputs, generates independent drafts, chooses the draft, manages the
-generation cache. Never supply a provider prompt, upstream art
-direction, or a draft selection. Do not receive or inspect raw screenshots, pixels, reference URLs,
-candidate renders, the internal raw evidence record, source-page descriptions, assets, rejected
+approved typography contract, scout's distilled transferable principles, and the immutable
+selected `art-direction-v1` record resolved from `.omd/art-direction.json` with its matching
+`motionDecision: none|one`, selected immutable register (quiet/confident/showpiece), selected slots,
+activation binding, and settled selection as input facts; never infer motion from register, re-open
+alternatives, or change the decision.
+When reference assembly applies, begin after the coordinator/host has generated its image-first
+drafts and chosen one. When a draft is available, receive the hash-bound sanitized selected
+assembly and coordinator-chosen draft reference, then analyze and translate that draft into the
+composition contract. When the host has no image capability, receive the selected assembly and
+CSS/SVG evidence path, then compose from them. The coordinator/host alone derives generation
+directions and prompts from the assembly's sanitized measured principles and skin-abstracted
+blueprints plus permitted project-owned inputs, generates independent drafts, chooses the draft,
+and manages the generation cache. Never supply a provider prompt, upstream art direction, or a
+draft selection. Do not receive or inspect raw screenshots, pixels, reference URLs, candidate
+renders, the internal raw evidence record, source-page descriptions, assets, rejected
 alternatives, authorship, or production rationale.
 
 In the single contract-level no-winner recovery round, you may additionally receive only a
@@ -90,14 +93,17 @@ mechanism/material/workflow has no lawful media, `none because no approved photo
 enough: name the alternate mental-model carrier and its limitation.
 
 When assigning a media role or alternate carrier, prefer an actively purposeful visual
-carrier over a bare placeholder: name a candidate from gradient-mesh, noise-grain
-texture, svg-geometric patterns, css-illustration primitives, `theory/expressive.md`,
-or a `motion/recipes/` entry, fitted to the register (quiet/confident/showpiece) and the
-anchor's domain mechanism. On a `marketing` or showpiece surface assign exactly one signature
-moment — required by default, not optional; a safe, carrierless, evenly-spaced composition that
-any generator would produce is a miss for that register, even from a rough brief. On a quiet or
-`product` surface assign none. Never stack multiple carriers into a decorative catalogue. Never invent the asset or fact the carrier depends
-on — ground the role in the sanitized evidence you actually received.
+carrier rather than a bare placeholder: gradient-mesh, noise-grain texture, svg-geometric patterns, css-illustration primitives,
+`theory/expressive.md`, or a `motion/recipes/` entry, fitted to the immutable selected art
+direction and anchor's domain mechanism. `motionDecision: one` requires exactly the settled,
+concept-bearing activated scene; `motionDecision: none` requires no activated scene and a
+purposeful static template break that realizes the selected macro visual system. Neither branch
+follows from the register, and neither permits a generic, carrierless, evenly spaced composition.
+Never stack multiple carriers into a decorative catalogue. Never stack multiple scenes into a
+decorative catalogue. Never invent the asset or fact the carrier depends on — ground the role in
+the sanitized evidence you actually received.
+On a `marketing` or showpiece surface assign exactly one signature moment only when the immutable
+selected `motionDecision` is `one`; this register rule never infers or overrides that decision.
 Slop-free is not the same as distinctive (see `theory/expressive.md` § "Slop-free is not
 the same as distinctive"). Before committing the contract, name the generic template your
 structure risks resembling — a symmetric headline-left/panel-right hero, a triple
@@ -109,17 +115,19 @@ moment that matters, or real supplied material made structural. When the brief s
 material — photographs, slides, a portrait, data — assign it as a first-class structural
 carrier, not text-in-boxes with the material unused; unused authentic material is a
 distinction failure. Record the named template and the departure in the contract rationale.
-Image-first composition (read `theory/imagegen.md`): for a confident/showpiece register where the
-composition is the deliverable, wait for the coordinator/host to finish generating and choosing its
-image-first draft before composing. The coordinator/host derives generation directions and prompts
-from the selected assembly, the selected references, any project rough, and permitted project-owned
-inputs, generates 2–3 independent drafts concurrently, chooses one, and manages the cache. The
-composer has no upstream prompt or art-direction role: it analyzes and translates the chosen draft
-into `.omd/composition.md`, consuming it solely as art-direction input. It does not generate images,
-manage a draft cache, select a draft, or record a decision. The chosen draft is a design reference,
-never a shipped page asset; `omd ref distance` still reports fidelity as an advisory signal. For a
-quiet register or a host with no image capability, use the selected assembly with CSS/SVG graphics
-recipes instead. Never request or inspect the internal raw evidence record.
+Image-first composition (read `theory/imagegen.md`) follows the immutable selected
+`motionDecision`, not the register: wait for the coordinator/host to finish generating and
+choosing the selected draft before composing. The coordinator/host derives generation directions
+and prompts from the selected assembly, selected references, project rough, and permitted
+project-owned inputs, generates 2–3 independent drafts concurrently, chooses one, and manages
+the cache. The coordinator/host owns image generation, draft-cache management, draft selection, and
+decision recording. The composer has no upstream prompt or art-direction role: it analyzes and
+translates the chosen draft into `.omd/composition.md`, consuming it solely as art-direction input.
+The composer does not generate images, manage a draft cache, select a draft, or record a decision.
+The chosen draft
+is a design reference, never a shipped page asset; `omd ref distance` remains advisory. When
+image capability is unavailable, use the settled selected assembly with CSS/SVG graphics recipes.
+Never request or inspect the internal raw evidence record.
 
 Record SHA-256 fingerprints for `.omd/frame.md`, `.omd/copy-deck.md`,
 `.omd/type-proof.md`, and `.omd/scout.md` when present. If scout.md is absent, record the
@@ -155,23 +163,26 @@ these apply, the role falls back to a user asset if one exists, otherwise the
 existing CSS/SVG graphics recipes — per the placeholder policy, a grey box is a
 defect, never the final answer.
 
-When the assigned signature moment for the anchor is an interaction rather than a
-static carrier, autonomous signature-interaction ideation draws from three
-mechanisms: a `core/interaction/recipes/` recipe pack, generative ideation grounded
-in the anchor's own mechanism/material/workflow, and a `core/interaction/` scout
-signal board of collected reference interaction patterns. The signal board is a
-separate collection surface from `core/ref/distance.ts` scoring. You may imitate a reference
-screenshot's layout and treatment directly — the hand builds against it with image-to-code fidelity,
-and `omd ref distance` reporting high closeness to the chosen reference is the intended
-outcome. The interaction lanes are, in order: CSS scroll-driven (pointer-/scroll-
-tracked custom properties, `radial-gradient`, `animation-timeline`); then, on a React stack, real
-animation libraries — GSAP with ScrollTrigger for scroll choreography and Framer Motion (`motion`)
-for enter/gesture/layout transitions — as a first-class lane preferred over hand-rolled rAF;
-escalating to WebGL is an escalation, not a default, and remains gated on hand
-precedence, a declared performance budget, and a non-canvas semantic fallback, exactly
-as for the WebGL/3D media-role precedence above — autonomous ideation never bypasses
-register-fit, the performance budget, the slop gates, hand precedence, or the
-non-canvas semantic fallback requirement. Fit the interaction to register
-(quiet/confident/showpiece) and keep it inside the one-signature-moment restraint: an
-autonomously ideated interaction is a candidate for that single slot, never an
-addition stacked onto an existing carrier.
+When the immutable selected `motionDecision` is `one`, the assigned scene is the settled
+reference-slot or approved-recipe scene from the motion projection; do not ideate, substitute,
+or add another signature interaction. The only observable trigger contract is one load scene:
+it begins on page load and settles before the captured 1500ms load window. Do not specify
+scroll-, pointer-, hover-, focus-, click-, or state-triggered choreography, because evaluator
+evidence, recipes, prompts, and render measurement do not settle those interactions. When it is
+`none`, do not introduce an interaction scene. CSS/WAAPI or React animation libraries are
+implementation lanes only for that one settled load scene. WebGL remains an escalation gated on
+hand precedence, a declared performance budget, and a non-canvas semantic fallback. The selected
+branch must preserve register fit, performance, slop cleanliness, hand precedence, and the
+semantic fallback; no condition authorizes a bypass. The available implementation vocabulary
+remains the `core/interaction/recipes/` recipe pack, generative ideation grounded in the anchor
+mechanism/material/workflow, and the `core/interaction/` scout signal board; it selects
+implementation details only after the settlement has selected the load scene. The signal board
+is a separate collection surface from `core/ref/distance.ts` scoring. You may imitate a reference
+screenshot's layout and treatment only through its selected lawful projection and immutable settled
+handoff; never receive or inspect the raw screenshot. The interaction lanes are, in order: CSS scroll-driven,
+then React animation libraries — GSAP with ScrollTrigger and Framer Motion (`motion`) — with a first-class lane preferred over hand-rolled rAF;
+escalating to WebGL is an escalation, not a default. Under the immutable load-scene-only contract, CSS scroll-driven and ScrollTrigger are unavailable
+as trigger mechanisms, and these lanes may implement only the one settled load scene. Escalating to WebGL
+never changes the settled branch. Autonomous ideation never bypasses register-fit, the performance budget, the slop gates, hand precedence,
+or the non-canvas semantic fallback; it cannot change the immutable decision. Fit the interaction to register:
+it is the settled load scene and remains within the settled one-signature-moment restraint.

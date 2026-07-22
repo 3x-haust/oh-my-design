@@ -60,7 +60,8 @@ test('hand and composer fall back to user asset or CSS\\/SVG per the placeholder
   }
 });
 
-test('the asset sourcing additions do not weaken hand/composer G1 carrier, restraint, or dependency lock text', () => {
+test('asset sourcing preserves evidence-bound carrier and dependency locks', () => {
+  const protocol = read('core/protocol/human-design-loop.md');
   const hand = read('src/agents/hand.agent.yaml');
   const composer = read('src/agents/composer.agent.yaml');
 
@@ -72,10 +73,15 @@ test('the asset sourcing additions do not weaken hand/composer G1 carrier, restr
   assert.match(composer, /never mandate a photo or invent facts\/assets/);
   assert.match(hand, /Never fabricate assets, data, or product facts to justify a\s+carrier/i);
   assert.match(composer, /Never invent the asset or fact the carrier depends\s+on/i);
-  assert.match(hand, /a `marketing` or showpiece surface must carry\s+exactly one signature moment/i);
-  assert.match(composer, /On a `marketing` or showpiece surface assign exactly one signature/i);
 
-  // The new sections say they narrow *how*, not *whether/what*, a carrier is sourced.
+  // Autonomous direction selection is locked by explicit user input and never defaults to motion.
+  assert.match(protocol, /explicit current-user register or motion instruction is a lock[\s\S]*never inferred from silence/i);
+  assert.match(protocol, /compare exactly three evidence-grounded directions silently[\s\S]*do not ask the user/i);
+  assert.match(protocol, /`none` is legal[\s\S]*adequate static proof[\s\S]*`one` is legal only when one declared motion hypothesis is eligible/i);
+  assert.match(hand, /`motionDecision: one` requires exactly one real[\s\S]*triggered scene/i);
+  assert.match(hand, /`motionDecision: none` permits no[\s\S]*triggered scene[\s\S]*designed static template break/i);
+
+  // The asset sections narrow *how*, not whether/what, a carrier is sourced.
   assert.match(hand, /never overrides the carrier\s+or restraint rules above/i);
   assert.match(composer, /never overrides the media-role or restraint rules above/i);
 });
