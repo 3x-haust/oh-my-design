@@ -201,7 +201,7 @@ const copyDeckV2 = (
 | --- | --- |
 ${beatIds.map((beatId) => `| ${beatId} | F-001 |`).join('\n')}
 `;
-const manifest = (directory: string, decision: 'none' | 'one' = 'none'): FinalEvidenceV2Manifest => {
+const manifest = (directory: string, decision: 'none' | 'one' = 'none', motionRegister: 'confident' | 'showpiece' = 'confident'): FinalEvidenceV2Manifest => {
   const invocation = finalEvidenceInvocation(directory);
   const current = invocation.current;
   const activation = receipt(directory, 'activation', 'activation-context-v2', { schemaVersion: 'activation-context-v2', buildSha256: current.buildSha256, loadedSkillSha256: current.loadedSkillSha256, briefSha256: current.briefSha256, hostCapability: { host: 'local' } });
@@ -239,7 +239,7 @@ const manifest = (directory: string, decision: 'none' | 'one' = 'none'): FinalEv
     { register: 'confident', subjectIdentityFit: 'Confident framing fits the subject.', staticReferenceSlotIds: ['static'], motionReferenceSlotIds: decision === 'one' ? ['motion-reference'] : [], conceptRole: 'Launch transition', macroCompositionHypothesis: 'Layered promotional composition.', motionHypothesis: 'one', uxAccessibilityPerformanceRisks: ['Reduced motion remains available.'], lawfulImplementationPath: 'CSS and SVG implementation.', rejectionCondition: 'Another evidenced direction better fits the launch.' },
     { register: 'showpiece', subjectIdentityFit: 'Showpiece framing fits the subject.', staticReferenceSlotIds: ['static'], motionReferenceSlotIds: decision === 'one' ? ['motion-reference'] : [], conceptRole: 'Signature reveal', macroCompositionHypothesis: 'Layered promotional composition.', motionHypothesis: 'one', uxAccessibilityPerformanceRisks: ['Reduced motion remains available.'], lawfulImplementationPath: 'CSS and SVG implementation.', rejectionCondition: 'Another evidenced direction better fits the launch.' },
   ] as const;
-  const selected = decision === 'none' ? alternatives[0] : alternatives[1];
+  const selected = decision === 'none' ? alternatives[0] : (motionRegister === 'showpiece' ? alternatives[2] : alternatives[1]);
   const authorInvocationSha256 = sha('author-invocation');
   const authorPayloadSha256 = sha('author-payload');
   const authorResultSha256 = sha('author-result');
@@ -913,4 +913,85 @@ test('project writes reject an existing symlink leaf target', () => {
     }));
     assert.equal(readFileSync(outsideTarget, 'utf8'), 'original');
   } finally { clean(directory); clean(outside); }
+});
+const scrollMotionFixture = `<!doctype html><html data-omd-production-boundary="whole-page"><style>
+      html, body { width: 100%; height: 100%; margin: 0; }
+      html { background: #111; animation: production-scene 1000ms linear 100ms forwards; }
+      body { min-height: 100%; }
+      @keyframes production-scene { to { background: #eee; } }
+      @media (prefers-reduced-motion: reduce) { html { background: #eee; animation: none !important; } }
+    </style><body>motion</body></html>`;
+async function captureLoadScene(directory: string, input: FinalEvidenceV2Manifest): Promise<{ path: string; schema: 'motion-evidence-v2'; sha256: string }> {
+  const artDirectionHash = artDirectionSha256(JSON.parse(readFileSync(join(directory, input.graph.artDirection.path), 'utf8')));
+  const buildHash = (JSON.parse(readFileSync(join(directory, input.graph.activation.path), 'utf8')) as { buildSha256: string }).buildSha256;
+  const target = join(directory, 'motion.html');
+  writeFileSync(target, scrollMotionFixture);
+  const observationDirectory = join(directory, '.omd', 'motion-observations', 'run-1');
+  const adapter = createTestProjectWriteAdapter(directory);
+  adapter.mkdir('.omd/motion-observations/run-1');
+  const motion = projectRelativePaths(directory, await captureMotionEvidenceV2(target, {
+    viewport: { width: 390, height: 300 }, outDir: observationDirectory, runId: 'run-1', buildHash,
+    artDirectionHash, referenceSlotId: 'motion-reference', selector: 'html', trigger: 'load', intervalMs: 160, adapter,
+  }));
+  const sourceSealValue = createSourceSeal(directory, '2026-01-01T00:00:00.000Z');
+  writeFileSync(join(directory, '.omd', 'source-seal.json'), `${canonical(sourceSealValue)}\n`);
+  (input.graph.sourceSeal as { sha256: string }).sha256 = sha(readFileSync(join(directory, '.omd', 'source-seal.json')));
+  return receipt(directory, 'motion-one', 'motion-evidence-v2', motion);
+}
+const scrollScenesEvidence = (artDirectionHash: string): Record<string, unknown> => ({
+  schema: 'scroll-scene-evidence-v1', artDirectionHash, register: 'showpiece', perfBudgetDeclared: true, reducedMotionComplete: true,
+  scenes: [
+    { sceneId: 'reveal-a', scrollFraction: 0.4, roiSelector: '#a', settle: { settledEnergy: 0, noiseFloor: 0.002 }, stateChangeEnergy: 0.2, reducedMotion: { behavior: 'static-equivalent' } },
+    { sceneId: 'reveal-b', scrollFraction: 0.85, roiSelector: '#b', settle: { settledEnergy: 0.001, noiseFloor: 0.002 }, stateChangeEnergy: 0.15, reducedMotion: { behavior: 'removed' } },
+  ],
+});
+test('a showpiece one manifest carries a scroll-position-scrubbed journey; wrong binding and tampered bytes are rejected', async () => {
+  const directory = root(); try {
+    const input = manifest(directory, 'one', 'showpiece');
+    const artDirectionHash = artDirectionSha256(JSON.parse(readFileSync(join(directory, input.graph.artDirection.path), 'utf8')));
+    const motionEvidence = await captureLoadScene(directory, input);
+    const scrollValue = scrollScenesEvidence(artDirectionHash);
+    const publish = (scroll: { path: string; schema: string; sha256: string }) => {
+      const cwd = process.cwd();
+      try { process.chdir(directory); return publishFinalEvidenceV2(directory, { ...input, motionEvidence, scrollSceneEvidence: scroll }); }
+      finally { process.chdir(cwd); }
+    };
+    // Scroll evidence must bind the same immutable art direction as the load scene.
+    const wrongBinding = receipt(directory, 'scroll-wrong', 'scroll-scene-evidence-v1', { ...scrollValue, artDirectionHash: sha('unrelated-art-direction') });
+    assert.throws(() => publish(wrongBinding), /bind the selected semantic art direction/);
+    // The scroll evidence bytes are content-addressed: a tampered file cannot publish.
+    const scrollReceipt = receipt(directory, 'scroll', 'scroll-scene-evidence-v1', scrollValue);
+    writeFileSync(join(directory, scrollReceipt.path), `${canonical({ ...scrollValue, scenes: (scrollValue.scenes as unknown[]).slice(0, 1) })}\n`);
+    assert.throws(() => publish(scrollReceipt), /scroll-scene evidence hash changed/);
+    writeFileSync(join(directory, scrollReceipt.path), `${canonical(scrollValue)}\n`);
+    // A well-formed, bound scroll journey publishes and is returned by the checker.
+    assert.doesNotThrow(() => publish(scrollReceipt));
+    const cwd = process.cwd();
+    try {
+      process.chdir(directory);
+      assert.equal(checkFinalEvidenceV2(directory).scrollSceneEvidence?.schema, 'scroll-scene-evidence-v1');
+    } finally { process.chdir(cwd); }
+  } finally { clean(directory); }
+});
+test('a scroll journey is a showpiece one escalation: none decisions and confident registers are rejected', async () => {
+  {
+    const directory = root(); try {
+      const base = manifest(directory, 'none');
+      const scroll = receipt(directory, 'scroll-none', 'scroll-scene-evidence-v1', scrollScenesEvidence(sha('any-art-direction')));
+      assert.throws(() => validateFinalEvidenceV2Manifest({ ...base, scrollSceneEvidence: scroll }), /showpiece escalation that accompanies the one load scene/);
+    } finally { clean(directory); }
+  }
+  {
+    const directory = root(); try {
+      const input = manifest(directory, 'one');
+      const artDirectionHash = artDirectionSha256(JSON.parse(readFileSync(join(directory, input.graph.artDirection.path), 'utf8')));
+      const motionEvidence = await captureLoadScene(directory, input);
+      const scroll = receipt(directory, 'scroll', 'scroll-scene-evidence-v1', scrollScenesEvidence(artDirectionHash));
+      const cwd = process.cwd();
+      try {
+        process.chdir(directory);
+        assert.throws(() => publishFinalEvidenceV2(directory, { ...input, motionEvidence, scrollSceneEvidence: scroll }), /showpiece-only escalation/);
+      } finally { process.chdir(cwd); }
+    } finally { clean(directory); }
+  }
 });
