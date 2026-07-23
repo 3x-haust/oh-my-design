@@ -114,8 +114,15 @@ production evidence still renders 1280x900 and 390x844.
 
 ## Candidate axes
 
-Define at least two genuinely different structural axes that can satisfy the same spine,
-copy, type, and acceptance criteria. Axes vary spatial relationships, not content truth.
+Define at least two structurally divergent candidate axes that can satisfy the same spine, copy,
+type, and acceptance criteria. Genuine divergence is a different macro-layout family — the top-level
+spatial organization changes (single-column stack, asymmetric split, multi-column or modular grid,
+sidebar/rail, centered canvas, full-bleed alternating bands) or the dominant anchor's placement and
+reading path changes — not the same layout at different sizes. Axes vary spatial relationships, not
+content truth. Two candidates that share one macro-layout family and differ only cosmetically — margin,
+column width, type scale, or the vertical spacing of the same single-column stack — are one axis, not
+two, and are a divergence failure, not a candidate set. Name each axis's macro-layout family so the
+difference is legible before any sketch is built.
 
 ## Transfer boundary
 

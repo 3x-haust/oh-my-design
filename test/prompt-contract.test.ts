@@ -594,3 +594,19 @@ test('the framer and the loop require research gathering to run in parallel', ()
   const loop = read('core/protocol/human-design-loop.md').replace(/\s+/g, ' ');
   assert.match(loop, /issues its independent searches, captures, and lookups in parallel, not one at a time/i);
 });
+test('candidate axes must be genuinely divergent macro-layouts, not one stack reskinned', () => {
+  const composition = read('core/protocol/composition-contract.md').replace(/\s+/g, ' ');
+  const loop = read('core/protocol/human-design-loop.md').replace(/\s+/g, ' ');
+  const sketch = read('src/agents/sketch.agent.yaml').replace(/\s+/g, ' ');
+  // Divergence is a different macro-layout family, named per axis.
+  assert.match(composition, /Genuine divergence is a different macro-layout family/i);
+  assert.match(composition, /Name each axis's macro-layout family/i);
+  // A single-column stack reskinned with cosmetic differences is one axis, a divergence failure.
+  assert.match(composition, /share one macro-layout family and differ only cosmetically[\s\S]*are one axis, not\s+two, and are a divergence failure/i);
+  // The blind selector rejects a non-divergent candidate set as a contract-level no-winner.
+  assert.match(loop, /A candidate set that collapses to a single macro-layout family has not diverged/i);
+  assert.match(loop, /treats it as a contract-level no-winner/i);
+  // Each isolated sketch realizes its axis as a distinct macro-layout, not a reskin of the default stack.
+  assert.match(sketch, /Realize that axis as its named\s+macro-layout family/i);
+  assert.match(sketch, /never a cosmetic reskin of\s+the default single-column stack/i);
+});
