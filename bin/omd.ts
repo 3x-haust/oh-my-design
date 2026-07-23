@@ -410,6 +410,37 @@ async function cmdProbe(opts: Opts): Promise<never> {
   process.exit(result.warnings.length ? 1 : 0);
 }
 
+async function cmdFlowProbe(opts: Opts): Promise<never> {
+  const base = opts._[0];
+  if (!base) throw new Error('usage: omd flow-probe <base-url-or-dir> [--plan path] [--json] [--out path]');
+  const { runProbeFlow } = await import('../core/probe/flow.ts');
+  const { writeProbeResult } = await import('../core/probe/index.ts');
+  const planPath = resolve(opts.plan ?? join(process.cwd(), '.omd', 'probes', 'flow.json'));
+  if (!existsSync(planPath)) throw new Error(`flow plan not found: ${planPath}`);
+  const result = await runProbeFlow(base, JSON.parse(readFileSync(planPath, 'utf8')) as unknown);
+  const safe = result.name.replace(/[^a-z0-9_-]+/gi, '-').replace(/^-|-$/g, '') || 'flow';
+  const out = resolve(opts.out ?? join(process.cwd(), '.omd', '.cache', 'probes', `${safe}-flow.json`));
+  const command = 'omd flow-probe';
+  const fromProject = relative(process.cwd(), out);
+  if (fromProject === '' || (!fromProject.startsWith('..') && !fromProject.startsWith('/'))) {
+    writeProbeResult(process.cwd(), fromProject, result as never, projectWriterFromActivation(opts, command));
+  } else {
+    writeExternalObservationFile({
+      projectRoot: process.cwd(),
+      absolutePath: opts.out ?? out,
+      content: JSON.stringify(result, null, 2),
+      invocation: invocationFromActivation(opts, command),
+      kind: 'probe-cache',
+    });
+  }
+  if (opts.json) process.stdout.write(JSON.stringify(result));
+  else {
+    for (const warning of result.warnings) console.log(`[${warning.severity}] ${warning.id}: ${warning.message}`);
+    console.log(out);
+  }
+  process.exit(result.warnings.length ? 1 : 0);
+}
+
 async function cmdConfig(sub: string | undefined, opts: Opts): Promise<never> {
   const { readConfig, setCheckpoint } = await import('../core/config/index.ts');
   if (sub === 'show') {
@@ -2481,6 +2512,7 @@ async function main(): Promise<never> {
   if (cmd === 'ir') return cmdIr(parseArgs(args.slice(1)));
   if (cmd === 'render') return cmdRender(parseArgs(args.slice(1)));
   if (cmd === 'probe') return cmdProbe(parseArgs(args.slice(1)));
+  if (cmd === 'flow-probe') return cmdFlowProbe(parseArgs(args.slice(1)));
   if (cmd === 'check') return cmdCheck(parseArgs(args.slice(1)));
   if (cmd === 'slop') return cmdSlop(sub, parseArgs(args.slice(2)));
   if (cmd === 'lighthouse') return cmdLighthouse(parseArgs(args.slice(1)));

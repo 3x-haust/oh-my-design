@@ -224,3 +224,46 @@ test('omd pack <missing-file> exits non-zero with an error message', () => {
   assert.notEqual(r.status, 0);
   assert.match(r.stderr, /not found/);
 });
+test('omd flow-probe walks the declared screen sequence and reports a clean flow', () => {
+  const dir = project();
+  writeFileSync(join(dir, 'login.html'), `<!doctype html><html><body>
+    <form id="login-form"><input id="email" /></form>
+    <button id="continue" type="button">Continue</button>
+    <script>document.getElementById('continue').addEventListener('click', function(){
+      location.href = 'dashboard.html?email=' + encodeURIComponent(document.getElementById('email').value);
+    });</script></body></html>`);
+  writeFileSync(join(dir, 'dashboard.html'), `<!doctype html><html><body>
+    <div data-region="dashboard">Dashboard</div>
+    <a id="open-settings" href="settings.html">Settings</a>
+    <script>document.getElementById('open-settings').addEventListener('click', function(e){ e.preventDefault(); location.href = 'settings.html' + location.search; });</script></body></html>`);
+  writeFileSync(join(dir, 'settings.html'), `<!doctype html><html><body>
+    <div id="settings"><input id="account-email" /></div>
+    <script>document.getElementById('account-email').value = new URLSearchParams(location.search).get('email') || '';</script></body></html>`);
+  mkdirSync(join(dir, '.omd', 'probes'), { recursive: true });
+  writeFileSync(join(dir, '.omd', 'probes', 'flow.json'), JSON.stringify({
+    schema: 'probe-flow-v1', name: 'onboarding', destructive: false,
+    screens: [
+      { screenId: 'login', route: '/login', arrival: [{ type: 'visible', selector: '#login-form' }],
+        steps: [
+          { action: 'fill', selector: '#email', value: 'user@example.com', expect: [{ type: 'attribute', selector: '#email', name: 'value', value: 'user@example.com' }] },
+          { action: 'click', selector: '#continue', expect: [{ type: 'url', value: 'dashboard' }] },
+        ], advancesTo: 'dashboard' },
+      { screenId: 'dashboard', route: '/dashboard', arrival: [{ type: 'visible', selector: '[data-region="dashboard"]' }],
+        steps: [{ action: 'click', selector: '#open-settings', expect: [{ type: 'url', value: 'settings' }] }], advancesTo: 'settings' },
+      { screenId: 'settings', route: '/settings', arrival: [{ type: 'visible', selector: '#settings' }], steps: [] },
+    ],
+    carries: [{ fromScreen: 'login', fromLocator: '#email', toScreen: 'settings', toLocator: '#account-email' }],
+  }));
+  const r = run(['flow-probe', dir, '--json'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  const result = JSON.parse(r.stdout) as { screens: unknown[]; warnings: unknown[] };
+  assert.equal(result.screens.length, 3);
+  assert.deepEqual(result.warnings, []);
+});
+
+test('omd flow-probe fails closed when no flow plan exists', () => {
+  const dir = project();
+  const r = run(['flow-probe', dir], dir);
+  assert.notEqual(r.status, 0);
+  assert.match(r.stderr, /flow plan not found/);
+});

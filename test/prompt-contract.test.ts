@@ -625,3 +625,11 @@ test('the AI-SaaS tells name decorative geometric-glyph ornament, flagged as SLO
   assert.match(expressive, /A marker system is consistent and meaningful or it is absent/i);
   assert.match(expressive, /`SLOP-ORNAMENT-GLYPH`/);
 });
+test('a multi-screen stateful surface runs omd flow-probe with dead-end and state-loss as RED', () => {
+  const loop = read('core/protocol/human-design-loop.md').replace(/\s+/g, ' ');
+  assert.match(loop, /spans two or more reachable screens[\s\S]*supplies `\.omd\/probes\/flow\.json` and runs `omd flow-probe`/i);
+  assert.match(loop, /a dead end \(`FLOW-DEAD-END`\)/i);
+  assert.match(loop, /state loss \(`FLOW-STATE-LOSS`\)/i);
+  assert.match(loop, /On a `product`\/`mixed` surface both are RED/i);
+  assert.match(loop, /makes cross-screen navigation and state-continuity claims only from this flow-probe evidence/i);
+});
