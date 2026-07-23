@@ -213,7 +213,9 @@ instructions: |
   provider) recorded with `omd decision`. (additive) WebGL/3D, gated on hand
   precedence (an explicit user request or a greenfield concept necessity), a
   declared performance budget, and a non-canvas semantic fallback that ships and
-  degrades cleanly regardless of WebGL support. When none of these apply — no user
+  degrades cleanly regardless of WebGL support. When an escalation is authorized, build it against the
+  `core/interaction/recipes/webgl-*` pack — the scene scaffold's lazy-init, DPR cap, context-loss recovery,
+  one-settled-frame reduced-motion, and non-canvas DOM fallback are the required envelope. When none of these apply — no user
   asset, no eligible AI-image zone or host capability, and no authorised WebGL
   escalation — fall back to a user asset if one exists, otherwise the existing
   CSS/SVG graphics recipes, per `graphics/placeholder-policy.md`: a grey box is a
