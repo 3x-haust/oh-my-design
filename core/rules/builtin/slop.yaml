@@ -107,6 +107,22 @@
   assert: "!/^\\s*[\\u{1F300}-\\u{1FAFF}\\u{2600}-\\u{27BF}]/u.test(value)"
   message: "Heading or button opens with an emoji: {value}. An emoji borrows emotional charge it has not earned. If it is doing a job your typography or copy failed to do, fix those instead."
 
+# Decorative geometric-glyph ornament. SLOP-EMOJI-HEADING covers emoji (U+1F300+, U+2600–27BF) and
+# deliberately ignores functional arrows (U+2190–21FF); it does NOT see the Geometric Shapes block
+# (U+25A0–U+25FF: ◆ ◇ ◈ ● ○ ▪ ▫ ◼ ◻ ▸ ▹ ◂ and friends). A model reaches for these as per-card ornament —
+# a different little diamond, square, or triangle before each feature — to make a plain card grid look
+# "designed". The shapes encode nothing; the variety is the tell. A real marker system is one consistent,
+# meaningful glyph or none. Fires page-level when TWO OR MORE DISTINCT Geometric-Shapes glyphs are used
+# as leading markers (glyph followed by whitespace or end of node), so a single consistent marker and a
+# same-glyph functional disclosure triangle never fire.
+- id: SLOP-ORNAMENT-GLYPH
+  layer: 1
+  category: slop
+  severity: warn
+  when: "node.parent === null"
+  value: "(() => { const marks = new Set(); for (const n of ir.nodes) { if (n.type !== 'TEXT' || !n.text) continue; const m = /^\\s*([\\u{25A0}-\\u{25FF}])(?:\\s|$)/u.exec(n.text); if (m) marks.add(m[1]); } return marks.size >= 2 ? [...marks] : null; })()"
+  assert: "value === null"
+  message: "Decorative geometric-glyph ornament: {value} are distinct shape glyphs used as leading markers on this page. A different little diamond, square, or triangle before each card is ornament assembled to look designed, not an icon system — the shapes encode nothing and the variety is the tell. Use one consistent, meaningful marker that maps to the content, or clean typography and spacing, and let the hierarchy carry itself."
 - id: SLOP-COPY
   layer: 1
   category: slop
