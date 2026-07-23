@@ -1002,3 +1002,28 @@ test('SLOP-COLORLESS does not fire on a short page or a thin (<3) palette', () =
   assert.ok(!runSlop([shortRoot, ...shortSecs]).some((x) => x.id === 'SLOP-COLORLESS'), 'a short page (pageH < 1500) must not fire');
   assert.ok(!runSlop(flatStackNodes({ fills: ['#FFFFFF', '#111111'] })).some((x) => x.id === 'SLOP-COLORLESS'), 'a two-tone palette (< 3 fills) must not fire');
 });
+// ── SLOP-ORNAMENT-GLYPH ───────────────────────────────────────────────────────
+test('SLOP-ORNAMENT-GLYPH fires on two or more distinct geometric-shape marker glyphs', () => {
+  const nodes: RawNode[] = [
+    accentRoot(['a', 'b', 'c']),
+    richText('a', { text: '◆ 사용자용 스킬 6개' }),
+    richText('b', { text: '◇ 내부 파이프라인 에이전트 9개' }),
+    richText('c', { text: '▪ 디자인 이론 팩' }),
+  ];
+  const v = check(normalize({ nodes }), builtin, { categories: ['slop'] });
+  assert.ok(v.some((x) => x.id === 'SLOP-ORNAMENT-GLYPH'), 'expected SLOP-ORNAMENT-GLYPH on assorted geometric markers');
+});
+test('SLOP-ORNAMENT-GLYPH does not fire on one consistent marker or functional arrows', () => {
+  const consistent: RawNode[] = [
+    accentRoot(['a', 'b']),
+    richText('a', { text: '◆ First feature' }),
+    richText('b', { text: '◆ Second feature' }),
+  ];
+  assert.ok(!check(normalize({ nodes: consistent }), builtin, { categories: ['slop'] }).some((x) => x.id === 'SLOP-ORNAMENT-GLYPH'), 'one consistent marker glyph must not fire');
+  const arrows: RawNode[] = [
+    accentRoot(['a', 'b']),
+    richText('a', { text: '→ View all' }),
+    richText('b', { text: '↗ Learn more' }),
+  ];
+  assert.ok(!check(normalize({ nodes: arrows }), builtin, { categories: ['slop'] }).some((x) => x.id === 'SLOP-ORNAMENT-GLYPH'), 'functional arrows (U+2190–21FF) must not fire');
+});

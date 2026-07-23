@@ -619,3 +619,9 @@ test('copy register is an authority-fit decision, not a soft default, and Korean
   // The writer proactively avoids the spaced em-dash in Korean copy (SLOP-KO-EMDASH catches it at render).
   assert.match(writer, /Never use a spaced em-dash \( — \)\s*inside Korean copy/i);
 });
+test('the AI-SaaS tells name decorative geometric-glyph ornament, flagged as SLOP-ORNAMENT-GLYPH', () => {
+  const expressive = read('core/theory/expressive.md').replace(/\s+/g, ' ');
+  assert.match(expressive, /Decorative ornament[\s\S]*a different little geometric glyph on each card/i);
+  assert.match(expressive, /A marker system is consistent and meaningful or it is absent/i);
+  assert.match(expressive, /`SLOP-ORNAMENT-GLYPH`/);
+});
