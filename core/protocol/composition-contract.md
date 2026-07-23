@@ -119,10 +119,17 @@ copy, type, and acceptance criteria. Axes vary spatial relationships, not conten
 
 ## Transfer boundary
 
-Permitted transfer: attributed relationships, measured invariants, and principles abstracted
-from trusted evidence. Forbidden transfer: source identity in shipped UI, copy, assets,
-literal tokens, full section order, pixels, recognizable silhouette, or unique interaction
-and motion. An exact transplant is allowed only when the user explicitly requested that
+The boundary is drawn around the source's identity, not its structure. Permitted transfer:
+attributed relationships, measured invariants, principles abstracted from trusted evidence, and —
+at section granularity — an assigned reference part's layout, composition, and treatment, rebuilt
+faithfully with the destination's own copy, assets, and tokens. This per-section fidelity is the
+point (see `reference-assembly.md`): reproducing the assigned section's layout is expected, and
+`omd ref distance`'s high per-part closeness is the intended outcome, not a warning. Forbidden
+transfer is the source's identity and its whole-page gestalt: its brand/wordmark, copy, photographs
+and assets, literal token values, unique interaction and motion, and — across the entire page — its
+full section order and overall silhouette. Faithfully rebuilding one assigned section is lawful;
+tracing a whole reference page section-by-section into your whole page is the derivative failure.
+An exact whole-page or identity transplant is allowed only when the user explicitly requested that
 specific transplant; record the request and attribution.
 
 ## Reference synthesis

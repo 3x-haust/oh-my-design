@@ -154,6 +154,17 @@ test('references are composed section by section from parts across references, n
   assert.match(assembly, /Different sections may draw parts from different references/i);
   assert.match(composition, /different sections may draw from different references/i);
 });
+test('the transfer boundary permits per-section layout fidelity and forbids only whole-page identity', () => {
+  const composition = read('core/protocol/composition-contract.md').replace(/\s+/g, ' ');
+  // Faithfully rebuilding an assigned section's layout is permitted and expected.
+  assert.match(composition, /an assigned reference part's layout, composition, and treatment, rebuilt\s+faithfully/i);
+  assert.match(composition, /reproducing the assigned section's layout is expected/i);
+  assert.match(composition, /Faithfully rebuilding one assigned section is lawful/i);
+  // What is forbidden is the source's identity and its whole-page gestalt, not a single section.
+  assert.match(composition, /Forbidden\s+transfer is the source's identity and its whole-page gestalt/i);
+  assert.match(composition, /across the entire page[\s\S]*full section order and overall silhouette/i);
+  assert.match(composition, /tracing a whole reference page section-by-section into your whole page is the derivative failure/i);
+});
 test('roles keep composer downstream of the chosen draft without image-generation duties', () => {
   const scout = read('src/agents/scout.agent.yaml');
   const composer = read('src/agents/composer.agent.yaml');
