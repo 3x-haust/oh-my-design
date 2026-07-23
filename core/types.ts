@@ -32,6 +32,8 @@ export interface RawNode {
   layout?: Layout;
   fill?: Styled;
   radius?: Styled;
+  /** True when the node carries a rule border on top and/or bottom but not a full box — a divider between rows. */
+  divider?: boolean;
   color?: Hex;
   interactive?: boolean;
   inline?: boolean;

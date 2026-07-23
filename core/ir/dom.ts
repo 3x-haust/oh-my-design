@@ -238,6 +238,14 @@ export function extractInPage(maxNodes: number, selector?: string | null): RawIr
       if (color) node.color = color;
     }
     if (radius > 0) node.radius = { value: radius, token: nameOf(String(radius) + 'PX') };
+    // A divider: a visible rule on the top and/or bottom edge, but not a full four-side box (that is a
+    // card, not a rule). Captures the "a line between every row" pattern (SLOP-DIVIDER-SPAM).
+    const edge = (w: string, s: string, c: string): boolean => (parseFloat(w) || 0) > 0 && s !== 'none' && c !== 'rgba(0, 0, 0, 0)' && c !== 'transparent';
+    const et = edge(cs.borderTopWidth, cs.borderTopStyle, cs.borderTopColor);
+    const eb = edge(cs.borderBottomWidth, cs.borderBottomStyle, cs.borderBottomColor);
+    const el2 = edge(cs.borderLeftWidth, cs.borderLeftStyle, cs.borderLeftColor);
+    const er = edge(cs.borderRightWidth, cs.borderRightStyle, cs.borderRightColor);
+    if ((et || eb) && !(el2 && er)) node.divider = true;
     if (isInteractive(el)) node.interactive = true;
     if (cs.display === 'inline') node.inline = true;
 

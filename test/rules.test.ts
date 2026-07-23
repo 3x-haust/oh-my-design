@@ -1027,3 +1027,15 @@ test('SLOP-ORNAMENT-GLYPH does not fire on one consistent marker or functional a
   ];
   assert.ok(!check(normalize({ nodes: arrows }), builtin, { categories: ['slop'] }).some((x) => x.id === 'SLOP-ORNAMENT-GLYPH'), 'functional arrows (U+2190–21FF) must not fire');
 });
+// ── SLOP-DIVIDER-SPAM ─────────────────────────────────────────────────────────
+test('SLOP-DIVIDER-SPAM fires when four or more sibling rows each carry a rule', () => {
+  const rows = Array.from({ length: 6 }, (_u, i) => makeChildNode('root', { id: `r${i}`, type: 'FRAME', divider: true, box: { x: 0, y: i * 60, w: 800, h: 56 } }, i));
+  const root = makeRootNode({ children: rows.map((r) => r.id) });
+  assert.ok(runSlop([root, ...rows]).some((x) => x.id === 'SLOP-DIVIDER-SPAM'), 'a line between every row is divider spam');
+});
+test('SLOP-DIVIDER-SPAM does not fire on a few dividers or on non-divider siblings', () => {
+  const three = Array.from({ length: 3 }, (_u, i) => makeChildNode('root', { id: `r${i}`, divider: true }, i));
+  assert.ok(!runSlop([makeRootNode({ children: three.map((r) => r.id) }), ...three]).some((x) => x.id === 'SLOP-DIVIDER-SPAM'), 'three dividers are not spam');
+  const plain = Array.from({ length: 6 }, (_u, i) => makeChildNode('root', { id: `c${i}` }, i));
+  assert.ok(!runSlop([makeRootNode({ children: plain.map((c) => c.id) }), ...plain]).some((x) => x.id === 'SLOP-DIVIDER-SPAM'), 'siblings with no rule are not spam');
+});
