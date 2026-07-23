@@ -147,3 +147,9 @@ test('an all-neutral marketing palette is a machine-flagged colourless failure, 
   assert.match(protocol, /`SLOP-COLORLESS`/);
   assert.match(protocol, /on a `marketing`\/showpiece surface that is RED, not a mere warn/i);
 });
+test('enumerated visual directions must genuinely diverge in colour and generator, not converge to monochrome variants', () => {
+  const protocol = read('core/protocol/human-design-loop.md');
+  assert.match(protocol, /The enumerated directions must genuinely diverge, not converge/i);
+  assert.match(protocol, /each commits a distinct colour identity[\s\S]*never white\/black by default/i);
+  assert.match(protocol, /one guess wearing three hats, and the blind selection rejects the set and re-enumerates/i);
+});
