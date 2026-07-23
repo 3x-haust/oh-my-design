@@ -510,11 +510,16 @@ test('scout researches the real subject first and lets its identity anchor gover
   assert.match(scout, /a colour lane keyed to the anchor palette/i);
   assert.match(scout, /a personality\/motif lane keyed to the anchor motif/i);
   assert.match(scout, /a layout lane and a motion lane drawn from high-craft award work/i);
+  assert.match(scout, /plus award showcases \(Awwwards, FWA, GDWEB\) and their case studies/i);
+  assert.match(scout, /this award-work lane is mandatory and reads the case study/i);
+  assert.match(scout, /never clone a famous showcase/i);
   const framer = read('src/agents/framer.agent.yaml').replace(/\s+/g, ' ');
   assert.match(framer, /record it in the frame as a research target/i);
   assert.match(framer, /The scout derives the visual anchor from it/i);
   const loop = read('core/protocol/human-design-loop.md').replace(/\s+/g, ' ');
   assert.match(loop, /fixes the subject's own identity anchor \(its real palette and motif\) before any gathering lane runs/i);
+  assert.match(loop, /Award showcases \(Awwwards, FWA, GDWEB\) and their case studies are part of this category/i);
+  assert.match(loop, /the FWA\/Awwwards case write-up \(concept, stack, motion approach\) is studied alongside the hero capture/i);
   const proto = read('core/protocol/reference-assembly.md').replace(/\s+/g, ' ');
   assert.match(proto, /## Subject anchor/i);
   assert.match(proto, /it governs the colour and motif every other lane serves/i);
