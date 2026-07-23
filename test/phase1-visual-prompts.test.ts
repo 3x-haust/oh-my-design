@@ -134,3 +134,11 @@ test('eye flags an absent visual carrier as a hierarchy defect, not a style pref
   const eye = read('src/agents/eye.agent.yaml');
   assert.match(eye, /When the dominant anchor has no purposeful\s+visual carrier[\s\S]*name that absence as a hierarchy defect, not a\s+style preference/i);
 });
+test('a showpiece scroll journey is lawful only as scroll-scene-evidence, never as an unsettleable claim', () => {
+  const protocol = read('core/protocol/human-design-loop.md');
+  assert.match(protocol, /A `showpiece` scroll journey is a lawful escalation only as verified evidence/i);
+  assert.match(protocol, /each scene is scroll-position-scrubbed/i);
+  assert.match(protocol, /`final-evidence-v2` binds this as `scroll-scene-evidence-v1`/i);
+  assert.match(protocol, /Time-triggered scroll animation stays out of scope because it cannot be deterministically settled/i);
+  assert.match(protocol, /`confident`\/`quiet`\/`product` surfaces never take this escalation/i);
+});

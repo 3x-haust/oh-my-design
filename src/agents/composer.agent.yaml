@@ -188,11 +188,19 @@ instructions: |
 
   When the immutable selected `motionDecision` is `one`, the assigned scene is the settled
   reference-slot or approved-recipe scene from the motion projection; do not ideate, substitute,
-  or add another signature interaction. The only observable trigger contract is one load scene:
+  or add another signature interaction. The default observable trigger contract is one load scene:
   it begins on page load and settles before the captured 1500ms load window. Do not specify
-  scroll-, pointer-, hover-, focus-, click-, or state-triggered choreography, because evaluator
-  evidence, recipes, prompts, and render measurement do not settle those interactions. When it is
-  `none`, do not introduce an interaction scene. CSS/WAAPI or React animation libraries are
+  pointer-, hover-, focus-, click-, or state-triggered choreography, nor a TIME-triggered scroll
+  animation, because evaluator evidence, recipes, prompts, and render measurement cannot settle
+  those interactions. The one lawful exception is a `showpiece` surface: a scroll-position-scrubbed
+  journey — every scene scrubbed to a fixed scroll position so its rendered state is stable across
+  time, never time-animating — is settleable and MAY accompany the one load scene as a progressive
+  enhancement, but only when it carries validated `scroll-scene-evidence-v1` (each scene
+  deterministically settled at its fixed position, a declared performance budget, and a complete
+  no-scroll reduced-motion baseline where every content region is already present and the page is
+  fully functional without any scroll motion). `final-evidence-v2` gates it: a claimed journey with
+  no such evidence, on any non-`showpiece` register, or with a time-triggered scene is rejected. When
+  it is `none`, do not introduce a load-scene interaction. CSS/WAAPI or React animation libraries are
   implementation lanes only for that one settled load scene. WebGL remains an escalation gated on
   hand precedence, a declared performance budget, and a non-canvas semantic fallback. The selected
   branch must preserve register fit, performance, slop cleanliness, hand precedence, and the
@@ -204,8 +212,9 @@ instructions: |
   screenshot's layout and treatment only through its selected lawful projection and immutable settled
   handoff; never receive or inspect the raw screenshot. The interaction lanes are, in order: CSS scroll-driven,
   then React animation libraries — GSAP with ScrollTrigger and Framer Motion (`motion`) — with a first-class lane preferred over hand-rolled rAF;
-  escalating to WebGL is an escalation, not a default. Under the immutable load-scene-only contract, CSS scroll-driven and ScrollTrigger are unavailable
-  as trigger mechanisms, and these lanes may implement only the one settled load scene. Escalating to WebGL
+  escalating to WebGL is an escalation, not a default. Outside a `showpiece` scroll-position-scrubbed journey that carries validated
+  `scroll-scene-evidence-v1`, CSS scroll-driven and ScrollTrigger stay unavailable as trigger mechanisms and these lanes may implement only
+  the one settled load scene; inside that evidence-gated journey they may scrub the scene sequence to scroll position, never animate it in time. Escalating to WebGL
   never changes the settled branch. Autonomous ideation never bypasses register-fit, the performance budget, the slop gates, hand precedence,
   or the non-canvas semantic fallback; it cannot change the immutable decision. Fit the interaction to register:
   it is the settled load scene and remains within the settled one-signature-moment restraint.
