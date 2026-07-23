@@ -610,3 +610,12 @@ test('candidate axes must be genuinely divergent macro-layouts, not one stack re
   assert.match(sketch, /Realize that axis as its named\s+macro-layout family/i);
   assert.match(sketch, /never a cosmetic reskin of\s+the default single-column stack/i);
 });
+test('copy register is an authority-fit decision, not a soft default, and Korean copy avoids the spaced em-dash', () => {
+  const voice = read('core/theory/voice.md').replace(/\s+/g, ' ');
+  const writer = read('src/agents/writer.agent.yaml').replace(/\s+/g, ' ');
+  // The speech level is chosen from audience + required authority; a soft 해요체 default on an authoritative landing is a miss.
+  assert.match(voice, /Defaulting to a soft, conversational 해요체[\s\S]*is a register-fit miss, not a safe default/i);
+  assert.match(writer, /Choose the register from this subject's audience and the authority its value claim needs/i);
+  // The writer proactively avoids the spaced em-dash in Korean copy (SLOP-KO-EMDASH catches it at render).
+  assert.match(writer, /Never use a spaced em-dash \( — \)\s*inside Korean copy/i);
+});
