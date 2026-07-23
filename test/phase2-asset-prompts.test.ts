@@ -19,6 +19,19 @@ test('hand and composer state the three-path asset sourcing precedence with duot
   }
 });
 
+test('a free-license real-photography path exists, and mood boards are study-only never lifted verbatim', () => {
+  const hand = read('src/agents/hand.agent.yaml');
+  const composer = read('src/agents/composer.agent.yaml');
+  const protocol = read('core/protocol/human-design-loop.md');
+  for (const source of [hand, composer, protocol]) {
+    // Real photos may be sourced from a free-license library and recorded with attribution.
+    assert.match(source, /free-license\s+library\s+\(Unsplash,\s+Pexels,\s+Openverse,\s+Wikimedia\s+Commons;\s+CC0\s+or\s+CC-BY\)/i);
+    assert.match(source, /recorded\s+with\s+its\s+source,\s+license,\s+and\s+attribution/i);
+    // Copyrighted mood boards are studied only, never lifted verbatim into the shipped page.
+    assert.match(source, /Pinterest,\s+Dribbble,\s+Mobbin[\s\S]*never\s+lifted\s+verbatim/i);
+  }
+});
+
 test('hand and composer confine AI-generated imagery to abstract/atmospheric zones and forbid factual carriers', () => {
   const hand = read('src/agents/hand.agent.yaml');
   const composer = read('src/agents/composer.agent.yaml');
