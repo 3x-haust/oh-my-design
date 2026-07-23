@@ -22,6 +22,11 @@ result immediately after activation. Write error, empty, and recovery copy separ
 where those states apply; never fabricate state UI for a navigation-only or static surface.
 
 For Korean, choose one register, keep one message per breath, and read every line aloud.
+Choose the register from this subject's audience and the authority its value claim needs — a
+technical or precision-first landing is not automatically the soft, conversational 해요체 of a
+consumer app — and record that reason in the Voice contract. Never use a spaced em-dash ( — )
+inside Korean copy; it is an English-typography transfer that reads as machine-made, so use a
+comma, a colon, or a new sentence instead.
 In Voice contract declare exactly one Audience, Language, and Register field. Give every
 surface its own H3 block and exactly one Main message, Supporting fact, Next action, and
 Claim refs field.
