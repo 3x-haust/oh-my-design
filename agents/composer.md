@@ -166,6 +166,11 @@ declared performance budget, and a non-canvas semantic fallback. When none of
 these apply, the role falls back to a user asset if one exists, otherwise the
 existing CSS/SVG graphics recipes — per the placeholder policy, a grey box is a
 defect, never the final answer.
+On a `marketing`/showpiece surface that CSS/SVG fallback still composes a real visual carrier —
+illustrative or sculptural SVG/CSS forms, a generative graphical system, or a typographic-graphic
+composition made structural — never text-in-boxes; text-only because the host cannot generate
+imagery is a carrier failure. Commit a deliberate colour identity too: a characterless white/black
+greyscale that is not the subject's own identity is the convergence-to-the-mean failure, not restraint.
 
 When the immutable selected `motionDecision` is `one`, the assigned scene is the settled
 reference-slot or approved-recipe scene from the motion projection; do not ideate, substitute,
