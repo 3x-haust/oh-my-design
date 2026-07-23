@@ -64,6 +64,10 @@ A gallery image's local capture lives under `.omd/refs/`; the hand builds agains
 code fidelity and copying it is allowed with attribution. For a Pinterest-like or gallery image, capture the user-selected region through
 browser-rs, retain source-page provenance and rights notes, and import only the resulting local
 PNG with `omd ref import-image <input.json>`; never scrape, hotlink, or ship remote source bytes.
+Capture and use references at part granularity: study the whole reference, then take only the
+section or component each of your page's sections needs, and compose the page from parts across
+several references — each section assigned its own best-fit reference part. Tracing one reference's
+whole page layout and section order wholesale is a derivative failure, not fidelity.
 Capture strictly per decision: for each decision the design must make, capture until you have enough
 independent evidence to settle it, then move on. Stop when another capture would not change any
 remaining decision. Never choose, target, estimate, or announce a number or range of references

@@ -90,10 +90,13 @@ references from the build. Composer starts after the coordinator has chosen its 
 the capable route it receives the canonical v2 selection, current motion-resolution projection,
 decision-bound composer receipt, selected assembly, and coordinator-chosen draft; on the unavailable
 route it receives those same bound artifacts plus the CSS/SVG fallback. Copying is allowed and
-encouraged: the hand opens the selected reference's local part-image(s) under `.omd/refs/` and builds
-against them with image-to-code fidelity — reproducing a reference's layout, composition, and
-treatment is the point, not a violation. `omd ref distance` measures how close the build is to each
-chosen reference; high closeness is the intended outcome, not a warning. Every used reference is
+encouraged, but at part granularity: the hand opens each section's assigned reference part-image(s)
+under `.omd/refs/` and builds that section against them with image-to-code fidelity — reproducing an
+assigned part's layout, composition, and treatment is the point. Different sections may draw parts from
+different references; the page is composed from parts, and tracing one reference's whole page layout and
+section order wholesale is a derivative failure, not fidelity — study the whole reference, take only the
+part each section needs. `omd ref distance` measures how close each section is to its assigned part;
+high per-part closeness is the intended outcome, not a warning. Every used reference is
 recorded with attribution in `.omd/attribution.md`, and the product's own copy is written rather than
 lifting the source's words. The eye and selector still score renders against the composition contract
 without seeing authorship — that blindness is about unbiased scoring, not about hiding the reference
