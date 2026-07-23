@@ -15,7 +15,10 @@
 // is NOT yet wired into a browser executor or the evals — capture and wiring are later increments — so
 // the existing single-screen probe is untouched.
 
-import { validateProbeExpectation, validateProbeStep } from './index.ts';
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { checkExpectation, type Expectation, type Step, validateProbeExpectation, validateProbeStep } from './index.ts';
 
 export const PROBE_FLOW_SCHEMA = 'probe-flow-v1' as const;
 
@@ -135,4 +138,135 @@ export function validateProbeFlow(input: unknown): ProbeFlow {
   }
 
   return input as ProbeFlow;
+}
+
+// ── Browser executor (increment 2): run a validated flow and observe dead ends and state loss ──
+
+export type FlowStepResult = { readonly action: string; readonly ok: boolean; readonly expectations: readonly { readonly ok: boolean }[] };
+export type FlowScreenResult = {
+  readonly screenId: string;
+  readonly route: string;
+  /** Did the browser actually reach this screen? A false here is a runtime dead end. */
+  readonly arrivalOk: boolean;
+  readonly steps: readonly FlowStepResult[];
+};
+export type FlowCarryResult = StateCarry & {
+  /** Was the earlier value still present, unchanged, on the later screen? */
+  readonly preserved: boolean;
+  readonly observed: { readonly from: string | null; readonly to: string | null };
+};
+export type ProbeFlowWarning = { readonly id: 'FLOW-DEAD-END' | 'FLOW-STATE-LOSS'; readonly severity: 'warn'; readonly message: string };
+export type ProbeFlowResult = {
+  readonly schema: typeof PROBE_FLOW_SCHEMA;
+  readonly name: string;
+  readonly base: string;
+  readonly screens: readonly FlowScreenResult[];
+  readonly carries: readonly FlowCarryResult[];
+  readonly warnings: readonly ProbeFlowWarning[];
+};
+
+/** Resolve the first screen's route to a real URL. Later screens are reached by their own navigation. */
+function resolveScreenUrl(base: string, route: string): string {
+  if (/^https?:\/\//.test(base)) {
+    const url = new URL(base);
+    if (!['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)) throw new Error('flow probe refuses remote targets');
+    url.pathname = route;
+    return url.href;
+  }
+  const path = resolve(base, `${route.replace(/^\//, '')}.html`);
+  if (!existsSync(path)) throw new Error(`no such screen page: ${path}`);
+  return pathToFileURL(path).href;
+}
+
+async function captureValue(page: import('playwright').Page, locator: string): Promise<string | null> {
+  const el = page.locator(locator).first();
+  if ((await el.count()) === 0) return null; // absent — never auto-wait 30s for an element on another screen
+  const input = await el.inputValue({ timeout: 1000 }).catch(() => null);
+  if (input !== null && input.trim() !== '') return input.trim();
+  const text = await el.textContent({ timeout: 1000 }).catch(() => null);
+  return text === null ? null : text.trim();
+}
+
+/**
+ * Runs a validated multi-screen flow in a real headless browser. It navigates the first screen, then
+ * follows each screen's own steps into the next; a screen whose arrival expectations fail was never
+ * reached — that transition is a runtime DEAD END (FLOW-DEAD-END) and the run stops there. Declared
+ * state carries are captured on the earlier screen (after each step, so a filled value is seen before it
+ * navigates away) and compared on the later screen; a value that did not survive forward is STATE LOSS
+ * (FLOW-STATE-LOSS). It reuses the single-screen step execution and expectation checks, and never fills
+ * a credential or runs a destructive action (the plan is validated first).
+ */
+export async function runProbeFlow(
+  base: string,
+  flow: unknown,
+  viewport = { width: 390, height: 844 },
+): Promise<ProbeFlowResult> {
+  const validated = validateProbeFlow(flow);
+  const { chromium } = await import('playwright');
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage({ viewport });
+    const screens: FlowScreenResult[] = [];
+    const carries: FlowCarryResult[] = [];
+    const warnings: ProbeFlowWarning[] = [];
+    const captured = new Map<number, string>(); // carry index → last-seen from-value (before navigation)
+
+    for (let i = 0; i < validated.screens.length; i += 1) {
+      const screen = validated.screens[i] as ProbeScreen;
+      if (i === 0) await page.goto(resolveScreenUrl(base, screen.route), { waitUntil: 'networkidle' });
+      else await page.waitForLoadState('domcontentloaded', { timeout: 8000 }).catch(() => {});
+
+      // Arrival: did we actually land on this screen? A failure is a dead end.
+      let arrivalOk = true;
+      for (const exp of screen.arrival as readonly Expectation[]) {
+        if (!(await checkExpectation(page, exp))) arrivalOk = false;
+      }
+      if (!arrivalOk) {
+        screens.push({ screenId: screen.screenId, route: screen.route, arrivalOk: false, steps: [] });
+        warnings.push({ id: 'FLOW-DEAD-END', severity: 'warn', message: `screen '${screen.screenId}' (${screen.route}) was not reached — the transition into it is a dead end` });
+        break;
+      }
+
+      // Compare any carries that land on this screen against the value captured earlier.
+      for (let index = 0; index < validated.carries.length; index += 1) {
+        const carry = validated.carries[index] as StateCarry;
+        if (carry.toScreen !== screen.screenId) continue;
+        const to = await captureValue(page, carry.toLocator);
+        const from = captured.get(index) ?? null;
+        const preserved = from !== null && to !== null && from === to;
+        carries.push({ ...carry, preserved, observed: { from, to } });
+        if (!preserved) warnings.push({ id: 'FLOW-STATE-LOSS', severity: 'warn', message: `state '${carry.fromLocator}' from '${carry.fromScreen}' did not survive to '${carry.toLocator}' on '${carry.toScreen}' (from=${JSON.stringify(from)}, to=${JSON.stringify(to)})` });
+      }
+
+      const captureFroms = async (): Promise<void> => {
+        for (let index = 0; index < validated.carries.length; index += 1) {
+          const carry = validated.carries[index] as StateCarry;
+          if (carry.fromScreen !== screen.screenId) continue;
+          const value = await captureValue(page, carry.fromLocator);
+          if (value !== null && value !== '') captured.set(index, value);
+        }
+      };
+      await captureFroms();
+
+      const stepResults: FlowStepResult[] = [];
+      for (const step of screen.steps as readonly Step[]) {
+        let ok = true;
+        try {
+          if (step.action === 'click') await page.locator(step.selector!).click();
+          else if (step.action === 'fill') await page.locator(step.selector!).fill(step.value!);
+          else if (step.selector) await page.locator(step.selector).press(step.key!);
+          else await page.keyboard.press(step.key!);
+        } catch { ok = false; }
+        const expectations: { ok: boolean }[] = [];
+        for (const exp of step.expect ?? []) expectations.push({ ok: await checkExpectation(page, exp) });
+        stepResults.push({ action: step.action, ok, expectations });
+        await captureFroms(); // re-capture after each step, so a filled value is seen before it navigates away
+      }
+      screens.push({ screenId: screen.screenId, route: screen.route, arrivalOk: true, steps: stepResults });
+    }
+
+    return { schema: PROBE_FLOW_SCHEMA, name: validated.name, base, screens, carries, warnings };
+  } finally {
+    await browser.close();
+  }
 }

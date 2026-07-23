@@ -3,12 +3,12 @@ import { resolve } from 'node:path';
 import { type ProjectWriteAdapter, requireProjectWriteAdapter } from '../runtime/project-write.ts';
 import { pathToFileURL } from 'node:url';
 
-type Expectation =
+export type Expectation =
   | { type: 'visible' | 'hidden'; selector: string }
   | { type: 'text'; selector: string; value: string }
   | { type: 'url'; value: string }
   | { type: 'attribute'; selector: string; name: string; value: string };
-type Step = { action: 'click' | 'fill' | 'press'; selector?: string; value?: string; key?: string; expect?: Expectation[] };
+export type Step = { action: 'click' | 'fill' | 'press'; selector?: string; value?: string; key?: string; expect?: Expectation[] };
 export interface ProbePlan {
   name: string;
   destructive: false;
@@ -37,7 +37,7 @@ const PRESS_KEYS = new Set([
 ]);
 const CREDENTIAL_SELECTOR = /password|token|secret|credential|auth/i;
 
-function localUrl(target: string): string {
+export function localUrl(target: string): string {
   if (!/^https?:\/\//.test(target)) {
     const path = resolve(target);
     if (!existsSync(path)) throw new Error(`no such page: ${target}`);
@@ -117,7 +117,7 @@ export function readProbePlan(path: string): ProbePlan {
   return validateProbePlan(JSON.parse(readFileSync(path, 'utf8')) as unknown);
 }
 
-async function checkExpectation(page: import('playwright').Page, exp: Expectation): Promise<boolean> {
+export async function checkExpectation(page: import('playwright').Page, exp: Expectation): Promise<boolean> {
   if (exp.type === 'url') return page.url().includes(exp.value);
   const el = page.locator(exp.selector).first();
   if (exp.type === 'visible') return el.isVisible().catch(() => false);
