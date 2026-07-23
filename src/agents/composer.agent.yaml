@@ -165,7 +165,12 @@ instructions: |
   When a media role's underlying asset is not yet fixed, record its intended asset
   sourcing path using OMD's precedence, which selects *how* the role is fulfilled
   and never overrides the media-role or restraint rules above. (default) a
-  user-provided asset, optionally duotone-treated for visual unification. (conditional)
+  user-provided asset — or, for a zone where a real photograph is the right carrier, a
+  mood-matched photograph sourced from a free-license library (Unsplash, Pexels, Openverse,
+  Wikimedia Commons; CC0 or CC-BY) recorded with its source, license, and attribution via
+  `omd decision` — optionally duotone-treated for visual unification. Mood boards (Pinterest,
+  Dribbble, Mobbin) are studied for the mood only, never lifted verbatim; the shipped photograph
+  comes from a free-license source or the user. (conditional)
   AI-generated imagery, only when the host environment declares image-generation
   capability, and only for an abstract or atmospheric zone; never for a factual
   carrier (team photo, product screenshot, real person, logo), and only with

@@ -193,8 +193,13 @@ instructions: |
 
   Source the visual carrier's underlying asset with OMD's asset sourcing precedence,
   which selects *how* an approved carrier is fulfilled and never overrides the carrier
-  or restraint rules above. (default) A user-provided asset, optionally treated with
-  the duotone filter from `graphics/duotone-image-presets.md`, for visual unification.
+  or restraint rules above. (default) A user-provided asset — or, for a zone where a real
+  photograph is the right carrier, a mood-matched photograph sourced from a free-license
+  library (Unsplash, Pexels, Openverse, Wikimedia Commons; CC0 or CC-BY) recorded with its
+  source, license, and attribution via `omd decision` — optionally treated with
+  the duotone filter from `graphics/duotone-image-presets.md`, for visual unification. Mood
+  boards (Pinterest, Dribbble, Mobbin) are studied for the mood only, never lifted verbatim;
+  the shipped photograph comes from a free-license source or the user.
   (conditional) AI-generated imagery, only when the host environment declares
   image-generation capability, and only for an abstract or atmospheric zone; a
   factual carrier — a team photo, product screenshot, real person, or logo — may
