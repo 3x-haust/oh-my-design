@@ -128,6 +128,20 @@
   value: "(() => { const marks = new Set(); for (const n of ir.nodes) { if (n.type !== 'TEXT' || !n.text) continue; const m = /^\\s*([\\u{25A0}-\\u{25FF}])(?:\\s|$)/u.exec(n.text); if (m) marks.add(m[1]); } return marks.size >= 2 ? [...marks] : null; })()"
   assert: "value === null"
   message: "Decorative geometric-glyph ornament: {value} are distinct shape glyphs used as leading markers on this page. A different little diamond, square, or triangle before each card is ornament assembled to look designed, not an icon system — the shapes encode nothing and the variety is the tell. Use one consistent, meaningful marker that maps to the content, or clean typography and spacing, and let the hierarchy carry itself."
+# Divider spam: a rule between every row. A generator separates a list, a stat stack, or a numbered
+# index by giving each sibling a top/bottom border, so the page fills with thin horizontal lines. It is
+# the heaviest, noisiest separator (theory/craft.md § Borders vs background contrast) and reads as
+# machine-made. dom.ts marks a node `divider` when it has a top/bottom rule but is not a full box (a card
+# is not a divider). Fires page-level when one parent has four or more divider children — a line between
+# every item — so a single hairline, a data table, or a couple of bordered inputs never fire.
+- id: SLOP-DIVIDER-SPAM
+  layer: 1
+  category: slop
+  severity: warn
+  when: "node.parent === null"
+  value: "(() => { const byParent = {}; for (const n of ir.nodes) { if (!n.divider) continue; const p = n.parent || 'root'; (byParent[p] = byParent[p] || 0); byParent[p] += 1; } const worst = Math.max(0, ...Object.values(byParent)); return worst >= 4 ? worst : null; })()"
+  assert: "value === null"
+  message: "Divider spam: {value} sibling items in one group are each separated by a rule. A line between every row is the heaviest, noisiest way to separate content and the one a generator reaches for by default (theory/craft.md § Borders vs background contrast). Separate rows with space or a subtle background-contrast band instead; reserve real borders for form inputs, data tables, and code blocks, where the line carries structure the spacing cannot."
 - id: SLOP-COPY
   layer: 1
   category: slop
