@@ -987,3 +987,18 @@ test('SLOP-FLAT-STACK does not fire on a short single-viewport page', () => {
   const v = runSlop([root, sec]);
   assert.ok(!v.some((x) => x.id === 'SLOP-FLAT-STACK'), 'a short page (pageH < 2000) should not fire');
 });
+// ── SLOP-COLORLESS ────────────────────────────────────────────────────────────
+test('SLOP-COLORLESS fires on a tall multi-tone page with an all-neutral fill palette', () => {
+  const v = runSlop(flatStackNodes({ fills: ['#FFFFFF', '#111111', '#F4F4F5', '#E5E5E5'] }));
+  assert.ok(v.some((x) => x.id === 'SLOP-COLORLESS'), 'expected SLOP-COLORLESS on an all-neutral white/black/grey palette');
+});
+test('SLOP-COLORLESS does not fire when a committed chromatic fill is present', () => {
+  const v = runSlop(flatStackNodes({ fills: ['#FFFFFF', '#111111', '#2E5AAC', '#FFFFFF'] }));
+  assert.ok(!v.some((x) => x.id === 'SLOP-COLORLESS'), 'a chromatic fill means the page committed a colour');
+});
+test('SLOP-COLORLESS does not fire on a short page or a thin (<3) palette', () => {
+  const shortRoot = makeRootNode({ children: ['s0', 's1', 's2'], box: { x: 0, y: 0, w: 1280, h: 700 } });
+  const shortSecs = ['#FFFFFF', '#111111', '#E5E5E5'].map((f, i) => makeChildNode('root', { id: `s${i}`, type: 'FRAME', box: { x: 0, y: i * 200, w: 1280, h: 180 }, fill: { value: f, token: null } }, i));
+  assert.ok(!runSlop([shortRoot, ...shortSecs]).some((x) => x.id === 'SLOP-COLORLESS'), 'a short page (pageH < 1500) must not fire');
+  assert.ok(!runSlop(flatStackNodes({ fills: ['#FFFFFF', '#111111'] })).some((x) => x.id === 'SLOP-COLORLESS'), 'a two-tone palette (< 3 fills) must not fire');
+});

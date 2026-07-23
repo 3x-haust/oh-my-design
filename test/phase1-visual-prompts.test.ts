@@ -142,3 +142,8 @@ test('a showpiece scroll journey is lawful only as scroll-scene-evidence, never 
   assert.match(protocol, /Time-triggered scroll animation stays out of scope because it cannot be deterministically settled/i);
   assert.match(protocol, /`confident`\/`quiet`\/`product` surfaces never take this escalation/i);
 });
+test('an all-neutral marketing palette is a machine-flagged colourless failure, not restraint', () => {
+  const protocol = read('core/protocol/human-design-loop.md');
+  assert.match(protocol, /`SLOP-COLORLESS`/);
+  assert.match(protocol, /on a `marketing`\/showpiece surface that is RED, not a mere warn/i);
+});
