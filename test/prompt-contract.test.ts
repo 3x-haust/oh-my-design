@@ -139,6 +139,21 @@ test('reference synthesis ABI has one owner and roles route sanitized multi-axis
   assert.match(loop, /list→detail workspace[\s\S]*non-default, non-first object[\s\S]*object-local state/i);
   assert.match(loop, /declared temporal compatibility window[\s\S]*within that window[\s\S]*expired-window reply/i);
 });
+
+test('references are composed section by section from parts across references, never traced whole', () => {
+  const assembly = read('core/protocol/reference-assembly.md').replace(/\s+/g, ' ');
+  const composition = read('core/protocol/composition-contract.md').replace(/\s+/g, ' ');
+  const scout = read('src/agents/scout.agent.yaml').replace(/\s+/g, ' ');
+  for (const source of [assembly, composition, scout]) {
+    // The page is composed from parts, each section assigned its own best-fit reference part.
+    assert.match(source, /composed from parts|composition of parts|compose the page from parts/i);
+    // Tracing one whole reference wholesale is a derivative failure, not fidelity.
+    assert.match(source, /tracing one reference's (entire|whole) page layout and section order wholesale is a derivative failure, not fidelity/i);
+  }
+  // Different sections may draw from different references.
+  assert.match(assembly, /Different sections may draw parts from different references/i);
+  assert.match(composition, /different sections may draw from different references/i);
+});
 test('roles keep composer downstream of the chosen draft without image-generation duties', () => {
   const scout = read('src/agents/scout.agent.yaml');
   const composer = read('src/agents/composer.agent.yaml');

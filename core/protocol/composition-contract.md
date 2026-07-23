@@ -6,8 +6,11 @@ copy a reference page or prescribe one visual answer.
 
 The composer receives a sanitized frame/concept, clean copy deck, sanitized approved type
 contract, and the scout's distilled transferable principles/invariants with source trust.
-It may plan a build that reproduces a reference's layout, section order, and treatment — the hand
-builds against the reference image with image-to-code fidelity. It still writes the product's own copy
+It composes section by section: each section is assigned the single best-fit reference part for that
+section's job, and different sections may draw from different references, so the page is a deliberate
+composition of parts — not one reference reproduced whole. The hand builds each section against its
+assigned reference part with image-to-code fidelity; tracing one reference's entire page layout and
+section order wholesale is a derivative failure, not fidelity. It still writes the product's own copy
 and uses its own real assets rather than lifting the source's literal text or photographs. Read `theory/layout.md` and
 `theory/ux.md` exactly before writing.
 
