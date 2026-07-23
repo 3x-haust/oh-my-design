@@ -251,6 +251,25 @@ unexpected element is what gets remembered.
 
 ---
 
+## Human calibration
+
+Every rule above is grounded in a named practitioner source, but the *verdict* on whether a finished render actually reads as designed is currently made by `omd-eye` — a blind reviewer, but still a language model judging a model's output. `theory/voice.md` closes this loop on the prose side: its "Calibration evidence" section measured a fully human-authored essay against a pipeline version on the same metrics and let the gaps rewrite the rules. Visual craft has no equivalent yet. That asymmetry is the one place "human-like" is still an LLM's opinion rather than a measurement.
+
+Condition → choice → reason: keep visual craft honest by calibrating it against real people on the same cadence, not by trusting the model's self-report.
+
+**The protocol** (a maintenance routine on the repository, like `core/rules/slop-intake.md`, not a step in a user's run):
+
+1. **Sample** — a fixed, versioned set of OMD renders across registers (quiet/confident/showpiece) and surface types, plus the human-made references they were built toward.
+2. **Rate** — real human designers and target users rank or score them on named dimensions (hierarchy clarity, colour commitment, craft finish, "reads as designed vs generated"), blind to which are OMD's, using an A/B or forced-choice format so the signal is a preference, not a number pulled from the air.
+3. **Compare** — set the human verdicts beside `omd-eye`'s own verdicts on the same renders. The **divergences** — where the model eye and real designers disagree — are the evidence, exactly as the measured prose gaps were in `voice.md`.
+4. **Feed back** — each divergence becomes a candidate change to a craft entry, a slop rule (through the `slop-intake.md` evidence bar), or an eye instruction, carried in a PR with the data. A dimension where the eye already matches human preference is left alone.
+
+**Data format**: real human ratings are recorded the way explicit user taste already is — appended to `.omd/taste/preferences.jsonl` (`actor: 'user'`, with the subject, verbatim evidence, and the chosen render), kept strictly separate from the agent's own choices (Coach never reads `.omd/taste/`). A calibration run is a batch of such records tagged with the sample version.
+
+**Honest limitation**: no calibration dataset has been collected yet — this section defines the methodology and the standing loop, not a finished result. Until a dataset exists, `omd-eye`'s verdict is explicitly a proxy for human taste, not ground truth, and any claim that a render "reads as human-made" is the model's estimate. The prose side (`voice.md`) is the worked example of what this produces once the data is in; visual craft is expected to reach the same standard on the same quarterly cadence.
+
+---
+
 ## Sources
 
 - Wathan & Schoger, *Refactoring UI* (2018 / refactoringui.com) — two-shadow system,
