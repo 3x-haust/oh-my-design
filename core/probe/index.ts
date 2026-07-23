@@ -65,46 +65,52 @@ export function validateProbePlan(input: unknown): ProbePlan {
   if (tabOrder !== undefined && (!Array.isArray(tabOrder) || tabOrder.some((s) => typeof s !== 'string' || !s.trim()))) {
     throw new Error('expectedTabOrder must contain selectors');
   }
-  for (const value of raw['steps']) {
-    const step = value as Record<string, unknown>;
-    if (!step || typeof step !== 'object' || Object.keys(step).some((key) => !['action', 'selector', 'value', 'key', 'expect'].includes(key))) {
-      throw new Error('probe step contains unsupported or authenticated fields');
-    }
-    const action = step['action'];
-    if (typeof action !== 'string' || !['click', 'fill', 'press'].includes(action)) throw new Error(`unsafe probe action: ${String(action)}`);
-    const selector = step['selector'];
-    if (action !== 'press' && (typeof selector !== 'string' || !selector.trim())) throw new Error(`${action} requires selector`);
-    if (selector !== undefined && (typeof selector !== 'string' || !selector.trim())) throw new Error('probe selector must be non-empty');
-    if (action === 'click' && (step['value'] !== undefined || step['key'] !== undefined)) throw new Error('click contains unsupported fields');
-    if (action === 'fill') {
-      if (typeof step['value'] !== 'string' || !step['value'] || CREDENTIAL_SELECTOR.test(String(selector))) {
-        throw new Error('probe refuses credential or empty fills');
-      }
-      if (step['key'] !== undefined) throw new Error('fill contains unsupported fields');
-    }
-    if (action === 'press') {
-      if (typeof step['key'] !== 'string' || !PRESS_KEYS.has(step['key'])) throw new Error('press key is not in the safe navigation/activation allowlist');
-      if (step['value'] !== undefined) throw new Error('press contains unsupported fields');
-    }
-    const expects = step['expect'];
-    if (!Array.isArray(expects) || expects.length === 0) throw new Error('every probe action requires at least one declared expectation');
-    for (const value of expects) {
-      if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('unsupported probe expectation');
-      const exp = value as Record<string, unknown>;
-      const type = exp['type'];
-      if (typeof type !== 'string' || !['visible', 'hidden', 'text', 'url', 'attribute'].includes(type)) {
-        throw new Error('unsupported probe expectation');
-      }
-      const allowed = type === 'url' ? ['type', 'value']
-        : type === 'attribute' ? ['type', 'selector', 'name', 'value']
-          : type === 'text' ? ['type', 'selector', 'value'] : ['type', 'selector'];
-      if (Object.keys(exp).some((key) => !allowed.includes(key))) throw new Error('invalid probe expectation fields');
-      if (type !== 'url' && (typeof exp['selector'] !== 'string' || !exp['selector'].trim())) throw new Error('expectation requires selector');
-      if (['text', 'url', 'attribute'].includes(type) && (typeof exp['value'] !== 'string' || (type !== 'attribute' && !exp['value']))) throw new Error('expectation requires value');
-      if (type === 'attribute' && (typeof exp['name'] !== 'string' || !exp['name'].trim())) throw new Error('attribute expectation requires name');
-    }
-  }
+  for (const value of raw['steps']) validateProbeStep(value);
   return input as ProbePlan;
+}
+
+/** Validate one probe expectation (visible/hidden/text/url/attribute) with its closed field shape. */
+export function validateProbeExpectation(value: unknown): void {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('unsupported probe expectation');
+  const exp = value as Record<string, unknown>;
+  const type = exp['type'];
+  if (typeof type !== 'string' || !['visible', 'hidden', 'text', 'url', 'attribute'].includes(type)) {
+    throw new Error('unsupported probe expectation');
+  }
+  const allowed = type === 'url' ? ['type', 'value']
+    : type === 'attribute' ? ['type', 'selector', 'name', 'value']
+      : type === 'text' ? ['type', 'selector', 'value'] : ['type', 'selector'];
+  if (Object.keys(exp).some((key) => !allowed.includes(key))) throw new Error('invalid probe expectation fields');
+  if (type !== 'url' && (typeof exp['selector'] !== 'string' || !exp['selector'].trim())) throw new Error('expectation requires selector');
+  if (['text', 'url', 'attribute'].includes(type) && (typeof exp['value'] !== 'string' || (type !== 'attribute' && !exp['value']))) throw new Error('expectation requires value');
+  if (type === 'attribute' && (typeof exp['name'] !== 'string' || !exp['name'].trim())) throw new Error('attribute expectation requires name');
+}
+
+/** Validate one probe step (click/fill/press) with its security constraints and declared expectations. */
+export function validateProbeStep(value: unknown): void {
+  const step = value as Record<string, unknown>;
+  if (!step || typeof step !== 'object' || Object.keys(step).some((key) => !['action', 'selector', 'value', 'key', 'expect'].includes(key))) {
+    throw new Error('probe step contains unsupported or authenticated fields');
+  }
+  const action = step['action'];
+  if (typeof action !== 'string' || !['click', 'fill', 'press'].includes(action)) throw new Error(`unsafe probe action: ${String(action)}`);
+  const selector = step['selector'];
+  if (action !== 'press' && (typeof selector !== 'string' || !selector.trim())) throw new Error(`${action} requires selector`);
+  if (selector !== undefined && (typeof selector !== 'string' || !selector.trim())) throw new Error('probe selector must be non-empty');
+  if (action === 'click' && (step['value'] !== undefined || step['key'] !== undefined)) throw new Error('click contains unsupported fields');
+  if (action === 'fill') {
+    if (typeof step['value'] !== 'string' || !step['value'] || CREDENTIAL_SELECTOR.test(String(selector))) {
+      throw new Error('probe refuses credential or empty fills');
+    }
+    if (step['key'] !== undefined) throw new Error('fill contains unsupported fields');
+  }
+  if (action === 'press') {
+    if (typeof step['key'] !== 'string' || !PRESS_KEYS.has(step['key'])) throw new Error('press key is not in the safe navigation/activation allowlist');
+    if (step['value'] !== undefined) throw new Error('press contains unsupported fields');
+  }
+  const expects = step['expect'];
+  if (!Array.isArray(expects) || expects.length === 0) throw new Error('every probe action requires at least one declared expectation');
+  for (const exp of expects) validateProbeExpectation(exp);
 }
 
 export function readProbePlan(path: string): ProbePlan {
