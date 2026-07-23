@@ -91,6 +91,15 @@ test('a marketing surface commits a real colour identity and a built visual-mate
   }
 });
 
+test('a showpiece surface aims its one verified load scene at award-level ambition without adding unverifiable triggers', () => {
+  const protocol = read('core/protocol/human-design-loop.md');
+  assert.match(protocol, /Motion ambition is part of the GREEN target on a `showpiece` surface/i);
+  assert.match(protocol, /as ambitious as the studied award work[\s\S]*not a token fade or a bare opacity transition/i);
+  assert.match(protocol, /A minimal or absent signature scene at showpiece is under-reach, not restraint \(RED\)/i);
+  // It raises the ceiling of the verified scene only — the evidence contract is not relaxed.
+  assert.match(protocol, /never adds an unverifiable scroll-, pointer-, or state-triggered trigger, and the single-load-scene motion-evidence contract is unchanged/i);
+});
+
 test('art direction is evidence-bound autonomous none|one with carrier and decision-fit floors', () => {
   const protocol = read('core/protocol/human-design-loop.md');
   const hand = read('src/agents/hand.agent.yaml');
