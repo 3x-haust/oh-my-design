@@ -30,6 +30,7 @@ import {
 import { validateArtDirectionPointer, validateArtDirectionRecord } from '../art-direction/schema.ts';
 import { validateStaticDirectionEvidenceV1 } from '../art-direction/static-evidence.ts';
 import { validateMotionEvidenceV2 } from '../render/index.ts';
+import { SCROLL_SCENE_EVIDENCE_SCHEMA, validateScrollSceneEvidence } from '../render/scroll-scene-evidence.ts';
 import { hasHostBoundLocalProjectWriteAuthority, requireHostPayloadAuthorization } from '../runtime/activation.ts';
 import { requireFinalEvidenceManifestAuthorization, requireStaticEvidenceResultAuthorization, type ProjectRunInvocation } from '../runtime/invocation.ts';
 export const FINAL_EVIDENCE_V2_SCHEMA = 'final-evidence-v2';
@@ -48,6 +49,7 @@ export type FinalEvidenceV2FaultPoint =
 export type FinalEvidenceV2Bindings = FinalEvidenceV2Graph;
 export type MotionEvidenceV2Binding = ArtifactReceipt & Readonly<{ schema: 'motion-evidence-v2' }>;
 export type StaticDirectionEvidenceV1Binding = ArtifactReceipt & Readonly<{ schema: 'static-direction-evidence-v1' }>;
+export type ScrollSceneEvidenceBinding = ArtifactReceipt & Readonly<{ schema: typeof SCROLL_SCENE_EVIDENCE_SCHEMA }>;
 export interface FinalEvidenceV2Manifest {
   schema: typeof FINAL_EVIDENCE_V2_SCHEMA;
   motionDecision: MotionDecision;
@@ -55,6 +57,8 @@ export interface FinalEvidenceV2Manifest {
   graphRootHash?: string;
   motionEvidence?: MotionEvidenceV2Binding;
   staticEvidence?: StaticDirectionEvidenceV1Binding;
+  // Optional showpiece escalation: a scroll-position-scrubbed journey that accompanies the one load scene.
+  scrollSceneEvidence?: ScrollSceneEvidenceBinding;
 }
 
 export interface FinalEvidenceV2Pointer {
@@ -134,9 +138,10 @@ function fileName(value: unknown): string {
 /** Validates receipt descriptors. Files are validated only by the publisher/checker against the project root. */
 export function validateFinalEvidenceV2Manifest(value: unknown): FinalEvidenceV2Manifest {
   const manifest = object(value, 'manifest');
-  exact(manifest, ['schema', 'motionDecision', 'graph', 'graphRootHash', 'motionEvidence', 'staticEvidence'].filter((key) => key in manifest), 'manifest');
+  exact(manifest, ['schema', 'motionDecision', 'graph', 'graphRootHash', 'motionEvidence', 'staticEvidence', 'scrollSceneEvidence'].filter((key) => key in manifest), 'manifest');
   if (manifest.schema !== FINAL_EVIDENCE_V2_SCHEMA) fail('unsupported manifest schema');
   if (manifest.motionDecision !== 'none' && manifest.motionDecision !== 'one') fail('motionDecision must be none or one');
+  if (manifest.scrollSceneEvidence !== undefined && manifest.motionDecision !== 'one') fail('a scroll-scene sequence is a showpiece escalation that accompanies the one load scene');
   const graph = validateFinalEvidenceV2Graph(manifest.graph);
   if (manifest.graphRootHash !== undefined) digest(manifest.graphRootHash, 'graphRootHash');
   const receipt = (value: unknown, label: string, schema: string): ArtifactReceipt & { schema: typeof schema } => {
@@ -148,7 +153,7 @@ export function validateFinalEvidenceV2Manifest(value: unknown): FinalEvidenceV2
   };
   if (manifest.motionDecision === 'one') {
     if (manifest.staticEvidence !== undefined || manifest.motionEvidence === undefined) fail('one requires exactly one motion evidence and no static evidence');
-    return { schema: FINAL_EVIDENCE_V2_SCHEMA, motionDecision: 'one', graph, ...(manifest.graphRootHash === undefined ? {} : { graphRootHash: manifest.graphRootHash as string }), motionEvidence: receipt(manifest.motionEvidence, 'motionEvidence', 'motion-evidence-v2') as MotionEvidenceV2Binding };
+    return { schema: FINAL_EVIDENCE_V2_SCHEMA, motionDecision: 'one', graph, ...(manifest.graphRootHash === undefined ? {} : { graphRootHash: manifest.graphRootHash as string }), motionEvidence: receipt(manifest.motionEvidence, 'motionEvidence', 'motion-evidence-v2') as MotionEvidenceV2Binding, ...(manifest.scrollSceneEvidence === undefined ? {} : { scrollSceneEvidence: receipt(manifest.scrollSceneEvidence, 'scrollSceneEvidence', SCROLL_SCENE_EVIDENCE_SCHEMA) as ScrollSceneEvidenceBinding }) };
   }
   if (manifest.motionEvidence !== undefined || manifest.staticEvidence === undefined) fail('none requires exactly one static evidence and no motion evidence');
   return { schema: FINAL_EVIDENCE_V2_SCHEMA, motionDecision: 'none', graph, ...(manifest.graphRootHash === undefined ? {} : { graphRootHash: manifest.graphRootHash as string }), staticEvidence: receipt(manifest.staticEvidence, 'staticEvidence', 'static-direction-evidence-v1') as StaticDirectionEvidenceV1Binding };
@@ -318,6 +323,23 @@ function validateBackedManifest(root: string, fs: FinalEvidenceV2FileSystem, val
       observationRoot: root,
       invocation,
     });
+  }
+  // A scroll journey is a showpiece-only escalation that must carry its own scroll-position-scrubbed
+  // evidence, bound to the same immutable art direction as the load scene.
+  if (manifest.scrollSceneEvidence !== undefined) {
+    if (artDirection.decision.selectedRegister !== 'showpiece') fail('a scroll-scene sequence is a showpiece-only escalation');
+    const scrollPath = resolve(root, manifest.scrollSceneEvidence.path);
+    const scrollOutside = relative(root, scrollPath);
+    if (scrollOutside === '' || scrollOutside.startsWith('..') || resolve(root, scrollOutside) !== scrollPath) fail('scroll-scene evidence escapes the project root');
+    requireRealAncestors(root, scrollPath, fs, 'scroll-scene evidence');
+    regular(fs, scrollPath);
+    const scrollBytes = fs.readFile(scrollPath);
+    if (hash(scrollBytes) !== manifest.scrollSceneEvidence.sha256) fail('scroll-scene evidence hash changed');
+    const scrollObject = object(readJson(fs, scrollPath, 'scroll-scene evidence'), 'scroll-scene evidence');
+    requireRealNestedProjectPaths(root, scrollObject, fs, 'scroll-scene evidence');
+    if (scrollObject.schema !== manifest.scrollSceneEvidence.schema) fail('scroll-scene evidence schema changed');
+    if (scrollObject.artDirectionHash !== graph.bindings.artDirectionSha256) fail('scroll-scene evidence does not bind the selected semantic art direction');
+    validateScrollSceneEvidence(scrollObject);
   }
   return manifest;
 }
