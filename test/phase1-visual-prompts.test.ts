@@ -73,6 +73,24 @@ test('deciding the stack is not permission to build before framing and research'
   }
 });
 
+test('a marketing surface commits a real colour identity and a built visual-material carrier', () => {
+  const protocol = read('core/protocol/human-design-loop.md');
+  const composer = read('src/agents/composer.agent.yaml');
+  const hand = read('src/agents/hand.agent.yaml');
+
+  // Colour under-commitment (characterless white/black) is the convergence failure, not restraint.
+  assert.match(protocol, /Colour commitment is the other half of the target[\s\S]*characterless near-greyscale default[\s\S]*convergence-to-the-mean failure \(RED\)/i);
+  assert.match(protocol, /60-30-10 governs how colour is distributed, never a licence to ship no colour/i);
+  // A real built visual-material carrier is expected; a text-only page is a carrier failure.
+  assert.match(protocol, /Visual-material carrier is part of the GREEN target[\s\S]*never a text-only page/i);
+  assert.match(protocol, /a page with no built visual material is a defect/i);
+  // The builders carry the same rule and never settle for text-in-boxes.
+  for (const builder of [composer, hand]) {
+    assert.match(builder, /still (composes|builds) a (real|genuine) visual carrier[\s\S]*never (text-in-boxes|a text-only page)/i);
+    assert.match(builder, /characterless white\/black[\s\S]*convergence-to-the-mean failure, not restraint/i);
+  }
+});
+
 test('art direction is evidence-bound autonomous none|one with carrier and decision-fit floors', () => {
   const protocol = read('core/protocol/human-design-loop.md');
   const hand = read('src/agents/hand.agent.yaml');
