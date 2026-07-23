@@ -334,6 +334,7 @@ The sharp eye receives only sanitized multi-axis observed rules, adaptations, an
 Structural divergence is conditional, not ceremonial: default to two independent sketches;
 use three for showpiece work or high structural uncertainty/impact. Skip only when structure
 is already supplied (for example, a Figma frame or explicit visual target), and record why.
+Divergence is measured, not assumed: the candidate set must realize genuinely different macro-layout families — a different top-level spatial organization, or a different placement and orientation of the dominant anchor and reading path — never one stacked single-column flow reskinned with different margins, column width, type scale, or spacing. A candidate set that collapses to a single macro-layout family has not diverged; the blind selector, which sees every candidate render, treats it as a contract-level no-winner (the Candidate axes were not genuinely different) and returns it to a fresh composer to re-derive divergent axes, even when one candidate would otherwise pass.
 Every sketch produces four proofs: fixed desktop 1280x900, fixed mobile 390x844, full-page
 desktop continuity, and full-page mobile continuity. Full-page evidence is supplemental and
 never replaces fixed-viewport acceptance.
