@@ -50,6 +50,23 @@
   assert: "value.length < 3"
   message: "Diffuse accent: {value} are distinct saturated hues used as fills, with no single reserved accent. 60-30-10 is a reading law — one dominant ground, one secondary, and ~10% accent held for the primary action and critical state (theory/color.md). Several categorical accent colours make everything read as equally important, so nothing does. Keep one hue family plus one semantic accent; category-coded data-viz is the deliberate exception."
 
+# The colourless page — the palette counterpart to SLOP-DIFFUSE-ACCENT (which catches too MANY accent
+# hues). This catches the opposite, under-commitment failure: a real multi-tone page whose entire fill
+# palette is achromatic — white, black, and greys — with NO committed chromatic colour anywhere. 60-30-10
+# reserves ~10% accent for the primary action; a page that ships zero chromatic fill has committed no
+# colour identity. Correct restraint on a quiet product surface; the convergence-to-the-mean failure on a
+# marketing/showpiece surface (theory/color.md, human-design-loop.md § Colour commitment). Register-agnostic
+# warn — the eye owns the register verdict and omd decision records a genuine monochrome brand. colorHistogram
+# counts fills only; guarded by a real (>=3 distinct) palette and page height >=1500 so it never fires on a
+# tiny utilitarian screen.
+- id: SLOP-COLORLESS
+  layer: 1
+  category: slop
+  severity: warn
+  when: "node.parent === null"
+  value: "(() => { const hist = ir.stats.colorHistogram || {}; const fills = Object.keys(hist); if (fills.length < 3) return null; const pageH = ir.nodes.reduce((m, n) => Math.max(m, n.box.y + n.box.h), 0); if (pageH < 1500) return null; let chromatic = 0; for (const hex of fills) { const m = /^#?([0-9a-fA-F]{6})$/.exec(hex); if (!m) continue; const q = m[1]; const r = parseInt(q.slice(0,2),16)/255, g = parseInt(q.slice(2,4),16)/255, b = parseInt(q.slice(4,6),16)/255; const mx = Math.max(r,g,b), mn = Math.min(r,g,b), d = mx - mn; if (d === 0) continue; const l = (mx+mn)/2; const s = d/(1-Math.abs(2*l-1)); if (s >= 0.25 && l >= 0.15 && l <= 0.9) chromatic++; } return chromatic === 0 ? { fills: fills.length, chromatic } : null; })()"
+  assert: "value === null"
+  message: "Colourless palette: {value}. Every fill on this multi-tone page is achromatic — white, black, and greys, with no committed chromatic colour anywhere. 60-30-10 reserves ~10% accent for the primary action and critical state (theory/color.md); a page that ships zero chromatic fill has not committed a colour identity. On a quiet product surface this restraint is correct; on a marketing or showpiece surface it is the convergence-to-the-mean failure (human-design-loop.md § Colour commitment): commit a deliberate palette with real hue — the subject's own brand colour or an evidence-grounded identity — or record with omd decision why this surface is genuinely monochrome."
 - id: SLOP-RADIUS-MONOCULTURE
   layer: 1
   category: slop
