@@ -633,3 +633,10 @@ test('a multi-screen stateful surface runs omd flow-probe with dead-end and stat
   assert.match(loop, /On a `product`\/`mixed` surface both are RED/i);
   assert.match(loop, /makes cross-screen navigation and state-continuity claims only from this flow-probe evidence/i);
 });
+test('craft names smooth in-page navigation with a reduced-motion fallback', () => {
+  const craft = read('core/theory/craft.md').replace(/\s+/g, ' ');
+  assert.match(craft, /## Smooth in-page navigation/);
+  assert.match(craft, /hard-jumps the viewport to its target is a polish gap/i);
+  assert.match(craft, /scroll-behavior: smooth[\s\S]*scrollIntoView\(\{ behavior: 'smooth'/i);
+  assert.match(craft, /Under `prefers-reduced-motion: reduce` it reverts to an instant jump/i);
+});
