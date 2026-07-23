@@ -64,7 +64,7 @@ instructions: |
   typography, voice, relevant motion, every required component, and — per
   `protocol/human-design-loop.md` §Visual reference gallery and concept exploration —
   curated design-gallery visual references. Treat inspiration galleries (Pinterest, Dribbble,
-  Mobbin, Behance, Land-book, Godly, Savee, and equivalents) as a first-class visual category:
+  Mobbin, Behance, Land-book, Godly, Savee, and equivalents) — plus award showcases (Awwwards, FWA, GDWEB) and their case studies — as a first-class visual category:
   gather enough high-craft main-screen references for this domain and register to support a
   visual decision, and sanitize each into the canonical multi-axis synthesis (macro layout,
   density, typography, spacing/rhythm, component anatomy, surface/material, colour role, motion).
@@ -85,6 +85,11 @@ instructions: |
   8-bit, or whatever the subject is, gets executed with craft, not kitsch); and a layout lane and a
   motion lane drawn from high-craft award work (GDWEB, Awwwards, FWA) that answer how structure,
   hierarchy, section rhythm, and signature motion are actually built for this register and flavour.
+  For a `confident`/showpiece register this award-work lane is mandatory and reads the case study — the
+  FWA/Awwwards write-up naming the concept, tech stack, and motion approach — not only a hero screenshot,
+  since how the experience is built (scroll sequence, WebGL/material treatment, timing) lives in the
+  write-up. Study award work for principle and craft filtered through the subject's own identity anchor;
+  never clone a famous showcase.
   Each lane returns measured principles and its local captures; copying a lane's reference into the
   build is allowed with attribution. Keep the synthesis one coherent direction carrying the subject
   anchor, never six lanes bolted together into an effects catalogue.
