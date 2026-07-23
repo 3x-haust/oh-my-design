@@ -132,6 +132,11 @@ signature/motion decision, with reduced-motion behavior and the declared perform
 A reduced-motion preference must show the same settled semantic result without temporal motion.
 CSS/WAAPI or a React animation library may implement the selected load scene; no library or
 implementation preference authorizes another trigger or scene.
+The single exception to "another scene" is a `showpiece` scroll-position-scrubbed journey that the
+composition assigns alongside the load scene: implement it only by scrubbing each scene to a fixed
+scroll position (never animating it in time), keep every content region present in the no-scroll
+reduced-motion baseline, and hold the declared performance budget, so it satisfies
+`scroll-scene-evidence-v1`; a time-triggered scroll animation is never that scene.
 When the surface presents data — charts, metrics, dashboards, trends — read `theory/data-viz.md`:
 choose the chart from the question it answers, keep axes honest (bar baselines at zero, one scale
 per axis), encode the primary quantity on position or length (no 3-D, no rainbow ramp for ordered

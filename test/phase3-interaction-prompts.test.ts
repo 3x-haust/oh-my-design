@@ -77,3 +77,15 @@ test('phase-1/phase-2 restraint and dependency locks on composer/sketch remain i
     /four structural proofs[\s\S]*1280x900[\s\S]*390x844[\s\S]*full-page desktop[\s\S]*full-page mobile/i
   );
 });
+test('composer permits only an evidence-gated showpiece scroll-position-scrubbed journey', () => {
+  const composer = read('src/agents/composer.agent.yaml');
+  // A scroll journey is a showpiece-only escalation atop the one load scene, gated on scroll-scene-evidence-v1.
+  assert.match(composer, /scroll-position-scrubbed\s+journey/i);
+  assert.match(composer, /carries validated `scroll-scene-evidence-v1`/i);
+  assert.match(composer, /`final-evidence-v2` gates it/i);
+  // Time-triggered scroll and non-showpiece registers stay rejected; other trigger kinds stay unsettleable.
+  assert.match(composer, /nor a TIME-triggered scroll\s+animation/i);
+  assert.match(composer, /on any non-`showpiece` register, or with a time-triggered scene is rejected/i);
+  assert.match(composer, /default observable trigger contract is one load scene/i);
+  assert.match(composer, /pointer-, hover-, focus-, click-, or state-triggered choreography/i);
+});
