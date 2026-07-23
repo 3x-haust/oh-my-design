@@ -153,3 +153,10 @@ test('enumerated visual directions must genuinely diverge in colour and generato
   assert.match(protocol, /each commits a distinct colour identity[\s\S]*never white\/black by default/i);
   assert.match(protocol, /one guess wearing three hats, and the blind selection rejects the set and re-enumerates/i);
 });
+test('a showpiece landing expects a scroll-motion narrative; its total absence is under-reach', () => {
+  const protocol = read('core/protocol/human-design-loop.md');
+  assert.match(protocol, /Scroll-motion ambition is part of the GREEN target on a `showpiece` marketing landing/i);
+  assert.match(protocol, /scrolls as a plain static document with no scroll-linked motion is under-reach \(RED\)/i);
+  assert.match(protocol, /scroll-position-scrubbed motion[\s\S]*satisfies the `scroll-scene-evidence-v1` protocol/i);
+  assert.match(protocol, /never a time-triggered scroll animation/i);
+});
