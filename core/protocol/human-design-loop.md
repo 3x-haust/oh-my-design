@@ -390,6 +390,8 @@ with reasons. `static` records both probes N/A with reasons. Never add fake erro
 recovery UI to make an inapplicable gate look complete. An eye makes interaction claims only
 from supplied probe evidence.
 
+A `stateful` surface that spans two or more reachable screens — a login → onboarding → dashboard sequence, a multi-step form or wizard — additionally supplies `.omd/probes/flow.json` and runs `omd flow-probe`, which walks the declared screen sequence in one browser. A screen that is never reached, because a control leads nowhere, is a dead end (`FLOW-DEAD-END`); a value entered early that does not survive forward to a later screen is state loss (`FLOW-STATE-LOSS`). On a `product`/`mixed` surface both are RED — a real UX failure, not advisory — because a broken cross-screen path fails the task no matter how correct each single screen is in isolation. The eye makes cross-screen navigation and state-continuity claims only from this flow-probe evidence, never from inspecting one screen; a single-screen surface records the flow probe N/A with a reason.
+
 ## UX acceptance contract
 
 Every applicable surface names and verifies the primary task, most frequent action,
