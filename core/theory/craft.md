@@ -251,6 +251,16 @@ unexpected element is what gets remembered.
 
 ---
 
+## Smooth in-page navigation
+
+An in-page anchor — a "jump to section" link, a "↓ see the nine steps" affordance, a table-of-contents entry — that hard-jumps the viewport to its target is a polish gap that separates generated work from designed work. The instantaneous jump gives the user no spatial continuity: they do not see that they moved down the page, so they lose their place and the relationship between where they were and where they landed. The award-tier version scrolls the viewport there smoothly, so the motion itself is the wayfinding — the user feels the distance travelled.
+
+The technique is one line: `scroll-behavior: smooth` on the scroll container (usually `html`), or, for control over duration and easing, `element.scrollIntoView({ behavior: 'smooth', block: 'start' })` on the anchor's click. The smooth scroll must resolve quickly; a long-distance smooth scroll that takes seconds is worse than a jump, because it holds the user hostage to the animation past the point where it informs.
+
+Condition → choice → reason: any in-page anchor or "scroll to the next section" affordance the design owns scrolls smoothly to its target rather than jumping. Under `prefers-reduced-motion: reduce` it reverts to an instant jump — the smooth motion is the enhancement and the destination is reached either way. Never override cross-page navigation or the browser's back/forward; this is only for same-page anchors.
+
+---
+
 ## Human calibration
 
 Every rule above is grounded in a named practitioner source, but the *verdict* on whether a finished render actually reads as designed is currently made by `omd-eye` — a blind reviewer, but still a language model judging a model's output. `theory/voice.md` closes this loop on the prose side: its "Calibration evidence" section measured a fully human-authored essay against a pipeline version on the same metrics and let the gaps rewrite the rules. Visual craft has no equivalent yet. That asymmetry is the one place "human-like" is still an LLM's opinion rather than a measurement.
