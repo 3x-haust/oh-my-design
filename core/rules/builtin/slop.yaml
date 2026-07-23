@@ -17,6 +17,11 @@
 # Each is a heuristic and each can be wrong about a deliberate choice. So they warn, they
 # never error, and every message says what to do instead rather than merely what is wrong.
 #
+# The pattern set is not static: AI aesthetics drift on a 6–12 month cycle, so a rule that catches
+# today's tell can become tomorrow's noise, and a new default can appear that no rule sees. New rules
+# are added and stale ones retired only with a documented case, through the quarterly intake routine in
+# `core/rules/slop-intake.md`.
+#
 # Whole-page rules fire once, on the root node, and read ir.stats.
 
 # Matched by hue, not by a list of hex codes: a blocklist of Tailwind's indigo-500 misses
