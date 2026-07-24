@@ -674,3 +674,12 @@ test('the scout consumes the domain brief and measures role-② craft references
   assert.match(scout, /lets `omd craft-fidelity` prove the built reproduction actually moves/);
   assert.match(scout, /- Bash\(omd craft-capture:\*\)/);
 });
+test('the ultradesign skill runs domain analysis before framing', () => {
+  const skill = read('src/skills/omd-ultradesign/SKILL.md').replace(/\s+/g, ' ');
+  assert.match(skill, /## 0\.5 Domain analysis/);
+  assert.match(skill, /write `\.omd\/domain-brief\.json`, then validate it with `omd domain check`/);
+  assert.match(skill, /Domain analysis, the framer, and the scout always run first/);
+  assert.match(skill, /Pass the validated brief to the framer[\s\S]*and to the scout/);
+  // the domain section precedes the frame section
+  assert.ok(skill.indexOf('## 0.5 Domain analysis') < skill.indexOf('## 1. Frame and concept hypothesis'));
+});

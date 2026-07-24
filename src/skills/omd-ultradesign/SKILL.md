@@ -64,7 +64,7 @@ is set and the scout's research is gathered. Creating `package.json`, `tsconfig`
 any framework skeleton is a production write owned by the hand phase, never a setup step you run
 first. An explicit stack request — even a precise one like `React + Vite + TypeScript` — only records
 the `omd stack`/`omd decision` choice; it never licenses scaffolding or building ahead of framing and
-research. The framer and the scout always run first: interrogate the brief and gather evidence before
+research. Domain analysis, the framer, and the scout always run first: understand the domain, interrogate the brief, and gather evidence before
 a single file is written. "The stack is already decided, so let me scaffold the project now" is a
 routing defect, not a lawful shortcut.
 
@@ -93,6 +93,16 @@ prior explicit taste, which beats agent choices. Record conflicts.
   carries the exact hash of a host-authorized typed exception event. The selected register and
   `motionDecision: none|one` control the macro visual system; quiet or restraint never
   authorizes a generic template or skipped visual work.
+
+## 0.5 Domain analysis
+
+Before framing, understand the domain. A raw request names a goal but under-specifies its domain, so designing straight from the words yields the generic mean. Analyze the request's domain and write `.omd/domain-brief.json`, then validate it with `omd domain check`:
+
+- Identify the **domain**, a one-line **summary**, the **audience**, the canonical **surfaces** the domain needs (each with its task — an ERP is an inventory dashboard, a purchase-order detail, an approvals queue, not one page), and the **coreObjects** it manipulates (its real nouns, not UI widgets).
+- Emit **referenceQueries** split by the two reference roles: `component` (detailed section/component design) and `craft` (motion, scroll, sculptural craft from top-tier galleries — Awwwards, theFWA).
+- For an unfamiliar domain or a named product/subject, actually research it (web search plus any linked repo/README) and set `researched: true`; a familiar domain may be inferred. Gather in parallel, never one lookup at a time.
+
+Pass the validated brief to the framer (its subject, task, and costliest error are chosen knowing the domain's surfaces and objects) and to the scout (it runs the two-role `referenceQueries` as its acquisition list). This step never designs, scaffolds, or writes production code. Full contract: `protocol/domain-analysis.md`.
 
 ## 1. Frame and concept hypothesis
 
