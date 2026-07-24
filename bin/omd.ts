@@ -63,6 +63,7 @@ interface Opts {
   to?: string;
   because?: string;
   as?: string;
+  technique?: string;
   add?: string;
   noLog?: boolean;
   /** Skip the energy (motion) capture on `omd ref add` — one fewer browser launch for non-motion refs. */
@@ -1601,6 +1602,26 @@ function cmdCraftFidelity(mode: string | undefined, opts: Opts): never {
   process.exit(0);
 }
 
+/** Measures a `reference-craft-v1` from a real browser (role ② craft acquisition). */
+async function cmdCraftCapture(opts: Opts): Promise<never> {
+  const target = opts._[0];
+  if (!target || !opts.as || !opts.technique) {
+    throw new Error('usage: omd craft-capture <url|file> --as <slug> --technique "<name>" [--selector <css>] [--viewport WxH] [--json]');
+  }
+  const { parseViewport } = await import('../core/render/index.ts');
+  const { captureReferenceCraft } = await import('../core/ref/reference-craft-capture.ts');
+  const craft = await captureReferenceCraft(target, {
+    source: target,
+    as: opts.as,
+    technique: opts.technique,
+    selector: opts.selector ?? null,
+    viewport: parseViewport(opts.viewport ?? '1440x900'),
+  });
+  if (opts.json) process.stdout.write(JSON.stringify(craft));
+  else console.log(`${craft.as}: peakEnergy ${craft.motion.peakEnergy}, scrollLinked ${craft.motion.scrollLinked}, reducedMotionSafe ${craft.motion.reducedMotionSafe} (${craft.technique})`);
+  process.exit(0);
+}
+
 /** Final byte-freshness evidence only; this does not judge semantic copy/source fidelity. */
 function cmdSource(mode: string | undefined, opts: Opts): never {
   const sourceRoot = resolve(opts._[0] ?? process.cwd());
@@ -2517,6 +2538,7 @@ function usage(): never {
     + '  intent append --input trusted-intent.json [--json]  append trusted intent and update its guarded current pointer\n'
     + '  domain check [--input domain-brief.json] [--json]  validate the domain-analysis brief\n'
     + '  craft-fidelity check --input pair.json [--json]  verify a generated part reproduced the reference craft\n'
+    + '  craft-capture <url> --as <slug> --technique "<t>" [--selector <css>] [--viewport WxH] [--json]  measure a reference-craft-v1 from a real browser\n'
     + '  preflight --input activation-context.json [--json]  read-only activation validation\n'
     + '  text-slop [file] [--json]                   advisory AI-cliche scan of copy (default .omd/copy-deck.md)\n'
     + '  visual-richness [file] [--register R] [--json]  advisory carrier read of composition (default .omd/composition.md)\n'
@@ -2635,6 +2657,7 @@ async function main(): Promise<never> {
   if (cmd === 'intent') return cmdIntent(sub, parseArgs(args.slice(2)));
   if (cmd === 'domain') return cmdDomain(sub, parseArgs(args.slice(2)));
   if (cmd === 'craft-fidelity') return cmdCraftFidelity(sub, parseArgs(args.slice(2)));
+  if (cmd === 'craft-capture') return cmdCraftCapture(parseArgs(args.slice(1)));
   if (cmd === 'stack') return cmdStack(parseArgs(args.slice(1)));
   if (cmd === 'text-slop') return cmdTextSlop(parseArgs(args.slice(1)));
   if (cmd === 'visual-richness') return cmdVisualRichness(parseArgs(args.slice(1)));
