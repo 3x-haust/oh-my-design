@@ -656,3 +656,12 @@ test('the domain-analysis contract names both reference roles and the feeds', ()
   assert.match(doc, /It feeds the frame and the scout|feeds[\s\S]*frame[\s\S]*scout/i);
   assert.match(doc, /never designs.*writes? (?:production )?code|never designs, scaffolds, or writes production code/i);
 });
+test('reference-assembly names the two roles and gates role-② craft by measured reproduction', () => {
+  const ra = read('core/protocol/reference-assembly.md').replace(/\s+/g, ' ');
+  assert.match(ra, /## Reference roles/);
+  assert.match(ra, /\*\*① component design\*\*/);
+  assert.match(ra, /\*\*② craft\*\*/);
+  assert.match(ra, /`reference-craft-v1` motion signature/);
+  assert.match(ra, /GATED by `verifyCraftReproduction` \(`omd craft-fidelity check`\)/);
+  assert.match(ra, /static, faint, or scroll-dropping reproduction fails/i);
+});
