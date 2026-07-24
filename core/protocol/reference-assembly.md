@@ -23,6 +23,24 @@ new agent, service, provider, or runtime.
 | production usage ledger | `omd-hand` | Passing v2 selection, current motion-resolution projection, decision-bound composer and hand receipts, actual production source/render/probe evidence, and attribution | Durable `.omd/reference-usage-v2.json` with exactly one `used`, `rejected`, or `anti-reference` row for every selected slot | `recordReferenceUsage(root, { rows }, writer)` then `validateReferenceUsage(root)` | Missing, unselected, duplicate, or unsupported rows, stale selection/motion/receipt bindings, or absent production evidence stop finalization. Do not replace real evidence with a claimed influence. |
 | final provenance report | `finalizer` | A passing v2 usage ledger, current v2 selection, decision-bound handoffs, and `.omd/attribution.md` | Durable `.omd/reference-report.md` and the exact deterministic bilingual Markdown pasted into the final chat | `generateReferenceReport(root)` validates usage and atomically persists the returned Markdown | Any validation failure stops the final report. Do not hand-write, paraphrase, or claim a replacement report; repair the owning earlier stage and regenerate. |
 
+## Reference roles
+
+Every reference serves one of two roles, and the domain brief's `referenceQueries` seed both:
+
+- **① component design** — a detailed section, component, or button whose *structure* is the value.
+  It is captured as a scoped measured record (`omd ref add … --selector … --blueprint --shot`): the
+  captured part's own values, never a whole-page average. This is a static structure a build can copy.
+- **② craft** — the motion, scroll animation, and sculptural moment that top-tier galleries
+  (Awwwards, theFWA) are known for. This role cannot be copied by looking: seeing the effect does not
+  give the build the skill to make it, so a reproduction tends to degrade into a static ghost. It is
+  therefore MEASURED, not asserted, as a `reference-craft-v1` motion signature — peak pixel-energy
+  (`core/motion/energy.ts`), whether it is scroll-linked, and whether it keeps a reduced-motion
+  baseline — and its reproduction is GATED by `verifyCraftReproduction` (`omd craft-fidelity check`):
+  the built part must actually move (energy above the floor and within the reference's fidelity
+  ratio), preserve a scroll-linked reference's scroll response, and be reduced-motion safe. A static,
+  faint, or scroll-dropping reproduction fails — the craft reference does not pass just because a
+  generation was attempted. This is how the "seeing is not building" gap is closed with evidence.
+
 ## Subject anchor
 
 When the brief names a real, existing subject — a product, project, company, repository, or brand, or supplies its link — the scout's fragment-inventory stage first establishes what that subject actually is (a web search plus the linked repository/README and any wordmark or brand the source already ships) and fixes the subject's own identity anchor: its real palette and motif. This anchor is not one measured reference among many; it governs the colour and motif every other lane serves, and is never outvoted by category evidence. A palette or motif taken from the product category's default instead of the subject's own identity is a rejected, not a shippable, synthesis.

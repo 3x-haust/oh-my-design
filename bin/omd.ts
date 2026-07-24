@@ -23,6 +23,7 @@ import { checkTaskEvidence, publishTaskEvidence } from '../core/evidence/task.ts
 import { computeStack } from '../core/stack/index.ts';
 import { scanTextSlop } from '../core/slop/text-slop.ts';
 import { validateDomainBrief } from '../core/domain/domain-brief.ts';
+import { validateReferenceCraft, verifyCraftReproduction } from '../core/ref/reference-craft.ts';
 import { evaluateLighthouse, type LighthouseBudget } from '../core/perf/lighthouse.ts';
 import { evaluateVisualRichness } from '../core/composition-contract/visual-richness.ts';
 import type { VisualRichnessRegister } from '../core/composition-contract/visual-richness.ts';
@@ -1581,6 +1582,25 @@ function cmdDomain(mode: string | undefined, opts: Opts): never {
   process.exit(0);
 }
 
+/** Verifies a generated part actually reproduced the craft of the reference it claims (the how-gap gate). */
+function cmdCraftFidelity(mode: string | undefined, opts: Opts): never {
+  if (mode !== 'check' || !opts.input) throw new Error('usage: omd craft-fidelity check --input <pair.json>  ({ reference, generated } reference-craft-v1 records) [--json]');
+  const payload = inputJson(opts.input, 'omd craft-fidelity check');
+  if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) throw new Error('omd craft-fidelity check input must be an object with `reference` and `generated`');
+  const { reference, generated } = payload as Record<string, unknown>;
+  try {
+    const result = verifyCraftReproduction(validateReferenceCraft(reference), validateReferenceCraft(generated));
+    if (opts.json) process.stdout.write(JSON.stringify(result));
+    else console.log(`ok — reproduction reproduced the reference craft (energy ratio ${result.energyRatio})`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (opts.json) process.stdout.write(JSON.stringify({ ok: false, error: message }));
+    else console.error(`[error] ${message}`);
+    process.exit(1);
+  }
+  process.exit(0);
+}
+
 /** Final byte-freshness evidence only; this does not judge semantic copy/source fidelity. */
 function cmdSource(mode: string | undefined, opts: Opts): never {
   const sourceRoot = resolve(opts._[0] ?? process.cwd());
@@ -2496,6 +2516,7 @@ function usage(): never {
     + '  art-direction check --input decision-check.json [--json]  persist the canonical selected direction before composition\n'
     + '  intent append --input trusted-intent.json [--json]  append trusted intent and update its guarded current pointer\n'
     + '  domain check [--input domain-brief.json] [--json]  validate the domain-analysis brief\n'
+    + '  craft-fidelity check --input pair.json [--json]  verify a generated part reproduced the reference craft\n'
     + '  preflight --input activation-context.json [--json]  read-only activation validation\n'
     + '  text-slop [file] [--json]                   advisory AI-cliche scan of copy (default .omd/copy-deck.md)\n'
     + '  visual-richness [file] [--register R] [--json]  advisory carrier read of composition (default .omd/composition.md)\n'
@@ -2613,6 +2634,7 @@ async function main(): Promise<never> {
   }
   if (cmd === 'intent') return cmdIntent(sub, parseArgs(args.slice(2)));
   if (cmd === 'domain') return cmdDomain(sub, parseArgs(args.slice(2)));
+  if (cmd === 'craft-fidelity') return cmdCraftFidelity(sub, parseArgs(args.slice(2)));
   if (cmd === 'stack') return cmdStack(parseArgs(args.slice(1)));
   if (cmd === 'text-slop') return cmdTextSlop(parseArgs(args.slice(1)));
   if (cmd === 'visual-richness') return cmdVisualRichness(parseArgs(args.slice(1)));
