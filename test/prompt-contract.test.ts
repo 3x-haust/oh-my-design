@@ -640,3 +640,19 @@ test('craft names smooth in-page navigation with a reduced-motion fallback', () 
   assert.match(craft, /scroll-behavior: smooth[\s\S]*scrollIntoView\(\{ behavior: 'smooth'/i);
   assert.match(craft, /Under `prefers-reduced-motion: reduce` it reverts to an instant jump/i);
 });
+test('the loop runs domain analysis before framing and records domain-brief.json', () => {
+  const loop = read('core/protocol/human-design-loop.md').replace(/\s+/g, ' ');
+  assert.match(loop, /preflight -> domain analysis -> frame/);
+  assert.match(loop, /## Domain analysis/);
+  assert.match(loop, /records `\.omd\/domain-brief\.json`[\s\S]*`domain-brief-v1`[\s\S]*`omd domain check`/i);
+  assert.match(loop, /two-role reference queries \(component design and top-tier craft\)/i);
+  assert.match(loop, /Durable, reviewable state lives under `\.omd\/`: `domain-brief\.json`/);
+});
+test('the domain-analysis contract names both reference roles and the feeds', () => {
+  const doc = read('core/protocol/domain-analysis.md').replace(/\s+/g, ' ');
+  assert.match(doc, /\*\*component\*\* — role ①/i);
+  assert.match(doc, /\*\*craft\*\* — role ②/i);
+  assert.match(doc, /top-tier galleries/i);
+  assert.match(doc, /It feeds the frame and the scout|feeds[\s\S]*frame[\s\S]*scout/i);
+  assert.match(doc, /never designs.*writes? (?:production )?code|never designs, scaffolds, or writes production code/i);
+});
