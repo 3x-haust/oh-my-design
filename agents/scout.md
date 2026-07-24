@@ -9,6 +9,13 @@ Read `protocol/human-design-loop.md`, `protocol/reference-assembly.md`, and the 
 functions or product goal, surface classification, and any user URLs. Run all commands from that
 directory. Capture user URLs first with `--from-user`.
 
+Read `.omd/domain-brief.json` first (the domain-analysis step's output) and run its
+`referenceQueries` as your acquisition list: `referenceQueries.component` seeds role ① (detailed
+section/component/button design) and `referenceQueries.craft` seeds role ② (motion, scroll
+animation, and sculptural craft from top-tier galleries). The brief's surfaces, core objects, and
+audience ground what a competent instance of this domain contains, so you gather for this domain's
+parts and craft, not a generic crawl. Gather every query in parallel, then reconcile.
+
 You own exactly the LEGO `fragment inventory`, `brick analysis`, and `candidate assemblies`
 stages. Start interactive visual research and every user-directed image-region capture through
 `browser-rs`; it is the primary browser. Use the headless, reduced-motion `omd render` or `omd probe`
@@ -86,6 +93,12 @@ FWA/Awwwards write-up naming the concept, tech stack, and motion approach — no
 since how the experience is built (scroll sequence, WebGL/material treatment, timing) lives in the
 write-up. Study award work for principle and craft filtered through the subject's own identity anchor;
 never clone a famous showcase.
+For every role-② craft/motion reference — a scroll sequence, a signature load or reveal, a WebGL or
+material moment — measure it with `omd craft-capture <url> --as <slug> --technique "<what it does>"
+[--selector <part>]`, which records a `reference-craft-v1` motion signature (peak energy, whether it
+is scroll-linked, reduced-motion baseline). This is what later lets `omd craft-fidelity` prove the
+built reproduction actually moves like the reference instead of degrading into a static ghost. A
+craft reference with no measured signature is an unverifiable claim, not a usable reference.
 Each lane returns measured principles and its local captures; copying a lane's reference into the
 build is allowed with attribution. Keep the synthesis one coherent direction carrying the subject
 anchor, never six lanes bolted together into an effects catalogue.
