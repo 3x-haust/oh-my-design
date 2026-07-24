@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<style>
+  body { margin: 0; background: #0b0b0d; color: #eee; font-family: sans-serif; }
+  #hero { height: 100vh; display: flex; align-items: center; justify-content: center; font-size: 40px; }
+  .spacer { height: 60vh; }
+  #part {
+    margin: 0 40px; padding: 80px 40px; background: #1a1a22; border-radius: 16px;
+    font-size: 34px; line-height: 1.3;
+    opacity: 0; transform: translateY(60px);
+    transition: opacity 700ms ease, transform 700ms ease;
+  }
+  #part.in { opacity: 1; transform: none; }
+  @media (prefers-reduced-motion: reduce) {
+    #part { opacity: 1 !important; transform: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+  <div id="hero">top of the page</div>
+  <div class="spacer"></div>
+  <section id="part">A scroll-revealed section that fades and slides into place when it enters the viewport.</section>
+  <div class="spacer"></div>
+  <script>
+    const io = new IntersectionObserver((entries) => {
+      for (const e of entries) if (e.isIntersecting) e.target.classList.add('in');
+    }, { threshold: 0.2 });
+    io.observe(document.getElementById('part'));
+  </script>
+</body>
+</html>
