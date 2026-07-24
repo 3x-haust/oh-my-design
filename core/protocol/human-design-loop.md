@@ -3,7 +3,7 @@
 This is the durable contract for an OMD run. Host prompts may explain it, but may not
 reorder it:
 
-`preflight -> frame -> concept -> research -> writer copy deck -> copy check -> blind copy
+`preflight -> domain analysis -> frame -> concept -> research -> writer copy deck -> copy check -> blind copy
 edit -> preserve copy-eye report -> copy review-check -> writer revision -> copy check -> typesetter proof -> blind type review -> type
 revision/proof pass -> composition contract/check -> structural sketches -> blind selection -> production build ->
 semantic checkpoint -> selected-container type reproof -> visual checkpoint -> squint
@@ -20,6 +20,16 @@ strong products solve that same UX problem — the specific flow, state, or comp
 changes, rather than applying generic UX rules from memory alone.
 
 Every research or data-gathering step — the framer's subject research and cited-evidence gathering, the scout's reference, gallery, and domain research — issues its independent searches, captures, and lookups in parallel, not one at a time. A serial gathering pass is a defect to avoid: gather concurrently, then reconcile.
+
+## Domain analysis
+
+Before framing, the run analyzes the request's domain and records `.omd/domain-brief.json`
+(`domain-brief-v1`, validated by `omd domain check`). A raw request names a goal but under-specifies
+its domain; designing straight from the words yields a generic shape. This step identifies the
+domain, its canonical surfaces, its core objects, and its audience, and emits the scout's two-role
+reference queries (component design and top-tier craft). An unfamiliar domain or named product is
+researched, not guessed. It feeds the frame and the scout; it never designs or writes code. The full
+contract is `protocol/domain-analysis.md`.
 
 ## Stack routing
 
@@ -41,7 +51,7 @@ dependency, dependency-API, or configuration change; retain the full final verif
 
 ## State boundary
 
-Durable, reviewable state lives under `.omd/`: `frame.md`, `scout.md`, `copy-deck.md`,
+Durable, reviewable state lives under `.omd/`: `domain-brief.json`, `frame.md`, `scout.md`, `copy-deck.md`,
 `type-proof.md`, `composition.md`, `decisions.md`, `design.md`, `attribution.md`, `motion-spec.md`, `craft.jsonl`,
 `source-seal.json`, `task-evidence.json`, `task-evidence-runs/*.json`, `final-evidence.json`,
 `final-evidence-runs/<runId>.json`, `config.json`, `probes/*.json`, `refs/*.json`, and explicit

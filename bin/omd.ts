@@ -22,6 +22,7 @@ import { checkFinalEvidence } from '../core/evidence/final.ts';
 import { checkTaskEvidence, publishTaskEvidence } from '../core/evidence/task.ts';
 import { computeStack } from '../core/stack/index.ts';
 import { scanTextSlop } from '../core/slop/text-slop.ts';
+import { validateDomainBrief } from '../core/domain/domain-brief.ts';
 import { evaluateLighthouse, type LighthouseBudget } from '../core/perf/lighthouse.ts';
 import { evaluateVisualRichness } from '../core/composition-contract/visual-richness.ts';
 import type { VisualRichnessRegister } from '../core/composition-contract/visual-richness.ts';
@@ -1563,6 +1564,23 @@ function cmdComposition(opts: Opts): never {
   process.exit(findings.length > 0 ? 1 : 0);
 }
 
+/** Schema lint of the domain-analysis artifact; advisory-adjacent — exits 1 on an invalid brief. */
+function cmdDomain(mode: string | undefined, opts: Opts): never {
+  if (mode !== 'check') throw new Error('usage: omd domain check [--input <domain-brief.json>] [--json]');
+  const file = opts.input ?? join(process.cwd(), '.omd', 'domain-brief.json');
+  try {
+    validateDomainBrief(inputJson(file, 'omd domain check'));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (opts.json) process.stdout.write(JSON.stringify({ ok: false, error: message }));
+    else console.error(`[error] ${message}`);
+    process.exit(1);
+  }
+  if (opts.json) process.stdout.write(JSON.stringify({ ok: true }));
+  else console.log('ok — domain-brief names the domain, its surfaces, core objects, audience, and per-role reference queries');
+  process.exit(0);
+}
+
 /** Final byte-freshness evidence only; this does not judge semantic copy/source fidelity. */
 function cmdSource(mode: string | undefined, opts: Opts): never {
   const sourceRoot = resolve(opts._[0] ?? process.cwd());
@@ -2477,6 +2495,7 @@ function usage(): never {
     + '\n'
     + '  art-direction check --input decision-check.json [--json]  persist the canonical selected direction before composition\n'
     + '  intent append --input trusted-intent.json [--json]  append trusted intent and update its guarded current pointer\n'
+    + '  domain check [--input domain-brief.json] [--json]  validate the domain-analysis brief\n'
     + '  preflight --input activation-context.json [--json]  read-only activation validation\n'
     + '  text-slop [file] [--json]                   advisory AI-cliche scan of copy (default .omd/copy-deck.md)\n'
     + '  visual-richness [file] [--register R] [--json]  advisory carrier read of composition (default .omd/composition.md)\n'
@@ -2593,6 +2612,7 @@ async function main(): Promise<never> {
     return cmdEvidence(sub, parseArgs(args.slice(2)));
   }
   if (cmd === 'intent') return cmdIntent(sub, parseArgs(args.slice(2)));
+  if (cmd === 'domain') return cmdDomain(sub, parseArgs(args.slice(2)));
   if (cmd === 'stack') return cmdStack(parseArgs(args.slice(1)));
   if (cmd === 'text-slop') return cmdTextSlop(parseArgs(args.slice(1)));
   if (cmd === 'visual-richness') return cmdVisualRichness(parseArgs(args.slice(1)));
