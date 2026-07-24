@@ -683,3 +683,12 @@ test('the ultradesign skill runs domain analysis before framing', () => {
   // the domain section precedes the frame section
   assert.ok(skill.indexOf('## 0.5 Domain analysis') < skill.indexOf('## 1. Frame and concept hypothesis'));
 });
+test('captured role-② scroll craft cannot be declined to stillness on a persuasion surface', () => {
+  const loop = read('core/protocol/human-design-loop.md').replace(/\s+/g, ' ');
+  assert.match(loop, /Captured role-② craft evidence must be honored, not declined to stillness/);
+  assert.match(loop, /a fired `scrollChoreography`, an `animatedShare` above the noise floor, or an energy curve above it/);
+  assert.match(loop, /at least one scroll-linked reveal drawn from that evidence is expected in the build, verified by `omd craft-fidelity`/);
+  assert.match(loop, /Declining every captured scroll-craft reference on the motion axis to ship a static page[\s\S]*is under-reach \(RED\), not restraint/);
+  assert.match(loop, /`reference-usage` ledger that marks every role-② craft reference `declined` on the motion axis[\s\S]*machine signal/);
+  assert.match(loop, /`product`\/quiet tool surface stays exempt/);
+});
