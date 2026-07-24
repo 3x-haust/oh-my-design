@@ -665,3 +665,12 @@ test('reference-assembly names the two roles and gates role-② craft by measure
   assert.match(ra, /GATED by `verifyCraftReproduction` \(`omd craft-fidelity check`\)/);
   assert.match(ra, /static, faint, or scroll-dropping reproduction fails/i);
 });
+test('the scout consumes the domain brief and measures role-② craft references', () => {
+  const scout = read('src/agents/scout.agent.yaml').replace(/\s+/g, ' ');
+  assert.match(scout, /Read `\.omd\/domain-brief\.json` first/);
+  assert.match(scout, /`referenceQueries\.component` seeds role ①/);
+  assert.match(scout, /`referenceQueries\.craft` seeds role ②/);
+  assert.match(scout, /measure it with `omd craft-capture/);
+  assert.match(scout, /lets `omd craft-fidelity` prove the built reproduction actually moves/);
+  assert.match(scout, /- Bash\(omd craft-capture:\*\)/);
+});
