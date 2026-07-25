@@ -31,6 +31,28 @@ the user's language.
 
 ## 0. Preflight and routing
 
+**Artifact ownership is not advisory.** Each durable artifact below is written by the agent that owns
+it, spawned for that purpose. The coordinator orchestrates, gathers, sanitizes, and gates — it never
+writes an owned artifact itself, however obvious the content seems or however much time a direct
+write would save. Writing one yourself is not a shortcut; it silently deletes the isolation the
+artifact exists to provide, and every downstream check that reads it is then verifying your own work.
+
+| Artifact | Owner | Spawned in |
+|---|---|---|
+| `.omd/frame.md` | `omd-framer` | §1 |
+| `.omd/scout.md`, `.omd/refs/*` | `omd-scout` | §2 |
+| `.omd/copy-deck.md` | `omd-writer` | §2 |
+| `.omd/type-proof.md` | `omd-typesetter` | §3 |
+| `.omd/composition.md` | `omd-composer` | §4 |
+| `.omd/.cache/sketches/*` | `omd-sketch` | §5 |
+| production source (every file the site ships) | `omd-hand` | §6 |
+| every review verdict | `omd-eye` / `omd-glance` | §5, §7, §8 |
+
+If a stage looks skippable because the answer seems clear, that is the failure mode this table
+exists to stop: a run that writes its own composition contract and its own production source has
+performed one agent's guess wearing the loop's name. Stages §4, §5, and §6 are not optional and have
+no inline path.
+
 Run `omd doctor`. Stop on a failed prerequisite. For interactive visual research or user-directed
 region capture, initialize `browser-rs` first. Only an observed initialization/capability failure
 permits headless, reduced-motion `omd render` or `omd probe` as the deterministic Playwright
@@ -257,6 +279,10 @@ proof container-width change. Rerun the proof instead of carrying an obsolete ap
 
 ## 4. Composition contract before divergence
 
+**Spawn `omd-composer`. The coordinator never writes `.omd/composition.md` itself.** The composition
+contract is the composer's artifact; a coordinator-written one is not a contract, it is the
+coordinator's own plan validating itself.
+
   Before spawning composer, the coordinator generates and chooses its image-first draft (when a draft
   is available) or takes the CSS/SVG path. Give composer the coordinator-chosen draft, or the selected
   assembly plus the CSS/SVG evidence path. The
@@ -301,6 +327,11 @@ The composer also runs `omd visual-richness .omd/composition.md` as an advisory 
 section; the selected art-direction contract determines the carrier and static/motion treatment.
 
 ## 5. Independent structural divergence and blind selection
+
+**Spawn `omd-sketch` for the candidates and a fresh `omd-eye` to select between them.** Skipping to a
+single structure the coordinator already has in mind is the failure this stage exists to prevent:
+without independent candidates there is nothing to select between, and the blind selection becomes a
+rubber stamp on the coordinator's first idea.
 
 Gate divergence by structural uncertainty and impact:
 
@@ -414,6 +445,11 @@ requires a human decision. Never create an execution engine or unbounded retry l
 the winner and rejected tradeoffs only when a candidate actually passes.
 
 ## 6. Production build with reflective craft
+
+**Spawn `omd-hand`. The coordinator never writes production source itself** — not the scaffold, not a
+component, not the stylesheet. The hand is where install-over-reimplement, the craft checkpoints, and
+the reflective render loop live; a coordinator that writes the source bypasses all three at once and
+the run ships whatever the coordinator happened to type.
 
 On the normal graph, spawn `omd-hand` once with the selected structure, sanitized build brief,
 copy deck, `.omd/type-proof.md`, `.omd/composition.md`, accepted sanitized transfer criteria, and

@@ -761,3 +761,19 @@ test('the award-bar eval scores against the rubric, tokens, installs, and no-JS 
   const nojs = read('evals/award-bar/graders/content-survives-no-js.md').replace(/\s+/g, ' ');
   assert.match(nojs, /content accessible with no JS/);
 });
+test('artifact ownership is enforced in both the loop and the executable skill', () => {
+  const loop = read('core/protocol/human-design-loop.md').replace(/\s+/g, ' ');
+  assert.match(loop, /Artifact ownership is enforced, not advisory/);
+  assert.match(loop, /`\.omd\/composition\.md` to the composer/);
+  assert.match(loop, /every production source file to the hand/);
+  assert.match(loop, /it never writes an owned artifact itself/);
+  assert.match(loop, /have no inline path and no skippable condition/);
+
+  const skill = read('src/skills/omd-ultradesign/SKILL.md').replace(/\s+/g, ' ');
+  assert.match(skill, /\*\*Artifact ownership is not advisory\.\*\*/);
+  assert.match(skill, /\*\*Spawn `omd-composer`\. The coordinator never writes `\.omd\/composition\.md` itself\.\*\*/);
+  assert.match(skill, /\*\*Spawn `omd-sketch` for the candidates and a fresh `omd-eye` to select between them\.\*\*/);
+  assert.match(skill, /\*\*Spawn `omd-hand`\. The coordinator never writes production source itself\*\*/);
+  // the ownership table must precede the stages it governs
+  assert.ok(skill.indexOf('Artifact ownership is not advisory') < skill.indexOf('## 4. Composition contract'));
+});
