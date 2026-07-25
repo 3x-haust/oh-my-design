@@ -50,8 +50,12 @@ page average with no component anatomy, so section-granular composition has noth
 Two captures of the same source at the same selector are one piece of evidence under two names and
 make the board read larger than it is. Granularity alone is not coverage. Five captures that collapse onto two slots — three navs and two
 install blocks — are two parts studied repeatedly while every other section carries no evidence, and
-those sections then get whatever the build invents. The board is worked down the surfaces the domain
-brief declares, one part per section it intends to compose. `omd ref granularity` audits both and
+those sections then compose from whatever the build invents. Coverage is measured per surface, by
+name: the domain brief's `surfaces` are the list of things the build must compose, so they are the
+acquisition list, and each capture is bound to the surface it answers
+(`omd ref add … --slot <surface>`). A board is finished when every declared surface has at least one
+bound capture — a capture count says nothing about whether the hero has evidence or the nav was
+studied five times, and it is the uncovered sections that need naming. `omd ref granularity` audits both and
 reports `REF-WHOLE-PAGE`, `REF-DUPLICATE-CAPTURE`, `REF-NO-PARTS`, `REF-PART-CONCENTRATION`,
 `REF-SURFACE-UNCOVERED`, and `REF-NAME-MISMATCH`. A capture is named for what it holds: a reference
 called `*-hero-*` captured at `header` tells every downstream reader that the hero is covered when

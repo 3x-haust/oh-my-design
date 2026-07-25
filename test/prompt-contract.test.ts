@@ -783,6 +783,8 @@ test('the scout and the reference protocol require component-scoped capture', ()
   assert.match(ra, /a capture scoped to a page root — `main`, `body`, `html`, `:root` — measures the whole document/);
   assert.match(ra, /Granularity alone is not coverage/);
   assert.match(ra, /three navs and two install blocks — are two parts studied repeatedly/);
+  assert.match(ra, /Coverage is measured per surface, by name/);
+  assert.match(ra, /A board is finished when every declared surface has at least one bound capture/);
   assert.match(ra, /`REF-SURFACE-UNCOVERED`, and `REF-NAME-MISMATCH`/);
   assert.match(ra, /A capture is named for what it holds/);
   assert.match(ra, /tracing a whole page is the derivative failure the transfer boundary forbids/);
@@ -791,7 +793,9 @@ test('the scout and the reference protocol require component-scoped capture', ()
   assert.match(scout, /Capture parts, not pages/);
   assert.match(scout, /Two captures of the same source at the same selector are one piece of evidence wearing two names/);
   assert.match(scout, /Run `omd ref granularity` before handing the board on/);
-  assert.match(scout, /Cover the page, do not restudy one slot/);
+  assert.match(scout, /Cover the result, not one slot/);
+  assert.match(scout, /`omd ref add <url> --as <component> --slot <surface> --selector "<css>" --blueprint --shot`/);
+  assert.match(scout, /`REF-SURFACE-UNCOVERED` names the surfaces that still have none/);
   assert.match(scout, /Name a capture for what it holds/);
   assert.match(scout, /`REF-NAME-MISMATCH` reports it/);
   assert.match(scout, /a nav studied three times while the hero, the process section, and the proof section have nothing/);

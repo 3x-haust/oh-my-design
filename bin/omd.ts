@@ -108,6 +108,8 @@ interface Opts {
   costliestError?: string;
   /** UX anchor: surface classification — marketing | product | editorial | mixed. (`omd frame set --surface "..."`) */
   surface?: string;
+  /** The surface a capture is evidence for (`omd ref add … --slot hero`), named from the domain brief. */
+  slot?: string;
   /** Page to compare against the committed tokens (`omd tokens check --page <page>`). */
   page?: string;
   /** Lighthouse report path for `omd award score --lighthouse <report.json>`. */
@@ -810,7 +812,7 @@ async function cmdRefAddBatch(opts: Opts): Promise<never> {
 async function cmdRefAdd(opts: Opts): Promise<never> {
   const target = opts._[0];
   if (!target || !opts.as) {
-    console.error('usage: omd ref add <url|file> --as <component> [--selector "css"] [--image]');
+    console.error('usage: omd ref add <url|file> --as <component> [--slot <surface>] [--selector "css"] [--image]');
     process.exit(1);
   }
   if (opts.image && opts.selector) {
@@ -834,6 +836,7 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
       component: opts.as,
       kind: 'image',
       capturedAt: new Date().toISOString(),
+      ...(opts.slot ? { slot: opts.slot } : {}),
       invariants: null,
       principles: [],
       ...(opts.fromUser ? { origin: 'user' as const } : {}),
@@ -897,6 +900,7 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
     kind: opts.selector ? 'component' : 'page',
     capturedAt: new Date().toISOString(),
     ...(opts.selector ? { selector: opts.selector } : {}),
+    ...(opts.slot ? { slot: opts.slot } : {}),
     invariants,
     principles: [],
     slopCount,
@@ -1721,14 +1725,18 @@ async function cmdRefGranularity(opts: Opts): Promise<never> {
   // The domain brief already declares the surfaces this run must compose; use its count so the
   // audit can say how many of them would be built with no reference at all.
   const briefPath = join(process.cwd(), '.omd', 'domain-brief.json');
-  let surfaces: number | undefined;
+  let surfaces: string[] | undefined;
   if (existsSync(briefPath)) {
     try {
-      const brief = JSON.parse(readFileSync(briefPath, 'utf8')) as { surfaces?: unknown[] };
-      if (Array.isArray(brief.surfaces)) surfaces = brief.surfaces.length;
+      const brief = JSON.parse(readFileSync(briefPath, 'utf8')) as { surfaces?: { name?: unknown }[] };
+      if (Array.isArray(brief.surfaces)) {
+        surfaces = brief.surfaces
+          .map((surface) => (typeof surface?.name === 'string' ? surface.name : ''))
+          .filter((name): name is string => name !== '');
+      }
     } catch { surfaces = undefined; }
   }
-  const findings = auditBoardGranularity(loadRefs(process.cwd()), surfaces === undefined ? {} : { surfaces });
+  const findings = auditBoardGranularity(loadRefs(process.cwd()), surfaces === undefined || surfaces.length === 0 ? {} : { surfaces });
   if (opts.json) process.stdout.write(JSON.stringify({ ok: findings.length === 0, findings }));
   else if (findings.length === 0) console.log('ok — the board holds component-scoped parts to compose from');
   else for (const finding of findings) console.error(`[error] ${finding.id}: ${finding.message}\n  ${finding.refs.join('\n  ')}`);
@@ -2754,7 +2762,7 @@ function usage(): never {
     + '  ref candidates [manifest]                   print chat-ready Korean-first candidate Markdown\n'
     + '  ref select <candidate-id> [--json]          bind a closed candidate selection to its evidence\n'
     + '  ref audit [--json]                          warn when references were captured sequentially (use ref add-batch)\n'
-    + '  ref granularity [--json]                    fail when the board holds no component-scoped parts\n'
+    + '  ref granularity [--json]                    fail when the board does not cover the surfaces to compose\n'
     + '\n'
     + '  design                                       discover evidence and create/refresh .omd/design.md\n'
     + '  design --check                              validate design.md section coverage\n'
