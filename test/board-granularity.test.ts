@@ -83,3 +83,52 @@ test('an empty board reports the missing parts rather than passing vacuously', (
   const ids = auditBoardGranularity([]).map((f) => f.id);
   assert.deepEqual(ids, ['REF-NO-PARTS']);
 });
+
+test('the real board is caught: five component captures collapsing onto two slots', () => {
+  // Reconstructed from the shipped board: three navs and two install code blocks, with every other
+  // section of the page carrying no reference at all.
+  const board = [
+    ref('https://bun.sh', 'cli-header-nav', 'header'),
+    ref('https://vite.dev', 'vite-header-nav', 'header'),
+    ref('https://www.warp.dev', 'warp-agentic-hero-craft', 'header'),
+    ref('https://bun.sh', 'cli-install-codeblock', 'pre'),
+    ref('https://vite.dev', 'hero-install-tabs', '.language-bash'),
+  ];
+  const findings = auditBoardGranularity(board, { surfaces: 5 });
+  const ids = findings.map((f) => f.id);
+  assert.ok(ids.includes('REF-PART-CONCENTRATION'), 'three navs out of five captures is one slot studied three times');
+  assert.ok(ids.includes('REF-SURFACE-UNCOVERED'), 'three distinct parts cannot compose five surfaces');
+  assert.ok(!ids.includes('REF-NO-PARTS'), 'these are genuine component captures');
+  assert.ok(!ids.includes('REF-WHOLE-PAGE'), 'none of them is a page root');
+  const conc = findings.find((f) => f.id === 'REF-PART-CONCENTRATION')!;
+  assert.match(conc.message, /3 of 5 component captures measure the same part \(`header`\)/);
+  assert.equal(conc.refs.length, 3);
+});
+
+test('a board with one part per surface passes the diversity audit', () => {
+  const board = [
+    ref('https://a.com', 'hero', '.hero'),
+    ref('https://b.com', 'pipeline', '.steps'),
+    ref('https://c.com', 'cards', '.grid'),
+    ref('https://d.com', 'install', 'pre'),
+    ref('https://e.com', 'footer', 'footer'),
+  ];
+  assert.deepEqual(auditBoardGranularity(board, { surfaces: 5 }), []);
+});
+
+test('concentration needs a real board; two captures of one part are not yet a pattern', () => {
+  const small = [ref('https://a.com', 'nav-a', 'header'), ref('https://b.com', 'nav-b', 'header'), ref('https://c.com', 'x', '.x')];
+  const ids = auditBoardGranularity(small).map((f) => f.id);
+  assert.ok(!ids.includes('REF-PART-CONCENTRATION'), 'below the capture minimum the share is noise');
+});
+
+test('surface coverage is only reported when the brief declared surfaces', () => {
+  const board = [
+    ref('https://a.com', 'hero', '.hero'),
+    ref('https://b.com', 'pipeline', '.steps'),
+    ref('https://c.com', 'cards', '.grid'),
+    ref('https://d.com', 'install', 'pre'),
+  ];
+  assert.ok(!auditBoardGranularity(board).some((f) => f.id === 'REF-SURFACE-UNCOVERED'));
+  assert.ok(auditBoardGranularity(board, { surfaces: 6 }).some((f) => f.id === 'REF-SURFACE-UNCOVERED'));
+});

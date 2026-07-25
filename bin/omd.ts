@@ -1718,7 +1718,17 @@ async function cmdRecipe(mode: string | undefined, opts: Opts): Promise<never> {
 async function cmdRefGranularity(opts: Opts): Promise<never> {
   const { loadRefs } = await import('../core/ref/store.ts');
   const { auditBoardGranularity } = await import('../core/ref/board-granularity.ts');
-  const findings = auditBoardGranularity(loadRefs(process.cwd()));
+  // The domain brief already declares the surfaces this run must compose; use its count so the
+  // audit can say how many of them would be built with no reference at all.
+  const briefPath = join(process.cwd(), '.omd', 'domain-brief.json');
+  let surfaces: number | undefined;
+  if (existsSync(briefPath)) {
+    try {
+      const brief = JSON.parse(readFileSync(briefPath, 'utf8')) as { surfaces?: unknown[] };
+      if (Array.isArray(brief.surfaces)) surfaces = brief.surfaces.length;
+    } catch { surfaces = undefined; }
+  }
+  const findings = auditBoardGranularity(loadRefs(process.cwd()), surfaces === undefined ? {} : { surfaces });
   if (opts.json) process.stdout.write(JSON.stringify({ ok: findings.length === 0, findings }));
   else if (findings.length === 0) console.log('ok — the board holds component-scoped parts to compose from');
   else for (const finding of findings) console.error(`[error] ${finding.id}: ${finding.message}\n  ${finding.refs.join('\n  ')}`);
