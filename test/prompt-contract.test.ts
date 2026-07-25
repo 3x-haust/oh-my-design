@@ -713,3 +713,11 @@ test('the loop and the hand install pack recipes instead of reimplementing them'
   assert.match(hand, /- Bash\(omd recipe:\*\)/);
   assert.match(hand, /Install first, then do the work a build is actually good at/);
 });
+test('the loop requires motion to enhance content, never gate it (omd no-js)', () => {
+  const loop = read('core/protocol/human-design-loop.md').replace(/\s+/g, ' ');
+  assert.match(loop, /Motion enhances content; it never gates it/);
+  assert.match(loop, /runs `omd no-js <page>`/);
+  assert.match(loop, /`NOJS-CONTENT-LOSS` is RED/);
+  assert.match(loop, /content accessible with no JS/);
+  assert.match(loop, /Below-fold content that has simply not been scrolled to yet is not a loss/);
+});
