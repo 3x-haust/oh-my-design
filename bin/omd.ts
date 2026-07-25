@@ -1709,6 +1709,20 @@ async function cmdRecipe(mode: string | undefined, opts: Opts): Promise<never> {
   process.exit(0);
 }
 
+/** Fails when the page's content is gated behind JavaScript rather than enhanced by it. */
+async function cmdNoJs(opts: Opts): Promise<never> {
+  const target = opts._[0];
+  if (!target) throw new Error('usage: omd no-js <page> [--viewport WxH] [--json]');
+  const { parseViewport } = await import('../core/render/index.ts');
+  const { observeNoJsContent, checkNoJsContent } = await import('../core/render/no-js.ts');
+  const observation = await observeNoJsContent(target, { viewport: parseViewport(opts.viewport ?? '1440x900') });
+  const finding = checkNoJsContent(observation);
+  if (opts.json) process.stdout.write(JSON.stringify({ ...observation, findings: finding ? [finding] : [] }));
+  else if (finding) console.error(`[error] ${finding.id}: ${finding.message}`);
+  else console.log(`ok — content survives without JavaScript (text ${Math.round(observation.textRatio * 100)}%, no gated blocks)`);
+  process.exit(finding ? 1 : 0);
+}
+
 /** Final byte-freshness evidence only; this does not judge semantic copy/source fidelity. */
 function cmdSource(mode: string | undefined, opts: Opts): never {
   const sourceRoot = resolve(opts._[0] ?? process.cwd());
@@ -2628,6 +2642,7 @@ function usage(): never {
     + '  craft-capture <url> --as <slug> --technique "<t>" [--selector <css>] [--viewport WxH] [--json]  measure a reference-craft-v1 from a real browser\n'
     + '  craft-usage <page> [--surface S] [--refs dir] [--json]  fail when captured scroll craft was declined to a static build\n'
     + '  recipe list [--json]                        list the installable recipe library\n'
+    + '  no-js <page> [--viewport WxH] [--json]      fail when content is gated behind JavaScript\n'
     + '  recipe show <name> [--stack S] [--json]     print the files an install would write\n'
     + '  recipe add <name> [--stack react|vanilla] [--out dir]  install a recipe as real source\n'
     + '  preflight --input activation-context.json [--json]  read-only activation validation\n'
@@ -2751,6 +2766,7 @@ async function main(): Promise<never> {
   if (cmd === 'craft-capture') return cmdCraftCapture(parseArgs(args.slice(1)));
   if (cmd === 'craft-usage') return cmdCraftUsage(parseArgs(args.slice(1)));
   if (cmd === 'recipe') return cmdRecipe(sub, parseArgs(args.slice(2)));
+  if (cmd === 'no-js') return cmdNoJs(parseArgs(args.slice(1)));
   if (cmd === 'stack') return cmdStack(parseArgs(args.slice(1)));
   if (cmd === 'text-slop') return cmdTextSlop(parseArgs(args.slice(1)));
   if (cmd === 'visual-richness') return cmdVisualRichness(parseArgs(args.slice(1)));

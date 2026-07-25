@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><style>
+  body { margin: 0; background: #0b0b0d; color: #eee; font-family: sans-serif; }
+  section { margin: 40px; padding: 60px 40px; background: #1a1a22; font-size: 22px; line-height: 1.5;
+    opacity: 0; transform: translateY(24px); transition: opacity .4s, transform .4s; }
+  section.in { opacity: 1; transform: none; }
+</style></head>
+<body>
+  <section>Product overview paragraph that a reader needs in order to understand what this page is selling.</section>
+  <section>Second block of substantive copy describing how the mechanism actually works end to end.</section>
+  <section>Third block covering pricing, guarantees, and the reason the reader should act on this page.</section>
+  <section>Fourth block with the closing argument and the specific next step the reader is asked to take.</section>
+  <script>
+    const io = new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) e.target.classList.add('in'); }));
+    document.querySelectorAll('section').forEach((el) => io.observe(el));
+  </script>
+</body></html>
