@@ -108,6 +108,8 @@ interface Opts {
   costliestError?: string;
   /** UX anchor: surface classification — marketing | product | editorial | mixed. (`omd frame set --surface "..."`) */
   surface?: string;
+  /** Page to compare against the committed tokens (`omd tokens check --page <page>`). */
+  page?: string;
   /** Lighthouse report path for `omd award score --lighthouse <report.json>`. */
   lighthouse?: string;
   /** Reference directory for `omd craft-usage` (default `<cwd>/.omd/refs`). */
@@ -1808,6 +1810,38 @@ async function documentMarkupFacts(target: string, viewport: { width: number; he
   }
 }
 
+
+/** Validates the token commitment and, given a page, that the build landed on its ladders. */
+async function cmdTokens(mode: string | undefined, opts: Opts): Promise<never> {
+  if (mode !== 'check') throw new Error('usage: omd tokens check [--input <tokens.json>] [--page <page>] [--viewport WxH] [--json]');
+  const { validateTokenCommit, checkTokenDrift } = await import('../core/tokens/contract.ts');
+  const file = opts.input ?? join(process.cwd(), '.omd', 'tokens.json');
+  let commit;
+  try {
+    commit = validateTokenCommit(inputJson(file, 'omd tokens check'));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (opts.json) process.stdout.write(JSON.stringify({ ok: false, error: message }));
+    else console.error(`[error] ${message}`);
+    process.exit(1);
+  }
+
+  let drift = null;
+  if (opts.page) {
+    const { parseViewport, extractIr } = await import('../core/render/index.ts');
+    const { normalize } = await import('../core/ir/normalize.ts');
+    const { extractInvariants } = await import('../core/ref/invariants.ts');
+    const ir = normalize(await extractIr(opts.page, { viewport: parseViewport(opts.viewport ?? '1440x900') }));
+    const invariants = extractInvariants(ir);
+    drift = checkTokenDrift(commit, { typeScale: invariants.typeScale, spacingScale: invariants.spacingLadder });
+  }
+
+  if (opts.json) process.stdout.write(JSON.stringify({ ok: drift === null, commit, findings: drift ? [drift] : [] }));
+  else if (drift) console.error(`[error] ${drift.id}: ${drift.message}`);
+  else console.log(`ok — tokens committed (${commit.typeScale.length} type rungs, ${commit.spacingScale.length} spacing rungs, accent ${commit.colorRoles.accent})${opts.page ? ' and the build lands on them' : ''}`);
+  process.exit(drift ? 1 : 0);
+}
+
 /** Final byte-freshness evidence only; this does not judge semantic copy/source fidelity. */
 function cmdSource(mode: string | undefined, opts: Opts): never {
   const sourceRoot = resolve(opts._[0] ?? process.cwd());
@@ -2729,6 +2763,7 @@ function usage(): never {
     + '  recipe list [--json]                        list the installable recipe library\n'
     + '  no-js <page> [--viewport WxH] [--json]      fail when content is gated behind JavaScript\n'
     + '  award score <page> [--lighthouse report.json] [--json]  score against the Awwwards developer rubric\n'
+    + '  tokens check [--input tokens.json] [--page <page>] [--json]  validate the committed ladders and their use\n'
     + '  recipe show <name> [--stack S] [--json]     print the files an install would write\n'
     + '  recipe add <name> [--stack react|vanilla] [--out dir]  install a recipe as real source\n'
     + '  preflight --input activation-context.json [--json]  read-only activation validation\n'
@@ -2854,6 +2889,7 @@ async function main(): Promise<never> {
   if (cmd === 'recipe') return cmdRecipe(sub, parseArgs(args.slice(2)));
   if (cmd === 'no-js') return cmdNoJs(parseArgs(args.slice(1)));
   if (cmd === 'award') return cmdAward(sub, parseArgs(args.slice(2)));
+  if (cmd === 'tokens') return cmdTokens(sub, parseArgs(args.slice(2)));
   if (cmd === 'stack') return cmdStack(parseArgs(args.slice(1)));
   if (cmd === 'text-slop') return cmdTextSlop(parseArgs(args.slice(1)));
   if (cmd === 'visual-richness') return cmdVisualRichness(parseArgs(args.slice(1)));
