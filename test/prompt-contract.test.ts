@@ -721,3 +721,11 @@ test('the loop requires motion to enhance content, never gate it (omd no-js)', (
   assert.match(loop, /content accessible with no JS/);
   assert.match(loop, /Below-fold content that has simply not been scrolled to yet is not a loss/);
 });
+test('the loop scores against the published Awwwards developer rubric', () => {
+  const loop = read('core/protocol/human-design-loop.md').replace(/\s+/g, ' ');
+  assert.match(loop, /`omd award score <page>` scores the page against the published Awwwards Developer Award rubric/);
+  assert.match(loop, /WPO 0\.20, RWD\/mobile 0\.20, markup\/metadata 0\.15, semantics\/SEO 0\.20, animations\/transitions 0\.15, accessibility 0\.10/);
+  assert.match(loop, /Scoring is conjunctive: an axis below its floor forces the verdict down/);
+  assert.match(loop, /Honourable Mention is 6\.5; the Developer Award is above 7/);
+  assert.match(loop, /does not fake a number for it/);
+});
