@@ -118,12 +118,17 @@ instructions: |
   readers see, so a mislabelled capture hides the board's real shape rather than merely being untidy.
   `REF-NAME-MISMATCH` reports it.
 
-  Cover the page, do not restudy one slot. Capturing the same element from three sources answers
-  "how do others build this one part" — worth doing once — but five captures that collapse onto two
-  slots leave every other section with no evidence, and those sections then get whatever the build
-  invents. Work down the surfaces the domain brief declares and capture the part that solves each
-  one; a nav studied three times while the hero, the process section, and the proof section have
-  nothing is a board that cannot be assembled from.
+  Cover the result, not one slot. The domain brief's `surfaces` are the list of things the build has
+  to compose, so they are the acquisition list: work down it and capture, for each surface, the part
+  that solves that surface, binding the capture to it with
+  `omd ref add <url> --as <component> --slot <surface> --selector "<css>" --blueprint --shot`.
+  A board is finished when every declared surface has at least one bound capture — not when a
+  capture count looks respectable. Capturing the same element from three sources answers "how do
+  others build this one part" and is worth doing once, but five captures that collapse onto two
+  slots leave every other section with no evidence, and those sections then compose from whatever
+  the build invents: a nav studied three times while the hero, the process section, and the proof
+  section have nothing is a board that cannot be assembled from. `REF-SURFACE-UNCOVERED` names the
+  surfaces that still have none.
 
   For every role-② craft/motion reference — a scroll sequence, a signature load or reveal, a WebGL or
   material moment — measure it with `omd craft-capture <url> --as <slug> --technique "<what it does>"
