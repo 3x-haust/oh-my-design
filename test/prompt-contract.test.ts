@@ -777,3 +777,15 @@ test('artifact ownership is enforced in both the loop and the executable skill',
   // the ownership table must precede the stages it governs
   assert.ok(skill.indexOf('Artifact ownership is not advisory') < skill.indexOf('## 4. Composition contract'));
 });
+test('the scout and the reference protocol require component-scoped capture', () => {
+  const ra = read('core/protocol/reference-assembly.md').replace(/\s+/g, ' ');
+  assert.match(ra, /## Capture granularity/);
+  assert.match(ra, /a capture scoped to a page root — `main`, `body`, `html`, `:root` — measures the whole document/);
+  assert.match(ra, /`omd ref granularity` audits this and reports `REF-WHOLE-PAGE`, `REF-DUPLICATE-CAPTURE`, and `REF-NO-PARTS`/);
+  assert.match(ra, /tracing a whole page is the derivative failure the transfer boundary forbids/);
+
+  const scout = read('src/agents/scout.agent.yaml').replace(/\s+/g, ' ');
+  assert.match(scout, /Capture parts, not pages/);
+  assert.match(scout, /Two captures of the same source at the same selector are one piece of evidence wearing two names/);
+  assert.match(scout, /Run `omd ref granularity` before handing the board on/);
+});

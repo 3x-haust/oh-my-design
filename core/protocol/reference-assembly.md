@@ -41,6 +41,18 @@ Every reference serves one of two roles, and the domain brief's `referenceQuerie
   faint, or scroll-dropping reproduction fails — the craft reference does not pass just because a
   generation was attempted. This is how the "seeing is not building" gap is closed with evidence.
 
+## Capture granularity
+
+A board is assembled from parts. Every measured reference is captured at the specific component it
+studies (`omd ref add <url> --as <component> --selector "<css>" --blueprint --shot`); a capture
+scoped to a page root — `main`, `body`, `html`, `:root` — measures the whole document and yields a
+page average with no component anatomy, so section-granular composition has nothing to take from it.
+Two captures of the same source at the same selector are one piece of evidence under two names and
+make the board read larger than it is. `omd ref granularity` audits this and reports
+`REF-WHOLE-PAGE`, `REF-DUPLICATE-CAPTURE`, and `REF-NO-PARTS`; any of the three means the board must
+be recaptured at component scope before composition, because a board of whole-page captures can only
+be traced, and tracing a whole page is the derivative failure the transfer boundary forbids.
+
 ## Subject anchor
 
 When the brief names a real, existing subject — a product, project, company, repository, or brand, or supplies its link — the scout's fragment-inventory stage first establishes what that subject actually is (a web search plus the linked repository/README and any wordmark or brand the source already ships) and fixes the subject's own identity anchor: its real palette and motif. This anchor is not one measured reference among many; it governs the colour and motif every other lane serves, and is never outvoted by category evidence. A palette or motif taken from the product category's default instead of the subject's own identity is a rejected, not a shippable, synthesis.
