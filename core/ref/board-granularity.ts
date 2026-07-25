@@ -31,8 +31,49 @@ export const MIN_PART_CAPTURES = 3;
 export const CONCENTRATION_SHARE = 0.5;
 export const CONCENTRATION_MIN_CAPTURES = 4;
 
+
+/**
+ * Slots a capture selector unambiguously identifies. Deliberately small: only selectors whose role
+ * is beyond argument are mapped, so a disagreement reported here is a real one rather than a guess.
+ */
+const SELECTOR_SLOTS: readonly (readonly [RegExp, string])[] = [
+  [/^(header|nav|header\s+nav|\[role=["']?banner["']?\])$/, 'nav'],
+  [/^(footer|\[role=["']?contentinfo["']?\])$/, 'footer'],
+  [/^(pre|code|\.language-[\w-]+|pre\s+code)$/, 'code block'],
+];
+
+/** Slot words a component name claims. Matched as whole words so `header-nav` does not read as hero. */
+const NAME_SLOTS: readonly (readonly [RegExp, string])[] = [
+  [/(^|[-_.])hero([-_.]|$)/, 'hero'],
+  [/(^|[-_.])(nav|header|navbar)([-_.]|$)/, 'nav'],
+  [/(^|[-_.])footer([-_.]|$)/, 'footer'],
+  [/(^|[-_.])(pricing|price)([-_.]|$)/, 'pricing'],
+  [/(^|[-_.])(testimonial|quote)([-_.]|$)/, 'testimonial'],
+  [/(^|[-_.])(gallery|carousel)([-_.]|$)/, 'gallery'],
+  [/(^|[-_.])(codeblock|snippet|terminal)([-_.]|$)/, 'code block'],
+];
+
+const slotOf = (value: string, table: readonly (readonly [RegExp, string])[]): string | null => {
+  for (const [pattern, slot] of table) if (pattern.test(value)) return slot;
+  return null;
+};
+
+/**
+ * The slot a reference's own name claims, and the slot its capture selector proves — when both are
+ * unambiguous. Returns null for either when the vocabulary does not confidently cover it.
+ */
+export function slotClaimAndCapture(ref: Pick<Reference, 'component' | 'selector'> & { blueprint?: { selector?: string } }): {
+  readonly claimed: string | null;
+  readonly captured: string | null;
+} {
+  return {
+    claimed: slotOf((ref.component ?? '').toLowerCase(), NAME_SLOTS),
+    captured: slotOf(captureSelector(ref), SELECTOR_SLOTS),
+  };
+}
+
 export type GranularityFinding = {
-  readonly id: 'REF-WHOLE-PAGE' | 'REF-DUPLICATE-CAPTURE' | 'REF-NO-PARTS' | 'REF-PART-CONCENTRATION' | 'REF-SURFACE-UNCOVERED';
+  readonly id: 'REF-WHOLE-PAGE' | 'REF-DUPLICATE-CAPTURE' | 'REF-NO-PARTS' | 'REF-PART-CONCENTRATION' | 'REF-SURFACE-UNCOVERED' | 'REF-NAME-MISMATCH';
   readonly message: string;
   /** Reference identifiers the finding is about, as `source (component)`. */
   readonly refs: readonly string[];
@@ -98,6 +139,21 @@ export function auditBoardGranularity(
       message:
         `the board holds ${parts.length} component-scoped capture${parts.length === 1 ? '' : 's'}, below the ${MIN_PART_CAPTURES} needed to compose section by section. Section-granular composition takes each section's best-fit part from possibly different references; with no parts there is nothing to assemble and the build falls back to imitating one page.`,
       refs: parts.map(label),
+    });
+  }
+
+  // Name truth: a reference whose name claims one slot while its capture proves another hides the
+  // board's real shape. Read as a list of component names the board looks varied; measured by
+  // selector it is the same part repeatedly, and only the mismatch explains the gap.
+  const mislabelled = measurable
+    .map((ref) => ({ ref, ...slotClaimAndCapture(ref) }))
+    .filter((entry) => entry.claimed !== null && entry.captured !== null && entry.claimed !== entry.captured);
+  if (mislabelled.length > 0) {
+    findings.push({
+      id: 'REF-NAME-MISMATCH',
+      message:
+        `${mislabelled.length} reference${mislabelled.length === 1 ? '' : 's'} name a slot the capture contradicts: ${mislabelled.map((e) => `\`${e.ref.component}\` claims ${e.claimed} but was captured at ${e.captured}`).join('; ')}. The name is what every downstream reader sees — the composer choosing a part for a section, and the human scanning the board — so a board of three navs reads as varied coverage while measuring as one slot three times. Rename the capture to what it holds, or recapture the slot the name claims.`,
+      refs: mislabelled.map((e) => label(e.ref)),
     });
   }
 

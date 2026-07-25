@@ -52,8 +52,11 @@ make the board read larger than it is. Granularity alone is not coverage. Five c
 install blocks — are two parts studied repeatedly while every other section carries no evidence, and
 those sections then get whatever the build invents. The board is worked down the surfaces the domain
 brief declares, one part per section it intends to compose. `omd ref granularity` audits both and
-reports `REF-WHOLE-PAGE`, `REF-DUPLICATE-CAPTURE`, `REF-NO-PARTS`, `REF-PART-CONCENTRATION`, and
-`REF-SURFACE-UNCOVERED`; any of them means the board must be recaptured at component scope across the
+reports `REF-WHOLE-PAGE`, `REF-DUPLICATE-CAPTURE`, `REF-NO-PARTS`, `REF-PART-CONCENTRATION`,
+`REF-SURFACE-UNCOVERED`, and `REF-NAME-MISMATCH`. A capture is named for what it holds: a reference
+called `*-hero-*` captured at `header` tells every downstream reader that the hero is covered when
+what exists is another nav, and since the name is the only thing most readers see, the mislabel hides
+the board's real shape rather than merely being untidy. Any of these any of them means the board must be recaptured at component scope across the
 surfaces that still have nothing, because a board of whole-page captures can only
 be traced, and tracing a whole page is the derivative failure the transfer boundary forbids.
 

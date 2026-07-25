@@ -100,8 +100,14 @@ component anatomy, and section-granular composition has nothing to take from it.
 the same source at the same selector are one piece of evidence wearing two names — capture a
 different part of that source or drop the duplicate. Run `omd ref granularity` before handing the
 board on; `REF-WHOLE-PAGE`, `REF-DUPLICATE-CAPTURE`, `REF-NO-PARTS`, `REF-PART-CONCENTRATION`, and
-`REF-SURFACE-UNCOVERED` each mean the board cannot be assembled from and must be recaptured at
+`REF-SURFACE-UNCOVERED`, and `REF-NAME-MISMATCH` each mean the board cannot be assembled from and must be recaptured at
 component scope, across the surfaces that still have nothing.
+
+Name a capture for what it holds. A reference called `*-hero-*` that was captured at `header` tells
+every downstream reader — the composer picking a part for a section, and the human scanning the
+board — that the hero is covered when what exists is a third nav. The name is the only thing most
+readers see, so a mislabelled capture hides the board's real shape rather than merely being untidy.
+`REF-NAME-MISMATCH` reports it.
 
 Cover the page, do not restudy one slot. Capturing the same element from three sources answers
 "how do others build this one part" — worth doing once — but five captures that collapse onto two

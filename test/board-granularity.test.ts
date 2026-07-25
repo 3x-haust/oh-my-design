@@ -5,6 +5,7 @@ import {
   auditBoardGranularity,
   captureSelector,
   isWholePageCapture,
+  slotClaimAndCapture,
 } from '../core/ref/board-granularity.ts';
 import type { Reference } from '../core/types.ts';
 
@@ -131,4 +132,39 @@ test('surface coverage is only reported when the brief declared surfaces', () =>
   ];
   assert.ok(!auditBoardGranularity(board).some((f) => f.id === 'REF-SURFACE-UNCOVERED'));
   assert.ok(auditBoardGranularity(board, { surfaces: 6 }).some((f) => f.id === 'REF-SURFACE-UNCOVERED'));
+});
+
+test('a reference whose name claims a slot its capture contradicts is named', () => {
+  // Both cases are from the live board, verified against the saved screenshots: a ref called
+  // `warp-agentic-hero-craft` whose shot is a nav bar, and `hero-install-tabs` whose shot is one
+  // line of shell inside a code block.
+  const board = [
+    ref('https://www.warp.dev', 'warp-agentic-hero-craft', 'header'),
+    ref('https://vite.dev', 'hero-install-tabs', '.language-bash'),
+    ref('https://bun.sh', 'cli-header-nav', 'header'),
+  ];
+  const finding = auditBoardGranularity(board).find((f) => f.id === 'REF-NAME-MISMATCH');
+  assert.ok(finding, 'a name that contradicts its capture must be reported');
+  assert.match(finding!.message, /`warp-agentic-hero-craft` claims hero but was captured at nav/);
+  assert.match(finding!.message, /`hero-install-tabs` claims hero but was captured at code block/);
+  assert.equal(finding!.refs.length, 2, 'the honestly named nav must not be reported');
+});
+
+test('slotClaimAndCapture reads a name and a selector only when each is unambiguous', () => {
+  assert.deepEqual(slotClaimAndCapture({ component: 'cli-header-nav', selector: 'header' } as never), { claimed: 'nav', captured: 'nav' });
+  assert.deepEqual(slotClaimAndCapture({ component: 'site-footer', selector: 'footer' } as never), { claimed: 'footer', captured: 'footer' });
+  assert.deepEqual(slotClaimAndCapture({ component: 'install-codeblock', selector: 'pre' } as never), { claimed: 'code block', captured: 'code block' });
+  // `header-nav` must not read as `hero`: the slot words are matched as whole segments.
+  assert.equal(slotClaimAndCapture({ component: 'header-nav', selector: '.x' } as never).claimed, 'nav');
+  // Outside the vocabulary nothing is claimed and nothing is asserted.
+  assert.deepEqual(slotClaimAndCapture({ component: 'proof-band', selector: '.proof' } as never), { claimed: null, captured: null });
+});
+
+test('an honestly named board raises no mismatch', () => {
+  const board = [
+    ref('https://a.com', 'cli-header-nav', 'header'),
+    ref('https://b.com', 'install-codeblock', 'pre'),
+    ref('https://c.com', 'site-footer', 'footer'),
+  ];
+  assert.ok(!auditBoardGranularity(board).some((f) => f.id === 'REF-NAME-MISMATCH'));
 });
