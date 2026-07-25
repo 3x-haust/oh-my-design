@@ -1,0 +1,12 @@
+{
+  "source": "https://warp.dev",
+  "component": "motion-hero",
+  "invariants": {
+    "animatedShare": 0.1449,
+    "scrollChoreography": [
+      { "step": 1, "fired": 1, "entered": 10 },
+      { "step": 2, "fired": 1, "entered": 9 }
+    ]
+  },
+  "energyCurve": { "peakEnergy": 0.0125 }
+}

@@ -107,6 +107,8 @@ interface Opts {
   costliestError?: string;
   /** UX anchor: surface classification — marketing | product | editorial | mixed. (`omd frame set --surface "..."`) */
   surface?: string;
+  /** Reference directory for `omd craft-usage` (default `<cwd>/.omd/refs`). */
+  refs?: string;
   /** Task coverage matrix rows for product or mixed surfaces. (`omd frame set --task-matrix "T1 …"`) */
   taskMatrix?: string;
   /** Render desktop+mobile fixed and full-page proofs in one browser (`omd render <page> --proofs -o <prefix>`). */
@@ -1622,6 +1624,47 @@ async function cmdCraftCapture(opts: Opts): Promise<never> {
   process.exit(0);
 }
 
+/**
+ * Gates the "captured role-② craft declined to stillness" under-reach: reads the captured reference
+ * signatures, measures the built page in a real browser, and fails when a persuasion surface that
+ * captured scroll-linked craft ships static.
+ */
+async function cmdCraftUsage(opts: Opts): Promise<never> {
+  const target = opts._[0];
+  if (!target) throw new Error('usage: omd craft-usage <page> [--surface marketing|product|…] [--refs <dir>] [--selector <css>] [--viewport WxH] [--json]');
+  const { readCapturedCraftSignals, hasCapturedScrollCraft, checkCraftUsage, EXEMPT_SURFACES } = await import('../core/ref/craft-usage.ts');
+  const { parseViewport } = await import('../core/render/index.ts');
+  const { captureReferenceCraft } = await import('../core/ref/reference-craft-capture.ts');
+  const refsDir = opts.refs ?? join(process.cwd(), '.omd', 'refs');
+  const signals = readCapturedCraftSignals(refsDir);
+  const capturedScrollCraft = hasCapturedScrollCraft(signals);
+  const built = await captureReferenceCraft(target, {
+    source: target,
+    as: 'built',
+    technique: 'as shipped',
+    selector: opts.selector ?? null,
+    viewport: parseViewport(opts.viewport ?? '1440x900'),
+  });
+  const surface = opts.surface ?? 'marketing';
+  const finding = checkCraftUsage({ surface, capturedScrollCraft, builtScrollLinked: built.motion.scrollLinked });
+  const payload = {
+    surface,
+    refs: signals.length,
+    capturedScrollCraft,
+    built: { peakEnergy: built.motion.peakEnergy, scrollLinked: built.motion.scrollLinked },
+    findings: finding ? [finding] : [],
+  };
+  if (opts.json) process.stdout.write(JSON.stringify(payload));
+  else if (finding) console.error(`[error] ${finding.id} (surface=${surface}, refs=${signals.length}, built peakEnergy=${built.motion.peakEnergy}, scrollLinked=${built.motion.scrollLinked}): ${finding.message}`);
+  else {
+    const reason = EXEMPT_SURFACES.has(surface)
+      ? 'surface is exempt — its correct risk is functional'
+      : capturedScrollCraft ? 'captured scroll craft is reproduced in the build' : 'no captured scroll craft to reproduce';
+    console.log(`ok — ${reason} (surface=${surface}, refs=${signals.length})`);
+  }
+  process.exit(finding ? 1 : 0);
+}
+
 /** Final byte-freshness evidence only; this does not judge semantic copy/source fidelity. */
 function cmdSource(mode: string | undefined, opts: Opts): never {
   const sourceRoot = resolve(opts._[0] ?? process.cwd());
@@ -2539,6 +2582,7 @@ function usage(): never {
     + '  domain check [--input domain-brief.json] [--json]  validate the domain-analysis brief\n'
     + '  craft-fidelity check --input pair.json [--json]  verify a generated part reproduced the reference craft\n'
     + '  craft-capture <url> --as <slug> --technique "<t>" [--selector <css>] [--viewport WxH] [--json]  measure a reference-craft-v1 from a real browser\n'
+    + '  craft-usage <page> [--surface S] [--refs dir] [--json]  fail when captured scroll craft was declined to a static build\n'
     + '  preflight --input activation-context.json [--json]  read-only activation validation\n'
     + '  text-slop [file] [--json]                   advisory AI-cliche scan of copy (default .omd/copy-deck.md)\n'
     + '  visual-richness [file] [--register R] [--json]  advisory carrier read of composition (default .omd/composition.md)\n'
@@ -2658,6 +2702,7 @@ async function main(): Promise<never> {
   if (cmd === 'domain') return cmdDomain(sub, parseArgs(args.slice(2)));
   if (cmd === 'craft-fidelity') return cmdCraftFidelity(sub, parseArgs(args.slice(2)));
   if (cmd === 'craft-capture') return cmdCraftCapture(parseArgs(args.slice(1)));
+  if (cmd === 'craft-usage') return cmdCraftUsage(parseArgs(args.slice(1)));
   if (cmd === 'stack') return cmdStack(parseArgs(args.slice(1)));
   if (cmd === 'text-slop') return cmdTextSlop(parseArgs(args.slice(1)));
   if (cmd === 'visual-richness') return cmdVisualRichness(parseArgs(args.slice(1)));

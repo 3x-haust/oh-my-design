@@ -1,0 +1,11 @@
+{
+  "source": "https://example.com",
+  "component": "plain-doc",
+  "invariants": {
+    "animatedShare": 0.0,
+    "scrollChoreography": [
+      { "step": 1, "fired": 0, "entered": 6 }
+    ]
+  },
+  "energyCurve": { "peakEnergy": 0 }
+}
