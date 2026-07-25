@@ -108,6 +108,8 @@ interface Opts {
   costliestError?: string;
   /** UX anchor: surface classification — marketing | product | editorial | mixed. (`omd frame set --surface "..."`) */
   surface?: string;
+  /** Lighthouse report path for `omd award score --lighthouse <report.json>`. */
+  lighthouse?: string;
   /** Reference directory for `omd craft-usage` (default `<cwd>/.omd/refs`). */
   refs?: string;
   /** Task coverage matrix rows for product or mixed surfaces. (`omd frame set --task-matrix "T1 …"`) */
@@ -1723,6 +1725,89 @@ async function cmdNoJs(opts: Opts): Promise<never> {
   process.exit(finding ? 1 : 0);
 }
 
+/**
+ * Scores a page against the published Awwwards Developer Award rubric from evidence OMD already
+ * collects. Axes with no evidence are excluded and reported as coverage, never fabricated.
+ */
+async function cmdAward(mode: string | undefined, opts: Opts): Promise<never> {
+  const target = opts._[0];
+  if (mode !== 'score' || !target) throw new Error('usage: omd award score <page> [--lighthouse <report.json>] [--viewport WxH] [--json]');
+  const { scoreAward } = await import('../core/award/rubric.ts');
+  const { loadRules, check } = await import('../core/rules/engine.ts');
+  const { extractLighthouseMetrics } = await import('../core/perf/lighthouse.ts');
+  const { parseViewport, extractIr } = await import('../core/render/index.ts');
+  const { normalize } = await import('../core/ir/normalize.ts');
+  const { observeNoJsContent, checkNoJsContent } = await import('../core/render/no-js.ts');
+  const { captureReferenceCraft } = await import('../core/ref/reference-craft-capture.ts');
+
+  const viewport = parseViewport(opts.viewport ?? '1440x900');
+  const rules = loadRules(join(root, 'core', 'rules', 'builtin'));
+  const ir = normalize(await extractIr(target, { viewport }));
+  const violationsList = check(ir, rules);
+  const countOf = (id: RegExp): number => violationsList.filter((v: { id: string }) => id.test(v.id)).length;
+
+  // Mobile reflow: the narrow render must not overflow horizontally.
+  const mobileIr = normalize(await extractIr(target, { viewport: parseViewport('390x844') }));
+  const mobileRoot = mobileIr.nodes.find((n) => n.parent === null);
+  const mobileReflows = mobileRoot ? mobileRoot.box.w <= 390 + 1 : undefined;
+
+  const markupFacts = await documentMarkupFacts(target, viewport);
+  const craft = await captureReferenceCraft(target, {
+    source: target, as: 'award', technique: 'as shipped', selector: null, viewport,
+  }).catch(() => null);
+  const noJs = await observeNoJsContent(target, { viewport }).catch(() => null);
+
+  const performance = opts.lighthouse
+    ? extractLighthouseMetrics(inputJson(opts.lighthouse, 'omd award score')).performance ?? undefined
+    : undefined;
+
+  const result = scoreAward({
+    ...(performance === undefined ? {} : { performance }),
+    ...(mobileReflows === undefined ? {} : { mobileReflows }),
+    violations: {
+      ux: countOf(/^UX-/), hitArea: countOf(/^HIT-/), headingOrder: countOf(/^HEADING-/),
+      system: countOf(/^SYSTEM-|^TOKEN-/), contrast: countOf(/^CONTRAST-/), focus: countOf(/^FOCUS-/),
+    },
+    markup: markupFacts,
+    ...(craft ? { motion: { scrollLinked: craft.motion.scrollLinked, peakEnergy: craft.motion.peakEnergy, reducedMotionSafe: craft.motion.reducedMotionSafe } } : {}),
+    ...(noJs ? { noJsSafe: checkNoJsContent(noJs) === null } : {}),
+  });
+
+  if (opts.json) process.stdout.write(JSON.stringify(result));
+  else {
+    for (const axis of result.axes) {
+      console.log(`  ${axis.axis.padEnd(10)} w=${axis.weight.toFixed(2)}  ${axis.score === null ? '  — ' : axis.score.toFixed(1).padStart(4)}  ${axis.source}`);
+    }
+    console.log(`  ${'weighted'.padEnd(10)}         ${result.weighted.toFixed(2)}  (coverage ${Math.round(result.coverage * 100)}%) → ${result.verdict}`);
+    if (result.floorFailures.length > 0) console.error(`  floor failures (cannot be averaged away): ${result.floorFailures.join(', ')}`);
+  }
+  process.exit(result.verdict === 'below-hm' ? 1 : 0);
+}
+
+/** Document-level markup facts the semantics/markup axes score. */
+async function documentMarkupFacts(target: string, viewport: { width: number; height: number }): Promise<{
+  hasLang: boolean; hasTitle: boolean; hasViewportMeta: boolean; hasDescription: boolean; hasOpenGraph: boolean; imagesMissingAlt: number;
+}> {
+  const { chromium } = await import('playwright');
+  const { pathToFileURL } = await import('node:url');
+  const url = /^https?:\/\//.test(target) ? target : pathToFileURL(resolve(target)).href;
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage({ viewport });
+    await page.goto(url, { waitUntil: 'domcontentloaded' });
+    return await page.evaluate(() => ({
+      hasLang: document.documentElement.lang.trim().length > 0,
+      hasTitle: document.title.trim().length > 0,
+      hasViewportMeta: document.querySelector('meta[name="viewport"]') !== null,
+      hasDescription: (document.querySelector('meta[name="description"]') as HTMLMetaElement | null)?.content.trim().length ? true : false,
+      hasOpenGraph: document.querySelector('meta[property^="og:"]') !== null,
+      imagesMissingAlt: Array.from(document.querySelectorAll('img')).filter((img) => !img.getAttribute('alt')).length,
+    }));
+  } finally {
+    await browser.close();
+  }
+}
+
 /** Final byte-freshness evidence only; this does not judge semantic copy/source fidelity. */
 function cmdSource(mode: string | undefined, opts: Opts): never {
   const sourceRoot = resolve(opts._[0] ?? process.cwd());
@@ -2643,6 +2728,7 @@ function usage(): never {
     + '  craft-usage <page> [--surface S] [--refs dir] [--json]  fail when captured scroll craft was declined to a static build\n'
     + '  recipe list [--json]                        list the installable recipe library\n'
     + '  no-js <page> [--viewport WxH] [--json]      fail when content is gated behind JavaScript\n'
+    + '  award score <page> [--lighthouse report.json] [--json]  score against the Awwwards developer rubric\n'
     + '  recipe show <name> [--stack S] [--json]     print the files an install would write\n'
     + '  recipe add <name> [--stack react|vanilla] [--out dir]  install a recipe as real source\n'
     + '  preflight --input activation-context.json [--json]  read-only activation validation\n'
@@ -2767,6 +2853,7 @@ async function main(): Promise<never> {
   if (cmd === 'craft-usage') return cmdCraftUsage(parseArgs(args.slice(1)));
   if (cmd === 'recipe') return cmdRecipe(sub, parseArgs(args.slice(2)));
   if (cmd === 'no-js') return cmdNoJs(parseArgs(args.slice(1)));
+  if (cmd === 'award') return cmdAward(sub, parseArgs(args.slice(2)));
   if (cmd === 'stack') return cmdStack(parseArgs(args.slice(1)));
   if (cmd === 'text-slop') return cmdTextSlop(parseArgs(args.slice(1)));
   if (cmd === 'visual-richness') return cmdVisualRichness(parseArgs(args.slice(1)));
