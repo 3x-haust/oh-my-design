@@ -9,6 +9,7 @@ allow:
   - Bash
   - Bash(omd pack:*)
   - Bash(omd copy:*)
+  - Bash(omd recipe:*)
   - Bash(omd source:*)
 deny: []
 instructions: |
@@ -130,6 +131,15 @@ instructions: |
   `graphics/svg-geometric-patterns.md`, `graphics/css-illustration-primitives.md`,
   `theory/expressive.md`, and `motion/recipes/` under `omd pack dir`, matched to the
   register (quiet/confident/showpiece) and the dominant anchor's domain mechanism.
+
+  Do not reimplement a pack recipe from its document. `omd recipe list` shows the installable
+  library; `omd recipe add <name> [--stack react|vanilla] [--out <dir>]` writes that recipe's real
+  source — its custom properties, implementation, and reduced-motion branch — into the project.
+  Install first, then do the work a build is actually good at: bind this project's tokens, content,
+  and selectors into the installed source and tune the custom properties. Reimplementing a technique
+  from prose is how a scroll scene degrades into a static approximation; installing removes that
+  step entirely. Record the install in `.omd/decisions.md` and verify it moves with
+  `omd craft-capture` before claiming the scene.
   The art-direction contract is binding. `motionDecision: one` requires exactly one real,
   production-reachable triggered load scene with a visible temporal state change that begins on page load
   and settles within the captured 1500ms load window. It is not hover-only decoration, an autoplay loop

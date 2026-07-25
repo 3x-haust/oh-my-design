@@ -136,19 +136,26 @@ export function verifyCraftReproduction(reference: ReferenceCraft, generated: Re
   const ref = validateReferenceCraft(reference);
   const gen = validateReferenceCraft(generated);
 
-  if (gen.motion.peakEnergy < CRAFT_ENERGY_FLOOR) {
+  if (ref.motion.scrollLinked && !gen.motion.scrollLinked) {
+    throw new CraftFidelityError('reproduction dropped the reference\'s scroll-linked response');
+  }
+
+  // Compare like with like. A scroll-position-scrubbed scene is time-STABLE by contract
+  // (`scroll-scene-evidence-v1` requires exactly that), so its time-energy is legitimately zero and
+  // an energy floor would punish the most correct implementation. The floor and fidelity ratio
+  // therefore apply only when the REFERENCE itself carries time-energy — a load or interaction
+  // scene. When it does not, scroll-linkage (checked above) is the proof of motion.
+  const timeBased = ref.motion.peakEnergy >= CRAFT_ENERGY_FLOOR;
+  if (timeBased && gen.motion.peakEnergy < CRAFT_ENERGY_FLOOR) {
     throw new CraftFidelityError(
       `reproduction is static: peak energy ${gen.motion.peakEnergy} is below the ${CRAFT_ENERGY_FLOOR} floor — the craft was not built, only approximated`,
     );
   }
   const energyRatio = ref.motion.peakEnergy > 0 ? gen.motion.peakEnergy / ref.motion.peakEnergy : 1;
-  if (energyRatio < CRAFT_ENERGY_RATIO) {
+  if (timeBased && energyRatio < CRAFT_ENERGY_RATIO) {
     throw new CraftFidelityError(
       `reproduction is a faint ghost: ${gen.motion.peakEnergy} is ${energyRatio.toFixed(2)}× the reference's ${ref.motion.peakEnergy}, below the ${CRAFT_ENERGY_RATIO} fidelity ratio`,
     );
-  }
-  if (ref.motion.scrollLinked && !gen.motion.scrollLinked) {
-    throw new CraftFidelityError('reproduction dropped the reference\'s scroll-linked response');
   }
   if (!gen.motion.reducedMotionSafe) {
     throw new CraftFidelityError('reproduction has no reduced-motion baseline — motion craft may never gate content');
