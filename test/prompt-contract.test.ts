@@ -701,3 +701,15 @@ test('the loop and the ultradesign skill run omd craft-usage on a persuasion sur
   assert.match(skill, /`CRAFT-DECLINED-TO-STILL` means the scout captured scroll-linked craft[\s\S]*build shipped static/);
   assert.match(skill, /`product`\/`quiet` surfaces are exempt/);
 });
+test('the loop and the hand install pack recipes instead of reimplementing them', () => {
+  const loop = read('core/protocol/human-design-loop.md').replace(/\s+/g, ' ');
+  assert.match(loop, /A pack recipe is installed, not reimplemented/);
+  assert.match(loop, /`omd recipe add <name> \[--stack react\|vanilla\]` writes that recipe's real source/);
+  assert.match(loop, /degrades into a static approximation/);
+  assert.match(loop, /verified with `omd craft-capture` before the scene is claimed/);
+
+  const hand = read('src/agents/hand.agent.yaml').replace(/\s+/g, ' ');
+  assert.match(hand, /Do not reimplement a pack recipe from its document/);
+  assert.match(hand, /- Bash\(omd recipe:\*\)/);
+  assert.match(hand, /Install first, then do the work a build is actually good at/);
+});

@@ -53,6 +53,7 @@ interface Opts {
   ir?: string;
   layer?: string;
   out?: string;
+  stack?: string;
   viewport?: string;
   problem?: string;
   reframe?: string;
@@ -1665,6 +1666,49 @@ async function cmdCraftUsage(opts: Opts): Promise<never> {
   process.exit(finding ? 1 : 0);
 }
 
+/**
+ * Installs a recipe's real source into the project instead of asking the build to reimplement it
+ * from the knowledge-pack document — the step that closes the "seeing is not building" gap.
+ */
+async function cmdRecipe(mode: string | undefined, opts: Opts): Promise<never> {
+  const packRoot = join(root, 'core');
+  const { listRecipes, loadRecipe, installRecipe } = await import('../core/recipe/store.ts');
+  const { materializeRecipe } = await import('../core/recipe/materialize.ts');
+
+  if (mode === 'list') {
+    const refs = listRecipes(packRoot);
+    if (opts.json) process.stdout.write(JSON.stringify(refs.map((r) => ({ name: r.name, family: r.family }))));
+    else for (const ref of refs) console.log(`  ${ref.family.padEnd(12)} ${ref.name}`);
+    process.exit(0);
+  }
+
+  const name = opts._[0];
+  if (!name || (mode !== 'show' && mode !== 'add')) {
+    throw new Error('usage: omd recipe list [--json] | omd recipe show <name> [--stack react|vanilla] [--json] | omd recipe add <name> [--stack react|vanilla] [--out <dir>] [--json]');
+  }
+  const stack = opts.stack === 'react' ? 'react' : 'vanilla';
+
+  if (mode === 'show') {
+    const result = materializeRecipe(loadRecipe(packRoot, name), { stack });
+    if (opts.json) process.stdout.write(JSON.stringify(result));
+    else {
+      for (const file of result.files) console.log(`── ${file.path} ──\n${file.contents}`);
+      for (const note of result.notes) console.log(`note: ${note}`);
+    }
+    process.exit(0);
+  }
+
+  const outDir = opts.out ?? join(process.cwd(), 'src', 'omd');
+  const result = installRecipe(packRoot, name, { stack, outDir });
+  if (opts.json) process.stdout.write(JSON.stringify(result));
+  else {
+    for (const path of result.written) console.log(`installed ${relative(process.cwd(), path)}`);
+    for (const note of result.notes) console.log(`note: ${note}`);
+    console.log(`Verify it moves once wired: omd craft-capture <page> --as ${name} --technique "${name}" --selector <css>`);
+  }
+  process.exit(0);
+}
+
 /** Final byte-freshness evidence only; this does not judge semantic copy/source fidelity. */
 function cmdSource(mode: string | undefined, opts: Opts): never {
   const sourceRoot = resolve(opts._[0] ?? process.cwd());
@@ -2583,6 +2627,9 @@ function usage(): never {
     + '  craft-fidelity check --input pair.json [--json]  verify a generated part reproduced the reference craft\n'
     + '  craft-capture <url> --as <slug> --technique "<t>" [--selector <css>] [--viewport WxH] [--json]  measure a reference-craft-v1 from a real browser\n'
     + '  craft-usage <page> [--surface S] [--refs dir] [--json]  fail when captured scroll craft was declined to a static build\n'
+    + '  recipe list [--json]                        list the installable recipe library\n'
+    + '  recipe show <name> [--stack S] [--json]     print the files an install would write\n'
+    + '  recipe add <name> [--stack react|vanilla] [--out dir]  install a recipe as real source\n'
     + '  preflight --input activation-context.json [--json]  read-only activation validation\n'
     + '  text-slop [file] [--json]                   advisory AI-cliche scan of copy (default .omd/copy-deck.md)\n'
     + '  visual-richness [file] [--register R] [--json]  advisory carrier read of composition (default .omd/composition.md)\n'
@@ -2703,6 +2750,7 @@ async function main(): Promise<never> {
   if (cmd === 'craft-fidelity') return cmdCraftFidelity(sub, parseArgs(args.slice(2)));
   if (cmd === 'craft-capture') return cmdCraftCapture(parseArgs(args.slice(1)));
   if (cmd === 'craft-usage') return cmdCraftUsage(parseArgs(args.slice(1)));
+  if (cmd === 'recipe') return cmdRecipe(sub, parseArgs(args.slice(2)));
   if (cmd === 'stack') return cmdStack(parseArgs(args.slice(1)));
   if (cmd === 'text-slop') return cmdTextSlop(parseArgs(args.slice(1)));
   if (cmd === 'visual-richness') return cmdVisualRichness(parseArgs(args.slice(1)));

@@ -89,6 +89,40 @@ async function partHasContent(page: import('playwright').Page, selector: string 
   }, selector);
 }
 
+/** Visual properties a scroll-scrubbed animation drives; compared across two scroll positions. */
+const SCRUB_PROPERTIES = ['opacity', 'transform', 'filter', 'backgroundColor', 'color', 'clipPath'] as const;
+
+/**
+ * True when the part's own rendered style changes with scroll POSITION — the signature of a
+ * scroll-position-scrubbed animation (`animation-timeline: view()/scroll()`, GSAP `scrub: true`).
+ *
+ * Such an animation is deliberately STABLE across time at a fixed position — that is exactly what
+ * `scroll-scene-evidence-v1` demands — so time-energy cannot see it. Comparing computed style at two
+ * positions is deterministic and immune to the clipping/alignment errors a pixel comparison of a
+ * moving element suffers.
+ */
+async function isScrubbed(page: import('playwright').Page, selector: string | null): Promise<boolean> {
+  if (!selector) return false;
+  const sample = async (fraction: number): Promise<string[] | null> =>
+    page.evaluate(([sel, f, props]) => {
+      const el = document.querySelector(sel as string);
+      if (!el) return null;
+      const rect = el.getBoundingClientRect();
+      window.scrollBy({ top: rect.top - window.innerHeight * (f as number), left: 0, behavior: 'instant' as ScrollBehavior });
+      return new Promise<string[]>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          const style = getComputedStyle(el);
+          resolve((props as readonly string[]).map((p) => style[p as keyof CSSStyleDeclaration] as string));
+        }));
+      });
+    }, [selector, fraction, SCRUB_PROPERTIES] as const);
+
+  const entering = await sample(0.9);
+  const settled = await sample(0.35);
+  if (!entering || !settled) return false;
+  return entering.some((value, index) => value !== settled[index]);
+}
+
 /**
  * Observes a real browser and returns a validated `reference-craft-v1` for one scoped part.
  * Measures peak motion energy at load and on scroll-into-view, classifies scroll-linkage from a CSS
@@ -122,11 +156,15 @@ export async function captureReferenceCraft(target: string, opts: ReferenceCraft
     const revealB = await page.screenshot({ fullPage: false });
     const revealEnergy = computeEnergy([revealA, revealB]).peakEnergy;
 
+    // 3. Scroll-linkage: a CSS scroll/view timeline, an observed reveal on entry, or a rendered-style
+    //    change across scroll positions (scrubbed motion, which is time-stable by contract and so
+    //    invisible to the energy measurements above).
     const scrollTimeline = await usesScrollTimeline(page, selector);
-    const scrollLinked = scrollTimeline || revealEnergy >= CRAFT_ENERGY_FLOOR;
+    const scrubbed = scrollTimeline ? true : await isScrubbed(page, selector);
+    const scrollLinked = scrollTimeline || scrubbed || revealEnergy >= CRAFT_ENERGY_FLOOR;
     const peakEnergy = Math.min(1, Math.max(loadEnergy, revealEnergy));
 
-    // 3. Reduced-motion baseline: a fresh reduced-motion page must still present the part's content.
+    // 4. Reduced-motion baseline: a fresh reduced-motion page must still present the part's content.
     const reducedPage = await browser.newPage({ viewport });
     let reducedMotionSafe: boolean;
     try {
