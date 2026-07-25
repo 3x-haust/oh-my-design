@@ -737,3 +737,27 @@ test('the loop commits the design system ladders before composition', () => {
   assert.match(loop, /collapsed to a two-rung type scale of \[12, 16\]/);
   assert.match(loop, /`TOKEN-DRIFT` for any rendered value that is not on a committed rung/);
 });
+test('motion theory names the implementation stack and the frequency counter-rule', () => {
+  const motion = read('core/theory/motion.md').replace(/\s+/g, ' ');
+  assert.match(motion, /## The implementation stack/);
+  assert.match(motion, /`animation-timeline: view\(\)`\/`scroll\(\)` is the default/);
+  assert.match(motion, /GSAP became free for every use in 2024 under Webflow's stewardship/);
+  assert.match(motion, /`ScrollTrigger` with `scrub: true` is scroll-position-scrubbed/);
+  assert.match(motion, /a time-driven `ScrollTrigger` callback is not, and does not qualify/);
+  assert.match(motion, /high-frequency, keyboard-initiated interaction[\s\S]*better without\* an entrance animation/);
+  assert.match(motion, /CSS animations and the Web Animations API keep running regardless/);
+});
+
+test('the award-bar eval scores against the rubric, tokens, installs, and no-JS survival', () => {
+  const prompt = read('evals/award-bar/prompt.md').replace(/\s+/g, ' ');
+  assert.match(prompt, /published Awwwards Developer Award rubric rather than an internal target/);
+  const score = read('evals/award-bar/graders/award-score.md').replace(/\s+/g, ' ');
+  assert.match(score, /`coverage` of at least 0\.8/);
+  assert.match(score, /`floorFailures` is empty/);
+  const tokens = read('evals/award-bar/graders/tokens-committed.md').replace(/\s+/g, ' ');
+  assert.match(tokens, /A two-rung type scale such as `\[12, 16\]` is the collapsed case/);
+  const install = read('evals/award-bar/graders/installed-not-reimplemented.md').replace(/\s+/g, ' ');
+  assert.match(install, /records at least one `omd recipe add` install/);
+  const nojs = read('evals/award-bar/graders/content-survives-no-js.md').replace(/\s+/g, ' ');
+  assert.match(nojs, /content accessible with no JS/);
+});

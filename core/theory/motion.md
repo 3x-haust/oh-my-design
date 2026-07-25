@@ -261,6 +261,37 @@ and parallax — are in `core/motion/recipes/`. The easing token vocabulary (--e
 Recipes reference the theory here; the hand wires the recipe parameters from the board's
 motion studies.
 
+## The implementation stack
+
+Recipes are installed with `omd recipe add`, not reimplemented; what follows is what they install on.
+
+**CSS first, always.** `animation-timeline: view()`/`scroll()` is the default for scroll-linked motion
+and the only path that satisfies the scroll-scene contract without scripting: the compositor advances
+it as the reader scrolls, so it is scroll-position-scrubbed by construction and it survives with
+JavaScript disabled. `transform` and `opacity` are the only properties to animate — they reach the
+composite step without touching layout — and a CSS `transition` is interruptible where a `keyframes`
+animation is not, which is why state changes belong in transitions.
+
+**GSAP where CSS cannot reach.** GSAP became free for every use in 2024 under Webflow's stewardship,
+including ScrollTrigger, Flip, MotionPath, Observer, and SplitText, so the licence question that used
+to push work toward weaker tools is gone. Reach for it when the scene needs timeline orchestration,
+pinning, scrubbed sequences across several elements, or FLIP-style layout transitions — things a CSS
+timeline cannot express. `ScrollTrigger` with `scrub: true` is scroll-position-scrubbed in exactly the
+sense the evidence contract requires; a time-driven `ScrollTrigger` callback is not, and does not
+qualify. Smooth-scroll libraries (Lenis and its peers) are a separate, optional layer: they change the
+feel of scrolling itself and must not be the thing that makes content reachable.
+
+**The frequency rule cuts the other way.** A high-frequency, keyboard-initiated interaction —
+a command palette, a context menu, a tab switch — is *better without* an entrance animation. Seen
+hundreds of times a day, the animation stops being delight and becomes latency the user has to sit
+through. Raycast ships no entrance animation and it feels correct. Ambition belongs to the moments a
+reader meets once or twice: the load scene, the scroll narrative, the signature.
+
+**Main-thread independence decides the library.** A `requestAnimationFrame`-driven animation (the
+default in most React motion libraries) drops frames whenever the main thread is busy — exactly when a
+page is hydrating or fetching. CSS animations and the Web Animations API keep running regardless.
+Where an animation must stay smooth during load, it belongs in CSS or WAAPI, not in a rAF loop.
+
 ## Sources
 
 - Nielsen, "Response Times: The 3 Important Limits" (1993) — 0.1s / 1s / 10s thresholds
