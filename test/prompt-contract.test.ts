@@ -729,3 +729,11 @@ test('the loop scores against the published Awwwards developer rubric', () => {
   assert.match(loop, /Honourable Mention is 6\.5; the Developer Award is above 7/);
   assert.match(loop, /does not fake a number for it/);
 });
+test('the loop commits the design system ladders before composition', () => {
+  const loop = read('core/protocol/human-design-loop.md').replace(/\s+/g, ' ');
+  assert.match(loop, /ladders are committed before composition, in `\.omd\/tokens\.json`/);
+  assert.match(loop, /at least four type rungs, each step at least 1\.15x its neighbour/);
+  assert.match(loop, /display moment of at least 2\.5x/);
+  assert.match(loop, /collapsed to a two-rung type scale of \[12, 16\]/);
+  assert.match(loop, /`TOKEN-DRIFT` for any rendered value that is not on a committed rung/);
+});
