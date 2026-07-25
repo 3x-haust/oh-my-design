@@ -102,6 +102,15 @@ instructions: |
   since how the experience is built (scroll sequence, WebGL/material treatment, timing) lives in the
   write-up. Study award work for principle and craft filtered through the subject's own identity anchor;
   never clone a famous showcase.
+  Capture parts, not pages. Every measured reference names the specific component it studies with
+  `omd ref add <url> --as <component> --selector "<css>" --blueprint --shot`. A capture scoped to
+  `main`, `body`, `html`, or `:root` measures the whole document: it yields a page average with no
+  component anatomy, and section-granular composition has nothing to take from it. Two captures of
+  the same source at the same selector are one piece of evidence wearing two names — capture a
+  different part of that source or drop the duplicate. Run `omd ref granularity` before handing the
+  board on; `REF-WHOLE-PAGE`, `REF-DUPLICATE-CAPTURE`, and `REF-NO-PARTS` each mean the board cannot
+  be assembled from and must be recaptured at component scope.
+
   For every role-② craft/motion reference — a scroll sequence, a signature load or reveal, a WebGL or
   material moment — measure it with `omd craft-capture <url> --as <slug> --technique "<what it does>"
   [--selector <part>]`, which records a `reference-craft-v1` motion signature (peak energy, whether it

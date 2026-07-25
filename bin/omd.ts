@@ -1713,6 +1713,18 @@ async function cmdRecipe(mode: string | undefined, opts: Opts): Promise<never> {
   process.exit(0);
 }
 
+
+/** Fails when the captured board holds no parts to compose section by section. */
+async function cmdRefGranularity(opts: Opts): Promise<never> {
+  const { loadRefs } = await import('../core/ref/store.ts');
+  const { auditBoardGranularity } = await import('../core/ref/board-granularity.ts');
+  const findings = auditBoardGranularity(loadRefs(process.cwd()));
+  if (opts.json) process.stdout.write(JSON.stringify({ ok: findings.length === 0, findings }));
+  else if (findings.length === 0) console.log('ok — the board holds component-scoped parts to compose from');
+  else for (const finding of findings) console.error(`[error] ${finding.id}: ${finding.message}\n  ${finding.refs.join('\n  ')}`);
+  process.exit(findings.length > 0 ? 1 : 0);
+}
+
 /** Fails when the page's content is gated behind JavaScript rather than enhanced by it. */
 async function cmdNoJs(opts: Opts): Promise<never> {
   const target = opts._[0];
@@ -2732,6 +2744,7 @@ function usage(): never {
     + '  ref candidates [manifest]                   print chat-ready Korean-first candidate Markdown\n'
     + '  ref select <candidate-id> [--json]          bind a closed candidate selection to its evidence\n'
     + '  ref audit [--json]                          warn when references were captured sequentially (use ref add-batch)\n'
+    + '  ref granularity [--json]                    fail when the board holds no component-scoped parts\n'
     + '\n'
     + '  design                                       discover evidence and create/refresh .omd/design.md\n'
     + '  design --check                              validate design.md section coverage\n'
@@ -2864,6 +2877,7 @@ async function main(): Promise<never> {
     if (sub === 'candidates') return cmdRefCandidates(opts);
     if (sub === 'select') return cmdRefSelect(opts);
     if (sub === 'audit') return cmdRefAudit(opts);
+    if (sub === 'granularity') return cmdRefGranularity(opts);
     return usage();
   }
 
