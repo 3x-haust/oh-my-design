@@ -23,8 +23,16 @@ export const PAGE_ROOT_SELECTORS: ReadonlySet<string> = new Set([
 /** A board needs at least this many component-scoped captures before it can be assembled from. */
 export const MIN_PART_CAPTURES = 3;
 
+/**
+ * Captures of the SAME part from several sources are one slot studied repeatedly, not several parts.
+ * When one part accounts for at least this share of a board of at least `CONCENTRATION_MIN_CAPTURES`
+ * captures, the board is concentrated: it can compose that one slot well and has nothing for the rest.
+ */
+export const CONCENTRATION_SHARE = 0.5;
+export const CONCENTRATION_MIN_CAPTURES = 4;
+
 export type GranularityFinding = {
-  readonly id: 'REF-WHOLE-PAGE' | 'REF-DUPLICATE-CAPTURE' | 'REF-NO-PARTS';
+  readonly id: 'REF-WHOLE-PAGE' | 'REF-DUPLICATE-CAPTURE' | 'REF-NO-PARTS' | 'REF-PART-CONCENTRATION' | 'REF-SURFACE-UNCOVERED';
   readonly message: string;
   /** Reference identifiers the finding is about, as `source (component)`. */
   readonly refs: readonly string[];
@@ -50,7 +58,10 @@ export function isWholePageCapture(ref: Pick<Reference, 'selector'> & { blueprin
  * Image references are excluded from the part count: they carry reasoning, not anatomy, so they
  * cannot answer "how is this component built" even though they are lawful board members.
  */
-export function auditBoardGranularity(refs: readonly Reference[]): GranularityFinding[] {
+export function auditBoardGranularity(
+  refs: readonly Reference[],
+  opts: { readonly surfaces?: number } = {},
+): GranularityFinding[] {
   const findings: GranularityFinding[] = [];
   const measurable = refs.filter((ref) => ref.kind !== 'image');
 
@@ -88,6 +99,34 @@ export function auditBoardGranularity(refs: readonly Reference[]): GranularityFi
         `the board holds ${parts.length} component-scoped capture${parts.length === 1 ? '' : 's'}, below the ${MIN_PART_CAPTURES} needed to compose section by section. Section-granular composition takes each section's best-fit part from possibly different references; with no parts there is nothing to assemble and the build falls back to imitating one page.`,
       refs: parts.map(label),
     });
+  }
+
+  // Part diversity: three navs from three sites are one slot studied three times, not three parts.
+  if (parts.length >= CONCENTRATION_MIN_CAPTURES) {
+    const bySelector = new Map<string, Reference[]>();
+    for (const ref of parts) {
+      const key = captureSelector(ref);
+      const bucket = bySelector.get(key);
+      if (bucket) bucket.push(ref); else bySelector.set(key, [ref]);
+    }
+    const [topSelector, topRefs] = [...bySelector.entries()].sort((a, b) => b[1].length - a[1].length)[0]!;
+    if (topRefs.length / parts.length >= CONCENTRATION_SHARE) {
+      findings.push({
+        id: 'REF-PART-CONCENTRATION',
+        message:
+          `${topRefs.length} of ${parts.length} component captures measure the same part (\`${topSelector}\`), so the board studies one slot repeatedly instead of covering the page. Capturing the same element from several sources answers "how do others build this one part" — useful once — but it leaves every other section with no evidence to compose from. Capture the sections that still have none.`,
+        refs: topRefs.map(label),
+      });
+    }
+
+    if (opts.surfaces !== undefined && bySelector.size < opts.surfaces) {
+      findings.push({
+        id: 'REF-SURFACE-UNCOVERED',
+        message:
+          `the board holds ${bySelector.size} distinct part${bySelector.size === 1 ? '' : 's'} for ${opts.surfaces} surfaces the domain brief declares, so at least ${opts.surfaces - bySelector.size} surface${opts.surfaces - bySelector.size === 1 ? '' : 's'} will be composed with no reference at all. Section-granular composition needs a part per section it intends to compose; the sections with nothing fall back to whatever the build invents.`,
+        refs: [...bySelector.keys()].map((selector) => `part: ${selector}`),
+      });
+    }
   }
 
   return findings;

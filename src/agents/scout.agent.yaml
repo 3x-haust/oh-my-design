@@ -108,8 +108,16 @@ instructions: |
   component anatomy, and section-granular composition has nothing to take from it. Two captures of
   the same source at the same selector are one piece of evidence wearing two names — capture a
   different part of that source or drop the duplicate. Run `omd ref granularity` before handing the
-  board on; `REF-WHOLE-PAGE`, `REF-DUPLICATE-CAPTURE`, and `REF-NO-PARTS` each mean the board cannot
-  be assembled from and must be recaptured at component scope.
+  board on; `REF-WHOLE-PAGE`, `REF-DUPLICATE-CAPTURE`, `REF-NO-PARTS`, `REF-PART-CONCENTRATION`, and
+  `REF-SURFACE-UNCOVERED` each mean the board cannot be assembled from and must be recaptured at
+  component scope, across the surfaces that still have nothing.
+
+  Cover the page, do not restudy one slot. Capturing the same element from three sources answers
+  "how do others build this one part" — worth doing once — but five captures that collapse onto two
+  slots leave every other section with no evidence, and those sections then get whatever the build
+  invents. Work down the surfaces the domain brief declares and capture the part that solves each
+  one; a nav studied three times while the hero, the process section, and the proof section have
+  nothing is a board that cannot be assembled from.
 
   For every role-② craft/motion reference — a scroll sequence, a signature load or reveal, a WebGL or
   material moment — measure it with `omd craft-capture <url> --as <slug> --technique "<what it does>"

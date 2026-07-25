@@ -48,9 +48,13 @@ studies (`omd ref add <url> --as <component> --selector "<css>" --blueprint --sh
 scoped to a page root — `main`, `body`, `html`, `:root` — measures the whole document and yields a
 page average with no component anatomy, so section-granular composition has nothing to take from it.
 Two captures of the same source at the same selector are one piece of evidence under two names and
-make the board read larger than it is. `omd ref granularity` audits this and reports
-`REF-WHOLE-PAGE`, `REF-DUPLICATE-CAPTURE`, and `REF-NO-PARTS`; any of the three means the board must
-be recaptured at component scope before composition, because a board of whole-page captures can only
+make the board read larger than it is. Granularity alone is not coverage. Five captures that collapse onto two slots — three navs and two
+install blocks — are two parts studied repeatedly while every other section carries no evidence, and
+those sections then get whatever the build invents. The board is worked down the surfaces the domain
+brief declares, one part per section it intends to compose. `omd ref granularity` audits both and
+reports `REF-WHOLE-PAGE`, `REF-DUPLICATE-CAPTURE`, `REF-NO-PARTS`, `REF-PART-CONCENTRATION`, and
+`REF-SURFACE-UNCOVERED`; any of them means the board must be recaptured at component scope across the
+surfaces that still have nothing, because a board of whole-page captures can only
 be traced, and tracing a whole page is the derivative failure the transfer boundary forbids.
 
 ## Subject anchor
