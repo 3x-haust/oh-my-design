@@ -499,6 +499,13 @@ selected projections, handoff receipts, the named landing criteria, and sharp/pr
 fidelity eye verifies the selected macro system at its named destination; neither eye receives raw
 source material. Both treat a failed `omd composition --check`, missing/duplicate canonical axes,
 or wrong landing as a blocker; validator pass never replaces visual/probe review.
+On a `marketing`/`confident`/`showpiece` persuasion surface, the deterministic checks also include
+`omd craft-usage <page> --surface <surface>`. It reads the captured role-② reference signatures and
+measures the built page in a real browser; `CRAFT-DECLINED-TO-STILL` means the scout captured
+scroll-linked craft for this domain but the build shipped static, which is under-reach (RED) —
+reproduce at least one scroll-linked reveal from that captured evidence and verify it with
+`omd craft-fidelity`, or record an explicit brief-driven reason for stillness. `product`/`quiet`
+surfaces are exempt.
 The sharp production review is conjunctive: `signature-fit`, `narrative-fit`, `motion-fit`, and
 `decision-fit` must all pass, and every critical 0–4 score (task/CTA clarity, narrative dependency,
 composition rhythm, responsive hierarchy) must be at least 3. Neither a mean nor a

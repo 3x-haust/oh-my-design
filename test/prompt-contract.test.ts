@@ -692,3 +692,12 @@ test('captured role-② scroll craft cannot be declined to stillness on a persua
   assert.match(loop, /`reference-usage` ledger that marks every role-② craft reference `declined` on the motion axis[\s\S]*machine signal/);
   assert.match(loop, /`product`\/quiet tool surface stays exempt/);
 });
+test('the loop and the ultradesign skill run omd craft-usage on a persuasion surface', () => {
+  const loop = read('core/protocol/human-design-loop.md').replace(/\s+/g, ' ');
+  assert.match(loop, /Production review order[\s\S]*runs `omd craft-usage <page> --surface <surface>`/);
+  assert.match(loop, /`CRAFT-DECLINED-TO-STILL` finding is the measured form of the captured-craft under-reach[\s\S]*RED/);
+  const skill = read('src/skills/omd-ultradesign/SKILL.md').replace(/\s+/g, ' ');
+  assert.match(skill, /deterministic checks also include `omd craft-usage <page> --surface <surface>`/);
+  assert.match(skill, /`CRAFT-DECLINED-TO-STILL` means the scout captured scroll-linked craft[\s\S]*build shipped static/);
+  assert.match(skill, /`product`\/`quiet` surfaces are exempt/);
+});
