@@ -531,6 +531,12 @@ export interface Reference {
    */
   slot?: string;
   /**
+   * Explicit provenance for one `omd ref add-batch` invocation. References in the same batch may
+   * finish far apart when remote pages vary in latency; the shared ID proves one-browser parallel
+   * acquisition without guessing from completion timestamps.
+   */
+  captureBatchId?: string;
+  /**
    * Null for an image, and the type says so on purpose. Pixels cannot be measured this way:
    * there is no spacing ladder to read out of a JPEG. An image reference carries reasoning
    * and nothing else, which also means `ref distance` cannot check it for cloning.

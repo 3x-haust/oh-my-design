@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { auditCaptureTimes } from '../core/ref/capture-audit.ts';
+import { auditCaptureRecords, auditCaptureTimes } from '../core/ref/capture-audit.ts';
 
 const NOW = Date.parse('2026-07-21T12:00:00.000Z');
 const iso = (msAgo: number): string => new Date(NOW - msAgo).toISOString();
@@ -40,4 +40,31 @@ test('auditCaptureTimes tolerates a lone late straggler among a batched set', ()
   // three tight captures + one much later — median gap stays small, so it passes
   const a = auditCaptureTimes([iso(600_000), iso(12_000), iso(10_000), iso(8_000)], NOW);
   assert.equal(a.ok, true);
+});
+
+test('explicit batch provenance passes despite slow remote completion gaps and one direct capture', () => {
+  const records = [
+    { capturedAt: iso(420_000) },
+    { capturedAt: iso(360_000), captureBatchId: 'batch-a' },
+    { capturedAt: iso(300_000), captureBatchId: 'batch-a' },
+    { capturedAt: iso(240_000), captureBatchId: 'batch-a' },
+    { capturedAt: iso(180_000), captureBatchId: 'batch-b' },
+    { capturedAt: iso(120_000), captureBatchId: 'batch-b' },
+    { capturedAt: iso(60_000), captureBatchId: 'batch-b' },
+  ];
+  const result = auditCaptureRecords(records, NOW);
+  assert.equal(result.ok, true);
+  assert.match(result.reason, /explicit shared-batch provenance/);
+});
+
+test('a small batch does not launder a mostly sequential pass', () => {
+  const records = [
+    { capturedAt: iso(360_000), captureBatchId: 'batch-a' },
+    { capturedAt: iso(300_000), captureBatchId: 'batch-a' },
+    { capturedAt: iso(240_000) },
+    { capturedAt: iso(180_000) },
+    { capturedAt: iso(120_000) },
+    { capturedAt: iso(60_000) },
+  ];
+  assert.equal(auditCaptureRecords(records, NOW).ok, false);
 });

@@ -25,6 +25,36 @@ const SEQUENTIAL_GAP_MS = 15_000;
 /** Batching is only material once several references were captured. */
 const MIN_REFS = 4;
 
+export type CaptureAuditRecord = {
+  readonly capturedAt: string;
+  readonly captureBatchId?: string;
+};
+
+export function auditCaptureRecords(records: readonly CaptureAuditRecord[], now: number = Date.now()): CaptureAudit {
+  const recent = records.filter((record) => {
+    const time = Date.parse(record.capturedAt);
+    return Number.isFinite(time) && time <= now && now - time <= RECENT_MS;
+  });
+  if (recent.length >= MIN_REFS) {
+    const groups = new Map<string, number>();
+    for (const record of recent) {
+      if (record.captureBatchId !== undefined) groups.set(record.captureBatchId, (groups.get(record.captureBatchId) ?? 0) + 1);
+    }
+    const batchedRefs = recent.reduce((count, record) => count + (
+      record.captureBatchId !== undefined && (groups.get(record.captureBatchId) ?? 0) >= 2 ? 1 : 0
+    ), 0);
+    if (batchedRefs >= recent.length - 1) {
+      const timing = auditCaptureTimes(recent.map((record) => record.capturedAt), now);
+      return {
+        ok: true,
+        refs: recent.length,
+        medianGapSeconds: timing.medianGapSeconds,
+        reason: `${batchedRefs} of ${recent.length} references carry explicit shared-batch provenance; remote completion gaps do not imply separate browser launches`,
+      };
+    }
+  }
+  return auditCaptureTimes(recent.map((record) => record.capturedAt), now);
+}
 /** Pure core: judge a list of `capturedAt` strings. */
 export function auditCaptureTimes(capturedAt: readonly string[], now: number = Date.now()): CaptureAudit {
   const times = capturedAt
@@ -57,7 +87,10 @@ export function auditCaptureTimes(capturedAt: readonly string[], now: number = D
   };
 }
 
-/** Read the saved reference records for `cwd` and audit their capture times. */
+/** Read the saved reference records for `cwd` and audit explicit batch provenance before legacy timing. */
 export function auditCaptureParallelism(cwd: string, now: number = Date.now()): CaptureAudit {
-  return auditCaptureTimes(loadRefs(cwd).map((r) => r.capturedAt), now);
+  return auditCaptureRecords(loadRefs(cwd).map((reference) => ({
+    capturedAt: reference.capturedAt,
+    ...(reference.captureBatchId === undefined ? {} : { captureBatchId: reference.captureBatchId }),
+  })), now);
 }

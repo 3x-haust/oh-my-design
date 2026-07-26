@@ -204,7 +204,7 @@ test('distances ranks every reference and names what drove the score', () => {
 // ── store ──
 
 const ref: Reference = {
-  source: 'https://linear.app', component: 'search-bar', kind: 'component', capturedAt: new Date().toISOString(), slot: 'hero',
+  source: 'https://linear.app', component: 'search-bar', kind: 'component', capturedAt: new Date().toISOString(), slot: 'hero', captureBatchId: 'batch-test',
   invariants: base, principles: ['Radii split into three rungs, so an input and a card are different materials.'],
 };
 

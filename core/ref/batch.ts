@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { dirname, relative } from 'node:path';
 import { capturePageForRef, withBrowser, parseViewport } from '../render/index.ts';
 import { normalize } from '../ir/normalize.ts';
@@ -51,6 +52,7 @@ export async function addRefsBatch(
   const concurrency = Math.max(1, opts.concurrency ?? 4);
   const rules = loadRules(opts.rulesRoot);
   const outcomes: BatchOutcome[] = new Array<BatchOutcome>(specs.length);
+  const captureBatchId = `batch-${randomUUID()}`;
 
   await withBrowser(async (browser) => {
     let next = 0;
@@ -77,6 +79,7 @@ export async function addRefsBatch(
             component: spec.as,
             kind: spec.selector ? 'component' : 'page',
             capturedAt: new Date().toISOString(),
+            captureBatchId,
             ...(spec.selector ? { selector: spec.selector } : {}),
             ...(spec.slot ? { slot: spec.slot } : {}),
             invariants,
