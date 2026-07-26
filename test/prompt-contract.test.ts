@@ -809,6 +809,17 @@ test('scout can write only its owned synthesis while reference records stay CLI-
   assert.match(scout, /Never touch production source, another `\.omd\/` artifact/);
 });
 
+test('scout batches zone-bound captures without debugging browser transport', () => {
+  const scout = read('src/agents/scout.agent.yaml').replace(/\s+/g, ' ');
+  assert.match(scout, /run `omd ref add-batch` once/);
+  assert.match(scout, /Every entry includes a tight component selector and the framer-owned `slot`/);
+  assert.match(scout, /Never start `browser-rs` yourself, handcraft or `curl` its MCP protocol/);
+  assert.match(scout, /run at most one missing-zone repair batch/);
+  const batch = read('core/ref/batch.ts');
+  assert.match(batch, /slot\?: string/);
+  assert.match(batch, /spec\.slot \? \{ slot: spec\.slot \}/);
+});
+
 test('framer CLI writes its owned frame and acquisition plan without direct file tools', () => {
   const framer = read('src/agents/framer.agent.yaml').replace(/\s+/g, ' ');
   assert.match(framer, /Bash\(omd frame:\*\).*Bash\(omd acquisition:\*\).*deny: \[\]/);

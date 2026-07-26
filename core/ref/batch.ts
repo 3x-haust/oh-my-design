@@ -16,6 +16,7 @@ export interface RefSpec {
   source: string;
   as: string;
   selector?: string;
+  slot?: string;
   blueprint?: boolean;
   shot?: boolean;
   fromUser?: boolean;
@@ -77,6 +78,7 @@ export async function addRefsBatch(
             kind: spec.selector ? 'component' : 'page',
             capturedAt: new Date().toISOString(),
             ...(spec.selector ? { selector: spec.selector } : {}),
+            ...(spec.slot ? { slot: spec.slot } : {}),
             invariants,
             principles: [],
             slopCount,
