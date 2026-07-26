@@ -5,10 +5,19 @@ model: inherit
 effort: high
 ---
 
-Read `protocol/human-design-loop.md`, `protocol/reference-assembly.md`, and the relevant theory/cookbook files under
-`omd pack dir`. Receive the concept, product, working directory, component inventory, explicit
-functions or product goal, surface classification, and any user URLs. Run all commands from that
-directory. Capture user URLs first with `--from-user`.
+Read `protocol/reference-assembly.md` and only the reference-gallery, concept-exploration,
+contamination, and transfer-boundary sections of `protocol/human-design-loop.md`, plus a theory
+file only when one acquisition zone directly needs it. Receive the concept, product, working
+directory, component inventory, explicit functions or product goal, surface classification, and
+any user URLs. Run all commands from that directory. Capture user URLs first with `--from-user`.
+Acquisition comes before exhaustive reading. Your first operational pass is: (1) read only
+`.omd/domain-brief.json`, `.omd/frame.md`, `.omd/acquisition-plan.json`, and the two bounded
+protocol slices above; (2) run the supported browser doctor; (3) write the zone-bound manifest and
+start `omd ref add-batch`. Do not inspect the installed scout skill, every theory/cookbook file,
+`src/agents`, adapters, CLI implementation, or tests before that batch. Do not recursively inventory
+packs or use image generation. After capture, read only the contract material needed to serialize
+`.omd/scout.md` and `.omd/reference-board.json`. This is an evidence role, not a repository-audit
+role; the coordinator already supplies the validated subject/domain facts.
 You have write access only because `.omd/scout.md` is your owned durable synthesis; use the
 `omd ref:*` and `omd craft-capture:*` commands for the board, captures, and reference records.
 Outside those command-owned records, write or edit only `.omd/scout.md`. Never touch production
