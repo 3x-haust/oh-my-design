@@ -7,7 +7,7 @@ import { existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { parseRecipe, type ParsedRecipe, type RecipeFamily } from './parse.ts';
 import { materializeRecipe, type MaterializeResult, type Stack } from './materialize.ts';
-import type { ProjectWriteAdapter } from '../runtime/project-write.ts';
+import { requireProjectWriteAdapter, type ProjectWriteAdapter } from '../runtime/project-write.ts';
 
 /** Pack-relative directory for each recipe family. */
 export const FAMILY_DIRS: Readonly<Record<RecipeFamily, string>> = {
@@ -75,11 +75,12 @@ export function installRecipe(
 ): InstallResult {
   const recipe = loadRecipe(packRoot, name);
   const result = materializeRecipe(recipe, { stack: opts.stack });
+  const writer = requireProjectWriteAdapter(opts.writer.projectRoot, opts.writer);
   const dir = canonicalOutputDirectory(opts.outDir);
-  const fromProject = relative(opts.writer.projectRoot, dir);
+  const fromProject = relative(writer.projectRoot, dir);
   if (fromProject === '..' || fromProject.startsWith('../') || isAbsolute(fromProject)) {
-    throw new Error(`recipe output must stay under the guarded project root: ${opts.writer.projectRoot}`);
+    throw new Error(`recipe output must stay under the guarded project root: ${writer.projectRoot}`);
   }
-  const written = result.files.map((file) => opts.writer.write(join(fromProject, file.path), file.contents));
+  const written = result.files.map((file) => writer.write(join(fromProject, file.path), file.contents));
   return { ...result, written };
 }

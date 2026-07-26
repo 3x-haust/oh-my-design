@@ -75,10 +75,11 @@ test('a recipe with no installable code on a stack raises rather than emitting a
 
 test('installRecipe writes the files to disk and reports what landed', () => {
   const out = mkdtempSync(join(tmpdir(), 'omd-recipe-'));
+  const writer = createTestProjectWriteAdapter(out);
   const result = installRecipe(PACK, 'scroll-reveal', {
     stack: 'vanilla',
     outDir: out,
-    writer: createTestProjectWriteAdapter(out),
+    writer,
   });
   assert.equal(result.written.length, result.files.length);
   for (const path of result.written) {
@@ -87,11 +88,21 @@ test('installRecipe writes the files to disk and reports what landed', () => {
   assert.throws(() => installRecipe(PACK, 'no-such-recipe', {
     stack: 'vanilla',
     outDir: out,
-    writer: createTestProjectWriteAdapter(out),
+    writer,
   }), RecipeNotFoundError);
   assert.throws(() => installRecipe(PACK, 'scroll-reveal', {
     stack: 'vanilla',
     outDir: join(out, '..', 'recipe-escape'),
-    writer: createTestProjectWriteAdapter(out),
+    writer,
   }), /guarded project root/);
+  const forged = {
+    projectRoot: out,
+    mkdir: (path: string) => path,
+    write: (path: string) => path,
+  };
+  assert.throws(() => installRecipe(PACK, 'scroll-reveal', {
+    stack: 'vanilla',
+    outDir: out,
+    writer: forged,
+  }), /trusted active project-write adapter/);
 });
