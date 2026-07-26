@@ -1725,7 +1725,11 @@ async function cmdRecipe(mode: string | undefined, opts: Opts): Promise<never> {
   }
 
   const outDir = opts.out ?? join(process.cwd(), 'src', 'omd');
-  const result = installRecipe(packRoot, name, { stack, outDir });
+  const result = installRecipe(packRoot, name, {
+    stack,
+    outDir,
+    writer: projectWriterFromActivation(opts, 'omd recipe add'),
+  });
   if (opts.json) process.stdout.write(JSON.stringify(result));
   else {
     for (const path of result.written) console.log(`installed ${relative(process.cwd(), path)}`);

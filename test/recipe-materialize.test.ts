@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { parseRecipe, RecipeParseError } from '../core/recipe/parse.ts';
 import { materializeRecipe, MaterializeError } from '../core/recipe/materialize.ts';
 import { installRecipe, listRecipes, loadRecipe, RecipeNotFoundError } from '../core/recipe/store.ts';
+import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
 
 const PACK = fileURLToPath(new URL('../core/', import.meta.url));
 
@@ -74,10 +75,23 @@ test('a recipe with no installable code on a stack raises rather than emitting a
 
 test('installRecipe writes the files to disk and reports what landed', () => {
   const out = mkdtempSync(join(tmpdir(), 'omd-recipe-'));
-  const result = installRecipe(PACK, 'scroll-reveal', { stack: 'vanilla', outDir: out });
+  const result = installRecipe(PACK, 'scroll-reveal', {
+    stack: 'vanilla',
+    outDir: out,
+    writer: createTestProjectWriteAdapter(out),
+  });
   assert.equal(result.written.length, result.files.length);
   for (const path of result.written) {
     assert.ok(readFileSync(path, 'utf8').length > 0, `${path} must not be empty`);
   }
-  assert.throws(() => installRecipe(PACK, 'no-such-recipe', { stack: 'vanilla', outDir: out }), RecipeNotFoundError);
+  assert.throws(() => installRecipe(PACK, 'no-such-recipe', {
+    stack: 'vanilla',
+    outDir: out,
+    writer: createTestProjectWriteAdapter(out),
+  }), RecipeNotFoundError);
+  assert.throws(() => installRecipe(PACK, 'scroll-reveal', {
+    stack: 'vanilla',
+    outDir: join(out, '..', 'recipe-escape'),
+    writer: createTestProjectWriteAdapter(out),
+  }), /guarded project root/);
 });
