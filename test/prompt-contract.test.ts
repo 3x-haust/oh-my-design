@@ -783,9 +783,10 @@ test('the scout and the reference protocol require component-scoped capture', ()
   assert.match(ra, /a capture scoped to a page root — `main`, `body`, `html`, `:root` — measures the whole document/);
   assert.match(ra, /Granularity alone is not coverage/);
   assert.match(ra, /three navs and two install blocks — are two parts studied repeatedly/);
-  assert.match(ra, /Coverage is measured per surface, by name/);
-  assert.match(ra, /A board is finished when every declared surface has at least one bound capture/);
-  assert.match(ra, /`REF-SURFACE-UNCOVERED`, and `REF-NAME-MISMATCH`/);
+  assert.match(ra, /Domain-brief `surfaces` are pages\/screens/);
+  assert.match(ra, /The framer therefore writes `\.omd\/acquisition-plan\.json`/);
+  assert.match(ra, /finished only when every required zone has at least one bound capture/);
+  assert.match(ra, /`REF-ZONE-UNCOVERED`, and `REF-NAME-MISMATCH`/);
   assert.match(ra, /A capture is named for what it holds/);
   assert.match(ra, /tracing a whole page is the derivative failure the transfer boundary forbids/);
 
@@ -794,11 +795,11 @@ test('the scout and the reference protocol require component-scoped capture', ()
   assert.match(scout, /Two captures of the same source at the same selector are one piece of evidence wearing two names/);
   assert.match(scout, /Run `omd ref granularity` before handing the board on/);
   assert.match(scout, /Cover the result, not one slot/);
-  assert.match(scout, /`omd ref add <url> --as <component> --slot <surface> --selector "<css>" --blueprint --shot`/);
-  assert.match(scout, /`REF-SURFACE-UNCOVERED` names the surfaces that still have none/);
+  assert.match(scout, /`omd ref add <url> --as <component> --slot <zone> --selector "<css>" --blueprint --shot`/);
+  assert.match(scout, /`REF-ZONE-UNCOVERED` names the zones that still have none/);
   assert.match(scout, /Name a capture for what it holds/);
   assert.match(scout, /`REF-NAME-MISMATCH` reports it/);
-  assert.match(scout, /a nav studied three times while the hero, the process section, and the proof section have nothing/);
+  assert.match(scout, /a nav studied three times while the hero, process, and proof zones have nothing/);
 });
 
 test('the selected host model is immutable while OMD adjusts only role effort', () => {
@@ -818,4 +819,31 @@ test('the selected host model is immutable while OMD adjusts only role effort', 
   assert.match(agents, /the user chooses the model; OMD chooses only effort/);
   assert.match(agents, /A recommendation, benchmark, role name, or belief that another model would perform better is never authority/);
   assert.doesNotMatch(agents, /Sol \\(recommended\\)|Terra xhigh \\(recommended\\)|Luna high \\(recommended\\)/);
+});
+
+test('ultradesign externalizes decisions, deliberation, visual observation, and complete assembly', () => {
+  const protocol = read('core/protocol/design-deliberation.md').replace(/\s+/g, ' ');
+  assert.match(protocol, /OMD does not request, store, or grade hidden chain-of-thought/);
+  assert.match(protocol, /A landing page with a new art direction is L4/);
+  assert.match(protocol, /Domain-brief `surfaces` are pages\/screens/);
+  assert.match(protocol, /spawn three fresh `omd-eye` agents concurrently/);
+  assert.match(protocol, /before render → observable fact → judgment → exact change → distinct after render → measured result/);
+  assert.match(protocol, /zone job → captured reference identity → extracted principle → composition decision ID/);
+  assert.match(protocol, /same concrete model and identical prompt bytes/);
+
+  const skill = read('src/skills/omd-ultradesign/SKILL.md').replace(/\s+/g, ' ');
+  assert.match(skill, /`omd depth classify --input \.omd\/depth\.json --json`/);
+  assert.match(skill, /spawn three fresh `omd-eye` contexts concurrently in UX, art-direction, and production perspective modes/);
+  assert.match(skill, /Require `omd deliberate check` to pass/);
+  assert.match(skill, /coordinator must not author or paraphrase them/);
+
+  const framer = read('src/agents/framer.agent.yaml').replace(/\s+/g, ' ');
+  assert.match(framer, /You also own `\.omd\/acquisition-plan\.json`/);
+  assert.match(framer, /`omd acquisition set --zones/);
+  const hand = read('src/agents/hand.agent.yaml').replace(/\s+/g, ' ');
+  assert.match(hand, /You own `\.omd\/observations\/\*\.json`/);
+  assert.match(hand, /every required zone must bind reference identity → principle → composer decision → production selector → final fidelity evidence/);
+  const eye = read('src/agents/eye.agent.yaml').replace(/\s+/g, ' ');
+  assert.match(eye, /In L4 perspective mode/);
+  assert.match(eye, /Do not majority-vote/);
 });

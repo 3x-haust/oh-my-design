@@ -73,7 +73,7 @@ export function slotClaimAndCapture(ref: Pick<Reference, 'component' | 'selector
 }
 
 export type GranularityFinding = {
-  readonly id: 'REF-WHOLE-PAGE' | 'REF-DUPLICATE-CAPTURE' | 'REF-NO-PARTS' | 'REF-PART-CONCENTRATION' | 'REF-SURFACE-UNCOVERED' | 'REF-NAME-MISMATCH';
+  readonly id: 'REF-WHOLE-PAGE' | 'REF-DUPLICATE-CAPTURE' | 'REF-NO-PARTS' | 'REF-PART-CONCENTRATION' | 'REF-ZONE-UNCOVERED' | 'REF-NAME-MISMATCH';
   readonly message: string;
   /** Reference identifiers the finding is about, as `source (component)`. */
   readonly refs: readonly string[];
@@ -101,7 +101,7 @@ export function isWholePageCapture(ref: Pick<Reference, 'selector'> & { blueprin
  */
 export function auditBoardGranularity(
   refs: readonly Reference[],
-  opts: { readonly surfaces?: readonly string[] } = {},
+  opts: { readonly zones?: readonly string[] } = {},
 ): GranularityFinding[] {
   const findings: GranularityFinding[] = [];
   const measurable = refs.filter((ref) => ref.kind !== 'image');
@@ -177,21 +177,20 @@ export function auditBoardGranularity(
 
   }
 
-  // Coverage is per surface, by name. A count comparison cannot tell a board that studied the nav
-  // five times from one that covered five sections, and it is the uncovered sections — the ones the
-  // build then invents from nothing — that the run needs named.
-  if (opts.surfaces !== undefined && opts.surfaces.length > 0) {
+  // Coverage is per composition zone, by name. Domain surfaces are pages/screens and cannot tell a
+  // board that studied the nav five times from one that covered every section/region/state inside it.
+  if (opts.zones !== undefined && opts.zones.length > 0) {
     const covered = new Set(
       parts.map((ref) => (ref.slot ?? '').trim().toLowerCase()).filter((slot) => slot !== ''),
     );
-    const uncovered = opts.surfaces.filter((surface) => !covered.has(surface.trim().toLowerCase()));
+    const uncovered = opts.zones.filter((zone) => !covered.has(zone.trim().toLowerCase()));
     if (uncovered.length > 0) {
       findings.push({
-        id: 'REF-SURFACE-UNCOVERED',
+        id: 'REF-ZONE-UNCOVERED',
         message: covered.size === 0
-          ? `no capture is bound to a surface, so none of the ${opts.surfaces.length} surfaces the domain brief declares has evidence: ${opts.surfaces.join(', ')}. Bind each capture to the surface it answers with \`omd ref add … --slot <surface>\`; an unbound board can be counted but not checked, and every section then composes from whatever the build invents.`
-          : `${uncovered.length} of ${opts.surfaces.length} declared surfaces have no capture bound to them: ${uncovered.join(', ')}. Those sections compose from nothing. Capture the part that answers each with \`omd ref add <url> --as <component> --slot <surface> --selector "<css>" --blueprint --shot\`.`,
-        refs: uncovered.map((surface) => `surface: ${surface}`),
+          ? `no capture is bound to a composition zone, so none of the ${opts.zones.length} required zones has evidence: ${opts.zones.join(', ')}. Bind each capture with \`omd ref add … --slot <zone>\`; an unbound board can be counted but not checked.`
+          : `${uncovered.length} of ${opts.zones.length} required composition zones have no capture bound to them: ${uncovered.join(', ')}. Those zones compose from nothing. Capture the part that answers each with \`omd ref add <url> --as <component> --slot <zone> --selector "<css>" --blueprint --shot\`.`,
+        refs: uncovered.map((zone) => `zone: ${zone}`),
       });
     }
   }

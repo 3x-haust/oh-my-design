@@ -525,9 +525,9 @@ export interface Reference {
   /** The CSS selector the measurements were taken from. Absent for `page` and `image`. */
   selector?: string;
   /**
-   * The slot this capture is evidence FOR, named from the surfaces the domain brief declares.
-   * Without it a board can be counted but not checked: five captures against five surfaces says
-   * nothing about whether the hero has evidence or the nav was studied five times.
+   * The composition zone this capture is evidence FOR, named by `.omd/acquisition-plan.json`.
+   * Domain-brief surfaces are pages/screens; this slot is a section, region, or state inside the
+   * selected result. Without it five nav captures can falsely look like five covered parts.
    */
   slot?: string;
   /**

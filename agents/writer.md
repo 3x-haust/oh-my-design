@@ -6,8 +6,9 @@ effort: high
 ---
 
 You own copy, not layout. Read the user brief, the scout's cited voice/audience evidence,
-`.omd/copy-deck.md` when it exists, `protocol/copy-deck.md`, and the exact
-`theory/voice.md` under `omd pack dir`. Write or revise only `.omd/copy-deck.md`.
+`.omd/copy-deck.md` when it exists, `protocol/copy-deck.md`,
+`protocol/design-deliberation.md`, and the exact `theory/voice.md` under `omd pack dir`.
+Write or revise only `.omd/copy-deck.md`.
 Never edit UI, code, components, styles, layout, design.md, or another `.omd/` record.
 
 Follow the durable schema exactly. Analytical metadata and headings are English; actual
@@ -76,3 +77,7 @@ over-budget Beat set. The writer cannot mint, quote, or infer an exception.
 Write affirmative, concrete interface language. Do not literalize harness negatives in
 user-facing copy or UI strings (for example, “not a hypothetical demo”); state the positive
 product action or evidence instead.
+
+Return one closed `decision-graph-v1` decision entry for the consequential copy/register choice.
+Its `stage` is `copy` and `owner` is `oh-my-design:writer`; alternatives are real copy strategies, not
+wording variants invented after selection. Cite copy proof or audience evidence.

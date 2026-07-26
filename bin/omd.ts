@@ -82,6 +82,7 @@ interface Opts {
   changed?: string;
   kind?: string;
   evidence?: string;
+  zones?: string;
   input?: string;
   activation?: string;
   /** Capture a full-resolution structural blueprint of the selected component. */
@@ -108,7 +109,7 @@ interface Opts {
   costliestError?: string;
   /** UX anchor: surface classification — marketing | product | editorial | mixed. (`omd frame set --surface "..."`) */
   surface?: string;
-  /** The surface a capture is evidence for (`omd ref add … --slot hero`), named from the domain brief. */
+  /** The composition zone a capture is evidence for (`omd ref add … --slot hero`), named by the framer's acquisition plan. */
   slot?: string;
   /** Page to compare against the committed tokens (`omd tokens check --page <page>`). */
   page?: string;
@@ -1722,21 +1723,19 @@ async function cmdRecipe(mode: string | undefined, opts: Opts): Promise<never> {
 async function cmdRefGranularity(opts: Opts): Promise<never> {
   const { loadRefs } = await import('../core/ref/store.ts');
   const { auditBoardGranularity } = await import('../core/ref/board-granularity.ts');
-  // The domain brief already declares the surfaces this run must compose; use its count so the
-  // audit can say how many of them would be built with no reference at all.
-  const briefPath = join(process.cwd(), '.omd', 'domain-brief.json');
-  let surfaces: string[] | undefined;
-  if (existsSync(briefPath)) {
+  // Domain-brief surfaces are pages/screens. Reference coverage instead follows the framer's
+  // section/region/state acquisition plan — otherwise one landing-page surface falsely looks covered
+  // by one nav capture while its hero, proof, process, and CTA have no evidence.
+  const planPath = join(process.cwd(), '.omd', 'acquisition-plan.json');
+  let zones: string[] | undefined;
+  if (existsSync(planPath)) {
     try {
-      const brief = JSON.parse(readFileSync(briefPath, 'utf8')) as { surfaces?: { name?: unknown }[] };
-      if (Array.isArray(brief.surfaces)) {
-        surfaces = brief.surfaces
-          .map((surface) => (typeof surface?.name === 'string' ? surface.name : ''))
-          .filter((name): name is string => name !== '');
-      }
-    } catch { surfaces = undefined; }
+      const { validateAcquisitionPlan } = await import('../core/deliberation/contracts.ts');
+      const result = validateAcquisitionPlan(JSON.parse(readFileSync(planPath, 'utf8')));
+      zones = result.value?.zones.filter((zone) => zone.required).map((zone) => zone.id);
+    } catch { zones = undefined; }
   }
-  const findings = auditBoardGranularity(loadRefs(process.cwd()), surfaces === undefined || surfaces.length === 0 ? {} : { surfaces });
+  const findings = auditBoardGranularity(loadRefs(process.cwd()), zones === undefined || zones.length === 0 ? {} : { zones });
   if (opts.json) process.stdout.write(JSON.stringify({ ok: findings.length === 0, findings }));
   else if (findings.length === 0) console.log('ok — the board holds component-scoped parts to compose from');
   else for (const finding of findings) console.error(`[error] ${finding.id}: ${finding.message}\n  ${finding.refs.join('\n  ')}`);
@@ -1870,6 +1869,53 @@ async function cmdTokens(mode: string | undefined, opts: Opts): Promise<never> {
   else if (drift) console.error(`[error] ${drift.id}: ${drift.message}`);
   else console.log(`ok — tokens committed (${commit.typeScale.length} type rungs, ${commit.spacingScale.length} spacing rungs, accent ${commit.colorRoles.accent})${opts.page ? ' and the build lands on them' : ''}`);
   process.exit(drift ? 1 : 0);
+}
+
+/** Validates the externalized decision, observation, assembly, and deliberation records for this run. */
+async function cmdDeliberate(mode: string | undefined, opts: Opts): Promise<never> {
+  if (mode !== 'check') throw new Error('usage: omd deliberate check [--json]');
+  const { checkDeliberationRun } = await import('../core/deliberation/check.ts');
+  const report = checkDeliberationRun(process.cwd());
+  if (opts.json) process.stdout.write(JSON.stringify(report));
+  else {
+    for (const finding of report.findings) console.error(`[error] ${finding.id} ${finding.path}: ${finding.message}`);
+    if (report.ok) console.log(`ok — ${report.depth?.level ?? '?'} decision chain (${report.counts.decisions} decisions, ${report.counts.deliberations} deliberations, ${report.counts.observations} observations, ${report.counts.zones} assembled zones)`);
+  }
+  process.exit(report.ok ? 0 : 1);
+}
+
+/** Selects the least expensive lawful loop depth; it never changes artifact ownership. */
+async function cmdDepth(mode: string | undefined, opts: Opts): Promise<never> {
+  if (mode !== 'classify' || !opts.input) throw new Error('usage: omd depth classify --input <design-depth-input.json> [--json]');
+  const { classifyDepth } = await import('../core/deliberation/depth.ts');
+  const result = classifyDepth(inputJson(opts.input, 'omd depth classify') as import('../core/deliberation/depth.ts').DepthInput);
+  if (opts.json) process.stdout.write(JSON.stringify(result));
+  else console.log(`${result.level} — ${result.reasons.join(', ')}\n${result.stages.join(' → ')}`);
+  process.exit(0);
+}
+
+/** Scores the four blind same-model/same-prompt comparison variants as quality and quality/cost. */
+async function cmdCompare(mode: string | undefined, opts: Opts): Promise<never> {
+  if (mode !== 'score' || !opts.input) throw new Error('usage: omd compare score --input <design-comparison.json> [--json]');
+  const { scoreComparison } = await import('../core/deliberation/comparison.ts');
+  const scores = scoreComparison(inputJson(opts.input, 'omd compare score') as import('../core/deliberation/comparison.ts').Comparison);
+  if (opts.json) process.stdout.write(JSON.stringify({ scores }));
+  else for (const score of scores) console.log(`${score.id}: quality ${score.quality.toFixed(3)}, cost ${score.cost.toFixed(3)}, quality/cost ${score.qualityPerCost.toFixed(3)}`);
+  process.exit(0);
+}
+
+/** Persists the framer-owned section/region/state acquisition plan through the project write boundary. */
+async function cmdAcquisition(mode: string | undefined, opts: Opts): Promise<never> {
+  if (mode !== 'set' || !opts.zones) throw new Error('usage: omd acquisition set --zones <json-array> [--activation <host-issued-invocation.json>]');
+  const { ACQUISITION_PLAN_SCHEMA, validateAcquisitionPlan } = await import('../core/deliberation/contracts.ts');
+  let zones: unknown;
+  try { zones = JSON.parse(opts.zones); } catch { throw new Error('omd acquisition set --zones must be valid JSON'); }
+  const plan = { schema: ACQUISITION_PLAN_SCHEMA, owner: 'omd-framer', zones };
+  const result = validateAcquisitionPlan(plan);
+  if (!result.value) throw new Error(result.findings.map((finding) => `${finding.id} ${finding.path}: ${finding.message}`).join('\n'));
+  projectWriterFromActivation(opts, 'omd acquisition set').write('.omd/acquisition-plan.json', `${JSON.stringify(result.value, null, 2)}\n`);
+  console.log(join(process.cwd(), '.omd', 'acquisition-plan.json'));
+  process.exit(0);
 }
 
 /** Final byte-freshness evidence only; this does not judge semantic copy/source fidelity. */
@@ -2762,7 +2808,7 @@ function usage(): never {
     + '  ref candidates [manifest]                   print chat-ready Korean-first candidate Markdown\n'
     + '  ref select <candidate-id> [--json]          bind a closed candidate selection to its evidence\n'
     + '  ref audit [--json]                          warn when references were captured sequentially (use ref add-batch)\n'
-    + '  ref granularity [--json]                    fail when the board does not cover the surfaces to compose\n'
+    + '  ref granularity [--json]                    fail when the board does not cover the composition zones\n'
     + '\n'
     + '  design                                       discover evidence and create/refresh .omd/design.md\n'
     + '  design --check                              validate design.md section coverage\n'
@@ -2770,6 +2816,10 @@ function usage(): never {
     + '  copy --review-check [--json]                validate copy-eye report structure only (not blindness)\n'
     + '  copy v2 check [--json]                      validate selected register and stable v2 Beat IDs\n'
     + '  composition --check [--json]                validate composition sections and input freshness\n'
+    + '  acquisition set --zones <json-array>          persist framer-owned section/region/state reference targets\n'
+    + '  depth classify --input depth.json [--json]      choose L1–L4 from design risk, never from convenience\n'
+    + '  deliberate check [--json]                      validate decisions, visual observations, assembly, and debate\n'
+    + '  compare score --input comparison.json [--json] blind same-model quality and quality/cost comparison\n'
     + '  source --seal [root]                        write final approved-input/source byte seal\n'
     + '  source --check [root] [--json]              fail when the source seal is missing or stale\n'
     + '  evidence finalize --input manifest.json      disabled: v1 publication is permanently trapped\n'
@@ -2922,6 +2972,10 @@ async function main(): Promise<never> {
   if (cmd === 'no-js') return cmdNoJs(parseArgs(args.slice(1)));
   if (cmd === 'award') return cmdAward(sub, parseArgs(args.slice(2)));
   if (cmd === 'tokens') return cmdTokens(sub, parseArgs(args.slice(2)));
+  if (cmd === 'depth') return cmdDepth(sub, parseArgs(args.slice(2)));
+  if (cmd === 'deliberate') return cmdDeliberate(sub, parseArgs(args.slice(2)));
+  if (cmd === 'compare') return cmdCompare(sub, parseArgs(args.slice(2)));
+  if (cmd === 'acquisition') return cmdAcquisition(sub, parseArgs(args.slice(2)));
   if (cmd === 'stack') return cmdStack(parseArgs(args.slice(1)));
   if (cmd === 'text-slop') return cmdTextSlop(parseArgs(args.slice(1)));
   if (cmd === 'visual-richness') return cmdVisualRichness(parseArgs(args.slice(1)));

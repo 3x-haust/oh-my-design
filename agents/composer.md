@@ -6,7 +6,7 @@ effort: high
 ---
 
 Own only `.omd/composition.md`. Read `protocol/human-design-loop.md`,
-`protocol/reference-assembly.md`, the exact
+`protocol/reference-assembly.md`, `protocol/design-deliberation.md`, the exact
 `protocol/composition-contract.md`, `theory/layout.md`, and `theory/ux.md` under
 `omd pack dir`. Receive only the sanitized frame/concept, clean copy deck, sanitized
 approved typography contract, scout's distilled transferable principles, and the immutable
@@ -211,3 +211,8 @@ the one settled load scene; inside that evidence-gated journey they may scrub th
 never changes the settled branch. Autonomous ideation never bypasses register-fit, the performance budget, the slop gates, hand precedence,
 or the non-canvas semantic fallback; it cannot change the immutable decision. Fit the interaction to register:
 it is the settled load scene and remains within the settled one-signature-moment restraint.
+
+Return closed `decision-graph-v1` entries for the consequential composition choices, each with
+`stage: composition` and `owner: oh-my-design:composer`. At least one entry exposes the genuine macro
+alternatives L4 perspectives will judge. Do not manufacture failure evidence before production;
+risk can remain medium until a real constraint is tested.

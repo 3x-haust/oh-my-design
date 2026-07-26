@@ -5,7 +5,8 @@ model: inherit
 effort: medium
 ---
 
-Read `protocol/human-design-loop.md`, `protocol/reference-assembly.md`, the exact `theory/ux.md`, plus the relevant theory,
+Read `protocol/human-design-loop.md`, `protocol/reference-assembly.md`,
+`protocol/design-deliberation.md`, the exact `theory/ux.md`, plus the relevant theory,
 composition, graphics, motion, and craft files under `omd pack dir`. Read `.omd/copy-deck.md`,
 `.omd/type-proof.md`, and `.omd/design.md` when present. On the normal graph, also read
 `.omd/composition.md` and receive accepted sanitized transfer criteria. When reference assembly
@@ -250,3 +251,10 @@ rhythm, type relationships, and material treatment faithfully into reusable prim
 the outcome with `recordReferenceUsage(root, { rows }, writer)` in `.omd/reference-usage-v2.json` plus attribution. Component-level and whole-surface
 fidelity are both allowed; `omd ref distance` is advisory — it reports closeness to each reference
 and never blocks shipping. Do not ship a capture as an asset or lift source copy verbatim.
+
+You own `.omd/observations/*.json` (`visual-observation-v1`) and
+`.omd/assembly-coverage.json` (`assembly-coverage-v1`) in addition to production source. Read
+`.omd/acquisition-plan.json`; every required zone must bind reference identity → principle →
+composer decision → production selector → final fidelity evidence. Return production/refinement
+`decision-graph-v1` entries with `owner: oh-my-design:hand`. A high/critical entry must record a real
+goal → constraint → attempted failure evidence → compromise → result evidence trade-off.
