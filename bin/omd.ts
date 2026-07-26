@@ -2029,25 +2029,54 @@ async function cmdIntent(mode: string | undefined, opts: Opts): Promise<never> {
 }
 
 async function cmdArtDirection(mode: string | undefined, opts: Opts): Promise<never> {
-  if (mode !== 'check' || !opts.input || opts._.length > 0) {
-    throw new Error('usage: omd art-direction check --input <decision-check.json> [--json]');
+  const localMode = mode === 'local-check';
+  if ((mode !== 'check' && !localMode) || !opts.input || opts._.length > 0) {
+    throw new Error('usage: omd art-direction check|local-check --input <decision-check.json> [--json]');
   }
-  const payload = inputJson(opts.input, 'omd art-direction check');
-  if (!isRecord(payload)) throw new Error('omd art-direction check input must contain host-authorized evaluator assessment and result payloads');
-  const allowed = new Set(['alternatives', 'references', 'eligibility', 'evaluatorAssessment', 'evaluatorResult', 'beats', 'invocation', 'route', 'implementationLane', 'fallbackPath', 'performanceAccessibilityBudget']);
-  if (Object.keys(payload).some((key) => !allowed.has(key))) throw new Error('ART_DIRECTION_CALLER_DECISION_FORBIDDEN: evaluator choices, scores, and motion sources must be inside the host-authorized evaluator bytes');
-  const { alternatives, references, eligibility, evaluatorAssessment, evaluatorResult, beats, invocation, route, implementationLane, fallbackPath, performanceAccessibilityBudget } = payload;
-  const run = validateProjectRunInvocation(invocation);
+  const command = localMode ? 'omd art-direction local-check' : 'omd art-direction check';
+  const payload = inputJson(opts.input, command);
+  if (!isRecord(payload)) throw new Error(`${command} input must contain evaluator assessment and result payloads`);
+  const allowed = new Set(['alternatives', 'references', 'eligibility', 'evaluatorAssessment', 'evaluatorResult', 'beats', 'invocation', 'deliberation', 'route', 'implementationLane', 'fallbackPath', 'performanceAccessibilityBudget']);
+  if (Object.keys(payload).some((key) => !allowed.has(key))) throw new Error('ART_DIRECTION_CALLER_DECISION_FORBIDDEN: evaluator choices, scores, and motion sources must remain inside the evaluator bytes');
+  const { alternatives, references, eligibility, evaluatorAssessment, evaluatorResult, beats, invocation, deliberation, route, implementationLane, fallbackPath, performanceAccessibilityBudget } = payload;
+  if (localMode && invocation !== undefined) throw new Error('ART_DIRECTION_LOCAL_INVOCATION_FORBIDDEN: local-check derives write authority from the running CLI');
+  const run = localMode
+    ? createLocalCliInvocation({ cliPath: fileURLToPath(import.meta.url), argv: process.argv.slice(2), brief: command, projectRoot: process.cwd() })
+    : validateProjectRunInvocation(invocation);
   if (evaluatorAssessment === undefined || evaluatorResult === undefined) throw new Error('ART_DIRECTION_EVALUATOR_AUTHORIZATION_REQUIRED: evaluator assessment and result payloads are required');
   const assessmentBytes = Buffer.from(canonicalJson(evaluatorAssessment));
   const resultBytes = Buffer.from(canonicalJson(evaluatorResult));
-  requireEvaluatorAssessmentAuthorization(run, process.cwd(), assessmentBytes);
-  requireEvaluatorResultAuthorization(run, process.cwd(), resultBytes);
-  const closedResult = parseClosedEvaluatorResult(evaluatorResult, sha256(canonicalJson(alternatives)));
+  if (!localMode) {
+    requireEvaluatorAssessmentAuthorization(run, process.cwd(), assessmentBytes);
+    requireEvaluatorResultAuthorization(run, process.cwd(), resultBytes);
+  }
+  const alternativesSha256 = sha256(canonicalJson(alternatives));
+  const closedResult = parseClosedEvaluatorResult(evaluatorResult, alternativesSha256);
+  if (localMode && closedResult.approvedMotionRecipe !== undefined) {
+    throw new Error('ART_DIRECTION_LOCAL_RECIPE_FORBIDDEN: local-check cannot authorize a motion recipe');
+  }
   if (!isRecord(evaluatorAssessment) || !Array.isArray(evaluatorAssessment.assessments)) evaluatorResultError('assessment must contain assessments');
   const assessments = evaluatorAssessment.assessments as { register?: unknown; score?: unknown }[];
   const winner = [...assessments].sort((left, right) => Number(right.score) - Number(left.score) || String(left.register).localeCompare(String(right.register)))[0];
-  if (winner?.register !== closedResult.winner) evaluatorResultError('winner must match the host-authorized assessment ranking');
+  if (winner?.register !== closedResult.winner) evaluatorResultError('winner must match the evaluator assessment ranking');
+  if (localMode) {
+    if (typeof deliberation !== 'string' || !deliberation.startsWith('.omd/deliberations/') || !deliberation.endsWith('.json')) {
+      throw new Error('ART_DIRECTION_LOCAL_DELIBERATION_REQUIRED: local-check requires a moderator-owned .omd/deliberations/*.json receipt');
+    }
+    const deliberationPath = resolve(process.cwd(), deliberation);
+    const deliberationRoot = resolve(process.cwd(), '.omd', 'deliberations');
+    if (!deliberationPath.startsWith(`${deliberationRoot}/`) || !existsSync(deliberationPath)) {
+      throw new Error('ART_DIRECTION_LOCAL_DELIBERATION_REQUIRED: local deliberation receipt is missing or outside .omd/deliberations');
+    }
+    const { validateDeliberation } = await import('../core/deliberation/contracts.ts');
+    const debateResult = validateDeliberation(inputJson(deliberationPath, 'local art-direction deliberation'));
+    if (debateResult.findings.length > 0 || debateResult.value === undefined) throw new Error(`ART_DIRECTION_LOCAL_DELIBERATION_INVALID: ${debateResult.findings.map((finding) => finding.id).join(', ')}`);
+    const debate = debateResult.value;
+    const sharedDigest = debate.perspectives.ux.inputSha256;
+    if (sharedDigest !== alternativesSha256 || debate.resolution.selected !== closedResult.winner) {
+      throw new Error('ART_DIRECTION_LOCAL_DELIBERATION_STALE: moderator receipt must bind the exact alternatives and selected register');
+    }
+  }
   const evaluatorEvidence = {
     invocationSha256: sha256(assessmentBytes),
     payloadSha256: sha256(assessmentBytes),
@@ -2071,7 +2100,7 @@ async function cmdArtDirection(mode: string | undefined, opts: Opts): Promise<ne
     ledger = validateIntentLedger(inputJson(join(process.cwd(), '.omd', pointer.record), 'intent immutable record'));
     if (intentLedgerSha256(ledger) !== pointer.sha256) throw new Error('ART_DIRECTION_INTENT_STALE: current intent pointer does not match immutable ledger');
     intentSha256 = pointer.sha256;
-    requireCurrentIntentLedgerAuthorization(run, process.cwd(), readFileSync(join(process.cwd(), '.omd', pointer.record)));
+    if (!localMode) requireCurrentIntentLedgerAuthorization(run, process.cwd(), readFileSync(join(process.cwd(), '.omd', pointer.record)));
   } else {
     const record = `intent-runs/sha256-${intentSha256}.json`;
     writeImmutableProjectFile({ projectRoot: process.cwd(), relativePath: `.omd/${record}`, content: JSON.stringify(ledger, null, 2), invocation: run });
@@ -2143,7 +2172,7 @@ async function cmdArtDirection(mode: string | undefined, opts: Opts): Promise<ne
   if (exceedsCanonicalBeatBudget(checked.selectedRegister, beats, currentBeatExceptionReceipt)) {
     throw new Error(`ART_DIRECTION_BEAT_BUDGET_EXCEEDED: ${checked.selectedRegister} permits at most ${beatBudgetForRegister(checked.selectedRegister)} Beats without an exact current-user host-authorized Beat-exception receipt`);
   }
-  const motion = persistMotionResolutionProjection(process.cwd(), motionInput, { assessmentBytes, resultBytes, ...(recipeBytes === undefined ? {} : { approvedRecipeBytes: recipeBytes }) }, run);
+  const motion = persistMotionResolutionProjection(process.cwd(), motionInput, { assessmentBytes, resultBytes, ...(recipeBytes === undefined ? {} : { approvedRecipeBytes: recipeBytes }) }, run, localMode ? 'local-moderator' : 'host');
   const settledSelection = persistSettledReferenceSelection(process.cwd(), selection, { ...motion.projection, selection }, run);
   const settledMotionResolutionSha256 = motionResolutionProjectionSha256(motion.projection);
   if (checked.motionResolutionProjectionSha256 !== settledMotionResolutionSha256 || checked.settledSelectionSha256 !== referenceSelectionV2Sha256(settledSelection)) {
@@ -2839,7 +2868,7 @@ function usage(): never {
     + '  evidence tasks --input .omd/.cache/task-evidence-manifest.json  publish strict production task evidence\n'
     + '  evidence tasks-check [--json]               revalidate strict production task evidence\n'
     + '\n'
-    + '  art-direction check --input decision-check.json [--json]  persist the canonical selected direction before composition\n'
+    + '  art-direction check|local-check --input decision-check.json [--json]  persist a host-authorized or moderator-bound local direction\n'
     + '  intent append --input trusted-intent.json [--json]  append trusted intent and update its guarded current pointer\n'
     + '  domain check [--input domain-brief.json] [--json]  validate the domain-analysis brief\n'
     + '  craft-fidelity check --input pair.json [--json]  verify a generated part reproduced the reference craft\n'

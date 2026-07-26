@@ -78,6 +78,13 @@ majority: it resolves objections against evidence and constraints, returns one s
 conditions, and authors the `design-deliberation-v1` record. All three perspective `inputSha256`
 values must match. The coordinator only preserves the moderator's closed JSON under
 `.omd/deliberations/<id>.json`.
+For the pre-composition art-direction decision, a host-issued invocation remains the publication
+lane. In an ordinary Codex or Claude session without that launcher receipt, the same three
+perspectives plus moderator bind the exact three register alternatives and selected register.
+`omd art-direction local-check` accepts only that moderator-owned receipt, derives write authority
+inside the running CLI, and persists the immutable direction and downstream handoffs. It grants no
+v2 publication authority. Missing host publication authority therefore limits the final evidence
+marker; it does not make the design/build loop unusable or authorize a handwritten direction.
 
 ## Visual observation
 

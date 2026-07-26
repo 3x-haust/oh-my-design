@@ -3,6 +3,7 @@ import { join, resolve } from 'node:path';
 import { canonicalJson, readReferenceBoardArtifacts, sha256 } from './board-artifacts.ts';
 import type { ReferenceAxis, ReferenceRights, ReferenceSignal } from './board-projection.ts';
 import { requireApprovedMotionRecipeAuthorization, requireEvaluatorAssessmentAuthorization, requireEvaluatorResultAuthorization, type ProjectRunInvocation } from '../runtime/invocation.ts';
+import { isHostDerivedLocalCliInvocation } from '../runtime/activation.ts';
 import { ProjectWriteError, replaceProjectFileAtomically, writeImmutableProjectFile } from '../runtime/project-write.ts';
 
 export const REFERENCE_SELECTION_SCHEMA_VERSION = 'reference-selection-v1';
@@ -279,16 +280,21 @@ export function persistMotionResolutionProjection(
   input: ResolveMotionProjectionInput,
   evidence: MotionResolutionEvidenceBytes,
   invocation: ProjectRunInvocation,
+  authorization: 'host' | 'local-moderator' = 'host',
 ): { readonly path: string; readonly projection: MotionResolutionProjection } {
   const projection = resolveMotionProjection(input);
   if (sha256(evidence.assessmentBytes) !== projection.evaluatorPayloadSha256 || sha256(evidence.resultBytes) !== projection.evaluatorResultSha256
     || (projection.approvedRecipe !== undefined && (evidence.approvedRecipeBytes === undefined || sha256(evidence.approvedRecipeBytes) !== projection.approvedRecipe.recipeSha256))) return fail('motion resolution evidence bytes do not match evaluator provenance');
-  try {
-    requireEvaluatorAssessmentAuthorization(invocation, root, evidence.assessmentBytes);
-    requireEvaluatorResultAuthorization(invocation, root, evidence.resultBytes);
-    if (projection.approvedRecipe !== undefined) requireApprovedMotionRecipeAuthorization(invocation, root, evidence.approvedRecipeBytes!);
-  } catch (error) {
-    return fail(error instanceof Error ? error.message : 'missing evaluator host authorization');
+  if (authorization === 'host') {
+    try {
+      requireEvaluatorAssessmentAuthorization(invocation, root, evidence.assessmentBytes);
+      requireEvaluatorResultAuthorization(invocation, root, evidence.resultBytes);
+      if (projection.approvedRecipe !== undefined) requireApprovedMotionRecipeAuthorization(invocation, root, evidence.approvedRecipeBytes!);
+    } catch (error) {
+      return fail(error instanceof Error ? error.message : 'missing evaluator host authorization');
+    }
+  } else if (!isHostDerivedLocalCliInvocation(invocation) || projection.approvedRecipe !== undefined) {
+    return fail('local moderator persistence requires CLI-derived local authority and forbids unapproved motion recipes');
   }
   const digest = motionResolutionProjectionSha256(projection);
   const relativePath = `.omd/motion-resolutions/sha256-${digest}.json`;

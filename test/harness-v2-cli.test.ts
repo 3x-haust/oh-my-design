@@ -474,6 +474,40 @@ test('doctor and preflight are read-only', () => {
   assert.equal(run(root, ['preflight', '--input', activation]).status, 0);
   assert.equal(existsSync(join(root, '.omd')), false);
 });
+
+test('moderator-bound local art direction unlocks ordinary sessions without host publication authority', () => {
+  const root = project();
+  const source = 'https://capture.example/local-hero'; const component = 'hero';
+  const image = refImagePath(root, { source, component });
+  const invariants: Invariants = { spacingLadder: [8], radiusLadder: [4], elevationLevels: 0, centeredRatio: 0, tokenCoverage: 1, paddingWeight: 8, typeScale: [], fontFamilies: [], weightLadder: [], motionDurations: [], easingVocab: [], animatedShare: 0, hoverCoverage: 0, focusCoverage: 0, animatedProperties: [], hasReducedMotion: false, scrollChoreography: [] };
+  const blueprint: Blueprint = { selector: '#hero', capturedAt: '2026-01-01T00:00:00.000Z', nodes: [{ id: 'hero', role: 'container', children: [], box: { w: 160, h: 40 } }] };
+  saveRef(root, { source, component, kind: 'component', capturedAt: '2026-01-01T00:00:00.000Z', selector: '#hero', invariants, principles: ['Keep the hierarchy.'], blueprint, imagePath: relative(root, image) }, createTestProjectWriteAdapter(root));
+  writeFileSync(image, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNgYGAAAAAEAAH2FzhVAAAAAElFTkSuQmCC', 'base64'));
+  const slot = { slotId: 'static', sourceKind: 'component-capture', referenceId: refIdentity(source, component), targetComponent: 'Hero', targetSelector: '#hero', taskIds: ['T1'], reason: 'Use structure', take: ['structure'], avoid: 'Avoid copying', adaptation: 'Adapt lawfully', evidenceAxes: { rights: 'lawful', signal: 'high-visual-system', staticAxis: 'available', motionAxis: 'absent' }, grid: { column: 1, span: 12, order: 0 } };
+  mkdirSync(join(root, '.omd'), { recursive: true });
+  writeFileSync(join(root, '.omd', 'reference-board.json'), JSON.stringify({ schemaVersion: 'reference-board-v1', frameSha256: sha('frame'), candidates: [{ id: 'candidate', label: 'Candidate', route: '/', rationale: 'Lawful evidence', pieces: [slot] }] }));
+  const selected = run(root, ['ref', 'select', 'candidate', '--json']);
+  assert.equal(selected.status, 0, selected.stderr);
+
+  const alternatives = [
+    { register: 'quiet', subjectIdentityFit: 'Quiet editorial framing fits the subject.', staticReferenceSlotIds: ['static'], motionReferenceSlotIds: [], conceptRole: 'Editorial clarity', macroCompositionHypothesis: 'Template-breaking asymmetric editorial departure.', motionHypothesis: 'none', uxAccessibilityPerformanceRisks: ['Reduced motion remains available.'], lawfulImplementationPath: 'CSS and SVG implementation.', rejectionCondition: 'The evidence better supports another direction.' },
+    { register: 'confident', subjectIdentityFit: 'Confident framing fits the subject.', staticReferenceSlotIds: ['static'], motionReferenceSlotIds: [], conceptRole: 'Launch transition', macroCompositionHypothesis: 'Layered promotional composition.', motionHypothesis: 'one', uxAccessibilityPerformanceRisks: ['Reduced motion remains available.'], lawfulImplementationPath: 'CSS and SVG implementation.', rejectionCondition: 'The evidence does not establish the required motion scene.' },
+    { register: 'showpiece', subjectIdentityFit: 'Showpiece framing fits the subject.', staticReferenceSlotIds: ['static'], motionReferenceSlotIds: [], conceptRole: 'Signature reveal', macroCompositionHypothesis: 'Sculptural promotional composition.', motionHypothesis: 'one', uxAccessibilityPerformanceRisks: ['Reduced motion remains available.'], lawfulImplementationPath: 'CSS and SVG implementation.', rejectionCondition: 'The evidence does not establish the required motion scene.' },
+  ];
+  const alternativesSha256 = sha(canonicalPayload(alternatives));
+  const perspective = (position: string) => ({ inputSha256: alternativesSha256, position, evidence: ['reference:static'], objections: [], conditions: ['Preserve the primary task.'] });
+  const deliberation = { schema: 'design-deliberation-v1', id: 'art-direction', decisionId: 'art-direction-register', trigger: 'local session requires independent art-direction selection', moderator: 'omd-eye', perspectives: { ux: perspective('Keep the primary action legible.'), artDirection: perspective('Use the quiet editorial register.'), production: perspective('Use the static CSS/SVG lane.') }, resolution: { selected: 'quiet', rationale: 'Quiet wins on evidence, task clarity, and lawful static feasibility.', conditions: ['Preserve the primary task.'] } };
+  mkdirSync(join(root, '.omd', 'deliberations'), { recursive: true });
+  writeFileSync(join(root, '.omd', 'deliberations', 'art-direction.json'), JSON.stringify(deliberation));
+  const evaluatorAssessment = { assessments: alternatives.map((alternative) => ({ register: alternative.register, score: alternative.register === 'quiet' ? 3 : 1, subjectIdentityRationale: `${alternative.register} subject assessment.`, conceptRoleRationale: `${alternative.register} role assessment.`, uxAccessibilityPerformanceRationale: `${alternative.register} accessibility assessment.`, lawfulFeasibilityRationale: `${alternative.register} lawful assessment.`, referenceEvidenceRationale: `${alternative.register} evidence assessment.`, rejectionRationale: `${alternative.register} ranking assessment.` })) };
+  const evaluatorResult = { winner: 'quiet', alternativesSha256, motionResolution: { motionDecision: 'none', slots: [] } };
+  const input = writeManifest(root, 'local-art-direction.json', { route: '/', alternatives, references: [{ slotId: 'static', signal: 'high-visual-system', positive: true, lawful: true, motionObligation: 'none' }], evaluatorAssessment, evaluatorResult, eligibility: { sceneRoles: [], fallbackAttempted: true, qualityGates: { blindSignatureGreen: true, narrativeGreen: true, motionFitGreen: true, fidelityDecisionFitGreen: true, macroLandingScore: 3, staticReferenceInfluenceScore: 3, templateBreakingLandingScore: 3 } }, beats: ['B-1'], implementationLane: 'browser', fallbackPath: 'CSS/SVG static reduced-motion fallback.', performanceAccessibilityBudget: 'Within the declared accessibility and performance budget.', deliberation: '.omd/deliberations/art-direction.json' });
+  const directed = run(root, ['art-direction', 'local-check', '--input', input, '--json']);
+  assert.equal(directed.status, 0, directed.stderr);
+  assert.equal(existsSync(join(root, '.omd', 'art-direction.json')), true);
+  assert.equal(existsSync(join(root, '.omd', 'reference-handoffs', 'composer.json')), true);
+  assert.equal(existsSync(join(root, '.omd', 'reference-handoffs', 'hand.json')), true);
+});
 test('art direction rejects over-budget Beat sets before settlement and accepts a host-authorized exception', async () => {
   for (const [selectedRegister, count] of [['quiet', 6], ['confident', 8]] as const) {
     const root = project();
