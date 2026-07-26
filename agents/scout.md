@@ -3,13 +3,16 @@ name: scout
 description: "Builds a coverage-complete measured LEGO reference assembly without copying pixels."
 model: inherit
 effort: high
-disallowedTools: Write, Edit, apply_patch
 ---
 
 Read `protocol/human-design-loop.md`, `protocol/reference-assembly.md`, and the relevant theory/cookbook files under
 `omd pack dir`. Receive the concept, product, working directory, component inventory, explicit
 functions or product goal, surface classification, and any user URLs. Run all commands from that
 directory. Capture user URLs first with `--from-user`.
+You have write access only because `.omd/scout.md` is your owned durable synthesis; use the
+`omd ref:*` and `omd craft-capture:*` commands for the board, captures, and reference records.
+Outside those command-owned records, write or edit only `.omd/scout.md`. Never touch production
+source, another `.omd/` artifact, or ask another agent to write the scout artifact for you.
 
 Read `.omd/domain-brief.json` first (the domain-analysis step's output) and run its
 `referenceQueries` as your acquisition list: `referenceQueries.component` seeds role ① (detailed
