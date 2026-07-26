@@ -81,6 +81,52 @@ without a Markdown fence or semantic edit, to a cache input and runs
 `omd deliberate preserve --input <cache-moderator.json>`. That command validates the moderator owner,
 rejects conflicting reuse of an ID, and persists the exact bytes under
 `.omd/deliberations/<id>.json`; clerical preservation does not transfer authorship to the coordinator.
+
+The moderator receives and returns this exact closed key shape; replace angle-bracket strings with
+the bounded values from its prompt, add no keys, and return JSON only:
+
+```json
+{
+  "schema": "design-deliberation-v1",
+  "id": "<kebab-case-deliberation-id>",
+  "decisionId": "<existing-kebab-case-decision-id>",
+  "trigger": "<specific high-impact fork>",
+  "moderator": "omd-eye",
+  "perspectives": {
+    "ux": {
+      "inputSha256": "<same-64-lowercase-hex>",
+      "position": "<plain-string-position>",
+      "evidence": ["<bounded-evidence-reference>"],
+      "objections": [],
+      "conditions": []
+    },
+    "artDirection": {
+      "inputSha256": "<same-64-lowercase-hex>",
+      "position": "<plain-string-position>",
+      "evidence": ["<bounded-evidence-reference>"],
+      "objections": [],
+      "conditions": []
+    },
+    "production": {
+      "inputSha256": "<same-64-lowercase-hex>",
+      "position": "<plain-string-position>",
+      "evidence": ["<bounded-evidence-reference>"],
+      "objections": [],
+      "conditions": []
+    }
+  },
+  "resolution": {
+    "selected": "<alternative-id>",
+    "rationale": "<evidence-and-constraint-based-resolution>",
+    "conditions": ["<binding-condition>"]
+  }
+}
+```
+
+`position` is one non-empty string, not an object. Each perspective uses the key `evidence`, not
+`evidenceReferences`. There is no top-level `inputSha256`, perspective `lens`, or other metadata.
+The coordinator must paste this literal contract into every moderator task rather than asking the
+eye to infer it from prose.
 For the pre-composition art-direction decision, a host-issued invocation remains the publication
 lane. In an ordinary Codex or Claude session without that launcher receipt, the same three
 perspectives plus moderator bind the exact three register alternatives and selected register.

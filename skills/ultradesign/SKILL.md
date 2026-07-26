@@ -162,8 +162,10 @@ reason to stop the design. When the launcher supplied the activation, use the ho
 `omd art-direction check` path above. When no activation was supplied, use the moderator-bound local
 lane: hash the exact three direction alternatives, spawn fresh `oh-my-design:eye` UX, art-direction, and
 production perspectives concurrently with those identical bytes, then a fourth fresh `oh-my-design:eye`
-moderator. The eye is intentionally read-only: it returns the closed JSON and never writes the
-artifact itself. Copy that JSON byte-for-byte, without its Markdown fence and without editing or
+moderator. Paste the literal closed `design-deliberation-v1` key skeleton from
+`protocol/design-deliberation.md` into the moderator task; never ask it to infer the schema from
+prose. The eye is intentionally read-only: it returns the closed JSON and never writes the artifact
+itself. Copy that JSON byte-for-byte, without its Markdown fence and without editing or
 paraphrasing, to `.omd/.cache/art-direction-moderator.json`, then run
 `omd deliberate preserve --input .omd/.cache/art-direction-moderator.json`. This validated clerical
 persistence is not coordinator authorship. Its three `inputSha256` values must equal the alternatives
@@ -388,11 +390,13 @@ For L4, composition does not advance directly to sketches. Take each high/critic
 and spawn three fresh `oh-my-design:eye` contexts concurrently in UX, art-direction, and production
 perspective modes. Give all three the identical sanitized alternatives and input bytes; give none
 another perspective's output or authorship. Then spawn a fourth fresh `oh-my-design:eye` as moderator with
-only the three completed records, alternatives, and shared input digest. Majority vote is forbidden:
-the moderator resolves objections against evidence and constraints and returns one closed
-`design-deliberation-v1` JSON record. A read-only moderator response is the required success path,
-not a permission blocker. Copy its JSON byte-for-byte without the Markdown fence to a cache input,
-then run `omd deliberate preserve --input <cache-moderator.json>`; never ask the eye to write and
+only the three completed records, alternatives, shared input digest, and the literal exact-key
+`design-deliberation-v1` skeleton from `protocol/design-deliberation.md`. The moderator must fill
+that skeleton, add no keys, use a plain string for each `position`, and return JSON only. Majority
+vote is forbidden: the moderator resolves objections against evidence and constraints. A read-only
+moderator response is the required success path, not a permission blocker. Copy its JSON
+byte-for-byte without the Markdown fence to a cache input, then run
+`omd deliberate preserve --input <cache-moderator.json>`; never ask the eye to write and
 never recreate its fields yourself. The command validates ownership and preserves that exact record
 under `.omd/deliberations/<id>.json`. If its resolution differs from the composer's selected alternative,
 return to the composer to revise `.omd/composition.md` and its owner-authored decision entry, then

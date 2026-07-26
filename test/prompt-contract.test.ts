@@ -881,6 +881,10 @@ test('ultradesign externalizes decisions, deliberation, visual observation, and 
   assert.match(protocol, /same concrete model and identical prompt bytes/);
   assert.match(protocol, /`omd art-direction local-check` accepts only that moderator-owned receipt/);
   assert.match(protocol, /The eye is intentionally read-only/);
+  assert.match(protocol, /"id": "<kebab-case-deliberation-id>"/);
+  assert.match(protocol, /"decisionId": "<existing-kebab-case-decision-id>"/);
+  assert.match(protocol, /`position` is one non-empty string, not an object/);
+  assert.match(protocol, /There is no top-level `inputSha256`, perspective `lens`, or other metadata/);
 
   const skill = read('src/skills/omd-ultradesign/SKILL.md').replace(/\s+/g, ' ');
   assert.match(skill, /`omd depth classify --input \.omd\/depth\.json --json`/);
@@ -892,6 +896,8 @@ test('ultradesign externalizes decisions, deliberation, visual observation, and 
   assert.match(skill, /do not attempt or claim v2 publication/);
   assert.match(skill, /`omd deliberate preserve --input/);
   assert.match(skill, /A read-only moderator response is the required success path/);
+  assert.match(skill, /Paste the literal closed `design-deliberation-v1` key skeleton/);
+  assert.match(skill, /use a plain string for each `position`, and return JSON only/);
 
   const framer = read('src/agents/framer.agent.yaml').replace(/\s+/g, ' ');
   assert.match(framer, /You also own `\.omd\/acquisition-plan\.json`/);
