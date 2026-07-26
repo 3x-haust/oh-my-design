@@ -214,9 +214,18 @@ encouraged. `omd ref distance` reports how close the build is — high closeness
 outcome. Record attribution for every used reference, and write the product's own copy and use its
 own real assets rather than lifting the source's words or photographs.
 
-Turn the validated inventory into sanitized bricks in `.omd/scout.md`, then create two or more
-viable candidate assemblies in the internal `.omd/reference-board.json`. Run `omd ref check`, then
-run `omd ref candidates` and paste its exact Markdown table directly into the Codex or Claude chat.
+Turn the validated inventory into sanitized bricks in `.omd/scout.md`, then author two or more
+viable candidate assemblies through `omd ref board --input <candidate-assemblies.json>`. Do not
+guess or hand-write the internal board schema. The input root is `{ "candidates": [...] }`; every
+candidate has `id`, `label`, `route`, `rationale`, and `pieces`. Every piece has the exact captured
+`source` and `component`, plus `slotId`, `targetComponent`, local `targetSelector`, optional
+`taskIds`, `reason`, non-empty `take` using only `structure|proportion|density|rhythm|motion`,
+`avoid`, `adaptation`, `grid: {column,span,order}`, `rights` (`lawful|restricted|unknown`),
+`signal` (`high-visual-system|high-motion|supporting-component|supporting-content|anti-reference`),
+and `motionAxis` (`available|absent`). The command derives reference IDs and the current frame hash,
+requires every candidate to cover every required acquisition zone, validates captured evidence,
+and alone writes `.omd/reference-board.json`. Run `omd ref check`, then run `omd ref candidates`
+and paste its exact Markdown table directly into the Codex or Claude chat.
 The table is the candidate presentation; do not create, open, attach, or ask the user to inspect a
 board UI, HTML, PNG, showcase, or `omd-board`. The coordinator selects the strongest candidate itself
 and records it with `omd ref select`, disclosing its choice and reason; it never asks the user to pick
