@@ -43,6 +43,12 @@ On Codex, every named-role launch uses `fork_turns: "none"` together with `agent
 then inherits the coordinator agent type instead of loading the OMD role, and the launch is invalid.
 A failed launch is retried once with the same role, effort, sanitized message, and
 `fork_turns: "none"`; it is never replaced by a generic `worker`.
+A child `send_message` is progress only, never its handback and never proof that the role stopped.
+Wait until the child agent state is `completed`, then consume its final response and run the
+artifact gate. Do not cancel a still-running owner or stop the graph because an intermediate
+message describes a temporary gap; capture and browser writes may still be joining. A timeout
+requires both an unfinished child and no ongoing tool/process activity, not merely several wait
+polls with no chat message.
 **Artifact ownership is not advisory.** Each durable artifact below is written by the agent that owns
 it, spawned for that purpose. The coordinator orchestrates, gathers, sanitizes, and gates — it never
 writes an owned artifact itself, however obvious the content seems or however much time a direct
