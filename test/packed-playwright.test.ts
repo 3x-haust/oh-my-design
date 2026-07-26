@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -14,7 +14,7 @@ interface PackedPackage {
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const NPM = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-const PLAYWRIGHT_RANGE = '1.61.1';
+const PLAYWRIGHT_VERSION = '1.61.1';
 const PROBE_FIXTURE = fileURLToPath(new URL('./fixtures/probe.html', import.meta.url));
 const RENDER_FIXTURE = fileURLToPath(new URL('./fixtures/slop.html', import.meta.url));
 const WORKSPACE_DEPENDENCIES = ['playwright', 'playwright-core', 'smol-toml', 'yaml'] as const;
@@ -95,7 +95,7 @@ test('Given a packed release When an isolated consumer installs it Then Playwrig
     mkdirSync(packs);
     const rootPackage = pack(packs);
     const packedManifest = manifestFromTarball(rootPackage.archive);
-    assert.equal(dependencyRecord(packedManifest, 'dependencies')['playwright'], PLAYWRIGHT_RANGE);
+    assert.equal(dependencyRecord(packedManifest, 'dependencies')['playwright'], PLAYWRIGHT_VERSION);
     assert.equal(optionalRecord(packedManifest['devDependencies'], 'devDependencies')?.['playwright'], undefined);
 
     installTarballWithoutScripts(rootPackage.archive, packedRuntime);
