@@ -1888,10 +1888,33 @@ async function cmdTokens(mode: string | undefined, opts: Opts): Promise<never> {
   process.exit(drift ? 1 : 0);
 }
 
-/** Validates owner-authored design records before production or across the completed run. */
+/** Persists a moderator handback verbatim or validates the joined run before/final. */
 async function cmdDeliberate(mode: string | undefined, opts: Opts): Promise<never> {
+  if (mode === 'preserve') {
+    if (!opts.input || opts._.length > 0) throw new Error('usage: omd deliberate preserve --input <moderator.json> [--json]');
+    const source = resolve(opts.input);
+    const body = readFileSync(source, 'utf8').trim();
+    let raw: unknown;
+    try { raw = JSON.parse(body); } catch { throw new Error('DELIBERATION_MODERATOR_JSON_INVALID: input must contain only the moderator JSON object, without a Markdown fence'); }
+    const { validateDeliberation } = await import('../core/deliberation/contracts.ts');
+    const result = validateDeliberation(raw);
+    if (!result.value || result.findings.length > 0) throw new Error(result.findings.map((finding) => `${finding.id} ${finding.path}: ${finding.message}`).join('\n'));
+    if (result.value.moderator !== 'omd-eye' || !/^[a-z0-9][a-z0-9-]*$/.test(result.value.id)) {
+      throw new Error('DELIBERATION_MODERATOR_OWNER_INVALID: receipt needs moderator omd-eye and a kebab-case id');
+    }
+    const relativePath = `.omd/deliberations/${result.value.id}.json`;
+    const destination = join(process.cwd(), relativePath);
+    const content = `${body}\n`;
+    if (existsSync(destination) && readFileSync(destination, 'utf8') !== content) {
+      throw new Error('DELIBERATION_IMMUTABLE_CONFLICT: a different moderator receipt already uses this id');
+    }
+    const path = projectWriterFromActivation(opts, 'omd deliberate preserve').write(relativePath, content);
+    if (opts.json) process.stdout.write(JSON.stringify({ path, id: result.value.id }));
+    else console.log(path);
+    process.exit(0);
+  }
   if (mode !== 'check' || (opts.phase !== undefined && opts.phase !== 'prebuild' && opts.phase !== 'final')) {
-    throw new Error('usage: omd deliberate check [--phase prebuild|final] [--json]');
+    throw new Error('usage: omd deliberate preserve --input <moderator.json> | check [--phase prebuild|final] [--json]');
   }
   const { checkDeliberationRun } = await import('../core/deliberation/check.ts');
   const phase = (opts.phase ?? 'final') as import('../core/deliberation/check.ts').DeliberationRunPhase;
@@ -2869,6 +2892,7 @@ function usage(): never {
     + '  acquisition set --zones <json-array>          persist framer-owned section/region/state reference targets\n'
     + '  depth classify --input depth.json [--json]      choose L1–L4 from design risk, never from convenience\n'
     + '  deliberate check [--phase prebuild|final] [--json] validate owner decisions before build or the complete visual loop\n'
+    + '  deliberate preserve --input moderator.json    validate and persist an exact omd-eye moderator handback\n'
     + '  compare score --input comparison.json [--json] blind same-model quality and quality/cost comparison\n'
     + '  source --seal [root]                        write final approved-input/source byte seal\n'
     + '  source --check [root] [--json]              fail when the source seal is missing or stale\n'

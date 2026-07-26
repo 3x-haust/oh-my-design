@@ -76,8 +76,11 @@ Then spawn a fourth fresh `omd-eye` as moderator. It receives only the three com
 records, the decision alternatives, and the same sanitized input digest. It does not vote by
 majority: it resolves objections against evidence and constraints, returns one selection plus
 conditions, and authors the `design-deliberation-v1` record. All three perspective `inputSha256`
-values must match. The coordinator only preserves the moderator's closed JSON under
-`.omd/deliberations/<id>.json`.
+values must match. The eye is intentionally read-only. The coordinator copies only its returned JSON,
+without a Markdown fence or semantic edit, to a cache input and runs
+`omd deliberate preserve --input <cache-moderator.json>`. That command validates the moderator owner,
+rejects conflicting reuse of an ID, and persists the exact bytes under
+`.omd/deliberations/<id>.json`; clerical preservation does not transfer authorship to the coordinator.
 For the pre-composition art-direction decision, a host-issued invocation remains the publication
 lane. In an ordinary Codex or Claude session without that launcher receipt, the same three
 perspectives plus moderator bind the exact three register alternatives and selected register.

@@ -162,8 +162,11 @@ reason to stop the design. When the launcher supplied the activation, use the ho
 `omd art-direction check` path above. When no activation was supplied, use the moderator-bound local
 lane: hash the exact three direction alternatives, spawn fresh `oh-my-design:eye` UX, art-direction, and
 production perspectives concurrently with those identical bytes, then a fourth fresh `oh-my-design:eye`
-moderator. Preserve its exact `design-deliberation-v1` JSON at
-`.omd/deliberations/art-direction.json`; its three `inputSha256` values must equal the alternatives
+moderator. The eye is intentionally read-only: it returns the closed JSON and never writes the
+artifact itself. Copy that JSON byte-for-byte, without its Markdown fence and without editing or
+paraphrasing, to `.omd/.cache/art-direction-moderator.json`, then run
+`omd deliberate preserve --input .omd/.cache/art-direction-moderator.json`. This validated clerical
+persistence is not coordinator authorship. Its three `inputSha256` values must equal the alternatives
 hash and its resolution must equal the evaluator result. Run
 `omd art-direction local-check --input <decision-check.json>` with that `deliberation` path and no
 `invocation` field. This derives only local project-write authority and cannot publish v2 evidence;
@@ -387,8 +390,11 @@ perspective modes. Give all three the identical sanitized alternatives and input
 another perspective's output or authorship. Then spawn a fourth fresh `oh-my-design:eye` as moderator with
 only the three completed records, alternatives, and shared input digest. Majority vote is forbidden:
 the moderator resolves objections against evidence and constraints and returns one closed
-`design-deliberation-v1` JSON record. Preserve that exact record under
-`.omd/deliberations/<id>.json`. If its resolution differs from the composer's selected alternative,
+`design-deliberation-v1` JSON record. A read-only moderator response is the required success path,
+not a permission blocker. Copy its JSON byte-for-byte without the Markdown fence to a cache input,
+then run `omd deliberate preserve --input <cache-moderator.json>`; never ask the eye to write and
+never recreate its fields yourself. The command validates ownership and preserves that exact record
+under `.omd/deliberations/<id>.json`. If its resolution differs from the composer's selected alternative,
 return to the composer to revise `.omd/composition.md` and its owner-authored decision entry, then
 rerun `omd composition --check`. No L4 sketch starts without this receipt.
 
