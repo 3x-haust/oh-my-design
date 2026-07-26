@@ -128,7 +128,7 @@ const readImmutablePreSelectionRecord = (root: string, digest: string, record: s
     return fail('immutable pre-selection record is invalid JSON');
   }
 };
-const readPersistedMotionResolution = (root: string, digest: string): MotionResolutionProjection => {
+export const readPersistedMotionResolution = (root: string, digest: string): MotionResolutionProjection => {
   const expectedDigest = sha(digest, 'motion resolution sha256');
   const body = readRegularFile(join(root, '.omd', 'motion-resolutions', `sha256-${expectedDigest}.json`), 'persisted motion resolution');
   try {
@@ -296,6 +296,9 @@ export function persistMotionResolutionProjection(
   authorization: 'host' | 'local-moderator' = 'host',
 ): { readonly path: string; readonly projection: MotionResolutionProjection } {
   const projection = resolveMotionProjection(input);
+  if (projection.activationSha256 !== artDirectionSha256(invocation.activation)) {
+    return fail('motion resolution does not bind the exact authorizing invocation activation');
+  }
   if (sha256(evidence.assessmentBytes) !== projection.evaluatorPayloadSha256 || sha256(evidence.resultBytes) !== projection.evaluatorResultSha256
     || (projection.approvedRecipe !== undefined && (evidence.approvedRecipeBytes === undefined || sha256(evidence.approvedRecipeBytes) !== projection.approvedRecipe.recipeSha256))) return fail('motion resolution evidence bytes do not match evaluator provenance');
   if (authorization === 'host') {

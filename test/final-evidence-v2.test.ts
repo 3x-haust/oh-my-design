@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { deflateSync } from 'node:zlib';
-import { closeSync, existsSync, fstatSync, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { basename, isAbsolute, join, relative, resolve } from 'node:path';
+import { closeSync, existsSync, fstatSync, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, renameSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
+import { hostname, tmpdir } from 'node:os';
+import { basename, join, resolve } from 'node:path';
 import test from 'node:test';
 import { checkFinalEvidenceV2 as guardedCheckFinalEvidenceV2, garbageCollectFinalEvidenceV2 as guardedGarbageCollectFinalEvidenceV2, publishFinalEvidenceV2 as guardedPublishFinalEvidenceV2, recoverFinalEvidenceV2Lock as guardedRecoverFinalEvidenceV2Lock, validateFinalEvidenceV2Manifest, FINAL_EVIDENCE_V2_GC_TTL_MS, type FinalEvidenceV2Manifest } from '../core/evidence/final-v2.ts';
 import { publishTaskEvidence } from '../core/evidence/task.ts';
@@ -74,12 +74,6 @@ function garbageCollectFinalEvidenceV2(directory: string, options: Parameters<ty
 
 const sha = (bytes: string | Buffer): string => createHash('sha256').update(bytes).digest('hex');
 const root = (): string => mkdtempSync(join(tmpdir(), 'omd-final-v2-'));
-const projectRelativePaths = <T>(directory: string, value: T): T => {
-  if (typeof value === 'string') return (isAbsolute(value) ? relative(realpathSync(directory), realpathSync(value)) : value) as T;
-  if (Array.isArray(value)) return value.map((item) => projectRelativePaths(directory, item)) as T;
-  if (value !== null && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, projectRelativePaths(directory, item)])) as T;
-  return value;
-};
 const clean = (path: string): void => rmSync(path, { recursive: true, force: true });
 const crc32 = (bytes: Buffer): number => {
   let value = 0xffffffff;
@@ -304,8 +298,8 @@ const manifest = (directory: string, decision: 'none' | 'one' = 'none', motionRe
     settledSelectionSha256,
     settledSelection,
   };
-  const composerHandoff = writeReferenceHandoffReceipt(directory, 'composer', invocation, artDirectionSemanticSha256, settlement).receipt;
-  writeReferenceHandoffReceipt(directory, 'hand', invocation, artDirectionSemanticSha256, settlement);
+  const composerHandoff = writeReferenceHandoffReceipt(directory, 'composer', invocation).receipt;
+  writeReferenceHandoffReceipt(directory, 'hand', invocation);
   const usageValue = {
     schemaVersion: 'reference-usage-v2',
     captureSha256: selectionValue.captureSha256,
@@ -428,9 +422,11 @@ const forgeBeatFinalization = (
   art.intentLedgerSha256 = intentSha256;
   art.beatIds = beatIds;
   const artDirectionSemanticSha256 = artDirectionSha256(art);
-  writeFileSync(artPath, `${canonical(art)}\n`);
-  writeFileSync(join(directory, '.omd', 'art-direction.json'), `${canonical({ schemaVersion: 'art-direction-current-v2', record: graph.artDirection.path.slice('.omd/'.length), sha256: artDirectionSemanticSha256 })}\n`);
-  graph = { ...graph, artDirection: { ...graph.artDirection, sha256: sha(readFileSync(artPath)) } };
+  const artRecordRelativePath = `.omd/art-direction-runs/sha256-${artDirectionSemanticSha256}.json`;
+  const artRecordPath = join(directory, artRecordRelativePath);
+  writeFileSync(artRecordPath, `${canonical(art)}\n`);
+  writeFileSync(join(directory, '.omd', 'art-direction.json'), `${canonical({ schemaVersion: 'art-direction-current-v2', record: artRecordRelativePath.slice('.omd/'.length), sha256: artDirectionSemanticSha256 })}\n`);
+  graph = { ...graph, artDirection: { ...graph.artDirection, path: artRecordRelativePath, sha256: sha(readFileSync(artRecordPath)) } };
 
   const invocation = finalEvidenceInvocation(directory);
   const motionResolution = JSON.parse(readFileSync(join(directory, '.omd', 'motion-resolutions', `sha256-${art.decision.motionResolutionProjectionSha256}.json`), 'utf8')) as MotionResolutionProjection;
@@ -442,8 +438,8 @@ const forgeBeatFinalization = (
   };
   assert.equal(settlement.motionResolutionProjectionSha256, art.decision.motionResolutionProjectionSha256);
   assert.equal(settlement.settledSelectionSha256, art.decision.settledSelectionSha256);
-  const composer = writeReferenceHandoffReceipt(directory, 'composer', invocation, artDirectionSemanticSha256, settlement).receipt;
-  writeReferenceHandoffReceipt(directory, 'hand', invocation, artDirectionSemanticSha256, settlement);
+  const composer = writeReferenceHandoffReceipt(directory, 'composer', invocation).receipt;
+  writeReferenceHandoffReceipt(directory, 'hand', invocation);
   const usage = JSON.parse(readFileSync(join(directory, graph.usage.path), 'utf8')) as Record<string, any>;
   usage.artDirectionSha256 = artDirectionSemanticSha256;
   usage.composerHandoffSha256 = composer.payloadSha256;
@@ -686,11 +682,11 @@ test('motion evidence accepts one observed scene and rejects empty or multi-scen
     const observationDirectory = join(directory, '.omd', 'motion-observations', 'run-1');
     const adapter = createTestProjectWriteAdapter(directory);
     adapter.mkdir('.omd/motion-observations/run-1');
-    const motion = projectRelativePaths(directory, await captureMotionEvidenceV2(target, {
+    const motion = await captureMotionEvidenceV2(target, {
       viewport: { width: 390, height: 300 }, outDir: observationDirectory, runId: 'run-1', buildHash,
       artDirectionHash: artDirectionHash, referenceSlotId: 'motion-reference', selector: 'html',
       trigger: 'load', intervalMs: 160, adapter,
-    }));
+    });
     for (const [stage, capture] of Object.entries({
       start: motion.scenes[0]!.start.capture,
       mid: motion.scenes[0]!.mid.capture,
@@ -761,7 +757,9 @@ test('stale committed lock recovery revalidates the complete current graph', () 
   const directory = root(); try {
     publishFinalEvidenceV2(directory, manifest(directory)); const pointer = JSON.parse(readFileSync(join(directory, '.omd', 'final-evidence-v2.json'), 'utf8')) as { sha256: string };
     writeFileSync(join(directory, '.omd', '.final-evidence-v2.lock'), JSON.stringify({ schema: 'final-evidence-v2-lock', operation: 'publication', hash: pointer.sha256, host: 'host', pid: 1, startedAt: 0 }));
+    writeFileSync(join(directory, '.omd-project-mutation.lock'), JSON.stringify({ schema: 'omd-project-mutation-lock-v1', host: hostname(), pid: 99_999_999, startedAt: 0 }));
     assert.equal(recoverFinalEvidenceV2Lock(directory, { now: () => 16 * 60 * 1000, processAlive: () => false }), true);
+    assert.equal(existsSync(join(directory, '.omd-project-mutation.lock')), false);
   } finally { clean(directory); }
 });
 test('stale GC recovery restores a journaled claimed runs parent before checking the pointer', () => {
@@ -802,7 +800,7 @@ test('orphan GC serializes quarantine and deletion against a same-hash publisher
     let concurrentPublisherAttempts = 0;
     const race = () => {
       concurrentPublisherAttempts += 1;
-      assert.throws(() => publishFinalEvidenceV2(directory, input), /publication is already in progress/);
+      assert.throws(() => publishFinalEvidenceV2(directory, input), /publication is already in progress|project mutation lock/);
     };
     const quarantined = garbageCollectFinalEvidenceV2(directory, {
       dryRun: false,
@@ -823,6 +821,66 @@ test('orphan GC serializes quarantine and deletion against a same-hash publisher
     assert.equal((JSON.parse(readFileSync(pointerPath, 'utf8')) as { record: string }).record, pointer.record);
     assert.doesNotThrow(() => checkFinalEvidenceV2(directory));
   } finally { clean(directory); }
+});
+test('final publication and destructive GC reject ordinary guarded writers at commit seams', () => {
+  const publicationRoot = root(); const gcRoot = root(); try {
+    const publicationInput = manifest(publicationRoot);
+    const publicationWriter = finalEvidenceInvocation(publicationRoot);
+    let publicationRaceObserved = false;
+    publishFinalEvidenceV2(publicationRoot, publicationInput, {
+      fs: {
+        rename: (from, to) => {
+          if (basename(to) === 'final-evidence-v2.json') {
+            publicationRaceObserved = true;
+            assert.throws(() => writeProjectFile({
+              projectRoot: publicationRoot,
+              relativePath: '.omd/concurrent-writer.json',
+              content: '{}',
+              invocation: publicationWriter,
+            }), /project mutation lock/);
+          }
+          renameSync(from, to);
+        },
+      },
+    });
+    assert.equal(publicationRaceObserved, true);
+    assert.equal(existsSync(join(publicationRoot, '.omd', 'concurrent-writer.json')), false);
+
+    const gcInput = manifest(gcRoot);
+    publishFinalEvidenceV2(gcRoot, gcInput);
+    const pointerPath = join(gcRoot, '.omd', 'final-evidence-v2.json');
+    const pointer = JSON.parse(readFileSync(pointerPath, 'utf8')) as { record: string };
+    const recordPath = join(gcRoot, '.omd', 'final-evidence-v2-runs', pointer.record);
+    rmSync(pointerPath);
+    utimesSync(recordPath, new Date(0), new Date(0));
+    const gcWriter = finalEvidenceInvocation(gcRoot);
+    let gcRaceObserved = false;
+    garbageCollectFinalEvidenceV2(gcRoot, {
+      dryRun: false,
+      now: 2 * FINAL_EVIDENCE_V2_GC_TTL_MS,
+      seams: {
+        fs: {
+          rename: (from, to) => {
+            if (basename(from) === pointer.record && basename(to) === pointer.record) {
+              gcRaceObserved = true;
+              assert.throws(() => writeProjectFile({
+                projectRoot: gcRoot,
+                relativePath: '.omd/concurrent-gc-writer.json',
+                content: '{}',
+                invocation: gcWriter,
+              }), /project mutation lock/);
+            }
+            renameSync(from, to);
+          },
+        },
+      },
+    });
+    assert.equal(gcRaceObserved, true);
+    assert.equal(existsSync(join(gcRoot, '.omd', 'concurrent-gc-writer.json')), false);
+  } finally {
+    clean(publicationRoot);
+    clean(gcRoot);
+  }
 });
 test('orphan GC rejects symlinked runs and quarantine parent directories', () => {
   const runsDirectory = root(); const quarantineDirectory = root(); const outside = root(); try {
@@ -978,10 +1036,10 @@ async function captureLoadScene(directory: string, input: FinalEvidenceV2Manifes
   const observationDirectory = join(directory, '.omd', 'motion-observations', 'run-1');
   const adapter = createTestProjectWriteAdapter(directory);
   adapter.mkdir('.omd/motion-observations/run-1');
-  const motion = projectRelativePaths(directory, await captureMotionEvidenceV2(target, {
+  const motion = await captureMotionEvidenceV2(target, {
     viewport: { width: 390, height: 300 }, outDir: observationDirectory, runId: 'run-1', buildHash,
     artDirectionHash, referenceSlotId: 'motion-reference', selector: 'html', trigger: 'load', intervalMs: 160, adapter,
-  }));
+  });
   const sourceSealValue = createSourceSeal(directory, '2026-01-01T00:00:00.000Z');
   writeFileSync(join(directory, '.omd', 'source-seal.json'), `${canonical(sourceSealValue)}\n`);
   (input.graph.sourceSeal as { sha256: string }).sha256 = sha(readFileSync(join(directory, '.omd', 'source-seal.json')));

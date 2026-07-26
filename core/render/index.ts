@@ -640,7 +640,8 @@ export async function captureMotionEvidenceV2(
     const receipt = async (name: string): Promise<ObservedCaptureReceipt> => {
       const output = join(opts.outDir, `${opts.runId}-${name}.png`);
       const bytes = await page.screenshot({ fullPage: false });
-      const path = adapter.write(projectOutputPath(adapter, output), bytes);
+      const path = projectOutputPath(adapter, output);
+      adapter.write(path, bytes);
       return { path, bytesBase64: bytes.toString('base64'), sha256: createHash('sha256').update(bytes).digest('hex') };
     };
     const baseline = await receipt('baseline');
@@ -677,7 +678,8 @@ export async function captureMotionEvidenceV2(
       }
       if (computeEnergy(stableFrames).peakEnergy > noiseFloor) throw new Error('fresh reduced-motion page did not remain stable across three frames');
       const bytes = stableFrames[2]!;
-      const path = adapter.write(projectOutputPath(adapter, join(opts.outDir, `${opts.runId}-reduced.png`)), bytes);
+      const path = projectOutputPath(adapter, join(opts.outDir, `${opts.runId}-reduced.png`));
+      adapter.write(path, bytes);
       reduced = { path, bytesBase64: bytes.toString('base64'), sha256: createHash('sha256').update(bytes).digest('hex') };
       reducedEnergy = computeEnergy([Buffer.from(end.bytesBase64, 'base64'), bytes]).peakEnergy;
     } finally {

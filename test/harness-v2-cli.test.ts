@@ -12,13 +12,12 @@ import { NO_CURRENT_USER_BEAT_EXCEPTION_RECEIPT_SHA256, recipeDecisionProjection
 import { intentLedgerSha256, resolveCurrentUserBeatExceptionReceipt } from '../core/runtime/intent.ts';
 import { refIdentity } from '../core/ref/identity.ts';
 import { refImagePath, saveRef } from '../core/ref/store.ts';
-import { motionResolutionProjectionSha256, referenceSelectionV2Sha256 } from '../core/ref/reference-selection.ts';
+import { motionResolutionProjectionSha256, persistMotionResolutionProjection, readPreReferenceSelectionV2, referenceSelectionV2Sha256 } from '../core/ref/reference-selection.ts';
 import { COPY_DECK_RECEIPT_SCHEMA_VERSION, copyDeckSha256, validateCanonicalCopyDeckReceipt } from '../core/copy/index.ts';
 import type { Blueprint, Invariants, Reference } from '../core/types.ts';
-import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
+import { createTestProjectRunInvocation, createTestProjectWriteAdapter } from './helpers/project-write.ts';
 import { writeSourceSeal } from '../core/source-seal/index.ts';
 import { publishTaskEvidence } from '../core/evidence/task.ts';
-import { createTestProjectRunInvocation } from './helpers/project-write.ts';
 import { validateFinalEvidenceV2Graph } from '../core/evidence/final-v2-graph.ts';
 
 import { captureRenderedBeatReceipt, renderFilmstrip, renderPage } from '../core/render/index.ts';
@@ -543,6 +542,30 @@ test('art direction rejects over-budget Beat sets before settlement and accepts 
   assert.notEqual(record.decision.currentUserBeatExceptionReceiptSha256, NO_CURRENT_USER_BEAT_EXCEPTION_RECEIPT_SHA256);
 });
 
+test('motion persistence rejects a projection replayed from another invocation activation', async () => {
+  const root = project();
+  const value = await manifest(root);
+  assert.equal(value.motionDecision, 'none');
+  const invocation = createTestProjectRunInvocation(root);
+  const selection = readPreReferenceSelectionV2(root);
+  assert.throws(
+    () => persistMotionResolutionProjection(root, {
+      activationSha256: sha('another-authorizing-invocation'),
+      alternativesSha256: sha('alternatives'),
+      handoffSha256: sha('handoff'),
+      evaluatorInvocationSha256: sha('evaluator-invocation'),
+      evaluatorPayloadSha256: sha('assessment'),
+      evaluatorResultSha256: sha('result'),
+      motionDecision: 'none',
+      slots: [],
+      selection,
+    }, {
+      assessmentBytes: Buffer.from('assessment'),
+      resultBytes: Buffer.from('result'),
+    }, invocation, 'local-moderator'),
+    /exact authorizing invocation activation/,
+  );
+});
 test('invalid none and one manifests cannot publish', async () => {
   for (const [name, kind] of [['none.json', 'none'], ['one.json', 'one']] as const) {
     const root = project(); const invalid = await manifest(root, kind);

@@ -22,7 +22,7 @@ import {
   observeClaudeLoadedSkill,
   preflightClaudeV2,
 } from '../adapters/claude.ts';
-import { createReviewerMcpAdapter, type ReviewerHost } from '../adapters/reviewer-mcp.ts';
+import { createReviewerMcpAdapter, reviewerEvidenceSha256, type ReviewerHost } from '../adapters/reviewer-mcp.ts';
 import { jsonFile, must, textFile } from './helpers.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -422,6 +422,8 @@ test('the correctly bound host invokes the real reviewer MCP proxy once without 
     sha256: createHash('sha256').update('review evidence').digest('hex'),
   });
   assert.match((transcript[3]!.error as { message: string }).message, /private host launch capability|unknown, reused, or unreadable/);
+  assert.equal(reviewerEvidenceSha256(receipt), receipt.evidence.sha256);
+  assert.throws(() => reviewerEvidenceSha256(receipt), /verified child\/process\/configuration\/capability handshake/);
   otherAdapter.dispose();
   adapter.dispose();
 });

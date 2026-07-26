@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import { deflateSync, crc32 } from 'node:zlib';
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import test, { type TestContext } from 'node:test';
 import { persistImageFragment } from '../core/ref/image-fragment.ts';
 import { refIdentity } from '../core/ref/identity.ts';
 import { motionResolutionProjectionSha256, persistSettledReferenceSelection, readPreReferenceSelectionV2, readReferenceSelectionV2, referenceSelectionV2Sha256, resolveMotionProjection, selectReferenceCandidateV2, type ReferenceSelectionV2 } from '../core/ref/reference-selection.ts';
-import { writeReferenceHandoffReceipt } from '../core/ref/reference-handoff.ts';
+import { createReferenceHandoffReceipt, writeReferenceHandoffReceipt } from '../core/ref/reference-handoff.ts';
 import { parseReferenceUsageV2, type ReferenceUsageInput, validateReferenceUsage } from '../core/ref/reference-usage.ts';
 import { formatReferenceReport, referenceReportPath, referenceReportSnapshot } from '../core/ref/reference-report.ts';
 import { canonicalJson, readReferenceBoardArtifacts, sha256 } from '../core/ref/board-artifacts.ts';
@@ -85,11 +85,7 @@ const persistDecisionSettlement = (
   writer.write('.omd/art-direction.json', canonicalJson({
     schemaVersion: ART_DIRECTION_POINTER_SCHEMA_VERSION, record: recordPath, sha256: artDirectionSha256Value,
   }));
-  writeReferenceHandoffReceipt(root, 'composer', invocation, artDirectionSha256Value, {
-    motionResolutionProjectionSha256: motionSha256,
-    settledSelectionSha256: referenceSelectionV2Sha256(settledSelection),
-    settledSelection,
-  });
+  writeReferenceHandoffReceipt(root, 'composer', invocation);
   return settledSelection;
 };
 
@@ -132,35 +128,6 @@ const generateReport = (value: Fixture): string => {
   const markdown = formatReferenceReport(referenceReportSnapshot(validateReferenceUsage(value.root)));
   writeReferenceUsageRecord(value.root, 'reference-report.md', markdown, 'reference report', value.writer);
   return markdown;
-};
-type Carrier = 'board' | 'selection' | 'attribution' | 'usage' | 'evidence';
-const pathFor = (root: string, carrier: Carrier): string => {
-  switch (carrier) {
-    case 'board': return join(root, '.omd', 'reference-board.json');
-    case 'selection': return join(root, '.omd', 'reference-selection-v2.json');
-    case 'attribution': return join(root, '.omd', 'attribution.md');
-    case 'usage': return join(root, '.omd', 'reference-usage-v2.json');
-    case 'evidence': return join(root, 'src', 'shop.ts');
-  }
-};
-const replacement = (root: string, carrier: Carrier): void => {
-  const path = pathFor(root, carrier); const before = readFileSync(path, 'utf8'); const body = (() => {
-    switch (carrier) {
-      case 'board': return before.replace('Selected clean-room assembly', 'Generation B assembly');
-      case 'selection':
-      case 'attribution': return `${before.trimEnd()}\n\n`;
-      case 'usage': return before.replace('Rendered hero is independently implemented.', 'Generation B verification note.');
-      case 'evidence': return 'export const shop = false;\n';
-    }
-  })();
-  const temporary = `${path}.replacement`; writeFileSync(temporary, body); renameSync(temporary, path);
-};
-const mutateAtLastEvidenceRead = (root: string, carrier: Carrier) => {
-  let reads = 0;
-  return {
-    readers: { readEvidence: (_projectRoot: string, path: string) => { const bytes = readFileSync(join(root, path)); reads += 1; if (reads === 6) replacement(root, carrier); return bytes; } },
-    reads: (): number => reads,
-  };
 };
 
 test('usage ledger binds every selected component and image-fragment production outcome', (context) => {
@@ -209,6 +176,19 @@ test('settlement rejects an unpersisted motion-resolution digest', (context) => 
   const value = fixture(context);
   assert.throws(() => persistSettledReferenceSelection(value.root, readPreReferenceSelectionV2(value.root), '0'.repeat(64), value.invocation));
 });
+
+test('composer handoff derives settlement only from the exact persisted graph', (context) => {
+  const value = fixture(context);
+  const receipt = createReferenceHandoffReceipt(value.root, 'composer');
+  assert.equal(receipt.settledSelectionSha256, referenceSelectionV2Sha256(value.selection));
+
+  const pointer = JSON.parse(readFileSync(join(value.root, '.omd', 'art-direction.json'), 'utf8')) as { record: string };
+  const record = JSON.parse(readFileSync(join(value.root, '.omd', pointer.record), 'utf8')) as { decision: { motionResolutionProjectionSha256: string } };
+  const motionPath = join(value.root, '.omd', 'motion-resolutions', `sha256-${record.decision.motionResolutionProjectionSha256}.json`);
+  writeFileSync(motionPath, `${readFileSync(motionPath, 'utf8')}\n`);
+
+  assert.throws(() => createReferenceHandoffReceipt(value.root, 'composer'), /persisted motion resolution/);
+});
 test('usage ledger rejects incomplete, ambiguous, injected, and non-selected rows', (context) => {
   // Given: exact selected pieces plus malformed attempts that vary one trust-boundary field.
   const value = fixture(context); const rows = usageRows(value); const first = rows[0];
@@ -246,85 +226,32 @@ test('usage ledger rejects stale upstream records and missing or symlinked produ
   assert.throws(() => validateReferenceUsage(stale.root)); assert.throws(() => validateReferenceUsage(staleHash.root)); assert.throws(() => validateReferenceUsage(replacedBoard.root)); assert.throws(() => validateReferenceUsage(missing.root)); assert.throws(() => recordUsage(linked, { rows: linkedRows })); assert.throws(() => validateReferenceUsage(swapped.root)); assert.throws(() => validateReferenceUsage(missingRecord.root)); assert.throws(() => validateReferenceUsage(linkedPointer.root));
 });
 
-test('usage validation survives bounded atomic replacement stress without mixing generations', (context) => {
-  // Given: a persisted valid ledger that changes bytes during two complete snapshot rounds.
-  const value = fixture(context); const recorded = recordUsage(value, { rows: usageRows(value) }); const path = join(value.root, '.omd', 'reference-usage-v2.json'); const replacement = join(value.root, '.omd', 'reference-usage.replacement.json'); let reads = 0;
-  const readers = { readUsage: () => { const bytes = readFileSync(path); if (reads < 4) { writeFileSync(replacement, `${bytes.toString('utf8').trimEnd()}${reads % 2 === 0 ? ' \n' : '\n'}`); renameSync(replacement, path); } reads += 1; return bytes; } };
-
-  // When: validation samples the usage file before and after each atomic replacement.
-  const checked = readValidatedReferenceUsage(value.root, readers);
-
-  // Then: only a settled replacement generation is accepted, with every other binding unchanged.
-  assert.deepEqual(checked.usage.rows, recorded.rows); assert.ok(reads > 6);
-});
-
-test('usage validation rejects a generation-B artifact carrier against generation-A bytes', (context) => {
-  // Given: exact generation-A files plus a reader that supplies a generation-B manifest.
-  const value = fixture(context); recordUsage(value, { rows: usageRows(value) }); const artifacts = readReferenceBoardArtifacts(value.root); const first = artifacts.manifest.candidates[0];
-  if (first === undefined) throw new Error('fixture must include a selected board candidate');
-  const generationBArtifacts = { ...artifacts, manifest: { ...artifacts.manifest, candidates: [{ ...first, label: 'Generation B manifest' }, ...artifacts.manifest.candidates.slice(1)] } };
-  const readers = {
-    readArtifacts: () => generationBArtifacts,
-  };
-
-  // When / Then: no checked result can be accepted unless both values derive from sampled generation-A bytes.
-  assert.throws(() => readValidatedReferenceUsage(value.root, readers));
-});
-
-test('usage validation does not accept an initial generation after last-evidence carrier replacement', (context) => {
-  // Given: a valid generation A and a real atomic replacement triggered by the sixth evidence read.
-  for (const carrier of ['board', 'selection', 'attribution', 'usage', 'evidence'] as const) {
-    const value = fixture(context); recordUsage(value, { rows: usageRows(value) }); const mutation = mutateAtLastEvidenceRead(value.root, carrier);
-
-    // When: validation reaches the final evidence callback after binding generation A.
-    if (carrier === 'usage') {
-      const checked = readValidatedReferenceUsage(value.root, mutation.readers);
-      const first = checked.usage.rows[0]; if (first === undefined) throw new Error('checked usage must retain the first row');
-      assert.equal(first.verificationNote, 'Generation B verification note.');
-    } else if (carrier === 'evidence') {
-      readValidatedReferenceUsage(value.root, mutation.readers); assert.ok(mutation.reads() > 6);
-    } else assert.throws(() => readValidatedReferenceUsage(value.root, mutation.readers), `${carrier} replacement must not accept generation A`);
-  }
-
-  // Then: a stale generation either fails closed or is retried to the current replacement.
-});
-
-test('usage preparation does not write an initial generation after last-evidence carrier replacement', (context) => {
-  // Given: input rows and replacements that occur after all initial evidence checks.
-  for (const carrier of ['board', 'selection', 'attribution', 'evidence'] as const) {
-    const value = fixture(context); const mutation = mutateAtLastEvidenceRead(value.root, carrier);
-
-    // When: preparation derives hashes before the last evidence callback mutates one carrier.
-    // A board replacement changes the capture hash, so the bound selection can never match — it fails closed.
-    // A whitespace-only settled-selection carrier is non-canonical and fails closed.
-    if (carrier === 'board' || carrier === 'selection') {
-      assert.throws(() => prepareReferenceUsage(value.root, { rows: usageRows(value) }, mutation.readers), `${carrier} replacement must not prepare generation A`);
+test('usage validation rejects every substituted settlement carrier', (context) => {
+  for (const carrier of ['art-direction-pointer', 'art-direction-record', 'art-direction-handoff', 'motion-resolution', 'settled-selection', 'composer-handoff'] as const) {
+    const value = fixture(context);
+    recordUsage(value, { rows: usageRows(value) });
+    const pointerPath = join(value.root, '.omd', 'art-direction.json');
+    const pointer = JSON.parse(readFileSync(pointerPath, 'utf8')) as { record: string };
+    const recordPath = join(value.root, '.omd', pointer.record);
+    const record = JSON.parse(readFileSync(recordPath, 'utf8')) as { decision: { motionResolutionProjectionSha256: string; settledSelectionSha256: string }; beatIds: string[] };
+    const paths = {
+      'art-direction-pointer': pointerPath,
+      'art-direction-record': recordPath,
+      'art-direction-handoff': join(value.root, '.omd', 'reference-handoffs', 'art-direction.json'),
+      'motion-resolution': join(value.root, '.omd', 'motion-resolutions', `sha256-${record.decision.motionResolutionProjectionSha256}.json`),
+      'settled-selection': join(value.root, '.omd', 'settled-reference-selections', `sha256-${record.decision.settledSelectionSha256}.json`),
+      'composer-handoff': join(value.root, '.omd', 'reference-handoffs', 'composer.json'),
+    };
+    if (carrier === 'art-direction-pointer') {
+      const current = JSON.parse(readFileSync(paths[carrier], 'utf8')) as { sha256: string };
+      writeFileSync(paths[carrier], canonicalJson({ ...current, sha256: '0'.repeat(64) }));
+    } else if (carrier === 'art-direction-record') {
+      writeFileSync(paths[carrier], canonicalJson({ ...record, beatIds: [...record.beatIds, 'B-replacement'] }));
+    } else {
+      writeFileSync(paths[carrier], `${readFileSync(paths[carrier], 'utf8')}\n`);
     }
-    else {
-      const prepared = prepareReferenceUsage(value.root, { rows: usageRows(value) }, mutation.readers);
-      switch (carrier) {
-        case 'attribution': assert.equal(prepared.attributionSha256, sha256(readFileSync(pathFor(value.root, carrier)))); break;
-        case 'evidence': assert.ok(mutation.reads() > 6); break;
-      }
-    }
+    assert.throws(() => validateReferenceUsage(value.root), `${carrier} replacement must invalidate usage`);
   }
-
-  // Then: only a final coherent generation can be returned for atomic publication.
-});
-
-test('usage validation retries a real replacement at the post-evidence seam', (context) => {
-  // Given: a valid ledger and a deterministic seam immediately before the final coherent snapshot.
-  const value = fixture(context); recordUsage(value, { rows: usageRows(value) }); let evidenceReads = 0; let finalChecks = 0;
-  const readers = {
-    readEvidence: (_projectRoot: string, path: string) => { evidenceReads += 1; return readFileSync(join(value.root, path)); },
-    afterEvidenceChecks: () => { if (finalChecks === 0) replacement(value.root, 'evidence'); finalChecks += 1; },
-  };
-
-  // When: the evidence file is atomically replaced after all initial evidence checks.
-  readValidatedReferenceUsage(value.root, readers);
-
-  // Then: the stale attempt is discarded and the stable replacement is re-read.
-  assert.equal(finalChecks, 2); assert.ok(evidenceReads > 6);
 });
 
 test('report generation never leaks raw artifact paths and preserves a prior report on failure', (context) => {

@@ -221,8 +221,8 @@ function persistValidCurrentArtDirection(root: string): { artDirectionRecord: st
   writer.write(`.omd/motion-resolutions/sha256-${settlement.motionResolutionProjectionSha256}.json`, canonicalJson(motionResolution));
   writer.write(`.omd/settled-reference-selections/sha256-${settlement.settledSelectionSha256}.json`, canonicalJson(settledSelection));
   writer.write('.omd/reference-selection-v2.json', canonicalJson(settledSelection));
-  const composer = writeReferenceHandoffReceipt(root, 'composer', invocation, digest, settlement);
-  writeReferenceHandoffReceipt(root, 'hand', invocation, digest, settlement);
+  const composer = writeReferenceHandoffReceipt(root, 'composer', invocation);
+  writeReferenceHandoffReceipt(root, 'hand', invocation);
   return {
     artDirectionRecord: digest,
     motionResolutionProjection: decision.motionResolutionProjectionSha256,

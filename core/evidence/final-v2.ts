@@ -33,6 +33,7 @@ import { validateMotionEvidenceV2 } from '../render/index.ts';
 import { SCROLL_SCENE_EVIDENCE_SCHEMA, validateScrollSceneEvidence } from '../render/scroll-scene-evidence.ts';
 import { hasHostBoundLocalProjectWriteAuthority, requireHostPayloadAuthorization } from '../runtime/activation.ts';
 import { requireFinalEvidenceManifestAuthorization, requireStaticEvidenceResultAuthorization, type ProjectRunInvocation } from '../runtime/invocation.ts';
+import { acquireProjectMutationLock } from '../runtime/project-write.ts';
 export const FINAL_EVIDENCE_V2_SCHEMA = 'final-evidence-v2';
 export const FINAL_EVIDENCE_V2_POINTER_SCHEMA = 'final-evidence-v2-pointer';
 export const FINAL_EVIDENCE_V2_LOCK_TTL_MS = 15 * 60 * 1000;
@@ -564,6 +565,8 @@ export function publishFinalEvidenceV2(rootInput: string, input: unknown, invoca
   if (submitted.graphRootHash !== undefined) fail('publisher computes graphRootHash from receipts');
   const fs = filesystem(seams);
   const root = requireFinalEvidenceV2Authority(rootInput, invocation);
+  const releaseMutation = acquireProjectMutationLock(root, invocation);
+  try {
   const graph = validateFinalEvidenceV2GraphFiles(root, submitted.graph, fs, invocation);
   const manifest: FinalEvidenceV2Manifest = { ...submitted, graphRootHash: graph.rootHash };
   validateBackedManifest(root, fs, manifest, invocation);
@@ -625,12 +628,18 @@ export function publishFinalEvidenceV2(rootInput: string, input: unknown, invoca
       }
     }
   }
+  } finally {
+    releaseMutation();
+  }
 }
 
 /** Removes only an unambiguously stale lock. A live, malformed, or ambiguous lock fails closed. */
 export function recoverFinalEvidenceV2Lock(rootInput: string, invocation: ProjectRunInvocation, seams: FinalEvidenceV2Seams = {}): boolean {
   const fs = filesystem(seams);
-  const location = paths(requireFinalEvidenceV2Authority(rootInput, invocation));
+  const root = requireFinalEvidenceV2Authority(rootInput, invocation);
+  const location = paths(root);
+  const releaseMutation = acquireProjectMutationLock(root, invocation);
+  try {
   if (!fs.exists(location.lock)) return false;
   ensureDirectory(fs, location.omd);
   let recoveryFd: StableLock | undefined;
@@ -671,17 +680,23 @@ export function recoverFinalEvidenceV2Lock(rootInput: string, invocation: Projec
     if (staleFd !== undefined) fs.close(staleFd);
     if (recoveryFd !== undefined) { releaseLock(fs, location.recovery, recoveryFd); syncDirectory(fs, location.omd); }
   }
+  } finally {
+    releaseMutation();
+  }
 }
 
 /** Conservative two-stage orphan retention. Mutations serialize with publication and require an explicit non-dry-run call. */
 export function garbageCollectFinalEvidenceV2(rootInput: string, invocation: ProjectRunInvocation, options: { dryRun?: boolean; now?: number; seams?: FinalEvidenceV2Seams } = {}): FinalEvidenceV2GcResult {
   const seams = options.seams ?? {};
   const fs = filesystem(seams);
-  const location = paths(options.dryRun === false ? requireFinalEvidenceV2Authority(rootInput, invocation) : rootPath(rootInput));
+  const root = options.dryRun === false ? requireFinalEvidenceV2Authority(rootInput, invocation) : rootPath(rootInput);
+  const location = paths(root);
   const active = { ...location };
   const now = options.now ?? seams.now?.() ?? Date.now();
   const dryRun = options.dryRun !== false;
   const result: FinalEvidenceV2GcResult = { dryRun, quarantined: [], deleted: [] };
+  const releaseMutation = dryRun ? undefined : acquireProjectMutationLock(root, invocation);
+  try {
   let lockFd: StableLock | undefined;
   let runsDirectory: StableDirectory | undefined;
   let quarantineDirectory: StableDirectory | undefined;
@@ -827,6 +842,9 @@ export function garbageCollectFinalEvidenceV2(rootInput: string, invocation: Pro
         }
       }
     }
+  }
+  } finally {
+    releaseMutation?.();
   }
 }
 

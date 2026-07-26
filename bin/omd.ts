@@ -1585,9 +1585,19 @@ function cmdCopy(opts: Opts): never {
 /** `omd composition --check [--json]` — structural/freshness gate for composition.md. */
 function cmdComposition(opts: Opts): never {
   if (!opts.check) throw new Error('usage: omd composition --check [--json]');
-  const direction = currentArtDirection(process.cwd());
-  requireDecisionBoundHandoffs(process.cwd(), artDirectionSha256(direction));
   const findings = validateCompositionContract(process.cwd());
+  if (findings.length === 0) {
+    try {
+      const direction = currentArtDirection(process.cwd());
+      requireDecisionBoundHandoffs(process.cwd(), artDirectionSha256(direction));
+    } catch (error) {
+      findings.push({
+        id: 'COMPOSITION-STALE',
+        path: '.omd/reference-handoffs/composer.json',
+        message: `decision-bound handoff lineage is stale: ${error instanceof Error ? error.message : String(error)}`,
+      });
+    }
+  }
   if (opts.json) process.stdout.write(JSON.stringify(findings));
   else {
     for (const finding of findings) console.log(`[error] ${finding.id} ${finding.path}: ${finding.message}`);
@@ -2233,9 +2243,8 @@ async function cmdArtDirection(mode: string | undefined, opts: Opts): Promise<ne
   const pointer = { schemaVersion: ART_DIRECTION_POINTER_SCHEMA_VERSION, record: recordPath, sha256: digest };
   const path = replaceProjectFileAtomically({ projectRoot: process.cwd(), relativePath: '.omd/art-direction.json', content: JSON.stringify(pointer, null, 2), invocation: run });
   const { writeReferenceHandoffReceipt } = await import('../core/ref/reference-handoff.ts');
-  const settlement = { motionResolutionProjectionSha256: settledMotionResolutionSha256, settledSelectionSha256: referenceSelectionV2Sha256(settledSelection), settledSelection };
-  const composerHandoff = writeReferenceHandoffReceipt(process.cwd(), 'composer', run, digest, settlement);
-  const handHandoff = writeReferenceHandoffReceipt(process.cwd(), 'hand', run, digest, settlement);
+  const composerHandoff = writeReferenceHandoffReceipt(process.cwd(), 'composer', run);
+  const handHandoff = writeReferenceHandoffReceipt(process.cwd(), 'hand', run);
   if (opts.json) process.stdout.write(JSON.stringify({ path, record: recordPath, sha256: digest, motionResolution: motion.path, composerHandoff, handHandoff }));
   else console.log(path);
   process.exit(0);

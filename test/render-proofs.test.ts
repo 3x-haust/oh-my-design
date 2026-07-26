@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { createHash } from 'node:crypto';
@@ -47,17 +47,23 @@ test('captures a real file URL load scene with path-backed ROI receipts', async 
     referenceSlotId: 'motion-reference', selector: 'html',
     trigger: 'load', intervalMs: 160, adapter: createTestProjectWriteAdapter(dir),
   });
-  assert.equal(validateMotionEvidenceV2(evidence, { motionDecision: 'one', buildHash }).scenes.length, 1);
+  assert.equal(validateMotionEvidenceV2(evidence, { motionDecision: 'one', buildHash, root: dir }).scenes.length, 1);
   assert.equal(evidence.scenes[0]!.boundary, 'viewport');
   assert.equal(evidence.scenes[0]!.activeAnimationCount, 1);
-  assert.ok(existsSync(evidence.scenes[0]!.start.capture.path));
+  const capturePaths = [
+    evidence.scenes[0]!.start.capture.path,
+    evidence.scenes[0]!.mid.capture.path,
+    evidence.scenes[0]!.end.capture.path,
+    evidence.scenes[0]!.reducedMotion.capture.path,
+  ];
+  assert.equal(capturePaths.every(path => !isAbsolute(path) && existsSync(join(dir, path))), true);
   const forged = JSON.parse(JSON.stringify(evidence)) as { scenes: { mid: { capture: { bytesBase64: string } }; start: { capture: { bytesBase64: string } } }[] };
   forged.scenes[0]!.mid.capture.bytesBase64 = forged.scenes[0]!.start.capture.bytesBase64;
-  assert.throws(() => validateMotionEvidenceV2(forged), /bytes do not match|path does not contain/);
+  assert.throws(() => validateMotionEvidenceV2(forged, { root: dir, motionDecision: 'one' }), /bytes do not match|path does not contain/);
   const wrongRoi = JSON.parse(JSON.stringify(evidence)) as { scenes: { roi: { width: number } }[] };
   wrongRoi.scenes[0]!.roi.width = 1;
   assert.throws(
-    () => validateMotionEvidenceV2(wrongRoi),
+    () => validateMotionEvidenceV2(wrongRoi, { root: dir, motionDecision: 'one' }),
     (error: unknown) => {
       assert.ok(error instanceof MotionEvidenceValidationError);
       assert.equal(error.reason, 'scene must be a visible non-trivial viewport rectangle');
@@ -67,10 +73,10 @@ test('captures a real file URL load scene with path-backed ROI receipts', async 
   );
   const tinyPulse = JSON.parse(JSON.stringify(evidence)) as { scenes: { calibration: { noiseFloor: number; roiEnergy: number } }[] };
   tinyPulse.scenes[0]!.calibration.roiEnergy = tinyPulse.scenes[0]!.calibration.noiseFloor;
-  assert.throws(() => validateMotionEvidenceV2(tinyPulse), /energy/);
+  assert.throws(() => validateMotionEvidenceV2(tinyPulse, { root: dir, motionDecision: 'one' }), /energy/);
   const hoverOnly = JSON.parse(JSON.stringify(evidence)) as { scenes: { trigger: string }[] };
   hoverOnly.scenes[0]!.trigger = 'hover';
-  assert.throws(() => validateMotionEvidenceV2(hoverOnly), /trigger/);
+  assert.throws(() => validateMotionEvidenceV2(hoverOnly, { root: dir, motionDecision: 'one' }), /trigger/);
   const unrelatedSibling = join(dir, 'motion-unrelated-sibling.html');
   writeFileSync(unrelatedSibling, `<!doctype html><html><style>
     html, body { width: 100%; height: 100%; margin: 0; }
