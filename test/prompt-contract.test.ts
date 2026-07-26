@@ -820,6 +820,9 @@ test('scout batches zone-bound captures without debugging browser transport', ()
   assert.match(scout, /designsystem\.digital\.gov\/patterns\/select-a-language\/two-languages/);
   assert.match(scout, /designsystem\.digital\.gov\/components\/header/);
   assert.match(scout, /do not spend both attempts guessing hashed classes/);
+  assert.match(scout, /Acquisition comes before exhaustive reading/);
+  assert.match(scout, /Do not inspect the installed scout skill, every theory\/cookbook file/);
+  assert.match(scout, /start `omd ref add-batch`/);
   const batch = read('core/ref/batch.ts');
   assert.match(batch, /slot\?: string/);
   assert.match(batch, /spec\.slot \? \{ slot: spec\.slot \}/);
@@ -840,6 +843,8 @@ test('the selected host model is immutable while OMD adjusts only role effort', 
   assert.match(skill, /This applies to every named pipeline agent and every ad-hoc worker/);
   assert.match(skill, /A child `send_message` is progress only, never its handback/);
   assert.match(skill, /Wait until the child agent state is `completed`/);
+  assert.match(skill, /Allow at least fifteen minutes for its first final state/);
+  assert.match(skill, /Six empty chat polls are not a timeout/);
 
   const loop = read('core/protocol/human-design-loop.md').replace(/\s+/g, ' ');
   assert.match(loop, /Model ownership belongs to the user/);

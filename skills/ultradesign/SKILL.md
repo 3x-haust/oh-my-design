@@ -49,6 +49,11 @@ artifact gate. Do not cancel a still-running owner or stop the graph because an 
 message describes a temporary gap; capture and browser writes may still be joining. A timeout
 requires both an unfinished child and no ongoing tool/process activity, not merely several wait
 polls with no chat message.
+For the scout specifically, acquisition and browser work can be quiet while a batch is active.
+Allow at least fifteen minutes for its first final state, and never retry or cancel it while its
+child state or a capture/browser tool is active. Six empty chat polls are not a timeout. Inspecting
+the `.omd/refs/` directory during an in-flight batch is observation only, not evidence that the
+owner is stalled.
 **Artifact ownership is not advisory.** Each durable artifact below is written by the agent that owns
 it, spawned for that purpose. The coordinator orchestrates, gathers, sanitizes, and gates — it never
 writes an owned artifact itself, however obvious the content seems or however much time a direct
