@@ -94,6 +94,8 @@ function emitAgentFile(agent: AbstractAgent): string {
     '---',
     `name: ${agent.name}`,
     `description: ${yamlScalar(agent.description)}`,
+    'model: inherit',
+    `effort: ${agent.reasoning}`,
   ];
   if (agent.deny?.length) frontmatter.push(`disallowedTools: ${agent.deny.join(', ')}`);
   frontmatter.push('---', '');

@@ -31,6 +31,12 @@ the user's language.
 
 ## 0. Preflight and routing
 
+**The user's session model is immutable for this run.** OMD selects only role effort. On Codex,
+omit `model` from every `spawn_agent` call and pass only the role's `reasoning_effort`; on Claude
+Code, use the installed agent whose metadata says `model: inherit` and its role `effort`. Never
+name Sol, Terra, Luna, Opus, Sonnet, Haiku, or any other concrete model in a child launch. A model
+recommendation, role label, or belief that another model is stronger does not override the user's
+selection. This applies to every named pipeline agent and every ad-hoc worker.
 **Artifact ownership is not advisory.** Each durable artifact below is written by the agent that owns
 it, spawned for that purpose. The coordinator orchestrates, gathers, sanitizes, and gates — it never
 writes an owned artifact itself, however obvious the content seems or however much time a direct

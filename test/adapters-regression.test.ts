@@ -252,11 +252,12 @@ test('codex agent toml survives quotes, colons and backslashes', () => {
   assert.ok(must(parsed.developer_instructions, 'developer_instructions').includes('Quote test:'));
 });
 
-test('claude agent frontmatter survives quotes and colons', () => {
+test('claude agent frontmatter survives quotes and colons while inheriting model and setting effort', () => {
   const md = textFile(emitClaude({ agents: [NASTY] }), 'agents/omd-eye.md');
   const fm = parseYaml(must(md.split('---')[1], 'frontmatter'));
   assert.equal(fm.name, 'omd-eye');
-  assert.equal(fm.model, undefined, 'model must be absent — agents inherit session model');
+  assert.equal(fm.model, 'inherit', 'Claude must inherit the user-selected session model');
+  assert.equal(fm.effort, 'high', 'Claude may adjust only the role effort');
   assert.ok(fm.description.includes('"rendered"'));
   assert.ok(md.includes('Quote test:'));
 });

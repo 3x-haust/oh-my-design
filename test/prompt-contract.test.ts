@@ -800,3 +800,22 @@ test('the scout and the reference protocol require component-scoped capture', ()
   assert.match(scout, /`REF-NAME-MISMATCH` reports it/);
   assert.match(scout, /a nav studied three times while the hero, the process section, and the proof section have nothing/);
 });
+
+test('the selected host model is immutable while OMD adjusts only role effort', () => {
+  const skill = read('src/skills/omd-ultradesign/SKILL.md').replace(/\s+/g, ' ');
+  assert.match(skill, /The user's session model is immutable for this run/);
+  assert.match(skill, /On Codex, omit `model` from every `spawn_agent` call/);
+  assert.match(skill, /on Claude Code, use the installed agent whose metadata says `model: inherit`/);
+  assert.match(skill, /This applies to every named pipeline agent and every ad-hoc worker/);
+
+  const loop = read('core/protocol/human-design-loop.md').replace(/\s+/g, ' ');
+  assert.match(loop, /Model ownership belongs to the user/);
+  assert.match(loop, /Codex child launches omit `model` and may pass only `reasoning_effort`/);
+  assert.match(loop, /Claude agent metadata uses `model: inherit` and the role's `effort`/);
+  assert.match(loop, /A user-selected Luna run remains Luna in the framer, scout, writer, typesetter, composer, sketch, eye, glance, hand, and ad-hoc workers/);
+
+  const agents = read('AGENTS.md').replace(/\s+/g, ' ');
+  assert.match(agents, /the user chooses the model; OMD chooses only effort/);
+  assert.match(agents, /A recommendation, benchmark, role name, or belief that another model would perform better is never authority/);
+  assert.doesNotMatch(agents, /Sol \\(recommended\\)|Terra xhigh \\(recommended\\)|Luna high \\(recommended\\)/);
+});

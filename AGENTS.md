@@ -3,61 +3,25 @@
 This file governs how the Codex / GPT-5.6 path contributes to this repository. `CLAUDE.md`
 covers the Claude Code path; both share the repository conventions at the bottom.
 
-## Division of labour: a strong model plans, the session model executes
+## Model ownership: the user chooses the model; OMD chooses only effort
 
-The principle is the same across both paths — planning quality dominates the outcome, so a
-capable model owns the plan and review while the session model handles mechanical
-implementation. On the GPT-5.6 generation (Sol / Terra / Luna), the role mapping below comes
-from a role-by-role Codex benchmark.
+The concrete model selected for the host session is user-owned configuration. OMD never replaces
+it for a child agent. This applies equally to Codex and Claude Code, to every pipeline role, and to
+ad-hoc workers spawned during the run.
 
-### Role → model
+- **Codex:** omit `model` from every `spawn_agent` call. The child inherits the session model.
+- **Claude Code:** agent metadata declares `model: inherit`; never request Opus, Sonnet, Haiku, or
+  any concrete model in a spawn.
+- **Both hosts:** OMD may set only the role's reasoning/effort tier. Judgment-heavy roles use
+  `high`; the production hand uses `medium`. Effort changes depth, not model identity.
+- A recommendation, benchmark, role name, or belief that another model would perform better is
+  never authority to override the user's selection. If the session is Luna, every OMD child is
+  Luna; if it is Sol, every child is Sol.
 
-| Role | Model | Why |
-|---|---|---|
-| **Orchestration · architecture · high-risk review (critic/planner)** | **Sol (recommended)** | Holds whole-repo context, decides what changes and why, reviews the diff it did not write. |
-| **Precise code-edit executor** | **Terra xhigh (recommended)** | The efficient default for exact-edit implementation work. |
-| **Low-cost executor** | **Luna high (recommended)** | Cheaper lane for lower-risk mechanical work. |
-
-### Benchmark basis (limited scope — read the caveat)
-
-Measured on a **restricted exact-edit task set** only:
-
-- 8 TypeScript edits: **Terra xhigh 8/8**.
-- Repeated test runs: Terra xhigh and Luna xhigh both **9/12**, but at equal accuracy Terra
-  vs Luna spent **~72% fewer input tokens, ~43% fewer output tokens, ~28% lower estimated
-  cost, ~29% less wall-clock time**.
-
-So for exact-edit executor work, **Terra xhigh matched Luna xhigh's accuracy far more
-efficiently** — hence Terra xhigh as the precise-edit default and Luna high as the low-cost
-lane.
-
-**Caveat, load-bearing:** this benchmark measures exact-edit tasks only. It does **not**
-demonstrate planning, architecture, or orchestration ability. Those stay with **Sol** on
-judgment, not on this benchmark — the exact-edit numbers say nothing about the work Sol is
-assigned.
-
-### How it runs
-
-Sol interrogates the request, writes a self-contained spec (files, rules, definition of
-done), dispatches implementation to Terra xhigh (or Luna high for cheap/low-risk work), then
-verifies the result against the spec — Sol does not hand-write the implementation, and it
-reviews precisely because it did not write the code.
-
-A spec handed to an executor carries: source-of-truth vs generated files, the narrowness
-discipline for any new linter rule (positive AND negative tests), the baseline test count,
-and the definition of done (`npm test` clean, `tsc` clean, `npm run build` succeeds).
-
-### The pipeline's own agents
-
-**`omd-framer`, `omd-scout`, `omd-writer`, `omd-eye`, and `omd-hand` do not pin a model** — they inherit
-whatever model you selected for the session. The pipeline does not force a specific model on
-any agent. The role split above (Sol for orchestration/review, Terra xhigh for precise edits,
-Luna high for the cheap lane) is a recommendation for how to assign work within a session;
-the choice is yours. Planning-heavy sessions benefit most from a capable model like Sol;
-`omd-hand` (the mechanical build executor) is where a cheaper model is a reasonable
-trade-off. Both the `@high` (framer/scout/writer/eye) and `@medium` (hand) tiers that appear in
-the agent source files now serve only to communicate *intent* — no concrete model name is
-emitted by the adapters.
+The pipeline's agent source files carry only the effort tier. The Codex adapter emits
+`model_reasoning_effort` and no `model`; the Claude adapter emits `model: inherit` plus `effort`.
+A coordinator that passes a concrete model has violated the run even when the chosen model is
+nominally stronger.
 
 ## Repository conventions
 
