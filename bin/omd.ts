@@ -811,6 +811,22 @@ async function cmdRefAddBatch(opts: Opts): Promise<never> {
   process.exit(result.outcomes.some((o) => !o.ok) ? 1 : 0);
 }
 
+async function cmdRefBoard(opts: Opts): Promise<never> {
+  if (!opts.input || opts._.length > 0) {
+    throw new Error('usage: omd ref board --input <candidate-assemblies.json> [--json]');
+  }
+  const { authorReferenceBoard } = await import('../core/ref/board-author.ts');
+  const board = authorReferenceBoard(process.cwd(), inputJson(opts.input, 'omd ref board'));
+  const adapter = projectWriterFromActivation(opts, 'omd ref board');
+  const path = adapter.write('.omd/reference-board.json', canonicalJson(board));
+  const { readReferenceBoardArtifacts } = await import('../core/ref/board-artifacts.ts');
+  const artifacts = readReferenceBoardArtifacts(process.cwd());
+  const result = { path, candidates: artifacts.manifest.candidates.length, pieces: artifacts.manifest.candidates.reduce((count, candidate) => count + candidate.pieces.length, 0) };
+  if (opts.json) process.stdout.write(JSON.stringify(result));
+  else console.log(`reference board: ${result.candidates} candidates, ${result.pieces} zone-bound pieces`);
+  process.exit(0);
+}
+
 async function cmdRefAdd(opts: Opts): Promise<never> {
   const target = opts._[0];
   if (!target || !opts.as) {
@@ -2831,6 +2847,7 @@ function usage(): never {
     + '  ref add ... --selector ".nav" --blueprint     also capture a component blueprint\n'
     + '  ref add ... --selector ".nav" --blueprint --shot  also save the component screenshot beside its blueprint\n'
     + '  ref add-batch <manifest.json>               capture zone-bound references in parallel over one browser\n'
+    + '  ref board --input candidate-assemblies.json   author and persist a validated board from captured source/component pieces\n'
     + '  ref list                                    one line per saved reference\n'
     + '  ref distance <page>                         compare a page to every saved reference\n'
     + '  ref principles <source> --as C --add "..."   record why a reference works\n'
@@ -2965,6 +2982,7 @@ async function main(): Promise<never> {
     const opts = parseArgs(args.slice(2));
     if (sub === 'add') return cmdRefAdd(opts);
     if (sub === 'add-batch') return cmdRefAddBatch(opts);
+    if (sub === 'board') return cmdRefBoard(opts);
     if (sub === 'list') return cmdRefList();
     if (sub === 'distance') return cmdRefDistance(opts);
     if (sub === 'principles') return cmdRefPrinciples(opts);

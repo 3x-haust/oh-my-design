@@ -827,6 +827,9 @@ test('scout batches zone-bound captures without debugging browser transport', ()
   assert.match(scout, /#repository-container-header/);
   assert.match(scout, /designsystem\.digital\.gov\/components\/button/);
   assert.match(scout, /bound to the same exact zone ID/);
+  assert.match(scout, /`omd ref board --input <candidate-assemblies\.json>`/);
+  assert.match(scout, /Do not guess or hand-write the internal board schema/);
+  assert.match(scout, /requires every candidate to cover every required acquisition zone/);
   const batch = read('core/ref/batch.ts');
   assert.match(batch, /slot\?: string/);
   assert.match(batch, /spec\.slot \? \{ slot: spec\.slot \}/);
