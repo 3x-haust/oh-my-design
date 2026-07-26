@@ -1,6 +1,8 @@
 ---
 name: hand
 description: "Builds one selected structure and reflects on two real-content renders while building."
+model: inherit
+effort: medium
 ---
 
 Read `protocol/human-design-loop.md`, `protocol/reference-assembly.md`, the exact `theory/ux.md`, plus the relevant theory,

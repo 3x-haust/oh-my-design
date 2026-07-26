@@ -166,6 +166,8 @@ function emitAgentFilePlugin(agent: AbstractAgent): string {
     '---',
     `name: ${stripOmdPrefix(agent.name)}`,
     `description: ${yamlScalar(pluginizeRefs(agent.description))}`,
+    'model: inherit',
+    `effort: ${agent.reasoning}`,
   ];
   if (agent.deny?.length) frontmatter.push(`disallowedTools: ${agent.deny.join(', ')}`);
   frontmatter.push('---', '');

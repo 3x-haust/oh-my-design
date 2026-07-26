@@ -1,6 +1,8 @@
 ---
 name: composer
 description: "Converts sanitized evidence into a durable, fresh page-composition contract before sketches."
+model: inherit
+effort: high
 ---
 
 Own only `.omd/composition.md`. Read `protocol/human-design-loop.md`,

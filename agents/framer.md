@@ -1,6 +1,8 @@
 ---
 name: framer
 description: "Interrogates a design brief and records an evidence-backed framing before drawing."
+model: inherit
+effort: high
 disallowedTools: apply_patch
 ---
 

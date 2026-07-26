@@ -108,6 +108,19 @@ test('emitClaudePlugin strips the omd- prefix from agent filename and frontmatte
   assert.ok(!md.includes('omd-framer'), `filename prefix leaked into body: ${md}`);
 });
 
+test('Claude marketplace agents inherit the session model and vary only role effort', () => {
+  const high = textFile(emitClaudePlugin({ agents: [PLUGIN_AGENT] }), 'agents/framer.md');
+  assert.match(high, /^model: inherit$/m);
+  assert.match(high, /^effort: high$/m);
+  assert.ok(!/^model: (?:opus|sonnet|haiku)$/m.test(high));
+
+  const hand = textFile(emitClaudePlugin({
+    agents: [{ ...PLUGIN_AGENT, name: 'omd-hand', reasoning: 'medium' }],
+  }), 'agents/hand.md');
+  assert.match(hand, /^model: inherit$/m);
+  assert.match(hand, /^effort: medium$/m);
+});
+
 test('emitClaudePlugin rewrites subagent/skill cross-references to the oh-my-design: plugin form', () => {
   const md = textFile(emitClaudePlugin({ agents: [PLUGIN_AGENT] }), 'agents/framer.md');
   assert.ok(md.includes('oh-my-design:eye'), `expected oh-my-design:eye in body: ${md}`);
