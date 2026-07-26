@@ -32,16 +32,18 @@ test('no @token survives emission', () => {
   }
 });
 
-test('agents render to toml for codex and md for claude; no pinned model (agents inherit session model)', () => {
+test('agents inherit the selected model and emit only the role effort on both hosts', () => {
   const toml = textFile(emitCodex({ agents: [AGENT] }), 'agents/omd-eye.toml');
   assert.match(toml, /^name = "omd-eye"/m);
-  assert.ok(!/^model = /m.test(toml), 'model line must be absent from codex TOML — agents inherit session model');
-  assert.match(toml, /model_reasoning_effort = "high"/);
+  assert.ok(!/^model = /m.test(toml), 'Codex must omit model so the child inherits the session model');
+  assert.match(toml, /^model_reasoning_effort = "high"$/m);
   assert.match(toml, /developer_instructions = """/);
 
   const md = textFile(emitClaude({ agents: [AGENT] }), 'agents/omd-eye.md');
   assert.match(md, /^---\n/);
-  assert.ok(!/^model:/m.test(md), 'model line must be absent from claude MD — agents inherit session model');
+  assert.match(md, /^model: inherit$/m, 'Claude must explicitly inherit rather than select a concrete model');
+  assert.match(md, /^effort: high$/m);
+  assert.ok(!/^model: (?:opus|sonnet|haiku)$/m.test(md), 'Claude must never pin a concrete model');
   assert.match(md, /^name: omd-eye$/m);
   assert.ok(md.includes('You do not know why this was built.'));
 });
