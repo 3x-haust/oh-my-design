@@ -11,9 +11,11 @@ import {
   validateObservation,
 } from './contracts.ts';
 import { classifyDepth, type DepthInput, type DepthResult } from './depth.ts';
+export type DeliberationRunPhase = 'prebuild' | 'final';
 
 export type DeliberationRunReport = {
   readonly ok: boolean;
+  readonly phase: DeliberationRunPhase;
   readonly depth?: DepthResult;
   readonly findings: readonly ContractFinding[];
   readonly counts: { readonly decisions: number; readonly deliberations: number; readonly observations: number; readonly zones: number };
@@ -22,7 +24,7 @@ export type DeliberationRunReport = {
 const parse = (path: string): unknown => JSON.parse(readFileSync(path, 'utf8'));
 const missing = (path: string, message: string): ContractFinding => ({ id: 'DELIBERATION-ARTIFACT-MISSING', path, message });
 
-export function checkDeliberationRun(cwd: string): DeliberationRunReport {
+export function checkDeliberationRun(cwd: string, phase: DeliberationRunPhase = 'final'): DeliberationRunReport {
   const dir = join(cwd, '.omd'); const findings: ContractFinding[] = [];
   const depthPath = join(dir, 'depth.json');
   let depth: DepthResult | undefined;
@@ -47,44 +49,49 @@ export function checkDeliberationRun(cwd: string): DeliberationRunReport {
     catch (error) { findings.push({ id: 'DECISION-GRAPH-JSON', path: '.omd/decision-graph.json', message: error instanceof Error ? error.message : String(error) }); }
   }
   if (depth && graph) {
-    const requiredStages = depth.level === 'L1'
+    const finalStages = depth.level === 'L1'
       ? ['refinement']
       : depth.level === 'L2'
         ? ['frame', 'composition', 'production']
         : ['frame', 'copy', 'type', 'composition', 'structure', 'production'];
+    const requiredStages = phase === 'prebuild'
+      ? finalStages.filter((stage) => stage !== 'production' && stage !== 'refinement')
+      : finalStages;
     const present = new Set(graph.decisions.map((decision) => decision.stage));
     for (const stage of requiredStages) {
       if (!present.has(stage as import('./contracts.ts').DecisionStage)) findings.push({
         id: 'DECISION-STAGE-UNCOVERED',
         path: '.omd/decision-graph.json',
-        message: `${depth.level} requires an owner-authored ${stage} decision entry`,
+        message: `${depth.level} ${phase} gate requires an owner-authored ${stage} decision entry`,
       });
     }
   }
 
   const coveragePath = join(dir, 'assembly-coverage.json'); let zones = 0;
-  if (depth && ['L3', 'L4'].includes(depth.level)) {
-    if (!existsSync(coveragePath)) findings.push(missing('.omd/assembly-coverage.json', 'bind every selected composition zone from reference to final evidence'));
-    else try {
-      const raw = parse(coveragePath); if (typeof raw === 'object' && raw !== null && Array.isArray((raw as { zones?: unknown }).zones)) zones = (raw as { zones: unknown[] }).zones.length;
-      findings.push(...validateAssemblyCoverage(raw, graph).findings);
-      if (acquisition && typeof raw === 'object' && raw !== null && Array.isArray((raw as { expectedZones?: unknown }).expectedZones)) {
-        const required = acquisition.zones.filter((zone) => zone.required).map((zone) => zone.id).sort();
-        const expected = [...((raw as { expectedZones: string[] }).expectedZones)].sort();
-        if (required.length !== expected.length || required.some((id, i) => id !== expected[i])) {
-          findings.push({ id: 'ASSEMBLY-ACQUISITION-DRIFT', path: '.omd/assembly-coverage.json:expectedZones', message: 'final assembly zones must exactly cover the required acquisition zones; revise the plan explicitly before composition rather than silently dropping a section' });
-        }
-      }
-    } catch (error) { findings.push({ id: 'ASSEMBLY-COVERAGE-JSON', path: '.omd/assembly-coverage.json', message: error instanceof Error ? error.message : String(error) }); }
-  }
-
   const observationDir = join(dir, 'observations'); let observations = 0;
-  if (!existsSync(observationDir)) findings.push(missing('.omd/observations/', 'record observable before/after render judgments'));
-  else {
-    const files = readdirSync(observationDir).filter((name) => name.endsWith('.json')).sort(); observations = files.length;
-    if (files.length === 0) findings.push(missing('.omd/observations/*.json', 'at least one Observe → Judge → Modify → Re-observe record is required'));
-    for (const file of files) try { findings.push(...validateObservation(parse(join(observationDir, file))).findings.map((f) => ({ ...f, path: `.omd/observations/${file}:${f.path}` }))); }
-    catch (error) { findings.push({ id: 'OBSERVATION-JSON', path: `.omd/observations/${file}`, message: error instanceof Error ? error.message : String(error) }); }
+  if (phase === 'final') {
+    if (depth && ['L3', 'L4'].includes(depth.level)) {
+      if (!existsSync(coveragePath)) findings.push(missing('.omd/assembly-coverage.json', 'bind every selected composition zone from reference to final evidence'));
+      else try {
+        const raw = parse(coveragePath); if (typeof raw === 'object' && raw !== null && Array.isArray((raw as { zones?: unknown }).zones)) zones = (raw as { zones: unknown[] }).zones.length;
+        findings.push(...validateAssemblyCoverage(raw, graph).findings);
+        if (acquisition && typeof raw === 'object' && raw !== null && Array.isArray((raw as { expectedZones?: unknown }).expectedZones)) {
+          const required = acquisition.zones.filter((zone) => zone.required).map((zone) => zone.id).sort();
+          const expected = [...((raw as { expectedZones: string[] }).expectedZones)].sort();
+          if (required.length !== expected.length || required.some((id, i) => id !== expected[i])) {
+            findings.push({ id: 'ASSEMBLY-ACQUISITION-DRIFT', path: '.omd/assembly-coverage.json:expectedZones', message: 'final assembly zones must exactly cover the required acquisition zones; revise the plan explicitly before composition rather than silently dropping a section' });
+          }
+        }
+      } catch (error) { findings.push({ id: 'ASSEMBLY-COVERAGE-JSON', path: '.omd/assembly-coverage.json', message: error instanceof Error ? error.message : String(error) }); }
+    }
+
+    if (!existsSync(observationDir)) findings.push(missing('.omd/observations/', 'record observable before/after render judgments'));
+    else {
+      const files = readdirSync(observationDir).filter((name) => name.endsWith('.json')).sort(); observations = files.length;
+      if (files.length === 0) findings.push(missing('.omd/observations/*.json', 'at least one Observe → Judge → Modify → Re-observe record is required'));
+      for (const file of files) try { findings.push(...validateObservation(parse(join(observationDir, file))).findings.map((f) => ({ ...f, path: `.omd/observations/${file}:${f.path}` }))); }
+      catch (error) { findings.push({ id: 'OBSERVATION-JSON', path: `.omd/observations/${file}`, message: error instanceof Error ? error.message : String(error) }); }
+    }
   }
 
   const deliberationDir = join(dir, 'deliberations'); let deliberations = 0;
@@ -99,6 +106,7 @@ export function checkDeliberationRun(cwd: string): DeliberationRunReport {
   }
 
   return {
+    phase,
     ok: findings.length === 0,
     ...(depth ? { depth } : {}),
     findings,

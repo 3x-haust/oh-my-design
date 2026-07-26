@@ -22,6 +22,14 @@ instructions: |
   `.omd/reference-selection-v2.json`, current `.omd/motion-resolutions/sha256-<digest>.json` projection,
   and decision-bound `.omd/reference-handoffs/composer.json` and `hand.json` receipts; they are the
   production fidelity evidence, not optional context.
+  Before touching production source on the normal graph, run
+  `omd deliberate check --phase prebuild` and `omd composition --check`. Both must pass, and
+  `.omd/type-proof.md`, `.omd/composition.md`, the selected structure, reference-selection/handoff
+  records, and every required L4 deliberation must exist. A missing or stale prerequisite is a
+  blocker: return it to the coordinator and stop without writing source. Never call it an
+  “unavailable prerequisite,” “scoped deviation,” or reason to continue. Never spawn or delegate to
+  another agent; you are the sole production-source owner, so a worker cannot implement on your
+  behalf.
   Build the selected reference's macro visual system — its composition, spacing rhythm, hierarchy,
   material treatment, and named landing rules — into the approved destination, while writing the
   product's own copy. Do not inspect source URLs or unselected/raw source material. Start only after

@@ -20,8 +20,8 @@ Give the user the working interface they asked for. Do not expose internal quota
 them to operate the harness. Run host-native agents in fresh contexts; do not create a
 workflow engine, queue, model router, or session runtime.
 
-Read `protocol/human-design-loop.md`, `protocol/reference-assembly.md`, and
-`protocol/design-deliberation.md` from `omd pack dir` first. The reference protocol owns the exact
+Read `protocol/human-design-loop.md` from `omd pack dir` first. Also read
+`protocol/reference-assembly.md` and `protocol/design-deliberation.md` there. The reference protocol owns the exact
 chat-first LEGO stage order and transfer boundaries; the deliberation protocol owns adaptive depth,
 decision provenance, acquisition zones, independent perspectives, visual observation, assembly
 coverage, and comparison; the human-design loop owns the remaining phase order, state, evidence
@@ -38,6 +38,11 @@ Code, use the installed agent whose metadata says `model: inherit` and its role 
 name Sol, Terra, Luna, Opus, Sonnet, Haiku, or any other concrete model in a child launch. A model
 recommendation, role label, or belief that another model is stronger does not override the user's
 selection. This applies to every named pipeline agent and every ad-hoc worker.
+On Codex, every named-role launch uses `fork_turns: "none"` together with `agent_type` and
+`reasoning_effort`. Never use `fork_turns: "all"` or a full-history fork for a named role: Codex
+then inherits the coordinator agent type instead of loading the OMD role, and the launch is invalid.
+A failed launch is retried once with the same role, effort, sanitized message, and
+`fork_turns: "none"`; it is never replaced by a generic `worker`.
 **Artifact ownership is not advisory.** Each durable artifact below is written by the agent that owns
 it, spawned for that purpose. The coordinator orchestrates, gathers, sanitizes, and gates — it never
 writes an owned artifact itself, however obvious the content seems or however much time a direct
@@ -63,6 +68,12 @@ If a stage looks skippable because the answer seems clear, that is the failure m
 exists to stop: a run that writes its own composition contract and its own production source has
 performed one agent's guess wearing the loop's name. Stages §4, §5, and §6 are not optional and have
 no inline path.
+**Gate failure is terminal for the run, not permission to improvise.** If an owner fails, returns no
+required artifact, reports a read/write boundary, times out, or leaves its deterministic check RED,
+stop the graph and report that blocker. Do not mark the stage “unavailable,” record it as a scoped
+deviation, advance to a later owner, or spawn a generic/ad-hoc worker to finish that owner's task.
+In particular, only `omd-hand` may write production source; neither the coordinator nor any
+`worker` may substitute for it.
 
 Run `omd doctor`. Stop on a failed prerequisite. For interactive visual research or user-directed
 region capture, initialize `browser-rs` first. Only an observed initialization/capability failure
@@ -476,6 +487,15 @@ requires a human decision. Never create an execution engine or unbounded retry l
 the winner and rejected tradeoffs only when a candidate actually passes.
 
 ## 6. Production build with reflective craft
+Before spawning the hand, wait for every retained upstream owner and review context to finish.
+Merge their exact returned decision JSON without rewriting it, then run `omd ref check`,
+`omd copy --check`, the required type-proof review/check, `omd composition --check`, and
+`omd deliberate check --phase prebuild`. The prebuild gate must prove the depth, acquisition plan,
+all required frame/copy/type/composition/structure owner decisions, and every L4 moderated
+deliberation while intentionally excluding hand-owned production observations and coverage.
+Any missing artifact or RED command blocks the hand; it cannot be documented away as a deviation.
+Do not launch the hand while a typesetter, composer, perspective, moderator, sketch, or selector is
+still running.
 
 **Spawn `omd-hand`. The coordinator never writes production source itself** — not the scaffold, not a
 component, not the stylesheet. The hand is where install-over-reimplement, the craft checkpoints, and
@@ -669,7 +689,8 @@ no fixed budget. Round 0 is almost never GREEN
 surface, with a recorded reason and a clean slop scan.
 Before source sealing, merge only the exact owner-authored decision entries returned by the spawned
 agents into `.omd/decision-graph.json`; the coordinator must not author or paraphrase them. Require
-`omd deliberate check` to pass. This joins depth, acquisition zones, decisions, any L4 moderator
+`omd deliberate check` to pass by running its explicit final gate:
+`omd deliberate check --phase final`. This joins depth, acquisition zones, decisions, any L4 moderator
 receipts, hand observations, and final assembly coverage. A missing zone, generic visual claim,
 owner mismatch, untested high-risk trade-off, or isolated artifact with no end-to-end chain is RED
 and blocks final evidence.
