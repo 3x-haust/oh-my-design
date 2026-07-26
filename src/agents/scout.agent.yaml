@@ -49,6 +49,13 @@ instructions: |
   uses `https://designsystem.digital.gov/components/header/` with selector `.usa-header`. Bind the
   result to `slot: "navigation-preferences"`; do not spend both attempts guessing hashed classes on
   Vite, Mintlify, or another frequently changing marketing header.
+  A required `repository-cta` or `source-cta` zone first captures the user-supplied repository with
+  `omd ref add https://github.com/3x-haust/oh-my-design --as repository-source-header
+  --from-user --slot <exact-zone-id> --selector "#repository-container-header" --blueprint --shot
+  --no-energy` before the general batch. If GitHub blocks or changes that selector, the one repair
+  batch uses `https://designsystem.digital.gov/components/button/` with selector `.usa-button`,
+  bound to the same exact zone ID. The fallback transfers accessible outbound-action anatomy while
+  subject identity remains grounded in the user-supplied repository facts.
   Never call `send_message`: it is an intermediate signal that can make the coordinator stop while late
   captures are still joining. Return exactly one final handback after the board and candidates are
   complete, or after the final stable checks prove the blocker. Once every required zone and

@@ -823,6 +823,10 @@ test('scout batches zone-bound captures without debugging browser transport', ()
   assert.match(scout, /Acquisition comes before exhaustive reading/);
   assert.match(scout, /Do not inspect the installed scout skill, every theory\/cookbook file/);
   assert.match(scout, /start `omd ref add-batch`/);
+  assert.match(scout, /required `repository-cta` or `source-cta` zone first captures the user-supplied repository/);
+  assert.match(scout, /#repository-container-header/);
+  assert.match(scout, /designsystem\.digital\.gov\/components\/button/);
+  assert.match(scout, /bound to the same exact zone ID/);
   const batch = read('core/ref/batch.ts');
   assert.match(batch, /slot\?: string/);
   assert.match(batch, /spec\.slot \? \{ slot: spec\.slot \}/);
