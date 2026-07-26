@@ -258,6 +258,8 @@ test('copy-eye provenance has one canonical format owner and role pointers', () 
     assert.match(source, /omd source --seal[\s\S]*omd source --check/);
     assert.match(source, /byte-freshness\s+evidence|byte freshness/i);
     assert.match(source, /(?:does\s+not\s+(?:claim|prove)|never\s+claim\s+it\s+proves)\s+semantic/i);
+    assert.match(source, /project root (?:that )?contain(?:s|ing)? `?\.omd\/?`?,? (?:not|never) a nested output\s+directory/i);
+    assert.match(source, /Never move, rename, or delete\s+a project symlink to make sealing pass/);
   }
 });
 

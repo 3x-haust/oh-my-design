@@ -181,8 +181,11 @@ For `marketing`, `editorial`, or `static` runs, do not invent product `Task cove
 Finish only when clean or each remaining finding has an evidence-backed overrule.
 After all source and approved-input repairs are complete, freeze and collect final evidence in the
 order required by `protocol/human-design-loop.md`: run `omd source --seal <root>`, then `omd source
---check <root>`; build and collect every final check, test, declared/applicable probe,
-fixed-viewport screenshot/render, and applicable motion filmstrip from sealed source; then run
+--check <root>`, where `<root>` is the project root containing `.omd/`, never a nested output
+directory. Excluded hidden or non-source metadata links are ignored. Never move, rename, or delete
+a project symlink to make sealing pass; a reported source-bearing symlink is a real blocker.
+Build and collect every final check, test, declared/applicable probe, fixed-viewport
+screenshot/render, and applicable motion filmstrip from sealed source; then run
 `omd source --check <root>` again. For `product` or `mixed`, publish the task index with `omd
 evidence tasks --input .omd/.cache/task-evidence-manifest.json`, then `omd evidence tasks-check
 --json`. The finalizer owns the sole v2 publication: write the required
