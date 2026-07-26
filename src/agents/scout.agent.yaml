@@ -42,20 +42,30 @@ instructions: |
   remains uncovered only then, run exactly one missing-zone repair batch, again waiting for process
   completion and two stable inventory reads. Prefer a different tight selector on an already
   reachable, relevant source when the gap came from a source or selector failure.
-  A required `navigation-preferences` zone uses the stable accessibility reference before volatile
-  marketing-site navigation: include
-  `https://designsystem.digital.gov/patterns/select-a-language/two-languages/` with selector
-  `.usa-language-container` in the initial batch. If that capture fails, the single repair batch
-  uses `https://designsystem.digital.gov/components/header/` with selector `.usa-header`. Bind the
-  result to `slot: "navigation-preferences"`; do not spend both attempts guessing hashed classes on
-  Vite, Mintlify, or another frequently changing marketing header.
+  Match stable fallbacks by the framer-owned zone's semantics, not by one literal zone ID. Inspect
+  both `zones[].id` and `zones[].job` before writing the initial manifest:
+  - A required preference-control zone (language, locale, theme, appearance, or preferences) uses
+    `https://designsystem.digital.gov/components/header/` with selector `.usa-header` in the initial
+    batch. Bind it to the exact framer-owned zone ID. Do not spend either attempt guessing hashed
+    classes on Vite, Mintlify, or another frequently changing marketing header.
+  - A required first-message/hero/adoption-message zone uses
+    `https://designsystem.digital.gov/templates/landing-page/` with selector `.site-page-title` in
+    the initial batch. Treat this deliberately narrow, low-signal capture only as title hierarchy;
+    do not claim that it supplies a whole hero or visual identity. Never request the nonexistent
+    `designsystem.digital.gov/components/hero/` page or guess `.usa-hero` on the landing template.
+  - A required CTA/install/copy/action zone other than the repository-specific case below uses
+    `https://designsystem.digital.gov/components/button/` with selector
+    `.site-component-preview .usa-button` in the initial batch. This tested selector scopes the
+    visible component preview; do not use the page's first generic `.usa-button` or guess
+    `.usa-button--big`.
   A required `repository-cta` or `source-cta` zone first captures the user-supplied repository with
   `omd ref add https://github.com/3x-haust/oh-my-design --as repository-source-header
   --from-user --slot <exact-zone-id> --selector "#repository-container-header" --blueprint --shot
   --no-energy` before the general batch. If GitHub blocks or changes that selector, the one repair
-  batch uses `https://designsystem.digital.gov/components/button/` with selector `.usa-button`,
-  bound to the same exact zone ID. The fallback transfers accessible outbound-action anatomy while
-  subject identity remains grounded in the user-supplied repository facts.
+  batch uses `https://designsystem.digital.gov/components/button/` with selector
+  `.site-component-preview .usa-button`, bound to the same exact zone ID. The fallback transfers
+  accessible outbound-action anatomy while subject identity remains grounded in the user-supplied
+  repository facts.
   Never call `send_message`: it is an intermediate signal that can make the coordinator stop while late
   captures are still joining. Return exactly one final handback after the board and candidates are
   complete, or after the final stable checks prove the blocker. Once every required zone and
