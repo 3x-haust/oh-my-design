@@ -11,7 +11,7 @@ import { writeReferenceHandoffReceipt } from '../core/ref/reference-handoff.ts';
 import { parseReferenceUsageV2, type ReferenceUsageInput, validateReferenceUsage } from '../core/ref/reference-usage.ts';
 import { formatReferenceReport, referenceReportPath, referenceReportSnapshot } from '../core/ref/reference-report.ts';
 import { canonicalJson, readReferenceBoardArtifacts, sha256 } from '../core/ref/board-artifacts.ts';
-import { prepareReferenceUsage } from '../core/ref/reference-usage-snapshot.ts';
+import { prepareReferenceUsage, readValidatedReferenceUsage } from '../core/ref/reference-usage-snapshot.ts';
 import { writeReferenceUsageRecord } from '../core/ref/reference-usage-files.ts';
 import { refImagePath, saveRef } from '../core/ref/store.ts';
 import type { Blueprint, Invariants, Reference } from '../core/types.ts';
@@ -50,13 +50,14 @@ const persistDecisionSettlement = (
   });
   const alternatives = [alternative('quiet'), alternative('confident'), alternative('showpiece')];
   const motion = resolveMotionProjection({
-    activationSha256: hash('activation'), alternativesSha256: hash(canonicalJson(alternatives)),
+    activationSha256: artDirectionSha256(invocation.activation), alternativesSha256: hash(canonicalJson(alternatives)),
     handoffSha256: handoff.payloadSha256, evaluatorInvocationSha256: hash('invocation'),
     evaluatorPayloadSha256: hash('payload'), evaluatorResultSha256: hash('result'),
     motionDecision: 'none', slots: [{ slotId: 'footer-links', obligationDisposition: 'rejected', obligationReason: 'Motion evidence was reviewed and rejected for the static implementation.' }], selection,
   });
-  const settledSelection = persistSettledReferenceSelection(root, selection, { ...motion, selection }, invocation);
   const motionSha256 = motionResolutionProjectionSha256(motion);
+  writer.write(`.omd/motion-resolutions/sha256-${motionSha256}.json`, canonicalJson(motion));
+  const settledSelection = persistSettledReferenceSelection(root, selection, motionSha256, invocation);
   const decision = {
     schemaVersion: 'art-direction-v1' as const, activationSha256: motion.activationSha256,
     intentSha256: hash('intent'), boardSha256: selection.captureSha256,
@@ -80,7 +81,6 @@ const persistDecisionSettlement = (
   };
   const artDirectionSha256Value = artDirectionSha256(record);
   const recordPath = `art-direction-runs/sha256-${artDirectionSha256Value}.json`;
-  writer.write(`.omd/motion-resolutions/sha256-${motionSha256}.json`, canonicalJson(motion));
   writer.write(`.omd/${recordPath}`, canonicalJson(record));
   writer.write('.omd/art-direction.json', canonicalJson({
     schemaVersion: ART_DIRECTION_POINTER_SCHEMA_VERSION, record: recordPath, sha256: artDirectionSha256Value,
@@ -183,7 +183,7 @@ test('usage ledger binds every selected component and image-fragment production 
   assert.equal(readFileSync(join(value.root, '.omd', pointer.record), 'utf8'), canonicalJson(preSelection));
 });
 
-test('pre-selection records are content-addressed while the current alias advances atomically', (context) => {
+test('pre-selection records are content-addressed while only the immutable pointer advances', (context) => {
   const value = fixture(context);
   const first = readPreReferenceSelectionV2(value.root);
   const dispositions = [
@@ -204,6 +204,10 @@ test('pre-selection records are content-addressed while the current alias advanc
   assert.ok(existsSync(join(value.root, '.omd', 'pre-reference-selections', `sha256-${referenceSelectionV2Sha256(revised)}.json`)));
   assert.equal(pointer.sha256, referenceSelectionV2Sha256(revised));
   assert.deepEqual(readPreReferenceSelectionV2(value.root), revised);
+});
+test('settlement rejects an unpersisted motion-resolution digest', (context) => {
+  const value = fixture(context);
+  assert.throws(() => persistSettledReferenceSelection(value.root, readPreReferenceSelectionV2(value.root), '0'.repeat(64), value.invocation));
 });
 test('usage ledger rejects incomplete, ambiguous, injected, and non-selected rows', (context) => {
   // Given: exact selected pieces plus malformed attempts that vary one trust-boundary field.
@@ -248,7 +252,7 @@ test('usage validation survives bounded atomic replacement stress without mixing
   const readers = { readUsage: () => { const bytes = readFileSync(path); if (reads < 4) { writeFileSync(replacement, `${bytes.toString('utf8').trimEnd()}${reads % 2 === 0 ? ' \n' : '\n'}`); renameSync(replacement, path); } reads += 1; return bytes; } };
 
   // When: validation samples the usage file before and after each atomic replacement.
-  const checked = validateReferenceUsage(value.root, readers);
+  const checked = readValidatedReferenceUsage(value.root, readers);
 
   // Then: only a settled replacement generation is accepted, with every other binding unchanged.
   assert.deepEqual(checked.usage.rows, recorded.rows); assert.ok(reads > 6);
@@ -264,7 +268,7 @@ test('usage validation rejects a generation-B artifact carrier against generatio
   };
 
   // When / Then: no checked result can be accepted unless both values derive from sampled generation-A bytes.
-  assert.throws(() => validateReferenceUsage(value.root, readers));
+  assert.throws(() => readValidatedReferenceUsage(value.root, readers));
 });
 
 test('usage validation does not accept an initial generation after last-evidence carrier replacement', (context) => {
@@ -274,15 +278,12 @@ test('usage validation does not accept an initial generation after last-evidence
 
     // When: validation reaches the final evidence callback after binding generation A.
     if (carrier === 'usage') {
-      const checked = validateReferenceUsage(value.root, mutation.readers);
+      const checked = readValidatedReferenceUsage(value.root, mutation.readers);
       const first = checked.usage.rows[0]; if (first === undefined) throw new Error('checked usage must retain the first row');
       assert.equal(first.verificationNote, 'Generation B verification note.');
     } else if (carrier === 'evidence') {
-      validateReferenceUsage(value.root, mutation.readers); assert.ok(mutation.reads() > 6);
-    } else if (carrier === 'selection') {
-      const checked = validateReferenceUsage(value.root, mutation.readers);
-      assert.equal(checked.usage.selectionSha256, referenceSelectionV2Sha256(readReferenceSelectionV2(value.root)));
-    } else assert.throws(() => validateReferenceUsage(value.root, mutation.readers));
+      readValidatedReferenceUsage(value.root, mutation.readers); assert.ok(mutation.reads() > 6);
+    } else assert.throws(() => readValidatedReferenceUsage(value.root, mutation.readers), `${carrier} replacement must not accept generation A`);
   }
 
   // Then: a stale generation either fails closed or is retried to the current replacement.
@@ -295,13 +296,13 @@ test('usage preparation does not write an initial generation after last-evidence
 
     // When: preparation derives hashes before the last evidence callback mutates one carrier.
     // A board replacement changes the capture hash, so the bound selection can never match — it fails closed.
-    // A whitespace-only selection change settles and is retried into a coherent generation because its
-    // content-addressed v2 payload remains canonical.
-    if (carrier === 'board') assert.throws(() => prepareReferenceUsage(value.root, { rows: usageRows(value) }, mutation.readers));
+    // A whitespace-only settled-selection carrier is non-canonical and fails closed.
+    if (carrier === 'board' || carrier === 'selection') {
+      assert.throws(() => prepareReferenceUsage(value.root, { rows: usageRows(value) }, mutation.readers), `${carrier} replacement must not prepare generation A`);
+    }
     else {
       const prepared = prepareReferenceUsage(value.root, { rows: usageRows(value) }, mutation.readers);
       switch (carrier) {
-        case 'selection': assert.equal(prepared.selectionSha256, referenceSelectionV2Sha256(readReferenceSelectionV2(value.root))); break;
         case 'attribution': assert.equal(prepared.attributionSha256, sha256(readFileSync(pathFor(value.root, carrier)))); break;
         case 'evidence': assert.ok(mutation.reads() > 6); break;
       }
@@ -320,7 +321,7 @@ test('usage validation retries a real replacement at the post-evidence seam', (c
   };
 
   // When: the evidence file is atomically replaced after all initial evidence checks.
-  validateReferenceUsage(value.root, readers);
+  readValidatedReferenceUsage(value.root, readers);
 
   // Then: the stale attempt is discarded and the stable replacement is re-read.
   assert.equal(finalChecks, 2); assert.ok(evidenceReads > 6);

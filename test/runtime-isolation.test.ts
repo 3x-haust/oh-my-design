@@ -11,7 +11,7 @@ import { ACTIVATION_CONTEXT_SCHEMA_VERSION, validateActivationContext, type Acti
 import { createReviewerEvidenceProxy, MAX_INLINE_EVIDENCE_BYTES, ReviewerIsolationError } from '../core/runtime/evidence-proxy.ts';
 import { requireReviewerIsolationInvocation, type ProjectRunInvocation } from '../core/runtime/invocation.ts';
 import { assertProjectRunMutationInventory, inventoryProjectRunMutations } from '../core/runtime/project-write-inventory.ts';
-import { ProjectWriteError, writeProjectFile } from '../core/runtime/project-write.ts';
+import { PROJECT_WRITE_THREAT_BOUNDARY, ProjectWriteError, writeProjectFile } from '../core/runtime/project-write.ts';
 
 const hash = (value: string): string => value.repeat(64);
 
@@ -28,6 +28,12 @@ function invocation(overrides: Partial<ActivationContext> = {}): ProjectRunInvoc
   };
   return { activation, current: { buildSha256: hash('a'), loadedSkillSha256: hash('b'), briefSha256: hash('c') } };
 }
+
+test('guarded writer exposes the explicit local-process threat boundary', () => {
+  assert.ok(PROJECT_WRITE_THREAT_BOUNDARY.protects.includes('path traversal and static symlink escape'));
+  assert.ok(PROJECT_WRITE_THREAT_BOUNDARY.excludes.includes('concurrent same-UID filesystem mutation'));
+  assert.ok(PROJECT_WRITE_THREAT_BOUNDARY.excludes.includes('host process injection or debugger control'));
+});
 type LocalCliReport = {
   readonly activation: ActivationContext;
   readonly cliPath: string;

@@ -7,7 +7,7 @@ import { join, relative } from 'node:path';
 import test, { type TestContext } from 'node:test';
 import { parseReferenceHandoffReceipt, validateReferenceHandoffCurrentness } from '../core/ref/reference-handoff.ts';
 import { refIdentity } from '../core/ref/identity.ts';
-import { parseReferenceSelectionV2, referenceSelectionV2Sha256, validateReferenceSelectionV2 } from '../core/ref/reference-selection.ts';
+import { parseReferenceSelectionV2, referenceSelectionV2Sha256, validatePreReferenceSelectionV2 } from '../core/ref/reference-selection.ts';
 import { refImagePath, saveRef } from '../core/ref/store.ts';
 import type { Blueprint, Invariants, Reference } from '../core/types.ts';
 import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
@@ -40,7 +40,7 @@ test('omd ref keeps board operations internal and prints a two-candidate chat ta
   assert.equal(envelope.handoff.path, '.omd/reference-handoffs/art-direction.json');
   const selection = parseReferenceSelectionV2(envelope.selection);
   const handoff = parseReferenceHandoffReceipt(envelope.handoff.receipt);
-  assert.deepEqual(validateReferenceSelectionV2(root), selection);
+  assert.deepEqual(validatePreReferenceSelectionV2(root), selection);
   assert.deepEqual(validateReferenceHandoffCurrentness(root, envelope.handoff.receipt), handoff);
   assert.equal(handoff.preSelectionSha256, referenceSelectionV2Sha256(selection));
   assert.match(candidates.stdout, /로컬 캡쳐 \(Local capture\)/); assert.match(candidates.stdout, /\.omd\/refs\//);

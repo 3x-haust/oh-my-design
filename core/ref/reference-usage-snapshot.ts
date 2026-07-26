@@ -119,6 +119,7 @@ const validateSelectionAgainstArtifacts = (selection: ReferenceSelectionV2, arti
 const captureOnce = (root: string, reader: SnapshotReaders): ReferenceUsageBindings | undefined => {
   const before = { attribution: observed(reader.readAttribution(root), 'attribution'), board: observed(reader.readBoard(root), 'reference board'), selection: observed(reader.readSelection(root), 'reference selection v2') };
   const artifacts = artifactsFrom(root, reader, before.board); const selection = parse(before.selection, 'reference selection v2', parseReferenceSelectionV2);
+  if (before.selection.bytes.toString('utf8') !== canonicalJson(selection)) fail('settled v2 selection is not canonical');
   const after = { attribution: observed(reader.readAttribution(root), 'attribution'), board: observed(reader.readBoard(root), 'reference board'), selection: observed(reader.readSelection(root), 'reference selection v2') };
   if (!sameBindings(before, after)) return undefined;
   if (selection.captureSha256 !== sha256(artifacts.boardBytes) || selection.assemblySha256 !== sha256(artifacts.assemblyBytes) || selection.projectionSha256 !== sha256(artifacts.projectionBytes)) return undefined;

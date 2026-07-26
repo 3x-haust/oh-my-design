@@ -1,13 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash, generateKeyPairSync, sign } from 'node:crypto';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { canonicalLegalCellManifest, createAliasResolver, createEvaluatorHoldout, evaluateHarness, projectHoldoutBrief, scoreBrief, validateDevelopmentCorpus } from '../core/eval-harness/holdout-projection.ts';
 import type { HoldoutBrief, RaterVote } from '../core/eval-harness/holdout-projection.ts';
-import { materializeEvidenceLock } from '../scripts/benchmark/materialize-evidence-lock.ts';
+import { materializeEvidenceLock, validateEvidenceSnapshot } from '../scripts/benchmark/materialize-evidence-lock.ts';
 import { validateEvidenceLock } from '../scripts/benchmark/validate-evidence-lock.ts';
 import { computeUnsignedHarnessRun, createUnsignedUsageComputation, computeUnsignedUsage, prepareHarnessV2 } from '../scripts/benchmark/run-harness-v2.ts';
 import type { IsolatedHarnessHost, UnsignedUsageComputation, ReviewerLane } from '../scripts/benchmark/run-harness-v2.ts';
@@ -118,6 +118,7 @@ test('process-bound reviewer evidence is one-shot and held only in live transpor
   const adapter = createReviewerMcpAdapter();
   const payload = new Uint8Array(8 * 1024 * 1024 + 1);
   try {
+    assert.throws(() => adapter.launch({ host: 'codex', buildSha256: digest('build'), loadedSkillSha256: digest('skill'), briefSha256: digest('brief'), evidence: 'forged', processBinding: { parentPid: 1 } }), /parent process binding must be host-observed/);
     const receipt = adapter.launch({ host: 'codex', buildSha256: digest('build'), loadedSkillSha256: digest('skill'), briefSha256: digest('brief'), evidence: payload, alias: { scope: 'fixture', expiresAt: new Date(Date.now() + 60_000).toISOString(), byteLimit: payload.byteLength } });
     assert.equal(receipt.evidence.sha256, createHash('sha256').update(payload).digest('hex'));
     assert.equal(JSON.stringify(receipt).includes(Buffer.from(payload).toString('base64')), false);
@@ -157,6 +158,19 @@ test('public callbacks only drive unsigned telemetry and cannot mint an authorit
   assert.equal('report' in output, false);
   assert.equal('signedE5Digest' in output, false);
 });
+test('genuine evidence bytes override forged caller-decoded snapshot payloads', () => {
+  const evidence = lockFixture();
+  try {
+    const forgedSnapshot = evidence.lock.entries.map(declaration => ({
+      declaration,
+      bytes: readFileSync(join(evidence.root, declaration.path)),
+      payload: { runnerId: 'forged-caller-payload' },
+    }));
+    const snapshot = validateEvidenceSnapshot(evidence.lock, forgedSnapshot);
+    assert.equal(snapshot.entries.E5!.payload.runnerId, JSON.parse(SIGNED_EVIDENCE_ARTIFACT_BYTES.E5!).payload.runnerId);
+    assert.notEqual(snapshot.entries.E5!.payload.runnerId, 'forged-caller-payload');
+  } finally { rmSync(evidence.root, { recursive: true, force: true }); }
+});
 test('canonical CLI subprocess matches the signed E6-E11 authoritative projection', () => {
   const evidence = lockFixture();
   try {
@@ -164,8 +178,7 @@ test('canonical CLI subprocess matches the signed E6-E11 authoritative projectio
     const child = runCanonicalCli(canonicalCliInput(evidence), evidence.root);
     assert.equal(child.status, 0, child.stderr);
     const report = JSON.parse(child.stdout).report;
-    const signed = JSON.parse(SIGNED_EVIDENCE_ARTIFACT_BYTES.E6!).payload;
-    for (const field of ['runnerId', 'hostIdentity', 'observerIdentity', 'observerAuthorityDigest', 'measuredBudget', 'result']) assert.deepEqual(report[field], signed[field]);
+    for (const [id, fields] of ['E6', 'E7', 'E8', 'E9', 'E10', 'E11'].map(id => [id, Object.keys(JSON.parse(SIGNED_EVIDENCE_ARTIFACT_BYTES[id]!).payload).filter(field => field !== 'lineage')] as const)) for (const field of fields) assert.deepEqual(report[field], JSON.parse(SIGNED_EVIDENCE_ARTIFACT_BYTES[id]!).payload[field], `${id}.${field}`);
     assert.match(report.executionReceiptDigest, /^[a-f0-9]{64}$/);
     assert.notEqual(report.executionReceiptDigest, digest([]));
   } finally { rmSync(evidence.root, { recursive: true, force: true }); }

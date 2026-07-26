@@ -8,7 +8,7 @@ import test, { type TestContext } from 'node:test';
 import { readReferenceBoardArtifacts, sha256 } from '../core/ref/board-artifacts.ts';
 import { refIdentity } from '../core/ref/identity.ts';
 import { persistImageFragment } from '../core/ref/image-fragment.ts';
-import { parseReferenceSelectionV2, selectReferenceCandidate, validateReferenceSelection, validateReferenceSelectionV2 } from '../core/ref/reference-selection.ts';
+import { readPreReferenceSelectionV2, selectReferenceCandidate, validateReferenceSelection, validatePreReferenceSelectionV2 } from '../core/ref/reference-selection.ts';
 import { refImagePath, saveRef } from '../core/ref/store.ts';
 import type { Blueprint, Invariants, Reference } from '../core/types.ts';
 import { createTestProjectRunInvocation, createTestProjectWriteAdapter } from './helpers/project-write.ts';
@@ -83,8 +83,8 @@ test('board artifacts canonicalize an ancestor-symlink project alias after CLI s
   // When: the CLI selects the candidate from the real root while a parent validates from the alias root.
   const cli = spawnSync(process.execPath, [CLI, 'ref', 'select', 'candidate', '--json'], { cwd: value.root, encoding: 'utf8' });
   const real = readReferenceBoardArtifacts(value.root); const alias = readReferenceBoardArtifacts(aliasRoot);
-  const selection = parseReferenceSelectionV2(JSON.parse(readFileSync(join(aliasRoot, '.omd', 'reference-selection-v2.json'), 'utf8')));
-  const realSelection = validateReferenceSelectionV2(value.root); const aliasSelection = validateReferenceSelectionV2(aliasRoot);
+  const selection = readPreReferenceSelectionV2(aliasRoot);
+  const realSelection = validatePreReferenceSelectionV2(value.root); const aliasSelection = validatePreReferenceSelectionV2(aliasRoot);
 
   // Then: canonical artifacts remain byte-identical and the v2 selection binds the real-root artifacts from either spelling.
   assert.equal(cli.status, 0, cli.stderr);

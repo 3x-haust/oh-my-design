@@ -77,7 +77,7 @@ const temporaryRoot = realpathSync(tmpdir());
 const socketPath = (launchId: string): string => join(temporaryRoot, `o-${createHash('sha256').update(launchId).digest('hex').slice(0, 16)}`);
 const executableSha256 = (path: string): string => createHash('sha256').update(readFileSync(path)).digest('hex');
 function parentExecutableSha256(parentPid: number): string {
-  const result = spawnSync('ps', ['-p', String(parentPid), '-o', 'comm='], { encoding: 'utf8' });
+  const result = spawnSync('/bin/ps', ['-p', String(parentPid), '-o', 'comm='], { encoding: 'utf8', env: { PATH: '' } });
   const path = result.status === 0 ? result.stdout.trim() : '';
   if (!path) throw new ReviewerLaunchError('reviewer parent executable cannot be observed');
   return executableSha256(path);
@@ -233,6 +233,12 @@ export class ReviewerLaunchError extends Error {
   }
 }
 
+function requireLiveLaunch(receipt: ReviewerLaunchReceipt): void {
+  const launch = localLaunches.get(receipt.launchId);
+  if (launch?.receipt !== receipt || Date.now() >= Date.parse(receipt.processBinding.expiresAt)) {
+    throw new ReviewerLaunchError('reviewer launch has no live host-owned process/configuration handshake');
+  }
+}
 function requireHash(value: string, field: string): void {
   if (!SHA256.test(value)) throw new ReviewerLaunchError(`${field} must be a lowercase SHA-256 hash`);
 }
@@ -259,7 +265,14 @@ export class ReviewerMcpAdapter {
     if (payload.byteLength === 0) throw new ReviewerLaunchError('reviewer launch requires a non-empty evidence bundle');
     const evidence = Object.freeze(this.#evidence.create(request.evidence, request.alias));
     const launchId = randomUUID();
-    const processBinding = Object.freeze({ ...defaultProcessBinding(), ...request.processBinding }) as ReviewerProcessBinding;
+    const observedBinding = defaultProcessBinding();
+    if (
+      request.processBinding?.parentPid !== undefined && request.processBinding.parentPid !== observedBinding.parentPid
+      || request.processBinding?.parentExecutableSha256 !== undefined && request.processBinding.parentExecutableSha256 !== observedBinding.parentExecutableSha256
+    ) {
+      throw new ReviewerLaunchError('reviewer launch parent process binding must be host-observed');
+    }
+    const processBinding = Object.freeze({ ...observedBinding, ...request.processBinding }) as ReviewerProcessBinding;
     requireHash(processBinding.parentExecutableSha256, 'parentExecutableSha256');
     if (!Number.isSafeInteger(processBinding.parentPid) || processBinding.parentPid <= 0 || !processBinding.runnerId || !processBinding.sessionId || !processBinding.nonce || !Number.isFinite(Date.parse(processBinding.expiresAt))) {
       throw new ReviewerLaunchError('reviewer launch requires an exact parent process, runner, session, nonce, and expiry binding');
@@ -320,6 +333,7 @@ export class ReviewerMcpAdapter {
     if (receiptLaunchers.get(reviewerLaunchReceipt) !== this) {
       throw new ReviewerLaunchError('reviewer receipt is not bound to this host evidence proxy');
     }
+    requireLiveLaunch(reviewerLaunchReceipt);
     requireReviewerLaunchReceipt(reviewerLaunchReceipt, {
       host: loadedSkillReceipt.host,
       buildSha256: reviewerLaunchReceipt.buildSha256,
@@ -351,6 +365,7 @@ export class ReviewerMcpAdapter {
     ) {
       throw new ReviewerLaunchError('reviewer launch bundle is not bound to this host evidence proxy');
     }
+    requireLiveLaunch(reviewerLaunchReceipt);
     requireReviewerLaunchReceipt(reviewerLaunchReceipt, {
       host,
       buildSha256: reviewerLaunchReceipt.buildSha256,

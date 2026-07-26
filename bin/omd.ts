@@ -41,7 +41,7 @@ import { createLocalCliInvocation, requireCurrentIntentLedgerAuthorization, requ
 import { acquireProjectLock, createExternalObservationDirectory, createProjectWriteAdapter, replaceProjectFileAtomically, writeExternalObservationFile, writeImmutableProjectFile, type ExternalObservationKind, type ProjectWriteAdapter } from '../core/runtime/project-write.ts';
 import { intentLedgerSha256, resolveCurrentUserBeatExceptionReceipt, serializeIntentLedger, validateIntentCurrentPointer, validateIntentLedger } from '../core/runtime/intent.ts';
 import { validateDecisionBoundReferenceHandoffs, validateReferenceHandoffCurrentness } from '../core/ref/reference-handoff.ts';
-import { parseReferenceSelectionV2, referenceSelectionV2Sha256, resolveMotionProjection, validateReferenceSelectionV2 } from '../core/ref/reference-selection.ts';
+import { parseReferenceSelectionV2, referenceSelectionV2Sha256, resolveMotionProjection, validatePreReferenceSelectionV2 } from '../core/ref/reference-selection.ts';
 import { referenceUsageV2Sha256, validateReferenceUsage } from '../core/ref/reference-usage.ts';
 import { canonicalJson, sha256 } from '../core/ref/board-artifacts.ts';
 
@@ -1132,9 +1132,10 @@ const boardPath = (opts: Opts, command: string): string | undefined => {
 };
 async function cmdRefCheck(opts: Opts): Promise<never> {
   const { readReferenceBoardArtifacts } = await import('../core/ref/board-artifacts.ts');
-  const { referenceSelectionExists, referenceSelectionV2Exists, validateReferenceSelection, validateReferenceSelectionV2 } = await import('../core/ref/reference-selection.ts');
+  const { referenceSelectionExists, referenceSelectionV2Exists, preReferenceSelectionV2Exists, validateReferenceSelection, validatePreReferenceSelectionV2, validateReferenceSelectionV2 } = await import('../core/ref/reference-selection.ts');
   const manifest = boardPath(opts, 'omd ref check'); readReferenceBoardArtifacts(process.cwd(), manifest);
   if (referenceSelectionExists(process.cwd())) validateReferenceSelection(process.cwd(), manifest);
+  if (preReferenceSelectionV2Exists(process.cwd())) validatePreReferenceSelectionV2(process.cwd(), manifest);
   if (referenceSelectionV2Exists(process.cwd())) validateReferenceSelectionV2(process.cwd(), manifest);
   if (opts.json) process.stdout.write('[]\n'); else console.log('ok');
   process.exit(0);
@@ -2182,7 +2183,7 @@ async function cmdArtDirection(mode: string | undefined, opts: Opts): Promise<ne
   const handoffPath = join(process.cwd(), '.omd', 'reference-handoffs', 'art-direction.json');
   if (!existsSync(handoffPath)) throw new Error('ART_DIRECTION_REFERENCE_HANDOFF_REQUIRED: run `omd ref select` before art direction');
   const handoff = validateReferenceHandoffCurrentness(process.cwd(), inputJson(handoffPath, 'art-direction reference handoff'));
-  const selection = validateReferenceSelectionV2(process.cwd());
+  const selection = validatePreReferenceSelectionV2(process.cwd());
   const selectionSha256 = referenceSelectionV2Sha256(selection);
   const { persistMotionResolutionProjection, persistSettledReferenceSelection, motionResolutionProjectionSha256 } = await import('../core/ref/reference-selection.ts');
   const input = {
@@ -2216,7 +2217,7 @@ async function cmdArtDirection(mode: string | undefined, opts: Opts): Promise<ne
     throw new Error(`ART_DIRECTION_BEAT_BUDGET_EXCEEDED: ${checked.selectedRegister} permits at most ${beatBudgetForRegister(checked.selectedRegister)} Beats without an exact current-user host-authorized Beat-exception receipt`);
   }
   const motion = persistMotionResolutionProjection(process.cwd(), motionInput, { assessmentBytes, resultBytes, ...(recipeBytes === undefined ? {} : { approvedRecipeBytes: recipeBytes }) }, run, localMode ? 'local-moderator' : 'host');
-  const settledSelection = persistSettledReferenceSelection(process.cwd(), selection, { ...motion.projection, selection }, run);
+  const settledSelection = persistSettledReferenceSelection(process.cwd(), selection, motionResolutionProjectionSha256(motion.projection), run);
   const settledMotionResolutionSha256 = motionResolutionProjectionSha256(motion.projection);
   if (checked.motionResolutionProjectionSha256 !== settledMotionResolutionSha256 || checked.settledSelectionSha256 !== referenceSelectionV2Sha256(settledSelection)) {
     throw new Error('ART_DIRECTION_MOTION_SETTLEMENT_STALE: decision must bind the persisted motion settlement');

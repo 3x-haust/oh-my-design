@@ -505,6 +505,55 @@ test('v2 publishes only a complete receipt graph and checker revalidates backing
     assert.throws(() => checkFinalEvidenceV2(directory));
   } finally { clean(directory); }
 });
+test('checker parses the authorized final pointer bytes without rereading its pathname', () => {
+  const directory = root(); try {
+    const input = manifest(directory);
+    publishFinalEvidenceV2(directory, input);
+    const invocation = finalEvidenceInvocation(directory);
+    authorizeFinalEvidenceCheck(directory, invocation);
+    const pointerPath = join(directory, '.omd', 'final-evidence-v2.json');
+    let pointerPathReads = 0;
+    assert.doesNotThrow(() => guardedCheckFinalEvidenceV2(directory, invocation, {
+      fs: {
+        readFile: (path) => {
+          if (path === pointerPath) {
+            pointerPathReads += 1;
+            return Buffer.from('{"substituted":"pointer"}\n');
+          }
+          return readFileSync(path);
+        },
+      },
+    }));
+    assert.equal(pointerPathReads, 0);
+  } finally { clean(directory); }
+});
+test('checker validates static evidence from its content-addressed stable bytes', () => {
+  const directory = root(); try {
+    const input = manifest(directory);
+    publishFinalEvidenceV2(directory, input);
+    const invocation = finalEvidenceInvocation(directory);
+    authorizeFinalEvidenceCheck(directory, invocation);
+    const staticPath = resolve(directory, input.staticEvidence!.path);
+    const staticBytes = readFileSync(staticPath);
+    const semanticSubstitution = Buffer.from(`${canonical({
+      ...(JSON.parse(staticBytes.toString('utf8')) as Record<string, unknown>),
+      artDirectionHash: sha('substituted-static-semantic-evidence'),
+    })}\n`);
+    let staticPathReads = 0;
+    assert.doesNotThrow(() => guardedCheckFinalEvidenceV2(directory, invocation, {
+      fs: {
+        readFile: (path) => {
+          if (path === staticPath) {
+            staticPathReads += 1;
+            return staticPathReads === 1 ? staticBytes : semanticSubstitution;
+          }
+          return readFileSync(path);
+        },
+      },
+    }));
+    assert.equal(staticPathReads, 0);
+  } finally { clean(directory); }
+});
 test('the final graph root binds complete stable current frame bytes', () => {
   const directory = root(); try {
     const input = manifest(directory);
@@ -971,6 +1020,27 @@ test('a showpiece one manifest carries a scroll-position-scrubbed journey; wrong
       process.chdir(directory);
       assert.equal(checkFinalEvidenceV2(directory).scrollSceneEvidence?.schema, 'scroll-scene-evidence-v1');
     } finally { process.chdir(cwd); }
+    const invocation = finalEvidenceInvocation(directory);
+    authorizeFinalEvidenceCheck(directory, invocation);
+    const scrollPath = resolve(directory, scrollReceipt.path);
+    const scrollBytes = readFileSync(scrollPath);
+    const semanticSubstitution = Buffer.from(`${canonical({
+      ...(JSON.parse(scrollBytes.toString('utf8')) as Record<string, unknown>),
+      artDirectionHash: sha('substituted-scroll-semantic-evidence'),
+    })}\n`);
+    let scrollPathReads = 0;
+    assert.doesNotThrow(() => guardedCheckFinalEvidenceV2(directory, invocation, {
+      fs: {
+        readFile: (path) => {
+          if (path === scrollPath) {
+            scrollPathReads += 1;
+            return scrollPathReads === 1 ? scrollBytes : semanticSubstitution;
+          }
+          return readFileSync(path);
+        },
+      },
+    }));
+    assert.equal(scrollPathReads, 0);
   } finally { clean(directory); }
 });
 test('a scroll journey is a showpiece one escalation: none decisions and confident registers are rejected', async () => {

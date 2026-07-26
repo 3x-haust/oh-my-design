@@ -148,7 +148,7 @@ function persistCurrentArtDirectionWithHandoffs(root: string): void {
     settledSelectionSha256: referenceSelectionV2Sha256(settledSelection),
     settledSelection,
   };
-  writer.write('.omd/reference-selection-v2.json', JSON.stringify(settledSelection));
+  writer.write('.omd/reference-selection-v2.json', canonicalJson(settledSelection));
   writeReferenceHandoffReceipt(root, 'composer', invocation, digest, settlement);
   writeReferenceHandoffReceipt(root, 'hand', invocation, digest, settlement);
 }

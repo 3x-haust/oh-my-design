@@ -1,6 +1,6 @@
 import { canonicalJson, readReferenceBoardArtifacts, sha256 } from './board-artifacts.ts';
 import { replaceProjectFileAtomically } from '../runtime/project-write.ts';
-import { readPreReferenceSelectionV2, referenceSelectionV2Sha256, validateReferenceSelectionV2 } from './reference-selection.ts';
+import { referenceSelectionV2Sha256, validatePreReferenceSelectionV2, validateReferenceSelectionV2 } from './reference-selection.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import type { ReferenceSelectionV2 } from './reference-selection.ts';
 
@@ -147,14 +147,13 @@ export function createReferenceHandoffReceipt(
   artDirectionSha256?: string,
   settlement?: SettledMotionBinding,
 ): ReferenceHandoffReceipt {
-  const currentSelection = validateReferenceSelectionV2(root);
-  const selection = readPreReferenceSelectionV2(root);
+  const selection = validatePreReferenceSelectionV2(root);
+  const currentSelection = handoffRole === 'art-direction' ? selection : validateReferenceSelectionV2(root);
   if (handoffRole === 'art-direction' && (artDirectionSha256 !== undefined || settlement !== undefined)) fail('art-direction handoff cannot bind a decision or settlement that it has not made');
   if (handoffRole !== 'art-direction' && (artDirectionSha256 === undefined || !/^[0-9a-f]{64}$/.test(artDirectionSha256) || settlement === undefined
     || !/^[0-9a-f]{64}$/.test(settlement.motionResolutionProjectionSha256))) {
     fail(`${handoffRole} handoff requires artDirectionSha256 and a content-addressed settled motion selection`);
   }
-  if (handoffRole === 'art-direction' && referenceSelectionV2Sha256(currentSelection) !== referenceSelectionV2Sha256(selection)) fail('art-direction handoff requires the current immutable pre-selection');
   if (settlement !== undefined && handoffRole !== 'art-direction' && referenceSelectionV2Sha256(currentSelection) !== settlement.settledSelectionSha256) fail('handoff settlement is not the current settled selection');
   if (settlement !== undefined) validateSettledSelection(selection, settlement);
   const artifacts = readReferenceBoardArtifacts(root);
@@ -189,8 +188,8 @@ export function writeReferenceHandoffReceipt(
 
 export function validateReferenceHandoffCurrentness(root: string, receiptValue: unknown): ReferenceHandoffReceipt {
   const receipt = parseReferenceHandoffReceipt(receiptValue);
-  const selection = validateReferenceSelectionV2(root);
-  const preSelection = readPreReferenceSelectionV2(root);
+  const preSelection = validatePreReferenceSelectionV2(root);
+  const selection = receipt.role === 'art-direction' ? preSelection : validateReferenceSelectionV2(root);
   const artifacts = readReferenceBoardArtifacts(root);
   if (receipt.captureSha256 !== sha256(artifacts.boardBytes)) fail('capture hash is stale');
   if (receipt.assemblySha256 !== sha256(artifacts.assemblyBytes)) fail('assembly hash is stale');

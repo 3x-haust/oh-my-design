@@ -24,6 +24,27 @@ export type ProjectWriteAdapter = {
   mkdir(relativePath: string): string;
   write(relativePath: string, content: string | Uint8Array): string;
 };
+
+/**
+ * Security boundary for guarded project mutation.
+ *
+ * OMD authenticates the host invocation, confines paths to a real project root, rejects static
+ * symlink ancestors/leaves, and serializes cooperating OMD publishers. A same-UID process that can
+ * rename project ancestors concurrently between operating-system calls already owns the project
+ * files and is outside this in-process library boundary; containment from that actor requires an
+ * OS sandbox or descriptor-relative beneath API that Node does not expose portably.
+ */
+export const PROJECT_WRITE_THREAT_BOUNDARY = Object.freeze({
+  protects: [
+    'caller-minted write authority',
+    'path traversal and static symlink escape',
+    'conflicting cooperating OMD mutations',
+  ],
+  excludes: [
+    'concurrent same-UID filesystem mutation',
+    'host process injection or debugger control',
+  ],
+});
 export type ExternalObservationKind = 'render' | 'capture' | 'probe-cache';
 
 export type ExternalObservationFileRequest = {

@@ -36,15 +36,14 @@ function verifyPinnedRoot(entries: readonly EvidenceDeclaration[], payload: Reco
   } catch { return false; }
 }
 function parseArtifact(root: string, declaration: EvidenceDeclaration): { payload: Record<string, unknown> } {
-  let artifact: { kind?: unknown; schemaVersion?: unknown; payload?: unknown; digest?: unknown }; try { artifact = JSON.parse(readFileSync(fileAt(root, declaration.path), 'utf8')); } catch { throw new Error(`evidence artifact must be JSON: ${declaration.id}`); }
-  if (artifact.kind !== declaration.kind || artifact.schemaVersion !== declaration.schemaVersion || artifact.digest !== payloadDigest(artifact) || !sha256.test(String(artifact.digest)) || !artifact.payload || Array.isArray(artifact.payload)) throw new Error(`evidence artifact schema or digest mismatch: ${declaration.id}`);
-  return { payload: artifact.payload as Record<string, unknown> };
+  return parseArtifactBytes(readFileSync(fileAt(root, declaration.path)), declaration);
+}
 function parseArtifactBytes(bytes: Uint8Array, declaration: EvidenceDeclaration): { payload: Record<string, unknown> } {
   let artifact: { kind?: unknown; schemaVersion?: unknown; payload?: unknown; digest?: unknown }; try { artifact = JSON.parse(new TextDecoder().decode(bytes)); } catch { throw new Error(`evidence artifact must be JSON: ${declaration.id}`); }
   if (artifact.kind !== declaration.kind || artifact.schemaVersion !== declaration.schemaVersion || artifact.digest !== payloadDigest(artifact) || !sha256.test(String(artifact.digest)) || !artifact.payload || Array.isArray(artifact.payload)) throw new Error(`evidence artifact schema or digest mismatch: ${declaration.id}`);
   return { payload: artifact.payload as Record<string, unknown> };
 }
-}
+function freezePayload<T>(value: T): T { if (value && typeof value === 'object') { Object.freeze(value); for (const child of Object.values(value as Record<string, unknown>)) freezePayload(child); } return value; }
 function validateLineage(payload: Record<string, unknown>, declaration: EvidenceDeclaration, entries: readonly EvidenceDeclaration[]): void {
   const lineage = payload.lineage as { rootDigest?: unknown; parents?: unknown } | undefined;
   if (!lineage || lineage.rootDigest !== rootDigest(entries) || !lineage.parents || Array.isArray(lineage.parents)) throw new Error(`typed lineage missing: ${declaration.id}`);
@@ -132,8 +131,17 @@ function validateTrustRoot(entries: readonly EvidenceDeclaration[], payloadFor: 
 export function readEvidencePayload(root: string, declaration: EvidenceDeclaration): Readonly<Record<string, unknown>> { return Object.freeze(parseArtifact(root, declaration).payload); }
 export function validateEvidenceSnapshot(lock: EvidenceLock, entries: readonly EvidenceSnapshotEntry[]): EvidenceLockSnapshot {
   if (entries.length !== lock.entries.length) throw new Error('evidence snapshot is incomplete');
-  const byId = Object.fromEntries(entries.map(entry => [entry.declaration.id, entry])) as Record<string, EvidenceSnapshotEntry>;
-  for (const declaration of lock.entries) { const entry=byId[declaration.id]; if (!entry || entry.declaration !== declaration || hash(entry.bytes)!==declaration.sha256) throw new Error(`evidence snapshot mismatch: ${declaration.id}`); validateLineage(entry.payload as Record<string, unknown>, declaration, lock.entries); }
+  const supplied = Object.fromEntries(entries.map(entry => [entry.declaration.id, entry])) as Record<string, EvidenceSnapshotEntry>;
+  const byId: Record<string, EvidenceSnapshotEntry> = {};
+  for (const declaration of lock.entries) {
+    const entry = supplied[declaration.id];
+    if (!entry || entry.declaration !== declaration) throw new Error(`evidence snapshot mismatch: ${declaration.id}`);
+    const bytes = new Uint8Array(entry.bytes);
+    if (hash(bytes) !== declaration.sha256) throw new Error(`evidence snapshot mismatch: ${declaration.id}`);
+    const payload = parseArtifactBytes(bytes, declaration).payload;
+    validateLineage(payload, declaration, lock.entries);
+    byId[declaration.id] = Object.freeze({ declaration, bytes, payload: freezePayload(payload) });
+  }
   const payload = (id: EvidenceId) => { const entry=byId[id]; if (!entry) throw new Error(`missing ${id}`); return entry.payload as Record<string, unknown>; };
   validateTrustRoot(lock.entries, payload);
   return Object.freeze({ lock, entries: Object.freeze(byId) });

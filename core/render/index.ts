@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
-import { resolve, dirname, basename, join, relative } from 'node:path';
+import { resolve, dirname, basename, isAbsolute, join, relative } from 'node:path';
 import { extractInPage } from '../ir/dom.ts';
 import { computeEnergy } from '../motion/energy.ts';
 import type { EnergyCurve, MotionMeasurement, RawIr } from '../types.ts';
@@ -773,7 +773,7 @@ function motionPositive(value: unknown, field: string): number {
   if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) motionFail(`${field} must be positive`);
   return value;
 }
-function motionReceipt(value: unknown, field: string): ObservedCaptureReceipt {
+function motionReceipt(value: unknown, field: string, root?: string): ObservedCaptureReceipt {
   const receipt = motionObject(value, field);
   motionExact(receipt, ['path', 'bytesBase64', 'sha256'], field);
   const path = motionText(receipt.path, `${field}.path`);
@@ -788,7 +788,8 @@ function motionReceipt(value: unknown, field: string): ObservedCaptureReceipt {
   if (bytes.length === 0 || bytes.toString('base64') !== bytesBase64 || createHash('sha256').update(bytes).digest('hex') !== receipt.sha256) {
     motionFail(`${field} bytes do not match sha256`);
   }
-  if (!existsSync(path) || !readFileSync(path).equals(bytes)) motionFail(`${field} path does not contain captured bytes`);
+  const capturePath = root === undefined || isAbsolute(path) ? path : resolve(root, path);
+  if (!existsSync(capturePath) || !readFileSync(capturePath).equals(bytes)) motionFail(`${field} path does not contain captured bytes`);
   return receipt as ObservedCaptureReceipt;
 }
 function motionTimestamp(value: unknown, field: string): number {
@@ -808,7 +809,7 @@ function motionTimestamp(value: unknown, field: string): number {
  */
 export function validateMotionEvidenceV2(
   value: unknown,
-  decision?: { readonly motionDecision: 'none' | 'one'; readonly buildHash?: string; readonly artDirectionHash?: string },
+  decision?: { readonly motionDecision: 'none' | 'one'; readonly buildHash?: string; readonly artDirectionHash?: string; readonly root?: string },
 ): MotionEvidenceV2 {
   const evidence = motionObject(value, 'evidence');
   motionExact(evidence, ['schema', 'artDirectionHash', 'motionDecision', 'observed', 'scenes'], 'evidence');
@@ -885,14 +886,14 @@ export function validateMotionEvidenceV2(
     const frame = motionObject(scene[stage], `scenes[0].${stage}`);
     motionExact(frame, ['timestampMs', 'capture'], `scenes[0].${stage}`);
     timestamps.push(motionTimestamp(frame.timestampMs, `scenes[0].${stage}.timestampMs`));
-    captures.push(motionReceipt(frame.capture, `scenes[0].${stage}.capture`));
+    captures.push(motionReceipt(frame.capture, `scenes[0].${stage}.capture`, decision?.root));
   }
   const observedEnergy = computeEnergy(captures.map((capture) => Buffer.from(capture.bytesBase64, 'base64'))).peakEnergy;
   if (energy !== observedEnergy) motionFail('ROI energy does not match captured pixel evidence');
   if (!(timestamps[0]! < timestamps[1]! && timestamps[1]! < timestamps[2]!)) motionFail('ROI timestamps must be strictly start < mid < end');
   const reduced = motionObject(scene.reducedMotion, 'scenes[0].reducedMotion');
   motionExact(reduced, ['capture', 'behavior'], 'scenes[0].reducedMotion');
-  const reducedReceipt = motionReceipt(reduced.capture, 'scenes[0].reducedMotion.capture');
+  const reducedReceipt = motionReceipt(reduced.capture, 'scenes[0].reducedMotion.capture', decision?.root);
   if (reduced.behavior !== 'removed' && reduced.behavior !== 'static-equivalent') motionFail('reduced-motion counterpart must remove motion or show a static equivalent');
   const observedReducedEnergy = computeEnergy([
     Buffer.from(captures[2]!.bytesBase64, 'base64'),

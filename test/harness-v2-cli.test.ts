@@ -774,7 +774,7 @@ test('intent CAS and canonical selection and handoff currentness fail closed', a
   assert.notEqual(cas.status, 0); assert.match(cas.stderr, /CAS_MISMATCH/);
   const selectionPath = join(root, '.omd', 'reference-selection-v2.json');
   writeFileSync(selectionPath, JSON.stringify({ schemaVersion: 'reference-selection-v2', captureSha256: sha('stale'), assemblySha256: sha('stale'), projectionSha256: sha('stale'), candidateId: 'candidate', slots: [] }));
-  const staleSelection = run(root, ['ref', 'v2-check', '--input', join(root, '.omd', 'reference-handoffs', 'art-direction.json')]);
+  const staleSelection = run(root, ['ref', 'v2-check', '--input', join(root, '.omd', 'reference-handoffs', 'composer.json')]);
   assert.notEqual(staleSelection.status, 0);
   writeFileSync(join(root, '.omd', 'reference-handoffs', 'art-direction.json'), JSON.stringify({ schemaVersion: 'reference-handoff-v2', role: 'art-direction', captureSha256: sha('stale'), assemblySha256: sha('stale'), projectionSha256: sha('stale'), selectionSha256: sha('stale'), positiveMotion: { slots: [] }, payloadSha256: sha('stale') }));
   const staleHandoff = run(root, ['ref', 'v2-check', '--input', join(root, '.omd', 'reference-handoffs', 'art-direction.json')]);

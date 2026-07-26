@@ -2,7 +2,6 @@ import { canonicalJson } from './board-artifacts.ts';
 import {
   prepareReferenceUsage,
   readValidatedReferenceUsage,
-  type ReferenceUsageReaders,
   type ReferenceUsageV2,
   type ValidatedReferenceUsage,
 } from './reference-usage-snapshot.ts';
@@ -15,7 +14,6 @@ export {
   referenceUsagePath,
   referenceUsageV2Sha256,
   trustedProductionEvidence,
-  type ReferenceUsageReaders,
   type ReferenceUsageV2,
   type ValidatedReferenceUsage,
   type ValidatedReferenceUsagePiece,
@@ -29,6 +27,6 @@ export function recordReferenceUsage(root: string, input: ReferenceUsageInput, w
   return usage;
 }
 
-export function validateReferenceUsage(root: string, overrides?: ReferenceUsageReaders): ValidatedReferenceUsage {
-  return readValidatedReferenceUsage(root, overrides);
+export function validateReferenceUsage(root: string): ValidatedReferenceUsage {
+  return readValidatedReferenceUsage(root);
 }

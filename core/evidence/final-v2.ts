@@ -238,12 +238,15 @@ function requireRealNestedProjectPaths(root: string, value: unknown, fs: FinalEv
   }
 }
 function temporary(directory: string, stem: string): string { return resolve(directory, `.${stem}.${process.pid}.${randomBytes(12).toString('hex')}.tmp`); }
+function parseJsonBytes(bytes: Buffer, label: string): unknown {
+  try { return JSON.parse(bytes.toString('utf8')) as unknown; } catch { fail(`${label} is not valid JSON`); }
+}
 function readJson(fs: FinalEvidenceV2FileSystem, path: string, label: string): unknown {
   regular(fs, path);
-  try { return JSON.parse(fs.readFile(path).toString('utf8')) as unknown; } catch { fail(`${label} is not valid JSON`); }
+  return parseJsonBytes(fs.readFile(path), label);
 }
-function pointerFrom(fs: FinalEvidenceV2FileSystem, path: string): FinalEvidenceV2Pointer {
-  const pointer = object(readJson(fs, path, 'pointer'), 'pointer');
+function pointerFrom(bytes: Buffer): FinalEvidenceV2Pointer {
+  const pointer = object(parseJsonBytes(bytes, 'pointer'), 'pointer');
   exact(pointer, ['schema', 'record', 'sha256'], 'pointer');
   if (pointer.schema !== FINAL_EVIDENCE_V2_POINTER_SCHEMA) fail('unsupported pointer schema');
   return { schema: FINAL_EVIDENCE_V2_POINTER_SCHEMA, record: fileName(pointer.record), sha256: digest(pointer.sha256, 'pointer.sha256') };
@@ -276,10 +279,9 @@ function validateBackedManifest(root: string, fs: FinalEvidenceV2FileSystem, val
   const outside = relative(root, evidencePath);
   if (outside === '' || outside.startsWith('..') || resolve(root, outside) !== evidencePath) fail('evidence branch escapes the project root');
   requireRealAncestors(root, evidencePath, fs, 'evidence branch');
-  regular(fs, evidencePath);
-  const evidenceBytes = fs.readFile(evidencePath);
+  const evidenceBytes = readStableRegularFile(fs, evidencePath, 'evidence branch');
   if (hash(evidenceBytes) !== evidence.sha256) fail('evidence branch hash changed');
-  const evidenceObject = object(readJson(fs, evidencePath, 'evidence branch'), 'evidence branch');
+  const evidenceObject = object(parseJsonBytes(evidenceBytes, 'evidence branch'), 'evidence branch');
   requireRealNestedProjectPaths(root, evidenceObject, fs, 'evidence branch');
   if ((evidenceObject.schema ?? evidenceObject.schemaVersion) !== evidence.schema) fail('evidence branch schema changed');
   if (evidenceObject.artDirectionHash !== graph.bindings.artDirectionSha256) fail('evidence branch provenance does not bind the selected semantic art direction');
@@ -288,6 +290,7 @@ function validateBackedManifest(root: string, fs: FinalEvidenceV2FileSystem, val
       motionDecision: 'one',
       artDirectionHash: graph.bindings.artDirectionSha256,
       buildHash: graph.bindings.buildSha256,
+      root,
     });
     if (motion.scenes.length !== 1) fail('motion evidence must prove exactly one scene');
     const observed = object(evidenceObject.observed, 'motion evidence observed');
@@ -332,10 +335,9 @@ function validateBackedManifest(root: string, fs: FinalEvidenceV2FileSystem, val
     const scrollOutside = relative(root, scrollPath);
     if (scrollOutside === '' || scrollOutside.startsWith('..') || resolve(root, scrollOutside) !== scrollPath) fail('scroll-scene evidence escapes the project root');
     requireRealAncestors(root, scrollPath, fs, 'scroll-scene evidence');
-    regular(fs, scrollPath);
-    const scrollBytes = fs.readFile(scrollPath);
+    const scrollBytes = readStableRegularFile(fs, scrollPath, 'scroll-scene evidence');
     if (hash(scrollBytes) !== manifest.scrollSceneEvidence.sha256) fail('scroll-scene evidence hash changed');
-    const scrollObject = object(readJson(fs, scrollPath, 'scroll-scene evidence'), 'scroll-scene evidence');
+    const scrollObject = object(parseJsonBytes(scrollBytes, 'scroll-scene evidence'), 'scroll-scene evidence');
     requireRealNestedProjectPaths(root, scrollObject, fs, 'scroll-scene evidence');
     if (scrollObject.schema !== manifest.scrollSceneEvidence.schema) fail('scroll-scene evidence schema changed');
     if (scrollObject.artDirectionHash !== graph.bindings.artDirectionSha256) fail('scroll-scene evidence does not bind the selected semantic art direction');
@@ -352,7 +354,7 @@ function recordFor(root: string, fs: FinalEvidenceV2FileSystem, runDirectory: st
 }
 function committedRecord(fs: FinalEvidenceV2FileSystem, location: ReturnType<typeof paths>, invocation: ProjectRunInvocation): string | undefined {
   if (!fs.exists(location.pointer)) return undefined;
-  const pointer = pointerFrom(fs, location.pointer);
+  const pointer = pointerFrom(readStableRegularFile(fs, location.pointer, 'final evidence pointer'));
   recordFor(location.omd === '' ? location.omd : resolve(location.omd, '..'), fs, location.runs, pointer, invocation);
   return pointer.record;
 }
@@ -366,7 +368,7 @@ export function checkFinalEvidenceV2(rootInput: string, invocation?: ProjectRunI
   requireRealAncestors(root, location.pointer, fs, 'final evidence pointer');
   const pointerBytes = readStableRegularFile(fs, location.pointer, 'final evidence pointer');
   requireHostPayloadAuthorization(invocation, root, 'final-reviewer-lane', pointerBytes);
-  return recordFor(root, fs, location.runs, pointerFrom(fs, location.pointer), invocation);
+  return recordFor(root, fs, location.runs, pointerFrom(pointerBytes), invocation);
 }
 
 function requireCurrentGraphIdentity(root: string, fs: FinalEvidenceV2FileSystem, manifest: FinalEvidenceV2Manifest, invocation: ProjectRunInvocation): void {
@@ -656,7 +658,7 @@ export function recoverFinalEvidenceV2Lock(rootInput: string, invocation: Projec
       }
       if (fs.exists(location.gcJournal)) recoverGcJournal(fs, location);
     }
-    if (fs.exists(location.pointer)) recordFor(rootPath(rootInput), fs, location.runs, pointerFrom(fs, location.pointer), invocation);
+    if (fs.exists(location.pointer)) recordFor(rootPath(rootInput), fs, location.runs, pointerFrom(readStableRegularFile(fs, location.pointer, 'final evidence pointer')), invocation);
     if (lockOperation === 'publication' && fs.exists(resolve(location.runs, `sha256-${lockHash}.json`))) {
       recordFor(rootPath(rootInput), fs, location.runs, { schema: FINAL_EVIDENCE_V2_POINTER_SCHEMA, record: `sha256-${lockHash}.json`, sha256: lockHash }, invocation);
     }
