@@ -814,7 +814,7 @@ test('scout batches zone-bound captures without debugging browser transport', ()
   assert.match(scout, /run `omd ref add-batch` once/);
   assert.match(scout, /Every entry includes a tight component selector and the framer-owned `slot`/);
   assert.match(scout, /Never start `browser-rs` yourself, handcraft or `curl` its MCP protocol/);
-  assert.match(scout, /run at most one missing-zone repair batch/);
+  assert.match(scout, /run exactly one missing-zone repair batch before reporting a blocker/);
   const batch = read('core/ref/batch.ts');
   assert.match(batch, /slot\?: string/);
   assert.match(batch, /spec\.slot \? \{ slot: spec\.slot \}/);

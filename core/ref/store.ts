@@ -79,6 +79,7 @@ export function loadRefs(cwd: string): Reference[] {
           kind: parsed.kind ?? 'page',
           capturedAt: parsed.capturedAt ?? '',
           ...(parsed.selector !== undefined ? { selector: parsed.selector } : {}),
+          ...(parsed.slot !== undefined ? { slot: parsed.slot } : {}),
           invariants: withInvariantDefaults(parsed.invariants),
           principles: parsed.principles ?? [],
           ...(parsed.slopCount !== undefined ? { slopCount: parsed.slopCount } : {}),
