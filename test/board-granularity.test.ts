@@ -96,11 +96,11 @@ test('the real board is caught: five component captures collapsing onto two slot
     ref('https://vite.dev', 'hero-install-tabs', '.language-bash'),
   ];
   const surfaces = ['hero', 'process-loop', 'skills-table', 'install', 'proof'];
-  const findings = auditBoardGranularity(board, { surfaces });
+  const findings = auditBoardGranularity(board, { zones: surfaces });
   const ids = findings.map((f) => f.id);
   assert.ok(ids.includes('REF-PART-CONCENTRATION'), 'three navs out of five captures is one slot studied three times');
-  const uncovered = findings.find((f) => f.id === 'REF-SURFACE-UNCOVERED')!;
-  assert.match(uncovered.message, /no capture is bound to a surface/, 'an unbound board covers nothing');
+  const uncovered = findings.find((f) => f.id === 'REF-ZONE-UNCOVERED')!;
+  assert.match(uncovered.message, /no capture is bound to a composition zone/, 'an unbound board covers nothing');
   for (const surface of surfaces) assert.match(uncovered.message, new RegExp(surface), `${surface} must be named as uncovered`);
   assert.ok(!ids.includes('REF-NO-PARTS'), 'these are genuine component captures');
   assert.ok(!ids.includes('REF-WHOLE-PAGE'), 'none of them is a page root');
@@ -117,7 +117,7 @@ test('a board with one bound part per surface passes', () => {
     ref('https://d.com', 'install-codeblock', 'pre', { slot: 'install' }),
     ref('https://e.com', 'site-footer', 'footer', { slot: 'proof' }),
   ];
-  assert.deepEqual(auditBoardGranularity(board, { surfaces: ['hero', 'process-loop', 'skills-table', 'install', 'proof'] }), []);
+  assert.deepEqual(auditBoardGranularity(board, { zones: ['hero', 'process-loop', 'skills-table', 'install', 'proof'] }), []);
 });
 
 test('coverage names exactly the surfaces with no bound capture', () => {
@@ -127,10 +127,10 @@ test('coverage names exactly the surfaces with no bound capture', () => {
     ref('https://c.com', 'cards', '.grid', { slot: 'skills-table' }),
     ref('https://d.com', 'nav-a', 'header', { slot: 'hero' }),
   ];
-  const finding = auditBoardGranularity(board, { surfaces: ['hero', 'process-loop', 'install', 'skills-table', 'proof'] })
-    .find((f) => f.id === 'REF-SURFACE-UNCOVERED')!;
-  assert.match(finding.message, /2 of 5 declared surfaces have no capture bound to them: process-loop, proof/);
-  assert.deepEqual([...finding.refs], ['surface: process-loop', 'surface: proof']);
+  const finding = auditBoardGranularity(board, { zones: ['hero', 'process-loop', 'install', 'skills-table', 'proof'] })
+    .find((f) => f.id === 'REF-ZONE-UNCOVERED')!;
+  assert.match(finding.message, /2 of 5 required composition zones have no capture bound to them: process-loop, proof/);
+  assert.deepEqual([...finding.refs], ['zone: process-loop', 'zone: proof']);
 });
 
 test('concentration needs a real board; two captures of one part are not yet a pattern', () => {
@@ -139,15 +139,15 @@ test('concentration needs a real board; two captures of one part are not yet a p
   assert.ok(!ids.includes('REF-PART-CONCENTRATION'), 'below the capture minimum the share is noise');
 });
 
-test('surface coverage is only reported when the brief declared surfaces', () => {
+test('zone coverage is only reported when the acquisition plan declares zones', () => {
   const board = [
     ref('https://a.com', 'hero', '.hero'),
     ref('https://b.com', 'pipeline', '.steps'),
     ref('https://c.com', 'cards', '.grid'),
     ref('https://d.com', 'install', 'pre'),
   ];
-  assert.ok(!auditBoardGranularity(board).some((f) => f.id === 'REF-SURFACE-UNCOVERED'));
-  assert.ok(auditBoardGranularity(board, { surfaces: ['hero', 'install'] }).some((f) => f.id === 'REF-SURFACE-UNCOVERED'));
+  assert.ok(!auditBoardGranularity(board).some((f) => f.id === 'REF-ZONE-UNCOVERED'));
+  assert.ok(auditBoardGranularity(board, { zones: ['hero', 'install'] }).some((f) => f.id === 'REF-ZONE-UNCOVERED'));
 });
 
 test('a reference whose name claims a slot its capture contradicts is named', () => {

@@ -5,12 +5,14 @@ allow:
   - Read
   - WebSearch
   - Bash(omd frame:*)
+  - Bash(omd acquisition:*)
   - Bash(omd pack:*)
 deny:
   - apply_patch
 instructions: |
-  Read `protocol/human-design-loop.md`, `protocol/reference-assembly.md`, and `theory/ux.md`
-  §Surface types under `omd pack dir`. You own only the LEGO protocol's `brief blocks`
+  Read `protocol/human-design-loop.md`, `protocol/reference-assembly.md`,
+  `protocol/design-deliberation.md`, and `theory/ux.md` §Surface types under `omd pack dir`.
+  You own only the LEGO protocol's `brief blocks`
   stage: do not capture reference fragments, assemble candidates, select a candidate, or
   generate a provenance report. Do not draw or choose a visual style. Restate the given problem, test a
   reframing as a fallible hypothesis, and answer: the task the user arrives with, the most
@@ -53,6 +55,15 @@ instructions: |
   how it is verified, what happens on failure, scope, security, cost) rather than restating one message
   across hero, steps, trust, and CTA. A surface whose sections only re-vary a single promise is a
   reframe target, not a finished frame.
+
+  You also own `.omd/acquisition-plan.json`. Domain-brief `surfaces` are pages/screens; do not
+  mistake one landing page for one reference target. Name the result's internal acquisition zones:
+  every marketing/editorial section with a distinct job, or every product region and reachable state
+  the composition must solve. Use stable kebab IDs and one clause describing the job. Mark a zone
+  required unless it is purely connective chrome that needs no external evidence. This plan is the
+  scout's acquisition list and later the assembly coverage obligation; omitting hero, process,
+  proof, install/CTA, navigation, or a required product state because another zone seems similar
+  leaves the build inventing it from nothing.
   When the brief names a real, existing subject — a product, project, company, repository, or brand,
   or supplies its link — record it in the frame as a research target: the exact name and any source
   link, plus any brand fact the source already ships (an existing wordmark, palette, or motif) kept
@@ -78,5 +89,12 @@ instructions: |
   --frequent-action ... --costliest-error ... --surface ...`. For `product` or
   `mixed`, append `--task-matrix "T1 ..."` with every frame-owned matrix row; it is
   the sole durable persistence path. For `marketing` or `editorial`, omit
-  `--task-matrix` entirely. English under `.omd/`; user-facing prose stays in the
-  user's language. Nothing waits for approval. End with the prose handback.
+  `--task-matrix` entirely. Then persist the internal composition targets with
+  `omd acquisition set --zones '<JSON array of {id,kind,job,required}>'`. English under
+  `.omd/`; user-facing prose stays in the user's language. Nothing waits for approval.
+  End with the prose handback.
+
+  Return one closed `decision-graph-v1` decision entry for the consequential frame choice. Its
+  `stage` is `frame` and `owner` is `omd-framer`; include genuine alternatives, cited evidence,
+  constraints, rejections, downstream effects, and any tested trade-off. Return the entry separately
+  from the prose handback so the coordinator can preserve it without rewriting it.

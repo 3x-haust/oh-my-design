@@ -108,9 +108,9 @@ instructions: |
   component anatomy, and section-granular composition has nothing to take from it. Two captures of
   the same source at the same selector are one piece of evidence wearing two names — capture a
   different part of that source or drop the duplicate. Run `omd ref granularity` before handing the
-  board on; `REF-WHOLE-PAGE`, `REF-DUPLICATE-CAPTURE`, `REF-NO-PARTS`, `REF-PART-CONCENTRATION`, and
-  `REF-SURFACE-UNCOVERED`, and `REF-NAME-MISMATCH` each mean the board cannot be assembled from and must be recaptured at
-  component scope, across the surfaces that still have nothing.
+  board on; `REF-WHOLE-PAGE`, `REF-DUPLICATE-CAPTURE`, `REF-NO-PARTS`, `REF-PART-CONCENTRATION`,
+  `REF-ZONE-UNCOVERED`, and `REF-NAME-MISMATCH` each mean the board cannot be assembled from and
+  must be recaptured at component scope across the zones that still have nothing.
 
   Name a capture for what it holds. A reference called `*-hero-*` that was captured at `header` tells
   every downstream reader — the composer picking a part for a section, and the human scanning the
@@ -118,17 +118,17 @@ instructions: |
   readers see, so a mislabelled capture hides the board's real shape rather than merely being untidy.
   `REF-NAME-MISMATCH` reports it.
 
-  Cover the result, not one slot. The domain brief's `surfaces` are the list of things the build has
-  to compose, so they are the acquisition list: work down it and capture, for each surface, the part
-  that solves that surface, binding the capture to it with
-  `omd ref add <url> --as <component> --slot <surface> --selector "<css>" --blueprint --shot`.
-  A board is finished when every declared surface has at least one bound capture — not when a
-  capture count looks respectable. Capturing the same element from three sources answers "how do
-  others build this one part" and is worth doing once, but five captures that collapse onto two
-  slots leave every other section with no evidence, and those sections then compose from whatever
-  the build invents: a nav studied three times while the hero, the process section, and the proof
-  section have nothing is a board that cannot be assembled from. `REF-SURFACE-UNCOVERED` names the
-  surfaces that still have none.
+  Cover the result, not one slot. Read the framer-owned `.omd/acquisition-plan.json`; its required
+  section/region/state zones are the acquisition list. Domain-brief `surfaces` are pages/screens and
+  are not substitutes for these internal zones. Work down the plan and capture, for each required
+  zone, the part that solves that zone, binding it with
+  `omd ref add <url> --as <component> --slot <zone> --selector "<css>" --blueprint --shot`.
+  A board is finished when every required zone has at least one bound capture — not when a capture
+  count looks respectable. Capturing the same element from three sources answers "how do others
+  build this one part" and is worth doing once, but five captures that collapse onto two slots leave
+  every other zone with no evidence, and those zones then compose from whatever the build invents:
+  a nav studied three times while the hero, process, and proof zones have nothing is a board that
+  cannot be assembled from. `REF-ZONE-UNCOVERED` names the zones that still have none.
 
   For every role-② craft/motion reference — a scroll sequence, a signature load or reveal, a WebGL or
   material moment — measure it with `omd craft-capture <url> --as <slug> --technique "<what it does>"

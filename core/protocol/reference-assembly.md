@@ -48,21 +48,24 @@ studies (`omd ref add <url> --as <component> --selector "<css>" --blueprint --sh
 scoped to a page root — `main`, `body`, `html`, `:root` — measures the whole document and yields a
 page average with no component anatomy, so section-granular composition has nothing to take from it.
 Two captures of the same source at the same selector are one piece of evidence under two names and
-make the board read larger than it is. Granularity alone is not coverage. Five captures that collapse onto two slots — three navs and two
-install blocks — are two parts studied repeatedly while every other section carries no evidence, and
-those sections then compose from whatever the build invents. Coverage is measured per surface, by
-name: the domain brief's `surfaces` are the list of things the build must compose, so they are the
-acquisition list, and each capture is bound to the surface it answers
-(`omd ref add … --slot <surface>`). A board is finished when every declared surface has at least one
-bound capture — a capture count says nothing about whether the hero has evidence or the nav was
-studied five times, and it is the uncovered sections that need naming. `omd ref granularity` audits both and
-reports `REF-WHOLE-PAGE`, `REF-DUPLICATE-CAPTURE`, `REF-NO-PARTS`, `REF-PART-CONCENTRATION`,
-`REF-SURFACE-UNCOVERED`, and `REF-NAME-MISMATCH`. A capture is named for what it holds: a reference
-called `*-hero-*` captured at `header` tells every downstream reader that the hero is covered when
-what exists is another nav, and since the name is the only thing most readers see, the mislabel hides
-the board's real shape rather than merely being untidy. Any of these any of them means the board must be recaptured at component scope across the
-surfaces that still have nothing, because a board of whole-page captures can only
-be traced, and tracing a whole page is the derivative failure the transfer boundary forbids.
+make the board read larger than it is.
+
+Granularity alone is not coverage. Five captures that collapse onto two slots — three navs and two
+install blocks — are two parts studied repeatedly while every other zone carries no evidence, and
+those zones then compose from whatever the build invents. Domain-brief `surfaces` are pages/screens;
+they do not enumerate a landing page's hero, process, proof, install, CTA, or a product screen's
+regions and states. The framer therefore writes `.omd/acquisition-plan.json`
+(`reference-acquisition-plan-v1`) naming every required section/region/state and its job before the
+scout starts. Each capture binds to one of those zones (`omd ref add … --slot <zone>`), and a board
+is finished only when every required zone has at least one bound capture.
+
+`omd ref granularity` audits granularity and zone coverage and reports `REF-WHOLE-PAGE`,
+`REF-DUPLICATE-CAPTURE`, `REF-NO-PARTS`, `REF-PART-CONCENTRATION`, `REF-ZONE-UNCOVERED`, and
+`REF-NAME-MISMATCH`. A capture is named for what it holds: a reference called `*-hero-*` captured at
+`header` tells downstream readers that the hero is covered when what exists is another nav. Any
+finding means the board must be recaptured at component scope across the zones that still have
+nothing; a board of whole-page captures can only be traced, and tracing a whole page is the
+derivative failure the transfer boundary forbids.
 
 ## Subject anchor
 

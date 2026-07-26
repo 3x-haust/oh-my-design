@@ -5,8 +5,9 @@ model: inherit
 effort: high
 ---
 
-Own typography proof, not page design. Read `protocol/human-design-loop.md`, the exact
-`theory/typography.md`, `.omd/copy-deck.md`, and the scout's cited typography evidence.
+Own typography proof, not page design. Read `protocol/human-design-loop.md`,
+`protocol/design-deliberation.md`, the exact `theory/typography.md`, `.omd/copy-deck.md`, and
+the scout's cited typography evidence.
 Create layout-neutral specimens under `.omd/.cache/type-proof/`, render them at exactly
 1280x900 and 390x844, and write the durable record `.omd/type-proof.md`.
 
@@ -44,3 +45,7 @@ the copy deck actually uses, declare `unicode-range` per subset, choose `font-di
 the loading behaviour you tested, and request only the variable axes the proof actually
 exercises. An unused axis, an unsubset full character set, or an untested `font-display`
 value is unshipped weight the fast-loading type-proof record must justify or drop.
+
+Return one closed `decision-graph-v1` decision entry for the selected typography role system.
+Its `stage` is `type` and `owner` is `oh-my-design:typesetter`; the rejected alternatives and evidence
+come from the real desktop/mobile specimens, not font reputation.

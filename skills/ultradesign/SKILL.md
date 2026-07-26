@@ -20,11 +20,12 @@ Give the user the working interface they asked for. Do not expose internal quota
 them to operate the harness. Run host-native agents in fresh contexts; do not create a
 workflow engine, queue, model router, or session runtime.
 
-Read `protocol/human-design-loop.md` from `omd pack dir` first. Then read
-`protocol/reference-assembly.md`. The reference protocol owns the exact chat-first LEGO stage
-order, single owners, artifact boundaries, browser fallback, and final reporting; the human-design
-loop owns the remaining phase order, state, evidence precedence, blindness, isolation,
-checkpoints, and probe safety. Use the relevant
+Read `protocol/human-design-loop.md`, `protocol/reference-assembly.md`, and
+`protocol/design-deliberation.md` from `omd pack dir` first. The reference protocol owns the exact
+chat-first LEGO stage order and transfer boundaries; the deliberation protocol owns adaptive depth,
+decision provenance, acquisition zones, independent perspectives, visual observation, assembly
+coverage, and comparison; the human-design loop owns the remaining phase order, state, evidence
+precedence, blindness, isolation, checkpoints, and probe safety. Use the relevant
 theory/cookbook files (`theory/`, `composition/`, `graphics/`, `motion/`, `craft/`) instead
 of duplicating their rules here. `.omd/` records are English; the interface and handback use
 the user's language.
@@ -46,12 +47,16 @@ artifact exists to provide, and every downstream check that reads it is then ver
 | Artifact | Owner | Spawned in |
 |---|---|---|
 | `.omd/frame.md` | `oh-my-design:framer` | §1 |
+| `.omd/acquisition-plan.json` | `oh-my-design:framer` | §1 |
 | `.omd/scout.md`, `.omd/refs/*` | `oh-my-design:scout` | §2 |
 | `.omd/copy-deck.md` | `oh-my-design:writer` | §2 |
 | `.omd/type-proof.md` | `oh-my-design:typesetter` | §3 |
 | `.omd/composition.md` | `oh-my-design:composer` | §4 |
+| decision entries in `.omd/decision-graph.json` | stage owner named by `design-deliberation.md` | §1–§8 |
+| `.omd/deliberations/*` | fresh moderator `oh-my-design:eye` (coordinator preserves exact returned JSON) | §4 |
 | `.omd/.cache/sketches/*` | `oh-my-design:sketch` | §5 |
 | production source (every file the site ships) | `oh-my-design:hand` | §6 |
+| `.omd/observations/*`, `.omd/assembly-coverage.json` | `oh-my-design:hand` | §6–§8 |
 | every review verdict | `oh-my-design:eye` / `oh-my-design:glance` | §5, §7, §8 |
 
 If a stage looks skippable because the answer seems clear, that is the failure mode this table
@@ -62,10 +67,19 @@ no inline path.
 Run `omd doctor`. Stop on a failed prerequisite. For interactive visual research or user-directed
 region capture, initialize `browser-rs` first. Only an observed initialization/capability failure
 permits headless, reduced-motion `omd render` or `omd probe` as the deterministic Playwright
-fallback; record the failure and do not add or try another provider. Pin the absolute working directory first. A Figma
-frame or exact visual target uses the single Figma structural-bypass route declared above; it retains
-content, craft, glance, probe, critique, and all UX evidence rather than handing the run off or
-terminating this loop.
+fallback; record the failure and do not add or try another provider. Pin the absolute working
+directory first. A Figma frame or exact visual target uses the single Figma structural-bypass route
+declared above; it retains content, craft, glance, probe, critique, and all UX evidence rather than
+handing the run off or terminating this loop.
+
+Before spawning an artifact owner, classify depth. The coordinator writes only the routing input
+`.omd/depth.json` as `design-depth-input-v1`, runs
+`omd depth classify --input .omd/depth.json --json`, and follows that result. Scope cannot lower a
+risk-raised level. A new promotional surface establishes an art direction and is L4; an existing
+component-only change may be L1. L1/L2 omit only the stages listed by the classifier and still spawn
+the owner of every retained artifact. L3 runs the full owner-separated graph. L4 adds the independent
+three-perspective deliberation and moderator. Never call a direct coordinator build an adaptive
+route.
 
 There is exactly one structural-skip route: the Figma structural-bypass above. A full multi-feature
 app, an ERP/dashboard/console/CRUD/admin/editor, a data-dense internal tool, or a quiet/product
@@ -332,6 +346,17 @@ The composer also runs `omd visual-richness .omd/composition.md` as an advisory 
 `CARRIER-ADVISORY` findings are non-gating prompts to name a purposeful carrier for a content
 section; the selected art-direction contract determines the carrier and static/motion treatment.
 
+For L4, composition does not advance directly to sketches. Take each high/critical composition fork
+and spawn three fresh `oh-my-design:eye` contexts concurrently in UX, art-direction, and production
+perspective modes. Give all three the identical sanitized alternatives and input bytes; give none
+another perspective's output or authorship. Then spawn a fourth fresh `oh-my-design:eye` as moderator with
+only the three completed records, alternatives, and shared input digest. Majority vote is forbidden:
+the moderator resolves objections against evidence and constraints and returns one closed
+`design-deliberation-v1` JSON record. Preserve that exact record under
+`.omd/deliberations/<id>.json`. If its resolution differs from the composer's selected alternative,
+return to the composer to revise `.omd/composition.md` and its owner-authored decision entry, then
+rerun `omd composition --check`. No L4 sketch starts without this receipt.
+
 ## 5. Independent structural divergence and blind selection
 
 **Spawn `oh-my-design:sketch` for the candidates and a fresh `oh-my-design:eye` to select between them.** Skipping to a
@@ -456,6 +481,12 @@ the winner and rejected tradeoffs only when a candidate actually passes.
 component, not the stylesheet. The hand is where install-over-reimplement, the craft checkpoints, and
 the reflective render loop live; a coordinator that writes the source bypasses all three at once and
 the run ships whatever the coordinator happened to type.
+
+The hand also owns the production/refinement entries returned for `.omd/decision-graph.json`,
+`.omd/observations/*.json`, and `.omd/assembly-coverage.json`. It reads the required zones from
+`.omd/acquisition-plan.json`. For every required zone it must bind the captured reference identity,
+extracted principle, composer-owned decision ID, actual production selector, and final fidelity
+evidence. A ref merely mentioned in prose or a production section with no bound ref does not count.
 
 On the normal graph, spawn `oh-my-design:hand` once with the selected structure, sanitized build brief,
 copy deck, `.omd/type-proof.md`, `.omd/composition.md`, accepted sanitized transfer criteria, and
@@ -615,6 +646,10 @@ Then iterate, leaving evidence every round — a round with no evidence does not
    accessibility check, and required-viewport task evidence. Any UX invariant failure rolls the round
    back.
    Build and judgment stay separate.
+   For every concrete change, the hand writes one `visual-observation-v1` record with a distinct
+   before render, observable metric/fact, judgment, exact modification, after render, and measured
+   result. “Looks better” or source inspection is not an observation. A round without that record
+   does not count even when screenshots exist.
 2. Spawn a fresh `oh-my-design:eye` — never the hand that built it — with only the sanitized acceptance
    criteria and the two anonymized renders (this round's after and the previous build). It forms the
    blind-choose visual distinction and reports which criteria are still RED. Record its verdict, the
@@ -632,6 +667,12 @@ beautiful UI remain coequal, and it may run as many rounds as it takes to conver
 no fixed budget. Round 0 is almost never GREEN
 — do not ship the first AI-shaped pass. A one-pass ship is allowed only for a trivial content-only
 surface, with a recorded reason and a clean slop scan.
+Before source sealing, merge only the exact owner-authored decision entries returned by the spawned
+agents into `.omd/decision-graph.json`; the coordinator must not author or paraphrase them. Require
+`omd deliberate check` to pass. This joins depth, acquisition zones, decisions, any L4 moderator
+receipts, hand observations, and final assembly coverage. A missing zone, generic visual claim,
+owner mismatch, untested high-risk trade-off, or isolated artifact with no end-to-end chain is RED
+and blocks final evidence.
   After all source and approved inputs stop changing, freeze and collect final evidence in the order
   required by `protocol/human-design-loop.md`: run `omd source --seal <root>`, then `omd source
   --check <root>`; build and collect every final check, test, declared/applicable probe,
