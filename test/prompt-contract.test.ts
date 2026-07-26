@@ -809,6 +809,13 @@ test('scout can write only its owned synthesis while reference records stay CLI-
   assert.match(scout, /Never touch production source, another `\.omd\/` artifact/);
 });
 
+test('framer CLI writes its owned frame and acquisition plan without direct file tools', () => {
+  const framer = read('src/agents/framer.agent.yaml').replace(/\s+/g, ' ');
+  assert.match(framer, /Bash\(omd frame:\*\).*Bash\(omd acquisition:\*\).*deny: \[\]/);
+  assert.match(framer, /those CLI mutations are required work, not forbidden direct source editing/);
+  assert.match(framer, /Never use a patch or file-write tool/);
+});
+
 test('the selected host model is immutable while OMD adjusts only role effort', () => {
   const skill = read('src/skills/omd-ultradesign/SKILL.md').replace(/\s+/g, ' ');
   assert.match(skill, /The user's session model is immutable for this run/);
