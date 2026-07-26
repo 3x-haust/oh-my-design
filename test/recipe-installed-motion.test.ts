@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { installRecipe } from '../core/recipe/store.ts';
 import { captureReferenceCraft } from '../core/ref/reference-craft-capture.ts';
 import { checkCraftUsage } from '../core/ref/craft-usage.ts';
+import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
 
 const PACK = fileURLToPath(new URL('../core/', import.meta.url));
 
@@ -20,7 +21,11 @@ const PACK = fileURLToPath(new URL('../core/', import.meta.url));
  */
 test('an installed scroll-reveal recipe reads as real scroll-linked motion in a browser', async () => {
   const out = mkdtempSync(join(tmpdir(), 'omd-installed-'));
-  const result = installRecipe(PACK, 'scroll-reveal', { stack: 'vanilla', outDir: out });
+  const result = installRecipe(PACK, 'scroll-reveal', {
+    stack: 'vanilla',
+    outDir: out,
+    writer: createTestProjectWriteAdapter(out),
+  });
   const css = readFileSync(join(out, 'scroll-reveal.css'), 'utf8');
   const js = readFileSync(join(out, 'scroll-reveal.js'), 'utf8');
   assert.ok(result.written.length >= 2, 'css and js must both land');

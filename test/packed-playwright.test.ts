@@ -14,7 +14,7 @@ interface PackedPackage {
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const NPM = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-const PLAYWRIGHT_RANGE = '^1.61.1';
+const PLAYWRIGHT_RANGE = '1.61.1';
 const PROBE_FIXTURE = fileURLToPath(new URL('./fixtures/probe.html', import.meta.url));
 const RENDER_FIXTURE = fileURLToPath(new URL('./fixtures/slop.html', import.meta.url));
 const WORKSPACE_DEPENDENCIES = ['playwright', 'playwright-core', 'smol-toml', 'yaml'] as const;

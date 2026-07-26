@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
+import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
 import {
   NO_JS_HIDDEN_BLOCK_FLOOR,
   checkNoJsContent,
@@ -44,7 +45,11 @@ test('the installed scroll-reveal recipe does not gate content behind JavaScript
   const { join } = await import('node:path');
   const pack = fileURLToPath(new URL('../core/', import.meta.url));
   const out = mkdtempSync(join(tmpdir(), 'omd-nojs-'));
-  installRecipe(pack, 'scroll-reveal', { stack: 'vanilla', outDir: out });
+  installRecipe(pack, 'scroll-reveal', {
+    stack: 'vanilla',
+    outDir: out,
+    writer: createTestProjectWriteAdapter(out),
+  });
   const css = readFileSync(join(out, 'scroll-reveal.css'), 'utf8');
   const js = readFileSync(join(out, 'scroll-reveal.js'), 'utf8');
   const page = join(out, 'index.html');

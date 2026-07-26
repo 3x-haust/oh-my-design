@@ -19,7 +19,7 @@ const REQUIRED_HEADINGS = [
   '## Do not combine with',
 ];
 
-// ── Exactly 6 recipe files ────────────────────────────────────────────────────
+// ── Six parameterized recipe files; protocol notes may live beside them ─────────────────────────
 const EXPECTED_RECIPES = [
   'gradient-mesh.md',
   'noise-grain-texture.md',
@@ -40,13 +40,11 @@ test('all 6 expected graphics recipe files exist', () => {
   }
 });
 
-test('graphics directory contains exactly 6 .md files', () => {
-  const files = readdirSync(recipesDir).filter((f) => f.endsWith('.md'));
-  assert.equal(
-    files.length,
-    6,
-    `expected 6 graphics recipe files, found ${files.length}: ${files.join(', ')}`
-  );
+test('graphics directory contains exactly the six parameterized recipe files', () => {
+  const files = readdirSync(recipesDir)
+    .filter((file) => file.endsWith('.md') && file !== 'photo-sourcing.md')
+    .sort();
+  assert.deepEqual(files, [...EXPECTED_RECIPES].sort());
 });
 
 // ── Each recipe contains all five required sections ───────────────────────────
