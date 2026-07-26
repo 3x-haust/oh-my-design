@@ -1,6 +1,8 @@
 ---
 name: scout
 description: "Builds a coverage-complete measured LEGO reference assembly without copying pixels."
+model: inherit
+effort: high
 disallowedTools: Write, Edit, apply_patch
 ---
 

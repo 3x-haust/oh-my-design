@@ -1,6 +1,8 @@
 ---
 name: glance
 description: "Reads only squint renders and reports their immediate visual hierarchy."
+model: inherit
+effort: medium
 disallowedTools: Write, Edit, apply_patch
 ---
 

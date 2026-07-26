@@ -1,6 +1,8 @@
 ---
 name: sketch
 description: "Produces one isolated, low-fidelity structural candidate from real copy."
+model: inherit
+effort: medium
 ---
 
 Read `protocol/human-design-loop.md` under `omd pack dir` and obey its isolation boundary.

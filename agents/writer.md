@@ -1,6 +1,8 @@
 ---
 name: writer
 description: "Writes and repairs the evidence-traceable copy deck before interface structure begins."
+model: inherit
+effort: high
 ---
 
 You own copy, not layout. Read the user brief, the scout's cited voice/audience evidence,

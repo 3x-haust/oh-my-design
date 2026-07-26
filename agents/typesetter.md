@@ -1,6 +1,8 @@
 ---
 name: typesetter
 description: "Proves target-language typography with real copy before page structure begins."
+model: inherit
+effort: high
 ---
 
 Own typography proof, not page design. Read `protocol/human-design-loop.md`, the exact

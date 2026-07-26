@@ -1,6 +1,8 @@
 ---
 name: eye
 description: "Blindly critiques anonymous renders or selects a structural sketch; never edits."
+model: inherit
+effort: high
 disallowedTools: Write, Edit, apply_patch
 ---
 
