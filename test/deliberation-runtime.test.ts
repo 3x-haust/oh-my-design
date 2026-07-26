@@ -119,3 +119,24 @@ test('run gate joins all L4 artifacts instead of letting each pass in isolation'
   writeFileSync(join(omd, 'observations', 'round-1.json'), JSON.stringify(observation));
   const report = checkDeliberationRun(cwd); assert.equal(report.ok, true); assert.equal(report.depth?.level, 'L4');
 });
+
+test('prebuild gate blocks production until upstream owner decisions and L4 moderation are complete', () => {
+  const cwd = mkdtempSync(join(tmpdir(), 'omd-prebuild-')); const omd = join(cwd, '.omd');
+  mkdirSync(join(omd, 'deliberations'), { recursive: true });
+  const depth: DepthInput = { schema: 'design-depth-input-v1', scope: 'single-surface', zoneCount: 4, newPrimaryCta: true, newInformationArchitecture: false, multiScreenState: false, costlyError: false, brandDirectionChange: true, showpieceMotion: false, webgl: false, referenceZones: 4 };
+  const upstreamGraph = { ...fullGraph, decisions: fullGraph.decisions.filter((decision) => decision.stage !== 'production') };
+  for (const [path, value] of [['depth.json', depth], ['acquisition-plan.json', acquisition], ['decision-graph.json', upstreamGraph]] as const) writeFileSync(join(omd, path), JSON.stringify(value));
+  writeFileSync(join(omd, 'deliberations', 'hero.json'), JSON.stringify(deliberation));
+
+  const prebuild = checkDeliberationRun(cwd, 'prebuild');
+  assert.equal(prebuild.ok, true);
+  assert.equal(prebuild.phase, 'prebuild');
+  assert.equal(prebuild.counts.observations, 0);
+  assert.equal(checkDeliberationRun(cwd, 'final').ok, false);
+
+  writeFileSync(join(omd, 'decision-graph.json'), JSON.stringify({
+    ...upstreamGraph,
+    decisions: upstreamGraph.decisions.filter((decision) => decision.stage !== 'structure'),
+  }));
+  assert.ok(checkDeliberationRun(cwd, 'prebuild').findings.some((finding) => finding.id === 'DECISION-STAGE-UNCOVERED'));
+});

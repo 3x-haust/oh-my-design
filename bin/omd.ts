@@ -84,6 +84,7 @@ interface Opts {
   evidence?: string;
   zones?: string;
   input?: string;
+  phase?: string;
   activation?: string;
   /** Capture a full-resolution structural blueprint of the selected component. */
   blueprint?: boolean;
@@ -1871,15 +1872,18 @@ async function cmdTokens(mode: string | undefined, opts: Opts): Promise<never> {
   process.exit(drift ? 1 : 0);
 }
 
-/** Validates the externalized decision, observation, assembly, and deliberation records for this run. */
+/** Validates owner-authored design records before production or across the completed run. */
 async function cmdDeliberate(mode: string | undefined, opts: Opts): Promise<never> {
-  if (mode !== 'check') throw new Error('usage: omd deliberate check [--json]');
+  if (mode !== 'check' || (opts.phase !== undefined && opts.phase !== 'prebuild' && opts.phase !== 'final')) {
+    throw new Error('usage: omd deliberate check [--phase prebuild|final] [--json]');
+  }
   const { checkDeliberationRun } = await import('../core/deliberation/check.ts');
-  const report = checkDeliberationRun(process.cwd());
+  const phase = (opts.phase ?? 'final') as import('../core/deliberation/check.ts').DeliberationRunPhase;
+  const report = checkDeliberationRun(process.cwd(), phase);
   if (opts.json) process.stdout.write(JSON.stringify(report));
   else {
     for (const finding of report.findings) console.error(`[error] ${finding.id} ${finding.path}: ${finding.message}`);
-    if (report.ok) console.log(`ok — ${report.depth?.level ?? '?'} decision chain (${report.counts.decisions} decisions, ${report.counts.deliberations} deliberations, ${report.counts.observations} observations, ${report.counts.zones} assembled zones)`);
+    if (report.ok) console.log(`ok — ${report.depth?.level ?? '?'} ${phase} decision gate (${report.counts.decisions} decisions, ${report.counts.deliberations} deliberations, ${report.counts.observations} observations, ${report.counts.zones} assembled zones)`);
   }
   process.exit(report.ok ? 0 : 1);
 }
@@ -2818,7 +2822,7 @@ function usage(): never {
     + '  composition --check [--json]                validate composition sections and input freshness\n'
     + '  acquisition set --zones <json-array>          persist framer-owned section/region/state reference targets\n'
     + '  depth classify --input depth.json [--json]      choose L1–L4 from design risk, never from convenience\n'
-    + '  deliberate check [--json]                      validate decisions, visual observations, assembly, and debate\n'
+    + '  deliberate check [--phase prebuild|final] [--json] validate owner decisions before build or the complete visual loop\n'
     + '  compare score --input comparison.json [--json] blind same-model quality and quality/cost comparison\n'
     + '  source --seal [root]                        write final approved-input/source byte seal\n'
     + '  source --check [root] [--json]              fail when the source seal is missing or stale\n'
