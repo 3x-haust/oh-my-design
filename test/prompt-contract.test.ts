@@ -802,6 +802,13 @@ test('the scout and the reference protocol require component-scoped capture', ()
   assert.match(scout, /a nav studied three times while the hero, process, and proof zones have nothing/);
 });
 
+test('scout can write only its owned synthesis while reference records stay CLI-owned', () => {
+  const scout = read('src/agents/scout.agent.yaml').replace(/\s+/g, ' ');
+  assert.match(scout, /- Write - Edit - apply_patch deny: \[\]/);
+  assert.match(scout, /Outside those command-owned records, write or edit only `\.omd\/scout\.md`/);
+  assert.match(scout, /Never touch production source, another `\.omd\/` artifact/);
+});
+
 test('the selected host model is immutable while OMD adjusts only role effort', () => {
   const skill = read('src/skills/omd-ultradesign/SKILL.md').replace(/\s+/g, ' ');
   assert.match(skill, /The user's session model is immutable for this run/);
