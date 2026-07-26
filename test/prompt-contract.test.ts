@@ -816,6 +816,10 @@ test('scout batches zone-bound captures without debugging browser transport', ()
   assert.match(scout, /Never start `browser-rs` yourself, handcraft or `curl` its MCP protocol/);
   assert.match(scout, /run exactly one missing-zone repair batch, again waiting for process completion and two stable inventory reads/);
   assert.match(scout, /Never call `send_message`/);
+  assert.match(scout, /Run exactly `oh-my-design browser doctor --json` once/);
+  assert.match(scout, /designsystem\.digital\.gov\/patterns\/select-a-language\/two-languages/);
+  assert.match(scout, /designsystem\.digital\.gov\/components\/header/);
+  assert.match(scout, /do not spend both attempts guessing hashed classes/);
   const batch = read('core/ref/batch.ts');
   assert.match(batch, /slot\?: string/);
   assert.match(batch, /spec\.slot \? \{ slot: spec\.slot \}/);

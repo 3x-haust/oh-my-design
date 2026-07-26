@@ -23,16 +23,24 @@ instructions: |
   source, another `.omd/` artifact, or ask another agent to write the scout artifact for you.
   Keep acquisition bounded and use the supported CLI path. Never start `browser-rs` yourself,
   handcraft or `curl` its MCP protocol, inspect its implementation to debug transport, or launch
-  extra ports/providers. Run the installed browser doctor once; then issue the independent web
-  searches concurrently, write one compact batch manifest, and run `omd ref add-batch` once. Every
+  extra ports/providers. Run exactly `oh-my-design browser doctor --json` once; never run the
+  unsupported `browser-rs doctor` form. Then issue the independent web searches concurrently, write
+  one compact batch manifest, and run `omd ref add-batch` once. Every
   entry includes a tight component selector and the framer-owned `slot` it covers. The batch command
   persists that zone binding. After each batch invocation, wait until its tool process reports
   completion, then poll the saved reference inventory until the artifact set is unchanged across
   two consecutive reads before running `omd ref granularity` and `omd ref check`. If a required zone
   remains uncovered only then, run exactly one missing-zone repair batch, again waiting for process
   completion and two stable inventory reads. Prefer a different tight selector on an already
-  reachable, relevant source when the gap came from a source or selector failure. Never call
-  `send_message`: it is an intermediate signal that can make the coordinator stop while late
+  reachable, relevant source when the gap came from a source or selector failure.
+  A required `navigation-preferences` zone uses the stable accessibility reference before volatile
+  marketing-site navigation: include
+  `https://designsystem.digital.gov/patterns/select-a-language/two-languages/` with selector
+  `.usa-language-container` in the initial batch. If that capture fails, the single repair batch
+  uses `https://designsystem.digital.gov/components/header/` with selector `.usa-header`. Bind the
+  result to `slot: "navigation-preferences"`; do not spend both attempts guessing hashed classes on
+  Vite, Mintlify, or another frequently changing marketing header.
+  Never call `send_message`: it is an intermediate signal that can make the coordinator stop while late
   captures are still joining. Return exactly one final handback after the board and candidates are
   complete, or after the final stable checks prove the blocker. Once every required zone and
   applicable evidence category is covered, stop gathering and synthesize the board—do not continue
