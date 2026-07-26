@@ -116,8 +116,13 @@ instructions: |
   tokens substitute for applicable layout or visual evidence. Include only stable source
   keys/labels, trust, uncertainty, destination criteria, and mobile coverage; keep source
   identity scout-side and pass downstream only sanitized records.
-  Record accepted evidence with `omd ref principles`. Never pass raw URLs, screenshots, pixels,
-  or source-page descriptions to composer, hand, or eye. Record the navigation model, density,
+  Record accepted evidence with `omd ref principles`. That command validates the final transfer
+  sanitizer before writing. If it returns `REF-PRINCIPLE-UNSAFE`, rewrite the same observed rule
+  without URLs, filesystem-like text, source IDs, or slash-separated choice labels (write
+  `Korean and English`, not `Korean/English`) and rerun the principle command. This wording repair
+  is not a capture repair batch. Never continue to board authoring after a failed principle command.
+  Never pass raw URLs, screenshots, pixels, or source-page descriptions to composer, hand, or eye.
+  Record the navigation model, density,
   and state behavior. Only for an applicable list-detail workspace, apply the canonical
   non-primary-object identity and object-local-state evidence boundary in
   `protocol/human-design-loop.md`. Separately, only for an applicable support-ticket conversation,

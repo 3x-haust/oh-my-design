@@ -835,6 +835,9 @@ test('scout batches zone-bound captures without debugging browser transport', ()
   assert.match(scout, /`omd ref board --input <candidate-assemblies\.json>`/);
   assert.match(scout, /Do not guess or hand-write the internal board schema/);
   assert.match(scout, /requires every candidate to cover every required acquisition zone/);
+  assert.match(scout, /If it returns `REF-PRINCIPLE-UNSAFE`, rewrite the same observed rule/);
+  assert.match(scout, /This wording repair is not a capture repair batch/);
+  assert.match(scout, /Never continue to board authoring after a failed principle command/);
   const batch = read('core/ref/batch.ts');
   assert.match(batch, /slot\?: string/);
   assert.match(batch, /spec\.slot \? \{ slot: spec\.slot \}/);
