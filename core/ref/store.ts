@@ -2,6 +2,7 @@ import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { join, basename } from 'node:path';
 import type { Invariants, Reference } from '../types.ts';
 import { type ProjectWriteAdapter, requireProjectWriteAdapter } from '../runtime/project-write.ts';
+import { hasAssemblyPayload } from './board-sanitization.ts';
 
 /** Backfills invariants written before typography/motion/interaction measurement existed. */
 function withInvariantDefaults(invariants: Invariants | null | undefined): Invariants | null {
@@ -117,6 +118,15 @@ export function addPrinciples(
   const path = join(refsDir(cwd), `${slugFor({ source, component })}.json`);
   if (!existsSync(path)) {
     throw new Error(`no reference found for ${source} (${component})`);
+  }
+
+  for (const principle of principles) {
+    if (principle.trim() === '' || hasAssemblyPayload(principle)) {
+      throw new Error(
+        'REF-PRINCIPLE-UNSAFE: principles must be non-empty sanitized design rules without URLs, '
+        + 'filesystem paths, source IDs, or slash-separated labels; write choice pairs with words such as "and"',
+      );
+    }
   }
 
   const ref = JSON.parse(readFileSync(path, 'utf8')) as Reference;

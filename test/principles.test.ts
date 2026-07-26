@@ -67,6 +67,29 @@ test('omd ref principles wires the same behaviour through the CLI', () => {
   assert.match(must(must(loadRefs(dir)[0]).principles[0]), /emphasis only/);
 });
 
+test('principles reject transfer-unsafe text before persistence and explain safe wording', () => {
+  const dir = project();
+  saveRef(dir, ref(), createTestProjectWriteAdapter(dir));
+  const unsafe = 'Keep Korean/English and light/dark choices in one stable band.';
+  assert.throws(
+    () => addPrinciples(dir, 'https://linear.app', 'page', [unsafe], createTestProjectWriteAdapter(dir)),
+    /REF-PRINCIPLE-UNSAFE[\s\S]*slash-separated labels/,
+  );
+  assert.deepEqual(must(loadRefs(dir)[0]).principles, []);
+
+  const cli = run(['ref', 'principles', 'https://linear.app', '--as', 'page', '--add', unsafe], dir);
+  assert.equal(cli.status, 1);
+  assert.match(cli.stderr, /write choice pairs with words such as "and"/);
+  assert.deepEqual(must(loadRefs(dir)[0]).principles, []);
+
+  const safe = run([
+    'ref', 'principles', 'https://linear.app', '--as', 'page', '--add',
+    'Keep Korean and English choices with light and dark appearance controls in one stable band.',
+  ], dir);
+  assert.equal(safe.status, 0, safe.stderr);
+  assert.equal(must(loadRefs(dir)[0]).principles.length, 1);
+});
+
 test('omd ref principles needs something to add', () => {
   const dir = project();
   saveRef(dir, ref(), createTestProjectWriteAdapter(dir));
