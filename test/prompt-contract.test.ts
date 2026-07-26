@@ -858,12 +858,16 @@ test('ultradesign externalizes decisions, deliberation, visual observation, and 
   assert.match(protocol, /before render → observable fact → judgment → exact change → distinct after render → measured result/);
   assert.match(protocol, /zone job → captured reference identity → extracted principle → composition decision ID/);
   assert.match(protocol, /same concrete model and identical prompt bytes/);
+  assert.match(protocol, /`omd art-direction local-check` accepts only that moderator-owned receipt/);
 
   const skill = read('src/skills/omd-ultradesign/SKILL.md').replace(/\s+/g, ' ');
   assert.match(skill, /`omd depth classify --input \.omd\/depth\.json --json`/);
   assert.match(skill, /spawn three fresh `omd-eye` contexts concurrently in UX, art-direction, and production perspective modes/);
   assert.match(skill, /Require `omd deliberate check` to pass/);
   assert.match(skill, /coordinator must not author or paraphrase them/);
+  assert.match(skill, /When no activation was supplied, use the moderator-bound local lane/);
+  assert.match(skill, /`omd art-direction local-check --input <decision-check\.json>`/);
+  assert.match(skill, /do not attempt or claim v2 publication/);
 
   const framer = read('src/agents/framer.agent.yaml').replace(/\s+/g, ' ');
   assert.match(framer, /You also own `\.omd\/acquisition-plan\.json`/);

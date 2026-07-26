@@ -152,6 +152,19 @@ prior explicit taste, which beats agent choices. Record conflicts.
   carries the exact hash of a host-authorized typed exception event. The selected register and
   `motionDecision: none|one` control the macro visual system; quiet or restraint never
   authorizes a generic template or skipped visual work.
+A normal Codex or Claude session may not carry a host-issued invocation/FD receipt. That is not a
+reason to stop the design. When the launcher supplied the activation, use the host-authorized
+`omd art-direction check` path above. When no activation was supplied, use the moderator-bound local
+lane: hash the exact three direction alternatives, spawn fresh `oh-my-design:eye` UX, art-direction, and
+production perspectives concurrently with those identical bytes, then a fourth fresh `oh-my-design:eye`
+moderator. Preserve its exact `design-deliberation-v1` JSON at
+`.omd/deliberations/art-direction.json`; its three `inputSha256` values must equal the alternatives
+hash and its resolution must equal the evaluator result. Run
+`omd art-direction local-check --input <decision-check.json>` with that `deliberation` path and no
+`invocation` field. This derives only local project-write authority and cannot publish v2 evidence;
+it still creates the immutable art-direction, motion settlement, composer handoff, and hand handoff
+required to build. Never fabricate a host activation or downgrade to an unsigned handwritten
+`.omd/art-direction.json`.
 
 ## 0.5 Domain analysis
 
@@ -706,20 +719,24 @@ and blocks final evidence.
   fixed-viewport screenshot/render, and applicable motion filmstrip from sealed source; then run
   `omd source --check <root>` again. For `product` or `mixed`, publish the task index with `omd
   evidence tasks --input .omd/.cache/task-evidence-manifest.json`, then `omd evidence tasks-check
-  --json`. Write the `final-evidence-v2` manifest at
-  `.omd/.cache/final-evidence-v2-manifest.json`; it binds the immutable art-direction record,
-  `.omd/reference-selection-v2.json`, settled motion projection, copy receipt, source seal, and
-  exactly one branch: `motionDecision: none` with `static-direction-evidence-v1`, or
-  `motionDecision: one` with exactly one `motion-evidence-v2`. It contains no unselected
-  direction or raw evidence. Publish only with
+  `--json`. When the launcher supplied a host-issued invocation, write the `final-evidence-v2`
+  manifest at `.omd/.cache/final-evidence-v2-manifest.json`; it binds the immutable art-direction
+  record, `.omd/reference-selection-v2.json`, settled motion projection, copy receipt, source seal,
+  and exactly one branch: `motionDecision: none` with `static-direction-evidence-v1`, or
+  `motionDecision: one` with exactly one `motion-evidence-v2`. It contains no unselected direction
+  or raw evidence. Publish only with
   `omd evidence v2 finalize --input .omd/.cache/final-evidence-v2-manifest.json --activation
   <host-issued-invocation.json>`, using a final-reviewer-authorized activation. Then run
   `omd evidence v2 check --activation <host-issued-invocation.json> --json`. The sole publication
   marker is `.omd/final-evidence-v2.json`, pointing at one immutable
   `.omd/final-evidence-v2-runs/sha256-<digest>.json` record. Never invoke the v1 finalizer/checker
-  or write `.omd/final-evidence.json`; any source or build mutation requires the protocol's
-  reseal, rebuild, rerun, and v2 republish sequence. The seal proves byte freshness only and does
-  not prove semantic copy/source fidelity.
+  or write `.omd/final-evidence.json`.
+  In the moderator-bound local lane, do not attempt or claim v2 publication. Finish with the same
+  source seal before/after checks, build, typecheck, required fixed-viewport renders, probes,
+  `omd deliberate check --phase final`, and applicable evidence checks; report those as local run
+  evidence rather than treating the absent host publisher as a blocker. Any source or build
+  mutation in either lane requires reseal, rebuild, and rerun. The seal proves byte freshness only
+  and does not prove semantic copy/source fidelity.
 Deliver the working artifact and briefly state the frame,
 concept, structural choice, what the two craft renders changed, glance/critique outcome,
 and any deliberate overruling. Do not release, deploy, or wait for further approval unless
