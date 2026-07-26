@@ -18,13 +18,18 @@ handcraft or `curl` its MCP protocol, inspect its implementation to debug transp
 extra ports/providers. Run the installed browser doctor once; then issue the independent web
 searches concurrently, write one compact batch manifest, and run `omd ref add-batch` once. Every
 entry includes a tight component selector and the framer-owned `slot` it covers. The batch command
-persists that zone binding. If an entry fails, replace that entry once. Then run
-`omd ref granularity` and `omd ref check`; when a required zone remains uncovered, run exactly one
-missing-zone repair batch before reporting a blocker. Prefer a different tight selector on an
-already reachable, relevant source when the gap came from a source or selector failure. Once every required zone and
+persists that zone binding. After each batch invocation, wait until its tool process reports
+completion, then poll the saved reference inventory until the artifact set is unchanged across
+two consecutive reads before running `omd ref granularity` and `omd ref check`. If a required zone
+remains uncovered only then, run exactly one missing-zone repair batch, again waiting for process
+completion and two stable inventory reads. Prefer a different tight selector on an already
+reachable, relevant source when the gap came from a source or selector failure. Never call
+`send_message`: it is an intermediate signal that can make the coordinator stop while late
+captures are still joining. Return exactly one final handback after the board and candidates are
+complete, or after the final stable checks prove the blocker. Once every required zone and
 applicable evidence category is covered, stop gathering and synthesize the board—do not continue
-browsing for optional inspiration. A provider failure is reported immediately to the coordinator
-under the fallback rule instead of becoming an infrastructure investigation.
+browsing for optional inspiration. A provider failure is recorded for the final handback under
+the fallback rule instead of becoming an infrastructure investigation.
 
 Read `.omd/domain-brief.json` first (the domain-analysis step's output) and run its
 `referenceQueries` as your acquisition list: `referenceQueries.component` seeds role ① (detailed

@@ -814,7 +814,8 @@ test('scout batches zone-bound captures without debugging browser transport', ()
   assert.match(scout, /run `omd ref add-batch` once/);
   assert.match(scout, /Every entry includes a tight component selector and the framer-owned `slot`/);
   assert.match(scout, /Never start `browser-rs` yourself, handcraft or `curl` its MCP protocol/);
-  assert.match(scout, /run exactly one missing-zone repair batch before reporting a blocker/);
+  assert.match(scout, /run exactly one missing-zone repair batch, again waiting for process completion and two stable inventory reads/);
+  assert.match(scout, /Never call `send_message`/);
   const batch = read('core/ref/batch.ts');
   assert.match(batch, /slot\?: string/);
   assert.match(batch, /spec\.slot \? \{ slot: spec\.slot \}/);
@@ -833,6 +834,8 @@ test('the selected host model is immutable while OMD adjusts only role effort', 
   assert.match(skill, /On Codex, omit `model` from every `spawn_agent` call/);
   assert.match(skill, /on Claude Code, use the installed agent whose metadata says `model: inherit`/);
   assert.match(skill, /This applies to every named pipeline agent and every ad-hoc worker/);
+  assert.match(skill, /A child `send_message` is progress only, never its handback/);
+  assert.match(skill, /Wait until the child agent state is `completed`/);
 
   const loop = read('core/protocol/human-design-loop.md').replace(/\s+/g, ' ');
   assert.match(loop, /Model ownership belongs to the user/);
