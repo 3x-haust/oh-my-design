@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -24,7 +24,7 @@ import {
 } from '../core/runtime/intent.ts';
 import type { Blueprint, Invariants, Reference } from '../core/types.ts';
 import { createTestProjectRunInvocation, createTestProjectWriteAdapter } from './helpers/project-write.ts';
-import { createSourceSeal, validateSourceSeal, writeSourceSeal } from '../core/source-seal/index.ts';
+import { createSourceSeal, listProductionSourceFiles, validateSourceSeal, writeSourceSeal } from '../core/source-seal/index.ts';
 
 const cli = fileURLToPath(new URL('../bin/omd.ts', import.meta.url));
 
@@ -178,6 +178,21 @@ test('source seal hashes approved inputs and a sorted narrow production source s
   assert.match(seal.inputs.typeProofSha256, /^[0-9a-f]{64}$/);
   assert.match(seal.inputs.compositionSha256, /^[0-9a-f]{64}$/);
   assert.equal(seal.sealedAt, '2026-07-14T00:00:00.000Z');
+});
+
+test('source collection ignores excluded metadata links but still rejects source-bearing links', () => {
+  const root = setup();
+  writeFileSync(join(root, 'project-rules.md'), 'rules');
+  symlinkSync('project-rules.md', join(root, 'CLAUDE.md'));
+  symlinkSync('project-rules.md', join(root, '.codegraph'));
+  assert.deepEqual(listProductionSourceFiles(root), ['public/mark.svg', 'src/app.ts']);
+  assert.doesNotThrow(() => createSourceSeal(root));
+
+  symlinkSync('app.ts', join(root, 'src', 'linked.ts'));
+  assert.throws(
+    () => listProductionSourceFiles(root),
+    /source production tree contains a symlink: src\/linked\.ts/,
+  );
 });
 
 test('source check passes fresh seal and ignores generated, dependency, cache, and lockfile changes', () => {

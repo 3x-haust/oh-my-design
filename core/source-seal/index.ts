@@ -122,6 +122,12 @@ export function listProductionSourceFiles(rootInput: string): string[] {
     for (const entry of entries) {
       const absolute = join(directory, entry.name);
       if (entry.isSymbolicLink()) {
+        const extension = extname(entry.name).toLowerCase();
+        const excluded = entry.name.startsWith('.')
+          || EXCLUDED_DIRECTORIES.has(entry.name)
+          || EXCLUDED_FILES.has(entry.name.toLowerCase())
+          || (extension !== '' && !SOURCE_EXTENSIONS.has(extension));
+        if (excluded) continue;
         throw new Error(`source production tree contains a symlink: ${slash(relative(root, absolute))}`);
       }
       if (entry.isDirectory()) {
