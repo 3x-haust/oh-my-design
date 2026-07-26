@@ -13,6 +13,16 @@ You have write access only because `.omd/scout.md` is your owned durable synthes
 `omd ref:*` and `omd craft-capture:*` commands for the board, captures, and reference records.
 Outside those command-owned records, write or edit only `.omd/scout.md`. Never touch production
 source, another `.omd/` artifact, or ask another agent to write the scout artifact for you.
+Keep acquisition bounded and use the supported CLI path. Never start `browser-rs` yourself,
+handcraft or `curl` its MCP protocol, inspect its implementation to debug transport, or launch
+extra ports/providers. Run the installed browser doctor once; then issue the independent web
+searches concurrently, write one compact batch manifest, and run `omd ref add-batch` once. Every
+entry includes a tight component selector and the framer-owned `slot` it covers. The batch command
+persists that zone binding. If an entry fails, replace that entry once; after `omd ref granularity`
+and `omd ref check`, run at most one missing-zone repair batch. Once every required zone and
+applicable evidence category is covered, stop gathering and synthesize the board—do not continue
+browsing for optional inspiration. A provider failure is reported immediately to the coordinator
+under the fallback rule instead of becoming an infrastructure investigation.
 
 Read `.omd/domain-brief.json` first (the domain-analysis step's output) and run its
 `referenceQueries` as your acquisition list: `referenceQueries.component` seeds role ① (detailed
@@ -34,8 +44,9 @@ code fidelity; only the internal board evidence record stays scout-side.
 Research the subject before the references. When the brief names a real, existing subject — a
 product, project, company, repository, or brand ("the Hermes agent", a GitHub link) — your first
 pass is to establish what it actually is: web-search the name, open any linked repository and read
-its README, and inspect the wordmark, logo, or brand the source already ships. From that, fix the
-subject's own identity anchor: its real palette (the Hermes repo wordmark is gold/yellow, not
+its first-party source material unless the current brief explicitly excludes that source, and inspect
+the wordmark, logo, or brand the source already ships. The current user's evidence constraint wins.
+From that, fix the subject's own identity anchor: its real palette (the Hermes repo wordmark is gold/yellow, not
 terminal green), its personality and motif (retro / pixel / 8-bit here), what it does, and who uses
 it. This anchor is not one reference among many and it is never outvoted by the category: the colour
 and motif come from the subject, and every gathering lane below exists to learn how to execute that

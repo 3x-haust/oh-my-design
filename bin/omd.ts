@@ -781,13 +781,13 @@ function cmdChoose(opts: Opts): never {
 
 /**
  * `omd ref add-batch <manifest.json>` — capture many references concurrently over ONE browser.
- * The manifest is a JSON array of `{ source, as, selector?, blueprint?, shot?, fromUser?, viewport? }`.
+ * The manifest is a JSON array of `{ source, as, selector?, slot?, blueprint?, shot?, fromUser?, viewport? }`.
  * Same per-reference result as `omd ref add`, minus the energy pass, at a fraction of the wall time.
  */
 async function cmdRefAddBatch(opts: Opts): Promise<never> {
   const manifestPath = opts._[0];
   if (!manifestPath) {
-    console.error('usage: omd ref add-batch <manifest.json>  (JSON array of { source, as, selector?, blueprint?, shot?, fromUser?, viewport? })');
+    console.error('usage: omd ref add-batch <manifest.json>  (JSON array of { source, as, selector?, slot?, blueprint?, shot?, fromUser?, viewport? })');
     process.exit(1);
   }
   const { addRefsBatch } = await import('../core/ref/batch.ts');
@@ -2801,7 +2801,7 @@ function usage(): never {
     + '                                                render, extract invariants, save\n'
     + '  ref add ... --selector ".nav" --blueprint     also capture a component blueprint\n'
     + '  ref add ... --selector ".nav" --blueprint --shot  also save the component screenshot beside its blueprint\n'
-    + '  ref add-batch <manifest.json>               capture many references in parallel over one browser\n'
+    + '  ref add-batch <manifest.json>               capture zone-bound references in parallel over one browser\n'
     + '  ref list                                    one line per saved reference\n'
     + '  ref distance <page>                         compare a page to every saved reference\n'
     + '  ref principles <source> --as C --add "..."   record why a reference works\n'
