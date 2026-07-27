@@ -899,6 +899,8 @@ test('ultradesign externalizes decisions, deliberation, visual observation, and 
   assert.match(skill, /coordinator must not author or paraphrase them/);
   assert.match(skill, /When no activation was supplied, use the moderator-bound local lane/);
   assert.match(skill, /`omd art-direction local-check --input <decision-check\.json>`/);
+  assert.match(skill, /`omd art-direction alternatives-sha --input <alternatives\.json> --json`/);
+  assert.match(skill, /never reimplement canonical JSON hashing in shell or ad-hoc JavaScript/);
   assert.match(skill, /do not attempt or claim v2 publication/);
   assert.match(skill, /`omd deliberate preserve --input/);
   assert.match(skill, /A read-only moderator response is the required success path/);

@@ -173,7 +173,12 @@ prior explicit taste, which beats agent choices. Record conflicts.
 A normal Codex or Claude session may not carry a host-issued invocation/FD receipt. That is not a
 reason to stop the design. When the launcher supplied the activation, use the host-authorized
 `omd art-direction check` path above. When no activation was supplied, use the moderator-bound local
-lane: hash the exact three direction alternatives, spawn fresh `oh-my-design:eye` UX, art-direction, and
+lane: persist the exact three direction alternatives, then run
+`omd art-direction alternatives-sha --input <alternatives.json> --json`. Use the returned
+`alternativesSha256` verbatim for every perspective, moderator, and evaluator result; never
+reimplement canonical JSON hashing in shell or ad-hoc JavaScript. A hash mismatch caused by
+coordinator-authored check input is a clerical preparation failure: correct it before launching
+roles rather than spending a role retry. Spawn fresh `oh-my-design:eye` UX, art-direction, and
 production perspectives concurrently with those identical bytes, then a fourth fresh `oh-my-design:eye`
 moderator. Paste the literal closed `design-deliberation-v1` key skeleton from
 `protocol/design-deliberation.md` into the moderator task; never ask it to infer the schema from
@@ -269,8 +274,12 @@ explicitly named still wins. Do not invoke composer, eye, or hand yet. Once each
 project-owned brief/copy/type/register/palette/material input has its normal clean check, the
 coordinator/host derives the two-to-three independent image-first art-direction directions directly
 from the selected assembly, the selected references, any project rough, and permitted project-owned
-inputs. It does not read `.omd/composition.md` or ask composer for a prompt. With image capability,
-generate the drafts concurrently and select one. Without capability, take the CSS/SVG path. Only then
+inputs. It does not read `.omd/composition.md` or ask composer for a prompt. Use image generation
+only when the selected direction materially benefits from a bitmap/raster draft. Typography-led,
+diagrammatic, vector, and other code-native directions take the CSS/SVG path even when an image
+tool is installed. When image generation is justified, start the drafts concurrently; if the batch
+does not complete within 120 seconds, cancel it, record the capability as unavailable for this run,
+and take the CSS/SVG path without retrying image generation. Only then
 invoke composer: pass its selected sanitized assembly plus the chosen draft, or the selected assembly
 plus the CSS/SVG evidence path on the fallback. Never pass raw records, source URLs, screenshots,
 pixels, or source-page prose.
@@ -381,15 +390,20 @@ media, explanatory graphics, real interaction/data, or concept-bearing typograph
 mandatory photo or invented fact/asset. When mechanism/material/workflow is central, Media
 roles assigns a lawful carrier or an explicit alternate non-media mental-model carrier with
 its limitation; `none because no approved photo` is insufficient.
-For the selected art-direction contract, the host/coordinator derives 2–3 independent image-first
+For the selected art-direction contract, the host/coordinator derives 2–3 independent art-direction
 directions from the committed palette/type/material, sanitized measured principles, the selected
 references, any project rough, and other permitted project-owned inputs before composer starts.
-The host/coordinator owns concurrent draft generation, cache management, and blind selection. The
-composer may consume only the coordinator-chosen draft as art-direction input. Composer neither
-generates nor supplies/revises prompts, inspects raw source material, manages the cache, or selects
-a draft. Drafts are design references, never shipped page assets; `omd ref distance` still reports
-fidelity as an advisory signal. When image capability is unavailable, use the selected sanitized
-assembly and CSS/SVG graphics recipes while still implementing the selected macro visual system.
+Use image-first drafts only when the selected direction materially benefits from bitmap/raster
+exploration; typography-led, diagrammatic, vector, and other code-native systems use CSS/SVG
+evidence instead. The host/coordinator owns concurrent image draft generation,
+cache management, and blind selection. The composer may consume only the
+coordinator-chosen draft as art-direction input. Composer neither generates nor supplies/revises
+prompts, inspects raw source material, manages the cache, or selects a draft.
+Drafts are design references, never shipped page assets;
+`omd ref distance` still reports fidelity as an advisory signal. Bound the whole concurrent image
+batch to 120 seconds. On timeout or tool failure, cancel outstanding generation, do not retry, and
+use the selected sanitized assembly and CSS/SVG graphics recipes while still implementing the
+selected macro visual system.
 
 Run `omd composition --check`. Missing sections, malformed fingerprints, or stale inputs
 stop divergence and return to the composer. A later change to frame, copy, type proof, or

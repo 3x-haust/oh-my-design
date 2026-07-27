@@ -316,6 +316,26 @@ export function writeImmutableProjectFile(request: ProjectWriteRequest): string 
     return target;
   });
 }
+
+/**
+ * Persist a content-addressed immutable receipt idempotently. The digest is in the path, so a
+ * repeated write of the exact same bytes is the same receipt and must not fail a resumed run;
+ * different bytes under one address stay a hard error.
+ */
+export function writeContentAddressedProjectFile(request: ProjectWriteRequest): string {
+  try {
+    return writeImmutableProjectFile(request);
+  } catch (error) {
+    if (!(error instanceof ProjectWriteError) || !error.reason.startsWith('immutable project artifact already exists:')) throw error;
+    const target = resolveProjectPath(request.projectRoot, request.relativePath);
+    const existing = readFileSync(target);
+    const written = typeof request.content === 'string' ? Buffer.from(request.content, 'utf8') : Buffer.from(request.content);
+    if (!existing.equals(written)) {
+      throw new ProjectWriteError(`content-addressed artifact already exists with different bytes: ${request.relativePath}`);
+    }
+    return target;
+  }
+}
 function acquireRawProjectLock(request: ProjectLockRequest, content = ''): () => void {
   requireGuardedProjectWrite(request.projectRoot, request.invocation);
   const target = resolveProjectPath(request.projectRoot, request.relativePath);

@@ -38,7 +38,7 @@ import {
 import { beatBudgetForRegister, exceedsCanonicalBeatBudget, NO_CURRENT_USER_BEAT_EXCEPTION_RECEIPT_SHA256, recipeDecisionProjectionSha256, resolveMarketingArtDirection, type ApprovedMotionRecipeReceipt, type ArtDirectionEligibility } from '../core/art-direction/decision.ts';
 import { validateActivationContext } from '../core/runtime/activation.ts';
 import { createLocalCliInvocation, requireCurrentIntentLedgerAuthorization, requireCurrentUserIntentEventAuthorization, requireEvaluatorAssessmentAuthorization, requireEvaluatorResultAuthorization, requireFinalEvidenceManifestAuthorization, requireFinalReviewerLaneAuthorization, requireStaticEvidenceResultAuthorization, requireStaticReviewReceiptAuthorization, validateCurrentProjectRun, type ProjectRunInvocation } from '../core/runtime/invocation.ts';
-import { acquireProjectLock, createExternalObservationDirectory, createProjectWriteAdapter, replaceProjectFileAtomically, writeExternalObservationFile, writeImmutableProjectFile, type ExternalObservationKind, type ProjectWriteAdapter } from '../core/runtime/project-write.ts';
+import { acquireProjectLock, createExternalObservationDirectory, createProjectWriteAdapter, replaceProjectFileAtomically, writeContentAddressedProjectFile, writeExternalObservationFile, writeImmutableProjectFile, type ExternalObservationKind, type ProjectWriteAdapter } from '../core/runtime/project-write.ts';
 import { intentLedgerSha256, resolveCurrentUserBeatExceptionReceipt, serializeIntentLedger, validateIntentCurrentPointer, validateIntentLedger } from '../core/runtime/intent.ts';
 import { validateDecisionBoundReferenceHandoffs, validateReferenceHandoffCurrentness } from '../core/ref/reference-handoff.ts';
 import { parseReferenceSelectionV2, referenceSelectionV2Sha256, resolveMotionProjection, validatePreReferenceSelectionV2 } from '../core/ref/reference-selection.ts';
@@ -2083,9 +2083,22 @@ async function cmdIntent(mode: string | undefined, opts: Opts): Promise<never> {
 }
 
 async function cmdArtDirection(mode: string | undefined, opts: Opts): Promise<never> {
+  if (mode === 'alternatives-sha') {
+    if (!opts.input || opts._.length > 0) throw new Error('usage: omd art-direction alternatives-sha --input <alternatives.json> [--json]');
+    const payload = inputJson(opts.input, 'omd art-direction alternatives-sha');
+    const alternatives = Array.isArray(payload)
+      ? payload
+      : isRecord(payload) && Array.isArray(payload.alternatives)
+        ? payload.alternatives
+        : undefined;
+    if (alternatives === undefined) throw new Error('ART_DIRECTION_ALTERNATIVES_INVALID: input must be an alternatives array or contain an alternatives array');
+    const result = { alternativesSha256: sha256(canonicalJson(alternatives)) };
+    console.log(opts.json ? JSON.stringify(result) : result.alternativesSha256);
+    process.exit(0);
+  }
   const localMode = mode === 'local-check';
   if ((mode !== 'check' && !localMode) || !opts.input || opts._.length > 0) {
-    throw new Error('usage: omd art-direction check|local-check --input <decision-check.json> [--json]');
+    throw new Error('usage: omd art-direction check|local-check|alternatives-sha --input <json> [--json]');
   }
   const command = localMode ? 'omd art-direction local-check' : 'omd art-direction check';
   const payload = inputJson(opts.input, command);
@@ -2138,7 +2151,7 @@ async function cmdArtDirection(mode: string | undefined, opts: Opts): Promise<ne
     assessments: evaluatorAssessment.assessments,
   };
   const evaluatorResultDigest = sha256(resultBytes);
-  writeImmutableProjectFile({
+  writeContentAddressedProjectFile({
     projectRoot: process.cwd(),
     relativePath: `.omd/evaluator-results/sha256-${evaluatorResultDigest}.json`,
     content: resultBytes,
@@ -2157,7 +2170,7 @@ async function cmdArtDirection(mode: string | undefined, opts: Opts): Promise<ne
     if (!localMode) requireCurrentIntentLedgerAuthorization(run, process.cwd(), readFileSync(join(process.cwd(), '.omd', pointer.record)));
   } else {
     const record = `intent-runs/sha256-${intentSha256}.json`;
-    writeImmutableProjectFile({ projectRoot: process.cwd(), relativePath: `.omd/${record}`, content: JSON.stringify(ledger, null, 2), invocation: run });
+    writeContentAddressedProjectFile({ projectRoot: process.cwd(), relativePath: `.omd/${record}`, content: JSON.stringify(ledger, null, 2), invocation: run });
     replaceProjectFileAtomically({ projectRoot: process.cwd(), relativePath: '.omd/intent-current.json', content: JSON.stringify({ schemaVersion: INTENT_CURRENT_POINTER_SCHEMA_VERSION, record, sha256: intentSha256 }, null, 2), invocation: run });
   }
   const lock = resolveCurrentUserIntent(ledger);
@@ -2239,7 +2252,7 @@ async function cmdArtDirection(mode: string | undefined, opts: Opts): Promise<ne
   const record = { schemaVersion: ART_DIRECTION_RECORD_SCHEMA_VERSION, decision: checked, decisionSha256: artDirectionSha256(checked), referenceHandoffSha256: handoff.payloadSha256, intentLedgerSha256: intentSha256, activationSha256, beatIds: beats };
   const digest = artDirectionSha256(record);
   const recordPath = `art-direction-runs/sha256-${digest}.json`;
-  writeImmutableProjectFile({ projectRoot: process.cwd(), relativePath: `.omd/${recordPath}`, content: JSON.stringify(record, null, 2), invocation: run });
+  writeContentAddressedProjectFile({ projectRoot: process.cwd(), relativePath: `.omd/${recordPath}`, content: JSON.stringify(record, null, 2), invocation: run });
   const pointer = { schemaVersion: ART_DIRECTION_POINTER_SCHEMA_VERSION, record: recordPath, sha256: digest };
   const path = replaceProjectFileAtomically({ projectRoot: process.cwd(), relativePath: '.omd/art-direction.json', content: JSON.stringify(pointer, null, 2), invocation: run });
   const { writeReferenceHandoffReceipt } = await import('../core/ref/reference-handoff.ts');
