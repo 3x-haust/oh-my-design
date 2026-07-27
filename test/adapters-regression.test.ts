@@ -428,7 +428,9 @@ test('the correctly bound host invokes the real reviewer MCP proxy once without 
     /not issued by this host reviewer launcher/,
   );
   const { adapter: forgedAdapter, receipt: forgedReceipt } = reviewerReceipt('codex');
-  const launcher = spawn(process.execPath, ['--input-type=module', '--eval', "import { spawn } from 'node:child_process'; const child=spawn(process.execPath,['-e','setTimeout(() => {}, 30000)']); console.log(child.pid); setTimeout(() => {}, 30000);"]);
+  const borrowerSource = `import { connect } from 'node:net'; const socket=connect(${JSON.stringify(reviewerSocketPath(forgedReceipt.launchId))}); socket.on('connect',()=>console.log(process.pid)); setTimeout(() => {}, 30000);`;
+  const launcherSource = `import { spawn } from 'node:child_process'; spawn(process.execPath,['--input-type=module','--eval',${JSON.stringify(borrowerSource)}],{stdio:['ignore','inherit','inherit']}); setTimeout(() => {}, 30000);`;
+  const launcher = spawn(process.execPath, ['--input-type=module', '--eval', launcherSource]);
   const borrowedPid = await new Promise<number>((resolvePid, reject) => {
     let output = '';
     launcher.stdout.setEncoding('utf8');

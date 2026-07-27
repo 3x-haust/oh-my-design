@@ -85,26 +85,25 @@ function parentExecutableSha256(parentPid: number): string {
   if (!path) throw new ReviewerLaunchError('reviewer parent executable cannot be observed');
   return executableSha256(path);
 }
-function socketPeerIs(path: string, childPid: number): boolean {
-  if (process.platform === 'darwin') {
-    const result = spawnSync('/usr/sbin/netstat', ['-anv', '-f', 'unix'], { encoding: 'utf8', env: { PATH: '' } });
-    if (result.status !== 0 || typeof result.stdout !== 'string') return false;
-    const rows = result.stdout.split('\n').filter(line => line.includes(' stream ')).map(line => {
-      const columns = line.trim().split(/\s+/);
-      const pid = Number(line.match(/:(\d+)\s+\d{5}\s/)?.[1]);
-      return { address: columns[0], connection: columns[5], pid, path: columns.at(-1) };
-    });
-    return rows.some(server => server.pid === process.pid && server.path === path && server.connection !== '0'
-      && rows.some(client => client.pid === childPid && client.address === server.connection && client.connection === server.address));
-  }
-  if (process.platform === 'linux') {
-    const executable = existsSync('/usr/bin/ss') ? '/usr/bin/ss' : existsSync('/usr/sbin/ss') ? '/usr/sbin/ss' : '';
-    if (!executable) return false;
-    const result = spawnSync(executable, ['-xnp'], { encoding: 'utf8', env: { PATH: '' } });
-    return result.status === 0 && typeof result.stdout === 'string'
-      && result.stdout.split('\n').some(line => line.includes(path) && line.includes(`pid=${childPid},`));
-  }
-  return false;
+function socketPeerPid(socket: import('node:net').Socket): number {
+  const descriptor = (socket as unknown as { _handle?: { fd?: unknown } })._handle?.fd;
+  if (!Number.isInteger(descriptor) || (descriptor as number) < 0) throw new ReviewerLaunchError('reviewer proxy socket descriptor is unavailable');
+  const python = existsSync('/usr/bin/python3') ? '/usr/bin/python3' : existsSync('/usr/local/bin/python3') ? '/usr/local/bin/python3' : '';
+  if (!python) throw new ReviewerLaunchError('reviewer proxy peer credential helper is unavailable');
+  const script = process.platform === 'darwin'
+    ? "import socket,struct; s=socket.socket(fileno=3); print(struct.unpack('i',s.getsockopt(0,2,4))[0])"
+    : process.platform === 'linux'
+      ? "import socket,struct; s=socket.socket(fileno=3); print(struct.unpack('3i',s.getsockopt(socket.SOL_SOCKET,socket.SO_PEERCRED,12))[0])"
+      : '';
+  if (!script) throw new ReviewerLaunchError('reviewer proxy peer credentials are unsupported on this platform');
+  const observed = spawnSync(python, ['-c', script], {
+    encoding: 'utf8',
+    env: { PATH: '' },
+    stdio: ['ignore', 'pipe', 'pipe', descriptor as number],
+  });
+  const pid = Number(observed.stdout.trim());
+  if (observed.status !== 0 || !Number.isSafeInteger(pid) || pid <= 0) throw new ReviewerLaunchError('reviewer proxy peer credentials could not be observed');
+  return pid;
 }
 function defaultProcessBinding(): ReviewerProcessBinding {
   return Object.freeze({
@@ -175,6 +174,7 @@ function startBroker(launch: BrokerLaunch): void {
     let input = '';
     socket.setEncoding('utf8');
     socket.on('data', chunk => { input += chunk; });
+    socket.on('error', () => undefined);
     socket.on('end', () => {
       try {
         const claim = JSON.parse(input) as Partial<ReviewerProcessBinding> & { childPid?: number; configurationSha256?: string; parentExecutableSha256?: string; launchCapability?: string };
@@ -195,7 +195,7 @@ function startBroker(launch: BrokerLaunch): void {
         if (!match || Number(match[1]) !== parentPid || executableSha256(match[2]!) !== executableSha256(process.execPath)) {
           throw new ReviewerLaunchError('reviewer proxy child process is not the observed configured child');
         }
-        if (!socketPeerIs(path, claim.childPid!)) throw new ReviewerLaunchError('reviewer proxy socket peer is not the claimed configured child');
+        if (socketPeerPid(socket) !== claim.childPid) throw new ReviewerLaunchError('reviewer proxy socket peer is not the claimed configured child');
         if (!localLaunches.has(launch.receipt.launchId)) throw new ReviewerLaunchError('unknown, reused, or unreadable reviewer proxy launch');
         if (claim.launchCapability === undefined) {
           launch.authorizedChildPid = claim.childPid!;
