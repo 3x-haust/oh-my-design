@@ -901,6 +901,14 @@ test('ultradesign externalizes decisions, deliberation, visual observation, and 
   assert.match(skill, /`omd art-direction local-check --input <decision-check\.json>`/);
   assert.match(skill, /`omd art-direction alternatives-sha --input <alternatives\.json> --json`/);
   assert.match(skill, /never reimplement canonical JSON hashing in shell or ad-hoc JavaScript/);
+  assert.match(skill, /`omd art-direction check-input`/);
+  assert.match(skill, /Never retype the references array by hand/);
+  assert.match(skill, /A rejected gate is only terminal when an owner role failed/);
+  assert.match(skill, /repair the bytes and rerun the same command/);
+  assert.match(skill, /Run `omd stage status` first and continue at the first stage whose artifact is missing/);
+  assert.match(skill, /`omd schema depth-input` instead of inferring keys from `core\/`/);
+  assert.match(skill, /the OMD CLI spawns `browser-rs` itself over stdio for each capture/);
+  assert.match(skill, /Never start a long-lived `browser-rs`, pick a port, or debug a listening socket/);
   assert.match(skill, /do not attempt or claim v2 publication/);
   assert.match(skill, /`omd deliberate preserve --input/);
   assert.match(skill, /A read-only moderator response is the required success path/);

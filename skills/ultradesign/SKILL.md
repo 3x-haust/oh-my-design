@@ -100,15 +100,24 @@ In particular, only `oh-my-design:hand` may write production source; neither the
 `worker` may substitute for it.
 
 Run `omd doctor`. Stop on a failed prerequisite. For interactive visual research or user-directed
-region capture, initialize `browser-rs` first. Only an observed initialization/capability failure
-permits headless, reduced-motion `omd render` or `omd probe` as the deterministic Playwright
-fallback; record the failure and do not add or try another provider. Pin the absolute working
-directory first. A Figma frame or exact visual target uses the single Figma structural-bypass route
-declared above; it retains content, craft, glance, probe, critique, and all UX evidence rather than
-handing the run off or terminating this loop.
+region capture, verify the provider with `oh-my-design browser doctor` and stop there: the OMD CLI
+spawns `browser-rs` itself over stdio for each capture. Never start a long-lived `browser-rs`, pick a
+port, or debug a listening socket — an `Address already in use` reply means you started a second
+instance that the capture path never needed. Only an observed provider failure reported by
+`browser doctor` permits headless, reduced-motion `omd render` or `omd probe` as the deterministic
+Playwright fallback; record the failure and do not add or try another provider. Pin the absolute
+working directory first. A Figma frame or exact visual target uses the single Figma structural-bypass
+route declared above; it retains content, craft, glance, probe, critique, and all UX evidence rather
+than handing the run off or terminating this loop.
+
+A resumed or restarted run does not begin again at the domain brief. Run `omd stage status` first and
+continue at the first stage whose artifact is missing; artifacts an earlier owner already wrote stay
+authoritative, and rewriting one yourself is the same ownership violation as writing it the first
+time.
 
 Before spawning an artifact owner, classify depth. The coordinator writes only the routing input
-`.omd/depth.json` as `design-depth-input-v1`, runs
+`.omd/depth.json` as `design-depth-input-v1` — print its exact skeleton with
+`omd schema depth-input` instead of inferring keys from `core/` — then runs
 `omd depth classify --input .omd/depth.json --json`, and follows that result. Scope cannot lower a
 risk-raised level. A new promotional surface establishes an art direction and is L4; an existing
 component-only change may be L1. L1/L2 omit only the stages listed by the classifier and still spawn
@@ -187,12 +196,23 @@ itself. Copy that JSON byte-for-byte, without its Markdown fence and without edi
 paraphrasing, to `.omd/.cache/art-direction-moderator.json`, then run
 `omd deliberate preserve --input .omd/.cache/art-direction-moderator.json`. This validated clerical
 persistence is not coordinator authorship. Its three `inputSha256` values must equal the alternatives
-hash and its resolution must equal the evaluator result. Run
+hash and its resolution must equal the evaluator result. Build the check payload with
+`omd art-direction check-input`, which emits the caller skeleton with the canonical `references`
+array already filled from the settled selection; fill in only the alternatives, evaluator bytes,
+beats, deliberation path, and lane/budget strings. `omd schema art-direction-check` prints the same
+skeleton without a project. Never retype the references array by hand. Then run
 `omd art-direction local-check --input <decision-check.json>` with that `deliberation` path and no
 `invocation` field. This derives only local project-write authority and cannot publish v2 evidence;
 it still creates the immutable art-direction, motion settlement, composer handoff, and hand handoff
 required to build. Never fabricate a host activation or downgrade to an unsigned handwritten
 `.omd/art-direction.json`.
+
+A rejected gate is only terminal when an owner role failed. A validator complaint about the
+coordinator's own payload — an unknown or missing key, a stale digest, a wrong path — is clerical:
+repair the bytes and rerun the same command. Reruns are safe because every receipt in this lane is
+content-addressed, so recomputing identical bytes is a no-op rather than an
+`immutable project artifact already exists` failure. Do not spend a role retry, do not restart the
+graph, and do not stop the run for a mistake you can fix in the file you wrote.
 
 ## 0.5 Domain analysis
 

@@ -15,6 +15,11 @@ export type DepthInput = {
   readonly webgl: boolean;
   readonly referenceZones: number;
 };
+export const DEPTH_INPUT_KEYS = [
+  'schema', 'scope', 'zoneCount', 'newPrimaryCta', 'newInformationArchitecture', 'multiScreenState',
+  'costlyError', 'brandDirectionChange', 'showpieceMotion', 'webgl', 'referenceZones',
+] as const;
+export const DEPTH_SCOPES = ['component-change', 'single-section', 'single-surface', 'multi-surface'] as const;
 export type DepthResult = {
   readonly level: DepthLevel;
   readonly reasons: readonly string[];
@@ -29,10 +34,36 @@ const BASE: Record<DepthLevel, readonly string[]> = {
   L4: ['domain', 'frame', 'scout', 'writer', 'typesetter', 'composer', 'design-deliberation', 'sketch', 'blind-selection', 'hand', 'render-observe', 'glance', 'constraint-deliberation', 'eye', 'red-green'],
 };
 
+/**
+ * One actionable shape error. A coordinator authors this file by hand, so a partial complaint
+ * about a single field sends it reverse-engineering the type instead of writing the input.
+ */
+export function validateDepthInput(input: DepthInput): void {
+  const value = input as unknown;
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new Error(`depth input must be a ${DEPTH_INPUT_SCHEMA} object with keys: ${DEPTH_INPUT_KEYS.join(', ')}`);
+  }
+  const record = value as Record<string, unknown>;
+  const missing = DEPTH_INPUT_KEYS.filter((key) => !Object.hasOwn(record, key));
+  const unknown = Object.keys(record).filter((key) => !(DEPTH_INPUT_KEYS as readonly string[]).includes(key));
+  if (missing.length > 0 || unknown.length > 0) {
+    throw new Error([
+      `depth input must contain exactly: ${DEPTH_INPUT_KEYS.join(', ')}`,
+      missing.length > 0 ? `missing: ${missing.join(', ')}` : '',
+      unknown.length > 0 ? `unknown: ${unknown.join(', ')}` : '',
+      'run `omd schema depth-input` for the exact skeleton',
+    ].filter((part) => part !== '').join('; '));
+  }
+  if (record.schema !== DEPTH_INPUT_SCHEMA) throw new Error(`depth schema must be ${DEPTH_INPUT_SCHEMA}`);
+  if (!(DEPTH_SCOPES as readonly unknown[]).includes(record.scope)) throw new Error(`scope must be one of ${DEPTH_SCOPES.join(', ')}`);
+  for (const key of ['newPrimaryCta', 'newInformationArchitecture', 'multiScreenState', 'costlyError', 'brandDirectionChange', 'showpieceMotion', 'webgl'] as const) {
+    if (typeof record[key] !== 'boolean') throw new Error(`${key} must be a boolean`);
+  }
+  if (!Number.isSafeInteger(record.zoneCount) || (record.zoneCount as number) < 1) throw new Error('zoneCount must be a positive integer');
+  if (!Number.isSafeInteger(record.referenceZones) || (record.referenceZones as number) < 0) throw new Error('referenceZones must be a non-negative integer');
+}
 export function classifyDepth(input: DepthInput): DepthResult {
-  if (input.schema !== DEPTH_INPUT_SCHEMA) throw new Error(`depth schema must be ${DEPTH_INPUT_SCHEMA}`);
-  if (!Number.isSafeInteger(input.zoneCount) || input.zoneCount < 1) throw new Error('zoneCount must be a positive integer');
-  if (!Number.isSafeInteger(input.referenceZones) || input.referenceZones < 0) throw new Error('referenceZones must be a non-negative integer');
+  validateDepthInput(input);
 
   let level: DepthLevel = input.scope === 'component-change' ? 'L1' : input.scope === 'single-section' ? 'L2' : 'L3';
   const reasons = [`scope:${input.scope}`];

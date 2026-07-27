@@ -29,13 +29,14 @@ import { evaluateVisualRichness } from '../core/composition-contract/visual-rich
 import type { VisualRichnessRegister } from '../core/composition-contract/visual-richness.ts';
 import type { Category, EnergyCurve, Layer, RawIr, Violation } from '../core/types.ts';
 import {
+  ART_DIRECTION_CHECK_INPUT_KEYS,
   ART_DIRECTION_POINTER_SCHEMA_VERSION,
   ART_DIRECTION_RECORD_SCHEMA_VERSION,
   artDirectionSha256,
   validateArtDirectionPointer,
   validateArtDirectionRecord,
 } from '../core/art-direction/schema.ts';
-import { beatBudgetForRegister, exceedsCanonicalBeatBudget, NO_CURRENT_USER_BEAT_EXCEPTION_RECEIPT_SHA256, recipeDecisionProjectionSha256, resolveMarketingArtDirection, type ApprovedMotionRecipeReceipt, type ArtDirectionEligibility } from '../core/art-direction/decision.ts';
+import { beatBudgetForRegister, canonicalArtDirectionReferences, exceedsCanonicalBeatBudget, NO_CURRENT_USER_BEAT_EXCEPTION_RECEIPT_SHA256, recipeDecisionProjectionSha256, resolveMarketingArtDirection, type ApprovedMotionRecipeReceipt, type ArtDirectionEligibility } from '../core/art-direction/decision.ts';
 import { validateActivationContext } from '../core/runtime/activation.ts';
 import { createLocalCliInvocation, requireCurrentIntentLedgerAuthorization, requireCurrentUserIntentEventAuthorization, requireEvaluatorAssessmentAuthorization, requireEvaluatorResultAuthorization, requireFinalEvidenceManifestAuthorization, requireFinalReviewerLaneAuthorization, requireStaticEvidenceResultAuthorization, requireStaticReviewReceiptAuthorization, validateCurrentProjectRun, type ProjectRunInvocation } from '../core/runtime/invocation.ts';
 import { acquireProjectLock, createExternalObservationDirectory, createProjectWriteAdapter, replaceProjectFileAtomically, writeContentAddressedProjectFile, writeExternalObservationFile, writeImmutableProjectFile, type ExternalObservationKind, type ProjectWriteAdapter } from '../core/runtime/project-write.ts';
@@ -94,6 +95,8 @@ interface Opts {
   site?: string;
   /** Similarity threshold for `omd figma diff` / `omd target diff` (0–1, default 0.97). */
   threshold?: string;
+  /** Route the emitted art-direction check payload targets (`omd art-direction check-input --route /`). */
+  route?: string;
   /** Force re-export even when a cached Figma export exists (`omd figma diff --fresh`). */
   fresh?: boolean;
   /** Named visual target to diff against (`omd target diff --target <name>`). */
@@ -2082,6 +2085,54 @@ async function cmdIntent(mode: string | undefined, opts: Opts): Promise<never> {
   process.exit(0);
 }
 
+/** Prints the canonical skeleton for an input a coordinator authors by hand. */
+async function cmdSchema(name: string | undefined, opts: Opts): Promise<never> {
+  const { INPUT_SKELETONS, inputSkeleton } = await import('../core/schema/inputs.ts');
+  if (name === undefined || name === 'list') {
+    if (opts.json) process.stdout.write(JSON.stringify(INPUT_SKELETONS.map((entry) => ({ name: entry.name, path: entry.path, command: entry.command }))));
+    else for (const entry of INPUT_SKELETONS) console.log(`  ${entry.name.padEnd(22)} ${entry.path.padEnd(38)} ${entry.command}`);
+    process.exit(0);
+  }
+  const entry = inputSkeleton(name);
+  if (opts.json) process.stdout.write(JSON.stringify(entry));
+  else {
+    console.log(`${entry.name} -> ${entry.path}`);
+    console.log(`validated by: ${entry.command}`);
+    console.log(JSON.stringify(entry.skeleton, null, 2));
+  }
+  process.exit(0);
+}
+
+type StageArtifact = { readonly stage: string; readonly path: string; readonly present: boolean };
+
+/**
+ * A resumed run must consume what earlier stages already produced. Without this, a coordinator
+ * that lost its session restarts from the domain brief and rewrites owned artifacts.
+ */
+function cmdStage(mode: string | undefined, opts: Opts): never {
+  if (mode !== 'status' || opts._.length > 0) throw new Error('usage: omd stage status [--json]');
+  const artifacts: StageArtifact[] = ([
+    ['domain', '.omd/domain-brief.json'],
+    ['depth', '.omd/depth.json'],
+    ['frame', '.omd/frame.md'],
+    ['acquisition', '.omd/acquisition-plan.json'],
+    ['scout', '.omd/scout.md'],
+    ['reference-board', '.omd/reference-board.json'],
+    ['reference-selection', '.omd/reference-pre-selection-v2.json'],
+    ['art-direction', '.omd/art-direction.json'],
+    ['copy', '.omd/copy-deck.md'],
+    ['type-proof', '.omd/type-proof.md'],
+    ['composition', '.omd/composition.md'],
+  ] as const).map(([stage, path]) => ({ stage, path, present: existsSync(join(process.cwd(), path)) }));
+  const next = artifacts.find((artifact) => !artifact.present);
+  const result = { completed: artifacts.filter((artifact) => artifact.present).map((artifact) => artifact.stage), next: next?.stage ?? null, artifacts };
+  if (opts.json) process.stdout.write(JSON.stringify(result));
+  else {
+    for (const artifact of artifacts) console.log(`  ${artifact.present ? 'have' : '    '}  ${artifact.stage.padEnd(20)} ${artifact.path}`);
+    console.log(next === undefined ? 'every recorded stage artifact exists; resume at the first unproven gate' : `next stage: ${next.stage} (${next.path})`);
+  }
+  process.exit(0);
+}
 async function cmdArtDirection(mode: string | undefined, opts: Opts): Promise<never> {
   if (mode === 'alternatives-sha') {
     if (!opts.input || opts._.length > 0) throw new Error('usage: omd art-direction alternatives-sha --input <alternatives.json> [--json]');
@@ -2096,14 +2147,27 @@ async function cmdArtDirection(mode: string | undefined, opts: Opts): Promise<ne
     console.log(opts.json ? JSON.stringify(result) : result.alternativesSha256);
     process.exit(0);
   }
+  if (mode === 'check-input') {
+    if (opts.input !== undefined || opts._.length > 0) throw new Error('usage: omd art-direction check-input [--route /] [--json]');
+    const { inputSkeleton } = await import('../core/schema/inputs.ts');
+    const selection = validatePreReferenceSelectionV2(process.cwd());
+    const skeleton = inputSkeleton('art-direction-check').skeleton as Record<string, unknown>;
+    const payload = {
+      ...skeleton,
+      route: opts.route ?? skeleton.route,
+      references: canonicalArtDirectionReferences(selection),
+    };
+    console.log(JSON.stringify(payload, null, opts.json ? 0 : 2));
+    process.exit(0);
+  }
   const localMode = mode === 'local-check';
   if ((mode !== 'check' && !localMode) || !opts.input || opts._.length > 0) {
-    throw new Error('usage: omd art-direction check|local-check|alternatives-sha --input <json> [--json]');
+    throw new Error('usage: omd art-direction check|local-check|alternatives-sha|check-input --input <json> [--json]');
   }
   const command = localMode ? 'omd art-direction local-check' : 'omd art-direction check';
   const payload = inputJson(opts.input, command);
   if (!isRecord(payload)) throw new Error(`${command} input must contain evaluator assessment and result payloads`);
-  const allowed = new Set(['alternatives', 'references', 'eligibility', 'evaluatorAssessment', 'evaluatorResult', 'beats', 'invocation', 'deliberation', 'route', 'implementationLane', 'fallbackPath', 'performanceAccessibilityBudget']);
+  const allowed = new Set<string>(ART_DIRECTION_CHECK_INPUT_KEYS);
   if (Object.keys(payload).some((key) => !allowed.has(key))) throw new Error('ART_DIRECTION_CALLER_DECISION_FORBIDDEN: evaluator choices, scores, and motion sources must remain inside the evaluator bytes');
   const { alternatives, references, eligibility, evaluatorAssessment, evaluatorResult, beats, invocation, deliberation, route, implementationLane, fallbackPath, performanceAccessibilityBudget } = payload;
   if (localMode && invocation !== undefined) throw new Error('ART_DIRECTION_LOCAL_INVOCATION_FORBIDDEN: local-check derives write authority from the running CLI');
@@ -2962,6 +3026,10 @@ function usage(): never {
     + '  evidence tasks-check [--json]               revalidate strict production task evidence\n'
     + '\n'
     + '  art-direction check|local-check --input decision-check.json [--json]  persist a host-authorized or moderator-bound local direction\n'
+    + '  art-direction alternatives-sha --input alternatives.json [--json]  canonical digest every perspective and receipt must bind\n'
+    + '  art-direction check-input [--route /] [--json]  emit the check payload skeleton with canonical references filled in\n'
+    + '  schema list | schema <name> [--json]        print the exact skeleton for a hand-authored input\n'
+    + '  stage status [--json]                       show which stage artifacts exist and where a resumed run continues\n'
     + '  intent append --input trusted-intent.json [--json]  append trusted intent and update its guarded current pointer\n'
     + '  domain check [--input domain-brief.json] [--json]  validate the domain-analysis brief\n'
     + '  craft-fidelity check --input pair.json [--json]  verify a generated part reproduced the reference craft\n'
@@ -3079,6 +3147,8 @@ async function main(): Promise<never> {
   if (cmd === 'design') return cmdDesign(parseArgs(args.slice(1)));
   if (cmd === 'copy') return cmdCopy(parseArgs(args.slice(1)));
   if (cmd === 'art-direction') return cmdArtDirection(sub, parseArgs(args.slice(2)));
+  if (cmd === 'schema') return cmdSchema(sub, parseArgs(args.slice(2)));
+  if (cmd === 'stage') return cmdStage(sub, parseArgs(args.slice(2)));
   if (cmd === 'preflight') return cmdPreflight(parseArgs(args.slice(1)));
   if (cmd === 'composition') return cmdComposition(parseArgs(args.slice(1)));
   if (cmd === 'source') return cmdSource(sub, parseArgs(args.slice(2)));
