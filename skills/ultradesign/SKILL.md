@@ -77,6 +77,7 @@ artifact exists to provide, and every downstream check that reads it is then ver
 |---|---|---|
 | `.omd/frame.md` | `oh-my-design:framer` | §1 |
 | `.omd/acquisition-plan.json` | `oh-my-design:framer` | §1 |
+| `.omd/functional-requirements.json` | `oh-my-design:framer` | §1 |
 | `.omd/scout.md`, `.omd/refs/*` | `oh-my-design:scout` | §2 |
 | `.omd/copy-deck.md` | `oh-my-design:writer` | §2 |
 | `.omd/type-proof.md` | `oh-my-design:typesetter` | §3 |
@@ -87,6 +88,7 @@ artifact exists to provide, and every downstream check that reads it is then ver
 | production source (every file the site ships) | `oh-my-design:hand` | §6 |
 | `.omd/observations/*`, `.omd/assembly-coverage.json` | `oh-my-design:hand` | §6–§8 |
 | every review verdict | `oh-my-design:eye` / `oh-my-design:glance` | §5, §7, §8 |
+| `.omd/delivery.jsonl`, `.omd/stage-usage.jsonl` | the `omd stage` CLI (never hand-edited) | §0–§9 |
 
 If a stage looks skippable because the answer seems clear, that is the failure mode this table
 exists to stop: a run that writes its own composition contract and its own production source has
@@ -143,6 +145,12 @@ component-only change may be L1. L1/L2 omit only the stages listed by the classi
 the owner of every retained artifact. L3 runs the full owner-separated graph. L4 adds the independent
 three-perspective deliberation and moderator. Never call a direct coordinator build an adaptive
 route.
+
+`.omd/locale.json` is the other coordinator-owned routing input, written only when the brief names
+more than one language. It is `locale-contract-v1` (`omd schema locale-contract`), and declaring it
+binds the writer to per-locale Beat copy and the hand to the layout, control-state, and
+document-signal obligations in `protocol/locale-contract.md`. A single-language run does not write
+the file at all; a bilingual one that omits it has left its second audience to chance.
 
 There is exactly one structural-skip route: the Figma structural-bypass above. A full multi-feature
 app, an ERP/dashboard/console/CRUD/admin/editor, a data-dense internal tool, or a quiet/product

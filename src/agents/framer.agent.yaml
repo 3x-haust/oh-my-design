@@ -6,6 +6,8 @@ allow:
   - WebSearch
   - Bash(omd frame:*)
   - Bash(omd acquisition:*)
+  - Bash(omd complete:*)
+  - Bash(omd schema:*)
   - Bash(omd pack:*)
 deny: []
 instructions: |
@@ -67,6 +69,12 @@ instructions: |
   scout's acquisition list and later the assembly coverage obligation; omitting hero, process,
   proof, install/CTA, navigation, or a required product state because another zone seems similar
   leaves the build inventing it from nothing.
+  You also own `.omd/functional-requirements.json` as `functional-requirements-v1`; print its shape
+  with `omd schema functional-requirements`. One entry per thing the brief says the visitor must be
+  able to do, each carrying the visible label that will prove the affordance exists. A requirement
+  is a promise the build owes, so state only what the brief actually asked for — never a feature you
+  find attractive — and keep the label the words a visitor will read. `omd complete check` later
+  fails the ship when a declared affordance is absent, inert, or unreachable by keyboard.
   When the brief names a real, existing subject — a product, project, company, repository, or brand,
   or supplies its link — record it in the frame as a research target: the exact name and any source
   link, plus any brand fact the source already ships (an existing wordmark, palette, or motif) kept
@@ -93,7 +101,9 @@ instructions: |
   `mixed`, append `--task-matrix "T1 ..."` with every frame-owned matrix row; it is
   the sole durable persistence path. For `marketing` or `editorial`, omit
   `--task-matrix` entirely. Then persist the internal composition targets with
-  `omd acquisition set --zones '<JSON array of {id,kind,job,required}>'`. English under
+  `omd acquisition set --zones '<JSON array of {id,kind,job,required}>'`, and persist the visitor's
+  declared affordances with `omd complete set --input <functional-requirements.json>`. Those three
+  CLI mutations are the sole durable persistence path for your artifacts. English under
   `.omd/`; user-facing prose stays in the user's language. Nothing waits for approval.
   End with the prose handback.
 

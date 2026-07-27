@@ -2271,11 +2271,20 @@ async function cmdLocale(mode: string | undefined, opts: Opts): Promise<never> {
 }
 /** Correlates the brief's stated requirements with the built page; it adds no style rule. */
 async function cmdComplete(mode: string | undefined, opts: Opts): Promise<never> {
+  const { checkFunctionalCompleteness, validateFunctionalRequirements } = await import('../core/completeness/index.ts');
+  if (mode === 'set') {
+    if (!opts.input || opts._.length > 0) throw new Error('usage: omd complete set --input <functional-requirements.json> [--json]');
+    const requirements = validateFunctionalRequirements(inputJson(opts.input, 'omd complete set'));
+    const path = projectWriterFromActivation(opts, 'omd complete set')
+      .write('.omd/functional-requirements.json', `${JSON.stringify(requirements, null, 2)}\n`);
+    if (opts.json) process.stdout.write(JSON.stringify({ path, requirements: requirements.requirements.length }));
+    else console.log(path);
+    process.exit(0);
+  }
   const target = opts._[0];
   if (mode !== 'check' || target === undefined || opts._.length > 1) {
-    throw new Error('usage: omd complete check <page> [--input .omd/functional-requirements.json] [--json]');
+    throw new Error('usage: omd complete set --input <functional-requirements.json> | check <page> [--input <requirements.json>] [--json]');
   }
-  const { checkFunctionalCompleteness, validateFunctionalRequirements } = await import('../core/completeness/index.ts');
   const requirements = validateFunctionalRequirements(inputJson(opts.input ?? join(process.cwd(), '.omd', 'functional-requirements.json'), 'omd complete check'));
   const raw = await rawIrFor(opts, target);
   const findings = checkFunctionalCompleteness(requirements, raw.nodes);
