@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -98,4 +98,35 @@ test('the gate runs against a real page and separates satisfied from unsatisfied
   const blocked = run(['complete', 'check', FIXTURE, '--input', unmet, '--json'], dir);
   assert.equal(blocked.status, 1, blocked.stdout);
   assert.deepEqual(JSON.parse(blocked.stdout).findings.map((finding: { id: string }) => finding.id), ['FUNC-MISSING', 'FUNC-UNREACHABLE']);
+});
+
+// The framer owns the requirement list because it is the role that interrogates the brief, and it
+// persists through the CLI like its other artifacts rather than writing the file directly.
+
+test('the framer owns and persists functional requirements through the CLI', () => {
+  const framer = readFileSync(fileURLToPath(new URL('../src/agents/framer.agent.yaml', import.meta.url)), 'utf8').replace(/\s+/g, ' ');
+  assert.match(framer, /Bash\(omd complete:\*\)/);
+  assert.match(framer, /You also own `\.omd\/functional-requirements\.json` as `functional-requirements-v1`/);
+  assert.match(framer, /persist the visitor's declared affordances with `omd complete set --input <functional-requirements\.json>`/);
+
+  const skill = readFileSync(fileURLToPath(new URL('../src/skills/omd-ultradesign/SKILL.md', import.meta.url)), 'utf8');
+  assert.match(skill, /\| `\.omd\/functional-requirements\.json` \| `omd-framer` \| §1 \|/);
+  assert.match(skill, /\| `\.omd\/delivery\.jsonl`, `\.omd\/stage-usage\.jsonl` \| the `omd stage` CLI \(never hand-edited\) \| §0–§9 \|/);
+  assert.match(skill, /`\.omd\/locale\.json` is the other coordinator-owned routing input/);
+});
+
+test('complete set validates before persisting and rejects an invalid list', () => {
+  const dir = project();
+  const path = join(dir, 'requirements.json');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(path, JSON.stringify(requirements({ id: 'R-1', kind: 'action', statement: 'Visitor opens the repository', label: '저장소 열기' })));
+  const stored = run(['complete', 'set', '--input', path, '--json'], dir);
+  assert.equal(stored.status, 0, stored.stderr);
+  assert.equal(JSON.parse(stored.stdout).requirements, 1);
+  assert.match(readFileSync(join(dir, '.omd/functional-requirements.json'), 'utf8'), /"id": "R-1"/);
+
+  writeFileSync(path, JSON.stringify(requirements({ id: 'R-1', kind: 'wish', statement: 'a', label: 'A' })));
+  const rejected = run(['complete', 'set', '--input', path], dir);
+  assert.equal(rejected.status, 1);
+  assert.match(rejected.stderr, /FUNCTIONAL_REQUIREMENTS_INVALID/);
 });
