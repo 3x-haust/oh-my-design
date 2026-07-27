@@ -49,7 +49,7 @@ export function preflightCodexV2Publication(input: CodexV2PublicationPreflightIn
     throw new Error('Codex loaded skill bytes do not match the current build source skill hash');
   }
   if (reviewerLaunchBundle === undefined) throw new Error('Codex reviewer preflight requires an evidence launch bundle');
-  const bundle = reviewerLaunchBundle.adapter.requireLaunchBundle(reviewerLaunchBundle, 'codex');
+  const bundle = reviewerLaunchBundle.adapter.requireCompletedLaunchBundle(reviewerLaunchBundle, 'codex');
   if (bundle.loadedSkillReceipt.loadedSkillReceipt !== loadedSkillReceipt) {
     throw new Error('Codex v2 preflight requires the bundle-attached observed loaded-skill receipt');
   }
@@ -60,7 +60,6 @@ export function preflightCodexV2Publication(input: CodexV2PublicationPreflightIn
   ) {
     throw new Error('Codex reviewer launch bundle does not match the current build, loaded skill, and brief');
   }
-  bundle.adapter.requireConfiguration(bundle.configuration, bundle.reviewerLaunchReceipt, 'codex');
   return validateActivationContext({
     schemaVersion: ACTIVATION_CONTEXT_SCHEMA_VERSION,
     buildSha256: buildIdentity.buildSha256,

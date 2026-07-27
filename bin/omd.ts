@@ -41,7 +41,7 @@ import { createLocalCliInvocation, requireCurrentIntentLedgerAuthorization, requ
 import { acquireProjectLock, createExternalObservationDirectory, createProjectWriteAdapter, replaceProjectFileAtomically, writeExternalObservationFile, writeImmutableProjectFile, type ExternalObservationKind, type ProjectWriteAdapter } from '../core/runtime/project-write.ts';
 import { intentLedgerSha256, resolveCurrentUserBeatExceptionReceipt, serializeIntentLedger, validateIntentCurrentPointer, validateIntentLedger } from '../core/runtime/intent.ts';
 import { validateDecisionBoundReferenceHandoffs, validateReferenceHandoffCurrentness } from '../core/ref/reference-handoff.ts';
-import { parseReferenceSelectionV2, referenceSelectionV2Sha256, resolveMotionProjection, validateReferenceSelectionV2 } from '../core/ref/reference-selection.ts';
+import { parseReferenceSelectionV2, referenceSelectionV2Sha256, resolveMotionProjection, validatePreReferenceSelectionV2 } from '../core/ref/reference-selection.ts';
 import { referenceUsageV2Sha256, validateReferenceUsage } from '../core/ref/reference-usage.ts';
 import { canonicalJson, sha256 } from '../core/ref/board-artifacts.ts';
 
@@ -1132,9 +1132,10 @@ const boardPath = (opts: Opts, command: string): string | undefined => {
 };
 async function cmdRefCheck(opts: Opts): Promise<never> {
   const { readReferenceBoardArtifacts } = await import('../core/ref/board-artifacts.ts');
-  const { referenceSelectionExists, referenceSelectionV2Exists, validateReferenceSelection, validateReferenceSelectionV2 } = await import('../core/ref/reference-selection.ts');
+  const { referenceSelectionExists, referenceSelectionV2Exists, preReferenceSelectionV2Exists, validateReferenceSelection, validatePreReferenceSelectionV2, validateReferenceSelectionV2 } = await import('../core/ref/reference-selection.ts');
   const manifest = boardPath(opts, 'omd ref check'); readReferenceBoardArtifacts(process.cwd(), manifest);
   if (referenceSelectionExists(process.cwd())) validateReferenceSelection(process.cwd(), manifest);
+  if (preReferenceSelectionV2Exists(process.cwd())) validatePreReferenceSelectionV2(process.cwd(), manifest);
   if (referenceSelectionV2Exists(process.cwd())) validateReferenceSelectionV2(process.cwd(), manifest);
   if (opts.json) process.stdout.write('[]\n'); else console.log('ok');
   process.exit(0);
@@ -1584,9 +1585,19 @@ function cmdCopy(opts: Opts): never {
 /** `omd composition --check [--json]` — structural/freshness gate for composition.md. */
 function cmdComposition(opts: Opts): never {
   if (!opts.check) throw new Error('usage: omd composition --check [--json]');
-  const direction = currentArtDirection(process.cwd());
-  requireDecisionBoundHandoffs(process.cwd(), artDirectionSha256(direction));
   const findings = validateCompositionContract(process.cwd());
+  if (findings.length === 0) {
+    try {
+      const direction = currentArtDirection(process.cwd());
+      requireDecisionBoundHandoffs(process.cwd(), artDirectionSha256(direction));
+    } catch (error) {
+      findings.push({
+        id: 'COMPOSITION-STALE',
+        path: '.omd/reference-handoffs/composer.json',
+        message: `decision-bound handoff lineage is stale: ${error instanceof Error ? error.message : String(error)}`,
+      });
+    }
+  }
   if (opts.json) process.stdout.write(JSON.stringify(findings));
   else {
     for (const finding of findings) console.log(`[error] ${finding.id} ${finding.path}: ${finding.message}`);
@@ -2182,7 +2193,7 @@ async function cmdArtDirection(mode: string | undefined, opts: Opts): Promise<ne
   const handoffPath = join(process.cwd(), '.omd', 'reference-handoffs', 'art-direction.json');
   if (!existsSync(handoffPath)) throw new Error('ART_DIRECTION_REFERENCE_HANDOFF_REQUIRED: run `omd ref select` before art direction');
   const handoff = validateReferenceHandoffCurrentness(process.cwd(), inputJson(handoffPath, 'art-direction reference handoff'));
-  const selection = validateReferenceSelectionV2(process.cwd());
+  const selection = validatePreReferenceSelectionV2(process.cwd());
   const selectionSha256 = referenceSelectionV2Sha256(selection);
   const { persistMotionResolutionProjection, persistSettledReferenceSelection, motionResolutionProjectionSha256 } = await import('../core/ref/reference-selection.ts');
   const input = {
@@ -2216,7 +2227,7 @@ async function cmdArtDirection(mode: string | undefined, opts: Opts): Promise<ne
     throw new Error(`ART_DIRECTION_BEAT_BUDGET_EXCEEDED: ${checked.selectedRegister} permits at most ${beatBudgetForRegister(checked.selectedRegister)} Beats without an exact current-user host-authorized Beat-exception receipt`);
   }
   const motion = persistMotionResolutionProjection(process.cwd(), motionInput, { assessmentBytes, resultBytes, ...(recipeBytes === undefined ? {} : { approvedRecipeBytes: recipeBytes }) }, run, localMode ? 'local-moderator' : 'host');
-  const settledSelection = persistSettledReferenceSelection(process.cwd(), selection, { ...motion.projection, selection }, run);
+  const settledSelection = persistSettledReferenceSelection(process.cwd(), selection, motionResolutionProjectionSha256(motion.projection), run);
   const settledMotionResolutionSha256 = motionResolutionProjectionSha256(motion.projection);
   if (checked.motionResolutionProjectionSha256 !== settledMotionResolutionSha256 || checked.settledSelectionSha256 !== referenceSelectionV2Sha256(settledSelection)) {
     throw new Error('ART_DIRECTION_MOTION_SETTLEMENT_STALE: decision must bind the persisted motion settlement');
@@ -2232,9 +2243,8 @@ async function cmdArtDirection(mode: string | undefined, opts: Opts): Promise<ne
   const pointer = { schemaVersion: ART_DIRECTION_POINTER_SCHEMA_VERSION, record: recordPath, sha256: digest };
   const path = replaceProjectFileAtomically({ projectRoot: process.cwd(), relativePath: '.omd/art-direction.json', content: JSON.stringify(pointer, null, 2), invocation: run });
   const { writeReferenceHandoffReceipt } = await import('../core/ref/reference-handoff.ts');
-  const settlement = { motionResolutionProjectionSha256: settledMotionResolutionSha256, settledSelectionSha256: referenceSelectionV2Sha256(settledSelection), settledSelection };
-  const composerHandoff = writeReferenceHandoffReceipt(process.cwd(), 'composer', run, digest, settlement);
-  const handHandoff = writeReferenceHandoffReceipt(process.cwd(), 'hand', run, digest, settlement);
+  const composerHandoff = writeReferenceHandoffReceipt(process.cwd(), 'composer', run);
+  const handHandoff = writeReferenceHandoffReceipt(process.cwd(), 'hand', run);
   if (opts.json) process.stdout.write(JSON.stringify({ path, record: recordPath, sha256: digest, motionResolution: motion.path, composerHandoff, handHandoff }));
   else console.log(path);
   process.exit(0);
@@ -2522,6 +2532,31 @@ async function cmdEvidence(mode: string | undefined, opts: Opts): Promise<never>
     process.exit(0);
   }
   throw new Error('usage: omd evidence static-capture --input <static-capture.json> | motion-capture --input <motion-capture.json> | static-check --input <evidence.json> | motion-check --input <evidence.json> | finalize --input <manifest.json> | check [--json] | v2 finalize --input <manifest.json> --activation <host-issued-invocation.json> | v2 check --activation <host-issued-invocation.json> [--json] | v2-recover [--json] | v2-gc [--dry-run|--apply] [--json] | tasks --input .omd/.cache/task-evidence-manifest.json> | tasks-check [--json]');
+}
+async function cmdObservation(mode: string | undefined, opts: Opts): Promise<never> {
+  if (mode === 'write') {
+    if (!opts.input || opts._.length > 0) throw new Error('usage: omd observation write --input <observation.json> [--activation <host-issued-invocation.json>] [--json]');
+    const { writeObservationV2 } = await import('../core/runtime/observation.ts');
+    const observation = writeObservationV2(process.cwd(), inputJson(opts.input, 'omd observation write') as never, projectWriterFromActivation(opts, 'omd observation write'));
+    if (opts.json) process.stdout.write(JSON.stringify(observation)); else console.log('.omd/observation-v2.json');
+    process.exit(0);
+  }
+  if (mode === 'retain') {
+    if (!opts.input || opts._.length > 0) throw new Error('usage: omd observation retain --input <retention.json> [--activation <host-issued-invocation.json>] [--json]');
+    const { retainObservationV2 } = await import('../core/runtime/observation-retention.ts');
+    const retained = retainObservationV2(process.cwd(), inputJson(opts.input, 'omd observation retain') as never, projectWriterFromActivation(opts, 'omd observation retain'));
+    if (opts.json) process.stdout.write(JSON.stringify(retained)); else console.log('.omd/observation-v2-retention.json');
+    process.exit(0);
+  }
+  throw new Error('usage: omd observation write --input <observation.json> | retain --input <retention.json>');
+}
+
+async function cmdAttest(mode: string | undefined, opts: Opts): Promise<never> {
+  if (mode !== 'v2' || opts._.length > 0) throw new Error('usage: omd attest v2 [--activation <host-issued-invocation.json>] [--json]');
+  const { attestLegacyV1AsV2 } = await import('../core/migration/attest-v2.ts');
+  const attestation = attestLegacyV1AsV2(process.cwd(), projectWriterFromActivation(opts, 'omd attest v2'));
+  if (opts.json) process.stdout.write(JSON.stringify(attestation)); else console.log('.omd/attest-v2.json');
+  process.exit(0);
 }
 
 async function cmdDoctor(): Promise<never> {
@@ -3042,6 +3077,8 @@ async function main(): Promise<never> {
     }
     return cmdEvidence(sub, parseArgs(args.slice(2)));
   }
+  if (cmd === 'observation') return cmdObservation(sub, parseArgs(args.slice(2)));
+  if (cmd === 'attest') return cmdAttest(sub, parseArgs(args.slice(2)));
   if (cmd === 'intent') return cmdIntent(sub, parseArgs(args.slice(2)));
   if (cmd === 'domain') return cmdDomain(sub, parseArgs(args.slice(2)));
   if (cmd === 'craft-fidelity') return cmdCraftFidelity(sub, parseArgs(args.slice(2)));

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { hostname, tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
@@ -11,7 +11,8 @@ import { ACTIVATION_CONTEXT_SCHEMA_VERSION, validateActivationContext, type Acti
 import { createReviewerEvidenceProxy, MAX_INLINE_EVIDENCE_BYTES, ReviewerIsolationError } from '../core/runtime/evidence-proxy.ts';
 import { requireReviewerIsolationInvocation, type ProjectRunInvocation } from '../core/runtime/invocation.ts';
 import { assertProjectRunMutationInventory, inventoryProjectRunMutations } from '../core/runtime/project-write-inventory.ts';
-import { ProjectWriteError, writeProjectFile } from '../core/runtime/project-write.ts';
+import { acquireProjectLock, acquireProjectMutationLock, ProjectWriteError, writeProjectFile } from '../core/runtime/project-write.ts';
+import { createTestProjectRunInvocation } from './helpers/project-write.ts';
 
 const hash = (value: string): string => value.repeat(64);
 
@@ -28,6 +29,63 @@ function invocation(overrides: Partial<ActivationContext> = {}): ProjectRunInvoc
   };
   return { activation, current: { buildSha256: hash('a'), loadedSkillSha256: hash('b'), briefSha256: hash('c') } };
 }
+
+test('project mutation lock recovers only a stable dead same-host owner', () => {
+  const root = mkdtempSync(join(tmpdir(), 'omd-mutation-recovery-'));
+  try {
+    const lock = join(root, '.omd-project-mutation.lock');
+    writeFileSync(lock, JSON.stringify({
+      schema: 'omd-project-mutation-lock-v1',
+      host: hostname(),
+      pid: 99_999_999,
+      startedAt: Date.now() - 1_000,
+    }));
+    const invocation = createTestProjectRunInvocation(root, 'dead-owner-recovery');
+    writeProjectFile({ projectRoot: root, relativePath: '.omd/recovered.txt', content: 'recovered', invocation });
+    assert.equal(readFileSync(join(root, '.omd', 'recovered.txt'), 'utf8'), 'recovered');
+    assert.equal(existsSync(lock), false);
+
+    writeFileSync(lock, JSON.stringify({
+      schema: 'omd-project-mutation-lock-v1',
+      host: hostname(),
+      pid: process.pid,
+      startedAt: Date.now(),
+    }));
+    assert.throws(
+      () => writeProjectFile({ projectRoot: root, relativePath: '.omd/blocked.txt', content: 'blocked', invocation }),
+      /owner is live or ambiguous/,
+    );
+    assert.equal(existsSync(lock), true);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('project mutation releases out of order and exported locks retain the global transaction', () => {
+  const root = mkdtempSync(join(tmpdir(), 'omd-mutation-release-'));
+  try {
+    const owner = createTestProjectRunInvocation(root, 'lock-owner');
+    const contender = createTestProjectRunInvocation(root, 'lock-contender');
+    const first = acquireProjectMutationLock(root, owner);
+    const second = acquireProjectMutationLock(root, owner);
+    first();
+    assert.equal(existsSync(join(root, '.omd-project-mutation.lock')), true);
+    second();
+    assert.equal(existsSync(join(root, '.omd-project-mutation.lock')), false);
+    mkdirSync(join(root, '.omd'));
+
+    const releaseNamed = acquireProjectLock({ projectRoot: root, relativePath: '.omd/named.lock', invocation: owner });
+    assert.throws(
+      () => writeProjectFile({ projectRoot: root, relativePath: '.omd/blocked.txt', content: 'blocked', invocation: contender }),
+      /project mutation lock is owned by another invocation/,
+    );
+    releaseNamed();
+    assert.equal(existsSync(join(root, '.omd-project-mutation.lock')), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 type LocalCliReport = {
   readonly activation: ActivationContext;
   readonly cliPath: string;
@@ -594,7 +652,7 @@ test('live-socket reviewer adapter inventory rejects an altered socket hash shap
   }
 });
 
-test('live-socket reviewer adapter inventory requires the private host launch capability', () => {
+test('live-socket reviewer adapter inventory requires the process-bound two-phase capability challenge', () => {
   const root = mkdtempSync(join(tmpdir(), 'omd-reviewer-socket-inventory-'));
   try {
     mkdirSync(join(root, 'bin'));
@@ -603,7 +661,7 @@ test('live-socket reviewer adapter inventory requires the private host launch ca
     const adapterSource = readFileSync(
       fileURLToPath(new URL('../adapters/reviewer-mcp.ts', import.meta.url)),
       'utf8',
-    ).replace("  if (!launchCapability) throw new ReviewerLaunchError('reviewer proxy lacks the private host launch capability');\n", '');
+    ).replace('  const evidence = await exchange({ ...claim, launchCapability: challenge.capability });\n', '');
     writeFileSync(join(root, 'adapters', 'reviewer-mcp.ts'), adapterSource);
 
     const inventory = inventoryProjectRunMutations(root);

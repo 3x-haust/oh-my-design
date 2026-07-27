@@ -102,8 +102,6 @@ function reviewerLiveSocketCleanupException(
   const closeBrokerCleanup = closeBroker === undefined
     ? false
     : [
-        'launchCapabilities.delete(launch.receipt);',
-        'launchEnvironments.delete(launch.receipt);',
         'launch.evidence.fill(0);',
         "launch.capability = '';",
         'const path = socketPath(launchId);',
@@ -130,10 +128,13 @@ function reviewerLiveSocketCleanupException(
     && startBroker?.includes('removeSocket(path);') === true
     && startBroker?.includes("server.once('error', () => closeBroker(launch.receipt.launchId));") === true
     && startBroker?.includes('closeBroker(launch.receipt.launchId);') === true
-    && consumeBroker?.includes('const launchCapability = process.env.OMD_REVIEWER_EVIDENCE_LAUNCH_CAPABILITY;') === true
-    && consumeBroker?.includes('delete process.env.OMD_REVIEWER_EVIDENCE_LAUNCH_CAPABILITY;') === true
-    && consumeBroker?.includes("if (!launchCapability) throw new ReviewerLaunchError('reviewer proxy lacks the private host launch capability');") === true
-    && consumeBroker?.includes('const socket = connect(brokerSocket);') === true;
+    && startBroker?.includes('launch.authorizedChildPid = claim.childPid!;') === true
+    && startBroker?.includes('socket.end(JSON.stringify({ capability: launch.capability }));') === true
+    && startBroker?.includes('claim.childPid !== launch.authorizedChildPid || claim.launchCapability !== launch.capability') === true
+    && startBroker?.includes("if (socketPeerPid(socket) !== claim.childPid) throw new ReviewerLaunchError('reviewer proxy socket peer is not the claimed configured child');") === true
+    && consumeBroker?.includes('const challenge = await exchange(claim);') === true
+    && consumeBroker?.includes('const evidence = await exchange({ ...claim, launchCapability: challenge.capability });') === true
+    && consumeBroker?.includes('const claim = { childPid: process.pid') === true;
 }
 function finalEvidenceStableDescriptorAdapter(
   filePath: string,

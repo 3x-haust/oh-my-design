@@ -1,10 +1,11 @@
 import { createHash, createPublicKey, verify } from 'node:crypto';
-import { lstatSync, readFileSync, realpathSync } from 'node:fs';
+import { closeSync, constants as fsConstants, fstatSync, lstatSync, openSync, readFileSync, readSync, realpathSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
+import { isAbsolute, resolve } from 'node:path';
 import { createAliasResolver, createEvaluatorHoldoutMetadata, evaluateHarness, freezeDevelopmentCorpus, projectHoldoutBrief, receiptHash, validateBudget, validateEvaluatorHoldoutMetadata, validateFrozenDevelopmentCorpus, validateProjectedBrief } from '../../core/eval-harness/holdout-projection.ts';
 import { validateEvidenceLock } from './validate-evidence-lock.ts';
-import { readEvidenceSnapshotPayload } from './materialize-evidence-lock.ts';
+import { evidenceLockDigest, readEvidenceSnapshotBytes, readEvidenceSnapshotPayload, requireEvidenceLockSnapshot } from './materialize-evidence-lock.ts';
 import type { AliasResolver, BrowserRunReceipt, BuildRunReceipt, EvaluatorHoldoutMetadata, FrozenDevelopmentCorpus, HarnessBudget, HoldoutBrief, ProjectedBrief, RaterVote } from '../../core/eval-harness/holdout-projection.ts';
 import type { EvidenceLock, EvidenceLockSnapshot } from './materialize-evidence-lock.ts';
 
@@ -38,7 +39,7 @@ export interface IsolatedHarnessHost { identity: string; executeBuild(brief: Pro
 export interface ReviewerSession { sessionId: string; executableSha256: string; processIdentity: string; configIdentity: string; handshake: string; }
 export interface ReviewerLane { laneId: string; raterId: string; session?: ReviewerSession; review(brief: ProjectedBrief, build: BuildRunReceipt, browser: BrowserRunReceipt): ReviewerResult; }
 export interface BrowserObserver { laneId: string; observe(brief: ProjectedBrief, build: BuildRunReceipt): BrowserObservation; }
-export interface HarnessV2RunInput extends PreparedHarnessV2 { host: IsolatedHarnessHost; reviewerLanes: readonly ReviewerLane[]; browser: BrowserObserver; usageObserver: E5E13PinnedUsageObserver; evidenceRoot: string; evidenceLock: EvidenceLock; evidenceSnapshot?: EvidenceLockSnapshot; budget: HarnessBudget; }
+export interface HarnessV2RunInput extends PreparedHarnessV2 { host: IsolatedHarnessHost; reviewerLanes: readonly ReviewerLane[]; browser: BrowserObserver; usageObserver: E5E13PinnedUsageObserver; evidenceRoot: string; evidenceLock: EvidenceLock; budget: HarnessBudget; }
 export interface HarnessV2RunReport { schemaVersion: 'harness-v2-run-report-v4'; signedE5Digest: string; signedE13Digest: string; runnerId: string; hostIdentity: string; observerIdentity: string; observerAuthorityDigest: string; buildReceiptDigest: string; browserReceiptDigest: string; reviewerReceiptDigest: string; executionReceiptDigest: string; receiptDigest: string; lockDigest: string; lineageRoot: string; observationEnvelope: string; processSessionIdentity: string; measuredBudget: HarnessBudget; result: ReturnType<typeof evaluateHarness>; }
 export interface UnsignedHarnessV2RunInput extends PreparedHarnessV2 {
   host: IsolatedHarnessHost;
@@ -62,7 +63,6 @@ export function computeUnsignedUsage(computation: UnsignedUsageComputation, sour
 function usage(value: unknown, source: string): UsageTelemetry { const telemetry=value as UsageTelemetry; if (!telemetry || !Number.isFinite(telemetry.tokens) || !Number.isFinite(telemetry.usd) || telemetry.tokens < 0 || telemetry.usd < 0) throw new Error(`${source} did not report finite non-negative parent-observed telemetry`); return Object.freeze({tokens:telemetry.tokens,usd:telemetry.usd}); }
 function addUsage(total: UsageTelemetry, next: UsageTelemetry): UsageTelemetry { return {tokens:total.tokens+next.tokens,usd:total.usd+next.usd}; }
 function canonical(value: unknown): string { if (value === null || typeof value !== 'object') return JSON.stringify(value); if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`; const record=value as Record<string, unknown>; return `{${Object.keys(record).sort().map(key => `${JSON.stringify(key)}:${canonical(record[key])}`).join(',')}}`; }
-function verifySignedExpectation(id: string, expected: unknown, observed: unknown): void { if (!expected || typeof expected !== 'object' || Array.isArray(expected) || !observed || typeof observed !== 'object' || Array.isArray(observed) || Object.entries(expected as Record<string, unknown>).some(([key,value]) => canonical(value) !== canonical((observed as Record<string, unknown>)[key]))) throw new Error(`live ${id} outcome diverges from the signed benchmark expectation`); }
 function observeUnsignedUsage(computation: UnsignedUsageComputation, source: ParentUsageSource): UsageTelemetry {
   if (!computation.identity) throw new Error('an unsigned usage computation identity is required');
   return usage(computation.observe(Object.freeze({ ...source })), `${source.kind} unsigned computation`);
@@ -88,8 +88,15 @@ function execute(projected: ProjectedBrief, rawEvidence: readonly string[], auth
   });
   return Object.freeze({build,browser:observedBrowser,reviews:Object.freeze(reviews),telemetry});
 }
-function signedFields(id: string, signed: Record<string, unknown>, live: Record<string, unknown>, fields: readonly string[]): void {
-  for (const field of fields) if (canonical(signed[field]) !== canonical(live[field])) throw new Error(`live ${id} ${field} diverges from the signed benchmark expectation`);
+function signedFieldMismatches(
+  id: string,
+  signed: Record<string, unknown>,
+  live: Record<string, unknown>,
+  fields: readonly string[],
+): string[] {
+  return fields.flatMap((field) => canonical(signed[field]) === canonical(live[field])
+    ? []
+    : [`${id}.${field}: expected ${canonical(signed[field])}, received ${canonical(live[field])}`]);
 }
 /** Runs the harness mechanics with public telemetry and deliberately returns no signed report. */
 export function computeUnsignedHarnessRun(input: UnsignedHarnessV2RunInput) {
@@ -125,12 +132,12 @@ export function computeUnsignedHarnessRun(input: UnsignedHarnessV2RunInput) {
     measuredBudget: Object.freeze(measuredBudget),
   });
 }
-export function computeHarnessRun(input: HarnessV2RunInput) {
+function computeHarnessRun(input: HarnessV2RunInput, snapshot: EvidenceLockSnapshot) {
   const usageObserver=input.usageObserver;
   if (!e5E13PinnedUsageObservers.has(usageObserver)) throw new Error('an E5/E13-pinned usage observer is required');
-  validateFrozenDevelopmentCorpus(input.developmentCorpus); validateEvaluatorHoldoutMetadata(input.evaluatorHoldouts); validateBudget(input.budget); const snapshot=input.evidenceSnapshot ?? validateEvidenceLock(input.evidenceRoot,input.evidenceLock);
+  validateFrozenDevelopmentCorpus(input.developmentCorpus); validateEvaluatorHoldoutMetadata(input.evaluatorHoldouts); validateBudget(input.budget); requireEvidenceLockSnapshot(snapshot, input.evidenceLock);
   const evidence = (id: string) => readEvidenceSnapshotPayload(snapshot, id as `E${number}`);
-  const e1=evidence('E1'),e2=evidence('E2'),e3=evidence('E3'),e4=evidence('E4'),e5=evidence('E5'),e6=evidence('E6'),e7=evidence('E7'),e8=evidence('E8'),e9=evidence('E9'),e10=evidence('E10'),e11=evidence('E11'),e13=evidence('E13');
+  const e1=evidence('E1'),e2=evidence('E2'),e3=evidence('E3'),e4=evidence('E4'),e5=evidence('E5'),e13=evidence('E13');
   const signedDigests=e13.runInputDigests as Record<string, unknown>, signedAuthority=e4.aliasAuthority, signedAuthorityDigest=e13.aliasAuthorityDigest;
   const signedObserver=e5.observer as {identity?:unknown;executableSha256?:unknown;configIdentity?:unknown}, observerAuthorityDigest=signedObserver && typeof signedObserver.identity==='string' && hash.test(signedObserver.executableSha256 as string) && hash.test(signedObserver.configIdentity as string) ? digest(signedObserver) : '';
   const clock=e5.clock as { issuedAt?:unknown; expiresAt?:unknown; elapsedMinutes?:unknown };
@@ -140,7 +147,7 @@ export function computeHarnessRun(input: HarnessV2RunInput) {
   const runnerId=e5.runnerId, decisions:Record<string,readonly {raterId:string;vote:RaterVote}[]>={}, receipts:Record<string,ReturnType<typeof execute>>={}; let observedUsage:UsageTelemetry={tokens:0,usd:0};
   for(const holdout of input.evaluatorHoldouts.holdouts){
     const projected=projectedById.get(holdout.id),rawEvidence=input.rawHoldoutEvidence[holdout.id],authority=input.rawHoldoutAuthority[holdout.id];
-    if(!projected||!rawEvidence||!authority||projected.kind!==holdout.kind||projected.surface!==holdout.surface||projected.domain!==holdout.domain||projected.language!==holdout.language)throw new Error(`missing or relabeled projected brief: ${holdout.id}`);
+    if(!projected||!rawEvidence||!authority||projected.kind!==holdout.kind||projected.surface!==holdout.surface||canonical(projected.routes)!==canonical(holdout.routes)||projected.domain!==holdout.domain||projected.language!==holdout.language)throw new Error(`missing or relabeled projected brief: ${holdout.id}`);
     const run=execute(projected,rawEvidence,authority,input.host,input.browser,input.reviewerLanes,usageObserver,runnerId,clock.issuedAt as number,clock.expiresAt as number); observedUsage=addUsage(observedUsage,run.telemetry);
     if(observedUsage.tokens>input.budget.tokens||observedUsage.usd>input.budget.usd) throw new Error('parent-observed usage exceeds input cap');
     validateBudget({rounds:1,browserLaunches:0,elapsedMinutes:0,...observedUsage}); receipts[holdout.id]=run; decisions[holdout.id]=run.reviews.map(review=>({raterId:review.raterId,vote:review.vote}));
@@ -152,36 +159,137 @@ export function computeHarnessRun(input: HarnessV2RunInput) {
   const rawReviewerReceiptDigest=digest(Object.fromEntries(Object.entries(receipts).map(([id,run])=>[id,run.reviews])));
   const orderedExecutionReceipts=Object.freeze([...executionReceipts.entries()].sort(([left],[right])=>left.localeCompare(right)).map(([,receipt])=>receipt));
   if (processUsageSource && orderedExecutionReceipts.length !== input.evaluatorHoldouts.holdouts.length * (2 + input.reviewerLanes.length)) throw new Error('every spawned child requires an observer-signed execution receipt');
-  const executionReceiptDigest=digest(orderedExecutionReceipts);
+  const normalizedExecutionReceipts = orderedExecutionReceipts.map((entry) => {
+    const receipt = entry as {
+      identity?: unknown;
+      source?: unknown;
+      child?: Record<string, unknown>;
+      networkDenial?: Record<string, unknown>;
+      accounting?: Record<string, unknown>;
+    };
+    return {
+      identity: receipt.identity,
+      source: receipt.source,
+      child: {
+        executableSha256: receipt.child?.executableSha256,
+        interpreterSha256: receipt.child?.interpreterSha256,
+        targetSha256: receipt.child?.targetSha256,
+        baseArgs: receipt.child?.baseArgs,
+        configIdentity: receipt.child?.configIdentity,
+        status: receipt.child?.status,
+        signal: receipt.child?.signal,
+        processIdentity: receipt.child?.processIdentity,
+      },
+      networkDenial: { denied: receipt.networkDenial?.denied },
+      accounting: { tokens: receipt.accounting?.tokens, usd: receipt.accounting?.usd },
+    };
+  });
+  const executionReceiptDigest=digest(normalizedExecutionReceipts);
   const reviewerReceiptDigest=digest({rawReviewerReceiptDigest,executionReceiptDigest});
   const receiptDigest=digest({buildReceiptDigest,browserReceiptDigest,reviewerReceiptDigest,executionReceiptDigest});
   const processSessionIdentity=digest({observerAuthorityDigest,browserLane:input.browser.laneId,executionReceiptDigest,reviewers:input.reviewerLanes.map(lane=>({laneId:lane.laneId,raterId:lane.raterId,session:lane.session}))});
-  const lockDigest=input.evidenceLock.digest, lineageRoot=digest({lockDigest,developmentCorpus:input.developmentCorpus.digest,evaluatorHoldouts:input.evaluatorHoldouts.digest,buildReceiptDigest,browserReceiptDigest,reviewerReceiptDigest,executionReceiptDigest,receiptDigest,result,measuredBudget,processSessionIdentity});
+  const lockDigest=evidenceLockDigest(snapshot.lock.entries);
+  const lineageRoot=digest({lockDigest,developmentCorpus:input.developmentCorpus.digest,evaluatorHoldouts:input.evaluatorHoldouts.digest,buildReceiptDigest,browserReceiptDigest,reviewerReceiptDigest,executionReceiptDigest,receiptDigest,result,measuredBudget,processSessionIdentity});
   const observationEnvelope=digest({runnerId,hostIdentity:input.host.identity,observerIdentity:usageObserver.identity,observerAuthorityDigest,buildReceiptDigest,browserReceiptDigest,reviewerReceiptDigest,executionReceiptDigest,receiptDigest,lineageRoot,measuredBudget,result,processSessionIdentity});
   const live={runnerId,hostIdentity:input.host.identity,observerIdentity:usageObserver.identity,observerAuthorityDigest,buildReceiptDigest,browserReceiptDigest,reviewerReceiptDigest,executionReceiptDigest,receiptDigest,lockDigest,lineageRoot,observationEnvelope,processSessionIdentity,measuredBudget,result};
-  const report: HarnessV2RunReport=Object.freeze({schemaVersion:'harness-v2-run-report-v4',signedE5Digest:input.evidenceLock.entries.find(entry=>entry.id==='E5')!.sha256,signedE13Digest:input.evidenceLock.entries.find(entry=>entry.id==='E13')!.sha256,...live});
-  return {result,projectedBriefs:input.projectedBriefs,receipts,report,snapshot};
+  return {result,projectedBriefs:input.projectedBriefs,receipts,live:Object.freeze(live),snapshot};
+}
+function runHarnessV2WithSnapshot(input: HarnessV2RunInput, snapshot: EvidenceLockSnapshot) {
+  const computed=computeHarnessRun(input, snapshot);
+  const evidence = (id: string) => readEvidenceSnapshotPayload(computed.snapshot, id as `E${number}`);
+  const live=computed.live as unknown as Record<string, unknown>;
+  const mismatches = (['E6','E7','E8','E9','E10','E11'] as const).flatMap((id) => {
+    const signed = evidence(id) as Record<string, unknown>;
+    return signedFieldMismatches(id, signed, live, Object.keys(signed).filter((field) => field !== 'lineage'));
+  });
+  if (mismatches.length > 0) throw new Error(`live signed benchmark projection diverges:\n${mismatches.join('\n')}`);
+  const report: HarnessV2RunReport=Object.freeze({
+    schemaVersion:'harness-v2-run-report-v4',
+    signedE5Digest:createHash('sha256').update(readEvidenceSnapshotBytes(snapshot,'E5')).digest('hex'),
+    signedE13Digest:createHash('sha256').update(readEvidenceSnapshotBytes(snapshot,'E13')).digest('hex'),
+    ...computed.live,
+  });
+  return {result:computed.result,projectedBriefs:computed.projectedBriefs,receipts:computed.receipts,report};
 }
 export function runHarnessV2(input: HarnessV2RunInput) {
-  const computed=computeHarnessRun(input);
-  const evidence = (id: string) => readEvidenceSnapshotPayload(computed.snapshot, id as `E${number}`);
-  const live=computed.report as unknown as Record<string, unknown>;
-  for (const [id, fields] of [['E6',['runnerId','hostIdentity','observerIdentity','observerAuthorityDigest']],['E11',['observerAuthorityDigest']]] as const) signedFields(id,evidence(id),live,fields);
-  return computed;
+  return runHarnessV2WithSnapshot(input, validateEvidenceLock(input.evidenceRoot, input.evidenceLock));
 }
-interface CliInput { developmentCorpus: readonly HoldoutBrief[]; developmentRouteMap: Record<string, HoldoutBrief['surface']>; holdouts: readonly HoldoutBrief[]; projectionSalt: string; evidenceRoot: string; evidenceLock: EvidenceLock; evidenceSnapshot?: EvidenceLockSnapshot; budget: HarnessBudget; hostCommand: string; hostArgs?: readonly string[]; browserCommand: string; browserArgs?: readonly string[]; reviewerCommands: readonly { command:string; args?:readonly string[]; laneId:string; raterId:string }[]; usageSidecarCommand: string; usageSidecarArgs?: readonly string[]; }
-interface SignedProcess { executableSha256: string; configIdentity: string; telemetry: UsageTelemetry; }
+interface CliInput { developmentCorpus: readonly HoldoutBrief[]; developmentRouteMap: Record<string, HoldoutBrief['surface']>; holdouts: readonly HoldoutBrief[]; projectionSalt: string; evidenceRoot: string; evidenceLock: EvidenceLock; budget: HarnessBudget; hostCommand: string; hostArgs?: readonly string[]; browserCommand: string; browserArgs?: readonly string[]; reviewerCommands: readonly { command:string; args?:readonly string[]; laneId:string; raterId:string }[]; usageSidecarCommand: string; usageSidecarArgs?: readonly string[]; }
+interface SignedProcess { executableSha256: string; interpreterSha256: string; targetSha256: string; configIdentity: string; telemetry: UsageTelemetry; }
 interface SignedObserverProcess extends SignedProcess { identity: string; publicKey: string; }
-interface ProcessExecution { pid: number; executableSha256: string; configIdentity: string; status: number | null; signal: string | null; processIdentity: string; }
-function executableIdentity(command:string):string { const path=realpathSync(command); const stat=lstatSync(path); if(!stat.isFile()||stat.isSymbolicLink()) throw new Error('subprocess executable must be a regular resolved file'); return createHash('sha256').update(readFileSync(path)).digest('hex'); }
+interface ProcessExecution { pid: number; executableSha256: string; interpreterSha256: string; targetSha256: string; baseArgs: readonly string[]; configIdentity: string; status: number | null; signal: string | null; processIdentity: string; }
+type PinnedSpawn = ReturnType<typeof spawnSync> & { readonly interpreterSha256: string; readonly targetSha256: string; readonly baseArgs: readonly string[]; };
+function openVerifiedExecutable(command: string): { readonly fd: number; readonly sha256: string; readonly bytes: Buffer } {
+  if(!isAbsolute(command)||resolve(command)!==command) throw new Error('subprocess command must be an absolute path');
+  const fd = openSync(command, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
+  try {
+    const before = fstatSync(fd); const path = lstatSync(command);
+    if (!before.isFile() || path.isSymbolicLink() || !path.isFile()
+      || before.dev !== path.dev || before.ino !== path.ino || before.size !== path.size
+      || realpathSync(command)!==command) throw new Error('subprocess executable must be a stable resolved file');
+    const bytes = Buffer.alloc(before.size);
+    let offset = 0;
+    while (offset < bytes.length) {
+      const count = readSync(fd, bytes, offset, bytes.length - offset, offset);
+      if (count <= 0) throw new Error('subprocess executable ended during verification');
+      offset += count;
+    }
+    const after = fstatSync(fd); const finalPath = lstatSync(command);
+    if (after.dev !== before.dev || after.ino !== before.ino || after.size !== before.size
+      || after.mtimeMs !== before.mtimeMs || after.ctimeMs !== before.ctimeMs
+      || finalPath.dev !== before.dev || finalPath.ino !== before.ino || finalPath.size !== before.size) {
+      throw new Error('subprocess executable changed during verification');
+    }
+    return { fd, sha256: createHash('sha256').update(bytes).digest('hex'), bytes };
+  } catch (error) {
+    closeSync(fd);
+    throw error;
+  }
+}
+function executableIdentity(command:string):string {
+  const opened = openVerifiedExecutable(command);
+  try { return opened.sha256; } finally { closeSync(opened.fd); }
+}
+const pinnedInterpreter = realpathSync(process.execPath);
+const pinnedInterpreterStat = lstatSync(pinnedInterpreter);
+const pinnedInterpreterSha256 = executableIdentity(pinnedInterpreter);
+function interpreterIdentity(): string {
+  const current = lstatSync(pinnedInterpreter);
+  if (!current.isFile() || current.isSymbolicLink()
+    || current.dev !== pinnedInterpreterStat.dev
+    || current.ino !== pinnedInterpreterStat.ino
+    || current.size !== pinnedInterpreterStat.size
+    || current.mtimeMs !== pinnedInterpreterStat.mtimeMs
+    || current.ctimeMs !== pinnedInterpreterStat.ctimeMs
+    || realpathSync(pinnedInterpreter) !== pinnedInterpreter) {
+    throw new Error('pinned subprocess interpreter identity changed');
+  }
+  return pinnedInterpreterSha256;
+}
+const fixedSubprocessEnvironment = Object.freeze({ PATH: '' });
+const fixedSubprocessCwd = realpathSync(tmpdir());
+function spawnPinned(command:string,args:readonly string[],options:{input?:string;encoding:'utf8';timeout:number;maxBuffer:number},signed:SignedProcess):PinnedSpawn {
+  const interpreterSha256=interpreterIdentity();
+  const target=openVerifiedExecutable(command);
+  const source = `process.argv.splice(1, 0, 'verified-executable');\n${target.bytes.toString('utf8').replace(/^#![^\n]*\n/, '')}`;
+  const baseArgs=Object.freeze(['--input-type=module','--eval',`sha256:${target.sha256}`,...args]);
+  try {
+    if (interpreterSha256 !== signed.interpreterSha256 || target.sha256 !== signed.targetSha256) throw new Error('subprocess interpreter or target changed before execution');
+    closeSync(target.fd);
+    return Object.assign(spawnSync(pinnedInterpreter,['--input-type=module','--eval',source,...args],{...options,cwd:fixedSubprocessCwd,env:fixedSubprocessEnvironment}),{interpreterSha256,targetSha256:target.sha256,baseArgs}) as PinnedSpawn;
+  } catch (error) {
+    try { closeSync(target.fd); } catch {}
+    throw error;
+  }
+}
 const processExecutions = new Map<string, ProcessExecution>();
 const executionReceipts = new Map<string, Readonly<Record<string, unknown>>>();
 let processUsageSource: ((source: ParentUsageSource) => UsageTelemetry) | undefined;
 function processExecutionKey(source: ParentUsageSource): string { return `${source.runnerId}:${source.kind}:${source.laneId}:${source.sessionId??''}`; }
-function recordProcessExecution(source: ParentUsageSource, command: string, args: readonly string[], child: ReturnType<typeof spawnSync>): ProcessExecution { if (child.status !== 0 || child.signal || !Number.isSafeInteger(child.pid) || child.pid! <= 0) throw new Error(`${source.kind} subprocess lacks a successful child process identity`); const execution=Object.freeze({pid:child.pid!,executableSha256:executableIdentity(command),configIdentity:digest(args),status:child.status,signal:child.signal,processIdentity:digest({executableSha256:executableIdentity(command),configIdentity:digest(args),pid:child.pid,status:child.status,signal:child.signal})}); processExecutions.set(processExecutionKey(source),execution); return execution; }
-function pinProcess(command: string, args: readonly string[], signed: SignedProcess, source: string): void { if (executableIdentity(command) !== signed.executableSha256 || digest(args) !== signed.configIdentity) throw new Error(`${source} executable or config does not match signed E5`); }
-function signedObserverAuthority(e5: unknown, e13: unknown): SignedObserverProcess { const signed=(e5 as {observer?:unknown})?.observer as SignedObserverProcess, reconciliation=e13 as {observerAuthorityDigest?:unknown;runInputDigests?:Record<string,unknown>}; if (!signed || typeof signed.identity!=='string' || typeof signed.publicKey!=='string' || !hash.test(signed.executableSha256) || !hash.test(signed.configIdentity)) throw new Error('usage sidecar is not authorized by signed E5 observer authority'); const authorityDigest=digest(signed); if (reconciliation?.observerAuthorityDigest!==authorityDigest || reconciliation?.runInputDigests?.observerAuthority!==authorityDigest) throw new Error('usage sidecar authority does not match signed E13'); return signed; }
-function commandHost(command:string,args:readonly string[]=[],signed:SignedProcess,identity:string,runnerId:string):IsolatedHarnessHost { pinProcess(command,args,signed,'host'); return {identity,executeBuild(brief,aliases){const evidence=brief.evidenceAliases.map(alias=>{const resolved=aliases.resolve(alias);return {alias,bytes:Buffer.from(resolved.bytes).toString('base64'),sha256:createHash('sha256').update(resolved.bytes).digest('hex'),receipt:resolved.receipt};});const child=spawnSync(command,args,{cwd:tmpdir(),env:{PATH:process.env.PATH??''},input:JSON.stringify({schemaVersion:'harness-v2-host-ipc-v5',brief,evidence}),encoding:'utf8',timeout:60_000,maxBuffer:1_048_576});const stdout=subprocessText(child.stdout),stderr=subprocessText(child.stderr);if(child.error||child.status!==0)throw new Error(`isolated host failed: ${child.error?.message??stderr}`);const response=JSON.parse(stdout) as {laneId:string;artifactBytes:string};const artifactBytes=Buffer.from(response.artifactBytes,'base64');if(!response.laneId||!response.artifactBytes||!artifactBytes.byteLength||Buffer.from(artifactBytes).toString('base64')!==response.artifactBytes)throw new Error('host did not return immutable artifact bytes');recordProcessExecution({runnerId,hostIdentity:identity,kind:'host',laneId:`${runnerId}:build:${response.laneId}`},command,args,child);return {laneId:response.laneId,artifactHash:createHash('sha256').update(artifactBytes).digest('hex'),artifactBytes};}}; }
-function commandBrowser(command:string,args:readonly string[]=[],signed:SignedProcess,runnerId:string,hostIdentity:string):BrowserObserver{pinProcess(command,args,signed,'browser');return{laneId:'command-browser',observe(brief,build){const child=spawnSync(command,args,{cwd:tmpdir(),env:{PATH:process.env.PATH??''},input:JSON.stringify({brief,build:{...build,artifactBytes:Buffer.from(build.artifactBytes).toString('base64')}}),encoding:'utf8',timeout:60_000,maxBuffer:1_048_576});const stdout=subprocessText(child.stdout).trim();if(child.error||child.status!==0||!stdout)throw new Error('browser observer failed');const response=JSON.parse(stdout) as {observationBytes:string};const bytes=Buffer.from(response.observationBytes,'base64');if(!bytes.byteLength||Buffer.from(bytes).toString('base64')!==response.observationBytes)throw new Error('browser observer did not return immutable observation bytes');recordProcessExecution({runnerId,hostIdentity,kind:'browser',laneId:`${runnerId}:browser:command-browser`},command,args,child);return {observationBytes:bytes};}};}
-function sidecarUsage(command: string, args: readonly string[], signed: SignedObserverProcess, source: ParentUsageSource): UsageTelemetry { const execution=processExecutions.get(processExecutionKey(source)); if (!execution) throw new Error(`parent usage sidecar lacks ${source.kind} child-process correlation`); const child=spawnSync(command,[...args,JSON.stringify({source,child:execution})],{cwd:tmpdir(),env:{PATH:process.env.PATH??''},encoding:'utf8',timeout:10_000,maxBuffer:65_536}); if(child.error||child.status!==0) throw new Error(`parent usage sidecar failed for ${source.kind}`); let observed: unknown; try { observed=JSON.parse(subprocessText(child.stdout)); } catch { throw new Error(`parent usage sidecar did not provide observable ${source.kind} usage`); } const receipt=observed as {identity?:unknown;source?:unknown;child?:unknown;networkDenial?:{denied?:unknown;receipt?:unknown};accounting?:{tokens?:unknown;usd?:unknown;receipt?:unknown};signature?:unknown}; const publicKey=signed.publicKey; if(typeof publicKey!=='string'||!receipt.signature||!verify(null,Buffer.from(canonical({identity:receipt.identity,source:receipt.source,child:receipt.child,networkDenial:receipt.networkDenial,accounting:receipt.accounting})),createPublicKey(publicKey),Buffer.from(String(receipt.signature),'base64'))) throw new Error(`parent usage sidecar receipt signature is invalid for ${source.kind}`); if (receipt.identity!==signed.identity || canonical(receipt.source)!==canonical(source) || canonical(receipt.child)!==canonical(execution) || receipt.networkDenial?.denied!==true || receipt.networkDenial.receipt!==digest({source,child:execution,denied:true}) || receipt.accounting?.receipt!==digest({source,child:execution,tokens:receipt.accounting?.tokens,usd:receipt.accounting?.usd})) throw new Error(`parent usage sidecar did not provide bound offline network-denial/accounting evidence for ${source.kind}`); executionReceipts.set(`${processExecutionKey(source)}:${execution.pid}`,Object.freeze(receipt as Record<string,unknown>)); const telemetry=usage(receipt.accounting,`parent usage sidecar ${source.kind}`); if (telemetry.tokens!==0 || telemetry.usd!==0) throw new Error(`${source.kind} attempted metered resource usage`); return telemetry; }
-if(process.argv[1]?.endsWith('run-harness-v2.ts')){const path=process.argv[2];if(!path)throw new Error('usage: run-harness-v2 <input.json>');const input=JSON.parse(readFileSync(path,'utf8')) as CliInput;if(!input.hostCommand||!input.browserCommand||!input.reviewerCommands?.length||!input.evidenceRoot||!input.usageSidecarCommand)throw new Error('CLI input requires host, browser, reviewers, evidence root, and parent usage sidecar');const evidenceSnapshot=validateEvidenceLock(input.evidenceRoot,input.evidenceLock);processExecutions.clear();executionReceipts.clear();processUsageSource=undefined;const e5Entry=input.evidenceLock.entries.find(entry=>entry.id==='E5'),e13Entry=input.evidenceLock.entries.find(entry=>entry.id==='E13');if(!e5Entry||!e13Entry)throw new Error('missing signed E5/E13');const e5=readEvidenceSnapshotPayload(evidenceSnapshot,'E5') as {runnerId:string;hostIdentity:string;observerIdentity:string;host:SignedProcess;browser:SignedProcess;reviewers:({laneId:string;raterId:string}&SignedProcess)[]};const signedObserver=signedObserverAuthority(e5,readEvidenceSnapshotPayload(evidenceSnapshot,'E13'));if(e5.observerIdentity!==signedObserver.identity)throw new Error('signed E5 observer identity does not match observer executable authority');pinProcess(input.usageSidecarCommand,input.usageSidecarArgs??[],signedObserver,'usage sidecar');processUsageSource=source=>sidecarUsage(input.usageSidecarCommand,input.usageSidecarArgs??[],signedObserver,source);const prepared=prepareHarnessV2(input.developmentCorpus,input.developmentRouteMap,input.holdouts,input.projectionSalt);const reviewerLanes:ReviewerLane[]=input.reviewerCommands.map(reviewer=>{const signed=e5.reviewers.find(candidate=>candidate.laneId===reviewer.laneId&&candidate.raterId===reviewer.raterId);if(!signed)throw new Error('reviewer is not authorized by signed E5');const args=reviewer.args??[];pinProcess(reviewer.command,args,signed,`reviewer ${reviewer.laneId}`);const executableSha256=executableIdentity(reviewer.command),configIdentity=digest(args),sessionId=`${e5.runnerId}:${reviewer.laneId}`;return{laneId:reviewer.laneId,raterId:reviewer.raterId,session:{sessionId,executableSha256,processIdentity:digest({executableSha256,configIdentity,sessionId}),configIdentity,handshake:digest({runnerId:e5.runnerId,executableSha256,configIdentity,sessionId})},review(brief,build,browser){const child=spawnSync(reviewer.command,args,{cwd:tmpdir(),env:{PATH:process.env.PATH??''},input:JSON.stringify({brief,build:{...build,artifactBytes:Buffer.from(build.artifactBytes).toString('base64')},browser:{...browser,observationBytes:Buffer.from(browser.observationBytes).toString('base64')}}),encoding:'utf8',timeout:60_000,maxBuffer:1_048_576});if(child.error||child.status!==0)throw new Error('reviewer lane failed');const output=JSON.parse(subprocessText(child.stdout)) as {vote:unknown};if(output.vote!=='one'&&output.vote!=='none'&&output.vote!=='abstain')throw new Error('reviewer response is invalid');recordProcessExecution({runnerId:e5.runnerId,hostIdentity:e5.hostIdentity,kind:'reviewer',laneId:reviewer.laneId,sessionId},reviewer.command,args,child);return {vote:output.vote};}};});const usageObserver=issueE5E13PinnedUsageObserver(signedObserver.identity, source => { const observed=processUsageSource?.(source); if (!observed) throw new Error('CLI usage observer did not observe a subprocess'); return observed; });process.stdout.write(`${JSON.stringify(runHarnessV2({...prepared,host:commandHost(input.hostCommand,input.hostArgs??[],e5.host,e5.hostIdentity,e5.runnerId),browser:commandBrowser(input.browserCommand,input.browserArgs??[],e5.browser,e5.runnerId,e5.hostIdentity),reviewerLanes,usageObserver,evidenceRoot:input.evidenceRoot,evidenceLock:input.evidenceLock,evidenceSnapshot,budget:input.budget}))}\n`);}
+function recordProcessExecution(source: ParentUsageSource, signed: SignedProcess, child: PinnedSpawn): ProcessExecution { if (child.status !== 0 || child.signal || !Number.isSafeInteger(child.pid) || child.pid! <= 0 || child.interpreterSha256 !== signed.interpreterSha256 || child.targetSha256 !== signed.targetSha256 || signed.executableSha256 !== signed.targetSha256 || child.baseArgs[0] === undefined) throw new Error(`${source.kind} subprocess lacks a successful exact interpreter/target/status binding`); const execution=Object.freeze({pid:child.pid!,executableSha256:signed.executableSha256,interpreterSha256:child.interpreterSha256,targetSha256:child.targetSha256,baseArgs:child.baseArgs,configIdentity:signed.configIdentity,status:child.status,signal:child.signal,processIdentity:digest({interpreterSha256:child.interpreterSha256,targetSha256:child.targetSha256,baseArgs:child.baseArgs,executableSha256:signed.executableSha256,configIdentity:signed.configIdentity,status:child.status,signal:child.signal})}); processExecutions.set(processExecutionKey(source),execution); return execution; }
+function pinProcess(command: string, args: readonly string[], signed: SignedProcess, source: string): void { if (interpreterIdentity() !== signed.interpreterSha256 || executableIdentity(command) !== signed.targetSha256 || signed.executableSha256 !== signed.targetSha256 || digest(args) !== signed.configIdentity) throw new Error(`${source} interpreter, target, or config does not match signed E5`); }
+function signedObserverAuthority(e5: unknown, e13: unknown): SignedObserverProcess { const signed=(e5 as {observer?:unknown})?.observer as SignedObserverProcess, reconciliation=e13 as {observerAuthorityDigest?:unknown;runInputDigests?:Record<string,unknown>}; if (!signed || typeof signed.identity!=='string' || typeof signed.publicKey!=='string' || !hash.test(signed.executableSha256) || !hash.test(signed.interpreterSha256) || !hash.test(signed.targetSha256) || !hash.test(signed.configIdentity)) throw new Error('usage sidecar is not authorized by signed E5 observer authority'); const authorityDigest=digest(signed); if (reconciliation?.observerAuthorityDigest!==authorityDigest || reconciliation?.runInputDigests?.observerAuthority!==authorityDigest) throw new Error('usage sidecar authority does not match signed E13'); return signed; }
+function commandHost(command:string,args:readonly string[]=[],signed:SignedProcess,identity:string,runnerId:string):IsolatedHarnessHost { pinProcess(command,args,signed,'host'); return {identity,executeBuild(brief,aliases){const evidence=brief.evidenceAliases.map(alias=>{const resolved=aliases.resolve(alias);return {alias,bytes:Buffer.from(resolved.bytes).toString('base64'),sha256:createHash('sha256').update(resolved.bytes).digest('hex'),receipt:resolved.receipt};});const child=spawnPinned(command, args, {input:JSON.stringify({schemaVersion:'harness-v2-host-ipc-v5',brief,evidence}),encoding:'utf8',timeout:60_000,maxBuffer:1_048_576}, signed);const stdout=subprocessText(child.stdout),stderr=subprocessText(child.stderr);if(child.error||child.status!==0)throw new Error(`isolated host failed: ${child.error?.message??stderr}`);const response=JSON.parse(stdout) as {laneId:string;artifactBytes:string};const artifactBytes=Buffer.from(response.artifactBytes,'base64');if(!response.laneId||!response.artifactBytes||!artifactBytes.byteLength||Buffer.from(artifactBytes).toString('base64')!==response.artifactBytes)throw new Error('host did not return immutable artifact bytes');recordProcessExecution({runnerId,hostIdentity:identity,kind:'host',laneId:`${runnerId}:build:${response.laneId}`},signed,child);return {laneId:response.laneId,artifactHash:createHash('sha256').update(artifactBytes).digest('hex'),artifactBytes};}}; }
+function commandBrowser(command:string,args:readonly string[]=[],signed:SignedProcess,runnerId:string,hostIdentity:string):BrowserObserver{pinProcess(command,args,signed,'browser');return{laneId:'command-browser',observe(brief,build){const child=spawnPinned(command, args, {input:JSON.stringify({brief,build:{...build,artifactBytes:Buffer.from(build.artifactBytes).toString('base64')}}),encoding:'utf8',timeout:60_000,maxBuffer:1_048_576}, signed);const stdout=subprocessText(child.stdout).trim();if(child.error||child.status!==0||!stdout)throw new Error('browser observer failed');const response=JSON.parse(stdout) as {observationBytes:string};const bytes=Buffer.from(response.observationBytes,'base64');if(!bytes.byteLength||Buffer.from(bytes).toString('base64')!==response.observationBytes)throw new Error('browser observer did not return immutable observation bytes');recordProcessExecution({runnerId,hostIdentity,kind:'browser',laneId:`${runnerId}:browser:command-browser`},signed,child);return {observationBytes:bytes};}};}
+function sidecarUsage(command: string, args: readonly string[], signed: SignedObserverProcess, source: ParentUsageSource): UsageTelemetry { const execution=processExecutions.get(processExecutionKey(source)); if (!execution) throw new Error(`parent usage sidecar lacks ${source.kind} child-process correlation`); const child=spawnPinned(command, [...args,JSON.stringify({source,child:execution})], {encoding:'utf8',timeout:10_000,maxBuffer:65_536}, signed); if(child.error||child.status!==0) throw new Error(`parent usage sidecar failed for ${source.kind}`); let observed: unknown; try { observed=JSON.parse(subprocessText(child.stdout)); } catch { throw new Error(`parent usage sidecar did not provide observable ${source.kind} usage`); } const receipt=observed as {identity?:unknown;source?:unknown;child?:unknown;networkDenial?:{denied?:unknown;receipt?:unknown};accounting?:{tokens?:unknown;usd?:unknown;receipt?:unknown};signature?:unknown}; const publicKey=signed.publicKey; if(typeof publicKey!=='string'||!receipt.signature||!verify(null,Buffer.from(canonical({identity:receipt.identity,source:receipt.source,child:receipt.child,networkDenial:receipt.networkDenial,accounting:receipt.accounting})),createPublicKey(publicKey),Buffer.from(String(receipt.signature),'base64'))) throw new Error(`parent usage sidecar receipt signature is invalid for ${source.kind}`); if (receipt.identity!==signed.identity || canonical(receipt.source)!==canonical(source) || canonical(receipt.child)!==canonical(execution) || receipt.networkDenial?.denied!==true || receipt.networkDenial.receipt!==digest({source,child:execution,denied:true}) || receipt.accounting?.receipt!==digest({source,child:execution,tokens:receipt.accounting?.tokens,usd:receipt.accounting?.usd})) throw new Error(`parent usage sidecar did not provide bound offline network-denial/accounting evidence for ${source.kind}`); executionReceipts.set(`${processExecutionKey(source)}:${execution.pid}`,Object.freeze(receipt as Record<string,unknown>)); const telemetry=usage(receipt.accounting,`parent usage sidecar ${source.kind}`); if (telemetry.tokens!==0 || telemetry.usd!==0) throw new Error(`${source.kind} attempted metered resource usage`); return telemetry; }
+if(process.argv[1]?.endsWith('run-harness-v2.ts')){const path=process.argv[2];if(!path)throw new Error('usage: run-harness-v2 <input.json>');const input=JSON.parse(readFileSync(path,'utf8')) as CliInput;if(!input.hostCommand||!input.browserCommand||!input.reviewerCommands?.length||!input.evidenceRoot||!input.usageSidecarCommand)throw new Error('CLI input requires host, browser, reviewers, evidence root, and parent usage sidecar');const evidenceSnapshot=validateEvidenceLock(input.evidenceRoot,input.evidenceLock);processExecutions.clear();executionReceipts.clear();processUsageSource=undefined;const e5Entry=evidenceSnapshot.lock.entries.find(entry=>entry.id==='E5'),e13Entry=evidenceSnapshot.lock.entries.find(entry=>entry.id==='E13');if(!e5Entry||!e13Entry)throw new Error('missing signed E5/E13');const e5=readEvidenceSnapshotPayload(evidenceSnapshot,'E5') as {runnerId:string;hostIdentity:string;observerIdentity:string;host:SignedProcess;browser:SignedProcess;reviewers:({laneId:string;raterId:string}&SignedProcess)[]};const signedObserver=signedObserverAuthority(e5,readEvidenceSnapshotPayload(evidenceSnapshot,'E13'));if(e5.observerIdentity!==signedObserver.identity)throw new Error('signed E5 observer identity does not match observer executable authority');pinProcess(input.usageSidecarCommand,input.usageSidecarArgs??[],signedObserver,'usage sidecar');processUsageSource=source=>sidecarUsage(input.usageSidecarCommand,input.usageSidecarArgs??[],signedObserver,source);const prepared=prepareHarnessV2(input.developmentCorpus,input.developmentRouteMap,input.holdouts,input.projectionSalt);const reviewerLanes:ReviewerLane[]=input.reviewerCommands.map(reviewer=>{const signed=e5.reviewers.find(candidate=>candidate.laneId===reviewer.laneId&&candidate.raterId===reviewer.raterId);if(!signed)throw new Error('reviewer is not authorized by signed E5');const args=reviewer.args??[];pinProcess(reviewer.command,args,signed,`reviewer ${reviewer.laneId}`);const executableSha256=executableIdentity(reviewer.command),configIdentity=digest(args),sessionId=`${e5.runnerId}:${reviewer.laneId}`;return{laneId:reviewer.laneId,raterId:reviewer.raterId,session:{sessionId,executableSha256,processIdentity:digest({executableSha256,configIdentity,sessionId}),configIdentity,handshake:digest({runnerId:e5.runnerId,executableSha256,configIdentity,sessionId})},review(brief,build,browser){const child=spawnPinned(reviewer.command, args, {input:JSON.stringify({brief,build:{...build,artifactBytes:Buffer.from(build.artifactBytes).toString('base64')},browser:{...browser,observationBytes:Buffer.from(browser.observationBytes).toString('base64')}}),encoding:'utf8',timeout:60_000,maxBuffer:1_048_576}, signed);if(child.error||child.status!==0)throw new Error('reviewer lane failed');const output=JSON.parse(subprocessText(child.stdout)) as {vote:unknown};if(output.vote!=='one'&&output.vote!=='none'&&output.vote!=='abstain')throw new Error('reviewer response is invalid');recordProcessExecution({runnerId:e5.runnerId,hostIdentity:e5.hostIdentity,kind:'reviewer',laneId:reviewer.laneId,sessionId},signed,child);return {vote:output.vote};}};});const usageObserver=issueE5E13PinnedUsageObserver(signedObserver.identity, source => { const observed=processUsageSource?.(source); if (!observed) throw new Error('CLI usage observer did not observe a subprocess'); return observed; });process.stdout.write(`${JSON.stringify(runHarnessV2WithSnapshot({ ...prepared, host: commandHost(input.hostCommand,input.hostArgs??[],e5.host,e5.hostIdentity,e5.runnerId), browser: commandBrowser(input.browserCommand,input.browserArgs??[],e5.browser,e5.runnerId,e5.hostIdentity), reviewerLanes, usageObserver, evidenceRoot: input.evidenceRoot, evidenceLock: evidenceSnapshot.lock, budget: input.budget }, evidenceSnapshot))}\n`);}

@@ -1,11 +1,10 @@
 import { createHash } from 'node:crypto';
-import { lstatSync, readFileSync } from 'node:fs';
+import { closeSync, constants as fsConstants, fstatSync, lstatSync, openSync, readFileSync } from 'node:fs';
 import { resolve, relative, sep } from 'node:path';
 import { evidenceLockDigest, validateEvidenceLockEntry } from './materialize-evidence-lock.ts';
 import { validateEvidenceSnapshot } from './materialize-evidence-lock.ts';
 import type { EvidenceLock, EvidenceLockSnapshot, EvidenceSnapshotEntry } from './materialize-evidence-lock.ts';
 const hash = (value: string | Uint8Array): string => createHash('sha256').update(value).digest('hex');
-function freezePayload<T>(value: T): T { if (value && typeof value === 'object') { Object.freeze(value); for (const child of Object.values(value as Record<string, unknown>)) freezePayload(child); } return value; }
 function safePath(path: string): string { if (!path || path.startsWith('/') || path.includes('\\') || path.split('/').some(part => !part || part === '.' || part === '..')) throw new Error(`unsafe evidence path: ${path}`); return path; }
 function fileAt(root: string, path: string): string { const absolute=resolve(root,...safePath(path).split('/')); const rel=relative(root,absolute); if(!rel||rel==='..'||rel.startsWith(`..${sep}`)) throw new Error(`evidence path escapes root: ${path}`); return absolute; }
 /** Every run consumes this complete immutable graph; a valid but unrelated lock has no authority. */
@@ -13,11 +12,16 @@ export function validateEvidenceLockShape(lock: EvidenceLock): void { if(lock.sc
 export function validateEvidenceLock(root: string, lock: EvidenceLock): EvidenceLockSnapshot {
   validateEvidenceLockShape(lock);
   const snapshot: EvidenceSnapshotEntry[] = lock.entries.map(entry => {
-    const path=fileAt(root,entry.path), stat=lstatSync(path), bytes=readFileSync(path);
-    if(!stat.isFile()||stat.isSymbolicLink()||hash(bytes)!==entry.sha256) throw new Error(`evidence lock mismatch: ${entry.path}`);
-    let payload: Record<string, unknown>;
-    try { const artifact=JSON.parse(new TextDecoder().decode(bytes)) as {kind?:unknown;schemaVersion?:unknown;payload?:unknown;digest?:unknown}; if(artifact.kind!==entry.kind||artifact.schemaVersion!==entry.schemaVersion||!artifact.payload||Array.isArray(artifact.payload)||artifact.digest!==hash(JSON.stringify(artifact.payload))) throw new Error(); payload=artifact.payload as Record<string,unknown>; } catch { throw new Error(`evidence artifact schema or digest mismatch: ${entry.id}`); }
-    return Object.freeze({declaration:entry,bytes:new Uint8Array(bytes),payload:freezePayload(payload)});
+    const path=fileAt(root,entry.path), descriptor=openSync(path,fsConstants.O_RDONLY|fsConstants.O_NOFOLLOW);
+    let bytes:Buffer;
+    try {
+      const before=fstatSync(descriptor), pathStat=lstatSync(path);
+      if(!before.isFile()||pathStat.isSymbolicLink()||!pathStat.isFile()||before.dev!==pathStat.dev||before.ino!==pathStat.ino||before.size!==pathStat.size) throw new Error(`evidence artifact is not a stable regular file: ${entry.id}`);
+      bytes=readFileSync(descriptor);
+      const after=fstatSync(descriptor);
+      if(before.dev!==after.dev||before.ino!==after.ino||before.size!==after.size||before.mtimeMs!==after.mtimeMs||before.ctimeMs!==after.ctimeMs||hash(bytes)!==entry.sha256) throw new Error(`evidence artifact changed while validating: ${entry.id}`);
+    } finally { closeSync(descriptor); }
+    return Object.freeze({declaration:entry,bytes:new Uint8Array(bytes)});
   });
   return validateEvidenceSnapshot(lock,snapshot);
 }

@@ -216,7 +216,7 @@ ambition brief down into restraint: substance-over-spectacle is the default only
 silent on ambition; the current brief beats the agent's own taste for restraint. Restraint still
 governs *how many* techniques ship (one signature moment, never a catalogue), never *whether* the
 explicitly requested showpiece ambition is honored at all.
-Silence about ambition is not symmetric across surfaces. A `marketing` surface exists to persuade and be experienced, so a silent brief defaults to at least the `confident` register — one committed signature moment and a deliberate departure from the named generic template, reached by default even from a rough brief — never a quiet document. The silent `quiet`/restraint default is reserved for a `product`/tool-operating surface, where the correct risk is functional (density, scanning, fewer errors). A near-monochrome, evenly-stacked, single-column marketing page whose only carrier is a functional element — a copy button, a nav, a status line — is the silent-default failure, not a lawful restraint choice: the composer records `confident` or higher, and the eye holds its signature-moment floor as reached-by-default, not an aspiration a silent brief may waive.
+Silence about ambition is not symmetric across surfaces. A `marketing` surface exists to persuade and be experienced, so a silent brief defaults to at least the `confident` register and a deliberate departure from the named generic template, reached by default even from a rough brief — never a quiet document. Motion does not follow from that register default: `motionDecision: one` requires explicit current-user policy or selected evidence and its exact-one binding; otherwise the selected evidence may lawfully resolve to `none`. The silent `quiet`/restraint default is reserved for a `product`/tool-operating surface, where the correct risk is functional (density, scanning, fewer errors). A near-monochrome, evenly-stacked, single-column marketing page whose only carrier is a functional element — a copy button, a nav, a status line — is the silent-default failure, not a lawful restraint choice: the composer records `confident` or higher, and the eye holds its deliberate visual-departure floor as reached-by-default, not an aspiration a silent brief may waive.
 
 ## 2. Research and copy before structure
   Every research or gathering role fans out its independent source, artifact, and evidence work in
@@ -626,13 +626,7 @@ selected projections, handoff receipts, the named landing criteria, and sharp/pr
 fidelity eye verifies the selected macro system at its named destination; neither eye receives raw
 source material. Both treat a failed `omd composition --check`, missing/duplicate canonical axes,
 or wrong landing as a blocker; validator pass never replaces visual/probe review.
-On a `marketing`/`confident`/`showpiece` persuasion surface, the deterministic checks also include
-`omd craft-usage <page> --surface <surface>`. It reads the captured role-② reference signatures and
-measures the built page in a real browser; `CRAFT-DECLINED-TO-STILL` means the scout captured
-scroll-linked craft for this domain but the build shipped static, which is under-reach (RED) —
-reproduce at least one scroll-linked reveal from that captured evidence and verify it with
-`omd craft-fidelity`, or record an explicit brief-driven reason for stillness. `product`/`quiet`
-surfaces are exempt.
+`omd craft-usage <page> --surface <surface>` audits captured role-② reference signatures against the selected direction. Captured scroll-linked craft is evidence for the art-direction decision, never an instruction to add motion beyond its selected `motionDecision`: a `none` decision may deliberately decline it, while `one` permits only its one declared, observed `load`, `scroll`, or `pointer` scene. `product`/`quiet` surfaces are exempt.
 The sharp production review is conjunctive: `signature-fit`, `narrative-fit`, `motion-fit`, and
 `decision-fit` must all pass, and every critical 0–4 score (task/CTA clarity, narrative dependency,
 composition rhythm, responsive hierarchy) must be at least 3. Neither a mean nor a

@@ -148,9 +148,11 @@ function persistCurrentArtDirectionWithHandoffs(root: string): void {
     settledSelectionSha256: referenceSelectionV2Sha256(settledSelection),
     settledSelection,
   };
-  writer.write('.omd/reference-selection-v2.json', JSON.stringify(settledSelection));
-  writeReferenceHandoffReceipt(root, 'composer', invocation, digest, settlement);
-  writeReferenceHandoffReceipt(root, 'hand', invocation, digest, settlement);
+  writer.write(`.omd/motion-resolutions/sha256-${settlement.motionResolutionProjectionSha256}.json`, canonicalJson(motionResolution));
+  writer.write(`.omd/settled-reference-selections/sha256-${settlement.settledSelectionSha256}.json`, canonicalJson(settledSelection));
+  writer.write('.omd/reference-selection-v2.json', canonicalJson(settledSelection));
+  writeReferenceHandoffReceipt(root, 'composer', invocation);
+  writeReferenceHandoffReceipt(root, 'hand', invocation);
 }
 function setup(): string {
   const root = mkdtempSync(join(tmpdir(), 'omd-source-seal-'));

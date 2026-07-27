@@ -685,30 +685,26 @@ test('the ultradesign skill runs domain analysis before framing', () => {
   // the domain section precedes the frame section
   assert.ok(skill.indexOf('## 0.5 Domain analysis') < skill.indexOf('## 1. Frame and concept hypothesis'));
 });
-test('captured role-② scroll craft cannot be declined to stillness on a persuasion surface', () => {
+test('captured role-② craft cannot override the selected exact motion decision', () => {
   const loop = read('core/protocol/human-design-loop.md').replace(/\s+/g, ' ');
-  assert.match(loop, /Captured role-② craft evidence must be honored, not declined to stillness/);
-  assert.match(loop, /a fired `scrollChoreography`, an `animatedShare` above the noise floor, or an energy curve above it/);
-  assert.match(loop, /at least one scroll-linked reveal drawn from that evidence is expected in the build, verified by `omd craft-fidelity`/);
-  assert.match(loop, /Declining every captured scroll-craft reference on the motion axis to ship a static page[\s\S]*is under-reach \(RED\), not restraint/);
-  assert.match(loop, /`reference-usage` ledger that marks every role-② craft reference `declined` on the motion axis[\s\S]*machine signal/);
-  assert.match(loop, /`product`\/quiet tool surface stays exempt/);
+  assert.match(loop, /never turns captured scroll craft into an additional motion obligation beyond the exact selected `motionDecision`/i);
+  assert.match(loop, /Never default motion to `one`/);
+  assert.match(loop, /A `product`\/quiet surface[\s\S]*exempt/i);
 });
-test('the loop and the ultradesign skill run omd craft-usage on a persuasion surface', () => {
+test('the loop and the ultradesign skill run omd craft-usage without minting motion authority', () => {
   const loop = read('core/protocol/human-design-loop.md').replace(/\s+/g, ' ');
   assert.match(loop, /Production review order[\s\S]*runs `omd craft-usage <page> --surface <surface>`/);
-  assert.match(loop, /`CRAFT-DECLINED-TO-STILL` finding is the measured form of the captured-craft under-reach[\s\S]*RED/);
+  assert.match(loop, /never turns captured scroll craft into an additional motion obligation beyond the exact selected `motionDecision`/);
   const skill = read('src/skills/omd-ultradesign/SKILL.md').replace(/\s+/g, ' ');
-  assert.match(skill, /deterministic checks also include `omd craft-usage <page> --surface <surface>`/);
-  assert.match(skill, /`CRAFT-DECLINED-TO-STILL` means the scout captured scroll-linked craft[\s\S]*build shipped static/);
-  assert.match(skill, /`product`\/`quiet` surfaces are exempt/);
+  assert.match(skill, /`omd craft-usage <page> --surface <surface>` audits captured role-② reference signatures/);
+  assert.match(skill, /never an instruction to add motion beyond its selected `motionDecision`/);
 });
 test('the loop and the hand install pack recipes instead of reimplementing them', () => {
   const loop = read('core/protocol/human-design-loop.md').replace(/\s+/g, ' ');
   assert.match(loop, /A pack recipe is installed, not reimplemented/);
   assert.match(loop, /`omd recipe add <name> \[--stack react\|vanilla\]` writes that recipe's real source/);
-  assert.match(loop, /degrades into a static approximation/);
-  assert.match(loop, /verified with `omd craft-capture` before the scene is claimed/);
+  assert.match(loop, /remain within the selected exact-one decision/);
+  assert.match(loop, /verified with `omd craft-capture` before the technique is claimed/);
 
   const hand = read('src/agents/hand.agent.yaml').replace(/\s+/g, ' ');
   assert.match(hand, /Do not reimplement a pack recipe from its document/);

@@ -12,13 +12,12 @@ import { NO_CURRENT_USER_BEAT_EXCEPTION_RECEIPT_SHA256, recipeDecisionProjection
 import { intentLedgerSha256, resolveCurrentUserBeatExceptionReceipt } from '../core/runtime/intent.ts';
 import { refIdentity } from '../core/ref/identity.ts';
 import { refImagePath, saveRef } from '../core/ref/store.ts';
-import { motionResolutionProjectionSha256, referenceSelectionV2Sha256 } from '../core/ref/reference-selection.ts';
+import { motionResolutionProjectionSha256, persistMotionResolutionProjection, readPreReferenceSelectionV2, referenceSelectionV2Sha256 } from '../core/ref/reference-selection.ts';
 import { COPY_DECK_RECEIPT_SCHEMA_VERSION, copyDeckSha256, validateCanonicalCopyDeckReceipt } from '../core/copy/index.ts';
 import type { Blueprint, Invariants, Reference } from '../core/types.ts';
-import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
+import { createTestProjectRunInvocation, createTestProjectWriteAdapter } from './helpers/project-write.ts';
 import { writeSourceSeal } from '../core/source-seal/index.ts';
 import { publishTaskEvidence } from '../core/evidence/task.ts';
-import { createTestProjectRunInvocation } from './helpers/project-write.ts';
 import { validateFinalEvidenceV2Graph } from '../core/evidence/final-v2-graph.ts';
 
 import { captureRenderedBeatReceipt, renderFilmstrip, renderPage } from '../core/render/index.ts';
@@ -293,11 +292,24 @@ const manifest = async (root: string, motionDecision: 'none' | 'one' = 'none', b
   const copy = receipt(root, 'copy', COPY_DECK_RECEIPT_SCHEMA_VERSION, copyValue);
   let renderedBeats: Record<string, string>;
   const buildIdentity = receipt(root, 'build', 'omd-build-identity-v1', { schemaVersion: 'omd-build-identity-v1', packageVersion: '1.0.0', buildSha256: activationValue.buildSha256, sourceSkillSha256: activationValue.loadedSkillSha256 });
-  const firstValue = { schema: 'observation-v2', buildSha256: activationValue.buildSha256, predecessorSha256: null, observedAt: '2026-01-01T00:00:00.000Z' };
+  const firstValue = { schema: 'observation-v2', buildSha256: activationValue.buildSha256, currentArtifact: { path: buildIdentity.path, sha256: buildIdentity.sha256 }, predecessorSha256: null, observedAt: '2026-01-01T00:00:00.000Z', evidence: {} };
   const first = receipt(root, 'observation-1', 'observation-v2', firstValue);
-  const secondValue = { schema: 'observation-v2', buildSha256: activationValue.buildSha256, predecessorSha256: sha(canonical(firstValue)), observedAt: '2026-01-01T00:01:00.000Z' };
+  const secondValue = { schema: 'observation-v2', buildSha256: activationValue.buildSha256, currentArtifact: { path: buildIdentity.path, sha256: buildIdentity.sha256 }, predecessorSha256: sha(canonical(firstValue)), observedAt: '2026-01-01T00:01:00.000Z', evidence: {} };
   const second = receipt(root, 'observation-2', 'observation-v2', secondValue);
-  const lane = (name: string, schema: string) => receipt(root, name, schema, { schema, artDirectionSha256: artDirectionSemantic, buildSha256: activationValue.buildSha256, isolationReceipt: { schema: 'reviewer-isolation-v1', sha256: sha(`${name}-isolation`) }, verdicts: { independentVisual: 'GREEN', independentProtocol: 'GREEN' }, criticalFloors: { fidelity: 3 }, quorum: { required: 2, passed: 2 }, provenance: { observationSha256s: [sha(canonical(firstValue)), sha(canonical(secondValue))], reviewerIds: ['reviewer-a', 'reviewer-b'] } });
+  const lane = (name: 'blind' | 'fidelity' | 'protocol', schema: 'blind-review-v1' | 'fidelity-review-v1' | 'protocol-review-v1') => {
+    const contract = {
+      blind: { verdicts: { blindVisual: 'GREEN', blindNarrative: 'GREEN' }, criticalFloors: { composition: 3, copy: 3 } },
+      fidelity: { verdicts: { referenceFidelity: 'GREEN', renderFidelity: 'GREEN' }, criticalFloors: { desktop: 3, mobile: 3 } },
+      protocol: { verdicts: { evidenceIntegrity: 'GREEN', publicationProtocol: 'GREEN' }, criticalFloors: { authority: 3, currentness: 3 } },
+    }[name];
+    const sessionSha256 = sha(`${name}-isolation`);
+    return receipt(root, name, schema, {
+      schema, artDirectionSha256: artDirectionSemantic, buildSha256: activationValue.buildSha256,
+      isolationReceipt: { schema: 'reviewer-isolation-v1', sha256: sessionSha256 },
+      ...contract, quorum: { required: 2, passed: 2 },
+      provenance: { observationSha256s: [sha(canonical(firstValue)), sha(canonical(secondValue))], reviewerIds: [`${name}-reviewer-a`, `${name}-reviewer-b`], reviewerSessionSha256: sessionSha256 },
+    });
+  };
   const staticRunId = activationValue.buildSha256;
   const staticEvidencePath = (...parts: string[]): string => join('.omd', 'static-evidence', ...parts);
   const staticEvidenceOutput = (...parts: string[]): string => join(root, staticEvidencePath(...parts));
@@ -543,6 +555,30 @@ test('art direction rejects over-budget Beat sets before settlement and accepts 
   assert.notEqual(record.decision.currentUserBeatExceptionReceiptSha256, NO_CURRENT_USER_BEAT_EXCEPTION_RECEIPT_SHA256);
 });
 
+test('motion persistence rejects a projection replayed from another invocation activation', async () => {
+  const root = project();
+  const value = await manifest(root);
+  assert.equal(value.motionDecision, 'none');
+  const invocation = createTestProjectRunInvocation(root);
+  const selection = readPreReferenceSelectionV2(root);
+  assert.throws(
+    () => persistMotionResolutionProjection(root, {
+      activationSha256: sha('another-authorizing-invocation'),
+      alternativesSha256: sha('alternatives'),
+      handoffSha256: sha('handoff'),
+      evaluatorInvocationSha256: sha('evaluator-invocation'),
+      evaluatorPayloadSha256: sha('assessment'),
+      evaluatorResultSha256: sha('result'),
+      motionDecision: 'none',
+      slots: [],
+      selection,
+    }, {
+      assessmentBytes: Buffer.from('assessment'),
+      resultBytes: Buffer.from('result'),
+    }, invocation, 'local-moderator'),
+    /exact authorizing invocation activation/,
+  );
+});
 test('invalid none and one manifests cannot publish', async () => {
   for (const [name, kind] of [['none.json', 'none'], ['one.json', 'one']] as const) {
     const root = project(); const invalid = await manifest(root, kind);
@@ -774,7 +810,7 @@ test('intent CAS and canonical selection and handoff currentness fail closed', a
   assert.notEqual(cas.status, 0); assert.match(cas.stderr, /CAS_MISMATCH/);
   const selectionPath = join(root, '.omd', 'reference-selection-v2.json');
   writeFileSync(selectionPath, JSON.stringify({ schemaVersion: 'reference-selection-v2', captureSha256: sha('stale'), assemblySha256: sha('stale'), projectionSha256: sha('stale'), candidateId: 'candidate', slots: [] }));
-  const staleSelection = run(root, ['ref', 'v2-check', '--input', join(root, '.omd', 'reference-handoffs', 'art-direction.json')]);
+  const staleSelection = run(root, ['ref', 'v2-check', '--input', join(root, '.omd', 'reference-handoffs', 'composer.json')]);
   assert.notEqual(staleSelection.status, 0);
   writeFileSync(join(root, '.omd', 'reference-handoffs', 'art-direction.json'), JSON.stringify({ schemaVersion: 'reference-handoff-v2', role: 'art-direction', captureSha256: sha('stale'), assemblySha256: sha('stale'), projectionSha256: sha('stale'), selectionSha256: sha('stale'), positiveMotion: { slots: [] }, payloadSha256: sha('stale') }));
   const staleHandoff = run(root, ['ref', 'v2-check', '--input', join(root, '.omd', 'reference-handoffs', 'art-direction.json')]);

@@ -90,12 +90,17 @@ function evaluatorEvidence(scores: Readonly<Record<'quiet' | 'confident' | 'show
 function motionResolutionFor(input: Pick<ResolveMarketingArtDirectionInput,
   'activationSha256' | 'alternatives' | 'evaluatorEvidence' | 'intent' | 'referenceBindings' | 'eligibility'
 >): MotionResolutionProjection {
+  const scores = new Map(input.evaluatorEvidence.assessments.map((assessment) => [assessment.register, assessment.score] as const));
   const evaluatorWinner = [...input.evaluatorEvidence.assessments].sort((left, right) => (
     right.score - left.score || left.register.localeCompare(right.register)
   ))[0]!;
-  const selected = input.alternatives.find((alternative) => (
-    alternative.register === (input.intent.register ?? evaluatorWinner.register)
-  ))!;
+  const selected = input.intent.register === undefined && input.intent.motionDecision !== undefined
+    ? [...input.alternatives]
+      .filter((alternative) => alternative.motionHypothesis === input.intent.motionDecision)
+      .sort((left, right) => scores.get(right.register)! - scores.get(left.register)!)[0]!
+    : input.alternatives.find((alternative) => (
+      alternative.register === (input.intent.register ?? evaluatorWinner.register)
+    ))!;
   const motionDecision = input.intent.motionDecision ?? selected.motionHypothesis;
   const recipeReceipt = motionDecision === 'one'
     && input.eligibility.selectedMotionReferenceSlotId === undefined
@@ -215,6 +220,52 @@ test('silent marketing selects the uniquely highest evaluator score', () => {
   assert.equal(decision.motionDecision, 'one');
   assert.equal(decision.rejectedAlternatives.length, 2);
   assert.deepEqual(decision.selectedMotionReferenceSlotIds, ['motion']);
+});
+test('silent marketing does not default motion to one when evaluator evidence selects none', () => {
+  const resolved = input({
+    evaluatorEvidence: evaluatorEvidence({ quiet: 9, confident: 4, showpiece: 2 }),
+    eligibility: {
+      sceneRoles: [],
+      fallbackAttempted: true,
+      qualityGates: {
+        blindSignatureGreen: true,
+        narrativeGreen: true,
+        motionFitGreen: true,
+        fidelityDecisionFitGreen: true,
+        macroLandingScore: 3,
+        staticReferenceInfluenceScore: 3,
+        templateBreakingLandingScore: 3,
+      },
+    },
+  });
+  const decision = resolveMarketingArtDirection(resolved);
+  assert.equal(decision.source, 'agent-evidence');
+  assert.equal(decision.selectedRegister, 'quiet');
+  assert.equal(decision.motionDecision, 'none');
+});
+
+test('explicit motion-only lock selects the best compatible evaluated direction', () => {
+  const resolved = input({
+    intent: { motionDecision: 'none' },
+    evaluatorEvidence: evaluatorEvidence({ quiet: 2, confident: 4, showpiece: 9 }),
+    eligibility: {
+      sceneRoles: [],
+      fallbackAttempted: true,
+      qualityGates: {
+        blindSignatureGreen: true,
+        narrativeGreen: true,
+        motionFitGreen: true,
+        fidelityDecisionFitGreen: true,
+        macroLandingScore: 3,
+        staticReferenceInfluenceScore: 3,
+        templateBreakingLandingScore: 3,
+      },
+    },
+  });
+  const decision = resolveMarketingArtDirection(resolved);
+  assert.equal(decision.source, 'explicit-user');
+  assert.equal(decision.selectedRegister, 'quiet');
+  assert.equal(decision.motionDecision, 'none');
 });
 
 test('silent resolution rejects caller-selected labels as authority and selects from evaluator scores', () => {

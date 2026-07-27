@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
-import { resolve, dirname, basename, join, relative } from 'node:path';
+import { resolve, dirname, basename, isAbsolute, join, relative } from 'node:path';
 import { extractInPage } from '../ir/dom.ts';
 import { computeEnergy } from '../motion/energy.ts';
 import type { EnergyCurve, MotionMeasurement, RawIr } from '../types.ts';
@@ -608,7 +608,7 @@ export async function captureMotionEvidenceV2(
   opts: {
     viewport: Viewport; outDir: string; runId: string; buildHash: string; artDirectionHash: string;
     referenceSlotId?: string; sourceInfluence?: MotionSourceInfluence; selector: string; adapter: ProjectWriteAdapter;
-    trigger: 'load'; intervalMs?: number;
+    trigger: MotionTrigger; intervalMs?: number;
   },
 ): Promise<MotionEvidenceV2> {
   const interval = opts.intervalMs ?? 150;
@@ -616,39 +616,75 @@ export async function captureMotionEvidenceV2(
   const outputDirectory = projectOutputPath(adapter, opts.outDir);
   if (outputDirectory) adapter.mkdir(outputDirectory);
   return withBrowser((browser) => onPage(browser, target, opts.viewport, async (page) => {
-    const transcript: { event: 'load'; timestampMs: number }[] = [{ event: 'load', timestampMs: 0 }];
     const started = Date.now();
     const element = await page.$(opts.selector);
     if (!element) throw new Error(`no element matches ROI selector: ${opts.selector}`);
-    const activeAnimations = await page.evaluate(() => document.getAnimations()
-      .filter((animation) => animation.playState === 'running')
-      .map((animation) => {
-        const effect = animation.effect;
-        const target = typeof KeyframeEffect !== 'undefined' && effect instanceof KeyframeEffect
-          ? effect.target
-          : null;
-        const rect = target instanceof Element ? target.getBoundingClientRect() : null;
-        return {
-          name: (animation as CSSAnimation).animationName || animation.id || 'unnamed',
-          targetIsDocument: target === document.documentElement || target === document.body
-            || (rect !== null && rect.left <= 0 && rect.top <= 0 && rect.right >= innerWidth && rect.bottom >= innerHeight),
-        };
-      }));
-    if (activeAnimations.length > 1) throw new Error('one motion decision rejects multiple concurrent load concepts');
-    if (activeAnimations.some((animation) => !animation.targetIsDocument)) throw new Error('motion scene contains an unrelated sibling animation rather than a whole-page production boundary');
-    const roi = { x: 0, y: 0, width: opts.viewport.width, height: opts.viewport.height };
+    const box = await element.boundingBox();
+    if (!box) throw new Error(`ROI selector is not visible: ${opts.selector}`);
+    const roi = {
+      x: Math.max(0, box.x), y: Math.max(0, box.y),
+      width: Math.min(box.width, opts.viewport.width - Math.max(0, box.x)),
+      height: Math.min(box.height, opts.viewport.height - Math.max(0, box.y)),
+    };
+    if (roi.width <= 1 || roi.height <= 1 || (roi.x === 0 && roi.y === 0 && roi.width === opts.viewport.width && roi.height === opts.viewport.height)) {
+      throw new Error(`ROI selector must identify a visible selector-local region: ${opts.selector}`);
+    }
     const receipt = async (name: string): Promise<ObservedCaptureReceipt> => {
       const output = join(opts.outDir, `${opts.runId}-${name}.png`);
-      const bytes = await page.screenshot({ fullPage: false });
-      const path = adapter.write(projectOutputPath(adapter, output), bytes);
+      const bytes = await page.screenshot({ clip: roi });
+      const path = projectOutputPath(adapter, output);
+      adapter.write(path, bytes);
       return { path, bytesBase64: bytes.toString('base64'), sha256: createHash('sha256').update(bytes).digest('hex') };
     };
     const baseline = await receipt('baseline');
+    await page.evaluate((trigger) => {
+      const key = 'data-omd-motion-trigger-observed';
+      document.documentElement.removeAttribute(key);
+      const record = () => document.documentElement.setAttribute(key, trigger);
+      if (trigger === 'scroll') window.addEventListener('scroll', record, { once: true, passive: true });
+      if (trigger === 'pointer') {
+        window.addEventListener('pointermove', record, { once: true, passive: true });
+        window.addEventListener('mousemove', record, { once: true, passive: true });
+      }
+    }, opts.trigger);
+    if (opts.trigger === 'scroll') {
+      await page.evaluate((distance) => window.scrollBy({ top: distance, behavior: 'instant' }), Math.max(1, Math.floor(opts.viewport.height / 2)));
+    } else if (opts.trigger === 'pointer') {
+      await page.mouse.move(roi.x + roi.width / 2, roi.y + roi.height / 2);
+    }
+    if (opts.trigger !== 'load') {
+      try {
+        await page.waitForFunction(
+          (trigger) => document.documentElement.getAttribute('data-omd-motion-trigger-observed') === trigger,
+          opts.trigger,
+          { timeout: 1_000 },
+        );
+      } catch {
+        throw new Error(`declared ${opts.trigger} trigger did not execute in the browser`);
+      }
+    }
+    const observedTrigger = await page.evaluate((trigger) => {
+      const key = 'data-omd-motion-trigger-observed';
+      const observed = trigger === 'load' ? 'load' : document.documentElement.getAttribute(key);
+      document.documentElement.removeAttribute(key);
+      return observed;
+    }, opts.trigger);
+    if (observedTrigger !== opts.trigger) throw new Error(`declared ${opts.trigger} trigger did not execute in the browser`);
+    const transcript: { event: MotionTrigger; timestampMs: number }[] = [{ event: opts.trigger, timestampMs: Date.now() - started }];
     await new Promise<void>((resolveInterval) => setTimeout(resolveInterval, Math.max(1, Math.floor(interval / 3))));
     const start = await receipt('start');
     const startTimestampMs = Date.now() - started;
     const noiseFloor = Math.max(computeEnergy([Buffer.from(baseline.bytesBase64, 'base64'), Buffer.from(start.bytesBase64, 'base64')]).peakEnergy, Number.EPSILON);
-    if (opts.trigger !== 'load') throw new Error('positive motion evidence only accepts an observed load scene; scroll and pointer affordances cannot satisfy it');
+    const activeAnimations = await page.evaluate((selector) => {
+      const roiElement = document.querySelector(selector);
+      return document.getAnimations().filter((animation) => {
+        if (animation.playState !== 'running') return false;
+        const effect = animation.effect;
+        const target = typeof KeyframeEffect !== 'undefined' && effect instanceof KeyframeEffect ? effect.target : null;
+        return target instanceof Element && roiElement !== null && (target === roiElement || roiElement.contains(target));
+      }).length;
+    }, opts.selector);
+    if (activeAnimations > 1) throw new Error('one motion decision rejects multiple concurrent selector-local animations');
     await new Promise<void>((resolveInterval) => setTimeout(resolveInterval, interval));
     const mid = await receipt('mid');
     const midTimestampMs = Date.now() - started;
@@ -677,7 +713,8 @@ export async function captureMotionEvidenceV2(
       }
       if (computeEnergy(stableFrames).peakEnergy > noiseFloor) throw new Error('fresh reduced-motion page did not remain stable across three frames');
       const bytes = stableFrames[2]!;
-      const path = adapter.write(projectOutputPath(adapter, join(opts.outDir, `${opts.runId}-reduced.png`)), bytes);
+      const path = projectOutputPath(adapter, join(opts.outDir, `${opts.runId}-reduced.png`));
+      adapter.write(path, bytes);
       reduced = { path, bytesBase64: bytes.toString('base64'), sha256: createHash('sha256').update(bytes).digest('hex') };
       reducedEnergy = computeEnergy([Buffer.from(end.bytesBase64, 'base64'), bytes]).peakEnergy;
     } finally {
@@ -691,7 +728,7 @@ export async function captureMotionEvidenceV2(
         triggerTranscript: transcript, sourceInfluence: opts.sourceInfluence ?? (opts.referenceSlotId ? { kind: 'reference-slot', referenceSlotId: opts.referenceSlotId } : (() => { throw new Error('motion evidence requires a source reference slot or approved recipe'); })()),
       },
       scenes: [{
-        trigger: opts.trigger, roiSelector: opts.selector, roi, boundary: 'viewport', activeAnimationCount: activeAnimations.length,
+        trigger: opts.trigger, roiSelector: opts.selector, roi, boundary: 'selector', activeAnimationCount: activeAnimations,
         calibration: { noiseFloor, roiEnergy: energy.peakEnergy },
         start: { timestampMs: startTimestampMs, capture: start }, mid: { timestampMs: midTimestampMs, capture: mid }, end: { timestampMs: endTimestampMs, capture: end },
         reducedMotion: { capture: reduced, behavior: reducedMotionBehavior },
@@ -707,10 +744,10 @@ export type ObservedCaptureReceipt = {
   readonly sha256: string;
 };
 
+export type MotionTrigger = 'load' | 'scroll' | 'pointer';
 export type MotionSourceInfluence =
   | { readonly kind: 'reference-slot'; readonly referenceSlotId: string }
   | { readonly kind: 'approved-recipe'; readonly recipeId: string; readonly recipeSha256: string };
-
 export type MotionEvidenceV2 = {
   readonly schema: typeof MOTION_EVIDENCE_V2_SCHEMA;
   readonly artDirectionHash: string;
@@ -720,14 +757,14 @@ export type MotionEvidenceV2 = {
     readonly runId: string;
     readonly buildHash: string;
     readonly viewport: Viewport;
-    readonly triggerTranscript: readonly { readonly event: 'load'; readonly timestampMs: number }[];
+    readonly triggerTranscript: readonly { readonly event: MotionTrigger; readonly timestampMs: number }[];
     readonly sourceInfluence: MotionSourceInfluence;
   };
   readonly scenes: readonly [{
-    readonly trigger: 'load';
+    readonly trigger: MotionTrigger;
     readonly roiSelector: string;
     readonly roi: { readonly x: number; readonly y: number; readonly width: number; readonly height: number };
-    readonly boundary: 'viewport';
+    readonly boundary: 'selector';
     readonly activeAnimationCount: number;
     readonly calibration: { readonly noiseFloor: number; readonly roiEnergy: number };
     readonly start: { readonly timestampMs: number; readonly capture: ObservedCaptureReceipt };
@@ -773,7 +810,7 @@ function motionPositive(value: unknown, field: string): number {
   if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) motionFail(`${field} must be positive`);
   return value;
 }
-function motionReceipt(value: unknown, field: string): ObservedCaptureReceipt {
+function motionReceipt(value: unknown, field: string, root?: string): ObservedCaptureReceipt {
   const receipt = motionObject(value, field);
   motionExact(receipt, ['path', 'bytesBase64', 'sha256'], field);
   const path = motionText(receipt.path, `${field}.path`);
@@ -788,7 +825,8 @@ function motionReceipt(value: unknown, field: string): ObservedCaptureReceipt {
   if (bytes.length === 0 || bytes.toString('base64') !== bytesBase64 || createHash('sha256').update(bytes).digest('hex') !== receipt.sha256) {
     motionFail(`${field} bytes do not match sha256`);
   }
-  if (!existsSync(path) || !readFileSync(path).equals(bytes)) motionFail(`${field} path does not contain captured bytes`);
+  const capturePath = root === undefined || isAbsolute(path) ? path : resolve(root, path);
+  if (!existsSync(capturePath) || !readFileSync(capturePath).equals(bytes)) motionFail(`${field} path does not contain captured bytes`);
   return receipt as ObservedCaptureReceipt;
 }
 function motionTimestamp(value: unknown, field: string): number {
@@ -808,7 +846,7 @@ function motionTimestamp(value: unknown, field: string): number {
  */
 export function validateMotionEvidenceV2(
   value: unknown,
-  decision?: { readonly motionDecision: 'none' | 'one'; readonly buildHash?: string; readonly artDirectionHash?: string },
+  decision?: { readonly motionDecision: 'none' | 'one'; readonly buildHash?: string; readonly artDirectionHash?: string; readonly root?: string },
 ): MotionEvidenceV2 {
   const evidence = motionObject(value, 'evidence');
   motionExact(evidence, ['schema', 'artDirectionHash', 'motionDecision', 'observed', 'scenes'], 'evidence');
@@ -817,7 +855,7 @@ export function validateMotionEvidenceV2(
   if (evidence.motionDecision !== 'one') motionFail('motionDecision must be one');
   if (decision?.artDirectionHash !== undefined && evidence.artDirectionHash !== decision.artDirectionHash) motionFail('motion evidence art direction is not current');
   if (decision?.motionDecision !== undefined && decision.motionDecision !== 'one') motionFail('cannot bind motion evidence to a none decision');
-  if (!Array.isArray(evidence.scenes) || evidence.scenes.length !== 1) motionFail('one requires exactly one whole-page load scene');
+  if (!Array.isArray(evidence.scenes) || evidence.scenes.length !== 1) motionFail('one requires exactly one motion scene');
 
   const observed = motionObject(evidence.observed, 'observed');
   motionExact(observed, ['browser', 'runId', 'buildHash', 'viewport', 'triggerTranscript', 'sourceInfluence'], 'observed');
@@ -833,19 +871,11 @@ export function validateMotionEvidenceV2(
   for (const dimension of ['width', 'height'] as const) {
     if (!Number.isInteger(viewport[dimension]) || (viewport[dimension] as number) <= 0) motionFail(`observed.viewport.${dimension} must be positive integer`);
   }
-  if (!Array.isArray(observed.triggerTranscript) || observed.triggerTranscript.length === 0) motionFail('trigger transcript requires observed events');
-  let lastTranscriptTime = -1;
-  const transcriptEvents = new Set<string>();
-  for (const [index, entry] of observed.triggerTranscript.entries()) {
-    const transcript = motionObject(entry, `observed.triggerTranscript[${index}]`);
-    motionExact(transcript, ['event', 'timestampMs'], `observed.triggerTranscript[${index}]`);
-    if (transcript.event !== 'load') motionFail('trigger transcript contains unsupported event');
-    const timestamp = motionTimestamp(transcript.timestampMs, `observed.triggerTranscript[${index}].timestampMs`);
-    if (timestamp < lastTranscriptTime) motionFail('trigger transcript timestamps must be monotonic');
-    lastTranscriptTime = timestamp;
-    transcriptEvents.add(transcript.event as string);
-  }
-  if (!transcriptEvents.has('load')) motionFail('trigger transcript must include load');
+  if (!Array.isArray(observed.triggerTranscript) || observed.triggerTranscript.length !== 1) motionFail('trigger transcript requires exactly one observed trigger');
+  const transcript = motionObject(observed.triggerTranscript[0], 'observed.triggerTranscript[0]');
+  motionExact(transcript, ['event', 'timestampMs'], 'observed.triggerTranscript[0]');
+  if (transcript.event !== 'load' && transcript.event !== 'scroll' && transcript.event !== 'pointer') motionFail('trigger transcript contains unsupported event');
+  motionTimestamp(transcript.timestampMs, 'observed.triggerTranscript[0].timestampMs');
   const influence = motionObject(observed.sourceInfluence, 'observed.sourceInfluence');
   if (influence.kind === 'reference-slot') {
     motionExact(influence, ['kind', 'referenceSlotId'], 'observed.sourceInfluence');
@@ -860,10 +890,10 @@ export function validateMotionEvidenceV2(
 
   const scene = motionObject(evidence.scenes[0], 'scenes[0]');
   motionExact(scene, ['trigger', 'roiSelector', 'roi', 'boundary', 'activeAnimationCount', 'calibration', 'start', 'mid', 'end', 'reducedMotion'], 'scenes[0]');
-  if (scene.trigger !== 'load') motionFail('scenes[0].trigger must be a declared load scene');
-  if (scene.boundary !== 'viewport') motionFail('motion scene must declare the whole viewport production boundary');
-  if (!Number.isInteger(scene.activeAnimationCount) || (scene.activeAnimationCount as number) < 0 || (scene.activeAnimationCount as number) > 1) motionFail('motion scene must inventory zero or one active production animation');
-  if (!transcriptEvents.has(scene.trigger)) motionFail('scene trigger is absent from observed transcript');
+  if (scene.trigger !== 'load' && scene.trigger !== 'scroll' && scene.trigger !== 'pointer') motionFail('scenes[0].trigger must be load, scroll, or pointer');
+  if (scene.boundary !== 'selector') motionFail('motion scene must declare a selector-local production boundary');
+  if (!Number.isInteger(scene.activeAnimationCount) || (scene.activeAnimationCount as number) < 0 || (scene.activeAnimationCount as number) > 1) motionFail('motion scene must inventory zero or one active selector-local animation');
+  if (transcript.event !== scene.trigger) motionFail('scene trigger does not match the executed trigger transcript');
   motionText(scene.roiSelector, 'scenes[0].roiSelector');
   const roi = motionObject(scene.roi, 'scenes[0].roi');
   motionExact(roi, ['x', 'y', 'width', 'height'], 'scenes[0].roi');
@@ -871,8 +901,8 @@ export function validateMotionEvidenceV2(
     if (typeof roi[dimension] !== 'number' || !Number.isFinite(roi[dimension])) motionFail(`scenes[0].roi.${dimension} must be finite`);
   }
   if ((roi.width as number) <= 1 || (roi.height as number) <= 1 || (roi.x as number) < 0 || (roi.y as number) < 0
-    || (roi.x as number) + (roi.width as number) > (viewport.width as number) || (roi.y as number) + (roi.height as number) > (viewport.height as number)) motionFail('scene must be a visible non-trivial viewport rectangle');
-  if ((roi.x as number) !== 0 || (roi.y as number) !== 0 || (roi.width as number) !== (viewport.width as number) || (roi.height as number) !== (viewport.height as number)) motionFail('motion scene must inventory the whole viewport, not a caller-selected ROI');
+    || (roi.x as number) + (roi.width as number) > (viewport.width as number) || (roi.y as number) + (roi.height as number) > (viewport.height as number)) motionFail('scene must be a visible non-trivial selector-local rectangle');
+  if ((roi.x as number) === 0 && (roi.y as number) === 0 && (roi.width as number) === (viewport.width as number) && (roi.height as number) === (viewport.height as number)) motionFail('motion scene must not claim the whole viewport as its ROI');
   const calibration = motionObject(scene.calibration, 'scenes[0].calibration');
   motionExact(calibration, ['noiseFloor', 'roiEnergy'], 'scenes[0].calibration');
   const noise = motionPositive(calibration.noiseFloor, 'scenes[0].calibration.noiseFloor');
@@ -885,14 +915,14 @@ export function validateMotionEvidenceV2(
     const frame = motionObject(scene[stage], `scenes[0].${stage}`);
     motionExact(frame, ['timestampMs', 'capture'], `scenes[0].${stage}`);
     timestamps.push(motionTimestamp(frame.timestampMs, `scenes[0].${stage}.timestampMs`));
-    captures.push(motionReceipt(frame.capture, `scenes[0].${stage}.capture`));
+    captures.push(motionReceipt(frame.capture, `scenes[0].${stage}.capture`, decision?.root));
   }
   const observedEnergy = computeEnergy(captures.map((capture) => Buffer.from(capture.bytesBase64, 'base64'))).peakEnergy;
   if (energy !== observedEnergy) motionFail('ROI energy does not match captured pixel evidence');
   if (!(timestamps[0]! < timestamps[1]! && timestamps[1]! < timestamps[2]!)) motionFail('ROI timestamps must be strictly start < mid < end');
   const reduced = motionObject(scene.reducedMotion, 'scenes[0].reducedMotion');
   motionExact(reduced, ['capture', 'behavior'], 'scenes[0].reducedMotion');
-  const reducedReceipt = motionReceipt(reduced.capture, 'scenes[0].reducedMotion.capture');
+  const reducedReceipt = motionReceipt(reduced.capture, 'scenes[0].reducedMotion.capture', decision?.root);
   if (reduced.behavior !== 'removed' && reduced.behavior !== 'static-equivalent') motionFail('reduced-motion counterpart must remove motion or show a static equivalent');
   const observedReducedEnergy = computeEnergy([
     Buffer.from(captures[2]!.bytesBase64, 'base64'),
@@ -917,20 +947,23 @@ export async function captureRenderedBeatReceipt(
     for (const viewport of viewports) {
       await onPage(browser, target, viewport, async (page, httpStatus, resolvedUrl) => {
         await assertNotBlocked(page, httpStatus, resolvedUrl);
-        const observed = await page.evaluate((observedViewport) => [...document.querySelectorAll<HTMLElement>('[data-omd-beat]')].map((element) => {
-          const style = getComputedStyle(element);
-          const rect = element.getBoundingClientRect();
-          const parent = element.parentElement?.closest<HTMLElement>('[data-omd-beat]');
-          return {
-            id: element.dataset.omdBeat ?? '',
-            boundary: style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity) > 0
-              && rect.width > 1 && rect.height > 1,
-            distinctRegions: element.querySelectorAll('[data-omd-beat]').length,
-            ancestorBeatIds: parent?.dataset.omdBeat ? [parent.dataset.omdBeat] : [],
-            rendered: true as const,
-            observedViewport,
-          };
-        }), viewport);
+        const raw = await page.evaluate(
+          browserEvaluationExpression(extractInPage.toString(), `${MAX_NODES}, null`),
+        ) as RawIr;
+        const observed = ((raw.meta?.renderedBeats as Array<{
+          id: string;
+          boundary: boolean;
+          distinctRegions: number;
+          ancestorBeatIds: string[];
+          rendered: boolean;
+        }> | undefined) ?? []).map((beat) => ({
+          id: beat.id,
+          boundary: beat.boundary,
+          distinctRegions: beat.distinctRegions,
+          ancestorBeatIds: beat.ancestorBeatIds,
+          rendered: beat.rendered,
+          observedViewport: { ...viewport },
+        }));
         renderedBeats.push(...observed);
       });
     }

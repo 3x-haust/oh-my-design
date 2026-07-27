@@ -5,6 +5,7 @@ import type { ReferenceAxis, ReferenceRights, ReferenceSignal } from './board-pr
 import { requireApprovedMotionRecipeAuthorization, requireEvaluatorAssessmentAuthorization, requireEvaluatorResultAuthorization, type ProjectRunInvocation } from '../runtime/invocation.ts';
 import { isHostDerivedLocalCliInvocation } from '../runtime/activation.ts';
 import { ProjectWriteError, replaceProjectFileAtomically, writeImmutableProjectFile } from '../runtime/project-write.ts';
+import { artDirectionSha256 } from '../art-direction/schema.ts';
 
 export const REFERENCE_SELECTION_SCHEMA_VERSION = 'reference-selection-v1';
 export const REFERENCE_SELECTION_V2_SCHEMA_VERSION = 'reference-selection-v2' as const;
@@ -125,6 +126,18 @@ const readImmutablePreSelectionRecord = (root: string, digest: string, record: s
   } catch (error) {
     if (error instanceof ReferenceSelectionValidationError) throw error;
     return fail('immutable pre-selection record is invalid JSON');
+  }
+};
+export const readPersistedMotionResolution = (root: string, digest: string): MotionResolutionProjection => {
+  const expectedDigest = sha(digest, 'motion resolution sha256');
+  const body = readRegularFile(join(root, '.omd', 'motion-resolutions', `sha256-${expectedDigest}.json`), 'persisted motion resolution');
+  try {
+    const projection = validateMotionResolutionProjection(JSON.parse(body));
+    if (body !== canonicalJson(projection) || motionResolutionProjectionSha256(projection) !== expectedDigest) fail('persisted motion resolution does not match its hash');
+    return projection;
+  } catch (error) {
+    if (error instanceof ReferenceSelectionValidationError) throw error;
+    return fail('persisted motion resolution is invalid JSON');
   }
 };
 const writeImmutableContentAddressed = (root: string, relativePath: string, content: string, invocation: ProjectRunInvocation): void => {
@@ -283,6 +296,9 @@ export function persistMotionResolutionProjection(
   authorization: 'host' | 'local-moderator' = 'host',
 ): { readonly path: string; readonly projection: MotionResolutionProjection } {
   const projection = resolveMotionProjection(input);
+  if (projection.activationSha256 !== artDirectionSha256(invocation.activation)) {
+    return fail('motion resolution does not bind the exact authorizing invocation activation');
+  }
   if (sha256(evidence.assessmentBytes) !== projection.evaluatorPayloadSha256 || sha256(evidence.resultBytes) !== projection.evaluatorResultSha256
     || (projection.approvedRecipe !== undefined && (evidence.approvedRecipeBytes === undefined || sha256(evidence.approvedRecipeBytes) !== projection.approvedRecipe.recipeSha256))) return fail('motion resolution evidence bytes do not match evaluator provenance');
   if (authorization === 'host') {
@@ -298,7 +314,7 @@ export function persistMotionResolutionProjection(
   }
   const digest = motionResolutionProjectionSha256(projection);
   const relativePath = `.omd/motion-resolutions/sha256-${digest}.json`;
-  writeAtomically(root, relativePath, canonicalJson(projection), invocation);
+  writeImmutableContentAddressed(root, relativePath, canonicalJson(projection), invocation);
   return { path: relativePath, projection };
 }
 
@@ -311,12 +327,15 @@ export function referenceSelectionV2Sha256(selection: ReferenceSelectionV2): str
 export function persistSettledReferenceSelection(
   root: string,
   selection: ReferenceSelectionV2,
-  resolution: ResolveMotionProjectionInput,
+  motionResolutionSha256: string,
   invocation: ProjectRunInvocation,
 ): ReferenceSelectionV2 {
   const preSelection = readPreReferenceSelectionV2(root);
   if (referenceSelectionV2Sha256(selection) !== referenceSelectionV2Sha256(preSelection)) fail('settlement must derive from the immutable pre-selection');
-  const settled = materializeSettledReferenceSelection(preSelection, resolution);
+  const motion = readPersistedMotionResolution(root, motionResolutionSha256);
+  if (motion.selectionSha256 !== referenceSelectionV2Sha256(preSelection)) fail('persisted motion resolution does not bind the immutable pre-selection');
+  if (motion.activationSha256 !== artDirectionSha256(invocation.activation)) fail('persisted motion resolution does not bind the current invocation');
+  const settled = materializeSettledReferenceSelection(preSelection, { ...motion, selection: preSelection });
   const digest = referenceSelectionV2Sha256(settled);
   writeImmutableContentAddressed(root, `.omd/settled-reference-selections/sha256-${digest}.json`, canonicalJson(settled), invocation);
   writeAtomically(root, '.omd/reference-selection-v2.json', canonicalJson(settled), invocation);
@@ -339,8 +358,15 @@ export function readReferenceSelection(root: string): ReferenceSelection {
 }
 
 export function readReferenceSelectionV2(root: string): ReferenceSelectionV2 {
-  try { return parseReferenceSelectionV2(JSON.parse(readRegularFile(selectionV2Path(root), 'settled v2 selection'))); }
-  catch (error) { if (error instanceof ReferenceSelectionValidationError) throw error; return fail('v2 record is missing or invalid JSON'); }
+  try {
+    const body = readRegularFile(selectionV2Path(root), 'settled v2 selection');
+    const selection = parseReferenceSelectionV2(JSON.parse(body));
+    if (body !== canonicalJson(selection)) fail('settled v2 selection is not canonical');
+    return selection;
+  } catch (error) {
+    if (error instanceof ReferenceSelectionValidationError) throw error;
+    return fail('settled v2 selection is missing or invalid JSON');
+  }
 }
 
 export function validateReferenceSelection(root: string, manifestPath?: string): ReferenceSelection {
@@ -351,8 +377,8 @@ export function validateReferenceSelection(root: string, manifestPath?: string):
   return selection;
 }
 
-export function validateReferenceSelectionV2(root: string, manifestPath?: string): ReferenceSelectionV2 {
-  const selection = readReferenceSelectionV2(root); const artifacts = readReferenceBoardArtifacts(root, manifestPath === undefined ? undefined : resolve(root, manifestPath));
+const validateReferenceSelectionV2AgainstArtifacts = (selection: ReferenceSelectionV2, root: string, manifestPath?: string): ReferenceSelectionV2 => {
+  const artifacts = readReferenceBoardArtifacts(root, manifestPath === undefined ? undefined : resolve(root, manifestPath));
   if (selection.captureSha256 !== sha256(artifacts.boardBytes)) fail('capture hash does not match the current canonical capture');
   if (selection.assemblySha256 !== sha256(artifacts.assemblyBytes)) fail('assembly hash does not match the current sanitized assembly');
   if (selection.projectionSha256 !== sha256(artifacts.projectionBytes)) fail('projection hash does not match the current typed projection');
@@ -366,6 +392,14 @@ export function validateReferenceSelectionV2(root: string, manifestPath?: string
   }
   if (!selection.slots.some((slot) => slot.signal === 'high-visual-system' && slot.rights === 'lawful' && slot.obligationDisposition === 'used')) fail('selection requires one lawful high-visual-system positive used slot');
   return selection;
+};
+
+export function validateReferenceSelectionV2(root: string, manifestPath?: string): ReferenceSelectionV2 {
+  return validateReferenceSelectionV2AgainstArtifacts(readReferenceSelectionV2(root), root, manifestPath);
+}
+
+export function validatePreReferenceSelectionV2(root: string, manifestPath?: string): ReferenceSelectionV2 {
+  return validateReferenceSelectionV2AgainstArtifacts(readPreReferenceSelectionV2(root), root, manifestPath);
 }
 
 const writeAtomically = (root: string, relativePath: string, body: string, invocation: ProjectRunInvocation): string =>
@@ -401,7 +435,6 @@ export function selectReferenceCandidateV2(root: string, candidateId: string, di
   if (!selection.slots.some((slot) => slot.signal === 'high-visual-system' && slot.rights === 'lawful' && slot.obligationDisposition === 'used')) fail('selection requires one lawful high-visual-system positive used slot');
   const pointer = persistImmutablePreSelection(root, selection, invocation);
   writeAtomically(root, '.omd/reference-pre-selection-v2.json', canonicalJson(pointer), invocation);
-  writeAtomically(root, '.omd/reference-selection-v2.json', canonicalJson(selection), invocation);
   return selection;
 }
 export function selectReferenceCandidateV2Autonomously(root: string, candidateId: string, invocation: ProjectRunInvocation): ReferenceSelectionV2 {
@@ -425,3 +458,4 @@ export function selectReferenceCandidateV2Autonomously(root: string, candidateId
 
 export const referenceSelectionExists = (root: string): boolean => existsSync(selectionPath(root));
 export const referenceSelectionV2Exists = (root: string): boolean => existsSync(selectionV2Path(root));
+export const preReferenceSelectionV2Exists = (root: string): boolean => existsSync(preSelectionV2Path(root));
