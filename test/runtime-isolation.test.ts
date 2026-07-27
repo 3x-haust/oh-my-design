@@ -11,7 +11,7 @@ import { ACTIVATION_CONTEXT_SCHEMA_VERSION, validateActivationContext, type Acti
 import { createReviewerEvidenceProxy, MAX_INLINE_EVIDENCE_BYTES, ReviewerIsolationError } from '../core/runtime/evidence-proxy.ts';
 import { requireReviewerIsolationInvocation, type ProjectRunInvocation } from '../core/runtime/invocation.ts';
 import { assertProjectRunMutationInventory, inventoryProjectRunMutations } from '../core/runtime/project-write-inventory.ts';
-import { acquireProjectLock, acquireProjectMutationLock, ProjectWriteError, writeProjectFile } from '../core/runtime/project-write.ts';
+import { acquireProjectLock, acquireProjectMutationLock, ProjectWriteError, writeContentAddressedProjectFile, writeImmutableProjectFile, writeProjectFile } from '../core/runtime/project-write.ts';
 import { createTestProjectRunInvocation } from './helpers/project-write.ts';
 
 const hash = (value: string): string => value.repeat(64);
@@ -56,6 +56,35 @@ test('project mutation lock recovers only a stable dead same-host owner', () => 
       /owner is live or ambiguous/,
     );
     assert.equal(existsSync(lock), true);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// A content-addressed receipt carries its own digest in its path, so a resumed run recomputing
+// identical bytes must not be blocked by the first write. Different bytes under one address stay
+// fatal, and the plain immutable receipt keeps its strict single-write contract.
+test('content-addressed receipts are idempotent for identical bytes and fatal for different bytes', () => {
+  const root = mkdtempSync(join(tmpdir(), 'omd-content-addressed-'));
+  try {
+    const run = createTestProjectRunInvocation(root, 'content-addressed');
+    const relativePath = '.omd/evaluator-results/sha256-fixture.json';
+    const content = '{"winner":"confident"}';
+    const first = writeContentAddressedProjectFile({ projectRoot: root, relativePath, content, invocation: run });
+    assert.equal(writeContentAddressedProjectFile({ projectRoot: root, relativePath, content, invocation: run }), first);
+    assert.equal(readFileSync(first, 'utf8'), content);
+
+    assert.throws(
+      () => writeContentAddressedProjectFile({ projectRoot: root, relativePath, content: '{"winner":"quiet"}', invocation: run }),
+      /content-addressed artifact already exists with different bytes/,
+    );
+    assert.equal(readFileSync(first, 'utf8'), content);
+
+    writeImmutableProjectFile({ projectRoot: root, relativePath: '.omd/strict-receipt.json', content, invocation: run });
+    assert.throws(
+      () => writeImmutableProjectFile({ projectRoot: root, relativePath: '.omd/strict-receipt.json', content, invocation: run }),
+      (error: unknown) => error instanceof ProjectWriteError && /immutable project artifact already exists/.test(error.reason),
+    );
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

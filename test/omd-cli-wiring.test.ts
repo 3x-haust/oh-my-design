@@ -83,3 +83,37 @@ test('visual-richness quiet register yields no findings (register-aware, never g
   const parsed = JSON.parse(result.stdout) as { findings: unknown[] };
   assert.equal(parsed.findings.length, 0, result.stdout);
 });
+
+// ── art-direction alternatives-sha ──────────────────────────────────────────
+
+// The local art-direction lane binds perspectives, the moderator receipt, and the evaluator
+// result to one canonical alternatives digest. The CLI owns that digest so no coordinator has to
+// reimplement canonical JSON in shell; a mismatch there costs a whole deliberation round.
+
+const ALTERNATIVES = [
+  { register: 'quiet', conceptRole: 'Calm evidence dossier' },
+  { register: 'confident', conceptRole: 'Evidence signal field' },
+  { register: 'showpiece', conceptRole: 'Evidence theatre' },
+];
+
+test('art-direction alternatives-sha emits the canonical digest the local check binds', async () => {
+  const { canonicalJson, sha256 } = await import('../core/ref/board-artifacts.ts');
+  const dir = project();
+  const file = writeFile(dir, 'alternatives.json', JSON.stringify(ALTERNATIVES));
+  const result = run(['art-direction', 'alternatives-sha', '--input', file, '--json']);
+  assert.equal(result.status, 0, result.stderr);
+  const parsed = JSON.parse(result.stdout) as { alternativesSha256: string };
+  assert.equal(parsed.alternativesSha256, sha256(canonicalJson(ALTERNATIVES)));
+});
+
+test('art-direction alternatives-sha accepts a decision-check payload and rejects a shapeless one', () => {
+  const dir = project();
+  const decisionCheck = writeFile(dir, 'decision-check.json', JSON.stringify({ route: '/', alternatives: ALTERNATIVES }));
+  const bare = run(['art-direction', 'alternatives-sha', '--input', writeFile(dir, 'bare.json', JSON.stringify(ALTERNATIVES)), '--json']);
+  const wrapped = run(['art-direction', 'alternatives-sha', '--input', decisionCheck, '--json']);
+  assert.equal(wrapped.status, 0, wrapped.stderr);
+  assert.equal(JSON.parse(wrapped.stdout).alternativesSha256, JSON.parse(bare.stdout).alternativesSha256);
+  const invalid = run(['art-direction', 'alternatives-sha', '--input', writeFile(dir, 'invalid.json', '{"route":"/"}'), '--json']);
+  assert.notEqual(invalid.status, 0);
+  assert.match(invalid.stderr, /ART_DIRECTION_ALTERNATIVES_INVALID/);
+});
