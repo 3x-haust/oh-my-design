@@ -66,7 +66,7 @@ export function preflightClaudeV2(input: ClaudeV2PreflightInput): ActivationCont
     throw new Error('Claude loaded skill bytes do not match the current build source skill hash');
   }
   if (reviewerLaunchBundle === undefined) throw new Error('Claude reviewer preflight requires an evidence launch bundle');
-  const bundle = reviewerLaunchBundle.adapter.requireLaunchBundle(reviewerLaunchBundle, 'claude');
+  const bundle = reviewerLaunchBundle.adapter.requireCompletedLaunchBundle(reviewerLaunchBundle, 'claude');
   if (bundle.loadedSkillReceipt.loadedSkillReceipt !== loadedSkillReceipt) {
     throw new Error('Claude v2 preflight requires the bundle-attached observed loaded-skill receipt');
   }
@@ -77,7 +77,6 @@ export function preflightClaudeV2(input: ClaudeV2PreflightInput): ActivationCont
   ) {
     throw new Error('Claude reviewer launch bundle does not match the current build, loaded skill, and brief');
   }
-  bundle.adapter.requireConfiguration(bundle.configuration, bundle.reviewerLaunchReceipt, 'claude');
   return validateActivationContext({
     schemaVersion: ACTIVATION_CONTEXT_SCHEMA_VERSION,
     buildSha256: buildIdentity.buildSha256,

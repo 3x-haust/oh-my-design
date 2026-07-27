@@ -78,6 +78,11 @@ const reviewerBundle = (host: ReviewerHost, loadedSkillReceipt: object) => {
     reviewerLaunchReceipt: receipt,
   });
 };
+const completedReviewerBundle = async (host: ReviewerHost, loadedSkillReceipt: object) => {
+  const bundle = reviewerBundle(host, loadedSkillReceipt);
+  await reviewerMcpTranscript(bundle.reviewerLaunchReceipt, [MCP_INITIALIZE, MCP_INITIALIZED, evidenceToolCall(1)]);
+  return bundle;
+};
 
 test('Claude v2 preflight rejects caller-created loaded-skill receipts', () => {
   const receipt = createClaudeLoadedSkillReceipt('0.18.0', V2_LOADED_SKILL_BYTES);
@@ -96,13 +101,13 @@ test('Claude v2 preflight rejects caller-created loaded-skill receipts', () => {
   );
 });
 
-test('Claude v2 preflight accepts the exact bundle-attached loaded build receipt', () => {
+test('Claude v2 preflight accepts the exact bundle-attached loaded build receipt', async () => {
   const receipt = observeClaudeLoadedSkill(V2_BUILD, '0.18.0', V2_LOADED_SKILL_BYTES);
   const activation = preflightClaudeV2({
     buildIdentity: V2_BUILD,
     loadedSkillReceipt: receipt,
     briefSha256: BRIEF_SHA256,
-    reviewerLaunchBundle: reviewerBundle('claude', receipt),
+    reviewerLaunchBundle: await completedReviewerBundle('claude', receipt),
   });
   assert.equal(receipt.schemaVersion, CLAUDE_LOADED_SKILL_RECEIPT_SCHEMA_VERSION);
   assert.deepEqual(activation, {
@@ -131,13 +136,13 @@ test('Codex blocks raw self-attested loaded-skill receipts while legacy adapter 
   assert.doesNotThrow(() => emitCodex({ agents: [NASTY] }));
 });
 
-test('Codex v2 preflight accepts a host-owned launch bundle', () => {
+test('Codex v2 preflight accepts a host-owned launch bundle', async () => {
   const receipt = observeCodexLoadedSkill(V2_BUILD, V2_LOADED_SKILL_BYTES);
   const activation = preflightCodexV2Publication({
     buildIdentity: V2_BUILD,
     loadedSkillReceipt: receipt,
     briefSha256: BRIEF_SHA256,
-    reviewerLaunchBundle: reviewerBundle('codex', receipt),
+    reviewerLaunchBundle: await completedReviewerBundle('codex', receipt),
   });
   assert.deepEqual(activation, {
     schemaVersion: 'activation-context-v2',
@@ -147,13 +152,13 @@ test('Codex v2 preflight accepts a host-owned launch bundle', () => {
     hostCapability: { host: 'codex' },
   });
 });
-test('adapter activations expose no caller-selectable authority fields', () => {
+test('adapter activations expose no caller-selectable authority fields', async () => {
   const receipt = observeCodexLoadedSkill(V2_BUILD, V2_LOADED_SKILL_BYTES);
   const activation = preflightCodexV2Publication({
     buildIdentity: V2_BUILD,
     loadedSkillReceipt: receipt,
     briefSha256: BRIEF_SHA256,
-    reviewerLaunchBundle: reviewerBundle('codex', receipt),
+    reviewerLaunchBundle: await completedReviewerBundle('codex', receipt),
   });
   assert.deepEqual(activation, {
     schemaVersion: 'activation-context-v2',
@@ -343,7 +348,7 @@ test('no CLAUDE_PLUGIN_ROOT in real skill sources', () => {
 
 const reviewerSocketPath = (launchId: string) => join(realpathSync(tmpdir()), `o-${createHash('sha256').update(launchId).digest('hex').slice(0, 16)}`);
 async function borrowedReviewerPidClaim(
-  receipt: { readonly launchId: string; readonly configurationSha256: string; readonly processBinding: { readonly runnerId: string; readonly sessionId: string; readonly nonce: string } },
+  receipt: { readonly host: ReviewerHost; readonly launchId: string; readonly configurationSha256: string; readonly processBinding: { readonly runnerId: string; readonly sessionId: string; readonly nonce: string } },
   childPid: number,
   parentPid = process.pid,
 ): Promise<{ error?: string; capability?: string }> {
@@ -359,6 +364,7 @@ async function borrowedReviewerPidClaim(
       runnerId: receipt.processBinding.runnerId,
       sessionId: receipt.processBinding.sessionId,
       nonce: receipt.processBinding.nonce,
+      host: receipt.host,
     })));
     socket.on('data', chunk => { response += chunk; });
     socket.on('error', reject);
@@ -367,6 +373,7 @@ async function borrowedReviewerPidClaim(
 }
 async function reviewerMcpTranscript(
   receipt: {
+    readonly host: ReviewerHost;
     readonly launchId: string;
     readonly configurationSha256: string;
     readonly processBinding: { readonly runnerId: string; readonly sessionId: string; readonly nonce: string };
@@ -386,6 +393,7 @@ async function reviewerMcpTranscript(
     '--runner-id', receipt.processBinding.runnerId,
     '--session-id', receipt.processBinding.sessionId,
     '--nonce', receipt.processBinding.nonce,
+    '--host', receipt.host,
   ], { cwd: root });
   let stdout = '';
   let stderr = '';
