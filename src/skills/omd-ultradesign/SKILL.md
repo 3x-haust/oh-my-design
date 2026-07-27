@@ -110,10 +110,29 @@ working directory first. A Figma frame or exact visual target uses the single Fi
 route declared above; it retains content, craft, glance, probe, critique, and all UX evidence rather
 than handing the run off or terminating this loop.
 
-A resumed or restarted run does not begin again at the domain brief. Run `omd stage status` first and
-continue at the first stage whose artifact is missing; artifacts an earlier owner already wrote stay
-authoritative, and rewriting one yourself is the same ownership violation as writing it the first
-time.
+A resumed or restarted run does not begin again at the domain brief. Run `omd stage resume` first
+and continue at the stage it names; artifacts an earlier owner already wrote stay authoritative, and
+rewriting one yourself is the same ownership violation as writing it the first time. The same
+command is the recovery step after a context compaction: it reports the current stage, the owner of
+every artifact, and the contracts that stage still needs.
+
+Before spawning a stage's owner, hand it its contracts and record that handoff:
+`omd stage deliver --stage <stage> --contract <pack-relative.md>` for each contract
+`omd stage list` names, then `omd stage require <stage>`. `require` exits non-zero while an earlier
+owner's artifact is missing or a contract has no receipt for its current bytes; that is a hard stop,
+not a warning. Editing a contract invalidates its receipt, so a mid-run protocol change forces a
+fresh delivery rather than a silent divergence between what the role read and what the loop
+requires. Never claim a role received a contract without its receipt.
+
+Contracts are also bound by the work itself, not only by the stage. Before handing a role its task,
+run `omd cue --path <file> --symbol <symbol> --field <name>=<value>` for the paths, symbols, and
+typed frame fields that task touches, and deliver everything it returns alongside the stage's own
+contracts. Cues resolve only from those deterministic inputs; a rule that needed the coordinator to
+interpret intent would be the same undelivered-knowledge failure in a new costume.
+
+Record cost at each stage boundary with `omd stage record --stage <stage>` and read it back with
+`omd stage cost`. A run that dies with no cost record cannot tell an expensive stage from a runaway
+one, and the next run repeats the same spend.
 
 Before spawning an artifact owner, classify depth. The coordinator writes only the routing input
 `.omd/depth.json` as `design-depth-input-v1` — print its exact skeleton with
@@ -715,6 +734,16 @@ selected frame. Source-candidate triage has no untriaged or needs-render items a
   persists `.omd/reference-report.md`; paste the pure formatter's exact Korean-first bilingual
   Markdown unchanged into the final chat. Everything is clean or has an evidence-backed deliberate
   overrule.
+A declared requirement is not shipped because the page looks finished. Write the brief's stated
+requirements to `.omd/functional-requirements.json` as `functional-requirements-v1` — print its
+shape with `omd schema functional-requirements` — and run `omd complete check <page>`. It fails
+when a declared affordance is absent, is text rather than an operable control, or cannot be reached
+by keyboard. It adds no style rule; it only proves the page does what the brief said it would.
+
+When the run declares more than one locale, `.omd/locale.json` is `locale-contract-v1` and
+`omd locale check` must pass before ship: every Beat carries real copy in every declared locale,
+and no locale silently falls back to another. Read `protocol/locale-contract.md` for the layout,
+control-state, and document-signal obligations that go with it.
 Regardless of whether reference assembly applied, close the final chat response with this run's usage: run `omd usage` and include its elapsed-time and token total in your final message to the user. It reads the host session log (Claude Code or Codex); if no log is found it prints a short unavailable note, which you simply omit rather than fabricating a number.
 When the run is an iteration with a before/after pair, form the pairwise blind-choose verdict:
 blind-choose is the visual distinction signal only; applicable task probes, accessibility checks, and

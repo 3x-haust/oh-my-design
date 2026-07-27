@@ -134,14 +134,20 @@ test('printed input skeletons carry exactly the keys their validators accept', a
   const authored = Object.keys(check.skeleton as object);
   assert.ok(authored.every((key) => (ART_DIRECTION_CHECK_INPUT_KEYS as readonly string[]).includes(key)), authored.join(','));
   assert.ok(!authored.includes('invocation'), 'the local lane never authors an invocation');
-  assert.equal(INPUT_SKELETONS.length, 2);
+  assert.equal(INPUT_SKELETONS.length, 4);
+
+  const locale = inputSkeleton('locale-contract');
+  const { LOCALE_CONTRACT_KEYS } = await import('../core/locale/contract.ts');
+  assert.deepEqual(Object.keys(locale.skeleton as object).sort(), [...LOCALE_CONTRACT_KEYS].sort());
+  const functional = inputSkeleton('functional-requirements');
+  assert.deepEqual(Object.keys(functional.skeleton as object).sort(), ['requirements', 'schema']);
 
   const dir = project();
   const printed = run(['schema', 'depth-input', '--json'], dir);
   assert.equal(printed.status, 0, printed.stderr);
   assert.deepEqual(JSON.parse(printed.stdout).skeleton, depth.skeleton);
   const listed = run(['schema', 'list', '--json'], dir);
-  assert.deepEqual(JSON.parse(listed.stdout).map((entry: { name: string }) => entry.name), ['depth-input', 'art-direction-check']);
+  assert.deepEqual(JSON.parse(listed.stdout).map((entry: { name: string }) => entry.name), ['depth-input', 'art-direction-check', 'locale-contract', 'functional-requirements']);
 });
 
 test('the printed depth skeleton classifies and a shapeless input names every missing key', () => {
@@ -160,18 +166,19 @@ test('the printed depth skeleton classifies and a shapeless input names every mi
   assert.match(rejected.stderr, /omd schema depth-input/);
 });
 
-test('stage status names the first missing artifact so a resumed run does not restart', () => {
+// Stage state itself is covered by test/stage-state.test.ts; this only locks the CLI surface.
+test('stage status reports the derived run state through the CLI', () => {
   const dir = project();
   const empty = run(['stage', 'status', '--json'], dir);
   assert.equal(empty.status, 0, empty.stderr);
-  assert.equal(JSON.parse(empty.stdout).next, 'domain');
+  assert.equal(JSON.parse(empty.stdout).current, 'domain');
   assert.deepEqual(JSON.parse(empty.stdout).completed, []);
 
   writeFile(dir, '.omd/domain-brief.json', '{}');
   writeFile(dir, '.omd/depth.json', '{}');
   const resumed = JSON.parse(run(['stage', 'status', '--json'], dir).stdout);
   assert.deepEqual(resumed.completed, ['domain', 'depth']);
-  assert.equal(resumed.next, 'frame');
+  assert.equal(resumed.current, 'frame');
 });
 
 // The check payload's `references` array must equal this projection byte-for-byte, so emitting it
