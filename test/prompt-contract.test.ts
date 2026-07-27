@@ -905,7 +905,16 @@ test('ultradesign externalizes decisions, deliberation, visual observation, and 
   assert.match(skill, /Never retype the references array by hand/);
   assert.match(skill, /A rejected gate is only terminal when an owner role failed/);
   assert.match(skill, /repair the bytes and rerun the same command/);
-  assert.match(skill, /Run `omd stage status` first and continue at the first stage whose artifact is missing/);
+  assert.match(skill, /Run `omd stage resume` first and continue at the stage it names/);
+  assert.match(skill, /`omd stage deliver --stage <stage> --contract <pack-relative\.md>`/);
+  assert.match(skill, /`require` exits non-zero while an earlier owner's artifact is missing or a contract has no receipt/);
+  assert.match(skill, /Never claim a role received a contract without its receipt/);
+  assert.match(skill, /`omd cue --path <file> --symbol <symbol> --field <name>=<value>`/);
+  assert.match(skill, /Cues resolve only from those deterministic inputs/);
+  assert.match(skill, /Record cost at each stage boundary with `omd stage record --stage <stage>`/);
+  assert.match(skill, /`omd complete check <page>`/);
+  assert.match(skill, /It adds no style rule; it only proves the page does what the brief said it would/);
+  assert.match(skill, /`omd locale check` must pass before ship/);
   assert.match(skill, /`omd schema depth-input` instead of inferring keys from `core\/`/);
   assert.match(skill, /the OMD CLI spawns `browser-rs` itself over stdio for each capture/);
   assert.match(skill, /Never start a long-lived `browser-rs`, pick a port, or debug a listening socket/);

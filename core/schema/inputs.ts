@@ -6,6 +6,8 @@
 
 import { DEPTH_INPUT_KEYS, DEPTH_INPUT_SCHEMA, DEPTH_SCOPES } from '../deliberation/depth.ts';
 import { ART_DIRECTION_CHECK_INPUT_KEYS } from '../art-direction/schema.ts';
+import { LOCALE_CONTRACT_KEYS, LOCALE_CONTRACT_SCHEMA, LOCALE_MODES } from '../locale/contract.ts';
+import { FUNCTIONAL_REQUIREMENTS_SCHEMA, REQUIREMENT_KINDS } from '../completeness/index.ts';
 
 export type InputSkeleton = {
   readonly name: string;
@@ -84,7 +86,36 @@ const ART_DIRECTION_CHECK: InputSkeleton = {
   },
 };
 
-export const INPUT_SKELETONS: readonly InputSkeleton[] = [DEPTH_INPUT, ART_DIRECTION_CHECK];
+const LOCALE_CONTRACT: InputSkeleton = {
+  name: 'locale-contract',
+  path: '.omd/locale.json',
+  command: 'omd locale check --json',
+  keys: LOCALE_CONTRACT_KEYS,
+  skeleton: {
+    schema: LOCALE_CONTRACT_SCHEMA,
+    mode: LOCALE_MODES[0],
+    locales: ['ko-KR', 'en-US'],
+    primary: 'ko-KR',
+  },
+};
+
+const FUNCTIONAL_REQUIREMENTS: InputSkeleton = {
+  name: 'functional-requirements',
+  path: '.omd/functional-requirements.json',
+  command: 'omd complete check <page> --json',
+  keys: ['schema', 'requirements'],
+  skeleton: {
+    schema: FUNCTIONAL_REQUIREMENTS_SCHEMA,
+    requirements: [{
+      id: 'R-1',
+      kind: REQUIREMENT_KINDS[0],
+      statement: "<what the visitor must be able to do, in the brief's words>",
+      label: '<the visible text that proves the affordance exists>',
+    }],
+  },
+};
+
+export const INPUT_SKELETONS: readonly InputSkeleton[] = [DEPTH_INPUT, ART_DIRECTION_CHECK, LOCALE_CONTRACT, FUNCTIONAL_REQUIREMENTS];
 
 export function inputSkeleton(name: string): InputSkeleton {
   const found = INPUT_SKELETONS.find((entry) => entry.name === name);

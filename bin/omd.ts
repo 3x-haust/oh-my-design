@@ -97,6 +97,24 @@ interface Opts {
   threshold?: string;
   /** Route the emitted art-direction check payload targets (`omd art-direction check-input --route /`). */
   route?: string;
+  /** Stage a contract is delivered to (`omd stage deliver --stage art-direction`). */
+  stage?: string;
+  /** Pack-relative contract path delivered to a stage (`--contract protocol/copy-deck.md`). */
+  contract?: string;
+  /** Per-stage token ceiling for `omd stage cost --max-stage-tokens`. */
+  maxStageTokens?: string;
+  /** Whole-run token ceiling for `omd stage cost --max-run-tokens`. */
+  maxRunTokens?: string;
+  /** Whole-run wall-clock ceiling in minutes for `omd stage cost --max-run-minutes`. */
+  maxRunMinutes?: string;
+  /** File path a cue is resolved for (`omd cue --path src/landing/Hero.tsx`). */
+  path?: string;
+  /** Code symbol a cue is resolved for (`omd cue --symbol Dialog`). */
+  symbol?: string;
+  /** Typed brief field a cue is resolved for (`omd cue --field surface=marketing`). */
+  field?: string;
+  /** Copy deck the locale gate binds against (`omd locale check --deck .omd/copy-deck.md`). */
+  deck?: string;
   /** Force re-export even when a cached Figma export exists (`omd figma diff --fresh`). */
   fresh?: boolean;
   /** Named visual target to diff against (`omd target diff --target <name>`). */
@@ -153,6 +171,9 @@ const ALIASES: Record<string, keyof Opts> = {
   'max-lcp': 'maxLcp',
   'max-tbt': 'maxTbt',
   'max-cls': 'maxCls',
+  'max-stage-tokens': 'maxStageTokens',
+  'max-run-tokens': 'maxRunTokens',
+  'max-run-minutes': 'maxRunMinutes',
   'dry-run': 'dryRun',
 };
 
@@ -2103,35 +2124,167 @@ async function cmdSchema(name: string | undefined, opts: Opts): Promise<never> {
   process.exit(0);
 }
 
-type StageArtifact = { readonly stage: string; readonly path: string; readonly present: boolean };
-
 /**
- * A resumed run must consume what earlier stages already produced. Without this, a coordinator
- * that lost its session restarts from the domain brief and rewrites owned artifacts.
+ * Stage state for a run. `status`/`resume` derive everything from artifacts on disk; `deliver`
+ * records the one fact that cannot be derived — that a contract's exact bytes reached the stage
+ * that must obey them — and `require` refuses to advance without both.
  */
-function cmdStage(mode: string | undefined, opts: Opts): never {
-  if (mode !== 'status' || opts._.length > 0) throw new Error('usage: omd stage status [--json]');
-  const artifacts: StageArtifact[] = ([
-    ['domain', '.omd/domain-brief.json'],
-    ['depth', '.omd/depth.json'],
-    ['frame', '.omd/frame.md'],
-    ['acquisition', '.omd/acquisition-plan.json'],
-    ['scout', '.omd/scout.md'],
-    ['reference-board', '.omd/reference-board.json'],
-    ['reference-selection', '.omd/reference-pre-selection-v2.json'],
-    ['art-direction', '.omd/art-direction.json'],
-    ['copy', '.omd/copy-deck.md'],
-    ['type-proof', '.omd/type-proof.md'],
-    ['composition', '.omd/composition.md'],
-  ] as const).map(([stage, path]) => ({ stage, path, present: existsSync(join(process.cwd(), path)) }));
-  const next = artifacts.find((artifact) => !artifact.present);
-  const result = { completed: artifacts.filter((artifact) => artifact.present).map((artifact) => artifact.stage), next: next?.stage ?? null, artifacts };
+async function cmdStage(mode: string | undefined, opts: Opts): Promise<never> {
+  const { STAGES, contractSha256, deliveryReceipt, DELIVERY_LOG, readDeliveryReceipts, requireStage, resolveRunState, serializeDeliveryLog, stageDefinition } = await import('../core/stage/contract.ts');
+  const packRoot = join(root, 'core');
+  const projectRoot = process.cwd();
+
+  if (mode === 'status' || mode === 'resume') {
+    if (opts._.length > 0) throw new Error(`usage: omd stage ${mode} [--json]`);
+    const state = resolveRunState(projectRoot, packRoot);
+    const blocked = state.current === null ? undefined : requireStage(projectRoot, packRoot, state.current);
+    const result = { ...state, blocked: blocked?.ok === false ? blocked : null };
+    if (opts.json) process.stdout.write(JSON.stringify(result));
+    else {
+      for (const stage of state.stages) {
+        const contracts = stage.undelivered.length === 0 ? '' : `  undelivered: ${stage.undelivered.join(', ')}`;
+        console.log(`  ${stage.present ? 'have' : '    '}  ${stage.stage.padEnd(20)} ${stage.artifact.padEnd(40)} ${stage.owner}${contracts}`);
+      }
+      if (state.current === null) console.log('every recorded stage artifact exists; resume at the first unproven gate');
+      else {
+        console.log(`current stage: ${state.current}`);
+        for (const contract of blocked?.undeliveredContracts ?? []) console.log(`  deliver first: omd stage deliver --stage ${state.current} --contract ${contract}`);
+      }
+    }
+    process.exit(0);
+  }
+
+  if (mode === 'deliver') {
+    const contract = opts.contract;
+    const stage = opts.stage;
+    if (contract === undefined || stage === undefined || opts._.length > 0) {
+      throw new Error('usage: omd stage deliver --stage <stage> --contract <pack-relative.md> [--json]');
+    }
+    const receipt = deliveryReceipt(stageDefinition(stage).id, contract, contractSha256(packRoot, contract), new Date().toISOString());
+    const adapter = projectWriterFromActivation(opts, 'omd stage deliver');
+    adapter.write(DELIVERY_LOG, serializeDeliveryLog([...readDeliveryReceipts(projectRoot), receipt]));
+    if (opts.json) process.stdout.write(JSON.stringify(receipt));
+    else console.log(`delivered ${contract} to ${receipt.stage} (${receipt.sha256.slice(0, 12)})`);
+    process.exit(0);
+  }
+
+  if (mode === 'require') {
+    const stage = opts.stage ?? opts._[0];
+    if (stage === undefined || opts._.length > 1) throw new Error('usage: omd stage require <stage> [--json]');
+    const requirement = requireStage(projectRoot, packRoot, stage);
+    if (opts.json) process.stdout.write(JSON.stringify(requirement));
+    else if (requirement.ok) console.log(`ok — ${requirement.stage} may run`);
+    else {
+      for (const artifact of requirement.missingArtifacts) console.error(`[blocked] ${requirement.stage} needs an earlier owner's artifact: ${artifact}`);
+      for (const contract of requirement.undeliveredContracts) console.error(`[blocked] ${requirement.stage} has no current delivery receipt for ${contract}; run: omd stage deliver --stage ${requirement.stage} --contract ${contract}`);
+    }
+    process.exit(requirement.ok ? 0 : 1);
+  }
+
+  if (mode === 'record' || mode === 'cost') {
+    const { evaluateStageBudget, readStageUsage, serializeStageUsage, STAGE_USAGE_LOG, STAGE_USAGE_SCHEMA, validateStageUsageSample } = await import('../core/stage/usage.ts');
+    if (mode === 'record') {
+      const stage = opts.stage ?? opts._[0];
+      if (stage === undefined || opts._.length > 1) throw new Error('usage: omd stage record --stage <stage> [--json]');
+      const { computeRunUsage } = await import('../core/usage/index.ts');
+      const current = computeRunUsage(projectRoot);
+      if (current === null) throw new Error('STAGE_USAGE_UNAVAILABLE: no host session log to attribute this stage to');
+      const sample = validateStageUsageSample({
+        schema: STAGE_USAGE_SCHEMA,
+        stage: stageDefinition(stage).id,
+        at: new Date().toISOString(),
+        totalTokens: current.totalTokens,
+        outputTokens: current.outputTokens,
+        elapsedMs: current.elapsedMs,
+        approximate: current.approximate === true,
+      });
+      const adapter = projectWriterFromActivation(opts, 'omd stage record');
+      adapter.write(STAGE_USAGE_LOG, serializeStageUsage([...readStageUsage(projectRoot), sample]));
+      if (opts.json) process.stdout.write(JSON.stringify(sample));
+      else console.log(`recorded ${sample.stage}: ${sample.totalTokens} tokens, ${Math.round(sample.elapsedMs / 1000)}s cumulative`);
+      process.exit(0);
+    }
+    const budget = {
+      ...(opts.maxStageTokens === undefined ? {} : { maxStageTokens: Number(opts.maxStageTokens) }),
+      ...(opts.maxRunTokens === undefined ? {} : { maxRunTokens: Number(opts.maxRunTokens) }),
+      ...(opts.maxRunMinutes === undefined ? {} : { maxRunElapsedMs: Number(opts.maxRunMinutes) * 60_000 }),
+    };
+    const report = evaluateStageBudget(readStageUsage(projectRoot), budget);
+    if (opts.json) process.stdout.write(JSON.stringify(report));
+    else {
+      for (const cost of report.costs) console.log(`  ${cost.stage.padEnd(20)} ${String(cost.totalTokens).padStart(10)} tokens  ${String(Math.round(cost.elapsedMs / 1000)).padStart(6)}s${cost.approximate ? '  (approx)' : ''}`);
+      console.log(`  ${'run total'.padEnd(20)} ${String(report.runTokens).padStart(10)} tokens  ${String(Math.round(report.runElapsedMs / 1000)).padStart(6)}s`);
+      for (const finding of report.findings) console.error(`[over budget] ${finding}`);
+    }
+    process.exit(report.ok ? 0 : 1);
+  }
+  if (mode === 'list') {
+    if (opts.json) process.stdout.write(JSON.stringify(STAGES));
+    else for (const stage of STAGES) console.log(`  ${stage.id.padEnd(20)} ${stage.owner.padEnd(16)} ${stage.artifact.padEnd(40)} ${stage.requiredContracts.join(', ')}`);
+    process.exit(0);
+  }
+
+  throw new Error('usage: omd stage status|resume|list [--json] | deliver --stage <s> --contract <c> | require <stage> | record --stage <s> | cost [--max-stage-tokens N] [--max-run-tokens N] [--max-run-minutes N]');
+}
+/**
+ * Resolves the contracts a piece of work binds, from inputs a machine evaluates identically twice:
+ * file paths, code symbols, and typed brief fields. Never from free-text intent.
+ */
+async function cmdCue(opts: Opts): Promise<never> {
+  const { resolveCues, cueContracts, stageContractsWithCues } = await import('../core/stage/cues.ts');
+  const fields: Record<string, string> = {};
+  for (const pair of opts.field === undefined ? [] : [opts.field]) {
+    const [key, ...rest] = pair.split('=');
+    if (key === undefined || rest.length === 0) throw new Error('usage: omd cue --field <name>=<value>');
+    fields[key] = rest.join('=');
+  }
+  const cues = resolveCues({
+    ...(opts.path === undefined ? {} : { paths: [opts.path] }),
+    ...(opts.symbol === undefined ? {} : { symbols: [opts.symbol] }),
+    fields,
+  });
+  const contracts = opts.stage === undefined ? cueContracts(cues) : stageContractsWithCues(opts.stage, cues);
+  const result = { contracts, cues: cues.map((cue) => ({ source: cue.rule.source, matched: cue.matched, contracts: cue.rule.contracts, reason: cue.rule.reason })) };
   if (opts.json) process.stdout.write(JSON.stringify(result));
   else {
-    for (const artifact of artifacts) console.log(`  ${artifact.present ? 'have' : '    '}  ${artifact.stage.padEnd(20)} ${artifact.path}`);
-    console.log(next === undefined ? 'every recorded stage artifact exists; resume at the first unproven gate' : `next stage: ${next.stage} (${next.path})`);
+    for (const cue of result.cues) console.log(`  ${cue.source.padEnd(7)} ${cue.matched.padEnd(28)} ${cue.contracts.join(', ')}  — ${cue.reason}`);
+    console.log(contracts.length === 0 ? 'no contract is bound by these cues' : `deliver: ${contracts.join(', ')}`);
   }
   process.exit(0);
+}
+/** Validates the declared locale contract and that every Beat carries copy in every locale. */
+async function cmdLocale(mode: string | undefined, opts: Opts): Promise<never> {
+  if (mode !== 'check' || opts._.length > 0) throw new Error('usage: omd locale check [--input .omd/locale.json] [--deck .omd/copy-deck.md] [--json]');
+  const { checkLocaleCopyBinding, validateLocaleContract } = await import('../core/locale/contract.ts');
+  const contractPath = opts.input ?? join(process.cwd(), '.omd', 'locale.json');
+  const contract = validateLocaleContract(inputJson(contractPath, 'omd locale check'));
+  const deckPath = opts.deck ?? join(process.cwd(), '.omd', 'copy-deck.md');
+  const findings = existsSync(deckPath)
+    ? checkLocaleCopyBinding(contract, readFileSync(deckPath, 'utf8'))
+    : [{ id: 'LOCALE-DECK-MISSING', message: `No copy deck at ${relative(process.cwd(), deckPath)} to bind locales against.` }];
+  if (opts.json) process.stdout.write(JSON.stringify({ contract, findings }));
+  else {
+    for (const finding of findings) console.error(`[error] ${finding.id}: ${finding.message}`);
+    if (findings.length === 0) console.log(`ok — ${contract.mode} contract covers ${contract.locales.join(', ')} with primary ${contract.primary}`);
+  }
+  process.exit(findings.length > 0 ? 1 : 0);
+}
+/** Correlates the brief's stated requirements with the built page; it adds no style rule. */
+async function cmdComplete(mode: string | undefined, opts: Opts): Promise<never> {
+  const target = opts._[0];
+  if (mode !== 'check' || target === undefined || opts._.length > 1) {
+    throw new Error('usage: omd complete check <page> [--input .omd/functional-requirements.json] [--json]');
+  }
+  const { checkFunctionalCompleteness, validateFunctionalRequirements } = await import('../core/completeness/index.ts');
+  const requirements = validateFunctionalRequirements(inputJson(opts.input ?? join(process.cwd(), '.omd', 'functional-requirements.json'), 'omd complete check'));
+  const raw = await rawIrFor(opts, target);
+  const findings = checkFunctionalCompleteness(requirements, raw.nodes);
+  if (opts.json) process.stdout.write(JSON.stringify({ requirements: requirements.requirements.length, findings }));
+  else {
+    for (const finding of findings) console.error(`[error] ${finding.id} ${finding.requirement}: ${finding.message}`);
+    if (findings.length === 0) console.log(`ok — all ${requirements.requirements.length} declared requirements are present, operable, and reachable`);
+  }
+  process.exit(findings.length > 0 ? 1 : 0);
 }
 async function cmdArtDirection(mode: string | undefined, opts: Opts): Promise<never> {
   if (mode === 'alternatives-sha') {
@@ -3029,7 +3182,13 @@ function usage(): never {
     + '  art-direction alternatives-sha --input alternatives.json [--json]  canonical digest every perspective and receipt must bind\n'
     + '  art-direction check-input [--route /] [--json]  emit the check payload skeleton with canonical references filled in\n'
     + '  schema list | schema <name> [--json]        print the exact skeleton for a hand-authored input\n'
-    + '  stage status [--json]                       show which stage artifacts exist and where a resumed run continues\n'
+    + '  stage list|status|resume [--json]           stage owners, artifacts, and where a resumed run continues\n'
+    + '  stage deliver --stage <s> --contract <pack-relative.md>  record that a contract reached its stage\n'
+    + '  stage require <stage> [--json]              block until earlier artifacts exist and contracts are delivered\n'
+    + '  stage record --stage <s> | stage cost [--max-stage-tokens N] [--max-run-tokens N] [--max-run-minutes N]  per-stage cost and budget\n'
+    + '  cue [--path p] [--symbol s] [--field k=v] [--stage s] [--json]  contracts this work binds, from deterministic inputs only\n'
+    + '  locale check [--input .omd/locale.json] [--deck .omd/copy-deck.md] [--json]  validate declared locales and their Beat copy\n'
+    + '  complete check <page> [--input .omd/functional-requirements.json] [--json]  every declared requirement is present, operable, reachable\n'
     + '  intent append --input trusted-intent.json [--json]  append trusted intent and update its guarded current pointer\n'
     + '  domain check [--input domain-brief.json] [--json]  validate the domain-analysis brief\n'
     + '  craft-fidelity check --input pair.json [--json]  verify a generated part reproduced the reference craft\n'
@@ -3146,9 +3305,12 @@ async function main(): Promise<never> {
 
   if (cmd === 'design') return cmdDesign(parseArgs(args.slice(1)));
   if (cmd === 'copy') return cmdCopy(parseArgs(args.slice(1)));
+  if (cmd === 'locale') return cmdLocale(sub, parseArgs(args.slice(2)));
+  if (cmd === 'complete') return cmdComplete(sub, parseArgs(args.slice(2)));
   if (cmd === 'art-direction') return cmdArtDirection(sub, parseArgs(args.slice(2)));
   if (cmd === 'schema') return cmdSchema(sub, parseArgs(args.slice(2)));
   if (cmd === 'stage') return cmdStage(sub, parseArgs(args.slice(2)));
+  if (cmd === 'cue') return cmdCue(parseArgs(args.slice(1)));
   if (cmd === 'preflight') return cmdPreflight(parseArgs(args.slice(1)));
   if (cmd === 'composition') return cmdComposition(parseArgs(args.slice(1)));
   if (cmd === 'source') return cmdSource(sub, parseArgs(args.slice(2)));
