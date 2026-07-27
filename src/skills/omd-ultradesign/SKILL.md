@@ -57,6 +57,11 @@ artifact gate. Do not cancel a still-running owner or stop the graph because an 
 message describes a temporary gap; capture and browser writes may still be joining. A timeout
 requires both an unfinished child and no ongoing tool/process activity, not merely several wait
 polls with no chat message.
+A Codex `wait` result that says `No agents completed yet` is an unfinished poll, never a child
+response. Call `wait` again for the same retained child thread IDs until the tool reports that child
+as `completed`, then quote only the child's returned handback. Never invent the expected response,
+treat the child's display name or `Started` event as its result, or advance because one poll returned
+no completed agents.
 For the scout specifically, acquisition and browser work can be quiet while a batch is active.
 Allow at least fifteen minutes for its first final state, and never retry or cancel it while its
 child state or a capture/browser tool is active. Six empty chat polls are not a timeout. Inspecting
