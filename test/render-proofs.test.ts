@@ -36,7 +36,7 @@ test('captures a real file URL load scene with path-backed ROI receipts', async 
   writeFileSync(page, `<!doctype html><html data-omd-production-boundary="whole-page"><style>
     html, body { width: 100%; height: 100%; margin: 0; }
     html { background: #111; }
-    body { min-height: 100%; background: #111; animation: production-scene 1000ms linear 100ms forwards; }
+    body { min-height: 100%; background: #111; animation: production-scene 4000ms linear 150ms forwards; }
     @keyframes production-scene { to { background: #eee; } }
     @media (prefers-reduced-motion: reduce) { body { animation: none !important; background: #eee; } }
   </style><body>motion</body></html>`);
