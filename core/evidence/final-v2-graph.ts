@@ -232,10 +232,7 @@ function readReceipt(root: string, fs: EvidenceGraphFs, receipt: ArtifactReceipt
   if (outside === '' || outside.startsWith('..') || resolve(root, outside) !== path) fail(`${label} escapes the project root`);
   const rootStat = fs.lstat(root);
   if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) fail('project root is not a real directory');
-  requireRealReceiptAncestors(root, path, fs, label);
-  const stat = fs.lstat(path);
-  if (!stat.isFile() || stat.isSymbolicLink()) fail(`${label} is not a regular receipt file`);
-  const bytes = fs.readFile(path);
+  const bytes = readStableRegularFile(root, fs, path, label);
   const value = parseReceipt(bytes, label);
   const byteHash = createHash('sha256').update(bytes).digest('hex');
   if (byteHash !== receipt.sha256) fail(`${label} storage-byte hash changed`);
@@ -443,7 +440,7 @@ export function validateFinalEvidenceV2GraphFiles(root: string, graphInput: unkn
   }
   try {
     const currentSelection = validateReferenceSelectionV2(root);
-    const currentHandoff = parseReferenceHandoffReceipt(parseReceipt(fs.readFile(resolve(root, '.omd', 'reference-handoffs', 'art-direction.json')), 'current art-direction handoff'));
+    const currentHandoff = parseReferenceHandoffReceipt(parseReceipt(readStableRegularFile(root, fs, resolve(root, '.omd', 'reference-handoffs', 'art-direction.json'), 'current art-direction handoff'), 'current art-direction handoff'));
     const currentUsage = readValidatedReferenceUsage(root);
     if (referenceSelectionV2Sha256(currentSelection) !== hashes.get('settledSelection')
       || currentHandoff.payloadSha256 !== handoff.payloadSha256
@@ -456,14 +453,12 @@ export function validateFinalEvidenceV2GraphFiles(root: string, graphInput: unkn
   }
   try {
     const pointerPath = resolve(root, '.omd', 'intent-current.json');
-    requireRealReceiptAncestors(root, pointerPath, fs, 'intent current pointer');
-    const pointer = validateIntentCurrentPointer(parseReceipt(fs.readFile(pointerPath), 'intent current pointer'));
+    const pointer = validateIntentCurrentPointer(parseReceipt(readStableRegularFile(root, fs, pointerPath, 'intent current pointer'), 'intent current pointer'));
     if (`.omd/${pointer.record}` !== graph.intent.path || pointer.sha256 !== hashes.get('intent')) {
       fail('intent receipt is not the current immutable ledger');
     }
     const boardPath = resolve(root, '.omd', 'reference-board.json');
-    requireRealReceiptAncestors(root, boardPath, fs, 'current reference board');
-    if (semanticHash('board', parseReceipt(fs.readFile(boardPath), 'current reference board')) !== hashes.get('board')) {
+    if (semanticHash('board', parseReceipt(readStableRegularFile(root, fs, boardPath, 'current reference board'), 'current reference board')) !== hashes.get('board')) {
       fail('board receipt is not the current canonical board');
     }
   } catch (error) {
@@ -542,10 +537,7 @@ export function validateFinalEvidenceV2GraphFiles(root: string, graphInput: unkn
     fail('art direction Beat identities exceed the canonical register budget without a current-user exception');
   }
   const copyDeckPath = resolve(root, '.omd', 'copy-deck.md');
-  requireRealReceiptAncestors(root, copyDeckPath, fs, 'canonical copy deck');
-  const copyDeckStat = fs.lstat(copyDeckPath);
-  if (!copyDeckStat.isFile() || copyDeckStat.isSymbolicLink()) fail('canonical copy deck is not a regular file');
-  const copyDeckBytes = fs.readFile(copyDeckPath);
+  const copyDeckBytes = readStableRegularFile(root, fs, copyDeckPath, 'canonical copy deck');
   try {
     validateCanonicalCopyDeckReceipt(copy, copyDeckBytes, {
       selectedRegister: selectedCopyRegister,
@@ -598,10 +590,7 @@ export function validateFinalEvidenceV2GraphFiles(root: string, graphInput: unkn
   });
   const motionResolutionSha256 = digest(decision.motionResolutionProjectionSha256, 'art direction motion resolution');
   const motionResolutionPath = resolve(root, '.omd', 'motion-resolutions', `sha256-${motionResolutionSha256}.json`);
-  requireRealReceiptAncestors(root, motionResolutionPath, fs, 'motion resolution');
-  const motionResolutionStat = fs.lstat(motionResolutionPath);
-  if (!motionResolutionStat.isFile() || motionResolutionStat.isSymbolicLink()) fail('motion resolution is not a regular receipt file');
-  const motionResolutionBytes = fs.readFile(motionResolutionPath);
+  const motionResolutionBytes = readStableRegularFile(root, fs, motionResolutionPath, 'motion resolution');
   const motionResolution = validateMotionResolutionProjection(parseReceipt(motionResolutionBytes, 'motion resolution'));
   if (motionResolutionProjectionSha256(motionResolution) !== motionResolutionSha256
     || motionResolution.motionDecision !== selectedCopyMotion

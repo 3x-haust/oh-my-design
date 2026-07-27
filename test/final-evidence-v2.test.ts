@@ -654,6 +654,23 @@ test('digest-only, missing, mixed, branch-mismatched, red, and forked graphs can
     }
   } finally { clean(directory); }
 });
+test('final graph reads every injected receipt through a stable no-follow descriptor', () => {
+  const directory = root(); try {
+    const input = manifest(directory);
+    const invocation = finalEvidenceInvocation(directory);
+    authorizeTestProjectRunPayloads(directory, invocation, finalEvidenceGraphAuthorizations(directory, input));
+    let descriptorReads = 0;
+    validateFinalEvidenceV2GraphFiles(directory, input.graph, {
+      ...finalEvidenceGraphFilesystem,
+      readFile(path: string | number) {
+        assert.equal(typeof path, 'number', `path-based graph read remained: ${String(path)}`);
+        descriptorReads += 1;
+        return readFileSync(path);
+      },
+    }, invocation);
+    assert.ok(descriptorReads > input.graph.observations.length);
+  } finally { clean(directory); }
+});
 test('unrelated usage raw-board, assembly, or selection receipt bindings cannot substitute selected artifacts', () => {
   const directory = root(); try {
     for (const field of ['captureSha256', 'assemblySha256', 'projectionSha256', 'selectionSha256', 'settledSelectionSha256'] as const) {
