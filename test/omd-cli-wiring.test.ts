@@ -117,3 +117,82 @@ test('art-direction alternatives-sha accepts a decision-check payload and reject
   assert.notEqual(invalid.status, 0);
   assert.match(invalid.stderr, /ART_DIRECTION_ALTERNATIVES_INVALID/);
 });
+
+// ── schema / stage / check-input ────────────────────────────────────────────
+
+// Every skeleton the CLI prints must stay the exact key set its validator enforces; a drifted
+// skeleton is worse than none, because the coordinator trusts it and loses a stage to the gate.
+
+test('printed input skeletons carry exactly the keys their validators accept', async () => {
+  const { INPUT_SKELETONS, inputSkeleton } = await import('../core/schema/inputs.ts');
+  const { DEPTH_INPUT_KEYS } = await import('../core/deliberation/depth.ts');
+  const { ART_DIRECTION_CHECK_INPUT_KEYS } = await import('../core/art-direction/schema.ts');
+
+  const depth = inputSkeleton('depth-input');
+  assert.deepEqual(Object.keys(depth.skeleton as object).sort(), [...DEPTH_INPUT_KEYS].sort());
+  const check = inputSkeleton('art-direction-check');
+  const authored = Object.keys(check.skeleton as object);
+  assert.ok(authored.every((key) => (ART_DIRECTION_CHECK_INPUT_KEYS as readonly string[]).includes(key)), authored.join(','));
+  assert.ok(!authored.includes('invocation'), 'the local lane never authors an invocation');
+  assert.equal(INPUT_SKELETONS.length, 2);
+
+  const dir = project();
+  const printed = run(['schema', 'depth-input', '--json'], dir);
+  assert.equal(printed.status, 0, printed.stderr);
+  assert.deepEqual(JSON.parse(printed.stdout).skeleton, depth.skeleton);
+  const listed = run(['schema', 'list', '--json'], dir);
+  assert.deepEqual(JSON.parse(listed.stdout).map((entry: { name: string }) => entry.name), ['depth-input', 'art-direction-check']);
+});
+
+test('the printed depth skeleton classifies and a shapeless input names every missing key', () => {
+  const dir = project();
+  const skeleton = JSON.parse(run(['schema', 'depth-input', '--json'], dir).stdout).skeleton;
+  const good = writeFile(dir, 'depth.json', JSON.stringify(skeleton));
+  const classified = run(['depth', 'classify', '--input', good, '--json'], dir);
+  assert.equal(classified.status, 0, classified.stderr);
+  assert.equal(JSON.parse(classified.stdout).level, 'L3');
+
+  const bad = writeFile(dir, 'bad-depth.json', JSON.stringify({ schema: 'design-depth-input-v1', surface: 'marketing', costlyError: false, webgl: false }));
+  const rejected = run(['depth', 'classify', '--input', bad, '--json'], dir);
+  assert.notEqual(rejected.status, 0);
+  assert.match(rejected.stderr, /missing: scope, zoneCount/);
+  assert.match(rejected.stderr, /unknown: surface/);
+  assert.match(rejected.stderr, /omd schema depth-input/);
+});
+
+test('stage status names the first missing artifact so a resumed run does not restart', () => {
+  const dir = project();
+  const empty = run(['stage', 'status', '--json'], dir);
+  assert.equal(empty.status, 0, empty.stderr);
+  assert.equal(JSON.parse(empty.stdout).next, 'domain');
+  assert.deepEqual(JSON.parse(empty.stdout).completed, []);
+
+  writeFile(dir, '.omd/domain-brief.json', '{}');
+  writeFile(dir, '.omd/depth.json', '{}');
+  const resumed = JSON.parse(run(['stage', 'status', '--json'], dir).stdout);
+  assert.deepEqual(resumed.completed, ['domain', 'depth']);
+  assert.equal(resumed.next, 'frame');
+});
+
+// The check payload's `references` array must equal this projection byte-for-byte, so emitting it
+// is the only way a coordinator can stop retyping it. Rights and anti-reference signal decide
+// `positive`/`lawful`; motion obligations stay pending until the evaluator settles them.
+test('canonical check references project rights and signal from the settled selection', async () => {
+  const { canonicalArtDirectionReferences } = await import('../core/art-direction/decision.ts');
+  const slot = (slotId: string, signal: string, rights: string) => ({
+    slotId, signal, rights, staticAxis: 'available', motionAxis: 'absent',
+    obligationDisposition: 'not-applicable', obligationReason: 'static-only reference',
+  });
+  const references = canonicalArtDirectionReferences({
+    slots: [
+      slot('hero', 'high-visual-system', 'lawful'),
+      slot('avoid', 'anti-reference', 'lawful'),
+      slot('unlicensed', 'supporting-component', 'restricted'),
+    ],
+  } as never);
+  assert.deepEqual(references, [
+    { slotId: 'hero', signal: 'high-visual-system', positive: true, lawful: true, motionObligation: 'none' },
+    { slotId: 'avoid', signal: 'anti-reference', positive: false, lawful: true, motionObligation: 'none' },
+    { slotId: 'unlicensed', signal: 'supporting-component', positive: false, lawful: false, motionObligation: 'none' },
+  ]);
+});

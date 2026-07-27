@@ -184,14 +184,21 @@ function citedReferences(slotIds: readonly string[], references: readonly ArtDir
     return reference;
   });
 }
-function canonicalReferences(bindings: CanonicalReferenceBindings): readonly ArtDirectionReference[] {
-  return bindings.selection.slots.map((slot) => ({
+/**
+ * The references array a check payload must carry is a pure projection of the settled selection.
+ * Exported so the CLI can emit it instead of asking a coordinator to retype it byte-exactly.
+ */
+export function canonicalArtDirectionReferences(selection: ReferenceSelectionV2): readonly ArtDirectionReference[] {
+  return selection.slots.map((slot) => ({
     slotId: slot.slotId,
     signal: slot.signal,
     positive: slot.rights === 'lawful' && slot.signal !== 'anti-reference',
     lawful: slot.rights === 'lawful',
     motionObligation: 'none',
   }));
+}
+function canonicalReferences(bindings: CanonicalReferenceBindings): readonly ArtDirectionReference[] {
+  return canonicalArtDirectionReferences(bindings.selection);
 }
 
 function validateCanonicalSelectionSlots(selection: ReferenceSelectionV2): void {

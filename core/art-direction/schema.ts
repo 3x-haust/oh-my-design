@@ -5,6 +5,11 @@ export const REGISTERS = ['quiet', 'confident', 'showpiece'] as const;
 export const MOTION_DECISIONS = ['none', 'one'] as const;
 export const ART_DIRECTION_RECORD_SCHEMA_VERSION = 'art-direction-record-v2' as const;
 export const ART_DIRECTION_POINTER_SCHEMA_VERSION = 'art-direction-current-v2' as const;
+/** Exactly the keys a caller may author in an `omd art-direction check|local-check` payload. */
+export const ART_DIRECTION_CHECK_INPUT_KEYS = [
+  'route', 'alternatives', 'references', 'eligibility', 'evaluatorAssessment', 'evaluatorResult',
+  'beats', 'invocation', 'deliberation', 'implementationLane', 'fallbackPath', 'performanceAccessibilityBudget',
+] as const;
 
 export type Register = (typeof REGISTERS)[number];
 export type MotionDecision = (typeof MOTION_DECISIONS)[number];
