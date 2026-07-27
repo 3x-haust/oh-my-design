@@ -18,7 +18,7 @@ Every brief implies a register. The register is not the visual style — it is t
 
 The error is applying showpiece technique to quiet or confident contexts. A dashboard with split-text entrances is not ambitious; it is misread. The thirty-percent Usability weight does not become a thirty-percent weight only when the judges disagree with your taste — it applies regardless of intent. Usability 30% is the reason showpiece technique must still serve navigation and clarity, not just aesthetic ambition.
 
-On a `marketing` or showpiece surface, ambition is the default state, not an upgrade the user has to request. The register commits to at least one signature moment — a motion that carries the concept and a layout that departs from the generic template — even when the brief is a single rough line. A competent, evenly-weighted, inoffensive result that any generator would produce is a MISS here, not a neutral outcome: a surface that came to persuade or to be experienced has failed if it is merely safe. This never licenses an effects catalogue (see The restraint clause): the ceiling is one bold concept committed fully — the GDWEB / Awwwards way — never a pile of techniques. And it never travels down-register: a `product` or quiet surface stays quiet no matter how rough the brief, where ambition means density, scanning, and fewer errors, not motion.
+On a `marketing` or showpiece surface, ambition is the default state, not an upgrade the user has to request. The register commits to a signature visual or structural moment and a layout that departs from the generic template — even when the brief is a single rough line. Motion is not implied: `motionDecision: one` arises only from explicit current-user policy or selected evidence, and is then exactly one declared, activated load scene. A competent, evenly-weighted, inoffensive result that any generator would produce is a MISS here, not a neutral outcome: a surface that came to persuade or to be experienced has failed if it is merely safe. This never licenses an effects catalogue (see The restraint clause): the ceiling is one bold concept committed fully — the GDWEB / Awwwards way — never a pile of techniques. And it never travels down-register: a `product` or quiet surface stays quiet no matter how rough the brief, where ambition means density, scanning, and fewer errors, not motion.
 
 ---
 
@@ -38,17 +38,15 @@ long heavy line that becomes a clipped mobile wall fails even if one desktop ren
 
 ### Scroll is the narrative axis
 
-On a showpiece site, sections are not containers — they are scenes. The order of scroll is the order of a story: exposition, complication, turn, resolution. If the sections could be reordered without loss, there is no scroll narrative, only content in a column.
+On a showpiece site, sections are narrative beats, not additional motion scenes. The order of scroll is the order of a story: exposition, complication, turn, resolution. If the sections could be reordered without loss, there is no narrative, only content in a column.
 
-The structural implication: the first scene commits to the register, the middle scenes develop it, and the footer scene closes it. A footer that reverts to default template styling breaks the narrative as certainly as a film that ends with stock footage.
-
-CSS scroll-driven animations (the `animation-timeline: scroll()` and `view()` properties, now available in Chromium and WebKit as of 2024) enable scroll-linked motion without JavaScript. The correct fallback for unsupported browsers is the static layout — which must be designed to stand without the motion. An experience that is illegible when still is not a scroll narrative; it is content that depends on JavaScript to exist.
+The structural implication: the first beat commits to the register, the middle beats develop it, and the footer beat closes it. A footer that reverts to default template styling breaks the narrative as certainly as a film that ends with stock footage. This narrative may be entirely static; it must not create a multi-scene scroll exception to the selected exact-one motion contract.
 
 ### The first three seconds declare the register
 
-A loader or entrance animation on a showpiece site is not a technical necessity — it is the opening sentence. It tells the user: this is what kind of experience you are in. A loader that runs longer than the asset load time is a loader that is costing more than it earns. The outer bound is three seconds; under one second is the performance target. Beyond that, a fast site is made to feel slow, and the Usability score suffers before the user has seen a single thing.
+An entrance animation is not a technical necessity. When the selected `motionDecision` is `one`, its one declared load scene can be the opening sentence: it commits the palette, declares the type register, and establishes the motion vocabulary. A scene that is only a spinner followed by a page reveal has wasted the available motion budget.
 
-What the entrance must do in those seconds: commit the palette, declare the type register, establish the motion vocabulary. A loader that is only a spinner followed by a page reveal has wasted the three seconds it consumed.
+When `motionDecision` is `none`, the opening declares the register through static composition, palette, and type. Neither register nor surface silently authorizes an entrance animation.
 
 ### The concept must survive to the footer
 
@@ -156,9 +154,9 @@ Each entry names the condition under which the technique earns its place and the
 
 ### Sticky stage / scene sequencing
 
-**Condition for use**: A multi-scene showpiece where each scene requires the user's full attention before advancing — a product demo, a feature walk-through with animated states, a narrative with distinct chapters. The stage (`position: sticky`) pins the viewport while scroll advances the timeline inside the scene.
+**Condition for use**: None under the harness-v2 exact-one motion contract. Use static section sequencing, or the one declared load-triggered scene, rather than a sticky multi-scene scroll timeline.
 
-**Condition against**: Sites where the user is goal-oriented and is scrolling to find something specific. Sticky stages are navigation debt — the user cannot scroll past to scan; they must watch the scene play. If they have seen it before, it is friction. If there is any chance of return visits, the stage needs an explicit skip or fast-forward affordance.
+**Condition against**: Any surface governed by the exact-one contract. Sticky multi-scene timelines add motion scenes beyond the authorized decision and create navigation debt.
 
 ### Editorial number / index labels (01, 02, 03)
 

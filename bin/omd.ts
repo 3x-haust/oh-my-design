@@ -2533,6 +2533,31 @@ async function cmdEvidence(mode: string | undefined, opts: Opts): Promise<never>
   }
   throw new Error('usage: omd evidence static-capture --input <static-capture.json> | motion-capture --input <motion-capture.json> | static-check --input <evidence.json> | motion-check --input <evidence.json> | finalize --input <manifest.json> | check [--json] | v2 finalize --input <manifest.json> --activation <host-issued-invocation.json> | v2 check --activation <host-issued-invocation.json> [--json] | v2-recover [--json] | v2-gc [--dry-run|--apply] [--json] | tasks --input .omd/.cache/task-evidence-manifest.json> | tasks-check [--json]');
 }
+async function cmdObservation(mode: string | undefined, opts: Opts): Promise<never> {
+  if (mode === 'write') {
+    if (!opts.input || opts._.length > 0) throw new Error('usage: omd observation write --input <observation.json> [--activation <host-issued-invocation.json>] [--json]');
+    const { writeObservationV2 } = await import('../core/runtime/observation.ts');
+    const observation = writeObservationV2(process.cwd(), inputJson(opts.input, 'omd observation write') as never, projectWriterFromActivation(opts, 'omd observation write'));
+    if (opts.json) process.stdout.write(JSON.stringify(observation)); else console.log('.omd/observation-v2.json');
+    process.exit(0);
+  }
+  if (mode === 'retain') {
+    if (!opts.input || opts._.length > 0) throw new Error('usage: omd observation retain --input <retention.json> [--activation <host-issued-invocation.json>] [--json]');
+    const { retainObservationV2 } = await import('../core/runtime/observation-retention.ts');
+    const retained = retainObservationV2(process.cwd(), inputJson(opts.input, 'omd observation retain') as never, projectWriterFromActivation(opts, 'omd observation retain'));
+    if (opts.json) process.stdout.write(JSON.stringify(retained)); else console.log('.omd/observation-v2-retention.json');
+    process.exit(0);
+  }
+  throw new Error('usage: omd observation write --input <observation.json> | retain --input <retention.json>');
+}
+
+async function cmdAttest(mode: string | undefined, opts: Opts): Promise<never> {
+  if (mode !== 'v2' || opts._.length > 0) throw new Error('usage: omd attest v2 [--activation <host-issued-invocation.json>] [--json]');
+  const { attestLegacyV1AsV2 } = await import('../core/migration/attest-v2.ts');
+  const attestation = attestLegacyV1AsV2(process.cwd(), projectWriterFromActivation(opts, 'omd attest v2'));
+  if (opts.json) process.stdout.write(JSON.stringify(attestation)); else console.log('.omd/attest-v2.json');
+  process.exit(0);
+}
 
 async function cmdDoctor(): Promise<never> {
   let allPass = true;
@@ -3052,6 +3077,8 @@ async function main(): Promise<never> {
     }
     return cmdEvidence(sub, parseArgs(args.slice(2)));
   }
+  if (cmd === 'observation') return cmdObservation(sub, parseArgs(args.slice(2)));
+  if (cmd === 'attest') return cmdAttest(sub, parseArgs(args.slice(2)));
   if (cmd === 'intent') return cmdIntent(sub, parseArgs(args.slice(2)));
   if (cmd === 'domain') return cmdDomain(sub, parseArgs(args.slice(2)));
   if (cmd === 'craft-fidelity') return cmdCraftFidelity(sub, parseArgs(args.slice(2)));

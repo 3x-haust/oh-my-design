@@ -147,7 +147,7 @@ function computeHarnessRun(input: HarnessV2RunInput, snapshot: EvidenceLockSnaps
   const runnerId=e5.runnerId, decisions:Record<string,readonly {raterId:string;vote:RaterVote}[]>={}, receipts:Record<string,ReturnType<typeof execute>>={}; let observedUsage:UsageTelemetry={tokens:0,usd:0};
   for(const holdout of input.evaluatorHoldouts.holdouts){
     const projected=projectedById.get(holdout.id),rawEvidence=input.rawHoldoutEvidence[holdout.id],authority=input.rawHoldoutAuthority[holdout.id];
-    if(!projected||!rawEvidence||!authority||projected.kind!==holdout.kind||projected.surface!==holdout.surface||projected.domain!==holdout.domain||projected.language!==holdout.language)throw new Error(`missing or relabeled projected brief: ${holdout.id}`);
+    if(!projected||!rawEvidence||!authority||projected.kind!==holdout.kind||projected.surface!==holdout.surface||canonical(projected.routes)!==canonical(holdout.routes)||projected.domain!==holdout.domain||projected.language!==holdout.language)throw new Error(`missing or relabeled projected brief: ${holdout.id}`);
     const run=execute(projected,rawEvidence,authority,input.host,input.browser,input.reviewerLanes,usageObserver,runnerId,clock.issuedAt as number,clock.expiresAt as number); observedUsage=addUsage(observedUsage,run.telemetry);
     if(observedUsage.tokens>input.budget.tokens||observedUsage.usd>input.budget.usd) throw new Error('parent-observed usage exceeds input cap');
     validateBudget({rounds:1,browserLaunches:0,elapsedMinutes:0,...observedUsage}); receipts[holdout.id]=run; decisions[holdout.id]=run.reviews.map(review=>({raterId:review.raterId,vote:review.vote}));

@@ -21,6 +21,17 @@ export const FINAL_EVIDENCE_V2_GRAPH_SCHEMA = 'final-evidence-v2-graph' as const
 const SHA256 = /^[a-f0-9]{64}$/;
 
 export type ArtifactReceipt = Readonly<{ path: string; schema: string; sha256: string }>;
+export type FinalReviewerLane = 'blindLane' | 'fidelityLane' | 'protocolLane';
+export type FinalReviewerLaneContract = Readonly<{
+  schema: 'blind-review-v1' | 'fidelity-review-v1' | 'protocol-review-v1';
+  verdictKeys: readonly [string, string];
+  floorDimensions: readonly [string, string];
+}>;
+const FINAL_REVIEWER_LANE_CONTRACTS: Readonly<Record<FinalReviewerLane, FinalReviewerLaneContract>> = {
+  blindLane: { schema: 'blind-review-v1', verdictKeys: ['blindVisual', 'blindNarrative'], floorDimensions: ['composition', 'copy'] },
+  fidelityLane: { schema: 'fidelity-review-v1', verdictKeys: ['referenceFidelity', 'renderFidelity'], floorDimensions: ['desktop', 'mobile'] },
+  protocolLane: { schema: 'protocol-review-v1', verdictKeys: ['evidenceIntegrity', 'publicationProtocol'], floorDimensions: ['authority', 'currentness'] },
+};
 export type FinalEvidenceV2Graph = Readonly<{
   schema: typeof FINAL_EVIDENCE_V2_GRAPH_SCHEMA;
   activation: ArtifactReceipt;
@@ -305,18 +316,24 @@ function validateTypedReceipt(label: string, value: Record<string, unknown>): vo
       case 'blindLane':
       case 'fidelityLane':
       case 'protocolLane': {
+        const contract = FINAL_REVIEWER_LANE_CONTRACTS[label];
         exact(value, ['schema', 'artDirectionSha256', 'buildSha256', 'isolationReceipt', 'verdicts', 'criticalFloors', 'quorum', 'provenance'], label);
+        if (value.schema !== contract.schema) fail(`${label} schema does not match its critical lane`);
         digest(value.artDirectionSha256, `${label}.artDirectionSha256`);
         digest(value.buildSha256, `${label}.buildSha256`);
         const isolation = object(value.isolationReceipt, `${label}.isolationReceipt`);
         exact(isolation, ['schema', 'sha256'], `${label}.isolationReceipt`);
         if (isolation.schema !== 'reviewer-isolation-v1') fail(`${label} requires an isolation receipt`);
-        digest(isolation.sha256, `${label}.isolationReceipt.sha256`);
+        const isolationSha256 = digest(isolation.sha256, `${label}.isolationReceipt.sha256`);
         const verdicts = object(value.verdicts, `${label}.verdicts`);
-        const verdictValues = Object.values(verdicts);
-        if (verdictValues.length < 2 || verdictValues.some((verdict) => verdict !== 'GREEN')) fail(`${label} requires conjunctive independent GREEN verdicts`);
+        exact(verdicts, contract.verdictKeys, `${label}.verdicts`);
+        if (Object.values(verdicts).some((verdict) => verdict !== 'GREEN')) fail(`${label} requires all critical GREEN verdicts`);
         const floors = object(value.criticalFloors, `${label}.criticalFloors`);
-        if (Object.keys(floors).length === 0 || Object.values(floors).some((floor) => typeof floor !== 'number' || !Number.isFinite(floor) || floor < 3)) fail(`${label} critical floors are invalid`);
+        exact(floors, contract.floorDimensions, `${label}.criticalFloors`);
+        for (const dimension of contract.floorDimensions) {
+          const floor = floors[dimension];
+          if (typeof floor !== 'number' || !Number.isFinite(floor) || floor < 3) fail(`${label} critical floor ${dimension} is invalid`);
+        }
         const quorum = object(value.quorum, `${label}.quorum`);
         exact(quorum, ['required', 'passed'], `${label}.quorum`);
         const required = quorum.required;
@@ -325,17 +342,22 @@ function validateTypedReceipt(label: string, value: Record<string, unknown>): vo
           || !Number.isSafeInteger(required) || !Number.isSafeInteger(passed)
           || required < 2 || passed < required) fail(`${label} quorum is not satisfied`);
         const provenance = object(value.provenance, `${label}.provenance`);
-        exact(provenance, ['observationSha256s', 'reviewerIds'], `${label}.provenance`);
+        exact(provenance, ['observationSha256s', 'reviewerIds', 'reviewerSessionSha256'], `${label}.provenance`);
         const observations = array(provenance.observationSha256s, `${label}.provenance.observationSha256s`);
         const reviewers = array(provenance.reviewerIds, `${label}.provenance.reviewerIds`);
-        if (observations.length === 0 || reviewers.length < 2) fail(`${label} provenance is incomplete`);
+        if (observations.length === 0 || reviewers.length !== passed || new Set(reviewers).size !== reviewers.length) fail(`${label} provenance is incomplete or reuses a reviewer`);
         observations.forEach((item, index) => digest(item, `${label}.provenance.observationSha256s[${index}]`));
         reviewers.forEach((item, index) => stringValue(item, `${label}.provenance.reviewerIds[${index}]`));
+        if (digest(provenance.reviewerSessionSha256, `${label}.provenance.reviewerSessionSha256`) !== isolationSha256) fail(`${label} is not bound to its reviewer session evidence`);
         return;
       }
       case 'observation': {
-        exact(value, ['schema', 'buildSha256', 'predecessorSha256', 'observedAt'], 'observation');
+        exact(value, ['schema', 'buildSha256', 'currentArtifact', 'predecessorSha256', 'observedAt', 'evidence'], 'observation');
         digest(value.buildSha256, 'observation.buildSha256');
+        const currentArtifact = object(value.currentArtifact, 'observation.currentArtifact');
+        exact(currentArtifact, ['path', 'sha256'], 'observation.currentArtifact');
+        stringValue(currentArtifact.path, 'observation.currentArtifact.path');
+        digest(currentArtifact.sha256, 'observation.currentArtifact.sha256');
         if (value.predecessorSha256 !== null) digest(value.predecessorSha256, 'observation.predecessorSha256');
         stringValue(value.observedAt, 'observation.observedAt');
         return;
@@ -498,6 +520,16 @@ export function validateFinalEvidenceV2GraphFiles(root: string, graphInput: unkn
     ? selectedRegister : fail('art direction does not expose a selected copy register');
   const selectedCopyMotion = motionDecision === 'none' || motionDecision === 'one'
     ? motionDecision : fail('art direction does not expose a selected copy motion decision');
+  if (surface === 'product' && (selectedCopyMotion === 'one' || selectedCopyRegister === 'showpiece')) {
+    fail('product routes cannot publish a signature scene or showpiece register');
+  }
+  if (surface === 'mixed') {
+    const task = checkTaskEvidence(root);
+    const routes = new Set(task.tasks.map((entry) => entry.production.route));
+    if (routes.size !== 1 || !routes.has(stringValue(decision.route, 'art direction route'))) {
+      fail('mixed publication requires a current per-route legal decision map; this single-route decision cannot authorize multiple routes');
+    }
+  }
   const selectedCopyException = typeof currentUserBeatExceptionReceiptSha256 === 'string'
     ? currentUserBeatExceptionReceiptSha256 : fail('art direction does not expose a selected copy exception receipt');
   const currentIntentLedger = validateIntentLedger(values.get('intent') ?? fail('intent receipt is missing'));
@@ -539,12 +571,19 @@ export function validateFinalEvidenceV2GraphFiles(root: string, graphInput: unkn
   if (!sealedSources.includes(activation.briefSha256) || !sealedSources.includes(activation.loadedSkillSha256)) {
     fail('source seal does not bind the active task brief and loaded skill identities');
   }
+  const criticalReviewerIds = new Set<string>();
   for (const label of ['blindLane', 'fidelityLane', 'protocolLane'] as const) {
     const lane = values.get(label) ?? fail(`${label} receipt is missing`);
     if (lane.artDirectionSha256 !== hashes.get('artDirection') || lane.buildSha256 !== buildSha256) fail(`${label} does not bind art direction and build`);
     const observedHashes = new Set(graph.observations.map((_, index) => hashes.get(`observations[${index}]`) ?? fail('observation semantic hash is missing')));
-    const laneObservationHashes = array(object(lane.provenance, `${label}.provenance`).observationSha256s, `${label}.provenance.observationSha256s`);
+    const provenance = object(lane.provenance, `${label}.provenance`);
+    const laneObservationHashes = array(provenance.observationSha256s, `${label}.provenance.observationSha256s`);
     if (laneObservationHashes.length !== observedHashes.size || laneObservationHashes.some((item) => typeof item !== 'string' || !observedHashes.has(item))) fail(`${label} does not bind the complete observed evidence chain`);
+    for (const reviewerId of array(provenance.reviewerIds, `${label}.provenance.reviewerIds`)) {
+      const reviewer = stringValue(reviewerId, `${label}.provenance.reviewerIds`);
+      if (criticalReviewerIds.has(reviewer)) fail('critical reviewer identities must be unique across final lanes');
+      criticalReviewerIds.add(reviewer);
+    }
     rejectRed(lane, label);
   }
   let predecessor: string | null = null;
@@ -553,6 +592,8 @@ export function validateFinalEvidenceV2GraphFiles(root: string, graphInput: unkn
     const claimed = observationPredecessor(value, index);
     if (claimed !== predecessor) fail('observations fork or break predecessor chain');
     if (value.buildSha256 !== buildSha256) fail('observation does not bind build');
+    const currentArtifact = object(value.currentArtifact, `observations[${index}].currentArtifact`);
+    if (currentArtifact.path !== graph.buildIdentity.path || currentArtifact.sha256 !== graph.buildIdentity.sha256) fail('observation does not bind the exact current build artifact');
     predecessor = hashes.get(`observations[${index}]`) ?? fail('observation receipt semantic hash is missing');
   });
   const motionResolutionSha256 = digest(decision.motionResolutionProjectionSha256, 'art direction motion resolution');

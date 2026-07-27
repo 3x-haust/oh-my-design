@@ -27,9 +27,12 @@
   },
   "scripts": {
     "test": "node --test 'test/*.test.ts'",
+    "test:obligations": "node --test test/obligations-v2.test.ts",
     "test:harness-v2": "node --test test/obligations-v2.test.ts test/reference-handoff-v2.test.ts test/final-evidence-v2.test.ts test/harness-v2-cli.test.ts test/static-direction-evidence.test.ts test/runtime-isolation.test.ts test/harness-v2-quality.test.ts",
     "benchmark:harness-v2": "node bin/omd-harness-v2.mjs",
     "test:benchmark-harness-v2": "node --test test/harness-v2-benchmark.test.ts",
+    "benchmark:harness-v2:evidence-lock": "node scripts/benchmark/validate-evidence-lock.ts",
+    "test:benchmark-harness-v2:evidence-lock": "node --test test/harness-v2-benchmark.test.ts",
     "typecheck": "tsc --noEmit",
     "build": "node adapters/build.ts",
     "release:prep": "node scripts/bump.ts"

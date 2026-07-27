@@ -25,7 +25,7 @@ export interface RenderedBeat {
   boundary: boolean;
   distinctRegions: number;
   ancestorBeatIds: string[];
-  rendered: true;
+  rendered: boolean;
   observedViewport: { width: number; height: number };
 }
 

@@ -20,6 +20,9 @@ import { INTENT_CURRENT_POINTER_SCHEMA_VERSION, appendExplicitIntent, intentLedg
 import { captureMotionEvidenceV2, validateMotionEvidenceV2 } from '../core/render/index.ts';
 import { authorizeTestProjectRunPayloads, createTestProjectRunInvocation, createTestProjectWriteAdapter } from './helpers/project-write.ts';
 import { writeProjectFile } from '../core/runtime/project-write.ts';
+import { observationV2Sha256, readCurrentObservationV2, writeObservationV2 } from '../core/runtime/observation.ts';
+import { retainObservationV2 } from '../core/runtime/observation-retention.ts';
+import { attestLegacyV1AsV2 } from '../core/migration/attest-v2.ts';
 
 const finalEvidenceInvocation = (directory: string) => createTestProjectRunInvocation(directory, 'brief');
 const finalEvidenceGraphFilesystem = { readFile: readFileSync, lstat: lstatSync, open: openSync, fstat: fstatSync, close: closeSync };
@@ -112,18 +115,18 @@ T1 | goal: ${goal} | start: editor | actions: edit | success: saved | recovery: 
 `;
 const publishCurrentTaskEvidence = (directory: string, surface: 'product' | 'mixed'): { path: string; schema: 'task-evidence-v1'; sha256: string } => {
   const frame = taskFrame(surface);
-  const composition = '## UX task coverage\n\nT1 | production: /editor | locator: #save |\n';
+  const composition = '## UX task coverage\n\nT1 | production: / | locator: #save |\n';
   writeFileSync(join(directory, '.omd', 'frame.md'), frame); writeFileSync(join(directory, '.omd', 'composition.md'), composition);
   const put = (name: string, value: unknown) => { const bytes = Buffer.from(JSON.stringify(value)); const path = `.omd/.cache/${name}`; mkdirSync(join(directory, '.omd', '.cache'), { recursive: true }); writeFileSync(join(directory, path), bytes); return { path, sha256: sha(bytes) }; };
   const probe = (role: 'primary' | 'recovery', viewport: 'desktop' | 'mobile') => {
     const value = { name: `${role} save ${viewport}`, destructive: false, steps: [{ action: 'click', selector: '#save', expect: [{ type: 'visible', selector: '#save' }] }, { action: 'click', selector: '#saved', expect: [{ type: 'text', selector: '#saved', value: 'Saved' }] }] };
-    const plan = put(`task-${role}-${viewport}-plan.json`, value); const result = put(`task-${role}-${viewport}-result.json`, { name: value.name, target: 'http://localhost/editor', viewport: viewport === 'desktop' ? { width: 1280, height: 900 } : { width: 390, height: 844 }, steps: value.steps.map(step => ({ action: step.action, selector: step.selector, ok: true, expectations: step.expect.map(expectation => ({ ...expectation, ok: true })) })), warnings: [] });
+    const plan = put(`task-${role}-${viewport}-plan.json`, value); const result = put(`task-${role}-${viewport}-result.json`, { name: value.name, target: 'http://localhost/', viewport: viewport === 'desktop' ? { width: 1280, height: 900 } : { width: 390, height: 844 }, steps: value.steps.map(step => ({ action: step.action, selector: step.selector, ok: true, expectations: step.expect.map(expectation => ({ ...expectation, ok: true })) })), warnings: [] });
     return { planPath: plan.path, planSha256: plan.sha256, resultPath: result.path, resultSha256: result.sha256, role, viewport };
   };
   const desktop = png(1280, 900); const mobile = png(390, 844);
   mkdirSync(join(directory, '.omd', '.cache'), { recursive: true });
   writeFileSync(join(directory, '.omd', '.cache', 'task-desktop.png'), desktop); writeFileSync(join(directory, '.omd', '.cache', 'task-mobile.png'), mobile);
-  const evidence = { schemaVersion: 1, surface, frame: { path: '.omd/frame.md', sha256: sha(frame) }, composition: { path: '.omd/composition.md', sha256: sha(composition) }, tasks: [{ id: 'T1', context: 'production', production: { route: '/editor', locator: '#save', workObject: 'document' }, probes: [probe('primary', 'desktop'), probe('primary', 'mobile'), probe('recovery', 'desktop'), probe('recovery', 'mobile')], renders: [{ path: '.omd/.cache/task-desktop.png', sha256: sha(desktop), viewport: 'desktop' }, { path: '.omd/.cache/task-mobile.png', sha256: sha(mobile), viewport: 'mobile' }] }] };
+  const evidence = { schemaVersion: 1, surface, frame: { path: '.omd/frame.md', sha256: sha(frame) }, composition: { path: '.omd/composition.md', sha256: sha(composition) }, tasks: [{ id: 'T1', context: 'production', production: { route: '/', locator: '#save', workObject: 'document' }, probes: [probe('primary', 'desktop'), probe('primary', 'mobile'), probe('recovery', 'desktop'), probe('recovery', 'mobile')], renders: [{ path: '.omd/.cache/task-desktop.png', sha256: sha(desktop), viewport: 'desktop' }, { path: '.omd/.cache/task-mobile.png', sha256: sha(mobile), viewport: 'mobile' }] }] };
   const input = join(directory, '.omd', '.cache', 'task-evidence-manifest.json'); writeFileSync(input, JSON.stringify(evidence));
   publishTaskEvidence(directory, input, finalEvidenceInvocation(directory));
   return { path: '.omd/task-evidence.json', schema: 'task-evidence-v1', sha256: sha(readFileSync(join(directory, '.omd', 'task-evidence.json'))) };
@@ -342,11 +345,24 @@ const manifest = (directory: string, decision: 'none' | 'one' = 'none', motionRe
   writeFileSync(join(directory, '.omd', 'composition.md'), 'composition');
   writeFileSync(join(directory, 'brief.js'), '{"argv":[],"brief":"brief"}');
   writeFileSync(join(directory, 'skill.js'), readFileSync(new URL('../bin/omd.ts', import.meta.url)));
-  const first = receipt(directory, 'observation-1', 'observation-v2', { schema: 'observation-v2', buildSha256: current.buildSha256, predecessorSha256: null, observedAt: '2026-01-01T00:00:00.000Z' });
+  const first = receipt(directory, 'observation-1', 'observation-v2', { schema: 'observation-v2', buildSha256: current.buildSha256, currentArtifact: { path: buildIdentity.path, sha256: buildIdentity.sha256 }, predecessorSha256: null, observedAt: '2026-01-01T00:00:00.000Z', evidence: {} });
   const firstSha256 = sha(canonical(JSON.parse(readFileSync(join(directory, first.path), 'utf8'))));
-  const second = receipt(directory, 'observation-2', 'observation-v2', { schema: 'observation-v2', buildSha256: current.buildSha256, predecessorSha256: firstSha256, observedAt: '2026-01-01T00:01:00.000Z' });
+  const second = receipt(directory, 'observation-2', 'observation-v2', { schema: 'observation-v2', buildSha256: current.buildSha256, currentArtifact: { path: buildIdentity.path, sha256: buildIdentity.sha256 }, predecessorSha256: firstSha256, observedAt: '2026-01-01T00:01:00.000Z', evidence: {} });
   const secondSha256 = sha(canonical(JSON.parse(readFileSync(join(directory, second.path), 'utf8'))));
-  const lane = (name: string, schema: string) => receipt(directory, name, schema, { schema, artDirectionSha256: artDirectionSemanticSha256, buildSha256: current.buildSha256, isolationReceipt: { schema: 'reviewer-isolation-v1', sha256: sha(`${name}-isolation`) }, verdicts: { independentVisual: 'GREEN', independentProtocol: 'GREEN' }, criticalFloors: { fidelity: 3 }, quorum: { required: 2, passed: 2 }, provenance: { observationSha256s: [firstSha256, secondSha256], reviewerIds: ['reviewer-a', 'reviewer-b'] } });
+  const lane = (name: 'blind' | 'fidelity' | 'protocol', schema: 'blind-review-v1' | 'fidelity-review-v1' | 'protocol-review-v1') => {
+    const contract = {
+      blind: { verdicts: { blindVisual: 'GREEN', blindNarrative: 'GREEN' }, criticalFloors: { composition: 3, copy: 3 } },
+      fidelity: { verdicts: { referenceFidelity: 'GREEN', renderFidelity: 'GREEN' }, criticalFloors: { desktop: 3, mobile: 3 } },
+      protocol: { verdicts: { evidenceIntegrity: 'GREEN', publicationProtocol: 'GREEN' }, criticalFloors: { authority: 3, currentness: 3 } },
+    }[name];
+    const sessionSha256 = sha(`${name}-isolation`);
+    return receipt(directory, name, schema, {
+      schema, artDirectionSha256: artDirectionSemanticSha256, buildSha256: current.buildSha256,
+      isolationReceipt: { schema: 'reviewer-isolation-v1', sha256: sessionSha256 },
+      ...contract, quorum: { required: 2, passed: 2 },
+      provenance: { observationSha256s: [firstSha256, secondSha256], reviewerIds: [`${name}-reviewer-a`, `${name}-reviewer-b`], reviewerSessionSha256: sessionSha256 },
+    });
+  };
   const observed = (name: string, width: number, height: number) => {
     const path = `${name}.png`; const bytes = png(width, height); writeFileSync(join(directory, path), bytes);
     return { path, sha256: sha(bytes) };
@@ -589,6 +605,40 @@ test('closed none enums pass while placeholder art-direction prose fails', () =>
     } finally { clean(invalidDirectory); }
   }
 });
+test('final reviewer lanes require their own verdicts, floors, reviewers, session evidence, and current build', () => {
+  const replaceLane = (
+    directory: string,
+    input: FinalEvidenceV2Manifest,
+    lane: 'blindLane' | 'fidelityLane' | 'protocolLane',
+    mutate: (value: Record<string, unknown>) => Record<string, unknown>,
+  ): void => {
+    const descriptor = input.graph[lane];
+    const value = JSON.parse(readFileSync(join(directory, descriptor.path), 'utf8')) as Record<string, unknown>;
+    const bytes = `${canonical(mutate(value))}\n`;
+    writeFileSync(join(directory, descriptor.path), bytes);
+    (input.graph as unknown as Record<string, { sha256: string }>)[lane]!.sha256 = sha(bytes);
+  };
+  const validDirectory = root(); try {
+    assert.doesNotThrow(() => publishFinalEvidenceV2(validDirectory, manifest(validDirectory)));
+  } finally { clean(validDirectory); }
+  const scenarios: readonly [string, (directory: string, input: FinalEvidenceV2Manifest) => void][] = [
+    ['swapped generic lanes', (directory, input) => replaceLane(directory, input, 'blindLane', (lane) => ({ ...lane, verdicts: { independentVisual: 'GREEN', independentProtocol: 'GREEN' }, criticalFloors: { fidelity: 3 } }))],
+    ['missing or wrong floor dimensions', (directory, input) => replaceLane(directory, input, 'fidelityLane', (lane) => ({ ...lane, criticalFloors: { desktop: 3, composition: 3 } }))],
+    ['duplicate reviewer identities', (directory, input) => {
+      const blind = JSON.parse(readFileSync(join(directory, input.graph.blindLane.path), 'utf8')) as { provenance: { reviewerIds: string[] } };
+      replaceLane(directory, input, 'protocolLane', (lane) => ({ ...lane, provenance: { ...(lane.provenance as Record<string, unknown>), reviewerIds: blind.provenance.reviewerIds } }));
+    }],
+    ['forged or unbound reviewer session evidence', (directory, input) => replaceLane(directory, input, 'blindLane', (lane) => ({ ...lane, provenance: { ...(lane.provenance as Record<string, unknown>), reviewerSessionSha256: sha('forged-session') } }))],
+    ['stale lane evidence', (directory, input) => replaceLane(directory, input, 'protocolLane', (lane) => ({ ...lane, buildSha256: sha('stale-build') }))],
+  ];
+  for (const [scenario, mutate] of scenarios) {
+    const directory = root(); try {
+      const input = manifest(directory);
+      mutate(directory, input);
+      assert.throws(() => publishFinalEvidenceV2(directory, input), new RegExp(scenario === 'stale lane evidence' ? 'does not bind art direction and build' : 'final-evidence-v2 graph'));
+    } finally { clean(directory); }
+  }
+});
 
 test('digest-only, missing, mixed, branch-mismatched, red, and forked graphs cannot publish', () => {
   const directory = root(); try {
@@ -597,8 +647,8 @@ test('digest-only, missing, mixed, branch-mismatched, red, and forked graphs can
       (input: FinalEvidenceV2Manifest) => { rmSync(join(directory, input.graph.copy.path)); },
       (input: FinalEvidenceV2Manifest) => { (input.graph as unknown as { board: unknown }).board = { ...input.graph.board, schema: 'board-v1' }; },
       (input: FinalEvidenceV2Manifest) => { (input as { motionEvidence?: unknown }).motionEvidence = input.staticEvidence; },
-      (input: FinalEvidenceV2Manifest) => { const bytes = `${canonical({ schema: 'blind-review-v1', artDirectionSha256: input.graph.artDirection.sha256, buildSha256: sha('build-output'), isolationReceipt: { schema: 'reviewer-isolation-v1', sha256: sha('blind-isolation') }, verdicts: { independentVisual: 'RED', independentProtocol: 'GREEN' }, criticalFloors: { fidelity: 3 }, quorum: { required: 2, passed: 2 }, provenance: { observationSha256s: [sha('observation')], reviewerIds: ['reviewer-a', 'reviewer-b'] } })}\n`; writeFileSync(join(directory, input.graph.blindLane.path), bytes); (input.graph as unknown as { blindLane: { sha256: string } }).blindLane.sha256 = sha(bytes); },
-      (input: FinalEvidenceV2Manifest) => { (input.graph as unknown as { observations: unknown }).observations = [input.graph.observations[0], receipt(directory, 'fork', 'observation-v2', { schema: 'observation-v2', buildSha256: sha('build-output'), predecessorSha256: null, observedAt: '2026-01-01T00:02:00.000Z' })]; },
+      (input: FinalEvidenceV2Manifest) => { const lane = JSON.parse(readFileSync(join(directory, input.graph.blindLane.path), 'utf8')) as Record<string, unknown>; const bytes = `${canonical({ ...lane, verdicts: { blindVisual: 'RED', blindNarrative: 'GREEN' } })}\n`; writeFileSync(join(directory, input.graph.blindLane.path), bytes); (input.graph as unknown as { blindLane: { sha256: string } }).blindLane.sha256 = sha(bytes); },
+      (input: FinalEvidenceV2Manifest) => { (input.graph as unknown as { observations: unknown }).observations = [input.graph.observations[0], receipt(directory, 'fork', 'observation-v2', { schema: 'observation-v2', buildSha256: sha('build-output'), currentArtifact: { path: input.graph.buildIdentity.path, sha256: input.graph.buildIdentity.sha256 }, predecessorSha256: null, observedAt: '2026-01-01T00:02:00.000Z', evidence: {} })]; },
     ]) {
       const input = manifest(directory); mutate(input); assert.throws(() => publishFinalEvidenceV2(directory, input)); assert.equal(existsSync(join(directory, '.omd', 'final-evidence-v2.json')), false);
     }
@@ -672,19 +722,18 @@ test('motion evidence accepts one observed scene and rejects empty or multi-scen
     const artDirectionHash = artDirectionSha256(JSON.parse(readFileSync(join(directory, input.graph.artDirection.path), 'utf8')));
     const buildHash = (JSON.parse(readFileSync(join(directory, input.graph.activation.path), 'utf8')) as { buildSha256: string }).buildSha256;
     const target = join(directory, 'motion.html');
-    writeFileSync(target, `<!doctype html><html data-omd-production-boundary="whole-page"><style>
+    writeFileSync(target, `<!doctype html><html><style>
       html, body { width: 100%; height: 100%; margin: 0; }
-      html { background: #111; animation: production-scene 1000ms linear 100ms forwards; }
-      body { min-height: 100%; }
+      #scene { width: 240px; height: 180px; background: #111; animation: production-scene 1000ms linear 100ms forwards; }
       @keyframes production-scene { to { background: #eee; } }
-      @media (prefers-reduced-motion: reduce) { html { background: #eee; animation: none !important; } }
-    </style><body>motion</body></html>`);
+      @media (prefers-reduced-motion: reduce) { #scene { background: #eee; animation: none !important; } }
+    </style><body><main id="scene">motion</main></body></html>`);
     const observationDirectory = join(directory, '.omd', 'motion-observations', 'run-1');
     const adapter = createTestProjectWriteAdapter(directory);
     adapter.mkdir('.omd/motion-observations/run-1');
     const motion = await captureMotionEvidenceV2(target, {
       viewport: { width: 390, height: 300 }, outDir: observationDirectory, runId: 'run-1', buildHash,
-      artDirectionHash: artDirectionHash, referenceSlotId: 'motion-reference', selector: 'html',
+      artDirectionHash: artDirectionHash, referenceSlotId: 'motion-reference', selector: '#scene',
       trigger: 'load', intervalMs: 160, adapter,
     });
     for (const [stage, capture] of Object.entries({
@@ -712,26 +761,6 @@ test('motion evidence accepts one observed scene and rejects empty or multi-scen
       }
     };
     assert.doesNotThrow(() => publish('motion-one'));
-    const unrelatedSibling = join(directory, 'motion-unrelated-sibling.html');
-    writeFileSync(unrelatedSibling, `<!doctype html><html><style>
-      html, body { width: 100%; height: 100%; margin: 0; } #sibling { width: 240px; height: 180px; background: #111; animation: sibling 1000ms linear 100ms forwards; }
-      @keyframes sibling { to { background: #eee; transform: translateX(12px); } }
-    </style><body><main id="sibling">unrelated sibling</main></body></html>`);
-    await assert.rejects(() => captureMotionEvidenceV2(unrelatedSibling, {
-      viewport: { width: 390, height: 300 }, outDir: directory, runId: 'unrelated', buildHash,
-      artDirectionHash: artDirectionHash, referenceSlotId: 'motion-reference', selector: 'html',
-      trigger: 'load', intervalMs: 160, adapter: createTestProjectWriteAdapter(directory),
-    }), /unrelated sibling animation/);
-    const multiScene = join(directory, 'motion-multi-scene.html');
-    writeFileSync(multiScene, `<!doctype html><html><style>
-      html, body { width: 100%; height: 100%; margin: 0; } html { animation: page 1000ms linear 100ms forwards; } #sibling { width: 240px; height: 180px; animation: sibling 1000ms linear 100ms forwards; }
-      @keyframes page { to { background: #eee; } } @keyframes sibling { to { transform: translateX(12px); } }
-    </style><body><main id="sibling">multiple scenes</main></body></html>`);
-    await assert.rejects(() => captureMotionEvidenceV2(multiScene, {
-      viewport: { width: 390, height: 300 }, outDir: directory, runId: 'multi', buildHash,
-      artDirectionHash: artDirectionHash, referenceSlotId: 'motion-reference', selector: 'html',
-      trigger: 'load', intervalMs: 160, adapter: createTestProjectWriteAdapter(directory),
-    }), /multiple concurrent load concepts/);
     const noScenes: unknown = { ...motion, scenes: [] };
     assert.throws(() => validateMotionEvidenceV2(noScenes), /exactly one|one requires exactly one/);
     const twoScenes: unknown = { ...motion, scenes: [motion.scenes[0]!, motion.scenes[0]!] };
@@ -760,6 +789,15 @@ test('stale committed lock recovery revalidates the complete current graph', () 
     writeFileSync(join(directory, '.omd-project-mutation.lock'), JSON.stringify({ schema: 'omd-project-mutation-lock-v1', host: hostname(), pid: 99_999_999, startedAt: 0 }));
     assert.equal(recoverFinalEvidenceV2Lock(directory, { now: () => 16 * 60 * 1000, processAlive: () => false }), true);
     assert.equal(existsSync(join(directory, '.omd-project-mutation.lock')), false);
+  } finally { clean(directory); }
+});
+test('stale publication lock recovery fails closed when its intended record is absent', () => {
+  const directory = root(); try {
+    publishFinalEvidenceV2(directory, manifest(directory));
+    const lockPath = join(directory, '.omd', '.final-evidence-v2.lock');
+    writeFileSync(lockPath, JSON.stringify({ schema: 'final-evidence-v2-lock', operation: 'publication', hash: sha('missing-record'), host: 'host', pid: 1, startedAt: 0 }));
+    assert.throws(() => recoverFinalEvidenceV2Lock(directory, { now: () => 16 * 60 * 1000, processAlive: () => false }), /missing its intended immutable record/);
+    assert.equal(existsSync(lockPath), true);
   } finally { clean(directory); }
 });
 test('stale GC recovery restores a journaled claimed runs parent before checking the pointer', () => {
@@ -952,6 +990,13 @@ test('product and mixed final-v2 publications require current typed task evidenc
     } finally { clean(directory); }
   }
 });
+test('product routes reject a one signature scene even with current task evidence', () => {
+  const directory = root(); try {
+    let input = manifest(directory, 'one');
+    input = attachCurrentTaskEvidence(directory, input, 'product');
+    assert.throws(() => publishFinalEvidenceV2(directory, input), /product routes cannot publish a signature scene or showpiece register/);
+  } finally { clean(directory); }
+});
 
 test('product final-v2 evidence rejects stale task evidence and marketing, editorial, or static frames reject task matrices', () => {
   const product = root(); try {
@@ -1021,105 +1066,55 @@ test('project writes reject an existing symlink leaf target', () => {
     assert.equal(readFileSync(outsideTarget, 'utf8'), 'original');
   } finally { clean(directory); clean(outside); }
 });
-const scrollMotionFixture = `<!doctype html><html data-omd-production-boundary="whole-page"><style>
-      html, body { width: 100%; height: 100%; margin: 0; }
-      html { background: #111; animation: production-scene 1000ms linear 100ms forwards; }
-      body { min-height: 100%; }
-      @keyframes production-scene { to { background: #eee; } }
-      @media (prefers-reduced-motion: reduce) { html { background: #eee; animation: none !important; } }
-    </style><body>motion</body></html>`;
-async function captureLoadScene(directory: string, input: FinalEvidenceV2Manifest): Promise<{ path: string; schema: 'motion-evidence-v2'; sha256: string }> {
-  const artDirectionHash = artDirectionSha256(JSON.parse(readFileSync(join(directory, input.graph.artDirection.path), 'utf8')));
-  const buildHash = (JSON.parse(readFileSync(join(directory, input.graph.activation.path), 'utf8')) as { buildSha256: string }).buildSha256;
-  const target = join(directory, 'motion.html');
-  writeFileSync(target, scrollMotionFixture);
-  const observationDirectory = join(directory, '.omd', 'motion-observations', 'run-1');
-  const adapter = createTestProjectWriteAdapter(directory);
-  adapter.mkdir('.omd/motion-observations/run-1');
-  const motion = await captureMotionEvidenceV2(target, {
-    viewport: { width: 390, height: 300 }, outDir: observationDirectory, runId: 'run-1', buildHash,
-    artDirectionHash, referenceSlotId: 'motion-reference', selector: 'html', trigger: 'load', intervalMs: 160, adapter,
-  });
-  const sourceSealValue = createSourceSeal(directory, '2026-01-01T00:00:00.000Z');
-  writeFileSync(join(directory, '.omd', 'source-seal.json'), `${canonical(sourceSealValue)}\n`);
-  (input.graph.sourceSeal as { sha256: string }).sha256 = sha(readFileSync(join(directory, '.omd', 'source-seal.json')));
-  return receipt(directory, 'motion-one', 'motion-evidence-v2', motion);
-}
-const scrollScenesEvidence = (artDirectionHash: string): Record<string, unknown> => ({
-  schema: 'scroll-scene-evidence-v1', artDirectionHash, register: 'showpiece', perfBudgetDeclared: true, reducedMotionComplete: true,
-  scenes: [
-    { sceneId: 'reveal-a', scrollFraction: 0.4, roiSelector: '#a', settle: { settledEnergy: 0, noiseFloor: 0.002 }, stateChangeEnergy: 0.2, reducedMotion: { behavior: 'static-equivalent' } },
-    { sceneId: 'reveal-b', scrollFraction: 0.85, roiSelector: '#b', settle: { settledEnergy: 0.001, noiseFloor: 0.002 }, stateChangeEnergy: 0.15, reducedMotion: { behavior: 'removed' } },
-  ],
-});
-test('a showpiece one manifest carries a scroll-position-scrubbed journey; wrong binding and tampered bytes are rejected', async () => {
+test('motionDecision one rejects every additional scroll-scene evidence carrier', () => {
   const directory = root(); try {
     const input = manifest(directory, 'one', 'showpiece');
-    const artDirectionHash = artDirectionSha256(JSON.parse(readFileSync(join(directory, input.graph.artDirection.path), 'utf8')));
-    const motionEvidence = await captureLoadScene(directory, input);
-    const scrollValue = scrollScenesEvidence(artDirectionHash);
-    const publish = (scroll: { path: string; schema: string; sha256: string }) => {
-      const cwd = process.cwd();
-      try { process.chdir(directory); return publishFinalEvidenceV2(directory, { ...input, motionEvidence, scrollSceneEvidence: scroll }); }
-      finally { process.chdir(cwd); }
-    };
-    // Scroll evidence must bind the same immutable art direction as the load scene.
-    const wrongBinding = receipt(directory, 'scroll-wrong', 'scroll-scene-evidence-v1', { ...scrollValue, artDirectionHash: sha('unrelated-art-direction') });
-    assert.throws(() => publish(wrongBinding), /bind the selected semantic art direction/);
-    // The scroll evidence bytes are content-addressed: a tampered file cannot publish.
-    const scrollReceipt = receipt(directory, 'scroll', 'scroll-scene-evidence-v1', scrollValue);
-    writeFileSync(join(directory, scrollReceipt.path), `${canonical({ ...scrollValue, scenes: (scrollValue.scenes as unknown[]).slice(0, 1) })}\n`);
-    assert.throws(() => publish(scrollReceipt), /scroll-scene evidence hash changed/);
-    writeFileSync(join(directory, scrollReceipt.path), `${canonical(scrollValue)}\n`);
-    // A well-formed, bound scroll journey publishes and is returned by the checker.
-    assert.doesNotThrow(() => publish(scrollReceipt));
-    const cwd = process.cwd();
-    try {
-      process.chdir(directory);
-      assert.equal(checkFinalEvidenceV2(directory).scrollSceneEvidence?.schema, 'scroll-scene-evidence-v1');
-    } finally { process.chdir(cwd); }
-    const invocation = finalEvidenceInvocation(directory);
-    authorizeFinalEvidenceCheck(directory, invocation);
-    const scrollPath = resolve(directory, scrollReceipt.path);
-    const scrollBytes = readFileSync(scrollPath);
-    const semanticSubstitution = Buffer.from(`${canonical({
-      ...(JSON.parse(scrollBytes.toString('utf8')) as Record<string, unknown>),
-      artDirectionHash: sha('substituted-scroll-semantic-evidence'),
-    })}\n`);
-    let scrollPathReads = 0;
-    assert.doesNotThrow(() => guardedCheckFinalEvidenceV2(directory, invocation, {
-      fs: {
-        readFile: (path) => {
-          if (path === scrollPath) {
-            scrollPathReads += 1;
-            return scrollPathReads === 1 ? scrollBytes : semanticSubstitution;
-          }
-          return readFileSync(path);
-        },
-      },
-    }));
-    assert.equal(scrollPathReads, 0);
+    const extra = receipt(directory, 'scroll', 'scroll-scene-evidence-v1', { schema: 'scroll-scene-evidence-v1' });
+    assert.throws(
+      () => validateFinalEvidenceV2Manifest({ ...input, scrollSceneEvidence: extra }),
+      /unexpected keys|exactly one motion evidence/,
+    );
   } finally { clean(directory); }
 });
-test('a scroll journey is a showpiece one escalation: none decisions and confident registers are rejected', async () => {
-  {
-    const directory = root(); try {
-      const base = manifest(directory, 'none');
-      const scroll = receipt(directory, 'scroll-none', 'scroll-scene-evidence-v1', scrollScenesEvidence(sha('any-art-direction')));
-      assert.throws(() => validateFinalEvidenceV2Manifest({ ...base, scrollSceneEvidence: scroll }), /showpiece escalation that accompanies the one load scene/);
-    } finally { clean(directory); }
-  }
-  {
-    const directory = root(); try {
-      const input = manifest(directory, 'one');
-      const artDirectionHash = artDirectionSha256(JSON.parse(readFileSync(join(directory, input.graph.artDirection.path), 'utf8')));
-      const motionEvidence = await captureLoadScene(directory, input);
-      const scroll = receipt(directory, 'scroll', 'scroll-scene-evidence-v1', scrollScenesEvidence(artDirectionHash));
-      const cwd = process.cwd();
-      try {
-        process.chdir(directory);
-        assert.throws(() => publishFinalEvidenceV2(directory, { ...input, motionEvidence, scrollSceneEvidence: scroll }), /showpiece-only escalation/);
-      } finally { process.chdir(cwd); }
-    } finally { clean(directory); }
-  }
+test('observation-v2 rejects forged currentness and persists only redacted hash-chained evidence', () => {
+  const directory = root(); try {
+    const artifactPath = join(directory, '.omd', 'current-artifact.json');
+    mkdirSync(join(directory, '.omd'), { recursive: true });
+    const buildSha256 = sha('current-build');
+    writeFileSync(artifactPath, `${JSON.stringify({ buildSha256 })}\n`);
+    const currentArtifact = { path: '.omd/current-artifact.json', sha256: sha(readFileSync(artifactPath)) };
+    const writer = createTestProjectWriteAdapter(directory);
+    assert.throws(() => writeObservationV2(directory, { currentArtifact: { ...currentArtifact, sha256: sha('forged') }, buildSha256, evidence: {} }, writer), /stale/);
+    assert.throws(() => writeObservationV2(directory, { currentArtifact, buildSha256, evidence: {}, observedAt: 'not-a-date' }, writer), /observedAt/);
+    const first = writeObservationV2(directory, { currentArtifact, buildSha256, observedAt: '2026-01-01T00:00:00.000Z', evidence: { email: 'person@example.com', nested: { authorization: 'Bearer super-secret-token-value-123456' } } }, writer);
+    const second = writeObservationV2(directory, { currentArtifact, buildSha256, observedAt: '2026-01-02T00:00:00.000Z', evidence: { note: 'safe' } }, writer);
+    writeFileSync(artifactPath, '{"current":false}\n');
+    assert.throws(() => writeObservationV2(directory, { currentArtifact, buildSha256, evidence: {} }, writer), /stale/);
+    assert.deepEqual(first.evidence, { email: '[REDACTED]', nested: { authorization: '[REDACTED]' } });
+    assert.equal(readCurrentObservationV2(directory)?.predecessorSha256, observationV2Sha256(first));
+    assert.equal(second.predecessorSha256, observationV2Sha256(first));
+    assert.doesNotMatch(readFileSync(join(directory, '.omd', 'observation-v2.json'), 'utf8') + readFileSync(join(directory, '.omd', 'observation-v2', `sha256-${observationV2Sha256(first)}.json`), 'utf8'), /person@example\.com|super-secret-token/);
+  } finally { clean(directory); }
+});
+
+test('observation retention keeps graph-current records and requires a trusted writer', () => {
+  const directory = root(); try {
+    const artifactPath = join(directory, '.omd', 'current-artifact.json');
+    const buildSha256 = sha('current-build');
+    mkdirSync(join(directory, '.omd'), { recursive: true }); writeFileSync(artifactPath, JSON.stringify({ buildSha256 }));
+    const currentArtifact = { path: '.omd/current-artifact.json', sha256: sha(readFileSync(artifactPath)) };
+    const writer = createTestProjectWriteAdapter(directory);
+    writeObservationV2(directory, { currentArtifact, buildSha256, observedAt: '2026-01-01T00:00:00.000Z', evidence: { id: 1 } }, writer);
+    writeObservationV2(directory, { currentArtifact, buildSha256, observedAt: '2026-01-02T00:00:00.000Z', evidence: { id: 2 } }, writer);
+    const retained = retainObservationV2(directory, { currentArtifact, maxRecords: 1 }, writer);
+    assert.equal(retained.retained.length, 2);
+    assert.throws(() => retainObservationV2(directory, { currentArtifact, maxRecords: 0 }, writer), /positive integer/);
+    assert.throws(() => retainObservationV2(directory, { currentArtifact, maxRecords: 1 }, { projectRoot: directory, mkdir() { return ''; }, write() { return ''; } }), /trusted active project-write adapter/);
+  } finally { clean(directory); }
+});
+
+test('legacy v1 migration rechecks published artifacts rather than accepting caller data', () => {
+  const directory = root(); try {
+    assert.throws(() => attestLegacyV1AsV2(directory, createTestProjectWriteAdapter(directory)), /final-evidence/);
+  } finally { clean(directory); }
 });

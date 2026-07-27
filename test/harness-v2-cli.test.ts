@@ -292,11 +292,24 @@ const manifest = async (root: string, motionDecision: 'none' | 'one' = 'none', b
   const copy = receipt(root, 'copy', COPY_DECK_RECEIPT_SCHEMA_VERSION, copyValue);
   let renderedBeats: Record<string, string>;
   const buildIdentity = receipt(root, 'build', 'omd-build-identity-v1', { schemaVersion: 'omd-build-identity-v1', packageVersion: '1.0.0', buildSha256: activationValue.buildSha256, sourceSkillSha256: activationValue.loadedSkillSha256 });
-  const firstValue = { schema: 'observation-v2', buildSha256: activationValue.buildSha256, predecessorSha256: null, observedAt: '2026-01-01T00:00:00.000Z' };
+  const firstValue = { schema: 'observation-v2', buildSha256: activationValue.buildSha256, currentArtifact: { path: buildIdentity.path, sha256: buildIdentity.sha256 }, predecessorSha256: null, observedAt: '2026-01-01T00:00:00.000Z', evidence: {} };
   const first = receipt(root, 'observation-1', 'observation-v2', firstValue);
-  const secondValue = { schema: 'observation-v2', buildSha256: activationValue.buildSha256, predecessorSha256: sha(canonical(firstValue)), observedAt: '2026-01-01T00:01:00.000Z' };
+  const secondValue = { schema: 'observation-v2', buildSha256: activationValue.buildSha256, currentArtifact: { path: buildIdentity.path, sha256: buildIdentity.sha256 }, predecessorSha256: sha(canonical(firstValue)), observedAt: '2026-01-01T00:01:00.000Z', evidence: {} };
   const second = receipt(root, 'observation-2', 'observation-v2', secondValue);
-  const lane = (name: string, schema: string) => receipt(root, name, schema, { schema, artDirectionSha256: artDirectionSemantic, buildSha256: activationValue.buildSha256, isolationReceipt: { schema: 'reviewer-isolation-v1', sha256: sha(`${name}-isolation`) }, verdicts: { independentVisual: 'GREEN', independentProtocol: 'GREEN' }, criticalFloors: { fidelity: 3 }, quorum: { required: 2, passed: 2 }, provenance: { observationSha256s: [sha(canonical(firstValue)), sha(canonical(secondValue))], reviewerIds: ['reviewer-a', 'reviewer-b'] } });
+  const lane = (name: 'blind' | 'fidelity' | 'protocol', schema: 'blind-review-v1' | 'fidelity-review-v1' | 'protocol-review-v1') => {
+    const contract = {
+      blind: { verdicts: { blindVisual: 'GREEN', blindNarrative: 'GREEN' }, criticalFloors: { composition: 3, copy: 3 } },
+      fidelity: { verdicts: { referenceFidelity: 'GREEN', renderFidelity: 'GREEN' }, criticalFloors: { desktop: 3, mobile: 3 } },
+      protocol: { verdicts: { evidenceIntegrity: 'GREEN', publicationProtocol: 'GREEN' }, criticalFloors: { authority: 3, currentness: 3 } },
+    }[name];
+    const sessionSha256 = sha(`${name}-isolation`);
+    return receipt(root, name, schema, {
+      schema, artDirectionSha256: artDirectionSemantic, buildSha256: activationValue.buildSha256,
+      isolationReceipt: { schema: 'reviewer-isolation-v1', sha256: sessionSha256 },
+      ...contract, quorum: { required: 2, passed: 2 },
+      provenance: { observationSha256s: [sha(canonical(firstValue)), sha(canonical(secondValue))], reviewerIds: [`${name}-reviewer-a`, `${name}-reviewer-b`], reviewerSessionSha256: sessionSha256 },
+    });
+  };
   const staticRunId = activationValue.buildSha256;
   const staticEvidencePath = (...parts: string[]): string => join('.omd', 'static-evidence', ...parts);
   const staticEvidenceOutput = (...parts: string[]): string => join(root, staticEvidencePath(...parts));

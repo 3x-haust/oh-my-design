@@ -162,6 +162,7 @@ export function extractInPage(maxNodes: number, selector?: string | null): RawIr
     const style = getComputedStyle(el);
     const tag = el.tagName;
     const role = el.getAttribute('role') ?? '';
+    if (/^(?:H[1-6]|P|SPAN|STRONG|EM|SMALL|LABEL|LI)$/.test(tag)) return false;
     const landmark = new Set(['HEADER', 'MAIN', 'NAV', 'ASIDE', 'FOOTER', 'SECTION', 'ARTICLE']).has(tag)
       || new Set(['banner', 'navigation', 'main', 'complementary', 'contentinfo', 'region', 'form', 'search']).has(role);
     const fullWidth = rect.width >= window.innerWidth * 0.9;
@@ -174,11 +175,24 @@ export function extractInPage(maxNodes: number, selector?: string | null): RawIr
       || Number.parseFloat(style.marginTop) + Number.parseFloat(style.marginBottom) >= 32;
     const band = /(?:cta|install|proof|footer)/i.test(`${el.className} ${el.id} ${el.textContent ?? ''}`)
       && (fullWidth || separated);
-    return landmark || hasRepeatedAnatomy(el) || fullWidth || viewportSized || painted || separated || band;
+    return landmark || hasRepeatedAnatomy(el) || viewportSized || painted || separated || band;
   };
   const distinctRegions = (el: Element): number => {
     const regions: Element[] = [];
+    const repeatedChildKeys = new Set<string>();
+    const childCounts = new Map<string, number>();
+    for (const child of Array.from(el.children)) {
+      const key = `${child.tagName}:${child.getAttribute('class') ?? ''}`;
+      childCounts.set(key, (childCounts.get(key) ?? 0) + 1);
+    }
+    for (const [key, count] of childCounts) if (count >= 2) repeatedChildKeys.add(key);
+    const headings = el.querySelectorAll('h1, h2, h3, h4, h5, h6');
     const visit = (candidate: Element): void => {
+      const key = `${candidate.tagName}:${candidate.getAttribute('class') ?? ''}`;
+      if (candidate.parentElement === el && repeatedChildKeys.has(key)) {
+        regions.push(candidate);
+        return;
+      }
       if (candidate !== el && segmentBoundary(candidate)) {
         regions.push(candidate);
         return;
@@ -186,14 +200,24 @@ export function extractInPage(maxNodes: number, selector?: string | null): RawIr
       for (const child of Array.from(candidate.children)) visit(child);
     };
     for (const child of Array.from(el.children)) visit(child);
-    return regions.length;
+    return regions.length > 0 ? regions.length : headings.length > 1 ? headings.length : 0;
   };
-  const renderedBeats: RenderedBeat[] = Array.from(document.querySelectorAll('[data-omd-beat]')).map((el) => {
+  const beatElements = Array.from(document.querySelectorAll('[data-omd-beat]'));
+  const renderedBeats: RenderedBeat[] = beatElements.map((el) => {
     const rect = el.getBoundingClientRect();
     const ancestorBeatIds: string[] = [];
     for (let ancestor = el.parentElement; ancestor; ancestor = ancestor.parentElement) {
       const beatId = ancestor.getAttribute('data-omd-beat');
       if (beatId) ancestorBeatIds.push(beatId.trim());
+    }
+    for (const other of beatElements) {
+      if (other === el || !isRendered(other)) continue;
+      const otherRect = other.getBoundingClientRect();
+      if (rect.left < otherRect.right && rect.right > otherRect.left
+        && rect.top < otherRect.bottom && rect.bottom > otherRect.top) {
+        const beatId = other.getAttribute('data-omd-beat')?.trim();
+        if (beatId && !ancestorBeatIds.includes(beatId)) ancestorBeatIds.push(beatId);
+      }
     }
     return {
       id: el.getAttribute('data-omd-beat')?.trim() ?? '',

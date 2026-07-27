@@ -257,6 +257,24 @@ function validateAlternative(alternative: ArtDirectionAlternative, references: r
   });
 }
 
+function resolveMotionCompatibleEvaluatorChoice(
+  evidence: EvaluatorAuthoredResolutionEvidence,
+  alternatives: readonly ArtDirectionAlternative[],
+  motionDecision: MotionDecision,
+): ArtDirectionAlternative {
+  const scores = new Map(evidence.assessments.map((assessment) => [assessment.register, assessment.score] as const));
+  const compatible = alternatives
+    .filter((alternative) => alternative.motionHypothesis === motionDecision)
+    .sort((left, right) => scores.get(right.register)! - scores.get(left.register)!);
+  if (compatible.length === 0) {
+    throw new ArtDirectionValidationError('explicit current-user motion lock has no compatible evaluated direction');
+  }
+  if (compatible.length > 1 && scores.get(compatible[0]!.register) === scores.get(compatible[1]!.register)) {
+    throw new ArtDirectionValidationError('explicit current-user motion lock has no unambiguous compatible evaluated direction');
+  }
+  return compatible[0]!;
+}
+
 function resolveEvaluatorChoice(
   evidence: EvaluatorAuthoredResolutionEvidence,
   alternatives: readonly ArtDirectionAlternative[],
@@ -442,12 +460,13 @@ export function resolveMarketingArtDirection(input: ResolveMarketingArtDirection
   input.alternatives.forEach((alternative) => validateAlternative(alternative, canonical));
   const lock = input.intent;
   const evaluatorSelected = resolveEvaluatorChoice(input.evaluatorEvidence, input.alternatives);
-  const selected = lock.register === undefined
-    ? evaluatorSelected
-    : byRegister(input.alternatives, lock.register);
+  const selected = lock.register !== undefined
+    ? byRegister(input.alternatives, lock.register)
+    : lock.motionDecision !== undefined
+      ? resolveMotionCompatibleEvaluatorChoice(input.evaluatorEvidence, input.alternatives, lock.motionDecision)
+      : evaluatorSelected;
   const motionDecision: MotionDecision = lock.motionDecision ?? selected.motionHypothesis;
   if (lock.register !== undefined && lock.motionDecision !== undefined && selected.motionHypothesis !== lock.motionDecision) throw new ArtDirectionValidationError('explicit current-user motion lock conflicts with its selected register alternative');
-  if (lock.register === undefined && lock.motionDecision !== undefined && evaluatorSelected.motionHypothesis !== lock.motionDecision) throw new ArtDirectionValidationError('explicit current-user motion lock conflicts with evaluator evidence');
   if (motionDecision === 'one' && input.eligibility.selectedMotionReferenceSlotId !== undefined
     && !selected.motionReferenceSlotIds.includes(input.eligibility.selectedMotionReferenceSlotId)) {
     throw new ArtDirectionValidationError('evaluator-selected motion slot must be cited by the selected alternative');

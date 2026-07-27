@@ -91,13 +91,12 @@ test('a marketing surface commits a real colour identity and a built visual-mate
   }
 });
 
-test('a showpiece surface aims its one verified load scene at award-level ambition without adding unverifiable triggers', () => {
+test('a showpiece one scene is ambitious but never selected by surface default', () => {
   const protocol = read('core/protocol/human-design-loop.md');
-  assert.match(protocol, /Motion ambition is part of the GREEN target on a `showpiece` surface/i);
-  assert.match(protocol, /as ambitious as the studied award work[\s\S]*not a token fade or a bare opacity transition/i);
-  assert.match(protocol, /A minimal or absent signature scene at showpiece is under-reach, not restraint \(RED\)/i);
-  // It raises the ceiling of the verified scene only — the evidence contract is not relaxed.
-  assert.match(protocol, /never adds an unverifiable scroll-, pointer-, or state-triggered trigger, and the single-load-scene motion-evidence contract is unchanged/i);
+  assert.match(protocol, /after `motionDecision: one` is selected[\s\S]*as ambitious as the studied award work/i);
+  assert.match(protocol, /Never default motion to `one`/i);
+  assert.match(protocol, /exactly one declared, activated scene/i);
+  assert.match(protocol, /Neither outcome is a default/i);
 });
 
 test('art direction is evidence-bound autonomous none|one with carrier and decision-fit floors', () => {
@@ -134,13 +133,11 @@ test('eye flags an absent visual carrier as a hierarchy defect, not a style pref
   const eye = read('src/agents/eye.agent.yaml');
   assert.match(eye, /When the dominant anchor has no purposeful\s+visual carrier[\s\S]*name that absence as a hierarchy defect, not a\s+style preference/i);
 });
-test('a showpiece scroll journey is lawful only as scroll-scene-evidence, never as an unsettleable claim', () => {
+test('showpiece motion remains one declared triggered scene rather than a multi-scene exception', () => {
   const protocol = read('core/protocol/human-design-loop.md');
-  assert.match(protocol, /A `showpiece` scroll journey is a lawful escalation only as verified evidence/i);
-  assert.match(protocol, /each scene is scroll-position-scrubbed/i);
-  assert.match(protocol, /`final-evidence-v2` binds this as `scroll-scene-evidence-v1`/i);
-  assert.match(protocol, /Time-triggered scroll animation stays out of scope because it cannot be deterministically settled/i);
-  assert.match(protocol, /`confident`\/`quiet`\/`product` surfaces never take this escalation/i);
+  assert.match(protocol, /`one` requires exactly one declared, activated scene/i);
+  assert.match(protocol, /never turns captured scroll craft into an additional motion obligation beyond the exact selected `motionDecision`/i);
+  assert.doesNotMatch(protocol, /scroll-scene-evidence-v1/i);
 });
 test('an all-neutral marketing palette is a machine-flagged colourless failure, not restraint', () => {
   const protocol = read('core/protocol/human-design-loop.md');
@@ -153,10 +150,9 @@ test('enumerated visual directions must genuinely diverge in colour and generato
   assert.match(protocol, /each commits a distinct colour identity[\s\S]*never white\/black by default/i);
   assert.match(protocol, /one guess wearing three hats, and the blind selection rejects the set and re-enumerates/i);
 });
-test('a showpiece landing expects a scroll-motion narrative; its total absence is under-reach', () => {
+test('a showpiece landing does not silently acquire a scroll-motion obligation', () => {
   const protocol = read('core/protocol/human-design-loop.md');
-  assert.match(protocol, /Scroll-motion ambition is part of the GREEN target on a `showpiece` marketing landing/i);
-  assert.match(protocol, /scrolls as a plain static document with no scroll-linked motion is under-reach \(RED\)/i);
-  assert.match(protocol, /scroll-position-scrubbed motion[\s\S]*satisfies the `scroll-scene-evidence-v1` protocol/i);
-  assert.match(protocol, /never a time-triggered scroll animation/i);
+  assert.match(protocol, /Never default motion to `one`/i);
+  assert.match(protocol, /Motion is not implied by that default/i);
+  assert.match(protocol, /`motionDecision: none`[\s\S]*designed static template break/i);
 });

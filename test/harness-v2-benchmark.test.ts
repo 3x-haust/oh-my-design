@@ -18,10 +18,11 @@ const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(va
 const budget = { rounds: 0, elapsedMinutes: 0, browserLaunches: 0, tokens: 0, usd: 0 };
 
 function brief(id: string, expectedDecision: 'one' | 'none', surface: HoldoutBrief['surface'], domain: HoldoutBrief['domain'], language: HoldoutBrief['language'], kind: HoldoutBrief['kind'] = 'silent-evidence'): HoldoutBrief {
-  return { id, expectedDecision, surface, domain, language, kind, evidence: [`fixture/${id}.json`] };
+  const routes: HoldoutBrief['routes'] = surface === 'mixed' ? [{ surface: 'marketing' }, { surface: 'product' }] : [{ surface }];
+  return { id, expectedDecision, surface, routes, domain, language, kind, evidence: [`fixture/${id}.json`] };
 }
 function corpus() {
-  const briefs = canonicalLegalCellManifest().map((cell, index) => brief(`cell-${index}-${cell.expectedDecision}`, cell.expectedDecision, cell.surface, cell.domain, cell.language, index % 17 === 0 ? 'showpiece' : index % 19 === 0 ? 'quiet' : 'silent-evidence'));
+  const briefs = canonicalLegalCellManifest().map((cell, index) => brief(`cell-${index}-${cell.kind}-${cell.expectedDecision}`, cell.expectedDecision, cell.surface, cell.domain, cell.language, cell.kind));
   return { briefs, routeMap: Object.fromEntries(briefs.map(item => [item.id, item.surface])) };
 }
 function lockFixture(mutation = '') {
@@ -87,9 +88,30 @@ test('alias resolver is evaluator-owned, scoped, expiring, byte-limited, and one
   aliases.resolve(projected.evidenceAliases[0]!); assert.throws(() => aliases.resolve(projected.evidenceAliases[0]!), /consumed/);
   assert.throws(() => createAliasResolver(projected, ['fixture/substituted.json'], authority, Date.now()), /immutable alias authority/);
 });
-test('the development corpus and holdouts are the exact crossed 128-cell authority', () => {
-  const { briefs, routeMap } = corpus(); assert.equal(briefs.length, 128); assert.deepEqual(briefs.map(({ surface, domain, language, expectedDecision }) => ({ surface, domain, language, expectedDecision })), canonicalLegalCellManifest());
-  assert.doesNotThrow(() => validateDevelopmentCorpus(briefs, routeMap)); assert.throws(() => validateDevelopmentCorpus(briefs.slice(1), Object.fromEntries(briefs.slice(1).map(item => [item.id, item.surface]))), /canonical crossed legal-cell manifest/);
+test('the development corpus and holdouts cover the exact lawful 128-cell matrix', () => {
+  const { briefs, routeMap } = corpus(); assert.equal(briefs.length, 128); assert.deepEqual(briefs.map(({ surface, kind, domain, language, expectedDecision }) => ({ surface, kind, domain, language, expectedDecision })), canonicalLegalCellManifest());
+  assert.doesNotThrow(() => validateDevelopmentCorpus(briefs, routeMap)); assert.throws(() => validateDevelopmentCorpus(briefs.slice(1), Object.fromEntries(briefs.slice(1).map(item => [item.id, item.surface]))), /canonical legal-cell manifest/);
+});
+test('the legal matrix rejects product-one, quiet-one, product-showpiece, and unlawful showpiece-none cells', () => {
+  const { briefs } = corpus();
+  const cases: readonly [string, Partial<HoldoutBrief>][] = [
+    ['product-one', { surface: 'product', routes: [{ surface: 'product' }], kind: 'silent-evidence', expectedDecision: 'one' }],
+    ['quiet-one', { kind: 'quiet', expectedDecision: 'one' }],
+    ['product-showpiece', { surface: 'product', routes: [{ surface: 'product' }], kind: 'showpiece', expectedDecision: 'none' }],
+    ['showpiece-none', { surface: 'marketing', routes: [{ surface: 'marketing' }], kind: 'showpiece', expectedDecision: 'none' }],
+  ];
+  for (const [name, mutation] of cases) {
+    const candidate = { ...briefs[0]!, ...mutation, id: name };
+    const rest = briefs.filter(item => item.surface !== candidate.surface || item.kind !== candidate.kind || item.expectedDecision !== candidate.expectedDecision || item.domain !== candidate.domain || item.language !== candidate.language);
+    const matrix = [...rest, candidate];
+    assert.throws(() => validateDevelopmentCorpus(matrix, Object.fromEntries(matrix.map(item => [item.id, item.surface]))), /invalid legal-cell brief|missing, extra, or illegal/);
+  }
+});
+test('mixed cells require every declared route to be independently lawful', () => {
+  const { briefs } = corpus();
+  const mixed = briefs.find(item => item.surface === 'mixed')!;
+  const matrix = briefs.map(item => item.id === mixed.id ? { ...item, routes: [{ surface: 'product' as const }] } : item);
+  assert.throws(() => validateDevelopmentCorpus(matrix, Object.fromEntries(matrix.map(item => [item.id, item.surface]))), /mixed routes are not individually legal/);
 });
 
 test('signed E5 binds the exact interpreter and target bytes for every subprocess role', () => {

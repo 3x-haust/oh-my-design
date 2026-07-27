@@ -1,3 +1,9 @@
+import {
+  EXECUTABLE_OBLIGATION_TEST_CASES,
+  OBLIGATION_PROJECTION_DEFINITIONS,
+  type ExecutableObligationTestCase,
+  type ObligationProjectionDefinition,
+} from './targets.ts';
 export const REQUIRED_OBLIGATION_IDS = [
   'explicit-user-motion-lock',
   'silent-marketing-three-direction-comparison',
@@ -35,8 +41,50 @@ function nonEmptyIds(ids: readonly string[], label: string, obligation: string):
   }
 }
 
-/** Validates the single ownership map used to project harness-v2 policy into tests and prompts. */
+function targetIndex<T extends { readonly id: string; readonly applicableTo: readonly string[] }>(
+  targets: readonly T[],
+  kind: string,
+): ReadonlyMap<string, T> {
+  const indexed = new Map<string, T>();
+  for (const target of targets) {
+    if (target.id.trim().length === 0) throw new Error(`${kind} target has an empty id`);
+    if (target.applicableTo.length === 0) throw new Error(`${kind} target ${target.id} is missing applicability`);
+    const applicable = new Set<string>();
+    for (const obligationId of target.applicableTo) {
+      if (!requiredId(obligationId)) throw new Error(`${kind} target ${target.id} has unknown applicability: ${obligationId}`);
+      if (applicable.has(obligationId)) throw new Error(`${kind} target ${target.id} duplicates applicability: ${obligationId}`);
+      applicable.add(obligationId);
+    }
+    if (indexed.has(target.id)) throw new Error(`duplicate ${kind} target: ${target.id}`);
+    indexed.set(target.id, target);
+  }
+  return indexed;
+}
+
+/** Validates fixed executable test and projection declarations before they can authorize obligations. */
+export function validateObligationTargets(
+  testCases: readonly ExecutableObligationTestCase[] = EXECUTABLE_OBLIGATION_TEST_CASES,
+  projections: readonly ObligationProjectionDefinition[] = OBLIGATION_PROJECTION_DEFINITIONS,
+): void {
+  for (const testCase of testCases) {
+    if (testCase.file.trim().length === 0 || testCase.title.trim().length === 0) {
+      throw new Error(`test case target ${testCase.id} is missing an executable declaration`);
+    }
+  }
+  for (const projection of projections) {
+    if (projection.file.trim().length === 0 || projection.definition.trim().length === 0) {
+      throw new Error(`projection target ${projection.id} is missing a definition`);
+    }
+  }
+  targetIndex(testCases, 'test case');
+  targetIndex(projections, 'projection');
+}
+
+/** Validates the single ownership map used to project harness-v2 policy into executable tests and projections. */
 export function validateObligationRegistry(obligations: readonly ProtocolObligation[]): readonly ProtocolObligation[] {
+  validateObligationTargets();
+  const testCases = targetIndex(EXECUTABLE_OBLIGATION_TEST_CASES, 'test case');
+  const projections = targetIndex(OBLIGATION_PROJECTION_DEFINITIONS, 'projection');
   const obligationOwners = new Map<string, string>();
   const testOwners = new Map<string, string>();
   const projectionOwners = new Map<string, string>();
@@ -52,13 +100,19 @@ export function validateObligationRegistry(obligations: readonly ProtocolObligat
     nonEmptyIds(obligation.projectionIds, 'projection', obligation.id);
 
     for (const testId of obligation.testIds) {
+      const testCase = testCases.get(testId);
+      if (testCase === undefined) throw new Error(`obligation ${obligation.id} references missing executable test case: ${testId}`);
       const owner = testOwners.get(testId);
       if (owner !== undefined) throw new Error(`test id ${testId} is owned by both ${owner} and ${obligation.id}`);
+      if (!(testCase.applicableTo as readonly string[]).includes(obligation.id)) throw new Error(`executable test case ${testId} is missing applicability for ${obligation.id}`);
       testOwners.set(testId, obligation.id);
     }
     for (const projectionId of obligation.projectionIds) {
+      const projection = projections.get(projectionId);
+      if (projection === undefined) throw new Error(`obligation ${obligation.id} references missing projection definition: ${projectionId}`);
       const owner = projectionOwners.get(projectionId);
       if (owner !== undefined) throw new Error(`projection id ${projectionId} is owned by both ${owner} and ${obligation.id}`);
+      if (!(projection.applicableTo as readonly string[]).includes(obligation.id)) throw new Error(`projection ${projectionId} is missing applicability for ${obligation.id}`);
       projectionOwners.set(projectionId, obligation.id);
     }
   }
