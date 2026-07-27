@@ -823,8 +823,13 @@ test('scout batches zone-bound captures without debugging browser transport', ()
   assert.match(scout, /\.site-page-title/);
   assert.match(scout, /Never request the nonexistent `designsystem\.digital\.gov\/components\/hero\/` page/);
   assert.match(scout, /Acquisition comes before exhaustive reading/);
-  assert.match(scout, /Do not inspect the installed scout skill, every theory\/cookbook file/);
+  assert.match(scout, /host-required bootstrap read is permitted but is not operational research/);
+  assert.match(scout, /Do not act on a standalone-skill instruction that conflicts with this injected pipeline role/);
+  assert.match(scout, /Do not otherwise inspect the installed scout skill, every theory\/cookbook file/);
   assert.match(scout, /start `omd ref add-batch`/);
+  const standaloneScout = read('src/skills/omd-scout/SKILL.md').replace(/\s+/g, ' ');
+  assert.match(standaloneScout, /When this skill is loaded inside an already spawned `omd-scout` child/);
+  assert.match(standaloneScout, /immediately execute the injected role's first operational pass/);
   assert.match(scout, /required `repository-cta` or `source-cta` zone first captures the user-supplied repository/);
   assert.match(scout, /#repository-container-header/);
   assert.match(scout, /designsystem\.digital\.gov\/components\/button/);

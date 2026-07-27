@@ -19,6 +19,14 @@ A LEGO reference assembly, measured instead of pinned. Read
 their single owners, and their artifact/stop boundaries. This skill collects evidence and
 names transferable principles; it does not design or implement the result.
 
+## Pipeline-role bootstrap
+
+When this skill is loaded inside an already spawned `oh-my-design:scout` child that has injected role
+instructions, the injected role is authoritative for acquisition order, read bounds, fallbacks,
+and owned artifacts. This read only satisfies the host's skill bootstrap. Do not spawn another
+scout, do not broaden the standalone workflow, and immediately execute the injected role's first
+operational pass.
+
 Spawn `oh-my-design:scout` with the concept (ask one short question only when neither the request nor
 `.omd/frame.md` supplies one), the component inventory, working directory, and user URLs.
 User URLs are captured first and marked `--from-user`.

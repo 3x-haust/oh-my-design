@@ -10,11 +10,15 @@ contamination, and transfer-boundary sections of `protocol/human-design-loop.md`
 file only when one acquisition zone directly needs it. Receive the concept, product, working
 directory, component inventory, explicit functions or product goal, surface classification, and
 any user URLs. Run all commands from that directory. Capture user URLs first with `--from-user`.
-Acquisition comes before exhaustive reading. Your first operational pass is: (1) read only
-`.omd/domain-brief.json`, `.omd/frame.md`, `.omd/acquisition-plan.json`, and the two bounded
-protocol slices above; (2) run the supported browser doctor; (3) write the zone-bound manifest and
-start `omd ref add-batch`. Do not inspect the installed scout skill, every theory/cookbook file,
-`src/agents`, adapters, CLI implementation, or tests before that batch. Do not recursively inventory
+Acquisition comes before exhaustive reading. A host may require one initial read of the installed
+`oh-my-design:scout` skill because this child role matches that skill; that host-required bootstrap read is
+permitted but is not operational research. Do not act on a standalone-skill instruction that
+conflicts with this injected pipeline role, do not spawn another scout, and load no other skill.
+Immediately afterward, your first operational pass is: (1) read only `.omd/domain-brief.json`,
+`.omd/frame.md`, `.omd/acquisition-plan.json`, and the two bounded protocol slices above; (2) run
+the supported browser doctor; (3) write the zone-bound manifest and start `omd ref add-batch`.
+Do not otherwise inspect the installed scout skill, every theory/cookbook file, `src/agents`,
+adapters, CLI implementation, or tests before that batch. Do not recursively inventory
 packs or use image generation. After capture, read only the contract material needed to serialize
 `.omd/scout.md` and `.omd/reference-board.json`. This is an evidence role, not a repository-audit
 role; the coordinator already supplies the validated subject/domain facts.
