@@ -9,7 +9,8 @@ export interface EvidenceDeclaration { id: EvidenceId; path: string; kind: Evide
 export interface EvidenceLockEntry extends EvidenceDeclaration { status: EvidenceStatus; statusHash: string; }
 export interface EvidenceLock { schemaVersion: 'harness-v2-evidence-lock-v4'; entries: readonly EvidenceLockEntry[]; digest: string; }
 export interface EvidenceSnapshotEntry { readonly declaration: EvidenceLockEntry; readonly bytes: Uint8Array; }
-export interface EvidenceLockSnapshot { readonly lock: EvidenceLock; readonly entries: Readonly<Record<string, EvidenceSnapshotEntry>>; }
+/** Opaque handle: validated bytes and payloads stay in private module state and are reachable only through the accessors below. */
+export interface EvidenceLockSnapshot { readonly lock: EvidenceLock; }
 
 const hash = (value: string | Uint8Array): string => createHash('sha256').update(value).digest('hex');
 const sha256 = /^[a-f0-9]{64}$/;
@@ -142,7 +143,6 @@ export function validateEvidenceSnapshot(lock: EvidenceLock, entries: readonly E
   if (entries.length !== lock.entries.length) throw new Error('evidence snapshot is incomplete');
   const supplied = Object.fromEntries(entries.map(entry => [entry.declaration.id, entry])) as Record<string, EvidenceSnapshotEntry>;
   const ownedLock = freezeLock(lock);
-  const byId: Record<string, EvidenceSnapshotEntry> = {};
   const privateBytes: Record<string, Buffer> = {};
   const payloads: Record<string, Readonly<Record<string, unknown>>> = {};
   for (const declaration of ownedLock.entries) {
@@ -154,11 +154,10 @@ export function validateEvidenceSnapshot(lock: EvidenceLock, entries: readonly E
     validateLineage(payload, declaration, ownedLock.entries);
     privateBytes[declaration.id] = Buffer.from(bytes);
     payloads[declaration.id] = payload;
-    byId[declaration.id] = Object.freeze({ declaration, bytes: new Uint8Array(bytes) });
   }
   const payload = (id: EvidenceId) => { const value=payloads[id]; if (!value) throw new Error(`missing ${id}`); return value as Record<string, unknown>; };
   validateTrustRoot(ownedLock.entries, payload);
-  const snapshot = Object.freeze({ lock: ownedLock, entries: Object.freeze(byId) });
+  const snapshot = Object.freeze({ lock: ownedLock });
   evidenceSnapshots.set(snapshot, Object.freeze({ lockFingerprint: hash(canonical(ownedLock)), bytes: Object.freeze(privateBytes), payloads: Object.freeze(payloads) }));
   return snapshot;
 }

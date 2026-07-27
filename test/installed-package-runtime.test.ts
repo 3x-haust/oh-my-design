@@ -42,6 +42,7 @@ test('packed reviewer evidence proxy starts its shipped MCP runtime', () => {
       '--runner-id', 'packed-runtime-test-runner',
       '--session-id', 'packed-runtime-test-session',
       '--nonce', 'packed-runtime-test-nonce',
+      '--host', 'codex',
     ];
     const started = process.platform === 'win32'
       ? run(process.execPath, [executable, ...proxyArgs], temporary, '{"jsonrpc":"2.0","id":1,"method":"initialize"}\n')
@@ -49,5 +50,33 @@ test('packed reviewer evidence proxy starts its shipped MCP runtime', () => {
     assert.equal(started.status, 0, started.stderr);
     assert.match(started.stdout, /"serverInfo":\{"name":"omd-reviewer-evidence-proxy","version":"1"\}/);
     assert.doesNotMatch(started.stderr, /ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING/);
+  } finally { rmSync(temporary, { recursive: true, force: true }); }
+});
+
+test('packed harness v2 ships an authoritative runner bin rather than a test launcher', () => {
+  const temporary = mkdtempSync(join(tmpdir(), 'omd-installed-harness-v2-'));
+  const packs = join(temporary, 'packs');
+  const consumer = join(temporary, 'consumer');
+  try {
+    mkdirSync(packs); mkdirSync(consumer);
+    const packed = run(NPM, ['pack', '--json', '--ignore-scripts', '--pack-destination', packs], ROOT);
+    assert.equal(packed.status, 0, packed.stderr);
+    const archive = join(packs, (JSON.parse(packed.stdout) as readonly { filename: string }[])[0]!.filename);
+    const installed = run(NPM, ['install', '--offline', '--ignore-scripts', '--no-audit', '--no-fund', archive], consumer);
+    assert.equal(installed.status, 0, installed.stderr);
+    const packageRoot = join(consumer, 'node_modules', '@3xhaust', 'oh-my-design');
+    const manifest = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8')) as { bin: Record<string, string>; scripts: Record<string, string> };
+    const entry = manifest.bin['omd-harness-v2'];
+    if (entry === undefined) throw new Error('packed manifest has no harness v2 bin');
+    assert.match(entry, /^\.\/bin\/.*\.mjs$/);
+    assert.equal(existsSync(join(packageRoot, entry)), true);
+    assert.equal(existsSync(join(packageRoot, 'scripts', 'benchmark', 'run-harness-v2.ts')), true);
+    assert.doesNotMatch(manifest.scripts['benchmark:harness-v2'] ?? '', /--test|test\//);
+    const executable = process.platform === 'win32' ? join(packageRoot, entry) : join(consumer, 'node_modules', '.bin', 'omd-harness-v2');
+    const started = process.platform === 'win32'
+      ? run(process.execPath, [executable], temporary)
+      : run(executable, [], temporary);
+    assert.notEqual(started.status, 0);
+    assert.match(started.stderr, /usage: run-harness-v2 <input\.json>/);
   } finally { rmSync(temporary, { recursive: true, force: true }); }
 });

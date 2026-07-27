@@ -182,7 +182,7 @@ test('structurally forged evidence snapshots lack validated provenance', () => {
   try {
     const genuine = validateEvidenceLock(evidence.root, evidence.lock);
     assert.throws(
-      () => requireEvidenceLockSnapshot({ lock: evidence.lock, entries: genuine.entries }, evidence.lock),
+      () => requireEvidenceLockSnapshot({ lock: evidence.lock }, evidence.lock),
       /validated immutable provenance/,
     );
   } finally { rmSync(evidence.root, { recursive: true, force: true }); }
@@ -190,8 +190,12 @@ test('structurally forged evidence snapshots lack validated provenance', () => {
 test('validated snapshots retain private immutable authority after caller mutation', () => {
   const evidence = lockFixture();
   try {
-    const snapshot = validateEvidenceLock(evidence.root, evidence.lock);
-    snapshot.entries.E5!.bytes[0] = 0;
+    const supplied = evidence.lock.entries.map(declaration => ({
+      declaration,
+      bytes: new Uint8Array(readFileSync(join(evidence.root, declaration.path))),
+    }));
+    const snapshot = validateEvidenceSnapshot(evidence.lock, supplied);
+    for (const entry of supplied) entry.bytes[0] = 0;
     assert.equal(readEvidenceSnapshotPayload(snapshot, 'E5').runnerId, JSON.parse(SIGNED_EVIDENCE_ARTIFACT_BYTES.E5!).payload.runnerId);
     assert.equal(createHash('sha256').update(readEvidenceSnapshotBytes(snapshot, 'E5')).digest('hex'), snapshot.lock.entries.find(entry => entry.id === 'E5')!.sha256);
     evidence.lock.entries.find(entry => entry.id === 'E13')!.sha256 = '0'.repeat(64);

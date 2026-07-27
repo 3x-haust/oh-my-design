@@ -9,13 +9,15 @@
   "bin": {
     "omd": "./bin/omd.mjs",
     "oh-my-design": "./bin/omd-install.mjs",
-    "omd-reviewer-evidence-proxy": "./bin/omd-reviewer-evidence-proxy.mjs"
+    "omd-reviewer-evidence-proxy": "./bin/omd-reviewer-evidence-proxy.mjs",
+    "omd-harness-v2": "./bin/omd-harness-v2.mjs"
   },
   "files": [
     "bin",
     "core",
     "adapters",
     "src",
+    "scripts",
     "dist",
     "README.md",
     "LICENSE"
@@ -26,7 +28,8 @@
   "scripts": {
     "test": "node --test 'test/*.test.ts'",
     "test:harness-v2": "node --test test/obligations-v2.test.ts test/reference-handoff-v2.test.ts test/final-evidence-v2.test.ts test/harness-v2-cli.test.ts test/static-direction-evidence.test.ts test/runtime-isolation.test.ts test/harness-v2-quality.test.ts",
-    "benchmark:harness-v2": "node --test test/harness-v2-benchmark.test.ts",
+    "benchmark:harness-v2": "node bin/omd-harness-v2.mjs",
+    "test:benchmark-harness-v2": "node --test test/harness-v2-benchmark.test.ts",
     "typecheck": "tsc --noEmit",
     "build": "node adapters/build.ts",
     "release:prep": "node scripts/bump.ts"

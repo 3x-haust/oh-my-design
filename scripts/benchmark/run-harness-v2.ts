@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { isAbsolute, resolve } from 'node:path';
 import { createAliasResolver, createEvaluatorHoldoutMetadata, evaluateHarness, freezeDevelopmentCorpus, projectHoldoutBrief, receiptHash, validateBudget, validateEvaluatorHoldoutMetadata, validateFrozenDevelopmentCorpus, validateProjectedBrief } from '../../core/eval-harness/holdout-projection.ts';
 import { validateEvidenceLock } from './validate-evidence-lock.ts';
-import { evidenceLockDigest, readEvidenceSnapshotPayload, requireEvidenceLockSnapshot } from './materialize-evidence-lock.ts';
+import { evidenceLockDigest, readEvidenceSnapshotBytes, readEvidenceSnapshotPayload, requireEvidenceLockSnapshot } from './materialize-evidence-lock.ts';
 import type { AliasResolver, BrowserRunReceipt, BuildRunReceipt, EvaluatorHoldoutMetadata, FrozenDevelopmentCorpus, HarnessBudget, HoldoutBrief, ProjectedBrief, RaterVote } from '../../core/eval-harness/holdout-projection.ts';
 import type { EvidenceLock, EvidenceLockSnapshot } from './materialize-evidence-lock.ts';
 
@@ -205,8 +205,8 @@ function runHarnessV2WithSnapshot(input: HarnessV2RunInput, snapshot: EvidenceLo
   if (mismatches.length > 0) throw new Error(`live signed benchmark projection diverges:\n${mismatches.join('\n')}`);
   const report: HarnessV2RunReport=Object.freeze({
     schemaVersion:'harness-v2-run-report-v4',
-    signedE5Digest:snapshot.lock.entries.find(entry=>entry.id==='E5')!.sha256,
-    signedE13Digest:snapshot.lock.entries.find(entry=>entry.id==='E13')!.sha256,
+    signedE5Digest:createHash('sha256').update(readEvidenceSnapshotBytes(snapshot,'E5')).digest('hex'),
+    signedE13Digest:createHash('sha256').update(readEvidenceSnapshotBytes(snapshot,'E13')).digest('hex'),
     ...computed.live,
   });
   return {result:computed.result,projectedBriefs:computed.projectedBriefs,receipts:computed.receipts,report};
