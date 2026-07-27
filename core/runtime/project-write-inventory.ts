@@ -131,6 +131,7 @@ function reviewerLiveSocketCleanupException(
     && startBroker?.includes('launch.authorizedChildPid = claim.childPid!;') === true
     && startBroker?.includes('socket.end(JSON.stringify({ capability: launch.capability }));') === true
     && startBroker?.includes('claim.childPid !== launch.authorizedChildPid || claim.launchCapability !== launch.capability') === true
+    && startBroker?.includes("if (!socketPeerIs(path, claim.childPid!)) throw new ReviewerLaunchError('reviewer proxy socket peer is not the claimed configured child');") === true
     && consumeBroker?.includes('const challenge = await exchange(claim);') === true
     && consumeBroker?.includes('const evidence = await exchange({ ...claim, launchCapability: challenge.capability });') === true
     && consumeBroker?.includes('const claim = { childPid: process.pid') === true;

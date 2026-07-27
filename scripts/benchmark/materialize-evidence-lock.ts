@@ -8,7 +8,7 @@ export type EvidenceArtifactKind = 'development-corpus' | 'legal-surface-matrix'
 export interface EvidenceDeclaration { id: EvidenceId; path: string; kind: EvidenceArtifactKind; schemaVersion: string; sha256: string; }
 export interface EvidenceLockEntry extends EvidenceDeclaration { status: EvidenceStatus; statusHash: string; }
 export interface EvidenceLock { schemaVersion: 'harness-v2-evidence-lock-v4'; entries: readonly EvidenceLockEntry[]; digest: string; }
-export interface EvidenceSnapshotEntry { readonly declaration: EvidenceLockEntry; readonly bytes: Uint8Array; readonly payload: Readonly<Record<string, unknown>>; }
+export interface EvidenceSnapshotEntry { readonly declaration: EvidenceLockEntry; readonly bytes: Uint8Array; }
 export interface EvidenceLockSnapshot { readonly lock: EvidenceLock; readonly entries: Readonly<Record<string, EvidenceSnapshotEntry>>; }
 
 const hash = (value: string | Uint8Array): string => createHash('sha256').update(value).digest('hex');
@@ -17,7 +17,7 @@ const HARNESS_V2_RUN_LOCK_DIGEST_V1 = 'harness-v2-run-lock-digest-v1' as const;
 const runLockEvidenceIds = new Set(['E1', 'E2', 'E3', 'E4', 'E5', 'E12']);
 type EvidenceSnapshotState = Readonly<{
   lockFingerprint: string;
-  lock: EvidenceLock;
+  bytes: Readonly<Record<string, Buffer>>;
   payloads: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
 }>;
 const evidenceSnapshots = new WeakMap<EvidenceLockSnapshot, EvidenceSnapshotState>();
@@ -143,6 +143,7 @@ export function validateEvidenceSnapshot(lock: EvidenceLock, entries: readonly E
   const supplied = Object.fromEntries(entries.map(entry => [entry.declaration.id, entry])) as Record<string, EvidenceSnapshotEntry>;
   const ownedLock = freezeLock(lock);
   const byId: Record<string, EvidenceSnapshotEntry> = {};
+  const privateBytes: Record<string, Buffer> = {};
   const payloads: Record<string, Readonly<Record<string, unknown>>> = {};
   for (const declaration of ownedLock.entries) {
     const entry = supplied[declaration.id];
@@ -151,13 +152,14 @@ export function validateEvidenceSnapshot(lock: EvidenceLock, entries: readonly E
     if (hash(bytes) !== declaration.sha256) throw new Error(`evidence snapshot mismatch: ${declaration.id}`);
     const payload = freezePayload(parseArtifactBytes(bytes, declaration).payload);
     validateLineage(payload, declaration, ownedLock.entries);
+    privateBytes[declaration.id] = Buffer.from(bytes);
     payloads[declaration.id] = payload;
-    byId[declaration.id] = Object.freeze({ declaration, bytes: new Uint8Array(bytes), payload });
+    byId[declaration.id] = Object.freeze({ declaration, bytes: new Uint8Array(bytes) });
   }
   const payload = (id: EvidenceId) => { const value=payloads[id]; if (!value) throw new Error(`missing ${id}`); return value as Record<string, unknown>; };
   validateTrustRoot(ownedLock.entries, payload);
   const snapshot = Object.freeze({ lock: ownedLock, entries: Object.freeze(byId) });
-  evidenceSnapshots.set(snapshot, Object.freeze({ lockFingerprint: hash(canonical(ownedLock)), lock: ownedLock, payloads: Object.freeze(payloads) }));
+  evidenceSnapshots.set(snapshot, Object.freeze({ lockFingerprint: hash(canonical(ownedLock)), bytes: Object.freeze(privateBytes), payloads: Object.freeze(payloads) }));
   return snapshot;
 }
 export function readEvidenceSnapshotPayload(snapshot: EvidenceLockSnapshot, id: EvidenceId): Readonly<Record<string, unknown>> {
@@ -165,6 +167,11 @@ export function readEvidenceSnapshotPayload(snapshot: EvidenceLockSnapshot, id: 
   const payload = state?.payloads[id];
   if (!state || !payload) throw new Error(`missing signed ${id}`);
   return payload;
+}
+export function readEvidenceSnapshotBytes(snapshot: EvidenceLockSnapshot, id: EvidenceId): Uint8Array {
+  const bytes = evidenceSnapshots.get(snapshot)?.bytes[id];
+  if (!bytes) throw new Error(`missing signed ${id}`);
+  return new Uint8Array(bytes);
 }
 export function requireEvidenceLockSnapshot(snapshot: EvidenceLockSnapshot, lock: EvidenceLock): EvidenceLockSnapshot {
   const state = evidenceSnapshots.get(snapshot);

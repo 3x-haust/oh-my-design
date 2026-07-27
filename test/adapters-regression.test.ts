@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { connect } from 'node:net';
 import { parse as parseToml } from 'smol-toml';
 import { parse as parseYaml } from 'yaml';
 import { canonicalSkillSourceBytes, createBuildIdentity } from '../adapters/build.ts';
@@ -22,7 +23,7 @@ import {
   observeClaudeLoadedSkill,
   preflightClaudeV2,
 } from '../adapters/claude.ts';
-import { createReviewerMcpAdapter, reviewerEvidenceSha256, type ReviewerHost } from '../adapters/reviewer-mcp.ts';
+import { createReviewerMcpAdapter, requireReviewerLaunchReceipt, reviewerEvidenceSha256, type ReviewerHost } from '../adapters/reviewer-mcp.ts';
 import { jsonFile, must, textFile } from './helpers.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -341,6 +342,29 @@ test('no CLAUDE_PLUGIN_ROOT in real skill sources', () => {
 });
 
 const reviewerSocketPath = (launchId: string) => join(realpathSync(tmpdir()), `o-${createHash('sha256').update(launchId).digest('hex').slice(0, 16)}`);
+async function borrowedReviewerPidClaim(
+  receipt: { readonly launchId: string; readonly configurationSha256: string; readonly processBinding: { readonly runnerId: string; readonly sessionId: string; readonly nonce: string } },
+  childPid: number,
+  parentPid = process.pid,
+): Promise<{ error?: string; capability?: string }> {
+  return await new Promise((resolvePromise, reject) => {
+    const socket = connect(reviewerSocketPath(receipt.launchId));
+    let response = '';
+    socket.setEncoding('utf8');
+    socket.on('connect', () => socket.end(JSON.stringify({
+      childPid,
+      parentPid,
+      parentExecutableSha256: createHash('sha256').update(readFileSync(process.execPath)).digest('hex'),
+      configurationSha256: receipt.configurationSha256,
+      runnerId: receipt.processBinding.runnerId,
+      sessionId: receipt.processBinding.sessionId,
+      nonce: receipt.processBinding.nonce,
+    })));
+    socket.on('data', chunk => { response += chunk; });
+    socket.on('error', reject);
+    socket.on('end', () => resolvePromise(JSON.parse(response) as { error?: string; capability?: string }));
+  });
+}
 async function reviewerMcpTranscript(
   receipt: {
     readonly launchId: string;
@@ -397,12 +421,34 @@ test('the correctly bound host invokes the real reviewer MCP proxy once without 
   assert.deepEqual(receipt.evidence, { kind: 'brokered', sha256: createHash('sha256').update('review evidence').digest('hex'), byteLength: Buffer.byteLength('review evidence') });
   assert.equal(JSON.stringify(receipt).includes(Buffer.from('review evidence').toString('base64')), false);
   assert.equal(JSON.stringify(bundle.configuration).includes('OMD_REVIEWER_EVIDENCE_LAUNCH_CAPABILITY'), false);
+  assert.throws(() => requireReviewerLaunchReceipt(receipt), /no completed process-authenticated evidence handshake/);
   const otherAdapter = createReviewerMcpAdapter();
-  await assert.rejects(
-    () => otherAdapter.invokeEvidenceProxy(bundle, [MCP_INITIALIZE]),
+  assert.throws(
+    () => otherAdapter.requireLaunchBundle(bundle, 'codex'),
     /not issued by this host reviewer launcher/,
   );
-  const transcript = await adapter.invokeEvidenceProxy(bundle, [
+  const { adapter: forgedAdapter, receipt: forgedReceipt } = reviewerReceipt('codex');
+  const launcher = spawn(process.execPath, ['--input-type=module', '--eval', "import { spawn } from 'node:child_process'; const child=spawn(process.execPath,['-e','setTimeout(() => {}, 30000)']); console.log(child.pid); setTimeout(() => {}, 30000);"]);
+  const borrowedPid = await new Promise<number>((resolvePid, reject) => {
+    let output = '';
+    launcher.stdout.setEncoding('utf8');
+    launcher.stdout.on('data', chunk => {
+      output += chunk;
+      const value = Number(output.trim());
+      if (Number.isSafeInteger(value) && value > 0) resolvePid(value);
+    });
+    launcher.once('error', reject);
+  });
+  try {
+    const forged = await borrowedReviewerPidClaim(forgedReceipt, borrowedPid, launcher.pid!);
+    assert.match(forged.error ?? '', /socket peer is not the claimed configured child/);
+    assert.equal(forged.capability, undefined);
+  } finally {
+    process.kill(borrowedPid, 'SIGTERM');
+    launcher.kill();
+    forgedAdapter.dispose();
+  }
+  const transcript = await reviewerMcpTranscript(receipt, [
     MCP_INITIALIZE,
     MCP_INITIALIZED,
     MCP_TOOLS_LIST,
@@ -416,12 +462,14 @@ test('the correctly bound host invokes the real reviewer MCP proxy once without 
     description: 'Read the opaque evidence bound to this reviewer launch exactly once.',
     inputSchema: { type: 'object', additionalProperties: false },
   }]);
+  assert.ok('result' in transcript[2]!, JSON.stringify(transcript[2]));
   assert.deepEqual((transcript[2]!.result as { structuredContent: unknown }).structuredContent, {
     base64: Buffer.from('review evidence').toString('base64'),
     byteLength: Buffer.byteLength('review evidence'),
     sha256: createHash('sha256').update('review evidence').digest('hex'),
   });
   assert.match((transcript[3]!.error as { message: string }).message, /private host launch capability|unknown, reused, or unreadable/);
+  assert.equal(requireReviewerLaunchReceipt(receipt), receipt);
   assert.equal(reviewerEvidenceSha256(receipt), receipt.evidence.sha256);
   assert.throws(() => reviewerEvidenceSha256(receipt), /verified child\/process\/configuration\/capability handshake/);
   otherAdapter.dispose();
@@ -452,5 +500,5 @@ test('the reviewer proxy rejects a mismatched emitted configuration identity', a
     [MCP_INITIALIZE, MCP_INITIALIZED, evidenceToolCall(3)],
     'a'.repeat(64),
   );
-  assert.match(((transcript[1]!.error as { message: string }).message), /private host launch capability|binding failed/);
+  assert.match(((transcript[1]!.error as { message: string }).message), /private host launch capability|binding failed|configuration does not match/);
 });

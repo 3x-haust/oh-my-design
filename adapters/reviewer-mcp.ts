@@ -3,7 +3,7 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { existsSync, readFileSync, realpathSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, isAbsolute, join, resolve } from 'node:path';
-import { spawn, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { createServer, connect, type Server } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { createInterface } from 'node:readline';
@@ -70,6 +70,7 @@ const observedSkillLaunchers = new WeakMap<ReviewerObservedLoadedSkillReceipt, R
 const launchBundles = new WeakSet<ReviewerLaunchBundle>();
 const bundleLaunchers = new WeakMap<ReviewerLaunchBundle, ReviewerMcpAdapter>();
 const verifiedEvidenceProofs = new WeakMap<ReviewerLaunchReceipt, Readonly<{ sha256: string; launchId: string; configurationSha256: string }>>();
+const completedReviewerLaunches = new WeakSet<ReviewerLaunchReceipt>();
 const SHA256 = /^[a-f0-9]{64}$/;
 const temporaryRoot = realpathSync(tmpdir());
 const socketPath = (launchId: string): string => join(temporaryRoot, `o-${createHash('sha256').update(launchId).digest('hex').slice(0, 16)}`);
@@ -84,11 +85,32 @@ function parentExecutableSha256(parentPid: number): string {
   if (!path) throw new ReviewerLaunchError('reviewer parent executable cannot be observed');
   return executableSha256(path);
 }
+function socketPeerIs(path: string, childPid: number): boolean {
+  if (process.platform === 'darwin') {
+    const result = spawnSync('/usr/sbin/netstat', ['-anv', '-f', 'unix'], { encoding: 'utf8', env: { PATH: '' } });
+    if (result.status !== 0 || typeof result.stdout !== 'string') return false;
+    const rows = result.stdout.split('\n').filter(line => line.includes(' stream ')).map(line => {
+      const columns = line.trim().split(/\s+/);
+      const pid = Number(line.match(/:(\d+)\s+\d{5}\s/)?.[1]);
+      return { address: columns[0], connection: columns[5], pid, path: columns.at(-1) };
+    });
+    return rows.some(server => server.pid === process.pid && server.path === path && server.connection !== '0'
+      && rows.some(client => client.pid === childPid && client.address === server.connection && client.connection === server.address));
+  }
+  if (process.platform === 'linux') {
+    const executable = existsSync('/usr/bin/ss') ? '/usr/bin/ss' : existsSync('/usr/sbin/ss') ? '/usr/sbin/ss' : '';
+    if (!executable) return false;
+    const result = spawnSync(executable, ['-xnp'], { encoding: 'utf8', env: { PATH: '' } });
+    return result.status === 0 && typeof result.stdout === 'string'
+      && result.stdout.split('\n').some(line => line.includes(path) && line.includes(`pid=${childPid},`));
+  }
+  return false;
+}
 function defaultProcessBinding(): ReviewerProcessBinding {
   return Object.freeze({
-    parentPid: process.ppid,
-    parentExecutableSha256: parentExecutableSha256(process.ppid),
-    runnerId: `reviewer-runner-${process.ppid}`,
+    parentPid: process.pid,
+    parentExecutableSha256: executableSha256(process.execPath),
+    runnerId: `reviewer-runner-${process.pid}`,
     sessionId: randomUUID(),
     nonce: randomUUID(),
     expiresAt: new Date(Date.now() + 60_000).toISOString(),
@@ -158,24 +180,22 @@ function startBroker(launch: BrokerLaunch): void {
         const claim = JSON.parse(input) as Partial<ReviewerProcessBinding> & { childPid?: number; configurationSha256?: string; parentExecutableSha256?: string; launchCapability?: string };
         const binding = launch.receipt.processBinding;
         const parentPid = claim.parentPid;
-        const expectedParentExecutable = parentPid === binding.parentPid
-          ? binding.parentExecutableSha256
-          : parentPid === process.pid ? executableSha256(process.execPath) : undefined;
-        if (
-          !Number.isSafeInteger(claim.childPid) || claim.childPid! <= 0
-          || expectedParentExecutable === undefined
-          || claim.parentExecutableSha256 !== expectedParentExecutable
-          || claim.configurationSha256 !== launch.receipt.configurationSha256
-          || claim.runnerId !== binding.runnerId
-          || claim.sessionId !== binding.sessionId
-          || claim.nonce !== binding.nonce
-          || Date.now() >= Date.parse(binding.expiresAt)
-        ) throw new ReviewerLaunchError('reviewer proxy process, executable, configuration, session, nonce, or expiry binding failed');
+        if (!Number.isSafeInteger(claim.childPid) || claim.childPid! <= 0) throw new ReviewerLaunchError('reviewer proxy child PID is invalid');
+        if (claim.parentExecutableSha256 !== executableSha256(process.execPath)) throw new ReviewerLaunchError('reviewer proxy parent executable does not match');
+        if (claim.configurationSha256 !== launch.receipt.configurationSha256) throw new ReviewerLaunchError('reviewer proxy configuration does not match');
+        if (claim.runnerId !== binding.runnerId || claim.sessionId !== binding.sessionId || claim.nonce !== binding.nonce) throw new ReviewerLaunchError('reviewer proxy session or nonce does not match');
+        if (Date.now() >= Date.parse(binding.expiresAt)) throw new ReviewerLaunchError('reviewer proxy binding expired');
+        const observedParent = spawnSync('/bin/ps', ['-p', String(parentPid), '-o', 'ppid=,comm='], { encoding: 'utf8', env: { PATH: '' } });
+        const parentMatch = observedParent.status === 0 ? observedParent.stdout.trim().match(/^(\d+)\s+(.+)$/) : undefined;
+        if (!parentMatch || Number(parentMatch[1]) !== binding.parentPid || executableSha256(parentMatch[2]!) !== executableSha256(process.execPath)) {
+          throw new ReviewerLaunchError('reviewer proxy launcher is not a child of the configured host');
+        }
         const observed = spawnSync('/bin/ps', ['-p', String(claim.childPid), '-o', 'ppid=,comm='], { encoding: 'utf8', env: { PATH: '' } });
         const match = observed.status === 0 ? observed.stdout.trim().match(/^(\d+)\s+(.+)$/) : undefined;
         if (!match || Number(match[1]) !== parentPid || executableSha256(match[2]!) !== executableSha256(process.execPath)) {
           throw new ReviewerLaunchError('reviewer proxy child process is not the observed configured child');
         }
+        if (!socketPeerIs(path, claim.childPid!)) throw new ReviewerLaunchError('reviewer proxy socket peer is not the claimed configured child');
         if (!localLaunches.has(launch.receipt.launchId)) throw new ReviewerLaunchError('unknown, reused, or unreadable reviewer proxy launch');
         if (claim.launchCapability === undefined) {
           launch.authorizedChildPid = claim.childPid!;
@@ -191,6 +211,7 @@ function startBroker(launch: BrokerLaunch): void {
           launchId: launch.receipt.launchId,
           configurationSha256: launch.receipt.configurationSha256,
         }));
+        completedReviewerLaunches.add(launch.receipt);
         const base64 = Buffer.from(launch.evidence).toString('base64');
         closeBroker(launch.receipt.launchId);
         socket.end(JSON.stringify({ base64 }));
@@ -354,7 +375,7 @@ export class ReviewerMcpAdapter {
       throw new ReviewerLaunchError('reviewer receipt is not bound to this host evidence proxy');
     }
     requireLiveLaunch(reviewerLaunchReceipt);
-    requireReviewerLaunchReceipt(reviewerLaunchReceipt, {
+    requireIssuedReviewerLaunchReceipt(reviewerLaunchReceipt, {
       host: loadedSkillReceipt.host,
       buildSha256: reviewerLaunchReceipt.buildSha256,
       loadedSkillSha256: loadedSkillReceipt.loadedSkillSha256,
@@ -386,7 +407,7 @@ export class ReviewerMcpAdapter {
       throw new ReviewerLaunchError('reviewer launch bundle is not bound to this host evidence proxy');
     }
     requireLiveLaunch(reviewerLaunchReceipt);
-    requireReviewerLaunchReceipt(reviewerLaunchReceipt, {
+    requireIssuedReviewerLaunchReceipt(reviewerLaunchReceipt, {
       host,
       buildSha256: reviewerLaunchReceipt.buildSha256,
       loadedSkillSha256: loadedSkillReceipt.loadedSkillSha256,
@@ -396,38 +417,6 @@ export class ReviewerMcpAdapter {
     return bundle;
   }
   /**
-   * The pinned host invokes the real MCP proxy without exposing its private launch
-   * capability to callers, receipts, or emitted configuration.
-   */
-  async invokeEvidenceProxy(bundle: ReviewerLaunchBundle, requests: readonly object[]): Promise<readonly Record<string, unknown>[]> {
-    const bound = this.requireLaunchBundle(bundle, bundle.loadedSkillReceipt.host);
-    const receipt = bound.reviewerLaunchReceipt;
-    const server = this.requireConfiguration(bound.configuration, receipt, bound.loadedSkillReceipt.host)
-      .mcpServers['omd-reviewer-evidence'];
-    const executable = fileURLToPath(import.meta.url);
-    const child = spawn(process.execPath, [executable, ...server.args], {
-      env: { PATH: process.env.PATH ?? '' },
-    });
-    let stdout = '';
-    let stderr = '';
-    child.stdout.setEncoding('utf8');
-    child.stderr.setEncoding('utf8');
-    child.stdout.on('data', chunk => { stdout += chunk; });
-    child.stderr.on('data', chunk => { stderr += chunk; });
-    child.stdin.end(`${requests.map(request => JSON.stringify(request)).join('\n')}\n`);
-    const status = await new Promise<number | null>((resolvePromise, reject) => {
-      child.once('error', reject);
-      child.once('exit', resolvePromise);
-    });
-    if (status !== 0) throw new ReviewerLaunchError(`reviewer evidence proxy failed: ${stderr}`);
-    try {
-      return Object.freeze(stdout.trim().split('\n').filter(Boolean).map(line => Object.freeze(JSON.parse(line) as Record<string, unknown>)));
-    } catch {
-      throw new ReviewerLaunchError('reviewer evidence proxy emitted invalid JSON-RPC');
-    }
-  }
-
-  /**
    * The sole MCP configuration the host may attach to a reviewer lane. The proxy
    * resolves the opaque launch identity locally; evidence bytes, filesystem paths,
    * shell commands, and alternate tools never enter this configuration.
@@ -436,7 +425,7 @@ export class ReviewerMcpAdapter {
     if (receiptLaunchers.get(receipt) !== this) {
       throw new ReviewerLaunchError('reviewer receipt is not bound to this host evidence proxy');
     }
-    requireReviewerLaunchReceipt(receipt, {
+    requireIssuedReviewerLaunchReceipt(receipt, {
       host,
       buildSha256: receipt.buildSha256,
       loadedSkillSha256: receipt.loadedSkillSha256,
@@ -469,7 +458,7 @@ export class ReviewerMcpAdapter {
     if (receiptLaunchers.get(receipt) !== this) {
       throw new ReviewerLaunchError('reviewer receipt is not bound to this host evidence proxy');
     }
-    requireReviewerLaunchReceipt(receipt, {
+    requireIssuedReviewerLaunchReceipt(receipt, {
       host,
       buildSha256: receipt.buildSha256,
       loadedSkillSha256: receipt.loadedSkillSha256,
@@ -513,7 +502,7 @@ export function createReviewerMcpAdapter(now?: () => number): ReviewerMcpAdapter
   return new ReviewerMcpAdapter(now);
 }
 
-export function requireReviewerLaunchReceipt(
+function requireIssuedReviewerLaunchReceipt(
   receipt: ReviewerLaunchReceipt,
   expected?: Pick<ReviewerLaunchReceipt, 'host' | 'buildSha256' | 'loadedSkillSha256' | 'briefSha256'>,
 ): ReviewerLaunchReceipt {
@@ -530,9 +519,19 @@ export function requireReviewerLaunchReceipt(
   }
   return receipt;
 }
+export function requireReviewerLaunchReceipt(
+  receipt: ReviewerLaunchReceipt,
+  expected?: Pick<ReviewerLaunchReceipt, 'host' | 'buildSha256' | 'loadedSkillSha256' | 'briefSha256'>,
+): ReviewerLaunchReceipt {
+  requireIssuedReviewerLaunchReceipt(receipt, expected);
+  if (!completedReviewerLaunches.has(receipt)) {
+    throw new ReviewerLaunchError('reviewer launch has no completed process-authenticated evidence handshake');
+  }
+  return receipt;
+}
 
 export function reviewerEvidenceSha256(receipt: ReviewerLaunchReceipt): string {
-  requireReviewerLaunchReceipt(receipt);
+  requireIssuedReviewerLaunchReceipt(receipt);
   const proof = verifiedEvidenceProofs.get(receipt);
   if (!proof
     || proof.launchId !== receipt.launchId

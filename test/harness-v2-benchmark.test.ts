@@ -7,7 +7,7 @@ import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { canonicalLegalCellManifest, createAliasResolver, createEvaluatorHoldout, evaluateHarness, projectHoldoutBrief, scoreBrief, validateDevelopmentCorpus } from '../core/eval-harness/holdout-projection.ts';
 import type { HoldoutBrief, RaterVote } from '../core/eval-harness/holdout-projection.ts';
-import { materializeEvidenceLock, readEvidenceSnapshotPayload, requireEvidenceLockSnapshot, validateEvidenceSnapshot } from '../scripts/benchmark/materialize-evidence-lock.ts';
+import { materializeEvidenceLock, readEvidenceSnapshotBytes, readEvidenceSnapshotPayload, requireEvidenceLockSnapshot, validateEvidenceSnapshot } from '../scripts/benchmark/materialize-evidence-lock.ts';
 import { validateEvidenceLock } from '../scripts/benchmark/validate-evidence-lock.ts';
 import { computeUnsignedHarnessRun, createUnsignedUsageComputation, computeUnsignedUsage, prepareHarnessV2 } from '../scripts/benchmark/run-harness-v2.ts';
 import type { IsolatedHarnessHost, UnsignedUsageComputation, ReviewerLane } from '../scripts/benchmark/run-harness-v2.ts';
@@ -173,8 +173,8 @@ test('genuine evidence bytes override forged caller-decoded snapshot payloads', 
       payload: { runnerId: 'forged-caller-payload' },
     }));
     const snapshot = validateEvidenceSnapshot(evidence.lock, forgedSnapshot);
-    assert.equal(snapshot.entries.E5!.payload.runnerId, JSON.parse(SIGNED_EVIDENCE_ARTIFACT_BYTES.E5!).payload.runnerId);
-    assert.notEqual(snapshot.entries.E5!.payload.runnerId, 'forged-caller-payload');
+    assert.equal(readEvidenceSnapshotPayload(snapshot, 'E5').runnerId, JSON.parse(SIGNED_EVIDENCE_ARTIFACT_BYTES.E5!).payload.runnerId);
+    assert.notEqual(readEvidenceSnapshotPayload(snapshot, 'E5').runnerId, 'forged-caller-payload');
   } finally { rmSync(evidence.root, { recursive: true, force: true }); }
 });
 test('structurally forged evidence snapshots lack validated provenance', () => {
@@ -193,6 +193,7 @@ test('validated snapshots retain private immutable authority after caller mutati
     const snapshot = validateEvidenceLock(evidence.root, evidence.lock);
     snapshot.entries.E5!.bytes[0] = 0;
     assert.equal(readEvidenceSnapshotPayload(snapshot, 'E5').runnerId, JSON.parse(SIGNED_EVIDENCE_ARTIFACT_BYTES.E5!).payload.runnerId);
+    assert.equal(createHash('sha256').update(readEvidenceSnapshotBytes(snapshot, 'E5')).digest('hex'), snapshot.lock.entries.find(entry => entry.id === 'E5')!.sha256);
     evidence.lock.entries.find(entry => entry.id === 'E13')!.sha256 = '0'.repeat(64);
     assert.throws(() => requireEvidenceLockSnapshot(snapshot, evidence.lock), /validated immutable provenance/);
   } finally { rmSync(evidence.root, { recursive: true, force: true }); }
