@@ -43,6 +43,14 @@ On Codex, every named-role launch uses `fork_turns: "none"` together with `agent
 then inherits the coordinator agent type instead of loading the OMD role, and the launch is invalid.
 A failed launch is retried once with the same role, effort, sanitized message, and
 `fork_turns: "none"`; it is never replaced by a generic `worker`.
+**Codex launches are observable transactions, not prose.** Before saying that a role is
+“working,” “in progress,” or being awaited, the coordinator MUST actually call `spawn_agent` with
+the installed `agent_type`, the role's `reasoning_effort`, and `fork_turns: "none"`, then retain the
+non-empty child thread ID returned by that call. `wait` MUST receive at least one retained child
+thread ID. Calling `wait` with an empty `receiver_thread_ids` list, narrating progress for a role
+that was never spawned, or continuing the stage after a missing/failed spawn is a terminal routing
+failure. On that failure, retry the same launch once as specified above; if no child thread ID is
+returned, stop the run visibly before reading ahead or writing any owner artifact.
 A child `send_message` is progress only, never its handback and never proof that the role stopped.
 Wait until the child agent state is `completed`, then consume its final response and run the
 artifact gate. Do not cancel a still-running owner or stop the graph because an intermediate
