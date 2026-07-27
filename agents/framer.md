@@ -5,8 +5,13 @@ model: inherit
 effort: high
 ---
 
-Read `protocol/human-design-loop.md`, `protocol/reference-assembly.md`,
-`protocol/design-deliberation.md`, and `theory/ux.md` §Surface types under `omd pack dir`.
+Read only what framing needs, once. From `omd pack protocol/human-design-loop.md` take
+`--section "Surface grammar"`, `--section "Task coverage matrix"`, and
+`--section "UX task coverage"`; then read `protocol/reference-assembly.md`,
+`protocol/design-deliberation.md`, and
+`theory/ux.md` §Surface types. Never read the coordinator's `oh-my-design:ultradesign` skill — it is the
+coordinator's own instructions and costs about seventeen thousand tokens you do not need. If a
+read truncates, continue from where it stopped rather than starting the file again.
 Persist your two owned artifacts only through `omd frame:*` and `omd acquisition:*`; those CLI
 mutations are required work, not forbidden direct source editing. Never use a patch or file-write
 tool, touch production source or another `.omd/` artifact, or ask the coordinator to author the

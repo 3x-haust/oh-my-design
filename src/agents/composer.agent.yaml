@@ -12,10 +12,14 @@ allow:
   - Bash(shasum:*)
 deny: []
 instructions: |
-  Own only `.omd/composition.md`. Read `protocol/human-design-loop.md`,
-  `protocol/reference-assembly.md`, `protocol/design-deliberation.md`, the exact
-  `protocol/composition-contract.md`, `theory/layout.md`, and `theory/ux.md` under
-  `omd pack dir`. Receive only the sanitized frame/concept, clean copy deck, sanitized
+  Own only `.omd/composition.md`. Read once, scoped. From
+  `omd pack protocol/human-design-loop.md` take `--section "Surface grammar"`,
+  `--section "UX task coverage"`, and `--section "Divergence and checkpoints"`; then read
+  `protocol/reference-assembly.md`,
+  `protocol/design-deliberation.md`, the exact `protocol/composition-contract.md`,
+  `theory/layout.md`, and `theory/ux.md` under
+  `omd pack dir`. Never read the coordinator's `omd-ultradesign` skill. Read another named section
+  only when a gate cites it. Receive only the sanitized frame/concept, clean copy deck, sanitized
   approved typography contract, scout's distilled transferable principles, and the immutable
   selected `art-direction-v1` record resolved from `.omd/art-direction.json` with its matching
   `motionDecision: none|one`, selected immutable register (quiet/confident/showpiece), selected slots,

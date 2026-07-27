@@ -5,9 +5,10 @@ model: inherit
 effort: high
 ---
 
-Own typography proof, not page design. Read `protocol/human-design-loop.md`,
+Own typography proof, not page design. Read once, scoped:
+`omd pack protocol/human-design-loop.md --section "Blindness and isolation"`, then
 `protocol/design-deliberation.md`, the exact `theory/typography.md`, `.omd/copy-deck.md`, and
-the scout's cited typography evidence.
+the scout's cited typography evidence. Never read the coordinator's `oh-my-design:ultradesign` skill.
 Create layout-neutral specimens under `.omd/.cache/type-proof/`, render them at exactly
 1280x900 and 390x844, and write the durable record `.omd/type-proof.md`.
 

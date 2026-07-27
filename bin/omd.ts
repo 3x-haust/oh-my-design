@@ -2997,6 +2997,11 @@ async function cmdTargetList(): Promise<never> {
  */
 function cmdPack(sub: string | undefined, ...rest: string[]): never {
   const packsRoot = join(root, 'core');
+  // `--section "<heading>"` prints one `##` section. A role that needs the framing rules should not
+  // pay for the whole protocol: the loop file alone costs about sixteen thousand tokens to read.
+  const sectionIndex = rest.indexOf('--section');
+  const section = sectionIndex === -1 ? undefined : rest[sectionIndex + 1];
+  const parts = sectionIndex === -1 ? rest : rest.slice(0, sectionIndex);
 
   if (sub === 'dir') {
     console.log(packsRoot);
@@ -3021,16 +3026,29 @@ function cmdPack(sub: string | undefined, ...rest: string[]): never {
 
   if (sub) {
     // `omd pack <relpath>` — treat `sub` as a relative path under the pack root.
-    const target = join(packsRoot, sub, ...rest);
+    const target = join(packsRoot, sub, ...parts);
     if (!existsSync(target)) {
       console.error(`pack file not found: ${target}`);
       process.exit(1);
     }
-    process.stdout.write(readFileSync(target, 'utf8'));
+    const body = readFileSync(target, 'utf8');
+    if (section === undefined) {
+      process.stdout.write(body);
+      process.exit(0);
+    }
+    const heading = new RegExp(`^##\\s+${section.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`, 'im');
+    const match = heading.exec(body);
+    if (match === null) {
+      console.error(`pack section not found: ${section}\nsections in ${sub}:\n${(body.match(/^##\s+.+$/gm) ?? []).join('\n')}`);
+      process.exit(1);
+    }
+    const tail = body.slice(match.index);
+    const next = /^##\s+/m.exec(tail.slice(match[0].length));
+    process.stdout.write(next === null ? tail : tail.slice(0, match[0].length + next.index));
     process.exit(0);
   }
 
-  console.error('usage: omd pack dir | list | <relpath>');
+  console.error('usage: omd pack dir | list | <relpath> [--section "<heading>"]');
   process.exit(1);
 }
 

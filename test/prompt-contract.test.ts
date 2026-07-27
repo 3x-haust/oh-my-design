@@ -915,6 +915,12 @@ test('ultradesign externalizes decisions, deliberation, visual observation, and 
   assert.match(skill, /`omd complete check <page>`/);
   assert.match(skill, /It adds no style rule; it only proves the page does what the brief said it would/);
   assert.match(skill, /`omd locale check` must pass before ship/);
+  assert.match(skill, /Every poll is a full turn/);
+  assert.match(skill, /never poll a capture, render, or build stage more often than every five minutes/);
+  assert.match(skill, /Read once, read what you were given/);
+  assert.match(skill, /Answer the depth input honestly; every field is a cost lever/);
+  assert.match(skill, /At L1 and L2 the retained judgment roles run at `medium`/);
+  assert.match(skill, /Effort changes depth of thought, never model identity/);
   assert.match(skill, /`omd schema depth-input` instead of inferring keys from `core\/`/);
   assert.match(skill, /the OMD CLI spawns `browser-rs` itself over stdio for each capture/);
   assert.match(skill, /Never start a long-lived `browser-rs`, pick a port, or debug a listening socket/);
