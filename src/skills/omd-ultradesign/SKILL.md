@@ -62,6 +62,19 @@ response. Call `wait` again for the same retained child thread IDs until the too
 as `completed`, then quote only the child's returned handback. Never invent the expected response,
 treat the child's display name or `Started` event as its result, or advance because one poll returned
 no completed agents.
+**Every poll is a full turn.** A coordinator waiting on a role re-sends its whole context to ask
+"is it done", so a 60-second wait on a twenty-minute stage spends twenty turns learning nothing.
+Always request the longest wait the host supports — on Codex pass the maximum `timeout_ms` the tool
+accepts rather than a minute — and never poll a capture, render, or build stage more often than
+every five minutes. Waiting longer is free; polling is not.
+
+**Read once, read what you were given.** This skill is the coordinator's own instructions; a spawned
+role must never read it. Each role reads its own agent instructions plus exactly the contracts
+delivered to its stage, once, whole — not the same file again in overlapping slices because an
+earlier read was truncated. The knowledge pack costs roughly seventeen thousand tokens for this
+skill and sixteen thousand for the human-design loop, so a role that reloads both has spent a third
+of a context window before it looks at the brief. When output truncates, read the remaining range
+once, not the whole file again.
 For the scout specifically, acquisition and browser work can be quiet while a batch is active.
 Allow at least fifteen minutes for its first final state, and never retry or cancel it while its
 child state or a capture/browser tool is active. Six empty chat polls are not a timeout. Inspecting
@@ -145,6 +158,21 @@ component-only change may be L1. L1/L2 omit only the stages listed by the classi
 the owner of every retained artifact. L3 runs the full owner-separated graph. L4 adds the independent
 three-perspective deliberation and moderator. Never call a direct coordinator build an adaptive
 route.
+
+**Answer the depth input honestly; every field is a cost lever.** `brandDirectionChange` is true only
+when this run establishes a visual identity that does not exist yet. A surface built inside a
+project that already ships tokens, a type system, and a wordmark is an iteration, not a new
+direction, and marking it true buys a three-perspective deliberation the run does not need. The
+same discipline applies to `costlyError`, `showpieceMotion`, and `webgl`: each raises the level to
+L4 on its own. Inflating them is not caution, it is an hour of wall clock and a deliberation round
+spent proving something the project already decided. Under-reporting a genuinely new direction is
+the opposite failure and is worse; state what is true.
+
+Effort follows depth. At L3 and L4 every judgment role runs at its declared `high` tier. At L1 and
+L2 the retained judgment roles run at `medium` — the depth classifier already found that this
+change carries no new direction, and paying deep reasoning to confirm a component swap is the same
+waste as an inflated depth input. The production hand stays `medium` at every level. Effort changes
+depth of thought, never model identity, and never artifact ownership.
 
 `.omd/locale.json` is the other coordinator-owned routing input, written only when the brief names
 more than one language. It is `locale-contract-v1` (`omd schema locale-contract`), and declaring it

@@ -6,8 +6,12 @@ effort: high
 disallowedTools: Write, Edit, apply_patch
 ---
 
-You did not build this work. Read `protocol/human-design-loop.md`,
-`protocol/reference-assembly.md`, and `protocol/design-deliberation.md` under `omd pack dir`.
+You did not build this work. Read once, scoped. From
+`omd pack protocol/human-design-loop.md` take `--section "Blindness and isolation"`,
+`--section "UX acceptance contract"`, `--section "Task evidence index"`, and
+`--section "Production quality gates"`; then read `protocol/reference-assembly.md` and
+`protocol/design-deliberation.md` under `omd pack dir`. Never read the coordinator's
+`oh-my-design:ultradesign` skill; read another named section only when a gate cites it.
 You may receive only a role-bounded review brief: primary task, costliest error, generator,
 register, art-direction contract, sanitized composition acceptance criteria, anonymous render paths,
 and deterministic check/probe outputs. An isolated blind eye receives only bounded opaque production

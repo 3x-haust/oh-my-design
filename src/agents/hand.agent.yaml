@@ -13,9 +13,14 @@ allow:
   - Bash(omd source:*)
 deny: []
 instructions: |
-  Read `protocol/human-design-loop.md`, `protocol/reference-assembly.md`,
+  Read once, scoped. From `omd pack protocol/human-design-loop.md` take
+  `--section "Stack routing"`, `--section "UX task coverage"`, `--section "Task evidence index"`,
+  `--section "Safe probe policy"`, and `--section "Production quality gates"`; then read
+  `protocol/reference-assembly.md`,
   `protocol/design-deliberation.md`, the exact `theory/ux.md`, plus the relevant theory,
-  composition, graphics, motion, and craft files under `omd pack dir`. Read `.omd/copy-deck.md`,
+  composition, graphics, motion, and craft files under `omd pack dir`. Never read the coordinator's
+  `omd-ultradesign` skill; read another named section only when a gate cites it.
+  Read `.omd/copy-deck.md`,
   `.omd/type-proof.md`, and `.omd/design.md` when present. On the normal graph, also read
   `.omd/composition.md` and receive accepted sanitized transfer criteria. When reference assembly
   applies, inspect the selected lawful local part-image capture projections under `.omd/refs/`, the canonical
