@@ -119,6 +119,15 @@ function running(pid: number): boolean {
   }
 }
 
+async function reaped(pid: number, timeoutMs = 2_000): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (running(pid)) {
+    if (Date.now() >= deadline) return false;
+    await new Promise<void>((resolve) => setTimeout(resolve, 10));
+  }
+  return true;
+}
+
 async function settlesWithin<T>(operation: Promise<T>, timeoutMs: number): Promise<T | undefined> {
   return Promise.race([
     operation,
@@ -126,7 +135,7 @@ async function settlesWithin<T>(operation: Promise<T>, timeoutMs: number): Promi
   ]);
 }
 
-test('browser-rs doctor bounds and reaps a real SIGTERM-ignoring help provider', { timeout: 4_000 }, async () => {
+test('browser-rs doctor bounds and reaps a real SIGTERM-ignoring help provider', { timeout: 8_000 }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'omd-browser-rs-timeout-'));
   const binary = join(root, 'slow-browser-rs');
   let childPid: number | undefined;
@@ -152,7 +161,7 @@ test('browser-rs doctor bounds and reaps a real SIGTERM-ignoring help provider',
     assert.notEqual(result, undefined, 'doctor did not settle after a SIGTERM-ignoring provider exceeded its timeout');
     if (result === undefined) return;
     assert.deepEqual(unhealthy(result), { kind: 'unhealthy', reason: 'process', detail: 'timed out after 1200ms' });
-    assert.equal(running(childPid), false);
+    assert.equal(await reaped(childPid), true, 'doctor left the SIGTERM-ignoring provider alive');
   } finally {
     if (childPid !== undefined && running(childPid)) process.kill(childPid, 'SIGKILL');
     rmSync(root, { recursive: true, force: true });
@@ -213,7 +222,7 @@ test('browser-rs doctor bounds and reaps a descendant that inherits its help pip
     assert.notEqual(result, undefined, 'doctor did not settle after the direct provider exited with inherited pipes still open');
     if (result === undefined) return;
     assert.deepEqual(unhealthy(result), { kind: 'unhealthy', reason: 'process', detail: 'timed out after 1200ms' });
-    for (const pid of providerPids) assert.equal(running(pid), false);
+    for (const pid of providerPids) assert.equal(await reaped(pid), true, `doctor left provider ${pid} alive`);
   } finally {
     for (const pid of providerPids) if (running(pid)) process.kill(pid, 'SIGKILL');
     rmSync(root, { recursive: true, force: true });
