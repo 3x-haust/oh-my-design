@@ -2175,8 +2175,8 @@ async function cmdStage(mode: string | undefined, opts: Opts): Promise<never> {
     if (opts.json) process.stdout.write(JSON.stringify(requirement));
     else if (requirement.ok) console.log(`ok — ${requirement.stage} may run`);
     else {
-      for (const artifact of requirement.missingArtifacts) console.error(`[blocked] ${requirement.stage} needs an earlier owner's artifact: ${artifact}`);
-      for (const contract of requirement.undeliveredContracts) console.error(`[blocked] ${requirement.stage} has no current delivery receipt for ${contract}; run: omd stage deliver --stage ${requirement.stage} --contract ${contract}`);
+      for (const artifact of requirement.missingArtifacts) console.error(`[owner-blocked] ${requirement.stage} needs an earlier owner's artifact: ${artifact} — spawn that owner; only its failure stops the run`);
+      for (const contract of requirement.undeliveredContracts) console.error(`[deliver-then-retry] ${requirement.stage} has no current receipt for ${contract}. This is your own next step, not a run failure: run \`omd stage deliver --stage ${requirement.stage} --contract ${contract}\`, then require again`);
     }
     process.exit(requirement.ok ? 0 : 1);
   }
@@ -2997,11 +2997,21 @@ async function cmdTargetList(): Promise<never> {
  */
 function cmdPack(sub: string | undefined, ...rest: string[]): never {
   const packsRoot = join(root, 'core');
-  // `--section "<heading>"` prints one `##` section. A role that needs the framing rules should not
-  // pay for the whole protocol: the loop file alone costs about sixteen thousand tokens to read.
-  const sectionIndex = rest.indexOf('--section');
-  const section = sectionIndex === -1 ? undefined : rest[sectionIndex + 1];
-  const parts = sectionIndex === -1 ? rest : rest.slice(0, sectionIndex);
+  // `--section "<heading>"` prints one `##` section, and repeats to print several in file order. A
+  // role that needs the framing rules should not pay for the whole protocol: the loop file alone
+  // costs about sixteen thousand tokens to read.
+  const sections: string[] = [];
+  const parts: string[] = [];
+  for (let index = 0; index < rest.length; index++) {
+    if (rest[index] === '--section') {
+      const value = rest[++index];
+      if (value === undefined) {
+        console.error('usage: omd pack <relpath> --section "<heading>" [--section "<heading>"]');
+        process.exit(1);
+      }
+      sections.push(value);
+    } else parts.push(rest[index]!);
+  }
 
   if (sub === 'dir') {
     console.log(packsRoot);
@@ -3032,19 +3042,24 @@ function cmdPack(sub: string | undefined, ...rest: string[]): never {
       process.exit(1);
     }
     const body = readFileSync(target, 'utf8');
-    if (section === undefined) {
+    if (sections.length === 0) {
       process.stdout.write(body);
       process.exit(0);
     }
-    const heading = new RegExp(`^##\\s+${section.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`, 'im');
-    const match = heading.exec(body);
-    if (match === null) {
-      console.error(`pack section not found: ${section}\nsections in ${sub}:\n${(body.match(/^##\s+.+$/gm) ?? []).join('\n')}`);
-      process.exit(1);
+    const headings = body.match(/^##\s+.+$/gm) ?? [];
+    const printed: string[] = [];
+    for (const section of sections) {
+      const heading = new RegExp(`^##\\s+${section.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`, 'im');
+      const match = heading.exec(body);
+      if (match === null) {
+        console.error(`pack section not found: ${section}\nsections in ${sub}:\n${headings.join('\n')}`);
+        process.exit(1);
+      }
+      const tail = body.slice(match.index);
+      const next = /^##\s+/m.exec(tail.slice(match[0].length));
+      printed.push(next === null ? tail : tail.slice(0, match[0].length + next.index));
     }
-    const tail = body.slice(match.index);
-    const next = /^##\s+/m.exec(tail.slice(match[0].length));
-    process.stdout.write(next === null ? tail : tail.slice(0, match[0].length + next.index));
+    process.stdout.write(printed.join('\n'));
     process.exit(0);
   }
 

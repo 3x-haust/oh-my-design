@@ -134,7 +134,7 @@ test('printed input skeletons carry exactly the keys their validators accept', a
   const authored = Object.keys(check.skeleton as object);
   assert.ok(authored.every((key) => (ART_DIRECTION_CHECK_INPUT_KEYS as readonly string[]).includes(key)), authored.join(','));
   assert.ok(!authored.includes('invocation'), 'the local lane never authors an invocation');
-  assert.equal(INPUT_SKELETONS.length, 4);
+  assert.equal(INPUT_SKELETONS.length, 6);
 
   const locale = inputSkeleton('locale-contract');
   const { LOCALE_CONTRACT_KEYS } = await import('../core/locale/contract.ts');
@@ -147,7 +147,7 @@ test('printed input skeletons carry exactly the keys their validators accept', a
   assert.equal(printed.status, 0, printed.stderr);
   assert.deepEqual(JSON.parse(printed.stdout).skeleton, depth.skeleton);
   const listed = run(['schema', 'list', '--json'], dir);
-  assert.deepEqual(JSON.parse(listed.stdout).map((entry: { name: string }) => entry.name), ['depth-input', 'art-direction-check', 'locale-contract', 'functional-requirements']);
+  assert.deepEqual(JSON.parse(listed.stdout).map((entry: { name: string }) => entry.name), ['domain-brief', 'depth-input', 'art-direction-check', 'locale-contract', 'functional-requirements', 'decision-graph']);
 });
 
 test('the printed depth skeleton classifies and a shapeless input names every missing key', () => {

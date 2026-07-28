@@ -8,6 +8,8 @@ import { DEPTH_INPUT_KEYS, DEPTH_INPUT_SCHEMA, DEPTH_SCOPES } from '../deliberat
 import { ART_DIRECTION_CHECK_INPUT_KEYS } from '../art-direction/schema.ts';
 import { LOCALE_CONTRACT_KEYS, LOCALE_CONTRACT_SCHEMA, LOCALE_MODES } from '../locale/contract.ts';
 import { FUNCTIONAL_REQUIREMENTS_SCHEMA, REQUIREMENT_KINDS } from '../completeness/index.ts';
+import { DOMAIN_BRIEF_SCHEMA } from '../domain/domain-brief.ts';
+import { DECISION_GRAPH_SCHEMA } from '../deliberation/contracts.ts';
 
 export type InputSkeleton = {
   readonly name: string;
@@ -115,7 +117,64 @@ const FUNCTIONAL_REQUIREMENTS: InputSkeleton = {
   },
 };
 
-export const INPUT_SKELETONS: readonly InputSkeleton[] = [DEPTH_INPUT, ART_DIRECTION_CHECK, LOCALE_CONTRACT, FUNCTIONAL_REQUIREMENTS];
+const DOMAIN_BRIEF: InputSkeleton = {
+  name: 'domain-brief',
+  path: '.omd/domain-brief.json',
+  command: 'omd domain check --input .omd/domain-brief.json --json',
+  keys: ['schema', 'request', 'domain', 'summary', 'surfaces', 'coreObjects', 'audience', 'referenceQueries', 'researched'],
+  skeleton: {
+    schema: DOMAIN_BRIEF_SCHEMA,
+    request: '<the raw request, normalized>',
+    domain: '<the domain in a few words>',
+    summary: '<one line: what this domain is and does>',
+    surfaces: [{ name: '<canonical page or screen>', purpose: '<the task it serves, one clause>' }],
+    coreObjects: ['<the real nouns the domain manipulates>'],
+    audience: '<who the work is for>',
+    referenceQueries: {
+      component: ['<detailed component or section design query>'],
+      craft: ['<motion, scroll, or sculptural craft query>'],
+    },
+    researched: false,
+  },
+};
+
+const DECISION_GRAPH: InputSkeleton = {
+  name: 'decision-graph',
+  path: '.omd/decision-graph.json',
+  command: 'omd deliberate check --json',
+  keys: ['schema', 'decisions'],
+  skeleton: {
+    schema: DECISION_GRAPH_SCHEMA,
+    decisions: [{
+      id: '<kebab-case-decision-id>',
+      stage: '<frame|copy|type|composition|structure|production|refinement>',
+      risk: '<low|medium|high|critical>',
+      owner: '<the role that owns that stage, never the coordinator>',
+      question: '<the consequential question this decision answered>',
+      alternatives: [
+        { id: '<kebab-id>', label: '<what this alternative was>' },
+        { id: '<kebab-id>', label: '<the other real option>' },
+      ],
+      selected: '<the chosen alternative id>',
+      evidence: ['<path or record that supports the choice>'],
+      constraints: ['<what the choice had to hold>'],
+      rejected: [{ id: '<kebab-id>', reason: '<why it lost, from evidence>' }],
+      affects: ['<downstream artifact or decision>'],
+      dependsOn: ['<upstream decision id>'],
+      reversible: true,
+      tradeoffs: [{
+        goal: '<what was wanted>',
+        constraint: '<what stopped it>',
+        attempt: '<what was actually tried>',
+        failureEvidence: ['<observed failure>'],
+        compromise: '<what shipped instead>',
+        resultEvidence: ['<observed result>'],
+      }],
+    }],
+  },
+};
+
+export const INPUT_SKELETONS: readonly InputSkeleton[] = [DOMAIN_BRIEF, DEPTH_INPUT, ART_DIRECTION_CHECK, LOCALE_CONTRACT, FUNCTIONAL_REQUIREMENTS, DECISION_GRAPH];
 
 export function inputSkeleton(name: string): InputSkeleton {
   const found = INPUT_SKELETONS.find((entry) => entry.name === name);
