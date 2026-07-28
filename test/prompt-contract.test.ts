@@ -907,7 +907,7 @@ test('ultradesign externalizes decisions, deliberation, visual observation, and 
   assert.match(skill, /repair the bytes and rerun the same command/);
   assert.match(skill, /Run `omd stage resume` first and continue at the stage it names/);
   assert.match(skill, /`omd stage deliver --stage <stage> --contract <pack-relative\.md>`/);
-  assert.match(skill, /`require` exits non-zero while an earlier owner's artifact is missing or a contract has no receipt/);
+  assert.match(skill, /Never end a run because a gate told you to do the next thing/);
   assert.match(skill, /Never claim a role received a contract without its receipt/);
   assert.match(skill, /`omd cue --path <file> --symbol <symbol> --field <name>=<value>`/);
   assert.match(skill, /Cues resolve only from those deterministic inputs/);
@@ -917,7 +917,7 @@ test('ultradesign externalizes decisions, deliberation, visual observation, and 
   assert.match(skill, /`omd locale check` must pass before ship/);
   assert.match(skill, /Every poll is a full turn/);
   assert.match(skill, /never poll a capture, render, or build stage more often than every five minutes/);
-  assert.match(skill, /Read once, read what you were given/);
+  assert.match(skill, /Read once, read what you were given — the coordinator included/);
   assert.match(skill, /Answer the depth input honestly; every field is a cost lever/);
   assert.match(skill, /At L1 and L2 the retained judgment roles run at `medium`/);
   assert.match(skill, /Effort changes depth of thought, never model identity/);

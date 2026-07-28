@@ -68,13 +68,16 @@ Always request the longest wait the host supports — on Codex pass the maximum 
 accepts rather than a minute — and never poll a capture, render, or build stage more often than
 every five minutes. Waiting longer is free; polling is not.
 
-**Read once, read what you were given.** This skill is the coordinator's own instructions; a spawned
-role must never read it. Each role reads its own agent instructions plus exactly the contracts
-delivered to its stage, once, whole — not the same file again in overlapping slices because an
-earlier read was truncated. The knowledge pack costs roughly seventeen thousand tokens for this
-skill and sixteen thousand for the human-design loop, so a role that reloads both has spent a third
-of a context window before it looks at the brief. When output truncates, read the remaining range
-once, not the whole file again.
+**Read once, read what you were given — the coordinator included.** This skill is the coordinator's
+own instructions; a spawned role must never read it. Each role reads its own agent instructions plus
+exactly the contracts delivered to its stage. The coordinator reads `protocol/human-design-loop.md`
+**once, whole, at preflight** and never again: every later question about a phase, gate, or boundary
+is answered by `omd pack protocol/human-design-loop.md --section "<heading>"`, which prints one
+section instead of sixteen thousand tokens. Re-running `sed -n '1,9999p'` on a protocol you already
+read this run, or re-reading it in overlapping ranges because an earlier output truncated, is the
+single most expensive mistake available to you — one observed run spent roughly forty-eight thousand
+tokens reading the same file three times before it framed anything. When output truncates, continue
+from where it stopped.
 For the scout specifically, acquisition and browser work can be quiet while a batch is active.
 Allow at least fifteen minutes for its first final state, and never retry or cancel it while its
 child state or a capture/browser tool is active. Six empty chat polls are not a timeout. Inspecting
@@ -133,9 +136,12 @@ every artifact, and the contracts that stage still needs.
 
 Before spawning a stage's owner, hand it its contracts and record that handoff:
 `omd stage deliver --stage <stage> --contract <pack-relative.md>` for each contract
-`omd stage list` names, then `omd stage require <stage>`. `require` exits non-zero while an earlier
-owner's artifact is missing or a contract has no receipt for its current bytes; that is a hard stop,
-not a warning. Editing a contract invalidates its receipt, so a mid-run protocol change forces a
+`omd stage list` names, then `omd stage require <stage>`. A non-zero `require` is not by itself a
+run failure. It has exactly two causes and they end differently. `[deliver-then-retry]` means you
+have not delivered a contract yet: that is your own next step, so deliver it and run `require`
+again. `[owner-blocked]` means an earlier owner's artifact is missing, which stops the run only when
+that owner already ran and failed. Never end a run because a gate told you to do the next thing.
+Editing a contract invalidates its receipt, so a mid-run protocol change forces a
 fresh delivery rather than a silent divergence between what the role read and what the loop
 requires. Never claim a role received a contract without its receipt.
 

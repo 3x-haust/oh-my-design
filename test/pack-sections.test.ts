@@ -27,7 +27,8 @@ function citedSections(body: string): readonly { readonly file: string; readonly
   const pattern = /(?:omd pack\s+(\S+\.md)[^\n]*?)?--section\s+"([^"]+)"/g;
   for (const match of body.replace(/\n\s*/g, ' ').matchAll(pattern)) {
     if (match[1] !== undefined) file = match[1];
-    if (file !== undefined && match[2] !== undefined) cited.push({ file, section: match[2] });
+    // `--section "<heading>"` in prose is the placeholder documenting the flag, not a citation.
+    if (file !== undefined && match[2] !== undefined && !match[2].startsWith('<')) cited.push({ file, section: match[2] });
   }
   return cited;
 }
@@ -75,4 +76,18 @@ test('no spawned role is told to read the coordinator skill', () => {
     const body = readFileSync(join(ROOT, 'src', 'agents', `${role}.agent.yaml`), 'utf8').replace(/\s+/g, ' ');
     assert.match(body, /Never read the coordinator's `omd-ultradesign` skill/, `${role} may still reload the coordinator skill`);
   }
+});
+
+// Roles ask for several sections in one call; taking only the first would silently drop the rest
+// and cost the extra round trip the flag exists to avoid.
+test('repeated --section prints every requested section in one call', () => {
+  const both = run(['pack', 'protocol/human-design-loop.md', '--section', 'Surface grammar', '--section', 'Task coverage matrix']);
+  assert.equal(both.status, 0, both.stderr);
+  assert.equal((both.stdout.match(/^## /gm) ?? []).length, 2);
+  assert.match(both.stdout, /^## Surface grammar$/m);
+  assert.match(both.stdout, /^## Task coverage matrix$/m);
+
+  const partial = run(['pack', 'protocol/human-design-loop.md', '--section', 'Surface grammar', '--section', 'Nope']);
+  assert.equal(partial.status, 1);
+  assert.match(partial.stderr, /pack section not found: Nope/);
 });

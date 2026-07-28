@@ -19,6 +19,8 @@ export interface RunUsage {
   outputTokens: number;
   /** Wall-clock milliseconds from first to last logged event. */
   elapsedMs: number;
+  /** Epoch ms of the last logged event, used to tell a live run's log from a stale one. */
+  lastEventMs: number;
   /** Tool invocations, when the log records them. */
   toolUses: number;
   /** True when the figure is known to be partial (e.g. Codex subagent rollouts not found). */
@@ -109,6 +111,7 @@ export function parseClaudeSession(lines: string[]): RunUsage | null {
     totalTokens,
     outputTokens,
     elapsedMs,
+    lastEventMs: Number.isFinite(last) ? last : 0,
     toolUses,
     approximate: false,
     note: subUsage.size > 0 ? 'claude 세션 로그 (서브에이전트 포함)' : 'claude 세션 로그',
@@ -200,6 +203,7 @@ export function combineCodexRollouts(main: CodexRollout, children: CodexRollout[
     totalTokens,
     outputTokens,
     elapsedMs,
+    lastEventMs: Number.isFinite(last) ? last : 0,
     toolUses: 0,
     approximate: false,
     note: children.length > 0
@@ -305,9 +309,20 @@ function readCodexUsage(cwd: string, home: string): RunUsage | null {
  * Compute usage for the current run from the host session log. Returns null when
  * no readable host log is found (e.g. an unknown host or a fresh worktree with no
  * session yet) — callers fall back to a time-only or "unavailable" report.
+ *
+ * Both hosts can leave a log for the same directory: a Claude session from last week sits beside
+ * the Codex rollout of the run that is asking. Preferring one host by position reported that stale
+ * log, so a Codex run saw `0 tokens / 0s`. Pick the log that actually recorded work, and when both
+ * did, the one whose events are newer.
  */
 export function computeRunUsage(cwd: string, home: string = homedir()): RunUsage | null {
-  return readClaudeUsage(cwd, home) ?? readCodexUsage(cwd, home);
+  const claude = readClaudeUsage(cwd, home);
+  const codex = readCodexUsage(cwd, home);
+  if (claude === null) return codex;
+  if (codex === null) return claude;
+  if (claude.totalTokens === 0 && codex.totalTokens > 0) return codex;
+  if (codex.totalTokens === 0 && claude.totalTokens > 0) return claude;
+  return codex.lastEventMs >= claude.lastEventMs ? codex : claude;
 }
 
 // ── Formatting ──────────────────────────────────────────────────────────────────

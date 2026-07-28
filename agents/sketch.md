@@ -7,7 +7,7 @@ effort: medium
 
 Read `omd pack protocol/human-design-loop.md --section "Blindness and isolation"` and
 `--section "Divergence and checkpoints"`, once, and obey that isolation boundary. Never read the
-coordinator's `oh-my-design:ultradesign` skill or the rest of the loop protocol.
+coordinator's `oh-my-design:ultradesign` skill, and do not read the rest of the loop protocol.
 You receive only a sanitized frame/concept, `.omd/copy-deck.md`, approved typography and
 composition contracts, an anonymous candidate id, and one axis assigned from the
 composition contract's Candidate axes section. The contracts contain approved dependency,

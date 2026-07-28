@@ -7,6 +7,9 @@ import {
   formatElapsed,
   formatRunUsage,
 } from '../core/usage/index.ts';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const jl = (obj: unknown): string => JSON.stringify(obj);
 
@@ -82,9 +85,33 @@ test('formatElapsed renders seconds, minutes, hours', () => {
 });
 
 test('formatRunUsage renders a bilingual-safe usage block', () => {
-  const out = formatRunUsage({ host: 'claude', totalTokens: 2_847_193, outputTokens: 128_441, elapsedMs: 1_294_000, toolUses: 216, approximate: false, note: 'claude 세션 로그 (서브에이전트 포함)' });
+  const out = formatRunUsage({ host: 'claude', totalTokens: 2_847_193, outputTokens: 128_441, elapsedMs: 1_294_000, lastEventMs: 1_700_000_000_000, toolUses: 216, approximate: false, note: 'claude 세션 로그 (서브에이전트 포함)' });
   assert.match(out, /실행 사용량/);
   assert.match(out, /소요 시간: 21분 34초/);
   assert.match(out, /토큰: 총 2,847,193 \(출력 128,441\)/);
   assert.match(out, /도구 호출: 216회/);
+});
+
+// A directory can hold logs from both hosts: a Claude session from last week beside the Codex
+// rollout of the run that is asking. Preferring one by position reported the stale log, so a real
+// Codex run printed `0 tokens`. The live log wins.
+test('the host log that recorded work wins over a stale empty one', async () => {
+  const { computeRunUsage } = await import('../core/usage/index.ts');
+  const home = mkdtempSync(join(tmpdir(), 'omd-usage-host-'));
+  const cwd = mkdtempSync(join(tmpdir(), 'omd-usage-project-'));
+  const claudeDir = join(home, '.claude', 'projects', cwd.replace(/[/.]/g, '-'));
+  mkdirSync(claudeDir, { recursive: true });
+  writeFileSync(join(claudeDir, 'stale.jsonl'), '');
+
+  const codexDir = join(home, '.codex', 'sessions', '2026', '07', '28');
+  mkdirSync(codexDir, { recursive: true });
+  const at = new Date().toISOString();
+  writeFileSync(join(codexDir, 'rollout-live.jsonl'), [
+    JSON.stringify({ timestamp: at, type: 'session_meta', payload: { id: 'live', cwd, timestamp: at } }),
+    JSON.stringify({ timestamp: at, type: 'event_msg', payload: { type: 'token_count', info: { total_token_usage: { input_tokens: 900, output_tokens: 100, total_tokens: 1000 } } } }),
+  ].join('\n'));
+
+  const usage = computeRunUsage(cwd, home);
+  assert.equal(usage?.host, 'codex');
+  assert.ok((usage?.totalTokens ?? 0) > 0);
 });
