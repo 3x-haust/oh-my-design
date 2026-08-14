@@ -150,10 +150,10 @@ export function emitClaude({
 
 // Marketplace references use the plugin namespace, but executable `--agent omd-hand`
 // arguments remain host CLI identifiers rather than Claude plugin references.
-const PLUGIN_REF = /\bomd-(composer|framer|eye|glance|hand|scout|sketch|typesetter|writer|ultradesign|humanize|critique|coach|figma)\b/g;
+const AGENT_REF = /\bomd-(composer|framer|eye|glance|hand|scout|sketch|typesetter|writer|ultradesign|humanize|critique|coach|figma)\b/g;
 
 const pluginizeRefs = (text: string): string => text.replace(
-  PLUGIN_REF,
+  AGENT_REF,
   (match, name: string, offset: number) => {
     const linePrefix = text.slice(text.lastIndexOf('\n', offset) + 1, offset);
     const machineIdentity = /(?:--agent(?:=|\s+)|(?:owner|moderator)(?:`|"|')?(?:\s+is|\s*[:=])\s*(?:`|"|')?)$/.test(linePrefix);
