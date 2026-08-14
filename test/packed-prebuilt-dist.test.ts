@@ -17,13 +17,13 @@ function run(command: string, args: readonly string[]): string {
   return result.stdout;
 }
 
-test('Given a prepared prebuilt tree When the package is packed Then every Codex and Claude payload file is published', () => {
+test('Given a prepared prebuilt tree When packed Then every Codex Claude and Senpi payload is published', () => {
   const temporary = mkdtempSync(join(tmpdir(), 'omd-packed-prebuilt-'));
   try {
     requirePrebuiltDist({
       distributionRoot: ROOT,
       sourceRoot: ROOT,
-      hosts: [{ host: 'codex' }, { host: 'claude' }],
+      hosts: [{ host: 'codex' }, { host: 'claude' }, { host: 'senpi' }],
     });
     const destination = join(temporary, 'packs');
     mkdirSync(destination);
@@ -34,7 +34,7 @@ test('Given a prepared prebuilt tree When the package is packed Then every Codex
     const archive = join(destination, entry.filename);
     const entries = new Set(run('tar', ['-tzf', archive]).trim().split('\n'));
 
-    for (const host of ['codex', 'claude'] as const) {
+    for (const host of ['codex', 'claude', 'senpi'] as const) {
       const expected = expectedPrebuiltFiles(ROOT, host);
       assert.ok(expected.size > 0, `${host} must have generated payload`);
       for (const relative of expected.keys()) {

@@ -48,5 +48,5 @@ exercises. An unused axis, an unsubset full character set, or an untested `font-
 value is unshipped weight the fast-loading type-proof record must justify or drop.
 
 Return one closed `decision-graph-v1` decision entry for the selected typography role system.
-Its `stage` is `type` and `owner` is `oh-my-design:typesetter`; the rejected alternatives and evidence
+Its `stage` is `type` and `owner` is `omd-typesetter`; the rejected alternatives and evidence
 come from the real desktop/mobile specimens, not font reputation.

@@ -1,11 +1,21 @@
-import test from 'node:test';
+import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
+  aiAssetDecisionAuthorityBytes,
+  commitAiAssetDecision,
   decideAssetStrategy,
   evaluateWebglEscalation,
   validateAiImageUsage,
   type AssetStrategyInputs,
 } from '../core/asset-sourcing/index.ts';
+import {
+  authorizeTestProjectRunPayloads,
+  createTestProjectRunInvocation,
+  createTestProjectWriteAdapter,
+} from './helpers/project-write.ts';
 
 // --- decideAssetStrategy -----------------------------------------------
 
@@ -136,22 +146,35 @@ test('decideAssetStrategy: fallbackChain always terminates in css-svg-fallback',
 
 // --- validateAiImageUsage ------------------------------------------------
 
+const aiUsageRoots: string[] = [];
+after(() => {
+  for (const root of aiUsageRoots) rmSync(root, { recursive: true, force: true });
+});
+function committedAiUsage(zone: 'abstract' | 'atmospheric', prompt: string) {
+  const root = mkdtempSync(join(tmpdir(), 'omd-ai-usage-'));
+  aiUsageRoots.push(root);
+  const invocation = createTestProjectRunInvocation(root, `${zone}-asset`);
+  const input = {
+    decisionId: `${zone}-asset`, prompt, provider: 'example-provider',
+    reason: 'The selected generated carrier is required by the current direction.',
+  };
+  const authority = aiAssetDecisionAuthorityBytes(root, input, invocation);
+  authorizeTestProjectRunPayloads(root, invocation, [{ purpose: 'ai-asset-decision', payload: authority }]);
+  const decision = commitAiAssetDecision(root, input, createTestProjectWriteAdapter(root, invocation), invocation);
+  return {
+    zone, hostHasImageGen: true, provenance: { prompt, provider: input.provider },
+    decision, currentDecision: decision, projectRoot: root, invocation,
+  };
+}
+
 test('validateAiImageUsage: abstract zone, host capable, full provenance is allowed', () => {
-  const result = validateAiImageUsage({
-    zone: 'abstract',
-    hostHasImageGen: true,
-    provenance: { prompt: 'a soft gradient wash', provider: 'example-provider' },
-  });
+  const result = validateAiImageUsage(committedAiUsage('abstract', 'a soft gradient wash'));
   assert.equal(result.allowed, true);
   assert.deepEqual(result.violations, []);
 });
 
 test('validateAiImageUsage: atmospheric zone, host capable, full provenance is allowed', () => {
-  const result = validateAiImageUsage({
-    zone: 'atmospheric',
-    hostHasImageGen: true,
-    provenance: { prompt: 'misty forest ambience', provider: 'example-provider' },
-  });
+  const result = validateAiImageUsage(committedAiUsage('atmospheric', 'misty forest ambience'));
   assert.equal(result.allowed, true);
 });
 
@@ -205,13 +228,13 @@ test('validateAiImageUsage: missing provenance provider produces a violation', (
   assert.ok(result.violations.some((v) => v.toLowerCase().includes('provider')));
 });
 
-test('validateAiImageUsage: missing provenance entirely produces two violations', () => {
+test('validateAiImageUsage: missing provenance and decision binding produces three violations', () => {
   const result = validateAiImageUsage({
     zone: 'abstract',
     hostHasImageGen: true,
   });
   assert.equal(result.allowed, false);
-  assert.equal(result.violations.length, 2);
+  assert.equal(result.violations.length, 3);
 });
 
 // --- evaluateWebglEscalation ---------------------------------------------

@@ -9,6 +9,7 @@ allow:
   - Bash(omd complete:*)
   - Bash(omd schema:*)
   - Bash(omd pack:*)
+  - Bash(omd brief:*)
 deny: []
 instructions: |
   Read only what framing needs, once. From `omd pack protocol/human-design-loop.md` take

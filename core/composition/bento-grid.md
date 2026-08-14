@@ -24,13 +24,13 @@ one primary piece of information that the eye finds first, and secondary informa
 serves it." The bento grid applies this principle at the section level: one cell is the
 primary; all others serve it.
 
-**Anti-slop clause.** A bento grid that fills all cells with equal-weight cards is
-SLOP-TRIPLE-CARD rendered at scale. The grid earns its place only when the cell-size
-hierarchy is non-recoverable: the arrangement itself tells the reader what matters most.
-If you can swap cells without loss of meaning, the bento grid is the wrong layout.
-The `SLOP-TRIPLE-CARD` slop rule fires on three or more identically-treated cards
-regardless of whether they are arranged in a standard grid or a bento mosaic — the
-violation is in the equal treatment, not in the grid structure.
+**Anti-slop clause.** A bento grid that fills all cells with equal surfaced cards can enter
+SLOP-TRIPLE-CARD territory when the task has a real priority but the peers share anatomy,
+visual area, radius, and shadow. The grid earns its place only when the cell-size hierarchy
+is non-recoverable: the arrangement itself tells the reader what matters most. If you can
+swap cells without loss of meaning, the bento grid is the wrong layout. Genuinely equal
+pricing tiers, people, or comparable options are the contextual exception; do not manufacture
+ranking where the content has none.
 
 Condition against: content where all items are genuinely equal in importance — a pricing
 table, a team member grid, a portfolio gallery. Forced hierarchy on equal content
@@ -218,6 +218,6 @@ same level. Applying both in a single section produces competing spatial logics.
 cell introduces a fourth surface level (page → section → cell → inverted cell) that
 obscures the hierarchy the bento grid was designed to communicate.
 
-**A bento grid where every cell has the same span** — this collapses back into
-`SLOP-TRIPLE-CARD` territory. The anti-slop clause above applies: if the spans are
-uniform, use a standard grid or card layout and state the reason.
+**A bento grid where every cell has the same span despite unequal priority** — this can
+collapse into `SLOP-TRIPLE-CARD` territory. If the items are genuinely equal, use a standard
+comparison grid; if they are not, let area or another task-backed signal expose the rank.

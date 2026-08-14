@@ -3,10 +3,10 @@
  * scripts/release-notes.ts — generate structured release notes.
  *
  * Pure function (no I/O — safe to unit-test):
- *   buildReleaseNotes({ version, prevTag, summary, prs, testCount }) → markdown
+ *   buildReleaseNotes({ version, prevTag, summary, compatibility, prs, testCount }) → markdown
  *
  * CLI (gathers real data via git + gh, then calls the pure function):
- *   node scripts/release-notes.ts --version X.Y.Z [--prev vX.Y.Z] [--test-count N]
+ *   node scripts/release-notes.ts --version X.Y.Z [--prev vX.Y.Z] [--compatibility TEXT] [--test-count N]
  *   Prints release notes markdown to stdout.
  */
 
@@ -25,6 +25,8 @@ export interface ReleaseNotesInput {
   version: string;
   prevTag: string;
   summary: string;
+  /** Exact release-specific compatibility statement. Omit rather than claim unverified compatibility. */
+  compatibility?: string;
   prs: PrEntry[];
   testCount: number;
 }
@@ -36,6 +38,10 @@ export interface ReleaseNotesInput {
 export function buildReleaseNotes(opts: ReleaseNotesInput): string {
   const { version, prevTag, summary, prs, testCount } = opts;
   const tag = version.startsWith('v') ? version : `v${version}`;
+  const compatibility = opts.compatibility === undefined
+    ? '_Compatibility impact was not specified for this release._'
+    : opts.compatibility.trim();
+  if (compatibility === '') throw new Error('compatibility must be a non-empty statement when provided');
 
   const prLink = (n: number): string =>
     `[#${n}](${REPO}/pull/${n})`;
@@ -65,7 +71,7 @@ export function buildReleaseNotes(opts: ReleaseNotesInput): string {
     '',
     '## Compatibility',
     '',
-    'No breaking changes.',
+    compatibility,
     '',
     '## Validation',
     '',
@@ -155,10 +161,11 @@ function run(argv: string[]): void {
   const versionArg = flag('--version');
   const prevArg = flag('--prev');
   const testCountArg = flag('--test-count');
+  const compatibilityArg = flag('--compatibility');
 
   if (!versionArg || !/^\d+\.\d+\.\d+/.test(versionArg)) {
     process.stderr.write(
-      'Usage: node scripts/release-notes.ts --version X.Y.Z [--prev vX.Y.Z] [--test-count N]\n',
+      'Usage: node scripts/release-notes.ts --version X.Y.Z [--prev vX.Y.Z] [--compatibility TEXT] [--test-count N]\n',
     );
     process.exit(1);
   }
@@ -173,6 +180,7 @@ function run(argv: string[]): void {
     version: versionArg,
     prevTag,
     summary,
+    ...(compatibilityArg === undefined ? {} : { compatibility: compatibilityArg }),
     prs,
     testCount,
   });

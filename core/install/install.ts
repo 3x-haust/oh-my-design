@@ -59,8 +59,10 @@ const OMD_ALLOW = [
   'Bash(omd frame:*)', 'Bash(omd ref:*)', 'Bash(omd choose:*)',
   'Bash(omd decision:*)', 'Bash(omd taste:*)', 'Bash(omd coach:*)',
   'Bash(omd probe:*)', 'Bash(omd config:*)', 'Bash(omd craft:*)', 'Bash(omd copy:*)',
-  'Bash(omd composition:*)',
+  'Bash(omd composition:*)', 'Bash(omd complete:*)', 'Bash(omd completion:*)',
   'Bash(omd text-slop:*)', 'Bash(omd visual-richness:*)', 'Bash(omd stack:*)',
+  'Bash(omd route:*)', 'Bash(omd workflow:*)', 'Bash(omd status:*)', 'Bash(omd clean:*)', 'Bash(omd schema:*)',
+  'Bash(omd stage:*)', 'Bash(omd cue:*)', 'Bash(omd brief:*)',
   'Bash(omd source:*)', 'Bash(omd pack:*)', 'Bash(shasum:*)',
 ];
 
@@ -165,6 +167,48 @@ function uninstallClaude(d: Detected, changes: string[]): void {
   }
 }
 
+/**
+ * Senpi has no plugin cache and no agent registry: it discovers skills under `<agentDir>/skills`
+ * and has no in-process agent-spawn tool. Roles therefore install as prompt files the coordinator
+ * runs as separate `senpi -p` processes, which is where this host's isolation comes from.
+ */
+function installSenpi(d: Detected, distributionRoot: string, changes: string[]): void {
+  const skillsSrc = join(distributionRoot, 'dist', 'senpi', 'skills');
+  const skillsDest = join(d.home, 'skills');
+  if (existsSync(skillsSrc)) {
+    mkdirSync(skillsDest, { recursive: true });
+    cpSync(skillsSrc, skillsDest, { recursive: true });
+    changes.push(`senpi: installed skills -> ${skillsDest}`);
+  }
+
+  const agentsSrc = join(distributionRoot, 'dist', 'senpi', 'agents');
+  const agentsDest = join(d.home, 'omd-agents');
+  const agentNames: string[] = [];
+  if (existsSync(agentsSrc)) {
+    mkdirSync(agentsDest, { recursive: true });
+    for (const file of readdirSafe(agentsSrc)) {
+      if (!file.endsWith('.md')) continue;
+      cpSync(join(agentsSrc, file), join(agentsDest, file));
+      agentNames.push(file.replace(/\.md$/, ''));
+    }
+    changes.push(`senpi: installed role prompts -> ${agentsDest} (${agentNames.join(', ') || 'none'})`);
+  }
+
+  const hostFile = join(distributionRoot, 'dist', 'senpi', 'omd-host.json');
+  if (existsSync(hostFile)) {
+    cpSync(hostFile, join(d.home, 'omd-host.json'));
+    changes.push(`senpi: recorded spawn contract -> ${join(d.home, 'omd-host.json')}`);
+  }
+
+  for (const parts of [['core', 'theory'], ['core', 'protocol'], ['core', 'motion'], ['core', 'recipes']]) {
+    const src = join(distributionRoot, 'dist', 'senpi', ...parts);
+    if (!existsSync(src)) continue;
+    const dest = join(d.home, 'omd-pack', ...parts.slice(1));
+    mkdirSync(dest, { recursive: true });
+    cpSync(src, dest, { recursive: true });
+  }
+}
+
 function installCodex(d: Detected, version: string, distributionRoot: string, changes: string[]): void {
   const pluginDir = join(d.home, 'plugins', 'cache', 'omd', 'oh-my-design', version);
   mkdirSync(pluginDir, { recursive: true });
@@ -197,6 +241,30 @@ function installCodex(d: Detected, version: string, distributionRoot: string, ch
   mkdirSync(d.home, { recursive: true });
   writeFileSync(configPath, patched);
   changes.push(`codex: patched ${configPath}`);
+}
+
+/**
+ * Remove exactly what `installSenpi` wrote, and nothing else.
+ *
+ * Senpi keeps no plugin cache and no agent registry, so the Codex uninstall path removes none of
+ * this — it would report success while every OMD skill, role prompt, and pack stayed installed.
+ * The user's own skills live beside ours under the same directory, so pruning is by prefix, and
+ * project `.omd/` records are never touched.
+ */
+function uninstallSenpi(d: Detected, changes: string[]): void {
+  const skillsDir = join(d.home, 'skills');
+  for (const name of readdirSafe(skillsDir)) {
+    if (!name.startsWith('omd-') && !LEGACY_SKILLS.includes(name)) continue;
+    rmSync(join(skillsDir, name), { recursive: true, force: true });
+    changes.push(`senpi: removed ${join(skillsDir, name)}`);
+  }
+
+  for (const relative of ['omd-agents', 'omd-pack', 'omd-host.json']) {
+    const target = join(d.home, relative);
+    if (!existsSync(target)) continue;
+    rmSync(target, { recursive: true, force: true });
+    changes.push(`senpi: removed ${target}`);
+  }
 }
 
 function uninstallCodex(d: Detected, changes: string[]): void {
@@ -244,6 +312,8 @@ export async function install(hosts: Detected[], options: InstallOptions = {}): 
     if (d.host === 'claude') {
       installClaude(d, distributionRoot, changes);
       claudePluginFreshnessNote(d, changes);
+    } else if (d.host === 'senpi') {
+      installSenpi(d, distributionRoot, changes);
     } else {
       installCodex(d, version, distributionRoot, changes);
     }
@@ -267,6 +337,7 @@ export function linkCli(binDir: string, changes: string[]): void {
   const links: ReadonlyArray<readonly [string, string]> = [
     ['omd', join(pkgRoot, 'bin', 'omd.mjs')],
     ['oh-my-design', join(pkgRoot, 'bin', 'omd-install.mjs')],
+    ['omd-codex', join(pkgRoot, 'bin', 'omd-codex.mjs')],
   ];
   for (const [name, target] of links) {
     try {
@@ -332,15 +403,21 @@ function claudePluginFreshnessNote(d: Detected, changes: string[]): void {
   }
 }
 
-export type UninstallOptions = { readonly browser?: BrowserRsDependencies };
+/**
+ * `keepBrowser` retains the shared browser provider when only one host is being removed. Uninstalling
+ * OMD from Senpi must not break the Claude and Codex installs that use the same `browser-rs`.
+ */
+export type UninstallOptions = { readonly browser?: BrowserRsDependencies; readonly keepBrowser?: boolean };
 
 export function uninstall(hosts: Detected[], options: UninstallOptions = {}): string[] {
   const changes: string[] = [];
   for (const d of hosts) {
     if (d.host === 'claude') uninstallClaude(d, changes);
+    else if (d.host === 'senpi') uninstallSenpi(d, changes);
     else uninstallCodex(d, changes);
   }
-  changes.push(browserUninstallChange(uninstallBrowserRs(options.browser)));
+  if (options.keepBrowser === true) changes.push('browser-rs: kept (other hosts still have OMD installed)');
+  else changes.push(browserUninstallChange(uninstallBrowserRs(options.browser)));
   return changes;
 }
 
@@ -467,6 +544,47 @@ function doctorCodex(d: Detected): DoctorCheck[] {
   return checks;
 }
 
+function doctorSenpi(d: Detected): DoctorCheck[] {
+  const checks: DoctorCheck[] = [];
+  const hostPath = join(d.home, 'omd-host.json');
+  let agentNames: string[] = [];
+  try {
+    const value = JSON.parse(readFileSync(hostPath, 'utf8')) as {
+      host?: unknown;
+      agents?: unknown;
+    };
+    if (value.host !== 'senpi' || !Array.isArray(value.agents)) throw new Error('invalid Senpi host contract');
+    agentNames = value.agents
+      .map((agent) => (
+        typeof agent === 'object' && agent !== null && 'name' in agent && typeof agent.name === 'string'
+          ? agent.name
+          : ''
+      ))
+      .filter(Boolean);
+    checks.push(check('spawn contract parses', true));
+  } catch (err) {
+    checks.push(check('spawn contract parses', false, err instanceof Error ? err.message : String(err)));
+  }
+
+  const roleDir = join(d.home, 'omd-agents');
+  const registered = agentNames.length > 0
+    && agentNames.every((name) => existsSync(join(roleDir, `${name}.md`)));
+  checks.push(check('agents registered', registered));
+  checks.push(check(
+    'typesetter agent registered',
+    agentNames.includes('omd-typesetter') && existsSync(join(roleDir, 'omd-typesetter.md')),
+  ));
+  checks.push(check(
+    'composer agent registered',
+    agentNames.includes('omd-composer') && existsSync(join(roleDir, 'omd-composer.md')),
+  ));
+  checks.push(check(
+    'skills present',
+    shippedSkillNames().some((name) => existsSync(join(d.home, 'skills', name))),
+  ));
+  return checks;
+}
+
 export type DoctorOptions = { readonly browser?: BrowserProviderDoctorOptions; readonly cliBinDir?: string };
 
 function browserProviderCheck(result: BrowserProviderHealth): DoctorCheck {
@@ -508,7 +626,11 @@ export async function doctor(hosts: Detected[], options: DoctorOptions = {}): Pr
   const browserCheck = browserProviderCheck(await doctorBrowserProvider(options.browser));
   const cliCheck = options.cliBinDir === undefined ? undefined : cliLinkCheck(options.cliBinDir);
   return hosts.map((d) => {
-    const checks = d.host === 'claude' ? doctorClaude(d) : doctorCodex(d);
+    const checks = d.host === 'claude'
+      ? doctorClaude(d)
+      : d.host === 'senpi'
+        ? doctorSenpi(d)
+        : doctorCodex(d);
     checks.push(versionCheck);
     if (cliCheck !== undefined) checks.push(cliCheck);
     checks.push(browserCheck);

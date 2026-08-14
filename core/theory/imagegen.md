@@ -57,6 +57,15 @@ Reasoning the layout in the abstract is exactly what produces the symmetric, box
 `expressive.md` § "Slop-free is not the same as distinctive" warns about. A generated draft forces a
 concrete art direction to react to instead of a reasonable-sounding description.
 
+## Anti-literal generation contract
+
+Every generation direction consumes the selected decision's exact non-empty `metaphorQualities` and
+`literalPropsToReject`. Preserve the qualities through hierarchy, rhythm, typography, imagery, and
+motion cues. Supply the rejected props only as private visual exclusions: drafts must not depict,
+spell, iconize, pattern, silhouette, or substitute a close visual synonym for any rejected prop.
+Neither field is image text, UI copy, a caption, or a negative sentence to render. The chosen draft
+must be rejected if it literalizes the metaphor even when its palette and polish otherwise fit.
+
 ## Break the AI defaults (aggressively)
 
 Standard image generation and abstract layout-reasoning both collapse into the same tells. Name the

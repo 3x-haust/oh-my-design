@@ -120,10 +120,10 @@ is a start; choosing muted sage green instead of saturated lime is the actual de
 Backgrounds are not neutral. A warm background (slightly yellow, cream, warm grey) creates
 a different psychological environment than a cool one (blue-grey, neutral-white, near-black).
 
-**Warm backgrounds**: approachable, organic, human. Appropriate for products where
-connection and warmth are the value proposition — communication tools, creative tools,
-consumer apps. The warmth carries even at very low saturation; a barely-tinted cream reads
-differently from a cool white.
+**Warm backgrounds**: approachable, organic, human. Use them as a dominant canvas only when
+connection or warmth is an explicit brand or subject requirement — not merely because the surface
+is consumer-facing, creative, editorial, or expressive. The warmth carries even at very low
+saturation; a barely-tinted cream still reads as a material choice, not as neutral white.
 
 **Cool backgrounds**: crisp, precise, efficient. Appropriate for productivity tools,
 fintech, developer tools. Signals that the environment is here to help you work, not to be
@@ -136,6 +136,27 @@ platforms. The absence of warmth or coolness is deliberate.
 The background temperature sets the emotional register for every colour that sits on it.
 A warm accent on a cool background reads as a guest; the same accent on a warm background
 reads as native. Choose the temperature before choosing the accent, not after.
+
+### Default ground and evidence threshold
+
+For a general product surface, the dominant 60% canvas defaults to true white (`#FFFFFF`).
+Near-white neutrals belong to the secondary 30% surface role rather than replacing the page
+background. This is not an absence of art direction: it protects content contrast,
+keeps large areas calm, and lets the secondary and accent roles carry identity without tinting
+every pixel. Build the 30% secondary role from restrained neutral or brand surfaces, then reserve
+the 10% accent for the primary action, selected state, and critical feedback.
+
+Depart from the true-white dominant canvas only when explicit user preference, an established brand
+system, or subject-specific evidence makes a dark, tinted, or material ground meaningful. Words
+such as "editorial", "premium", "cultural", "handcrafted", or "magazine-like" are not that
+evidence by themselves. Translate those metaphors into hierarchy, rhythm, typography, image
+treatment, and composition rather than literal paper beige, faux print texture, or a uniformly
+sepia surface.
+
+The role split must remain legible in the rendered interface. Small accent-coloured text still
+meets 4.5:1 contrast against its actual ground; large text and non-text interface boundaries meet
+3:1. If the chosen accent cannot carry small text, keep the hue for larger actions and use a darker
+role-compatible tone for labels.
 
 ---
 

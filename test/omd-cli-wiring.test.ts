@@ -134,20 +134,30 @@ test('printed input skeletons carry exactly the keys their validators accept', a
   const authored = Object.keys(check.skeleton as object);
   assert.ok(authored.every((key) => (ART_DIRECTION_CHECK_INPUT_KEYS as readonly string[]).includes(key)), authored.join(','));
   assert.ok(!authored.includes('invocation'), 'the local lane never authors an invocation');
-  assert.equal(INPUT_SKELETONS.length, 6);
+  assert.equal(INPUT_SKELETONS.length, 8);
 
   const locale = inputSkeleton('locale-contract');
   const { LOCALE_CONTRACT_KEYS } = await import('../core/locale/contract.ts');
   assert.deepEqual(Object.keys(locale.skeleton as object).sort(), [...LOCALE_CONTRACT_KEYS].sort());
   const functional = inputSkeleton('functional-requirements');
   assert.deepEqual(Object.keys(functional.skeleton as object).sort(), ['requirements', 'schema']);
+  const board = inputSkeleton('reference-board');
+  assert.deepEqual(Object.keys(board.skeleton as object), ['candidates']);
+  const boardCandidates = (board.skeleton as { candidates: { pieces: { grid: object }[] }[] }).candidates;
+  assert.equal(boardCandidates.length, 2);
+  assert.deepEqual(Object.keys(boardCandidates[0]!.pieces[0]!.grid), ['column', 'span', 'order']);
+  assert.match(board.constraints?.join('\n') ?? '', /grid\.column is 1\.\.12[\s\S]*unique non-negative integer/);
 
   const dir = project();
   const printed = run(['schema', 'depth-input', '--json'], dir);
   assert.equal(printed.status, 0, printed.stderr);
   assert.deepEqual(JSON.parse(printed.stdout).skeleton, depth.skeleton);
+  const printedBoard = run(['schema', 'reference-board'], dir);
+  assert.equal(printedBoard.status, 0, printedBoard.stderr);
+  assert.match(printedBoard.stdout, /every piece grid contains exactly column, span, order/);
+  assert.match(printedBoard.stdout, /"grid": \{\s+"column": 1,\s+"span": 12,\s+"order": 0/s);
   const listed = run(['schema', 'list', '--json'], dir);
-  assert.deepEqual(JSON.parse(listed.stdout).map((entry: { name: string }) => entry.name), ['domain-brief', 'depth-input', 'art-direction-check', 'locale-contract', 'functional-requirements', 'decision-graph']);
+  assert.deepEqual(JSON.parse(listed.stdout).map((entry: { name: string }) => entry.name), ['route-input', 'domain-brief', 'depth-input', 'reference-board', 'art-direction-check', 'locale-contract', 'functional-requirements', 'decision-graph']);
 });
 
 test('the printed depth skeleton classifies and a shapeless input names every missing key', () => {
@@ -181,9 +191,8 @@ test('stage status reports the derived run state through the CLI', () => {
   assert.equal(resumed.current, 'frame');
 });
 
-// The check payload's `references` array must equal this projection byte-for-byte, so emitting it
-// is the only way a coordinator can stop retyping it. Rights and anti-reference signal decide
-// `positive`/`lawful`; motion obligations stay pending until the evaluator settles them.
+// The check payload's `references` array must equal this projection byte-for-byte. Settled
+// disposition, rights, signal, and static/motion axes jointly decide positive lawful use.
 test('canonical check references project rights and signal from the settled selection', async () => {
   const { canonicalArtDirectionReferences } = await import('../core/art-direction/decision.ts');
   const slot = (slotId: string, signal: string, rights: string) => ({
@@ -198,8 +207,26 @@ test('canonical check references project rights and signal from the settled sele
     ],
   } as never);
   assert.deepEqual(references, [
-    { slotId: 'hero', signal: 'high-visual-system', positive: true, lawful: true, motionObligation: 'none' },
-    { slotId: 'avoid', signal: 'anti-reference', positive: false, lawful: true, motionObligation: 'none' },
-    { slotId: 'unlicensed', signal: 'supporting-component', positive: false, lawful: false, motionObligation: 'none' },
+    { slotId: 'hero', signal: 'high-visual-system', positive: false, lawful: true, motionObligation: 'none', staticAxis: 'available', motionAxis: 'absent', obligationDisposition: 'not-applicable' },
+    { slotId: 'avoid', signal: 'anti-reference', positive: false, lawful: true, motionObligation: 'none', staticAxis: 'available', motionAxis: 'absent', obligationDisposition: 'not-applicable' },
+    { slotId: 'unlicensed', signal: 'supporting-component', positive: false, lawful: false, motionObligation: 'none', staticAxis: 'available', motionAxis: 'absent', obligationDisposition: 'not-applicable' },
   ]);
+});
+// Role ② craft evidence is declared by the domain brief, not the acquisition plan, so a board can
+// cover every zone and still have gathered only half the roles the protocol names.
+test('declared craft queries with no measured craft record fail the board audit', () => {
+  const dir = project();
+  writeFile(dir, '.omd/domain-brief.json', JSON.stringify({
+    schema: 'domain-brief-v1', request: 'r', domain: 'd', summary: 's',
+    surfaces: [{ name: 'landing', purpose: 'p' }], coreObjects: ['o'], audience: 'a',
+    referenceQueries: { component: ['nav'], craft: ['awwwards editorial motion'] }, researched: false,
+  }));
+  writeFile(dir, '.omd/refs/still.json', JSON.stringify({
+    source: 'https://a.example', component: 'nav', kind: 'component', selector: '.nav',
+    capturedAt: '2026-07-28T00:00:00.000Z', slot: 'nav', principles: [],
+    invariants: { spacingLadder: [8], radiusLadder: [4], elevationLevels: 1, centeredRatio: 0, tokenCoverage: 1, paddingWeight: 8, typeScale: [16], fontFamilies: ['inter'], weightLadder: [400], motionDurations: [], easingVocab: [], animatedShare: 0, hoverCoverage: 0, focusCoverage: 0, animatedProperties: [], hasReducedMotion: false, scrollChoreography: [] },
+  }));
+  const blocked = run(['ref', 'granularity', '--json'], dir);
+  assert.equal(blocked.status, 1);
+  assert.ok(JSON.parse(blocked.stdout).findings.some((f: { id: string }) => f.id === 'REF-CRAFT-UNGATHERED'));
 });

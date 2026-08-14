@@ -1,11 +1,10 @@
-import { lstatSync, readFileSync, type Stats } from 'node:fs';
-import { join } from 'node:path';
 import { canonicalJson, readReferenceBoardArtifacts, sha256 } from './board-artifacts.ts';
 import { acquireProjectMutationLock, replaceProjectFileAtomically } from '../runtime/project-write.ts';
 import {
   materializeSettledReferenceSelection,
   motionResolutionProjectionSha256,
   parseReferenceSelectionV2,
+  readContainedRegularFile,
   referenceSelectionV2Sha256,
   validatePreReferenceSelectionV2,
   validateReferenceSelectionV2,
@@ -127,20 +126,8 @@ export const referencePositiveMotion = (selection: ReferenceSelectionV2): Positi
     }))
     .sort((left, right) => left.slotId.localeCompare(right.slotId)),
 });
-const sameFile = (left: Stats, right: Stats): boolean => left.dev === right.dev && left.ino === right.ino && left.size === right.size;
-const readRegularFile = (path: string, label: string): string => {
-  try {
-    const before = lstatSync(path);
-    if (!before.isFile() || before.isSymbolicLink()) return fail(`${label} must be a regular non-symlink file`);
-    const body = readFileSync(path, 'utf8');
-    const after = lstatSync(path);
-    if (!after.isFile() || after.isSymbolicLink() || !sameFile(before, after)) return fail(`${label} changed while it was read`);
-    return body;
-  } catch (error) {
-    if (error instanceof ReferenceHandoffValidationError) throw error;
-    return fail(`${label} is missing or unreadable`);
-  }
-};
+const readRegularFile = (root: string, relativePath: string, label: string): string =>
+  readContainedRegularFile(root, relativePath, label).toString('utf8');
 export type ReferenceSettlementSnapshot = {
   readonly pointerBytes: Buffer;
   readonly recordBytes: Buffer;
@@ -152,6 +139,9 @@ export type ReferenceSettlementSnapshot = {
   readonly captureSha256: string;
   readonly assemblySha256: string;
   readonly projectionSha256: string;
+  readonly selectedCandidateRoute: string;
+  readonly selectedCandidateSlotIds: readonly string[];
+  readonly selectedCandidateTaskIds: readonly string[];
 };
 
 export type ValidatedReferenceSettlement = {
@@ -188,6 +178,19 @@ export function validateReferenceSettlementSnapshot(snapshot: ReferenceSettlemen
   if (record.decision.preSelectionSha256 !== preSelectionSha256) {
     return fail('current art-direction record does not bind the immutable pre-selection');
   }
+  const selectedAlternative = record.decision.consideredAlternatives.find((alternative) => alternative.register === record.decision.selectedRegister);
+  const candidateSlotIds = [...snapshot.selectedCandidateSlotIds].sort();
+  if (record.decision.boardSha256 !== snapshot.captureSha256
+    || record.decision.route !== snapshot.selectedCandidateRoute
+    || selectedAlternative === undefined
+    || selectedAlternative.conceptRole !== record.decision.conceptRole
+    || selectedAlternative.motionHypothesis !== record.decision.motionDecision
+    || canonicalJson([...selectedAlternative.staticReferenceSlotIds].sort()) !== canonicalJson([...record.decision.selectedStaticReferenceSlotIds].sort())
+    || canonicalJson([...selectedAlternative.motionReferenceSlotIds].sort()) !== canonicalJson([...record.decision.selectedMotionReferenceSlotIds].sort())
+    || record.decision.selectedStaticReferenceSlotIds.some((slotId) => !candidateSlotIds.includes(slotId))
+    || record.decision.selectedMotionReferenceSlotIds.some((slotId) => !candidateSlotIds.includes(slotId))) {
+    return fail('current art-direction decision does not bind the selected board route, alternative, and slots');
+  }
   const motion = parse(snapshot.motionResolutionBytes, 'persisted motion resolution', validateMotionResolutionProjection);
   if (motion.alternativesSha256 !== record.decision.alternativesSha256
     || motion.handoffSha256 !== artHandoff.payloadSha256
@@ -219,6 +222,12 @@ export function validateReferenceSettlementSnapshot(snapshot: ReferenceSettlemen
   if (canonicalJson(expectedSettled) !== canonicalJson(settledSelection)) {
     return fail('current settled selection does not match the persisted motion resolution');
   }
+  for (const staticSlotId of record.decision.selectedStaticReferenceSlotIds) {
+    const slot = settledSelection.slots.find((entry) => entry.slotId === staticSlotId);
+    if (slot === undefined || slot.staticAxis !== 'available' || slot.obligationDisposition !== 'used') {
+      return fail(`settled selection does not retain selected static reference ${staticSlotId}`);
+    }
+  }
   const selectedMotion = new Set(record.decision.selectedMotionReferenceSlotIds);
   for (const slot of settledSelection.slots) {
     if (slot.signal === 'high-motion' && slot.rights === 'lawful' && slot.motionAxis === 'available'
@@ -237,23 +246,28 @@ export function validateReferenceSettlementSnapshot(snapshot: ReferenceSettlemen
 const readCurrentSettlementGraph = (root: string): ValidatedReferenceSettlement => {
   const preSelection = validatePreReferenceSelectionV2(root);
   const artifacts = readReferenceBoardArtifacts(root);
-  const pointerBytes = Buffer.from(readRegularFile(join(root, '.omd', 'art-direction.json'), 'current art-direction pointer'));
+  const pointerBytes = Buffer.from(readRegularFile(root, '.omd/art-direction.json', 'current art-direction pointer'));
   let pointer;
   try { pointer = validateArtDirectionPointer(JSON.parse(pointerBytes.toString('utf8'))); } catch { return fail('current art-direction pointer is invalid JSON'); }
-  const recordBytes = Buffer.from(readRegularFile(join(root, '.omd', pointer.record), 'current art-direction record'));
+  const recordBytes = Buffer.from(readRegularFile(root, `.omd/${pointer.record}`, 'current art-direction record'));
   let record;
   try { record = validateArtDirectionRecord(JSON.parse(recordBytes.toString('utf8'))); } catch { return fail('current art-direction record is invalid JSON'); }
+  const candidate = artifacts.raw.candidates.find((entry) => entry.id === preSelection.candidateId);
+  if (candidate === undefined) return fail('current pre-selection candidate is unavailable from the current board');
   return validateReferenceSettlementSnapshot({
     pointerBytes,
     recordBytes,
-    artDirectionHandoffBytes: Buffer.from(readRegularFile(join(root, '.omd', 'reference-handoffs', 'art-direction.json'), 'current art-direction handoff')),
-    motionResolutionBytes: Buffer.from(readRegularFile(join(root, '.omd', 'motion-resolutions', `sha256-${record.decision.motionResolutionProjectionSha256}.json`), 'persisted motion resolution')),
-    settledSelectionBytes: Buffer.from(readRegularFile(join(root, '.omd', 'reference-selection-v2.json'), 'current settled selection')),
-    immutableSettledSelectionBytes: Buffer.from(readRegularFile(join(root, '.omd', 'settled-reference-selections', `sha256-${record.decision.settledSelectionSha256}.json`), 'immutable settled selection record')),
+    artDirectionHandoffBytes: Buffer.from(readRegularFile(root, '.omd/reference-handoffs/art-direction.json', 'current art-direction handoff')),
+    motionResolutionBytes: Buffer.from(readRegularFile(root, `.omd/motion-resolutions/sha256-${record.decision.motionResolutionProjectionSha256}.json`, 'persisted motion resolution')),
+    settledSelectionBytes: Buffer.from(readRegularFile(root, '.omd/reference-selection-v2.json', 'current settled selection')),
+    immutableSettledSelectionBytes: Buffer.from(readRegularFile(root, `.omd/settled-reference-selections/sha256-${record.decision.settledSelectionSha256}.json`, 'immutable settled selection record')),
     preSelection,
     captureSha256: sha256(artifacts.boardBytes),
     assemblySha256: sha256(artifacts.assemblyBytes),
     projectionSha256: sha256(artifacts.projectionBytes),
+    selectedCandidateRoute: candidate.route,
+    selectedCandidateSlotIds: candidate.pieces.map((piece) => piece.slotId),
+    selectedCandidateTaskIds: [...new Set(candidate.pieces.flatMap((piece) => piece.taskIds))],
   });
 };
 export function createReferenceHandoffReceipt(
@@ -326,21 +340,53 @@ export function validateReferenceHandoffCurrentness(root: string, receiptValue: 
   return receipt;
 }
 export function validateDecisionBoundReferenceHandoffs(
+  root: string,
   handoffs: DecisionBoundReferenceHandoffs,
-  artDirectionSha256: string,
 ): DecisionBoundReferenceHandoffs {
-  if (!/^[0-9a-f]{64}$/.test(artDirectionSha256)) fail('art direction hash must be a SHA-256 digest');
+  /*
+   * Handoffs are receipts, not authority assertions. Read the two current receipts
+   * from the same settled graph and require the caller's values to be their exact
+   * canonical bytes. A pair of fabricated but mutually consistent objects cannot
+   * stand in for persisted project receipts.
+   */
+  const graph = readCurrentSettlementGraph(root);
   const composer = parseReferenceHandoffReceipt(handoffs.composer);
   const hand = parseReferenceHandoffReceipt(handoffs.hand);
+  const persistedComposer = parseReferenceHandoffReceipt(JSON.parse(readRegularFile(root, '.omd/reference-handoffs/composer.json', 'current composer handoff')));
+  const persistedHand = parseReferenceHandoffReceipt(JSON.parse(readRegularFile(root, '.omd/reference-handoffs/hand.json', 'current hand handoff')));
+  if (canonicalJson(composer) !== canonicalJson(persistedComposer) || canonicalJson(hand) !== canonicalJson(persistedHand)) {
+    fail('decision-bound handoffs must be the current persisted composer and hand receipts');
+  }
+  const currentComposer = validateReferenceHandoffCurrentness(root, persistedComposer);
+  const currentHand = validateReferenceHandoffCurrentness(root, persistedHand);
+  if (canonicalJson(composer) !== canonicalJson(currentComposer) || canonicalJson(hand) !== canonicalJson(currentHand)) {
+    fail('decision-bound handoffs must bind freshly sampled current artifacts');
+  }
   if (composer.role !== 'composer' || hand.role !== 'hand') fail('decision-bound handoffs require composer then hand receipts');
-  if (composer.artDirectionSha256 !== artDirectionSha256 || hand.artDirectionSha256 !== artDirectionSha256) fail('composer and hand handoffs must bind the same decision');
-  if (composer.motionResolutionProjectionSha256 === undefined || composer.settledSelectionSha256 === undefined
-    || hand.motionResolutionProjectionSha256 !== composer.motionResolutionProjectionSha256 || hand.settledSelectionSha256 !== composer.settledSelectionSha256) {
-    fail('composer and hand handoffs must bind the same settled motion resolution');
+  for (const receipt of [composer, hand]) {
+    if (receipt.artDirectionSha256 !== graph.artDirectionSha256
+      || receipt.motionResolutionProjectionSha256 !== graph.motionResolutionProjectionSha256
+      || receipt.settledSelectionSha256 !== graph.settledSelectionSha256
+      || canonicalJson(receipt.positiveMotion) !== canonicalJson(referencePositiveMotion(graph.settledSelection))) {
+      fail('decision-bound handoff does not bind the current persisted settlement graph');
+    }
   }
   for (const field of ['captureSha256', 'assemblySha256', 'projectionSha256', 'preSelectionSha256'] as const) {
     if (composer[field] !== hand[field]) fail(`composer and hand handoffs disagree on ${field}`);
   }
-  if (canonicalJson(composer.positiveMotion) !== canonicalJson(hand.positiveMotion)) fail('composer and hand handoffs disagree on motion dispositions');
+  const stableGraph = readCurrentSettlementGraph(root);
+  if (canonicalJson(graph) !== canonicalJson(stableGraph)) {
+    fail('current settlement graph changed while decision-bound handoffs were validated');
+  }
+  const stableComposer = parseReferenceHandoffReceipt(JSON.parse(readRegularFile(root, '.omd/reference-handoffs/composer.json', 'current composer handoff')));
+  const stableHand = parseReferenceHandoffReceipt(JSON.parse(readRegularFile(root, '.omd/reference-handoffs/hand.json', 'current hand handoff')));
+  const stableCurrentComposer = validateReferenceHandoffCurrentness(root, stableComposer);
+  const stableCurrentHand = validateReferenceHandoffCurrentness(root, stableHand);
+  if (canonicalJson(persistedComposer) !== canonicalJson(stableComposer)
+    || canonicalJson(persistedHand) !== canonicalJson(stableHand)
+    || canonicalJson(currentComposer) !== canonicalJson(stableCurrentComposer)
+    || canonicalJson(currentHand) !== canonicalJson(stableCurrentHand)) {
+    fail('current decision-bound handoffs changed while they were validated');
+  }
   return { composer, hand };
 }

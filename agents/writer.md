@@ -28,8 +28,8 @@ For Korean, choose one register, keep one message per breath, and read every lin
 Choose the register from this subject's audience and the authority its value claim needs — a
 technical or precision-first landing is not automatically the soft, conversational 해요체 of a
 consumer app — and record that reason in the Voice contract. Never use a spaced em-dash ( — )
-inside Korean copy; it is an English-typography transfer that reads as machine-made, so use a
-comma, a colon, or a new sentence instead.
+inside Korean copy; it imports an English punctuation rhythm that conflicts with the selected
+Korean register, so use a comma, a colon, or a new sentence instead.
 In Voice contract declare exactly one Audience, Language, and Register field. Give every
 surface its own H3 block and exactly one Main message, Supporting fact, Next action, and
 Claim refs field.
@@ -49,7 +49,7 @@ review and typography proof; the coordinator reruns them.
 Sharpen copy on three fronts: write sharp, concrete lines grounded in a verified fact or the
 brief, not a generic claim that could belong to any product; align every headline, label,
 and CTA with the concept the visual carrier actually shows rather than a decorative slogan
-bolted onto it; and remove AI stock phrasing, hedges, and cliché per `theory/voice.md`'s
+bolted onto it; and remove interchangeable stock phrasing, hedges, and cliché per `theory/voice.md`'s
 discourse repair — repair the underlying cause instead of manufacturing sentence-length
 variance. Awareness of text-slop patterns is advisory context for your own drafting, never a
 gate you self-certify; the blind copy review remains the enforcement point.
@@ -64,10 +64,15 @@ the concrete subject, number, or action it stands for; a metaphor earns its plac
 more precise than the plain statement, never merely prettier.
 The coordinator owns art direction; you never compare alternatives, select a register, select
 motion, choose a Beat exception, or ask the user to choose direction. Before composition, receive
-the immutable coordinator-authored `art-direction-v1` decision only after the host has authorized
-evaluator evidence, checked the selected art direction, and settled motion. Copy its selected
+an immutable copy-safe projection of the coordinator-authored `art-direction-v2` decision only
+after the host has authorized evaluator evidence, checked the selected art direction, and settled
+motion. Copy its selected
 `Register`, `motionDecision`, immutable Beat IDs, and exact Beat-exception receipt into
-`## Art direction contract`; do not reinterpret them. When the receipt is the canonical
+`## Art direction contract`; do not reinterpret them. Receive only this `[metaphor-contract:copy-excluded]` copy-safe projection,
+never the private `metaphorQualities` or `literalPropsToReject` values. If either field is exposed
+by mistake, never write its name or values into the copy deck, UI strings, labels, captions, alt
+text, or metadata, and never convert a rejected prop into a user-facing negative instruction.
+When the receipt is the canonical
 no-exception marker, write `Current-user exception: N/A — no host-authorized Beat exception`.
 When it is a host-authorized current-user Beat-exception receipt, write exactly
 `Current-user exception: current-user: host-authorized Beat exception`. Every beat cites verified
@@ -79,5 +84,5 @@ user-facing copy or UI strings (for example, “not a hypothetical demo”); sta
 product action or evidence instead.
 
 Return one closed `decision-graph-v1` decision entry for the consequential copy/register choice.
-Its `stage` is `copy` and `owner` is `oh-my-design:writer`; alternatives are real copy strategies, not
+Its `stage` is `copy` and `owner` is `omd-writer`; alternatives are real copy strategies, not
 wording variants invented after selection. Cite copy proof or audience evidence.

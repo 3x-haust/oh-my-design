@@ -3,76 +3,71 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-
-// Locks the image-first (imagegen) art-direction wiring: the theory file exists and states the
-// load-bearing rules, and composer/hand/scout/SKILL reference it without breaking OMD's
-// clean-room and anti-fabrication invariants (generated image = reference not shipped asset,
-// factual carriers never AI, kinship gate remains the anti-laundering backstop).
+import {
+  ADAPTIVE_BEHAVIOR_POLICY,
+  AdaptiveRouteError,
+  OPTIONAL_METHOD_IDS,
+  parseRouteRecord,
+  routeAdaptiveFlow,
+} from '../core/route/index.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
-const read = (rel: string): string => readFileSync(join(root, rel), 'utf8');
+const input = (name: string): object => JSON.parse(readFileSync(
+  join(root, `test/fixtures/adaptive-flow/${name}.json`), 'utf8',
+));
 
-test('theory/imagegen.md exists and states the mandatory image-first order', () => {
-  const t = read('core/theory/imagegen.md');
-  assert.match(t, /image-first/i);
-  assert.match(t, /Generate[\s\S]*Analyze[\s\S]*(Feed|implement)/i, 'names generate -> analyze -> implement order');
+test('image generation has an executable generate-analyze-implement and non-shipping contract', () => {
+  const policy = ADAPTIVE_BEHAVIOR_POLICY.imageGeneration;
+  assert.deepEqual(policy.sequence, ['generate', 'analyze', 'implement']);
+  assert.equal(policy.owner, 'coordinator');
+  assert.equal(policy.selection, 'blind');
+  assert.equal(policy.concurrency, 'independent-drafts');
+  assert.equal(policy.requiresHostCapability, true);
+  assert.equal(policy.minimumDistinctAnchors, 3);
+  assert.equal(policy.rejectPattern, 'left-text-right-image-default');
+  assert.equal(policy.chosenDraftShips, false);
+  assert.equal(policy.factualCarrierAllowed, false);
+  assert.equal(policy.distanceBlocksShipping, false);
 });
 
-test('imagegen theory keeps a generated image as a design reference, never a shipped asset', () => {
-  const t = read('core/theory/imagegen.md');
-  assert.match(t, /never (a )?shipped (page )?asset/i);
-  assert.match(t, /factual carrier[\s\S]*never (be )?AI-generated|NEVER AI-generated/i);
+test('selected image generation is consumed by composition and omitted image work stays reasoned', () => {
+  assert.ok(OPTIONAL_METHOD_IDS.includes('image-first-draft'));
+  const skipped = routeAdaptiveFlow(input('copy-only'));
+  assert.equal(skipped.behavior.active.imageGeneration, false);
+  assert.ok(skipped.strategy.skips.some((entry) => entry.id === 'image-first-draft' && entry.reason.trim() !== ''));
+
+  const selectedInput = input('medical-new-product');
+  const strategy = Reflect.get(selectedInput, 'strategyDecision');
+  const methods = Reflect.get(strategy, 'methods');
+  const skips = Reflect.get(strategy, 'skips');
+  assert.ok(Array.isArray(methods) && Array.isArray(skips));
+  Reflect.set(strategy, 'methods', [...methods, 'image-first-draft']);
+  Reflect.set(strategy, 'skips', skips.filter((entry) => Reflect.get(entry, 'id') !== 'image-first-draft'));
+  const selected = routeAdaptiveFlow(selectedInput);
+  assert.equal(selected.behavior.active.imageGeneration, true);
+  assert.ok(selected.strategy.roles.includes('omd-composer'));
+  assert.ok(selected.strategy.stages.includes('composition'));
+  assert.equal(selected.behavior.policy.imageGeneration.composerRole, 'selected-draft-consumer');
+  assert.deepEqual(selected.behavior.policy.imageGeneration.composerForbidden, [
+    'provider-prompt', 'generation', 'cache-management', 'draft-selection',
+  ]);
 });
 
-test('imagegen ref distance is advisory and drafts may seed from the selected references', () => {
-  const t = read('core/theory/imagegen.md');
-  assert.match(t, /ref distance/);
-  assert.match(t, /advisory/i);
-  assert.match(t, /never blocks shipping/i);
-  // Drafts may now seed from the selected references (clean-room input-class gating removed).
-  assert.match(t, /seeded from the selected/i);
+test('selected references seed drafts through sanitized blueprints and measured local handoff', () => {
+  assert.deepEqual(ADAPTIVE_BEHAVIOR_POLICY.imageGeneration.seedInputs, [
+    'selected-references', 'skin-abstracted-blueprints', 'project-owned-inputs',
+  ]);
+  assert.equal(ADAPTIVE_BEHAVIOR_POLICY.references.localPartImages, true);
+  assert.equal(ADAPTIVE_BEHAVIOR_POLICY.references.fidelityTarget, 'high');
+  assert.equal(ADAPTIVE_BEHAVIOR_POLICY.references.blueprintSeedAllowed, true);
+  assert.equal(ADAPTIVE_BEHAVIOR_POLICY.references.handoff, 'sanitized-summary-only');
+  assert.equal(ADAPTIVE_BEHAVIOR_POLICY.references.rawHandoff, false);
+  assert.equal(routeAdaptiveFlow(input('copy-only')).behavior.active.referenceDistance, false);
+  assert.equal(routeAdaptiveFlow(input('medical-new-product')).behavior.active.referenceDistance, true);
 });
 
-test('imagegen theory carries the variation engine and the anti-AI-default tells', () => {
-  const t = read('core/theory/imagegen.md');
-  assert.match(t, /left-text ?\/ ?right-image/i, 'names the most overused AI hero pattern');
-  assert.match(t, /composition anchor/i);
-  assert.match(t, /at least 3 different anchors/i);
-});
-
-test('composer runs image-first from the chosen draft, gated by register and host capability', () => {
-  const c = read('agents/composer.md');
-  assert.match(c, /image-first/i);
-  assert.match(c, /theory\/imagegen\.md/);
-  assert.match(c, /skin-abstracted\s+blueprint/i);
-  assert.doesNotMatch(c, /--shot/);
-  assert.match(c, /coordinator-chosen draft/i);
-  assert.match(c, /does not generate images,[\s\S]*manage a draft cache, select a draft, or record a decision/i);
-});
-
-test('hand implements against the draft with image-to-code fidelity and never ships the draft', () => {
-  const h = read('agents/hand.md');
-  assert.match(h, /image-to-code/i);
-  assert.match(h, /never ship the draft image|never ship the draft/i);
-  assert.match(h, /ref distance/);
-});
-
-test('scout routes reference fidelity to the hand with an advisory distance signal', () => {
-  const s = read('agents/scout.md');
-  assert.match(s, /the hand builds from its local part-image/i);
-  assert.match(s, /\.omd\/refs\//);
-  assert.match(s, /image-to-code fidelity/i);
-  assert.match(s, /omd ref distance` reports how close the build is/i);
-  assert.match(s, /high closeness is the intended\s+outcome/i);
-  // The imagegen draft-seed path (blueprint) still exists for the composer route.
-  assert.match(s, /blueprint/i);
-  assert.match(s, /theory\/imagegen\.md/);
-});
-
-test('ultradesign SKILL wires host-owned image-first draft generation', () => {
-  const skill = read('skills/ultradesign/SKILL.md');
-  assert.match(skill, /image-first art-direction directions/i);
-  assert.match(skill, /host\/coordinator owns concurrent[\s\S]*draft generation/i);
-  assert.match(skill, /cache management,? and blind selection/i);
-  assert.match(skill, /coordinator-chosen draft as art-direction input/i);
+test('persisted image-generation behavior cannot be weakened', () => {
+  const record = structuredClone(routeAdaptiveFlow(input('medical-new-product')));
+  Reflect.set(record.behavior.policy.imageGeneration, 'chosenDraftShips', true);
+  assert.throws(() => parseRouteRecord(record), AdaptiveRouteError);
 });

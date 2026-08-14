@@ -3,13 +3,17 @@ import type { ReferenceAssembly, ReferenceAssemblyPiece } from './board-projecti
 
 const cell = (value: string): string => value.replace(/[\r\n]+/g, ' ').replaceAll('&', '&amp;').replaceAll('\\', '\\\\').replaceAll('|', '\\|').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('[', '\\[').replaceAll(']', '\\]').replaceAll('(', '\\(').replaceAll(')', '\\)').replaceAll('`', '\\`');
 const host = (source: string): string => { try { return new URL(source).hostname; } catch { return source; } };
-const source = (piece: RawReferenceBoard['candidates'][number]['pieces'][number]): string => piece.evidence.kind === 'component-capture'
-  ? `${host(piece.evidence.source)} — ${piece.evidence.source}`
-  : `${host(piece.evidence.sourcePage)} — ${piece.evidence.sourcePage}`;
-const part = (piece: RawReferenceBoard['candidates'][number]['pieces'][number]): string => piece.evidence.kind === 'component-capture'
-  ? `컴포넌트: ${piece.evidence.component} — ${piece.evidence.selector}`
-  : `이미지 조각: ${piece.evidence.captureRegion}`;
-const localCapture = (piece: RawReferenceBoard['candidates'][number]['pieces'][number]): string => piece.evidence.imagePath.trim() === '' ? '—' : piece.evidence.imagePath;
+const source = (piece: RawReferenceBoard['candidates'][number]['pieces'][number]): string => piece.evidence.kind === 'image-fragment'
+  ? `${host(piece.evidence.sourcePage)} — ${piece.evidence.sourcePage}`
+  : `${host(piece.evidence.source)} — ${piece.evidence.source}`;
+const part = (piece: RawReferenceBoard['candidates'][number]['pieces'][number]): string => {
+  switch (piece.evidence.kind) {
+    case 'component-capture': return `컴포넌트: ${piece.evidence.component} — ${piece.evidence.selector}`;
+    case 'image-fragment': return `이미지 조각: ${piece.evidence.captureRegion}`;
+    case 'classified-reference': return `비시각 근거: ${piece.evidence.component} — ${piece.evidence.classification}`;
+  }
+};
+const localCapture = (piece: RawReferenceBoard['candidates'][number]['pieces'][number]): string => piece.evidence.kind === 'classified-reference' || piece.evidence.imagePath.trim() === '' ? '—' : piece.evidence.imagePath;
 const rawPiece = (candidate: RawReferenceBoard['candidates'][number], piece: ReferenceAssemblyPiece): RawReferenceBoard['candidates'][number]['pieces'][number] => {
   const found = candidate.pieces.find((item) => item.slotId === piece.slotId);
   if (found === undefined) throw new Error(`candidate ${candidate.id} is missing raw evidence for ${piece.slotId}`);

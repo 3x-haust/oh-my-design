@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, watch, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -20,10 +19,11 @@ function unhealthy(result: BrowserRsHealth): Extract<BrowserRsHealth, { readonly
   return result;
 }
 
-function writeTimeoutFixture(path: string): void {
+function writeTimeoutFixture(path: string, pidPath: string): void {
   writeFileSync(path, [
     '#!/bin/sh',
     "trap '' TERM",
+    `printf "%s\\n" "$$" > ${shellQuote(pidPath)}`,
     'IFS= read -r _line',
     '',
   ].join('\n'));
@@ -74,39 +74,31 @@ function writeSupportedHelpFixture(path: string): void {
   chmodSync(path, 0o755);
 }
 
-function runningPid(path: string): number | undefined {
-  const output = execFileSync('/bin/ps', ['-axo', 'pid=,command='], { encoding: 'utf8' });
-  const match = output.split('\n').find((line) => line.includes(path));
-  if (match === undefined) return undefined;
-  const pid = Number(match.trim().split(/\s+/, 1)[0]);
-  if (!Number.isSafeInteger(pid)) throw new Error(`ps returned an invalid provider PID: ${match}`);
-  return pid;
-}
-
-async function waitForPid(path: string): Promise<number> {
-  for (let attempt = 0; attempt < 40; attempt += 1) {
-    const pid = runningPid(path);
-    if (pid !== undefined) return pid;
-    await new Promise<void>((resolve) => setTimeout(resolve, 10));
-  }
-  throw new Error(`provider did not appear in ps within 400ms: ${path}`);
-}
-
-function pidFromFile(path: string): number | undefined {
-  if (!existsSync(path)) return undefined;
+function pidFromFile(path: string): number {
   const pid = Number(readFileSync(path, 'utf8').trim());
   if (!Number.isSafeInteger(pid)) throw new Error(`fixture wrote an invalid PID: ${path}`);
   return pid;
 }
 
-async function waitForPids(parentPath: string, childPath: string): Promise<readonly [number, number]> {
-  for (let attempt = 0; attempt < 200; attempt += 1) {
-    const parentPid = pidFromFile(parentPath);
-    const childPid = pidFromFile(childPath);
-    if (parentPid !== undefined && childPid !== undefined) return [parentPid, childPid];
-    await new Promise<void>((resolve) => setTimeout(resolve, 10));
-  }
-  throw new Error('provider tree did not write both PID sentinels within 2s');
+function pidFiles(parent: string, paths: readonly string[], signal: AbortSignal): Promise<readonly number[]> {
+  return new Promise((resolve, reject) => {
+    const names = new Set(paths.map((path) => path.slice(parent.length + 1)));
+    const watcher = watch(parent);
+    const onAbort = (): void => finish(signal.reason instanceof Error ? signal.reason : new Error('PID sentinel observation aborted'));
+    const finish = (error?: Error): void => {
+      if (error === undefined && !paths.every(existsSync)) return;
+      watcher.close();
+      signal.removeEventListener('abort', onAbort);
+      if (error !== undefined) reject(error);
+      else resolve(paths.map(pidFromFile));
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+    watcher.on('change', (_event, changed) => {
+      if (changed !== null && names.has(changed.toString())) finish();
+    });
+    watcher.once('error', finish);
+    finish();
+  });
 }
 
 function running(pid: number): boolean {
@@ -119,29 +111,15 @@ function running(pid: number): boolean {
   }
 }
 
-async function reaped(pid: number, timeoutMs = 2_000): Promise<boolean> {
-  const deadline = Date.now() + timeoutMs;
-  while (running(pid)) {
-    if (Date.now() >= deadline) return false;
-    await new Promise<void>((resolve) => setTimeout(resolve, 10));
-  }
-  return true;
-}
-
-async function settlesWithin<T>(operation: Promise<T>, timeoutMs: number): Promise<T | undefined> {
-  return Promise.race([
-    operation,
-    new Promise<undefined>((resolve) => setTimeout(resolve, timeoutMs)),
-  ]);
-}
-
-test('browser-rs doctor bounds and reaps a real SIGTERM-ignoring help provider', { timeout: 8_000 }, async () => {
+test('browser-rs doctor bounds and reaps a real SIGTERM-ignoring help provider', { timeout: 8_000 }, async (context) => {
   const root = mkdtempSync(join(tmpdir(), 'omd-browser-rs-timeout-'));
   const binary = join(root, 'slow-browser-rs');
+  const childPidPath = join(root, 'provider.pid');
   let childPid: number | undefined;
   try {
     // Given: a zero-output direct shell provider that ignores SIGTERM and blocks on inherited stdin.
-    writeTimeoutFixture(binary);
+    writeTimeoutFixture(binary, childPidPath);
+    const pidReady = pidFiles(root, [childPidPath], context.signal);
 
     // When: doctor probes the real provider while the test captures its unique direct process PID.
     const doctor = doctorBrowserRs({
@@ -154,14 +132,14 @@ test('browser-rs doctor bounds and reaps a real SIGTERM-ignoring help provider',
       }),
       timeoutMs: 1_200,
     });
-    childPid = await waitForPid(binary);
-    const result = await settlesWithin(doctor, 2_000);
+    const [observedPid] = await pidReady;
+    if (observedPid === undefined) throw new Error('provider did not publish its PID sentinel');
+    childPid = observedPid;
+    const result = await doctor;
 
     // Then: the configured bound is named distinctly and the direct provider process has been reaped.
-    assert.notEqual(result, undefined, 'doctor did not settle after a SIGTERM-ignoring provider exceeded its timeout');
-    if (result === undefined) return;
     assert.deepEqual(unhealthy(result), { kind: 'unhealthy', reason: 'process', detail: 'timed out after 1200ms' });
-    assert.equal(await reaped(childPid), true, 'doctor left the SIGTERM-ignoring provider alive');
+    assert.equal(running(childPid), false, 'doctor left the SIGTERM-ignoring provider alive');
   } finally {
     if (childPid !== undefined && running(childPid)) process.kill(childPid, 'SIGKILL');
     rmSync(root, { recursive: true, force: true });
@@ -194,7 +172,7 @@ test('browser-rs doctor captures a real supported help response', async () => {
   }
 });
 
-test('browser-rs doctor bounds and reaps a descendant that inherits its help pipes', { timeout: 8_000 }, async () => {
+test('browser-rs doctor bounds and reaps a descendant that inherits its help pipes', { timeout: 8_000 }, async (context) => {
   const root = mkdtempSync(join(tmpdir(), 'omd-browser-rs-pipe-tree-'));
   const binary = join(root, 'pipe-tree-browser-rs');
   const parentPidPath = join(root, 'parent.pid');
@@ -203,6 +181,7 @@ test('browser-rs doctor bounds and reaps a descendant that inherits its help pip
   try {
     // Given: a direct shell parent and SIGTERM-ignoring child that both block on inherited standard input.
     writeInheritedPipeFixture(binary, parentPidPath, childPidPath);
+    const pidsReady = pidFiles(root, [parentPidPath, childPidPath], context.signal);
 
     // When: doctor starts the parent and the test observes both processes before its deadline.
     const doctor = doctorBrowserRs({
@@ -215,14 +194,12 @@ test('browser-rs doctor bounds and reaps a descendant that inherits its help pip
       }),
       timeoutMs: 1_200,
     });
-    providerPids = await waitForPids(parentPidPath, childPidPath);
-    const result = await settlesWithin(doctor, 4_000);
+    providerPids = await pidsReady;
+    const result = await doctor;
 
     // Then: the bounded probe settles and reaps both the direct provider and pipe-holding descendant.
-    assert.notEqual(result, undefined, 'doctor did not settle after the direct provider exited with inherited pipes still open');
-    if (result === undefined) return;
     assert.deepEqual(unhealthy(result), { kind: 'unhealthy', reason: 'process', detail: 'timed out after 1200ms' });
-    for (const pid of providerPids) assert.equal(await reaped(pid), true, `doctor left provider ${pid} alive`);
+    for (const pid of providerPids) assert.equal(running(pid), false, `doctor left provider ${pid} alive`);
   } finally {
     for (const pid of providerPids) if (running(pid)) process.kill(pid, 'SIGKILL');
     rmSync(root, { recursive: true, force: true });

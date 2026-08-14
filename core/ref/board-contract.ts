@@ -1,10 +1,11 @@
 import type { BlueprintNode, Invariants, Reference } from '../types.ts';
 
 export const REFERENCE_BOARD_SCHEMA_VERSION = 'reference-board-v1' as const;
+export const REFERENCE_BOARD_V2_SCHEMA_VERSION = 'reference-board-v2' as const;
 export const REFERENCE_ASSEMBLY_SCHEMA_VERSION = 'reference-assembly-v1' as const;
-export const BOARD_TAKE_VALUES = ['structure', 'proportion', 'density', 'rhythm', 'motion'] as const;
+export const BOARD_TAKE_VALUES = ['structure', 'proportion', 'density', 'rhythm', 'motion', 'content', 'voice', 'rejection'] as const;
 export type BoardTake = (typeof BOARD_TAKE_VALUES)[number];
-export type BoardSourceKind = 'component-capture' | 'image-fragment';
+export type BoardSourceKind = 'component-capture' | 'image-fragment' | 'classified-reference';
 
 export const REFERENCE_RIGHTS_VALUES = ['lawful', 'restricted', 'unknown'] as const;
 export const REFERENCE_SIGNAL_VALUES = ['high-visual-system', 'high-motion', 'supporting-component', 'supporting-content', 'anti-reference'] as const;
@@ -48,7 +49,15 @@ export type ReferenceBoardImageFragmentPiece = ReferenceBoardPieceBase & {
   readonly sourceKind: 'image-fragment';
 };
 
-export type ReferenceBoardPiece = ReferenceBoardComponentPiece | ReferenceBoardImageFragmentPiece;
+export type ReferenceBoardClassifiedPiece = ReferenceBoardPieceBase & {
+  readonly sourceKind: 'classified-reference';
+  readonly classification: {
+    readonly kind: 'content-only' | 'anti-reference';
+    readonly sha256: string;
+  };
+};
+
+export type ReferenceBoardPiece = ReferenceBoardComponentPiece | ReferenceBoardImageFragmentPiece | ReferenceBoardClassifiedPiece;
 
 export type ReferenceBoardCandidate = {
   readonly id: string;
@@ -58,11 +67,18 @@ export type ReferenceBoardCandidate = {
   readonly pieces: readonly ReferenceBoardPiece[];
 };
 
-export type ReferenceBoardManifest = {
-  readonly schemaVersion: typeof REFERENCE_BOARD_SCHEMA_VERSION;
-  readonly frameSha256: string;
-  readonly candidates: readonly ReferenceBoardCandidate[];
-};
+export type ReferenceBoardManifest =
+  | {
+    readonly schemaVersion: typeof REFERENCE_BOARD_SCHEMA_VERSION;
+    readonly frameSha256: string;
+    readonly candidates: readonly ReferenceBoardCandidate[];
+  }
+  | {
+    readonly schemaVersion: typeof REFERENCE_BOARD_V2_SCHEMA_VERSION;
+    readonly projectSha256: string;
+    readonly frameSha256: string;
+    readonly candidates: readonly ReferenceBoardCandidate[];
+  };
 
 export type ResolvedComponentCapturePiece = ReferenceBoardComponentPiece & {
   readonly reference: Reference;
@@ -130,13 +146,25 @@ export type ResolvedImageFragmentPiece = ReferenceBoardImageFragmentPiece & {
   readonly transfer: ImageFragmentTransfer;
 };
 
-export type ResolvedReferenceBoardPiece = ResolvedComponentCapturePiece | ResolvedImageFragmentPiece;
+export type ClassifiedReferenceTransfer =
+  | { readonly classification: 'content-only'; readonly principles: readonly string[] }
+  | { readonly classification: 'anti-reference'; readonly constraints: readonly string[] };
+
+export type ResolvedClassifiedReferencePiece = ReferenceBoardClassifiedPiece & {
+  readonly reference: Pick<Reference, 'source' | 'component' | 'capturedAt'>;
+  readonly transfer: ClassifiedReferenceTransfer;
+};
+
+export type ResolvedReferenceBoardPiece = ResolvedComponentCapturePiece | ResolvedImageFragmentPiece | ResolvedClassifiedReferencePiece;
 
 export type ResolvedReferenceBoardCandidate = Omit<ReferenceBoardCandidate, 'pieces'> & {
   readonly pieces: readonly ResolvedReferenceBoardPiece[];
 };
 
-export type ResolvedReferenceBoard = Omit<ReferenceBoardManifest, 'candidates'> & {
+export type ResolvedReferenceBoard = {
+  readonly schemaVersion: ReferenceBoardManifest['schemaVersion'];
+  readonly projectSha256?: string;
+  readonly frameSha256: string;
   readonly candidates: readonly ResolvedReferenceBoardCandidate[];
 };
 

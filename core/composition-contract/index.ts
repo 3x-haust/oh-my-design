@@ -6,11 +6,19 @@ import { loadRefs } from '../ref/store.ts';
 import { artDirectionSha256, validateArtDirectionPointer, validateArtDirectionRecord } from '../art-direction/schema.ts';
 import { parseReferenceHandoffReceipt } from '../ref/reference-handoff.ts';
 import { motionResolutionProjectionSha256, parseReferenceSelectionV2, referenceSelectionV2Sha256, validateMotionResolutionProjection } from '../ref/reference-selection.ts';
+import type { ProjectRunInvocation } from '../runtime/invocation.ts';
+import { createAdaptiveSourceSealRoute } from '../source-seal/adaptive-inputs.ts';
 
+/** Historical unversioned Markdown ABI. Keep this list stable for persisted artifacts and source seals. */
 export const COMPOSITION_SECTIONS = [
   'Input fingerprint', 'Experience spine', 'Section dependency', 'Grid and alignment',
   'Density and visual mass', 'Focal hierarchy', 'Domain form grammar', 'Media roles',
   'Responsive recomposition', 'Candidate axes', 'Transfer boundary',
+] as const;
+
+/** Current authoring/publication ABI. `Colour roles` is the additive version boundary. */
+export const CURRENT_COMPOSITION_SECTIONS = [
+  ...COMPOSITION_SECTIONS.slice(0, -1), 'Colour roles', 'Transfer boundary',
 ] as const;
 
 // Allowed-but-optional H2 headings whose row/field schema is owned by another canonical
@@ -23,6 +31,34 @@ export interface CompositionContractFinding {
   id: 'COMPOSITION-MISSING' | 'COMPOSITION-SECTION' | 'COMPOSITION-HASH' | 'COMPOSITION-STALE' | 'COMPOSITION-SCOUT' | 'COMPOSITION-SYNTHESIS';
   path: string;
   message: string;
+}
+
+const COLOUR_ROLES = ['Dominant', 'Secondary', 'Accent', 'Semantic success', 'Semantic error'] as const;
+const COLOUR_ROLE_PLACEHOLDER = /\b(?:tbd|todo|placeholder|later|unknown)\b/i;
+
+export function validateColourRoles(lines: readonly string[]): string[] {
+  const findings: string[] = [];
+  const rows = lines
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith('|') && line.endsWith('|'))
+    .map((line) => line.slice(1, -1).split('|').map((cell) => cell.trim()))
+    .filter((cells) => cells.length === 3 && cells[0] !== 'Role' && !cells.every((cell) => /^-+$/.test(cell)));
+  const seen = new Set<string>();
+  for (const [role = '', token = '', use = ''] of rows) {
+    if (!(COLOUR_ROLES as readonly string[]).includes(role)) {
+      findings.push(`unknown colour role: ${role || '(empty)'}`);
+      continue;
+    }
+    if (seen.has(role)) findings.push(`duplicate colour role: ${role}`);
+    seen.add(role);
+    if (!token || COLOUR_ROLE_PLACEHOLDER.test(token)) findings.push(`placeholder token/value for ${role}`);
+    if (!use || COLOUR_ROLE_PLACEHOLDER.test(use)) findings.push(`placeholder intended use for ${role}`);
+    if (role === 'Accent' && !/(primary action|selected state|critical)/i.test(use)) {
+      findings.push('Accent intended use must name a primary action, selected state, or critical state');
+    }
+  }
+  for (const role of COLOUR_ROLES) if (!seen.has(role)) findings.push(`missing colour role: ${role}`);
+  return findings;
 }
 
 export const SYNTHESIS_SECTION = 'Reference synthesis';
@@ -52,7 +88,7 @@ function parseSections(markdown: string): ParsedSections {
     const heading = /^##\s+(.+?)\s*$/.exec(line);
     if (heading) {
       const name = heading[1]!;
-      if (![...COMPOSITION_SECTIONS, SYNTHESIS_SECTION, ...AUXILIARY_SECTIONS].includes(name as never)) findings.push(sectionFinding(name, `unknown H2 section: ${name}`));
+      if (![...CURRENT_COMPOSITION_SECTIONS, SYNTHESIS_SECTION, ...AUXILIARY_SECTIONS].includes(name as never)) findings.push(sectionFinding(name, `unknown H2 section: ${name}`));
       else if (sections.has(name)) findings.push(sectionFinding(name, `duplicate H2 section: ${name}`));
       else sections.set(name, []);
       current = name;
@@ -65,7 +101,13 @@ function parseSections(markdown: string): ParsedSections {
   return { sections, findings };
 }
 
-function validateFingerprint(lines: string[], inputs: CompositionContractInputs): CompositionContractFinding[] {
+type ArtDirectionFingerprintRequirement = 'selected' | 'skipped';
+
+function validateFingerprint(
+  lines: string[],
+  inputs: CompositionContractInputs,
+  artDirection: ArtDirectionFingerprintRequirement,
+): CompositionContractFinding[] {
   const findings: CompositionContractFinding[] = [];
   const values = new Map<string, string>();
   for (const line of lines) {
@@ -78,16 +120,25 @@ function validateFingerprint(lines: string[], inputs: CompositionContractInputs)
   }
   const required: Array<[string, string, string | undefined]> = [
     ['Frame', 'frame.md', inputs.frame], ['Copy deck', 'copy-deck.md', inputs.copyDeck], ['Type proof', 'type-proof.md', inputs.typeProof],
+  ];
+  const artDirectionInputs: Array<[string, string, string | undefined]> = [
     ['Art direction record', 'art-direction.json', inputs.artDirectionRecord],
     ['Motion resolution projection', 'motion resolution projection', inputs.motionResolutionProjection],
     ['Settled selection', 'settled-reference-selections', inputs.settledSelection],
     ['Composer handoff', 'reference-handoffs/composer.json', inputs.composerHandoff],
   ];
+  if (artDirection === 'selected') required.push(...artDirectionInputs);
+  else for (const [label] of artDirectionInputs) {
+    if (values.has(`${label} SHA-256`)) findings.push({
+      id: 'COMPOSITION-HASH', path: '.omd/composition.md#Input fingerprint',
+      message: `${label} SHA-256 must be omitted when the exact current adaptive route skips art-direction`,
+    });
+  }
   for (const [label, filename, actual] of required) {
     const value = values.get(`${label} SHA-256`);
     if (!value || !/^[0-9a-f]{64}$/.test(value)) findings.push({ id: 'COMPOSITION-HASH', path: '.omd/composition.md#Input fingerprint', message: `${label} SHA-256 must be exactly 64 lowercase hex characters` });
     else if (actual === undefined) findings.push({ id: 'COMPOSITION-STALE', path: `.omd/${filename}`, message: `${filename} is missing; composition cannot be current` });
-    else if (actual !== undefined && value !== actual) findings.push({ id: 'COMPOSITION-STALE', path: `.omd/${filename}`, message: `${filename} changed after composition was written` });
+    else if (value !== actual) findings.push({ id: 'COMPOSITION-STALE', path: `.omd/${filename}`, message: `${filename} changed after composition was written` });
   }
   const scout = values.get('Scout SHA-256');
   if (inputs.scout !== undefined) {
@@ -211,12 +262,20 @@ export interface CompositionContractInputs {
   userRefLabels?: string[];
 }
 
-export function validateCompositionContractSource(inputs: CompositionContractInputs): CompositionContractFinding[] {
+function validateCompositionContractSourceFor(
+  inputs: CompositionContractInputs,
+  requiredSections: readonly string[],
+  artDirection: ArtDirectionFingerprintRequirement = 'selected',
+): CompositionContractFinding[] {
   if (inputs.contract === undefined) return [{ id: 'COMPOSITION-MISSING', path: '.omd/composition.md', message: 'composition contract is missing' }];
   const parsed = parseSections(inputs.contract);
   const findings = [...parsed.findings];
-  for (const section of COMPOSITION_SECTIONS) if (!parsed.sections.get(section)?.join('\n').trim()) findings.push(sectionFinding(section, `required section is missing or empty: ${section}`));
-  findings.push(...validateFingerprint(parsed.sections.get('Input fingerprint') ?? [], inputs));
+  for (const section of requiredSections) if (!parsed.sections.get(section)?.join('\n').trim()) findings.push(sectionFinding(section, `required section is missing or empty: ${section}`));
+  const colourRoleLines = parsed.sections.get('Colour roles');
+  if (colourRoleLines !== undefined) {
+    for (const message of validateColourRoles(colourRoleLines)) findings.push(sectionFinding('Colour roles', message));
+  }
+  findings.push(...validateFingerprint(parsed.sections.get('Input fingerprint') ?? [], inputs, artDirection));
   const synthesisLines = parsed.sections.get(SYNTHESIS_SECTION);
   const synthesis = synthesisLines?.join('\n').trim() ?? '';
   const result = synthesis ? validateReferenceSynthesis(synthesisLines!) : { findings: [], sourceRefs: [] };
@@ -227,7 +286,25 @@ export function validateCompositionContractSource(inputs: CompositionContractInp
   return findings.sort((a, b) => a.path.localeCompare(b.path) || a.id.localeCompare(b.id) || a.message.localeCompare(b.message));
 }
 
-export function validateCompositionContract(root: string): CompositionContractFinding[] {
+/** Compatibility checker for historical unversioned artifacts. Present Colour roles rows are still validated. */
+export function validateCompositionContractSource(inputs: CompositionContractInputs): CompositionContractFinding[] {
+  return validateCompositionContractSourceFor(inputs, COMPOSITION_SECTIONS);
+}
+
+/** Current authoring/publication checker. */
+export function validateCurrentCompositionContractSource(inputs: CompositionContractInputs): CompositionContractFinding[] {
+  return validateCompositionContractSourceFor(inputs, CURRENT_COMPOSITION_SECTIONS);
+}
+
+type CompositionSourceValidator = (
+  inputs: CompositionContractInputs,
+  artDirection?: ArtDirectionFingerprintRequirement,
+) => CompositionContractFinding[];
+function validateCompositionContractWith(
+  root: string,
+  sourceValidator: CompositionSourceValidator,
+  invocation?: ProjectRunInvocation,
+): CompositionContractFinding[] {
   const omd = join(root, '.omd');
   const readHash = (filename: string): string | undefined => {
     const path = join(omd, filename);
@@ -254,22 +331,40 @@ export function validateCompositionContract(root: string): CompositionContractFi
   const frame = readHash('frame.md'); const copyDeck = readHash('copy-deck.md'); const typeProof = readHash('type-proof.md'); const scout = readHash('scout.md');
   const userRefLabels = loadRefs(root).filter((ref) => ref.origin === 'user').map((ref) => refIdentity(ref.source, ref.component)).sort();
   const derived: Omit<CompositionContractInputs, 'contract' | 'frame' | 'copyDeck' | 'typeProof' | 'scout' | 'userRefLabels'> = {};
-  let record: ReturnType<typeof validateArtDirectionRecord> | undefined;
-  const pointerValue = readJson('art-direction.json');
-  if (pointerValue !== undefined) {
-    try {
-      const pointer = validateArtDirectionPointer(pointerValue);
-      const recordValue = readJson(pointer.record);
-      if (recordValue !== undefined) {
-        const candidate = validateArtDirectionRecord(recordValue);
-        if (pointer.sha256 !== artDirectionSha256(candidate)) stale('art-direction.json', 'art-direction.json points to a stale record; composition cannot be current');
-        else {
-          derived.artDirectionRecord = pointer.sha256;
-          record = candidate;
-        }
+  let artDirectionRequirement: ArtDirectionFingerprintRequirement = 'selected';
+  if (existsSync(join(omd, 'route.json'))) {
+    if (invocation === undefined) stale('route.json', 'adaptive route authority is required to validate composition');
+    else {
+      try {
+        const route = createAdaptiveSourceSealRoute(root, invocation);
+        const artDirection = route.stages.find((stage) => stage.id === 'art-direction');
+        const composition = route.stages.find((stage) => stage.id === 'composition');
+        if (artDirection === undefined || composition?.status !== 'selected') {
+          stale('route.json', 'composition is not selected by the exact current adaptive route');
+        } else if (artDirection.status === 'skipped') artDirectionRequirement = 'skipped';
+      } catch (error) {
+        stale('route.json', `adaptive route, source, or authority is stale: ${error instanceof Error ? error.message : String(error)}`);
       }
-    } catch {
-      stale('art-direction.json', 'art-direction.json is invalid; composition cannot be current');
+    }
+  }
+  let record: ReturnType<typeof validateArtDirectionRecord> | undefined;
+  if (artDirectionRequirement === 'selected') {
+    const pointerValue = readJson('art-direction.json');
+    if (pointerValue !== undefined) {
+      try {
+        const pointer = validateArtDirectionPointer(pointerValue);
+        const recordValue = readJson(pointer.record);
+        if (recordValue !== undefined) {
+          const candidate = validateArtDirectionRecord(recordValue);
+          if (pointer.sha256 !== artDirectionSha256(candidate)) stale('art-direction.json', 'art-direction.json points to a stale record; composition cannot be current');
+          else {
+            derived.artDirectionRecord = pointer.sha256;
+            record = candidate;
+          }
+        }
+      } catch {
+        stale('art-direction.json', 'art-direction.json is invalid; composition cannot be current');
+      }
     }
   }
   if (record !== undefined) {
@@ -309,7 +404,7 @@ export function validateCompositionContract(root: string): CompositionContractFi
       }
     }
   }
-  return [...validateCompositionContractSource({
+  return [...sourceValidator({
     ...(existsSync(contractPath) ? { contract: readFileSync(contractPath, 'utf8') } : {}),
     ...(frame ? { frame } : {}),
     ...(copyDeck ? { copyDeck } : {}),
@@ -317,5 +412,23 @@ export function validateCompositionContract(root: string): CompositionContractFi
     ...(scout ? { scout } : {}),
     ...derived,
     ...(userRefLabels.length ? { userRefLabels } : {}),
-  }), ...lineage].sort((a, b) => a.path.localeCompare(b.path) || a.id.localeCompare(b.id) || a.message.localeCompare(b.message));
+  }, artDirectionRequirement), ...lineage].sort((a, b) => a.path.localeCompare(b.path) || a.id.localeCompare(b.id) || a.message.localeCompare(b.message));
+}
+
+/** Read/check compatibility path used by historical artifacts and immutable evidence checks. */
+export function validateCompositionContract(root: string, invocation?: ProjectRunInvocation): CompositionContractFinding[] {
+  return validateCompositionContractWith(
+    root,
+    (inputs, artDirection) => validateCompositionContractSourceFor(inputs, COMPOSITION_SECTIONS, artDirection),
+    invocation,
+  );
+}
+
+/** Strict path used only when authoring or publishing a current composition. */
+export function validateCurrentCompositionContract(root: string, invocation?: ProjectRunInvocation): CompositionContractFinding[] {
+  return validateCompositionContractWith(
+    root,
+    (inputs, artDirection) => validateCompositionContractSourceFor(inputs, CURRENT_COMPOSITION_SECTIONS, artDirection),
+    invocation,
+  );
 }

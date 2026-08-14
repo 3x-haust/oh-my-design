@@ -1,4 +1,4 @@
-import { constants as fsConstants, closeSync, fstatSync, fsyncSync, ftruncateSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, unlinkSync, writeSync } from 'node:fs';
+import { chmodSync, constants as fsConstants, closeSync, fstatSync, fsyncSync, ftruncateSync, linkSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, unlinkSync, writeSync } from 'node:fs';
 import type { Stats } from 'node:fs';
 import { hostname } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
@@ -14,6 +14,7 @@ export type ProjectWriteRequest = {
   readonly relativePath: string;
   readonly content: string | Uint8Array;
   readonly invocation: ProjectRunInvocation;
+  readonly mode?: number;
 };
 export type ProjectLockRequest = {
   readonly projectRoot: string;
@@ -24,6 +25,8 @@ export type ProjectWriteAdapter = {
   readonly projectRoot: string;
   mkdir(relativePath: string): string;
   write(relativePath: string, content: string | Uint8Array): string;
+  writeContentAddressed(relativePath: string, content: string | Uint8Array): string;
+  remove(relativePath: string): string;
 };
 
 /**
@@ -47,8 +50,16 @@ export type ExternalObservationFileRequest = {
 
 export type ExternalObservationDirectoryRequest = Omit<ExternalObservationFileRequest, 'content'>;
 const trustedAdapters = new WeakSet<ProjectWriteAdapter>();
+const trustedAdapterMetadata = new WeakMap<ProjectWriteAdapter, Readonly<{
+  projectRoot: string;
+  mkdir: ProjectWriteAdapter['mkdir'];
+  write: ProjectWriteAdapter['write'];
+  writeContentAddressed: ProjectWriteAdapter['writeContentAddressed'];
+  remove: ProjectWriteAdapter['remove'];
+  invocation: ProjectRunInvocation;
+}>>();
 const PROJECT_MUTATION_LOCK = '.omd-project-mutation.lock';
-type ActiveMutationLock = { readonly invocation: ProjectRunInvocation; depth: number; readonly releaseFileLock: () => void };
+type ActiveMutationLock = { readonly invocation: ProjectRunInvocation; readonly nonReentrant: boolean; depth: number; readonly releaseFileLock: () => void };
 const activeMutationLocks = new Map<string, ActiveMutationLock>();
 
 export class ProjectWriteError extends Error {
@@ -115,6 +126,17 @@ function openStableRegularProjectFile(pathname: string, flags: number, mode = 0o
   }
 }
 
+function writeFully(descriptor: number, content: string | Uint8Array): void {
+  const bytes = typeof content === 'string' ? Buffer.from(content, 'utf8') : content;
+  let offset = 0;
+  while (offset < bytes.byteLength) {
+    const written = writeSync(descriptor, bytes, offset, bytes.byteLength - offset, null);
+    if (!Number.isSafeInteger(written) || written <= 0) {
+      throw new ProjectWriteError('project write made no progress');
+    }
+    offset += written;
+  }
+}
 function writeStableProjectFile(target: string, content: string | Uint8Array, immutable: boolean): void {
   requireRegularProjectLeafOrMissing(target, 'project write target');
   const flags = immutable
@@ -124,11 +146,8 @@ function writeStableProjectFile(target: string, content: string | Uint8Array, im
   try {
     descriptor = openStableRegularProjectFile(target, flags);
     if (!immutable) ftruncateSync(descriptor, 0);
-    if (typeof content === 'string') {
-      writeSync(descriptor, content);
-    } else {
-      writeSync(descriptor, content, 0, content.byteLength, null);
-    }
+    writeFully(descriptor, content);
+    fsyncSync(descriptor);
     const opened = fstatSync(descriptor);
     const entry = lstatSync(target);
     if (!sameFileIdentity(opened, entry) || entry.isSymbolicLink()) {
@@ -139,6 +158,45 @@ function writeStableProjectFile(target: string, content: string | Uint8Array, im
   }
 }
 
+function fsyncDirectory(directory: string): void {
+  const descriptor = openSync(directory, fsConstants.O_RDONLY);
+  try {
+    const stat = fstatSync(descriptor);
+    if (!stat.isDirectory()) throw new ProjectWriteError('project write directory changed before durability sync');
+    fsyncSync(descriptor);
+  } finally {
+    closeSync(descriptor);
+  }
+}
+
+function ensureProjectDirectoryDurably(projectRoot: string, directory: string): void {
+  const root = canonicalProjectRoot(projectRoot);
+  const target = resolve(directory);
+  if (target !== root && !isWithinProjectRoot(root, target)) {
+    throw new ProjectWriteError('project directory escapes the project root');
+  }
+  const missing: string[] = [];
+  let current = target;
+  for (;;) {
+    try {
+      const metadata = lstatSync(current);
+      if (metadata.isSymbolicLink() || !metadata.isDirectory()) {
+        throw new ProjectWriteError('project directory target must be a real directory, not a symlink');
+      }
+      break;
+    } catch (error) {
+      if (error instanceof ProjectWriteError) throw error;
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      if (current === root) throw new ProjectWriteError('project root does not exist');
+      missing.push(current);
+      current = dirname(current);
+    }
+  }
+  for (const path of missing.reverse()) {
+    mkdirSync(path);
+    fsyncDirectory(dirname(path));
+  }
+}
 
 function requireGuardedProjectWrite(
   projectRoot: string,
@@ -291,9 +349,38 @@ export function writeProjectFile(request: ProjectWriteRequest): string {
     requireGuardedProjectWrite(request.projectRoot, request.invocation);
     const target = resolveProjectPath(request.projectRoot, request.relativePath);
     requireRealProjectAncestors(request.projectRoot, target);
-    mkdirSync(dirname(target), { recursive: true });
+    ensureProjectDirectoryDurably(request.projectRoot, dirname(target));
     requireRealProjectAncestors(request.projectRoot, target);
     writeStableProjectFile(target, request.content, false);
+    fsyncDirectory(dirname(target));
+    return target;
+  });
+}
+
+/**
+ * Delete one project file under the same lock and activation every write takes.
+ *
+ * Cleaning is a project mutation, not a convenience: a direct `unlinkSync` outside this boundary
+ * would delete records while another run holds the mutation lock, and the mutation inventory
+ * rejects it for exactly that reason. Directories are never removed, and a target that is not a
+ * regular file is refused rather than followed.
+ */
+export function removeProjectFile(request: Omit<ProjectWriteRequest, 'content'>): string {
+  return withProjectMutationLock(request.projectRoot, request.invocation, () => {
+    requireGuardedProjectWrite(request.projectRoot, request.invocation);
+    const target = resolveProjectPath(request.projectRoot, request.relativePath);
+    requireRealProjectAncestors(request.projectRoot, target);
+    let stats: Stats;
+    try {
+      stats = lstatSync(target);
+    } catch (error) {
+      const nodeError = error as NodeJS.ErrnoException;
+      if (nodeError.code === 'ENOENT') return target;
+      throw error;
+    }
+    if (!stats.isFile()) throw new ProjectWriteError(`${request.relativePath} is not a regular project file`);
+    unlinkSync(target);
+    fsyncDirectory(dirname(target));
     return target;
   });
 }
@@ -304,10 +391,11 @@ export function writeImmutableProjectFile(request: ProjectWriteRequest): string 
     requireGuardedProjectWrite(request.projectRoot, request.invocation);
     const target = resolveProjectPath(request.projectRoot, request.relativePath);
     requireRealProjectAncestors(request.projectRoot, target);
-    mkdirSync(dirname(target), { recursive: true });
+    ensureProjectDirectoryDurably(request.projectRoot, dirname(target));
     requireRealProjectAncestors(request.projectRoot, target);
     try {
       writeStableProjectFile(target, request.content, true);
+      fsyncDirectory(dirname(target));
     } catch (error) {
       const nodeError = error as NodeJS.ErrnoException;
       if (nodeError.code === 'EEXIST') throw new ProjectWriteError(`immutable project artifact already exists: ${request.relativePath}`);
@@ -339,50 +427,80 @@ export function writeContentAddressedProjectFile(request: ProjectWriteRequest): 
 function acquireRawProjectLock(request: ProjectLockRequest, content = ''): () => void {
   requireGuardedProjectWrite(request.projectRoot, request.invocation);
   const target = resolveProjectPath(request.projectRoot, request.relativePath);
+  const directory = dirname(target);
   requireRealProjectAncestors(request.projectRoot, target);
   requireRegularProjectLeafOrMissing(target, 'project lock');
-  let descriptor: number | undefined;
-  try {
-    descriptor = openStableRegularProjectFile(target, fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL);
-    if (content !== '') {
-      writeSync(descriptor, content);
-      fsyncSync(descriptor);
+  const temporary = `${target}.prepare-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  let temporaryDescriptor: number | undefined;
+  let lockDescriptor: number | undefined;
+  let claimedIdentity: Stats | undefined;
+  const cleanClaim = (): void => {
+    if (claimedIdentity === undefined) return;
+    try {
+      const entry = lstatSync(target);
+      if (sameFileIdentity(entry, claimedIdentity) && entry.isFile() && !entry.isSymbolicLink()) unlinkSync(target);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     }
-    requireRegularProjectLock(target);
+  };
+  try {
+    temporaryDescriptor = openStableRegularProjectFile(
+      temporary,
+      fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL,
+    );
+    writeFully(temporaryDescriptor, content);
+    fsyncSync(temporaryDescriptor);
+    closeSync(temporaryDescriptor);
+    temporaryDescriptor = undefined;
+    linkSync(temporary, target);
+    claimedIdentity = lstatSync(target);
+    if (!claimedIdentity.isFile() || claimedIdentity.isSymbolicLink()) {
+      throw new ProjectWriteError('project lock changed during acquisition');
+    }
+    unlinkSync(temporary);
+    const directoryDescriptor = openSync(directory, fsConstants.O_RDONLY | fsConstants.O_DIRECTORY | fsConstants.O_NOFOLLOW);
+    try { fsyncSync(directoryDescriptor); } finally { closeSync(directoryDescriptor); }
+    lockDescriptor = openStableRegularProjectFile(target, fsConstants.O_RDONLY);
+    const lockIdentity = fstatSync(lockDescriptor);
+    const lockEntry = lstatSync(target);
+    if (!sameFileIdentity(lockIdentity, lockEntry) || lockEntry.isSymbolicLink() || !lockEntry.isFile()) {
+      throw new ProjectWriteError('project lock changed during acquisition');
+    }
+    claimedIdentity = undefined;
+    let closed = false;
+    let released = false;
+    return () => {
+      if (released) return;
+      requireGuardedProjectWrite(request.projectRoot, request.invocation);
+      const opened = fstatSync(lockDescriptor as number);
+      const entry = lstatSync(target);
+      if (!sameFileIdentity(opened, lockIdentity) || !sameFileIdentity(opened, entry) || entry.isSymbolicLink() || !entry.isFile()) {
+        throw new ProjectWriteError('project lock changed before release');
+      }
+      if (!closed) {
+        closeSync(lockDescriptor as number);
+        closed = true;
+      }
+      const finalEntry = lstatSync(target);
+      if (!sameFileIdentity(finalEntry, lockIdentity) || finalEntry.isSymbolicLink() || !finalEntry.isFile()) {
+        throw new ProjectWriteError('project lock changed during release');
+      }
+      unlinkSync(target);
+      released = true;
+    };
   } catch (error) {
-    const nodeError = error as NodeJS.ErrnoException;
-    if (nodeError.code === 'EEXIST') throw new ProjectWriteError(`project lock already exists: ${request.relativePath}`);
+    if (lockDescriptor !== undefined) closeSync(lockDescriptor);
+    if (temporaryDescriptor !== undefined) closeSync(temporaryDescriptor);
+    try { cleanClaim(); } finally {
+      try { unlinkSync(temporary); } catch (cleanupError) {
+        if ((cleanupError as NodeJS.ErrnoException).code !== 'ENOENT') throw cleanupError;
+      }
+    }
+    if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
+      throw new ProjectWriteError(`project lock already exists: ${request.relativePath}`);
+    }
     throw error;
   }
-  if (descriptor === undefined) throw new ProjectWriteError('project lock could not be opened');
-  const lockDescriptor = descriptor;
-  const lockIdentity = fstatSync(lockDescriptor);
-  const lockEntry = lstatSync(target);
-  if (!sameFileIdentity(lockIdentity, lockEntry) || lockEntry.isSymbolicLink() || !lockEntry.isFile()) {
-    closeSync(lockDescriptor);
-    throw new ProjectWriteError('project lock changed during acquisition');
-  }
-  let closed = false;
-  let released = false;
-  return () => {
-    if (released) return;
-    requireGuardedProjectWrite(request.projectRoot, request.invocation);
-    const opened = fstatSync(lockDescriptor);
-    const entry = lstatSync(target);
-    if (!sameFileIdentity(opened, lockIdentity) || !sameFileIdentity(opened, entry) || entry.isSymbolicLink() || !entry.isFile()) {
-      throw new ProjectWriteError('project lock changed before release');
-    }
-    if (!closed) {
-      closeSync(lockDescriptor);
-      closed = true;
-    }
-    const finalEntry = lstatSync(target);
-    if (!sameFileIdentity(finalEntry, lockIdentity) || finalEntry.isSymbolicLink() || !finalEntry.isFile()) {
-      throw new ProjectWriteError('project lock changed during release');
-    }
-    unlinkSync(target);
-    released = true;
-  };
 }
 
 const mutationOwner = (): string => JSON.stringify({
@@ -460,12 +578,18 @@ function mutationRelease(root: string, invocation: ProjectRunInvocation, state: 
  * Serializes every cooperating project mutation with final publication and destructive GC.
  * A dead same-host owner is recovered only after stable inode checks and an ESRCH liveness result.
  */
-export function acquireProjectMutationLock(projectRoot: string, invocation: ProjectRunInvocation): () => void {
+export function acquireProjectMutationLock(
+  projectRoot: string,
+  invocation: ProjectRunInvocation,
+  options: { nonReentrant?: boolean } = {},
+): () => void {
   requireGuardedProjectWrite(projectRoot, invocation);
   const root = canonicalProjectRoot(projectRoot);
   const active = activeMutationLocks.get(root);
   if (active !== undefined) {
-    if (active.invocation !== invocation) throw new ProjectWriteError('project mutation lock is owned by another invocation');
+    if (active.invocation !== invocation || active.nonReentrant || options.nonReentrant) {
+      throw new ProjectWriteError('project mutation lock is owned by another invocation');
+    }
     active.depth += 1;
     return mutationRelease(root, invocation, active);
   }
@@ -484,7 +608,7 @@ export function acquireProjectMutationLock(projectRoot: string, invocation: Proj
       mutationOwner(),
     );
   }
-  const state: ActiveMutationLock = { invocation, depth: 1, releaseFileLock };
+  const state: ActiveMutationLock = { invocation, nonReentrant: options.nonReentrant === true, depth: 1, releaseFileLock };
   activeMutationLocks.set(root, state);
   return mutationRelease(root, invocation, state);
 }
@@ -522,15 +646,24 @@ export function replaceProjectFileAtomically(request: ProjectWriteRequest): stri
     const target = resolveProjectPath(request.projectRoot, request.relativePath);
     requireRealProjectAncestors(request.projectRoot, target);
     const directory = dirname(target);
-    mkdirSync(directory, { recursive: true });
+    ensureProjectDirectoryDurably(request.projectRoot, directory);
     requireRealProjectAncestors(request.projectRoot, target);
     requireRegularProjectLeafOrMissing(target, 'project pointer');
     const temporary = `${target}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
     try {
       writeStableProjectFile(temporary, request.content, true);
+      if (request.mode !== undefined) {
+        if (!Number.isInteger(request.mode) || request.mode < 0 || request.mode > 0o777) {
+          throw new ProjectWriteError('project file mode is invalid');
+        }
+        chmodSync(temporary, request.mode);
+        const temporaryDescriptor = openStableRegularProjectFile(temporary, fsConstants.O_RDONLY);
+        try { fsyncSync(temporaryDescriptor); } finally { closeSync(temporaryDescriptor); }
+      }
       requireRegularProjectLeafOrMissing(target, 'project pointer');
       requireRealProjectAncestors(request.projectRoot, target);
       renameSync(temporary, target);
+      fsyncDirectory(directory);
     } finally {
       try { unlinkSync(temporary); } catch (error) {
         const nodeError = error as NodeJS.ErrnoException;
@@ -559,7 +692,7 @@ export function createProjectDirectory(
       const nodeError = error as NodeJS.ErrnoException;
       if (nodeError.code !== 'ENOENT') throw error;
     }
-    mkdirSync(target, { recursive: true });
+    ensureProjectDirectoryDurably(projectRoot, target);
     requireRealProjectAncestors(projectRoot, target);
     const metadata = lstatSync(target);
     if (metadata.isSymbolicLink() || !metadata.isDirectory()) {
@@ -589,22 +722,56 @@ export function createProjectWriteAdapter(
     write(relativePath, content) {
       return writeProjectFile({ projectRoot: resolvedProjectRoot, relativePath, content, invocation });
     },
+    writeContentAddressed(relativePath, content) {
+      return writeContentAddressedProjectFile({ projectRoot: resolvedProjectRoot, relativePath, content, invocation });
+    },
+    remove(relativePath) {
+      return removeProjectFile({ projectRoot: resolvedProjectRoot, relativePath, invocation });
+    },
   };
   trustedAdapters.add(adapter);
-  return adapter;
+  trustedAdapterMetadata.set(adapter, Object.freeze({
+    projectRoot: resolvedProjectRoot,
+    mkdir: adapter.mkdir,
+    write: adapter.write,
+    writeContentAddressed: adapter.writeContentAddressed,
+    remove: adapter.remove,
+    invocation,
+  }));
+  return Object.freeze(adapter);
 }
 
 export function requireProjectWriteAdapter(
   projectRoot: string,
   adapter: ProjectWriteAdapter | undefined,
 ): ProjectWriteAdapter {
-  if (!adapter || typeof adapter.mkdir !== 'function' || typeof adapter.write !== 'function' || !trustedAdapters.has(adapter)) {
-    throw new ProjectWriteError('a trusted active project-write adapter is required');
+  const metadata = adapter === undefined ? undefined : trustedAdapterMetadata.get(adapter);
+  if (!adapter || !metadata
+    || adapter.projectRoot !== metadata.projectRoot
+    || adapter.mkdir !== metadata.mkdir
+    || adapter.write !== metadata.write
+    || adapter.writeContentAddressed !== metadata.writeContentAddressed
+    || adapter.remove !== metadata.remove
+    || !Object.isFrozen(adapter)
+    || !trustedAdapters.has(adapter)) {
+    throw new ProjectWriteError('a trusted immutable project-write adapter is required');
   }
-  if (canonicalProjectRoot(adapter.projectRoot) !== canonicalProjectRoot(projectRoot)) {
+  if (canonicalProjectRoot(metadata.projectRoot) !== canonicalProjectRoot(projectRoot)) {
     throw new ProjectWriteError('project-write adapter belongs to a different project root');
   }
   return adapter;
+}
+
+export function requireProjectWriteAdapterForInvocation(
+  projectRoot: string,
+  adapter: ProjectWriteAdapter | undefined,
+  invocation: ProjectRunInvocation,
+): ProjectWriteAdapter {
+  const trusted = requireProjectWriteAdapter(projectRoot, adapter);
+  if (trustedAdapterMetadata.get(trusted)?.invocation !== invocation) {
+    throw new ProjectWriteError('project-write adapter belongs to a different invocation');
+  }
+  return trusted;
 }
 
 export function projectWriteTarget(projectRoot: string, relativePath: string): string {

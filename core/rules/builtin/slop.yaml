@@ -1,21 +1,14 @@
-# Nothing in this file describes a defect. Every rule here describes work that a model
-# produced from pattern alone, without the position of an author who built the thing and
-# speaks the language. Two families live here:
+# Nothing in this file identifies authorship. Every rule reports an observable condition
+# that can flatten hierarchy, task fit, or language specificity. Two families live here:
 #
-# 1. Visual convergence-to-the-mean — the gradient band, the identical radius, the triple
-#    card grid. Correct, competent, indistinguishable from ten thousand others. That is the
-#    failure this tool was first built for.
+# 1. Visual convergence compounds — repeated unassigned decoration, equal surfaced peers,
+#    or one material treatment spanning roles that users need to distinguish.
 #
-# 2. Prose that could not have been written by a person who speaks the language natively
-#    and owns the product — register drift, translation punctuation (spaced em-dash inside
-#    Korean copy), speech-level mixing within a paragraph, explainer cadence on a product
-#    page. These are not grammar errors. A fluent reader knows, immediately, that no native
-#    speaker wrote them. The IR cannot always see layout-level signals (a hard <br> inside
-#    a sentence is invisible once the DOM collapses text nodes), but it can see the text
-#    itself — and the text is where generated work gives itself away first.
+# 2. Copy conditions — interchangeable claims, placeholder text, register drift,
+#    translation punctuation, and document narration that obscure the product's actual fact.
 #
-# Each is a heuristic and each can be wrong about a deliberate choice. So they warn, they
-# never error, and every message says what to do instead rather than merely what is wrong.
+# Each heuristic can be wrong about a deliberate, context-fit choice. So rules warn, never
+# error, and messages name the visible consequence plus a relevant exception or next move.
 #
 # The pattern set is not static: AI aesthetics drift on a 6–12 month cycle, so a rule that catches
 # today's tell can become tomorrow's noise, and a new default can appear that no rule sees. New rules
@@ -24,21 +17,18 @@
 #
 # Whole-page rules fire once, on the root node, and read ir.stats.
 
-# Matched by hue, not by a list of hex codes: a blocklist of Tailwind's indigo-500 misses
-# the same idea expressed one shade over. Both stops must sit in the 230–300° band at real
-# saturation — that covers indigo (239°) through violet (258°) to purple (271°) while
-# leaving an honest blue brand (#3B82F6, 217°) alone.
-#
-# The band was first written as 240–300 and missed #6366F1 by one degree — the exact colour
-# it was written to catch. Hand-picked thresholds are brittle; widen only with a case.
+# A single gradient is neutral. This warning requires at least two rendered regions whose
+# saturated stops sit in the 230–300° band and whose markup names no semantic gradient role.
+# `data-omd-gradient-role` records an observable job such as hero atmosphere or data intensity;
+# it is not a global exemption, and two other unassigned gradients still form the compound.
 - id: SLOP-GRADIENT
   layer: 1
   category: slop
   severity: warn
   when: "node.parent === null"
-  value: "ir.stats.gradients.filter(g => (g.match(/#[0-9a-f]{6}/gi) ?? []).map(x => { const r = parseInt(x.slice(1,3),16)/255, gr = parseInt(x.slice(3,5),16)/255, b = parseInt(x.slice(5,7),16)/255; const mx = Math.max(r,gr,b), mn = Math.min(r,gr,b), d = mx - mn; if (d === 0 || mx === 0 || d/mx < 0.35) return -1; let h = mx === r ? ((gr-b)/d) % 6 : mx === gr ? (b-r)/d + 2 : (r-gr)/d + 4; h *= 60; return h < 0 ? h + 360 : h; }).filter(h => h >= 230 && h <= 300).length >= 2)"
-  assert: "value.length === 0"
-  message: "Indigo-to-violet gradient: {value}. It is the signature of every landing page generated since 2023. Unless the brand really is violet, this is not a point of view — it is a default."
+  value: "(() => { const inBand = g => (g.match(/#[0-9a-f]{6}/gi) ?? []).map(x => { const r = parseInt(x.slice(1,3),16)/255, gr = parseInt(x.slice(3,5),16)/255, b = parseInt(x.slice(5,7),16)/255; const mx = Math.max(r,gr,b), mn = Math.min(r,gr,b), d = mx - mn; if (d === 0 || mx === 0 || d/mx < 0.35) return -1; let h = mx === r ? ((gr-b)/d) % 6 : mx === gr ? (b-r)/d + 2 : (r-gr)/d + 4; h *= 60; return h < 0 ? h + 360 : h; }).filter(h => h >= 230 && h <= 300).length >= 2; return ir.nodes.filter(n => n.gradient && !n.gradientRole && inBand(n.gradient)).map(n => n.path); })()"
+  assert: "value.length < 2"
+  message: "Repeated unassigned indigo-to-violet gradients: {value}. The same atmospheric treatment spans multiple regions without a named job, so section purpose and hierarchy blur together. Keep one focal use, name distinct semantic roles with data-omd-gradient-role, or remove decoration that carries no task or brand consequence."
 
 # colorHistogram counts fills only (not borders or text), so this catches a rainbow of
 # background accents, not a diffuse border accent — the eye owns the 60-30-10 verdict on the
@@ -51,7 +41,7 @@
   category: slop
   severity: warn
   when: "node.parent === null"
-  value: "(() => { const fam = {}; for (const hex of Object.keys(ir.stats.colorHistogram || {})) { const m = /^#?([0-9a-fA-F]{6})$/.exec(hex); if (!m) continue; const n = m[1]; const r = parseInt(n.slice(0,2),16)/255, g = parseInt(n.slice(2,4),16)/255, b = parseInt(n.slice(4,6),16)/255; const mx = Math.max(r,g,b), mn = Math.min(r,g,b), d = mx - mn; if (d === 0) continue; const l = (mx+mn)/2; const s = d/(1-Math.abs(2*l-1)); if (s < 0.3) continue; if (l < 0.15 || l > 0.9) continue; let h = mx===r ? ((g-b)/d)%6 : mx===g ? (b-r)/d+2 : (r-g)/d+4; h*=60; if (h<0) h+=360; if (h<=12 || h>=348) continue; if (h>=95 && h<=150) continue; const bucket = Math.round(h/25); if (!(bucket in fam)) fam[bucket] = '#'+n; } return Object.values(fam); })()"
+  value: "(() => { const fam = {}; const computed = ir.stats.computedColorHistogram || {}; const semanticAware = Object.keys(computed).length > 0; const paints = semanticAware ? computed : (ir.stats.colorHistogram || {}); for (const hex of Object.keys(paints)) { const m = /^#?([0-9a-fA-F]{6})$/.exec(hex); if (!m) continue; const n = m[1]; const r = parseInt(n.slice(0,2),16)/255, g = parseInt(n.slice(2,4),16)/255, b = parseInt(n.slice(4,6),16)/255; const mx = Math.max(r,g,b), mn = Math.min(r,g,b), d = mx - mn; if (d === 0) continue; const l = (mx+mn)/2; const s = d/(1-Math.abs(2*l-1)); if (s < 0.3 || l < 0.15 || l > 0.9) continue; let h = mx===r ? ((g-b)/d)%6 : mx===g ? (b-r)/d+2 : (r-g)/d+4; h*=60; if (h<0) h+=360; if (!semanticAware && (h<=12 || h>=348 || (h>=95 && h<=150))) continue; const bucket = Math.round(h/25); if (!(bucket in fam)) fam[bucket] = '#'+n; } return Object.values(fam); })()"
   assert: "value.length < 3"
   message: "Diffuse accent: {value} are distinct saturated hues used as fills, with no single reserved accent. 60-30-10 is a reading law — one dominant ground, one secondary, and ~10% accent held for the primary action and critical state (theory/color.md). Several categorical accent colours make everything read as equally important, so nothing does. Keep one hue family plus one semantic accent; category-coded data-viz is the deliberate exception."
 
@@ -72,14 +62,17 @@
   value: "(() => { const hist = ir.stats.colorHistogram || {}; const fills = Object.keys(hist); if (fills.length < 3) return null; const pageH = ir.nodes.reduce((m, n) => Math.max(m, n.box.y + n.box.h), 0); if (pageH < 1500) return null; let chromatic = 0; for (const hex of fills) { const m = /^#?([0-9a-fA-F]{6})$/.exec(hex); if (!m) continue; const q = m[1]; const r = parseInt(q.slice(0,2),16)/255, g = parseInt(q.slice(2,4),16)/255, b = parseInt(q.slice(4,6),16)/255; const mx = Math.max(r,g,b), mn = Math.min(r,g,b), d = mx - mn; if (d === 0) continue; const l = (mx+mn)/2; const s = d/(1-Math.abs(2*l-1)); if (s >= 0.25 && l >= 0.15 && l <= 0.9) chromatic++; } return chromatic === 0 ? { fills: fills.length, chromatic } : null; })()"
   assert: "value === null"
   message: "Colourless palette: {value}. Every fill on this multi-tone page is achromatic — white, black, and greys, with no committed chromatic colour anywhere. 60-30-10 reserves ~10% accent for the primary action and critical state (theory/color.md); a page that ships zero chromatic fill has not committed a colour identity. On a quiet product surface this restraint is correct; on a marketing or showpiece surface it is the convergence-to-the-mean failure (human-design-loop.md § Colour commitment): commit a deliberate palette with real hue — the subject's own brand colour or an evidence-grounded identity — or record with omd decision why this surface is genuinely monochrome."
+# Radius becomes a hierarchy warning only as a compound: one radius appears at least eight
+# times and crosses from controls into authored/elevated content surfaces. A consistent
+# control radius or a repeated family of genuinely equal objects is a contextual exception.
 - id: SLOP-RADIUS-MONOCULTURE
   layer: 1
   category: slop
   severity: warn
   when: "node.parent === null"
-  value: "Object.entries(ir.stats.radiusHistogram).sort((a,b) => b[1]-a[1])[0] ?? null"
-  assert: "value === null || value[1] < 8 || Object.keys(ir.stats.radiusHistogram).length > 1"
-  message: "Every corner on the page shares one radius ({value}). Without hierarchy the eye cannot rank anything: a card, a button and an input should not feel like the same material."
+  value: "(() => { const entries = Object.entries(ir.stats.radiusHistogram).sort((a,b) => b[1]-a[1]); if (entries.length !== 1 || !entries[0] || entries[0][1] < 8) return null; const rounded = ir.nodes.filter(n => n.radius); const interactive = rounded.filter(n => n.interactive).length; const surfaced = rounded.filter(n => !n.interactive && (n.shadow || (n.fill && !n.fill.inherited && n.fill.authored !== false))).length; return interactive >= 2 && surfaced >= 2 ? { radius: entries[0][0], count: entries[0][1], interactive, surfaced } : null; })()"
+  assert: "value === null"
+  message: "Radius/material monoculture across roles: {value}. Controls and authored or elevated content surfaces share one corner treatment, reducing the visual distinction users need to separate action from content. Keep a common control family when appropriate, but differentiate unlike roles through shape, edge, elevation, or no container at all."
 
 - id: SLOP-SHADOW-MONOCULTURE
   layer: 1
@@ -114,9 +107,8 @@
 
 # Decorative geometric-glyph ornament. SLOP-EMOJI-HEADING covers emoji (U+1F300+, U+2600–27BF) and
 # deliberately ignores functional arrows (U+2190–21FF); it does NOT see the Geometric Shapes block
-# (U+25A0–U+25FF: ◆ ◇ ◈ ● ○ ▪ ▫ ◼ ◻ ▸ ▹ ◂ and friends). A model reaches for these as per-card ornament —
-# a different little diamond, square, or triangle before each feature — to make a plain card grid look
-# "designed". The shapes encode nothing; the variety is the tell. A real marker system is one consistent,
+# (U+25A0–U+25FF: ◆ ◇ ◈ ● ○ ▪ ▫ ◼ ◻ ▸ ▹ ◂ and friends). A different little diamond, square, or
+# triangle before each feature adds variety without encoding a role. A real marker system is one consistent,
 # meaningful glyph or none. Fires page-level when TWO OR MORE DISTINCT Geometric-Shapes glyphs are used
 # as leading markers (glyph followed by whitespace or end of node), so a single consistent marker and a
 # same-glyph functional disclosure triangle never fire.
@@ -128,10 +120,9 @@
   value: "(() => { const marks = new Set(); for (const n of ir.nodes) { if (n.type !== 'TEXT' || !n.text) continue; const m = /^\\s*([\\u{25A0}-\\u{25FF}])(?:\\s|$)/u.exec(n.text); if (m) marks.add(m[1]); } return marks.size >= 2 ? [...marks] : null; })()"
   assert: "value === null"
   message: "Decorative geometric-glyph ornament: {value} are distinct shape glyphs used as leading markers on this page. A different little diamond, square, or triangle before each card is ornament assembled to look designed, not an icon system — the shapes encode nothing and the variety is the tell. Use one consistent, meaningful marker that maps to the content, or clean typography and spacing, and let the hierarchy carry itself."
-# Divider spam: a rule between every row. A generator separates a list, a stat stack, or a numbered
-# index by giving each sibling a top/bottom border, so the page fills with thin horizontal lines. It is
-# the heaviest, noisiest separator (theory/craft.md § Borders vs background contrast) and reads as
-# machine-made. dom.ts marks a node `divider` when it has a top/bottom rule but is not a full box (a card
+# Divider spam: a rule between every row. Repeating a top/bottom border on every sibling fills a list,
+# stat stack, or numbered index with the heaviest separator even when proximity already groups it.
+# dom.ts marks a node `divider` when it has a top/bottom rule but is not a full box (a card
 # is not a divider). Fires page-level when one parent has four or more divider children — a line between
 # every item — so a single hairline, a data table, or a couple of bordered inputs never fire.
 - id: SLOP-DIVIDER-SPAM
@@ -141,7 +132,7 @@
   when: "node.parent === null"
   value: "(() => { const byParent = {}; for (const n of ir.nodes) { if (!n.divider) continue; const p = n.parent || 'root'; (byParent[p] = byParent[p] || 0); byParent[p] += 1; } const worst = Math.max(0, ...Object.values(byParent)); return worst >= 4 ? worst : null; })()"
   assert: "value === null"
-  message: "Divider spam: {value} sibling items in one group are each separated by a rule. A line between every row is the heaviest, noisiest way to separate content and the one a generator reaches for by default (theory/craft.md § Borders vs background contrast). Separate rows with space or a subtle background-contrast band instead; reserve real borders for form inputs, data tables, and code blocks, where the line carries structure the spacing cannot."
+  message: "Divider spam: {value} sibling items in one group are each separated by a rule. Repetition gives every boundary equal weight and slows row scanning. Separate with space or a subtle background band; borders remain appropriate for form inputs, data tables, and code blocks where the line carries structure proximity cannot."
 - id: SLOP-COPY
   layer: 1
   category: slop
@@ -157,11 +148,22 @@
   # swallowed ordinary 404s, empty states, and privacy copy). F3: moved the narrow Korean
   # self-negating pattern `이런 내용은 없` to SLOP-PINK-ELEPHANT, which covers the full family.
   # F2 widening: added three phrases with near-zero false-positive risk.
-  # "say goodbye to" — textbook AI marketing opener; never appears in honest product copy.
-  # "it['’]s not just.*it['’]s" — the classic AI antithesis formula "It's not just X — it's Y".
+  # "say goodbye to" — interchangeable marketing opener with no product mechanism.
+  # "it['’]s not just.*it['’]s" — a stock antithesis formula that delays the concrete claim.
   # "blazing.?fast" — stock performance adjective; real benchmarks use numbers.
   assert: "!/\\b(seamlessly|effortlessly|unlock the power|elevate your|supercharge|game.?chang|take .* to the next level|revolutioniz|cutting.?edge|unleash|no (?:fluff|jargon|nonsense) here|say goodbye to|blazing.?fast)\\b|it[\\u2019']s not just|결론적으로|시사하는 바가 크|주목할 만하|첫째[,，]/i.test(value)"
-  message: "Marketing filler or AI stock phrase: \"{value}\". It fits any product and says nothing about this one. Write what this product specifically gives, costs, or does."
+  message: "Interchangeable marketing phrase: \"{value}\". It fits many products and leaves the reader without a specific capability, cost, proof, or next action. Replace it with the verified fact this product can uniquely support; quoted discussion of the phrase is a contextual exception for source review."
+
+# Exact whole-node placeholder copy. Narrow whole-string matching avoids flagging documentation
+# that discusses placeholders, TODO tooling, or content design as a subject.
+- id: SLOP-PLACEHOLDER-COPY
+  layer: 1
+  category: slop
+  severity: warn
+  when: "Boolean(node.text)"
+  value: "node.text.trim()"
+  assert: "!/^(?:lorem ipsum(?: dolor sit amet)?[.,]?|your (?:content|headline|tagline) here[.!]?|(?:todo|tbd|placeholder)(?: text| copy)?[.!]?|\\[(?:todo|tbd|placeholder)\\])$/i.test(value)"
+  message: "Visible placeholder copy: \"{value}\". The user cannot evaluate hierarchy, wrapping, or the promised action against unspecified content. Replace it with representative task-specific copy; documentation that merely discusses placeholder syntax is outside this exact whole-node match."
 
 # The pink-elephant failure: a page told "no clutter" that writes "No clutter here."
 # Copy must state what IS — the positive fact the negation was hiding. This rule catches
@@ -176,11 +178,11 @@
   when: "Boolean(node.text) && node.text.length > 8"
   value: "node.text"
   assert: "!/you won't find [^.]{0,40} here|we (?:won't|will never) (?:bore|spam|waste)|\\b(?:no|zero) (?:ads|clutter|distractions|gimmicks)[,.]? just\\b|\\bnot (?:a |an |just a )?(?:hypothetical ?)?(?:demo|mock-?up|mockup|prototype|placeholder|simulation|wireframe|dummy|proof.?of.?concept|hypothetical)s?\\b|이런 (?:내용|것)[은는] 없|(?:여기|이 페이지)에는 [가-힣 ]{0,15}(?:광고|잡동사니|군더더기)[가는은]? 없|(?:가상\\s*)?(?:데모|목업|시안|시제품|프로토타입|플레이스홀더|더미|샘플)(?:이|가|은|는)?\\s*아(?:닙니다|니에요|니라)/i.test(value)"
-  message: "Self-negating meta-copy: \"{value}\". The page is announcing what it refuses to do — the model quoting its own brief. Delete this sentence and write the positive fact it was hiding: what the reader gets, what it costs, what happens next."
+  message: "Self-negating meta-copy: \"{value}\". The sentence repeats a rejected condition instead of telling the reader what exists. Replace it with the positive, verifiable fact: what the reader gets, what it costs, or what happens next; privacy, error, empty, and availability statements remain valid exceptions."
 
-# Korean AI writing patterns promoted from the im-not-ai taxonomy.
+# Korean product-copy patterns that warrant contextual review.
 #
-# Three classes, all S1 (deterministically AI-flavoured in UI copy):
+# Three narrow classes with observable register or document-cadence consequences:
 #
 # C-11 — a sentence-opening connective directly followed by a comma (그러나, / 하지만, /
 # 또한, / 따라서, / 즉,). Standard Korean prose does not punctuate these with a comma;
@@ -188,10 +190,8 @@
 # Narrow by design: only the exact five connectives fire; the comma+space pair is required so
 # "또한 그날 밤" (ordinary adverb) passes cleanly.
 #
-# D류 — 알아보겠습니다 / 살펴보겠습니다. The "let us now examine" structural openers that
-# appear in AI-generated explanatory content. On a product page they expose the model's
-# essay skeleton. A human copywriter writes what the product does, not that we will look at
-# what the product does.
+# D류 — 알아보겠습니다 / 살펴보겠습니다. These "let us now examine" structural openers
+# announce an essay outline. On a product surface they delay the actual capability or action.
 #
 # F2 rule: drop a pattern rather than ship one that fires on legitimate prose. A-19 겹조사
 # (-에서의/-으로의) was studied and dropped: "서울에서의 하루" is unambiguous legitimate Korean
@@ -205,14 +205,12 @@
   when: "Boolean(node.text) && node.text.length > 8"
   value: "node.text"
   assert: "!/(?:그러나|하지만|또한|따라서|즉),[ \\t]|살펴보겠습니다|알아보겠습니다|둘째[,，]|셋째[,，]/u.test(value)"
-  message: "Korean AI writing pattern: \"{value}\". A connective followed by a comma (그러나,/또한,), a structural 살펴보겠습니다/알아보겠습니다opener, or a 둘째/셋째 enumeration all trace the model's essay skeleton, not the product's actual claim. Write the specific fact this sentence was hiding."
+  message: "Korean document-cadence pattern: \"{value}\". A translated connective comma, structural 살펴보겠습니다/알아보겠습니다 opener, or mechanical 둘째/셋째 enumeration delays the product's actual claim. Write the specific fact or action directly; a genuine long-form essay is the contextual exception."
 
-# Korean translation-punctuation tell: a spaced em-dash ( — ) or en-dash ( – ) inside a
-# sentence that contains Hangul. The spaced em-dash is standard English typography and is
-# legitimate in English copy; it is not standard in Korean product writing. It appears in
-# Korean AI output because the model learned the pattern from English text and transfers it
-# directly. A native Korean copywriter uses a comma, a colon, a dash without surrounding
-# spaces, or starts a new sentence — never the spaced European em-dash construction.
+# Korean translation-punctuation review: a spaced em-dash ( — ) or en-dash ( – ) inside a
+# sentence that contains Hangul. The spaced dash is standard English typography but unusual
+# in Korean product copy, where it can interrupt register and reading rhythm. English nodes
+# remain exempt.
 #
 # Gated on Hangul presence in the same node so English copy is never touched.
 - id: SLOP-KO-EMDASH
@@ -222,7 +220,7 @@
   when: "Boolean(node.text) && node.text.length > 8 && /[가-힣]/u.test(node.text)"
   value: "node.text"
   assert: "!/ [—–] /.test(value)"
-  message: "Spaced em-dash or en-dash inside Korean copy: \"{value}\". The spaced em-dash ( — ) is an English typography convention; it appears in Korean AI output as a direct transfer from English training data. Rewrite as a comma, colon, or a new sentence — the construction Korean product copy actually uses."
+  message: "Spaced em-dash or en-dash inside Korean copy: \"{value}\". This English punctuation convention interrupts Korean product-copy rhythm and may signal an unresolved translation register. Use a comma, colon, or new sentence; quoted English and deliberate bilingual editorial copy are contextual exceptions."
 
 # Korean speech-level mixing within a single text block. Korean has two formal registers
 # that must not alternate in the same paragraph outside of quoted dialogue:
@@ -235,10 +233,8 @@
 #              "만듭니다" is 만+듭+니+다, not 만+들+ㅂ+니+다. The text "ㅂ니다" never
 #              appears; 니다[.!?] is the correct detector for the full family.)
 #
-# A native speaker writing product copy commits to one level and holds it. A model assembles
-# sentences across registers because each sentence is generated independently. The result
-# reads immediately as machine-made to any fluent reader — not as a grammar error but as
-# a sign that no single human voice was present.
+# Product copy normally holds one speech level within a paragraph. Alternation can make the
+# product's relationship and authority feel inconsistent even when every sentence is grammatical.
 #
 # False positive guard: if the node contains quotation marks (straight or curly, Korean
 # angle brackets), stay silent — dialogue attribution legitimately mixes registers.
@@ -252,7 +248,7 @@
   when: "Boolean(node.text) && node.text.length > 8 && /[가-힣]/u.test(node.text)"
   value: "node.text"
   assert: "!(/요[.!?]/.test(value) && /니다[.!?]/.test(value)) || /[\"'\\u201C\\u201D\\u2018\\u2019\\u300C\\u300D]/.test(value)"
-  message: "Mixed speech levels in one text block: \"{value}\". 해요체 endings (요.) and 합니다체 endings (니다.) alternate inside one paragraph — a sign that sentences were assembled across generation passes rather than written by one voice. Choose one level, held for the whole page, and state which in the voice study."
+  message: "Mixed speech levels in one text block: \"{value}\". 해요체 endings (요.) and 합니다체 endings (니다.) alternate inside one paragraph, making authority and audience relationship inconsistent. Choose the level justified by the voice study; quoted dialogue remains exempt."
 
 - id: SLOP-TRIPLE-CARD
   layer: 1
@@ -261,14 +257,12 @@
   when: "node.computed.identicalSiblings >= 3 && Boolean(node.shadow) && Boolean(node.radius)"
   value: "node.computed.identicalSiblings"
   assert: "false"
-  message: "{value} structurally identical cards sit side by side. Three feature cards are not an information architecture; they are a confession that nobody decided what matters most. Decide, then make that one bigger."
+  message: "{value} equal surfaced peers share component anatomy, dimensions, radius, and shadow, leaving no visible rank. When the task has a real priority, expose it through content order, size, density, or treatment; when the items are genuinely equal (pricing tiers, people, comparable options), equal cards are the correct exception."
 
 # Korean document-structure narration. These phrases announce the document's own organisation
 # rather than communicating what the product does: "아래는 그 기록이에요" (below is the record),
-# "다음은 기능 목록입니다" (the following is the feature list). On a product page, this cadence
-# exposes the model's essay or README skeleton — the AI introducing its own bullet list instead
-# of writing the bullet list. A human copywriter presents the content; they do not narrate
-# that content is about to appear.
+# "다음은 기능 목록입니다" (the following is the feature list). On a product page, this essay or
+# README cadence delays the content it says is about to appear.
 #
 # Two patterns, both gated on Korean text presence:
 #
@@ -303,10 +297,9 @@
 # an AI-authorship claim. Unsafe source cues do not become broad YAML regexes. Rendered IR is
 # authoritative when source and render evidence overlap.
 
-# Gradient-clipped text: background-clip: text combined with a gradient. The effect
-# sacrifices legibility for an appearance that every generated landing page now shows.
-# The IR sets node.clipText when the browser reports background-clip:text (or the
-# -webkit- prefix) alongside a gradient on the same node.
+# Gradient-clipped text: background-clip:text combined with a gradient. The warning is
+# about legibility and hierarchy, not who produced the treatment. The IR sets node.clipText
+# when the browser reports the standard or prefixed property beside a gradient.
 # Gradient headline text.
 - id: SLOP-GRADIENT-TEXT
   layer: 1
@@ -314,7 +307,7 @@
   severity: warn
   when: "Boolean(node.clipText)"
   assert: "false"
-  message: "Gradient-clipped text on this node. background-clip:text renders text in a gradient, sacrificing legibility for an effect that every generated landing page now shares. Establish hierarchy through size, weight, and position; use a single legible text colour. Use omd decision to record a brand reason if this hue band is genuinely the brand's."
+  message: "Gradient-clipped text on this node. background-clip:text makes letter contrast vary across the word, weakening fast reading and hierarchy. Prefer size, weight, and position with one legible text colour; a tested brand display treatment with verified contrast is the contextual exception."
 
 # Invented stat row: round heroic numbers (10k+, 99.9%, 24/7) clustered on a page.
 # Real metrics are odd and specific — "847 teams migrated in Q1" carries more weight than
@@ -444,7 +437,7 @@
   when: "node.parent === null"
   value: "(() => { const nodes = ir.nodes; const pageH = nodes.reduce((m, n) => Math.max(m, n.box.y + n.box.h), 0); if (pageH < 2000) return null; const bodyW = nodes.reduce((m, n) => Math.max(m, n.box.w), 0); const sections = nodes.filter(n => n.type === 'FRAME' && n.box.w >= bodyW * 0.9 && n.box.h >= 320); if (sections.length < 4) return null; const fills = new Set(sections.filter(n => n.fill).map(n => n.fill.value)); const texts = nodes.filter(n => n.type === 'TEXT' && typeof n.fontSize === 'number' && n.text && n.text.trim().length > 0); if (texts.length < 8) return null; const sizes = texts.map(n => n.fontSize).sort((a, b) => a - b); const maxSize = sizes[sizes.length - 1]; const bodyPool = sizes.filter(s => s >= 12 && s <= 20); const pool = bodyPool.length ? bodyPool : sizes; const body = pool[Math.floor(pool.length / 2)] || 16; const ratio = maxSize / body; return (fills.size <= 1 && ratio < 3) ? { sections: sections.length, sectionBackgrounds: fills.size, maxText: maxSize, body, ratio: Math.round(ratio * 10) / 10 } : null; })()"
   assert: "value === null"
-  message: "Flat vertical stack: {value}. Several full-bleed sections share one background (no inversion) and the largest text is barely above body size (no display-scale moment) — an evenly-weighted stack any generator would produce. On a quiet product surface this restraint is correct; on a marketing or showpiece surface it is the slop-free-but-not-distinctive failure (theory/expressive.md § The register decision): commit one display-scale type moment, a section inversion at the conceptual turn, or a real layout break — or record why this surface is quiet."
+  message: "Flat vertical stack: {value}. Several full-bleed sections share one background and the largest text stays near body scale, so the sequence offers no visible turn or dominant beat. This restraint is correct on a quiet product surface; on marketing/showpiece work, add a task- or narrative-backed scale, inversion, or layout shift, or record why the surface is intentionally quiet."
 
 # Type circus: three faces can be a display + text + monospace-numeral system; four or more
 # distinct font families on one page is almost always accidental font soup — a system default,

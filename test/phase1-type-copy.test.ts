@@ -30,7 +30,7 @@ test('writer prompt names the three copy-sharpening fronts and keeps blind revie
   assert.match(writer, /Sharpen copy on three fronts/);
   assert.match(writer, /sharp, concrete lines grounded in a verified fact or the\s+brief, not a generic claim/i);
   assert.match(writer, /align every headline, label,\s+and CTA with the concept the visual carrier actually shows/i);
-  assert.match(writer, /remove AI stock phrasing, hedges, and cliché per\s+`theory\/voice\.md`/i);
+  assert.match(writer, /remove interchangeable stock phrasing, hedges, and cliché per\s+`theory\/voice\.md`/i);
   assert.match(writer, /Awareness of text-slop patterns is advisory context for your own drafting, never a\s+gate you self-certify/i);
   assert.match(writer, /the blind copy review remains the enforcement point/);
 });

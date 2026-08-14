@@ -3,6 +3,18 @@ import { closeSync, constants as fsConstants, existsSync, fstatSync, lstatSync, 
 import { extname, join, relative, resolve, sep } from 'node:path';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import { replaceProjectFileAtomically } from '../runtime/project-write.ts';
+import {
+  createAdaptiveWorkflowSourceBinding,
+  isAdaptiveWorkflowSourceBinding,
+  type AdaptiveWorkflowSourceBinding,
+} from '../design-development/workflow-persistence.ts';
+import { canonicalRouteJson } from '../route/adaptive-source-contract.ts';
+import {
+  adaptiveSourceSealInputHashes,
+  createAdaptiveSourceSealRoute,
+  isAdaptiveSourceSealRoute,
+  type AdaptiveSourceSealRoute,
+} from './adaptive-inputs.ts';
 
 export const SOURCE_SEAL_SCHEMA_VERSION = 1;
 
@@ -23,7 +35,8 @@ const EXCLUDED_FILES = new Set([
   'yarn.lock',
 ]);
 
-export interface SourceSealArtifact {
+type SourceSealSources = Array<{ path: string; sha256: string }>;
+export interface LegacySourceSealArtifact {
   schemaVersion: 1;
   sealedAt: string;
   inputs: {
@@ -31,8 +44,25 @@ export interface SourceSealArtifact {
     typeProofSha256: string;
     compositionSha256: string;
   };
-  sources: Array<{ path: string; sha256: string }>;
+  route?: undefined;
+  sources: SourceSealSources;
 }
+export interface AdaptiveSourceSealArtifact {
+  schemaVersion: 1;
+  sealedAt: string;
+  inputs: Record<string, string>;
+  route: AdaptiveSourceSealRoute;
+  sources: SourceSealSources;
+}
+export interface WorkflowSourceSealArtifact {
+  schemaVersion: 2;
+  sealedAt: string;
+  inputs: Record<string, string>;
+  route: AdaptiveSourceSealRoute;
+  workflow: AdaptiveWorkflowSourceBinding;
+  sources: SourceSealSources;
+}
+export type SourceSealArtifact = LegacySourceSealArtifact | AdaptiveSourceSealArtifact | WorkflowSourceSealArtifact;
 
 export interface SourceSealFinding {
   id: 'SOURCE-SEAL-MISSING' | 'SOURCE-SEAL-STALE';
@@ -55,9 +85,18 @@ function isSafeSourcePath(value: unknown): value is string {
 }
 
 function isSourceSealArtifact(value: unknown): value is SourceSealArtifact {
-  if (!isRecord(value) || value.schemaVersion !== SOURCE_SEAL_SCHEMA_VERSION || typeof value.sealedAt !== 'string') return false;
+  if (!isRecord(value) || (value.schemaVersion !== SOURCE_SEAL_SCHEMA_VERSION && value.schemaVersion !== 2) || typeof value.sealedAt !== 'string') return false;
   if (!isRecord(value.inputs) || !Array.isArray(value.sources)) return false;
-  for (const key of ['copyDeckSha256', 'typeProofSha256', 'compositionSha256'] as const) {
+  const route = value.route;
+  if (value.schemaVersion === 2 && (!isAdaptiveSourceSealRoute(route) || !isAdaptiveWorkflowSourceBinding(value.workflow))) return false;
+  if (value.schemaVersion === 1 && value.workflow !== undefined) return false;
+  const expectedInputs = route === undefined
+    ? ['copyDeckSha256', 'typeProofSha256', 'compositionSha256'].sort()
+    : isAdaptiveSourceSealRoute(route) ? Object.keys(adaptiveSourceSealInputHashes(route)).sort() : [];
+  const actualInputs = Object.keys(value.inputs).sort();
+  if (expectedInputs.length === 0 || actualInputs.length !== expectedInputs.length
+    || actualInputs.some((key, index) => key !== expectedInputs[index])) return false;
+  for (const key of actualInputs) {
     if (typeof value.inputs[key] !== 'string' || !SHA256_PATTERN.test(value.inputs[key])) return false;
   }
   return value.sources.every((item) => (
@@ -66,6 +105,11 @@ function isSourceSealArtifact(value: unknown): value is SourceSealArtifact {
     && typeof item.sha256 === 'string'
     && SHA256_PATTERN.test(item.sha256)
   ));
+}
+
+export function validateSourceSealArtifact(value: unknown): SourceSealArtifact {
+  if (!isSourceSealArtifact(value)) throw new Error('source seal schema is invalid');
+  return value;
 }
 
 function requireRealSourcePath(root: string, path: string, leaf: 'file' | 'directory'): void {
@@ -145,35 +189,67 @@ export function listProductionSourceFiles(rootInput: string): string[] {
   return files.sort();
 }
 
-function inputHashes(root: string): SourceSealArtifact['inputs'] {
+function legacyInputHashes(root: string): LegacySourceSealArtifact['inputs'] {
   const omd = join(root, '.omd');
   const required = [
     ['copyDeckSha256', 'copy-deck.md'],
     ['typeProofSha256', 'type-proof.md'],
     ['compositionSha256', 'composition.md'],
   ] as const;
-  const values: Partial<SourceSealArtifact['inputs']> = {};
+  const values: Partial<LegacySourceSealArtifact['inputs']> = {};
   for (const [key, filename] of required) {
     const path = join(omd, filename);
     if (!existsSync(path)) throw new Error(`cannot seal source: missing .omd/${filename}`);
     requireRealSourcePath(root, path, 'file');
     values[key] = hashBytes(readStableSourceFile(root, path));
   }
-  return values as SourceSealArtifact['inputs'];
+  if (values.copyDeckSha256 === undefined || values.typeProofSha256 === undefined || values.compositionSha256 === undefined) {
+    throw new Error('cannot seal source: approved legacy inputs are incomplete');
+  }
+  return {
+    copyDeckSha256: values.copyDeckSha256,
+    typeProofSha256: values.typeProofSha256,
+    compositionSha256: values.compositionSha256,
+  };
 }
 
-export function createSourceSeal(rootInput: string, sealedAt = new Date().toISOString()): SourceSealArtifact {
+export function createSourceSeal(rootInput: string, sealedAt?: string): LegacySourceSealArtifact;
+export function createSourceSeal(rootInput: string, sealedAt: string | undefined, invocation: ProjectRunInvocation): SourceSealArtifact;
+export function createSourceSeal(
+  rootInput: string,
+  sealedAt = new Date().toISOString(),
+  invocation?: ProjectRunInvocation,
+): SourceSealArtifact {
   const root = resolve(rootInput);
   const stat = lstatSync(root);
   if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error(`source root must be a non-symlink directory: ${root}`);
+  const hasAdaptiveRoute = existsSync(join(root, '.omd', 'route.json'));
+  const hasWorkflow = existsSync(join(root, '.omd', 'workflow-plan.json'));
+  if ((hasAdaptiveRoute || hasWorkflow) && invocation === undefined) throw new Error('ROUTE_AUTHORITY_REQUIRED: adaptive source sealing requires the current host invocation');
+  if (hasWorkflow && !hasAdaptiveRoute) throw new Error('WORKFLOW_ROUTE_REQUIRED: workflow source sealing requires an adaptive route');
+  const route = hasAdaptiveRoute && invocation !== undefined ? createAdaptiveSourceSealRoute(root, invocation) : undefined;
+  const workflow = hasWorkflow && invocation !== undefined ? createAdaptiveWorkflowSourceBinding(root, invocation) : undefined;
+  const sources = listProductionSourceFiles(root).map((path) => ({
+    path,
+    sha256: hashBytes(readStableSourceFile(root, join(root, path))),
+  }));
+  if (route === undefined) return {
+    schemaVersion: SOURCE_SEAL_SCHEMA_VERSION, sealedAt, inputs: legacyInputHashes(root), sources,
+  };
+  if (workflow !== undefined) return {
+    schemaVersion: 2,
+    sealedAt,
+    inputs: adaptiveSourceSealInputHashes(route),
+    route,
+    workflow,
+    sources,
+  };
   return {
     schemaVersion: SOURCE_SEAL_SCHEMA_VERSION,
     sealedAt,
-    inputs: inputHashes(root),
-    sources: listProductionSourceFiles(root).map((path) => ({
-      path,
-      sha256: hashBytes(readStableSourceFile(root, join(root, path))),
-    })),
+    inputs: adaptiveSourceSealInputHashes(route),
+    route,
+    sources,
   };
 }
 
@@ -182,12 +258,12 @@ export function writeSourceSeal(rootInput: string, invocation: ProjectRunInvocat
   return replaceProjectFileAtomically({
     projectRoot: root,
     relativePath: '.omd/source-seal.json',
-    content: `${JSON.stringify(createSourceSeal(root), null, 2)}\n`,
+    content: `${JSON.stringify(createSourceSeal(root, new Date().toISOString(), invocation), null, 2)}\n`,
     invocation,
   });
 }
 
-export function validateSourceSeal(rootInput: string): SourceSealFinding[] {
+export function validateSourceSeal(rootInput: string, invocation?: ProjectRunInvocation): SourceSealFinding[] {
   const root = resolve(rootInput);
   const path = join(root, '.omd', 'source-seal.json');
   if (!existsSync(path)) {
@@ -208,19 +284,37 @@ export function validateSourceSeal(rootInput: string): SourceSealFinding[] {
 
   let current: SourceSealArtifact;
   try {
-    current = createSourceSeal(root, sealed.sealedAt);
+    current = invocation === undefined
+      ? createSourceSeal(root, sealed.sealedAt)
+      : createSourceSeal(root, sealed.sealedAt, invocation);
   } catch (error) {
-    return [{ id: 'SOURCE-SEAL-STALE', path: '.omd/source-seal.json', message: error instanceof Error ? error.message : String(error) }];
+    return [{
+      id: 'SOURCE-SEAL-STALE',
+      path: sealed.schemaVersion === 2 ? '.omd/workflow-plan.json' : sealed.route === undefined ? '.omd/source-seal.json' : '.omd/route.json',
+      message: error instanceof Error ? error.message : String(error),
+    }];
   }
   const findings: SourceSealFinding[] = [];
-  for (const [key, filename] of [
-    ['copyDeckSha256', 'copy-deck.md'],
-    ['typeProofSha256', 'type-proof.md'],
-    ['compositionSha256', 'composition.md'],
-  ] as const) {
-    if (sealed.inputs[key] !== current.inputs[key]) {
-      findings.push({ id: 'SOURCE-SEAL-STALE', path: `.omd/${filename}`, message: `${filename} changed after source seal` });
+  if (sealed.route === undefined && current.route === undefined) {
+    for (const [key, filename] of [
+      ['copyDeckSha256', 'copy-deck.md'],
+      ['typeProofSha256', 'type-proof.md'],
+      ['compositionSha256', 'composition.md'],
+    ] as const) {
+      if (sealed.inputs[key] !== current.inputs[key]) {
+        findings.push({ id: 'SOURCE-SEAL-STALE', path: `.omd/${filename}`, message: `${filename} changed after source seal` });
+      }
     }
+  } else if (canonicalRouteJson(sealed.inputs) !== canonicalRouteJson(current.inputs)) {
+    findings.push({ id: 'SOURCE-SEAL-STALE', path: '.omd/source-seal.json', message: 'approved input selection or bytes changed after source seal' });
+  }
+  if (canonicalRouteJson(sealed.route ?? null) !== canonicalRouteJson(current.route ?? null)) {
+    findings.push({ id: 'SOURCE-SEAL-STALE', path: '.omd/route.json', message: 'adaptive route decision, authority, or current artifact changed after source seal' });
+  }
+  if (sealed.schemaVersion !== current.schemaVersion
+    || (sealed.schemaVersion === 2 && current.schemaVersion === 2
+      && canonicalRouteJson(sealed.workflow) !== canonicalRouteJson(current.workflow))) {
+    findings.push({ id: 'SOURCE-SEAL-STALE', path: '.omd/workflow-plan.json', message: 'workflow plan, selected artifacts, reviews, or current pointers changed after source seal' });
   }
 
   const sealedSources = new Map(sealed.sources.map((item) => [item.path, item.sha256]));

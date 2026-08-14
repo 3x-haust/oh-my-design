@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import { loadRefs } from '../core/ref/store.ts';
+import { packOfflineWorkspaceDependencies } from './helpers/packed-install.ts';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const NPM = process.platform === 'win32' ? 'npm.cmd' : 'npm';
@@ -13,7 +14,7 @@ const PACKAGE = join('node_modules', '@3xhaust', 'oh-my-design');
 const VERSION = (JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')) as { readonly version: string }).version;
 
 type Command = {
-  readonly name: 'omd' | 'oh-my-design';
+  readonly name: 'omd' | 'oh-my-design' | 'omd-codex';
   readonly args: readonly string[];
   readonly status: number;
   readonly output: RegExp;
@@ -22,6 +23,7 @@ type Command = {
 const COMMANDS: readonly Command[] = [
   { name: 'omd', args: ['--version'], status: 0, output: new RegExp(`^${VERSION.replaceAll('.', '\\.')}\\s*$`) },
   { name: 'oh-my-design', args: ['--version'], status: 0, output: new RegExp(`^${VERSION.replaceAll('.', '\\.')}\\s*$`) },
+  { name: 'omd-codex', args: ['--help'], status: 0, output: /usage: omd-codex exec/ },
 ];
 
 function run(command: string, args: readonly string[], cwd: string, env?: NodeJS.ProcessEnv) {
@@ -59,7 +61,8 @@ test('Given a real offline installed tarball When each public command starts The
     mkdirSync(packs);
     mkdirSync(consumer);
     const archive = pack(packs);
-    const installed = run(NPM, ['install', '--offline', '--ignore-scripts', '--no-audit', '--no-fund', archive], consumer);
+    const dependencies = packOfflineWorkspaceDependencies(ROOT, packs);
+    const installed = run(NPM, ['install', '--offline', '--ignore-scripts', '--no-audit', '--no-fund', archive, ...dependencies], consumer);
     assert.equal(installed.status, 0, installed.stderr);
 
     for (const command of COMMANDS) {
@@ -74,21 +77,34 @@ test('Given a real offline installed tarball When each public command starts The
 
     const claudeHome = join(temporary, 'claude home');
     const codexHome = join(temporary, 'codex home');
+    const senpiHome = join(temporary, 'senpi home');
     mkdirSync(claudeHome);
     mkdirSync(codexHome);
+    mkdirSync(senpiHome);
     const environment = {
       ...process.env,
       HOME: temporary,
       CLAUDE_CONFIG_DIR: claudeHome,
       CODEX_HOME: codexHome,
+      SENPI_CODING_AGENT_DIR: senpiHome,
       OMD_BROWSER_RS_BIN: process.execPath,
     };
     const installer = installedCommand(consumer, 'oh-my-design');
-    for (const host of ['claude', 'codex'] as const) {
+    for (const host of ['claude', 'codex', 'senpi'] as const) {
       const install = process.platform === 'win32'
         ? run(process.execPath, [installer, 'install', `--host=${host}`], temporary, environment)
         : run(installer, ['install', `--host=${host}`], temporary, environment);
       assert.equal(install.status, 0, `${host} install: ${install.stderr}`);
+      if (host === 'senpi') {
+        const shippedSkills = readdirSync(join(consumer, PACKAGE, 'dist', 'senpi', 'skills')).sort();
+        assert.ok(shippedSkills.length > 0, 'packed Senpi distribution must ship skills');
+        for (const skill of shippedSkills) {
+          const shipped = join(consumer, PACKAGE, 'dist', 'senpi', 'skills', skill, 'SKILL.md');
+          const installedSkill = join(senpiHome, 'skills', skill, 'SKILL.md');
+          assert.equal(existsSync(installedSkill), true, `Senpi install must include shipped skill ${skill}`);
+          assert.deepEqual(readFileSync(installedSkill), readFileSync(shipped), `Senpi skill ${skill} must preserve packed bytes`);
+        }
+      }
       const doctor = process.platform === 'win32'
         ? run(process.execPath, [installer, 'doctor', `--host=${host}`], temporary, environment)
         : run(installer, ['doctor', `--host=${host}`], temporary, environment);
@@ -118,7 +134,8 @@ test('Given a real offline installed tarball When omd ref add captures a local s
     mkdirSync(consumer);
     writeFileSync(fixture, '<!doctype html><title>reference</title><style>.card{padding:24px;border-radius:12px;background:#fff;box-shadow:0 4px 12px #0003}</style><article class="card">Packed selector capture</article>');
     const archive = pack(packs);
-    const installed = run(NPM, ['install', '--offline', '--ignore-scripts', '--no-audit', '--no-fund', archive], consumer);
+    const dependencies = packOfflineWorkspaceDependencies(ROOT, packs);
+    const installed = run(NPM, ['install', '--offline', '--ignore-scripts', '--no-audit', '--no-fund', archive, ...dependencies], consumer);
     assert.equal(installed.status, 0, installed.stderr);
 
     const executable = installedCommand(consumer, 'omd');

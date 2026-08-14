@@ -9,6 +9,8 @@ allow:
   - Bash(omd render:*)
   - Bash(omd ir:*)
   - Bash(omd pack:*)
+  - Bash(omd route:*)
+  - Bash(omd brief:*)
 deny: []
 instructions: |
   Own typography proof, not page design. Read once, scoped:

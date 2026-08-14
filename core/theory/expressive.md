@@ -18,7 +18,7 @@ Every brief implies a register. The register is not the visual style — it is t
 
 The error is applying showpiece technique to quiet or confident contexts. A dashboard with split-text entrances is not ambitious; it is misread. The thirty-percent Usability weight does not become a thirty-percent weight only when the judges disagree with your taste — it applies regardless of intent. Usability 30% is the reason showpiece technique must still serve navigation and clarity, not just aesthetic ambition.
 
-On a `marketing` or showpiece surface, ambition is the default state, not an upgrade the user has to request. The register commits to a signature visual or structural moment and a layout that departs from the generic template — even when the brief is a single rough line. Motion is not implied: `motionDecision: one` arises only from explicit current-user policy or selected evidence, and is then exactly one declared, activated load scene. A competent, evenly-weighted, inoffensive result that any generator would produce is a MISS here, not a neutral outcome: a surface that came to persuade or to be experienced has failed if it is merely safe. This never licenses an effects catalogue (see The restraint clause): the ceiling is one bold concept committed fully — the GDWEB / Awwwards way — never a pile of techniques. And it never travels down-register: a `product` or quiet surface stays quiet no matter how rough the brief, where ambition means density, scanning, and fewer errors, not motion.
+On a `marketing` or showpiece surface, ambition is the default state, not an upgrade the user has to request. The register commits to a signature visual or structural moment and a layout that departs from the generic template — even when the brief is a single rough line. Motion is not implied: `motionDecision: one` arises only from explicit current-user policy or selected evidence, and is then exactly one declared, activated load scene. A competent, evenly-weighted, inoffensive result with no visible priority or subject-specific consequence is a MISS here, not a neutral outcome: a surface that came to persuade or to be experienced has failed if it is merely safe. This never licenses an effects catalogue (see The restraint clause): the ceiling is one bold concept committed fully — the GDWEB / Awwwards way — never a pile of techniques. And it never travels down-register: a `product` or quiet surface stays quiet no matter how rough the brief, where ambition means density, scanning, and fewer errors, not motion.
 
 ---
 
@@ -60,16 +60,16 @@ FWA (thefwa.com) rewards a different axis than Awwwards. Its Site/App of the Day
 
 ## Slop-free is not the same as distinctive
 
-Passing every slop gate proves the absence of a known defect. It does not prove the presence of a design. A layout can be measurably clean — correct contrast, no triple-radius, no gradient-mesh cliché, one primary action — and still read as AI-made, because the composition itself is the most predictable arrangement of its parts. Distinction is a positive property the gates cannot supply; it has to be committed on purpose.
+Passing every slop gate proves only the absence of a known warning. It does not prove the presence of a task-specific design. One gradient, rounded card, or common typeface does not establish genericity. Review observable compounds instead: equal surfaced peers with no visible rank, repeated decorative gradients without a named role, radius and material treatment that collapse distinct roles, placeholder or interchangeable copy, or candidate directions that share one macro-layout family.
 
-The AI-made feel is not one slop pattern. It is the sum of safe defaults: symmetric balance, boxed regions, evenly-weighted columns, and the single most common arrangement for the content type. A skeptical viewer reads it in one second — "a model produced the reasonable layout" — and that read is the failure, independent of any individual clean metric.
+These compounds matter because they have consequences: users cannot tell what matters first, section jobs blur together, actions look like content, claims fit any product, or nominal alternatives fail to test a real decision. Context governs the verdict. Equal pricing tiers may deserve equal cards; one brand gradient may carry a named focal role; one control family may correctly share a radius. Name the condition, task consequence, and exception rather than guessing who made the work.
 
 ### Template tells (clean, but generic)
 
 Each is a layout that survives the slop scan and still announces a template. Treat a match as a distinction failure to break, not a pass.
 
 - **Symmetric hero split**: oversized headline on the left, a bordered panel or card on the right, balanced masses. Two competing primary masses is the usual side effect — the eye cannot find the one thing that matters first.
-- **Triple feature-cards with arrows**: three equal-weight boxes (SIGNAL → SYSTEM → PROOF, or any A → B → C) joined by arrows. The single most templated way to show a process; recognizable as generated at a glance.
+- **Triple feature-cards with arrows**: three equal-weight boxes (SIGNAL → SYSTEM → PROOF, or any A → B → C) joined by arrows. When the steps have dependencies or unequal consequence, equal surfacing hides the reading order instead of explaining the process. A genuinely equal comparison is the exception.
 - **Trend-decoration as identity**: an offset drop-shadow, a glassmorphism blur, or a gradient border used as *the* idea rather than in service of one. A dated trend applied evenly is not art direction.
 - **Boxed everything**: every region gets a border, a radius, and equal padding, so nothing dominates and the grid never breaks. Uniform containment reads as a system, not a composition.
 - **Unused real material**: the brief supplies photographs, slides, a portrait, or data, and the layout still leads with text-in-boxes. Authentic material left out of the composition is the clearest tell that the layout was reasoned in the abstract.
@@ -83,7 +83,7 @@ This register choice gates how "distinctive" is judged, never whether the loop r
 
 ### The AI-SaaS landing tells (the specific template to break)
 
-The most common generic result is the AI-SaaS landing page. Every item below is a tell to avoid, not a default to reach for — a design that matches the checklist reads as machine-made in one second regardless of polish.
+"AI-SaaS" names a familiar template category, not the authorship of any page. Treat the items below as contextual candidates only when they compound into weak hierarchy, interchangeable claims, or decoration without a named role; none establishes genericity alone.
 
 - **Layout**: a centered hero (big one-line headline, short subhead, prompt box), a logo wall, then every section as a 3-column card grid with a small eyebrow label ("Features", "Use cases", "Testimonials"); sections divided only by gradient blobs; everything floating centered with left/right balance but no tension; more whitespace than the content earns; the same card component repeated down the page.
 - **Fabricated proof**: a pretty UI mockup instead of a real product screenshot, with invented dashboard data and cliché figures (98%, 10x, 24/7). This is also a fabrication violation — never ship invented numbers or a fake product screen (see `graphics/placeholder-policy.md`).
@@ -92,7 +92,7 @@ The most common generic result is the AI-SaaS landing page. Every item below is 
 - **UX (product surfaces)**: the tool suggests before the user acts; empty states full of "Try asking…" chips; a bigger Regenerate than Edit; "shorter / longer / change tone" buttons; thumbs up/down and "Was this helpful?"; "Option 1, 2, 3" instead of one committed answer; "Analyzing… / Generating…" theatre. These make the product feel like a demo of AI, not a tool that solves a problem.
 - **Decorative ornament**: a different little geometric glyph on each card or list item (◆ ◇ ▸ ▪ ▫ and similar filled/outline diamonds, squares, and triangles), a per-feature icon set assembled from arbitrary shapes that encode nothing, decorative dividers between every section, or an accent border on every card just to look treated. A marker system is consistent and meaningful or it is absent: one deliberate icon language that maps to the content, or clean typography and spacing carrying the hierarchy — never a bag of assorted shapes sprinkled on to look designed. `omd slop scan` flags two or more distinct geometric-shape marker glyphs on one page as `SLOP-ORNAMENT-GLYPH`.
 
-The underlying failure — why designers call it "AI slop" — is mood before function, no brand specificity, seen-it-before, unaudited details, visual density high but information density low, no tension or rhythm or contrast, no human life, too average, too safe. The fix is never more effects; it is one concrete, brand-specific, evidence-grounded decision a template would not make.
+The underlying failure grouped under "AI slop" is observable: mood before function, no brand specificity, unaudited details, visual density higher than information density, and no priority or rhythm. The fix is never more effects; it is one concrete, task- or brand-specific, evidence-grounded decision with a visible consequence.
 
 ---
 
@@ -179,6 +179,21 @@ Each entry names the condition under which the technique earns its place and the
 **Implementation constraint**: Native `overflow-x` with `scroll-snap-type: x`; DOM order equals reading order so keyboard, Home/End, and find-in-page work; the scrollbar stays visible and controls are enhancement over a natively scrollable region, never the only way to advance. Reduced-motion disables smooth scroll.
 
 ---
+
+## Metaphor is behavior, not a prop
+
+A selected art direction carries two private implementation fields. `metaphorQualities` names the
+perceptual behavior to preserve; `literalPropsToReject` names objects that would reduce that behavior
+to themed decoration. Both arrays are non-empty and binding. Translate the qualities through
+hierarchy, rhythm, typography, imagery, and motion: for example, "measured precision" can govern
+alignment, cadence, type spacing, crop discipline, and easing without drawing an instrument that
+supposedly represents precision.
+
+Never realize an item from `literalPropsToReject` as an icon, illustration, photograph, 3D object,
+texture, cursor, border motif, or background silhouette. Synonyms and close visual stand-ins are the
+same literalization. The reject list is an internal visual constraint, not copy: never print it,
+quote it, or turn it into user-facing negative instructions. A metaphor succeeds when its qualities
+shape the system while its obvious props are absent.
 
 ## The restraint clause
 

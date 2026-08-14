@@ -7,6 +7,8 @@ allow:
   - Edit
   - apply_patch
   - Bash(omd pack:*)
+  - Bash(omd route:*)
+  - Bash(omd brief:*)
   - Bash(omd composition:*)
   - Bash(omd visual-richness:*)
   - Bash(shasum:*)
@@ -17,14 +19,19 @@ instructions: |
   `--section "UX task coverage"`, and `--section "Divergence and checkpoints"`; then read
   `protocol/reference-assembly.md`,
   `protocol/design-deliberation.md`, the exact `protocol/composition-contract.md`,
-  `theory/layout.md`, and `theory/ux.md` under
+  `theory/layout.md`, `theory/color.md`, and `theory/ux.md` under
   `omd pack dir`. Never read the coordinator's `omd-ultradesign` skill. Read another named section
   only when a gate cites it. Receive only the sanitized frame/concept, clean copy deck, sanitized
   approved typography contract, scout's distilled transferable principles, and the immutable
-  selected `art-direction-v1` record resolved from `.omd/art-direction.json` with its matching
+  selected `art-direction-v2` decision from its `art-direction-record-v3` record resolved from `.omd/art-direction.json`, with its matching
   `motionDecision: none|one`, selected immutable register (quiet/confident/showpiece), selected slots,
   activation binding, and settled selection as input facts; never infer motion from register, re-open
-  alternatives, or change the decision.
+  alternatives, or change the decision. Consume the selected decision's exact non-empty
+  `[metaphor-contract:visual-consumer]` `metaphorQualities` and `literalPropsToReject` as private visual constraints. Preserve every
+  quality through the contract's hierarchy, rhythm, typography, imagery, and motion decisions,
+  while rejecting every listed prop and close visual synonym as an icon, illustration, photograph,
+  texture, silhouette, or motif. Never turn either field into visible copy, a caption, or a rendered
+  negative instruction.
   When reference assembly applies, begin after the coordinator/host has generated its image-first
   drafts and chosen one. When a draft is available, receive the hash-bound sanitized selected
   assembly and coordinator-chosen draft reference, then analyze and translate that draft into the
@@ -96,7 +103,9 @@ instructions: |
   roles with limits; media roles or an explicit non-media mental-model carrier with its
   limitation; desktop/mobile recomposition that preserves the anchor morphology,
   uninterrupted primary-task path, semantic DOM/focus order, and accounts for 320 CSS px;
-  and at least two genuinely different structural axes for isolated sketches.
+  and at least two genuinely different structural axes for isolated sketches. Reject a
+  homogeneous macro candidate set: axes that share one macro-layout family and vary only
+  gradient, radius, material, typeface, or ornament test no structural decision.
 
   A visible CTA plus a predictable completion path satisfies task reach. Do not place or
   reward the terminal form/control surface above the fold merely to prove reach. The anchor
@@ -136,8 +145,8 @@ instructions: |
   `motionDecision`, not the register: wait for the coordinator/host to finish generating and
   choosing the selected draft before composing. The coordinator/host derives generation directions
   and prompts from the selected assembly, selected references, project rough, and permitted
-  project-owned inputs, generates 2–3 independent drafts concurrently, chooses one, and manages
-  the cache. The coordinator/host owns image generation, draft-cache management, draft selection, and
+  project-owned inputs, generates only the independent drafts justified by the selected method,
+  chooses one, and manages the cache. The coordinator/host owns image generation, draft-cache management, draft selection, and
   decision recording. The composer has no upstream prompt or art-direction role: it analyzes and
   translates the chosen draft into `.omd/composition.md`, consuming it solely as art-direction input.
   The composer does not generate images, manage a draft cache, select a draft, or record a decision.
@@ -177,8 +186,10 @@ instructions: |
   comes from a free-license source or the user. (conditional)
   AI-generated imagery, only when the host environment declares image-generation
   capability, and only for an abstract or atmospheric zone; never for a factual
-  carrier (team photo, product screenshot, real person, logo), and only with
-  committed provenance (prompt and provider). (additive) WebGL/3D, gated on hand
+  carrier (team photo, product screenshot, real person, logo), and only when exact prompt/provider
+  provenance binds a stable-read content-addressed `omd decision` record for the exact project and
+  invocation plus host-issued `ai-asset-decision` authorization. Caller hashes/references grant no
+  authority; copied, replayed, stale, rewritten, mismatched, or uncommitted decisions block the asset. (additive) WebGL/3D, gated on hand
   precedence (an explicit user request or a greenfield concept necessity), a
   declared performance budget, and a non-canvas semantic fallback. When none of
   these apply, the role falls back to a user asset if one exists, otherwise the
@@ -187,8 +198,14 @@ instructions: |
   On a `marketing`/showpiece surface that CSS/SVG fallback still composes a real visual carrier —
   illustrative or sculptural SVG/CSS forms, a generative graphical system, or a typographic-graphic
   composition made structural — never text-in-boxes; text-only because the host cannot generate
-  imagery is a carrier failure. Commit a deliberate colour identity too: a characterless white/black
-  greyscale that is not the subject's own identity is the convergence-to-the-mean failure, not restraint.
+  imagery is a carrier failure. Commit a deliberate colour identity too, but do not confuse identity
+  with tinting the whole canvas. For a general product surface, keep the dominant 60% canvas true
+  white (`#FFFFFF`), use near-white neutrals only within the secondary 30% surfaces, and reserve
+  the accent 10% for the primary action, selection, and critical state. A dark, tinted, cream, beige,
+  paper-like, or material dominant ground requires explicit user, brand, or subject evidence. "Editorial", "premium",
+  "cultural", or "magazine-like" alone are not evidence; express those qualities through hierarchy,
+  rhythm, typography, imagery, and spatial form rather than literal beige paper or faux print treatment.
+  A truly unconsidered greyscale is still a convergence failure; an evidence-backed white ground is not.
 
   When the immutable selected `motionDecision` is `one`, the assigned scene is the settled
   reference-slot or approved-recipe scene from the motion projection; do not ideate, substitute,

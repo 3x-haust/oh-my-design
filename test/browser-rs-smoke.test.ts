@@ -32,7 +32,7 @@ function options(item: Fixture, mode: string, timeouts: Timeouts = NORMAL_TIMEOU
     temporaryDirectory: item.root,
     responseTimeoutMs: timeouts.responseTimeoutMs,
     processTimeoutMs: timeouts.processTimeoutMs,
-    spawn: (_binary, _args, environment) => spawn(process.execPath, [FAKE_SERVER, mode], { stdio: ['pipe', 'pipe', 'pipe'], env: { ...environment, OMD_FAKE_TEMPORARY_DIRECTORY: item.root, ...extraEnvironment } }),
+    spawn: (_binary, _args, environment) => spawn(process.execPath, [FAKE_SERVER, mode], { stdio: ['pipe', 'pipe', 'pipe'], detached: process.platform !== 'win32', env: { ...environment, OMD_FAKE_TEMPORARY_DIRECTORY: item.root, ...extraEnvironment } }),
   };
 }
 
@@ -143,6 +143,20 @@ test('Given an early provider exit When smoke runs Then it reports the process f
     await assert.rejects(runBrowserRsSmoke(options(item, 'early-exit')), /exited/);
 
     // Then: no profile or screenshot survives.
+    cleaned(item, undefined);
+  } finally {
+    rmSync(item.root, { recursive: true, force: true });
+  }
+});
+
+test('Given a crashed provider with a descendant When smoke runs Then it kills the orphaned process group', async () => {
+  const item = fixture();
+  const descendantPidPath = join(item.root, 'descendant.pid');
+  try {
+    await assert.rejects(runBrowserRsSmoke(options(item, 'orphan-on-exit', NORMAL_TIMEOUTS, { OMD_FAKE_DESCENDANT_PID: descendantPidPath })), /exited/);
+    const descendantPid = Number(readFileSync(descendantPidPath, 'utf8'));
+    assert.throws(() => process.kill(descendantPid, 0), (error: unknown) => error instanceof Error && 'code' in error && error.code === 'ESRCH');
+    rmSync(descendantPidPath);
     cleaned(item, undefined);
   } finally {
     rmSync(item.root, { recursive: true, force: true });

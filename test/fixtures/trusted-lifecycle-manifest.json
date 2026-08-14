@@ -1,0 +1,22 @@
+{
+  "schema": "trusted-lifecycle-manifest-v1",
+  "entryPath": "index.html",
+  "scripts": [
+    {
+      "outcomeRef": "mustHave:0",
+      "actions": [
+        {
+          "kind": "click",
+          "selector": "#submit"
+        }
+      ],
+      "assertions": [
+        {
+          "kind": "visible-text",
+          "selector": "[role=status]",
+          "text": "Order submitted"
+        }
+      ]
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -26,7 +26,7 @@ function corpus() {
   return { briefs, routeMap: Object.fromEntries(briefs.map(item => [item.id, item.surface])) };
 }
 function lockFixture(mutation = '') {
-  const root = mkdtempSync(join(tmpdir(), 'omd-lock-'));
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-lock-')));
   const bytes: Record<string, string> = { ...SIGNED_EVIDENCE_ARTIFACT_BYTES };
   const declarations = SIGNED_EVIDENCE_DECLARATIONS.map(entry => ({ ...entry }));
   if (mutation) {
@@ -47,7 +47,28 @@ function lockFixture(mutation = '') {
     throw error;
   }
 }
-const portableHelper = resolve('test/fixtures/harness-v2-subprocess.mjs');
+test('evidence lock canonicalizes a named stable root', () => {
+  const evidence = lockFixture();
+  const namedRoot = evidence.root.startsWith('/private/var/') ? `/var/${evidence.root.slice('/private/var/'.length)}` : evidence.root;
+  try {
+    assert.doesNotThrow(() => materializeEvidenceLock(namedRoot, SIGNED_EVIDENCE_DECLARATIONS));
+  } finally {
+    rmSync(evidence.root, { recursive: true, force: true });
+  }
+});
+test('evidence lock rejects symbolic-link ancestors beneath its stable root', () => {
+  const evidence = lockFixture();
+  const alias = mkdtempSync(join(tmpdir(), 'omd-link-'));
+  try {
+    rmSync(join(evidence.root, '.omd'), { recursive: true, force: true });
+    symlinkSync(alias, join(evidence.root, '.omd'));
+    assert.throws(() => materializeEvidenceLock(evidence.root, SIGNED_EVIDENCE_DECLARATIONS), /symbolic-link ancestor/);
+  } finally {
+    rmSync(evidence.root, { recursive: true, force: true });
+    rmSync(alias, { recursive: true, force: true });
+  }
+});
+const portableHelper = realpathSync(resolve('test/fixtures/harness-v2-subprocess.mjs'));
 function canonicalCliInput(evidence: ReturnType<typeof lockFixture>) {
   const developmentCorpus = JSON.parse(SIGNED_EVIDENCE_ARTIFACT_BYTES.E1!).payload.briefs;
   const developmentRouteMap = JSON.parse(SIGNED_EVIDENCE_ARTIFACT_BYTES.E2!).payload.routeMap;
@@ -62,7 +83,10 @@ function canonicalCliInput(evidence: ReturnType<typeof lockFixture>) {
 function runCanonicalCli(input: object, root: string) {
   const inputPath = join(root, 'harness-v2-cli-input.json');
   writeFileSync(inputPath, JSON.stringify(input));
-  return spawnSync(process.execPath, ['scripts/benchmark/run-harness-v2.ts', inputPath], { cwd: resolve('.'), encoding: 'utf8', maxBuffer: 4 * 1024 * 1024 });
+  return spawnSync(process.execPath, ['scripts/benchmark/run-harness-v2.ts', inputPath], { cwd: resolve('.'), encoding: 'utf8', maxBuffer: 4 * 1024 * 1024, timeout: 1_800_000 });
+}
+function stagedHarnessDirectories(): readonly string[] {
+  return Object.freeze(readdirSync(tmpdir()).filter((name) => name.startsWith('omd-harness-stage-')).sort());
 }
 const unsignedUsage = createUnsignedUsageComputation('fixture-parent-observer', () => ({ tokens: 0, usd: 0 }));
 function host(consume = true): IsolatedHarnessHost {
@@ -143,12 +167,23 @@ test('unsigned computation reaches host-consumption and reviewer-independence re
   assert.throws(() => runUnsignedFixture({ host: host(false), reviewerLanes: reviewers(() => 'one') }), /complete immutable artifact and observed evidence consumption/);
   assert.throws(() => runUnsignedFixture({ reviewerLanes: reviewers(() => 'one', true) }), /reviewer session is reused, unobserved, or non-independent/);
 });
+test('loaded-skill observation rejects caller-created metadata instead of branding it', () => {
+  const adapter = createReviewerMcpAdapter();
+  try {
+    assert.throws(
+      () => adapter.observeLoadedSkill('codex', portableHelper as unknown as object, digest('forged')),
+      /not the host-observed loaded-skill bytes/,
+    );
+  } finally {
+    adapter.dispose();
+  }
+});
 test('process-bound reviewer evidence is one-shot and held only in live transport memory', () => {
   const adapter = createReviewerMcpAdapter();
   const payload = new Uint8Array(8 * 1024 * 1024 + 1);
   try {
-    assert.throws(() => adapter.launch({ host: 'codex', buildSha256: digest('build'), loadedSkillSha256: digest('skill'), briefSha256: digest('brief'), evidence: 'forged', processBinding: { parentPid: 1 } }), /parent process binding must be host-observed/);
-    const receipt = adapter.launch({ host: 'codex', buildSha256: digest('build'), loadedSkillSha256: digest('skill'), briefSha256: digest('brief'), evidence: payload, alias: { scope: 'fixture', expiresAt: new Date(Date.now() + 60_000).toISOString(), byteLimit: payload.byteLength } });
+    assert.throws(() => adapter.launch({ host: 'codex', buildSha256: digest('build'), loadedSkillSha256: digest('skill'), briefSha256: digest('brief'), browserSha256: digest('browser'), evidence: 'forged', processBinding: { parentPid: 1, parentExecutableSha256: digest('parent'), reviewerPid: 0, reviewerExecutableSha256: digest('reviewer'), laneId: 'forged-lane', runnerId: 'forged-runner', sessionId: 'forged-session', nonce: 'forged-nonce', expiresAt: new Date(Date.now() + 60_000).toISOString() } }), /requires an exact parent process, designated reviewer, lane, runner, session, nonce, and expiry binding/);
+    const receipt = adapter.launch({ host: 'codex', buildSha256: digest('build'), loadedSkillSha256: digest('skill'), briefSha256: digest('brief'), browserSha256: digest('browser'), evidence: payload, alias: { scope: 'fixture', expiresAt: new Date(Date.now() + 60_000).toISOString(), byteLimit: payload.byteLength } });
     assert.equal(receipt.evidence.sha256, createHash('sha256').update(payload).digest('hex'));
     assert.throws(() => reviewerEvidenceSha256(receipt), /verified child\/process\/configuration\/capability handshake/);
     assert.equal(JSON.stringify(receipt).includes(Buffer.from(payload).toString('base64')), false);
@@ -181,7 +216,8 @@ test('unsigned computation reaches telemetry shape and cap rejection branches', 
   }
 });
 test('public callbacks only drive unsigned telemetry and cannot mint an authoritative report', () => {
-  assert.deepEqual(computeUnsignedUsage(unsignedUsage, [{ runnerId: 'r', hostIdentity: 'h', kind: 'host', laneId: 'l' }]), { tokens: 0, usd: 0 });
+  assert.deepEqual(computeUnsignedUsage(unsignedUsage, [{ runnerId: 'r', executionId: digest('execution'), hostIdentity: 'h', kind: 'host', laneId: 'l' }]), { tokens: 0, usd: 0 });
+  assert.throws(() => computeUnsignedUsage(unsignedUsage, [{ runnerId: 'r', executionId: 'forged', hostIdentity: 'h', kind: 'host', laneId: 'l' }]), /exact execution identity/);
   const output = runUnsignedFixture({ usageComputation: { identity: 'forged', observe: () => ({ tokens: 0, usd: 0 }) } });
   assert.equal('report' in output, false);
   assert.equal('signedE5Digest' in output, false);
@@ -220,20 +256,45 @@ test('validated snapshots retain private immutable authority after caller mutati
     for (const entry of supplied) entry.bytes[0] = 0;
     assert.equal(readEvidenceSnapshotPayload(snapshot, 'E5').runnerId, JSON.parse(SIGNED_EVIDENCE_ARTIFACT_BYTES.E5!).payload.runnerId);
     assert.equal(createHash('sha256').update(readEvidenceSnapshotBytes(snapshot, 'E5')).digest('hex'), snapshot.lock.entries.find(entry => entry.id === 'E5')!.sha256);
-    evidence.lock.entries.find(entry => entry.id === 'E13')!.sha256 = '0'.repeat(64);
-    assert.throws(() => requireEvidenceLockSnapshot(snapshot, evidence.lock), /validated immutable provenance/);
+    const callerOwnedLock = { ...evidence.lock, entries: evidence.lock.entries.map(entry => ({ ...entry })) };
+    callerOwnedLock.entries.find(entry => entry.id === 'E13')!.sha256 = '0'.repeat(64);
+    assert.throws(() => requireEvidenceLockSnapshot(snapshot, callerOwnedLock), /validated immutable provenance/);
   } finally { rmSync(evidence.root, { recursive: true, force: true }); }
 });
-test('canonical CLI subprocess matches the signed E6-E11 authoritative projection', () => {
+test('canonical CLI subprocess matches the signed E6-E11 authoritative projection', { skip: process.env.OMD_OBSERVER_PRIVATE_KEY === undefined ? 'requires external E5 observer signing authority' : false }, () => {
   const evidence = lockFixture();
   try {
     validateEvidenceLock(evidence.root, evidence.lock);
+    const stagesBefore = stagedHarnessDirectories();
     const child = runCanonicalCli(canonicalCliInput(evidence), evidence.root);
     assert.equal(child.status, 0, child.stderr);
+    assert.deepEqual(stagedHarnessDirectories(), stagesBefore, 'successful canonical runs clean pinned executable staging');
     const report = JSON.parse(child.stdout).report;
-    for (const [id, fields] of ['E6', 'E7', 'E8', 'E9', 'E10', 'E11'].map(id => [id, Object.keys(JSON.parse(SIGNED_EVIDENCE_ARTIFACT_BYTES[id]!).payload).filter(field => field !== 'lineage')] as const)) for (const field of fields) assert.deepEqual(report[field], JSON.parse(SIGNED_EVIDENCE_ARTIFACT_BYTES[id]!).payload[field], `${id}.${field}`);
-    assert.match(report.executionReceiptDigest, /^[a-f0-9]{64}$/);
+    const runtimeReceiptFields = new Set([
+      'reviewerReceiptDigest',
+      'executionReceiptDigest',
+      'receiptDigest',
+      'lineageRoot',
+      'observationEnvelope',
+      'processSessionIdentity',
+    ]);
+    for (const id of ['E6', 'E7', 'E8', 'E9', 'E10', 'E11']) {
+      const signed = JSON.parse(SIGNED_EVIDENCE_ARTIFACT_BYTES[id]!).payload;
+      for (const field of Object.keys(signed).filter(field => field !== 'lineage' && !runtimeReceiptFields.has(field))) {
+        assert.deepEqual(report[field], signed[field], `${id}.${field}`);
+      }
+    }
+    for (const field of runtimeReceiptFields) assert.match(report[field], /^[a-f0-9]{64}$/, field);
     assert.notEqual(report.executionReceiptDigest, digest([]));
+    const repeatEvidence = lockFixture();
+    try {
+      const repeat = runCanonicalCli(canonicalCliInput(repeatEvidence), repeatEvidence.root);
+      assert.equal(repeat.status, 0, repeat.stderr);
+      const repeated = JSON.parse(repeat.stdout);
+      assert.deepEqual(Object.keys(repeated.receipts), Object.keys(JSON.parse(child.stdout).receipts), 'bounded workers preserve canonical receipt order');
+      assert.equal(repeated.report.buildReceiptDigest, report.buildReceiptDigest, 'bounded workers preserve build receipt digest');
+      assert.equal(repeated.report.browserReceiptDigest, report.browserReceiptDigest, 'bounded workers preserve browser receipt digest');
+    } finally { rmSync(repeatEvidence.root, { recursive: true, force: true }); }
   } finally { rmSync(evidence.root, { recursive: true, force: true }); }
 });
 test('CLI child-spawn authority negatives fail at their named boundaries after evidence-lock validation', () => {
@@ -243,7 +304,7 @@ test('CLI child-spawn authority negatives fail at their named boundaries after e
     [(input: ReturnType<typeof canonicalCliInput>) => { input.reviewerCommands[0]!.laneId = 'forged-lane'; }, /reviewer is not authorized by signed E5/],
     [(input: ReturnType<typeof canonicalCliInput>) => { input.usageSidecarArgs = ['observer', 'forged-accounting']; }, /usage sidecar interpreter, target, or config does not match signed E5/],
     [(input: ReturnType<typeof canonicalCliInput>) => { input.usageSidecarArgs = []; }, /usage sidecar interpreter, target, or config does not match signed E5/],
-    [(input: ReturnType<typeof canonicalCliInput>) => { input.reviewerCommands[1]!.args = ['reviewer', 'forged']; }, /reviewer lane-1 interpreter, target, or config does not match signed E5/],
+    [(input: ReturnType<typeof canonicalCliInput>) => { input.reviewerCommands[1]!.args = ['reviewer', 'forged']; }, /reviewer lane-[^ ]+ interpreter, target, or config does not match signed E5/],
   ] as const;
   for (const [mutate, expected] of scenarios) {
     const evidence = lockFixture();

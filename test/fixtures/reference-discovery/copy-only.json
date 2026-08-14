@@ -1,0 +1,9 @@
+{
+  "schema": "reference-discovery-input-v1",
+  "taskNeed": "copy-only-edit",
+  "uncertainty": "resolved",
+  "existingEvidence": "sufficient",
+  "intendedUse": "Preserve the approved product voice and verified terminology.",
+  "existingEvidenceUse": "The approved copy deck and verified product facts directly constrain this edit.",
+  "skipReason": "Existing approved evidence fully covers this copy-only edit."
+}

@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { STAGES, readDeliveryReceipts, requireStage, resolveRunState } from '../core/stage/contract.ts';
+import { publishTestAdaptiveRoute } from './helpers/project-write.ts';
 import { evaluateStageBudget, readStageUsage, serializeStageUsage, STAGE_USAGE_LOG, STAGE_USAGE_SCHEMA, stageCosts } from '../core/stage/usage.ts';
 
 // Stage state is the loop's answer to a run that died mid-stage or lost its context to compaction.
@@ -73,6 +74,18 @@ test('delivery unblocks a stage and an edited contract invalidates its receipt',
   const stale = requireStage(dir, stalePack, 'frame');
   assert.equal(stale.ok, false);
   assert.deepEqual(stale.undeliveredContracts, ['protocol/human-design-loop.md', 'theory/ux.md']);
+});
+
+test('an adaptive route preserves the selected model stage order instead of the canonical table order', () => {
+  const dir = project();
+  const input = JSON.parse(readFileSync(fileURLToPath(
+    new URL('fixtures/adaptive-flow/medical-new-product.json', import.meta.url),
+  ), 'utf8'));
+  const invocation = publishTestAdaptiveRoute(dir, input);
+
+  const state = resolveRunState(dir, PACK, invocation);
+  assert.deepEqual(state.stages.map((stage) => stage.stage), ['frame', 'scout', 'copy', 'composition']);
+  assert.equal(state.current, 'frame');
 });
 
 test('run state names the current stage and its blocking contracts after a partial run', () => {

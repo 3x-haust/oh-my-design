@@ -1,4 +1,6 @@
 import { appendFileSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { spawn } from 'node:child_process';
+import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -78,6 +80,11 @@ async function handle(message) {
     if (!initializedNotification) return fail(message.id, 'initialized notification was missing or out of order');
     if (mode === 'timeout') return;
     if (mode === 'early-exit') process.exit(29);
+    if (mode === 'orphan-on-exit') {
+      const descendant = spawn(process.execPath, ['-e', "require('node:net').createServer().listen(0, '127.0.0.1')"], { stdio: ['ignore', 'inherit', 'inherit'] });
+      writeFileSync(process.env.OMD_FAKE_DESCENDANT_PID, String(descendant.pid));
+      process.exit(29);
+    }
     send(message.id, { tools: tools().map((name) => ({ name })) });
     return;
   }
@@ -153,7 +160,7 @@ process.stdin.on('data', (chunk) => {
 });
 process.stdin.on('end', () => {
   queue.then(() => {
-    if (mode === 'process-timeout' || overflowed) setInterval(() => undefined, 1_000);
+    if (mode === 'process-timeout' || overflowed) createServer().listen({ host: '127.0.0.1', port: 0 });
     else {
       if (process.env.OMD_FAKE_TEMPORARY_DIRECTORY === undefined) rmSync(fakeRoot, { recursive: true, force: true });
       process.exitCode = closed ? 0 : 31;

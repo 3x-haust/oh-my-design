@@ -267,9 +267,14 @@ function executeHostIssuedCli(
   const receiptArgs = [binPath, ...receiptArgv, '--activation', 'activation.json'];
   writeFileSync(join(projectRoot, 'activation.json'), JSON.stringify({ activation, current: activation }));
   const receipt = {
-    schema: 'omd-host-project-write-receipt-v2',
+    schema: 'omd-host-project-write-receipt-v3',
     host: 'claude',
-    hostAuthentication: { host: 'claude', mechanism: 'inherited-ipc' },
+    hostAuthentication: {
+      host: 'claude',
+      mechanism: 'inherited-ipc',
+      parentPid: process.pid,
+      parentExecutableSha256: createHash('sha256').update(readFileSync(process.execPath)).digest('hex'),
+    },
     projectRoot: realpathSync(projectRoot),
     argvSha256: createHash('sha256').update(canonicalJson([process.execPath, ...receiptArgs])).digest('hex'),
     buildSha256: activation.buildSha256,
@@ -309,9 +314,14 @@ function executeHostIssuedCliTwice(projectRoot: string, nonce: string) {
   const argv = ['config', 'set', 'checkpoint', 'both'];
   const args = [binPath, ...argv, '--activation', 'activation.json'];
   const receipt = {
-    schema: 'omd-host-project-write-receipt-v2',
+    schema: 'omd-host-project-write-receipt-v3',
     host: 'claude',
-    hostAuthentication: { host: 'claude', mechanism: 'inherited-ipc' },
+    hostAuthentication: {
+      host: 'claude',
+      mechanism: 'inherited-ipc',
+      parentPid: process.pid,
+      parentExecutableSha256: createHash('sha256').update(readFileSync(process.execPath)).digest('hex'),
+    },
     projectRoot: realpathSync(projectRoot),
     argvSha256: createHash('sha256').update(canonicalJson([process.execPath, ...args])).digest('hex'),
     buildSha256: activation.buildSha256,
@@ -344,7 +354,9 @@ process.stdout.write(JSON.stringify({
 }
 
 test('guarded writes reject missing and stale activation before mutating', () => {
-  const root = mkdtempSync(join(tmpdir(), 'omd-project-write-'));
+  const container = mkdtempSync(join(tmpdir(), 'omd-project-write-'));
+  const root = join(container, 'project');
+  mkdirSync(root);
   try {
     assert.throws(() => Reflect.apply(writeProjectFile, undefined, [{ projectRoot: root, relativePath: 'blocked.txt', content: 'no', invocation: undefined }]));
     const stale = invocation();
@@ -367,13 +379,14 @@ test('guarded writes reject missing and stale activation before mutating', () =>
       invocation: { activation: report.activation, current: report.activation },
     }), ProjectWriteError);
   } finally {
-    rmSync(root, { recursive: true, force: true });
-    rmSync(resolve(root, '..', '.omd-observations'), { recursive: true, force: true });
+    rmSync(container, { recursive: true, force: true });
   }
 });
 
 test('external observation writes use the invocation-bound output root and reject arbitrary targets and overwrites', () => {
-  const projectRoot = mkdtempSync(join(tmpdir(), 'omd-observation-project-'));
+  const container = mkdtempSync(join(tmpdir(), 'omd-observation-project-'));
+  const projectRoot = join(container, 'project');
+  mkdirSync(projectRoot);
   try {
     const canonicalProjectRoot = realpathSync(projectRoot);
     const report = executeLocalCli(projectRoot, ['guarded', 'render']);
@@ -387,13 +400,14 @@ test('external observation writes use the invocation-bound output root and rejec
     assert.equal(existsSync(resolve(projectRoot, '..', '.omd-observations', 'render', 'nested')), false);
     assert.equal(existsSync(resolve(projectRoot, '..', '.omd-observations', 'render', 'nested', 'proof.txt')), false);
   } finally {
-    rmSync(projectRoot, { recursive: true, force: true });
-    rmSync(resolve(projectRoot, '..', '.omd-observations'), { recursive: true, force: true });
+    rmSync(container, { recursive: true, force: true });
   }
 });
 
 test('local CLI invocation is byte- and argv-bound, guarded, and cannot mint reviewer access', () => {
-  const root = mkdtempSync(join(tmpdir(), 'omd-local-cli-'));
+  const container = mkdtempSync(join(tmpdir(), 'omd-local-cli-'));
+  const root = join(container, 'project');
+  mkdirSync(root);
   try {
     const local = executeLocalCli(root, ['guarded', 'config', 'set', 'checkpoint', 'both']);
     const changedArgv = executeLocalCli(root, ['serialized', 'config', 'set', 'checkpoint', 'none']);
@@ -429,13 +443,13 @@ test('local CLI invocation is byte- and argv-bound, guarded, and cannot mint rev
           buildSha256: local.activation.buildSha256,
           loadedSkillSha256: local.activation.loadedSkillSha256,
           briefSha256: local.activation.briefSha256,
+          browserSha256: 'b'.repeat(64),
           evidence: 'not a local reviewer',
         }),
       ),
     );
   } finally {
-    rmSync(root, { recursive: true, force: true });
-    rmSync(resolve(root, '..', '.omd-observations'), { recursive: true, force: true });
+    rmSync(container, { recursive: true, force: true });
   }
 });
 
@@ -720,6 +734,10 @@ test('normal CLI mutation graph has no unclassified direct project writers', () 
   assert.equal(
     inventory.owners.find((owner) => owner.filePath === 'adapters/reviewer-mcp.ts')?.exception,
     'reviewer proxy live-socket cleanup (audited in-memory broker)',
+  );
+  assert.equal(
+    inventory.owners.find((owner) => owner.filePath === 'core/figma/artifact-authority-store.ts')?.exception,
+    'external host-owned Figma artifact authority store (audited exact-identity adapter)',
   );
 });
 

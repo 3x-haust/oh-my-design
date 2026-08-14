@@ -1,13 +1,16 @@
 import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
-import { existsSync, readFileSync, realpathSync } from 'node:fs';
-import { resolve, dirname, basename, isAbsolute, join, relative } from 'node:path';
+import { constants as fsConstants, closeSync, fstatSync, lstatSync, openSync, readFileSync, realpathSync, type Stats } from 'node:fs';
+import { resolve, dirname, basename, isAbsolute, join, normalize, relative } from 'node:path';
 import { extractInPage } from '../ir/dom.ts';
+import { resolveRenderTarget as resolveTarget } from './serve.ts';
 import { computeEnergy } from '../motion/energy.ts';
 import type { EnergyCurve, MotionMeasurement, RawIr } from '../types.ts';
 import { type ProjectWriteAdapter, requireProjectWriteAdapter } from '../runtime/project-write.ts';
 import type { RenderedBeat, RenderedBeatProof } from '../copy/index.ts';
+import { requireMotionResultAuthorization, requireRenderedBeatResultAuthorization, type ProjectRunInvocation } from '../runtime/invocation.ts';
 const MAX_NODES = 4000;
+const MOTION_CAPTURE_EVENT_TIMEOUT_MS = 5_000;
 const reducedMotionRemovalThreshold = (noiseFloor: number): number => noiseFloor * 2;
 
 const projectOutputPath = (adapter: ProjectWriteAdapter, output: string): string => {
@@ -16,6 +19,49 @@ const projectOutputPath = (adapter: ProjectWriteAdapter, output: string): string
   const path = relative(adapter.projectRoot, canonicalOutput).split('\\').join('/');
   if (path === '..' || path.startsWith('../')) throw new Error('render output must be inside the adapter project root');
   return path;
+};
+const retainedProjectArtifactBytes = (root: string, artifact: string, label: string): Buffer => {
+  if (isAbsolute(artifact) || artifact.includes('\\') || artifact === '.' || artifact !== normalize(artifact) || artifact.split('/').includes('..')) {
+    motionFail(`${label} must be a normalized project-relative path`);
+  }
+  const canonicalRoot = realpathSync(root);
+  const path = resolve(canonicalRoot, artifact);
+  if (relative(canonicalRoot, path) === '..' || relative(canonicalRoot, path).startsWith('../')) motionFail(`${label} escapes the project root`);
+  const descriptors: number[] = [];
+  const identity = (stat: Stats) => `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeMs}:${stat.ctimeMs}`;
+  try {
+    const rootDescriptor = openSync(canonicalRoot, fsConstants.O_RDONLY | fsConstants.O_DIRECTORY | fsConstants.O_NOFOLLOW);
+    descriptors.push(rootDescriptor);
+    const ancestors = [{ path: canonicalRoot, identity: identity(fstatSync(rootDescriptor)) }];
+    let current = canonicalRoot;
+    for (const segment of artifact.split('/').slice(0, -1)) {
+      current = join(current, segment);
+      const descriptor = openSync(current, fsConstants.O_RDONLY | fsConstants.O_DIRECTORY | fsConstants.O_NOFOLLOW);
+      descriptors.push(descriptor);
+      const stat = fstatSync(descriptor);
+      if (!stat.isDirectory()) motionFail(`${label} escapes the project root`);
+      ancestors.push({ path: current, identity: identity(stat) });
+    }
+    const descriptor = openSync(path, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
+    descriptors.push(descriptor);
+    const before = fstatSync(descriptor);
+    if (!before.isFile()) motionFail(`${label} must be a regular non-symlink file`);
+    const bytes = readFileSync(descriptor);
+    const after = fstatSync(descriptor);
+    if (identity(before) !== identity(after) || bytes.length !== before.size) motionFail(`${label} changed while read`);
+    for (const ancestor of ancestors) {
+      const stat = lstatSync(ancestor.path);
+      if (!stat.isDirectory() || stat.isSymbolicLink() || identity(stat) !== ancestor.identity) motionFail(`${label} ancestor changed while read`);
+    }
+    const entry = lstatSync(path);
+    if (!entry.isFile() || entry.isSymbolicLink() || identity(entry) !== identity(before)) motionFail(`${label} changed while read`);
+    return bytes;
+  } catch (error) {
+    if (error instanceof MotionEvidenceValidationError) throw error;
+    motionFail(`${label} could not be opened without following links`);
+  } finally {
+    for (const descriptor of descriptors.reverse()) closeSync(descriptor);
+  }
 };
 const writeScreenshot = async (
   capture: () => Promise<Buffer>,
@@ -147,12 +193,6 @@ export async function waitForDocumentFonts(
   }
 }
 
-function toUrl(target: string): string {
-  if (/^https?:\/\//.test(target)) return target;
-  const path = resolve(target);
-  if (!existsSync(path)) throw new Error(`no such page: ${target}`);
-  return pathToFileURL(path).href;
-}
 
 type Browser = import('playwright').Browser;
 
@@ -173,17 +213,35 @@ export async function onPage<T>(
   browser: Browser,
   target: string,
   viewport: Viewport,
-  fn: (page: import('playwright').Page, httpStatus: number | null, resolvedUrl: string) => Promise<T>,
+  fn: (page: import('playwright').Page, httpStatus: number | null, resolvedUrl: string, loadTimestampMs: number) => Promise<T>,
 ): Promise<T> {
   const page = await browser.newPage({ viewport });
+  const resolved = await resolveTarget(target);
   try {
-    const resolvedUrl = toUrl(target);
-    const response = await page.goto(resolvedUrl, { waitUntil: 'networkidle' });
+    const observedLoad = page.waitForEvent('load');
+    const response = await page.goto(resolved.url, { waitUntil: 'domcontentloaded' });
+    await observedLoad;
+    const loadTimestampMs = Date.now();
     await waitForDocumentFonts(page);
-    return await fn(page, response?.status() ?? null, resolvedUrl);
+    return await fn(page, response?.status() ?? null, resolved.url, loadTimestampMs);
   } finally {
     await page.close();
+    await resolved.close();
   }
+}
+function canonicalResultBytes(value: unknown): Buffer {
+  const serialize = (item: unknown): string => {
+    if (item === null || typeof item === 'boolean' || typeof item === 'string') return JSON.stringify(item);
+    if (typeof item === 'number') {
+      if (!Number.isFinite(item)) throw new Error('result projection must contain finite numbers');
+      return JSON.stringify(item);
+    }
+    if (Array.isArray(item)) return `[${item.map(serialize).join(',')}]`;
+    if (typeof item !== 'object') throw new Error('result projection must be JSON-compatible');
+    const record = item as Record<string, unknown>;
+    return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${serialize(record[key])}`).join(',')}}`;
+  };
+  return Buffer.from(`${serialize(value)}\n`);
 }
 
 async function withPage<T>(
@@ -199,6 +257,13 @@ export function parseViewport(s = '390x844'): Viewport {
   if (!width || !height) throw new Error(`bad viewport: ${s}`);
   return { width, height };
 }
+
+/**
+ * Reference capture runs at desktop width. Captured at the mobile default, a landing-page board
+ * holds 358px column fragments — a 49px title strip, a header collapsed to a menu button — and the
+ * build that composes from it has never seen the layout it is being asked to produce.
+ */
+export const REFERENCE_VIEWPORT = '1440x900';
 
 export function renderPage(target: string, opts: { viewport: Viewport; out: string; squint?: boolean; fullPage?: boolean; adapter: ProjectWriteAdapter }): Promise<string> {
   return withPage(target, opts.viewport, async (page, _httpStatus, _resolvedUrl) => {
@@ -600,13 +665,14 @@ export async function capturePageForRef(
   });
 }
 /**
- * Executes one real browser trigger and saves ROI screenshots as independently
- * verifiable receipts. Callers supply immutable run/build/reference bindings.
+ * Captures the load-only canonical motion scene and saves selector-local screenshots
+ * as independently verifiable receipts. Callers supply immutable run/build/reference bindings.
  */
 export async function captureMotionEvidenceV2(
   target: string,
   opts: {
     viewport: Viewport; outDir: string; runId: string; buildHash: string; artDirectionHash: string;
+    route?: string; taskId?: string; invocation?: ProjectRunInvocation;
     referenceSlotId?: string; sourceInfluence?: MotionSourceInfluence; selector: string; adapter: ProjectWriteAdapter;
     trigger: MotionTrigger; intervalMs?: number;
   },
@@ -614,9 +680,15 @@ export async function captureMotionEvidenceV2(
   const interval = opts.intervalMs ?? 150;
   const adapter = requireProjectWriteAdapter(opts.adapter.projectRoot, opts.adapter);
   const outputDirectory = projectOutputPath(adapter, opts.outDir);
+  if (opts.invocation === undefined || opts.route === undefined || opts.taskId === undefined) {
+    throw new Error('motion collection requires a host-issued invocation, route, and task');
+  }
+  if (opts.trigger !== 'load') throw new Error('canonical motion evidence only supports the load trigger');
+  const route = opts.route;
+  const taskId = opts.taskId;
   if (outputDirectory) adapter.mkdir(outputDirectory);
-  return withBrowser((browser) => onPage(browser, target, opts.viewport, async (page) => {
-    const started = Date.now();
+  return withBrowser((browser) => onPage(browser, target, opts.viewport, async (page, _httpStatus, _resolvedUrl, loadTimestampMs) => {
+    const started = loadTimestampMs;
     const element = await page.$(opts.selector);
     if (!element) throw new Error(`no element matches ROI selector: ${opts.selector}`);
     const box = await element.boundingBox();
@@ -636,69 +708,83 @@ export async function captureMotionEvidenceV2(
       adapter.write(path, bytes);
       return { path, bytesBase64: bytes.toString('base64'), sha256: createHash('sha256').update(bytes).digest('hex') };
     };
-    const baseline = await receipt('baseline');
-    await page.evaluate((trigger) => {
-      const key = 'data-omd-motion-trigger-observed';
-      document.documentElement.removeAttribute(key);
-      const record = () => document.documentElement.setAttribute(key, trigger);
-      if (trigger === 'scroll') window.addEventListener('scroll', record, { once: true, passive: true });
-      if (trigger === 'pointer') {
-        window.addEventListener('pointermove', record, { once: true, passive: true });
-        window.addEventListener('mousemove', record, { once: true, passive: true });
-      }
-    }, opts.trigger);
-    if (opts.trigger === 'scroll') {
-      await page.evaluate((distance) => window.scrollBy({ top: distance, behavior: 'instant' }), Math.max(1, Math.floor(opts.viewport.height / 2)));
-    } else if (opts.trigger === 'pointer') {
-      await page.mouse.move(roi.x + roi.width / 2, roi.y + roi.height / 2);
-    }
-    if (opts.trigger !== 'load') {
-      try {
-        await page.waitForFunction(
-          (trigger) => document.documentElement.getAttribute('data-omd-motion-trigger-observed') === trigger,
-          opts.trigger,
-          { timeout: 1_000 },
-        );
-      } catch {
-        throw new Error(`declared ${opts.trigger} trigger did not execute in the browser`);
-      }
-    }
-    const observedTrigger = await page.evaluate((trigger) => {
-      const key = 'data-omd-motion-trigger-observed';
-      const observed = trigger === 'load' ? 'load' : document.documentElement.getAttribute(key);
-      document.documentElement.removeAttribute(key);
-      return observed;
-    }, opts.trigger);
-    if (observedTrigger !== opts.trigger) throw new Error(`declared ${opts.trigger} trigger did not execute in the browser`);
-    const transcript: { event: MotionTrigger; timestampMs: number }[] = [{ event: opts.trigger, timestampMs: Date.now() - started }];
-    await new Promise<void>((resolveInterval) => setTimeout(resolveInterval, Math.max(1, Math.floor(interval / 3))));
-    const start = await receipt('start');
-    const startTimestampMs = Date.now() - started;
-    const noiseFloor = Math.max(computeEnergy([Buffer.from(baseline.bytesBase64, 'base64'), Buffer.from(start.bytesBase64, 'base64')]).peakEnergy, Number.EPSILON);
-    const activeAnimations = await page.evaluate((selector) => {
+    const animationSampling = await page.evaluate(async ({ selector, timeoutMs }) => {
       const roiElement = document.querySelector(selector);
-      return document.getAnimations().filter((animation) => {
-        if (animation.playState !== 'running') return false;
+      const relevant = document.getAnimations().filter((animation) => {
+        if (animation.playState === 'idle') return false;
         const effect = animation.effect;
         const target = typeof KeyframeEffect !== 'undefined' && effect instanceof KeyframeEffect ? effect.target : null;
         return target instanceof Element && roiElement !== null && (target === roiElement || roiElement.contains(target));
-      }).length;
-    }, opts.selector);
+      });
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await Promise.race([
+          Promise.all(relevant.map((animation) => animation.ready)),
+          new Promise<never>((_resolve, reject) => {
+            timeout = setTimeout(() => reject(new Error('selector-local animation readiness timed out')), timeoutMs);
+          }),
+        ]);
+      } finally {
+        if (timeout !== undefined) clearTimeout(timeout);
+      }
+      const animation = relevant[0];
+      const endTime = animation?.effect?.getComputedTiming().endTime;
+      if (animation !== undefined && relevant.length === 1 && typeof endTime === 'number' && Number.isFinite(endTime) && endTime > 0) {
+        animation.pause();
+        animation.currentTime = 0;
+        return { count: 1, endTime };
+      }
+      return { count: relevant.length, endTime: null };
+    }, { selector: opts.selector, timeoutMs: MOTION_CAPTURE_EVENT_TIMEOUT_MS });
+    const activeAnimations = animationSampling.count;
     if (activeAnimations > 1) throw new Error('one motion decision rejects multiple concurrent selector-local animations');
-    await new Promise<void>((resolveInterval) => setTimeout(resolveInterval, interval));
+    const nextPaint = async (): Promise<void> => page.evaluate((timeoutMs) => new Promise<void>((resolvePaint, reject) => {
+      const timeout = setTimeout(() => reject(new Error('selector-local paint readiness timed out')), timeoutMs);
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        clearTimeout(timeout);
+        resolvePaint();
+      }));
+    }), MOTION_CAPTURE_EVENT_TIMEOUT_MS);
+    const seek = async (timestampMs: number): Promise<void> => {
+      await page.evaluate(({ selector, timestamp }) => {
+        const roiElement = document.querySelector(selector);
+        const animation = document.getAnimations().find((candidate) => {
+          const effect = candidate.effect;
+          const target = typeof KeyframeEffect !== 'undefined' && effect instanceof KeyframeEffect ? effect.target : null;
+          return target instanceof Element && roiElement !== null && (target === roiElement || roiElement.contains(target));
+        });
+        if (animation === undefined) throw new Error('selector-local animation disappeared during capture');
+        animation.currentTime = timestamp;
+      }, { selector: opts.selector, timestamp: timestampMs });
+      await nextPaint();
+    };
+    const transcript: { event: MotionTrigger; timestampMs: number }[] = [{ event: 'load', timestampMs: Date.now() - started }];
+    if (animationSampling.endTime !== null) await seek(0);
+    const baseline = await receipt('baseline');
+    if (animationSampling.endTime === null) await new Promise<void>((resolveInterval) => setTimeout(resolveInterval, Math.max(1, Math.floor(interval / 3))));
+    else await nextPaint();
+    const start = await receipt('start');
+    const startTimestampMs = animationSampling.endTime === null ? Date.now() - started : 0;
+    const noiseFloor = Math.max(computeEnergy([Buffer.from(baseline.bytesBase64, 'base64'), Buffer.from(start.bytesBase64, 'base64')]).peakEnergy, Number.EPSILON);
+    if (animationSampling.endTime === null) await new Promise<void>((resolveInterval) => setTimeout(resolveInterval, interval));
+    else await seek(animationSampling.endTime / 2);
     const mid = await receipt('mid');
-    const midTimestampMs = Date.now() - started;
-    await new Promise<void>((resolveInterval) => setTimeout(resolveInterval, interval));
+    const midTimestampMs = animationSampling.endTime === null ? Date.now() - started : animationSampling.endTime / 2;
+    if (animationSampling.endTime === null) await new Promise<void>((resolveInterval) => setTimeout(resolveInterval, interval));
+    else await seek(animationSampling.endTime);
     const end = await receipt('end');
-    const endTimestampMs = Date.now() - started;
+    const endTimestampMs = animationSampling.endTime === null ? Date.now() - started : animationSampling.endTime;
     const energy = computeEnergy([Buffer.from(start.bytesBase64, 'base64'), Buffer.from(mid.bytesBase64, 'base64'), Buffer.from(end.bytesBase64, 'base64')]);
     if (energy.peakEnergy <= noiseFloor) throw new Error('selector-local ROI did not exceed its measured noise floor');
     const reducedPage = await browser.newPage({ viewport: opts.viewport });
     let reduced: ObservedCaptureReceipt;
     let reducedEnergy: number;
+    const reducedTarget = await resolveTarget(target);
     try {
       await reducedPage.emulateMedia({ reducedMotion: 'reduce' });
-      await reducedPage.goto(toUrl(target), { waitUntil: 'networkidle' });
+      const reducedLoad = reducedPage.waitForEvent('load');
+      await reducedPage.goto(reducedTarget.url, { waitUntil: 'domcontentloaded' });
+      await reducedLoad;
       await waitForDocumentFonts(reducedPage);
       const reducedElement = await reducedPage.$(opts.selector);
       if (!reducedElement) throw new Error(`reduced-motion page has no ROI selector: ${opts.selector}`);
@@ -708,7 +794,9 @@ export async function captureMotionEvidenceV2(
       if (reducedRoi.width <= 1 || reducedRoi.height <= 1) throw new Error(`reduced-motion ROI selector is outside viewport: ${opts.selector}`);
       const stableFrames: Buffer[] = [];
       for (let frame = 0; frame < 3; frame++) {
-        if (frame > 0) await new Promise<void>((resolveInterval) => setTimeout(resolveInterval, interval));
+        if (frame > 0) await reducedPage.evaluate(() => new Promise<void>((resolvePaint) => {
+          requestAnimationFrame(() => requestAnimationFrame(() => resolvePaint()));
+        }));
         stableFrames.push(await reducedPage.screenshot({ clip: reducedRoi }));
       }
       if (computeEnergy(stableFrames).peakEnergy > noiseFloor) throw new Error('fresh reduced-motion page did not remain stable across three frames');
@@ -719,12 +807,14 @@ export async function captureMotionEvidenceV2(
       reducedEnergy = computeEnergy([Buffer.from(end.bytesBase64, 'base64'), bytes]).peakEnergy;
     } finally {
       await reducedPage.close();
+      await reducedTarget.close();
     }
     const reducedMotionBehavior = reducedEnergy <= reducedMotionRemovalThreshold(noiseFloor) ? 'removed' : 'static-equivalent';
     return {
       schema: MOTION_EVIDENCE_V2_SCHEMA, artDirectionHash: opts.artDirectionHash, motionDecision: 'one',
       observed: {
         browser: { name: 'chromium', version: browser.version() }, runId: opts.runId, buildHash: opts.buildHash, viewport: opts.viewport,
+        route, target, taskId,
         triggerTranscript: transcript, sourceInfluence: opts.sourceInfluence ?? (opts.referenceSlotId ? { kind: 'reference-slot', referenceSlotId: opts.referenceSlotId } : (() => { throw new Error('motion evidence requires a source reference slot or approved recipe'); })()),
       },
       scenes: [{
@@ -757,6 +847,9 @@ export type MotionEvidenceV2 = {
     readonly runId: string;
     readonly buildHash: string;
     readonly viewport: Viewport;
+    readonly route: string;
+    readonly target: string;
+    readonly taskId: string;
     readonly triggerTranscript: readonly { readonly event: MotionTrigger; readonly timestampMs: number }[];
     readonly sourceInfluence: MotionSourceInfluence;
   };
@@ -810,7 +903,7 @@ function motionPositive(value: unknown, field: string): number {
   if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) motionFail(`${field} must be positive`);
   return value;
 }
-function motionReceipt(value: unknown, field: string, root?: string): ObservedCaptureReceipt {
+function motionReceipt(value: unknown, field: string, root: string): ObservedCaptureReceipt {
   const receipt = motionObject(value, field);
   motionExact(receipt, ['path', 'bytesBase64', 'sha256'], field);
   const path = motionText(receipt.path, `${field}.path`);
@@ -825,8 +918,7 @@ function motionReceipt(value: unknown, field: string, root?: string): ObservedCa
   if (bytes.length === 0 || bytes.toString('base64') !== bytesBase64 || createHash('sha256').update(bytes).digest('hex') !== receipt.sha256) {
     motionFail(`${field} bytes do not match sha256`);
   }
-  const capturePath = root === undefined || isAbsolute(path) ? path : resolve(root, path);
-  if (!existsSync(capturePath) || !readFileSync(capturePath).equals(bytes)) motionFail(`${field} path does not contain captured bytes`);
+  if (!retainedProjectArtifactBytes(root, path, field).equals(bytes)) motionFail(`${field} path does not contain captured bytes`);
   return receipt as ObservedCaptureReceipt;
 }
 function motionTimestamp(value: unknown, field: string): number {
@@ -846,26 +938,29 @@ function motionTimestamp(value: unknown, field: string): number {
  */
 export function validateMotionEvidenceV2(
   value: unknown,
-  decision?: { readonly motionDecision: 'none' | 'one'; readonly buildHash?: string; readonly artDirectionHash?: string; readonly root?: string },
+  decision: { readonly motionDecision: 'one'; readonly buildHash: string; readonly artDirectionHash: string; readonly root: string; readonly invocation?: ProjectRunInvocation; readonly route?: string; readonly target?: string; readonly taskId?: string; readonly consumeResult?: boolean },
 ): MotionEvidenceV2 {
   const evidence = motionObject(value, 'evidence');
   motionExact(evidence, ['schema', 'artDirectionHash', 'motionDecision', 'observed', 'scenes'], 'evidence');
   if (evidence.schema !== MOTION_EVIDENCE_V2_SCHEMA) motionFail('unsupported schema');
   motionHash(evidence.artDirectionHash, 'artDirectionHash');
   if (evidence.motionDecision !== 'one') motionFail('motionDecision must be one');
-  if (decision?.artDirectionHash !== undefined && evidence.artDirectionHash !== decision.artDirectionHash) motionFail('motion evidence art direction is not current');
-  if (decision?.motionDecision !== undefined && decision.motionDecision !== 'one') motionFail('cannot bind motion evidence to a none decision');
+  if (evidence.artDirectionHash !== decision.artDirectionHash) motionFail('motion evidence art direction is not current');
+  if (decision.motionDecision !== 'one') motionFail('cannot bind motion evidence to a none decision');
   if (!Array.isArray(evidence.scenes) || evidence.scenes.length !== 1) motionFail('one requires exactly one motion scene');
+  if (decision.invocation === undefined || decision.route === undefined || decision.target === undefined || decision.taskId === undefined) motionFail('motion evidence requires a current host result invocation, route, target, and task');
+  try { requireMotionResultAuthorization(decision.invocation, decision.root, canonicalResultBytes(evidence), decision.consumeResult === true); } catch (error) { motionFail(error instanceof Error ? error.message : 'motion result is not host-authorized'); }
 
   const observed = motionObject(evidence.observed, 'observed');
-  motionExact(observed, ['browser', 'runId', 'buildHash', 'viewport', 'triggerTranscript', 'sourceInfluence'], 'observed');
+  motionExact(observed, ['browser', 'runId', 'buildHash', 'viewport', 'route', 'target', 'taskId', 'triggerTranscript', 'sourceInfluence'], 'observed');
   const browser = motionObject(observed.browser, 'observed.browser');
   motionExact(browser, ['name', 'version'], 'observed.browser');
   if (browser.name !== 'chromium') motionFail('observed browser must be chromium');
   motionText(browser.version, 'observed.browser.version');
   motionText(observed.runId, 'observed.runId');
   motionHash(observed.buildHash, 'observed.buildHash');
-  if (decision?.buildHash !== undefined && observed.buildHash !== decision.buildHash) motionFail('observed build does not match decision build');
+  if (observed.buildHash !== decision.buildHash) motionFail('observed build does not match decision build');
+  if (observed.route !== decision.route || observed.target !== decision.target || observed.taskId !== decision.taskId) motionFail('motion observation is not bound to the current route, target, and task');
   const viewport = motionObject(observed.viewport, 'observed.viewport');
   motionExact(viewport, ['width', 'height'], 'observed.viewport');
   for (const dimension of ['width', 'height'] as const) {
@@ -874,7 +969,8 @@ export function validateMotionEvidenceV2(
   if (!Array.isArray(observed.triggerTranscript) || observed.triggerTranscript.length !== 1) motionFail('trigger transcript requires exactly one observed trigger');
   const transcript = motionObject(observed.triggerTranscript[0], 'observed.triggerTranscript[0]');
   motionExact(transcript, ['event', 'timestampMs'], 'observed.triggerTranscript[0]');
-  if (transcript.event !== 'load' && transcript.event !== 'scroll' && transcript.event !== 'pointer') motionFail('trigger transcript contains unsupported event');
+  if (transcript.event !== 'load') motionFail('trigger transcript event must be load');
+  motionTimestamp(transcript.timestampMs, 'observed.triggerTranscript[0].timestampMs');
   motionTimestamp(transcript.timestampMs, 'observed.triggerTranscript[0].timestampMs');
   const influence = motionObject(observed.sourceInfluence, 'observed.sourceInfluence');
   if (influence.kind === 'reference-slot') {
@@ -890,7 +986,7 @@ export function validateMotionEvidenceV2(
 
   const scene = motionObject(evidence.scenes[0], 'scenes[0]');
   motionExact(scene, ['trigger', 'roiSelector', 'roi', 'boundary', 'activeAnimationCount', 'calibration', 'start', 'mid', 'end', 'reducedMotion'], 'scenes[0]');
-  if (scene.trigger !== 'load' && scene.trigger !== 'scroll' && scene.trigger !== 'pointer') motionFail('scenes[0].trigger must be load, scroll, or pointer');
+  if (scene.trigger !== 'load') motionFail('scenes[0].trigger must be load');
   if (scene.boundary !== 'selector') motionFail('motion scene must declare a selector-local production boundary');
   if (!Number.isInteger(scene.activeAnimationCount) || (scene.activeAnimationCount as number) < 0 || (scene.activeAnimationCount as number) > 1) motionFail('motion scene must inventory zero or one active selector-local animation');
   if (transcript.event !== scene.trigger) motionFail('scene trigger does not match the executed trigger transcript');
@@ -915,14 +1011,14 @@ export function validateMotionEvidenceV2(
     const frame = motionObject(scene[stage], `scenes[0].${stage}`);
     motionExact(frame, ['timestampMs', 'capture'], `scenes[0].${stage}`);
     timestamps.push(motionTimestamp(frame.timestampMs, `scenes[0].${stage}.timestampMs`));
-    captures.push(motionReceipt(frame.capture, `scenes[0].${stage}.capture`, decision?.root));
+    captures.push(motionReceipt(frame.capture, `scenes[0].${stage}.capture`, decision.root));
   }
   const observedEnergy = computeEnergy(captures.map((capture) => Buffer.from(capture.bytesBase64, 'base64'))).peakEnergy;
   if (energy !== observedEnergy) motionFail('ROI energy does not match captured pixel evidence');
   if (!(timestamps[0]! < timestamps[1]! && timestamps[1]! < timestamps[2]!)) motionFail('ROI timestamps must be strictly start < mid < end');
   const reduced = motionObject(scene.reducedMotion, 'scenes[0].reducedMotion');
   motionExact(reduced, ['capture', 'behavior'], 'scenes[0].reducedMotion');
-  const reducedReceipt = motionReceipt(reduced.capture, 'scenes[0].reducedMotion.capture', decision?.root);
+  const reducedReceipt = motionReceipt(reduced.capture, 'scenes[0].reducedMotion.capture', decision.root);
   if (reduced.behavior !== 'removed' && reduced.behavior !== 'static-equivalent') motionFail('reduced-motion counterpart must remove motion or show a static equivalent');
   const observedReducedEnergy = computeEnergy([
     Buffer.from(captures[2]!.bytesBase64, 'base64'),
@@ -936,13 +1032,54 @@ export function validateMotionEvidenceV2(
  * Host-observed Beat receipt. The collector never accepts caller-provided Beat
  * entries: it extracts the live DOM at both fixed harness viewports.
  */
+export type RenderedBeatResult = RenderedBeatProof & {
+  readonly buildSha256: string;
+  readonly route: string;
+  readonly target: string;
+  readonly taskId: string;
+};
+
+export function validateRenderedBeatResultAuthority(
+  value: unknown,
+  decision: { readonly invocation: ProjectRunInvocation; readonly root: string; readonly buildSha256: string; readonly artDirectionHash: string; readonly route: string; readonly target: string; readonly taskId: string; readonly consumeResult?: boolean },
+): RenderedBeatResult {
+  const proof = motionObject(value, 'rendered Beat result');
+  motionExact(proof, ['schema', 'artDirectionHash', 'buildSha256', 'copyDeckSha256', 'beatIds', 'renderedBeats', 'captureViewports', 'captures', 'route', 'target', 'taskId'], 'rendered Beat result');
+  if (proof.schema !== 'rendered-beat-receipt-v1' || proof.buildSha256 !== decision.buildSha256 || proof.artDirectionHash !== decision.artDirectionHash
+    || proof.route !== decision.route || proof.target !== decision.target || proof.taskId !== decision.taskId) motionFail('rendered Beat result is not bound to the current build, art, route, target, and task');
+  try { requireRenderedBeatResultAuthorization(decision.invocation, decision.root, canonicalResultBytes(proof), decision.consumeResult === true); } catch (error) { motionFail(error instanceof Error ? error.message : 'rendered Beat result is not host-authorized'); }
+  if (!Array.isArray(proof.captureViewports) || proof.captureViewports.length !== 2
+    || new Set(proof.captureViewports.map((viewport) => `${(viewport as Viewport).width}x${(viewport as Viewport).height}`)).size !== 2
+    || !proof.captureViewports.some((viewport) => (viewport as Viewport).width === 1280 && (viewport as Viewport).height === 900)
+    || !proof.captureViewports.some((viewport) => (viewport as Viewport).width === 390 && (viewport as Viewport).height === 844)
+    || !Array.isArray(proof.captures) || proof.captures.length !== 2) motionFail('rendered Beat result requires exactly the fixed viewport observations and captures');
+  for (const capture of proof.captures) {
+    const receipt = motionObject(capture, 'rendered Beat capture');
+    motionExact(receipt, ['path', 'sha256', 'viewport'], 'rendered Beat capture');
+    motionHash(receipt.sha256, 'rendered Beat capture.sha256');
+    const viewport = motionObject(receipt.viewport, 'rendered Beat capture.viewport');
+    motionExact(viewport, ['width', 'height'], 'rendered Beat capture.viewport');
+    if (!Number.isInteger(viewport.width) || !Number.isInteger(viewport.height)
+      || !proof.captureViewports.some((candidate) => (candidate as Viewport).width === viewport.width && (candidate as Viewport).height === viewport.height)) motionFail('rendered Beat capture viewport is not a fixed observed viewport');
+    const bytes = retainedProjectArtifactBytes(decision.root, motionText(receipt.path, 'rendered Beat capture.path'), 'rendered Beat capture');
+    if (createHash('sha256').update(bytes).digest('hex') !== receipt.sha256) motionFail('rendered Beat capture digest does not match retained bytes');
+  }
+  if (new Set(proof.captures.map((capture) => {
+    const viewport = (capture as { viewport?: Viewport }).viewport;
+    return viewport ? `${viewport.width}x${viewport.height}` : '';
+  })).size !== 2) motionFail('rendered Beat captures must cover each fixed viewport exactly once');
+  return proof as unknown as RenderedBeatResult;
+}
+
 export async function captureRenderedBeatReceipt(
   target: string,
-  opts: { readonly adapter: ProjectWriteAdapter; readonly out: string; readonly artDirectionHash: string; readonly copyDeckSha256: string; readonly beatIds: readonly string[] },
-): Promise<RenderedBeatProof> {
+  opts: { readonly adapter: ProjectWriteAdapter; readonly out: string; readonly artDirectionHash: string; readonly copyDeckSha256: string; readonly beatIds: readonly string[]; readonly buildSha256: string; readonly route: string; readonly taskId: string; readonly invocation: ProjectRunInvocation },
+): Promise<RenderedBeatResult> {
   const adapter = requireProjectWriteAdapter(opts.adapter.projectRoot, opts.adapter);
+  if (!opts.buildSha256 || !opts.route || !opts.taskId) throw new Error('rendered Beat collection requires build, route, and task bindings');
   const viewports = [{ width: 1280, height: 900 }, { width: 390, height: 844 }] as const;
   const renderedBeats: RenderedBeat[] = [];
+  const captures: Array<{ path: string; sha256: string; viewport: Viewport }> = [];
   await withBrowser(async (browser) => {
     for (const viewport of viewports) {
       await onPage(browser, target, viewport, async (page, httpStatus, resolvedUrl) => {
@@ -965,16 +1102,25 @@ export async function captureRenderedBeatReceipt(
           observedViewport: { ...viewport },
         }));
         renderedBeats.push(...observed);
+        const bytes = await page.screenshot({ fullPage: false });
+        const path = projectOutputPath(adapter, join(dirname(opts.out), `${basename(opts.out, '.json')}-${viewport.width}x${viewport.height}.png`));
+        adapter.write(path, bytes);
+        captures.push({ path, sha256: createHash('sha256').update(bytes).digest('hex'), viewport: { ...viewport } });
       });
     }
   });
-  const proof: RenderedBeatProof = {
+  const proof: RenderedBeatResult = {
     schema: 'rendered-beat-receipt-v1',
     artDirectionHash: opts.artDirectionHash,
+    buildSha256: opts.buildSha256,
     copyDeckSha256: opts.copyDeckSha256,
     beatIds: [...opts.beatIds],
     renderedBeats,
     captureViewports: viewports,
+    captures,
+    route: opts.route,
+    target,
+    taskId: opts.taskId,
   };
   adapter.write(projectOutputPath(adapter, opts.out), `${JSON.stringify(proof)}\n`);
   return proof;

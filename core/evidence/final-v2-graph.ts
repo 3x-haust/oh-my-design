@@ -1,23 +1,43 @@
 import { createHash } from 'node:crypto';
-import { constants as fsConstants } from 'node:fs';
 import { relative, resolve } from 'node:path';
 import { parse } from 'yaml';
 import { validateActivationContext } from '../runtime/activation.ts';
 import type { ActivationContext } from '../runtime/activation.ts';
 import { intentLedgerSha256, resolveCurrentUserBeatExceptionReceipt, validateIntentLedger, validateIntentCurrentPointer } from '../runtime/intent.ts';
-import { validateSourceSeal } from '../source-seal/index.ts';
+import { validateSourceSeal, validateSourceSealArtifact } from '../source-seal/index.ts';
+import {
+  createAdaptiveWorkflowSourceBinding,
+  isAdaptiveWorkflowSourceBinding,
+  type AdaptiveWorkflowSourceBinding,
+} from '../design-development/workflow-persistence.ts';
 import { parseReferenceBoard } from '../ref/board-parser.ts';
+import { readPersistedRoute } from '../route/adaptive-route-persistence.ts';
 import { parseReferenceHandoffReceipt, referenceHandoffPayloadSha256, validateDecisionBoundReferenceHandoffs } from '../ref/reference-handoff.ts';
 import { motionResolutionProjectionSha256, parseReferenceSelectionV2, referenceSelectionV2Sha256, validateMotionResolutionProjection, validateReferenceSelectionV2 } from '../ref/reference-selection.ts';
+import { canonicalJson, projectRawReferenceBoard, sha256 } from '../ref/board-artifacts.ts';
+import { resolveReferenceBoard } from '../ref/board.ts';
 import { parseReferenceUsageV2, readValidatedReferenceUsage, referenceUsageV2Sha256 } from '../ref/reference-usage-snapshot.ts';
 import { artDirectionSha256, validateArtDirectionRecord } from '../art-direction/schema.ts';
 import { NO_CURRENT_USER_BEAT_EXCEPTION_RECEIPT_SHA256, exceedsCanonicalBeatBudget } from '../art-direction/decision.ts';
-import { validateCanonicalCopyDeckReceipt } from '../copy/index.ts';
-import { requireFinalReviewerLaneAuthorization, type ProjectRunInvocation } from '../runtime/invocation.ts';
-import { checkFrameUx, normalizeUxSurface } from '../frame/check-ux.ts';
-import { checkTaskEvidence } from './task.ts';
+import { validateCanonicalCopyDeckReceipt, validatePostRenderBeatProof } from '../copy/index.ts';
+import { requireCurrentIntentLedgerAuthorization, requireFinalReviewerLaneAuthorization, type ProjectRunInvocation } from '../runtime/invocation.ts';
+import { normalizeUxSurface, validateFrameUxBytes } from '../frame/check-ux.ts';
+import { checkTaskEvidenceAgainstSources, requireTaskEvidenceProbeAuthorizations } from './task.ts';
+import { validateCompositionContract } from '../composition-contract/index.ts';
+import { validateRenderedBeatResultAuthority } from '../render/index.ts';
+import { validateFinalBrowserObservations } from './final-v2-browser-observations.ts';
+import { validateTrustedOutcomeEvidence } from './final-v2-outcome-gate.ts';
+import { readStableProjectFile, StableProjectFileReadError, type StableProjectFileSystem } from '../runtime/stable-project-file.ts';
+import {
+  isAdaptiveFinalEvidenceV2Graph,
+  validateAdaptiveFinalEvidenceV2Graph,
+  type AdaptiveFinalEvidenceV2Bindings,
+  type AdaptiveFinalEvidenceV2Graph,
+} from './final-v2-adaptive-contract.ts';
+import { validateAdaptiveFinalEvidenceV2GraphFiles } from './final-v2-adaptive-files.ts';
 
 export const FINAL_EVIDENCE_V2_GRAPH_SCHEMA = 'final-evidence-v2-graph' as const;
+export const FINAL_EVIDENCE_V2_WORKFLOW_GRAPH_SCHEMA = 'final-evidence-v2-workflow-graph-v1' as const;
 const SHA256 = /^[a-f0-9]{64}$/;
 
 export type ArtifactReceipt = Readonly<{ path: string; schema: string; sha256: string }>;
@@ -32,7 +52,7 @@ const FINAL_REVIEWER_LANE_CONTRACTS: Readonly<Record<FinalReviewerLane, FinalRev
   fidelityLane: { schema: 'fidelity-review-v1', verdictKeys: ['referenceFidelity', 'renderFidelity'], floorDimensions: ['desktop', 'mobile'] },
   protocolLane: { schema: 'protocol-review-v1', verdictKeys: ['evidenceIntegrity', 'publicationProtocol'], floorDimensions: ['authority', 'currentness'] },
 };
-export type FinalEvidenceV2Graph = Readonly<{
+export type ArtSelectedFinalEvidenceV2Graph = Readonly<{
   schema: typeof FINAL_EVIDENCE_V2_GRAPH_SCHEMA;
   activation: ArtifactReceipt;
   intent: ArtifactReceipt;
@@ -52,7 +72,23 @@ export type FinalEvidenceV2Graph = Readonly<{
   taskEvidence?: ArtifactReceipt;
   observations: readonly ArtifactReceipt[];
 }>;
-export type FinalEvidenceV2GraphBindings = Readonly<{
+export type FinalEvidenceV2Graph = ArtSelectedFinalEvidenceV2Graph;
+export type WorkflowArtSelectedFinalEvidenceV2Graph = Readonly<Omit<ArtSelectedFinalEvidenceV2Graph, 'schema' | 'sourceSeal'> & {
+  schema: typeof FINAL_EVIDENCE_V2_WORKFLOW_GRAPH_SCHEMA;
+  productionSchema: typeof FINAL_EVIDENCE_V2_GRAPH_SCHEMA;
+  workflow: AdaptiveWorkflowSourceBinding;
+  sourceSeal: ArtifactReceipt & Readonly<{ schema: 'source-seal-v2' }>;
+}>;
+export type WorkflowAdaptiveFinalEvidenceV2Graph = Readonly<Omit<AdaptiveFinalEvidenceV2Graph, 'schema' | 'sourceSeal'> & {
+  schema: typeof FINAL_EVIDENCE_V2_WORKFLOW_GRAPH_SCHEMA;
+  productionSchema: 'final-evidence-v2-adaptive-omission-graph';
+  workflow: AdaptiveWorkflowSourceBinding;
+  sourceSeal: ArtifactReceipt & Readonly<{ schema: 'source-seal-v2' }>;
+}>;
+export type WorkflowFinalEvidenceV2Graph = WorkflowArtSelectedFinalEvidenceV2Graph | WorkflowAdaptiveFinalEvidenceV2Graph;
+export type FinalEvidenceV2GraphVariant = FinalEvidenceV2Graph | AdaptiveFinalEvidenceV2Graph | WorkflowFinalEvidenceV2Graph;
+export type ArtSelectedFinalEvidenceV2GraphBindings = Readonly<{
+  readonly branch: 'art-selected';
   readonly activation: ActivationContext;
   readonly artDirectionSha256: string;
   readonly selectionSha256: string;
@@ -61,15 +97,12 @@ export type FinalEvidenceV2GraphBindings = Readonly<{
   readonly buildSha256: string;
   readonly allowedMotionReferenceSlotIds: readonly string[];
   readonly approvedMotionRecipe?: Readonly<{ recipeId: string; recipeSha256: string }>;
+  readonly motionTask?: Readonly<{ taskId: string; route: string; targets: readonly string[] }>;
 }>;
+export type FinalEvidenceV2GraphBindings = ArtSelectedFinalEvidenceV2GraphBindings;
+export type FinalEvidenceV2GraphBindingsVariant = FinalEvidenceV2GraphBindings | AdaptiveFinalEvidenceV2Bindings;
 
-export interface EvidenceGraphFs {
-  readFile(path: string | number): Buffer;
-  lstat(path: string): { isFile(): boolean; isDirectory(): boolean; isSymbolicLink(): boolean; dev?: number; ino?: number };
-  open(path: string, flags: number, mode: number): number;
-  fstat(fd: number): { isFile(): boolean; isDirectory(): boolean; isSymbolicLink(): boolean; dev?: number; ino?: number };
-  close(fd: number): void;
-}
+export interface EvidenceGraphFs extends StableProjectFileSystem {}
 
 export class FinalEvidenceGraphError extends Error {
   constructor(reason: string) { super(`final-evidence-v2 graph: ${reason}`); }
@@ -123,7 +156,7 @@ const rejectHandAuthoredPlaceholder = (value: unknown, label: string): void => {
 const RECEIPT_SCHEMAS: Readonly<Record<string, readonly string[]>> = {
   activation: ['activation-context-v2'],
   intent: ['intent-ledger-v1'],
-  artDirection: ['art-direction-record-v2'],
+  artDirection: ['art-direction-record-v2', 'art-direction-record-v3'],
   board: ['reference-board-v1'],
   selection: ['reference-selection-v2'],
   settledSelection: ['reference-selection-v2'],
@@ -145,13 +178,50 @@ function receipt(value: unknown, label: string): ArtifactReceipt {
   exact(item, ['path', 'schema', 'sha256'], label);
   const path = stringValue(item.path, `${label}.path`);
   const schema = stringValue(item.schema, `${label}.schema`);
-  if (path.startsWith('/') || path.includes('\\') || path === '.' || path.split('/').includes('..')) fail(`${label}.path must be a project-relative path`);
+  if (path.startsWith('/') || path.includes('\\') || path === '.' || path.split('/').some((segment) => segment === '' || segment === '..')) fail(`${label}.path must be a normalized project-relative path`);
   const supported = RECEIPT_SCHEMAS[label] ?? fail(`${label} has no typed production artifact contract`);
   if (!supported.includes(schema)) fail(`${label}.schema is not an accepted production artifact type`);
   return { path, schema, sha256: digest(item.sha256, `${label}.sha256`) };
 }
 
-export function validateFinalEvidenceV2Graph(value: unknown): FinalEvidenceV2Graph {
+export function isWorkflowFinalEvidenceV2Graph(value: unknown): value is WorkflowFinalEvidenceV2Graph {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    && Reflect.get(value, 'schema') === FINAL_EVIDENCE_V2_WORKFLOW_GRAPH_SCHEMA;
+}
+export function isWorkflowAdaptiveFinalEvidenceV2Graph(value: unknown): value is WorkflowAdaptiveFinalEvidenceV2Graph {
+  return isWorkflowFinalEvidenceV2Graph(value) && Reflect.get(value, 'productionSchema') === 'final-evidence-v2-adaptive-omission-graph';
+}
+export function isWorkflowArtSelectedFinalEvidenceV2Graph(value: unknown): value is WorkflowArtSelectedFinalEvidenceV2Graph {
+  return isWorkflowFinalEvidenceV2Graph(value) && Reflect.get(value, 'productionSchema') === FINAL_EVIDENCE_V2_GRAPH_SCHEMA;
+}
+function workflowProductionGraph(value: WorkflowFinalEvidenceV2Graph | Record<string, unknown>): Record<string, unknown> {
+  const projected = { ...(value as Record<string, unknown>) };
+  projected.schema = projected.productionSchema;
+  delete projected.productionSchema; delete projected.workflow;
+  const sourceSeal = object(projected.sourceSeal, 'workflow graph sourceSeal');
+  projected.sourceSeal = { ...sourceSeal, schema: 'source-seal-v1' };
+  return projected;
+}
+function validateWorkflowFinalEvidenceV2Graph(value: unknown): WorkflowFinalEvidenceV2Graph {
+  const graph = object(value, 'workflow graph');
+  if (graph.schema !== FINAL_EVIDENCE_V2_WORKFLOW_GRAPH_SCHEMA
+    || (graph.productionSchema !== FINAL_EVIDENCE_V2_GRAPH_SCHEMA && graph.productionSchema !== 'final-evidence-v2-adaptive-omission-graph')
+    || !isAdaptiveWorkflowSourceBinding(graph.workflow)) fail('workflow graph identity or binding is invalid');
+  const sourceSeal = object(graph.sourceSeal, 'workflow graph sourceSeal');
+  if (sourceSeal.schema !== 'source-seal-v2') fail('workflow graph requires a source-seal-v2 receipt');
+  const production = validateFinalEvidenceV2Graph(workflowProductionGraph(graph));
+  if ((graph.productionSchema === FINAL_EVIDENCE_V2_GRAPH_SCHEMA && production.schema !== FINAL_EVIDENCE_V2_GRAPH_SCHEMA)
+    || (graph.productionSchema !== FINAL_EVIDENCE_V2_GRAPH_SCHEMA && !isAdaptiveFinalEvidenceV2Graph(production))) fail('workflow production graph schema is inconsistent');
+  const expectedKeys = [...Object.keys(production).filter((key) => key !== 'schema'), 'schema', 'productionSchema', 'workflow'].sort();
+  const actualKeys = Object.keys(graph).sort();
+  if (actualKeys.length !== expectedKeys.length || actualKeys.some((key, index) => key !== expectedKeys[index])) fail('workflow graph has unexpected keys');
+  return Object.freeze({ ...production, schema: FINAL_EVIDENCE_V2_WORKFLOW_GRAPH_SCHEMA, productionSchema: graph.productionSchema, workflow: graph.workflow,
+    sourceSeal: Object.freeze({ path: stringValue(sourceSeal.path, 'workflow graph sourceSeal.path'), schema: 'source-seal-v2', sha256: digest(sourceSeal.sha256, 'workflow graph sourceSeal.sha256') }) }) as WorkflowFinalEvidenceV2Graph;
+}
+
+export function validateFinalEvidenceV2Graph(value: unknown): FinalEvidenceV2GraphVariant {
+  if (isWorkflowFinalEvidenceV2Graph(value)) return validateWorkflowFinalEvidenceV2Graph(value);
+  if (isAdaptiveFinalEvidenceV2Graph(value)) return validateAdaptiveFinalEvidenceV2Graph(value);
   const graph = object(value, 'graph');
   const keys = ['schema', 'activation', 'intent', 'artDirection', 'board', 'selection', 'settledSelection', 'handoff', 'usage', 'copy', 'renderedBeats', 'sourceSeal', 'buildIdentity', 'blindLane', 'fidelityLane', 'protocolLane', 'taskEvidence', 'observations'].filter((key) => key in graph);
   exact(graph, keys, 'graph');
@@ -192,38 +262,10 @@ function semanticHash(label: string, value: Record<string, unknown>): string {
     default: return createHash('sha256').update(canonical(value)).digest('hex');
   }
 }
-function requireRealReceiptAncestors(root: string, path: string, fs: EvidenceGraphFs, label: string): void {
-  let current = root;
-  const segments = relative(root, path).split('/');
-  for (const segment of segments.slice(0, -1)) {
-    current = resolve(current, segment);
-    const stat = fs.lstat(current);
-    if (!stat.isDirectory() || stat.isSymbolicLink()) fail(`${label} has a symlink or non-directory ancestor`);
-  }
-}
-function sameFileIdentity(left: { dev?: number; ino?: number }, right: { dev?: number; ino?: number }): boolean {
-  return left.dev !== undefined && left.ino !== undefined && left.dev === right.dev && left.ino === right.ino;
-}
 function readStableRegularFile(root: string, fs: EvidenceGraphFs, path: string, label: string): Buffer {
-  requireRealReceiptAncestors(root, path, fs, label);
-  const before = fs.lstat(path);
-  if (!before.isFile() || before.isSymbolicLink()) fail(`${label} is not a regular receipt file`);
-  const fd = fs.open(path, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW, 0o600);
-  try {
-    const opened = fs.fstat(fd);
-    const entry = fs.lstat(path);
-    if (!opened.isFile() || !entry.isFile() || entry.isSymbolicLink() || !sameFileIdentity(opened, entry)) {
-      fail(`${label} changed or is not a regular receipt file`);
-    }
-    const bytes = fs.readFile(fd);
-    requireRealReceiptAncestors(root, path, fs, label);
-    const current = fs.lstat(path);
-    if (!current.isFile() || current.isSymbolicLink() || !sameFileIdentity(opened, current)) {
-      fail(`${label} changed while it was read`);
-    }
-    return bytes;
-  } finally {
-    fs.close(fd);
+  try { return readStableProjectFile({ root, fs, path, label }); } catch (error) {
+    if (error instanceof StableProjectFileReadError) fail(error.message);
+    throw error;
   }
 }
 function readReceipt(root: string, fs: EvidenceGraphFs, receipt: ArtifactReceipt, label: string): { bytes: Buffer; byteHash: string; semanticHash: string; value: Record<string, unknown> } {
@@ -265,56 +307,15 @@ function validateTypedReceipt(label: string, value: Record<string, unknown>): vo
         if (beats.length === 0 || new Set(beats).size !== beats.length || beats.some((beat, index) => !/^B-\d+$/.test(stringValue(beat, `copy.beatIds[${index}]`)))) fail('copy Beat identities are invalid');
         return;
       }
-      case 'renderedBeats': {
-        exact(value, ['schema', 'artDirectionHash', 'copyDeckSha256', 'beatIds', 'renderedBeats', 'captureViewports'], 'renderedBeats');
-        if (value.schema !== 'rendered-beat-receipt-v1') fail('renderedBeats schema changed');
-        digest(value.artDirectionHash, 'renderedBeats.artDirectionHash');
-        digest(value.copyDeckSha256, 'renderedBeats.copyDeckSha256');
-        const beatIds = array(value.beatIds, 'renderedBeats.beatIds');
-        if (beatIds.length === 0 || new Set(beatIds).size !== beatIds.length || beatIds.some((id, index) => !/^B-\d+$/.test(stringValue(id, `renderedBeats.beatIds[${index}]`)))) fail('renderedBeats has invalid Beat identities');
-        const viewports = array(value.captureViewports, 'renderedBeats.captureViewports');
-        const viewportKeys = new Set(viewports.map((viewport, index) => {
-          const item = object(viewport, `renderedBeats.captureViewports[${index}]`);
-          exact(item, ['width', 'height'], `renderedBeats.captureViewports[${index}]`);
-          return `${item.width}x${item.height}`;
-        }));
-        if (viewports.length !== 2 || viewportKeys.size !== 2 || !viewportKeys.has('1280x900') || !viewportKeys.has('390x844')) fail('renderedBeats must bind the canonical desktop and mobile viewports');
-        const beats = array(value.renderedBeats, 'renderedBeats.renderedBeats');
-        if (beats.length !== beatIds.length * 2) fail('renderedBeats must observe every Beat at both canonical viewports');
-        const observed = new Set<string>();
-        for (const [index, beat] of beats.entries()) {
-          const item = object(beat, `renderedBeats.renderedBeats[${index}]`);
-          exact(item, ['id', 'boundary', 'distinctRegions', 'ancestorBeatIds', 'rendered', 'observedViewport'], `renderedBeats.renderedBeats[${index}]`);
-          const viewport = object(item.observedViewport, `renderedBeats.renderedBeats[${index}].observedViewport`);
-          exact(viewport, ['width', 'height'], `renderedBeats.renderedBeats[${index}].observedViewport`);
-          const id = stringValue(item.id, `renderedBeats.renderedBeats[${index}].id`);
-          const viewportKey = `${viewport.width}x${viewport.height}`;
-          if (!beatIds.includes(id) || item.boundary !== true || item.distinctRegions !== 0 || !Array.isArray(item.ancestorBeatIds) || item.ancestorBeatIds.length !== 0 || item.rendered !== true || !viewportKeys.has(viewportKey) || observed.has(`${id}@${viewportKey}`)) fail('renderedBeats contains a hidden, nested, merged, duplicate, or non-canonical Beat observation');
-          observed.add(`${id}@${viewportKey}`);
-        }
+      case 'renderedBeats':
+        // The complete host-authorized Beat contract needs the resolved task binding below.
         return;
-      }
-      case 'sourceSeal': {
-        exact(value, ['schemaVersion', 'sealedAt', 'inputs', 'sources'], 'sourceSeal');
-        if (value.schemaVersion !== 1) fail('sourceSeal schema changed');
-        stringValue(value.sealedAt, 'sourceSeal.sealedAt');
-        const inputs = object(value.inputs, 'sourceSeal.inputs');
-        exact(inputs, ['copyDeckSha256', 'typeProofSha256', 'compositionSha256'], 'sourceSeal.inputs');
-        for (const key of ['copyDeckSha256', 'typeProofSha256', 'compositionSha256'] as const) digest(inputs[key], `sourceSeal.inputs.${key}`);
-        const sources = array(value.sources, 'sourceSeal.sources');
-        for (const [index, source] of sources.entries()) {
-          const item = object(source, `sourceSeal.sources[${index}]`);
-          exact(item, ['path', 'sha256'], `sourceSeal.sources[${index}]`);
-          stringValue(item.path, `sourceSeal.sources[${index}].path`);
-          digest(item.sha256, `sourceSeal.sources[${index}].sha256`);
-        }
-        return;
-      }
+      case 'sourceSeal': validateSourceSealArtifact(value); return;
       case 'blindLane':
       case 'fidelityLane':
       case 'protocolLane': {
         const contract = FINAL_REVIEWER_LANE_CONTRACTS[label];
-        exact(value, ['schema', 'artDirectionSha256', 'buildSha256', 'isolationReceipt', 'verdicts', 'criticalFloors', 'quorum', 'provenance'], label);
+        exact(value, ['schema', 'artDirectionSha256', 'buildSha256', 'isolationReceipt', 'verdicts', 'criticalFloors', 'quorum', 'provenance', 'executionReceipts'], label);
         if (value.schema !== contract.schema) fail(`${label} schema does not match its critical lane`);
         digest(value.artDirectionSha256, `${label}.artDirectionSha256`);
         digest(value.buildSha256, `${label}.buildSha256`);
@@ -345,6 +346,15 @@ function validateTypedReceipt(label: string, value: Record<string, unknown>): vo
         if (observations.length === 0 || reviewers.length !== passed || new Set(reviewers).size !== reviewers.length) fail(`${label} provenance is incomplete or reuses a reviewer`);
         observations.forEach((item, index) => digest(item, `${label}.provenance.observationSha256s[${index}]`));
         reviewers.forEach((item, index) => stringValue(item, `${label}.provenance.reviewerIds[${index}]`));
+        const executions = array(value.executionReceipts, `${label}.executionReceipts`);
+        if (executions.length !== passed) fail(`${label} requires one completed host reviewer execution receipt per quorum member`);
+        for (const [index, execution] of executions.entries()) {
+          const item = object(execution, `${label}.executionReceipts[${index}]`);
+          exact(item, ['path', 'sha256'], `${label}.executionReceipts[${index}]`);
+          const path = stringValue(item.path, `${label}.executionReceipts[${index}].path`);
+          if (path.startsWith('/') || path.includes('\\') || path === '.' || path.split('/').some((segment) => segment === '' || segment === '..')) fail(`${label} execution receipt path must be normalized and project-relative`);
+          digest(item.sha256, `${label}.executionReceipts[${index}].sha256`);
+        }
         if (digest(provenance.reviewerSessionSha256, `${label}.provenance.reviewerSessionSha256`) !== isolationSha256) fail(`${label} is not bound to its reviewer session evidence`);
         return;
       }
@@ -360,8 +370,9 @@ function validateTypedReceipt(label: string, value: Record<string, unknown>): vo
         return;
       }
       case 'taskEvidence': {
-        exact(value, ['schemaVersion', 'surface', 'frame', 'composition', 'tasks'], 'taskEvidence');
+        exact(value, ['schemaVersion', 'buildSha256', 'surface', 'frame', 'composition', 'tasks'], 'taskEvidence');
         if (value.schemaVersion !== 1 || (value.surface !== 'product' && value.surface !== 'mixed')) fail('taskEvidence schema changed');
+        digest(value.buildSha256, 'taskEvidence.buildSha256');
         return;
       }
       case 'buildIdentity': {
@@ -396,9 +407,70 @@ function rejectRed(value: unknown, label: string): void {
     rejectRed(item, label);
   }
 }
+function validateCompletedReviewerExecutions(
+  root: string,
+  fs: EvidenceGraphFs,
+  invocation: ProjectRunInvocation,
+  label: FinalReviewerLane,
+  lane: Record<string, unknown>,
+  usedExecutions: Set<string>,
+): void {
+  const provenance = object(lane.provenance, `${label}.provenance`);
+  const expectedReviewers = array(provenance.reviewerIds, `${label}.provenance.reviewerIds`).map((value, index) => stringValue(value, `${label}.provenance.reviewerIds[${index}]`));
+  const expectedObservations = array(provenance.observationSha256s, `${label}.provenance.observationSha256s`).map((value, index) => digest(value, `${label}.provenance.observationSha256s[${index}]`));
+  const expectedIsolation = digest(object(lane.isolationReceipt, `${label}.isolationReceipt`).sha256, `${label}.isolationReceipt.sha256`);
+  const executions = array(lane.executionReceipts, `${label}.executionReceipts`);
+  const completedReviewers = new Set<string>();
+  for (const [index, descriptor] of executions.entries()) {
+    const item = object(descriptor, `${label}.executionReceipts[${index}]`);
+    const executionPath = stringValue(item.path, `${label}.executionReceipts[${index}].path`);
+    const bytes = readStableRegularFile(root, fs, resolve(root, executionPath), `${label}.executionReceipts[${index}]`);
+    if (createHash('sha256').update(bytes).digest('hex') !== digest(item.sha256, `${label}.executionReceipts[${index}].sha256`)) fail(`${label} completed execution receipt bytes changed`);
+    requireFinalReviewerLaneAuthorization(invocation, root, bytes);
+    const execution = parseReceipt(bytes, `${label}.executionReceipts[${index}]`);
+    exact(execution, ['schema', 'lane', 'reviewerId', 'verdicts', 'criticalFloors', 'isolationReceiptSha256', 'observationSha256s', 'artDirectionSha256', 'buildSha256', 'briefSha256', 'browserSha256', 'childPid', 'sessionId', 'nonce', 'evidenceSha256', 'configurationSha256'], `${label}.executionReceipts[${index}]`);
+    if (execution.schema !== 'final-reviewer-execution-v1' || execution.lane !== label) fail(`${label} execution receipt is not a completed host reviewer execution for this lane`);
+    const reviewerId = stringValue(execution.reviewerId, `${label}.executionReceipts[${index}].reviewerId`);
+    if (!expectedReviewers.includes(reviewerId) || completedReviewers.has(reviewerId)) fail(`${label} execution receipts do not cover the issued reviewer identities exactly once`);
+    completedReviewers.add(reviewerId);
+    if (canonical(execution.verdicts) !== canonical(lane.verdicts) || canonical(execution.criticalFloors) !== canonical(lane.criticalFloors)
+      || digest(execution.isolationReceiptSha256, `${label}.executionReceipts[${index}].isolationReceiptSha256`) !== expectedIsolation
+      || execution.artDirectionSha256 !== lane.artDirectionSha256 || execution.buildSha256 !== lane.buildSha256
+      || execution.briefSha256 !== invocation.activation.briefSha256) fail(`${label} execution receipt does not bind the lane verdict, floors, isolation, current brief, art direction, and build`);
+    const observations = array(execution.observationSha256s, `${label}.executionReceipts[${index}].observationSha256s`).map((value, observationIndex) => digest(value, `${label}.executionReceipts[${index}].observationSha256s[${observationIndex}]`));
+    if (new Set(observations).size !== observations.length
+      || observations.length !== expectedObservations.length
+      || observations.some((value) => !expectedObservations.includes(value))) fail(`${label} execution receipt does not bind the complete duplicate-free lane observation set`);
+    const childPid = execution.childPid;
+    if (typeof childPid !== 'number' || !Number.isSafeInteger(childPid) || childPid <= 0) fail(`${label} execution receipt child process is invalid`);
+    const sessionId = stringValue(execution.sessionId, `${label}.executionReceipts[${index}].sessionId`);
+    const nonce = stringValue(execution.nonce, `${label}.executionReceipts[${index}].nonce`);
+    const configurationSha256 = digest(execution.configurationSha256, `${label}.executionReceipts[${index}].configurationSha256`);
+    digest(execution.browserSha256, `${label}.executionReceipts[${index}].browserSha256`);
+    digest(execution.evidenceSha256, `${label}.executionReceipts[${index}].evidenceSha256`);
+    const identities = [`process:${childPid}`, `session:${sessionId}`, `nonce:${nonce}`, `configuration:${configurationSha256}`];
+    if (identities.some((identity) => usedExecutions.has(identity))) fail('completed host reviewer execution receipts cannot reuse a process, session, nonce, or configuration');
+    identities.forEach((identity) => usedExecutions.add(identity));
+  }
+  if (completedReviewers.size !== expectedReviewers.length) fail(`${label} execution receipts do not cover the final quorum`);
+}
 
-export function validateFinalEvidenceV2GraphFiles(root: string, graphInput: unknown, fs: EvidenceGraphFs, invocation: ProjectRunInvocation): { graph: FinalEvidenceV2Graph; rootHash: string; bindings: FinalEvidenceV2GraphBindings } {
+export function validateFinalEvidenceV2GraphFiles(root: string, graphInput: FinalEvidenceV2Graph, fs: EvidenceGraphFs, invocation: ProjectRunInvocation): { graph: FinalEvidenceV2Graph; rootHash: string; bindings: FinalEvidenceV2GraphBindings };
+export function validateFinalEvidenceV2GraphFiles(root: string, graphInput: unknown, fs: EvidenceGraphFs, invocation: ProjectRunInvocation): { graph: FinalEvidenceV2GraphVariant; rootHash: string; bindings: FinalEvidenceV2GraphBindingsVariant };
+export function validateFinalEvidenceV2GraphFiles(root: string, graphInput: unknown, fs: EvidenceGraphFs, invocation: ProjectRunInvocation): { graph: FinalEvidenceV2GraphVariant; rootHash: string; bindings: FinalEvidenceV2GraphBindingsVariant } {
   const graph = validateFinalEvidenceV2Graph(graphInput);
+  if (isWorkflowFinalEvidenceV2Graph(graph)) {
+    const production = validateFinalEvidenceV2GraphFiles(root, workflowProductionGraph(graph), fs, invocation);
+    const currentWorkflow = createAdaptiveWorkflowSourceBinding(root, invocation);
+    if (canonical(graph.workflow) !== canonical(currentWorkflow)) fail('workflow plan, route authority, selected proofs, reviews, or pointers are stale');
+    const source = readReceipt(root, fs, graph.sourceSeal, 'sourceSeal');
+    const seal = validateSourceSealArtifact(source.value);
+    if (seal.schemaVersion !== 2 || canonical(seal.workflow) !== canonical(graph.workflow) || validateSourceSeal(root, invocation).length !== 0) {
+      fail('source seal does not bind the current workflow proof plane');
+    }
+    return { graph, rootHash: createHash('sha256').update(canonical({ productionRootHash: production.rootHash, graph })).digest('hex'), bindings: production.bindings };
+  }
+  if (graph.schema !== FINAL_EVIDENCE_V2_GRAPH_SCHEMA) return validateAdaptiveFinalEvidenceV2GraphFiles(root, graph, fs, invocation);
   const entries: ReadonlyArray<readonly [string, ArtifactReceipt]> = [
     ['activation', graph.activation], ['intent', graph.intent], ['artDirection', graph.artDirection], ['board', graph.board],
     ['selection', graph.selection], ['settledSelection', graph.settledSelection], ['handoff', graph.handoff], ['usage', graph.usage], ['copy', graph.copy],
@@ -457,6 +529,11 @@ export function validateFinalEvidenceV2GraphFiles(root: string, graphInput: unkn
     if (`.omd/${pointer.record}` !== graph.intent.path || pointer.sha256 !== hashes.get('intent')) {
       fail('intent receipt is not the current immutable ledger');
     }
+    const currentIntentBytes = readStableRegularFile(root, fs, resolve(root, '.omd', pointer.record), 'current intent ledger');
+    if (createHash('sha256').update(currentIntentBytes).digest('hex') !== graph.intent.sha256) {
+      fail('current intent ledger bytes do not match the graph receipt');
+    }
+    requireCurrentIntentLedgerAuthorization(invocation, root, currentIntentBytes);
     const boardPath = resolve(root, '.omd', 'reference-board.json');
     if (semanticHash('board', parseReceipt(readStableRegularFile(root, fs, boardPath, 'current reference board'), 'current reference board')) !== hashes.get('board')) {
       fail('board receipt is not the current canonical board');
@@ -467,31 +544,46 @@ export function validateFinalEvidenceV2GraphFiles(root: string, graphInput: unkn
   }
   const framePath = resolve(root, '.omd', 'frame.md');
   const frameBytes = readStableRegularFile(root, fs, framePath, 'current frame');
+  const compositionBytes = readStableRegularFile(root, fs, resolve(root, '.omd', 'composition.md'), 'current composition');
   const currentFrameSha256 = createHash('sha256').update(frameBytes).digest('hex');
   const frameMatch = /^---\n([\s\S]*?)\n---/.exec(frameBytes.toString('utf8'));
   const frame = frameMatch === null ? {} : object(parse(frameMatch[1] ?? '') ?? {}, 'frame frontmatter');
-  const frameUxViolations = checkFrameUx(root);
+  const frameUxViolations = validateFrameUxBytes(frameBytes);
   if (frameUxViolations.length > 0) {
     fail(`current frame fails UX contract: ${frameUxViolations.map((violation) => violation.id).join(', ')}`);
   }
   const surface = normalizeUxSurface(frame.uxSurface);
   if (surface === null) fail('frame does not expose a supported uxSurface');
   const taskEvidence = graph.taskEvidence;
+  let currentTaskEvidence: ReturnType<typeof checkTaskEvidenceAgainstSources> | undefined;
   if (surface === 'product' || surface === 'mixed') {
     if (taskEvidence === undefined) fail(`${surface} final publication requires current task evidence`);
     if ((taskEvidence ?? fail('task evidence receipt is missing')).path !== '.omd/task-evidence.json') fail('task evidence receipt must identify the current canonical task evidence');
     try {
-      const currentTask = checkTaskEvidence(root);
+      const currentTask = checkTaskEvidenceAgainstSources(root, frameBytes, compositionBytes);
+      currentTaskEvidence = currentTask;
       if (currentTask.surface !== surface || currentTask.frame.sha256 !== currentFrameSha256
         || canonical(currentTask) !== canonical(values.get('taskEvidence') ?? fail('task evidence receipt is missing'))) {
         fail('task evidence receipt is not the current validated task evidence');
       }
+      requireTaskEvidenceProbeAuthorizations(root, currentTask, invocation);
     } catch (error) {
       if (error instanceof FinalEvidenceGraphError) throw error;
       fail(`current task evidence validation failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   } else if (taskEvidence !== undefined) {
     fail(`${surface} final publication must not include task evidence`);
+  }
+  const graphBoard = parseReferenceBoard(values.get('board') ?? fail('board receipt is missing'));
+  const graphBoardCaptureSha256 = (() => {
+    try {
+      return sha256(canonicalJson(projectRawReferenceBoard(root, resolveReferenceBoard(root, graphBoard))));
+    } catch (error) {
+      return fail(`graph board capture provenance validation failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  })();
+  if (selection.captureSha256 !== graphBoardCaptureSha256 || settledSelection.captureSha256 !== graphBoardCaptureSha256) {
+    fail('selection capture provenance does not bind the exact current graph board');
   }
   const artDirection = values.get('artDirection') ?? fail('art direction receipt is missing');
   const decision = object(artDirection.decision, 'artDirection.decision');
@@ -519,10 +611,13 @@ export function validateFinalEvidenceV2GraphFiles(root: string, graphInput: unkn
     fail('product routes cannot publish a signature scene or showpiece register');
   }
   if (surface === 'mixed') {
-    const task = checkTaskEvidence(root);
+    const task = currentTaskEvidence ?? fail('mixed publication requires current task evidence');
     const routes = new Set(task.tasks.map((entry) => entry.production.route));
-    if (routes.size !== 1 || !routes.has(stringValue(decision.route, 'art direction route'))) {
-      fail('mixed publication requires a current per-route legal decision map; this single-route decision cannot authorize multiple routes');
+    if (routes.size < 2) {
+      fail('mixed publication requires task evidence for at least two distinct production routes');
+    }
+    if (!routes.has(stringValue(decision.route, 'art direction route'))) {
+      fail('mixed publication task routes do not include the art-direction-bound production route');
     }
   }
   const selectedCopyException = typeof currentUserBeatExceptionReceiptSha256 === 'string'
@@ -551,31 +646,82 @@ export function validateFinalEvidenceV2GraphFiles(root: string, graphInput: unkn
   if (copy.artDirectionSha256 !== hashes.get('artDirection')) fail('copy does not bind art direction semantics');
   const renderedBeats = values.get('renderedBeats') ?? fail('rendered Beat receipt is missing');
   if (renderedBeats.artDirectionHash !== hashes.get('artDirection')
+    || renderedBeats.buildSha256 !== buildSha256
     || renderedBeats.copyDeckSha256 !== createHash('sha256').update(copyDeckBytes).digest('hex')) {
-    fail('rendered Beats do not bind the current art direction and copy output');
+    fail('rendered Beats do not bind the current art direction, build, and copy output');
+  }
+  for (const [index, capture] of array(renderedBeats.captures, 'renderedBeats.captures').entries()) {
+    const item = object(capture, `renderedBeats.captures[${index}]`);
+    const path = stringValue(item.path, `renderedBeats.captures[${index}].path`);
+    const bytes = readStableRegularFile(root, fs, resolve(root, path), `renderedBeats.captures[${index}]`);
+    if (createHash('sha256').update(bytes).digest('hex') !== item.sha256) fail('rendered Beat capture bytes changed');
   }
   const renderedBeatIds = array(renderedBeats.beatIds, 'renderedBeats.beatIds').map((beat, index) => stringValue(beat, `renderedBeats.beatIds[${index}]`));
   if (renderedBeatIds.length !== decisionBeatIds.length || renderedBeatIds.some((beat) => !decisionBeatIds.includes(beat))) fail('rendered Beats do not cover exactly the decision-bound Beat identities');
   const sourceSeal = values.get('sourceSeal') ?? fail('source seal receipt is missing');
+  const compositionFindings = validateCompositionContract(root, invocation);
+  if (compositionFindings.length > 0) {
+    fail(`composition contract is not semantically valid: ${compositionFindings.map((finding) => finding.id).join(', ')}`);
+  }
   if (object(sourceSeal.inputs, 'sourceSeal.inputs').copyDeckSha256 !== createHash('sha256').update(copyDeckBytes).digest('hex')) fail('source seal does not bind copy output bytes');
-  if (graph.sourceSeal.path !== '.omd/source-seal.json' || validateSourceSeal(root).length !== 0) fail('source seal is not the current canonical source snapshot');
+  if (graph.sourceSeal.path !== '.omd/source-seal.json' || validateSourceSeal(root, invocation).length !== 0) fail('source seal is not the current canonical source snapshot');
   const sealedSources = array(sourceSeal.sources, 'sourceSeal.sources').map((source, index) => digest(object(source, `sourceSeal.sources[${index}]`).sha256, `sourceSeal.sources[${index}].sha256`));
   if (!sealedSources.includes(activation.briefSha256) || !sealedSources.includes(activation.loadedSkillSha256)) {
     fail('source seal does not bind the active task brief and loaded skill identities');
   }
+  // allow: SIZE_OK - this pre-existing graph orchestrator keeps one call at the immutable receipt join; browser parsing and stable reads live in the bounded responsibility module.
+  validateFinalBrowserObservations(root, fs, graph.observations.map((_, index) => (values.get(`observations[${index}]`) ?? fail(`observation ${index} receipt is missing`)).evidence));
+  const trustedOutcomeRoute = sourceSeal.route === undefined
+    ? undefined
+    : readPersistedRoute(root, invocation);
+  validateTrustedOutcomeEvidence({
+    root,
+    branch: 'art-selected',
+    required: trustedOutcomeRoute !== undefined,
+    invocation,
+    expected: {
+      buildSha256: digest(buildSha256, 'buildIdentity.buildSha256'),
+      ...(trustedOutcomeRoute === undefined ? {} : (() => {
+        const route = object(sourceSeal.route, 'sourceSeal.route');
+        return {
+          routeSha256: digest(
+            object(route.record, 'sourceSeal.route.record').sha256,
+            'sourceSeal.route.record.sha256',
+          ),
+          sourceContractSha256: trustedOutcomeRoute.sourceContractSha256,
+          sourceContract: trustedOutcomeRoute.sourceContract,
+        };
+      })()),
+    },
+    observations: graph.observations.map((_, index) => {
+      const observation = values.get(`observations[${index}]`)
+        ?? fail(`observation ${index} receipt is missing`);
+      return {
+        evidence: observation.evidence,
+        buildSha256: stringValue(observation.buildSha256, 'observation buildSha256'),
+      };
+    }),
+  });
+  const observationHashes = graph.observations.map((_, index) => hashes.get(`observations[${index}]`) ?? fail('observation semantic hash is missing'));
+  if (new Set(observationHashes).size !== observationHashes.length) fail('graph observations must be a duplicate-free exact set');
   const criticalReviewerIds = new Set<string>();
+  const completedReviewerExecutions = new Set<string>();
   for (const label of ['blindLane', 'fidelityLane', 'protocolLane'] as const) {
     const lane = values.get(label) ?? fail(`${label} receipt is missing`);
     if (lane.artDirectionSha256 !== hashes.get('artDirection') || lane.buildSha256 !== buildSha256) fail(`${label} does not bind art direction and build`);
-    const observedHashes = new Set(graph.observations.map((_, index) => hashes.get(`observations[${index}]`) ?? fail('observation semantic hash is missing')));
+    const observedHashes = new Set(observationHashes);
     const provenance = object(lane.provenance, `${label}.provenance`);
-    const laneObservationHashes = array(provenance.observationSha256s, `${label}.provenance.observationSha256s`);
-    if (laneObservationHashes.length !== observedHashes.size || laneObservationHashes.some((item) => typeof item !== 'string' || !observedHashes.has(item))) fail(`${label} does not bind the complete observed evidence chain`);
+    const laneObservationHashes = array(provenance.observationSha256s, `${label}.provenance.observationSha256s`)
+      .map((item, index) => digest(item, `${label}.provenance.observationSha256s[${index}]`));
+    if (new Set(laneObservationHashes).size !== laneObservationHashes.length
+      || laneObservationHashes.length !== observedHashes.size
+      || laneObservationHashes.some((item) => !observedHashes.has(item))) fail(`${label} does not bind the complete duplicate-free observed evidence set`);
     for (const reviewerId of array(provenance.reviewerIds, `${label}.provenance.reviewerIds`)) {
       const reviewer = stringValue(reviewerId, `${label}.provenance.reviewerIds`);
       if (criticalReviewerIds.has(reviewer)) fail('critical reviewer identities must be unique across final lanes');
       criticalReviewerIds.add(reviewer);
     }
+    validateCompletedReviewerExecutions(root, fs, invocation, label, lane, completedReviewerExecutions);
     rejectRed(lane, label);
   }
   let predecessor: string | null = null;
@@ -596,11 +742,50 @@ export function validateFinalEvidenceV2GraphFiles(root: string, graphInput: unkn
     || motionResolution.motionDecision !== selectedCopyMotion
     || motionResolution.selectionSha256 !== hashes.get('selection')
     || motionResolution.handoffSha256 !== handoff.payloadSha256) fail('motion resolution is not the pre-selection-bound decision settlement');
+  const route = stringValue(decision.route, 'art direction route');
+  const fallbackRenderedBeatTask = {
+    taskId: stringValue(renderedBeats.taskId, 'rendered Beat task'),
+    route,
+    targets: [stringValue(renderedBeats.target, 'rendered Beat target')],
+  };
+  const renderedBeatTask = currentTaskEvidence === undefined ? fallbackRenderedBeatTask : (() => {
+    const tasks = currentTaskEvidence.tasks.filter((task) => task.production.route === route);
+    if (tasks.length !== 1) fail('current task evidence must identify exactly one task for the art-direction motion route');
+    const task = tasks[0] ?? fail('current task evidence did not retain its unique route task');
+    const targets = [...new Set(currentTaskEvidence.snapshot.probes
+      .filter((probe) => probe.taskId === task.id)
+      .map((probe) => probe.target))];
+    if (targets.length === 0) fail('current task evidence must expose host-authorized motion probe targets');
+    return { taskId: task.id, route: task.production.route, targets };
+  })();
+  const motionTask = currentTaskEvidence === undefined ? undefined : renderedBeatTask;
+  let renderedBeatError: unknown;
+  let canonicalRenderedBeats: ReturnType<typeof validateRenderedBeatResultAuthority> | undefined;
+  for (const target of renderedBeatTask.targets) {
+    try {
+      canonicalRenderedBeats = validateRenderedBeatResultAuthority(renderedBeats, {
+        invocation,
+        root,
+        buildSha256: digest(buildSha256, 'buildIdentity.buildSha256'),
+        artDirectionHash: hashes.get('artDirection') ?? fail('art direction semantic hash is missing'),
+        route: renderedBeatTask.route,
+        target,
+        taskId: renderedBeatTask.taskId,
+      });
+      break;
+    } catch (error) {
+      renderedBeatError = error instanceof Error ? error : new Error(String(error));
+    }
+  }
+  const validatedRenderedBeats = canonicalRenderedBeats
+    ?? fail(`rendered Beat result is not current and host-authorized: ${renderedBeatError instanceof Error ? renderedBeatError.message : String(renderedBeatError)}`);
+  const beatViolations = validatePostRenderBeatProof('', validatedRenderedBeats, { beatIds: decisionBeatIds });
+  if (beatViolations.length > 0) fail(`rendered Beat result fails canonical DOM semantics: ${(beatViolations[0] ?? fail('rendered Beat violation disappeared during validation')).message}`);
   try {
-    const handoffs = validateDecisionBoundReferenceHandoffs({
+    const handoffs = validateDecisionBoundReferenceHandoffs(root, {
       composer: parseReferenceHandoffReceipt(parseReceipt(readStableRegularFile(root, fs, resolve(root, '.omd', 'reference-handoffs', 'composer.json'), 'composer handoff'), 'composer handoff')),
       hand: parseReferenceHandoffReceipt(parseReceipt(readStableRegularFile(root, fs, resolve(root, '.omd', 'reference-handoffs', 'hand.json'), 'hand handoff'), 'hand handoff')),
-    }, hashes.get('artDirection') ?? fail('art direction semantic hash is missing'));
+    });
     if (handoffs.composer.motionResolutionProjectionSha256 !== motionResolutionSha256
       || handoffs.composer.settledSelectionSha256 !== hashes.get('settledSelection')) {
       fail('composer and hand handoffs do not bind the settled selection');
@@ -615,6 +800,7 @@ export function validateFinalEvidenceV2GraphFiles(root: string, graphInput: unkn
     graph,
     rootHash: createHash('sha256').update(canonical({ graph, currentFrameSha256 })).digest('hex'),
     bindings: {
+      branch: 'art-selected',
       activation,
       artDirectionSha256: hashes.get('artDirection') ?? fail('art direction semantic hash is missing'),
       selectionSha256: hashes.get('selection') ?? fail('selection semantic hash is missing'),
@@ -625,6 +811,7 @@ export function validateFinalEvidenceV2GraphFiles(root: string, graphInput: unkn
         .filter((slot) => slot.obligationDisposition === 'used')
         .map((slot) => slot.slotId),
       ...(motionResolution.approvedRecipe === undefined ? {} : { approvedMotionRecipe: motionResolution.approvedRecipe }),
+      ...(motionTask === undefined ? {} : { motionTask }),
     },
   };
 }

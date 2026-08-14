@@ -1,0 +1,7 @@
+{
+  "schema": "design-axis-input-v1",
+  "taskSize": "large",
+  "failureRisk": "moderate",
+  "uxNeed": "rigorous",
+  "expressiveDesignNeed": "showpiece"
+}

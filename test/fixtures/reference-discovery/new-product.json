@@ -1,0 +1,9 @@
+{
+  "schema": "reference-discovery-input-v1",
+  "taskNeed": "new-product",
+  "uncertainty": "unresolved",
+  "existingEvidence": "none",
+  "intendedUse": "Discover category patterns and anti-patterns before establishing a new product direction.",
+  "existingEvidenceUse": null,
+  "skipReason": null
+}

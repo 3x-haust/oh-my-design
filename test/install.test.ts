@@ -81,13 +81,15 @@ test('patchConfigToml registers agents and enables required features', () => {
   }
 });
 
-test('patchConfigToml preserves the user settings it did not author', () => {
-  const cfg = parseToml(patchConfigToml(EXISTING_TOML, { agents: AGENTS })) as unknown as CodexConfig;
+test('patchConfigToml preserves the user settings and foreign hooks it did not author', () => {
+  const foreignHook = '\n[hooks.state."foreign-plugin:hooks.json:session_start:0:0"]\ntrusted_hash = "sha256:abc123"\n';
+  const cfg = parseToml(patchConfigToml(`${EXISTING_TOML}${foreignHook}`, { agents: AGENTS })) as unknown as CodexConfig;
   assert.equal(cfg.model, 'gpt-5.5');
   assert.equal(must(cfg.features, 'features').js_repl, false, 'must merge features, never clobber');
   const agents = must(cfg.agents, 'agents');
   assert.equal(agents.max_threads, 1000);
   assert.equal(must(agents.explorer, 'explorer').config_file, './agents/explorer.toml');
+  assert.match(patchConfigToml(`${EXISTING_TOML}${foreignHook}`, { agents: AGENTS }), /foreign-plugin:hooks\.json:session_start:0:0/);
 });
 
 test('patchConfigToml is idempotent — patching twice equals patching once', () => {
@@ -209,6 +211,7 @@ test('Claude plugin install registers the plugin, prunes any direct duplicate, a
     assert.ok(settings.permissions?.allow?.includes('Bash(omd composition:*)'));
     assert.ok(settings.permissions?.allow?.includes('Bash(shasum:*)'));
     assert.ok(settings.permissions?.allow?.includes('Bash(omd source:*)'));
+    assert.ok(settings.permissions?.allow?.includes('Bash(omd workflow:*)'));
     assert.equal(
       settings.hooks?.PreToolUse?.some((entry) => entry.hooks.some((hook) => hook.command.includes('omd.ts'))) ?? false,
       false,
@@ -301,6 +304,29 @@ test('Codex doctor requires the typesetter and composer files and config registr
     const missingComposer = (await doctor([detected], UNSUPPORTED_BROWSER_DOCTOR))[0]!;
     assert.equal(missingComposer.ok, false);
     assert.equal(missingComposer.checks.find((check) => check.name === 'composer agent registered')?.ok, false);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('Senpi doctor validates its spawn contract and markdown role prompts', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'omd-senpi-install-'));
+  const detected = { host: 'senpi' as const, home };
+  try {
+    await install([detected], UNSUPPORTED_BROWSER);
+    const installed = (await doctor([detected], UNSUPPORTED_BROWSER_DOCTOR))[0]!;
+    assert.equal(installed.ok, true, installed.checks.filter((check) => !check.ok).map((check) => check.name).join(', '));
+
+    rmSync(join(home, 'omd-agents', 'omd-typesetter.md'));
+    const missing = (await doctor([detected], UNSUPPORTED_BROWSER_DOCTOR))[0]!;
+    assert.equal(missing.ok, false);
+    assert.equal(missing.checks.find((check) => check.name === 'typesetter agent registered')?.ok, false);
+
+    await install([detected], UNSUPPORTED_BROWSER);
+    writeFileSync(join(home, 'omd-host.json'), JSON.stringify({ host: 'senpi', agents: [] }));
+    const invalidContract = (await doctor([detected], UNSUPPORTED_BROWSER_DOCTOR))[0]!;
+    assert.equal(invalidContract.ok, false);
+    assert.equal(invalidContract.checks.find((check) => check.name === 'agents registered')?.ok, false);
   } finally {
     rmSync(home, { recursive: true, force: true });
   }
@@ -450,8 +476,11 @@ test('install links the omd CLI to this build so omd pack dir serves the current
     const changes = await install([detected], { browser: UNSUPPORTED_BROWSER.browser, cliBinDir: binDir });
     assert.ok(lstatSync(join(binDir, 'omd')).isSymbolicLink(), 'omd is a symlink');
     assert.ok(lstatSync(join(binDir, 'oh-my-design')).isSymbolicLink(), 'oh-my-design is a symlink');
+    assert.ok(lstatSync(join(binDir, 'omd-codex')).isSymbolicLink(), 'omd-codex is a symlink');
     assert.equal(readlinkSync(join(binDir, 'omd')), OMD_SHIM);
     assert.equal(readlinkSync(join(binDir, 'oh-my-design')), INSTALL_SHIM);
+    assert.equal(readlinkSync(join(binDir, 'omd-codex')), join(PACKAGE_ROOT, 'bin', 'omd-codex.mjs'));
+    assert.ok(changes.some((c) => c.startsWith('cli: linked omd-codex -> ') && c.endsWith('omd-codex.mjs')));
     assert.ok(changes.some((c) => c.startsWith('cli: linked omd -> ') && c.endsWith('omd.mjs')));
 
     const result = (await doctor([detected], { ...UNSUPPORTED_BROWSER_DOCTOR, cliBinDir: binDir }))[0]!;

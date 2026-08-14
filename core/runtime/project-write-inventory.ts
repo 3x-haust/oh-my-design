@@ -79,6 +79,8 @@ const REVIEWER_LIVE_SOCKET_ADAPTER = 'adapters/reviewer-mcp.ts';
 const REVIEWER_LIVE_SOCKET_EXCEPTION = 'reviewer proxy live-socket cleanup (audited in-memory broker)';
 const FINAL_EVIDENCE_STABLE_DESCRIPTOR_ADAPTER = 'core/evidence/final-v2.ts';
 const FINAL_EVIDENCE_STABLE_DESCRIPTOR_EXCEPTION = 'final-evidence-v2 stable descriptor adapter (audited capability owner)';
+const FIGMA_AUTHORITY_STORE_ADAPTER = 'core/figma/artifact-authority-store.ts';
+const FIGMA_AUTHORITY_STORE_EXCEPTION = 'external host-owned Figma artifact authority store (audited exact-identity adapter)';
 const GUARD_ENTRYPOINTS = [
   'writeExternalObservationFile',
   'createExternalObservationDirectory',
@@ -131,7 +133,8 @@ function reviewerLiveSocketCleanupException(
     && startBroker?.includes('launch.authorizedChildPid = claim.childPid!;') === true
     && startBroker?.includes('socket.end(JSON.stringify({ capability: launch.capability }));') === true
     && startBroker?.includes('claim.childPid !== launch.authorizedChildPid || claim.launchCapability !== launch.capability') === true
-    && startBroker?.includes("if (socketPeerPid(socket) !== claim.childPid) throw new ReviewerLaunchError('reviewer proxy socket peer is not the claimed configured child');") === true
+    && startBroker?.includes('const peerPid = socketPeerPid(socket);') === true
+    && startBroker?.includes("if (peerPid !== claim.childPid) throw new ReviewerLaunchError('reviewer proxy socket peer is not the claimed configured child');") === true
     && consumeBroker?.includes('const challenge = await exchange(claim);') === true
     && consumeBroker?.includes('const evidence = await exchange({ ...claim, launchCapability: challenge.capability });') === true
     && consumeBroker?.includes('const claim = { childPid: process.pid') === true;
@@ -142,12 +145,28 @@ function finalEvidenceStableDescriptorAdapter(
   directMutations: readonly UnguardedProjectMutation[],
 ): boolean {
   return filePath === FINAL_EVIDENCE_STABLE_DESCRIPTOR_ADAPTER
-    && directMutations.length === 1
-    && directMutations[0]?.operation === 'writeSync'
-    && directMutations[0]?.sourceLine.trim() === 'mkdir: mkdirSync, open: openSync, write: (fd, bytes) => { writeSync(fd, bytes); }, writeFile: writeFileSync, readFile: readFileSync, rename: renameSync, link: linkSync,'
-    && functionBody(source, 'filesystem')?.includes('const defaults: FinalEvidenceV2FileSystem = {') === true
-    && functionBody(source, 'filesystem')?.includes('write: (fd, bytes) => { writeSync(fd, bytes); }') === true
-    && functionBody(source, 'filesystem')?.includes('return { ...defaults, ...seams.fs };') === true;
+    && directMutations.length === 2
+    && directMutations.every(mutation =>
+      mutation.operation === 'writeSync'
+      && mutation.sourceLine.trim() === "? writeSync(fd, bytes, offset) : writeSync(fd, bytes, offset ?? 0, length ?? bytes.byteLength), writeFile: writeFileSync, readFile: readFileSync, rename: renameSync, link: linkSync,")
+    && functionBody(source, 'filesystem')?.includes('return {') === true
+    && functionBody(source, 'filesystem')?.includes("write: (fd, bytes, offset, length) => typeof bytes === 'string'") === true
+    && functionBody(source, 'filesystem')?.includes('...seams') === false;
+}
+function figmaAuthorityStoreAdapter(
+  filePath: string,
+  source: string,
+  directMutations: readonly UnguardedProjectMutation[],
+): boolean {
+  const operations = directMutations.map((mutation) => mutation.operation).sort().join(',');
+  return filePath === FIGMA_AUTHORITY_STORE_ADAPTER
+    && operations === 'mkdirSync,mkdirSync,openSync,renameSync,rmdirSync,rmdirSync,unlinkSync,unlinkSync,writeSync'
+    && source.includes("constants.O_RDONLY | constants.O_NOFOLLOW")
+    && source.includes("constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL, 0o600")
+    && source.includes("if ((mode & 0o077) !== 0) throw new Error('Figma authority root must not be accessible to group or other users')")
+    && source.includes("if (!stats.isDirectory() || stats.isSymbolicLink()) throw new Error('Figma project authority must be a real directory')")
+    && source.includes("if (directory === undefined || dirname(path) !== directory) throw new Error('Figma authority record escaped its project directory')")
+    && !source.includes('rmSync(');
 }
 function sourcePath(repositoryRoot: string, absolutePath: string): string {
   return relative(repositoryRoot, absolutePath).split('\\').join('/');
@@ -520,6 +539,7 @@ export function inventoryProjectRunMutations(
       : [];
     const reviewerLiveSocketException = reviewerLiveSocketCleanupException(filePath, source, directMutations);
     const finalEvidenceDescriptorAdapter = finalEvidenceStableDescriptorAdapter(filePath, source, directMutations);
+    const figmaAuthorityAdapter = figmaAuthorityStoreAdapter(filePath, source, directMutations);
     const hasExternalObservationWrapper = filePath === GUARD_BOUNDARY
       && source.includes('export function writeExternalObservationFile')
       && source.includes('export function createExternalObservationDirectory');
@@ -529,7 +549,7 @@ export function inventoryProjectRunMutations(
       ? 'guarded'
       : reviewerLiveSocketException
         ? 'external-exception'
-        : finalEvidenceDescriptorAdapter
+        : finalEvidenceDescriptorAdapter || figmaAuthorityAdapter
           ? 'external-exception'
           : 'unclassified';
     const exception = hasExternalObservationWrapper
@@ -538,7 +558,9 @@ export function inventoryProjectRunMutations(
         ? REVIEWER_LIVE_SOCKET_EXCEPTION
         : finalEvidenceDescriptorAdapter
           ? FINAL_EVIDENCE_STABLE_DESCRIPTOR_EXCEPTION
-          : undefined;
+          : figmaAuthorityAdapter
+            ? FIGMA_AUTHORITY_STORE_EXCEPTION
+            : undefined;
     owners.push({
       filePath,
       classification,

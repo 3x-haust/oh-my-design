@@ -1,6 +1,7 @@
 import {
   BOARD_TAKE_VALUES,
   REFERENCE_BOARD_SCHEMA_VERSION,
+  REFERENCE_BOARD_V2_SCHEMA_VERSION,
   ReferenceBoardValidationError,
   type BoardSourceKind,
   type BoardTake,
@@ -46,6 +47,7 @@ const sourceKind = (value: unknown, label: string): BoardSourceKind => {
   switch (value) {
     case 'component-capture': return value;
     case 'image-fragment': return value;
+    case 'classified-reference': return value;
     default: return fail(`${label} must be a supported sourceKind`);
   }
 };
@@ -56,6 +58,9 @@ const take = (value: unknown, label: string): BoardTake => {
     case 'density': return value;
     case 'rhythm': return value;
     case 'motion': return value;
+    case 'content': return value;
+    case 'voice': return value;
+    case 'rejection': return value;
     default: return fail(`${label} must be one of ${BOARD_TAKE_VALUES.join(', ')}`);
   }
 };
@@ -111,31 +116,65 @@ const grid = (value: unknown, label: string): ReferenceBoardGrid => {
   return { column, span, order };
 };
 
-const piece = (value: unknown, label: string): ReferenceBoardPiece => {
+const classification = (value: unknown, label: string): { readonly kind: 'content-only' | 'anti-reference'; readonly sha256: string } => {
   const parsed = record(value, label);
-  exactKeys(parsed, ['slotId', 'sourceKind', 'referenceId', 'targetComponent', 'targetSelector', 'taskIds', 'reason', 'take', 'avoid', 'adaptation', 'grid', 'evidenceAxes'], label);
+  exactKeys(parsed, ['kind', 'sha256'], label);
+  const rawKind = parsed['kind'];
+  if (rawKind !== 'content-only' && rawKind !== 'anti-reference') fail(`${label}.kind must be content-only or anti-reference`);
+  const kind = rawKind as 'content-only' | 'anti-reference';
+  const digest = nonEmpty(parsed['sha256'], `${label}.sha256`);
+  if (!/^[0-9a-f]{64}$/.test(digest)) fail(`${label}.sha256 must be 64 lowercase hexadecimal characters`);
+  return { kind, sha256: digest };
+};
+
+const piece = (value: unknown, label: string, version: ReferenceBoardManifest['schemaVersion']): ReferenceBoardPiece => {
+  const parsed = record(value, label);
   const kind = sourceKind(parsed['sourceKind'], `${label}.sourceKind`);
+  const classified = kind === 'classified-reference';
+  exactKeys(parsed, classified
+    ? ['slotId', 'sourceKind', 'referenceId', 'targetComponent', 'targetSelector', 'taskIds', 'reason', 'take', 'avoid', 'adaptation', 'grid', 'evidenceAxes', 'classification']
+    : ['slotId', 'sourceKind', 'referenceId', 'targetComponent', 'targetSelector', 'taskIds', 'reason', 'take', 'avoid', 'adaptation', 'grid', 'evidenceAxes'], label);
+  if (classified && version !== REFERENCE_BOARD_V2_SCHEMA_VERSION) fail(`${label}.sourceKind classified-reference requires ${REFERENCE_BOARD_V2_SCHEMA_VERSION}`);
   const takes = strings(parsed['take'], `${label}.take`, true).map((entry, index) => take(entry, `${label}.take[${index}]`));
   if (new Set(takes).size !== takes.length) fail(`${label}.take must not contain duplicates`);
+  if (version === REFERENCE_BOARD_SCHEMA_VERSION && takes.some((entry) => entry === 'content' || entry === 'voice' || entry === 'rejection')) {
+    fail(`${label} nonvisual take values require ${REFERENCE_BOARD_V2_SCHEMA_VERSION}`);
+  }
+  const axes = evidenceAxes(parsed['evidenceAxes'], `${label}.evidenceAxes`);
   const base = {
     slotId: assemblyText(parsed['slotId'], `${label}.slotId`), referenceId: nonEmpty(parsed['referenceId'], `${label}.referenceId`),
     targetComponent: assemblyText(parsed['targetComponent'], `${label}.targetComponent`), targetSelector: localTargetSelector(parsed['targetSelector'], `${label}.targetSelector`),
     taskIds: strings(parsed['taskIds'], `${label}.taskIds`, true, true), reason: assemblyText(parsed['reason'], `${label}.reason`),
     take: takes, avoid: assemblyText(parsed['avoid'], `${label}.avoid`), adaptation: assemblyText(parsed['adaptation'], `${label}.adaptation`), grid: grid(parsed['grid'], `${label}.grid`),
-    evidenceAxes: evidenceAxes(parsed['evidenceAxes'], `${label}.evidenceAxes`),
+    evidenceAxes: axes,
   };
+  if (classified) {
+    const binding = classification(parsed['classification'], `${label}.classification`);
+    if (binding.kind === 'content-only') {
+      if (axes.signal !== 'supporting-content' || takes.some((entry) => entry !== 'content' && entry !== 'voice')) fail(`${label} content-only evidence may take only content or voice`);
+    } else if (axes.signal !== 'anti-reference' || takes.some((entry) => entry !== 'rejection')) {
+      fail(`${label} anti-reference evidence may take only rejection constraints`);
+    }
+    if (axes.staticAxis !== 'absent' || axes.motionAxis !== 'absent') fail(`${label} nonvisual evidence cannot expose static or motion axes`);
+    return { ...base, sourceKind: kind, classification: binding };
+  }
+  if (version === REFERENCE_BOARD_V2_SCHEMA_VERSION
+    && (takes.some((entry) => entry === 'content' || entry === 'voice' || entry === 'rejection')
+      || axes.signal === 'supporting-content' || axes.signal === 'anti-reference')) {
+    fail(`${label} v2 nonvisual claims require sourceKind classified-reference`);
+  }
   switch (kind) {
     case 'component-capture': return { ...base, sourceKind: kind };
     case 'image-fragment': return { ...base, sourceKind: kind };
   }
 };
 
-const candidate = (value: unknown, index: number): ReferenceBoardCandidate => {
+const candidate = (value: unknown, index: number, version: ReferenceBoardManifest['schemaVersion']): ReferenceBoardCandidate => {
   const label = `candidates[${index}]`; const parsed = record(value, label);
   exactKeys(parsed, ['id', 'label', 'route', 'rationale', 'pieces'], label);
   const entries = array(parsed['pieces'], `${label}.pieces`);
   if (entries.length === 0) fail(`${label}.pieces must be a non-empty array`);
-  const pieces = entries.map((entry, pieceIndex) => piece(entry, `${label}.pieces[${pieceIndex}]`));
+  const pieces = entries.map((entry, pieceIndex) => piece(entry, `${label}.pieces[${pieceIndex}]`, version));
   const slots = pieces.map((entry) => entry.slotId);
   if (new Set(slots).size !== slots.length) fail(`${label}.pieces slotId values must be unique`);
   const orders = pieces.map((entry) => entry.grid.order);
@@ -145,14 +184,22 @@ const candidate = (value: unknown, index: number): ReferenceBoardCandidate => {
 
 export function parseReferenceBoard(value: unknown): ReferenceBoardManifest {
   const parsed = record(value, 'reference board');
-  exactKeys(parsed, ['schemaVersion', 'frameSha256', 'candidates'], 'reference board');
-  if (parsed['schemaVersion'] !== REFERENCE_BOARD_SCHEMA_VERSION) fail(`schemaVersion must be ${REFERENCE_BOARD_SCHEMA_VERSION}`);
+  const rawVersion = parsed['schemaVersion'];
+  if (rawVersion !== REFERENCE_BOARD_SCHEMA_VERSION && rawVersion !== REFERENCE_BOARD_V2_SCHEMA_VERSION) fail(`schemaVersion must be ${REFERENCE_BOARD_SCHEMA_VERSION} or ${REFERENCE_BOARD_V2_SCHEMA_VERSION}`);
+  const version = rawVersion as ReferenceBoardManifest['schemaVersion'];
+  exactKeys(parsed, version === REFERENCE_BOARD_V2_SCHEMA_VERSION
+    ? ['schemaVersion', 'projectSha256', 'frameSha256', 'candidates']
+    : ['schemaVersion', 'frameSha256', 'candidates'], 'reference board');
+  const projectSha256 = version === REFERENCE_BOARD_V2_SCHEMA_VERSION ? nonEmpty(parsed['projectSha256'], 'projectSha256') : undefined;
+  if (projectSha256 !== undefined && !/^[0-9a-f]{64}$/.test(projectSha256)) fail('projectSha256 must be 64 lowercase hexadecimal characters');
   const frameSha256 = nonEmpty(parsed['frameSha256'], 'frameSha256');
   if (!/^[0-9a-f]{64}$/.test(frameSha256)) fail('frameSha256 must be 64 lowercase hexadecimal characters');
   const entries = array(parsed['candidates'], 'candidates');
   if (entries.length === 0) fail('candidates must be a non-empty array');
-  const candidates = entries.map(candidate);
+  const candidates = entries.map((entry, index) => candidate(entry, index, version));
   const ids = candidates.map((entry) => entry.id);
   if (new Set(ids).size !== ids.length) fail('candidate id values must be unique');
-  return { schemaVersion: REFERENCE_BOARD_SCHEMA_VERSION, frameSha256, candidates };
+  return version === REFERENCE_BOARD_V2_SCHEMA_VERSION
+    ? { schemaVersion: version, projectSha256: projectSha256!, frameSha256, candidates }
+    : { schemaVersion: version, frameSha256, candidates };
 }

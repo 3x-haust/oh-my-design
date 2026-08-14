@@ -361,7 +361,7 @@ function readManifestFile(path: string): unknown {
   try { return JSON.parse(readFileSync(path, 'utf8')) as unknown; } catch { throw new Error(`manifest is not valid JSON: ${path}`); }
 }
 
-/** Validates a caller manifest and atomically publishes an immutable bound final evidence record. */
+/** V1 final evidence publication is permanently disabled before opening its manifest. */
 function legacyPublicationDisabled(): never {
   const error = new Error('LEGACY_PUBLICATION_DISABLED') as Error & { code?: string };
   error.code = 'LEGACY_PUBLICATION_DISABLED';

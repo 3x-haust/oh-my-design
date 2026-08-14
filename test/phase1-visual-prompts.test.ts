@@ -3,156 +3,130 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  ADAPTIVE_BEHAVIOR_POLICY,
+  ADAPTIVE_STAGE_GRAPH,
+  ADAPTIVE_STAGE_OWNERS,
+  AdaptiveRouteError,
+  MANDATORY_ADAPTIVE_GATES,
+  parseRouteRecord,
+  routeAdaptiveFlow,
+} from '../core/route/index.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
-const read = (path: string): string => readFileSync(join(root, path), 'utf8');
+const fixture = (): object => JSON.parse(readFileSync(
+  join(root, 'test/fixtures/adaptive-flow/medical-new-product.json'), 'utf8',
+));
 
-test('hand, composer, and eye actively steer toward register-fit visual carriers, not bare gray boxes', () => {
-  const hand = read('src/agents/hand.agent.yaml');
-  const composer = read('src/agents/composer.agent.yaml');
-  const eye = read('src/agents/eye.agent.yaml');
-
-  for (const source of [hand, composer]) {
-    assert.match(source, /register \(quiet\/confident\/showpiece\)/i);
-  }
-  assert.match(eye, /purposeful\s+visual carrier/i);
-  assert.match(hand, /gray box/i);
-  assert.match(eye, /gray box/i);
-  assert.match(composer, /bare placeholder/i);
-
-  assert.match(hand, /gradient-mesh\.md[\s\S]*noise-grain-texture\.md[\s\S]*svg-geometric-patterns\.md[\s\S]*css-illustration-primitives\.md/);
-  assert.match(hand, /`theory\/expressive\.md`, and `motion\/recipes\/`/);
-
-  assert.match(composer, /gradient-mesh, noise-grain[\s\S]*texture, svg-geometric patterns, css-illustration primitives/);
-  assert.match(composer, /`theory\/expressive\.md`[\s\S]*`motion\/recipes\/` entry/);
-
-  assert.match(eye, /purposeful\s+visual carrier/i);
-  assert.match(eye, /signature or static template break/i);
+test('visual phases retain independent machine-owned artifacts and dependency order', () => {
+  const route = routeAdaptiveFlow(fixture());
+  assert.equal(ADAPTIVE_STAGE_OWNERS.copy, 'omd-writer');
+  assert.equal(ADAPTIVE_STAGE_OWNERS['type-proof'], 'omd-typesetter');
+  assert.equal(ADAPTIVE_STAGE_OWNERS.composition, 'omd-composer');
+  assert.equal(ADAPTIVE_STAGE_OWNERS['candidate-generation'], 'omd-sketch');
+  assert.equal(ADAPTIVE_STAGE_OWNERS.production, 'omd-hand');
+  assert.deepEqual(ADAPTIVE_STAGE_GRAPH.composition.prerequisites, ['frame', 'copy']);
+  assert.deepEqual(ADAPTIVE_STAGE_GRAPH['type-proof'].prerequisites, ['copy']);
+  assert.deepEqual(ADAPTIVE_STAGE_GRAPH['candidate-generation'].prerequisites, ['composition']);
+  assert.ok(route.strategy.stages.indexOf('composition') < route.strategy.stages.indexOf('production'));
 });
 
-test('a marketing surface defaults to the confident register even from a silent brief', () => {
-  const skill = read('src/skills/omd-ultradesign/SKILL.md');
-  const protocol = read('core/protocol/human-design-loop.md');
-  const eye = read('src/agents/eye.agent.yaml');
-
-  // The silent-brief default is asymmetric: marketing/landing defaults up to confident
-  // (one committed signature moment + a template departure), never a quiet document.
-  for (const source of [skill, protocol]) {
-    assert.match(source, /`marketing` surface[\s\S]*defaults to at least the `confident` register/i);
-    assert.match(source, /silent `quiet`\/restraint default is reserved for a `product`\/tool-operating surface/i);
-    assert.match(source, /single-column marketing page whose only carrier is a functional element[\s\S]*silent-default failure/i);
-  }
-  // It must not invert the product default: quiet stays correct on a product/tool surface.
-  assert.match(eye, /On a `product` or quiet surface the correct risk is functional/i);
+test('register, colour, scale, and carrier decisions are executable conditional policy', () => {
+  const visual = ADAPTIVE_BEHAVIOR_POLICY.visual;
+  assert.deepEqual(visual.registers, ['quiet', 'confident', 'showpiece']);
+  assert.deepEqual(visual.registerDefaults, { marketing: 'confident', product: 'quiet' });
+  assert.deepEqual(visual.restrainedMarketingCarrier, ['scale', 'structure', 'display-type']);
+  assert.equal(visual.productDisplayExempt, true);
+  assert.equal(visual.marketingRequiresColourIdentity, true);
+  assert.equal(visual.marketingRequiresBuiltCarrier, true);
+  assert.equal(visual.textOnlyMarketingPasses, false);
+  assert.equal(visual.colourDistribution, '60-30-10');
+  assert.equal(visual.colourlessMarketing, 'RED');
+  assert.deepEqual(visual.carrierOptions, [
+    'gradient-mesh', 'noise-grain-texture', 'svg-geometric-pattern',
+    'css-illustration-primitives', 'expressive-theory', 'motion-recipe',
+  ]);
+  assert.equal(visual.carrierAbsenceClassification, 'hierarchy-defect');
+  assert.equal(visual.carrierStackingAllowed, false);
+  assert.equal(visual.maximumSystematicDetailLayers, 1);
 });
 
-test('a restrained-colour marketing surface carries its register through scale, with a systematic craft advisory', () => {
-  const protocol = read('core/protocol/human-design-loop.md');
-  const composer = read('src/agents/composer.agent.yaml');
-
-  // Monochrome/restrained palette must be carried by scale + structure, not uniform body type.
-  assert.match(protocol, /Restrained-colour ambition is part of the GREEN target[\s\S]*carried by scale and structure[\s\S]*display-scale type moment/i);
-  assert.match(protocol, /Uniform body-scale type across an evenly-stacked monochrome marketing page is the silent-default failure \(RED\)/i);
-  // Product/quiet stays exempt — no over-application down-register.
-  assert.match(protocol, /A `product`\/quiet surface is exempt — its clarity comes from density, not a display moment/i);
-
-  // Craft detail is advisory and must never become a decorative catalogue.
-  assert.match(composer, /One systematic detail layer may reinforce the anchor[\s\S]*never a decorative catalogue and never a substitute for the one signature moment/i);
+test('stack choice, direction divergence, and motion remain locked and non-defaulting', () => {
+  const visual = ADAPTIVE_BEHAVIOR_POLICY.visual;
+  assert.equal(visual.productionBeforeFrameAndResearch, false);
+  assert.equal(visual.explicitStackRequestBuildAuthority, false);
+  assert.equal(visual.autonomousMarketingDirectionCount, 3);
+  assert.equal(visual.directionSelection, 'autonomous');
+  assert.equal(visual.directionsRequireDistinctColourAndGenerator, true);
+  assert.equal(visual.userRegisterMotionLock, true);
+  assert.equal(visual.motionDefault, 'none');
+  assert.equal(visual.maximumTriggeredScenes, 1);
+  assert.equal(visual.motionOneRequiresTriggeredScene, true);
+  assert.equal(visual.motionNoneRequiresStaticBreak, true);
+  assert.equal(visual.scrollEvidenceAddsMotionObligation, false);
 });
 
-test('deciding the stack is not permission to build before framing and research', () => {
-  const skill = read('src/skills/omd-ultradesign/SKILL.md');
-  const protocol = read('core/protocol/human-design-loop.md');
-  for (const source of [skill, protocol]) {
-    // No production write — scaffolding included — before the frame and the scout's research.
-    assert.match(source, /Deciding the stack is not permission to build it/i);
-    assert.match(source, /no production write[\s\S]*before[\s\S]*fram/i);
-    // An explicit stack request records the decision only; it never licenses building first.
-    assert.match(source, /explicit stack request[\s\S]*omd decision/i);
-    assert.match(source, /routing defect, not a lawful shortcut/i);
-  }
+test('visual review is isolated, evidence-terminal, and conjunctively gated', () => {
+  const route = routeAdaptiveFlow(fixture());
+  assert.equal(ADAPTIVE_STAGE_OWNERS['independent-review'], 'omd-eye');
+  assert.deepEqual(ADAPTIVE_STAGE_GRAPH['independent-review'].prerequisites, ['browser-evidence']);
+  assert.deepEqual(route.behavior.policy.process.reviewIsolation.blindAllowed, [
+    'role-brief', 'opaque-renders', 'deterministic-findings',
+  ]);
+  assert.deepEqual(route.behavior.policy.process.reviewIsolation.fidelityAllowed, [
+    'selected-projections', 'handoff-receipts',
+  ]);
+  assert.equal(route.behavior.policy.visual.criticalReviewFloor, 3);
+  assert.deepEqual(route.behavior.policy.visual.reviewVerdicts, [
+    'signature-fit', 'narrative-fit', 'motion-fit', 'decision-fit',
+  ]);
+  assert.equal(route.behavior.policy.visual.allReviewVerdictsRequired, true);
+  assert.equal(route.behavior.policy.visual.functionalElementIsSignature, false);
+  assert.equal(route.behavior.policy.visual.quietProductExtraSignatureRequired, false);
+  assert.ok(MANDATORY_ADAPTIVE_GATES.includes('final-evidence-v2'));
+  assert.ok(MANDATORY_ADAPTIVE_GATES.includes('independent-review'));
+  assert.deepEqual(route.strategy.stages.slice(-3), ['production', 'browser-evidence', 'independent-review']);
 });
 
-test('a marketing surface commits a real colour identity and a built visual-material carrier', () => {
-  const protocol = read('core/protocol/human-design-loop.md');
-  const composer = read('src/agents/composer.agent.yaml');
-  const hand = read('src/agents/hand.agent.yaml');
+test('showpiece selected motion persists award or canonical ambition and rejects baseline only there', () => {
+  const make = (need: 'restrained' | 'showpiece', ambition: 'baseline' | 'award-level' | 'canonical'): object => {
+    const input = fixture();
+    const axes = Reflect.get(input, 'designAxes');
+    const strategy = Reflect.get(input, 'strategyDecision');
+    assert.ok(typeof axes === 'object' && axes !== null && typeof strategy === 'object' && strategy !== null);
+    Reflect.set(axes, 'expressiveDesignNeed', need);
+    const methods = Reflect.get(strategy, 'methods');
+    const skips = Reflect.get(strategy, 'skips');
+    const categories = Reflect.get(strategy, 'attributionCategories');
+    assert.ok(Array.isArray(methods) && Array.isArray(skips) && Array.isArray(categories));
+    Reflect.set(strategy, 'methods', [...methods, 'motion-one', `motion-ambition:${ambition}`]);
+    Reflect.set(strategy, 'skips', skips.filter((entry) => Reflect.get(entry, 'id') !== 'motion-one'));
+    Reflect.set(strategy, 'attributionCategories', ['tokens', 'motion', ...categories.filter((entry) => entry !== 'tokens')]);
+    return input;
+  };
 
-  // Colour under-commitment (characterless white/black) is the convergence failure, not restraint.
-  assert.match(protocol, /Colour commitment is the other half of the target[\s\S]*characterless near-greyscale default[\s\S]*convergence-to-the-mean failure \(RED\)/i);
-  assert.match(protocol, /60-30-10 governs how colour is distributed, never a licence to ship no colour/i);
-  // A real built visual-material carrier is expected; a text-only page is a carrier failure.
-  assert.match(protocol, /Visual-material carrier is part of the GREEN target[\s\S]*never a text-only page/i);
-  assert.match(protocol, /a page with no built visual material is a defect/i);
-  // The builders carry the same rule and never settle for text-in-boxes.
-  for (const builder of [composer, hand]) {
-    assert.match(builder, /still (composes|builds) a (real|genuine) visual carrier[\s\S]*never (text-in-boxes|a text-only page)/i);
-    assert.match(builder, /characterless white\/black[\s\S]*convergence-to-the-mean failure, not restraint/i);
-  }
+  assert.equal(routeAdaptiveFlow(make('showpiece', 'award-level')).behavior.active.motion.ambition, 'award-level');
+  assert.equal(routeAdaptiveFlow(make('showpiece', 'canonical')).behavior.active.motion.ambition, 'canonical');
+  assert.equal(routeAdaptiveFlow(make('restrained', 'baseline')).behavior.active.motion.ambition, 'baseline');
+  assert.throws(() => routeAdaptiveFlow(make('showpiece', 'baseline')), AdaptiveRouteError);
+
+  const missing = make('showpiece', 'award-level');
+  const strategy = Reflect.get(missing, 'strategyDecision');
+  const methods = Reflect.get(strategy, 'methods');
+  assert.ok(Array.isArray(methods));
+  Reflect.set(strategy, 'methods', methods.filter((entry) => !String(entry).startsWith('motion-ambition:')));
+  assert.throws(() => routeAdaptiveFlow(missing), AdaptiveRouteError);
+
+  const duplicate = make('showpiece', 'award-level');
+  const duplicateStrategy = Reflect.get(duplicate, 'strategyDecision');
+  const duplicateMethods = Reflect.get(duplicateStrategy, 'methods');
+  assert.ok(Array.isArray(duplicateMethods));
+  Reflect.set(duplicateStrategy, 'methods', [...duplicateMethods, 'motion-ambition:canonical']);
+  assert.throws(() => routeAdaptiveFlow(duplicate), AdaptiveRouteError);
 });
 
-test('a showpiece one scene is ambitious but never selected by surface default', () => {
-  const protocol = read('core/protocol/human-design-loop.md');
-  assert.match(protocol, /after `motionDecision: one` is selected[\s\S]*as ambitious as the studied award work/i);
-  assert.match(protocol, /Never default motion to `one`/i);
-  assert.match(protocol, /exactly one declared, activated scene/i);
-  assert.match(protocol, /Neither outcome is a default/i);
-});
-
-test('art direction is evidence-bound autonomous none|one with carrier and decision-fit floors', () => {
-  const protocol = read('core/protocol/human-design-loop.md');
-  const hand = read('src/agents/hand.agent.yaml');
-  const composer = read('src/agents/composer.agent.yaml');
-  const eye = read('src/agents/eye.agent.yaml');
-
-  assert.match(protocol, /explicit current-user register or motion instruction is a lock[\s\S]*preserved[\s\S]*never inferred from silence/i);
-  assert.match(protocol, /For `marketing`, compare exactly three evidence-grounded directions silently[\s\S]*do not ask the user/i);
-  assert.match(protocol, /Never default motion to `one`, invent a motion scene, or convert a user lock into a preference/i);
-  assert.match(protocol, /A merely functional element — a working copy button, a form, a nav, or a terminal that only runs a command — is baseline function, never the signature moment[\s\S]*For `motionDecision: none`, require a designed static template break; for `one`, it cannot count as the triggered scene/i);
-  for (const source of [hand, composer]) {
-    assert.match(source, /register \(quiet\/confident\/showpiece\)/i);
-  }
-
-  assert.match(hand, /`motionDecision: one` requires exactly one real[\s\S]*triggered scene/i);
-  assert.match(hand, /`motionDecision: none` permits no[\s\S]*triggered scene[\s\S]*designed static template break/i);
-  assert.match(eye, /`motionDecision` is implemented exactly \(`one` is one real triggered scene; `none` has none\)/i);
-  assert.match(eye, /purposeful\s+visual carrier/i);
-  assert.match(eye, /`decision-fit`/i);
-  assert.match(eye, /every critical score must be at least 3/i);
-  assert.match(eye, /Never demand a signature moment on a quiet\/product surface beyond its recorded art-direction decision/i);
-  assert.match(eye, /any file not explicitly\s+supplied\.\s+A fidelity eye receives only the canonical selected projections and handoff receipts/i);
-  assert.match(eye, /fidelity-projection exception is limited to those artifacts/i);
-  assert.match(eye, /A merely functional element — a working copy button, a form, a nav, or a terminal that only runs a command — is baseline function, never the signature moment[\s\S]*For `motionDecision: none`, require a designed static template break; for `one`, it cannot count as the triggered scene/i);
-
-  assert.match(hand, /Never fabricate assets, data, or product facts to justify a\s+carrier/i);
-  assert.match(composer, /Never invent the asset or fact the carrier depends\s+on/i);
-  assert.match(composer, /Never stack multiple carriers into a decorative catalogue/i);
-});
-
-test('eye flags an absent visual carrier as a hierarchy defect, not a style preference', () => {
-  const eye = read('src/agents/eye.agent.yaml');
-  assert.match(eye, /When the dominant anchor has no purposeful\s+visual carrier[\s\S]*name that absence as a hierarchy defect, not a\s+style preference/i);
-});
-test('showpiece motion remains one declared triggered scene rather than a multi-scene exception', () => {
-  const protocol = read('core/protocol/human-design-loop.md');
-  assert.match(protocol, /`one` requires exactly one declared, activated scene/i);
-  assert.match(protocol, /never turns captured scroll craft into an additional motion obligation beyond the exact selected `motionDecision`/i);
-  assert.doesNotMatch(protocol, /scroll-scene-evidence-v1/i);
-});
-test('an all-neutral marketing palette is a machine-flagged colourless failure, not restraint', () => {
-  const protocol = read('core/protocol/human-design-loop.md');
-  assert.match(protocol, /`SLOP-COLORLESS`/);
-  assert.match(protocol, /on a `marketing`\/showpiece surface that is RED, not a mere warn/i);
-});
-test('enumerated visual directions must genuinely diverge in colour and generator, not converge to monochrome variants', () => {
-  const protocol = read('core/protocol/human-design-loop.md');
-  assert.match(protocol, /The enumerated directions must genuinely diverge, not converge/i);
-  assert.match(protocol, /each commits a distinct colour identity[\s\S]*never white\/black by default/i);
-  assert.match(protocol, /one guess wearing three hats, and the blind selection rejects the set and re-enumerates/i);
-});
-test('a showpiece landing does not silently acquire a scroll-motion obligation', () => {
-  const protocol = read('core/protocol/human-design-loop.md');
-  assert.match(protocol, /Never default motion to `one`/i);
-  assert.match(protocol, /Motion is not implied by that default/i);
-  assert.match(protocol, /`motionDecision: none`[\s\S]*designed static template break/i);
+test('persisted visual policy mutations fail closed', () => {
+  const record = structuredClone(routeAdaptiveFlow(fixture()));
+  Reflect.set(record.behavior.policy.visual, 'motionDefault', 'one');
+  assert.throws(() => parseRouteRecord(record), AdaptiveRouteError);
 });

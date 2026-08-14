@@ -119,6 +119,55 @@ export function extractInPage(maxNodes: number, selector?: string | null): RawIr
     return m && m[1] ? Number(m[1]) : undefined;
   };
 
+  // Display wrapping is a production contract only for display roles. A descendant owns
+  // its direct text as a separate IR node, but inherits the semantic role of a heading,
+  // blockquote, or explicit display container around it.
+  const isDisplayText = (el: Element): boolean =>
+    el.closest('h1, h2, h3, h4, h5, h6, blockquote, [data-omd-display]') !== null;
+
+  const koreanWrapOf = (el: Element): 'character' | undefined => {
+    const context = el.closest('[data-omd-korean-wrap]');
+    return context?.getAttribute('data-omd-korean-wrap') === 'character' ? 'character' : undefined;
+  };
+
+  /**
+   * Measure only direct text. Range geometry is read after the render pipeline has awaited
+   * document.fonts.ready, so line assignment describes the painted font metrics rather than
+   * an earlier fallback wrap. Rounded top coordinates absorb sub-pixel noise between glyphs
+   * on the same line while preserving the existing integer IR geometry convention.
+   */
+  const directTextLines = (el: Element): NonNullable<RawIr['nodes'][number]['textLines']> => {
+    type Grapheme = NonNullable<RawIr['nodes'][number]['textLines']>[number]['graphemes'][number];
+    const lines: Array<{ top: number; graphemes: Grapheme[] }> = [];
+    const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+
+    for (const child of Array.from(el.childNodes)) {
+      if (child.nodeType !== 3) continue;
+      const text = child.textContent ?? '';
+      for (const part of segmenter.segment(text)) {
+        const range = document.createRange();
+        range.setStart(child, part.index);
+        range.setEnd(child, part.index + part.segment.length);
+        const rect = range.getClientRects()[0] ?? range.getBoundingClientRect();
+        if (rect.height <= 0) continue;
+        const box = {
+          x: Math.round(rect.x),
+          y: Math.round(rect.y),
+          w: Math.round(rect.width),
+          h: Math.round(rect.height),
+        };
+        const current = lines[lines.length - 1];
+        if (!current || Math.abs(current.top - box.y) > 1) {
+          lines.push({ top: box.y, graphemes: [{ text: part.segment, box }] });
+        } else {
+          current.graphemes.push({ text: part.segment, box });
+        }
+      }
+    }
+
+    return lines.map((line) => ({ graphemes: line.graphemes }));
+  };
+
   const px = (v: string): number => Math.round(parseFloat(v) || 0);
 
   const pathOf = (el: Element): string => {
@@ -245,6 +294,15 @@ export function extractInPage(maxNodes: number, selector?: string | null): RawIr
     const radius = px(cs.borderTopLeftRadius);
     const isText = hasOwnText(el);
     const authored = authoredProps(el);
+    const declaredColourRole = el.getAttribute('data-omd-color-role');
+    const semanticRole: 'success' | 'error' | null =
+      declaredColourRole === 'success' || declaredColourRole === 'error'
+        ? declaredColourRole
+        : el.getAttribute('role') === 'alert' || (
+          el.hasAttribute('aria-invalid') && el.getAttribute('aria-invalid') !== 'false'
+        )
+          ? 'error'
+          : null;
 
     const node: RawIr['nodes'][number] = {
       id,
@@ -257,9 +315,14 @@ export function extractInPage(maxNodes: number, selector?: string | null): RawIr
     };
 
     if (bg) node.fill = { value: bg, token: nameOf(bg), authored: declares(authored, 'background') };
+    const paintColors: NonNullable<RawIr['nodes'][number]['paintColors']> = [];
+    if (bg) paintColors.push({ property: 'background', value: bg, token: nameOf(bg), semanticRole });
     if (isText) {
       const color = toHex(cs.color);
-      if (color) node.color = color;
+      if (color) {
+        node.color = color;
+        paintColors.push({ property: 'text', value: color, token: nameOf(color), semanticRole });
+      }
     }
     if (radius > 0) node.radius = { value: radius, token: nameOf(String(radius) + 'PX') };
     // A divider: a visible rule on the top and/or bottom edge, but not a full four-side box (that is a
@@ -270,6 +333,16 @@ export function extractInPage(maxNodes: number, selector?: string | null): RawIr
     const el2 = edge(cs.borderLeftWidth, cs.borderLeftStyle, cs.borderLeftColor);
     const er = edge(cs.borderRightWidth, cs.borderRightStyle, cs.borderRightColor);
     if ((et || eb) && !(el2 && er)) node.divider = true;
+    const borderColours = [
+      et ? toHex(cs.borderTopColor) : null,
+      eb ? toHex(cs.borderBottomColor) : null,
+      el2 ? toHex(cs.borderLeftColor) : null,
+      er ? toHex(cs.borderRightColor) : null,
+    ];
+    for (const value of Array.from(new Set(borderColours.filter((item): item is string => item !== null)))) {
+      paintColors.push({ property: 'border', value, token: nameOf(value), semanticRole });
+    }
+    if (paintColors.length > 0) node.paintColors = paintColors;
     if (isInteractive(el)) node.interactive = true;
     if (cs.display === 'inline') node.inline = true;
 
@@ -304,6 +377,14 @@ export function extractInPage(maxNodes: number, selector?: string | null): RawIr
       // Access via bracket notation to avoid TypeScript complaints on older lib versions.
       const tw = (cs as unknown as Record<string, string>)['textWrap'];
       if (tw) node.textWrap = tw;
+
+      if (isDisplayText(el)) {
+        node.displayText = true;
+        const koreanWrap = koreanWrapOf(el);
+        if (koreanWrap) node.koreanWrap = koreanWrap;
+        const textLines = directTextLines(el);
+        if (textLines.length > 0) node.textLines = textLines;
+      }
     }
     // Capture overflow when non-default so SYS-TEXT-CLIP can identify clipping parents.
     // Skip 'visible' (the CSS default) to keep the IR sparse.
@@ -375,10 +456,11 @@ export function extractInPage(maxNodes: number, selector?: string | null): RawIr
       // The browser reports stops as rgb(); normalise to hex so a rule can read the colour
       // instead of parsing two notations, and so the IR stays byte-stable across engines.
       node.gradient = cs.backgroundImage.replace(/rgba?\([^)]+\)/g, (m) => toHex(m) ?? m);
+      const gradientRole = el.getAttribute('data-omd-gradient-role')?.trim();
+      if (gradientRole) node.gradientRole = gradientRole.slice(0, 80);
     }
-    // background-clip: text is the gradient-text tell. The browser may prefix this as
-    // -webkit-background-clip in some engines; check both. Only set when a gradient is also
-    // present — a clipped solid colour is a different pattern entirely.
+    // The browser may prefix background-clip:text as -webkit-background-clip. Only set
+    // it when a gradient is present; a clipped solid colour is a different treatment.
     const bgClip = cs.backgroundClip || (cs as unknown as Record<string, string>)['webkitBackgroundClip'];
     if (node.gradient && (bgClip === 'text' || bgClip === '-webkit-text')) node.clipText = true;
 

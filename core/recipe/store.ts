@@ -3,7 +3,8 @@
 // The pack ships with OMD (`omd pack dir`), so nothing here reaches the network or a third-party
 // registry: the assets are OMD's own, versioned with the plugin.
 
-import { existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { parseRecipe, type ParsedRecipe, type RecipeFamily } from './parse.ts';
 import { materializeRecipe, type MaterializeResult, type Stack } from './materialize.ts';
@@ -45,12 +46,27 @@ export function findRecipe(packRoot: string, name: string): RecipeRef {
   return ref;
 }
 
-export function loadRecipe(packRoot: string, name: string): ParsedRecipe {
-  const ref = findRecipe(packRoot, name);
-  return parseRecipe(readFileSync(ref.path, 'utf8'), ref.name, ref.family);
+function recipeBytes(packRoot: string, ref: RecipeRef): Buffer {
+  const root = realpathSync(packRoot);
+  const source = realpathSync(ref.path);
+  const fromPack = relative(root, source);
+  const stat = lstatSync(source);
+  if (!fromPack || fromPack.startsWith('../') || isAbsolute(fromPack) || !stat.isFile() || stat.isSymbolicLink()) {
+    throw new Error(`recipe source must be a regular file inside the installed pack: ${ref.name}`);
+  }
+  return readFileSync(source);
 }
 
-export type InstallResult = MaterializeResult & { readonly written: readonly string[] };
+export function loadRecipe(packRoot: string, name: string): ParsedRecipe {
+  const ref = findRecipe(packRoot, name);
+  return parseRecipe(recipeBytes(packRoot, ref).toString('utf8'), ref.name, ref.family);
+}
+
+export type InstallResult = MaterializeResult & {
+  readonly written: readonly string[];
+  readonly recipeSha256: string;
+  readonly materializedSha256: string;
+};
 
 function canonicalOutputDirectory(input: string): string {
   const unresolved: string[] = [];
@@ -73,7 +89,9 @@ export function installRecipe(
   name: string,
   opts: { readonly stack: Stack; readonly outDir: string; readonly writer: ProjectWriteAdapter },
 ): InstallResult {
-  const recipe = loadRecipe(packRoot, name);
+  const ref = findRecipe(packRoot, name);
+  const source = recipeBytes(packRoot, ref);
+  const recipe = parseRecipe(source.toString('utf8'), ref.name, ref.family);
   const result = materializeRecipe(recipe, { stack: opts.stack });
   const writer = requireProjectWriteAdapter(opts.writer.projectRoot, opts.writer);
   const dir = canonicalOutputDirectory(opts.outDir);
@@ -82,5 +100,20 @@ export function installRecipe(
     throw new Error(`recipe output must stay under the guarded project root: ${writer.projectRoot}`);
   }
   const written = result.files.map((file) => writer.write(join(fromProject, file.path), file.contents));
-  return { ...result, written };
+  for (const [index, materialized] of result.files.entries()) {
+    const target = resolve(dir, materialized.path);
+    if (written[index] !== target || !readFileSync(target).equals(Buffer.from(materialized.contents))) {
+      throw new Error(`recipe install did not materialize exact source bytes: ${materialized.path}`);
+    }
+  }
+  const materializedSha256 = createHash('sha256').update(JSON.stringify(result.files.map((file) => ({
+    path: file.path,
+    sha256: createHash('sha256').update(file.contents).digest('hex'),
+  })))).digest('hex');
+  return {
+    ...result,
+    written,
+    recipeSha256: createHash('sha256').update(source).digest('hex'),
+    materializedSha256,
+  };
 }

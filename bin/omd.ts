@@ -3,7 +3,9 @@ import { createHash } from 'node:crypto';
 import { accessSync, constants, existsSync, readFileSync, readdirSync, realpathSync, unlinkSync } from 'node:fs';
 import { join, dirname, resolve, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
 import { stringify } from 'yaml';
+import { runTrustedLifecycle } from '../adapters/trusted-lifecycle-runtime.ts';
 import { readFrame } from '../core/frame/index.ts';
 import { writeFrameRecord, reframe, setGenerator, logDecision, logChoice, logTaste, tasteProfile } from '../core/frame/write.ts';
 import { logRun, readHistory } from '../core/history/index.ts';
@@ -21,6 +23,7 @@ import { validateSourceSeal, writeSourceSeal } from '../core/source-seal/index.t
 import { checkFinalEvidence } from '../core/evidence/final.ts';
 import { checkTaskEvidence, publishTaskEvidence } from '../core/evidence/task.ts';
 import { computeStack } from '../core/stack/index.ts';
+import { bridgeGlobals, renderTargetHint } from '../core/stack/shell.ts';
 import { scanTextSlop } from '../core/slop/text-slop.ts';
 import { validateDomainBrief } from '../core/domain/domain-brief.ts';
 import { validateReferenceCraft, verifyCraftReproduction } from '../core/ref/reference-craft.ts';
@@ -35,16 +38,19 @@ import {
   artDirectionSha256,
   validateArtDirectionPointer,
   validateArtDirectionRecord,
+  validateArtDirectionDecisionShape,
 } from '../core/art-direction/schema.ts';
 import { beatBudgetForRegister, canonicalArtDirectionReferences, exceedsCanonicalBeatBudget, NO_CURRENT_USER_BEAT_EXCEPTION_RECEIPT_SHA256, recipeDecisionProjectionSha256, resolveMarketingArtDirection, type ApprovedMotionRecipeReceipt, type ArtDirectionEligibility } from '../core/art-direction/decision.ts';
 import { validateActivationContext } from '../core/runtime/activation.ts';
-import { createLocalCliInvocation, requireCurrentIntentLedgerAuthorization, requireCurrentUserIntentEventAuthorization, requireEvaluatorAssessmentAuthorization, requireEvaluatorResultAuthorization, requireFinalEvidenceManifestAuthorization, requireFinalReviewerLaneAuthorization, requireStaticEvidenceResultAuthorization, requireStaticReviewReceiptAuthorization, validateCurrentProjectRun, type ProjectRunInvocation } from '../core/runtime/invocation.ts';
-import { acquireProjectLock, createExternalObservationDirectory, createProjectWriteAdapter, replaceProjectFileAtomically, writeContentAddressedProjectFile, writeExternalObservationFile, writeImmutableProjectFile, type ExternalObservationKind, type ProjectWriteAdapter } from '../core/runtime/project-write.ts';
-import { intentLedgerSha256, resolveCurrentUserBeatExceptionReceipt, serializeIntentLedger, validateIntentCurrentPointer, validateIntentLedger } from '../core/runtime/intent.ts';
-import { validateDecisionBoundReferenceHandoffs, validateReferenceHandoffCurrentness } from '../core/ref/reference-handoff.ts';
-import { parseReferenceSelectionV2, referenceSelectionV2Sha256, resolveMotionProjection, validatePreReferenceSelectionV2 } from '../core/ref/reference-selection.ts';
+import { createLocalCliInvocation, requireCurrentIntentLedgerAuthorization, requireCurrentUserIntentEventAuthorization, requireFinalEvidenceManifestAuthorization, requireFinalReviewerLaneAuthorization, requireStaticEvidenceResultAuthorization, requireStaticReviewReceiptAuthorization, validateCurrentProjectRun, type ProjectRunInvocation } from '../core/runtime/invocation.ts';
+import { acquireProjectLock, acquireProjectMutationLock, createExternalObservationDirectory, createProjectWriteAdapter, replaceProjectFileAtomically, writeContentAddressedProjectFile, writeExternalObservationFile, writeImmutableProjectFile, type ExternalObservationKind, type ProjectWriteAdapter } from '../core/runtime/project-write.ts';
+import { eventHash, intentLedgerSha256, resolveCurrentUserBeatExceptionReceipt, serializeIntentLedger, validateIntentCurrentPointer, validateIntentLedger } from '../core/runtime/intent.ts';
+import { parseReferenceHandoffReceipt, validateDecisionBoundReferenceHandoffs, validateReferenceHandoffCurrentness } from '../core/ref/reference-handoff.ts';
+import { parseReferenceSelectionV2, projectRunInvocationSha256, referenceSelectionV2Sha256, resolveMotionProjection, validatePreReferenceSelectionV2 } from '../core/ref/reference-selection.ts';
 import { referenceUsageV2Sha256, validateReferenceUsage } from '../core/ref/reference-usage.ts';
 import { canonicalJson, sha256 } from '../core/ref/board-artifacts.ts';
+import { requireSenpiCapability, senpiSpawnArgs } from '../adapters/senpi-runtime.ts';
+import { commitAiAssetDecision } from '../core/asset-sourcing/ai-decision.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -54,6 +60,7 @@ interface Opts {
   ir?: string;
   layer?: string;
   out?: string;
+  agent?: string;
   stack?: string;
   viewport?: string;
   problem?: string;
@@ -83,8 +90,15 @@ interface Opts {
   changed?: string;
   kind?: string;
   evidence?: string;
+  aiAssetId?: string;
+  project?: string;
+  manifest?: string;
+  prompt?: string;
+  provider?: string;
   zones?: string;
   input?: string;
+  review?: string;
+  mirror?: string;
   phase?: string;
   activation?: string;
   /** Capture a full-resolution structural blueprint of the selected component. */
@@ -154,9 +168,71 @@ interface Opts {
   apply?: boolean;
   /** Explicitly request v2 garbage collection's default dry-run mode. */
   dryRun?: boolean;
+  /** `omd clean --cache` — drop reproducible scratch. */
+  cache?: boolean;
+  /** `omd clean --stale-records` — drop retired scratch and unreferenced immutable records. */
+  staleRecords?: boolean;
+  /** `omd status --files` — the storage view rather than the run view. */
+  files?: boolean;
 }
 
-const FLAGS = new Set(['json', 'no-log', 'no-energy', 'image', 'filmstrip', 'squint', 'full-page', 'from-user', 'all', 'blueprint', 'shot', 'proofs', 'fresh', 'check', 'review-check', 'apply', 'dry-run']);
+type SenpiHostManifest = {
+  readonly host: 'senpi';
+  readonly agents: readonly { readonly name: string; readonly thinking: string }[];
+};
+
+function readSenpiHostManifest(): SenpiHostManifest {
+  const path = join(root, 'dist', 'senpi', 'omd-host.json');
+  if (!existsSync(path)) throw new Error('SENPI_HOST_NOT_BUILT: run `npm run build` and reinstall OMD for Senpi');
+  const parsed = JSON.parse(readFileSync(path, 'utf8')) as Partial<SenpiHostManifest>;
+  if (parsed.host !== 'senpi' || !Array.isArray(parsed.agents)) throw new Error('SENPI_HOST_MANIFEST_INVALID');
+  return parsed as SenpiHostManifest;
+}
+
+function senpiRole(name: string | undefined): { readonly prompt: string; readonly thinking: string } {
+  if (name === undefined || !/^omd-[a-z][a-z-]*$/.test(name)) {
+    throw new Error('SENPI_AGENT_INVALID: use an installed OMD role name such as omd-framer');
+  }
+  const manifest = readSenpiHostManifest();
+  const agent = manifest.agents.find((entry) => entry.name === name);
+  if (agent === undefined || !['low', 'medium', 'high'].includes(agent.thinking)) {
+    throw new Error(`SENPI_AGENT_UNKNOWN: ${name}`);
+  }
+  const path = join(root, 'dist', 'senpi', 'agents', `${name}.md`);
+  if (!existsSync(path)) throw new Error(`SENPI_AGENT_PROMPT_MISSING: ${name}`);
+  return { prompt: readFileSync(path, 'utf8'), thinking: agent.thinking };
+}
+
+function cmdHostSenpi(mode: string | undefined, opts: Opts): never {
+  if (mode === 'agent') {
+    if (opts._.length !== 1) throw new Error('usage: omd host senpi agent <omd-role>');
+    process.stdout.write(senpiRole(opts._[0]).prompt);
+    process.exit(0);
+  }
+  if (mode === 'run') {
+    if (!opts.agent || !opts.input || opts._.length > 0) {
+      throw new Error('usage: omd host senpi run --agent <omd-role> --input <task.md>');
+    }
+    requireSenpiCapability();
+    const role = senpiRole(opts.agent);
+    const taskPath = realpathSync(resolve(opts.input));
+    const task = readFileSync(taskPath, 'utf8');
+    if (task.trim() === '') throw new Error('SENPI_TASK_EMPTY');
+    const child = spawnSync('senpi', senpiSpawnArgs(role.thinking, role.prompt, task), {
+      cwd: process.cwd(),
+      encoding: 'utf8',
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    if (child.stdout) process.stdout.write(child.stdout);
+    if (child.stderr) process.stderr.write(child.stderr);
+    if (child.error) throw new Error(`SENPI_SPAWN_FAILED: ${child.error.message}`);
+    if (child.status !== 0) process.exit(child.status ?? 1);
+    process.exit(0);
+  }
+  throw new Error('usage: omd host senpi agent <omd-role> | run --agent <omd-role> --input <task.md>');
+}
+
+const FLAGS = new Set(['json', 'no-log', 'no-energy', 'image', 'filmstrip', 'squint', 'full-page', 'from-user', 'all', 'blueprint', 'shot', 'proofs', 'fresh', 'check', 'review-check', 'apply', 'dry-run', 'cache', 'stale-records', 'files']);
 const ALIASES: Record<string, keyof Opts> = {
   o: 'out',
   'no-log': 'noLog',
@@ -175,6 +251,8 @@ const ALIASES: Record<string, keyof Opts> = {
   'max-run-tokens': 'maxRunTokens',
   'max-run-minutes': 'maxRunMinutes',
   'dry-run': 'dryRun',
+  'stale-records': 'staleRecords',
+  'ai-asset-id': 'aiAssetId',
 };
 
 function parseArgs(args: string[]): Opts {
@@ -225,7 +303,7 @@ function digest(value: unknown, label: string): string {
 function exactKeys(value: Record<string, unknown>, expected: readonly string[], label: string): void {
   const keys = Object.keys(value).sort();
   const sortedExpected = [...expected].sort();
-  if (keys.length !== sortedExpected.length || keys.some((key, index) => key !== sortedExpected[index])) evaluatorResultError(`${label} has unknown or missing keys`);
+  if (keys.length !== sortedExpected.length || keys.some((key, index) => key !== sortedExpected[index])) evaluatorResultError(`${label} has unknown or missing keys: expected ${sortedExpected.join(',')}; received ${keys.join(',')}`);
 }
 function parseClosedEvaluatorResult(value: unknown, alternativesSha256: string): ClosedEvaluatorResult {
   if (!isRecord(value)) evaluatorResultError('result must be an object');
@@ -233,8 +311,8 @@ function parseClosedEvaluatorResult(value: unknown, alternativesSha256: string):
   const hasRecipe = Object.hasOwn(result, 'approvedMotionRecipe');
   if (hasRecipe !== Object.hasOwn(result, 'approvedMotionRecipeReceipt')) evaluatorResultError('approved recipe payload and receipt must be supplied together');
   exactKeys(result, hasRecipe
-    ? ['alternativesSha256', 'approvedMotionRecipe', 'approvedMotionRecipeReceipt', 'motionResolution', 'winner']
-    : ['alternativesSha256', 'motionResolution', 'winner'], 'result');
+    ? ['alternativesSha256', 'approvedMotionRecipe', 'approvedMotionRecipeReceipt', 'boardSha256', 'handoffSha256', 'intentSha256', 'motionResolution', 'preSelectionSha256', 'route', 'taskIds', 'winner']
+    : ['alternativesSha256', 'boardSha256', 'handoffSha256', 'intentSha256', 'motionResolution', 'preSelectionSha256', 'route', 'taskIds', 'winner'], 'result');
   if (digest(result.alternativesSha256, 'alternativesSha256') !== alternativesSha256) evaluatorResultError('result must bind the exact alternatives');
   if (!isRecord(result.motionResolution)) evaluatorResultError('motionResolution must be an object');
   const resolution = result.motionResolution;
@@ -320,9 +398,21 @@ function projectWriter(invocation: ProjectRunInvocation, projectRoot = process.c
   return createProjectWriteAdapter(projectRoot, invocation);
 }
 
+function activationInputPath(opts: Opts): string | undefined {
+  const hostPath = process.env.OMD_ACTIVATION_PATH;
+  const selected = opts.activation ?? hostPath;
+  if (process.env.OMD_CODEX_AUTHORITY_SOCKET !== undefined && hostPath !== undefined && selected !== undefined) {
+    let exact = false;
+    try { exact = realpathSync(resolve(selected)) === realpathSync(resolve(hostPath)); } catch { /* inputJson reports the unreadable path */ }
+    if (!exact) throw new Error('CODEX_ACTIVATION_PATH_REJECTED: use the read-only activation path issued by the current host launcher');
+  }
+  return selected;
+}
+
 function invocationFromActivation(opts: Opts, command: string, projectRoot = process.cwd()): ProjectRunInvocation {
-  return opts.activation
-    ? validateProjectRunInvocation(inputJson(opts.activation, command))
+  const activationPath = activationInputPath(opts);
+  return activationPath !== undefined
+    ? validateProjectRunInvocation(inputJson(activationPath, command))
     : createLocalCliInvocation({
       cliPath: fileURLToPath(import.meta.url),
       argv: process.argv.slice(2),
@@ -369,8 +459,26 @@ async function rawIrFor(opts: Opts, target: string | undefined, selector?: strin
   return JSON.parse(readFileSync(irPath, 'utf8')) as RawIr;
 }
 
+/**
+ * A desktop renderer opened outside its shell has no preload bridge, so an app that reads
+ * `window.<name>` at startup paints a boot error. Say so once, on stderr: a review handed that
+ * screenshot would otherwise report the harness as a design defect.
+ */
+function warnDesktopBridge(target: string | undefined): void {
+  if (target === undefined || /^https?:\/\//.test(target)) return;
+  const stack = computeStack(process.cwd());
+  const globals = bridgeGlobals(process.cwd(), stack.shell);
+  if (globals.length === 0) return;
+  console.error(
+    `[note] ${stack.shell.kind} renderer opened outside its shell: window.${globals.join(', window.')} `
+    + 'is undefined here, so a boot error on this capture is the harness, not the design. '
+    + `Render the running app at ${stack.shell.devUrl ?? 'its dev URL'} for interaction evidence.`,
+  );
+}
+
 async function cmdIr(opts: Opts): Promise<never> {
   const raw = await rawIrFor(opts, opts._[0]);
+  warnDesktopBridge(opts._[0]);
   const out = opts.out ?? join(process.cwd(), '.omd', '.cache', 'ir.json');
   const adapter = projectWriterFromActivation(opts, 'omd ir');
   adapter.write(relative(process.cwd(), resolve(out)), JSON.stringify(raw, null, 2));
@@ -381,6 +489,7 @@ async function cmdIr(opts: Opts): Promise<never> {
 async function cmdRender(opts: Opts): Promise<never> {
   const { renderPage, renderProofs, renderFilmstrip, parseViewport } = await import('../core/render/index.ts');
   const target = opts._[0];
+  warnDesktopBridge(target);
   if (!target) usage();
 
   if (opts.filmstrip) {
@@ -893,7 +1002,7 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
 
   const { loadRules, check } = await import('../core/rules/engine.ts');
 
-  const raw = await rawIrFor(opts, target, opts.selector);
+  const raw = await rawIrFor({ ...opts, viewport: opts.viewport ?? '1440x900' }, target, opts.selector);
   const ir = normalize(raw);
   const invariants = extractInvariants(ir);
 
@@ -906,8 +1015,9 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
   // Sees ALL motion including GSAP/rAF — closing the getAnimations() blind spot.
   // Failure is silently ignored: a blocked page or unsupported format must not prevent
   // the reference from being saved.
-  const { captureEnergy, parseViewport } = await import('../core/render/index.ts');
-  const energyCurve = opts.noEnergy ? null : await captureEnergy(target, { viewport: parseViewport(opts.viewport) });
+  const { captureEnergy, parseViewport, REFERENCE_VIEWPORT } = await import('../core/render/index.ts');
+  const captureViewport = parseViewport(opts.viewport ?? REFERENCE_VIEWPORT);
+  const energyCurve = opts.noEnergy ? null : await captureEnergy(target, { viewport: captureViewport });
 
   // Blueprint: full-resolution structural snapshot with skin abstracted to color roles.
   // Only captured when --blueprint is passed together with --selector.
@@ -928,7 +1038,7 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
     const absShot = refImagePath(adapter.projectRoot, { source: target, component: opts.as });
     adapter.mkdir(relative(adapter.projectRoot, dirname(absShot)));
     try {
-      await renderElement(target, { viewport: parseViewport(opts.viewport), selector: opts.selector, out: absShot, adapter });
+      await renderElement(target, { viewport: captureViewport, selector: opts.selector, out: absShot, adapter });
       imagePath = relative(adapter.projectRoot, absShot);
       console.error(`shot: ${imagePath}`);
     } catch (err) {
@@ -950,6 +1060,7 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
     ...(energyCurve !== null ? { energyCurve } : {}),
     ...(blueprint !== undefined ? { blueprint } : {}),
     ...(imagePath !== undefined ? { imagePath } : {}),
+    viewport: captureViewport,
   }, adapter);
   console.log(path);
   console.log(JSON.stringify(invariants, null, 2));
@@ -1157,12 +1268,34 @@ const boardPath = (opts: Opts, command: string): string | undefined => {
 async function cmdRefCheck(opts: Opts): Promise<never> {
   const { readReferenceBoardArtifacts } = await import('../core/ref/board-artifacts.ts');
   const { referenceSelectionExists, referenceSelectionV2Exists, preReferenceSelectionV2Exists, validateReferenceSelection, validatePreReferenceSelectionV2, validateReferenceSelectionV2 } = await import('../core/ref/reference-selection.ts');
-  const manifest = boardPath(opts, 'omd ref check'); readReferenceBoardArtifacts(process.cwd(), manifest);
+  const manifest = boardPath(opts, 'omd ref check'); const artifacts = readReferenceBoardArtifacts(process.cwd(), manifest);
   if (referenceSelectionExists(process.cwd())) validateReferenceSelection(process.cwd(), manifest);
   if (preReferenceSelectionV2Exists(process.cwd())) validatePreReferenceSelectionV2(process.cwd(), manifest);
   if (referenceSelectionV2Exists(process.cwd())) validateReferenceSelectionV2(process.cwd(), manifest);
-  if (opts.json) process.stdout.write('[]\n'); else console.log('ok');
-  process.exit(0);
+  // Board quality belongs to the gate the protocol already mandates. Left in a separate command, a
+  // real run passed `ref check`, never ran `ref granularity`, and carried a board that was 8 of 11
+  // from one source with an unresolved kinship pair all the way into typography. Audited only when
+  // the framer's plan exists, so unit fixtures with two captures are not judged as boards.
+  const findings = existsSync(join(process.cwd(), '.omd', 'acquisition-plan.json'))
+    ? await auditBoardForCheck(artifacts.manifest)
+    : [];
+  if (opts.json) process.stdout.write(`${JSON.stringify(findings)}\n`);
+  else if (findings.length === 0) console.log('ok');
+  else for (const finding of findings) console.error(`[error] ${finding.id}: ${finding.message}\n  ${finding.refs.join('\n  ')}`);
+  process.exit(findings.length > 0 ? 1 : 0);
+}
+
+/** The board audit `omd ref granularity` runs, resolved against the framer's required zones. */
+async function auditBoardForCheck(board: import('../core/ref/board-contract.ts').ReferenceBoardManifest): Promise<readonly { id: string; message: string; refs: readonly string[] }[]> {
+  const { loadRefs } = await import('../core/ref/store.ts');
+  const { auditBoardGranularity } = await import('../core/ref/board-granularity.ts');
+  const { validateAcquisitionPlan } = await import('../core/deliberation/contracts.ts');
+  let zones: string[] | undefined;
+  try {
+    const plan = validateAcquisitionPlan(JSON.parse(readFileSync(join(process.cwd(), '.omd', 'acquisition-plan.json'), 'utf8')));
+    zones = plan.value?.zones.filter((zone) => zone.required).map((zone) => zone.id);
+  } catch { zones = undefined; }
+  return auditBoardGranularity(loadRefs(process.cwd()), zones === undefined || zones.length === 0 ? { board } : { zones, board });
 }
 async function cmdRefV2Check(opts: Opts): Promise<never> {
   if (!opts.input || opts._.length > 0) throw new Error('usage: omd ref v2-check --input <reference-handoff.json> [--json]');
@@ -1329,6 +1462,8 @@ async function cmdFigmaDiff(opts: Opts): Promise<never> {
     process.exit(1);
   }
   const adapter = projectWriterFromActivation(opts, 'omd figma diff');
+  const { authorizeFigmaArtifact, createFigmaArtifactAuthoritySession } = await import('../core/figma/artifact-authority.ts');
+  const artifactAuthority = createFigmaArtifactAuthoritySession(process.cwd(), adapter);
 
   const threshold =
     opts.threshold !== undefined ? parseFloat(opts.threshold) : 0.97;
@@ -1349,8 +1484,9 @@ async function cmdFigmaDiff(opts: Opts): Promise<never> {
     process.exit(1);
   }
 
+  const snapshotBytes = readFileSync(snapPath);
   const snapshot = JSON.parse(
-    readFileSync(snapPath, 'utf8'),
+    snapshotBytes.toString('utf8'),
   ) as import('../core/figma/types.ts').FigmaSnapshot;
 
   // Locate frame in snapshot.
@@ -1388,10 +1524,16 @@ async function cmdFigmaDiff(opts: Opts): Promise<never> {
   const safeId = frameId.replace(/[:/]/g, '_');
   const exportsDir = join(process.cwd(), '.omd', 'figma', 'exports');
   const cachePath = join(exportsDir, `${safeId}.png`);
+  const { figmaArtifactMatchesReceipt, figmaArtifactReceipt } = await import('../core/figma/artifact-lifecycle.ts');
+  const currentExport = figmaArtifactMatchesReceipt(cachePath, 'export', snapshotBytes);
 
-  if (!fresh && existsSync(cachePath)) {
+  if (!fresh && currentExport) {
     if (!jsonOut) console.log(`Using cached export: ${cachePath}`);
   } else {
+    if (existsSync(cachePath)) {
+      console.error(`Refusing to replace an existing Figma deliverable without current-task write authority: ${cachePath}`);
+      process.exit(1);
+    }
     const token = process.env['FIGMA_TOKEN'];
     if (token === undefined || token.length === 0) {
       console.error(
@@ -1435,7 +1577,12 @@ async function cmdFigmaDiff(opts: Opts): Promise<never> {
       process.exit(1);
     }
 
-    adapter.write(relative(process.cwd(), cachePath), Buffer.from(await pngRes.arrayBuffer()));
+    const pngBytes = Buffer.from(await pngRes.arrayBuffer());
+    adapter.write(relative(process.cwd(), cachePath), pngBytes);
+    adapter.write(relative(process.cwd(), `${cachePath}.omd.json`), figmaArtifactReceipt({
+      kind: 'export', frameId, snapshotBytes, pngBytes,
+    }));
+    authorizeFigmaArtifact(artifactAuthority, { kind: 'export', frameId, pngPath: cachePath, snapshotBytes });
     if (!jsonOut) console.log(`Exported: ${cachePath}`);
   }
 
@@ -1449,18 +1596,26 @@ async function cmdFigmaDiff(opts: Opts): Promise<never> {
   const rendersDir = join(process.cwd(), '.omd', 'figma', 'renders');
   adapter.mkdir(relative(process.cwd(), rendersDir));
   const renderPath = join(rendersDir, `${safeId}.png`);
+  if (existsSync(renderPath)) {
+    console.error(`Refusing to replace an existing Figma deliverable without current-task write authority: ${renderPath}`);
+    process.exit(1);
+  }
 
   await renderPage(pageOrUrl, {
     viewport: { width: Math.round(frameW), height: Math.round(frameH) },
     out: renderPath,
     adapter,
   });
+  const buildBuf = readFileSync(renderPath);
+  adapter.write(relative(process.cwd(), `${renderPath}.omd.json`), figmaArtifactReceipt({
+    kind: 'render', frameId, snapshotBytes, pngBytes: buildBuf,
+  }));
+  authorizeFigmaArtifact(artifactAuthority, { kind: 'render', frameId, pngPath: renderPath, snapshotBytes });
 
   // ── Step 3: pixel diff ────────────────────────────────────────────────────
 
   const { compareImages, formatDiffReport } = await import('../core/figma/diff.ts');
   const refBuf = readFileSync(cachePath);
-  const buildBuf = readFileSync(renderPath);
 
   const result = compareImages(refBuf, buildBuf, threshold);
 
@@ -1608,12 +1763,15 @@ function cmdCopy(opts: Opts): never {
 
 /** `omd composition --check [--json]` — structural/freshness gate for composition.md. */
 function cmdComposition(opts: Opts): never {
-  if (!opts.check) throw new Error('usage: omd composition --check [--json]');
-  const findings = validateCompositionContract(process.cwd());
-  if (findings.length === 0) {
+  if (!opts.check) throw new Error('usage: omd composition --check [--activation <host-issued-invocation.json>] [--json]');
+  const projectRoot = process.cwd();
+  const adaptive = existsSync(join(projectRoot, '.omd', 'route.json'));
+  const invocation = adaptive ? invocationFromActivation(opts, 'omd composition --check') : undefined;
+  const findings = validateCompositionContract(projectRoot, invocation);
+  if (findings.length === 0 && !adaptive) {
     try {
-      const direction = currentArtDirection(process.cwd());
-      requireDecisionBoundHandoffs(process.cwd(), artDirectionSha256(direction));
+      currentArtDirection(projectRoot);
+      requireDecisionBoundHandoffs(projectRoot);
     } catch (error) {
       findings.push({
         id: 'COMPOSITION-STALE',
@@ -1791,7 +1949,34 @@ async function cmdRefGranularity(opts: Opts): Promise<never> {
       zones = result.value?.zones.filter((zone) => zone.required).map((zone) => zone.id);
     } catch { zones = undefined; }
   }
-  const findings = auditBoardGranularity(loadRefs(process.cwd()), zones === undefined || zones.length === 0 ? {} : { zones });
+  let board: import('../core/ref/board-contract.ts').ReferenceBoardManifest | undefined;
+  const boardManifestPath = join(process.cwd(), '.omd', 'reference-board.json');
+  if (existsSync(boardManifestPath)) {
+    const { readReferenceBoardArtifacts } = await import('../core/ref/board-artifacts.ts');
+    board = readReferenceBoardArtifacts(process.cwd()).manifest;
+  }
+  const boardOption = board === undefined ? {} : { board };
+  const findings = auditBoardGranularity(loadRefs(process.cwd()), zones === undefined || zones.length === 0 ? boardOption : { zones, ...boardOption });
+  // Role ② craft evidence is declared by the domain brief, not by the acquisition plan, so a board
+  // can cover every zone and still have gathered only half the roles the protocol names. A run
+  // observed doing exactly that produced a correct page with no measured craft to be ambitious with.
+  const briefPath = join(process.cwd(), '.omd', 'domain-brief.json');
+  if (existsSync(briefPath)) {
+    try {
+      const brief = JSON.parse(readFileSync(briefPath, 'utf8')) as { referenceQueries?: { craft?: unknown[] } };
+      const declared = brief.referenceQueries?.craft ?? [];
+      const { readCapturedCraftSignals } = await import('../core/ref/craft-usage.ts');
+      const captured = readCapturedCraftSignals(join(process.cwd(), '.omd', 'refs'))
+        .filter((signal) => signal.scrollFired || signal.animatedShare > 0 || signal.peakEnergy > 0).length;
+      if (declared.length > 0 && captured === 0) {
+        findings.push({
+          id: 'REF-CRAFT-UNGATHERED',
+          message: `the domain brief declares ${declared.length} role-② craft quer${declared.length === 1 ? 'y' : 'ies'} and the board holds no measured craft record. Component evidence answers how a section is built; craft evidence answers what makes a page worth looking at, and a board with none can only be correct. Capture at least one with \`omd craft-capture <url> --as <slug> --technique "<name>" --selector <css>\`, or remove the craft queries from the brief and record why this surface needs none.`,
+          refs: (declared as string[]).map((query) => `craft query: ${String(query).slice(0, 60)}`),
+        });
+      }
+    } catch { /* an unreadable brief is the domain gate's finding, not this one's */ }
+  }
   if (opts.json) process.stdout.write(JSON.stringify({ ok: findings.length === 0, findings }));
   else if (findings.length === 0) console.log('ok — the board holds component-scoped parts to compose from');
   else for (const finding of findings) console.error(`[error] ${finding.id}: ${finding.message}\n  ${finding.refs.join('\n  ')}`);
@@ -1802,6 +1987,15 @@ async function cmdRefGranularity(opts: Opts): Promise<never> {
 async function cmdNoJs(opts: Opts): Promise<never> {
   const target = opts._[0];
   if (!target) throw new Error('usage: omd no-js <page> [--viewport WxH] [--json]');
+  // An Electron/Tauri renderer ships its own JavaScript runtime, so "does the content survive with
+  // scripting off" has no visitor to protect. Report that instead of failing an app for being one.
+  const shell = computeStack(process.cwd()).shell;
+  if (shell.kind !== 'browser') {
+    const skipped = { skipped: true, shell: shell.kind, reason: `no-js does not apply to an ${shell.kind} renderer: the shell is the JavaScript runtime` };
+    if (opts.json) process.stdout.write(JSON.stringify({ ...skipped, findings: [] }));
+    else console.log(`skipped — ${skipped.reason}`);
+    process.exit(0);
+  }
   const { parseViewport } = await import('../core/render/index.ts');
   const { observeNoJsContent, checkNoJsContent } = await import('../core/render/no-js.ts');
   const observation = await observeNoJsContent(target, { viewport: parseViewport(opts.viewport ?? '1440x900') });
@@ -1929,6 +2123,35 @@ async function cmdTokens(mode: string | undefined, opts: Opts): Promise<never> {
 
 /** Persists a moderator handback verbatim or validates the joined run before/final. */
 async function cmdDeliberate(mode: string | undefined, opts: Opts): Promise<never> {
+  // Every role returns its decision entry in its handback; the coordinator's job is to append it,
+  // unedited, to the graph. Left as a hand-merged JSON file, a run reached the build gate with two
+  // of five entries and ended there — the entries existed, nobody had put them in the file.
+  if (mode === 'append') {
+    if (!opts.input || opts._.length > 0) throw new Error('usage: omd deliberate append --input <decision-entry.json> [--json]');
+    const { DECISION_GRAPH_SCHEMA, validateDecisionGraph } = await import('../core/deliberation/contracts.ts');
+    const entry = inputJson(opts.input, 'omd deliberate append');
+    const graphPath = join(process.cwd(), '.omd', 'decision-graph.json');
+    const current = existsSync(graphPath)
+      ? inputJson(graphPath, 'current decision graph') as { decisions?: unknown[] }
+      : { schema: DECISION_GRAPH_SCHEMA, decisions: [] };
+    const entries = Array.isArray(entry) ? entry : [entry];
+    const decisions = [...(current.decisions ?? [])];
+    for (const candidate of entries) {
+      const id = isRecord(candidate) ? candidate.id : undefined;
+      if (typeof id !== 'string') throw new Error('DECISION_ENTRY_INVALID: each entry needs a kebab-case id');
+      const at = decisions.findIndex((existing) => isRecord(existing) && existing.id === id);
+      if (at === -1) decisions.push(candidate); else decisions[at] = candidate;
+    }
+    const graph = { schema: DECISION_GRAPH_SCHEMA, decisions };
+    const result = validateDecisionGraph(graph);
+    if (result.value === undefined || result.findings.length > 0) {
+      throw new Error(`DECISION_GRAPH_INVALID: ${result.findings.map((finding) => `${finding.id} ${finding.path}: ${finding.message}`).join('; ')}`);
+    }
+    const path = projectWriterFromActivation(opts, 'omd deliberate append').write('.omd/decision-graph.json', `${JSON.stringify(graph, null, 2)}\n`);
+    if (opts.json) process.stdout.write(JSON.stringify({ path, decisions: decisions.length }));
+    else console.log(`${path} (${decisions.length} decisions)`);
+    process.exit(0);
+  }
   if (mode === 'preserve') {
     if (!opts.input || opts._.length > 0) throw new Error('usage: omd deliberate preserve --input <moderator.json> [--json]');
     const source = resolve(opts.input);
@@ -2003,15 +2226,22 @@ async function cmdAcquisition(mode: string | undefined, opts: Opts): Promise<nev
 /** Final byte-freshness evidence only; this does not judge semantic copy/source fidelity. */
 function cmdSource(mode: string | undefined, opts: Opts): never {
   const sourceRoot = resolve(opts._[0] ?? process.cwd());
-  if (mode === '--seal') requireDecisionBoundHandoffs(sourceRoot, artDirectionSha256(currentArtDirection(sourceRoot)));
   if (mode === '--seal') {
-    const path = writeSourceSeal(sourceRoot, invocationFromActivation(opts, 'omd source --seal', sourceRoot));
+    const invocation = invocationFromActivation(opts, 'omd source --seal', sourceRoot);
+    if (!existsSync(join(sourceRoot, '.omd', 'route.json'))) {
+      currentArtDirection(sourceRoot);
+      requireDecisionBoundHandoffs(sourceRoot);
+    }
+    const path = writeSourceSeal(sourceRoot, invocation);
     if (opts.json) process.stdout.write(JSON.stringify({ path }));
     else console.log(path);
     process.exit(0);
   }
   if (mode === '--check') {
-    const findings = validateSourceSeal(sourceRoot);
+    const invocation = activationInputPath(opts) === undefined
+      ? undefined
+      : invocationFromActivation(opts, 'omd source --check', sourceRoot);
+    const findings = validateSourceSeal(sourceRoot, invocation);
     if (opts.json) process.stdout.write(JSON.stringify(findings));
     else {
       for (const finding of findings) console.log(`[error] ${finding.id} ${finding.path}: ${finding.message}`);
@@ -2050,17 +2280,17 @@ function currentArtDirection(root: string) {
   return record;
 }
 
-function requireDecisionBoundHandoffs(projectRoot: string, directionSha256: string): void {
+function requireDecisionBoundHandoffs(projectRoot: string): void {
   const handoffRoot = join(projectRoot, '.omd', 'reference-handoffs');
   const composerPath = join(handoffRoot, 'composer.json');
   const handPath = join(handoffRoot, 'hand.json');
   if (!existsSync(composerPath) || !existsSync(handPath)) {
     throw new Error('DECISION_BOUND_REFERENCE_HANDOFFS_REQUIRED: resolve art direction before composition, build, or finalization');
   }
-  validateDecisionBoundReferenceHandoffs({
-    composer: validateReferenceHandoffCurrentness(projectRoot, inputJson(composerPath, 'composer reference handoff')),
-    hand: validateReferenceHandoffCurrentness(projectRoot, inputJson(handPath, 'hand reference handoff')),
-  }, directionSha256);
+  validateDecisionBoundReferenceHandoffs(projectRoot, {
+    composer: parseReferenceHandoffReceipt(inputJson(composerPath, 'composer reference handoff')),
+    hand: parseReferenceHandoffReceipt(inputJson(handPath, 'hand reference handoff')),
+  });
 }
 
 
@@ -2119,6 +2349,10 @@ async function cmdSchema(name: string | undefined, opts: Opts): Promise<never> {
   else {
     console.log(`${entry.name} -> ${entry.path}`);
     console.log(`validated by: ${entry.command}`);
+    if (entry.constraints !== undefined) {
+      console.log('constraints:');
+      for (const constraint of entry.constraints) console.log(`- ${constraint}`);
+    }
     console.log(JSON.stringify(entry.skeleton, null, 2));
   }
   process.exit(0);
@@ -2136,8 +2370,9 @@ async function cmdStage(mode: string | undefined, opts: Opts): Promise<never> {
 
   if (mode === 'status' || mode === 'resume') {
     if (opts._.length > 0) throw new Error(`usage: omd stage ${mode} [--json]`);
-    const state = resolveRunState(projectRoot, packRoot);
-    const blocked = state.current === null ? undefined : requireStage(projectRoot, packRoot, state.current);
+    const invocation = invocationFromActivation(opts, `omd stage ${mode}`);
+    const state = resolveRunState(projectRoot, packRoot, invocation);
+    const blocked = state.current === null ? undefined : requireStage(projectRoot, packRoot, state.current, invocation);
     const result = { ...state, blocked: blocked?.ok === false ? blocked : null };
     if (opts.json) process.stdout.write(JSON.stringify(result));
     else {
@@ -2171,7 +2406,12 @@ async function cmdStage(mode: string | undefined, opts: Opts): Promise<never> {
   if (mode === 'require') {
     const stage = opts.stage ?? opts._[0];
     if (stage === undefined || opts._.length > 1) throw new Error('usage: omd stage require <stage> [--json]');
-    const requirement = requireStage(projectRoot, packRoot, stage);
+    const requirement = requireStage(
+      projectRoot,
+      packRoot,
+      stage,
+      invocationFromActivation(opts, 'omd stage require'),
+    );
     if (opts.json) process.stdout.write(JSON.stringify(requirement));
     else if (requirement.ok) console.log(`ok — ${requirement.stage} may run`);
     else {
@@ -2281,9 +2521,16 @@ async function cmdComplete(mode: string | undefined, opts: Opts): Promise<never>
     else console.log(path);
     process.exit(0);
   }
+  if (mode === 'publish') {
+    if (!opts.input || opts._.length > 0) throw new Error('usage: omd complete publish --input <completeness-run.json> [--activation <host-issued-invocation.json>] [--json]');
+    const { publishCompletenessRun } = await import('../core/completion/evidence.ts');
+    const path = publishCompletenessRun(process.cwd(), inputJson(opts.input, 'omd complete publish'), invocationFromActivation(opts, 'omd complete publish'));
+    if (opts.json) process.stdout.write(JSON.stringify({ path })); else console.log(path);
+    process.exit(0);
+  }
   const target = opts._[0];
   if (mode !== 'check' || target === undefined || opts._.length > 1) {
-    throw new Error('usage: omd complete set --input <functional-requirements.json> | check <page> [--input <requirements.json>] [--json]');
+    throw new Error('usage: omd complete set --input <functional-requirements.json> | check <page> [--input <requirements.json>] | publish --input <completeness-run.json> [--json]');
   }
   const requirements = validateFunctionalRequirements(inputJson(opts.input ?? join(process.cwd(), '.omd', 'functional-requirements.json'), 'omd complete check'));
   const raw = await rawIrFor(opts, target);
@@ -2322,84 +2569,44 @@ async function cmdArtDirection(mode: string | undefined, opts: Opts): Promise<ne
     console.log(JSON.stringify(payload, null, opts.json ? 0 : 2));
     process.exit(0);
   }
-  const localMode = mode === 'local-check';
-  if ((mode !== 'check' && !localMode) || !opts.input || opts._.length > 0) {
-    throw new Error('usage: omd art-direction check|local-check|alternatives-sha|check-input --input <json> [--json]');
+  if (mode !== 'check' || !opts.input || opts._.length > 0) {
+    throw new Error('usage: omd art-direction check|alternatives-sha|check-input --input <json> [--json]');
   }
-  const command = localMode ? 'omd art-direction local-check' : 'omd art-direction check';
+  const command = 'omd art-direction check';
   const payload = inputJson(opts.input, command);
   if (!isRecord(payload)) throw new Error(`${command} input must contain evaluator assessment and result payloads`);
   const allowed = new Set<string>(ART_DIRECTION_CHECK_INPUT_KEYS);
   if (Object.keys(payload).some((key) => !allowed.has(key))) throw new Error('ART_DIRECTION_CALLER_DECISION_FORBIDDEN: evaluator choices, scores, and motion sources must remain inside the evaluator bytes');
-  const { alternatives, references, eligibility, evaluatorAssessment, evaluatorResult, beats, invocation, deliberation, route, implementationLane, fallbackPath, performanceAccessibilityBudget } = payload;
-  if (localMode && invocation !== undefined) throw new Error('ART_DIRECTION_LOCAL_INVOCATION_FORBIDDEN: local-check derives write authority from the running CLI');
-  const run = localMode
-    ? createLocalCliInvocation({ cliPath: fileURLToPath(import.meta.url), argv: process.argv.slice(2), brief: command, projectRoot: process.cwd() })
-    : validateProjectRunInvocation(invocation);
+  const { alternatives, references, eligibility, evaluatorAssessment, evaluatorResult, beats, invocation, route, implementationLane, fallbackPath, performanceAccessibilityBudget } = payload;
+  const run = validateProjectRunInvocation(invocation);
   if (evaluatorAssessment === undefined || evaluatorResult === undefined) throw new Error('ART_DIRECTION_EVALUATOR_AUTHORIZATION_REQUIRED: evaluator assessment and result payloads are required');
   const assessmentBytes = Buffer.from(canonicalJson(evaluatorAssessment));
   const resultBytes = Buffer.from(canonicalJson(evaluatorResult));
-  if (!localMode) {
-    requireEvaluatorAssessmentAuthorization(run, process.cwd(), assessmentBytes);
-    requireEvaluatorResultAuthorization(run, process.cwd(), resultBytes);
-  }
   const alternativesSha256 = sha256(canonicalJson(alternatives));
   const closedResult = parseClosedEvaluatorResult(evaluatorResult, alternativesSha256);
-  if (localMode && closedResult.approvedMotionRecipe !== undefined) {
-    throw new Error('ART_DIRECTION_LOCAL_RECIPE_FORBIDDEN: local-check cannot authorize a motion recipe');
-  }
   if (!isRecord(evaluatorAssessment) || !Array.isArray(evaluatorAssessment.assessments)) evaluatorResultError('assessment must contain assessments');
   const assessments = evaluatorAssessment.assessments as { register?: unknown; score?: unknown }[];
   const winner = [...assessments].sort((left, right) => Number(right.score) - Number(left.score) || String(left.register).localeCompare(String(right.register)))[0];
   if (winner?.register !== closedResult.winner) evaluatorResultError('winner must match the evaluator assessment ranking');
-  if (localMode) {
-    if (typeof deliberation !== 'string' || !deliberation.startsWith('.omd/deliberations/') || !deliberation.endsWith('.json')) {
-      throw new Error('ART_DIRECTION_LOCAL_DELIBERATION_REQUIRED: local-check requires a moderator-owned .omd/deliberations/*.json receipt');
-    }
-    const deliberationPath = resolve(process.cwd(), deliberation);
-    const deliberationRoot = resolve(process.cwd(), '.omd', 'deliberations');
-    if (!deliberationPath.startsWith(`${deliberationRoot}/`) || !existsSync(deliberationPath)) {
-      throw new Error('ART_DIRECTION_LOCAL_DELIBERATION_REQUIRED: local deliberation receipt is missing or outside .omd/deliberations');
-    }
-    const { validateDeliberation } = await import('../core/deliberation/contracts.ts');
-    const debateResult = validateDeliberation(inputJson(deliberationPath, 'local art-direction deliberation'));
-    if (debateResult.findings.length > 0 || debateResult.value === undefined) throw new Error(`ART_DIRECTION_LOCAL_DELIBERATION_INVALID: ${debateResult.findings.map((finding) => finding.id).join(', ')}`);
-    const debate = debateResult.value;
-    const sharedDigest = debate.perspectives.ux.inputSha256;
-    if (sharedDigest !== alternativesSha256 || debate.resolution.selected !== closedResult.winner) {
-      throw new Error('ART_DIRECTION_LOCAL_DELIBERATION_STALE: moderator receipt must bind the exact alternatives and selected register');
-    }
-  }
-  const evaluatorEvidence = {
-    invocationSha256: sha256(assessmentBytes),
-    payloadSha256: sha256(assessmentBytes),
-    resultSha256: sha256(resultBytes),
-    assessments: evaluatorAssessment.assessments,
-  };
-  const evaluatorResultDigest = sha256(resultBytes);
-  writeContentAddressedProjectFile({
-    projectRoot: process.cwd(),
-    relativePath: `.omd/evaluator-results/sha256-${evaluatorResultDigest}.json`,
-    content: resultBytes,
-    invocation: run,
-  });
 
-  const { INTENT_CURRENT_POINTER_SCHEMA_VERSION, INTENT_LEDGER_SCHEMA_VERSION, createEmptyIntentLedger, resolveCurrentUserIntent, resolveCurrentUserBeatExceptionReceipt } = await import('../core/runtime/intent.ts');
+  const releaseMutation = acquireProjectMutationLock(process.cwd(), run);
+  try {
+  const { INTENT_CURRENT_POINTER_SCHEMA_VERSION, INTENT_LEDGER_SCHEMA_VERSION, createEmptyIntentLedger, resolveCurrentUserBeatExceptionReceipt } = await import('../core/runtime/intent.ts');
   const intentPointerPath = join(process.cwd(), '.omd', 'intent-current.json');
   let ledger = createEmptyIntentLedger();
   let intentSha256 = intentLedgerSha256(ledger);
+  let intentLedgerBytes = serializeIntentLedger(ledger);
   if (existsSync(intentPointerPath)) {
     const pointer = validateIntentCurrentPointer(inputJson(intentPointerPath, 'intent current pointer'));
-    ledger = validateIntentLedger(inputJson(join(process.cwd(), '.omd', pointer.record), 'intent immutable record'));
+    intentLedgerBytes = readFileSync(join(process.cwd(), '.omd', pointer.record));
+    ledger = validateIntentLedger(JSON.parse(intentLedgerBytes.toString('utf8')));
     if (intentLedgerSha256(ledger) !== pointer.sha256) throw new Error('ART_DIRECTION_INTENT_STALE: current intent pointer does not match immutable ledger');
     intentSha256 = pointer.sha256;
-    if (!localMode) requireCurrentIntentLedgerAuthorization(run, process.cwd(), readFileSync(join(process.cwd(), '.omd', pointer.record)));
   } else {
     const record = `intent-runs/sha256-${intentSha256}.json`;
-    writeContentAddressedProjectFile({ projectRoot: process.cwd(), relativePath: `.omd/${record}`, content: JSON.stringify(ledger, null, 2), invocation: run });
+    writeContentAddressedProjectFile({ projectRoot: process.cwd(), relativePath: `.omd/${record}`, content: intentLedgerBytes, invocation: run });
     replaceProjectFileAtomically({ projectRoot: process.cwd(), relativePath: '.omd/intent-current.json', content: JSON.stringify({ schemaVersion: INTENT_CURRENT_POINTER_SCHEMA_VERSION, record, sha256: intentSha256 }, null, 2), invocation: run });
   }
-  const lock = resolveCurrentUserIntent(ledger);
   if (!isRecord(eligibility)) throw new Error('ART_DIRECTION_ELIGIBILITY_INVALID: eligibility must be an object');
   if ('approvedMotionRecipe' in eligibility || 'selectedMotionReferenceSlotId' in eligibility || 'buildSha256' in eligibility) throw new Error('ART_DIRECTION_ELIGIBILITY_BYPASS_FORBIDDEN: motion source and build binding are host-owned fields');
   const selectedReferenceSlotId = closedResult.motionResolution.slots.find((slot) => slot.obligationDisposition === 'used')?.slotId;
@@ -2433,39 +2640,64 @@ async function cmdArtDirection(mode: string | undefined, opts: Opts): Promise<ne
   if (!existsSync(handoffPath)) throw new Error('ART_DIRECTION_REFERENCE_HANDOFF_REQUIRED: run `omd ref select` before art direction');
   const handoff = validateReferenceHandoffCurrentness(process.cwd(), inputJson(handoffPath, 'art-direction reference handoff'));
   const selection = validatePreReferenceSelectionV2(process.cwd());
-  const selectionSha256 = referenceSelectionV2Sha256(selection);
   const { persistMotionResolutionProjection, persistSettledReferenceSelection, motionResolutionProjectionSha256 } = await import('../core/ref/reference-selection.ts');
-  const input = {
-    activationSha256: artDirectionSha256(run.activation), intentSha256, boardSha256: selection.captureSha256,
-    selectionSha256, route: typeof route === 'string' ? route : '', intent: lock, alternatives: alternatives as never,
-    references: references as never, referenceBindings: { selection, handoff, canonicalSelectionSha256: selectionSha256, canonicalHandoffSha256: handoff.payloadSha256 },
-    evaluatorEvidence: evaluatorEvidence as never, eligibility: resolvedEligibility, implementationLane: typeof implementationLane === 'string' ? implementationLane : '',
-    fallbackPath: typeof fallbackPath === 'string' ? fallbackPath : '', performanceAccessibilityBudget: typeof performanceAccessibilityBudget === 'string' ? performanceAccessibilityBudget : '',
-    beatExceptionReceiptSha256: resolveCurrentUserBeatExceptionReceipt(ledger),
-  };
   if (!Array.isArray(beats) || !beats.every((beat) => typeof beat === 'string' && /^B-\d+$/.test(beat)) || new Set(beats).size !== beats.length) throw new Error('ART_DIRECTION_BEATS_INVALID: beats must be unique stable B-<number> IDs');
   const motionInput = {
-    activationSha256: input.activationSha256,
+    activationSha256: artDirectionSha256(run.activation),
     alternativesSha256: closedResult.alternativesSha256,
     handoffSha256: handoff.payloadSha256,
-    evaluatorInvocationSha256: evaluatorEvidence.invocationSha256,
-    evaluatorPayloadSha256: evaluatorEvidence.payloadSha256,
-    evaluatorResultSha256: evaluatorEvidence.resultSha256,
+    evaluatorInvocationSha256: projectRunInvocationSha256(run),
+    evaluatorPayloadSha256: sha256(assessmentBytes),
+    evaluatorResultSha256: sha256(resultBytes),
     motionDecision: closedResult.motionResolution.motionDecision,
     slots: closedResult.motionResolution.slots,
     ...(closedResult.motionResolution.approvedRecipe === undefined ? {} : { approvedRecipe: closedResult.motionResolution.approvedRecipe }),
     selection,
   };
   const projectedMotion = resolveMotionProjection(motionInput);
-  const checked = resolveMarketingArtDirection({ ...input, motionResolution: projectedMotion });
-  const currentBeatExceptionReceipt = resolveCurrentUserBeatExceptionReceipt(ledger) ?? NO_CURRENT_USER_BEAT_EXCEPTION_RECEIPT_SHA256;
+  const currentBeatException = ledger.events.at(-1)?.kind === 'current-user-beat-exception'
+    ? ledger.events.at(-1)
+    : undefined;
+  const beatExceptionEventBytes = currentBeatException === undefined ? undefined : Buffer.from(canonicalJson({
+    eventId: currentBeatException.eventId,
+    currentUser: currentBeatException.currentUser,
+    kind: currentBeatException.kind,
+    lock: currentBeatException.lock,
+    recordedAt: currentBeatException.recordedAt,
+  }));
+  const checked = resolveMarketingArtDirection({
+    root: process.cwd(),
+    invocation: run,
+    intentLedgerBytes,
+    evaluatorAssessmentBytes: assessmentBytes,
+    evaluatorResultBytes: resultBytes,
+    route: typeof route === 'string' ? route : '',
+    alternatives: alternatives as never,
+    eligibility: resolvedEligibility,
+    implementationLane: typeof implementationLane === 'string' ? implementationLane : '',
+    fallbackPath: typeof fallbackPath === 'string' ? fallbackPath : '',
+    performanceAccessibilityBudget: typeof performanceAccessibilityBudget === 'string' ? performanceAccessibilityBudget : '',
+    ...(beatExceptionEventBytes === undefined ? {} : { beatExceptionEventBytes }),
+    ...(recipeBytes === undefined ? {} : { approvedMotionRecipeBytes: recipeBytes }),
+  });
+  const currentBeatExceptionReceipt = currentBeatException === undefined
+    ? NO_CURRENT_USER_BEAT_EXCEPTION_RECEIPT_SHA256
+    : eventHash(currentBeatException);
   if (checked.currentUserBeatExceptionReceiptSha256 !== currentBeatExceptionReceipt) {
     throw new Error('ART_DIRECTION_BEAT_EXCEPTION_STALE: decision must bind the resolved current-user Beat-exception receipt');
   }
+  validateArtDirectionDecisionShape(checked);
   if (exceedsCanonicalBeatBudget(checked.selectedRegister, beats, currentBeatExceptionReceipt)) {
     throw new Error(`ART_DIRECTION_BEAT_BUDGET_EXCEEDED: ${checked.selectedRegister} permits at most ${beatBudgetForRegister(checked.selectedRegister)} Beats without an exact current-user host-authorized Beat-exception receipt`);
   }
-  const motion = persistMotionResolutionProjection(process.cwd(), motionInput, { assessmentBytes, resultBytes, ...(recipeBytes === undefined ? {} : { approvedRecipeBytes: recipeBytes }) }, run, localMode ? 'local-moderator' : 'host');
+  const evaluatorResultDigest = sha256(resultBytes);
+  writeContentAddressedProjectFile({
+    projectRoot: process.cwd(),
+    relativePath: `.omd/evaluator-results/sha256-${evaluatorResultDigest}.json`,
+    content: resultBytes,
+    invocation: run,
+  });
+  const motion = persistMotionResolutionProjection(process.cwd(), motionInput, { assessmentBytes, resultBytes, ...(recipeBytes === undefined ? {} : { approvedRecipeBytes: recipeBytes }) }, run);
   const settledSelection = persistSettledReferenceSelection(process.cwd(), selection, motionResolutionProjectionSha256(motion.projection), run);
   const settledMotionResolutionSha256 = motionResolutionProjectionSha256(motion.projection);
   if (checked.motionResolutionProjectionSha256 !== settledMotionResolutionSha256 || checked.settledSelectionSha256 !== referenceSelectionV2Sha256(settledSelection)) {
@@ -2473,9 +2705,9 @@ async function cmdArtDirection(mode: string | undefined, opts: Opts): Promise<ne
   }
   const activationSha256 = artDirectionSha256(run.activation);
   if (checked.intentSha256 !== intentSha256 || checked.activationSha256 !== activationSha256) throw new Error('ART_DIRECTION_RUNTIME_BINDING_STALE: decision must bind the current immutable intent ledger and activation');
-  if ((lock.register !== undefined && checked.selectedRegister !== lock.register) || (lock.motionDecision !== undefined && checked.motionDecision !== lock.motionDecision)) throw new Error('ART_DIRECTION_INTENT_LOCK_VIOLATION: decision ignores a current-user register or motion lock');
   if (handoff.role !== 'art-direction' || handoff.preSelectionSha256 !== checked.preSelectionSha256 || handoff.captureSha256 !== checked.boardSha256) throw new Error('ART_DIRECTION_REFERENCE_HANDOFF_STALE: decision must bind the current canonical v2 art-direction handoff');
   const record = { schemaVersion: ART_DIRECTION_RECORD_SCHEMA_VERSION, decision: checked, decisionSha256: artDirectionSha256(checked), referenceHandoffSha256: handoff.payloadSha256, intentLedgerSha256: intentSha256, activationSha256, beatIds: beats };
+  validateArtDirectionRecord(record);
   const digest = artDirectionSha256(record);
   const recordPath = `art-direction-runs/sha256-${digest}.json`;
   writeContentAddressedProjectFile({ projectRoot: process.cwd(), relativePath: `.omd/${recordPath}`, content: JSON.stringify(record, null, 2), invocation: run });
@@ -2486,30 +2718,44 @@ async function cmdArtDirection(mode: string | undefined, opts: Opts): Promise<ne
   const handHandoff = writeReferenceHandoffReceipt(process.cwd(), 'hand', run);
   if (opts.json) process.stdout.write(JSON.stringify({ path, record: recordPath, sha256: digest, motionResolution: motion.path, composerHandoff, handHandoff }));
   else console.log(path);
+  } finally {
+    releaseMutation();
+  }
   process.exit(0);
 }
 function captureReceipt(path: string) {
   const bytes = readFileSync(path);
   return { path, sha256: createHash('sha256').update(bytes).digest('hex') };
 }
-async function renderedBeatProof(target: string, beatIds: readonly string[], artDirectionHash: string, adapter: ProjectWriteAdapter, out: string) {
+async function renderedBeatProof(target: string, beatIds: readonly string[], artDirectionHash: string, buildSha256: string, route: string, taskId: string, invocation: ProjectRunInvocation, adapter: ProjectWriteAdapter, out: string) {
   const copyDeck = readFileSync(join(process.cwd(), '.omd', 'copy-deck.md'));
   const copyDeckSha256 = createHash('sha256').update(copyDeck).digest('hex');
   const { captureRenderedBeatReceipt } = await import('../core/render/index.ts');
-  const proof = await captureRenderedBeatReceipt(target, { adapter, out, artDirectionHash, copyDeckSha256, beatIds });
+  const proof = await captureRenderedBeatReceipt(target, { adapter, out, artDirectionHash, buildSha256, route, taskId, invocation, copyDeckSha256, beatIds });
   const { validatePostRenderBeatProof } = await import('../core/copy/index.ts');
   const violations = validatePostRenderBeatProof(copyDeck.toString('utf8'), proof, { beatIds });
   if (violations.length > 0) throw new Error(`RENDERED_BEAT_PROOF_REQUIRED: ${violations.map((violation) => violation.message).join(' ')}`);
   return proof;
 }
 
+function requireCurrentLocalProductionTarget(target: string, route: string): void {
+  let url: URL;
+  try { url = new URL(target); } catch { throw new Error('DIRECTION_EVIDENCE_TARGET_INVALID: capture target must be an absolute localhost production URL'); }
+  if ((url.protocol !== 'http:' && url.protocol !== 'https:')
+    || (url.hostname !== 'localhost' && url.hostname !== '127.0.0.1' && url.hostname !== '[::1]')
+    || url.pathname !== route || url.search !== '' || url.hash !== '') {
+    throw new Error('DIRECTION_EVIDENCE_TARGET_STALE: capture target must be the exact current route on localhost with no query or fragment');
+  }
+}
+
 async function cmdStaticEvidenceCapture(opts: Opts): Promise<never> {
   if (!opts.input || opts._.length > 0) throw new Error('usage: omd evidence static-capture --input <static-capture.json> [--json]');
   const payload = inputJson(opts.input, 'omd evidence static-capture');
-  if (!isRecord(payload) || typeof payload.target !== 'string' || typeof payload.outDir !== 'string' || typeof payload.runId !== 'string') throw new Error('static capture input requires target, outDir, runId, and invocation');
-  const { target, outDir: requestedOutDir, runId } = payload;
+  if (!isRecord(payload) || typeof payload.target !== 'string' || typeof payload.outDir !== 'string' || typeof payload.runId !== 'string' || typeof payload.taskId !== 'string') throw new Error('static capture input requires target, outDir, runId, taskId, and invocation');
+  const { target, outDir: requestedOutDir, runId, taskId } = payload;
   const run = validateProjectRunInvocation(payload.invocation);
   const direction = currentArtDirection(process.cwd());
+  requireCurrentLocalProductionTarget(target, direction.decision.route);
   const settledSelection = parseReferenceSelectionV2(inputJson(join(process.cwd(), '.omd', 'settled-reference-selections', `sha256-${direction.decision.settledSelectionSha256}.json`), 'static capture settlement'));
   if (referenceSelectionV2Sha256(settledSelection) !== direction.decision.settledSelectionSha256
     || settledSelection.slots.some((slot) => slot.signal === 'high-motion' && slot.rights === 'lawful' && slot.motionAxis === 'available' && slot.obligationDisposition !== 'rejected')) {
@@ -2521,7 +2767,7 @@ async function cmdStaticEvidenceCapture(opts: Opts): Promise<never> {
   if (relativeOut.startsWith('..') || relativeOut.startsWith('/')) throw new Error('static evidence capture outDir must be inside the project');
   const adapter = projectWriter(run);
   adapter.mkdir(relativeOut);
-  const beatReceipt = await renderedBeatProof(target, direction.beatIds, artDirectionSha256(direction), adapter, join(relativeOut, `${runId}-rendered-beats.json`));
+  const beatReceipt = await renderedBeatProof(target, direction.beatIds, artDirectionSha256(direction), run.activation.buildSha256, direction.decision.route, taskId, run, adapter, join(relativeOut, `${runId}-rendered-beats.json`));
   const { renderPage } = await import('../core/render/index.ts');
   const capture = async (name: string, viewport: { width: number; height: number }) => {
     const path = join(outDir, `${runId}-${name}.png`);
@@ -2538,22 +2784,28 @@ async function cmdStaticEvidenceCapture(opts: Opts): Promise<never> {
       mobile: [await capture('mobile-static-1', mobile), await capture('mobile-static-2', mobile), await capture('mobile-static-3', mobile)] as const,
     },
   };
-  const observedSha256 = createHash('sha256').update(JSON.stringify([
-    observations.desktop.capture.sha256, observations.mobile.capture.sha256,
-    ...observations.temporalSamples.desktop.map((capture) => capture.sha256),
-    ...observations.temporalSamples.mobile.map((capture) => capture.sha256),
-  ])).digest('hex');
+  const observationManifest = [
+    observations.desktop.capture,
+    observations.mobile.capture,
+    ...observations.temporalSamples.desktop,
+    ...observations.temporalSamples.mobile,
+  ];
+  const observationManifestSha256 = createHash('sha256').update(JSON.stringify(
+    observationManifest.map(({ path, sha256 }) => ({ path, sha256 })),
+  )).digest('hex');
   const captureRecord = {
-    schema: 'static-direction-capture-v1' as const,
+    schema: 'static-direction-evidence-v1' as const,
     artDirectionHash: artDirectionSha256(direction),
     motionDecision: 'none' as const,
     expected: {
       artDirectionHash: artDirectionSha256(direction), selectionSha256: direction.decision.settledSelectionSha256,
-      handoffSha256: direction.referenceHandoffSha256, buildHash: run.activation.buildSha256, runId: payload.runId,
+      handoffSha256: direction.referenceHandoffSha256, buildHash: run.activation.buildSha256, runId,
+      route: direction.decision.route, target, taskId,
     },
     observed: {
-      runId: payload.runId, buildHash: run.activation.buildSha256,
-      selectionSha256: direction.decision.settledSelectionSha256, handoffSha256: direction.referenceHandoffSha256, observedSha256,
+      runId, buildHash: run.activation.buildSha256,
+      selectionSha256: direction.decision.settledSelectionSha256, handoffSha256: direction.referenceHandoffSha256,
+      route: direction.decision.route, target, taskId, observationManifestSha256,
     },
     beatReceipt,
     observations,
@@ -2571,6 +2823,7 @@ async function cmdMotionEvidenceCapture(opts: Opts): Promise<never> {
   const approvedRecipe = isRecord(payload.approvedRecipe) ? payload.approvedRecipe : undefined;
   if ((referenceSlotId === undefined) === (approvedRecipe === undefined)) throw new Error('motion capture requires exactly one settled referenceSlotId or approvedRecipe');
   const run = validateProjectRunInvocation(payload.invocation);
+  requireCurrentLocalProductionTarget(payload.target, currentArtDirection(process.cwd()).decision.route);
   const direction = currentArtDirection(process.cwd());
   if (direction.decision.motionDecision !== 'one' || direction.activationSha256 !== artDirectionSha256(run.activation)) throw new Error('MOTION_EVIDENCE_DIRECTION_STALE: capture requires the current one-motion art direction and its bound activation');
   const { motionResolutionProjectionSha256, validateMotionResolutionProjection } = await import('../core/ref/reference-selection.ts');
@@ -2596,12 +2849,12 @@ async function cmdMotionEvidenceCapture(opts: Opts): Promise<never> {
   if (relativeOut.startsWith('..') || relativeOut.startsWith('/')) throw new Error('motion evidence capture outDir must be inside the project');
   const adapter = projectWriter(run);
   adapter.mkdir(relativeOut);
-  await renderedBeatProof(payload.target, direction.beatIds, artDirectionSha256(direction), adapter, join(relativeOut, `${payload.runId}-rendered-beats.json`));
+  await renderedBeatProof(payload.target, direction.beatIds, artDirectionSha256(direction), run.activation.buildSha256, direction.decision.route, payload.runId, run, adapter, join(relativeOut, `${payload.runId}-rendered-beats.json`));
   const { captureMotionEvidenceV2, parseViewport } = await import('../core/render/index.ts');
   const evidence = await captureMotionEvidenceV2(payload.target, {
     viewport: typeof payload.viewport === 'string' ? parseViewport(payload.viewport) : { width: 390, height: 844 },
     outDir, runId: payload.runId, buildHash: run.activation.buildSha256, artDirectionHash: artDirectionSha256(direction),
-    sourceInfluence, selector: payload.selector, trigger: 'load', adapter,
+    route: direction.decision.route, taskId: payload.runId, invocation: run, sourceInfluence, selector: payload.selector, trigger: 'load', adapter,
   });
   if (opts.json) process.stdout.write(JSON.stringify(evidence)); else console.log(JSON.stringify(evidence, null, 2));
   process.exit(0);
@@ -2619,8 +2872,11 @@ async function cmdDirectionEvidenceCheck(mode: 'static-check' | 'motion-check', 
   }
   const input = inputJson(opts.input, `omd evidence ${mode}`);
   const run = isRecord(input) && 'invocation' in input ? validateProjectRunInvocation(input.invocation) : undefined;
-  const evidence = mode === 'static-check' && isRecord(input) && isRecord(input.capture)
-    ? { ...input.capture, schema: 'static-direction-evidence-v1', reviewReceipts: input.reviewReceipts }
+  const evidence = mode === 'static-check' && isRecord(input)
+    ? (() => {
+      const { invocation: _invocation, ...submitted } = input;
+      return submitted;
+    })()
     : input;
   if (!isRecord(evidence) || evidence.artDirectionHash !== artDirectionSha256(direction)) throw new Error('DIRECTION_EVIDENCE_STALE: evidence does not bind the current immutable art direction');
   if (mode === 'static-check' && run === undefined) throw new Error('STATIC_EVIDENCE_REVIEW_AUTHORIZATION_REQUIRED: a fresh host invocation is required');
@@ -2628,7 +2884,14 @@ async function cmdDirectionEvidenceCheck(mode: 'static-check' | 'motion-check', 
   if (mode === 'static-check') {
     if (direction.decision.motionDecision !== 'none') throw new Error('STATIC_EVIDENCE_DIRECTION_MISMATCH');
     const { validatePostRenderBeatProof } = await import('../core/copy/index.ts');
-    const beatViolations = validatePostRenderBeatProof(readFileSync(join(process.cwd(), '.omd', 'copy-deck.md'), 'utf8'), evidence.beatReceipt as import('../core/copy/index.ts').RenderedBeatProof, { beatIds: direction.beatIds });
+    const { validateRenderedBeatResultAuthority } = await import('../core/render/index.ts');
+    const renderedBeatResult = validateRenderedBeatResultAuthority(evidence.beatReceipt, {
+      invocation: run!, root: process.cwd(), buildSha256: run!.activation.buildSha256, artDirectionHash: artDirectionSha256(direction),
+      route: direction.decision.route, target: typeof (evidence.beatReceipt as Record<string, unknown> | undefined)?.target === 'string' ? (evidence.beatReceipt as Record<string, unknown>).target as string : '',
+      taskId: typeof (evidence.beatReceipt as Record<string, unknown> | undefined)?.taskId === 'string' ? (evidence.beatReceipt as Record<string, unknown>).taskId as string : '',
+      consumeResult: true,
+    });
+    const beatViolations = validatePostRenderBeatProof(readFileSync(join(process.cwd(), '.omd', 'copy-deck.md'), 'utf8'), renderedBeatResult, { beatIds: direction.beatIds });
     if (beatViolations.length > 0) throw new Error(`RENDERED_BEAT_PROOF_REQUIRED: ${beatViolations.map((violation) => violation.message).join(' ')}`);
     const { validateStaticDirectionEvidenceV1 } = await import('../core/art-direction/static-evidence.ts');
     if (!isRecord(evidence.reviewReceipts)) throw new Error('STATIC_EVIDENCE_REVIEW_AUTHORIZATION_REQUIRED: review receipts are required');
@@ -2644,16 +2907,71 @@ async function cmdDirectionEvidenceCheck(mode: 'static-check' | 'motion-check', 
       selectionSha256: direction.decision.settledSelectionSha256,
       handoffSha256: direction.referenceHandoffSha256,
       buildHash: run!.activation.buildSha256,
-      runId: run!.activation.buildSha256,
+      runId: isRecord(evidence.expected) && typeof evidence.expected.runId === 'string' ? evidence.expected.runId : '',
       observationRoot: process.cwd(),
       invocation: run!,
+      route: direction.decision.route,
+      target: renderedBeatResult.target,
+      taskId: renderedBeatResult.taskId,
     });
   } else {
     if (direction.decision.motionDecision !== 'one') throw new Error('MOTION_EVIDENCE_DIRECTION_MISMATCH');
+    if (run === undefined) throw new Error('MOTION_EVIDENCE_AUTHORIZATION_REQUIRED: a fresh host invocation is required');
     const { validateMotionEvidenceV2 } = await import('../core/render/index.ts');
-    validateMotionEvidenceV2(evidence, { motionDecision: 'one' });
+    validateMotionEvidenceV2(evidence, {
+      motionDecision: 'one',
+      artDirectionHash: artDirectionSha256(direction),
+      buildHash: run.activation.buildSha256,
+      root: process.cwd(),
+      invocation: run,
+      route: direction.decision.route,
+      target: typeof evidence.observed === 'object' && evidence.observed !== null && typeof (evidence.observed as Record<string, unknown>).target === 'string' ? (evidence.observed as Record<string, unknown>).target as string : '',
+      taskId: typeof evidence.observed === 'object' && evidence.observed !== null && typeof (evidence.observed as Record<string, unknown>).taskId === 'string' ? (evidence.observed as Record<string, unknown>).taskId as string : '',
+      consumeResult: true,
+    });
   }
   if (opts.json) process.stdout.write(JSON.stringify(mode === 'static-check' ? evidence : { ok: true })); else console.log('ok — observed evidence is path-backed and matches the current art direction');
+  process.exit(0);
+}
+
+async function cmdCompletion(mode: string | undefined, opts: Opts): Promise<never> {
+  if (mode === 'typography-applicability') {
+    const activationPath = activationInputPath(opts);
+    if (!opts.ir || activationPath === undefined || opts._.length > 0) throw new Error('usage: omd completion typography-applicability --ir <rendered-ir.json> --activation <host-issued-invocation.json> [--json]');
+    const invocation = validateProjectRunInvocation(inputJson(activationPath, 'omd completion typography applicability activation'));
+    const { publishTypographyApplicability } = await import('../core/completion/evidence.ts');
+    const receipt = publishTypographyApplicability(process.cwd(), inputJson(opts.ir, 'omd completion typography applicability rendered IR'), invocation);
+    if (opts.json) process.stdout.write(JSON.stringify(receipt)); else console.log(receipt.path);
+    process.exit(0);
+  }
+  const activationPath = activationInputPath(opts);
+  if (mode !== 'preflight' || activationPath === undefined || opts._.length > 0) throw new Error('usage: omd completion preflight --activation <host-issued-invocation.json> [--json]');
+  const invocation = validateProjectRunInvocation(inputJson(activationPath, 'omd completion preflight activation'));
+  const pointerPath = join(process.cwd(), '.omd', 'final-evidence-v2.json');
+  const pointerBytes = readFileSync(pointerPath);
+  requireFinalReviewerLaneAuthorization(invocation, process.cwd(), pointerBytes);
+  const pointer = JSON.parse(pointerBytes.toString('utf8')) as unknown;
+  if (!isRecord(pointer) || typeof pointer.record !== 'string') throw new Error('FINAL_EVIDENCE_MANIFEST_AUTHORIZATION_REQUIRED: final v2 evidence pointer is invalid');
+  const recordPath = resolve(process.cwd(), '.omd', 'final-evidence-v2-runs', pointer.record);
+  if (relative(join(process.cwd(), '.omd', 'final-evidence-v2-runs'), recordPath).startsWith('..')) throw new Error('FINAL_EVIDENCE_MANIFEST_AUTHORIZATION_REQUIRED: final v2 evidence record escapes the project');
+  const recordBytes = readFileSync(recordPath);
+  requireFinalEvidenceManifestAuthorization(invocation, process.cwd(), recordBytes);
+  const record = JSON.parse(recordBytes.toString('utf8')) as unknown;
+  if (!isRecord(record) || !isRecord(record.graph)) throw new Error('FINAL_REVIEWER_LANE_AUTHORIZATION_REQUIRED: final graph is required');
+  for (const lane of ['blindLane', 'fidelityLane', 'protocolLane']) {
+    const descriptor = record.graph[lane];
+    if (!isRecord(descriptor) || typeof descriptor.path !== 'string') throw new Error(`FINAL_REVIEWER_LANE_AUTHORIZATION_REQUIRED: ${lane} receipt is required`);
+    requireFinalReviewerLaneAuthorization(invocation, process.cwd(), readFileSync(resolve(process.cwd(), descriptor.path)));
+  }
+  if (record.graph.schema !== 'final-evidence-v2-adaptive-omission-graph'
+    && !(record.graph.schema === 'final-evidence-v2-workflow-graph-v1' && record.graph.productionSchema === 'final-evidence-v2-adaptive-omission-graph')) {
+    const intentPointer = validateIntentCurrentPointer(inputJson(join(process.cwd(), '.omd', 'intent-current.json'), 'completion current intent pointer'));
+    requireCurrentIntentLedgerAuthorization(invocation, process.cwd(), readFileSync(join(process.cwd(), '.omd', intentPointer.record)));
+  }
+  if (isRecord(record.staticEvidence) && typeof record.staticEvidence.path === 'string') requireStaticEvidenceResultAuthorization(invocation, process.cwd(), readFileSync(resolve(process.cwd(), record.staticEvidence.path)));
+  const { checkTerminalCompletion } = await import('../core/completion/preflight.ts');
+  const result = checkTerminalCompletion(process.cwd(), invocation);
+  if (opts.json) process.stdout.write(JSON.stringify(result)); else console.log('ok — terminal completion evidence is current');
   process.exit(0);
 }
 
@@ -2688,9 +3006,10 @@ async function cmdEvidence(mode: string | undefined, opts: Opts): Promise<never>
     process.exit(0);
   }
   if (mode === 'v2-finalize') {
-    if (!opts.input || !opts.activation || opts._.length > 0) throw new Error('usage: omd evidence v2 finalize --input <manifest.json> --activation <host-issued-invocation.json> [--json]');
+    const activationPath = activationInputPath(opts);
+    if (!opts.input || activationPath === undefined || opts._.length > 0) throw new Error('usage: omd evidence v2 finalize --input <manifest.json> --activation <host-issued-invocation.json> [--json]');
     const { publishFinalEvidenceV2 } = await import('../core/evidence/final-v2.ts');
-    const invocation = validateProjectRunInvocation(inputJson(opts.activation, 'omd evidence v2 finalize activation'));
+    const invocation = validateProjectRunInvocation(inputJson(activationPath, 'omd evidence v2 finalize activation'));
     const manifestBytes = inputJsonBytes(opts.input, 'omd evidence v2 finalize');
     requireFinalEvidenceManifestAuthorization(invocation, process.cwd(), manifestBytes);
     const manifest = JSON.parse(manifestBytes.toString('utf8')) as unknown;
@@ -2702,8 +3021,11 @@ async function cmdEvidence(mode: string | undefined, opts: Opts): Promise<never>
       if (relative(process.cwd(), path).startsWith('..')) throw new Error(`FINAL_REVIEWER_LANE_AUTHORIZATION_REQUIRED: ${lane} path must remain inside the project`);
       requireFinalReviewerLaneAuthorization(invocation, process.cwd(), readFileSync(path));
     }
-    const intentPointer = validateIntentCurrentPointer(inputJson(join(process.cwd(), '.omd', 'intent-current.json'), 'final current intent pointer'));
-    requireCurrentIntentLedgerAuthorization(invocation, process.cwd(), readFileSync(join(process.cwd(), '.omd', intentPointer.record)));
+    if (manifest.graph.schema !== 'final-evidence-v2-adaptive-omission-graph'
+      && !(manifest.graph.schema === 'final-evidence-v2-workflow-graph-v1' && manifest.graph.productionSchema === 'final-evidence-v2-adaptive-omission-graph')) {
+      const intentPointer = validateIntentCurrentPointer(inputJson(join(process.cwd(), '.omd', 'intent-current.json'), 'final current intent pointer'));
+      requireCurrentIntentLedgerAuthorization(invocation, process.cwd(), readFileSync(join(process.cwd(), '.omd', intentPointer.record)));
+    }
     if (isRecord(manifest.staticEvidence) && typeof manifest.staticEvidence.path === 'string') requireStaticEvidenceResultAuthorization(invocation, process.cwd(), readFileSync(resolve(process.cwd(), manifest.staticEvidence.path)));
     const path = publishFinalEvidenceV2(process.cwd(), manifest, invocation);
     if (opts.json) process.stdout.write(JSON.stringify({ path }));
@@ -2711,9 +3033,10 @@ async function cmdEvidence(mode: string | undefined, opts: Opts): Promise<never>
     process.exit(0);
   }
   if (mode === 'v2-check') {
-    if (!opts.activation || opts._.length > 0) throw new Error('usage: omd evidence v2 check --activation <host-issued-invocation.json> [--json]');
+    const activationPath = activationInputPath(opts);
+    if (activationPath === undefined || opts._.length > 0) throw new Error('usage: omd evidence v2 check --activation <host-issued-invocation.json> [--json]');
     const { checkFinalEvidenceV2 } = await import('../core/evidence/final-v2.ts');
-    const invocation = validateProjectRunInvocation(inputJson(opts.activation, 'omd evidence v2 check activation'));
+    const invocation = validateProjectRunInvocation(inputJson(activationPath, 'omd evidence v2 check activation'));
     const pointerPath = join(process.cwd(), '.omd', 'final-evidence-v2.json');
     const pointerBytes = readFileSync(pointerPath);
     requireFinalReviewerLaneAuthorization(invocation, process.cwd(), pointerBytes);
@@ -2732,8 +3055,11 @@ async function cmdEvidence(mode: string | undefined, opts: Opts): Promise<never>
       if (relative(process.cwd(), path).startsWith('..')) throw new Error(`FINAL_REVIEWER_LANE_AUTHORIZATION_REQUIRED: ${lane} path must remain inside the project`);
       requireFinalReviewerLaneAuthorization(invocation, process.cwd(), readFileSync(path));
     }
-    const intentPointer = validateIntentCurrentPointer(inputJson(join(process.cwd(), '.omd', 'intent-current.json'), 'final current intent pointer'));
-    requireCurrentIntentLedgerAuthorization(invocation, process.cwd(), readFileSync(join(process.cwd(), '.omd', intentPointer.record)));
+    if (record.graph.schema !== 'final-evidence-v2-adaptive-omission-graph'
+      && !(record.graph.schema === 'final-evidence-v2-workflow-graph-v1' && record.graph.productionSchema === 'final-evidence-v2-adaptive-omission-graph')) {
+      const intentPointer = validateIntentCurrentPointer(inputJson(join(process.cwd(), '.omd', 'intent-current.json'), 'final current intent pointer'));
+      requireCurrentIntentLedgerAuthorization(invocation, process.cwd(), readFileSync(join(process.cwd(), '.omd', intentPointer.record)));
+    }
     if (isRecord(record.staticEvidence) && typeof record.staticEvidence.path === 'string') requireStaticEvidenceResultAuthorization(invocation, process.cwd(), readFileSync(resolve(process.cwd(), record.staticEvidence.path)));
     const evidence = checkFinalEvidenceV2(process.cwd(), invocation);
     if (opts.json) process.stdout.write(JSON.stringify(evidence));
@@ -3080,6 +3406,240 @@ function cmdSlop(sub: string | undefined, opts: Opts): never {
   process.exit(0);
 }
 
+async function cmdWorkflow(mode: string | undefined, opts: Opts): Promise<never> {
+  if (activationInputPath(opts) === undefined || opts._.length > 0) throw new Error('usage: omd workflow plan|readiness|slice|artifacts --input <workflow.json> --activation <host-issued-invocation.json> | check-readiness|check --activation <host-issued-invocation.json> [--json]');
+  const invocation = invocationFromActivation(opts, `omd workflow ${mode ?? 'check'}`);
+  const {
+    checkAdaptiveWorkflow, checkAdaptiveWorkflowProductionReadiness, checkAdaptiveWorkflowProductionSlice,
+    publishAdaptiveWorkflowArtifacts, publishAdaptiveWorkflowPlan, publishAdaptiveWorkflowProductionReadiness,
+    publishAdaptiveWorkflowProductionSlice,
+  } = await import('../core/design-development/workflow-persistence.ts');
+  if (mode === 'plan') {
+    if (!opts.input) throw new Error('usage: omd workflow plan --input <workflow-plan-input.json> --activation <host-issued-invocation.json> [--json]');
+    const path = publishAdaptiveWorkflowPlan(process.cwd(), inputJson(opts.input, 'omd workflow plan'), projectWriter(invocation), invocation);
+    if (opts.json) process.stdout.write(JSON.stringify({ path })); else console.log(path);
+    process.exit(0);
+  }
+  if (mode === 'readiness') {
+    if (!opts.input) throw new Error('usage: omd workflow readiness --input <workflow-readiness.json> --activation <host-issued-invocation.json> [--json]');
+    const path = publishAdaptiveWorkflowProductionReadiness(process.cwd(), inputJson(opts.input, 'omd workflow readiness'), projectWriter(invocation), invocation);
+    if (opts.json) process.stdout.write(JSON.stringify({ path })); else console.log(path);
+    process.exit(0);
+  }
+  if (mode === 'slice') {
+    if (!opts.input) throw new Error('usage: omd workflow slice --input <workflow-production-slice.json> --activation <host-issued-invocation.json> [--json]');
+    const path = publishAdaptiveWorkflowProductionSlice(process.cwd(), inputJson(opts.input, 'omd workflow slice'), projectWriter(invocation), invocation);
+    if (opts.json) process.stdout.write(JSON.stringify({ path })); else console.log(path);
+    process.exit(0);
+  }
+  if (mode === 'artifacts') {
+    if (!opts.input) throw new Error('usage: omd workflow artifacts --input <workflow-artifacts.json> --activation <host-issued-invocation.json> [--json]');
+    const path = publishAdaptiveWorkflowArtifacts(process.cwd(), inputJson(opts.input, 'omd workflow artifacts'), projectWriter(invocation), invocation);
+    if (opts.json) process.stdout.write(JSON.stringify({ path })); else console.log(path);
+    process.exit(0);
+  }
+  if (mode === 'check-readiness') {
+    if (opts.input) throw new Error('usage: omd workflow check-readiness --activation <host-issued-invocation.json> [--json]');
+    const current = checkAdaptiveWorkflowProductionReadiness(process.cwd(), invocation);
+    if (opts.json) process.stdout.write(JSON.stringify(current)); else console.log('ok — workflow production readiness is current');
+    process.exit(0);
+  }
+  if (mode === 'check-slice') {
+    if (opts.input) throw new Error('usage: omd workflow check-slice --activation <host-issued-invocation.json> [--json]');
+    const current = checkAdaptiveWorkflowProductionSlice(process.cwd(), invocation);
+    if (opts.json) process.stdout.write(JSON.stringify(current)); else console.log('ok — authenticated workflow production slice is current');
+    process.exit(0);
+  }
+  if (mode === 'check') {
+    if (opts.input) throw new Error('usage: omd workflow check --activation <host-issued-invocation.json> [--json]');
+    const current = checkAdaptiveWorkflow(process.cwd(), invocation);
+    if (opts.json) process.stdout.write(JSON.stringify(current)); else console.log(`ok — ${current.plan.development.mode} workflow is complete and current`);
+    process.exit(0);
+  }
+  throw new Error('usage: omd workflow plan|readiness|slice|artifacts --input <workflow.json> --activation <host-issued-invocation.json> | check-readiness|check-slice|check --activation <host-issued-invocation.json> [--json]');
+}
+
+/**
+ * `omd route` — how much loop this request needs, and what it is not allowed to touch.
+ *
+ * A run that classifies a themed pass over a shipped product as a full brand establishment does
+ * not produce a better result; it produces the same result an hour later. The route is the gate
+ * that stops that, and its scope lock is what stops a UI request from creating repositories.
+ */
+async function cmdRoute(mode: string | undefined, opts: Opts): Promise<never> {
+  const { adaptiveRouteRecordSha256, changedPathsForAdaptiveRoute, classifyRoute, pathsOutsideScope, publishAdaptiveRoute, readPersistedRoute, validateRouteInput } = await import('../core/route/index.ts');
+  const recordPath = join(process.cwd(), '.omd', 'route.json');
+
+  if (mode === 'classify') {
+    if (!opts.input || activationInputPath(opts) === undefined) throw new Error('usage: omd route classify --input <route-input.json> --activation <host-issued-invocation.json> [--json]');
+    const input = validateRouteInput(inputJson(opts.input, 'omd route classify'));
+    const invocation = invocationFromActivation(opts, 'omd route classify');
+    const writer = projectWriter(invocation);
+    const published = publishAdaptiveRoute(
+      process.cwd(),
+      input,
+      writer,
+      invocation,
+    );
+    const activationEvidencePath = process.env.OMD_ACTIVATION_EVIDENCE_PATH;
+    if (activationEvidencePath !== undefined && validateActivationContext(inputJson(activationEvidencePath, 'Codex activation evidence')).briefSha256 === invocation.activation.briefSha256) {
+      writer.mkdir('.omd/receipts');
+      writer.write('.omd/receipts/activation.json', `${canonicalJson(invocation.activation)}\n`);
+    }
+    const record = published.record;
+    const path = published.pointerPath;
+    if (opts.json) process.stdout.write(JSON.stringify(record));
+    else {
+      console.log(`route: ${record.route} -> ${path}`);
+      console.log(`  rationale: ${record.strategy.rationale}`);
+      console.log(`  roles: ${record.strategy.roles.join(', ')}`);
+      console.log(`  stages: ${record.strategy.stages.join(' -> ')}`);
+      console.log(`  methods: ${record.strategy.methods.join(', ')}`);
+      console.log(`  references: ${record.references.decision} — ${record.references.intended}`);
+    }
+    process.exit(0);
+  }
+
+  if (mode === 'show' || mode === undefined) {
+    if (activationInputPath(opts) === undefined) throw new Error('usage: omd route show --activation <host-issued-invocation.json> [--json]');
+    if (!existsSync(recordPath)) throw new Error('ROUTE_UNCLASSIFIED: run `omd route classify --input <route-input.json>` first');
+    const record = readPersistedRoute(process.cwd(), invocationFromActivation(opts, 'omd route show'));
+    if (opts.json) process.stdout.write(JSON.stringify(record));
+    else {
+      console.log(`route: ${record.route}`);
+      console.log(`  request: ${record.request}`);
+      console.log(`  roles: ${record.strategy.roles.join(', ')}`);
+      console.log(`  stages: ${record.strategy.stages.join(' -> ')}`);
+      console.log(`  methods: ${record.strategy.methods.join(', ')}`);
+      console.log(`  allowed: ${record.allowedPaths.join(', ')}`);
+      for (const skipped of record.strategy.skips) console.log(`  skip ${skipped.id}: ${skipped.reason}`);
+    }
+    process.exit(0);
+  }
+
+  if (mode === 'check') {
+    if (activationInputPath(opts) === undefined) throw new Error('usage: omd route check --activation <host-issued-invocation.json> [--json]');
+    if (!existsSync(recordPath)) throw new Error('ROUTE_UNCLASSIFIED: run `omd route classify --input <route-input.json>` first');
+    const invocation = invocationFromActivation(opts, 'omd route check');
+    const record = readPersistedRoute(process.cwd(), invocation);
+    let changed: readonly string[];
+    try {
+      changed = changedPathsForAdaptiveRoute(
+        process.cwd(), record, adaptiveRouteRecordSha256(record), invocation,
+      );
+    } catch (error) {
+      throw new Error(`ROUTE_SCOPE_UNVERIFIABLE: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    const outside = pathsOutsideScope(record, changed);
+    if (opts.json) process.stdout.write(JSON.stringify({ route: record.route, changed: changed.length, outside }));
+    else if (outside.length === 0) console.log(`ok — ${changed.length} changed paths, all inside the ${record.route} route scope`);
+    else {
+      console.error(`ROUTE_SCOPE_EXCEEDED: ${outside.length} path(s) outside the declared scope`);
+      for (const path of outside) console.error(`  - ${path}`);
+      console.error(`  allowed: ${record.allowedPaths.join(', ')}`);
+    }
+    process.exit(outside.length === 0 ? 0 : 1);
+  }
+
+  if (mode === 'preview') {
+    if (!opts.input) throw new Error('usage: omd route preview --input <route-input.json> [--json]');
+    const result = classifyRoute(validateRouteInput(inputJson(opts.input, 'omd route preview')));
+    if (opts.json) process.stdout.write(JSON.stringify(result));
+    else console.log(`route: ${result.route} (${result.strategy.rationale})`);
+    process.exit(0);
+  }
+
+  throw new Error('usage: omd route classify --input <route-input.json> | show | check | preview --input <route-input.json>');
+}
+
+/**
+ * `omd brief <stage>` — everything a stage owner needs, derived from this project's own state.
+ *
+ * This is the supply point that replaces reading a coordinator skill: no instructions about how to
+ * reason, only what the stage owns, the evidence gathered for it, the contracts bound to it, and
+ * the commands that will judge it. None of that changes when the model changes.
+ */
+async function cmdBrief(stage: string | undefined, opts: Opts): Promise<never> {
+  const { buildBrief, formatBrief, EXTRA_BRIEF_STAGES } = await import('../core/brief/index.ts');
+  const { STAGES } = await import('../core/stage/contract.ts');
+  if (stage === undefined) {
+    throw new Error(`usage: omd brief <stage> [--json]  (stages: ${[...STAGES.map((s) => s.id), ...EXTRA_BRIEF_STAGES].join(', ')})`);
+  }
+  const brief = buildBrief(
+    process.cwd(),
+    stage as Parameters<typeof buildBrief>[1],
+    join(root, 'core'),
+    invocationFromActivation(opts, 'omd brief'),
+  );
+  if (opts.json) process.stdout.write(JSON.stringify(brief));
+  else process.stdout.write(formatBrief(brief));
+  process.exit(0);
+}
+
+/** `omd status --files` — what this project actually holds, by what it is for. */
+async function cmdStatus(opts: Opts): Promise<never> {
+  const { scanProject } = await import('../core/layout/scan.ts');
+  const scan = scanProject(process.cwd());
+  const kb = (bytes: number): string => `${(bytes / 1024).toFixed(1)}KB`;
+  if (opts.json) {
+    process.stdout.write(JSON.stringify(scan));
+    process.exit(0);
+  }
+  console.log(`Design record        ${String(scan.byClass.human.files).padStart(4)}  ${kb(scan.byClass.human.bytes)}`);
+  console.log(`Reference captures   ${String(scan.byClass.refs.files).padStart(4)}  ${kb(scan.byClass.refs.bytes)}`);
+  console.log(`Trust state          ${String(scan.byClass.state.files).padStart(4)}  ${kb(scan.byClass.state.bytes)}`);
+  console.log(`Scratch (cache)      ${String(scan.byClass.cache.files).padStart(4)}  ${kb(scan.byClass.cache.bytes)}`);
+  const cleanable = scan.cleanable.length + scan.retired.length + scan.orphanRecords.length;
+  console.log(`Safe to clean        ${String(cleanable).padStart(4)}  ${kb([...scan.cleanable, ...scan.retired, ...scan.orphanRecords].reduce((sum, entry) => sum + entry.bytes, 0))}`);
+  if (scan.unclassified.length > 0) {
+    console.log(`Unclassified         ${String(scan.unclassified.length).padStart(4)}  (never cleaned automatically)`);
+    for (const entry of scan.unclassified.slice(0, 10)) console.log(`  ? .omd/${entry.path}`);
+  }
+  process.exit(0);
+}
+
+/**
+ * `omd clean` — remove only what a rerun can rebuild. Dry run is the default because the one
+ * unrecoverable mistake here is deleting an audit record something still cites.
+ */
+async function cmdClean(opts: Opts): Promise<never> {
+  if (opts.cache !== true && opts.staleRecords !== true && opts.all !== true) {
+    throw new Error('usage: omd clean --cache | --stale-records | --all [--apply] [--json]  (dry run unless --apply)');
+  }
+  const { citedFigmaArtifactPaths, scanProject } = await import('../core/layout/scan.ts');
+  const apply = opts.apply === true;
+  const invocation = invocationFromActivation(opts, 'omd clean');
+  const release = apply ? acquireProjectMutationLock(process.cwd(), invocation) : undefined;
+  let selected: readonly import('../core/layout/scan.ts').ScannedEntry[];
+  try {
+    const scan = scanProject(process.cwd());
+    selected = [
+      ...(opts.cache === true || opts.all === true ? scan.cleanable : []),
+      ...(opts.staleRecords === true || opts.all === true ? [...scan.retired, ...scan.orphanRecords] : []),
+    ];
+    if (apply) {
+      const adapter = projectWriter(invocation);
+      const figmaSelected = selected.filter((entry) => /^figma\/(exports|renders)\//.test(entry.path));
+      const nonFigmaSelected = selected.filter((entry) => !figmaSelected.includes(entry));
+      const removedFigma = opts.cache === true || opts.all === true
+        ? (await import('../core/figma/artifact-authority.ts')).applyAuthorizedFigmaCleanup(
+            process.cwd(), adapter, citedFigmaArtifactPaths(process.cwd()),
+          )
+        : [];
+      for (const entry of nonFigmaSelected) adapter.remove(join('.omd', entry.path));
+      selected = [...nonFigmaSelected, ...removedFigma.map((path) => ({ path, bytes: 0 }))];
+    }
+  } finally {
+    release?.();
+  }
+  if (opts.json) process.stdout.write(JSON.stringify({ applied: apply, removed: selected.map((entry) => entry.path) }));
+  else {
+    console.log(`${apply ? 'removed' : 'would remove'} ${selected.length} file(s)`);
+    for (const entry of selected) console.log(`  - .omd/${entry.path}`);
+    if (!apply && selected.length > 0) console.log('re-run with --apply to delete');
+  }
+  process.exit(0);
+}
 /** Performance gate over a Lighthouse JSON report (the agent runs Lighthouse; OMD gates it). */
 function cmdLighthouse(opts: Opts): never {
   const file = opts._[0];
@@ -3140,6 +3700,12 @@ function cmdStack(opts: Opts): never {
     console.log(`stack: ${d.stack}${d.framework ? ` (${d.framework})` : ''}`);
     console.log(`  reason: ${d.reason}`);
     console.log(`  greenfield: ${d.greenfield}`);
+    console.log(`  shell: ${d.shell.kind}${d.shell.evidence.length > 0 ? ` (${d.shell.evidence.join(', ')})` : ''}`);
+    if (d.shell.kind !== 'browser') {
+      console.log(`  ${renderTargetHint(d.shell)}`);
+      console.log('  not applicable to this shell:');
+      for (const check of d.shell.inapplicableChecks) console.log(`    - ${check}`);
+    }
   }
   process.exit(0);
 }
@@ -3162,6 +3728,8 @@ function usage(): never {
     + '  coach                                        trends across `omd check` history\n'
     + '  usage [--json]                              this run\'s elapsed time + token total (host session log)\n'
     + '\n'
+    + '  lifecycle run --project <dir> --manifest <json>\n'
+    + '                                               trusted browser evaluation and observation\n'
     + '  frame show\n'
     + '  frame set --problem P --reframe R --why EVIDENCE\n'
     + '            [--task T --frequent-action A --costliest-error E --surface S --task-matrix "T1 …"]\n'
@@ -3199,8 +3767,14 @@ function usage(): never {
     + '  copy --check [--json]                       validate required copy deck structure and fact refs\n'
     + '  copy --review-check [--json]                validate copy-eye report structure only (not blindness)\n'
     + '  copy v2 check [--json]                      validate selected register and stable v2 Beat IDs\n'
-    + '  composition --check [--json]                validate composition sections and input freshness\n'
+    + '  composition --check [--activation <invocation>] [--json]  validate composition sections and input freshness\n'
     + '  acquisition set --zones <json-array>          persist framer-owned section/region/state reference targets\n'
+    + '  brief <stage> [--json]                      what this stage owns, its evidence, and what will judge it\n'
+    + '  route classify --input route-input.json      validate an adaptive contract-derived strategy and lock scope\n'
+    + '  route show | route check [--json]           the chosen route, and writes outside its scope\n'
+    + '  workflow plan|readiness|slice|artifacts|check-readiness|check-slice|check --activation <host-issued-invocation.json>  persist/check immutable design-development checkpoints\n'
+    + '  status [--files] [--json]                   what this project holds, by what it is for\n'
+    + '  clean --cache | --stale-records | --all [--apply]  remove only what a rerun can rebuild\n'
     + '  depth classify --input depth.json [--json]      choose L1–L4 from design risk, never from convenience\n'
     + '  deliberate check [--phase prebuild|final] [--json] validate owner decisions before build or the complete visual loop\n'
     + '  deliberate preserve --input moderator.json    validate and persist an exact omd-eye moderator handback\n'
@@ -3220,7 +3794,7 @@ function usage(): never {
     + '  evidence tasks --input .omd/.cache/task-evidence-manifest.json  publish strict production task evidence\n'
     + '  evidence tasks-check [--json]               revalidate strict production task evidence\n'
     + '\n'
-    + '  art-direction check|local-check --input decision-check.json [--json]  persist a host-authorized or moderator-bound local direction\n'
+    + '  art-direction check --input decision-check.json [--json]  persist a host-authorized direction\n'
     + '  art-direction alternatives-sha --input alternatives.json [--json]  canonical digest every perspective and receipt must bind\n'
     + '  art-direction check-input [--route /] [--json]  emit the check payload skeleton with canonical references filled in\n'
     + '  schema list | schema <name> [--json]        print the exact skeleton for a hand-authored input\n'
@@ -3231,6 +3805,9 @@ function usage(): never {
     + '  cue [--path p] [--symbol s] [--field k=v] [--stage s] [--json]  contracts this work binds, from deterministic inputs only\n'
     + '  locale check [--input .omd/locale.json] [--deck .omd/copy-deck.md] [--json]  validate declared locales and their Beat copy\n'
     + '  complete check <page> [--input .omd/functional-requirements.json] [--json]  every declared requirement is present, operable, reachable\n'
+    + '  complete publish --input <completeness-run.json>  publish a current immutable zero-finding completeness receipt\n'
+    + '  completion typography-applicability --ir <rendered-ir.json> --activation <host-issued-invocation.json>  publish immutable Korean display applicability\n'
+    + '  completion preflight --activation <host-issued-invocation.json> [--json]  read-only terminal final/completeness gate\n'
     + '  intent append --input trusted-intent.json [--json]  append trusted intent and update its guarded current pointer\n'
     + '  domain check [--input domain-brief.json] [--json]  validate the domain-analysis brief\n'
     + '  craft-fidelity check --input pair.json [--json]  verify a generated part reproduced the reference craft\n'
@@ -3250,6 +3827,8 @@ function usage(): never {
     + '  pack list                                   list all pack .md files\n'
     + '  pack <relpath>                              print one pack file (e.g. theory/color.md)\n'
     + '\n'
+  + '  host senpi agent <omd-role>                 print the installed isolated-role prompt\n'
+  + '  host senpi run --agent <role> --input task.md  run the role in a separate Senpi process\n'
     + '  doctor                                       check environment prerequisites\n'
   + '\n'
   + '  figma pull <file-url>                        fetch Figma file -> .omd/figma/snapshot.json\n'
@@ -3274,7 +3853,69 @@ async function main(): Promise<never> {
     process.exit(0);
   }
 
+  if (cmd === 'lifecycle' && (sub === '--help' || sub === 'help')) {
+    console.log([
+      'Usage:',
+      '  omd lifecycle run|evaluate --project <dir> --manifest <json> [--activation <json>]',
+      '  omd lifecycle repair --project <dir> --activation <json> --review <json> --mirror <dir>',
+      '  omd lifecycle finalize --project <dir> --activation <json> --input <final-v2.json>',
+    ].join('\n'));
+    process.exit(0);
+  }
   if (cmd === 'ir') return cmdIr(parseArgs(args.slice(1)));
+  if (cmd === 'lifecycle' && (sub === 'run' || sub === 'evaluate')) {
+    const opts = parseArgs(args.slice(2));
+    if (!opts.project || !opts.manifest) return usage();
+    const value = await runTrustedLifecycle({
+      project: opts.project,
+      manifestPath: resolve(opts.manifest),
+      cliPath: fileURLToPath(import.meta.url),
+      argv: args,
+      ...(opts.activation === undefined ? {} : {
+        invocation: validateProjectRunInvocation(
+          inputJson(opts.activation, 'omd lifecycle evaluation activation'),
+        ),
+      }),
+    });
+    console.log(`EVALUATION: ${value.status}`);
+    if (value.status === 'PASS' && value.readyForFinalization) console.log('READY_FOR_FINALIZATION');
+    console.log(`receipt: ${value.receiptPath}`);
+    console.log(`observation: ${value.observationPath}`);
+    process.exit(value.status === 'PASS' ? 0 : 1);
+  }
+  if (cmd === 'lifecycle' && sub === 'repair') {
+    const opts = parseArgs(args.slice(2));
+    if (!opts.project || !opts.activation || !opts.review || !opts.mirror) return usage();
+    const project = realpathSync(resolve(opts.project));
+    const invocation = validateProjectRunInvocation(
+      inputJson(opts.activation, 'omd lifecycle repair activation'),
+    );
+    const review = inputJson(opts.review, 'omd lifecycle repair review');
+    const {
+      applyProductionRepair,
+      stageProductionRepair,
+    } = await import('../core/runtime/production-repair.ts');
+    const staged = stageProductionRepair({
+      root: project,
+      invocation,
+      review: review as Parameters<typeof stageProductionRepair>[0]['review'],
+      mirrorRoot: realpathSync(resolve(opts.mirror)),
+    });
+    const outcome = applyProductionRepair({
+      root: project,
+      invocation,
+      writer: createProjectWriteAdapter(project, invocation),
+      staged,
+    });
+    console.log(opts.json ? JSON.stringify(outcome) : `REPAIR: COMMITTED\noutcome: ${outcome.outcomePath}`);
+    process.exit(0);
+  }
+  if (cmd === 'lifecycle' && sub === 'finalize') {
+    const opts = parseArgs(args.slice(2));
+    if (!opts.project || !opts.activation || !opts.input) return usage();
+    process.chdir(realpathSync(resolve(opts.project)));
+    return cmdEvidence('v2-finalize', opts);
+  }
   if (cmd === 'render') return cmdRender(parseArgs(args.slice(1)));
   if (cmd === 'probe') return cmdProbe(parseArgs(args.slice(1)));
   if (cmd === 'flow-probe') return cmdFlowProbe(parseArgs(args.slice(1)));
@@ -3349,6 +3990,7 @@ async function main(): Promise<never> {
   if (cmd === 'copy') return cmdCopy(parseArgs(args.slice(1)));
   if (cmd === 'locale') return cmdLocale(sub, parseArgs(args.slice(2)));
   if (cmd === 'complete') return cmdComplete(sub, parseArgs(args.slice(2)));
+  if (cmd === 'completion') return cmdCompletion(sub, parseArgs(args.slice(2)));
   if (cmd === 'art-direction') return cmdArtDirection(sub, parseArgs(args.slice(2)));
   if (cmd === 'schema') return cmdSchema(sub, parseArgs(args.slice(2)));
   if (cmd === 'stage') return cmdStage(sub, parseArgs(args.slice(2)));
@@ -3379,11 +4021,17 @@ async function main(): Promise<never> {
   if (cmd === 'deliberate') return cmdDeliberate(sub, parseArgs(args.slice(2)));
   if (cmd === 'compare') return cmdCompare(sub, parseArgs(args.slice(2)));
   if (cmd === 'acquisition') return cmdAcquisition(sub, parseArgs(args.slice(2)));
+  if (cmd === 'brief') return cmdBrief(sub, parseArgs(args.slice(2)));
+  if (cmd === 'route') return cmdRoute(sub, parseArgs(args.slice(2)));
+  if (cmd === 'workflow') return cmdWorkflow(sub, parseArgs(args.slice(2)));
+  if (cmd === 'status') return cmdStatus(parseArgs(args.slice(1)));
+  if (cmd === 'clean') return cmdClean(parseArgs(args.slice(1)));
   if (cmd === 'stack') return cmdStack(parseArgs(args.slice(1)));
   if (cmd === 'text-slop') return cmdTextSlop(parseArgs(args.slice(1)));
   if (cmd === 'visual-richness') return cmdVisualRichness(parseArgs(args.slice(1)));
   if (cmd === 'pack') return cmdPack(sub, ...args.slice(2));
   if (cmd === 'doctor') return cmdDoctor();
+  if (cmd === 'host' && sub === 'senpi') return cmdHostSenpi(args[2], parseArgs(args.slice(3)));
 
   if (cmd === 'figma') {
     if (sub === 'pull') return cmdFigmaPull(args[2], parseArgs(args.slice(3)));
@@ -3405,11 +4053,19 @@ async function main(): Promise<never> {
   if (cmd === 'decision') {
     const opts = parseArgs(args.slice(1));
     const what = opts._[0];
-    if (!what || !opts.why) {
-      console.error('usage: omd decision "what" --why "why"\nA decision without a reason is not a decision.');
+    const aiFields = [opts.aiAssetId, opts.prompt, opts.provider];
+    if (!what || !opts.why || (aiFields.some((value) => value !== undefined) && aiFields.some((value) => !value))) {
+      console.error('usage: omd decision "what" --why "why" [--ai-asset-id <id> --prompt <exact> --provider <exact>]\nA decision without a reason is not a decision.');
       process.exit(1);
     }
-    console.log(logDecision(process.cwd(), what, opts.why, projectWriterFromActivation(opts, 'omd decision')));
+    const invocation = invocationFromActivation(opts, 'omd decision');
+    const writer = projectWriter(invocation);
+    const aiReference = opts.aiAssetId === undefined ? undefined : commitAiAssetDecision(process.cwd(), {
+      decisionId: opts.aiAssetId, prompt: opts.prompt as string,
+      provider: opts.provider as string, reason: opts.why,
+    }, writer, invocation);
+    const path = logDecision(process.cwd(), what, opts.why, writer);
+    console.log(opts.json ? JSON.stringify({ path, aiAssetDecision: aiReference }) : path);
     process.exit(0);
   }
 

@@ -6,6 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parse } from 'yaml';
 import { emitCodex } from './codex.ts';
 import { emitClaude, emitClaudePlugin, pluginizeSkill } from './claude.ts';
+import { emitSenpi } from './senpi.ts';
 import { substituter } from './tokens.ts';
 import type { AbstractAgent, Emitted, Host } from '../core/types.ts';
 
@@ -123,6 +124,7 @@ export function build(): void {
   const emitters: Record<Host, (opts: { agents: AbstractAgent[]; buildIdentity: BuildIdentity }) => Emitted> = {
     codex: (opts) => emitCodex({ ...opts, version: pkg.version }),
     claude: emitClaude,
+    senpi: emitSenpi,
   };
 
   for (const host of Object.keys(emitters) as Host[]) {
@@ -229,6 +231,22 @@ function emitPlugin(agents: AbstractAgent[], skills: Skill[]): void {
     const path = join(root, rel);
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, typeof content === 'string' ? content : `${JSON.stringify(content, null, 2)}\n`);
+  }
+  const version = packageVersion(root);
+  for (const relativePath of [
+    '.claude-plugin/plugin.json',
+    '.codex-plugin/plugin.json',
+    '.claude-plugin/marketplace.json',
+    '.agents/plugins/marketplace.json',
+  ]) {
+    const path = join(root, relativePath);
+    const manifest = JSON.parse(readFileSync(path, 'utf8')) as {
+      version?: string;
+      plugins?: Array<{ version?: string }>;
+    };
+    if (manifest.version !== undefined) manifest.version = version;
+    for (const plugin of manifest.plugins ?? []) plugin.version = version;
+    writeFileSync(path, `${JSON.stringify(manifest, null, 2)}\n`);
   }
 
   console.log(`plugin (root): ${pluginized.length} skills, ${agents.length} agents`);

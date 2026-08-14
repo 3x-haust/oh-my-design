@@ -1,0 +1,160 @@
+{
+  "schema": "adaptive-design-route-input-v1",
+  "request": "Create a new medication-order review product with safe error recovery.",
+  "namedDependencies": [],
+  "allowedPaths": ["src/medication/**"],
+  "taskOutcome": {
+    "schema": "task-outcome-contract-v1",
+    "goal": "Let a clinician review a medication order and safely recover from a dosage error.",
+    "mustHave": [
+      "The clinician can verify patient, medication, dosage, and route before submission.",
+      "A dosage error is blocked and has an actionable recovery path."
+    ],
+    "mustNotHave": [
+      "Do not submit an invalid dosage.",
+      "Do not expose patient data outside the authorized task context."
+    ],
+    "completionEvidence": [
+      "Browser probes cover successful review and dosage-error recovery.",
+      "Desktop and mobile evidence bind the safety decisions they validate."
+    ],
+    "strategyFreedom": [
+      "Choose the order of framing, evidence, copy, and composition work while preserving dependencies.",
+      "Choose optional methods that do not weaken safety or completion gates."
+    ]
+  },
+  "uxPolicy": {
+    "schema": "ux-policy-v1",
+    "decisions": [
+      { "id": "protect-patient-data", "kind": "hard_safety_rail", "status": "enforced" },
+      { "id": "medication-error-recovery", "kind": "required_outcome", "status": "required" },
+      {
+        "id": "clinical-task-prototype",
+        "kind": "recommended_method",
+        "status": "selected",
+        "reason": "The costly dosage-error path needs direct task-flow validation."
+      }
+    ]
+  },
+  "evidenceClaims": {
+    "schema": "evidence-claim-publication-v1",
+    "claims": [
+      {
+        "id": "dosage-recovery-required",
+        "text": "The requested product must block dosage errors and support recovery.",
+        "status": "confirmed",
+        "userEvidence": [
+          {
+            "kind": "explicit-user-evidence",
+            "source": "user-message",
+            "reference": "message-1",
+            "excerpt": "Create a medication-order review product with safe error recovery."
+          }
+        ]
+      },
+      {
+        "id": "guided-review-hypothesis",
+        "text": "A guided review may reduce omission risk.",
+        "status": "hypothesis",
+        "basis": "The task requires several safety-critical fields to be checked before submission."
+      }
+    ],
+    "userFacts": ["dosage-recovery-required"],
+    "workingContext": ["guided-review-hypothesis"]
+  },
+  "referenceDiscovery": {
+    "schema": "reference-discovery-input-v1",
+    "taskNeed": "new-product",
+    "uncertainty": "unresolved",
+    "existingEvidence": "none",
+    "intendedUse": "Discover clinical review, error-prevention, recovery, and accessibility patterns.",
+    "existingEvidenceUse": null,
+    "skipReason": null
+  },
+  "designAxes": {
+    "schema": "design-axis-input-v1",
+    "taskSize": "large",
+    "failureRisk": "high",
+    "uxNeed": "rigorous",
+    "expressiveDesignNeed": "restrained"
+  },
+  "modelCapability": {
+    "now": 1500,
+    "routingInput": {
+      "schema": "model-capability-probe-routing-input-v1",
+      "selectedModel": {
+        "selection": "host-user-selection",
+        "provider": "host-provider",
+        "modelId": "host-model",
+        "revision": "2026-08-11"
+      },
+      "profile": null
+    }
+  },
+  "browserDecisionContext": {
+    "schema": "adaptive-browser-decision-context-v1",
+    "status": "validated",
+    "decisionIds": ["medication-review-order", "dosage-recovery"],
+    "reason": "Prior linked observations identify the decisions that need fresh product-specific validation."
+  },
+  "validatedLearningContext": {
+    "schema": "adaptive-learning-context-v1",
+    "status": "promoted",
+    "learningIds": ["medical-recovery-copy"],
+    "reason": "Repeated independent observations support this scoped advisory recovery-copy method."
+  },
+  "strategyDecision": {
+    "schema": "adaptive-strategy-decision-v1",
+    "owner": "user-selected-model",
+    "roles": ["omd-framer", "omd-scout", "omd-composer", "omd-writer", "omd-hand", "omd-eye"],
+    "stages": [
+      "frame",
+      "scout",
+      "safety-validation",
+      "copy",
+      "composition",
+      "production",
+      "browser-evidence",
+      "independent-review"
+    ],
+    "executionWaves": [
+      { "id": "frame", "mode": "concurrent", "roles": ["omd-framer"] },
+      { "id": "parallel-research-copy", "mode": "concurrent", "roles": ["omd-scout", "omd-writer"] },
+      { "id": "composition", "mode": "concurrent", "roles": ["omd-composer"] },
+      { "id": "production", "mode": "concurrent", "roles": ["omd-hand"] },
+      { "id": "review", "mode": "concurrent", "roles": ["omd-eye"] }
+    ],
+    "methods": [
+      "design-strategy-safety-recovery",
+      "reference-discovery",
+      "model-capability-probe",
+      "clinical-task-prototype",
+      "evidence-claim-accounting",
+      "hypothesis-validation",
+      "reuse-linked-browser-evidence",
+      "validated-learning:medical-recovery-copy",
+      "rigorous-task-accessibility-validation",
+      "reflection-in-action",
+      "reference-distance",
+      "parallel-reference-acquisition",
+      "evidence-driven-refinement"
+    ],
+    "aiAssets": [],
+    "attributionCategories": ["tokens", "composition"],
+    "skips": [
+      { "id": "domain", "reason": "The supplied clinical task and safety contracts already establish the bounded domain." },
+      { "id": "depth", "reason": "The selected prototype method externalizes the unresolved safety-flow decisions." },
+      { "id": "acquisition", "reason": "Discovery can target the named safety decisions without a separate acquisition artifact." },
+      { "id": "reference-board", "reason": "Measured decision evidence can flow directly to the selected composition work." },
+      { "id": "reference-selection", "reason": "The route uses decision coverage rather than a candidate-board selection ritual." },
+      { "id": "art-direction", "reason": "The restrained clinical surface has no unresolved expressive-direction decision." },
+      { "id": "type-proof", "reason": "The restrained clinical system can use the existing verified type system." },
+      { "id": "candidate-generation", "reason": "Safety-flow alternatives are tested through the selected clinical prototype instead of a fixed visual candidate quota." },
+      { "id": "image-first-draft", "reason": "The clinical route begins with validated safety outcomes rather than generated imagery." },
+      { "id": "copy-repair-workflow", "reason": "This route authors initial clinical copy rather than repairing copy returned by a failed check." },
+      { "id": "motion-one", "reason": "The restrained safety-critical task selects a static interaction contract." },
+      { "id": "ai-shipped-asset", "reason": "The clinical task has no lawful need for a shipped generated asset." }
+    ],
+    "rationale": "Resolve the safety-critical task and evidence obligations while allowing the selected model to order the optional design work."
+  }
+}

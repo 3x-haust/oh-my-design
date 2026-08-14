@@ -3,6 +3,7 @@ import { substituter } from './tokens.ts';
 import { browserRsMcpConfig } from './browser-mcp.ts';
 import type { BuildIdentity } from './build.ts';
 import { ACTIVATION_CONTEXT_SCHEMA_VERSION, validateActivationContext, type ActivationContext } from '../core/runtime/activation.ts';
+import type { ProjectRunInvocation } from '../core/runtime/invocation.ts';
 import type { AbstractAgent, Emitted } from '../core/types.ts';
 import {
   type ReviewerLaunchBundle,
@@ -15,6 +16,15 @@ export type CodexLoadedSkillReceipt = {
   readonly schemaVersion: typeof CODEX_LOADED_SKILL_RECEIPT_SCHEMA_VERSION;
   readonly loadedSkillSha256: string;
 };
+export const CODEX_HOST_LOADED_SKILL_RECEIPT_SCHEMA_VERSION = 'codex-host-loaded-skill-receipt-v1' as const;
+export type CodexHostLoadedSkillReceipt = Readonly<{
+  schemaVersion: typeof CODEX_HOST_LOADED_SKILL_RECEIPT_SCHEMA_VERSION;
+  launchId: string;
+  projectRoot: string;
+  issuedAt: string;
+  activationSha256: string;
+  loadedSkillReceipt: CodexLoadedSkillReceipt;
+}>;
 const observedSkillReceipts = new WeakSet<CodexLoadedSkillReceipt>();
 
 
@@ -35,6 +45,34 @@ export function observeCodexLoadedSkill(buildIdentity: BuildIdentity, loadedSkil
   }
   observedSkillReceipts.add(receipt);
   return receipt;
+}
+
+export function createCodexHostInvocation(
+  buildIdentity: BuildIdentity,
+  loadedSkillReceipt: CodexLoadedSkillReceipt,
+  input: Readonly<{ launchId: string; projectRoot: string; briefSha256: string }>,
+): ProjectRunInvocation {
+  if (!observedSkillReceipts.has(loadedSkillReceipt)) {
+    throw new Error('Codex host invocation requires a host-observed loaded-skill/build receipt');
+  }
+  if (loadedSkillReceipt.loadedSkillSha256 !== buildIdentity.sourceSkillSha256) {
+    throw new Error('Codex host invocation loaded skill does not match the installed build');
+  }
+  if (!/^[A-Za-z0-9_-]{32,}$/.test(input.launchId) || !input.projectRoot || !/^[a-f0-9]{64}$/.test(input.briefSha256)) {
+    throw new Error('Codex host invocation binding is invalid');
+  }
+  const activation = validateActivationContext({
+    schemaVersion: ACTIVATION_CONTEXT_SCHEMA_VERSION,
+    buildSha256: buildIdentity.buildSha256,
+    loadedSkillSha256: loadedSkillReceipt.loadedSkillSha256,
+    briefSha256: input.briefSha256,
+    hostCapability: { host: 'codex' },
+  });
+  return Object.freeze({ activation, current: Object.freeze({
+    buildSha256: activation.buildSha256,
+    loadedSkillSha256: activation.loadedSkillSha256,
+    briefSha256: activation.briefSha256,
+  }) });
 }
 
 export function preflightCodexV2Publication(input: CodexV2PublicationPreflightInput): ActivationContext {

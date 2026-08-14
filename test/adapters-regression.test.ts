@@ -12,6 +12,7 @@ import { parse as parseYaml } from 'yaml';
 import { canonicalSkillSourceBytes, createBuildIdentity } from '../adapters/build.ts';
 import {
   CODEX_LOADED_SKILL_RECEIPT_SCHEMA_VERSION,
+  createCodexHostInvocation,
   emitCodex,
   observeCodexLoadedSkill,
   preflightCodexV2Publication,
@@ -23,7 +24,7 @@ import {
   observeClaudeLoadedSkill,
   preflightClaudeV2,
 } from '../adapters/claude.ts';
-import { createReviewerMcpAdapter, requireReviewerLaunchReceipt, reviewerEvidenceSha256, type ReviewerHost } from '../adapters/reviewer-mcp.ts';
+import { createReviewerMcpAdapter, requireProductionReviewerLaunchReceipt, requireReviewerLaunchReceipt, reviewerEvidenceSha256, type ProductionReviewerHost, type ReviewerHost } from '../adapters/reviewer-mcp.ts';
 import { jsonFile, must, textFile } from './helpers.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -67,18 +68,19 @@ const reviewerReceipt = (host: ReviewerHost, adapter = createReviewerMcpAdapter(
       buildSha256: V2_BUILD.buildSha256,
       loadedSkillSha256: V2_BUILD.sourceSkillSha256,
       briefSha256: BRIEF_SHA256,
+      browserSha256: 'c'.repeat(64),
       evidence: 'review evidence',
     }),
   };
 };
-const reviewerBundle = (host: ReviewerHost, loadedSkillReceipt: object) => {
+const reviewerBundle = (host: ProductionReviewerHost, loadedSkillReceipt: object) => {
   const { adapter, receipt } = reviewerReceipt(host);
   return adapter.launchBundle({
     loadedSkillReceipt: adapter.observeLoadedSkill(host, loadedSkillReceipt, V2_BUILD.sourceSkillSha256),
     reviewerLaunchReceipt: receipt,
   });
 };
-const completedReviewerBundle = async (host: ReviewerHost, loadedSkillReceipt: object) => {
+const completedReviewerBundle = async (host: ProductionReviewerHost, loadedSkillReceipt: object) => {
   const bundle = reviewerBundle(host, loadedSkillReceipt);
   await reviewerMcpTranscript(bundle.reviewerLaunchReceipt, [MCP_INITIALIZE, MCP_INITIALIZED, evidenceToolCall(1)]);
   return bundle;
@@ -124,6 +126,14 @@ test('Codex blocks raw self-attested loaded-skill receipts while legacy adapter 
     schemaVersion: CODEX_LOADED_SKILL_RECEIPT_SCHEMA_VERSION,
     loadedSkillSha256: V2_BUILD.sourceSkillSha256,
   } as const;
+  assert.throws(
+    () => createCodexHostInvocation(V2_BUILD, selfAttested, {
+      launchId: 'caller-created-launch-id-0123456789',
+      projectRoot: root,
+      briefSha256: BRIEF_SHA256,
+    }),
+    /host-observed loaded-skill/,
+  );
   assert.throws(
     () => preflightCodexV2Publication({
       buildIdentity: V2_BUILD,
@@ -178,6 +188,13 @@ test('reviewer launch bundles reject copied configuration and cross-adapter rece
     reviewerLaunchReceipt: claudeReviewerReceipt,
   });
   assert.throws(
+    () => claudeAdapter.launchBundle({
+      loadedSkillReceipt: bundle.loadedSkillReceipt,
+      reviewerLaunchReceipt: claudeReviewerReceipt,
+    }),
+    /already has a one-use bundle/,
+  );
+  assert.throws(
     () => claudeAdapter.requireConfiguration(
       { mcpServers: { ...bundle.configuration.mcpServers } },
       bundle.reviewerLaunchReceipt,
@@ -216,7 +233,7 @@ test('reviewer emission exposes only the opaque evidence MCP server', () => {
   assert.deepEqual(jsonFile(emitted, '.mcp.json'), {
     mcpServers: {
       'omd-reviewer-evidence': {
-        command: 'omd-reviewer-evidence-proxy',
+        command: bundle.configuration.mcpServers['omd-reviewer-evidence'].command,
         args: bundle.configuration.mcpServers['omd-reviewer-evidence'].args,
       },
     },
@@ -239,9 +256,49 @@ test('reviewer preflight rejects generic adapter emission and omitted evidence a
       buildSha256: V2_BUILD.buildSha256,
       loadedSkillSha256: V2_BUILD.sourceSkillSha256,
       briefSha256: BRIEF_SHA256,
+      browserSha256: 'b'.repeat(64),
       evidence: '',
     }),
     /non-empty evidence bundle/,
+  );
+  assert.throws(
+    () => createReviewerMcpAdapter().launch({
+      host: 'codex',
+      buildSha256: V2_BUILD.buildSha256,
+      loadedSkillSha256: V2_BUILD.sourceSkillSha256,
+      briefSha256: BRIEF_SHA256,
+      browserSha256: 'b'.repeat(64),
+      evidence: 'review evidence',
+      proxyBinding: {
+        stagedPath: join(root, 'bin', 'omd-reviewer-evidence-proxy.mjs'),
+        stagedSha256: 'a'.repeat(64),
+        targetPath: join(root, 'adapters', 'reviewer-mcp.ts'),
+        targetSha256: createHash('sha256').update(readFileSync(join(root, 'adapters', 'reviewer-mcp.ts'))).digest('hex'),
+      },
+    }),
+    /staging path or immutable target bytes/,
+  );
+  assert.throws(
+    () => createReviewerMcpAdapter().launch({
+      host: 'codex',
+      buildSha256: V2_BUILD.buildSha256,
+      loadedSkillSha256: V2_BUILD.sourceSkillSha256,
+      briefSha256: BRIEF_SHA256,
+      browserSha256: 'b'.repeat(64),
+      evidence: 'review evidence',
+      processBinding: {
+        parentPid: process.pid,
+        parentExecutableSha256: createHash('sha256').update(readFileSync(process.execPath)).digest('hex'),
+        reviewerPid: process.pid,
+        reviewerExecutableSha256: 'a'.repeat(64),
+        laneId: 'wrong-reviewer',
+        runnerId: 'runner',
+        sessionId: 'session',
+        nonce: 'nonce',
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      },
+    }),
+    /designated reviewer PID does not match its pinned executable bytes/,
   );
   const genericCodex = emitCodex({ agents: [NASTY] });
   const genericClaude = emitClaude({ agents: [NASTY] });
@@ -377,16 +434,13 @@ async function reviewerMcpTranscript(
     readonly launchId: string;
     readonly configurationSha256: string;
     readonly processBinding: { readonly runnerId: string; readonly sessionId: string; readonly nonce: string };
+    readonly proxyBinding: { readonly stagedPath: string; readonly targetPath: string; readonly targetSha256: string };
   },
   requests: readonly object[],
   configurationSha256 = receipt.configurationSha256,
 ): Promise<Record<string, unknown>[]> {
-  const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as {
-    bin: Record<string, string>;
-  };
-  const executable = join(root, manifest.bin['omd-reviewer-evidence-proxy']!);
-  const child = spawn(process.execPath, [
-    executable,
+  const child = spawn(receipt.proxyBinding.stagedPath, [
+    receipt.proxyBinding.targetPath,
     '--launch-id', receipt.launchId,
     '--configuration-sha256', configurationSha256,
     '--socket', reviewerSocketPath(receipt.launchId),
@@ -394,6 +448,9 @@ async function reviewerMcpTranscript(
     '--session-id', receipt.processBinding.sessionId,
     '--nonce', receipt.processBinding.nonce,
     '--host', receipt.host,
+    '--reviewer-pid', String(process.pid),
+    '--proxy-target', receipt.proxyBinding.targetPath,
+    '--proxy-sha256', receipt.proxyBinding.targetSha256,
   ], { cwd: root });
   let stdout = '';
   let stderr = '';
@@ -436,6 +493,10 @@ test('the correctly bound host invokes the real reviewer MCP proxy once without 
     /not issued by this host reviewer launcher/,
   );
   const { adapter: forgedAdapter, receipt: forgedReceipt } = reviewerReceipt('codex');
+  forgedAdapter.launchBundle({
+    loadedSkillReceipt: forgedAdapter.observeLoadedSkill('codex', loadedSkillReceipt, V2_BUILD.sourceSkillSha256),
+    reviewerLaunchReceipt: forgedReceipt,
+  });
   const borrowerSource = `import { connect } from 'node:net'; const socket=connect(${JSON.stringify(reviewerSocketPath(forgedReceipt.launchId))}); socket.on('connect',()=>console.log(process.pid)); setTimeout(() => {}, 30000);`;
   const launcherSource = `import { spawn } from 'node:child_process'; spawn(process.execPath,['--input-type=module','--eval',${JSON.stringify(borrowerSource)}],{stdio:['ignore','inherit','inherit']}); setTimeout(() => {}, 30000);`;
   const launcher = spawn(process.execPath, ['--input-type=module', '--eval', launcherSource]);
@@ -487,28 +548,43 @@ test('the correctly bound host invokes the real reviewer MCP proxy once without 
 });
 
 test('the reviewer MCP proxy rejects expired bindings and never persists recoverable evidence', async () => {
-  const expiredAdapter = createReviewerMcpAdapter(() => 0);
+  let now = 0;
+  const expiredAdapter = createReviewerMcpAdapter(() => now, 1);
   const byteLimit = (8 * 1024 * 1024) + 1;
   const expired = expiredAdapter.launch({
     host: 'claude',
     buildSha256: V2_BUILD.buildSha256,
     loadedSkillSha256: V2_BUILD.sourceSkillSha256,
     briefSha256: BRIEF_SHA256,
+    browserSha256: 'b'.repeat(64),
     evidence: new Uint8Array(byteLimit),
-    alias: { scope: 'review', expiresAt: new Date(1).toISOString(), byteLimit },
-    processBinding: { expiresAt: new Date(1).toISOString() },
+    alias: { scope: 'review', expiresAt: new Date(Date.now() + 60_000).toISOString(), byteLimit },
   });
+  now = 2;
   const expiredResponse = await reviewerMcpTranscript(expired, [MCP_INITIALIZE, MCP_INITIALIZED, evidenceToolCall(3)]);
   assert.match(((expiredResponse[1]!.error as { message: string }).message), /private host launch capability|unknown, reused/);
   assert.equal(existsSync(reviewerSocketPath(expired.launchId)), false);
   expiredAdapter.dispose();
 });
 test('the reviewer proxy rejects a mismatched emitted configuration identity', async () => {
-  const { receipt } = reviewerReceipt('codex');
+  const { adapter, receipt } = reviewerReceipt('codex');
+  const loadedSkillReceipt = observeCodexLoadedSkill(V2_BUILD, V2_LOADED_SKILL_BYTES);
+  adapter.launchBundle({
+    loadedSkillReceipt: adapter.observeLoadedSkill('codex', loadedSkillReceipt, V2_BUILD.sourceSkillSha256),
+    reviewerLaunchReceipt: receipt,
+  });
   const transcript = await reviewerMcpTranscript(
     receipt,
     [MCP_INITIALIZE, MCP_INITIALIZED, evidenceToolCall(3)],
     'a'.repeat(64),
   );
   assert.match(((transcript[1]!.error as { message: string }).message), /private host launch capability|binding failed|configuration does not match/);
+});
+test('runner benchmark receipts cannot satisfy production reviewer authority', () => {
+  const { adapter, receipt } = reviewerReceipt('benchmark');
+  assert.throws(
+    () => requireProductionReviewerLaunchReceipt(receipt),
+    /runner-owned benchmark reviewers cannot satisfy production final-reviewer authority/,
+  );
+  adapter.dispose();
 });

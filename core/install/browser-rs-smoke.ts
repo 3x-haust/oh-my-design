@@ -1,10 +1,12 @@
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import { createServer, type Server } from 'node:http';
-import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, relative, sep } from 'node:path';
 import { decodePng } from '../motion/energy.ts';
 import { BrowserRsStdioClient } from './browser-rs-stdio.ts';
+import { spawnBrowserRsProcessReaper } from './browser-rs-process-reaper.ts';
+import { createBrowserRsTemporaryResource, type BrowserRsTemporaryResource } from './browser-rs-temporary.ts';
 
 const REQUIRED_TOOLS = ['browser_navigate', 'browser_type', 'browser_click', 'browser_snapshot', 'browser_take_screenshot', 'browser_close'] as const;
 const DEFAULT_RESPONSE_TIMEOUT_MS = 5_000;
@@ -43,14 +45,18 @@ export async function runBrowserRsSmoke(options: BrowserRsSmokeOptions): Promise
   const fixture = await localFixture(options.fixturePath);
   const temporaryDirectory = options.temporaryDirectory ?? tmpdir();
   let client: BrowserRsStdioClient | undefined;
+  let profile: BrowserRsTemporaryResource | undefined;
+  let screenshotResource: BrowserRsTemporaryResource | undefined;
   let profilePath: string | undefined;
   let screenshotDirectory: string | undefined;
   let closeSent = false;
   let protocolReady = false;
   let proof: { readonly screenshot: Buffer; readonly snapshot: string; readonly typedName: string } | undefined;
   try {
-    profilePath = await mkdtemp(join(temporaryDirectory, 'omd-browser-rs-profile-'));
-    screenshotDirectory = await mkdtemp(join(temporaryDirectory, 'omd-browser-rs-screenshot-'));
+    profile = await createBrowserRsTemporaryResource(temporaryDirectory, 'profile');
+    profilePath = profile.path;
+    screenshotResource = await createBrowserRsTemporaryResource(temporaryDirectory, 'screenshot');
+    screenshotDirectory = screenshotResource.path;
     const expectedScreenshotPath = join(screenshotDirectory, 'ab-p1.png');
     client = new BrowserRsStdioClient((options.spawn ?? spawnBrowserRs)(options.binary, ['--headless', '--stealth', '--user-data-dir', profilePath], { ...process.env, TMPDIR: screenshotDirectory }), responseTimeoutMs);
     const initialized = await client.request('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'oh-my-design', version: '0.16.1' } });
@@ -73,8 +79,7 @@ export async function runBrowserRsSmoke(options: BrowserRsSmokeOptions): Promise
       if (client !== undefined) await closeClient(client, closeSent, protocolReady, processTimeoutMs);
     } finally {
       await closeFixture(fixture.server);
-      if (profilePath !== undefined) await rm(profilePath, { recursive: true, force: true });
-      if (screenshotDirectory !== undefined) await rm(screenshotDirectory, { recursive: true, force: true });
+      await cleanupTemporaryResources([screenshotResource, profile]);
     }
   }
   if (proof === undefined || profilePath === undefined || client === undefined) throw new BrowserRsSmokeError('browser-rs smoke did not complete');
@@ -85,7 +90,22 @@ export async function runBrowserRsSmoke(options: BrowserRsSmokeOptions): Promise
 
 function timeout(value: number | undefined, fallback: number, label: string): number { const result = value ?? fallback; if (!Number.isInteger(result) || result <= 0 || result > MAX_TIMEOUT_MS) throw new BrowserRsSmokeError(`${label} timeout must be a positive integer no greater than ${MAX_TIMEOUT_MS}ms`); return result; }
 
-function spawnBrowserRs(binary: string, args: readonly string[], environment: NodeJS.ProcessEnv): ChildProcessWithoutNullStreams { return spawn(binary, args, { stdio: ['pipe', 'pipe', 'pipe'], env: environment }); }
+function spawnBrowserRs(binary: string, args: readonly string[], environment: NodeJS.ProcessEnv): ChildProcessWithoutNullStreams {
+  return spawnBrowserRsProcessReaper(binary, args, environment);
+}
+
+async function cleanupTemporaryResources(resources: readonly (BrowserRsTemporaryResource | undefined)[]): Promise<void> {
+  let failure: Error | undefined;
+  for (const resource of resources) {
+    if (resource === undefined) continue;
+    try {
+      if (!await resource.cleanup()) failure ??= new BrowserRsSmokeError(`browser-rs ${resource.kind} temporary ownership changed during cleanup`);
+    } catch (error) {
+      failure ??= error instanceof Error ? error : new BrowserRsSmokeError(`browser-rs ${resource.kind} temporary cleanup failed`);
+    }
+  }
+  if (failure !== undefined) throw failure;
+}
 
 async function localFixture(path: string): Promise<LocalFixture> {
   const bytes = await readFile(path);
@@ -199,6 +219,7 @@ async function closeClient(client: BrowserRsStdioClient, closeSent: boolean, pro
   }
   try {
     const exit = await client.waitForExit(processTimeoutMs);
+    client.killProcessGroup();
     if (exit.code !== 0) cleanupError ??= new BrowserRsSmokeError(`browser-rs exited with ${exit.signal === null ? `code ${String(exit.code)}` : `signal ${exit.signal}`}`);
   } catch (error) {
     const waitError = error instanceof Error ? error : new BrowserRsSmokeError('browser-rs process did not exit');

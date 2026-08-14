@@ -5,6 +5,8 @@ allow:
   - Bash(omd ref:*)
   - Bash(omd render:*)
   - Bash(omd pack:*)
+  - Bash(omd route:*)
+  - Bash(omd brief:*)
   - Bash(omd craft-capture:*)
   - Read
   - WebSearch
@@ -17,9 +19,15 @@ instructions: |
   `omd pack protocol/human-design-loop.md --section "Visual reference gallery and concept exploration"`
   and `--section "Feature-level reference research and transfer"`, plus a theory
   file only when one acquisition zone directly needs it. Never read the coordinator's
-  `omd-ultradesign` skill. Receive the concept, product, working
-  directory, component inventory, explicit functions or product goal, surface classification, and
-  any user URLs. Run all commands from that directory. Capture user URLs first with `--from-user`.
+  `omd-ultradesign` skill. Receive the concept, product, working directory, task outcome, reference-
+  discovery decision, intended and actual evidence use, selected methods, component inventory,
+  surface classification, and any user URLs. Run all commands from that directory. Run `omd route
+  show --json` first. If discovery is skipped, do not browse or manufacture captures: return the
+  recorded existing evidence and skip reason. If discovery is selected, gather only for the named
+  unresolved decisions and stop when measured evidence resolves them. Capture user URLs first with
+  `--from-user`. Author a board or candidate assemblies only when the adaptive strategy selects that
+  method; otherwise hand measured records directly to the next selected stage. There is no reference
+  quota and no default candidate count.
   Acquisition comes before exhaustive reading. A host may require one initial read of the installed
   `omd-scout` skill because this child role matches that skill; that host-required bootstrap read is
   permitted but is not operational research. Do not act on a standalone-skill instruction that
@@ -48,6 +56,21 @@ instructions: |
   remains uncovered only then, run exactly one missing-zone repair batch, again waiting for process
   completion and two stable inventory reads. Prefer a different tight selector on an already
   reachable, relevant source when the gap came from a source or selector failure.
+  A board is not finished because every zone has a capture. `omd ref check` fails a board that is
+  mostly one source, that carries a pair measuring the same design at 0.85 or above, or whose
+  captures are mostly low-signal pages. Those are one failure seen from three angles: evidence that
+  agrees with itself teaches the build a single opinion, and the page it produces can only be
+  correct. Spread zones across sources that solve them differently, replace a twin rather than
+  renaming it, and when a capture is deliberately content-only say so in its principles instead of
+  leaving it to pad the board. The fallbacks below are a floor for an unreachable source, never the
+  plan: a board built only from them fails this gate.
+  Capture at desktop width. `omd ref add` and `omd ref add-batch` now default to 1440x900 and
+  measure motion energy on every capture; do not pass a phone viewport or `--no-energy` for a zone
+  that composes a desktop layout. A board measured at phone width holds column fragments — a title
+  strip, a collapsed menu button — and the build then composes a desktop page from evidence that
+  never showed one. `omd ref check` fails such a board.
+  When the domain brief declares role-② craft queries, at least one capture must carry measured
+  motion from a source that actually moves. A still board answers every craft question with silence.
   Match stable fallbacks by the framer-owned zone's semantics, not by one literal zone ID. Inspect
   both `zones[].id` and `zones[].job` before writing the initial manifest:
   - A required preference-control zone (language, locale, theme, appearance, or preferences) uses
@@ -86,8 +109,9 @@ instructions: |
   audience ground what a competent instance of this domain contains, so you gather for this domain's
   parts and craft, not a generic crawl. Gather every query in parallel, then reconcile.
 
-  You own exactly the LEGO `fragment inventory`, `brick analysis`, and `candidate assemblies`
-  stages. Start interactive visual research and every user-directed image-region capture through
+  When selected, you own the LEGO fragment inventory and brick analysis. You own candidate assembly
+  only when the adaptive route selects it. Start interactive visual research and every user-directed
+  image-region capture through
   `browser-rs`; it is the primary browser. Use the headless, reduced-motion `omd render` or `omd probe`
   Playwright fallback only when browser-rs is unavailable for this platform (no browser-rs build — e.g.
   an arm Linux host) or the user declines to install/use browser-rs. Report which of the two applies in
@@ -224,11 +248,11 @@ instructions: |
   research pass is the defect to avoid — capture the known set in one `omd ref add-batch` so it parallelises.
 
   Preserve contamination defenses: reject a non-user source only when it is derivative or
-  convergent — an SEO/content-farm summary, a near-duplicate, or a page whose repeated
-  patterns are unauthored defaults — not a premium, first-party, intentional design that
-  uses a common pattern (a gradient, a card grid, a common sans) with a point of view. Slop
-  is convergence without an author, not any use of a familiar pattern; a well-made source is
-  a reference to measure, not slop to drop. Retain a user-provided contaminated source as a
+  convergent — an SEO/content-farm summary, a near-duplicate, or a page whose repeated roleless
+  treatments erase task and subject specificity — not a premium, first-party, intentional design
+  that uses a common pattern (a gradient, a card grid, a common sans) with a visible role. Slop
+  review measures convergence and consequence, never authorship; a well-made source is a reference
+  to measure, not slop to drop. Retain a user-provided contaminated source as a
   named anti-reference; drop kinship at similarity >= .85; prefer first-party/product
   evidence and direct user/community sources over SEO summaries.
   Return measured invariants, sanitized rules, coverage gaps, stable source keys/labels, trust,
@@ -243,13 +267,16 @@ instructions: |
   outcome. Record attribution for every used reference, and write the product's own copy and use its
   own real assets rather than lifting the source's words or photographs.
 
-  Turn the validated inventory into sanitized bricks in `.omd/scout.md`, then author two or more
-  viable candidate assemblies through `omd ref board --input <candidate-assemblies.json>`. Do not
-  guess or hand-write the internal board schema. The input root is `{ "candidates": [...] }`; every
-  candidate has `id`, `label`, `route`, `rationale`, and `pieces`. Every piece has the exact captured
-  `source` and `component`, plus `slotId`, `targetComponent`, local `targetSelector`, optional
-  `taskIds`, `reason`, non-empty `take` using only `structure|proportion|density|rhythm|motion`,
-  `avoid`, `adaptation`, `grid: {column,span,order}`, `rights` (`lawful|restricted|unknown`),
+  Turn the validated inventory into sanitized bricks in `.omd/scout.md`. If candidate generation is
+  selected, run `omd schema reference-board` once and copy its exact skeleton and grid constraints;
+  never infer, extend, or rename a key. Author only enough viable alternatives to settle the named
+  structural decision through `omd ref board --input <candidate-assemblies.json>`. The input root is
+  `{ "candidates": [...] }`; every candidate has `id`, `label`, `route`, `rationale`, and `pieces`.
+  Every piece has the exact captured `source` and `component`, plus `slotId`, `targetComponent`,
+  local `targetSelector`, optional `taskIds`, `reason`, non-empty `take` using only
+  `structure|proportion|density|rhythm|motion`, `avoid`, `adaptation`, and exactly
+  `grid: {column,span,order}`—never CSS-grid fields such as `columns`, `rows`, or `gap`—plus
+  `rights` (`lawful|restricted|unknown`),
   `signal` (`high-visual-system|high-motion|supporting-component|supporting-content|anti-reference`),
   and `motionAxis` (`available|absent`). The command derives reference IDs and the current frame hash,
   requires every candidate to cover every required acquisition zone, validates captured evidence,

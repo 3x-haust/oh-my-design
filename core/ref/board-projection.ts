@@ -1,4 +1,5 @@
 import type {
+  ClassifiedReferenceTransfer,
   ComponentCaptureTransfer,
   ImageFragmentTransfer,
   ResolvedReferenceBoard,
@@ -21,7 +22,7 @@ export type ReferenceAssemblyPiece = {
   readonly avoid: string;
   readonly adaptation: string;
   readonly grid: { readonly column: number; readonly span: number; readonly order: number };
-  readonly transfer: ComponentCaptureTransfer | ImageFragmentTransfer;
+  readonly transfer: ComponentCaptureTransfer | ImageFragmentTransfer | ClassifiedReferenceTransfer;
 };
 
 export type ReferenceAssembly = {
@@ -74,6 +75,12 @@ const projectPiece = (piece: ResolvedReferenceBoardPiece): ReferenceAssemblyPiec
   switch (piece.sourceKind) {
     case 'component-capture': return { ...common, transfer: copyComponentCaptureTransfer(piece.transfer) };
     case 'image-fragment': return { ...common, transfer: copyImageFragmentTransfer(piece.transfer) };
+    case 'classified-reference': return {
+      ...common,
+      transfer: piece.transfer.classification === 'content-only'
+        ? { classification: piece.transfer.classification, principles: [...piece.transfer.principles] }
+        : { classification: piece.transfer.classification, constraints: [...piece.transfer.constraints] },
+    };
   }
 };
 

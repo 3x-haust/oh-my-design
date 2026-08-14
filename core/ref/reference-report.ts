@@ -37,6 +37,7 @@ const source = (piece: ValidatedReferenceUsagePiece): { readonly page: string; r
       const cropSuffix = crop === undefined ? '' : ` (${crop.x}, ${crop.y}, ${crop.width}×${crop.height})`;
       return { page: piece.raw.evidence.sourcePage, region: `${piece.raw.evidence.captureRegion}${cropSuffix}` };
     }
+    case 'classified-reference': return { page: piece.raw.evidence.source, region: `${piece.raw.evidence.component} — ${piece.raw.evidence.classification}` };
   }
 };
 const target = (piece: ValidatedReferenceUsagePiece): string => `${piece.usage.target.route} · ${piece.usage.target.component} · ${piece.usage.target.selector}`;

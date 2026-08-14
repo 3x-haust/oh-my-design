@@ -9,10 +9,12 @@ import type { ReferenceAssembly, ReferenceEvidenceProjection } from './board-pro
 import type { ReferenceBoardManifest, ResolvedReferenceBoard, ResolvedReferenceBoardPiece } from './board-contract.ts';
 
 export const REFERENCE_BOARD_EVIDENCE_SCHEMA_VERSION = 'reference-board-evidence-v1';
+export const REFERENCE_BOARD_EVIDENCE_V2_SCHEMA_VERSION = 'reference-board-evidence-v2';
 
 export type RawBoardEvidence =
   | { readonly kind: 'component-capture'; readonly source: string; readonly component: string; readonly selector: string; readonly capturedAt: string; readonly imagePath: string; readonly imageSha256: string }
-  | { readonly kind: 'image-fragment'; readonly sourcePage: string; readonly sourceImage?: string; readonly captureRegion: string; readonly cropBox?: { readonly x: number; readonly y: number; readonly width: number; readonly height: number }; readonly licenseStatus: string; readonly rightsNotes: string; readonly capturedAt: string; readonly imagePath: string; readonly imageSha256: string };
+  | { readonly kind: 'image-fragment'; readonly sourcePage: string; readonly sourceImage?: string; readonly captureRegion: string; readonly cropBox?: { readonly x: number; readonly y: number; readonly width: number; readonly height: number }; readonly licenseStatus: string; readonly rightsNotes: string; readonly capturedAt: string; readonly imagePath: string; readonly imageSha256: string }
+  | { readonly kind: 'classified-reference'; readonly source: string; readonly component: string; readonly capturedAt: string; readonly classification: 'content-only' | 'anti-reference'; readonly classificationSha256: string };
 
 export type RawBoardPiece = {
   readonly slotId: string;
@@ -30,7 +32,8 @@ export type RawBoardPiece = {
 };
 
 export type RawReferenceBoard = {
-  readonly schemaVersion: typeof REFERENCE_BOARD_EVIDENCE_SCHEMA_VERSION;
+  readonly schemaVersion: typeof REFERENCE_BOARD_EVIDENCE_SCHEMA_VERSION | typeof REFERENCE_BOARD_EVIDENCE_V2_SCHEMA_VERSION;
+  readonly projectSha256?: string;
   readonly frameSha256: string;
   readonly candidates: readonly { readonly id: string; readonly label: string; readonly route: string; readonly rationale: string; readonly pieces: readonly RawBoardPiece[] }[];
 };
@@ -56,6 +59,7 @@ const encode = (value: unknown): string => {
 
 export const canonicalJson = (value: unknown): string => `${encode(value)}\n`;
 export const sha256 = (bytes: string | Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
+export const referenceBoardProjectSha256 = (root: string): string => sha256(trustedProjectRoot(root));
 
 const common = (piece: ResolvedReferenceBoardPiece): Omit<RawBoardPiece, 'evidence'> => ({
   slotId: piece.slotId, sourceKind: piece.sourceKind, referenceId: piece.referenceId,
@@ -64,11 +68,10 @@ const common = (piece: ResolvedReferenceBoardPiece): Omit<RawBoardPiece, 'eviden
   grid: { column: piece.grid.column, span: piece.grid.span, order: piece.grid.order },
 });
 const rawPiece = (root: string, piece: ResolvedReferenceBoardPiece): RawBoardPiece => {
-  const imageSha256 = sha256(readFileSync(piece.imagePath));
   switch (piece.sourceKind) {
     case 'component-capture': return {
       ...common(piece),
-      evidence: { kind: piece.sourceKind, source: piece.reference.source, component: piece.reference.component, selector: piece.reference.selector ?? '', capturedAt: piece.reference.capturedAt, imagePath: piece.reference.imagePath ?? '', imageSha256 },
+      evidence: { kind: piece.sourceKind, source: piece.reference.source, component: piece.reference.component, selector: piece.reference.selector ?? '', capturedAt: piece.reference.capturedAt, imagePath: piece.reference.imagePath ?? '', imageSha256: sha256(readFileSync(piece.imagePath)) },
     };
     case 'image-fragment': return {
       ...common(piece),
@@ -76,13 +79,22 @@ const rawPiece = (root: string, piece: ResolvedReferenceBoardPiece): RawBoardPie
         kind: piece.sourceKind, sourcePage: piece.provenance.sourcePage, ...(piece.provenance.sourceImage === undefined ? {} : { sourceImage: piece.provenance.sourceImage }),
         captureRegion: piece.provenance.captureRegion, ...(piece.provenance.cropBox === undefined ? {} : { cropBox: { ...piece.provenance.cropBox } }),
         licenseStatus: piece.provenance.licenseStatus, rightsNotes: piece.provenance.rightsNotes, capturedAt: piece.provenance.capturedAt,
-        imagePath: relative(root, piece.imagePath), imageSha256,
+        imagePath: relative(root, piece.imagePath), imageSha256: sha256(readFileSync(piece.imagePath)),
+      },
+    };
+    case 'classified-reference': return {
+      ...common(piece),
+      evidence: {
+        kind: piece.sourceKind, source: piece.reference.source, component: piece.reference.component,
+        capturedAt: piece.reference.capturedAt, classification: piece.classification.kind,
+        classificationSha256: piece.classification.sha256,
       },
     };
   }
 };
 export const projectRawReferenceBoard = (root: string, board: ResolvedReferenceBoard): RawReferenceBoard => ({
-  schemaVersion: REFERENCE_BOARD_EVIDENCE_SCHEMA_VERSION,
+  schemaVersion: board.schemaVersion === 'reference-board-v2' ? REFERENCE_BOARD_EVIDENCE_V2_SCHEMA_VERSION : REFERENCE_BOARD_EVIDENCE_SCHEMA_VERSION,
+  ...(board.schemaVersion === 'reference-board-v2' ? { projectSha256: board.projectSha256 } : {}),
   frameSha256: board.frameSha256,
   candidates: board.candidates.map((candidate) => ({
     id: candidate.id, label: candidate.label, route: candidate.route, rationale: candidate.rationale,
@@ -94,6 +106,13 @@ export function readReferenceBoardArtifacts(root: string, manifestPath = join(ro
   const canonicalRoot = trustedProjectRoot(root);
   const parsed: unknown = JSON.parse(readFileSync(manifestPath, 'utf8'));
   const manifest = parseReferenceBoard(parsed);
+  if (manifest.schemaVersion === 'reference-board-v2') {
+    if (manifest.projectSha256 !== referenceBoardProjectSha256(canonicalRoot)) throw new Error('reference board project binding is stale or cross-project');
+    let frame: Buffer;
+    try { frame = readFileSync(join(canonicalRoot, '.omd', 'frame.md')); }
+    catch { throw new Error('reference board current frame is missing'); }
+    if (sha256(frame) !== manifest.frameSha256) throw new Error('reference board frame is stale for the current frame');
+  }
   const resolved = resolveReferenceBoard(canonicalRoot, manifest);
   const raw = projectRawReferenceBoard(canonicalRoot, resolved);
   const assembly = projectReferenceAssembly(resolved);

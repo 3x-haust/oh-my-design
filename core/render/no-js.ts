@@ -10,9 +10,7 @@
 // Deterministic: two real renders of the same URL, one with JavaScript enabled and one without,
 // compared on the text a user can actually see.
 
-import { pathToFileURL } from 'node:url';
-import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { resolveRenderTarget } from './serve.ts';
 import { chromium } from 'playwright';
 
 /** Below this share of the JavaScript-enabled text, the no-JS render has lost content. */
@@ -35,13 +33,6 @@ export type NoJsFinding = {
   readonly id: 'NOJS-CONTENT-LOSS';
   readonly message: string;
 };
-
-function toUrl(target: string): string {
-  if (/^https?:\/\//.test(target)) return target;
-  const path = resolve(target);
-  if (!existsSync(path)) throw new Error(`no such page: ${target}`);
-  return pathToFileURL(path).href;
-}
 
 /**
  * Counts elements that stay invisible *while they are in the viewport* during a scroll-through.
@@ -84,7 +75,8 @@ export async function observeNoJsContent(
   target: string,
   opts: { readonly viewport: { readonly width: number; readonly height: number } },
 ): Promise<NoJsObservation> {
-  const url = toUrl(target);
+  const resolved = await resolveRenderTarget(target);
+  const url = resolved.url;
   const viewport = { width: opts.viewport.width, height: opts.viewport.height };
   const browser = await chromium.launch({ headless: true });
   try {
@@ -134,6 +126,7 @@ export async function observeNoJsContent(
     };
   } finally {
     await browser.close();
+    await resolved.close();
   }
 }
 

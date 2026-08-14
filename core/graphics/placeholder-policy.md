@@ -159,10 +159,10 @@ image is photographic and the gradient conveys the intended colour register.
   with fixed-height, no semantic content, and a near-neutral background. If a legitimate
   design element fires this check, record the reason with `omd decision`.
 
-- Generated gradient placeholders that land in the SLOP-GRADIENT hue bands (indigo–violet,
-  purple–pink) should use the brand's actual hue variable (`var(--hue-brand)`) rather than
-  a hardcoded hue. The placeholder inherits the brand palette, so if the brand changes,
-  the placeholders update automatically.
+- A single gradient placeholder is not a `SLOP-GRADIENT` finding. Repeated saturated
+  indigo–violet gradients need distinct semantic roles or one focal use; a placeholder role
+  does not justify repeating atmosphere across unrelated regions. Use the brand's actual hue
+  variable (`var(--hue-brand)`) so the placeholder follows the palette while it remains.
 
 - Every placeholder element must have a meaningful `aria-label` that describes the
   intended content. A placeholder without an accessible description is both a design

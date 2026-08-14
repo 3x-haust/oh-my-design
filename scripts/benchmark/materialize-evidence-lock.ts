@@ -1,5 +1,5 @@
 import { createHash, createPublicKey, verify } from 'node:crypto';
-import { lstatSync, readFileSync, writeFileSync } from 'node:fs';
+import { closeSync, constants as fsConstants, fstatSync, lstatSync, openSync, readFileSync, readSync, realpathSync, writeFileSync } from 'node:fs';
 import { resolve, relative, sep } from 'node:path';
 
 export type EvidenceStatus = 'present';
@@ -22,15 +22,37 @@ type EvidenceSnapshotState = Readonly<{
   payloads: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
 }>;
 const evidenceSnapshots = new WeakMap<EvidenceLockSnapshot, EvidenceSnapshotState>();
-const PINNED_TRUST_ROOT_PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAVLQxTe4ZngNX3COuzGPzeY6OqKeBGp8xd8Ze35F0VRU=\n-----END PUBLIC KEY-----\n`;
+const PINNED_TRUST_ROOT_PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
+MCowBQYDK2VwAyEA+wStl/MLfsYLgAX+uSOmd7labHaOfwYoYmuUYBe0TyY=
+-----END PUBLIC KEY-----
+`;
 const expectedEvidence: Readonly<Record<EvidenceId, Omit<EvidenceDeclaration, 'id' | 'sha256'>>> = {
   E1:{path:'.omd/evidence/harness-v2/development-corpus.json',kind:'development-corpus',schemaVersion:'harness-v2-development-corpus-v1'}, E2:{path:'.omd/evidence/harness-v2/legal-surface-matrix.json',kind:'legal-surface-matrix',schemaVersion:'harness-v2-legal-surface-matrix-v1'}, E3:{path:'.omd/evidence/harness-v2/evaluator-holdouts.json',kind:'evaluator-holdouts',schemaVersion:'harness-v2-evaluator-holdouts-v1'}, E4:{path:'.omd/evidence/harness-v2/projected-briefs.json',kind:'projected-briefs',schemaVersion:'harness-v2-projected-briefs-v1'}, E5:{path:'.omd/evidence/harness-v2/runner-identity.json',kind:'runner-identity',schemaVersion:'harness-v2-runner-identity-v1'}, E6:{path:'.omd/evidence/harness-v2/runner-report.json',kind:'runner-report',schemaVersion:'harness-v2-run-report-v4'}, E7:{path:'.omd/evidence/harness-v2/build-receipts.json',kind:'build-receipts',schemaVersion:'harness-v2-build-receipts-v1'}, E8:{path:'.omd/evidence/harness-v2/browser-receipts.json',kind:'browser-receipts',schemaVersion:'harness-v2-browser-receipts-v1'}, E9:{path:'.omd/evidence/harness-v2/reviewer-receipts.json',kind:'reviewer-receipts',schemaVersion:'harness-v2-reviewer-receipts-v1'}, E10:{path:'.omd/evidence/harness-v2/score-report.json',kind:'score-report',schemaVersion:'harness-v2-score-report-v1'}, E11:{path:'.omd/evidence/harness-v2/evidence-manifest.json',kind:'evidence-manifest',schemaVersion:'harness-v2-evidence-manifest-v1'}, E12:{path:'example/harness-v2-protected.json',kind:'protected-example',schemaVersion:'harness-v2-protected-example-v1'}, E13:{path:'.omd/evidence/harness-v2/reconciliation-receipt.json',kind:'reconciliation-receipt',schemaVersion:'harness-v2-reconciliation-receipt-v1'} };
 const ids = Object.keys(expectedEvidence) as EvidenceId[];
 function requiredExpectedEvidence(id: EvidenceId): Omit<EvidenceDeclaration, 'id' | 'sha256'> { const expected = expectedEvidence[id]; if (!expected) throw new Error(`required expected evidence is missing: ${id}`); return expected; }
 const parentIds: Readonly<Record<EvidenceId, readonly EvidenceId[]>> = { E1:[], E2:['E1'], E3:['E1','E2'], E4:['E3'], E5:['E4'], E6:['E4','E5'], E7:['E6'], E8:['E7'], E9:['E8'], E10:['E9'], E11:['E10'], E12:['E1'], E13:['E1','E2','E3','E4','E5','E6','E7','E8','E9','E10','E11','E12'] };
+const postRunAttestationFields = Object.freeze(['schemaVersion', 'runnerId', 'hostIdentity', 'observerIdentity', 'observerAuthorityDigest', 'signedE5Digest', 'signedE13Digest', 'buildReceiptDigest', 'browserReceiptDigest', 'reviewerReceiptDigest', 'executionReceiptDigest', 'reviewerExecutionDigest', 'receiptDigest', 'lockDigest', 'lineageRoot', 'observationEnvelope', 'processSessionIdentity', 'measuredBudget', 'result']);
 function canonical(value: unknown): string { return JSON.stringify(value); }
 function safePath(path: string): string { if (!path || path.startsWith('/') || path.includes('\\') || path.split('/').some(part => !part || part === '.' || part === '..')) throw new Error(`unsafe evidence path: ${path}`); return path; }
-function fileAt(root: string, path: string): string { const absolute = resolve(root, ...safePath(path).split('/')); const rel = relative(root, absolute); if (!rel || rel === '..' || rel.startsWith(`..${sep}`)) throw new Error(`evidence path escapes root: ${path}`); return absolute; }
+function stableEvidenceRoot(root: string): string {
+  const namedRoot = resolve(root);
+  const named = lstatSync(namedRoot);
+  if (!named.isDirectory() || named.isSymbolicLink()) throw new Error('evidence root must be a stable non-symbolic directory');
+  return resolve(realpathSync(namedRoot));
+}
+function fileAt(root: string, path: string): string {
+  const stableRoot = stableEvidenceRoot(root);
+  const parts = safePath(path).split('/');
+  let current = stableRoot;
+  for (const part of parts) {
+    current = resolve(current, part);
+    const named = lstatSync(current);
+    if (named.isSymbolicLink()) throw new Error(`evidence path contains a symbolic-link ancestor: ${path}`);
+  }
+  const rel = relative(stableRoot, current);
+  if (!rel || rel === '..' || rel.startsWith(`..${sep}`)) throw new Error(`evidence path escapes root: ${path}`);
+  return current;
+}
 function payloadDigest(artifact: { payload?: unknown }): string { return hash(canonical(artifact.payload)); }
 function manifest(entries: readonly EvidenceDeclaration[], includeE13 = false): readonly EvidenceDeclaration[] { return Object.freeze([...entries].filter(entry => includeE13 || entry.id !== 'E13').sort((a,b) => Number(a.id.slice(1)) - Number(b.id.slice(1))).map(entry => Object.freeze({ id:entry.id, path:entry.path, kind:entry.kind, schemaVersion:entry.schemaVersion, sha256:entry.sha256 }))); }
 function rootDigest(entries: readonly EvidenceDeclaration[]): string { return hash(canonical(manifest(entries).map(entry => ({ id: entry.id, path: entry.path, kind: entry.kind, schemaVersion: entry.schemaVersion })))); }
@@ -44,8 +66,30 @@ function verifyPinnedRoot(entries: readonly EvidenceDeclaration[], payload: Reco
     return trustRoot.algorithm === 'ed25519' && canonical(trustRoot.statement) === canonical(e13Statement(entries, payload)) && typeof trustRoot.signature === 'string' && verify(null, Buffer.from(canonical(trustRoot.statement)), createPublicKey(PINNED_TRUST_ROOT_PUBLIC_KEY), Buffer.from(trustRoot.signature, 'base64'));
   } catch { return false; }
 }
+function readStableArtifactBytes(root: string, declaration: EvidenceDeclaration): Uint8Array {
+  const path = fileAt(root, declaration.path);
+  const descriptor = openSync(path, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
+  try {
+    const before = fstatSync(descriptor);
+    const named = lstatSync(path);
+    if (!before.isFile() || named.isSymbolicLink() || !named.isFile() || before.dev !== named.dev || before.ino !== named.ino || before.size !== named.size) throw new Error(`evidence artifact is not a stable regular file: ${declaration.id}`);
+    const bytes = Buffer.alloc(before.size);
+    let offset = 0;
+    while (offset < bytes.length) {
+      const count = readSync(descriptor, bytes, offset, bytes.length - offset, offset);
+      if (count <= 0) throw new Error(`evidence artifact ended while reading: ${declaration.id}`);
+      offset += count;
+    }
+    const after = fstatSync(descriptor);
+    const finalNamed = lstatSync(path);
+    if (after.dev !== before.dev || after.ino !== before.ino || after.size !== before.size || after.mtimeMs !== before.mtimeMs || after.ctimeMs !== before.ctimeMs || finalNamed.dev !== before.dev || finalNamed.ino !== before.ino || finalNamed.size !== before.size) throw new Error(`evidence artifact changed while reading: ${declaration.id}`);
+    return new Uint8Array(bytes);
+  } finally {
+    closeSync(descriptor);
+  }
+}
 function parseArtifact(root: string, declaration: EvidenceDeclaration): { payload: Record<string, unknown> } {
-  return parseArtifactBytes(readFileSync(fileAt(root, declaration.path)), declaration);
+  return parseArtifactBytes(readStableArtifactBytes(root, declaration), declaration);
 }
 function parseArtifactBytes(bytes: Uint8Array, declaration: EvidenceDeclaration): { payload: Record<string, unknown> } {
   let artifact: { kind?: unknown; schemaVersion?: unknown; payload?: unknown; digest?: unknown }; try { artifact = JSON.parse(new TextDecoder().decode(bytes)); } catch { throw new Error(`evidence artifact must be JSON: ${declaration.id}`); }
@@ -135,6 +179,8 @@ function validateTrustRoot(entries: readonly EvidenceDeclaration[], payloadFor: 
   if (payload.aliasAuthorityDigest !== hash(canonical(aliasAuthority))) throw new Error('E13 does not bind E4 alias authority');
   const receipts = payload.runnerReceiptHashes;
   if (!receipts || typeof receipts !== 'object' || Array.isArray(receipts) || !['E5','E6','E7','E8','E9','E10','E11'].every(id => (receipts as Record<string, unknown>)[id] === entries.find(entry => entry.id === id)?.sha256)) throw new Error('E13 does not reconcile runner receipts');
+  const attestation = payload.postRunAttestation;
+  if (!attestation || typeof attestation !== 'object' || Array.isArray(attestation) || (attestation as Record<string, unknown>).schemaVersion !== 'harness-v2-live-observer-attestation-v1' || !Array.isArray((attestation as Record<string, unknown>).fields) || JSON.stringify((attestation as Record<string, unknown>).fields) !== JSON.stringify(postRunAttestationFields)) throw new Error('E13 does not authorize the typed post-run observer attestation');
   validateSignedRunConfiguration(entries, payloadFor);
   if (!verifyPinnedRoot(entries, payload)) throw new Error('E13 is not signed by the immutable approved trust root');
 }
@@ -191,6 +237,28 @@ function harnessV2RunLockDigestV1(entries: readonly EvidenceLockEntry[]): string
   }));
 }
 export function evidenceLockDigest(entries: readonly EvidenceLockEntry[]): string { return harnessV2RunLockDigestV1(entries); }
-export function materializeEvidenceLock(root: string, declarations: readonly EvidenceDeclaration[]): EvidenceLock { const seen = new Set<string>(); const entries = declarations.map(declaration => { if (seen.has(declaration.id)) throw new Error(`duplicate evidence declaration: ${declaration.id}`); seen.add(declaration.id); const expected = requiredExpectedEvidence(declaration.id); if (declaration.path !== expected.path || declaration.kind !== expected.kind || declaration.schemaVersion !== expected.schemaVersion || !sha256.test(declaration.sha256)) throw new Error(`evidence declaration is not authoritative: ${declaration.id}`); const absolute = fileAt(root,declaration.path); const stat = lstatSync(absolute); if (!stat.isFile() || stat.isSymbolicLink() || hash(readFileSync(absolute)) !== declaration.sha256) throw new Error(`approved evidence hash mismatch: ${declaration.id}`); return declaration; }).sort((a,b)=>a.id.localeCompare(b.id)); if (entries.length !== ids.length || !ids.every(id=>seen.has(id))) throw new Error('evidence lock requires complete E1-E13 entries'); for (const entry of entries) validateLineage(parseArtifact(root, entry).payload, entry, entries); validateApprovedEvidenceRoot(root,entries); const lockEntries = entries.map(entry => { const base: EvidenceLockEntry={...entry,status:'present',statusHash:''}; return {...base,statusHash:evidenceStatusHash(base)}; }); return {schemaVersion:'harness-v2-evidence-lock-v4',entries:lockEntries,digest:evidenceLockDigest(lockEntries)}; }
+export function materializeEvidenceLock(root: string, declarations: readonly EvidenceDeclaration[]): EvidenceLock {
+  const seen = new Set<string>();
+  const entries = declarations.map(declaration => {
+    if (seen.has(declaration.id)) throw new Error(`duplicate evidence declaration: ${declaration.id}`);
+    seen.add(declaration.id);
+    const expected = requiredExpectedEvidence(declaration.id);
+    if (declaration.path !== expected.path || declaration.kind !== expected.kind || declaration.schemaVersion !== expected.schemaVersion || !sha256.test(declaration.sha256)) throw new Error(`evidence declaration is not authoritative: ${declaration.id}`);
+    return Object.freeze({ ...declaration });
+  }).sort((a,b) => a.id.localeCompare(b.id));
+  if (entries.length !== ids.length || !ids.every(id => seen.has(id))) throw new Error('evidence lock requires complete E1-E13 entries');
+  const lockEntries = entries.map(entry => {
+    const base: EvidenceLockEntry = { ...entry, status: 'present', statusHash: '' };
+    return Object.freeze({ ...base, statusHash: evidenceStatusHash(base) });
+  });
+  const lock = Object.freeze({ schemaVersion: 'harness-v2-evidence-lock-v4' as const, entries: Object.freeze(lockEntries), digest: evidenceLockDigest(lockEntries) });
+  const snapshotEntries: EvidenceSnapshotEntry[] = lockEntries.map(declaration => {
+    const bytes = readStableArtifactBytes(root, declaration);
+    if (hash(bytes) !== declaration.sha256) throw new Error(`approved evidence hash mismatch: ${declaration.id}`);
+    return Object.freeze({ declaration, bytes });
+  });
+  validateEvidenceSnapshot(lock, snapshotEntries);
+  return lock;
+}
 export function writeEvidenceLock(root: string, declarations: readonly EvidenceDeclaration[], output: string): EvidenceLock { const lock=materializeEvidenceLock(root,declarations); writeFileSync(fileAt(root,output),`${JSON.stringify(lock,null,2)}\n`,{encoding:'utf8',flag:'wx'}); return lock; }
 if(process.argv[1]?.endsWith('materialize-evidence-lock.ts')) { const [root,output,declarationFile]=process.argv.slice(2); if(!root||!output||!declarationFile) throw new Error('usage: materialize-evidence-lock <root> <output> <declarations.json>'); writeEvidenceLock(root,JSON.parse(readFileSync(fileAt(root,declarationFile),'utf8')) as EvidenceDeclaration[],output); }

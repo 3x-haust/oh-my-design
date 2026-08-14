@@ -1,22 +1,32 @@
 import { createHash } from 'node:crypto';
-import { lstatSync, readFileSync } from 'node:fs';
+import { closeSync, constants, fstatSync, lstatSync, openSync, readFileSync, readSync } from 'node:fs';
 import { relative, resolve, sep } from 'node:path';
 import { parse } from 'yaml';
 import { validateTaskCoverageMatrix } from '../frame/check-ux.ts';
 import { decodePng } from '../motion/energy.ts';
 import { validateProbePlan, type ProbePlan, type ProbeResult } from '../probe/index.ts';
-import type { ProjectRunInvocation } from '../runtime/invocation.ts';
+import { requireProductCaptureResultAuthorization, requireProductProbeResultAuthorization, validateCurrentProjectRun, type ProjectRunInvocation } from '../runtime/invocation.ts';
 import { acquireProjectLock, createProjectDirectory, replaceProjectFileAtomically, writeImmutableProjectFile } from '../runtime/project-write.ts';
 
 export const TASK_EVIDENCE_SCHEMA_VERSION = 1;
-export interface TaskEvidence { schemaVersion: 1; surface: 'product' | 'mixed'; frame: Bound; composition: Bound; tasks: Task[]; }
+/** The prior v1 shape did not bind a build or host-authorized captures. It is read-only. */
+export const LEGACY_TASK_EVIDENCE_SCHEMA_VERSION = 1;
+export interface TaskEvidence { schemaVersion: 1; buildSha256: string; surface: 'product' | 'mixed'; frame: Bound; composition: Bound; tasks: Task[]; }
+export interface LegacyTaskEvidence { schemaVersion: 1; surface: 'product' | 'mixed'; frame: Bound; composition: Bound; tasks: LegacyTask[]; }
 interface Bound { path: string; sha256: string }
 type ProbeRole = 'primary' | 'recovery' | 'invalid-submit';
 interface Probe { planPath: string; planSha256: string; resultPath: string; resultSha256: string; role: ProbeRole; viewport: Viewport }
 type Viewport = 'desktop' | 'mobile';
-interface Render { path: string; sha256: string; viewport: Viewport }
-interface Transient { path: string; sha256: string; captureMode: 'settled' | 'reduced-motion'; probeRole: 'primary' | 'recovery'; stateSelector: string; stepIndex: number; viewport: Viewport }
+interface CaptureAuthorization { schemaVersion: 1; buildSha256: string; executionId: string; taskId: string; route: string; target: string; viewport: Viewport; capturePath: string; captureSha256: string; role: 'render' | 'transient' }
+interface Render { path: string; sha256: string; viewport: Viewport; authorization: CaptureAuthorization }
+interface Transient { path: string; sha256: string; captureMode: 'settled' | 'reduced-motion'; probeRole: 'primary' | 'recovery'; stateSelector: string; stepIndex: number; viewport: Viewport; authorization: CaptureAuthorization }
+interface LegacyRender { path: string; sha256: string; viewport: Viewport }
+interface LegacyTransient { path: string; sha256: string; captureMode: 'settled' | 'reduced-motion'; probeRole: 'primary' | 'recovery'; stateSelector: string; stepIndex: number; viewport: Viewport }
 interface Task { id: string; context: 'production'; production: { route: string; locator: string; workObject: string }; probes: Probe[]; renders: Render[]; invalidSubmit?: Probe; transient?: Transient[] }
+interface LegacyTask { id: string; context: 'production'; production: Task['production']; probes: Probe[]; renders: LegacyRender[]; invalidSubmit?: Probe; transient?: LegacyTransient[] }
+export interface ValidatedTaskEvidence extends TaskEvidence {
+  readonly snapshot: Readonly<{ probes: readonly Readonly<{ taskId: string; role: ProbeRole; viewport: Viewport; target: string; resultSha256: string }>[]; captures: readonly Readonly<CaptureAuthorization>[] }>;
+}
 interface FrameRow { recovery: string; viewports: string; requirements: string }
 
 const CACHE = '.omd/.cache/';
@@ -26,6 +36,13 @@ const RESERVED_LABEL_TOKEN = /(?:^|[^a-z0-9])(?:showcase|storybook|demo[-_ ]fixt
 const VIEWPORTS: Record<Viewport, { width: number; height: number }> = { desktop: { width: 1280, height: 900 }, mobile: { width: 390, height: 844 } };
 const compare = (a: string, b: string) => Buffer.compare(Buffer.from(a), Buffer.from(b));
 const digest = (bytes: Uint8Array | string) => createHash('sha256').update(bytes).digest('hex');
+function freeze<T>(value: T): T {
+  if (value && typeof value === 'object' && !Object.isFrozen(value)) {
+    for (const child of Object.values(value as Record<string, unknown>)) freeze(child);
+    Object.freeze(value);
+  }
+  return value;
+}
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 
 function exact(value: Record<string, unknown>, keys: readonly string[], label: string): void {
@@ -66,6 +83,30 @@ function file(root: string, projectPath: string): string {
   }
   return absolute;
 }
+function stableProjectFile(root: string, projectPath: string, label: string): Buffer {
+  const pathname = file(root, projectPath);
+  const before = lstatSync(pathname);
+  if (!before.isFile() || before.isSymbolicLink()) throw new Error(`${label} must be a regular non-symlink file`);
+  const descriptor = openSync(pathname, constants.O_RDONLY | constants.O_NOFOLLOW);
+  try {
+    const descriptorBefore = fstatSync(descriptor);
+    if (descriptorBefore.dev !== before.dev || descriptorBefore.ino !== before.ino || descriptorBefore.size !== before.size || descriptorBefore.mtimeMs !== before.mtimeMs || descriptorBefore.ctimeMs !== before.ctimeMs) throw new Error(`${label} changed before stable read`);
+    const bytes = Buffer.alloc(descriptorBefore.size);
+    for (let offset = 0; offset < bytes.length;) {
+      const read = readSync(descriptor, bytes, offset, bytes.length - offset, offset);
+      if (read === 0) throw new Error(`${label} changed during stable read`);
+      offset += read;
+    }
+    const descriptorAfter = fstatSync(descriptor);
+    const after = lstatSync(pathname);
+    for (const stat of [descriptorAfter, after]) {
+      if (!stat.isFile() || stat.isSymbolicLink() || stat.dev !== descriptorBefore.dev || stat.ino !== descriptorBefore.ino || stat.size !== descriptorBefore.size || stat.mtimeMs !== descriptorBefore.mtimeMs || stat.ctimeMs !== descriptorBefore.ctimeMs) throw new Error(`${label} changed during stable read`);
+    }
+    return bytes;
+  } finally {
+    closeSync(descriptor);
+  }
+}
 function canonical(value: unknown): string {
   if (value === null || typeof value === 'boolean' || typeof value === 'string') return JSON.stringify(value);
   if (typeof value === 'number') { if (!Number.isFinite(value)) throw new Error('canonical JSON rejects non-finite numbers'); return Object.is(value, -0) ? '0' : JSON.stringify(value); }
@@ -86,13 +127,54 @@ function parseProbe(value: unknown, label: string, roles: readonly ProbeRole[]):
   if (value.viewport !== 'desktop' && value.viewport !== 'mobile') throw new Error(`${label}.viewport is invalid`);
   return { planPath: cachePath(value.planPath, `${label}.planPath`), planSha256: hash(value.planSha256, `${label}.planSha256`), resultPath: cachePath(value.resultPath, `${label}.resultPath`), resultSha256: hash(value.resultSha256, `${label}.resultSha256`), role: value.role as ProbeRole, viewport: value.viewport };
 }
+function parseCaptureAuthorization(value: unknown, label: string): CaptureAuthorization {
+  if (!isRecord(value)) throw new Error(`${label} must be an object`);
+  exact(value, ['schemaVersion', 'buildSha256', 'executionId', 'taskId', 'route', 'target', 'viewport', 'capturePath', 'captureSha256', 'role'], label);
+  const viewport = value.viewport;
+  const role = value.role;
+  if (value.schemaVersion !== 1 || (viewport !== 'desktop' && viewport !== 'mobile') || (role !== 'render' && role !== 'transient')) throw new Error(`${label} is invalid`);
+  const route = string(value.route, `${label}.route`);
+  if (!route.startsWith('/') || /^\/\//.test(route)) throw new Error(`${label}.route is invalid`);
+  const authorization: CaptureAuthorization = {
+    schemaVersion: 1,
+    buildSha256: hash(value.buildSha256, `${label}.buildSha256`),
+    executionId: string(value.executionId, `${label}.executionId`),
+    taskId: string(value.taskId, `${label}.taskId`),
+    route,
+    target: string(value.target, `${label}.target`),
+    viewport,
+    capturePath: cachePath(value.capturePath, `${label}.capturePath`),
+    captureSha256: hash(value.captureSha256, `${label}.captureSha256`),
+    role,
+  };
+  localProductionTarget(authorization.target, authorization.route);
+  return authorization;
+}
 function parseRender(value: unknown, label: string): Render {
+  if (!isRecord(value)) throw new Error(`${label} must be an object`);
+  exact(value, ['path', 'sha256', 'viewport', 'authorization'], label);
+  if (value.viewport !== 'desktop' && value.viewport !== 'mobile') throw new Error(`${label}.viewport is invalid`);
+  return { path: cachePath(value.path, `${label}.path`), sha256: hash(value.sha256, `${label}.sha256`), viewport: value.viewport, authorization: parseCaptureAuthorization(value.authorization, `${label}.authorization`) };
+}
+function parseTransient(value: unknown, label: string): Transient {
+  if (!isRecord(value)) throw new Error(`${label} must be an object`);
+  exact(value, ['path', 'sha256', 'captureMode', 'probeRole', 'stateSelector', 'stepIndex', 'viewport', 'authorization'], label);
+  if (value.captureMode !== 'settled' && value.captureMode !== 'reduced-motion') throw new Error(`${label}.captureMode is invalid`);
+  if (value.probeRole !== 'primary' && value.probeRole !== 'recovery') throw new Error(`${label}.probeRole is invalid`);
+  if (value.viewport !== 'desktop' && value.viewport !== 'mobile') throw new Error(`${label}.viewport is invalid`);
+  const stepIndex = value.stepIndex;
+  if (typeof stepIndex !== 'number' || !Number.isSafeInteger(stepIndex) || stepIndex < 0) throw new Error(`${label}.stepIndex is invalid`);
+  const artifactPath = cachePath(value.path, `${label}.path`);
+  if (!artifactPath.endsWith('.png')) throw new Error(`${label}.path must be a PNG`);
+  return { path: artifactPath, sha256: hash(value.sha256, `${label}.sha256`), captureMode: value.captureMode, probeRole: value.probeRole, stateSelector: string(value.stateSelector, `${label}.stateSelector`), stepIndex, viewport: value.viewport, authorization: parseCaptureAuthorization(value.authorization, `${label}.authorization`) };
+}
+function parseLegacyRender(value: unknown, label: string): LegacyRender {
   if (!isRecord(value)) throw new Error(`${label} must be an object`);
   exact(value, ['path', 'sha256', 'viewport'], label);
   if (value.viewport !== 'desktop' && value.viewport !== 'mobile') throw new Error(`${label}.viewport is invalid`);
   return { path: cachePath(value.path, `${label}.path`), sha256: hash(value.sha256, `${label}.sha256`), viewport: value.viewport };
 }
-function parseTransient(value: unknown, label: string): Transient {
+function parseLegacyTransient(value: unknown, label: string): LegacyTransient {
   if (!isRecord(value)) throw new Error(`${label} must be an object`);
   exact(value, ['path', 'sha256', 'captureMode', 'probeRole', 'stateSelector', 'stepIndex', 'viewport'], label);
   if (value.captureMode !== 'settled' && value.captureMode !== 'reduced-motion') throw new Error(`${label}.captureMode is invalid`);
@@ -124,15 +206,83 @@ function parseTask(value: unknown, index: number): Task {
   const transient = value.transient?.map((item, n) => parseTransient(item, `${label}.transient[${n}]`));
   const id = string(value.id, `${label}.id`);
   if (!/^T[1-9]\d*$/.test(id)) throw new Error(`${label}.id is invalid`);
+  const captures = [...renders.map(render => render.authorization), ...(transient ?? []).map(artifact => artifact.authorization)];
+  for (const [captureIndex, capture] of captures.entries()) {
+    const artifact = [...renders, ...(transient ?? [])][captureIndex]!;
+    const expectedRole = captureIndex < renders.length ? 'render' : 'transient';
+    if (capture.taskId !== id || capture.route !== production.route || capture.target !== `http://localhost${production.route}` || capture.viewport !== artifact.viewport || capture.capturePath !== artifact.path || capture.captureSha256 !== artifact.sha256 || capture.role !== expectedRole) {
+      throw new Error(`${label} capture authorization does not bind the exact production task artifact`);
+    }
+  }
   return { id, context: 'production', production, probes, renders, ...(invalidSubmit ? { invalidSubmit } : {}), ...(transient ? { transient } : {}) };
 }
+function parseLegacyTask(value: unknown, index: number): LegacyTask {
+  const label = `tasks[${index}]`; if (!isRecord(value)) throw new Error(`${label} must be an object`);
+  const allowed = ['id', 'context', 'production', 'probes', 'renders', 'invalidSubmit', 'transient'];
+  if (Object.keys(value).some(key => !allowed.includes(key))) throw new Error(`${label} has unknown keys`);
+  if (!Array.isArray(value.probes) || !Array.isArray(value.renders) || !isRecord(value.production) || value.context !== 'production') throw new Error(`${label} is invalid`);
+  exact(value.production, ['route', 'locator', 'workObject'], `${label}.production`);
+  const production = { route: string(value.production.route, `${label}.production.route`), locator: string(value.production.locator, `${label}.production.locator`), workObject: string(value.production.workObject, `${label}.production.workObject`) };
+  if (!production.route.startsWith('/') || /^\/\//.test(production.route) || reservedProductionTarget(production)) throw new Error(`${label} must identify a local non-demo production target`);
+  const probes = value.probes.map((item, n) => parseProbe(item, `${label}.probes[${n}]`, ['primary', 'recovery']));
+  const renders = value.renders.map((item, n) => parseLegacyRender(item, `${label}.renders[${n}]`));
+  if (!probes.some(item => item.role === 'primary') || new Set(probes.map(item => `${item.role}:${item.viewport}`)).size !== probes.length) throw new Error(`${label} requires unique role and viewport probe executions`);
+  if (!renders.length || new Set(renders.map(item => item.viewport)).size !== renders.length) throw new Error(`${label}.renders must have unique viewports`);
+  const invalidSubmit = value.invalidSubmit === undefined ? undefined : parseProbe(value.invalidSubmit, `${label}.invalidSubmit`, ['invalid-submit']);
+  if (value.transient !== undefined && (!Array.isArray(value.transient) || !value.transient.length)) throw new Error(`${label}.transient must be non-empty`);
+  const transient = value.transient?.map((item, n) => parseLegacyTransient(item, `${label}.transient[${n}]`));
+  const id = string(value.id, `${label}.id`);
+  if (!/^T[1-9]\d*$/.test(id)) throw new Error(`${label}.id is invalid`);
+  return { id, context: 'production', production, probes, renders, ...(invalidSubmit ? { invalidSubmit } : {}), ...(transient ? { transient } : {}) };
+}
+function parseLegacyManifest(value: unknown): LegacyTaskEvidence {
+  if (!isRecord(value)) throw new Error('legacy task evidence manifest must be an object');
+  exact(value, ['schemaVersion', 'surface', 'frame', 'composition', 'tasks'], 'legacy task evidence manifest');
+  if (value.schemaVersion !== LEGACY_TASK_EVIDENCE_SCHEMA_VERSION || (value.surface !== 'product' && value.surface !== 'mixed') || !Array.isArray(value.tasks)) throw new Error('legacy task evidence manifest is invalid');
+  const tasks = value.tasks.map(parseLegacyTask);
+  if (!tasks.length || new Set(tasks.map(task => task.id)).size !== tasks.length || new Set(tasks.map(task => task.production.locator)).size !== tasks.length) throw new Error('legacy task ids and production locators must be globally unique');
+  return { schemaVersion: LEGACY_TASK_EVIDENCE_SCHEMA_VERSION, surface: value.surface, frame: bound(value.frame, 'frame', '.omd/frame.md'), composition: bound(value.composition, 'composition', '.omd/composition.md'), tasks };
+}
+
+/** Parses the exact task-evidence v1 bytes emitted before build/capture authorization bindings. */
+export function parseLegacyTaskEvidenceRecord(bytes: Uint8Array | string): LegacyTaskEvidence {
+  const source = typeof bytes === 'string' ? bytes : Buffer.from(bytes).toString('utf8');
+  let value: unknown;
+  try { value = JSON.parse(source); } catch { throw new Error('legacy task evidence record must be valid JSON'); }
+  return freeze(parseLegacyManifest(value));
+}
+
 function parseManifest(value: unknown): TaskEvidence {
   if (!isRecord(value)) throw new Error('task evidence manifest must be an object');
-  exact(value, ['schemaVersion', 'surface', 'frame', 'composition', 'tasks'], 'task evidence manifest');
-  if (value.schemaVersion !== 1 || (value.surface !== 'product' && value.surface !== 'mixed') || !Array.isArray(value.tasks)) throw new Error('task evidence manifest is invalid');
+  exact(value, ['schemaVersion', 'buildSha256', 'surface', 'frame', 'composition', 'tasks'], 'task evidence manifest');
+  const surface = value.surface;
+  if (value.schemaVersion !== 1 || (surface !== 'product' && surface !== 'mixed') || !Array.isArray(value.tasks)) throw new Error('task evidence manifest is invalid');
   const tasks = value.tasks.map(parseTask);
   if (!tasks.length || new Set(tasks.map(task => task.id)).size !== tasks.length || new Set(tasks.map(task => task.production.locator)).size !== tasks.length) throw new Error('task ids and production locators must be globally unique');
-  return { schemaVersion: 1, surface: value.surface, frame: bound(value.frame, 'frame', '.omd/frame.md'), composition: bound(value.composition, 'composition', '.omd/composition.md'), tasks };
+  const probeUses = new Map<string, string>();
+  for (const task of tasks) {
+    for (const probe of [...task.probes, ...(task.invalidSubmit === undefined ? [] : [task.invalidSubmit])]) {
+      for (const key of [`path:${probe.resultPath}`, `sha256:${probe.resultSha256}`]) {
+        const existing = probeUses.get(key);
+        if (existing !== undefined && existing !== task.id) throw new Error('probe execution or result cannot be reused across tasks');
+        probeUses.set(key, task.id);
+      }
+    }
+  }
+  if (surface === 'mixed' && new Set(tasks.map(task => task.production.route)).size < 2) throw new Error('mixed task evidence requires at least two distinct production routes');
+  const evidence: TaskEvidence = { schemaVersion: 1, buildSha256: hash(value.buildSha256, 'buildSha256'), surface, frame: bound(value.frame, 'frame', '.omd/frame.md'), composition: bound(value.composition, 'composition', '.omd/composition.md'), tasks };
+  const captureBindings = evidence.tasks.flatMap(task => [...task.renders.map(render => render.authorization), ...(task.transient ?? []).map(capture => capture.authorization)]);
+  if (captureBindings.some(capture => capture.buildSha256 !== evidence.buildSha256)) throw new Error('capture authorization build SHA-256 does not match task evidence');
+  const captureUses = new Map<string, string>();
+  for (const capture of captureBindings) {
+    const binding = `${capture.taskId}:${capture.role}`;
+    for (const key of [`execution:${capture.executionId}`, `path:${capture.capturePath}`]) {
+      const existing = captureUses.get(key);
+      if (existing !== undefined && existing !== binding) throw new Error('capture execution or path cannot be reused across tasks or capture roles');
+      captureUses.set(key, binding);
+    }
+  }
+  return evidence;
 }
 function frameRows(bytes: Buffer, surface: TaskEvidence['surface']): Map<string, FrameRow> {
   const source = bytes.toString('utf8'); const front = /^---\n([\s\S]*?)\n---/.exec(source); const frontmatter = front?.[1] === undefined ? {} : parse(front[1]);
@@ -188,7 +338,7 @@ function activationStep(plan: ProbePlan, result: ProbeResult, locator: string): 
   return { index, expectations };
 }
 function verifyProbe(root: string, evidence: Probe, task: Task): ProbeResult {
-  const planBytes = readFileSync(file(root, evidence.planPath)); const resultBytes = readFileSync(file(root, evidence.resultPath));
+  const planBytes = stableProjectFile(root, evidence.planPath, `probe plan for ${task.id}`); const resultBytes = stableProjectFile(root, evidence.resultPath, `probe result for ${task.id}`);
   if (digest(planBytes) !== evidence.planSha256 || digest(resultBytes) !== evidence.resultSha256) throw new Error(`probe digest mismatch for ${task.id}`);
   const plan = validateProbePlan(JSON.parse(planBytes.toString('utf8'))); const result = JSON.parse(resultBytes.toString('utf8')) as ProbeResult;
   localProductionTarget(result.target, task.production.route);
@@ -203,7 +353,7 @@ function verifyProbe(root: string, evidence: Probe, task: Task): ProbeResult {
   return result;
 }
 function verifyInvalidSubmit(root: string, evidence: Probe, task: Task): ProbeResult {
-  const result = verifyProbe(root, evidence, task); const plan = validateProbePlan(JSON.parse(readFileSync(file(root, evidence.planPath), 'utf8')));
+  const result = verifyProbe(root, evidence, task); const plan = validateProbePlan(JSON.parse(stableProjectFile(root, evidence.planPath, `probe plan for ${task.id}`).toString('utf8')));
   for (const [fillIndex, fill] of plan.steps.entries()) {
     if (fill.action !== 'fill') continue;
     const activation = plan.steps.findIndex((step, index) => index > fillIndex && (step.action === 'click' || step.action === 'press') && step.selector === task.production.locator);
@@ -249,11 +399,11 @@ function hasMeaningfulVisibleVariation(png: ReturnType<typeof decodePng>): boole
 }
 function verifyTransient(root: string, task: Task, results: Map<string, ProbeResult>): void {
   for (const artifact of task.transient ?? []) {
-    const bytes = readFileSync(file(root, artifact.path)); if (digest(bytes) !== artifact.sha256) throw new Error(`transient digest mismatch: ${task.id}`);
+    const bytes = stableProjectFile(root, artifact.path, `transient evidence for ${task.id}`); if (digest(bytes) !== artifact.sha256) throw new Error(`transient digest mismatch: ${task.id}`);
     const result = results.get(`${artifact.probeRole}:${artifact.viewport}`); if (!result) throw new Error(`transient must bind an existing ${artifact.probeRole} probe: ${task.id}`);
     const viewport = VIEWPORTS[artifact.viewport];
     const probe = task.probes.find(item => item.role === artifact.probeRole && item.viewport === artifact.viewport)!;
-    const plan = validateProbePlan(JSON.parse(readFileSync(file(root, probe.planPath), 'utf8')));
+    const plan = validateProbePlan(JSON.parse(stableProjectFile(root, probe.planPath, `probe plan for ${task.id}`).toString('utf8')));
     const step = plan.steps[artifact.stepIndex]; const observed = result.steps[artifact.stepIndex];
     if (!step || !observed || (step.action !== 'click' && step.action !== 'press') || step.selector !== task.production.locator) throw new Error(`transient state must be a successful production activation observable: ${task.id}`);
     const matchesState = (step.expect ?? []).some((expectation, index) => expectation.type !== 'url' && expectation.selector === artifact.stateSelector && expectationMatches(expectation, observed.expectations[index]!));
@@ -261,9 +411,10 @@ function verifyTransient(root: string, task: Task, results: Map<string, ProbeRes
     if (!hasMeaningfulVisibleVariation(verifyPng(bytes, viewport, `transient evidence for ${task.id}`))) throw new Error(`transient evidence must contain meaningful coherent visible PNG pixels: ${task.id}`);
   }
 }
-function verify(root: string, evidence: TaskEvidence): void {
-  const frame = readFileSync(file(root, evidence.frame.path));
-  const composition = readFileSync(file(root, evidence.composition.path));
+function verify(root: string, evidence: TaskEvidence, sources?: Readonly<{ frame: Buffer; composition: Buffer }>): readonly Readonly<{ taskId: string; role: ProbeRole; viewport: Viewport; target: string; resultSha256: string }>[] {
+  const probeSnapshots: Readonly<{ taskId: string; role: ProbeRole; viewport: Viewport; target: string; resultSha256: string }>[] = [];
+  const frame = sources?.frame ?? stableProjectFile(root, evidence.frame.path, 'frame');
+  const composition = sources?.composition ?? stableProjectFile(root, evidence.composition.path, 'composition');
   if (digest(frame) !== evidence.frame.sha256 || digest(composition) !== evidence.composition.sha256) {
     throw new Error('frame or composition digest mismatch');
   }
@@ -303,11 +454,18 @@ function verify(root: string, evidence: TaskEvidence): void {
     }
 
     const results = new Map<string, ProbeResult>();
-    for (const probe of [...primary, ...recovery]) results.set(`${probe.role}:${probe.viewport}`, verifyProbe(root, probe, task));
-    if (task.invalidSubmit) verifyInvalidSubmit(root, task.invalidSubmit, task);
+    for (const probe of [...primary, ...recovery]) {
+      const result = verifyProbe(root, probe, task);
+      probeSnapshots.push(Object.freeze({ taskId: task.id, role: probe.role, viewport: probe.viewport, target: result.target, resultSha256: probe.resultSha256 }));
+      results.set(`${probe.role}:${probe.viewport}`, result);
+    }
+    if (task.invalidSubmit) {
+      const result = verifyInvalidSubmit(root, task.invalidSubmit, task);
+      probeSnapshots.push(Object.freeze({ taskId: task.id, role: task.invalidSubmit.role, viewport: task.invalidSubmit.viewport, target: result.target, resultSha256: task.invalidSubmit.resultSha256 }));
+    }
 
     for (const render of task.renders) {
-      const bytes = readFileSync(file(root, render.path));
+      const bytes = stableProjectFile(root, render.path, `render evidence for ${task.id}`);
       if (!render.path.endsWith('.png') || digest(bytes) !== render.sha256) {
         throw new Error(`render digest or format mismatch: ${task.id}`);
       }
@@ -321,7 +479,26 @@ function verify(root: string, evidence: TaskEvidence): void {
     }
     verifyTransient(root, task, results);
   }
+  return Object.freeze(probeSnapshots);
 }
+export function requireTaskEvidenceProbeAuthorizations(rootInput: string, evidence: TaskEvidence, invocation: ProjectRunInvocation): void {
+  const root = rootOf(rootInput);
+  validateCurrentProjectRun(invocation);
+  if (evidence.buildSha256 !== invocation.current.buildSha256) {
+    throw new Error('task evidence build SHA-256 does not match the fresh invocation');
+  }
+  for (const task of evidence.tasks) {
+    for (const probe of [...task.probes, ...(task.invalidSubmit === undefined ? [] : [task.invalidSubmit])]) {
+      const resultBytes = stableProjectFile(root, probe.resultPath, `probe result for ${task.id}`);
+      if (digest(resultBytes) !== probe.resultSha256) throw new Error(`authorized probe digest mismatch for ${task.id}`);
+      requireProductProbeResultAuthorization(invocation, root, resultBytes);
+    }
+    for (const capture of [...task.renders, ...(task.transient ?? [])]) {
+      requireProductCaptureResultAuthorization(invocation, root, Buffer.from(canonical(capture.authorization)));
+    }
+  }
+}
+
 function regularFile(pathname: string, label: string): void {
   const stat = lstatSync(pathname);
   if (!stat.isFile() || stat.isSymbolicLink()) throw new Error(`${label} must be a regular non-symlink file`);
@@ -373,6 +550,7 @@ export function publishTaskEvidence(rootInput: string, input: string, invocation
     const manifestBytes = readFileSync(manifest);
     const evidence = parseManifest(JSON.parse(manifestBytes.toString('utf8')));
     verify(root, evidence);
+    requireTaskEvidenceProbeAuthorizations(root, evidence, invocation);
     const bytes = Buffer.from(`${canonical(evidence)}\n`);
     createProjectDirectory(root, '.omd', invocation);
     createProjectDirectory(root, '.omd/task-evidence-runs', invocation);
@@ -388,6 +566,7 @@ export function publishTaskEvidence(rootInput: string, input: string, invocation
     }
     const currentEvidence = parseManifest(JSON.parse(manifestBytes.toString('utf8')));
     verify(root, currentEvidence);
+    requireTaskEvidenceProbeAuthorizations(root, currentEvidence, invocation);
     const currentBytes = Buffer.from(`${canonical(currentEvidence)}\n`);
     if (!currentBytes.equals(bytes)) throw new Error('task evidence bindings changed during publication');
     publishCurrent(root, output, currentBytes, invocation);
@@ -396,24 +575,33 @@ export function publishTaskEvidence(rootInput: string, input: string, invocation
     releasePublicationLock();
   }
 }
-export function checkTaskEvidence(rootInput: string): TaskEvidence {
+function checkTaskEvidenceWithSources(rootInput: string, sources?: Readonly<{ frame: Buffer; composition: Buffer }>): ValidatedTaskEvidence {
   const root = rootOf(rootInput);
-  const current = file(root, '.omd/task-evidence.json');
-  const bytes = readFileSync(current);
+  const bytes = stableProjectFile(root, '.omd/task-evidence.json', 'current task evidence record');
   const evidence = parseManifest(JSON.parse(bytes.toString('utf8')));
 
-  let immutable: string;
+  let immutableBytes: Buffer;
   try {
-    immutable = file(root, `.omd/task-evidence-runs/${digest(bytes)}.json`);
+    immutableBytes = stableProjectFile(root, `.omd/task-evidence-runs/${digest(bytes)}.json`, 'immutable task evidence record');
   } catch (error: unknown) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      throw new Error('task evidence immutable publication is missing');
-    }
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') throw new Error('task evidence immutable publication is missing');
     throw error;
   }
-  if (!bytes.equals(readFileSync(immutable))) {
-    throw new Error('task evidence current record does not match immutable publication');
+  if (!bytes.equals(immutableBytes)) throw new Error('task evidence current record does not match immutable publication');
+
+  const probes = verify(root, evidence, sources);
+  if (!stableProjectFile(root, '.omd/task-evidence.json', 'current task evidence record').equals(bytes) || !stableProjectFile(root, `.omd/task-evidence-runs/${digest(bytes)}.json`, 'immutable task evidence record').equals(immutableBytes)) {
+    throw new Error('task evidence current or immutable record drifted during validation');
   }
-  verify(root, evidence);
-  return evidence;
+  const captures = Object.freeze(evidence.tasks.flatMap(task => [...task.renders.map(render => freeze({ ...render.authorization })), ...(task.transient ?? []).map(capture => freeze({ ...capture.authorization }))]));
+  Object.defineProperty(evidence, 'snapshot', { value: Object.freeze({ probes, captures }), enumerable: false, writable: false, configurable: false });
+  return freeze(evidence) as ValidatedTaskEvidence;
+}
+
+export function checkTaskEvidence(rootInput: string): ValidatedTaskEvidence {
+  return checkTaskEvidenceWithSources(rootInput);
+}
+
+export function checkTaskEvidenceAgainstSources(rootInput: string, frame: Buffer, composition: Buffer): ValidatedTaskEvidence {
+  return checkTaskEvidenceWithSources(rootInput, { frame, composition });
 }

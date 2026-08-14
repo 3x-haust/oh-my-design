@@ -67,6 +67,11 @@ test('slop.html is clean on a11y — slop is orthogonal to defects', () => {
   assert.deepEqual(a11y, []);
 });
 
+test('DOM extraction preserves an explicit gradient role for contextual review', () => {
+  const hero = must(slopIr.nodes.find((node) => node.path.endsWith('div.hero')), 'slop hero');
+  assert.equal(hero.gradientRole, 'hero-atmosphere');
+});
+
 test('slop.html fires every slop heuristic', () => {
   const ids = new Set(slopViolations.filter((v) => v.category === 'slop').map((v) => v.id));
   assert.deepEqual(

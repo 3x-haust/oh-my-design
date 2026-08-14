@@ -34,10 +34,9 @@ Each source is read for *the current common pattern*, not for a rule to copy ver
 
 A candidate rule (new or a widening) ships only with a documented case:
 
-1. **The pattern** — one sentence naming the convergence, and which family it belongs to (visual
-   convergence-to-the-mean, or prose no native owner would write).
-2. **A real positive** — at least one concrete generated example that exhibits it, with a note on why a
-   fluent reader/designer clocks it as machine-made.
+1. **The pattern** — one sentence naming the observable convergence and its user or task consequence.
+2. **A real positive** — at least one concrete example that exhibits the full compound, with no claim
+   that source provenance or a familiar treatment establishes authorship.
 3. **A false-positive analysis** — the deliberate, legitimate uses that look similar and must NOT fire,
    written as negative test cases. A rule with no defensible negatives is too broad to ship.
 4. **The lever** — whether it is machine-detectable from the IR/source (a `slop.yaml`/`core/slop` rule)
@@ -64,10 +63,10 @@ sent back, not merged.
 
 ```md
 ### Candidate: <SLOP-ID or eye-guidance name>
-- Family: visual convergence | prose (no native owner)
-- Pattern: <one sentence>
-- Positive: <a real generated example + why it reads as machine-made>
-- Must-not-fire (negatives): <deliberate legitimate uses that look similar>
+- Family: visual convergence | copy specificity/register
+- Pattern: <observable condition + user/task consequence>
+- Positive: <a concrete example exhibiting the full compound>
+- Must-not-fire (negatives): <deliberate legitimate uses and contextual exceptions>
 - Lever: machine rule (IR/source) | eye/theory guidance
 - Source(s): <where the current pattern was observed>
 ```

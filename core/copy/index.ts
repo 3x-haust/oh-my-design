@@ -33,10 +33,16 @@ export interface RenderedBeat {
 export interface RenderedBeatProof {
   schema: 'rendered-beat-receipt-v1';
   artDirectionHash: string;
+  buildSha256?: string;
   copyDeckSha256: string;
   beatIds: readonly string[];
   renderedBeats: unknown;
   captureViewports: unknown;
+  captures?: readonly {
+    readonly path: string;
+    readonly sha256: string;
+    readonly viewport: { readonly width: number; readonly height: number };
+  }[];
 }
 type CapturedViewport = { width?: unknown; height?: unknown };
 

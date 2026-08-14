@@ -94,6 +94,9 @@ export function loadRefs(cwd: string): Reference[] {
           ...(parsed.blueprint !== undefined ? { blueprint: parsed.blueprint } : {}),
           // imagePath is absent on references captured before --shot was introduced.
           ...(parsed.imagePath !== undefined ? { imagePath: parsed.imagePath } : {}),
+          // viewport is absent on references captured before capture width was recorded; a board
+          // with no recorded viewport cannot prove it is desktop evidence rather than a phone crop.
+          ...(parsed.viewport !== undefined ? { viewport: parsed.viewport } : {}),
         });
       }
     } catch {

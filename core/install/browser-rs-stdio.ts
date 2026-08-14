@@ -38,6 +38,7 @@ export class BrowserRsStdioClient {
   readonly responseTimeoutMs: number;
   readonly #pending = new Map<number, Pending>();
   readonly #exit: Promise<ExitResult>;
+  readonly #closed: Promise<void>;
   #buffer = '';
   #nextId = 1;
   #stderr = '';
@@ -56,6 +57,7 @@ export class BrowserRsStdioClient {
         resolve(result);
       });
     });
+    this.#closed = new Promise((resolve) => child.once('close', () => resolve()));
     child.stdout.setEncoding('utf8');
     child.stderr.setEncoding('utf8');
     child.stdout.on('data', (chunk: string) => this.#read(chunk));
@@ -93,17 +95,37 @@ export class BrowserRsStdioClient {
   }
 
   waitForExit(timeoutMs: number): Promise<ExitResult> {
+    const completed = this.#exit.then(async (result) => {
+      this.killProcessGroup();
+      await this.#closed;
+      return result;
+    });
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(new BrowserRsStdioError('timeout', `browser-rs process did not exit after ${timeoutMs}ms`)), timeoutMs);
-      this.#exit.then((result) => {
+      completed.then((result) => {
         clearTimeout(timer);
         resolve(result);
+      }, (error: Error) => {
+        clearTimeout(timer);
+        reject(error);
       });
     });
   }
 
   kill(): void {
-    if (this.#exited === undefined) this.child.kill('SIGKILL');
+    if (this.#exited === undefined) this.child.kill('SIGTERM');
+  }
+
+  killProcessGroup(): boolean {
+    const pid = this.child.pid;
+    if (process.platform === 'win32' || pid === undefined) return false;
+    try {
+      process.kill(-pid, 'SIGKILL');
+      return true;
+    } catch (error) {
+      if (error instanceof Error && 'code' in error && (error.code === 'ESRCH' || error.code === 'EPERM')) return false;
+      throw error;
+    }
   }
 
   stderr(): string {

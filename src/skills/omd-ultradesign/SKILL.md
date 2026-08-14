@@ -1,873 +1,180 @@
 ---
 name: omd-ultradesign
 description: >-
-  Design and build an interface through a human design loop: interrogate the brief,
-  research evidence, write real copy first, compose deliberately, compare isolated structural sketches, build
-  reflectively, test hierarchy and interaction, critique blind, reframe, and ship.
-  Use for UI, page, app, dashboard, blog, landing-page, and redesign requests.
+  Design and build an interface from typed task contracts, measured project evidence, rendered
+  outcomes, and independent review. Use for UI, page, app, dashboard, landing-page, and redesign work.
 ---
 
 # Ultradesign
 
-> **Figma structural-bypass route**: a figma.com link selects one partial graph, not a terminal handoff:
-> retain preflight, framing/task coverage, copy, typography proof, production build, craft
-> checkpoints, safe probes, glance, sharp critique/refinement, and ship; use `omd-figma` for supplied
-> structure and skip only concept hypothesis, scout/reference synthesis, composition authoring, and
-> independent sketch divergence/blind selection. Record the retained/skipped phases and the supplied
-> structure evidence. Do not run the normal structural graph as a second path.
-
-Give the user the working interface they asked for. Do not expose internal quotas or ask
-them to operate the harness. Run host-native agents in fresh contexts; do not create a
-workflow engine, queue, model router, or session runtime.
-
-Read `protocol/human-design-loop.md` from `omd pack dir` first. Also read
-`protocol/reference-assembly.md` and `protocol/design-deliberation.md` there. The reference protocol owns the exact
-chat-first LEGO stage order and transfer boundaries; the deliberation protocol owns adaptive depth,
-decision provenance, acquisition zones, independent perspectives, visual observation, assembly
-coverage, and comparison; the human-design loop owns the remaining phase order, state, evidence
-precedence, blindness, isolation, checkpoints, and probe safety. Use the relevant
-theory/cookbook files (`theory/`, `composition/`, `graphics/`, `motion/`, `craft/`) instead
-of duplicating their rules here. `.omd/` records are English; the interface and handback use
-the user's language.
-
-## 0. Preflight and routing
-
-**The user's session model is immutable for this run.** OMD selects only role effort. On Codex,
-omit `model` from every `spawn_agent` call and pass only the role's `reasoning_effort`; on Claude
-Code, use the installed agent whose metadata says `model: inherit` and its role `effort`. Never
-name Sol, Terra, Luna, Opus, Sonnet, Haiku, or any other concrete model in a child launch. A model
-recommendation, role label, or belief that another model is stronger does not override the user's
-selection. This applies to every named pipeline agent and every ad-hoc worker.
-On Codex, every named-role launch uses `fork_turns: "none"` together with `agent_type` and
-`reasoning_effort`. Never use `fork_turns: "all"` or a full-history fork for a named role: Codex
-then inherits the coordinator agent type instead of loading the OMD role, and the launch is invalid.
-A failed launch is retried once with the same role, effort, sanitized message, and
-`fork_turns: "none"`; it is never replaced by a generic `worker`.
-**Codex launches are observable transactions, not prose.** Before saying that a role is
-“working,” “in progress,” or being awaited, the coordinator MUST actually call `spawn_agent` with
-the installed `agent_type`, the role's `reasoning_effort`, and `fork_turns: "none"`, then retain the
-non-empty child thread ID returned by that call. `wait` MUST receive at least one retained child
-thread ID. Calling `wait` with an empty `receiver_thread_ids` list, narrating progress for a role
-that was never spawned, or continuing the stage after a missing/failed spawn is a terminal routing
-failure. On that failure, retry the same launch once as specified above; if no child thread ID is
-returned, stop the run visibly before reading ahead or writing any owner artifact.
-A child `send_message` is progress only, never its handback and never proof that the role stopped.
-Wait until the child agent state is `completed`, then consume its final response and run the
-artifact gate. Do not cancel a still-running owner or stop the graph because an intermediate
-message describes a temporary gap; capture and browser writes may still be joining. A timeout
-requires both an unfinished child and no ongoing tool/process activity, not merely several wait
-polls with no chat message.
-A Codex `wait` result that says `No agents completed yet` is an unfinished poll, never a child
-response. Call `wait` again for the same retained child thread IDs until the tool reports that child
-as `completed`, then quote only the child's returned handback. Never invent the expected response,
-treat the child's display name or `Started` event as its result, or advance because one poll returned
-no completed agents.
-**Every poll is a full turn.** A coordinator waiting on a role re-sends its whole context to ask
-"is it done", so a 60-second wait on a twenty-minute stage spends twenty turns learning nothing.
-Always request the longest wait the host supports — on Codex pass the maximum `timeout_ms` the tool
-accepts rather than a minute — and never poll a capture, render, or build stage more often than
-every five minutes. Waiting longer is free; polling is not.
-
-**Read once, read what you were given — the coordinator included.** This skill is the coordinator's
-own instructions; a spawned role must never read it. Each role reads its own agent instructions plus
-exactly the contracts delivered to its stage. The coordinator reads `protocol/human-design-loop.md`
-**once, whole, at preflight** and never again: every later question about a phase, gate, or boundary
-is answered by `omd pack protocol/human-design-loop.md --section "<heading>"`, which prints one
-section instead of sixteen thousand tokens. Re-running `sed -n '1,9999p'` on a protocol you already
-read this run, or re-reading it in overlapping ranges because an earlier output truncated, is the
-single most expensive mistake available to you — one observed run spent roughly forty-eight thousand
-tokens reading the same file three times before it framed anything. When output truncates, continue
-from where it stopped.
-For the scout specifically, acquisition and browser work can be quiet while a batch is active.
-Allow at least fifteen minutes for its first final state, and never retry or cancel it while its
-child state or a capture/browser tool is active. Six empty chat polls are not a timeout. Inspecting
-the `.omd/refs/` directory during an in-flight batch is observation only, not evidence that the
-owner is stalled.
-**Artifact ownership is not advisory.** Each durable artifact below is written by the agent that owns
-it, spawned for that purpose. The coordinator orchestrates, gathers, sanitizes, and gates — it never
-writes an owned artifact itself, however obvious the content seems or however much time a direct
-write would save. Writing one yourself is not a shortcut; it silently deletes the isolation the
-artifact exists to provide, and every downstream check that reads it is then verifying your own work.
-
-| Artifact | Owner | Spawned in |
-|---|---|---|
-| `.omd/frame.md` | `omd-framer` | §1 |
-| `.omd/acquisition-plan.json` | `omd-framer` | §1 |
-| `.omd/functional-requirements.json` | `omd-framer` | §1 |
-| `.omd/scout.md`, `.omd/refs/*` | `omd-scout` | §2 |
-| `.omd/copy-deck.md` | `omd-writer` | §2 |
-| `.omd/type-proof.md` | `omd-typesetter` | §3 |
-| `.omd/composition.md` | `omd-composer` | §4 |
-| decision entries in `.omd/decision-graph.json` | stage owner named by `design-deliberation.md` | §1–§8 |
-| `.omd/deliberations/*` | fresh moderator `omd-eye` (coordinator preserves exact returned JSON) | §4 |
-| `.omd/.cache/sketches/*` | `omd-sketch` | §5 |
-| production source (every file the site ships) | `omd-hand` | §6 |
-| `.omd/observations/*`, `.omd/assembly-coverage.json` | `omd-hand` | §6–§8 |
-| every review verdict | `omd-eye` / `omd-glance` | §5, §7, §8 |
-| `.omd/delivery.jsonl`, `.omd/stage-usage.jsonl` | the `omd stage` CLI (never hand-edited) | §0–§9 |
-
-If a stage looks skippable because the answer seems clear, that is the failure mode this table
-exists to stop: a run that writes its own composition contract and its own production source has
-performed one agent's guess wearing the loop's name. Stages §4, §5, and §6 are not optional and have
-no inline path.
-**Gate failure is terminal for the run, not permission to improvise.** If an owner fails, returns no
-required artifact, reports a read/write boundary, times out, or leaves its deterministic check RED,
-stop the graph and report that blocker. Do not mark the stage “unavailable,” record it as a scoped
-deviation, advance to a later owner, or spawn a generic/ad-hoc worker to finish that owner's task.
-In particular, only `omd-hand` may write production source; neither the coordinator nor any
-`worker` may substitute for it.
-
-Run `omd doctor`. Stop on a failed prerequisite. For interactive visual research or user-directed
-region capture, verify the provider with `oh-my-design browser doctor` and stop there: the OMD CLI
-spawns `browser-rs` itself over stdio for each capture. Never start a long-lived `browser-rs`, pick a
-port, or debug a listening socket — an `Address already in use` reply means you started a second
-instance that the capture path never needed. Only an observed provider failure reported by
-`browser doctor` permits headless, reduced-motion `omd render` or `omd probe` as the deterministic
-Playwright fallback; record the failure and do not add or try another provider. Pin the absolute
-working directory first. A Figma frame or exact visual target uses the single Figma structural-bypass
-route declared above; it retains content, craft, glance, probe, critique, and all UX evidence rather
-than handing the run off or terminating this loop.
-
-A resumed or restarted run does not begin again at the domain brief. Run `omd stage resume` first
-and continue at the stage it names; artifacts an earlier owner already wrote stay authoritative, and
-rewriting one yourself is the same ownership violation as writing it the first time. The same
-command is the recovery step after a context compaction: it reports the current stage, the owner of
-every artifact, and the contracts that stage still needs.
-
-Before spawning a stage's owner, hand it its contracts and record that handoff:
-`omd stage deliver --stage <stage> --contract <pack-relative.md>` for each contract
-`omd stage list` names, then `omd stage require <stage>`. A non-zero `require` is not by itself a
-run failure. It has exactly two causes and they end differently. `[deliver-then-retry]` means you
-have not delivered a contract yet: that is your own next step, so deliver it and run `require`
-again. `[owner-blocked]` means an earlier owner's artifact is missing, which stops the run only when
-that owner already ran and failed. Never end a run because a gate told you to do the next thing.
-Editing a contract invalidates its receipt, so a mid-run protocol change forces a
-fresh delivery rather than a silent divergence between what the role read and what the loop
-requires. Never claim a role received a contract without its receipt.
-
-Contracts are also bound by the work itself, not only by the stage. Before handing a role its task,
-run `omd cue --path <file> --symbol <symbol> --field <name>=<value>` for the paths, symbols, and
-typed frame fields that task touches, and deliver everything it returns alongside the stage's own
-contracts. Cues resolve only from those deterministic inputs; a rule that needed the coordinator to
-interpret intent would be the same undelivered-knowledge failure in a new costume.
-
-Record cost at each stage boundary with `omd stage record --stage <stage>` and read it back with
-`omd stage cost`. A run that dies with no cost record cannot tell an expensive stage from a runaway
-one, and the next run repeats the same spend.
-
-Before spawning an artifact owner, classify depth. The coordinator writes only the routing input
-`.omd/depth.json` as `design-depth-input-v1` — print its exact skeleton with
-`omd schema depth-input` instead of inferring keys from `core/` — then runs
-`omd depth classify --input .omd/depth.json --json`, and follows that result. Scope cannot lower a
-risk-raised level. A new promotional surface establishes an art direction and is L4; an existing
-component-only change may be L1. L1/L2 omit only the stages listed by the classifier and still spawn
-the owner of every retained artifact. L3 runs the full owner-separated graph. L4 adds the independent
-three-perspective deliberation and moderator. Never call a direct coordinator build an adaptive
-route.
-
-**Answer the depth input honestly; every field is a cost lever.** `brandDirectionChange` is true only
-when this run establishes a visual identity that does not exist yet. A surface built inside a
-project that already ships tokens, a type system, and a wordmark is an iteration, not a new
-direction, and marking it true buys a three-perspective deliberation the run does not need. The
-same discipline applies to `costlyError`, `showpieceMotion`, and `webgl`: each raises the level to
-L4 on its own. Inflating them is not caution, it is an hour of wall clock and a deliberation round
-spent proving something the project already decided. Under-reporting a genuinely new direction is
-the opposite failure and is worse; state what is true.
-
-Effort follows depth. At L3 and L4 every judgment role runs at its declared `high` tier. At L1 and
-L2 the retained judgment roles run at `medium` — the depth classifier already found that this
-change carries no new direction, and paying deep reasoning to confirm a component swap is the same
-waste as an inflated depth input. The production hand stays `medium` at every level. Effort changes
-depth of thought, never model identity, and never artifact ownership.
-
-`.omd/locale.json` is the other coordinator-owned routing input, written only when the brief names
-more than one language. It is `locale-contract-v1` (`omd schema locale-contract`), and declaring it
-binds the writer to per-locale Beat copy and the hand to the layout, control-state, and
-document-signal obligations in `protocol/locale-contract.md`. A single-language run does not write
-the file at all; a bilingual one that omits it has left its second audience to chance.
-
-There is exactly one structural-skip route: the Figma structural-bypass above. A full multi-feature
-app, an ERP/dashboard/console/CRUD/admin/editor, a data-dense internal tool, or a quiet/product
-register is NOT a skip route — a data tool, ERP, dashboard, or console (a tool's operating UI, not its
-landing page) is a `product` surface that runs the entire loop: framing with a
-task coverage matrix, scout, copy, compose, isolated sketches, hand, glance, blind eye, and the
-mandatory RED/GREEN refinement loop. A register selects how "distinctive" is judged — a functional
-advantage on a quiet surface — never whether the loop runs. "It is real engineering, a data tool, or
-too big for the loop, so build it directly" is a routing defect, not a lawful shortcut.
-
-Stack routing defaults to plain HTML/CSS/JS. A landing, marketing, or content surface is a static
-page and needs no framework, so a blank greenfield resolves to plain HTML/CSS/JS. Reach for a
-framework (React + Vite + TypeScript, or another) only when the user explicitly asks for one or the
-surface is a genuinely stateful application (dashboard, console, CRUD, editor). Always build in an
-existing project's stack — a package manifest, a framework/build config (`vite.config`, `next.config`,
-`package.json`), or files the user points at — instead of replacing it. A bare
-`index.html`/`.css`/`.js` with no manifest, sitting next to an `.omd/` directory from a prior OMD run,
-is OMD's own leftover output — not a user stack, and it never pins the stack. The hand runs `omd stack`
-before its first production write, records the choice and evidence with `omd decision`, and builds
-accordingly. Framework scaffold dependencies (when a framework is chosen) are allowed; existing
-projects receive no unnecessary dependencies.
-**Deciding the stack is not permission to build it.** No production write happens before the frame
-is set and the scout's research is gathered. Creating `package.json`, `tsconfig`, `vite.config`, or
-any framework skeleton is a production write owned by the hand phase, never a setup step you run
-first. An explicit stack request — even a precise one like `React + Vite + TypeScript` — only records
-the `omd stack`/`omd decision` choice; it never licenses scaffolding or building ahead of framing and
-research. Domain analysis, the framer, and the scout always run first: understand the domain, interrogate the brief, and gather evidence before
-a single file is written. "The stack is already decided, so let me scaffold the project now" is a
-routing defect, not a lawful shortcut.
-
-Run `omd config show`. `checkpoint: none` is the default and means no approval waits.
-Only `concept`, `structure`, or `both` opt into a human pause at that named point.
-Speed comes only from output-neutral structure, never from degrading the result. Two levers, both
-of which leave the full-fidelity output unchanged: reuse a coverage-complete `.omd/refs/` inventory when
-this working directory already has one for the concept (scout only the missing categories rather
-than rebuilding it), and let the scout capture references in parallel with `omd ref add-batch` — one
-browser instead of one per reference. The first run in a fresh directory is the slowest because it
-builds the inventory; later runs in the same directory are much faster and still full-fidelity. There is
-no reduced-quality mode: every run is the real result.
-
-Run `omd taste profile` and pass only that explicit-user profile to the framer. Never use
-`--all` for design decisions. Current brief beats current explicit feedback, which beats
-prior explicit taste, which beats agent choices. Record conflicts.
-  The coordinator owns the complete art-direction sequence and does not delegate direction to
-  the writer: (1) receive any host-authorized current-user intent, including either no Beat
-  exception or an explicit typed `current-user-beat-exception` event; (2) obtain the evaluator's
-  exact-three register assessments; (3) run the host-authorized evaluator-to-art-direction
-  check and resolve the selected register/motion; (4) settle every motion obligation and write
-  the selected-reference or approved-recipe handoffs; (5) create the immutable
-  `art-direction-v1` record; then (6) hand only that finalized record to writer, composer, and
-  hand. Writer never compares alternatives or chooses direction. A null Beat-exception receipt
-  is the explicit no-exception state; an over-budget Beat set is permitted only when the record
-  carries the exact hash of a host-authorized typed exception event. The selected register and
-  `motionDecision: none|one` control the macro visual system; quiet or restraint never
-  authorizes a generic template or skipped visual work.
-A normal Codex or Claude session may not carry a host-issued invocation/FD receipt. That is not a
-reason to stop the design. When the launcher supplied the activation, use the host-authorized
-`omd art-direction check` path above. When no activation was supplied, use the moderator-bound local
-lane: persist the exact three direction alternatives, then run
-`omd art-direction alternatives-sha --input <alternatives.json> --json`. Use the returned
-`alternativesSha256` verbatim for every perspective, moderator, and evaluator result; never
-reimplement canonical JSON hashing in shell or ad-hoc JavaScript. A hash mismatch caused by
-coordinator-authored check input is a clerical preparation failure: correct it before launching
-roles rather than spending a role retry. Spawn fresh `omd-eye` UX, art-direction, and
-production perspectives concurrently with those identical bytes, then a fourth fresh `omd-eye`
-moderator. Paste the literal closed `design-deliberation-v1` key skeleton from
-`protocol/design-deliberation.md` into the moderator task; never ask it to infer the schema from
-prose. The eye is intentionally read-only: it returns the closed JSON and never writes the artifact
-itself. Copy that JSON byte-for-byte, without its Markdown fence and without editing or
-paraphrasing, to `.omd/.cache/art-direction-moderator.json`, then run
-`omd deliberate preserve --input .omd/.cache/art-direction-moderator.json`. This validated clerical
-persistence is not coordinator authorship. Its three `inputSha256` values must equal the alternatives
-hash and its resolution must equal the evaluator result. Build the check payload with
-`omd art-direction check-input`, which emits the caller skeleton with the canonical `references`
-array already filled from the settled selection; fill in only the alternatives, evaluator bytes,
-beats, deliberation path, and lane/budget strings. `omd schema art-direction-check` prints the same
-skeleton without a project. Never retype the references array by hand. Then run
-`omd art-direction local-check --input <decision-check.json>` with that `deliberation` path and no
-`invocation` field. This derives only local project-write authority and cannot publish v2 evidence;
-it still creates the immutable art-direction, motion settlement, composer handoff, and hand handoff
-required to build. Never fabricate a host activation or downgrade to an unsigned handwritten
-`.omd/art-direction.json`.
-
-A rejected gate is only terminal when an owner role failed. A validator complaint about the
-coordinator's own payload — an unknown or missing key, a stale digest, a wrong path — is clerical:
-repair the bytes and rerun the same command. Reruns are safe because every receipt in this lane is
-content-addressed, so recomputing identical bytes is a no-op rather than an
-`immutable project artifact already exists` failure. Do not spend a role retry, do not restart the
-graph, and do not stop the run for a mistake you can fix in the file you wrote.
-
-## 0.5 Domain analysis
-
-Before framing, understand the domain. A raw request names a goal but under-specifies its domain, so designing straight from the words yields the generic mean. Analyze the request's domain and write `.omd/domain-brief.json`, then validate it with `omd domain check`:
-
-- Identify the **domain**, a one-line **summary**, the **audience**, the canonical **surfaces** the domain needs (each with its task — an ERP is an inventory dashboard, a purchase-order detail, an approvals queue, not one page), and the **coreObjects** it manipulates (its real nouns, not UI widgets).
-- Emit **referenceQueries** split by the two reference roles: `component` (detailed section/component design) and `craft` (motion, scroll, sculptural craft from top-tier galleries — Awwwards, theFWA).
-- For an unfamiliar domain or a named product/subject, actually research it (web search plus any linked repo/README) and set `researched: true`; a familiar domain may be inferred. Gather in parallel, never one lookup at a time.
-
-Pass the validated brief to the framer (its subject, task, and costliest error are chosen knowing the domain's surfaces and objects) and to the scout (it runs the two-role `referenceQueries` as its acquisition list). This step never designs, scaffolds, or writes production code. Full contract: `protocol/domain-analysis.md`.
-
-## 1. Frame and concept hypothesis
-
-Spawn `omd-framer` with the brief, explicit-user taste profile, and working directory. It
-records the primary task, frequent action, costliest error/recovery, the surface
-classification (`marketing` | `product` | `editorial` | `mixed`, per `theory/ux.md`
-§Surface types), evidence, hypothesis, and trade in `.omd/frame.md`. The surface
-classification routes every later stage's grammar: pass it explicitly to the composer,
-sketches, hand, and eyes. A brief that asks for a tool (dashboard, console, CRUD/admin,
-editor, settings, onboarding, search) is a `product` surface even when phrased like a
-site request — do not let the marketing grammar be the silent default.
-
-Read the frame and relevant theory. Explore several distinct candidate concept directions, not a
-single guess — each a named generator/metaphor, colour direction, typography register,
-surface/material stance, density posture, quiet/confident/showpiece register, and one memorable
-moment. Ground them in the brief and evidence, and after the scout's design-gallery visual research
-(§2, per `protocol/human-design-loop.md` §Visual reference gallery and concept exploration)
-blind-select the strongest main-screen direction and record it — with its rejected alternatives —
-using `omd frame generator` plus `omd decision`. The number of directions scales with ambition and
-uncertainty. This visual-direction choice is a direction signal only and never replaces the
-structural sketch divergence or any UX, copy, type, or critique gate; a generic default visual
-system (unstyled controls, flat fields, weak hierarchy, arbitrary whitespace, no distinctive
-surface/colour system) fails the visual acceptance gate even when every task passes. Pause only when
-config explicitly includes the concept checkpoint.
-When the brief explicitly signals visual ambition — 개쩔게, 죽여주게, 미쳤다, 어워드/awards-level,
-killer, wow, showpiece — treat it as an explicit user request for the showpiece register and at
-least one genuinely novel signature moment, and record it as such. Do not reframe an explicit
-ambition brief down into restraint: substance-over-spectacle is the default only when the brief is
-silent on ambition; the current brief beats the agent's own taste for restraint. Restraint still
-governs *how many* techniques ship (one signature moment, never a catalogue), never *whether* the
-explicitly requested showpiece ambition is honored at all.
-Silence about ambition is not symmetric across surfaces. A `marketing` surface exists to persuade and be experienced, so a silent brief defaults to at least the `confident` register and a deliberate departure from the named generic template, reached by default even from a rough brief — never a quiet document. Motion does not follow from that register default: `motionDecision: one` requires explicit current-user policy or selected evidence and its exact-one binding; otherwise the selected evidence may lawfully resolve to `none`. The silent `quiet`/restraint default is reserved for a `product`/tool-operating surface, where the correct risk is functional (density, scanning, fewer errors). A near-monochrome, evenly-stacked, single-column marketing page whose only carrier is a functional element — a copy button, a nav, a status line — is the silent-default failure, not a lawful restraint choice: the composer records `confident` or higher, and the eye holds its deliberate visual-departure floor as reached-by-default, not an aspiration a silent brief may waive.
-
-## 2. Research and copy before structure
-  Every research or gathering role fans out its independent source, artifact, and evidence work in
-  parallel before joining its findings into the canonical sanitized handoff. A role may not serialize
-  independent collection merely to inherit another role's interpretation; join only after each
-  applicable branch has produced its own bounded evidence.
-
-Spawn `omd-scout` with the concept, explicit functions or product goal, surface classification,
-user references first, and working directory; also pass the component inventory. Require the canonical branch decision before research.
-`protocol/reference-assembly.md` requires the scout to complete its fragment inventory, brick
-analysis, and candidate assemblies before the coordinator continues. `protocol/composition-contract.md` exclusively
-  owns the strict `## Reference synthesis` Markdown ABI; require scout to emit sanitized records
-  that use its exact axis keys, dispositions, reasons, and selector rules without a role-local
-  schema. Scout preserves explicit user-reference coverage, stable source keys/labels, trust,
-  uncertainty, and only applicable axes; it never passes raw source material downstream. Treat
-  the scout return as a sanitized summary, never raw transcripts or screenshots. Downstream
-  receives sanitized criteria, never raw URLs, screenshots, pixels, or source-page descriptions.
-  Resolve conflicts through product task, accessibility/mobile constraints, and one coherent
-  design system.
-  Require the scout to cover curated design-gallery visual references (Pinterest, Dribbble, Mobbin,
-  Behance, Land-book, and equivalents) as a first-class category per
-  `protocol/human-design-loop.md` §Visual reference gallery and concept exploration, sanitized into
-  the canonical multi-axis synthesis; no gallery image, URL, or pixel travels downstream.
-  **List-detail branch:** only for a requested or task-completely inferred list→detail workspace,
-  apply the canonical non-primary work-object selection requirement in
-  `protocol/human-design-loop.md`; it never creates a default task for other surfaces.
-  **Support-chat branch:** only for an explicitly requested or task-completely inferred
-  support-ticket conversation, apply the canonical temporal-window merge/split and visible-last-bubble
-  regressions in `protocol/human-design-loop.md`; it never applies conversation behavior elsewhere.
-
-After `omd ref check` passes, paste the exact `omd ref candidates` Markdown table directly into
-the Codex/Claude chat. It is the sole candidate presentation: never direct the user to a board UI,
-HTML, PNG, showcase, or `omd-board`. The coordinator selects the strongest candidate itself and records
-it with `omd ref select`, then runs `omd ref check` again, disclosing its choice and reason in
-`.omd/decisions.md`; it does not pause to ask the user to pick a candidate, and a candidate the user
-explicitly named still wins. Do not invoke composer, eye, or hand yet. Once each applicable
-project-owned brief/copy/type/register/palette/material input has its normal clean check, the
-coordinator/host derives the two-to-three independent image-first art-direction directions directly
-from the selected assembly, the selected references, any project rough, and permitted project-owned
-inputs. It does not read `.omd/composition.md` or ask composer for a prompt. Use image generation
-only when the selected direction materially benefits from a bitmap/raster draft. Typography-led,
-diagrammatic, vector, and other code-native directions take the CSS/SVG path even when an image
-tool is installed. When image generation is justified, start the drafts concurrently; if the batch
-does not complete within 120 seconds, cancel it, record the capability as unavailable for this run,
-and take the CSS/SVG path without retrying image generation. Only then
-invoke composer: pass its selected sanitized assembly plus the chosen draft, or the selected assembly
-plus the CSS/SVG evidence path on the fallback. Never pass raw records, source URLs, screenshots,
-pixels, or source-page prose.
-
-
-  The coordinator does not author copy. The scout's voice/audience evidence is the writer's only dependency;
-  remaining fragment capture is independent. Before writer receives an art-direction contract, the coordinator
-  completes the host-authorized evaluator → art-direction check → motion settlement →
-  selected-reference/recipe handoffs sequence and creates the immutable record. Then spawn `omd-writer`
-  concurrently with remaining independent fragment capture, with the brief, cited voice/audience evidence,
-  working directory, `protocol/copy-deck.md`, `theory/voice.md`, and the finalized record. It writes only
-  `.omd/copy-deck.md`, copying rather than selecting its Register, motionDecision, Beat IDs, and
-  Beat-exception receipt. The writer's `Current-user exception` is exactly `N/A — no
-  host-authorized Beat exception` for the canonical no-exception marker, or exactly
-  `current-user: host-authorized Beat exception` for the exact host receipt; it cannot quote,
-  infer, or mint an exception. Quiet permits five Beats and confident/showpiece seven unless that
-  exact receipt authorizes more. Run `omd copy --check`; on failure return deterministic findings
-  to the writer for autonomous repair. The writer additionally runs `omd text-slop
-  .omd/copy-deck.md` as an advisory self-scan; it is non-gating and never replaces the blind copy
-  review, but a kept candidate carries a recorded reason. Use affirmative product language; never
-  put internal negative instructions into visible copy (for example, “not a hypothetical demo”).
-
-After the first clean check, spawn a fresh `omd-eye` in copy-editor mode with only the
-sanitized brief, copy deck/fact ledger, and cited voice/audience evidence. Do not pass renders,
-layout, code, build rationale, frame, decisions, or authorship. Before sending its findings
-to the writer, preserve and validate the report as specified below. Then send the cleanly
-preserved findings to the writer for deck-first revision, rerun `omd copy --check`, and start
-sketches only after it passes again. Every shipped claim traces to a verified fact ID;
-fixture/open facts never ship. Status/error/empty/recovery copy exists only where applicable.
-
-Before returning the report to the writer, preserve the fresh eye's report verbatim at
-`.omd/.cache/copy-eye.md`. The exact copy-eye report format is owned only by
-`protocol/human-design-loop.md`; do not restate or alter it. Compute the
-reviewed hash before writer revision, then immediately run `omd copy --review-check`. A failure
-stops writer revision and divergence until the report format is repaired. The command validates
-report structure only; it does not prove blindness or semantic quality and must not compare the
-reviewed hash with the current deck. The writer's changed deck and final `omd copy --check` are
-separate evidence; never overwrite the report with the final deck hash or claim that the eye
-reviewed the revised bytes.
-
-For a `product` or `mixed` surface, and for any multi-surface output, run `omd design`
-and complete the durable design contract — its Information architecture and Interaction
-states sections are the state discipline (loading, empty, error, success, disabled,
-offline: implemented or explicitly skipped with a reason) that keeps a work surface from
-shipping happy-path-only. Only a single-surface `marketing`/`editorial` run may skip this
-artifact with a recorded reason; that skip never changes stack routing.
-For every `product` surface and product screen of a `mixed` surface, the first viewport is owned by the work object at representative working density; never replace it with a marketing hero or decoration.
-  For `product` or `mixed` surfaces, the frame owns the `Task coverage matrix` and the composer
-  maps every applicable frame `T#` into `UX task coverage` using the canonical schema in
-  `protocol/human-design-loop.md`; do not restate or alter that protocol-owned schema.
-  The same protocol exclusively owns task-evidence fields, cardinality, cache locations,
-  applicability, and validation. The hand binds each existing production-reachable task
-  to its production locator and work-object identity, runs declared applicable probes and
-  required-viewport renders, then publishes actual evidence with `omd evidence tasks --input
-  .omd/.cache/task-evidence-manifest.json` followed by `omd evidence tasks-check --json`.
-  Invalid submit remains attemptable and proves an actionable error with the entered value
-  preserved; transient evidence is captured only after settlement or reduced motion. Never
-  create task rows because a state is reachable or hand-write `.omd/task-evidence.json`. Do not
-  invent product task/state/probe evidence or a task-evidence manifest for `marketing`,
-  `editorial`, or `static` runs.
-
-
-## 3. Typography proof before structure
-
-After the second clean copy check, spawn `omd-typesetter` with the copy deck, scout's cited
-typography evidence, `protocol/human-design-loop.md`, and `theory/typography.md`. It creates
-layout-neutral actual-copy specimens in `.omd/.cache/type-proof/`, renders 1280x900 and
-390x844, and writes `.omd/type-proof.md`. It does not design composition, colour, graphics,
-or motion and does not rewrite copy.
-
-Spawn a fresh `omd-eye` in typography-proof mode with only the two specimens plus sanitized
-copy and requirements. Do not pass authorship, reference rationale, page structure, colour,
-or code. Return the blind findings to the typesetter, require revision and both renders
-again, and start sketches only after the proof passes. Large type may pass when concept-
-bearing and proof-clean; size alone is neither success nor failure.
-
-The proof fingerprint is invalid after any copy, font family/file, requested weight/axis, or
-proof container-width change. Rerun the proof instead of carrying an obsolete approval.
-
-## 4. Composition contract before divergence
-
-**Spawn `omd-composer`. The coordinator never writes `.omd/composition.md` itself.** The composition
-contract is the composer's artifact; a coordinator-written one is not a contract, it is the
-coordinator's own plan validating itself.
-
-  Before spawning composer, the coordinator generates and chooses its image-first draft (when a draft
-  is available) or takes the CSS/SVG path. Give composer the coordinator-chosen draft, or the selected
-  assembly plus the CSS/SVG evidence path. The
-  coordinator has already derived prompts and selected/recorded the draft from permitted inputs;
-  composer must not supply or revise those upstream directions. Then spawn a fresh `omd-composer`
-  with the sanitized frame/concept (including surface classification), clean copy deck, approved
-  type proof, scout transfer records,
-  `protocol/composition-contract.md`, and `theory/layout.md`. The composition protocol alone
-  owns the strict `## Reference synthesis` Markdown ABI: the composer serializes the scout's
-  sanitized records exactly in that section, with no duplicate schema, heading, axis, or selector.
-  It applies the canonical Branch A/B and clean-room rules in `protocol/human-design-loop.md`
-  without creating task rows. The composer writes only `.omd/composition.md`, records required
-  fingerprints, and runs `omd composition --check`; validator failure, including missing or
-  duplicate canonical axes or selectors, stops divergence. When no durable scout summary exists,
-  it records `N/A — reason` rather than inventing evidence.
-
-
-Require one first-viewport dominant anchor, its visual-mass budget and relationship to
-value/proof/visible CTA, plus a visible rejection condition. A visible CTA and predictable
-completion path satisfy task reach; the terminal form/control surface need not be above fold
-and is not rewarded merely for appearing there. The anchor may use lawful product/evidence
-media, explanatory graphics, real interaction/data, or concept-bearing typography—never a
-mandatory photo or invented fact/asset. When mechanism/material/workflow is central, Media
-roles assigns a lawful carrier or an explicit alternate non-media mental-model carrier with
-its limitation; `none because no approved photo` is insufficient.
-For the selected art-direction contract, the host/coordinator derives 2–3 independent art-direction
-directions from the committed palette/type/material, sanitized measured principles, the selected
-references, any project rough, and other permitted project-owned inputs before composer starts.
-Use image-first drafts only when the selected direction materially benefits from bitmap/raster
-exploration; typography-led, diagrammatic, vector, and other code-native systems use CSS/SVG
-evidence instead. The host/coordinator owns concurrent image draft generation,
-cache management, and blind selection. The composer may consume only the
-coordinator-chosen draft as art-direction input. Composer neither generates nor supplies/revises
-prompts, inspects raw source material, manages the cache, or selects a draft.
-Drafts are design references, never shipped page assets;
-`omd ref distance` still reports fidelity as an advisory signal. Bound the whole concurrent image
-batch to 120 seconds. On timeout or tool failure, cancel outstanding generation, do not retry, and
-use the selected sanitized assembly and CSS/SVG graphics recipes while still implementing the
-selected macro visual system.
-
-Run `omd composition --check`. Missing sections, malformed fingerprints, or stale inputs
-stop divergence and return to the composer. A later change to frame, copy, type proof, or
-scout summary invalidates all dependent sketches and the production build until the contract
-is recomposed and passes again.
-The composer also runs `omd visual-richness .omd/composition.md` as an advisory carrier read;
-`CARRIER-ADVISORY` findings are non-gating prompts to name a purposeful carrier for a content
-section; the selected art-direction contract determines the carrier and static/motion treatment.
-
-For L4, composition does not advance directly to sketches. Take each high/critical composition fork
-and spawn three fresh `omd-eye` contexts concurrently in UX, art-direction, and production
-perspective modes. Give all three the identical sanitized alternatives and input bytes; give none
-another perspective's output or authorship. Then spawn a fourth fresh `omd-eye` as moderator with
-only the three completed records, alternatives, shared input digest, and the literal exact-key
-`design-deliberation-v1` skeleton from `protocol/design-deliberation.md`. The moderator must fill
-that skeleton, add no keys, use a plain string for each `position`, and return JSON only. Majority
-vote is forbidden: the moderator resolves objections against evidence and constraints. A read-only
-moderator response is the required success path, not a permission blocker. Copy its JSON
-byte-for-byte without the Markdown fence to a cache input, then run
-`omd deliberate preserve --input <cache-moderator.json>`; never ask the eye to write and
-never recreate its fields yourself. The command validates ownership and preserves that exact record
-under `.omd/deliberations/<id>.json`. If its resolution differs from the composer's selected alternative,
-return to the composer to revise `.omd/composition.md` and its owner-authored decision entry, then
-rerun `omd composition --check`. No L4 sketch starts without this receipt.
-
-## 5. Independent structural divergence and blind selection
-
-**Spawn `omd-sketch` for the candidates and a fresh `omd-eye` to select between them.** Skipping to a
-single structure the coordinator already has in mind is the failure this stage exists to prevent:
-without independent candidates there is nothing to select between, and the blind selection becomes a
-rubber stamp on the coordinator's first idea.
-
-Gate divergence by structural uncertainty and impact:
-
-- default: two independent `omd-sketch` contexts;
-- showpiece or high uncertainty/impact: three;
-- skip only when structure is supplied (Figma/target/explicit layout), recording why.
-
-On the normal graph, skipping the composer or sketch divergence is a protocol violation: an
-`.omd/composition.md` that passes `omd composition --check` and the blind sketch-selection record are
-mandatory ship evidence. The Figma structural-bypass route is the sole exception and records its
-explicitly retained/skipped phases; do not run a terminal handoff or a second competing graph.
-
-Give every sketch the same sanitized frame/concept, copy deck, sanitized approved typography
-contract, and sanitized composition contract, plus a different anonymous candidate id and
-one axis from the contract's Candidate axes section. Include approved dependencies, grid and
-alignment behavior, density, focal hierarchy, form grammar, media or approved alternate
-mental-model carrier, responsive recomposition, type
-roles, family, weight, size/measure, and wrapping constraints; omit source rationale,
-rejected alternatives, URLs, and authorship. Sketches preserve both contracts and vary only
-their assigned axis. They cannot invent a new type scale, see one another, or read the full
-proof, and write only under
-`.omd/.cache/sketches/<id>/`. Their real-content low-fi renders contain structure, type
-scale, and enough grayscale carrier structure to judge its functional relation—never colour,
-motion, polished/decorative graphics, production edits, or sales prose.
-
-Every candidate renders exactly four proofs: fixed desktop 1280x900, fixed mobile 390x844,
-full-page desktop continuity, and full-page mobile continuity. Full-page captures use
-`--full-page` and are supplemental evidence for narrative dependency and composition rhythm
-only; fixed renders remain authoritative for every acceptance dimension.
-
-Spawn a fresh `omd-eye` in sketch-selector mode with anonymous renders, sanitized frame,
-copy deck, and the same sanitized typography and composition contracts only. Score exactly:
-task/CTA clarity, narrative dependency, composition rhythm, concept-specific form,
-responsive hierarchy, type/copy accommodation, interaction/form usability risk, and
-accessibility/implementation cost. Do not substitute a generic visual-taste score or expose
-candidate, source, typography, or composition rationale.
-Use the frozen scale exactly: 0 absent/broken; 1 weak with major failures dominant; 2
-adequate and functional with generic or consequential weakness; 3 strong, deliberate, and
-robust with only minor weakness; 4 exceptional, unusually coherent/specific with no material
-desktop/mobile contradiction. Require eight integer scores, eight one-sentence visible-
-evidence rationales, and the arithmetic mean. Reject any contract violation or any dimension
-below 2; do not average away a floor failure. Do not equate a form above fold with CTA reach,
-and award concept-specific form only when the motif/anchor/carrier has a functional relation
-to the domain mechanism, material, workflow, evidence, or action.
-
-Use these frozen dimension-specific anchors. Scores 1 and 3 interpolate only between adjacent
-0/2/4 anchors; they are not generic visual-taste scores:
-
-- **Task/CTA clarity** — 0: no immediate primary CTA or completion path; entry or next action
-  is ambiguous or blocked. 2: the CTA is visible and usable with an understandable next step,
-  but feedback or the path is generic or weak. 4: an immediate primary CTA, predictable
-  completion path, and state feedback are unmistakable on desktop and mobile; a terminal form
-  is not required above the fold.
-- **Narrative dependency** — 0: sections are interchangeable or out of order, or prerequisite
-  information is missing or follows the decision that needs it. 2: the sequence is
-  understandable, but some sections remain weakly dependent or generic. 4: every section
-  answers an entering question and creates a prerequisite for the next; removal or reordering
-  visibly weakens the narrative.
-- **Composition rhythm** — 0: alignment, visual mass, negative space, span, and density are
-  arbitrary or monotonous and obscure hierarchy or sequence. 2: those five properties form a
-  workable hierarchy with generic or uneven transitions. 4: alignment, visual mass, negative
-  space, span, and density vary deliberately to stage the sequence and dominant anchor across
-  desktop and mobile, without an arbitrary break.
-- **Concept-specific form** — 0: the result is a generic template or its motif/carrier is
-  decorative and unrelated to the domain. 2: a domain relationship is recognizable, but some
-  anatomy remains generic or ornamental. 4: motif, anchor, and carrier arise from the domain
-  mechanism, material, workflow, evidence, or action and govern functional relationships
-  rather than decoration.
-- **Responsive hierarchy** — 0: mobile is a shrunken/stacked desktop with lost or cropped
-  content, a broken task path, or a broken anchor dependency. 2: usable reflow preserves
-  content and task reach, but priority or anchor recomposition is conventional or uneven.
-  4: deliberate mobile recomposition preserves semantic order, dominant-anchor morphology,
-  priority, and an uninterrupted CTA/task path with no desktop-only dependency.
-- **Type/copy accommodation** — 0: real copy truncates, overlaps, becomes placeholder content,
-  or breaks Korean wrapping, hierarchy, or CTA labels. 2: real copy fits and hierarchy remains
-  understandable, with minor awkward wraps, repetition, or density. 4: real Korean copy,
-  repeated data, and CTA labels are fully integrated; measure, wrapping, hierarchy, and
-  concept-bearing type remain robust on desktop and mobile.
-- **Interaction/form usability risk** — 0: the primary task cannot succeed, or controls,
-  focus path, feedback, error/recovery, or a required reachable state is broken. 2: the primary
-  task works with adequate controls and states, but feedback, recovery, or an edge state has a
-  consequential non-blocking weakness. 4: task success, immediate feedback, focus path,
-  duplicate prevention, value preservation, and every applicable recovery/exit are robust in
-  supplied probes; inapplicable states are not invented.
-- **Accessibility/implementation cost** — 0: contrast, focus/order, reflow, or target reach
-  fails, or the structure is impractical and visibly unfinished. 2: the implementation path is
-  credible and basic access works, but costly complexity or incomplete finish remains. 4:
-  contrast, keyboard focus/order, reflow, target reach, reduced motion, maintainable structure,
-  and applicable finish details form a credible, accessible, finished implementation.
-
-When every candidate violates a contract or has any dimension below 2, record **no winner**.
-Never lower the floor, select the closest candidate, or hide the failure in the mean. Have the
-fresh selector classify the shared failure from visible evidence only as contract-level when
-a supplied contract requirement creates the shared contradiction, or execution-level when
-the contracts permit success but candidates fail to execute it.
-
-Run at most one bounded recovery round. For a contract-level failure, spawn a fresh composer
-with only the sanitized shared visible contract conflict—no candidate renders, scores,
-identities, or rationale. Require a revised `.omd/composition.md`, a clean
-`omd composition --check`, and a new hash; invalidate every old candidate. Then spawn fresh
-sketch contexts for replacements under the revised contract and assigned axes. For an
-execution-level failure, preserve the approved contracts and run exactly one bounded
-replacement round in fresh sketch contexts, one per candidate. Each replacement receives
-the same approved contracts and axis plus
-only its own sanitized visible failure and acceptance criteria. Do not pass numeric scores,
-the prior render/source, other candidates/renders, or candidate/selector rationale.
-
-Spawn a fresh selector for the replacement set. If none passes, do not retry again: reframe
-and stop with visible evidence, or pause only when the configured structure checkpoint
-requires a human decision. Never create an execution engine or unbounded retry loop. Record
-the winner and rejected tradeoffs only when a candidate actually passes.
-
-## 6. Production build with reflective craft
-Before spawning the hand, wait for every retained upstream owner and review context to finish.
-Merge their exact returned decision JSON without rewriting it, then run `omd ref check`,
-`omd copy --check`, the required type-proof review/check, `omd composition --check`, and
-`omd deliberate check --phase prebuild`. The prebuild gate must prove the depth, acquisition plan,
-all required frame/copy/type/composition/structure owner decisions, and every L4 moderated
-deliberation while intentionally excluding hand-owned production observations and coverage.
-Any missing artifact or RED command blocks the hand; it cannot be documented away as a deviation.
-Do not launch the hand while a typesetter, composer, perspective, moderator, sketch, or selector is
-still running.
-
-**Spawn `omd-hand`. The coordinator never writes production source itself** — not the scaffold, not a
-component, not the stylesheet. The hand is where install-over-reimplement, the craft checkpoints, and
-the reflective render loop live; a coordinator that writes the source bypasses all three at once and
-the run ships whatever the coordinator happened to type.
-
-The hand also owns the production/refinement entries returned for `.omd/decision-graph.json`,
-`.omd/observations/*.json`, and `.omd/assembly-coverage.json`. It reads the required zones from
-`.omd/acquisition-plan.json`. For every required zone it must bind the captured reference identity,
-extracted principle, composer-owned decision ID, actual production selector, and final fidelity
-evidence. A ref merely mentioned in prose or a production section with no bound ref does not count.
-
-On the normal graph, spawn `omd-hand` once with the selected structure, sanitized build brief,
-copy deck, `.omd/type-proof.md`, `.omd/composition.md`, accepted sanitized transfer criteria, and
-the selected lawful local capture projections plus handoff receipts resolved from the current
-reference selection. On the normal graph, require `omd composition --check` before its first production write.
-The hand must run it and a failure blocks production. The hand must inspect those selected artifacts and implement their selected
-macro visual system at the named destination; it never receives raw URLs or unselected source
-material. The Figma structural-bypass route is the sole structural-bypass exception: supply
-`.omd/figma/snapshot.json`, `.omd/figma/design-system.md`, `.omd/attribution.md`, and the selected
-frame inventory instead of composition/transfer inputs; require those artifacts to exist and match the
-supplied frame before the first production write. Transfer records never create tasks or probes.
-The hand builds semantic
-real-content layout first,
-then the visual system, then motion. It must record two concrete reflection-in-action loops:
-
-```bash
-omd craft checkpoint semantic --render <path> --observed "..." --changed "..."
-omd craft checkpoint visual --render <path> --observed "..." --changed "..."
+Deliver the requested interface from OMD's typed outcomes, boundaries, evidence, and validation.
+The user-selected model owns strategy: role order, stage order, and optional methods.
+
+## Runtime ownership
+
+The session model belongs to the user; OMD selects only role effort. Codex child launches omit
+`model` and inherit the authenticated host. Production uses the host-owned stdio JSONL boundary.
+Claude agents use `model: inherit`. Senpi roles run as isolated processes after a healthy
+authenticated `omd host senpi run`; its wrapper accepts no model flag.
+
+A named owner receives only its stage brief, delivered contracts, project path, and bounded task.
+The coordinator retains the real child/process identifier, waits for actual completion, and gates
+the artifact. A missing selected owner is a visible blocker; it does not transfer ownership. On
+Codex, write the task outside production and run:
+
+```text
+omd-codex owner run --agent omd-hand --input <task.md> --json
 ```
 
-The semantic checkpoint occurs after desktop/mobile real-content layout. Then the hand
-re-proves typography inside the selected production container at desktop and mobile after
-OMD render/IR waits for `document.fonts.ready`. It compares requested versus computed
-family/weight, actual Korean/Latin/numerals, wraps, clips, orphans, and hierarchy. The visual
-checkpoint occurs only after that reproof and after type/colour/spacing/components, before
-motion. Both checkpoints require a change; a gray-box or "no change" ritual does not count.
-  Immediately after scaffold/dependency resolution, resolve every newly introduced import/export
-  against the exact installed versions, parse generated configuration with its owning tool, and run
-  focused typecheck, build, and test-discovery. Repeat this smoke verification after every
-  dependency, dependency API, or build-config change; retain the full final verification. For
-  dialogs, toasts, and other transient UI, collect evidence only after fonts and
-  animations/transitions settle, or under reduced motion, and require visible pixels rather than
-  DOM presence alone.
+The command authenticates the owner against the live `omd-codex exec` host, rejects cross-project,
+copied, stale, or owner-mismatched authority, and records its exact session/process events. It permits
+at most one fresh-session retry, and only when the first attempt changed no production file. A timeout
+after any production mutation is terminal. Do not launch a second hand, resume one concurrently, use
+native `spawn_agent` for production, or write production source from the coordinator.
 
-The build acceptance contract verifies the primary task, most frequent action,
-costliest-error recovery, an exit from every reachable state, immediate visible feedback,
-and mobile reach. It also verifies the focal anchor's morphology, visual-mass budget, and
-value/proof/CTA relationship plus the lawful media/alternate carrier's functional relation
-and limitation in fixed desktop/mobile renders. It records visible acceptance evidence or a
-deviation for the sharp eye. A full form need not occupy the first viewport. The hand uses native semantics, preserves form values on error, blocks
-duplicate submits, implements only applicable states, and honors reduced motion.
+## Preflight and adaptive route
 
-## 7. Squint before sharp, then safe interaction
+Start Codex through `omd-codex exec -C <project> ...` (or `oh-my-design codex exec ...`). The host launcher exports the opaque, read-only `OMD_ACTIVATION_PATH`; never create, copy, or replace that invocation file.
 
-Render desktop and mobile squint images before any sharp render is exposed to a critic:
+From the target project:
 
-```bash
-omd render <page> --viewport 1280x900 --squint -o .omd/.cache/squint-desktop.png
-omd render <page> --viewport 390x844 --squint -o .omd/.cache/squint-mobile.png
+```text
+omd doctor
+omd stack --json
+omd schema route-input
+omd route classify --input .omd/.cache/route-input.json --json --activation "$OMD_ACTIVATION_PATH"
+omd stage resume
+omd route show --activation "$OMD_ACTIVATION_PATH"
 ```
 
-These commands capture the exact viewport by default. `--full-page` is supplementary
-continuity evidence only and never replaces fixed-viewport desktop/mobile acceptance renders.
+The route input is closed and typed. It carries:
 
-Spawn `omd-glance` with only those images. Preserve its four-line report. Squint isolates
-hierarchy; never call it a colour-blind simulation or literal 50ms test.
+- the task outcome contract and completion evidence;
+- UX hard rails, required outcomes, recommendations, and free choices;
+- confirmed user facts separately from hypotheses and temporary decisions;
+- the reference-discovery decision and its actual evidence use;
+- task size, failure risk, UX rigor, and expressive-design axes;
+- the current user-selected model capability profile decision;
+- browser observations linked to the design decisions they test;
+- validated-learning context that remains advisory and scope-bound;
+- the user-selected model's ordered roles, stages, methods, and reasoned optional skips;
+- exact conditional copy-repair, motion-ambition, AI decision receipt, and attribution-category contracts.
 
-Production source now exists. Read `protocol/slop-review.md`, run `omd slop scan <root>
---json`, and keep the raw report under `.omd/.cache/`. Triage each candidate as `confirmed`,
-`dismissed`, or `needs-render`; candidate presence is not a failed gate, while an untriaged
-candidate is. Treat `needs-render` as transitional: obtain sharp evidence and resolve it
-before ship. Final untriaged and needs-render counts are both zero. Record durable
-repair/dismissal evidence in `.omd/decisions.md`. Do not merge
-source candidates with rendered IR warnings or send them to check history/coach; rendered IR
-is authoritative where they overlap.
+Malformed or missing context fails closed. A skipped recommendation, optional stage, or optional method has a written
+reason. High-risk work retains safety and rigorous UX validation. Scope lock, required outcomes,
+project-write authority, activation, source sealing, final-v2 evidence, independent review, and
+user-selected-model ownership are hard gates and cannot be listed as skips.
 
-  Use the copy deck's Interaction scope. `stateful` requires explicit non-destructive
-  `.omd/probes/primary.json` and `.omd/probes/recovery.json`, with both run through `omd probe`;
-  these are baseline probes, not a ceiling on the `Task coverage matrix`. `navigation-only`
-  requires and runs only the primary probe; recovery is N/A with a reason. `static` records
-  both probes N/A with reasons. Never invent recovery/error/empty UI or product task/state/probe
-  evidence for an inapplicable `marketing`, `editorial`, or `static` surface. Probe only local
-  files/localhost, declared click/fill/press actions, declared expectations, and optional
-  expected tab order. Never auto-discover and click controls; never probe remote production or
-  authenticated flows.
+`omd route check --activation "$OMD_ACTIVATION_PATH"` enforces the declared write scope. A UI request does not authorize repository
+publication, licensing, unrelated dependencies, or unrequested surfaces.
 
-## 8. Blind critique, repair, and reframe
+Electron and Tauri renderers are web UI inside a desktop shell, not a second website. Use the
+renderer target printed by `omd stack`; SEO, no-JS visitor, and marketing checks apply only when the
+contract includes a website.
 
-Now render sharp desktop/mobile (and filmstrip when motion matters), run deterministic checks, and
-spawn an isolated fresh `omd-eye` with only bounded opaque production payload, never references or
-source identity. For reference fidelity, separately spawn a fidelity eye with only canonical
-selected projections, handoff receipts, the named landing criteria, and sharp/probe evidence. The
-fidelity eye verifies the selected macro system at its named destination; neither eye receives raw
-source material. Both treat a failed `omd composition --check`, missing/duplicate canonical axes,
-or wrong landing as a blocker; validator pass never replaces visual/probe review.
-`omd craft-usage <page> --surface <surface>` audits captured role-② reference signatures against the selected direction. Captured scroll-linked craft is evidence for the art-direction decision, never an instruction to add motion beyond its selected `motionDecision`: a `none` decision may deliberately decline it, while `one` permits only its one declared, observed `load`, `scroll`, or `pointer` scene. `product`/`quiet` surfaces are exempt.
-The sharp production review is conjunctive: `signature-fit`, `narrative-fit`, `motion-fit`, and
-`decision-fit` must all pass, and every critical 0–4 score (task/CTA clarity, narrative dependency,
-composition rhythm, responsive hierarchy) must be at least 3. Neither a mean nor a
-high score can average away a binary or floor failure. `motionDecision: one` is exactly one
-load-triggered scene observed from page load through its 1500ms settlement window; `none` is no
-temporal scene plus a designed static template break. The sharp eye
-judges focal hierarchy and the lawful media/alternate mental-model carrier across desktop/mobile,
-without demanding a photo, invented asset, or form above fold.
+A supplied Figma frame is structure evidence. Whether framing, copy, typography, reference work,
+composition, or alternative generation is useful is decided by the adaptive route. It never removes
+required UX outcomes, production evidence, accessibility, or independent review.
 
-For showpiece only, spawn one additional fresh eye with exactly one dominant-technique lens
-chosen from typography, motion, or graphics. It reviews that technique only. Do not create
-a permanent specialist or multi-lens panel.
+## Evidence supply
 
-Send prioritized findings back to the hand for the smallest repair, then rerun affected
-checks/renders/probe and `omd slop scan`. Confirmed source candidates are repaired; dismissed
-ones have evidence; confirmed current candidates are rescanned; final untriaged and
-needs-render counts are zero. If rendered evidence changes the problem, run `omd frame reframe --to
-... --because ...`; otherwise record why the frame survived.
-If a finding requests copy repair, update the deck through omd-writer first, re-run
-`omd copy --check`, and only then update source through the hand. Copy, claim, or action
-changes invalidate the affected blind copy review and typography proof. The hand never
-silently rewrites shipped copy.
+At each selected stage boundary run `omd brief <stage>`. The brief is derived from current disk state:
+owner, owned artifact, applicable references with measured principles, delivered contracts, input schemas,
+renderer target, prior renders, deterministic judges, and blockers. Pass it unchanged to the
+selected owner.
 
-## 9. Ship
+For each contract named by the selected stage:
 
-Verify project tests/build plus `omd check`, two clean copy checks around an independent
-writer/editor pass, a blind typography proof before sketches and production-container
-reproof before the visual checkpoint, responsive sharp/squint renders, applicable filmstrip, humanize review,
-probe, `omd craft status`, `omd design --check` when applicable, `omd ref distance`, bounded target
-convergence when a manifest exists, and `omd check --site` for multi-page output. The normal graph also
-requires a fresh `omd composition --check`; the Figma structural-bypass route instead requires the
-supplied snapshot/design-system/attribution artifacts plus a fresh passing `omd figma diff` for every
-selected frame. Source-candidate triage has no untriaged or needs-render items and its
-  scan was rerun after repairs. When reference assembly applies, hand off the passing
-  `.omd/reference-usage-v2.json` ledger, current `.omd/reference-selection-v2.json`, settled
-  `.omd/motion-resolutions/sha256-<digest>.json`, and decision-bound composer/hand
-  `reference-handoff-v2` receipts to the finalizer. The finalizer calls
-  `generateReferenceReport(root, writer)` with host-authorized `ProjectWriteAdapter`, which alone
-  persists `.omd/reference-report.md`; paste the pure formatter's exact Korean-first bilingual
-  Markdown unchanged into the final chat. Everything is clean or has an evidence-backed deliberate
-  overrule.
-A declared requirement is not shipped because the page looks finished. Write the brief's stated
-requirements to `.omd/functional-requirements.json` as `functional-requirements-v1` — print its
-shape with `omd schema functional-requirements` — and run `omd complete check <page>`. It fails
-when a declared affordance is absent, is text rather than an operable control, or cannot be reached
-by keyboard. It adds no style rule; it only proves the page does what the brief said it would.
+```text
+omd stage deliver --stage <stage> --contract <pack-relative-path>
+omd stage require <stage>
+```
 
-When the run declares more than one locale, `.omd/locale.json` is `locale-contract-v1` and
-`omd locale check` must pass before ship: every Beat carries real copy in every declared locale,
-and no locale silently falls back to another. Read `protocol/locale-contract.md` for the layout,
-control-state, and document-signal obligations that go with it.
-Regardless of whether reference assembly applied, close the final chat response with this run's usage: run `omd usage` and include its elapsed-time and token total in your final message to the user. It reads the host session log (Claude Code or Codex); if no log is found it prints a short unavailable note, which you simply omit rather than fabricating a number.
-When the run is an iteration with a before/after pair, form the pairwise blind-choose verdict:
-blind-choose is the visual distinction signal only; applicable task probes, accessibility checks, and
-declared viewport task evidence remain independent passing UX gates. Record the comparison; it never
-replaces the blind typography, copy, or critique gates above.
+`[deliver-then-retry]` asks for the missing delivery. `[owner-blocked]` means a selected earlier owner
+did not produce its artifact. File/symbol cues come from `omd cue`; schemas come from `omd schema`;
+protocol excerpts come from `omd pack <file> --section <heading>`. Roles do not inspect `core/**` to
+guess an input shape and do not read this coordinator skill.
 
-### Refinement rounds (RED/GREEN, evidence-driven)
+A measured observation is instruction-quality evidence. A slogan is not. Reference records state the
+component or zone, observed principle, provenance, and actual use. Browser records bind a tested URL,
+state, viewport, result, and exact design decision. One observation remains local; only repeated,
+independently validated learning may become scoped advisory guidance.
 
-Every `product`, `marketing`, and `mixed` surface — and any `editorial`/`static` surface with a real
-visual system — runs a mandatory RED/GREEN loop: the first shippable build is round 0, never the ship.
-Only a trivial content-only surface may ship after one pass, and only with a recorded reason and a clean
-slop scan. Write the acceptance criteria (the strict GREEN target) from the frame and
-`theory/expressive.md` § "Slop-free is not the same as distinctive": it names the template it resembles
-and departs from it; one clear first-read with no two competing primary masses; `omd slop scan` has zero
-confirmed candidates and `omd check --category slop` is clean; no reality-depth tell (a form that never
-submits, timing theatre standing in for real work, or self-referential in-page trust); `omd ref
-distance` recorded (advisory); carrier present and register-fit; and the blind-choose after beats before.
-Any unmet criterion is RED.
+## Adaptive execution
 
-Then iterate, leaving evidence every round — a round with no evidence does not count:
-1. The hand makes one concrete change, then captures sharp desktop/mobile renders into
-   `.omd/.cache/rounds/round-<N>/`, measures each visual criterion (glance hierarchy, `omd check`/slop
-   scan, `omd ref distance`, carrier read), and reruns every applicable declared task probe,
-   accessibility check, and required-viewport task evidence. Any UX invariant failure rolls the round
-   back.
-   Build and judgment stay separate.
-   For every concrete change, the hand writes one `visual-observation-v1` record with a distinct
-   before render, observable metric/fact, judgment, exact modification, after render, and measured
-   result. “Looks better” or source inspection is not an observation. A round without that record
-   does not count even when screenshots exist.
-2. Spawn a fresh `omd-eye` — never the hand that built it — with only the sanitized acceptance
-   criteria and the two anonymized renders (this round's after and the previous build). It forms the
-   blind-choose visual distinction and reports which criteria are still RED. Record its verdict, the
-   still-RED criteria, and the evidence paths with `omd decision`; blind-choose cannot overrule a UX
-   invariant.
-3. Decide continue or stop from the round evidence. CONTINUE only while the applicable UX invariants
-   pass, blind-choose favors the after, and RED criteria remain — there is no fixed round budget — then
-   fix the single highest-leverage RED target with the same one-concrete-change discipline
-   as the craft checkpoints and re-measure. STOP on GREEN (every acceptance criterion met — done), a
-   UX regression (rollback), a visual regression (revert to the previous build), a plateau
-   (blind-choose tie while still RED). On a plateau, keep the best valid build and report the
-   remaining RED. A round with no evidence does not count.
-It is not a blind automatic retry: it advances only on measured visual improvement while UX and
-beautiful UI remain coequal, and it may run as many rounds as it takes to converge on GREEN — there is
-no fixed budget. Round 0 is almost never GREEN
-— do not ship the first AI-shaped pass. A one-pass ship is allowed only for a trivial content-only
-surface, with a recorded reason and a clean slop scan.
-Before source sealing, merge only the exact owner-authored decision entries returned by the spawned
-agents into `.omd/decision-graph.json`; the coordinator must not author or paraphrase them. Require
-`omd deliberate check` to pass by running its explicit final gate:
-`omd deliberate check --phase final`. This joins depth, acquisition zones, decisions, any L4 moderator
-receipts, hand observations, and final assembly coverage. A missing zone, generic visual claim,
-owner mismatch, untested high-risk trade-off, or isolated artifact with no end-to-end chain is RED
-and blocks final evidence.
-  After all source and approved inputs stop changing, freeze and collect final evidence in the order
-  required by `protocol/human-design-loop.md`: run `omd source --seal <root>`, then `omd source
-  --check <root>`, where `<root>` is the project root containing `.omd/`, never a nested output
-  directory. Excluded hidden or non-source metadata links are ignored. Never move, rename, or delete
-  a project symlink to make sealing pass; a reported source-bearing symlink is a real blocker.
-  Build and collect every final check, test, declared/applicable probe, fixed-viewport
-  screenshot/render, and applicable motion filmstrip from sealed source; then run
-  `omd source --check <root>` again. For `product` or `mixed`, publish the task index with `omd
-  evidence tasks --input .omd/.cache/task-evidence-manifest.json`, then `omd evidence tasks-check
-  `--json`. When the launcher supplied a host-issued invocation, write the `final-evidence-v2`
-  manifest at `.omd/.cache/final-evidence-v2-manifest.json`; it binds the immutable art-direction
-  record, `.omd/reference-selection-v2.json`, settled motion projection, copy receipt, source seal,
-  and exactly one branch: `motionDecision: none` with `static-direction-evidence-v1`, or
-  `motionDecision: one` with exactly one `motion-evidence-v2`. It contains no unselected direction
-  or raw evidence. Publish only with
-  `omd evidence v2 finalize --input .omd/.cache/final-evidence-v2-manifest.json --activation
-  <host-issued-invocation.json>`, using a final-reviewer-authorized activation. Then run
-  `omd evidence v2 check --activation <host-issued-invocation.json> --json`. The sole publication
-  marker is `.omd/final-evidence-v2.json`, pointing at one immutable
-  `.omd/final-evidence-v2-runs/sha256-<digest>.json` record. Never invoke the v1 finalizer/checker
-  or write `.omd/final-evidence.json`.
-  In the moderator-bound local lane, do not attempt or claim v2 publication. Finish with the same
-  source seal before/after checks, build, typecheck, required fixed-viewport renders, probes,
-  `omd deliberate check --phase final`, and applicable evidence checks; report those as local run
-  evidence rather than treating the absent host publisher as a blocker. Any source or build
-  mutation in either lane requires reseal, rebuild, and rerun. The seal proves byte freshness only
-  and does not prove semantic copy/source fidelity.
-Deliver the working artifact and briefly state the frame,
-concept, structural choice, what the two craft renders changed, glance/critique outcome,
-and any deliberate overruling. Do not release, deploy, or wait for further approval unless
-the user asked for it.
+Use `.omd/route.json` as the machine-consumed strategy. Do not substitute a remembered `thin`,
+`standard`, or `deep` sequence.
+
+- Launch only the roles and stages selected by the route, in its model-owned order, while respecting
+  actual artifact dependencies.
+- Apply selected recommended methods and capability support cards. Preserve every reasoned skip.
+- When reference discovery is selected, gather for unresolved decisions and stop at coverage; there
+  is no reference quota. When it is skipped, use the recorded existing evidence and actual-use note.
+- Candidate generation, framing, copy isolation, typography proof, composition, art direction, and
+  refinement are conditional methods. Their own contracts apply fully when selected; absence requires
+  the route's reason rather than an invented artifact.
+- When art direction is selected, apply `[metaphor-contract:typed-router]` and route the immutable typed decision rather than retyping or
+  paraphrasing it. Its selected alternative and decision carry exact non-empty `metaphorQualities`
+  and `literalPropsToReject`. Pass the full private visual contract unchanged to `omd-composer`,
+  `omd-hand`, and the applicable fidelity `omd-eye`; give `omd-writer` only the copy-safe projection
+  that excludes both fields and all negative instructions. The coordinator does not duplicate or
+  author visible UI copy; copy remains the writer's exclusive artifact.
+- Before art direction, composition, or production writes visual styling, settle a rendered palette
+  plan from `theory/color.md`: dominant ground, secondary surfaces, primary/brand colour, accent,
+  expected 60-30-10 roles, and contrast targets. A general product surface defaults to true white
+  (`#FFFFFF`) for the dominant 60% canvas; near-white neutrals belong to secondary surfaces. A dark,
+  tinted, cream, beige, paper-like, or material dominant ground
+  requires explicit user, brand, or subject evidence; style words such as "editorial", "premium",
+  "cultural", or "magazine-like" alone are not evidence. Translate them into hierarchy, rhythm,
+  typography, imagery, and composition rather than literal material imitation.
+- Safety work and required outcomes are not recommendations. A high-risk route without its safety rail,
+  rigorous task/accessibility validation, and recovery evidence is invalid.
+- Production remains owned by `omd-hand`. On Codex it is launched only through `omd-codex owner run`; it writes only allowed paths and uses only named dependencies.
+- The terminal evidence transaction remains production, decision-linked browser evidence, and a fresh
+  independent `omd-eye` review. Strategy freedom cannot reorder away those gates.
+
+Artifact ownership remains exclusive whenever an artifact is selected: frame/acquisition belongs to
+`omd-framer`; scout/reference records to `omd-scout`; copy deck to `omd-writer`; type proof to
+`omd-typesetter`; composition to `omd-composer`; structural candidates to `omd-sketch`; production
+source and observations to `omd-hand`; verdicts to a fresh `omd-eye` or `omd-glance`. The coordinator
+orchestrates and preserves returned records; it does not impersonate an owner.
+
+## Build, observe, review
+
+For an investigate-mode workflow, `omd workflow check` means every selected proof and review is current. If a selected greenfield component has no source to render, publish only the production-independent artifacts and applicable structure review with `omd workflow readiness`, then require `omd workflow check-readiness` before launching the owner. The authenticated owner writes only the component and representative page-context slice and publishes `omd workflow slice`; after actual component/interaction proofs and expression review are published with `omd workflow artifacts`, require the complete `omd workflow check`. A decision graph never substitutes for a selected proof.
+
+`omd-hand` starts from `omd brief production`, builds only the routed scope, runs its `judgedBy`
+commands, and returns changed paths plus actual command results.
+
+Observe the real renderer rather than source intent. Collect the task states, viewports, interaction
+paths, reduced-motion behavior, and failure/recovery evidence required by the outcome and UX
+contracts. Browser observations must link to the exact design decisions they validate. Do not create
+states, motion, reference boards, candidates, or research solely because an older sequence contained
+them.
+
+The independent reviewer receives opaque renders plus deterministic findings, bounded product facts,
+required outcomes, and safety rails. It does not receive authorship, implementation rationale, or
+unselected reference material. Only the production owner repairs production.
+
+A refinement round is evidence-driven: RED records an observed mismatch; GREEN records the new
+observation and check that closed it. Run refinement when selected or when a required gate remains
+RED. Do not manufacture rounds after required outcomes and review are clean.
+
+## Ship
+
+Run the project's focused checks, applicable build/typecheck, checks from the selected production and
+review briefs, `omd route check --activation "$OMD_ACTIVATION_PATH"`, and final renderer inspection. After approved inputs and source stop
+changing, use the trusted project-write path, seal and recheck source, collect every applicable final
+check/probe/render, and publish final-v2 evidence through the host-authorized finalizer. Re-read the
+published pointer immediately, then run `omd completion preflight --activation "$OMD_ACTIVATION_PATH"`.
+Independent review and final evidence are required on both a one-line copy correction and a
+safety-critical new product; the work before them is adaptive.
+
+If the preflight does not exit zero, or `.omd/final-evidence-v2.json` does not name the current
+immutable record, you MUST NOT say the work is complete. Report the exact host-authority blocker and
+the strongest checks that did run, while keeping completion explicitly unclaimed. Never substitute
+app tests, build output, screenshots, probes, or reviewer prose for the current final pointer and
+successful terminal preflight.
+
+Return the working interface, changed files, actual evidence used, observed result, checks run, and
+any concrete blocker. Do not expose internal quotas or ask the user to operate the harness.

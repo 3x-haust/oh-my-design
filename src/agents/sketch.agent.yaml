@@ -8,6 +8,8 @@ allow:
   - apply_patch
   - Bash(omd render:*)
   - Bash(omd pack:*)
+  - Bash(omd route:*)
+  - Bash(omd brief:*)
 deny: []
 instructions: |
   Read `omd pack protocol/human-design-loop.md --section "Blindness and isolation"` and

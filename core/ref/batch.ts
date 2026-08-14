@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { dirname, relative } from 'node:path';
-import { capturePageForRef, withBrowser, parseViewport } from '../render/index.ts';
+import { capturePageForRef, captureEnergy, withBrowser, parseViewport, REFERENCE_VIEWPORT } from '../render/index.ts';
 import { normalize } from '../ir/normalize.ts';
 import { extractInvariants } from './invariants.ts';
 import { captureBlueprint } from './blueprint.ts';
@@ -22,6 +22,8 @@ export interface RefSpec {
   shot?: boolean;
   fromUser?: boolean;
   viewport?: string;
+  /** Motion capture is on by default; pass false only when the source cannot be animated. */
+  energy?: boolean;
 }
 
 export interface BatchOutcome {
@@ -66,10 +68,15 @@ export async function addRefsBatch(
             ? refImagePath(adapter.projectRoot, { source: spec.source, component: spec.as })
             : undefined;
           if (shotOut) adapter.mkdir(relative(adapter.projectRoot, dirname(shotOut)));
-          const { raw, shotSaved } = await capturePageForRef(browser, spec.source, parseViewport(spec.viewport), {
+          const viewport = parseViewport(spec.viewport ?? REFERENCE_VIEWPORT);
+          const { raw, shotSaved } = await capturePageForRef(browser, spec.source, viewport, {
             selector: spec.selector ?? null,
             ...(shotOut ? { shotOut, adapter } : {}),
           });
+          // Motion is evidence, not decoration: a board captured without it cannot answer what a
+          // reference does on scroll, and every craft query in the brief goes unanswered while the
+          // record still looks complete. One extra pass per capture, skipped only on request.
+          const energyCurve = spec.energy === false ? null : await captureEnergy(spec.source, { viewport });
           const ir = normalize(raw);
           const invariants = extractInvariants(ir);
           const slopCount = check(ir, rules, { categories: ['slop'] }).length;
@@ -88,6 +95,8 @@ export async function addRefsBatch(
             ...(spec.fromUser ? { origin: 'user' as const } : {}),
             ...(blueprint !== undefined ? { blueprint } : {}),
             ...(shotSaved && shotOut ? { imagePath: relative(adapter.projectRoot, shotOut) } : {}),
+            ...(energyCurve !== null ? { energyCurve } : {}),
+            viewport,
           }, adapter);
           outcomes[i] = { source: spec.source, as: spec.as, ok: true, slopCount };
         } catch (err) {

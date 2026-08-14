@@ -61,8 +61,8 @@ const REASONS: Record<SlopSourceCandidateId, Pick<SlopSourceCandidate, 'reason' 
     reviewQuestion: 'Does this state need continuous visual urgency, or would a quiet status remain legible?',
   },
   'rounded-accent-callout': {
-    reason: 'A callout combines rounded corners with a thick coloured left edge.',
-    reviewQuestion: 'Which one treatment communicates the aside most clearly without stacking both?',
+    reason: 'A callout combines rounded corners with a thick coloured left edge, stacking two containment signals.',
+    reviewQuestion: 'Does the established callout role require both signals, or would one preserve hierarchy with less noise?',
   },
   'decorative-ordinal-run': {
     reason: 'A display treatment repeats zero-padded ordinals across a three-step run.',

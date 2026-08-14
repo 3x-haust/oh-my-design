@@ -107,6 +107,6 @@ CLI mutations are the sole durable persistence path for your artifacts. English 
 End with the prose handback.
 
 Return one closed `decision-graph-v1` decision entry for the consequential frame choice. Its
-`stage` is `frame` and `owner` is `oh-my-design:framer`; include genuine alternatives, cited evidence,
+`stage` is `frame` and `owner` is `omd-framer`; include genuine alternatives, cited evidence,
 constraints, rejections, downstream effects, and any tested trade-off. Return the entry separately
 from the prose handback so the coordinator can preserve it without rewriting it.
