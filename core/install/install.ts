@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync, cpSync, rmSync, readdirSync, symlinkSync, lstatSync, readlinkSync, unlinkSync, chmodSync } from 'node:fs';
 import { join, dirname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { execFileSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { parse as parseToml } from 'smol-toml';
 import type { Detected } from './detect.ts';
 import { unpatchSettings, patchSettings, unpatchHooks } from './patch-claude.ts';
@@ -383,12 +383,10 @@ function check(name: string, ok: boolean, detail?: string): DoctorCheck {
 }
 
 function omdVersionRuns(): DoctorCheck {
-  try {
-    execFileSync(process.execPath, [join(pkgRoot, 'bin', 'omd.mjs'), '--version'], { stdio: 'pipe' });
-    return check('omd --version runs', true);
-  } catch (err) {
-    return check('omd --version runs', false, err instanceof Error ? err.message : String(err));
-  }
+  const result = spawnSync(process.execPath, [join(pkgRoot, 'bin', 'omd.mjs'), '--version'], { stdio: 'pipe', shell: false });
+  if (result.error) return check('omd --version runs', false, result.error.message);
+  if (result.status !== 0) return check('omd --version runs', false, String(result.stderr ?? 'process failed'));
+  return check('omd --version runs', true);
 }
 
 function doctorClaude(d: Detected): DoctorCheck[] {
