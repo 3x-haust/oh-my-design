@@ -1,0 +1,3 @@
+# Test-only harnesses invoke fixed local developer tools and are not shipped in the package.
+[scanner]
+ignore_paths = ["test/*"]
