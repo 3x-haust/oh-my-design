@@ -1,9 +1,9 @@
 {
   "mcpServers": {
     "browser-rs": {
-      "command": "node",
+      "command": "browser-rs",
       "args": [
-        "scripts/browser-rs-mcp.mjs"
+        "--headless"
       ]
     }
   }
