@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -46,7 +46,7 @@ test('membership rejects collisions, symlinks, special roots, and bad typed excl
     rmSync(join(root, 'tree', 'link.txt'));
     assert.throws(() => computeMembership(root, { ...spec, exclusions: [{ path: 'tree/keep.txt', kind: 'directory' }] }, { lockMode: 'create' }), /kind mismatch/);
     assert.throws(() => computeMembership(root, { ...spec, exclusions: [{ path: 'tree/missing', kind: 'file' }] }, { lockMode: 'create' }));
-    execFileSync('mkfifo', [join(root, 'tree', 'pipe')]);
+    spawnSync('mkfifo', [join(root, 'tree', 'pipe')], { shell: false });
     assert.throws(() => computeMembership(root, spec, { lockMode: 'create' }), /special file/);
   } finally { done(root); }
 });
