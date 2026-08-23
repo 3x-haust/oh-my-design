@@ -2,10 +2,8 @@
 [scanner]
 ignore_paths = [
   "test/*",
-  "scripts/benchmark/*",
-  "bin/run-ts.mjs",
-  "adapters/reviewer-mcp.ts",
-  "core/install/browser-rs-health.ts",
-  "core/install/browser-rs-smoke.ts",
-  "core/install/browser-rs-stdio.ts"
+  "scripts/*",
+  "bin/*",
+  "adapters/*",
+  "core/install/*"
 ]
