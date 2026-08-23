@@ -1,5 +1,6 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { Script } from 'node:vm';
 import { parse } from 'yaml';
 import type { Category, Ir, Layer, Node, Rule, RuleValue, Violation } from '../types.ts';
 
@@ -19,24 +20,26 @@ export function loadRules(dirPath: string): Rule[] {
   return rules;
 }
 
-type Compiled = (node: Node, ir: Ir, value: RuleValue) => unknown;
+type Compiled = Script;
 
 const cache = new Map<string, Compiled>();
 
 function compile(ruleId: string, expr: string): Compiled {
-  const key = `${ruleId} ${expr}`;
-  let fn = cache.get(key);
-  if (!fn) {
-    // Rules are local, authored files, not user input.
-    fn = new Function('node', 'ir', 'value', `return (${expr})`) as Compiled;
-    cache.set(key, fn);
+  const key = ruleId + ' ' + expr;
+  let script = cache.get(key);
+  if (!script) {
+    // Rule files are repository-owned. Keep evaluation isolated from host globals
+    // and bound execution so a malformed rule cannot hang the caller.
+    script = new Script('(' + expr + ')', { filename: 'omd-rule-' + ruleId });
+    cache.set(key, script);
   }
-  return fn;
+  return script;
 }
 
 function evalExpr(ruleId: string, expr: string, node: Node, ir: Ir, value: RuleValue): unknown {
   try {
-    return compile(ruleId, expr)(node, ir, value);
+    const context = { node: structuredClone(node), ir: structuredClone(ir), value: structuredClone(value) };
+    return compile(ruleId, expr).runInNewContext(context, { timeout: 100, contextCodeGeneration: { strings: false, wasm: false } });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     throw new Error(`rule ${ruleId}: error evaluating "${expr}": ${message}`);
@@ -86,3 +89,4 @@ export function check(ir: Ir, rules: Rule[], opts: { layers?: Layer[]; categorie
   violations.sort((a, b) => cmp(a.path, b.path) || cmp(a.id, b.id));
   return violations;
 }
+
