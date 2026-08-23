@@ -9,7 +9,7 @@ import { runDependencySeal, type DependencySealInput } from '../scripts/benchmar
 import { archiveLayout, encodeFrame, evaluateEligibility, FrameDecoder, SealStateMachine } from '../scripts/benchmark/seal-protocol.ts';
 import { prepareDarwinPublisherIdentity, writeNativePublisherIdentity, type NativePublisherIdentity } from '../scripts/benchmark/publish-exclusive.ts';
 import { canonicalJson, sha256, type JsonValue } from '../scripts/benchmark/contracts.ts';
-import { spawn, execFileSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import type { Duplex } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 
@@ -27,8 +27,8 @@ function sourceFinalizationFixture(root: string): { path: string; sha256: string
 let preparedIdentity: NativePublisherIdentity | undefined;
 function nativeIdentityPath(root: string): string {
   if (!preparedIdentity) {
-    const compilerPath = execFileSync('/usr/bin/xcrun', ['--find', 'clang'], { encoding: 'utf8' }).trim();
-    const sdkPath = execFileSync('/usr/bin/xcrun', ['--show-sdk-path'], { encoding: 'utf8' }).trim();
+    const compilerPath = spawnSync('/usr/bin/xcrun', ['--find', 'clang'], { encoding: 'utf8', shell: false }).stdout?.toString().trim() ?? '';
+    const sdkPath = spawnSync('/usr/bin/xcrun', ['--show-sdk-path'], { encoding: 'utf8', shell: false }).stdout?.toString().trim() ?? '';
     preparedIdentity = prepareDarwinPublisherIdentity({
       binaryPath: join(mkdtempSync(join(tmpdir(), 'omd-native-publisher-')), 'omd-darwin-publish-v1'),
       compilerPath, compilerArgv: [], sdkPath, deploymentTarget: '14.0', signing: { mode: 'none' },
