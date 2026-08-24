@@ -1,4 +1,5 @@
 name: Plugin Security Scan
+# Scan the current repository revision with the checked-in policy.
 
 on:
   push:
