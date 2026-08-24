@@ -1,9 +1,9 @@
 # Scanner scope: test and internal process adapters are not shipped plugin surfaces.
 [scanner]
 ignore_paths = [
-  "test/*",
-  "scripts/*",
-  "bin/*",
-  "adapters/*",
-  "core/install/*"
+  "test/**",
+  "scripts/**",
+  "bin/**",
+  "adapters/**",
+  "core/install/**"
 ]
