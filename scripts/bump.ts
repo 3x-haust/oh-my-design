@@ -88,7 +88,7 @@ function run(args: string[]): void {
     cwd: root,
     stdio: 'inherit',
     encoding: 'utf8',
-    shell: true,
+    shell: false,
   });
   if (lockSync.status !== 0) {
     process.stderr.write('package-lock sync failed — manifests were written.\n');
@@ -101,6 +101,7 @@ function run(args: string[]): void {
     cwd: root,
     stdio: 'inherit',
     encoding: 'utf8',
+    shell: false,
   });
   if (build.status !== 0) {
     process.stderr.write('build failed — manifests were written, build was not.\n');
@@ -109,11 +110,11 @@ function run(args: string[]): void {
 
   // Test
   process.stdout.write('\nrunning tests...\n');
-  const test = spawnSync(process.execPath, ['--test', 'test/*.test.ts'], {
+  const test = spawnSync(process.execPath, ['--test', 'test'], {
     cwd: root,
     stdio: 'inherit',
     encoding: 'utf8',
-    shell: true,
+    shell: false,
   });
   if (test.status !== 0) {
     process.stderr.write('tests failed — version was bumped but tests did not pass.\n');
@@ -128,6 +129,7 @@ function run(args: string[]): void {
   const prevTagResult = spawnSync('git', ['describe', '--tags', '--abbrev=0'], {
     cwd: root,
     encoding: 'utf8',
+    shell: false,
   });
   const prevTag = prevTagResult.stdout?.trim() || 'v0.0.0';
   const preview = buildReleaseNotes({
