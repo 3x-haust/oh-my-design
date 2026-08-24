@@ -20,3 +20,8 @@ jobs:
           config: ".plugin-scanner.toml"
           min_score: 80
           fail_on_severity: high
+          format: json
+          output: scanner-report.json
+      - name: Print scanner report
+        if: always()
+        run: cat scanner-report.json || true
