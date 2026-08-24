@@ -459,7 +459,7 @@ function directFsMutations(filePath: string, source: string, absolutePath: strin
   return mutations;
 }
 function functionBody(source: string, name: string): string | undefined {
-  const signature = new RegExp(`(?:export\\s+)?function\\s+${name}\\b`).exec(source);
+  const signature = source.match(new RegExp(`(?:export\\s+)?function\\s+${name}\\b`));
   if (!signature) return undefined;
   const opening = source.indexOf('{', signature.index);
   if (opening < 0) return undefined;
