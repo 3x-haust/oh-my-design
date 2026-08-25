@@ -81,9 +81,12 @@ and adaptation. The local capture column lets the human open and attach the exac
 part-image — the referenced button, card, or region — while selecting and building. For a
 user-directed selected reference, the hand opens its local part-image under `.omd/refs/` and builds
 against it with image-to-code fidelity. Component-level and whole-surface fidelity are both allowed;
-`omd ref distance` is advisory — it reports how close the shipped build is to each reference and never
-blocks shipping — and every used reference is recorded with attribution. Eye reviews against the
-composition contract and task/visual evidence, not source pixels.
+bare `omd ref distance <page>` remains advisory. After current usage and build observation exist,
+`omd ref distance <page> --selected --gate --json` measures each used component-capture slot at its
+assigned destination selector. Every comparison must score at least `0.6`; a failed, missing,
+malformed, unmeasurable, or stale receipt blocks new final-v2 publication. A typed reference-work
+omission creates no receipt obligation. Every used reference is recorded with attribution. Eye
+reviews against the composition contract and task/visual evidence, not source pixels.
 The coordinator selects the strongest candidate itself and records the canonical v2 selection with `omd ref select`; it produces `.omd/reference-selection-v2.json` and the art-direction receipt, then `omd ref check` verifies currentness. Before composition and production, resolve every pending lawful positive-motion slot into the hash-addressed `.omd/motion-resolutions/sha256-<digest>.json` projection. The art-direction decision writes the composer and hand receipts under `.omd/reference-handoffs/`; both must bind that same decision, capture, assembly, projection, selection, and positive-motion dispositions. Disclose the selection and reason in `.omd/decisions.md`; do not pause to ask the user to pick a candidate. A candidate the user explicitly named still wins.
 
 Never direct a user to open a board UI, standalone HTML, PNG, showcase, or `omd-board`.
@@ -140,7 +143,8 @@ assigned part's layout, composition, and treatment is the point. Different secti
 different references; the page is composed from parts, and tracing one reference's whole page layout and
 section order wholesale is a derivative failure, not fidelity — study the whole reference, take only the
 part each section needs. `omd ref distance` measures how close each section is to its assigned part;
-high per-part closeness is the intended outcome, not a warning. Every used reference is
+high per-part closeness is the intended outcome, not a warning. The selected production gate is
+slot-scoped and does not authorize whole-page cloning. Every used reference is
 recorded with attribution in `.omd/attribution.md`, and the product's own copy is written rather than
 lifting the source's words. The eye and selector still score renders against the composition contract
 without seeing authorship — that blindness is about unbiased scoring, not about hiding the reference

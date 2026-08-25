@@ -460,7 +460,7 @@ applicable production run. The method-specific gates below apply when their meth
 - Walk `craft/finish-pass.md`. Complete applicable items and record a concrete reason for
   every skipped item.
 - When `.omd/design.md` exists, run `omd design --check` and resolve its findings.
-- When reference work is selected, run `omd ref distance <page>` as an advisory fidelity signal: it reports closeness to each saved reference and never blocks shipping. High similarity to a chosen reference can be intended; record attribution. A typed reference-work skip creates no distance-check obligation.
+- Bare `omd ref distance <page>` remains an advisory comparison against saved references. When reference work is selected, wait for current usage and build observation, then run `omd ref distance <page> --selected --gate --json`; every used measurable slot must score at least `0.6`, and a failed, missing, malformed, unmeasurable, or stale receipt blocks new final-v2 publication. High selected-part similarity is intended; record attribution. A typed reference-work skip creates no receipt obligation.
 - When `.omd/target/manifest.json` exists, run a bounded `omd target diff` repair loop.
   Stop at the configured threshold or record the remaining measured mismatch and evidence;
   never iterate without a bound.

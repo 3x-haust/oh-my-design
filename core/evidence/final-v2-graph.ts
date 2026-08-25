@@ -17,6 +17,11 @@ import { motionResolutionProjectionSha256, parseReferenceSelectionV2, referenceS
 import { canonicalJson, projectRawReferenceBoard, sha256 } from '../ref/board-artifacts.ts';
 import { resolveReferenceBoard } from '../ref/board.ts';
 import { parseReferenceUsageV2, readValidatedReferenceUsage, referenceUsageV2Sha256 } from '../ref/reference-usage-snapshot.ts';
+import {
+  parseSelectedReferenceDistanceReceipt,
+  selectedReferenceDistanceSha256,
+  validateSelectedReferenceDistanceReceipt,
+} from '../ref/selected-reference-distance.ts';
 import { artDirectionSha256, validateArtDirectionRecord } from '../art-direction/schema.ts';
 import { NO_CURRENT_USER_BEAT_EXCEPTION_RECEIPT_SHA256, exceedsCanonicalBeatBudget } from '../art-direction/decision.ts';
 import { validateCanonicalCopyDeckReceipt, validatePostRenderBeatProof } from '../copy/index.ts';
@@ -62,6 +67,7 @@ export type ArtSelectedFinalEvidenceV2Graph = Readonly<{
   settledSelection: ArtifactReceipt;
   handoff: ArtifactReceipt;
   usage: ArtifactReceipt;
+  referenceDistance?: ArtifactReceipt;
   copy: ArtifactReceipt;
   renderedBeats: ArtifactReceipt;
   sourceSeal: ArtifactReceipt;
@@ -162,6 +168,7 @@ const RECEIPT_SCHEMAS: Readonly<Record<string, readonly string[]>> = {
   settledSelection: ['reference-selection-v2'],
   handoff: ['reference-handoff-v2'],
   usage: ['reference-usage-v2'],
+  referenceDistance: ['selected-reference-distance-v1'],
   copy: ['copy-deck-receipt-v1'],
   renderedBeats: ['rendered-beat-receipt-v1'],
   sourceSeal: ['source-seal-v1'],
@@ -223,7 +230,7 @@ export function validateFinalEvidenceV2Graph(value: unknown): FinalEvidenceV2Gra
   if (isWorkflowFinalEvidenceV2Graph(value)) return validateWorkflowFinalEvidenceV2Graph(value);
   if (isAdaptiveFinalEvidenceV2Graph(value)) return validateAdaptiveFinalEvidenceV2Graph(value);
   const graph = object(value, 'graph');
-  const keys = ['schema', 'activation', 'intent', 'artDirection', 'board', 'selection', 'settledSelection', 'handoff', 'usage', 'copy', 'renderedBeats', 'sourceSeal', 'buildIdentity', 'blindLane', 'fidelityLane', 'protocolLane', 'taskEvidence', 'observations'].filter((key) => key in graph);
+  const keys = ['schema', 'activation', 'intent', 'artDirection', 'board', 'selection', 'settledSelection', 'handoff', 'usage', 'referenceDistance', 'copy', 'renderedBeats', 'sourceSeal', 'buildIdentity', 'blindLane', 'fidelityLane', 'protocolLane', 'taskEvidence', 'observations'].filter((key) => key in graph);
   exact(graph, keys, 'graph');
   if (graph.schema !== FINAL_EVIDENCE_V2_GRAPH_SCHEMA) fail('unsupported graph schema');
   const observations = array(graph.observations, 'graph.observations');
@@ -232,6 +239,7 @@ export function validateFinalEvidenceV2Graph(value: unknown): FinalEvidenceV2Gra
     schema: FINAL_EVIDENCE_V2_GRAPH_SCHEMA,
     activation: receipt(graph.activation, 'activation'), intent: receipt(graph.intent, 'intent'), artDirection: receipt(graph.artDirection, 'artDirection'),
     board: receipt(graph.board, 'board'), selection: receipt(graph.selection, 'selection'), settledSelection: receipt(graph.settledSelection, 'settledSelection'), handoff: receipt(graph.handoff, 'handoff'), usage: receipt(graph.usage, 'usage'),
+    ...(graph.referenceDistance === undefined ? {} : { referenceDistance: receipt(graph.referenceDistance, 'referenceDistance') }),
     copy: receipt(graph.copy, 'copy'), renderedBeats: receipt(graph.renderedBeats, 'renderedBeats'), sourceSeal: receipt(graph.sourceSeal, 'sourceSeal'), buildIdentity: receipt(graph.buildIdentity, 'buildIdentity'),
     blindLane: receipt(graph.blindLane, 'blindLane'), fidelityLane: receipt(graph.fidelityLane, 'fidelityLane'), protocolLane: receipt(graph.protocolLane, 'protocolLane'),
     ...(graph.taskEvidence === undefined ? {} : { taskEvidence: receipt(graph.taskEvidence, 'taskEvidence') }),
@@ -239,6 +247,7 @@ export function validateFinalEvidenceV2Graph(value: unknown): FinalEvidenceV2Gra
   } as const;
   const paths = [
     result.activation, result.intent, result.artDirection, result.board, result.selection, result.settledSelection, result.handoff, result.usage,
+    ...(result.referenceDistance === undefined ? [] : [result.referenceDistance]),
     result.copy, result.renderedBeats, result.sourceSeal, result.buildIdentity, result.blindLane, result.fidelityLane,
     result.protocolLane, ...(result.taskEvidence === undefined ? [] : [result.taskEvidence]), ...result.observations,
   ].map((item) => item.path);
@@ -254,6 +263,7 @@ function semanticHash(label: string, value: Record<string, unknown>): string {
     case 'selection':
     case 'settledSelection': return referenceSelectionV2Sha256(parseReferenceSelectionV2(value));
     case 'usage': return referenceUsageV2Sha256(parseReferenceUsageV2(value));
+    case 'referenceDistance': return selectedReferenceDistanceSha256(parseSelectedReferenceDistanceReceipt(value));
     case 'handoff': {
       const { payloadSha256, ...receipt } = parseReferenceHandoffReceipt(value);
       if (referenceHandoffPayloadSha256(receipt) !== payloadSha256) fail('handoff semantic hash is invalid');
@@ -291,6 +301,7 @@ function validateTypedReceipt(label: string, value: Record<string, unknown>): vo
       case 'settledSelection': parseReferenceSelectionV2(value); return;
       case 'handoff': parseReferenceHandoffReceipt(value); return;
       case 'usage': parseReferenceUsageV2(value); return;
+      case 'referenceDistance': parseSelectedReferenceDistanceReceipt(value); return;
       case 'artDirection': {
         validateArtDirectionRecord(value);
         return;
@@ -474,6 +485,7 @@ export function validateFinalEvidenceV2GraphFiles(root: string, graphInput: unkn
   const entries: ReadonlyArray<readonly [string, ArtifactReceipt]> = [
     ['activation', graph.activation], ['intent', graph.intent], ['artDirection', graph.artDirection], ['board', graph.board],
     ['selection', graph.selection], ['settledSelection', graph.settledSelection], ['handoff', graph.handoff], ['usage', graph.usage], ['copy', graph.copy],
+    ...(graph.referenceDistance === undefined ? [] : [['referenceDistance', graph.referenceDistance] as const]),
     ['renderedBeats', graph.renderedBeats], ['sourceSeal', graph.sourceSeal], ['buildIdentity', graph.buildIdentity],
     ['blindLane', graph.blindLane], ['fidelityLane', graph.fidelityLane], ['protocolLane', graph.protocolLane],
     ...(graph.taskEvidence === undefined ? [] : [['taskEvidence', graph.taskEvidence] as const]),
@@ -495,6 +507,9 @@ export function validateFinalEvidenceV2GraphFiles(root: string, graphInput: unkn
   const settledSelection = parseReferenceSelectionV2(values.get('settledSelection') ?? fail('settled selection receipt is missing'));
   const handoff = parseReferenceHandoffReceipt(values.get('handoff') ?? fail('handoff receipt is missing'));
   const usage = parseReferenceUsageV2(values.get('usage') ?? fail('usage receipt is missing'));
+  const referenceDistance = graph.referenceDistance === undefined
+    ? undefined
+    : parseSelectedReferenceDistanceReceipt(values.get('referenceDistance') ?? fail('selected reference distance receipt is missing'));
   if (handoff.preSelectionSha256 !== hashes.get('selection') || handoff.captureSha256 !== selection.captureSha256
     || handoff.assemblySha256 !== selection.assemblySha256 || handoff.projectionSha256 !== selection.projectionSha256) {
     fail('handoff does not bind the immutable pre-selection reference artifacts');
@@ -594,6 +609,27 @@ export function validateFinalEvidenceV2GraphFiles(root: string, graphInput: unkn
   }
   const build = values.get('buildIdentity') ?? fail('build identity receipt is missing');
   const buildSha256 = build.buildSha256;
+  if (referenceDistance !== undefined) {
+    if (graph.referenceDistance?.path !== '.omd/selected-reference-distance.json') {
+      fail('selected reference distance receipt must identify the current canonical path');
+    }
+    if (referenceDistance.verdict !== 'pass') fail('selected reference distance verdict is not pass');
+    if (referenceDistance.selectionSha256 !== hashes.get('settledSelection')
+      || referenceDistance.usageSha256 !== hashes.get('usage')
+      || referenceDistance.buildSha256 !== buildSha256
+      || referenceDistance.candidateId !== settledSelection.candidateId) {
+      fail('selected reference distance does not bind settled selection, usage, build, and candidate');
+    }
+    try {
+      const current = validateSelectedReferenceDistanceReceipt(root);
+      if (selectedReferenceDistanceSha256(current) !== hashes.get('referenceDistance')) {
+        fail('selected reference distance is not the current canonical receipt');
+      }
+    } catch (error) {
+      if (error instanceof FinalEvidenceGraphError) throw error;
+      fail(`selected reference distance currentness failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
   const activation = validateActivationContext(values.get('activation') ?? fail('activation receipt is missing'));
   if (buildSha256 !== activation.buildSha256 || build.sourceSkillSha256 !== activation.loadedSkillSha256) {
     fail('build identity does not bind the current activation identity');
@@ -645,6 +681,10 @@ export function validateFinalEvidenceV2GraphFiles(root: string, graphInput: unkn
   }
   if (copy.artDirectionSha256 !== hashes.get('artDirection')) fail('copy does not bind art direction semantics');
   const renderedBeats = values.get('renderedBeats') ?? fail('rendered Beat receipt is missing');
+  if (referenceDistance !== undefined
+    && (referenceDistance.route !== decision.route || referenceDistance.target !== renderedBeats.target)) {
+    fail('selected reference distance does not bind art direction route and rendered target');
+  }
   if (renderedBeats.artDirectionHash !== hashes.get('artDirection')
     || renderedBeats.buildSha256 !== buildSha256
     || renderedBeats.copyDeckSha256 !== createHash('sha256').update(copyDeckBytes).digest('hex')) {

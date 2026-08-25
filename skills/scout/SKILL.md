@@ -111,7 +111,10 @@ local path, so attach the precise per-component capture in chat while the user s
 builds. For a user-directed selected reference, the hand then opens that slot's local part-image
 capture under `.omd/refs/` and builds against it with image-to-code fidelity. Component-level and
 whole-surface fidelity are both allowed; `omd ref distance` is advisory — it reports closeness and
-never blocks shipping. Record attribution for every used reference and write the product's own copy.
+never blocks shipping in bare mode. After current usage and build observation, selected measurable
+production slots must each score at least `0.6` and pass `omd ref distance <page> --selected --gate --json`; a failed, missing,
+malformed, unmeasurable, or stale receipt blocks new final-v2 publication. Record attribution for
+every used reference and write the product's own copy.
 
 ## Evidence quality and contamination
 
@@ -137,6 +140,7 @@ Every retained capture records:
 Hand off measurements, principles, contradictions, coverage gaps, and trust. The hand may open a
 user-directed selected reference's local part-image under `.omd/refs/` and build against it with
 image-to-code fidelity; component-level and whole-surface fidelity are both intended, and `omd ref
-distance` is advisory (it reports closeness, never blocks shipping). Record attribution and write the
+distance <page>` is advisory in bare mode. The selected production gate is blocking and slot-scoped;
+high per-part closeness is intended without authorizing whole-page cloning. Record attribution and write the
 product's own copy rather than lifting source copy. Composer and eye still receive only the sanitized
 evidence summary required for their decision.

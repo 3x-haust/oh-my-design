@@ -174,6 +174,8 @@ interface Opts {
   staleRecords?: boolean;
   /** `omd status --files` — the storage view rather than the run view. */
   files?: boolean;
+  selected?: boolean;
+  gate?: boolean;
 }
 
 type SenpiHostManifest = {
@@ -232,7 +234,7 @@ function cmdHostSenpi(mode: string | undefined, opts: Opts): never {
   throw new Error('usage: omd host senpi agent <omd-role> | run --agent <omd-role> --input <task.md>');
 }
 
-const FLAGS = new Set(['json', 'no-log', 'no-energy', 'image', 'filmstrip', 'squint', 'full-page', 'from-user', 'all', 'blueprint', 'shot', 'proofs', 'fresh', 'check', 'review-check', 'apply', 'dry-run', 'cache', 'stale-records', 'files']);
+const FLAGS = new Set(['json', 'no-log', 'no-energy', 'image', 'filmstrip', 'squint', 'full-page', 'from-user', 'all', 'blueprint', 'shot', 'proofs', 'fresh', 'check', 'review-check', 'apply', 'dry-run', 'cache', 'stale-records', 'files', 'selected', 'gate']);
 const ALIASES: Record<string, keyof Opts> = {
   o: 'out',
   'no-log': 'noLog',
@@ -1216,6 +1218,43 @@ async function cmdRefList(): Promise<never> {
 async function cmdRefDistance(opts: Opts): Promise<never> {
   const target = opts._[0];
   if (!target) usage();
+  if (opts.gate === true && opts.selected !== true) {
+    console.error('--gate requires --selected');
+    process.exit(1);
+  }
+  if (opts.selected === true) {
+    const { parseViewport } = await import('../core/render/index.ts');
+    const viewport = parseViewport(opts.viewport ?? '1440x900');
+    try {
+      const {
+        measureSelectedReferenceDistance,
+        writeSelectedReferenceDistanceReceipt,
+      } = await import('../core/ref/selected-reference-distance.ts');
+      const receipt = await measureSelectedReferenceDistance(process.cwd(), {
+        target,
+        viewport,
+        extract: (selector) => rawIrFor({ ...opts, viewport: `${viewport.width}x${viewport.height}` }, target, selector),
+      });
+      if (opts.gate === true) {
+        writeSelectedReferenceDistanceReceipt(
+          process.cwd(),
+          receipt,
+          projectWriterFromActivation(opts, 'omd ref distance --selected --gate'),
+        );
+      }
+      if (opts.json === true) console.log(JSON.stringify(receipt));
+      else {
+        for (const row of receipt.comparisons) {
+          console.log(`${row.slotId.padEnd(24)} ${row.similarity.toFixed(2)}  ${row.targetSelector}`);
+        }
+        console.log(`verdict: ${receipt.verdict}`);
+      }
+      process.exit(opts.gate === true && receipt.verdict === 'fail' ? 1 : 0);
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error));
+      process.exit(1);
+    }
+  }
 
   const { loadRefs } = await import('../core/ref/store.ts');
   const refs = loadRefs(process.cwd());
@@ -3751,7 +3790,7 @@ function usage(): never {
     + '  ref add-batch <manifest.json>               capture zone-bound references in parallel over one browser\n'
     + '  ref board --input candidate-assemblies.json   author and persist a validated board from captured source/component pieces\n'
     + '  ref list                                    one line per saved reference\n'
-    + '  ref distance <page>                         compare a page to every saved reference\n'
+    + '  ref distance <page> [--selected [--gate]] [--json]  compare all refs, or selected destination selectors\n'
     + '  ref principles <source> --as C --add "..."   record why a reference works\n'
     + '  ref show <source> --as C                    invariants + principles\n'
     + '  ref check [manifest] [--json]               validate board evidence and any saved selection\n'

@@ -244,7 +244,7 @@ OMD는 결정적 검사와 렌더 리뷰를 결합합니다.
 | 소스 후보 | `omd slop scan [root] [--json]` 은 지원되는 프로덕션 소스를 쓰지 않고 읽습니다. 후보는 맥락적 분류가 필요하며 `omd check` 경고·점수·작성자 주장이 아닙니다. |
 | 디자인 린트 | `omd check` 는 `system`, `a11y`, `slop`, `motion`, `ux` 조건을 평가합니다. 대비·터치 영역 규칙은 오류이고, slop과 기타 품질 하한 규칙은 그렇게 작성된 경우 경고입니다. 어떤 발견이든 1로 종료하므로 CI에서 쓸 수 있습니다. |
 | 사이트 일관성 | `omd check --site <dir>` 또는 다중 페이지 위치 인자 검사가 페이지 간 래더·토큰 드리프트를 보고합니다. |
-| 레퍼런스 거리 | `omd ref distance <page>` 가 측정 불변량을 저장된 레퍼런스와 비교해 빌드가 얼마나 가까운지 보고하는 자문(advisory) 충실도 신호입니다 — 배포를 막지 않습니다. |
+| 레퍼런스 거리 | 기본 `omd ref distance <page>` 는 자문용입니다. `omd ref distance <page> --selected --gate --json` 은 선택·사용된 측정 가능 슬롯을 대상 selector별로 비교해 현재 receipt를 기록하며, `0.6` 미만이거나 증거가 stale이면 비정상 종료합니다. 새 art-selected final-v2 배포에는 이 통과 receipt가 필요합니다. |
 | Figma 충실도 | `omd figma pull`, `system`, `diff` 가 Figma 스냅샷을 측정된 구현 보고와 연결합니다. `export FIGMA_TOKEN=…` 이 필요하며, `omd doctor` 는 토큰 부재를 선택 사항으로 처리합니다. |
 | 시각 타깃 | `omd target set <이미지-경로-또는-URL> --as <name>` 과 `omd target diff` 가 등록된 PNG 타깃에 대해 경계 있는 이미지 비교를 실행합니다. URL은 직접 HTTP(S) 이미지 URL이어야 합니다. |
 | 성능 | `omd lighthouse <lighthouse-report.json>` 가 Lighthouse JSON 리포트를 성능 예산(기본값: 성능 ≥ 90, Core Web Vitals가 Google "good" 기준 이내)에 대해 게이트합니다. Lighthouse 실행은 사용자가(`npx lighthouse <url> --output=json`), OMD는 그 리포트를 게이트하고 위반 시 비정상 종료합니다. |
@@ -302,7 +302,7 @@ omd craft checkpoint semantic|visual --render path --observed "..." --changed ".
 omd craft status [--json]
 
 omd ref add <url|file> --as <component> [--selector "css"] [--image] [--blueprint]
-omd ref list  |  omd ref distance <page>
+omd ref list  |  omd ref distance <page> [--selected [--gate]] [--json]
 omd ref principles <source> --as <component> --add "..."
 omd ref show <source> --as <component>
 omd ref check [manifest] [--json]

@@ -73,10 +73,10 @@ function dataArray(value: unknown, label: string): readonly unknown[] {
   }
 }
 
-function graphReceipts(value: unknown): Readonly<{ schema: unknown; productionSchema: unknown; observations: readonly unknown[]; buildIdentity: unknown; sourceSeal: unknown; workflow: unknown }> {
+function graphReceipts(value: unknown): Readonly<{ schema: unknown; productionSchema: unknown; observations: readonly unknown[]; buildIdentity: unknown; sourceSeal: unknown; workflow: unknown; referenceDistance: unknown }> {
   const manifest = dataObject(value, 'final manifest graph');
   const graph = dataObject(manifest.graph, 'final manifest graph');
-  return { schema: graph.schema, productionSchema: graph.productionSchema, observations: dataArray(graph.observations, 'final manifest graph observations'), buildIdentity: graph.buildIdentity, sourceSeal: graph.sourceSeal, workflow: graph.workflow };
+  return { schema: graph.schema, productionSchema: graph.productionSchema, observations: dataArray(graph.observations, 'final manifest graph observations'), buildIdentity: graph.buildIdentity, sourceSeal: graph.sourceSeal, workflow: graph.workflow, referenceDistance: graph.referenceDistance };
 }
 function receiptIdentity(value: unknown): string {
   const item = dataObject(value, 'final graph receipt');
@@ -125,6 +125,12 @@ export function checkCompletionPublicationPrerequisites(
   }
   if (graph.schema === 'final-evidence-v2-graph' || (graph.schema === 'final-evidence-v2-workflow-graph-v1'
     && graph.productionSchema === 'final-evidence-v2-graph')) {
+    const distance = dataObject(graph.referenceDistance, 'selected reference distance receipt');
+    receiptIdentity(distance);
+    if (distance.path !== '.omd/selected-reference-distance.json'
+      || distance.schema !== 'selected-reference-distance-v1') {
+      fail('selected reference distance receipt is not the current typed gate');
+    }
     const compositionFindings = validateCurrentCompositionContract(root, invocation);
     if (compositionFindings.length > 0) {
       fail(`current composition contract is invalid: ${compositionFindings.map((finding) => `${finding.id} ${finding.path}`).join(', ')}`);

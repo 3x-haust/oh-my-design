@@ -11,6 +11,7 @@ import { ART_DIRECTION_RECORD_SCHEMA_VERSION, artDirectionSha256 } from '../core
 import { NO_CURRENT_USER_BEAT_EXCEPTION_RECEIPT_SHA256, recipeDecisionProjectionSha256 } from '../core/art-direction/decision.ts';
 import { intentLedgerSha256, resolveCurrentUserBeatExceptionReceipt } from '../core/runtime/intent.ts';
 import { refIdentity } from '../core/ref/identity.ts';
+import { parseReferenceUsageV2, referenceUsageV2Sha256 } from '../core/ref/reference-usage-snapshot.ts';
 import { canonicalJson as canonicalBoardJson } from '../core/ref/board-artifacts.ts';
 import { refImagePath, saveRef } from '../core/ref/store.ts';
 import { motionResolutionProjectionSha256, persistMotionResolutionProjection, readPreReferenceSelectionV2, referenceSelectionV2Sha256 } from '../core/ref/reference-selection.ts';
@@ -155,7 +156,7 @@ const manifest = async (root: string, motionDecision: 'none' | 'one' = 'none', b
   const invariants: Invariants = { spacingLadder: [8], radiusLadder: [4], elevationLevels: 0, centeredRatio: 0, tokenCoverage: 1, paddingWeight: 8, typeScale: [], fontFamilies: [], weightLadder: [], motionDurations: [], easingVocab: [], animatedShare: 0, hoverCoverage: 0, focusCoverage: 0, animatedProperties: [], hasReducedMotion: false, scrollChoreography: [] };
   const blueprint: Blueprint = { selector: '#hero', capturedAt: '2026-01-01T00:00:00.000Z', nodes: [{ id: 'hero', role: 'container', children: [], box: { w: 160, h: 40 } }] };
   const source = 'https://capture.example/hero'; const component = 'hero'; const image = refImagePath(root, { source, component });
-  const reference: Reference = { source, component, kind: 'component', capturedAt: '2026-01-01T00:00:00.000Z', selector: '#hero', invariants, principles: ['Keep the hierarchy.'], blueprint, imagePath: relative(root, image) };
+  const reference: Reference = { source, component, kind: 'component', capturedAt: '2026-01-01T00:00:00.000Z', selector: '#hero', invariants, principles: ['Keep the hierarchy.'], blueprint, imagePath: relative(root, image), viewport: { width: 1280, height: 900 } };
   saveRef(root, reference, createTestProjectWriteAdapter(root)); writeFileSync(image, png);
   const needsSecondStatic = budgetOptions.selectedRegister === 'confident';
   const boardValue = { schemaVersion: 'reference-board-v1', frameSha256: sha('frame'), candidates: [{ id: 'candidate', label: 'Candidate', route: '/', rationale: 'Lawful evidence', pieces: [{ slotId: 'static', sourceKind: 'component-capture', referenceId: refIdentity(source, component), targetComponent: 'Hero', targetSelector: '#hero', taskIds: ['T1'], reason: 'Use structure', take: ['structure'], avoid: 'Avoid copying', adaptation: 'Adapt lawfully', evidenceAxes: { rights: 'lawful', signal: 'high-visual-system', staticAxis: 'available', motionAxis: 'absent' }, grid: { column: 1, span: needsSecondStatic ? 6 : 12, order: 0 } }, ...(needsSecondStatic ? [{ slotId: 'static-secondary', sourceKind: 'component-capture', referenceId: refIdentity(source, component), targetComponent: 'Hero detail', targetSelector: '#hero', taskIds: ['T1'], reason: 'Use supporting structure', take: ['structure'], avoid: 'Avoid copying', adaptation: 'Adapt lawfully', evidenceAxes: { rights: 'lawful', signal: 'high-visual-system', staticAxis: 'available', motionAxis: 'absent' }, grid: { column: 7, span: 6, order: 1 } }] : [])] }] };
@@ -315,6 +316,33 @@ const manifest = async (root: string, motionDecision: 'none' | 'one' = 'none', b
   const usageChecked = run(root, ['ref', 'usage-check']);
   assert.equal(usageChecked.status, 0, usageChecked.stderr);
   const usage = receipt(root, 'usage', 'reference-usage-v2', usageValue);
+  const referenceDistanceValue = {
+    schemaVersion: 'selected-reference-distance-v1',
+    selectionSha256: settledSelectionSemantic,
+    usageSha256: referenceUsageV2Sha256(parseReferenceUsageV2(usageValue)),
+    buildSha256: activationValue.buildSha256,
+    candidateId: settledSelectionValue.candidateId,
+    route: '/',
+    target: 'http://localhost/',
+    viewport: { width: 1280, height: 900 },
+    threshold: 0.6,
+    verdict: 'pass',
+    comparisons: [{
+      slotId: 'static',
+      referenceId: refIdentity(source, component),
+      sourceSelector: '#hero',
+      targetSelector: '#hero',
+      similarity: 1,
+      drivers: [],
+    }],
+  };
+  const referenceDistancePath = join(root, '.omd', 'selected-reference-distance.json');
+  writeFileSync(referenceDistancePath, canonical(referenceDistanceValue));
+  const referenceDistance = {
+    path: join('.omd', 'selected-reference-distance.json'),
+    schema: 'selected-reference-distance-v1',
+    sha256: sha(readFileSync(referenceDistancePath)),
+  };
   const copyDeck = copyDeckV2(artRecord.decision.selectedRegister, artRecord.decision.motionDecision, currentUserBeatExceptionReceiptSha256);
   writeFileSync(join(root, '.omd', 'copy-deck.md'), copyDeck);
   const copyValue = {
@@ -448,7 +476,7 @@ const manifest = async (root: string, motionDecision: 'none' | 'one' = 'none', b
     schema: 'source-seal-v1',
     sha256: sha(readFileSync(join(root, '.omd', 'source-seal.json'))),
   };
-  const graph = { schema: 'final-evidence-v2-graph', activation, intent, artDirection, board, selection, settledSelection, handoff, usage, copy, renderedBeats, sourceSeal, buildIdentity, blindLane, fidelityLane, protocolLane, taskEvidence, observations: [first, second] };
+  const graph = { schema: 'final-evidence-v2-graph', activation, intent, artDirection, board, selection, settledSelection, handoff, usage, referenceDistance, copy, renderedBeats, sourceSeal, buildIdentity, blindLane, fidelityLane, protocolLane, taskEvidence, observations: [first, second] };
   const claimPublication = {
     schema: 'evidence-claim-publication-v1',
     claims: [{ id: 'fixture-hypothesis', text: 'The fixture direction may satisfy the task.', status: 'hypothesis', basis: 'The final reviewers validate the built result.' }],

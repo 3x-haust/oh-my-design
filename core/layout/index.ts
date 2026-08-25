@@ -84,6 +84,7 @@ export const ARTIFACT_FAMILIES: readonly ArtifactFamily[] = [
   family('motion-resolutions', 'motion-resolutions', 'directory', 'state', 'immutable motion-resolution projections'),
   family('reference-handoffs', 'reference-handoffs', 'directory', 'state', 'decision-bound role receipts'),
   family('reference-usage', 'reference-usage-v2.json', 'file', 'state', 'production reference usage ledger'),
+  family('selected-reference-distance', 'selected-reference-distance.json', 'file', 'state', 'current selected-slot visual fidelity receipt'),
   family('assembly-coverage', 'assembly-coverage.json', 'file', 'state', 'assembly coverage record'),
   family('observation', 'observation-v2.json', 'file', 'state', 'runtime observation record'),
   family('observation-retention', 'observation-v2-retention.json', 'file', 'state', 'observation retention record'),

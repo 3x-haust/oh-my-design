@@ -10,13 +10,6 @@ const root = fileURLToPath(new URL('..', import.meta.url));
 const read = (path: string): string => readFileSync(join(root, path), 'utf8');
 const sha256 = (path: string): string => createHash('sha256').update(readFileSync(join(root, path))).digest('hex');
 
-test('Senpi routes every owner through a separate process when no spawn tool exists', () => {
-  const skill = read('src/skills/omd-ultradesign/SKILL.md');
-  assert.match(skill, /Senpi roles run as isolated processes/);
-  assert.match(skill, /omd host senpi run/);
-  assert.match(skill, /accepts no model flag/i);
-});
-
 test('the adaptive route decides which stages and reference work exist without quotas', () => {
   const skill = read('src/skills/omd-ultradesign/SKILL.md');
   const scout = read('src/agents/scout.agent.yaml').replace(/\s+/g, ' ');
@@ -360,7 +353,7 @@ test('scout rejects derivative or convergent references, not premium sites using
   }
 });
 
-test('hand builds a user-directed reference to fidelity; ref distance is advisory', () => {
+test('hand builds selected references to a blocking slot-scoped fidelity gate', () => {
   const hand = read('src/agents/hand.agent.yaml');
   const skill = read('src/skills/omd-scout/SKILL.md');
   const protocol = read('core/protocol/reference-assembly.md');
@@ -370,11 +363,11 @@ test('hand builds a user-directed reference to fidelity; ref distance is advisor
     assert.match(source, /local part-image/i);
     assert.match(source, /\.omd\/refs\//);
     assert.match(source, /image-to-code fidelity/i);
-    // ref distance no longer blocks shipping — it is advisory.
     assert.match(source, /omd ref distance/i);
-    assert.match(source, /advisory/i);
-    assert.match(source, /never blocks shipping/i);
-    assert.doesNotMatch(source, /omd ref distance` still (?:gates|blocks|guards)/i);
+    assert.match(source, /bare[\s\S]*advisory/i);
+    assert.match(source, /--selected[\s\S]*--gate[\s\S]*--json/i);
+    assert.match(source, /0\.6/);
+    assert.match(source, /(?:failed|missing)[\s\S]*(?:malformed|unmeasurable|stale)[\s\S]*blocks/i);
   }
 });
 

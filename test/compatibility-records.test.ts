@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
@@ -13,6 +14,8 @@ import {
   parseLegacyReferenceUsageV2Record,
   parseReferenceUsageV2,
 } from '../core/ref/reference-usage-snapshot.ts';
+import { loadRefs } from '../core/ref/store.ts';
+import { validateFinalEvidenceV2Graph } from '../core/evidence/final-v2-graph.ts';
 
 const FIXTURES = fileURLToPath(new URL('./fixtures/compatibility', import.meta.url));
 const fixture = (name: string): Buffer => readFileSync(join(FIXTURES, name));
@@ -53,4 +56,62 @@ test('prior reference-usage-v2 bytes retain their exact historical settlement sh
   assert.equal(record.rows[0]?.slotId, 'hero-card');
   assert.equal('handHandoffSha256' in record, false);
   assert.throws(() => parseReferenceUsageV2(JSON.parse(bytes.toString('utf8'))), /unknown or missing keys/);
+});
+
+test('legacy measured references remain readable without viewport evidence', () => {
+  const root = mkdtempSync(join(tmpdir(), 'omd-legacy-reference-'));
+  try {
+    mkdirSync(join(root, '.omd', 'refs'), { recursive: true });
+    writeFileSync(join(root, '.omd', 'refs', 'legacy.json'), JSON.stringify({
+      source: 'https://legacy.example/page',
+      component: 'hero',
+      kind: 'component',
+      capturedAt: '2025-01-01T00:00:00.000Z',
+      selector: '#hero',
+      invariants: {
+        spacingLadder: [8],
+        radiusLadder: [4],
+        elevationLevels: 0,
+        centeredRatio: 0,
+        tokenCoverage: 1,
+        paddingWeight: 8,
+      },
+      principles: ['Historical measured hierarchy.'],
+    }));
+    const [reference] = loadRefs(root);
+    assert.equal(reference?.selector, '#hero');
+    assert.equal(reference?.viewport, undefined);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('historical final-v2 graph remains parseable without reference distance', () => {
+  const descriptor = (path: string, schema: string) => ({
+    path: `.omd/${path}.json`,
+    schema,
+    sha256: 'a'.repeat(64),
+  });
+  const graph = {
+    schema: 'final-evidence-v2-graph',
+    activation: descriptor('activation', 'activation-context-v2'),
+    intent: descriptor('intent', 'intent-ledger-v1'),
+    artDirection: descriptor('art-direction', 'art-direction-record-v2'),
+    board: descriptor('board', 'reference-board-v1'),
+    selection: descriptor('selection', 'reference-selection-v2'),
+    settledSelection: descriptor('settled-selection', 'reference-selection-v2'),
+    handoff: descriptor('handoff', 'reference-handoff-v2'),
+    usage: descriptor('usage', 'reference-usage-v2'),
+    copy: descriptor('copy', 'copy-deck-receipt-v1'),
+    renderedBeats: descriptor('rendered-beats', 'rendered-beat-receipt-v1'),
+    sourceSeal: descriptor('source-seal', 'source-seal-v1'),
+    buildIdentity: descriptor('build', 'omd-build-identity-v1'),
+    blindLane: descriptor('blind', 'blind-review-v1'),
+    fidelityLane: descriptor('fidelity', 'fidelity-review-v1'),
+    protocolLane: descriptor('protocol', 'protocol-review-v1'),
+    observations: [descriptor('observation', 'observation-v2')],
+  };
+  const parsed = validateFinalEvidenceV2Graph(graph);
+  assert.equal(parsed.schema, 'final-evidence-v2-graph');
+  assert.equal('referenceDistance' in parsed, false);
 });

@@ -27,6 +27,7 @@ import { retainObservationV2 } from '../core/runtime/observation-retention.ts';
 import { writeBrowserDecisionFixture } from './helpers/browser-observation-decision-links.ts';
 import { registerFinalBrowserObservationCases } from './helpers/browser-observation-final-v2-cases.ts';
 import { attestLegacyV1AsV2 } from '../core/migration/attest-v2.ts';
+import { parseReferenceUsageV2, referenceUsageV2Sha256 } from '../core/ref/reference-usage-snapshot.ts';
 
 const finalEvidenceInvocation = (directory: string) => createTestProjectRunInvocation(directory, 'brief');
 const finalEvidenceGraphFilesystem = { readFile: readFileSync, lstat: lstatSync, open: openSync, fstat: fstatSync, close: closeSync };
@@ -237,6 +238,24 @@ const refreshSourceSeal = (directory: string, input: FinalEvidenceV2Manifest): F
   writeFileSync(join(directory, '.omd', 'source-seal.json'), bytes);
   return { ...input, graph: { ...input.graph, sourceSeal: { path: '.omd/source-seal.json', schema: 'source-seal-v1', sha256: sha(bytes) } } };
 };
+const refreshReferenceDistance = (
+  directory: string,
+  input: FinalEvidenceV2Manifest,
+  updates: Readonly<Record<string, unknown>>,
+): FinalEvidenceV2Manifest => {
+  const graph = input.graph as typeof input.graph & { referenceDistance?: ArtifactReceipt };
+  const current = required(graph.referenceDistance, 'selected reference distance');
+  const value = JSON.parse(readFileSync(join(directory, current.path), 'utf8')) as Record<string, unknown>;
+  const bytes = canonical({ ...value, ...updates });
+  writeFileSync(join(directory, current.path), bytes);
+  return {
+    ...input,
+    graph: {
+      ...input.graph,
+      referenceDistance: { ...current, sha256: sha(bytes) },
+    },
+  };
+};
 const attachCurrentTaskEvidence = (directory: string, input: FinalEvidenceV2Manifest, surface: 'product' | 'mixed'): FinalEvidenceV2Manifest => {
   const taskEvidence = publishCurrentTaskEvidence(directory, surface);
   const task = JSON.parse(readFileSync(join(directory, taskEvidence.path), 'utf8')).tasks[0] as {
@@ -278,6 +297,10 @@ const attachCurrentTaskEvidence = (directory: string, input: FinalEvidenceV2Mani
       staticEvidence: receipt(directory, `static-${surface}`, 'static-direction-evidence-v1', currentStatic),
     };
   }
+  output = refreshReferenceDistance(directory, output, {
+    route: task.production.route,
+    target,
+  });
   return refreshSourceSeal(directory, output);
 };
 const copyDeckV2 = (
@@ -359,7 +382,7 @@ const manifest = (directory: string, decision: 'none' | 'one' = 'none', motionRe
   saveRef(directory, {
     source: referenceSource, component: referenceComponent, kind: 'component', capturedAt: '2026-01-01T00:00:00.000Z',
     selector: '#hero', invariants: { spacingLadder: [8], radiusLadder: [4], elevationLevels: 0, centeredRatio: 0, tokenCoverage: 1, paddingWeight: 8, typeScale: [], fontFamilies: [], weightLadder: [], motionDurations: [], easingVocab: [], animatedShare: 0, hoverCoverage: 0, focusCoverage: 0, animatedProperties: [], hasReducedMotion: false, scrollChoreography: [] },
-    principles: ['Keep the hierarchy.'], blueprint: { selector: '#hero', capturedAt: '2026-01-01T00:00:00.000Z', nodes: [{ id: 'hero', role: 'container', children: [], box: { w: 160, h: 40 } }] }, imagePath: referenceImage.slice(directory.length + 1),
+    principles: ['Keep the hierarchy.'], blueprint: { selector: '#hero', capturedAt: '2026-01-01T00:00:00.000Z', nodes: [{ id: 'hero', role: 'container', children: [], box: { w: 160, h: 40 } }] }, imagePath: referenceImage.slice(directory.length + 1), viewport: { width: 1280, height: 900 },
   }, createTestProjectWriteAdapter(directory));
   writeFileSync(referenceImage, png(1, 1));
   const boardValue = { schemaVersion: 'reference-board-v1', frameSha256: sha('frame'), candidates: [{ id: 'candidate', label: 'Candidate', route: '/', rationale: 'Lawful evidence', pieces: [{ slotId: 'static', sourceKind: 'component-capture', referenceId: refIdentity(referenceSource, referenceComponent), targetComponent: 'Hero', targetSelector: '#hero', taskIds: ['T1'], reason: 'Use structure', take: ['structure'], avoid: 'Avoid copying', adaptation: 'Adapt lawfully', evidenceAxes: { rights: 'lawful', signal: 'high-visual-system', staticAxis: 'available', motionAxis: 'absent' }, grid: { column: 1, span: 12, order: 0 } }, { slotId: 'motion-reference', sourceKind: 'component-capture', referenceId: refIdentity(referenceSource, referenceComponent), targetComponent: 'Hero', targetSelector: '#hero', taskIds: ['T1'], reason: 'Use observed motion.', take: ['motion'], avoid: 'Avoid copying', adaptation: 'Adapt lawfully', evidenceAxes: { rights: 'lawful', signal: 'high-motion', staticAxis: 'absent', motionAxis: 'available' }, grid: { column: 1, span: 12, order: 1 } }] }] };
@@ -468,6 +491,43 @@ const manifest = (directory: string, decision: 'none' | 'one' = 'none', motionRe
   };
   writeFileSync(join(directory, '.omd', 'reference-usage-v2.json'), `${canonical(usageValue)}\n`);
   usage = { path: '.omd/reference-usage-v2.json', schema: 'reference-usage-v2', sha256: sha(readFileSync(join(directory, '.omd', 'reference-usage-v2.json'))) };
+  const selectedReferenceDistanceValue = {
+    schemaVersion: 'selected-reference-distance-v1',
+    selectionSha256,
+    usageSha256: referenceUsageV2Sha256(parseReferenceUsageV2(usageValue)),
+    buildSha256: current.buildSha256,
+    candidateId: 'candidate',
+    route: '/',
+    target: 'file://fixture/',
+    viewport: { width: 1280, height: 900 },
+    threshold: 0.6,
+    verdict: 'pass',
+    comparisons: [
+      {
+        slotId: 'static',
+        referenceId: refIdentity(referenceSource, referenceComponent),
+        sourceSelector: '#hero',
+        targetSelector: '#hero',
+        similarity: 1,
+        drivers: [],
+      },
+      ...(decision === 'one' ? [{
+        slotId: 'motion-reference',
+        referenceId: refIdentity(referenceSource, referenceComponent),
+        sourceSelector: '#hero',
+        targetSelector: '#hero',
+        similarity: 1,
+        drivers: [],
+      }] : []),
+    ].sort((left, right) => left.slotId.localeCompare(right.slotId)),
+  };
+  const selectedReferenceDistancePath = join(directory, '.omd', 'selected-reference-distance.json');
+  writeFileSync(selectedReferenceDistancePath, canonical(selectedReferenceDistanceValue));
+  const referenceDistance = {
+    path: '.omd/selected-reference-distance.json',
+    schema: 'selected-reference-distance-v1',
+    sha256: sha(readFileSync(selectedReferenceDistancePath)),
+  };
   const copyDeck = copyDeckV2(decisionValue.selectedRegister, decisionValue.motionDecision);
   writeFileSync(join(directory, '.omd', 'copy-deck.md'), copyDeck);
   const copyValue = {
@@ -608,7 +668,7 @@ const manifest = (directory: string, decision: 'none' | 'one' = 'none', motionRe
   const sourceSealValue = createSourceSeal(directory, '2026-01-01T00:00:00.000Z');
   writeFileSync(join(directory, '.omd', 'source-seal.json'), `${canonical(sourceSealValue)}\n`);
   const sourceSeal = { path: '.omd/source-seal.json', schema: 'source-seal-v1', sha256: sha(readFileSync(join(directory, '.omd', 'source-seal.json'))) };
-  const graph = { schema: 'final-evidence-v2-graph' as const, activation, intent, artDirection, board, selection, settledSelection: settledSelectionReceipt, handoff, usage, copy, renderedBeats, sourceSeal, buildIdentity, blindLane: lane('blind', 'blind-review-v1'), fidelityLane: lane('fidelity', 'fidelity-review-v1'), protocolLane: lane('protocol', 'protocol-review-v1'), observations: [first, second] };
+  const graph = { schema: 'final-evidence-v2-graph' as const, activation, intent, artDirection, board, selection, settledSelection: settledSelectionReceipt, handoff, usage, referenceDistance, copy, renderedBeats, sourceSeal, buildIdentity, blindLane: lane('blind', 'blind-review-v1'), fidelityLane: lane('fidelity', 'fidelity-review-v1'), protocolLane: lane('protocol', 'protocol-review-v1'), observations: [first, second] } as unknown as FinalEvidenceV2Manifest['graph'];
   return decision === 'one'
     ? { schema: 'final-evidence-v2', motionDecision: 'one', claimPublication: claimPublication(), graph, motionEvidence: receipt(directory, 'motion', 'motion-evidence-v2', { schema: 'motion-evidence-v2', artDirectionHash: artDirectionSemanticSha256, motionDecision: 'one', observed: {}, scenes: [] }) }
     : { schema: 'final-evidence-v2', motionDecision: 'none', claimPublication: claimPublication(), graph, staticEvidence };
@@ -673,6 +733,9 @@ const forgeBeatFinalization = (
   usage.handHandoffSha256 = hand.payloadSha256;
   writeFileSync(join(directory, '.omd', 'reference-usage-v2.json'), `${canonical(usage)}\n`);
   graph = { ...graph, usage: { ...graph.usage, sha256: sha(readFileSync(join(directory, '.omd', 'reference-usage-v2.json'))) } };
+  graph = refreshReferenceDistance(directory, { ...input, graph }, {
+    usageSha256: referenceUsageV2Sha256(parseReferenceUsageV2(usage)),
+  }).graph;
 
   const copyDeck = copyDeckV2(selectedRegister, art.decision.motionDecision, exceptionReceipt, beatIds);
   writeFileSync(join(directory, '.omd', 'copy-deck.md'), copyDeck);
@@ -991,6 +1054,48 @@ test('production APIs reject unissued filesystem seams and issued writers cannot
     assert.equal(Reflect.set(adapter, 'write', () => directory), false);
     assert.doesNotThrow(() => requireProjectWriteAdapter(directory, adapter));
   } finally { clean(directory); }
+});
+test('selected reference distance gates new art-selected publication', () => {
+  const passing = root(); try {
+    assert.doesNotThrow(() => publishFinalEvidenceV2(passing, manifest(passing)));
+  } finally { clean(passing); }
+
+  for (const scenario of ['missing', 'failed', 'stale-selection', 'wrong-target', 'wrong-slot'] as const) {
+    const directory = root(); try {
+      const input = manifest(directory);
+      const graph = input.graph as typeof input.graph & { referenceDistance?: ArtifactReceipt };
+      const descriptor = required(graph.referenceDistance, 'selected reference distance');
+      if (scenario === 'missing') {
+        delete graph.referenceDistance;
+      } else {
+        const value = JSON.parse(readFileSync(join(directory, descriptor.path), 'utf8')) as {
+          selectionSha256: string;
+          target: string;
+          verdict: 'pass' | 'fail';
+          comparisons: Array<{ similarity: number; slotId: string }>;
+        };
+        if (scenario === 'failed') {
+          value.comparisons[0]!.similarity = 0.1;
+          value.verdict = 'fail';
+        } else if (scenario === 'stale-selection') {
+          value.selectionSha256 = sha('stale-selection');
+        } else if (scenario === 'wrong-target') {
+          value.target = 'file://wrong-target/';
+        } else {
+          value.comparisons[0]!.slotId = 'forged-slot';
+        }
+        const bytes = canonical(value);
+        writeFileSync(join(directory, descriptor.path), bytes);
+        (descriptor as { sha256: string }).sha256 = sha(bytes);
+      }
+      assert.throws(
+        () => publishFinalEvidenceV2(directory, input),
+        /selected reference distance|referenceDistance/,
+        scenario,
+      );
+      assert.equal(existsSync(join(directory, '.omd', 'final-evidence-v2.json')), false);
+    } finally { clean(directory); }
+  }
 });
 test('unrelated usage raw-board, assembly, or selection receipt bindings cannot substitute selected artifacts', () => {
   const directory = root(); try {

@@ -264,7 +264,9 @@ instructions: |
   For every selected reference, the hand builds from its local part-image capture under `.omd/refs/`
   with image-to-code fidelity; copying its layout, composition, and treatment is allowed and
   encouraged. `omd ref distance` reports how close the build is — high closeness is the intended
-  outcome. Record attribution for every used reference, and write the product's own copy and use its
+  outcome. Bare distance remains advisory; selected measurable production slots must pass `omd ref
+  distance <page> --selected --gate --json` after current usage and build observation. Record
+  attribution for every used reference, and write the product's own copy and use its
   own real assets rather than lifting the source's words or photographs.
 
   Turn the validated inventory into sanitized bricks in `.omd/scout.md`. If candidate generation is

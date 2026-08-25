@@ -244,7 +244,7 @@ OMD combines deterministic checks with rendered review.
 | Source candidates | `omd slop scan [root] [--json]` reads supported production source without writing it. Candidates require contextual triage; they are not `omd check` warnings, scores, or authorship claims. |
 | Design lint | `omd check` evaluates `system`, `a11y`, `slop`, `motion`, and `ux` conditions. Contrast and hit-area rules are errors; slop and other quality-floor rules are warnings where authored that way. Any finding exits 1, so it is usable in CI. |
 | Site consistency | `omd check --site <dir>` or multi-page positional checks report cross-page ladder and token drift. |
-| Reference distance | `omd ref distance <page>` compares measured invariants against saved references and reports how close the build is, as an advisory fidelity signal — it never blocks shipping. |
+| Reference distance | Bare `omd ref distance <page>` remains advisory. `omd ref distance <page> --selected --gate --json` compares every selected used measurable slot at its destination selector, writes the current receipt, and exits non-zero below `0.6` or on stale evidence; new art-selected final-v2 publication requires that passing receipt. |
 | Figma fidelity | `omd figma pull`, `system`, and `diff` connect a Figma snapshot to a measured implementation report. Requires `export FIGMA_TOKEN=…`; `omd doctor` treats a missing token as optional. |
 | Visual target | `omd target set <image-path-or-url> --as <name>` and `omd target diff` run a bounded image comparison against a registered PNG target. A URL must be a direct HTTP(S) image URL. |
 | Performance | `omd lighthouse <lighthouse-report.json>` gates a Lighthouse JSON report against a performance budget (default: performance ≥ 90 and Core Web Vitals within Google's "good" thresholds). You run Lighthouse (`npx lighthouse <url> --output=json`); OMD gates its report and exits non-zero on a breach. |
@@ -302,7 +302,7 @@ omd craft checkpoint semantic|visual --render path --observed "..." --changed ".
 omd craft status [--json]
 
 omd ref add <url|file> --as <component> [--selector "css"] [--image] [--blueprint]
-omd ref list  |  omd ref distance <page>
+omd ref list  |  omd ref distance <page> [--selected [--gate]] [--json]
 omd ref principles <source> --as <component> --add "..."
 omd ref show <source> --as <component>
 omd ref check [manifest] [--json]

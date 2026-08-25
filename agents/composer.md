@@ -142,7 +142,8 @@ decision recording. The composer has no upstream prompt or art-direction role: i
 translates the chosen draft into `.omd/composition.md`, consuming it solely as art-direction input.
 The composer does not generate images, manage a draft cache, select a draft, or record a decision.
 The chosen draft
-is a design reference, never a shipped page asset; `omd ref distance` remains advisory. When
+is a design reference, never a shipped page asset; bare `omd ref distance <page>` remains advisory,
+while the hand owns the blocking selected-slot gate after current usage and build observation. When
 image capability is unavailable, use the settled selected assembly with CSS/SVG graphics recipes.
 Never request or inspect the internal raw evidence record.
 

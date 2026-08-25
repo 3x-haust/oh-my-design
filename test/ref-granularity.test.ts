@@ -141,6 +141,22 @@ test('omd ref distance with only image references compares nothing and says so',
   assert.match(out.stdout, /nothing to compare|no measured/i);
 });
 
+test('omd ref distance rejects gate without selected mode', () => {
+  const dir = project();
+  const out = run(['ref', 'distance', SLOP, '--gate'], dir);
+  assert.equal(out.status, 1);
+  assert.match(out.stderr, /--gate requires --selected/);
+});
+
+test('omd ref distance selected gate never falls back to legacy advisory output', () => {
+  const dir = project();
+  const out = run(['ref', 'distance', SLOP, '--selected', '--gate', '--json'], dir);
+  assert.equal(out.status, 1);
+  assert.equal(out.stdout, '');
+  assert.match(out.stderr, /reference usage|selected reference/i);
+  assert.doesNotMatch(out.stdout, /No references to compare/);
+});
+
 test('omd ref list shows the granularity of each reference', () => {
   const dir = project();
   run(['ref', 'add', SLOP, '--as', 'card-deck', '--selector', '.cards'], dir);
