@@ -15,7 +15,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: hashgraph-online/ai-plugin-scanner-action@5d17bb20ed8878ef1e82ed3ddf433522dbd36b26 # v1.2.532
+      - uses: hashgraph-online/ai-plugin-scanner-action@6bf4e9d7b49a9f245f5ac6046366d167c5145d40 # v1.2.591
         with:
           plugin_dir: "."
           config: ".plugin-scanner.toml"
