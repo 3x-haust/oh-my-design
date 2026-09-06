@@ -5,6 +5,7 @@ import type { TaskOutcomeContract } from '../brief/task-outcome.ts';
 import { validateDecisionGraph } from '../deliberation/contracts.ts';
 import { servedProjectTreeSha256 } from '../render/serve.ts';
 import { canonicalJson } from '../ref/board-artifacts.ts';
+import { parseTaskFlowBenchmarkProjection } from '../ref/task-flow-benchmark.ts';
 import {
   parseTrustedBrowserReceipt,
   trustedBrowserReceiptSha256,
@@ -62,6 +63,12 @@ export type TrustedOutcomeProjection = Readonly<{
   }>;
   captureSha256s: readonly string[];
   transcriptSha256: string;
+  entrySurface?: Readonly<{
+    benchmarkProjectionSha256: string;
+    prerequisiteTaskId: string;
+    dependentTaskId: string;
+    status: 'pass' | 'fail';
+  }>;
 }>;
 
 const SHA256 = /^[a-f0-9]{64}$/;
@@ -80,6 +87,13 @@ const PROJECTION_KEYS = new Set([
   'hardFloors',
   'captureSha256s',
   'transcriptSha256',
+]);
+const ENTRY_PROJECTION_KEYS = new Set([...PROJECTION_KEYS, 'entrySurface']);
+const ENTRY_SURFACE_KEYS = new Set([
+  'benchmarkProjectionSha256',
+  'prerequisiteTaskId',
+  'dependentTaskId',
+  'status',
 ]);
 
 const fail = (code: FinalOutcomeGateErrorCode): never => {
@@ -107,7 +121,7 @@ function digest(value: unknown): string {
   return value;
 }
 
-function strings(value: unknown, sha256 = false, allowEmpty = false): readonly string[] {
+function strings(value: unknown, sha256 = false, allowEmpty = false, unique = true): readonly string[] {
   if (!Array.isArray(value) || (!allowEmpty && value.length === 0)) {
     return fail('MALFORMED_FINAL_OUTCOME_EVALUATION');
   }
@@ -117,13 +131,16 @@ function strings(value: unknown, sha256 = false, allowEmpty = false): readonly s
     }
     return item;
   });
-  if (new Set(items).size !== items.length) return fail('MALFORMED_FINAL_OUTCOME_EVALUATION');
+  if (unique && new Set(items).size !== items.length) return fail('MALFORMED_FINAL_OUTCOME_EVALUATION');
   return Object.freeze(items);
 }
 
 export function parseTrustedOutcomeProjection(value: unknown): TrustedOutcomeProjection {
   const input = record(value);
-  exact(input, PROJECTION_KEYS);
+  exact(
+    input,
+    Object.hasOwn(input, 'entrySurface') ? ENTRY_PROJECTION_KEYS : PROJECTION_KEYS,
+  );
   if (input.schema !== 'trusted-outcome-observation-v1') {
     return fail('MALFORMED_FINAL_OUTCOME_EVALUATION');
   }
@@ -155,6 +172,23 @@ export function parseTrustedOutcomeProjection(value: unknown): TrustedOutcomePro
   for (const value of Object.values(hardFloors)) {
     if (value !== 'pass' && value !== 'fail') return fail('MALFORMED_FINAL_OUTCOME_EVALUATION');
   }
+  const entrySurface = input.entrySurface === undefined
+    ? undefined
+    : (() => {
+      const entry = record(input.entrySurface);
+      exact(entry, ENTRY_SURFACE_KEYS);
+      if (typeof entry.prerequisiteTaskId !== 'string' || entry.prerequisiteTaskId === ''
+        || typeof entry.dependentTaskId !== 'string' || entry.dependentTaskId === ''
+        || (entry.status !== 'pass' && entry.status !== 'fail')) {
+        return fail('MALFORMED_FINAL_OUTCOME_EVALUATION');
+      }
+      return Object.freeze({
+        benchmarkProjectionSha256: digest(entry.benchmarkProjectionSha256),
+        prerequisiteTaskId: entry.prerequisiteTaskId,
+        dependentTaskId: entry.dependentTaskId,
+        status: entry.status,
+      });
+    })();
   return Object.freeze({
     schema: 'trusted-outcome-observation-v1',
     receiptSha256: digest(input.receiptSha256),
@@ -170,8 +204,9 @@ export function parseTrustedOutcomeProjection(value: unknown): TrustedOutcomePro
       access: hardFloors.access as 'pass' | 'fail',
       safety: hardFloors.safety as 'pass' | 'fail',
     }),
-    captureSha256s: strings(input.captureSha256s, true),
+    captureSha256s: strings(input.captureSha256s, true, false, false),
     transcriptSha256: digest(input.transcriptSha256),
+    ...(entrySurface === undefined ? {} : { entrySurface }),
   });
 }
 
@@ -186,6 +221,7 @@ export function validateFinalOutcomeGate(input: Readonly<{
   }
   if (outcome.hardFloors.behavior === 'fail') return fail('FINAL_BEHAVIOR_FAILED');
   if (outcome.hardFloors.access === 'fail') return fail('FINAL_ACCESS_FAILED');
+  if (outcome.entrySurface?.status === 'fail') return fail('FINAL_ACCESS_FAILED');
   if (outcome.hardFloors.safety === 'fail') return fail('FINAL_SAFETY_FAILED');
   if (outcome.outcomeResults.some((result) => result.status === 'fail')) {
     return fail('FINAL_REQUIRED_OUTCOME_FAILED');
@@ -215,6 +251,7 @@ export function validateTrustedOutcomeEvidence(
       requiredOutcomeRefs?: readonly string[];
       confirmedClaimRefs?: readonly string[];
       decisionRefs?: readonly string[];
+      entrySurfaceRequired?: boolean;
     }>;
   }>,
 ): void {
@@ -262,9 +299,48 @@ export function validateTrustedOutcomeEvidence(
     || canonicalJson(redactObservationEvidence(receipt.confirmedClaimRefs)) !== canonicalJson(parsed.confirmedClaimRefs)
     || canonicalJson(redactObservationEvidence(receipt.decisionRefs)) !== canonicalJson(parsed.decisionRefs)
     || canonicalJson(receipt.hardFloors) !== canonicalJson(parsed.hardFloors)
+    || canonicalJson(receipt.entrySurface ?? null) !== canonicalJson(parsed.entrySurface ?? null)
     || canonicalJson(receipt.captures.map((capture) => capture.sha256)) !== canonicalJson(parsed.captureSha256s)
     || createHash('sha256').update(canonicalJson(receipt.transcript)).digest('hex') !== parsed.transcriptSha256) {
     return fail('UNAUTHORIZED_FINAL_OUTCOME_RECEIPT');
+  }
+  if (input.expected?.entrySurfaceRequired === true) {
+    const entrySurface = parsed.entrySurface;
+    if (entrySurface === undefined || entrySurface.status !== 'pass') {
+      return fail('FINAL_ACCESS_FAILED');
+    }
+    let projectionBytes: Buffer;
+    try {
+      projectionBytes = readStableProjectFile({
+        root: input.root,
+        path: resolve(input.root, '.omd/task-flow-benchmark-projection.json'),
+        label: 'trusted final entry-surface benchmark projection',
+        fs: nodeStableProjectFileSystem(),
+      });
+    } catch {
+      return fail('STALE_FINAL_OUTCOME_BINDING');
+    }
+    if (createHash('sha256').update(projectionBytes).digest('hex')
+      !== entrySurface.benchmarkProjectionSha256) {
+      return fail('STALE_FINAL_OUTCOME_BINDING');
+    }
+    let projection;
+    try {
+      projection = parseTaskFlowBenchmarkProjection(
+        JSON.parse(projectionBytes.toString('utf8')) as unknown,
+        input.expected.sourceContractSha256 === undefined
+          ? {}
+          : { expectedSourceContractSha256: input.expected.sourceContractSha256 },
+      );
+    } catch {
+      return fail('STALE_FINAL_OUTCOME_BINDING');
+    }
+    const dependent = projection.taskSteps.find(({ id }) =>
+      id === entrySurface.dependentTaskId);
+    if (dependent === undefined
+      || !dependent.dependsOn.includes(entrySurface.prerequisiteTaskId)) {
+      return fail('STALE_FINAL_OUTCOME_BINDING');
+    }
   }
   const root = resolve(input.root);
   const stableReceiptFile = (path: string, label: string): Buffer => {

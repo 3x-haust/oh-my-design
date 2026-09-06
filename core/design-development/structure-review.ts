@@ -14,6 +14,7 @@ import {
 export const DESIGN_REVIEW_SCHEMA = 'design-review-v1' as const;
 export const STRUCTURE_REVIEW_AXES = Object.freeze([
   'task-flow', 'hierarchy', 'content-accommodation', 'state-reachability', 'responsive-order', 'semantics',
+  'benchmark-fit', 'domain-specificity',
 ] as const);
 export type StructureReviewAxis = (typeof STRUCTURE_REVIEW_AXES)[number];
 export type DesignReviewSeverity = 'blocking' | 'advisory';

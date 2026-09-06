@@ -48,7 +48,7 @@ test('adaptive routing delegates selected requirements to stage briefs instead o
   assert.match(skill, /Candidate generation, framing, copy isolation, typography proof, composition[\s\S]*conditional methods/);
 
   const brief = read('core/brief/index.ts');
-  assert.match(brief, /frame: \['functional-requirements'\]/);
+  assert.match(brief, /frame: \['functional-requirements', 'reality-ledger'\]/);
   assert.match(brief, /omd complete check <page>/);
   assert.match(brief, /owner: definition\?\.owner/);
 });

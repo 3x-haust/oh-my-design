@@ -15,7 +15,7 @@ description: >-
 # OMD-scout
 
 A LEGO reference assembly, measured instead of pinned. Read
-`protocol/reference-assembly.md` under `omd pack dir`; it owns the exact eight stages,
+`protocol/reference-assembly.md` under `omd pack dir`; it owns the selected stages,
 their single owners, and their artifact/stop boundaries. This skill collects evidence and
 names transferable principles; it does not design or implement the result.
 
@@ -27,8 +27,10 @@ and owned artifacts. This read only satisfies the host's skill bootstrap. Do not
 scout, do not broaden the standalone workflow, and immediately execute the injected role's first
 operational pass.
 
-Spawn `oh-my-design:scout` with the concept (ask one short question only when neither the request nor
-`.omd/frame.md` supplies one), the component inventory, working directory, and user URLs.
+When the host exposes an isolated role boundary, spawn `oh-my-design:scout` with the concept (ask one short
+question only when neither the request nor `.omd/frame.md` supplies one), the component inventory,
+working directory, and user URLs. On a Pi-compatible host without such a boundary, execute this
+bounded standalone scout role in the current session and do not claim independent-process isolation.
 User URLs are captured first and marked `--from-user`.
 
 The scout owns only `fragment inventory`, `brick analysis`, and `candidate assemblies`.
@@ -98,7 +100,7 @@ rights status/notes, visual role, and principles to `omd ref import-image`. A re
 is provenance only, never an importer input or production asset.
 
 After analysis, write the internal candidate record, run `omd ref check`, then paste the exact
-`omd ref candidates` Markdown table directly into Codex/Claude chat. It is the selection
+`omd ref candidates` Markdown table directly into the host chat. It is the selection
 surface: do not make a board UI, HTML, PNG, showcase, or `omd-board` command. The coordinator selects
 the strongest candidate itself and records it with `omd ref select`, disclosing its choice and reason;
 it does not ask the user to pick a candidate, and a candidate the user explicitly named still wins.
@@ -107,14 +109,20 @@ the resulting hash-bound sanitized selected assembly.
 Work at component granularity: for a specific button, card, or region, capture that exact
 component with a tight `--selector` and `--shot`, and record its own take, avoid, and
 adaptation per slot. The candidate table's local-capture column carries each part-image's
-local path, so attach the precise per-component capture in chat while the user selects and
-builds. For a user-directed selected reference, the hand then opens that slot's local part-image
-capture under `.omd/refs/` and builds against it with image-to-code fidelity. Component-level and
+local path for human inspection. A raw file under `.omd/refs/` is Scout provenance, not Hand
+authority. The coordinator may derive a selected, source-free, no-ship geometry packet after
+selection; Scout never grants raw pixels to Hand. Without that packet Hand consumes the sanitized measured
+assembly. Component-level and
 whole-surface fidelity are both allowed; `omd ref distance` is advisory — it reports closeness and
 never blocks shipping in bare mode. After current usage and build observation, selected measurable
 production slots must each score at least `0.6` and pass `omd ref distance <page> --selected --gate --json`; a failed, missing,
 malformed, unmeasurable, or stale receipt blocks new final-v2 publication. Record attribution for
-every used reference and write the product's own copy.
+every used reference and write the product's own copy. For board-v3, also run `omd ref
+influence-proof --input <proof.json>` so every used influence passes at every target viewport on its
+promised axis and falsifier; aggregate closeness cannot compensate for a missing feature.
+The optional `omd ref visual-packet` command is coordinator-owned after selection. Its private
+evidence stays with source provenance; downstream roles receive only the current source-free
+manifest and named no-ship SVG.
 
 ## Evidence quality and contamination
 
@@ -137,10 +145,11 @@ Every retained capture records:
 - source trust and uncertainty;
 - the token, component, motion, voice, or composition question it may inform.
 
-Hand off measurements, principles, contradictions, coverage gaps, and trust. The hand may open a
-user-directed selected reference's local part-image under `.omd/refs/` and build against it with
-image-to-code fidelity; component-level and whole-surface fidelity are both intended, and `omd ref
+Hand off measurements, principles, contradictions, coverage gaps, and trust. A raw file under
+`.omd/refs/` is Scout provenance, not Hand authority; only the coordinator's selected neutral
+geometry packet may cross downstream, never raw source pixels. Component-level and whole-surface fidelity are both intended, and `omd ref
 distance <page>` is advisory in bare mode. The selected production gate is blocking and slot-scoped;
 high per-part closeness is intended without authorizing whole-page cloning. Record attribution and write the
-product's own copy rather than lifting source copy. Composer and eye still receive only the sanitized
+product's own copy rather than lifting source copy. Board-v3 additionally requires `omd ref
+influence-proof --input <proof.json>` at every promised viewport. Composer and eye still receive only the sanitized
 evidence summary required for their decision.

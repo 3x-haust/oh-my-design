@@ -55,6 +55,11 @@ const copyDeckV2 = (selectedRegister: 'quiet' | 'confident' | 'showpiece', motio
 - Language: en
 - Register: direct
 
+## Truth contract
+
+- Result boundary: navigation
+- Storage boundary: none
+
 ## Surface copy
 
 ### Launch
@@ -771,6 +776,63 @@ test('art direction rejects over-budget Beat sets before settlement and accepts 
   assert.deepEqual(record.beatIds, beats);
   assert.equal(record.decision.currentUserBeatExceptionReceiptSha256, resolveCurrentUserBeatExceptionReceipt(ledger));
   assert.notEqual(record.decision.currentUserBeatExceptionReceiptSha256, NO_CURRENT_USER_BEAT_EXCEPTION_RECEIPT_SHA256);
+});
+
+test('printed evaluator skeletons publish complete evidence while missing, extra, and stale lineage fail', async () => {
+  const { inputSkeleton } = await import('../core/schema/inputs.ts');
+  const root = project();
+  try {
+    const prepared = await manifest(root, 'none', { stopAfterArtDirection: true });
+    assert.equal(prepared.directed.status, 0, prepared.directed.stderr);
+    const fixture = JSON.parse(readFileSync(join(root, 'art-direction-input.json'), 'utf8'));
+    const template = inputSkeleton('art-direction-check').skeleton as Record<string, unknown>;
+    // Fill only fields exposed by the public skeleton. Missing nested help cannot be supplied
+    // by spreading the complete fixture, which would conceal the real transport regression.
+    const fill = (shape: unknown, value: any): any => {
+      if (Array.isArray(shape)) {
+        assert.ok(Array.isArray(value));
+        return shape.length === 0 ? value : value.map((entry: unknown) => fill(shape[0], entry));
+      }
+      if (shape !== null && typeof shape === 'object') {
+        return Object.fromEntries(Object.entries(shape).map(([key, nested]) => {
+          assert.ok(Object.hasOwn(value, key), `fixture lacks printed field ${key}`);
+          return [key, fill(nested, value[key])];
+        }));
+      }
+      assert.equal(typeof shape, typeof value);
+      return value;
+    };
+    const assessment = fill(template.evaluatorAssessment, fixture.evaluatorAssessment);
+    const result = fill(template.evaluatorResult, fixture.evaluatorResult);
+    assert.deepEqual(assessment, fixture.evaluatorAssessment);
+    assert.deepEqual(result, fixture.evaluatorResult);
+    const publish = async (nextAssessment: Record<string, unknown>, nextResult: Record<string, unknown>) => {
+      const input = writeManifest(root, 'printed-evaluator-input.json', {
+        ...fixture, evaluatorAssessment: nextAssessment, evaluatorResult: nextResult,
+      });
+      const intent = JSON.parse(readFileSync(join(root, '.omd/intent-current.json'), 'utf8'));
+      return runMutation(root, ['art-direction', 'check', '--input', input], fixture.invocation, [
+        { purpose: 'evaluator-assessment', payload: canonicalBoardJson(nextAssessment) },
+        { purpose: 'evaluator-result', payload: canonicalBoardJson(nextResult) },
+        { purpose: 'current-intent-ledger', payload: readFileSync(join(root, '.omd', intent.record)) },
+      ]);
+    };
+    const valid = await publish(assessment, result);
+    assert.equal(valid.status, 0, valid.stderr);
+    const { boardSha256: _missing, ...missingBoard } = assessment;
+    for (const [nextAssessment, nextResult, expected] of [
+      [missingBoard, result, /invalid exact shape/],
+      [assessment, { ...result, undocumented: true }, /ART_DIRECTION_EVALUATOR_RESULT_INVALID: result has unknown or missing keys/],
+      [assessment, { ...result, intentSha256: sha('stale intent') }, /does not bind current intentSha256/],
+      [assessment, { ...result, alternativesSha256: sha(JSON.stringify(assessment.alternatives, null, 2)) }, /ART_DIRECTION_EVALUATOR_RESULT_INVALID: result must bind the exact alternatives/],
+    ] as const) {
+      const rejected = await publish(nextAssessment, nextResult);
+      assert.notEqual(rejected.status, 0);
+      assert.match(rejected.stderr, expected);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('motion persistence rejects a projection replayed from another invocation activation', async () => {

@@ -309,29 +309,6 @@ test('Codex doctor requires the typesetter and composer files and config registr
   }
 });
 
-test('Senpi doctor validates its spawn contract and markdown role prompts', async () => {
-  const home = mkdtempSync(join(tmpdir(), 'omd-senpi-install-'));
-  const detected = { host: 'senpi' as const, home };
-  try {
-    await install([detected], UNSUPPORTED_BROWSER);
-    const installed = (await doctor([detected], UNSUPPORTED_BROWSER_DOCTOR))[0]!;
-    assert.equal(installed.ok, true, installed.checks.filter((check) => !check.ok).map((check) => check.name).join(', '));
-
-    rmSync(join(home, 'omd-agents', 'omd-typesetter.md'));
-    const missing = (await doctor([detected], UNSUPPORTED_BROWSER_DOCTOR))[0]!;
-    assert.equal(missing.ok, false);
-    assert.equal(missing.checks.find((check) => check.name === 'typesetter agent registered')?.ok, false);
-
-    await install([detected], UNSUPPORTED_BROWSER);
-    writeFileSync(join(home, 'omd-host.json'), JSON.stringify({ host: 'senpi', agents: [] }));
-    const invalidContract = (await doctor([detected], UNSUPPORTED_BROWSER_DOCTOR))[0]!;
-    assert.equal(invalidContract.ok, false);
-    assert.equal(invalidContract.checks.find((check) => check.name === 'agents registered')?.ok, false);
-  } finally {
-    rmSync(home, { recursive: true, force: true });
-  }
-});
-
 // ── detectHosts ──
 
 test('detectHosts finds only hosts whose config directory exists', () => {

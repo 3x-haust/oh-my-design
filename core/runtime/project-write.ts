@@ -1,4 +1,4 @@
-import { chmodSync, constants as fsConstants, closeSync, fstatSync, fsyncSync, ftruncateSync, linkSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, unlinkSync, writeSync } from 'node:fs';
+import { chmodSync, constants as fsConstants, closeSync, fstatSync, fsyncSync, ftruncateSync, linkSync, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, realpathSync, renameSync, rmSync, unlinkSync, writeSync } from 'node:fs';
 import type { Stats } from 'node:fs';
 import { hostname } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
@@ -49,6 +49,16 @@ export type ExternalObservationFileRequest = {
 };
 
 export type ExternalObservationDirectoryRequest = Omit<ExternalObservationFileRequest, 'content'>;
+export type ExternalPrivateMirrorRequest = {
+  readonly projectRoot: string;
+  readonly invocation: ProjectRunInvocation;
+  readonly parent: string;
+  readonly files: readonly Readonly<{
+    relativePath: string;
+    content: string | Uint8Array;
+    mode: number;
+  }>[];
+};
 const trustedAdapters = new WeakSet<ProjectWriteAdapter>();
 const trustedAdapterMetadata = new WeakMap<ProjectWriteAdapter, Readonly<{
   projectRoot: string;
@@ -58,7 +68,7 @@ const trustedAdapterMetadata = new WeakMap<ProjectWriteAdapter, Readonly<{
   remove: ProjectWriteAdapter['remove'];
   invocation: ProjectRunInvocation;
 }>>();
-const PROJECT_MUTATION_LOCK = '.omd-project-mutation.lock';
+const PROJECT_MUTATION_LOCK = '.omd/.project-mutation.lock';
 type ActiveMutationLock = { readonly invocation: ProjectRunInvocation; readonly nonReentrant: boolean; depth: number; readonly releaseFileLock: () => void };
 const activeMutationLocks = new Map<string, ActiveMutationLock>();
 
@@ -340,6 +350,39 @@ export function createExternalObservationDirectory(request: ExternalObservationD
   });
 }
 
+export function createExternalPrivateMirror(request: ExternalPrivateMirrorRequest): string {
+  return withProjectMutationLock(request.projectRoot, request.invocation, () => {
+    requireGuardedProjectWrite(request.projectRoot, request.invocation);
+    const projectRoot = canonicalProjectRoot(request.projectRoot);
+    if (!isAbsolute(request.parent) || request.parent.includes('\0')) {
+      throw new ProjectWriteError('private mirror parent must be an absolute path');
+    }
+    const parent = realpathSync(request.parent);
+    const parentMetadata = lstatSync(parent);
+    if (!parentMetadata.isDirectory() || parentMetadata.isSymbolicLink() || isWithinProjectRoot(projectRoot, parent)) {
+      throw new ProjectWriteError('private mirror parent must be a real external directory');
+    }
+    if (request.files.length === 0) throw new ProjectWriteError('private mirror requires at least one file');
+    const mirrorRoot = mkdtempSync(join(parent, 'omd-hand-repair-'));
+    try {
+      chmodSync(mirrorRoot, 0o700);
+      for (const file of request.files) {
+        const target = resolveProjectPath(mirrorRoot, file.relativePath);
+        requireRealProjectAncestors(mirrorRoot, target);
+        ensureProjectDirectoryDurably(mirrorRoot, dirname(target));
+        requireRealProjectAncestors(mirrorRoot, target);
+        writeStableProjectFile(target, file.content, false);
+        chmodSync(target, file.mode);
+      }
+      fsyncDirectory(mirrorRoot);
+      return mirrorRoot;
+    } catch (error) {
+      rmSync(mirrorRoot, { recursive: true, force: true });
+      throw error;
+    }
+  });
+}
+
 /**
  * The sole synchronous project mutation entry point for a v2 run. Validation occurs
  * before resolving or creating any target, so stale/missing receipts cannot mutate.
@@ -594,6 +637,7 @@ export function acquireProjectMutationLock(
     return mutationRelease(root, invocation, active);
   }
 
+  ensureProjectDirectoryDurably(root, resolve(root, '.omd'));
   let releaseFileLock: () => void;
   try {
     releaseFileLock = acquireRawProjectLock(

@@ -23,7 +23,7 @@ import {
 } from './structure-review.ts';
 
 export const EXPRESSION_REVIEW_AXES = Object.freeze([
-  'typography', 'color', 'media', 'material', 'motion', 'craft', 'structure-regression',
+  'typography', 'color', 'media', 'material', 'motion', 'craft', 'authenticity', 'structure-regression',
 ] as const);
 export type ExpressionReviewAxis = (typeof EXPRESSION_REVIEW_AXES)[number];
 export type ExpressionReview = Readonly<{

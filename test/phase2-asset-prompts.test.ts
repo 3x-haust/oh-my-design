@@ -42,9 +42,10 @@ test('asset precedence, fallback, and dependency authority are machine contracts
   assert.equal(assets.placeholderFinalAllowed, false);
   assert.equal(assets.sourcingOverridesCarrierDecision, false);
   assert.equal(ADAPTIVE_BEHAVIOR_POLICY.visual.userRegisterMotionLock, true);
-  assert.equal(ADAPTIVE_BEHAVIOR_POLICY.visual.autonomousMarketingDirectionCount, 3);
+  assert.equal(ADAPTIVE_BEHAVIOR_POLICY.visual.directionCount, 'ambition-and-uncertainty');
   assert.equal(ADAPTIVE_BEHAVIOR_POLICY.visual.motionOneRequiresTriggeredScene, true);
-  assert.equal(ADAPTIVE_BEHAVIOR_POLICY.visual.motionNoneRequiresStaticBreak, true);
+  assert.equal(ADAPTIVE_BEHAVIOR_POLICY.visual.motionNoneRequiresStaticBreak, false);
+  assert.equal(ADAPTIVE_BEHAVIOR_POLICY.visual.marketingMotionNoneRequiresStaticBreak, true);
 
   const input = fixture();
   Reflect.set(input, 'namedDependencies', ['existing-design-system']);

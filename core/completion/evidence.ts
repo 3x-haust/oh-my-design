@@ -26,6 +26,7 @@ import {
 import { validateBrowserObservationArtifacts, validateBrowserObservationDecisionLinks } from '../runtime/browser-observation.ts';
 import { validateObservationV2 } from '../runtime/observation.ts';
 import { validateSourceSeal, validateSourceSealArtifact } from '../source-seal/index.ts';
+import type { AdaptiveSourceSealRoute } from '../source-seal/adaptive-inputs.ts';
 
 export const LEGACY_COMPLETENESS_RUN_INPUT_SCHEMA = 'functional-completeness-run-input-v1' as const;
 export const LEGACY_COMPLETENESS_RUN_SCHEMA = 'functional-completeness-run-v1' as const;
@@ -365,7 +366,13 @@ function validateObservationSet(root: string, descriptors: readonly CompletionAr
   const required = testedViewports.map(({ width, height }) => `${width}x${height}`).sort();
   if (canonicalJson([...observed].sort()) !== canonicalJson(required)) fail('observation viewports do not match tested viewports');
 }
-function validateRun(root: string, value: unknown, invocation: ProjectRunInvocation, requireMeasured = false): CompletenessRun {
+function validateRun(
+  root: string,
+  value: unknown,
+  invocation: ProjectRunInvocation,
+  requireMeasured = false,
+  continuationRoute?: AdaptiveSourceSealRoute,
+): CompletenessRun {
   const item = object(value, 'run');
   const legacy = item.schema === LEGACY_COMPLETENESS_RUN_SCHEMA;
   exact(item, legacy
@@ -407,7 +414,7 @@ function validateRun(root: string, value: unknown, invocation: ProjectRunInvocat
     fail('typography applicability does not bind the exact tested URL, build, and source skill');
   }
   validateSourceSealArtifact(parseJson(backed(root, sourceSeal, 'source seal'), 'source seal'));
-  const sealFindings = validateSourceSeal(root, invocation);
+  const sealFindings = validateSourceSeal(root, invocation, continuationRoute);
   if (sealFindings.length !== 0) fail(`source seal is stale: ${sealFindings.map((finding) => finding.path).join(', ')}`);
   validateObservationSet(root, observationReceipts, url, state, testedViewports, observedBuild.buildSha256);
   return Object.freeze({
@@ -459,9 +466,13 @@ export function publishCompletenessRun(root: string, input: unknown, invocation:
 }
 
 /** Read-only current-pointer check. Historical/orphan runs are deliberately ignored. */
-export function checkCompletenessRun(root: string, invocation: ProjectRunInvocation): CompletenessRun {
+export function checkCompletenessRun(
+  root: string,
+  invocation: ProjectRunInvocation,
+  continuationRoute?: AdaptiveSourceSealRoute,
+): CompletenessRun {
   const current = pointer(parseJson(stableRead(root, '.omd/completeness-current.json', 'completeness current pointer'), 'completeness current pointer'));
   const bytes = stableRead(root, `.omd/${current.record}`, 'completeness current run');
   if (hash(bytes) !== current.sha256) fail('current pointer hash does not match the immutable run');
-  return validateRun(root, parseJson(bytes, 'completeness current run'), invocation);
+  return validateRun(root, parseJson(bytes, 'completeness current run'), invocation, false, continuationRoute);
 }

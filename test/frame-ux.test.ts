@@ -355,6 +355,30 @@ test('writeFrameRecord writes one durable task coverage matrix section', () => {
   assert.match(frame, /^T1 \| goal: Complete a purchase/m);
   assert.equal(checkFrameUx(cwd).length, 0, 'matrix written by writeFrameRecord should satisfy the check');
 });
+test('frame narrative preserves complete-page and component scope without inventing product tasks', () => {
+  for (const [surface, scope, regions] of [
+    ['marketing', 'complete landing page', 'Who it serves → supported mechanism → adoption requirements'],
+    ['editorial', 'complete reading page', 'Opening question → source material → conclusion'],
+    ['marketing', 'installation component only', 'Exact command → copy feedback'],
+  ] as const) {
+    const cwd = project();
+    const problem = `Scope: ${scope}\n\n### Content architecture\n${regions}\n\nCompletion: cover the requested scope.`;
+    writeFrameRecord(cwd, {
+      problem,
+      reframe: 'Preserve the supplied scope and its distinct content obligations.',
+      why: 'The user explicitly requested this scope and these reader questions.',
+      uxTask: 'Understand the supplied material',
+      uxFrequentAction: 'Read the next region',
+      uxCostliestError: 'Missing essential context; return to the relevant region',
+      uxSurface: surface,
+    }, createTestProjectWriteAdapter(cwd));
+    const persisted = readFileSync(join(cwd, '.omd', 'frame.md'), 'utf8');
+    assert.ok(persisted.includes(problem));
+    assert.doesNotMatch(persisted, /^## Task coverage matrix$/m);
+    assert.deepEqual(checkFrameUx(cwd), []);
+  }
+});
+
 test('writeFrameRecord rejects supplied invalid UX surface and task coverage matrix', () => {
   const base = {
     problem: 'Users cannot find the checkout button',

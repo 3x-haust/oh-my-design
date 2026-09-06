@@ -23,8 +23,8 @@ test('image generation has an executable generate-analyze-implement and non-ship
   assert.equal(policy.selection, 'blind');
   assert.equal(policy.concurrency, 'independent-drafts');
   assert.equal(policy.requiresHostCapability, true);
-  assert.equal(policy.minimumDistinctAnchors, 3);
-  assert.equal(policy.rejectPattern, 'left-text-right-image-default');
+  assert.equal(policy.anchorCount, 'content-dependent');
+  assert.equal(policy.templateAssessment, 'visible-fit-not-family-name');
   assert.equal(policy.chosenDraftShips, false);
   assert.equal(policy.factualCarrierAllowed, false);
   assert.equal(policy.distanceBlocksShipping, false);

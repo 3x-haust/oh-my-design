@@ -28,10 +28,13 @@ proof, installation path, CTA, navigation, work region, error state, or recovery
 surface. After framing, `omd-framer` persists `.omd/acquisition-plan.json` through:
 
 ```text
-omd acquisition set --zones '<JSON array of {id,kind,job,required}>'
+omd schema acquisition-plan
+omd acquisition set --input .omd/.cache/acquisition-plan.json
 ```
 
-The closed `reference-acquisition-plan-v1` uses `owner: "omd-framer"`; `kind` is `section`, `region`,
+Legacy `reference-acquisition-plan-v1` remains readable. New work uses the closed
+`reference-acquisition-plan-v2` with `owner: "omd-framer"`, a current locale-context hash or explicit
+no-market null, and decision/axis/state/viewport/falsifier fields per zone; `kind` is `section`, `region`,
 or `state`. The scout binds a component-scoped capture to every required zone with `--slot <zone>`.
 The final assembly coverage must contain exactly those required IDs. A zone may be revised, but it
 is revised explicitly in the acquisition plan before composition, never silently dropped because no
@@ -54,7 +57,8 @@ Ownership is enforced by stage:
 | production / refinement | `omd-hand` |
 
 Every consequential decision has at least two genuine alternatives. `selected` names one;
-`rejected` covers every other alternative with a bounded reason. Evidence uses durable artifact,
+`rejected` covers every other alternative with a bounded reason. An explicit current-user register lock
+is binding input, not a new fork requiring invented alternatives. Evidence uses durable artifact,
 reference, check, probe, or render paths — "looks better", "modern", and internal instructions are
 not evidence. High/critical decisions record at least one complete constraint trade-off:
 
@@ -128,12 +132,14 @@ the bounded values from its prompt, add no keys, and return JSON only:
 The coordinator must paste this literal contract into every moderator task rather than asking the
 eye to infer it from prose.
 For the pre-composition art-direction decision, a host-issued invocation remains the publication
-lane. In an ordinary Codex or Claude session without that launcher receipt, the same three
-perspectives plus moderator bind the exact three register alternatives and selected register.
-`omd art-direction local-check` accepts only that moderator-owned receipt, derives write authority
-inside the running CLI, and persists the immutable direction and downstream handoffs. It grants no
-v2 publication authority. Missing host publication authority therefore limits the final evidence
-marker; it does not make the design/build loop unusable or authorize a handwritten direction.
+lane. The three perspectives plus moderator bind the complete supplied register comparison and selected register:
+two or three distinct supported registers, or one matching a current explicit user register lock.
+This is separate from upstream concept-study count; same-register concepts are compared visibly before
+choosing their canonical representative. A motion-only lock does not authorize a singleton.
+`omd art-direction check` consumes that moderator-owned receipt through the current host-issued
+invocation and persists the immutable direction and downstream handoffs. The command does not issue
+its own authority. Missing host publication authority blocks this publication path; a session without
+the launcher receipt must not substitute a handwritten direction or claim a local authority fallback.
 
 ## Visual observation
 

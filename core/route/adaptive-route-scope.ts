@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { lstatSync, readdirSync, realpathSync, type Stats } from 'node:fs';
+import { lstatSync, readlinkSync, readdirSync, realpathSync, type Stats } from 'node:fs';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import type { ProjectWriteAdapter } from '../runtime/project-write.ts';
@@ -11,6 +11,7 @@ import { canonicalRouteJson } from './adaptive-source-contract.ts';
 export const ADAPTIVE_ROUTE_SCOPE_EVIDENCE_SCHEMA = 'adaptive-route-scope-evidence-v1' as const;
 export const ADAPTIVE_ROUTE_SCOPE_POINTER_SCHEMA = 'adaptive-route-scope-pointer-v1' as const;
 const SHA256 = /^[a-f0-9]{64}$/;
+const MISSING_SHA256 = '0'.repeat(64);
 const RECORD = /^route-scope-records\/sha256-([a-f0-9]{64})\.json$/;
 const fs = nodeStableProjectFileSystem();
 
@@ -75,7 +76,7 @@ function filesystemSnapshot(rootInput: string): readonly ScopeEntry[] {
     const names = readdirSync(directory).sort((left, right) => left.localeCompare(right, 'en'));
     for (const name of names) {
       if (relativeDirectory === ''
-        && (name === '.omd' || name === '.omd-project-mutation.lock')) continue;
+        && name === '.omd') continue;
       if (name === '' || name === '.' || name === '..' || name.includes('/') || name.includes('\\')) return fail('scope scan encountered an unsafe directory entry');
       const path = relativeDirectory === '' ? name : `${relativeDirectory}/${name}`;
       const absolute = projectPath(root, path);
@@ -102,6 +103,51 @@ function exactGitRoot(root: string): boolean {
   if (result.status !== 0) return false;
   try { return canonicalRoot(result.stdout.trim()) === root; } catch { return false; }
 }
+function gitDirtyPaths(root: string): readonly string[] {
+  if (!exactGitRoot(root)) return fail('the route was published for Git verification, but the canonical project Git root is unavailable');
+  const status = spawnSync('git', ['status', '--porcelain=1', '-z', '-uall'], { cwd: root, encoding: 'utf8' });
+  if (status.status !== 0) return fail('git status failed, so changed paths cannot be read');
+  const fields = status.stdout.split('\0');
+  const paths = new Set<string>();
+  for (let index = 0; index < fields.length; index += 1) {
+    const field = fields[index]!;
+    if (field === '') continue;
+    if (field.length < 4 || field[2] !== ' ') return fail('git status returned a malformed path record');
+    const code = field.slice(0, 2);
+    paths.add(safeRelativePath(field.slice(3)));
+    if (code.includes('R') || code.includes('C')) {
+      const source = fields[index + 1];
+      if (source === undefined || source === '') return fail('git status returned a malformed rename record');
+      paths.add(safeRelativePath(source));
+      index += 1;
+    }
+  }
+  return Object.freeze([...paths].sort((left, right) => left.localeCompare(right, 'en')));
+}
+function gitScopeEntry(root: string, path: string): ScopeEntry {
+  const absolute = projectPath(root, path);
+  let stat: Stats;
+  try { stat = lstatSync(absolute); }
+  catch (error) {
+    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+      return Object.freeze({ path, sha256: MISSING_SHA256, mode: 0 });
+    }
+    return fail(`route scope file ${path} is unreadable`);
+  }
+  if (stat.isSymbolicLink()) {
+    return Object.freeze({
+      path,
+      sha256: hash(Buffer.from(`symlink\0${readlinkSync(absolute)}`)),
+      mode: stat.mode & 0o7777,
+    });
+  }
+  if (!stat.isFile()) return fail(`scope scan cannot verify special Git path: ${path}`);
+  const bytes = readStableProjectFile({ root, path: absolute, label: `route scope file ${path}`, fs });
+  return Object.freeze({ path, sha256: hash(bytes), mode: stat.mode & 0o7777 });
+}
+function gitScopeSnapshot(root: string): readonly ScopeEntry[] {
+  return Object.freeze(gitDirtyPaths(root).map((path) => gitScopeEntry(root, path)));
+}
 function identity(invocation: ProjectRunInvocation): ScopeEvidence['invocation'] {
   return Object.freeze({
     buildSha256: invocation.current.buildSha256,
@@ -125,7 +171,7 @@ export function publishAdaptiveRouteScopeEvidence(
     projectRoot: root,
     invocation: identity(invocation),
     routeSha256,
-    baseline: git ? Object.freeze([]) : filesystemSnapshot(root),
+    baseline: git ? gitScopeSnapshot(root) : filesystemSnapshot(root),
   });
   const bytes = evidenceBytes(evidence);
   const sha256 = hash(bytes);
@@ -160,8 +206,8 @@ function parseEvidence(bytes: Buffer): ScopeEvidence {
       || !Number.isSafeInteger(entry.mode) || Number(entry.mode) < 0 || Number(entry.mode) > 0o7777) return fail('route scope evidence is malformed');
     return Object.freeze({ path: safeRelativePath(entry.path), sha256: entry.sha256, mode: Number(entry.mode) });
   });
-  if ((value.verification === 'git' && baseline.length !== 0)
-    || baseline.some((entry, index) => index > 0 && baseline[index - 1]!.path >= entry.path)) return fail('route scope evidence is malformed');
+  if (baseline.some((entry, index) => index > 0
+    && baseline[index - 1]!.path.localeCompare(entry.path, 'en') >= 0)) return fail('route scope evidence is malformed');
   return Object.freeze({
     schema: ADAPTIVE_ROUTE_SCOPE_EVIDENCE_SCHEMA,
     verification: value.verification,
@@ -189,15 +235,17 @@ function sameInvocation(evidence: ScopeEvidence, invocation: ProjectRunInvocatio
     && evidence.invocation.loadedSkillSha256 === invocation.current.loadedSkillSha256
     && evidence.invocation.briefSha256 === invocation.current.briefSha256;
 }
-function gitChangedPaths(root: string): readonly string[] {
-  if (!exactGitRoot(root)) return fail('the route was published for Git verification, but the canonical project Git root is unavailable');
-  const status = spawnSync('git', ['status', '--porcelain=1', '-uall'], { cwd: root, encoding: 'utf8' });
-  if (status.status !== 0) return fail('git status failed, so changed paths cannot be read');
-  return Object.freeze(status.stdout.split('\n')
-    .map((line) => line.slice(3).trim())
-    .filter((line) => line !== '')
-    .map((line) => line.includes(' -> ') ? line.slice(line.indexOf(' -> ') + 4) : line)
-    .map((line) => line.replace(/^"|"$/g, '')));
+function gitChangedPaths(root: string, baselineEntries: readonly ScopeEntry[]): readonly string[] {
+  const baseline = new Map(baselineEntries.map((entry) => [entry.path, entry]));
+  const currentEntries = gitScopeSnapshot(root);
+  const current = new Map(currentEntries.map((entry) => [entry.path, entry]));
+  const changed = new Set<string>();
+  for (const [path, entry] of current) {
+    const previous = baseline.get(path);
+    if (previous === undefined || previous.sha256 !== entry.sha256 || previous.mode !== entry.mode) changed.add(path);
+  }
+  for (const path of baseline.keys()) if (!current.has(path)) changed.add(path);
+  return Object.freeze([...changed].sort((left, right) => left.localeCompare(right, 'en')));
 }
 
 export function changedPathsForAdaptiveRoute(
@@ -212,7 +260,7 @@ export function changedPathsForAdaptiveRoute(
   if (evidence.projectRoot !== root || evidence.routeSha256 !== routeSha256 || !sameInvocation(evidence, invocation)) {
     return fail('route scope evidence is stale or belongs to another project or invocation');
   }
-  if (evidence.verification === 'git') return gitChangedPaths(root);
+  if (evidence.verification === 'git') return gitChangedPaths(root, evidence.baseline);
   const baseline = new Map(evidence.baseline.map((entry) => [entry.path, entry]));
   const current = new Map(filesystemSnapshot(root).map((entry) => [entry.path, entry]));
   const changed = new Set<string>();

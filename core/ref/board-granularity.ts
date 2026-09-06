@@ -11,9 +11,10 @@
 // derivative failure the transfer boundary forbids. This module names that condition.
 
 import type { Invariants, Reference } from '../types.ts';
+import { referenceMeasuredInvariants } from './measurement-coverage.ts';
 import type { ReferenceBoardManifest } from './board-contract.ts';
 import { designSignal, LOW_SIGNAL } from './signal.ts';
-import { similarity } from './distance.ts';
+import { similarity, unmeasuredComponents } from './distance.ts';
 import { refIdentity } from './identity.ts';
 
 /** Host of a capture source; a local fixture path is its own bucket. */
@@ -24,15 +25,15 @@ function sourceHost(source: string): string {
 type MeasuredReference = Reference & { readonly invariants: Invariants };
 
 const measured = (refs: readonly Reference[]): readonly MeasuredReference[] =>
-  refs.filter((ref): ref is MeasuredReference => ref.invariants !== null && ref.kind !== 'image');
+  refs.map(ref => ({ ...ref, invariants: referenceMeasuredInvariants(ref) })).filter((ref): ref is MeasuredReference => ref.invariants !== null && ref.kind !== 'image');
 
 /** Pairs that measure the same design closely enough to be one reference recorded twice. */
-function kinshipPairs(refs: readonly MeasuredReference[]): readonly { a: string; b: string; similarity: number }[] {
-  const pairs: { a: string; b: string; similarity: number }[] = [];
+function kinshipPairs(refs: readonly MeasuredReference[]): readonly { a: string; b: string; similarity: number; partial: boolean }[] {
+  const pairs: { a: string; b: string; similarity: number; partial: boolean }[] = [];
   for (let i = 0; i < refs.length; i++) {
     for (let j = i + 1; j < refs.length; j++) {
       const score = similarity(refs[i]!.invariants, refs[j]!.invariants);
-      if (score >= KINSHIP_THRESHOLD) pairs.push({ a: label(refs[i]!), b: label(refs[j]!), similarity: score });
+      if (score >= KINSHIP_THRESHOLD) pairs.push({ a: label(refs[i]!), b: label(refs[j]!), similarity: score, partial: unmeasuredComponents(refs[i]!.invariants, refs[j]!.invariants).length > 0 });
     }
   }
   return pairs;
@@ -167,7 +168,7 @@ export function auditBoardGranularity(
     ? refs
     : refs.filter((ref) => visuallyClaimed.has(refIdentity(ref.source, ref.component)));
   const boardVisualPieces = boardPieces?.filter((piece) => visuallyClaimed?.has(piece.referenceId));
-  const visualSlots = new Set(boardVisualPieces?.map((piece) => piece.slotId.trim().toLowerCase()) ?? []);
+  const visualSlots = new Set(boardVisualPieces?.map((piece) => (piece.binding?.zoneId ?? piece.slotId).trim().toLowerCase()) ?? []);
   const visualReferences = new Set(boardVisualPieces?.map((piece) => piece.referenceId) ?? []);
   const measurable = audited.filter((ref) => ref.kind !== 'image');
 
@@ -206,8 +207,9 @@ export function auditBoardGranularity(
   }
 
   const parts = measurable.filter((ref) => !isWholePageCapture(ref));
-  if ((visuallyClaimed === undefined && parts.length < MIN_PART_CAPTURES)
-    || (visuallyClaimed !== undefined && visualReferences.size > 0 && parts.length < MIN_PART_CAPTURES)) {
+  const legacyCountGate = opts.board?.schemaVersion !== 'reference-board-v3';
+  if (legacyCountGate && ((visuallyClaimed === undefined && parts.length < MIN_PART_CAPTURES)
+    || (visuallyClaimed !== undefined && visualReferences.size > 0 && parts.length < MIN_PART_CAPTURES))) {
     findings.push({
       id: 'REF-NO-PARTS',
       message:
@@ -257,7 +259,7 @@ export function auditBoardGranularity(
     const covered = opts.board === undefined
       ? new Set(parts.map((ref) => (ref.slot ?? '').trim().toLowerCase()).filter((slot) => slot !== ''))
       : new Set(opts.zones.map((zone) => zone.trim().toLowerCase()).filter((zone) => opts.board!.candidates.every((candidate) => candidate.pieces.some((piece) => (
-        piece.slotId.trim().toLowerCase() === zone && piece.evidenceAxes.signal !== 'anti-reference'
+        (piece.binding?.zoneId ?? piece.slotId).trim().toLowerCase() === zone && piece.evidenceAxes.signal !== 'anti-reference'
       )))));
     const uncovered = opts.zones.filter((zone) => !covered.has(zone.trim().toLowerCase()));
     const uncoveredVisual = opts.board === undefined ? uncovered : uncovered.filter((zone) => visualSlots.has(zone.trim().toLowerCase()));
@@ -301,7 +303,7 @@ export function auditBoardGranularity(
     findings.push({
       id: 'REF-KINSHIP-UNRESOLVED',
       message:
-        `${kin.length} reference pair${kin.length === 1 ? '' : 's'} measure the same design (${kin.map((pair) => `${pair.a} ≈ ${pair.b} at ${pair.similarity.toFixed(2)}`).join('; ')}). Two captures that agree this closely are one piece of evidence counted twice, and the board reads wider than it is. Drop the weaker capture, replace it with a source that disagrees, or record it deliberately as an anti-reference.`,
+        `${kin.length} reference pair${kin.length === 1 ? '' : 's'} measure the same design (${kin.map((pair) => `${pair.a} ≈ ${pair.b} at ${pair.similarity.toFixed(2)}${pair.partial ? ' on measured axes only; interaction remains unknown' : ''}`).join('; ')}). Two captures that agree this closely are one piece of evidence counted twice, and the board reads wider than it is. Drop the weaker capture, replace it with a source that disagrees, or record it deliberately as an anti-reference.`,
       refs: kin.flatMap((pair) => [pair.a, pair.b]),
     });
   }
@@ -309,7 +311,7 @@ export function auditBoardGranularity(
   // Signal: a page that makes almost no visual decisions cannot teach one. `omd ref add` warns per
   // capture; nothing checked the board as a whole, and a board that is mostly low-signal has no
   // visual evidence left to compose from once the content is stripped.
-  const lowSignal = measured(measurable).filter((ref) => designSignal(ref.invariants).score < LOW_SIGNAL);
+  const lowSignal = measured(measurable).filter((ref) => designSignal(ref.invariants, ref.blueprint).score < LOW_SIGNAL);
   if (measured(measurable).length > 0 && lowSignal.length / measured(measurable).length > LOW_SIGNAL_MAJORITY_SHARE) {
     findings.push({
       id: 'REF-LOW-SIGNAL-BOARD',

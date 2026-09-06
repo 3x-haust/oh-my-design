@@ -17,13 +17,13 @@ function run(command: string, args: readonly string[]): string {
   return result.stdout;
 }
 
-test('Given a prepared prebuilt tree When packed Then every Codex Claude and Senpi payload is published', () => {
+test('Given a prepared prebuilt tree When packed Then generated hosts and Pi package resources are published', () => {
   const temporary = mkdtempSync(join(tmpdir(), 'omd-packed-prebuilt-'));
   try {
     requirePrebuiltDist({
       distributionRoot: ROOT,
       sourceRoot: ROOT,
-      hosts: [{ host: 'codex' }, { host: 'claude' }, { host: 'senpi' }],
+      hosts: [{ host: 'codex' }, { host: 'claude' }],
     });
     const destination = join(temporary, 'packs');
     mkdirSync(destination);
@@ -34,13 +34,15 @@ test('Given a prepared prebuilt tree When packed Then every Codex Claude and Sen
     const archive = join(destination, entry.filename);
     const entries = new Set(run('tar', ['-tzf', archive]).trim().split('\n'));
 
-    for (const host of ['codex', 'claude', 'senpi'] as const) {
+    for (const host of ['codex', 'claude'] as const) {
       const expected = expectedPrebuiltFiles(ROOT, host);
       assert.ok(expected.size > 0, `${host} must have generated payload`);
       for (const relative of expected.keys()) {
         assert.ok(entries.has(`package/dist/${host}/${relative}`), `archive must include ${host}/${relative}`);
       }
     }
+    assert.ok(entries.has('package/extensions/omd.ts'), 'archive must include the portable Pi extension');
+    assert.ok(entries.has('package/src/skills/omd-ultradesign/SKILL.md'), 'archive must include canonical Pi skills');
   } finally {
     rmSync(temporary, { recursive: true, force: true });
   }

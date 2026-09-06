@@ -270,12 +270,47 @@ test('repair scope is route, authenticated slice, and nonempty host-authorized r
     try {
       const otherMirror = mirror(withoutSlice, { [productionPath]: 'after' });
       try {
-        assert.throws(() => stageProductionRepair({ root: withoutSlice.root, invocation: withoutSlice.invocation, review: review(withoutSlice, [productionPath], otherMirror), mirrorRoot: otherMirror }),
-          (error: unknown) => error instanceof ProductionRepairError && error.code === 'REPAIR_SLICE_REQUIRED');
+        const staged = stageProductionRepair({
+          root: withoutSlice.root,
+          invocation: withoutSlice.invocation,
+          review: review(withoutSlice, [productionPath], otherMirror),
+          mirrorRoot: otherMirror,
+        });
+        assert.equal(staged.schema, 'opaque-staged-production-repair-v1');
       } finally { rmSync(otherMirror, { recursive: true, force: true }); }
     } finally { rmSync(withoutSlice.root, { recursive: true, force: true }); }
   } finally {
     if (mirrorRoot) rmSync(mirrorRoot, { recursive: true, force: true });
+    rmSync(value.root, { recursive: true, force: true });
+  }
+});
+
+test('Given an authenticated Hand slice When mirror creation runs Then an exact private mirror is created', async () => {
+  const value = project();
+  const parent = mkdtempSync(join(tmpdir(), 'omd-hand-mirror-parent-'));
+  const parentAlias = `${parent}-alias`;
+  symlinkSync(parent, parentAlias, 'dir');
+  let mirrorRoot: string | undefined;
+  try {
+    const runtime = await import('../core/runtime/production-repair.ts');
+    const createMirror = Reflect.get(runtime, 'createProductionRepairMirror');
+    assert.equal(typeof createMirror, 'function');
+
+    const result = Reflect.apply(createMirror, undefined, [{
+      root: value.root,
+      invocation: value.invocation,
+      parent: parentAlias,
+    }]) as { mirrorRoot: string; paths: readonly string[] };
+    mirrorRoot = result.mirrorRoot;
+
+    assert.deepEqual(result.paths, [contextPath, productionPath]);
+    assert.equal(lstatSync(result.mirrorRoot).mode & 0o077, 0);
+    assert.equal(readFileSync(join(result.mirrorRoot, productionPath), 'utf8'), 'before');
+    assert.equal(readFileSync(join(result.mirrorRoot, contextPath), 'utf8'), 'context');
+  } finally {
+    if (mirrorRoot) rmSync(mirrorRoot, { recursive: true, force: true });
+    rmSync(parentAlias, { recursive: true, force: true });
+    rmSync(parent, { recursive: true, force: true });
     rmSync(value.root, { recursive: true, force: true });
   }
 });

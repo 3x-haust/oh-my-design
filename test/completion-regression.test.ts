@@ -25,6 +25,7 @@ import {
 } from '../core/completion/preflight.ts';
 import { observationV2Sha256, writeObservationV2 } from '../core/runtime/observation.ts';
 import { canonicalJson } from '../core/ref/board-artifacts.ts';
+import { servedProjectTreeSha256 } from '../core/render/serve.ts';
 import { writeSourceSeal } from '../core/source-seal/index.ts';
 import { checkAdaptiveWorkflow, publishAdaptiveWorkflowPlan } from '../core/design-development/workflow-persistence.ts';
 import {
@@ -129,7 +130,13 @@ function prepare(selectedTypography = false, koreanText: 'body' | 'display' = 'b
   mkdirSync(join(root, 'src', 'copy'), { recursive: true });
   writeFileSync(join(root, 'src', 'copy', 'index.html'), '<a href="/repo">Open</a>\n');
   writeFileSync(join(root, '.omd', 'copy-deck.md'), '# Copy\n');
-  if (selectedTypography) writeFileSync(join(root, '.omd', 'type-proof.md'), '# Approved typography proof\n');
+  if (selectedTypography) {
+    const revisionSha256 = servedProjectTreeSha256(root, 'src/copy/index.html');
+    writeFileSync(
+      join(root, '.omd', 'type-proof.md'),
+      `# Approved typography proof\n\n## Production revision binding\n- Production entry: \`src/copy/index.html\`\n- Production revision SHA-256: \`${revisionSha256}\`\n`,
+    );
+  }
   const invocation = publishTestAdaptiveRoute(root, routeFixture(selectedTypography), 'completion-regression');
   writeFileSync(join(root, '.omd', 'functional-requirements.json'), `${JSON.stringify(requirementsV2, null, 2)}\n`);
   const buildPath = '.omd/receipts/build.json';
@@ -361,7 +368,7 @@ test('historical v2 runs retain read compatibility with v1 typography applicabil
   } finally { rmSync(value.root, { recursive: true, force: true }); }
 });
 
-test('new publication prerequisites bind the exact final observations and accept only route-authorized typography omission', () => {
+test('current completeness and final review may use distinct observation sets', () => {
   const value = prepare();
   try {
     publishCompletenessRun(value.root, value.input, value.invocation);
@@ -371,10 +378,13 @@ test('new publication prerequisites bind the exact final observations and accept
     assert.equal(checked.typography.applicability.koreanDisplayText, false);
 
     const observations = value.input.observations.slice(0, 1);
-    assert.throws(
-      () => checkCompletionPublicationPrerequisites(value.root, { graph: { ...value.graph, observations } }, value.invocation),
-      /exact final observation set/,
+    const distinct = checkCompletionPublicationPrerequisites(
+      value.root,
+      { graph: { ...value.graph, observations } },
+      value.invocation,
     );
+    assert.ok(distinct.completeness);
+    assert.equal(distinct.completeness.observations.length, value.input.observations.length);
     rmSync(join(value.root, '.omd', 'route-authorities'), { recursive: true, force: true });
     assert.throws(
       () => checkCompletionPublicationPrerequisites(value.root, { graph: value.graph }, value.invocation),

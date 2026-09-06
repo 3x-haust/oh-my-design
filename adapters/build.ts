@@ -6,7 +6,6 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parse } from 'yaml';
 import { emitCodex } from './codex.ts';
 import { emitClaude, emitClaudePlugin, pluginizeSkill } from './claude.ts';
-import { emitSenpi } from './senpi.ts';
 import { substituter } from './tokens.ts';
 import type { AbstractAgent, Emitted, Host } from '../core/types.ts';
 
@@ -124,7 +123,6 @@ export function build(): void {
   const emitters: Record<Host, (opts: { agents: AbstractAgent[]; buildIdentity: BuildIdentity }) => Emitted> = {
     codex: (opts) => emitCodex({ ...opts, version: pkg.version }),
     claude: emitClaude,
-    senpi: emitSenpi,
   };
 
   for (const host of Object.keys(emitters) as Host[]) {

@@ -11,6 +11,7 @@ import { parseWorkflowProductionSlice, workflowProductionSliceBytes } from '../d
 import { canonicalWorkflowPlanJson } from '../design-development/workflow-plan.ts';
 import { canonicalJson } from '../ref/board-artifacts.ts';
 import { adaptiveRouteRecordSha256, readPersistedRoute } from '../route/adaptive-route-persistence.ts';
+import { pathsOutsideScope } from '../route/adaptive-route-record.ts';
 import {
   requireFinalReviewerLaneAuthorization,
   type ProjectRunInvocation,
@@ -18,6 +19,7 @@ import {
 import { observationV2Sha256, validateObservationV2 } from './observation.ts';
 import {
   acquireProjectMutationLock,
+  createExternalPrivateMirror,
   replaceProjectFileAtomically,
   requireProjectWriteAdapterForInvocation,
   type ProjectWriteAdapter,
@@ -179,7 +181,7 @@ function snapshotReview(value: unknown): ValidatedReview {
 ` });
 }
 
-export function productionRepairReviewBytes(review: ProductionRepairReview): Buffer {
+export function productionRepairReviewBytes(review: unknown): Buffer {
   return Buffer.from(snapshotReview(review).bytes);
 }
 
@@ -286,6 +288,105 @@ function slicePaths(slice: ReturnType<typeof currentSlice>['value']): readonly s
   ]))].sort());
 }
 
+function routeScopedPaths(root: string, invocation: ProjectRunInvocation): readonly string[] {
+  const route = readPersistedRoute(root, invocation);
+  const paths: string[] = [];
+  const directories = [''];
+  while (directories.length > 0) {
+    const directory = directories.pop();
+    if (directory === undefined) break;
+    for (const name of readdirSync(resolve(root, directory)).sort()) {
+      if (directory === '' && ['.git', '.omd', 'node_modules'].includes(name)) continue;
+      const relativePath = directory === '' ? name : `${directory}/${name}`;
+      const metadata = lstatSync(resolve(root, relativePath));
+      if (metadata.isSymbolicLink()) continue;
+      if (metadata.isDirectory()) directories.push(relativePath);
+      else if (metadata.isFile() && pathsOutsideScope(route, [relativePath]).length === 0) {
+        paths.push(relativePath);
+      }
+    }
+  }
+  if (paths.length === 0) throw new ProductionRepairError('REPAIR_SLICE_REQUIRED');
+  return Object.freeze(paths.sort());
+}
+
+function currentRepairScope(root: string, invocation: ProjectRunInvocation): Readonly<{
+  paths: readonly string[];
+  receipt: Readonly<{ sha256: string }>;
+  sourceSha256s?: ReadonlyMap<string, string>;
+}> {
+  if (optionalStableRead(root, '.omd/workflow-production-slice.json', 'repair production slice pointer') !== null) {
+    const slice = currentSlice(root, invocation);
+    const sources = slice.value.slices.flatMap((entry) => [
+      entry.component.source,
+      entry.representativeContext.source,
+    ]);
+    return Object.freeze({
+      paths: slicePaths(slice.value),
+      receipt: slice.receipt,
+      sourceSha256s: new Map(sources.map((source) => [source.path, source.sha256])),
+    });
+  }
+  const route = readPersistedRoute(root, invocation);
+  const paths = routeScopedPaths(root, invocation);
+  const bytes = Buffer.from(`${canonicalJson({
+    schema: 'adaptive-route-repair-scope-v1',
+    routeSha256: adaptiveRouteRecordSha256(route),
+    paths,
+  })}\n`);
+  return Object.freeze({ paths, receipt: Object.freeze({ sha256: hash(bytes) }) });
+}
+
+export function createProductionRepairMirror(input: Readonly<{
+  root: string;
+  invocation: ProjectRunInvocation;
+  parent: string;
+}>): Readonly<{ mirrorRoot: string; paths: readonly string[] }> {
+  if (!isAbsolute(input.parent)) throw new ProductionRepairError('MALFORMED_STAGED_REPAIR');
+  let parent: string;
+  try {
+    parent = realpathSync(input.parent);
+    const metadata = lstatSync(parent);
+    if (!metadata.isDirectory() || metadata.isSymbolicLink()) {
+      throw new ProductionRepairError('MALFORMED_STAGED_REPAIR');
+    }
+  } catch (error) {
+    if (error instanceof ProductionRepairError) throw error;
+    throw new ProductionRepairError('MALFORMED_STAGED_REPAIR');
+  }
+  const projectRoot = realpathSync(input.root);
+  const fromProject = relative(projectRoot, parent);
+  if (fromProject === '' || (!fromProject.startsWith('..') && !isAbsolute(fromProject))) {
+    throw new ProductionRepairError('MALFORMED_STAGED_REPAIR');
+  }
+  const scope = currentRepairScope(projectRoot, input.invocation);
+  const paths = scope.paths;
+  const files = paths.map((path) => {
+    const source = resolve(projectRoot, path);
+    const metadata = lstatSync(source);
+    if (!metadata.isFile() || metadata.isSymbolicLink()) {
+      throw new ProductionRepairError('MALFORMED_STAGED_REPAIR');
+    }
+    return Object.freeze({
+      relativePath: path,
+      content: stableRead(projectRoot, path, `repair mirror source ${path}`),
+      mode: metadata.mode & 0o777,
+    });
+  });
+  try {
+    const mirrorRoot = createExternalPrivateMirror({
+      projectRoot,
+      invocation: input.invocation,
+      parent,
+      files,
+    });
+    return Object.freeze({ mirrorRoot, paths });
+  } catch (error) {
+    if (error instanceof ProductionRepairError) throw error;
+    throw new ProductionRepairError('MALFORMED_STAGED_REPAIR');
+  }
+}
+
 function requirePrivateMirror(root: string, mirrorRoot: string): string {
   if (typeof mirrorRoot !== 'string' || mirrorRoot === '' || !isAbsolute(mirrorRoot)) {
     throw new ProductionRepairError('MALFORMED_STAGED_REPAIR');
@@ -351,8 +452,8 @@ export function stageProductionRepair(input: Readonly<{
     throw new ProductionRepairError('STALE_REPAIR_BASE');
   }
   const route = readPersistedRoute(input.root, input.invocation);
-  const slice = currentSlice(input.root, input.invocation);
-  const paths = slicePaths(slice.value);
+  const scope = currentRepairScope(input.root, input.invocation);
+  const paths = scope.paths;
   const mirrorRoot = requirePrivateMirror(input.root, input.mirrorRoot);
   const files = mirrorFiles(mirrorRoot);
   if (files.length !== paths.length || files.some((path, index) => path !== paths[index])) {
@@ -383,15 +484,14 @@ export function stageProductionRepair(input: Readonly<{
   if (reviewed.review.beforeSha256 !== beforeSha256 || reviewed.review.afterSha256 !== afterSha256) {
     throw new ProductionRepairError('MALFORMED_STAGED_REPAIR');
   }
-  const source = slice.value.slices.flatMap((entry) => [entry.component.source, entry.representativeContext.source])
-    .find((candidate) => candidate.path === change.path);
-  if (source === undefined || source.sha256 !== beforeSha256) throw new ProductionRepairError('STALE_REPAIR_BASE');
+  if (scope.sourceSha256s !== undefined
+    && scope.sourceSha256s.get(change.path) !== beforeSha256) throw new ProductionRepairError('STALE_REPAIR_BASE');
   const stage = Object.freeze({ schema: 'opaque-staged-production-repair-v1' as const });
   stagedRepairs.set(stage, Object.freeze({
     root: realpathSync(input.root), invocation: input.invocation, review: reviewed.review, reviewBytes: reviewed.bytes,
     path: change.path, before: Buffer.from(change.before), after: Buffer.from(change.after),
     beforeSha256, afterSha256, mode: change.mode,
-    routeSha256: adaptiveRouteRecordSha256(route), sliceSha256: slice.receipt.sha256,
+    routeSha256: adaptiveRouteRecordSha256(route), sliceSha256: scope.receipt.sha256,
     observationPointerSha256: hash(observation.pointer),
   }));
   return stage;
@@ -471,12 +571,12 @@ export function applyProductionRepair(input: Readonly<{
     requireFinalReviewerLaneAuthorization(input.invocation, input.root, Buffer.from(stage.reviewBytes));
     const observation = currentObservation(input.root);
     const route = readPersistedRoute(input.root, input.invocation);
-    const slice = currentSlice(input.root, input.invocation);
+    const scope = currentRepairScope(input.root, input.invocation);
     if (hash(observation.pointer) !== stage.observationPointerSha256
       || stage.review.observationPointerSha256 !== stage.observationPointerSha256
       || adaptiveRouteRecordSha256(route) !== stage.routeSha256
-      || slice.receipt.sha256 !== stage.sliceSha256) throw new ProductionRepairError('STALE_REPAIR_BASE');
-    const allowedSlicePaths = slicePaths(slice.value);
+      || scope.receipt.sha256 !== stage.sliceSha256) throw new ProductionRepairError('STALE_REPAIR_BASE');
+    const allowedSlicePaths = scope.paths;
     if (!allowedSlicePaths.includes(stage.path) || !within(stage.path, route.allowedPaths)) {
       throw new ProductionRepairError('REPAIR_PATH_OUTSIDE_ROUTE');
     }
@@ -616,6 +716,11 @@ function validateRetentionBytes(bytes: Buffer | null, predecessorSha256: string)
 function recoverySlicePaths(root: string, invocation: ProjectRunInvocation, journal: RepairJournal): readonly string[] {
   const route = readPersistedRoute(root, invocation);
   if (adaptiveRouteRecordSha256(route) !== journal.routeSha256) throw new ProductionRepairError('UNRESOLVED_REPAIR_JOURNAL');
+  if (optionalStableRead(root, '.omd/workflow-production-slice.json', 'repair recovery production slice pointer') === null) {
+    const scope = currentRepairScope(root, invocation);
+    if (scope.receipt.sha256 !== journal.sliceSha256) throw new ProductionRepairError('UNRESOLVED_REPAIR_JOURNAL');
+    return scope.paths;
+  }
   const readiness = checkAdaptiveWorkflowProductionReadiness(root, invocation);
   const pointerBytes = stableRead(root, '.omd/workflow-production-slice.json', 'repair recovery production slice pointer');
   let pointer: unknown;

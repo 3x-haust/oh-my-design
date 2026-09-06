@@ -5,6 +5,7 @@ export const COPY_REQUIRED_SECTIONS = [
   'Sources and fact ledger',
   'Audience language',
   'Voice contract',
+  'Truth contract',
   'Surface copy',
   'Navigation and actions',
   'States and recovery',
@@ -14,6 +15,16 @@ export const COPY_REQUIRED_SECTIONS = [
 export type InteractionScope = 'stateful' | 'navigation-only' | 'static';
 export type ArtDirectionRegister = 'quiet' | 'confident' | 'showpiece';
 export type MotionDecision = 'none' | 'one';
+export const COPY_RESULT_BOUNDARIES = [
+  'navigation',
+  'local-preview',
+  'request-sent',
+  'request-received',
+  'appointment-confirmed',
+  'service-completed',
+  'not-applicable',
+] as const;
+export const COPY_STORAGE_BOUNDARIES = ['none', 'browser-memory', 'tab-session', 'browser-persistent', 'remote'] as const;
 
 export interface CopyViolation {
   id: string;
@@ -67,7 +78,8 @@ export interface CanonicalCopyDeckReceipt {
 
 export interface CopyReviewViolation {
   id: 'COPY-REVIEW-MISSING' | 'COPY-REVIEW-MODE' | 'COPY-REVIEW-TIME'
-    | 'COPY-REVIEW-HASH' | 'COPY-REVIEW-VERDICT' | 'COPY-REVIEW-FINDINGS';
+    | 'COPY-REVIEW-HASH' | 'COPY-REVIEW-VERDICT' | 'COPY-REVIEW-FINDINGS'
+    | 'COPY-REVIEW-DECK-MISSING' | 'COPY-REVIEW-STALE';
   path: '.omd/.cache/copy-eye.md';
   message: string;
 }
@@ -120,8 +132,8 @@ export function validateCopyReviewReport(md: string): CopyReviewViolation[] {
   }
 
   const verdicts = exactReviewFieldValues(md, 'Verdict');
-  if (verdicts.length !== 1 || !verdicts[0] || /^(?:TODO|TBD|N\/A)$/i.test(verdicts[0])) {
-    violations.push(reviewIssue('COPY-REVIEW-VERDICT', 'Report must contain exactly one non-empty `Verdict` line.'));
+  if (verdicts.length !== 1 || !['CLEAN', 'REVISE'].includes(verdicts[0] ?? '')) {
+    violations.push(reviewIssue('COPY-REVIEW-VERDICT', 'Report must contain exactly one `Verdict: CLEAN` or `Verdict: REVISE` line.'));
   }
 
   const findings = [...md.matchAll(/^Findings:[ \t]*(.*?)[ \t]*$/gm)];
@@ -140,6 +152,35 @@ export function validateCopyReviewReport(md: string): CopyReviewViolation[] {
   }
 
   return violations;
+}
+
+export function validateCopyReviewReportForDeck(
+  md: string,
+  copyDeckBytes: Uint8Array | undefined,
+): CopyReviewViolation[] {
+  const violations = validateCopyReviewReport(md);
+  if (violations.length > 0) return violations;
+  if (copyDeckBytes === undefined) {
+    return [reviewIssue('COPY-REVIEW-DECK-MISSING', 'Current copy deck is missing; review freshness cannot be proven.')];
+  }
+
+  const reviewedHash = exactReviewFieldValues(md, 'Reviewed copy-deck SHA-256')[0];
+  if (reviewedHash !== copyDeckSha256(copyDeckBytes)) {
+    return [reviewIssue('COPY-REVIEW-STALE', 'Copy-eye report does not review the current copy-deck bytes.')];
+  }
+  return [];
+}
+
+export function validateCurrentCopyReview(
+  md: string,
+  copyDeckBytes: Uint8Array | undefined,
+): CopyReviewViolation[] {
+  const violations = validateCopyReviewReportForDeck(md, copyDeckBytes);
+  if (violations.length > 0) return violations;
+  if (exactReviewFieldValues(md, 'Verdict')[0] !== 'CLEAN') {
+    return [reviewIssue('COPY-REVIEW-VERDICT', 'Current copy review must have exactly `Verdict: CLEAN`.')];
+  }
+  return [];
 }
 
 export function parseCopySections(md: string): Map<string, string> {
@@ -236,6 +277,11 @@ function validateSurfaceCopy(body: string, facts: Map<string, Fact>, violations:
       }
     }
 
+    const support = fieldValues(surface.body, 'Supporting fact');
+    if (support.length === 1 && /^none\b/i.test(support[0]!) && !/^none(?:\s+(?:—|-|:)\s+\S.+)?$/i.test(support[0]!)) {
+      violations.push(issue('COPY-SUPPORT', `Surface "${surface.name}" must use none or none followed by a marked omission reason.`));
+    }
+
     const refs = fieldValues(surface.body, 'Claim refs');
     if (refs.length !== 1) continue;
     const value = refs[0]!;
@@ -259,6 +305,19 @@ function validateVoiceContract(body: string, violations: CopyViolation[]): void 
   for (const label of ['Audience', 'Language', 'Register']) {
     if (fieldValues(body, label).length !== 1) {
       violations.push(issue('COPY-VOICE-CONTRACT', `Voice contract must declare exactly one ${label} field.`));
+    }
+  }
+}
+
+function validateTruthContract(body: string, violations: CopyViolation[]): void {
+  const contracts = [
+    ['Result boundary', COPY_RESULT_BOUNDARIES],
+    ['Storage boundary', COPY_STORAGE_BOUNDARIES],
+  ] as const;
+  for (const [label, allowed] of contracts) {
+    const values = fieldValues(body, label);
+    if (values.length !== 1 || !new Set<string>(allowed).has(values[0] ?? '')) {
+      violations.push(issue('COPY-TRUTH', `${label} must appear exactly once and use one of: ${allowed.join(', ')}.`));
     }
   }
 }
@@ -430,6 +489,7 @@ export function validateCopyDeck(md: string): CopyViolation[] {
   const factBody = sections.get('sources and fact ledger') ?? '';
   const facts = parseFacts(factBody, violations);
   validateVoiceContract(sections.get('voice contract') ?? '', violations);
+  validateTruthContract(sections.get('truth contract') ?? '', violations);
   validateSurfaceCopy(sections.get('surface copy') ?? '', facts, violations);
   validateInteraction(sections.get('states and recovery') ?? '', violations);
   return violations;

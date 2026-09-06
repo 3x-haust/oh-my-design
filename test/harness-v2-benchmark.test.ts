@@ -112,16 +112,15 @@ test('alias resolver is evaluator-owned, scoped, expiring, byte-limited, and one
   aliases.resolve(projected.evidenceAliases[0]!); assert.throws(() => aliases.resolve(projected.evidenceAliases[0]!), /consumed/);
   assert.throws(() => createAliasResolver(projected, ['fixture/substituted.json'], authority, Date.now()), /immutable alias authority/);
 });
-test('the development corpus and holdouts cover the exact lawful 128-cell matrix', () => {
-  const { briefs, routeMap } = corpus(); assert.equal(briefs.length, 128); assert.deepEqual(briefs.map(({ surface, kind, domain, language, expectedDecision }) => ({ surface, kind, domain, language, expectedDecision })), canonicalLegalCellManifest());
+test('the development corpus and holdouts cover the exact lawful 144-cell matrix', () => {
+  const { briefs, routeMap } = corpus(); assert.equal(briefs.length, 144); assert.deepEqual(briefs.map(({ surface, kind, domain, language, expectedDecision }) => ({ surface, kind, domain, language, expectedDecision })), canonicalLegalCellManifest());
   assert.doesNotThrow(() => validateDevelopmentCorpus(briefs, routeMap)); assert.throws(() => validateDevelopmentCorpus(briefs.slice(1), Object.fromEntries(briefs.slice(1).map(item => [item.id, item.surface]))), /canonical legal-cell manifest/);
 });
-test('the legal matrix rejects product-one, quiet-one, product-showpiece, and unlawful showpiece-none cells', () => {
+test('the legal matrix rejects unscoped product-one, quiet-one, and showpiece-none cells', () => {
   const { briefs } = corpus();
   const cases: readonly [string, Partial<HoldoutBrief>][] = [
     ['product-one', { surface: 'product', routes: [{ surface: 'product' }], kind: 'silent-evidence', expectedDecision: 'one' }],
     ['quiet-one', { kind: 'quiet', expectedDecision: 'one' }],
-    ['product-showpiece', { surface: 'product', routes: [{ surface: 'product' }], kind: 'showpiece', expectedDecision: 'none' }],
     ['showpiece-none', { surface: 'marketing', routes: [{ surface: 'marketing' }], kind: 'showpiece', expectedDecision: 'none' }],
   ];
   for (const [name, mutation] of cases) {

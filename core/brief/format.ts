@@ -12,7 +12,36 @@ export function formatBrief(brief: Brief): string {
   lines.push(`stage         ${brief.stage}  (owner: ${brief.owner})`);
   section('owns', brief.owns);
   if (brief.route !== null) {
-    section('route', [`${brief.route.name} — ${brief.route.roles.join(', ')}`, `references: ${brief.route.references}`]);
+    section('route', [
+      `${brief.route.name}/${brief.route.projectMode} — ${brief.route.roles.join(', ')}`,
+      `references: ${brief.route.references}`,
+    ]);
+  }
+  if (brief.contentGrain !== null) {
+    section('grain', [
+      `${brief.contentGrain.path} — ${brief.contentGrain.status} @ ${brief.contentGrain.sha256.slice(0, 12)}`,
+    ]);
+  }
+  if (brief.localeDesign !== null) {
+    section('locale', [
+      `${brief.localeDesign.decision} — ${brief.localeDesign.surfaceLocale}`,
+      `context: ${brief.localeDesign.contextPath} @ ${brief.localeDesign.contextSha256.slice(0, 12)}`,
+      `market/audience: ${brief.localeDesign.marketRegion ?? 'withheld'} / ${brief.localeDesign.audience ?? 'withheld'}`,
+      ...(brief.localeDesign.projection === null
+        ? []
+        : [`projection: ${brief.localeDesign.projection.path} @ ${brief.localeDesign.projection.sha256.slice(0, 12)}`]),
+      ...(brief.localeDesign.referenceBinding === null
+        ? []
+        : [`reference binding: ${brief.localeDesign.referenceBinding.path} @ ${brief.localeDesign.referenceBinding.sha256.slice(0, 12)}`]),
+    ]);
+  }
+  if (brief.reality !== null) {
+    section('reality', [
+      brief.reality.mode,
+      ...brief.reality.facts.map((fact) => (
+        `${fact.category}/${fact.status}: ${fact.statement}${fact.source === undefined ? '' : ` (${fact.source})`}`
+      )),
+    ]);
   }
   section('references', [
     ...brief.references.map((entry) => {

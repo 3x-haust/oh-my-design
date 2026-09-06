@@ -122,7 +122,9 @@ export function writeTrustedEvaluationObservation(input: Readonly<{
       const core: BrowserObservationCore = {
         schema: BROWSER_OBSERVATION_SCHEMA,
         testedUrl: receipt.testedUrl,
-        testedState: 'trusted-evaluation',
+        testedState: capture.outcomeRef === undefined
+          ? 'trusted-evaluation'
+          : `outcome-${hash(Buffer.from(capture.outcomeRef)).slice(0, 16)}`,
         viewport: { width: capture.width, height: capture.height },
         observableResult: {
           kind: 'screenshot',
@@ -167,6 +169,7 @@ export function writeTrustedEvaluationObservation(input: Readonly<{
         hardFloors: receipt.hardFloors,
         captureSha256s: receipt.captures.map((capture) => capture.sha256),
         transcriptSha256,
+        ...(receipt.entrySurface === undefined ? {} : { entrySurface: receipt.entrySurface }),
       },
       ...browserEvidence,
     },

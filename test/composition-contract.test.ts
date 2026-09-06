@@ -715,11 +715,18 @@ test('closed parser rejects unknown or duplicate H2 sections and fingerprint key
   }
 });
 
-test('UX task coverage is an allowed auxiliary section and Unicode separators fail closed', () => {
+test('owned auxiliary sections are allowed once and Unicode separators fail closed', () => {
   const { values, digests } = baseInputs();
   const complete = artifact(values);
   const withCoverage = `${complete}\n\n## UX task coverage\n\nT1 | production: / | locator: [data-task="save"] |\n`;
   assert.deepEqual(validateCompositionContractSource({ contract: withCoverage, ...digests }), []);
+  const revision = 'a'.repeat(64);
+  const withProductionBinding = `${complete}\n\n## Production revision binding\n\n- Production entry: \`src/index.html\`\n- Production revision SHA-256: \`${revision}\`\n`;
+  assert.deepEqual(validateCompositionContractSource({ contract: withProductionBinding, ...digests }), []);
+  assert.ok(validateCompositionContractSource({
+    contract: `${withProductionBinding}\n\n## Production revision binding\n\n- Production entry: \`src/index.html\`\n- Production revision SHA-256: \`${revision}\`\n`,
+    ...digests,
+  }).some((finding) => /duplicate H2 section/.test(finding.message)));
   const hidden = `${complete}\n\nTask evidence binding:\u2028## UX task coverage\n\nT1 | production: / | locator: [data-task="save"] |\n`;
   assert.ok(validateCompositionContractSource({ contract: hidden, ...digests }).some((finding) => /Unicode line or paragraph separator/.test(finding.message)));
   for (const separator of ['\u2028', '\u2029', '\u0085', '\u000B', '\u000C']) {

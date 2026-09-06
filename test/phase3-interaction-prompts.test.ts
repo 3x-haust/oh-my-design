@@ -40,13 +40,14 @@ test('composer additive does not weaken the pre-existing one-signature-moment an
   const composer = read('src/agents/composer.agent.yaml');
   assert.match(
     composer,
-    /On a `marketing` or showpiece surface assign exactly one signature/i
+    /On a `marketing` surface with a selected showpiece register, assign exactly one signature/i
   );
   assert.match(composer, /never overrides the media-role or restraint rules above/i);
 });
 
-test('sketch represents an assigned interaction role structurally without implementing motion', () => {
+test('sketch keeps assigned interactions structural unless an exact host-evidence-only scene is routed', () => {
   const sketch = read('src/agents/sketch.agent.yaml');
+  const loop = read('core/protocol/human-design-loop.md');
 
   assert.match(sketch, /interaction-based signature moment/i);
   assert.match(sketch, /core\/interaction\/recipes\/`? pack/);
@@ -54,6 +55,10 @@ test('sketch represents an assigned interaction role structurally without implem
   assert.match(sketch, /structural footprint/i);
   assert.match(sketch, /Do not implement the interaction, its motion, timing, or any WebGL canvas/i);
   assert.match(sketch, /CSS scroll-driven default vs\. WebGL escalation/i);
+  assert.match(sketch, /both\s+`\[host-evidence-only:candidate\]`\s+and an exact `\[candidate-motion-scene:v1\]`/i);
+  assert.match(sketch, /implement exactly the named\s+preproduction scene/i);
+  assert.match(sketch, /do not invoke `omd render` or any browser\/capture\/probe command/i);
+  assert.match(loop, /Without both markers[\s\S]*ordinary no-motion and proof-rendering rules remain in force/i);
 
   // Must not relax the pre-existing no-motion / no-colour-direction constraint.
   assert.match(

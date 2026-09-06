@@ -1,4 +1,5 @@
 import { parseSelectedModelIdentity } from '../runtime/model-capability-boundary.ts';
+import { createHash } from 'node:crypto';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import type { ReferenceDiscoveryActualUse } from '../ref/reference-discovery-routing.ts';
 import {
@@ -13,15 +14,16 @@ import { parseAdaptiveBrowserContext, parseAdaptiveLearningContext, parseAdaptiv
 import { routeAdaptiveFlow, validateAdaptiveStrategyRails } from './adaptive-flow.ts';
 import { adaptiveSourceContractSha256, canonicalRouteJson } from './adaptive-source-contract.ts';
 import { validatePersistedAdaptiveBehavior } from './adaptive-behavior-record.ts';
+import { parseLocaleDesignRoute, type LocaleDesignRoute } from '../locale/design-context.ts';
 
 const RECORD_KEYS = [
-  'schema', 'route', 'request', 'requiredOutcomes', 'prohibitedOutcomes', 'evidenceRequired',
+  'schema', 'route', 'request', 'projectMode', 'requiredOutcomes', 'prohibitedOutcomes', 'evidenceRequired',
   'selectedModel', 'sourceContract', 'sourceContractSha256', 'strategy', 'behavior', 'references', 'claims',
   'browserDecisions', 'validatedLearning', 'gates', 'namedDependencies', 'allowedPaths',
   'forbiddenWithoutRequest',
 ] as const;
 const SOURCE_KEYS = [
-  'schema', 'request', 'namedDependencies', 'allowedPaths', 'taskOutcome', 'uxPolicy',
+  'schema', 'request', 'projectMode', 'namedDependencies', 'allowedPaths', 'taskOutcome', 'uxPolicy',
   'evidenceClaims', 'referenceDiscovery', 'designAxes', 'modelCapability',
   'browserDecisionContext', 'validatedLearningContext', 'strategyDecision',
 ] as const;
@@ -29,6 +31,8 @@ const REFERENCES_KEYS = ['decision', 'intended', 'actual'] as const;
 const CLAIM_KEYS = ['userFacts', 'workingContext'] as const;
 const SHA256 = /^[a-f0-9]{64}$/;
 type Fields = ReadonlyMap<string, unknown>;
+const hasOwn = (value: unknown, key: string): boolean =>
+  typeof value === 'object' && value !== null && !Array.isArray(value) && Object.hasOwn(value, key);
 
 function fields(value: unknown, expected: readonly string[]): Fields {
   if (typeof value !== 'object' || value === null || Array.isArray(value)
@@ -81,12 +85,16 @@ function actualReference(value: unknown): ReferenceDiscoveryActualUse {
   return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE');
 }
 
-function sourceRouteInput(value: unknown): unknown {
-  const source = fields(value, SOURCE_KEYS);
+function sourceRouteInput(value: unknown): Readonly<{ input: unknown; localeDesign?: LocaleDesignRoute }> {
+  const legacyKeys = SOURCE_KEYS.filter((key) => key !== 'projectMode');
+  const baseKeys = hasOwn(value, 'projectMode') ? SOURCE_KEYS : legacyKeys;
+  const expectedKeys = hasOwn(value, 'localeDesign') ? [...baseKeys, 'localeDesign'] : baseKeys;
+  const source = fields(value, expectedKeys);
   if (source.get('schema') !== ADAPTIVE_SOURCE_CONTRACT_SCHEMA) return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE');
-  return {
+  const input = {
     schema: ADAPTIVE_ROUTE_INPUT_SCHEMA,
     request: source.get('request'),
+    projectMode: source.get('projectMode') ?? 'existing',
     namedDependencies: source.get('namedDependencies'),
     allowedPaths: source.get('allowedPaths'),
     taskOutcome: source.get('taskOutcome'),
@@ -99,20 +107,33 @@ function sourceRouteInput(value: unknown): unknown {
     validatedLearningContext: source.get('validatedLearningContext'),
     strategyDecision: source.get('strategyDecision'),
   };
+  const localeDesign = source.get('localeDesign');
+  return Object.freeze({
+    input,
+    ...(localeDesign === undefined ? {} : { localeDesign: parseLocaleDesignRoute(localeDesign) }),
+  });
 }
 
 function parse(
   value: unknown,
   authority?: Readonly<{ root: string; invocation: ProjectRunInvocation }>,
 ): AdaptiveRouteRecord {
-  const item = fields(value, RECORD_KEYS);
+  const legacyKeys = RECORD_KEYS.filter((key) => key !== 'projectMode');
+  const item = fields(value, hasOwn(value, 'projectMode') ? RECORD_KEYS : legacyKeys);
   if (item.get('schema') !== ADAPTIVE_ROUTE_RECORD_SCHEMA || item.get('route') !== 'adaptive') {
     return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE');
   }
-  const expected = routeAdaptiveFlow(sourceRouteInput(item.get('sourceContract')), authority);
+  const persistedSourceContract = item.get('sourceContract');
+  const legacySourceContract = !hasOwn(persistedSourceContract, 'projectMode');
+  const replay = sourceRouteInput(persistedSourceContract);
+  const expected = routeAdaptiveFlow(replay.input, authority, replay.localeDesign);
+  const normalizedSourceSha256 = adaptiveSourceContractSha256(expected.sourceContract);
+  const persistedExpectedSha256 = legacySourceContract
+    ? createHash('sha256').update(`${canonicalRouteJson(persistedSourceContract)}\n`).digest('hex')
+    : normalizedSourceSha256;
   const sourceSha256 = item.get('sourceContractSha256');
   if (typeof sourceSha256 !== 'string' || !SHA256.test(sourceSha256)
-    || sourceSha256 !== adaptiveSourceContractSha256(expected.sourceContract)) {
+    || sourceSha256 !== persistedExpectedSha256) {
     return failAdaptiveRoute('SOURCE_CONTRACT_MISMATCH');
   }
   const selectedModel = parseSelectedModelIdentity(item.get('selectedModel'));
@@ -128,12 +149,13 @@ function parse(
     schema: ADAPTIVE_ROUTE_RECORD_SCHEMA,
     route: 'adaptive',
     request: text(item.get('request')),
+    projectMode: item.get('projectMode') === 'greenfield' ? 'greenfield' : 'existing',
     requiredOutcomes: strings(item.get('requiredOutcomes')),
     prohibitedOutcomes: strings(item.get('prohibitedOutcomes')),
     evidenceRequired: strings(item.get('evidenceRequired')),
     selectedModel,
     sourceContract: expected.sourceContract,
-    sourceContractSha256: sourceSha256,
+    sourceContractSha256: normalizedSourceSha256,
     strategy: parseAdaptiveStrategyDecision(item.get('strategy')),
     behavior: validatePersistedAdaptiveBehavior(item.get('behavior'), expected.behavior),
     references: Object.freeze({ decision, intended: text(references.get('intended')), actual: actualReference(references.get('actual')) }),

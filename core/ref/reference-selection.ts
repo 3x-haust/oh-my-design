@@ -583,6 +583,13 @@ export function selectReferenceCandidateV2(root: string, candidateId: string, di
   if (!selection.slots.some((slot) => slot.signal === 'high-visual-system' && slot.rights === 'lawful' && slot.obligationDisposition === 'used')) fail('selection requires one lawful high-visual-system positive used slot');
   const pointer = persistImmutablePreSelection(root, selection, invocation);
   writeAtomically(root, '.omd/reference-pre-selection-v2.json', canonicalJson(pointer), invocation);
+  // A new pre-selection supersedes any settled-selection pointer left by an earlier
+  // board or lap. Publish the current canonical bytes here as the protocol's v2
+  // selection pointer; art direction will replace them with the motion-settled
+  // form once its evaluator-owned resolution is persisted. Without this write,
+  // `omd ref select` can immediately make `omd ref check` fail by validating the
+  // freshly selected board and a historical settled pointer at the same time.
+  writeAtomically(root, '.omd/reference-selection-v2.json', canonicalJson(selection), invocation);
   return selection;
 }
 export function selectReferenceCandidateV2Autonomously(root: string, candidateId: string, invocation: ProjectRunInvocation): ReferenceSelectionV2 {

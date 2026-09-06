@@ -24,7 +24,6 @@ import type { AdaptiveRouteRecord } from '../core/route/adaptive-flow-domain.ts'
 import {
   checkAdaptiveWorkflow,
   checkAdaptiveWorkflowProductionReadiness,
-  checkAdaptiveWorkflowProductionSlice,
 } from '../core/design-development/workflow-persistence.ts';
 
 const PACKAGE_ROOT = fileURLToPath(new URL('..', import.meta.url));
@@ -38,7 +37,7 @@ const OWNER_RESULT_SCHEMA = 'omd-production-owner-result-v1';
 const OWNER_ROLE = 'omd-hand';
 const SHA256 = /^[a-f0-9]{64}$/;
 const DEFAULT_TIMEOUT_MS = 20 * 60 * 1000;
-const MAX_TIMEOUT_MS = 60 * 60 * 1000;
+const MAX_TIMEOUT_MS = 2 * 60 * 60 * 1000;
 
 export type ProductionOwnerAttempt = Readonly<{
   attempt: 1 | 2;
@@ -52,6 +51,11 @@ export type ProductionOwnerAttempt = Readonly<{
   sourceChanges: readonly string[];
   projectChanges: readonly string[];
   unsafeOutputs: readonly string[];
+  prohibitedTools: readonly string[];
+  modelArgumentOmitted: boolean;
+  model?: string;
+  modelReasoningEffort: string;
+  configurationSha256: string;
   eventCount: number;
   finalMessage: string;
 }>;
@@ -64,7 +68,10 @@ export type ProductionOwnerResult = Readonly<{
   rolePromptSha256: string;
   host: 'codex';
   transport: 'codex-exec-stdio-jsonl';
-  modelArgumentOmitted: true;
+  modelArgumentOmitted: boolean;
+  model?: string;
+  modelReasoningEffort: string;
+  configurationSha256: string;
   attempts: readonly ProductionOwnerAttempt[];
   sourceChanges: readonly string[];
   finalEvidence?: Readonly<{ path: '.omd/final-evidence-v2.json'; sha256: string }>;
@@ -81,6 +88,7 @@ export type ProductionOwnerDependencies = Readonly<{
   env?: NodeJS.ProcessEnv;
   timeoutMs?: number;
   now?: () => number;
+  mode?: 'production' | 'repair';
 }>;
 
 type SnapshotEntry =
@@ -101,6 +109,10 @@ type OwnerGrant = Readonly<{
   loadedSkillSha256: string;
   briefSha256: string;
   rolePromptSha256: string;
+  modelArgumentOmitted: boolean;
+  model?: string;
+  modelReasoningEffort: string;
+  configurationSha256: string;
   ownerDirectory: string;
   ownerReceiptPath: string;
   ownerDirectoryDevice: string;
@@ -110,6 +122,16 @@ type OwnerGrant = Readonly<{
 }>;
 
 type RoleProfile = Readonly<{ name: typeof OWNER_ROLE; model_reasoning_effort: string; developer_instructions: string }>;
+
+function ownerExecutionFields(grant: OwnerGrant): Pick<ProductionOwnerResult,
+  'modelArgumentOmitted' | 'model' | 'modelReasoningEffort' | 'configurationSha256'> {
+  return {
+    modelArgumentOmitted: grant.modelArgumentOmitted,
+    ...(grant.model === undefined ? {} : { model: grant.model }),
+    modelReasoningEffort: grant.modelReasoningEffort,
+    configurationSha256: grant.configurationSha256,
+  };
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -125,6 +147,13 @@ function canonicalJson(value: unknown): string {
   return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(',')}}`;
 }
 const sha256 = (value: string | Uint8Array): string => createHash('sha256').update(value).digest('hex');
+
+export function validateProductionOwnerTimeout(value: number): number {
+  if (!Number.isSafeInteger(value) || value < 25 || value > MAX_TIMEOUT_MS) {
+    throw new Error('OWNER_TIMEOUT_INVALID: timeout must be between 25ms and 120 minutes');
+  }
+  return value;
+}
 
 function canonicalProjectRoot(path: string): string {
   const root = realpathSync(resolve(path));
@@ -246,6 +275,10 @@ function verifyOwnerGrant(
     || grant.argvSha256 !== sha256(canonicalJson(process.argv)) || grant.taskSha256 !== expected.taskSha256
     || grant.buildSha256 !== activation.buildSha256 || grant.loadedSkillSha256 !== activation.loadedSkillSha256
     || grant.briefSha256 !== activation.briefSha256 || grant.rolePromptSha256 !== expected.rolePromptSha256
+    || typeof grant.modelArgumentOmitted !== 'boolean'
+    || (grant.modelArgumentOmitted ? grant.model !== undefined : typeof grant.model !== 'string' || grant.model.trim() === '')
+    || typeof grant.modelReasoningEffort !== 'string' || !/^(?:low|medium|high|xhigh)$/.test(grant.modelReasoningEffort)
+    || typeof grant.configurationSha256 !== 'string' || !SHA256.test(grant.configurationSha256)
     || grant.ownerDirectory !== expected.ownerDirectory
     || grant.ownerReceiptPath !== join(expected.ownerDirectory, 'result.json')
     || grant.ownerDirectoryDevice !== expected.ownerDirectoryDevice || grant.ownerDirectoryInode !== expected.ownerDirectoryInode
@@ -474,6 +507,12 @@ function runAttempt(input: Readonly<{
     || (value.processPid !== undefined && (!Number.isSafeInteger(value.processPid) || Number(value.processPid) <= 0))
     || (value.processStartIdentity !== undefined && (typeof value.processStartIdentity !== 'string' || !SHA256.test(value.processStartIdentity)))
     || (value.delegatedActivationSha256 !== undefined && (typeof value.delegatedActivationSha256 !== 'string' || !SHA256.test(value.delegatedActivationSha256)))
+    || value.modelArgumentOmitted !== input.grant.modelArgumentOmitted
+    || value.model !== input.grant.model
+    || value.modelReasoningEffort !== input.grant.modelReasoningEffort
+    || value.configurationSha256 !== input.grant.configurationSha256
+    || !Array.isArray(value.prohibitedTools)
+    || value.prohibitedTools.some((tool) => typeof tool !== 'string' || tool.trim() === '')
     || (value.sessionId !== undefined && typeof value.sessionId !== 'string')) {
     throw new Error('OWNER_EXECUTION_REJECTED: result is forged, stale, or mismatched');
   }
@@ -493,6 +532,11 @@ function runAttempt(input: Readonly<{
     sourceChanges,
     projectChanges,
     unsafeOutputs: unsafeChangedOutputs(afterProject, projectChanges),
+    prohibitedTools: Object.freeze(value.prohibitedTools as string[]),
+    modelArgumentOmitted: input.grant.modelArgumentOmitted,
+    ...(input.grant.model === undefined ? {} : { model: input.grant.model }),
+    modelReasoningEffort: input.grant.modelReasoningEffort,
+    configurationSha256: input.grant.configurationSha256,
     eventCount: Number(value.eventCount),
     finalMessage: value.finalMessage,
   };
@@ -556,14 +600,17 @@ export async function runProductionOwner(
   if (agent !== OWNER_ROLE) throw new Error(`OWNER_MISMATCH: production source belongs to ${OWNER_ROLE}, not ${agent}`);
   if (task.trim() === '') throw new Error('OWNER_TASK_EMPTY');
   const projectRoot = canonicalProjectRoot(projectPath);
-  if (existsSync(join(projectRoot, '.omd', 'observation-v2.json'))
+  const repairJournal = existsSync(join(projectRoot, '.omd', '.production-repair.journal'));
+  const observed = existsSync(join(projectRoot, '.omd', 'observation-v2.json'))
     || existsSync(join(projectRoot, '.omd', 'observation-v2-retention.json'))
-    || existsSync(join(projectRoot, '.omd', '.production-repair.journal'))
-    || hasHistoricalObservation(projectRoot)) {
+    || hasHistoricalObservation(projectRoot);
+  const repairMode = dependencies.mode === 'repair';
+  if (repairJournal || (observed && !repairMode)) {
     throw new Error(
       'OWNER_REPAIR_BYPASS: observed production may change only through the staged repair transaction',
     );
   }
+  if (!observed && repairMode) throw new Error('OWNER_REPAIR_NOT_REQUIRED: no trusted observation exists');
   const env = dependencies.env ?? process.env;
   const invocation = invocationFromHost(env, projectRoot);
   const codexHome = realpathSync(resolve(dependencies.codexHome ?? env.CODEX_HOME ?? join(homedir(), '.codex')));
@@ -572,16 +619,13 @@ export async function runProductionOwner(
   if (!route.strategy.roles.includes(OWNER_ROLE) || !route.strategy.stages.includes('production')) {
     throw new Error('OWNER_ROUTE_MISMATCH: the current route did not select omd-hand production');
   }
-  let productionSliceMode = false;
   if (existsSync(join(projectRoot, '.omd', 'workflow-plan.json'))) {
     try { checkAdaptiveWorkflow(projectRoot, invocation); }
     catch {
       checkAdaptiveWorkflowProductionReadiness(projectRoot, invocation);
-      productionSliceMode = true;
     }
   }
-  const timeoutMs = dependencies.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 25 || timeoutMs > MAX_TIMEOUT_MS) throw new Error('OWNER_TIMEOUT_INVALID: timeout must be between 25ms and 60 minutes');
+  const timeoutMs = validateProductionOwnerTimeout(dependencies.timeoutMs ?? DEFAULT_TIMEOUT_MS);
   const taskSha256 = sha256(task);
   const grant = hostOwnerGrant(env, projectRoot, taskSha256, invocation, (dependencies.now ?? Date.now)());
 
@@ -610,43 +654,54 @@ export async function runProductionOwner(
         return persistResult(env, invocation, grant, {
           schema: OWNER_RESULT_SCHEMA, owner: OWNER_ROLE, projectRoot, taskSha256,
           rolePromptSha256: sha256(role.developer_instructions), host: 'codex',
-          transport: 'codex-exec-stdio-jsonl', modelArgumentOmitted: true,
+          transport: 'codex-exec-stdio-jsonl', ...ownerExecutionFields(grant),
           attempts, sourceChanges: attempt.sourceChanges, result: 'failed', failure,
           ...(attempt.sessionId === undefined ? {} : { resumeCommand: resumeCommand(projectRoot, attempt.sessionId) }),
         });
       };
       if (attempt.status === 'completed') {
+        if (attempt.unsafeOutputs.length > 0) {
+          return failAndRollback(`OWNER_UNSAFE_OUTPUT:${attempt.unsafeOutputs.join(',')}`);
+        }
+        if (attempt.prohibitedTools.length > 0) {
+          return failAndRollback(`OWNER_PROHIBITED_PRODUCTION_TOOL:${attempt.prohibitedTools.join(',')}`);
+        }
+        if (repairMode) {
+          if (attempt.projectChanges.length > 0) {
+            return failAndRollback('OWNER_REPAIR_PROJECT_MUTATION: repair Hand may change only the external private mirror');
+          }
+          return persistResult(env, invocation, grant, {
+            schema: OWNER_RESULT_SCHEMA, owner: OWNER_ROLE, projectRoot, taskSha256,
+            rolePromptSha256: sha256(role.developer_instructions), host: 'codex', transport: 'codex-exec-stdio-jsonl',
+            ...ownerExecutionFields(grant), attempts, sourceChanges: [], result: 'completed',
+            ...(attempt.sessionId === undefined ? {} : { resumeCommand: resumeCommand(projectRoot, attempt.sessionId) }),
+          });
+        }
         const nonSourceChanges = attempt.projectChanges.filter(
           (path) => !attempt.sourceChanges.includes(path),
         );
         if (nonSourceChanges.length > 0) {
           return failAndRollback(`OWNER_NON_SOURCE_MUTATION:${nonSourceChanges.join(',')}`);
         }
-        if (attempt.unsafeOutputs.length > 0) {
-          return failAndRollback(`OWNER_UNSAFE_OUTPUT:${attempt.unsafeOutputs.join(',')}`);
-        }
         if (attempt.sourceChanges.length === 0) {
-          return failAndRollback('OWNER_COMPLETED_WITHOUT_PRODUCTION_WRITE');
+          const existingOwnedSource = [...baselineSource.entries()]
+            .filter(([path, entry]) =>
+              path !== '.'
+              && entry.kind === 'file'
+              && pathsOutsideScope(route, [path]).length === 0)
+            .map(([path]) => path);
+          if (existingOwnedSource.length === 0) {
+            return failAndRollback('OWNER_COMPLETED_WITHOUT_PRODUCTION_WRITE');
+          }
         }
         const outsideScope = pathsOutsideScope(route, attempt.sourceChanges);
         if (outsideScope.length > 0) {
           return failAndRollback(`OWNER_ROUTE_SCOPE_EXCEEDED:${outsideScope.join(',')}`);
         }
-        if (productionSliceMode) {
-          let sliced: ReturnType<typeof checkAdaptiveWorkflowProductionSlice>;
-          try { sliced = checkAdaptiveWorkflowProductionSlice(projectRoot, invocation); }
-          catch (error) {
-            return failAndRollback(`OWNER_PRODUCTION_SLICE_REQUIRED:${error instanceof Error ? error.message : String(error)}`);
-          }
-          const expected = sliced.productionSlice!.slices.flatMap((entry) => [entry.component.source.path, entry.representativeContext.source.path]).sort();
-          if (canonicalJson(expected) !== canonicalJson([...attempt.sourceChanges].sort())) {
-            return failAndRollback('OWNER_PRODUCTION_SLICE_SCOPE_EXCEEDED');
-          }
-        }
         return persistResult(env, invocation, grant, {
           schema: OWNER_RESULT_SCHEMA, owner: OWNER_ROLE, projectRoot, taskSha256,
           rolePromptSha256: sha256(role.developer_instructions), host: 'codex', transport: 'codex-exec-stdio-jsonl',
-          modelArgumentOmitted: true, attempts, sourceChanges: attempt.sourceChanges,
+          ...ownerExecutionFields(grant), attempts, sourceChanges: attempt.sourceChanges,
           result: 'completed',
           ...(attempt.sessionId === undefined ? {} : { resumeCommand: resumeCommand(projectRoot, attempt.sessionId) }),
         });
@@ -662,17 +717,18 @@ export async function runProductionOwner(
   return persistResult(env, invocation, grant, {
     schema: OWNER_RESULT_SCHEMA, owner: OWNER_ROLE, projectRoot, taskSha256,
     rolePromptSha256: sha256(role.developer_instructions), host: 'codex', transport: 'codex-exec-stdio-jsonl',
-    modelArgumentOmitted: true, attempts, sourceChanges: [], result: 'failed', failure: 'OWNER_ATTEMPTS_EXHAUSTED',
+    ...ownerExecutionFields(grant), attempts, sourceChanges: [], result: 'failed', failure: 'OWNER_ATTEMPTS_EXHAUSTED',
     ...(last?.sessionId === undefined ? {} : { resumeCommand: resumeCommand(projectRoot, last.sessionId) }),
   });
 }
 
 export function productionOwnerUsage(): string {
-  return 'usage: omd-codex owner run --agent omd-hand --input <task.md> [--timeout-ms <ms>] [--json]';
+  return 'usage: omd-codex owner run|repair --agent omd-hand --input <task.md> [--timeout-ms <ms>] [--json]';
 }
 
 export async function runProductionOwnerCli(args: readonly string[]): Promise<number> {
-  if (args[0] !== 'run') throw new Error(productionOwnerUsage());
+  if (args[0] !== 'run' && args[0] !== 'repair') throw new Error(productionOwnerUsage());
+  const mode = args[0] === 'repair' ? 'repair' : 'production';
   let agent: string | undefined;
   let input: string | undefined;
   let timeoutMs: number | undefined;
@@ -687,7 +743,12 @@ export async function runProductionOwnerCli(args: readonly string[]): Promise<nu
   }
   if (agent === undefined || input === undefined) throw new Error(productionOwnerUsage());
   const taskPath = realpathSync(resolve(input));
-  const result = await runProductionOwner(process.cwd(), agent, readFileSync(taskPath, 'utf8'), timeoutMs === undefined ? {} : { timeoutMs });
+  const result = await runProductionOwner(
+    process.cwd(),
+    agent,
+    readFileSync(taskPath, 'utf8'),
+    { mode, ...(timeoutMs === undefined ? {} : { timeoutMs }) },
+  );
   if (json) process.stdout.write(`${JSON.stringify(result)}\n`);
   else {
     console.log(`${result.result}: ${result.owner} (${result.attempts.length} attempt${result.attempts.length === 1 ? '' : 's'})`);

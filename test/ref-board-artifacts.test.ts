@@ -8,7 +8,7 @@ import test, { type TestContext } from 'node:test';
 import { readReferenceBoardArtifacts, sha256 } from '../core/ref/board-artifacts.ts';
 import { refIdentity } from '../core/ref/identity.ts';
 import { persistImageFragment } from '../core/ref/image-fragment.ts';
-import { readPreReferenceSelectionV2, selectReferenceCandidate, validateReferenceSelection, validatePreReferenceSelectionV2 } from '../core/ref/reference-selection.ts';
+import { readPreReferenceSelectionV2, readReferenceSelectionV2, selectReferenceCandidate, selectReferenceCandidateV2Autonomously, validateReferenceSelection, validatePreReferenceSelectionV2, validateReferenceSelectionV2 } from '../core/ref/reference-selection.ts';
 import { refImagePath, saveRef } from '../core/ref/store.ts';
 import type { Blueprint, Invariants, Reference } from '../core/types.ts';
 import { createTestProjectRunInvocation, createTestProjectWriteAdapter } from './helpers/project-write.ts';
@@ -82,6 +82,7 @@ test('board artifacts canonicalize an ancestor-symlink project alias after CLI s
 
   // When: the CLI selects the candidate from the real root while a parent validates from the alias root.
   const cli = spawnSync(process.execPath, [CLI, 'ref', 'select', 'candidate', '--json'], { cwd: value.root, encoding: 'utf8' });
+  assert.equal(cli.status, 0, cli.stderr);
   const real = readReferenceBoardArtifacts(value.root); const alias = readReferenceBoardArtifacts(aliasRoot);
   const selection = readPreReferenceSelectionV2(aliasRoot);
   const realSelection = validatePreReferenceSelectionV2(value.root); const aliasSelection = validatePreReferenceSelectionV2(aliasRoot);
@@ -95,6 +96,31 @@ test('board artifacts canonicalize an ancestor-symlink project alias after CLI s
   assert.equal(selection.projectionSha256, sha256(real.projectionBytes));
   assert.deepEqual(realSelection, selection);
   assert.deepEqual(aliasSelection, selection);
+});
+
+test('v2 selection replaces a stale settled pointer and remains capture-bound', (context) => {
+  // Given: a prior lap left a syntactically valid but stale settled-selection pointer.
+  const value = fixture(context);
+  writeFileSync(join(value.root, '.omd', 'reference-selection-v2.json'), JSON.stringify({
+    schemaVersion: 'reference-selection-v2', captureSha256: 'a'.repeat(64), assemblySha256: 'b'.repeat(64),
+    projectionSha256: 'c'.repeat(64), candidateId: 'old-candidate', slots: [{
+      slotId: 'old-slot', rights: 'lawful', signal: 'high-visual-system', staticAxis: 'available',
+      motionAxis: 'absent', obligationDisposition: 'used', obligationReason: 'Prior selection.',
+    }],
+  }));
+
+  // When: the coordinator selects a candidate from the current board.
+  const selected = selectReferenceCandidateV2Autonomously(value.root, 'candidate', value.invocation);
+
+  // Then: both current selection views resolve to the new canonical board, so an
+  // immediate ref check cannot be poisoned by the historical settled pointer.
+  assert.deepEqual(readReferenceSelectionV2(value.root), selected);
+  assert.deepEqual(validatePreReferenceSelectionV2(value.root), selected);
+  assert.deepEqual(validateReferenceSelectionV2(value.root), selected);
+
+  // And: replacing the stale pointer does not weaken raw-evidence currentness.
+  writeFileSync(value.componentImage, png(55));
+  assert.throws(() => validateReferenceSelectionV2(value.root), /capture hash/);
 });
 
 test('board artifacts reject direct-symlink, missing, and non-directory project roots', (context) => {

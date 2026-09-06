@@ -140,3 +140,15 @@ test('prebuild gate blocks production until upstream owner decisions and L4 mode
   }));
   assert.ok(checkDeliberationRun(cwd, 'prebuild').findings.some((finding) => finding.id === 'DECISION-STAGE-UNCOVERED'));
 });
+
+test('Given authenticated depth omission When prebuild runs Then no depth artifact is required', () => {
+  const cwd = mkdtempSync(join(tmpdir(), 'omd-depth-skipped-'));
+  const omd = join(cwd, '.omd');
+  mkdirSync(omd, { recursive: true });
+  writeFileSync(join(omd, 'decision-graph.json'), JSON.stringify(graph));
+
+  const report = checkDeliberationRun(cwd, 'prebuild', { depth: 'skipped' });
+
+  assert.equal(report.ok, true);
+  assert.equal(report.findings.some((finding) => finding.path === '.omd/depth.json'), false);
+});

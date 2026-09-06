@@ -377,7 +377,7 @@ function resolveEvaluatorChoice(
     const difference = byAssessment.get(right.register)!.score - byAssessment.get(left.register)!.score;
     return difference === 0 ? left.register.localeCompare(right.register) : difference;
   });
-  if (byAssessment.get(ranked[0]!.register)!.score === byAssessment.get(ranked[1]!.register)!.score) {
+  if (ranked.length > 1 && byAssessment.get(ranked[0]!.register)!.score === byAssessment.get(ranked[1]!.register)!.score) {
     throw new ArtDirectionValidationError('evaluator evidence must produce one unambiguous winning alternative');
   }
   if (ranked[0]!.uxAccessibilityPerformanceRisks.length === 0) throw new ArtDirectionValidationError('selected alternative must state UX, accessibility, and performance risks');
@@ -486,7 +486,7 @@ function validateMotionResolution(resolution: MotionResolutionProjection, input:
   return { digest: motionResolutionProjectionSha256(settled), settledSelectionSha256: referenceSelectionV2Sha256(settledSelection), projection: settled };
 }
 
-export function validateArtDirectionDecision(decision: ArtDirectionDecision, references: readonly ArtDirectionReference[], eligibility: ArtDirectionEligibility, referenceBindings?: CanonicalReferenceBindings, motionResolution?: MotionResolutionProjection): ArtDirectionDecision {
+export function validateArtDirectionDecision(decision: ArtDirectionDecision, references: readonly ArtDirectionReference[], eligibility: ArtDirectionEligibility, referenceBindings?: CanonicalReferenceBindings, motionResolution?: MotionResolutionProjection, intent?: IntentLock): ArtDirectionDecision {
   const canonical = referenceBindings === undefined ? references : validateReferenceBindings(referenceBindings);
   if (referenceBindings !== undefined) {
     if (decision.preSelectionSha256 !== referenceBindings.canonicalSelectionSha256) throw new ArtDirectionValidationError('decision pre-selection hash does not bind the canonical selection');
@@ -495,7 +495,8 @@ export function validateArtDirectionDecision(decision: ArtDirectionDecision, ref
   }
   if (!hasExactKeys(decision, DECISION_KEYS) || decision.schemaVersion !== ART_DIRECTION_SCHEMA_VERSION || !decision.route || decision.compositionSha256 !== undefined || decision.userPrompt !== undefined) throw new ArtDirectionValidationError('decision has an invalid pre-composition shape');
   [decision.activationSha256, decision.intentSha256, decision.boardSha256, decision.preSelectionSha256, decision.alternativesSha256, decision.motionResolutionProjectionSha256, decision.settledSelectionSha256, decision.authorInvocationSha256, decision.authorPayloadSha256, decision.authorResultSha256, decision.currentUserBeatExceptionReceiptSha256].forEach((value, index) => requireHash(value, `hash ${index}`));
-  if (decision.consideredAlternatives.length !== 3 || new Set(decision.consideredAlternatives.map((alternative) => alternative.register)).size !== 3) throw new ArtDirectionValidationError('decision must compare exactly quiet, confident, and showpiece');
+  if (decision.consideredAlternatives.length === 0 || new Set(decision.consideredAlternatives.map((alternative) => alternative.register)).size !== decision.consideredAlternatives.length) throw new ArtDirectionValidationError('decision alternatives must be nonempty and register-distinct');
+  if (decision.consideredAlternatives.length === 1 && (intent?.register !== decision.selectedRegister || decision.source !== 'explicit-user')) throw new ArtDirectionValidationError('singleton requires a matching current explicit register lock');
   decision.consideredAlternatives.forEach((alternative) => validateAlternative(alternative, canonical));
   if (decision.alternativesSha256 !== createHash('sha256').update(canonicalJson(decision.consideredAlternatives)).digest('hex')) throw new ArtDirectionValidationError('decision alternatives hash is stale');
   const selected = byRegister(decision.consideredAlternatives, decision.selectedRegister);
@@ -504,11 +505,11 @@ export function validateArtDirectionDecision(decision: ArtDirectionDecision, ref
     || canonicalJson(selected.literalPropsToReject) !== canonicalJson(decision.literalPropsToReject)) {
     throw new ArtDirectionValidationError('selection must preserve the chosen alternative and metaphor contract');
   }
-  if (decision.rejectedAlternatives.length !== 2
-    || new Set(decision.rejectedAlternatives.map((rejected) => rejected.register)).size !== 2
+  if (decision.rejectedAlternatives.length !== decision.consideredAlternatives.length - 1
+    || new Set(decision.rejectedAlternatives.map((rejected) => rejected.register)).size !== decision.consideredAlternatives.length - 1
     || decision.rejectedAlternatives.some((rejected) => rejected.register === decision.selectedRegister
       || rejected.reason.trim().length === 0 || rejected.citedReferenceSlotIds.length === 0)) {
-    throw new ArtDirectionValidationError('decision must record two distinct evidenced rejected alternatives');
+    throw new ArtDirectionValidationError('decision must record every nonwinner exactly once as an evidenced rejected alternative');
   }
   for (const rejected of decision.rejectedAlternatives) {
     const alternative = byRegister(decision.consideredAlternatives, rejected.register);
@@ -548,7 +549,8 @@ export function validateArtDirectionDecision(decision: ArtDirectionDecision, ref
  */
 export function resolveMarketingArtDirectionPure(input: NonAuthoritativeResolveMarketingArtDirectionInput): ArtDirectionDecision {
   if (input.route.trim().length === 0) throw new ArtDirectionValidationError('route must not be empty');
-  if (input.alternatives.length !== 3 || new Set(input.alternatives.map((alternative) => alternative.register)).size !== 3) throw new ArtDirectionValidationError('silent marketing requires exactly three alternatives');
+  if (input.alternatives.length === 0 || new Set(input.alternatives.map((alternative) => alternative.register)).size !== input.alternatives.length) throw new ArtDirectionValidationError('marketing alternatives must be nonempty and register-distinct');
+  if (input.alternatives.length === 1 && input.intent.register !== input.alternatives[0]!.register) throw new ArtDirectionValidationError('singleton requires a matching current explicit register lock');
   const canonical = validateReferenceBindings(input.referenceBindings);
   if (input.selectionSha256 !== input.referenceBindings.canonicalSelectionSha256) throw new ArtDirectionValidationError('selection hash does not bind the canonical selection');
   if (input.boardSha256 !== input.referenceBindings.selection.captureSha256) throw new ArtDirectionValidationError('board hash does not bind the current canonical selection');
@@ -599,7 +601,7 @@ export function resolveMarketingArtDirectionPure(input: NonAuthoritativeResolveM
     authorResultSha256: input.evaluatorEvidence.resultSha256,
     currentUserBeatExceptionReceiptSha256: resolveBeatExceptionReceipt(input.beatExceptionReceiptSha256),
   };
-  return validateArtDirectionDecision(decision, canonical, input.eligibility, input.referenceBindings, motionResolution.projection);
+  return validateArtDirectionDecision(decision, canonical, input.eligibility, input.referenceBindings, motionResolution.projection, input.intent);
 }
 export function resolveMarketingArtDirection(input: ResolveMarketingArtDirectionInput): ArtDirectionDecision {
   let root: string;

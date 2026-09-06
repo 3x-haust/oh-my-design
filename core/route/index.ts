@@ -90,6 +90,16 @@ export {
 } from './adaptive-flow-domain.ts';
 export { parseAdaptiveRouteInput } from './adaptive-flow-boundary.ts';
 export {
+  canonicalLocaleDesignJson,
+  localeDesignContextSha256,
+  localeDesignRouteFindings,
+  parseLocaleDesignContext,
+  parseLocaleDesignRoute,
+  routeLocaleDesignContext,
+  type LocaleDesignContext,
+  type LocaleDesignRoute,
+} from '../locale/design-context.ts';
+export {
   ADAPTIVE_BEHAVIOR_POLICY,
   ADAPTIVE_BEHAVIOR_SCHEMA,
   adaptiveBehaviorContract,

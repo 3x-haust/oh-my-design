@@ -147,7 +147,8 @@
   # and the unanchored `이 (?:페이지|사이트|글)(?:에서)?는 .*(?:없습니다|않습니다)` (its greedy `.*`
   # swallowed ordinary 404s, empty states, and privacy copy). F3: moved the narrow Korean
   # self-negating pattern `이런 내용은 없` to SLOP-PINK-ELEPHANT, which covers the full family.
-  # F2 widening: added three phrases with near-zero false-positive risk.
+  # F2 widening: added three phrases as non-gating attention aids. A phrase match never
+  # establishes authorship; review whether it replaces a concrete state, action, or fact.
   # "say goodbye to" — interchangeable marketing opener with no product mechanism.
   # "it['’]s not just.*it['’]s" — a stock antithesis formula that delays the concrete claim.
   # "blazing.?fast" — stock performance adjective; real benchmarks use numbers.
@@ -167,8 +168,9 @@
 
 # The pink-elephant failure: a page told "no clutter" that writes "No clutter here."
 # Copy must state what IS — the positive fact the negation was hiding. This rule catches
-# the structural pattern: announcing what the page refuses to do, which is always the model
-# quoting its own instructions back to the user. Narrow patterns only; broad negation ("we
+# the structural pattern: repeatedly announcing what the page refuses to do instead of naming
+# a concrete state, action, or consequence. This is a contextual copy defect, not authorship
+# evidence. Narrow patterns only; broad negation ("we
 # don't use") hits privacy and 404 copy that are entirely legitimate. Negative tests are
 # mandatory: "we don't use trackers", empty states, 404s, out-of-stock must never fire.
 - id: SLOP-PINK-ELEPHANT
@@ -185,9 +187,9 @@
 # Three narrow classes with observable register or document-cadence consequences:
 #
 # C-11 — a sentence-opening connective directly followed by a comma (그러나, / 하지만, /
-# 또한, / 따라서, / 즉,). Standard Korean prose does not punctuate these with a comma;
-# the comma is a direct trace of English "However," and "Therefore," translated by a model.
-# Narrow by design: only the exact five connectives fire; the comma+space pair is required so
+# 또한, / 따라서, / 즉,). In many Korean contexts this can read as translation-shaped
+# punctuation. Review the sentence in its genre and rhythm; meaningful connectors are lawful,
+# and punctuation never establishes authorship. Narrow by design: only the exact five connectives fire; the comma+space pair is required so
 # "또한 그날 밤" (ordinary adverb) passes cleanly.
 #
 # D류 — 알아보겠습니다 / 살펴보겠습니다. These "let us now examine" structural openers
@@ -383,7 +385,7 @@
 
 # Glassmorphism monoculture: three or more nodes use backdrop-filter: blur, the frozen
 # 2021 Dribbble aesthetic. A single frosted-glass surface can be a deliberate choice;
-# applying it to every card is a pattern inherited from training data.
+# applying it to every card collapses hierarchy regardless of authorship.
 # The IR captures node.backdropFilter when the computed backdrop-filter is not 'none'.
 # Max radius + glassmorphism.
 - id: SLOP-GLASSMORPHISM

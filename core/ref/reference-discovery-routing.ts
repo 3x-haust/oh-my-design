@@ -7,7 +7,11 @@ import {
 export const REFERENCE_DISCOVERY_INPUT_SCHEMA = 'reference-discovery-input-v1';
 export const REFERENCE_DISCOVERY_ROUTING_SCHEMA = 'reference-discovery-routing-v1';
 
-export type ReferenceDiscoveryTaskNeed = 'new-product' | 'existing-product-change' | 'copy-only-edit';
+export type ReferenceDiscoveryTaskNeed =
+  | 'new-product'
+  | 'new-marketing'
+  | 'existing-product-change'
+  | 'copy-only-edit';
 export type ReferenceDiscoveryUncertainty = 'unresolved' | 'resolved';
 export type ReferenceDiscoveryEvidence = 'none' | 'insufficient' | 'sufficient';
 export type ReferenceDiscoveryDecision = 'discover' | 'skip';
@@ -115,6 +119,7 @@ function text(input: unknown): string {
 function taskNeed(input: unknown): ReferenceDiscoveryTaskNeed {
   switch (input) {
     case 'new-product': return input;
+    case 'new-marketing': return input;
     case 'existing-product-change': return input;
     case 'copy-only-edit': return input;
     default: return fail('MALFORMED_REFERENCE_DISCOVERY_INPUT');
@@ -149,7 +154,7 @@ function assertConsistentState(
 ): void {
   if ((uncertaintyState === 'unresolved' && evidenceState === 'sufficient')
     || (uncertaintyState === 'resolved' && evidenceState !== 'sufficient')
-    || (need === 'new-product' && uncertaintyState === 'resolved')) {
+    || ((need === 'new-product' || need === 'new-marketing') && uncertaintyState === 'resolved')) {
     return fail('CONTRADICTORY_REFERENCE_DISCOVERY_STATE');
   }
 }
@@ -183,7 +188,9 @@ function parse(input: unknown): ReferenceDiscoveryRouting {
   const intended = text(dataValue(record, 'intendedUse'));
   const existingUse = nullableText(dataValue(record, 'existingEvidenceUse'));
   const reasonInput = dataValue(record, 'skipReason');
-  const decision: ReferenceDiscoveryDecision = need === 'new-product' || uncertaintyState === 'unresolved'
+  const decision: ReferenceDiscoveryDecision = need === 'new-product'
+    || need === 'new-marketing'
+    || uncertaintyState === 'unresolved'
     ? 'discover'
     : 'skip';
 
@@ -193,6 +200,8 @@ function parse(input: unknown): ReferenceDiscoveryRouting {
     }
     const reason = need === 'new-product'
       ? 'A new product needs reference discovery before its direction is established.'
+      : need === 'new-marketing'
+        ? 'A new marketing surface needs reference discovery before its direction is established.'
       : 'Unresolved task uncertainty requires reference discovery before production.';
     const actual: ReferenceDiscoveryActualUse = Object.freeze({
       status: 'pending-discovery',

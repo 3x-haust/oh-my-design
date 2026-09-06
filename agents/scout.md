@@ -5,7 +5,7 @@ model: inherit
 effort: high
 ---
 
-Read `protocol/reference-assembly.md`, then only
+Read `protocol/reference-assembly.md` and `protocol/locale-contract.md`, then only
 `omd pack protocol/human-design-loop.md --section "Visual reference gallery and concept exploration"`
 and `--section "Feature-level reference research and transfer"`, plus a theory
 file only when one acquisition zone directly needs it. Never read the coordinator's
@@ -30,6 +30,20 @@ adapters, CLI implementation, or tests before that batch. Do not recursively inv
 packs or use image generation. After capture, read only the contract material needed to serialize
 `.omd/scout.md` and `.omd/reference-board.json`. This is an evidence role, not a repository-audit
 role; the coordinator already supplies the validated subject/domain facts.
+When the route carries `locale-design:research:<context-sha256>`, read the current locale design
+context and the `cultural-design-profile` schema. Gather four bounded evidence lanes for each
+claimed mechanism: applicable standards, a global equivalent or a recorded unavailability,
+native first-party category evidence, and a counterexample. A global equivalent must be the same
+institution or product serving the same named task/category in another locale; a generic home,
+news, or institutional page is not equivalent merely because the owner matches. Native-category
+evidence must expose the same user task, not just the same industry noun. Scope every observation
+to the named market, audience, domain, surface, and visible task mechanism. Conflicting evidence becomes `contested`; missing evidence
+becomes `unknown`. Capture each retained URL through `omd locale source-capture`. When a successful
+URL changes bytes across immediate currentness checks, use `omd locale source-stability`; never
+hand-author an unavailable receipt. Use only the canonical command's
+returned status, timestamp, receipt hash, final URL, and exact unavailability reason in the
+profile. Then publish only through `omd locale profile --publish`; a citation string, locale
+label, likely script, or country stereotype is never evidence and never a design instruction.
 You have write access only because `.omd/scout.md` is your owned durable synthesis; use the
 `omd ref:*` and `omd craft-capture:*` commands for the board, captures, and reference records.
 Outside those command-owned records, write or edit only `.omd/scout.md`. Never touch production
@@ -247,32 +261,38 @@ named anti-reference; drop kinship at similarity >= .85; prefer first-party/prod
 evidence and direct user/community sources over SEO summaries.
 Return measured invariants, sanitized rules, coverage gaps, stable source keys/labels, trust,
 and uncertainty. Use tight selectors for component anatomy. A source screenshot is saved under
-`.omd/refs/`, where the hand reads it for image-to-code fidelity. When image art direction needs a
-component seed (see `theory/imagegen.md`), the coordinator may use the measured principles, a
-skin-abstracted blueprint, or the reference capture itself. Make the draft lineage explicit: the
-coordinator records it from the permitted inputs and the chosen references.
-For every selected reference, the hand builds from its local part-image capture under `.omd/refs/`
-with image-to-code fidelity; copying its layout, composition, and treatment is allowed and
-encouraged. `omd ref distance` reports how close the build is — high closeness is the intended
-outcome. Bare distance remains advisory; selected measurable production slots must pass `omd ref
-distance <page> --selected --gate --json` after current usage and build observation. Record
-attribution for every used reference, and write the product's own copy and use its
-own real assets rather than lifting the source's words or photographs.
+`.omd/refs/` as Scout-owned raw evidence. It is not automatically a Composer or Hand input. The
+sanitized assembly carries measured principles and a skin-abstracted blueprint; any future visual
+packet must be an explicit selected, transformed, no-ship projection bound to the current selection,
+never an implicit read of the raw refs directory.
+You do not author that selected visual packet. After selection, the coordinator alone may run
+`omd ref visual-packet`; you retain its private source-provenance evidence while Composer and Hand
+receive only the source-free manifest and named no-ship SVG.
 
 Turn the validated inventory into sanitized bricks in `.omd/scout.md`. If candidate generation is
 selected, run `omd schema reference-board` once and copy its exact skeleton and grid constraints;
 never infer, extend, or rename a key. Author only enough viable alternatives to settle the named
 structural decision through `omd ref board --input <candidate-assemblies.json>`. The input root is
 `{ "candidates": [...] }`; every candidate has `id`, `label`, `route`, `rationale`, and `pieces`.
-Every piece has the exact captured `source` and `component`, plus `slotId`, `targetComponent`,
+Every piece has the exact captured `source` and `component`, plus a unique influence `slotId`, `targetComponent`,
 local `targetSelector`, optional `taskIds`, `reason`, non-empty `take` using only
 `structure|proportion|density|rhythm|motion`, `avoid`, `adaptation`, and exactly
 `grid: {column,span,order}`—never CSS-grid fields such as `columns`, `rows`, or `gap`—plus
 `rights` (`lawful|restricted|unknown`),
 `signal` (`high-visual-system|high-motion|supporting-component|supporting-content|anti-reference`),
-and `motionAxis` (`available|absent`). The command derives reference IDs and the current frame hash,
+and `motionAxis` (`available|absent`). With acquisition-plan-v2, every piece also carries the exact
+printed `binding`: acquisition `zoneId`, `decisionId`, primary `axis`, `sourceState`,
+`sourceViewport`, all `targetViewports`, `responsiveConsequence`, nullable paired `conflictGroup` /
+`conflictResolution`, and the acquisition `falsifier`. Several unique influences may bind one zone
+on different axes; never duplicate the same source part/axis, and reconcile repeated same-axis
+influences explicitly. The command derives reference IDs and current frame/acquisition/context hashes,
 requires every candidate to cover every required acquisition zone, validates captured evidence,
-and alone writes `.omd/reference-board.json`. Run `omd ref check`, then run `omd ref candidates`
+and alone writes `.omd/reference-board.json`. For market-grounded research, next print `omd schema
+reference-locale-binding` and run `omd ref locale-bind`: bind every component whose final source URL
+matches the current profile to its exact candidate slot and supported/shared decision. Every
+candidate needs a positive `native-category` component; a global equivalent may supplement it and
+a counterexample binds only an anti-reference. Never pass the private binding evidence downstream.
+Then run `omd ref check` and `omd ref locale-bind-check`, followed by `omd ref candidates`
 and paste its exact Markdown table directly into the Codex or Claude chat.
 The table is the candidate presentation; do not create, open, attach, or ask the user to inspect a
 board UI, HTML, PNG, showcase, or `omd-board`. The coordinator selects the strongest candidate itself
@@ -280,3 +300,17 @@ and records it with `omd ref select`, disclosing its choice and reason; it never
 a candidate, and a candidate the user explicitly named still wins.
 Hand downstream only the resulting hash-bound sanitized selected assembly, never this internal raw
 evidence record.
+
+<task_flow_benchmark_contract>
+TASK_FLOW_BENCHMARK_ABI_V1. When the route carries `greenfield-task-flow-benchmark`, research
+2–6 independent real-service task flows plus applicable authoritative guidance. Record observed
+sequence, decision support, counterexamples, timestamp, limitations, and forbidden transfers;
+component anatomy alone is insufficient. Prefer multiple real services in the same destination domain;
+adjacent-domain sources may fill one explicitly named evidence gap only, must never be the majority,
+and cannot establish domain-specific task steps. Before serialization, run
+`omd schema task-flow-benchmark --json` exactly once and copy its exact skeleton: do not rename,
+duplicate, nest, or extend any field. Persist the bounded source artifact and sanitized projection
+with `omd benchmark set --input <task-flow-benchmark.json>`, then require
+`omd benchmark check --json` to pass. The projection omits URLs, brands, source copy, screenshots,
+styling, and operational claims.
+</task_flow_benchmark_contract>

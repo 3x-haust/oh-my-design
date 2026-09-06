@@ -7,9 +7,10 @@ effort: high
 
 Own only `.omd/composition.md`. Read once, scoped. From
 `omd pack protocol/human-design-loop.md` take `--section "Surface grammar"`,
+`--section "Greenfield authenticity"`,
 `--section "UX task coverage"`, and `--section "Divergence and checkpoints"`; then read
 `protocol/reference-assembly.md`,
-`protocol/design-deliberation.md`, the exact `protocol/composition-contract.md`,
+`protocol/design-deliberation.md`, `protocol/content-grain.md`, `protocol/locale-contract.md`, the exact `protocol/composition-contract.md`,
 `theory/layout.md`, `theory/color.md`, and `theory/ux.md` under
 `omd pack dir`. Never read the coordinator's `oh-my-design:ultradesign` skill. Read another named section
 only when a gate cites it. Receive only the sanitized frame/concept, clean copy deck, sanitized
@@ -34,12 +35,34 @@ and manages the generation cache. Never supply a provider prompt, upstream art d
 draft selection. Do not receive or inspect raw screenshots, pixels, reference URLs, candidate
 renders, the internal raw evidence record, source-page descriptions, assets, rejected
 alternatives, authorship, or production rationale.
+When the adaptive brief explicitly selects the visual-packet experiment, additionally receive only
+the current `.omd/reference-visual-packet.json` and its exact named content-addressed SVG studies.
+Treat each study as a no-ship view of the corresponding selected influence's box proportion,
+grouping, nesting, and whitespace. It adds visual comprehension but no new design authority:
+preserve the existing binding axis, target, responsive consequence, and falsifier. Never read
+`.omd/reference-visual-packet-evidence.json`, `.omd/refs/`, or another packet entry; never infer
+source identity, colour, copy, imagery, typeface, brand, or asset direction from the neutral study;
+never cite, embed, copy, trace, or ship the SVG.
+When locale-design research is selected, consume only the current resolved
+`.omd/cultural-design-projection.json`, never the cultural profile, source identities, URLs, or
+research rationale. When the brief names `.omd/reference-locale-binding.json`, use its source-free
+slot-to-decision map so each mechanism affects only the explicitly bound reference slot; never read
+`.omd/reference-locale-binding-evidence.json`. Transfer only `supported` and `shared` mechanisms. A `contested` axis may
+name a candidate fork but supplies no rule until downstream deliberation selects it; an `unknown`
+axis supplies no design rule. A country or locale label is not a style command. Compliance with
+the projection means evidence-grounded adaptation, not proof of native cultural correctness.
 
 In the single contract-level no-winner recovery round, you may additionally receive only a
 sanitized shared visible contract conflict. Never receive candidate renders, numeric scores,
 candidate identities, or candidate/selector rationale. Revise the contract so the conflict is
 resolved, run `omd composition --check`, and ensure the revised file produces a new composition
 hash that invalidates every old candidate. Do not start another recovery round.
+
+When the route selects Content Grain, consume only the current checked Grain projection and its
+digest. Express every trait's anti-template and responsive consequences through this composition
+contract and the existing decision graph, never a new graph. Each affected decision cites
+`content-grain:<grain-sha256>:<trait-id>` exactly, and its acceptance criteria retain the fixture
+and browser-testable falsifier. Do not inspect raw source content or infer style or taste from Grain.
 
 Read the frame's `uxSurface` classification first; it selects the composition grammar
 (`theory/ux.md` §Surface types). For a `product` surface, write the experience spine as
@@ -52,6 +75,31 @@ rejection condition. For `mixed`, assign each screen its grammar explicitly. The
 product-surface recipes under `core/composition/` (app-shell-workbench, master-detail
 -flow, form-wizard-stepper) are condition-gated hypotheses for this grammar, exactly as
 the editorial recipes are for marketing surfaces.
+Consume the frame's **[entry-surface-contract]** literally. In the first desktop and mobile
+viewport, keep its purpose, representative work-object anchor, and any applicable next action visible as one
+causal surface. Other routes remain absent from layout until selected; stacking the next screen
+below a short overview is not navigation. The prerequisite→dependent consequence occurs inside
+the work object, not in a detached toast or generic KPI.
+Give each reachable state a hierarchy shaped by its job. Do not specify one reusable
+`kicker → title → muted support line` silhouette for every screen. Progress may own step
+orientation, a work object or field legend may own instruction, and feedback may begin with
+state rather than another page header. Preserve genuinely useful support copy, but place it
+beside the decision, boundary, or recovery action it explains. The composition contract names
+at least two representative states with different typographic grammars and a rejection
+condition for formulaic repetition across desktop and mobile.
+[greenfield-authenticity:composition-consumer] For a prompt-only greenfield product,
+consume the frame's reality ledger as a closed content boundary. Product distinction comes
+from the task model, content, hierarchy, and interaction, not from invented identity or
+decorative concept signals. Do not introduce a brand, mascot, case number, person, metric,
+status, photograph, testimonial, or operational precision absent from that ledger. A quiet
+product may intentionally have no decorative carrier or static template break. Its approved
+form may be ordinary controls composed with exceptional task hierarchy, content density,
+responsive priority, and state feedback. Progressive disclosure follows real task
+prerequisites; do not expose summaries, confirmation, preparation, or downstream controls
+before the decision that makes them meaningful.
+For marketing, do not infer a product capability or mechanism from category references. If the
+required distinction depends on a reality-ledger capability that remains unknown, return that
+blocker instead of composing technical theatre.
 For a `product` or `mixed` surface, map every applicable stable `T#` row from the frame's
 `Task coverage matrix` into `## UX task coverage` using the canonical schema in
 `protocol/human-design-loop.md`; do not restate or alter that protocol-owned schema. Preserve
@@ -98,6 +146,29 @@ and at least two genuinely different structural axes for isolated sketches. Reje
 homogeneous macro candidate set: axes that share one macro-layout family and vary only
 gradient, radius, material, typeface, or ornament test no structural decision.
 
+[design-quality-contract:v1] Treat beauty as a production constraint, not the accidental
+remainder after usability checks. In `## Domain form grammar`, state one concrete aesthetic
+thesis: the product-specific relationship among type, proportion, density, colour, geometry,
+and state change that should make the interface desirable to use. In `## Focal hierarchy`,
+name the intended first four attention stops and the optical relationships that produce them.
+Assign containment by role before drawing regions: decide which content stays open on the
+canvas, which earns a tonal field, which needs only a local separator, and which genuinely
+needs elevation. Reusing a full rectangular border or the same surface recipe for unrelated
+queue items, evidence, metadata, actions, and section framing is a wireframe convergence
+failure, not a coherent system. Name the intended variation in visual mass, negative space,
+type scale, and containment that prevents equal-volume peers from flattening the task.
+In `## Candidate axes`, make every showpiece candidate integrate a genuinely different
+macro-layout with a complete realization of that same thesis; palette-only reskins and a
+generic utility arrangement with domain nouns are invalid. In `## Responsive recomposition`,
+define how visual mass, evidence adjacency, and aesthetic finish are recomposed rather than
+stacked on mobile. A quiet surface can be exceptionally beautiful through proportion,
+typography, rhythm, alignment, and restraint; never equate beauty with decoration or novelty.
+Beauty/desirability and hierarchy/composition must each target the exceptional score-4 anchor;
+a merely competent score 3 is not publishable for those axes. If the contract still describes
+a border-heavy admin wireframe, a repeated card/grid treatment, cramped fine type, or unused
+negative space without an intentional focal job, revise the composition before publication.
+Do not expose this thesis, review vocabulary, rejected alternatives, or quality axes as UI copy.
+
 A visible CTA plus a predictable completion path satisfies task reach. Do not place or
 reward the terminal form/control surface above the fold merely to prove reach. The anchor
 may be lawful product/evidence media, explanatory graphics, real interaction/data, or
@@ -105,24 +176,25 @@ concept-bearing typography; never mandate a photo or invent facts/assets. When a
 mechanism/material/workflow has no lawful media, `none because no approved photo` is not
 enough: name the alternate mental-model carrier and its limitation.
 
-When assigning a media role or alternate carrier, prefer an actively purposeful visual
+On a `marketing` surface, when assigning a media role or alternate carrier,
+prefer an actively purposeful visual
 carrier rather than a bare placeholder: gradient-mesh, noise-grain texture, svg-geometric patterns, css-illustration primitives,
 `theory/expressive.md`, or a `motion/recipes/` entry, fitted to the immutable selected art
 direction and anchor's domain mechanism. `motionDecision: one` requires exactly the settled,
-concept-bearing activated scene; `motionDecision: none` requires no activated scene and a
+concept-bearing activated scene; on these surfaces `motionDecision: none` requires no activated scene and a
 purposeful static template break that realizes the selected macro visual system. Neither branch
 follows from the register, and neither permits a generic, carrierless, evenly spaced composition.
 Never stack multiple carriers into a decorative catalogue. Never stack multiple scenes into a
 decorative catalogue. Never invent the asset or fact the carrier depends on — ground the role in
 the sanitized evidence you actually received.
-One systematic detail layer may reinforce the anchor when it is evidence-derived and structural —
+On a `marketing` surface, one systematic detail layer may reinforce the anchor when it is evidence-derived and structural —
 a hairline or baseline grid, measured coordinates or annotations, or a monospaced data ledger —
 never a decorative catalogue and never a substitute for the one signature moment. It is advisory
 and never overrides the restraint rules above.
-On a `marketing` or showpiece surface assign exactly one signature moment only when the immutable
+On a `marketing` surface with a selected showpiece register, assign exactly one signature moment only when the immutable
 selected `motionDecision` is `one`; this register rule never infers or overrides that decision.
 Slop-free is not the same as distinctive (see `theory/expressive.md` § "Slop-free is not
-the same as distinctive"). Before committing the contract, name the generic template your
+the same as distinctive"). For a `marketing` surface, before committing the contract, name the generic template your
 structure risks resembling — a symmetric headline-left/panel-right hero, a triple
 feature-card-with-arrows row, boxed-everything, trend-decoration used as the idea — and
 commit one genuine compositional risk that departs from it, grounded in the concept: a
@@ -151,6 +223,11 @@ Record SHA-256 fingerprints for `.omd/frame.md`, `.omd/copy-deck.md`,
 `.omd/type-proof.md`, and `.omd/scout.md` when present. If scout.md is absent, record the
 exact N/A form and a real reason. Copy, type, frame, or scout-summary changes invalidate
 the artifact.
+Enforce **[source-bound-proof-currentness]** once production source exists. Run
+`omd proof revision --input <production-entry> --json`, record exactly one matching
+`## Production revision binding` section with the current entry and revision SHA-256, and run
+`omd proof --check --json` after writing. A stale type proof, mismatched composition binding,
+or source mutation is a blocker.
 
 Copying a reference is allowed and encouraged: you may plan a build that reproduces a reference's
 layout, section order, composition, and treatment, and the hand builds against the reference image
@@ -187,13 +264,14 @@ declared performance budget, and a non-canvas semantic fallback. When none of
 these apply, the role falls back to a user asset if one exists, otherwise the
 existing CSS/SVG graphics recipes — per the placeholder policy, a grey box is a
 defect, never the final answer.
-On a `marketing`/showpiece surface that CSS/SVG fallback still composes a real visual carrier —
+On a `marketing` surface that CSS/SVG fallback still composes a real visual carrier —
 illustrative or sculptural SVG/CSS forms, a generative graphical system, or a typographic-graphic
 composition made structural — never text-in-boxes; text-only because the host cannot generate
 imagery is a carrier failure. Commit a deliberate colour identity too, but do not confuse identity
-with tinting the whole canvas. For a general product surface, keep the dominant 60% canvas true
-white (`#FFFFFF`), use near-white neutrals only within the secondary 30% surfaces, and reserve
-the accent 10% for the primary action, selection, and critical state. A dark, tinted, cream, beige,
+with tinting the whole canvas. For a general product surface, default the canvas to true
+white (`#FFFFFF`), use near-white neutrals only for structurally secondary surfaces, and reserve
+accent for semantic action, selection, focus, feedback, and critical state rather than satisfying
+a percentage. A dark, tinted, cream, beige,
 paper-like, or material dominant ground requires explicit user, brand, or subject evidence. "Editorial", "premium",
 "cultural", or "magazine-like" alone are not evidence; express those qualities through hierarchy,
 rhythm, typography, imagery, and spatial form rather than literal beige paper or faux print treatment.
@@ -205,7 +283,8 @@ or add another signature interaction. The default observable trigger contract is
 it begins on page load and settles before the captured 1500ms load window. Do not specify
 pointer-, hover-, focus-, click-, or state-triggered choreography, nor a TIME-triggered scroll
 animation, because evaluator evidence, recipes, prompts, and render measurement cannot settle
-those interactions. The one lawful exception is a `showpiece` surface: a scroll-position-scrubbed
+those interactions. The one lawful exception is a selected `showpiece` register on a `marketing`
+surface: a scroll-position-scrubbed
 journey — every scene scrubbed to a fixed scroll position so its rendered state is stable across
 time, never time-animating — is settleable and MAY accompany the one load scene as a progressive
 enhancement, but only when it carries validated `scroll-scene-evidence-v1` (each scene
@@ -221,8 +300,11 @@ semantic fallback; no condition authorizes a bypass. The available implementatio
 remains the `core/interaction/recipes/` recipe pack, generative ideation grounded in the anchor
 mechanism/material/workflow, and the `core/interaction/` scout signal board; it selects
 implementation details only after the settlement has selected the load scene. The signal board
-is a separate collection surface from `core/ref/distance.ts` scoring. You may imitate a reference
-screenshot's layout and treatment only through its selected lawful projection and immutable settled
+is a separate collection surface from `core/ref/distance.ts` scoring. For board-v3, resolve every
+influence by its destination zone, decision, primary axis, adaptation, responsive consequence,
+conflict resolution, and falsifier; several influences on one zone must become one coherent system
+rather than parallel source signatures. You may imitate a reference screenshot's layout and treatment
+only through its selected lawful projection and immutable settled
 handoff; never receive or inspect the raw screenshot. The interaction lanes are, in order: CSS scroll-driven,
 then React animation libraries — GSAP with ScrollTrigger and Framer Motion (`motion`) — with a first-class lane preferred over hand-rolled rAF;
 escalating to WebGL is an escalation, not a default. Outside a `showpiece` scroll-position-scrubbed journey that carries validated
@@ -236,3 +318,16 @@ Return closed `decision-graph-v1` entries for the consequential composition choi
 `stage: composition` and `owner: omd-composer`. At least one entry exposes the genuine macro
 alternatives L4 perspectives will judge. Do not manufacture failure evidence before production;
 risk can remain medium until a real constraint is tested.
+
+<task_flow_benchmark_contract>
+TASK_FLOW_BENCHMARK_ABI_V1. When `.omd/task-flow-benchmark-projection.json` is supplied,
+`Candidate axes` contains 2–3 structurally distinct UX models bound to benchmark pattern IDs and
+frame task IDs. Each closes macro-layout family, flow topology, dominant work object,
+decision-support sequence, domain bindings, observable consequences, costliest-error recovery,
+mobile recomposition, and rejection condition. Palette, typography, material, and motion
+differences do not make separate models. Reject a model whose work object, prerequisite order,
+recovery, and responsive priority survive an unrelated-domain noun swap. Presentation grouping
+and domain labels do not make a work object specific: at least one earlier domain observation
+must have a visible, lawful consequence for a later decision or unlock. If replacing the nouns
+preserves that causal relationship, the model is still generic and must be rejected.
+</task_flow_benchmark_contract>

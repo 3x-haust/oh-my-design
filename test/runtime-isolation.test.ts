@@ -33,7 +33,8 @@ function invocation(overrides: Partial<ActivationContext> = {}): ProjectRunInvoc
 test('project mutation lock recovers only a stable dead same-host owner', () => {
   const root = mkdtempSync(join(tmpdir(), 'omd-mutation-recovery-'));
   try {
-    const lock = join(root, '.omd-project-mutation.lock');
+    mkdirSync(join(root, '.omd'));
+    const lock = join(root, '.omd', '.project-mutation.lock');
     writeFileSync(lock, JSON.stringify({
       schema: 'omd-project-mutation-lock-v1',
       host: hostname(),
@@ -98,10 +99,9 @@ test('project mutation releases out of order and exported locks retain the globa
     const first = acquireProjectMutationLock(root, owner);
     const second = acquireProjectMutationLock(root, owner);
     first();
-    assert.equal(existsSync(join(root, '.omd-project-mutation.lock')), true);
+    assert.equal(existsSync(join(root, '.omd', '.project-mutation.lock')), true);
     second();
-    assert.equal(existsSync(join(root, '.omd-project-mutation.lock')), false);
-    mkdirSync(join(root, '.omd'));
+    assert.equal(existsSync(join(root, '.omd', '.project-mutation.lock')), false);
 
     const releaseNamed = acquireProjectLock({ projectRoot: root, relativePath: '.omd/named.lock', invocation: owner });
     assert.throws(
@@ -109,7 +109,7 @@ test('project mutation releases out of order and exported locks retain the globa
       /project mutation lock is owned by another invocation/,
     );
     releaseNamed();
-    assert.equal(existsSync(join(root, '.omd-project-mutation.lock')), false);
+    assert.equal(existsSync(join(root, '.omd', '.project-mutation.lock')), false);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

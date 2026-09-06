@@ -37,6 +37,7 @@ export function createSelectedReferenceDistanceReceipt(
       targetSelector: slot.targetSelector,
       similarity: measured.similarity,
       drivers: measured.drivers,
+      ...(measured.unmeasuredComponents ? { unmeasuredComponents: measured.unmeasuredComponents } : {}),
     };
   });
   return parseSelectedReferenceDistanceReceipt({

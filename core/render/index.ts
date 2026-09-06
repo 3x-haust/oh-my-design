@@ -6,6 +6,8 @@ import { extractInPage } from '../ir/dom.ts';
 import { resolveRenderTarget as resolveTarget } from './serve.ts';
 import { computeEnergy } from '../motion/energy.ts';
 import type { EnergyCurve, MotionMeasurement, RawIr } from '../types.ts';
+import { PREPARED_MEASUREMENT_COVERAGE } from '../ref/measurement-coverage.ts';
+import { parseCapturePreparation, prepareReferenceCapture, observeCapturePreparation, type CapturePreparation, type CapturePreparationReceipt } from '../ref/capture-preparation.ts';
 import { type ProjectWriteAdapter, requireProjectWriteAdapter } from '../runtime/project-write.ts';
 import type { RenderedBeat, RenderedBeatProof } from '../copy/index.ts';
 import { requireMotionResultAuthorization, requireRenderedBeatResultAuthorization, type ProjectRunInvocation } from '../runtime/invocation.ts';
@@ -115,12 +117,15 @@ const CHALLENGE_TITLE_PATTERNS: RegExp[] = [
  * Rules, in order:
  *   1. HTTP 403 or any 5xx → explicitly blocked or server error
  *   2. Challenge-page title → Cloudflare / WAF interstitial
- *   3. Near-empty body (< 200 visible chars) → hollow IR — nothing to measure
+ *   3. Near-empty body (< 200 visible chars) → hollow unless a visible, nonempty
+ *      component has been measured in a successful response. Length alone does
+ *      not distinguish an empty page from a standalone component example.
  */
 export function detectBlockReason(
   title: string,
   bodyTextLength: number,
   httpStatus: number | null,
+  hasMeasuredComponent = false,
 ): string | null {
   if (httpStatus !== null && (httpStatus === 403 || httpStatus >= 500)) {
     return `HTTP ${httpStatus}`;
@@ -130,7 +135,9 @@ export function detectBlockReason(
       return `challenge page: "${title.trim()}"`;
     }
   }
-  if (bodyTextLength < 200) {
+  const sparseComponent = hasMeasuredComponent && bodyTextLength > 0
+    && httpStatus !== null && httpStatus >= 200 && httpStatus < 300;
+  if (bodyTextLength < 200 && !sparseComponent) {
     return `near-empty body (${bodyTextLength} visible chars)`;
   }
   return null;
@@ -150,13 +157,31 @@ async function assertNotBlocked(
   page: import('playwright').Page,
   httpStatus: number | null,
   resolvedUrl: string,
+  selector: string | null = null,
 ): Promise<void> {
   if (resolvedUrl.startsWith('file:')) return; // local files are never bot-challenged
   const title = await page.title().catch(() => '');
   const bodyTextLength = await page
     .evaluate(() => (document.body?.innerText?.trim() ?? '').length)
     .catch(() => 999); // can't measure → assume valid so capture still runs
-  const reason = detectBlockReason(title, bodyTextLength, httpStatus);
+  let reason = detectBlockReason(title, bodyTextLength, httpStatus);
+  // No caller-controlled bypass: only a live, explicitly scoped component can
+  // resolve the weak short-body signal. HTTP and challenge signals still win.
+  if (reason?.startsWith('near-empty body') && selector !== null) {
+    const measured = await page.$eval(selector, (element) => {
+      if (!(element instanceof HTMLElement) || element === document.body
+        || element === document.documentElement) return false;
+      const box = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      for (let ancestor = element.parentElement; ancestor; ancestor = ancestor.parentElement) {
+        if (Number(getComputedStyle(ancestor).opacity) === 0) return false;
+      }
+      return box.width > 0 && box.height > 0 && style.visibility === 'visible'
+        && style.display !== 'none' && Number(style.opacity) > 0
+        && element.innerText.trim().length > 0;
+    }).catch(() => false);
+    reason = detectBlockReason(title, bodyTextLength, httpStatus, measured);
+  }
   if (reason !== null) throw new BlockedPageError(reason);
 }
 
@@ -623,15 +648,16 @@ async function extractIrCore(
   httpStatus: number | null,
   resolvedUrl: string,
   selector: string | null,
+  probe = true,
 ): Promise<RawIr> {
   // Fail fast on blocked/challenge pages before attempting DOM extraction.
-  await assertNotBlocked(page, httpStatus, resolvedUrl);
+  await assertNotBlocked(page, httpStatus, resolvedUrl, selector);
   const raw = await page.evaluate(
     browserEvaluationExpression(extractInPage.toString(), `${MAX_NODES}, ${JSON.stringify(selector ?? null)}`),
   ) as RawIr;
-  const interaction = await probeInteraction(page);
-  const motion = await probeMotion(page);
-  return { ...raw, meta: { ...(raw.meta ?? {}), interaction, motion } };
+  const interaction = probe ? await probeInteraction(page) : null;
+  const motion = probe ? await probeMotion(page) : null;
+  return { ...raw, meta: { ...(raw.meta ?? {}), interaction, motion, ...(!probe ? { measurementCoverage: { ...PREPARED_MEASUREMENT_COVERAGE } } : {}) } };
 }
 
 export function extractIr(target: string, opts: { viewport: Viewport; selector?: string | null }): Promise<RawIr> {
@@ -648,20 +674,51 @@ export async function capturePageForRef(
   browser: Browser,
   target: string,
   viewport: Viewport,
-  opts: { selector?: string | null; shotOut?: string; adapter?: ProjectWriteAdapter },
-): Promise<{ raw: RawIr; shotSaved: boolean }> {
+  opts: { selector?: string | null; shotOut?: string; adapter?: ProjectWriteAdapter; preparation?: CapturePreparation; bestEffortShot?: boolean },
+): Promise<{ raw: RawIr; shotSaved: boolean; shotError?: string; capturePreparation?: CapturePreparationReceipt }> {
+  const preparation = opts.preparation === undefined ? undefined : parseCapturePreparation(opts.preparation);
   return onPage(browser, target, viewport, async (page, httpStatus, resolvedUrl) => {
-    const raw = await extractIrCore(page, httpStatus, resolvedUrl, opts.selector ?? null);
+    const executedActions = preparation ? await prepareReferenceCapture(page, preparation) : undefined;
+    // Hover/tab probes can close disclosures; null means not measured, never observed absence.
+    const raw = await extractIrCore(page, httpStatus, resolvedUrl, opts.selector ?? null, preparation === undefined);
+    if (preparation) await observeCapturePreparation(page, preparation);
     let shotSaved = false;
+    let shotBytes: Buffer | undefined;
+    let shotError: string | undefined;
     if (opts.shotOut && opts.selector) {
       const el = await page.$(opts.selector);
+      if (!el && preparation) throw new Error('prepared reference screenshot target disappeared before capture');
       if (el) {
         if (!opts.adapter) throw new Error('scoped reference screenshot requires a project-write adapter');
-        await writeScreenshot(() => el.screenshot(), requireProjectWriteAdapter(opts.adapter.projectRoot, opts.adapter), opts.shotOut);
-        shotSaved = true;
+        try { shotBytes = await el.screenshot(); }
+        catch (error) {
+          if (preparation || !opts.bestEffortShot) throw error;
+          shotError = error instanceof Error ? error.message : String(error);
+        }
       }
     }
-    return { raw, shotSaved };
+    let capturePreparation: CapturePreparationReceipt | undefined;
+    if (preparation) {
+      const observations = await observeCapturePreparation(page, preparation);
+      const actualViewport = page.viewportSize();
+      if (!actualViewport) throw new Error('reference capture preparation requires an observed viewport');
+      capturePreparation = {
+        schema: 'reference-capture-preparation-receipt-v1', executedActions: executedActions!, observations,
+        observedAt: new Date().toISOString(), viewport: actualViewport,
+        notMeasured: ['interaction-probe', 'motion-probe', 'energy-curve'],
+      };
+    }
+    // Keep bytes private until all observations have passed, including after the screenshot.
+    if (shotBytes && opts.shotOut && opts.adapter) {
+      try {
+        await writeScreenshot(async () => shotBytes!, requireProjectWriteAdapter(opts.adapter.projectRoot, opts.adapter), opts.shotOut);
+        shotSaved = true;
+      } catch (error) {
+        if (preparation || !opts.bestEffortShot) throw error;
+        shotError = error instanceof Error ? error.message : String(error);
+      }
+    }
+    return { raw, shotSaved, ...(shotError ? { shotError } : {}), ...(capturePreparation ? { capturePreparation } : {}) };
   });
 }
 /**

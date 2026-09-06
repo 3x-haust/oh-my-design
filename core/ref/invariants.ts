@@ -1,4 +1,5 @@
 import type { Ir, Invariants } from '../types.ts';
+import { parseMeasurementCoverage } from './measurement-coverage.ts';
 
 /**
  * Keeps the values that carry 90% of the uses, sorted ascending. Zero is dropped first —
@@ -158,5 +159,6 @@ export function extractInvariants(ir: Ir): Invariants {
     animatedProperties,
     hasReducedMotion,
     scrollChoreography,
+    ...(ir.meta?.measurementCoverage === undefined ? {} : { measurementCoverage: parseMeasurementCoverage(ir.meta.measurementCoverage) }),
   };
 }

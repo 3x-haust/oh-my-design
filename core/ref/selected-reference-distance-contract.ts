@@ -12,6 +12,7 @@ export type SelectedReferenceDistanceComparison = Readonly<{
   targetSelector: string;
   similarity: number;
   drivers: readonly string[];
+  unmeasuredComponents?: readonly string[];
 }>;
 
 export type SelectedReferenceDistanceReceipt = Readonly<{
@@ -149,13 +150,19 @@ const comparison = (
   index: number,
 ): SelectedReferenceDistanceComparison => {
   const parsed = record(value, `comparisons[${index}]`);
-  exactKeys(parsed, COMPARISON_KEYS, `comparisons[${index}]`);
+  exactKeys(parsed, parsed['unmeasuredComponents'] === undefined ? COMPARISON_KEYS : [...COMPARISON_KEYS, 'unmeasuredComponents'], `comparisons[${index}]`);
   const rawDrivers = parsed['drivers'];
   if (!Array.isArray(rawDrivers)
     || rawDrivers.some((driver) => typeof driver !== 'string' || !DRIVER_NAMES.has(driver))) {
     failSelectedReferenceDistance(`comparisons[${index}].drivers contains an unknown driver`);
   }
   const drivers = rawDrivers as string[];
+  const unmeasured = parsed['unmeasuredComponents'];
+  if (unmeasured !== undefined && (!Array.isArray(unmeasured) || unmeasured.length === 0
+    || new Set(unmeasured).size !== unmeasured.length
+    || unmeasured.some(name => !['hoverCoverage', 'focusCoverage'].includes(name) || drivers.includes(name)))) {
+    failSelectedReferenceDistance(`comparisons[${index}].unmeasuredComponents must name excluded probe axes, never drivers`);
+  }
   return {
     slotId: text(parsed['slotId'], `comparisons[${index}].slotId`),
     referenceId: text(parsed['referenceId'], `comparisons[${index}].referenceId`),
@@ -163,6 +170,7 @@ const comparison = (
     targetSelector: text(parsed['targetSelector'], `comparisons[${index}].targetSelector`),
     similarity: finiteScore(parsed['similarity'], `comparisons[${index}].similarity`),
     drivers: Object.freeze([...drivers]),
+    ...(unmeasured === undefined ? {} : { unmeasuredComponents: Object.freeze([...(unmeasured as string[])]) }),
   };
 };
 

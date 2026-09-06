@@ -8,6 +8,7 @@ import type { UxPolicy, UxPolicyCheck } from '../ux/policy.ts';
 import type { AdaptiveBehaviorContract } from './adaptive-behavior-contract.ts';
 import type { AdaptiveAiAsset } from './adaptive-ai-assets.ts';
 import type { AdaptiveAttributionCategory } from './adaptive-attribution.ts';
+import type { LocaleDesignRoute } from '../locale/design-context.ts';
 
 export const ADAPTIVE_ROUTE_INPUT_SCHEMA = 'adaptive-design-route-input-v1' as const;
 export const ADAPTIVE_ROUTE_RECORD_SCHEMA = 'adaptive-design-route-v1' as const;
@@ -17,7 +18,7 @@ export const ADAPTIVE_LEARNING_CONTEXT_SCHEMA = 'adaptive-learning-context-v1' a
 export const ADAPTIVE_SOURCE_CONTRACT_SCHEMA = 'adaptive-route-source-contract-v1' as const;
 
 export const ADAPTIVE_ROUTE_INPUT_KEYS = [
-  'schema', 'request', 'namedDependencies', 'allowedPaths', 'taskOutcome', 'uxPolicy',
+  'schema', 'request', 'projectMode', 'namedDependencies', 'allowedPaths', 'taskOutcome', 'uxPolicy',
   'evidenceClaims', 'referenceDiscovery', 'designAxes', 'modelCapability',
   'browserDecisionContext', 'validatedLearningContext', 'strategyDecision',
 ] as const;
@@ -34,7 +35,7 @@ export const MANDATORY_ADAPTIVE_GATES = Object.freeze([
 ] as const);
 
 export const OPTIONAL_STAGE_IDS = Object.freeze([
-  'domain', 'depth', 'frame', 'acquisition', 'scout', 'reference-board',
+  'domain', 'depth', 'frame', 'content-grain', 'acquisition', 'scout', 'reference-board',
   'reference-selection', 'art-direction', 'copy', 'type-proof', 'composition',
   'candidate-generation', 'safety-validation',
 ] as const);
@@ -75,7 +76,13 @@ export type AdaptiveRouteErrorCode =
   | 'COPY_REPAIR_WORKFLOW_INVALID'
   | 'SHOWPIECE_MOTION_AMBITION_INVALID'
   | 'AI_ASSET_DECISION_INVALID'
-  | 'ATTRIBUTION_COVERAGE_INVALID';
+  | 'ATTRIBUTION_COVERAGE_INVALID'
+  | 'GREENFIELD_FRAME_REQUIRED'
+  | 'GREENFIELD_TASK_FLOW_STAGE_REQUIRED'
+  | 'GREENFIELD_TASK_FLOW_ROLE_REQUIRED'
+  | 'LOCALE_DESIGN_CLARIFICATION_REQUIRED'
+  | 'LOCALE_DESIGN_RESEARCH_REQUIRED'
+  | 'LOCALE_DESIGN_TYPE_PROOF_REQUIRED';
 
 export class AdaptiveRouteError extends Error {
   override readonly name = 'AdaptiveRouteError';
@@ -117,6 +124,7 @@ export type ModelCapabilityRouteInput = Readonly<{ now: number; routingInput: un
 export type AdaptiveRouteInput = Readonly<{
   schema: typeof ADAPTIVE_ROUTE_INPUT_SCHEMA;
   request: string;
+  projectMode: 'greenfield' | 'existing';
   namedDependencies: readonly string[];
   allowedPaths: readonly string[];
   taskOutcome: unknown;
@@ -132,6 +140,7 @@ export type AdaptiveRouteInput = Readonly<{
 export type AdaptiveSourceContract = Readonly<{
   schema: typeof ADAPTIVE_SOURCE_CONTRACT_SCHEMA;
   request: string;
+  projectMode: 'greenfield' | 'existing';
   namedDependencies: readonly string[];
   allowedPaths: readonly string[];
   taskOutcome: TaskOutcomeContract;
@@ -143,6 +152,7 @@ export type AdaptiveSourceContract = Readonly<{
   browserDecisionContext: AdaptiveBrowserDecisionContext;
   validatedLearningContext: AdaptiveLearningContext;
   strategyDecision: AdaptiveStrategyDecision;
+  localeDesign?: LocaleDesignRoute;
 }>;
 
 export type ValidatedAdaptiveRouteInput = Omit<AdaptiveRouteInput,
@@ -154,11 +164,13 @@ export type ValidatedAdaptiveRouteInput = Omit<AdaptiveRouteInput,
   referenceDiscovery: ReferenceDiscoveryRouting;
   designAxes: DesignAxisRouting;
   modelCapability: ModelCapabilityProbeRouting;
+  localeDesign?: LocaleDesignRoute;
 }>;
 export type AdaptiveRouteRecord = Readonly<{
   schema: typeof ADAPTIVE_ROUTE_RECORD_SCHEMA;
   route: 'adaptive';
   request: string;
+  projectMode: 'greenfield' | 'existing';
   requiredOutcomes: readonly string[];
   prohibitedOutcomes: readonly string[];
   evidenceRequired: readonly string[];

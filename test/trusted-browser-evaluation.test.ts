@@ -112,6 +112,212 @@ test('real browser produces a trusted fail and pass receipt at fixed viewports',
   }
 });
 
+test('interactive labels reject token-internal wrapping and clipping at fixed viewports', async () => {
+  const broken = mkdtempSync(join(tmpdir(), 'omd-browser-label-broken-'));
+  const fixed = mkdtempSync(join(tmpdir(), 'omd-browser-label-fixed-'));
+  const labelPage = (controlWidth: number): string => page(true).replace(
+    '<style>',
+    `<style>#submit{box-sizing:border-box;width:${controlWidth}px;padding-inline:16px}`,
+  ).replace('Submit order', '프로젝트 열기');
+  try {
+    writeFileSync(join(broken, 'index.html'), labelPage(64));
+    writeFileSync(join(fixed, 'index.html'), labelPage(180));
+
+    const brokenResult = await runTrustedBrowserEvaluation(request(broken));
+    const fixedResult = await runTrustedBrowserEvaluation(request(fixed));
+
+    assert.equal(brokenResult.receipt.outcomeResults[0]?.status, 'pass');
+    assert.equal(brokenResult.receipt.hardFloors.access, 'fail');
+    assert.equal(fixedResult.receipt.hardFloors.access, 'pass');
+  } finally {
+    rmSync(broken, { recursive: true, force: true });
+    rmSync(fixed, { recursive: true, force: true });
+  }
+});
+
+test('benchmark entry surface rejects a functional workflow hidden below the first viewport', async () => {
+  const generic = mkdtempSync(join(tmpdir(), 'omd-browser-entry-generic-'));
+  const specific = mkdtempSync(join(tmpdir(), 'omd-browser-entry-specific-'));
+  const premature = mkdtempSync(join(tmpdir(), 'omd-browser-entry-premature-'));
+  const entryPage = (offset: number, gateDependent = true): string => [
+    '<!doctype html><html><head><meta name="viewport" content="width=device-width">',
+    '<style>body{margin:0;font:16px sans-serif}main{padding:24px}',
+    `[data-omd-work-object]{margin-top:${offset}px;padding:24px;border:1px solid}`,
+    'button{min-height:32px;margin:8px}</style></head><body><main>',
+    '<h1 data-omd-purpose>Resolve cold-chain shipment exceptions</h1>',
+    '<section data-omd-work-object>',
+    '<h2 data-omd-work-anchor>Shipment CX-204</h2>',
+    '<p id="dispatch-constraint">Awaiting evidence</p>',
+    '<button id="inspect-temperature">Inspect temperature</button>',
+    `<button data-omd-next-action${gateDependent ? ' disabled' : ''}>Choose disposition</button>`,
+    '</section></main><script>',
+    'document.querySelector("#inspect-temperature").onclick=()=>{',
+    'document.querySelector("#dispatch-constraint").textContent="Cold-chain inspection required";',
+    gateDependent ? 'document.querySelector("[data-omd-next-action]").disabled=false;' : '',
+    '};',
+    '</script></body></html>',
+  ].join('');
+  const manifest = {
+    schema: 'trusted-lifecycle-manifest-v1',
+    entryPath: 'index.html',
+    scripts: [{
+      outcomeRef: 'outcome:a',
+      actions: [{ kind: 'click', selector: '#inspect-temperature' }],
+      assertions: [{
+        kind: 'visible-text',
+        selector: '#dispatch-constraint',
+        text: 'Cold-chain inspection required',
+      }],
+    }],
+    entrySurface: {
+      benchmarkProjectionSha256: sha('a'),
+      prerequisiteTaskId: 'inspect-temperature',
+      dependentTaskId: 'choose-disposition',
+      purpose: {
+        selector: '[data-omd-purpose]',
+        text: 'Resolve cold-chain shipment exceptions',
+      },
+      workObject: {
+        selector: '[data-omd-work-object]',
+        anchorSelector: '[data-omd-work-anchor]',
+        anchorText: 'Shipment CX-204',
+      },
+      nextAction: {
+        selector: '[data-omd-next-action]',
+        accessibleName: 'Choose disposition',
+      },
+      trigger: {
+        kind: 'click',
+        selector: '#inspect-temperature',
+      },
+      consequence: {
+        selector: '#dispatch-constraint',
+        beforeText: 'Awaiting evidence',
+        afterText: 'Cold-chain inspection required',
+      },
+    },
+  } as const;
+  try {
+    writeFileSync(join(generic, 'index.html'), entryPage(1_000));
+    writeFileSync(join(specific, 'index.html'), entryPage(0));
+    writeFileSync(join(premature, 'index.html'), entryPage(0, false));
+    const genericInput = request(generic);
+    const specificInput = request(specific);
+    const prematureInput = request(premature);
+
+    const genericResult = await runTrustedBrowserEvaluation({
+      ...genericInput,
+      manifest: parseTrustedLifecycleManifest(manifest),
+    });
+    const specificResult = await runTrustedBrowserEvaluation({
+      ...specificInput,
+      manifest: parseTrustedLifecycleManifest(manifest),
+    });
+    const prematureResult = await runTrustedBrowserEvaluation({
+      ...prematureInput,
+      manifest: parseTrustedLifecycleManifest(manifest),
+    });
+
+    assert.equal(genericResult.receipt.outcomeResults[0]?.status, 'pass');
+    assert.equal(genericResult.receipt.hardFloors.access, 'fail');
+    assert.equal(genericResult.receipt.entrySurface?.status, 'fail');
+    assert.equal(specificResult.receipt.hardFloors.access, 'pass');
+    assert.deepEqual(specificResult.receipt.entrySurface, {
+      benchmarkProjectionSha256: sha('a'),
+      prerequisiteTaskId: 'inspect-temperature',
+      dependentTaskId: 'choose-disposition',
+      status: 'pass',
+    });
+    assert.equal(prematureResult.receipt.outcomeResults[0]?.status, 'pass');
+    assert.equal(prematureResult.receipt.hardFloors.behavior, 'pass');
+    assert.equal(prematureResult.receipt.entrySurface?.status, 'fail');
+  } finally {
+    rmSync(generic, { recursive: true, force: true });
+    rmSync(specific, { recursive: true, force: true });
+    rmSync(premature, { recursive: true, force: true });
+  }
+});
+
+test('rendered Korean result copy rejects wrong particles and duplicated endings', async () => {
+  const broken = mkdtempSync(join(tmpdir(), 'omd-browser-copy-broken-'));
+  const fixed = mkdtempSync(join(tmpdir(), 'omd-browser-copy-fixed-'));
+  const resultPage = (result: string): string => [
+    '<!doctype html><html lang="ko"><head><meta name="viewport" content="width=device-width">',
+    '<style>body{margin:0;font:16px sans-serif}button,p{margin:24px}</style></head><body>',
+    '<button id="submit">처분 적용</button>',
+    `<p role="status" hidden>${result}</p>`,
+    '<script>document.querySelector("#submit").onclick=()=>{',
+    'document.querySelector("[role=status]").hidden=false;',
+    '};</script></body></html>',
+  ].join('');
+  const evaluate = async (root: string, result: string) => {
+    writeFileSync(join(root, 'index.html'), resultPage(result));
+    const input = request(root);
+    return runTrustedBrowserEvaluation({
+      ...input,
+      manifest: parseTrustedLifecycleManifest({
+        schema: 'trusted-lifecycle-manifest-v1',
+        entryPath: 'index.html',
+        scripts: [{
+          outcomeRef: 'outcome:a',
+          actions: [{ kind: 'click', selector: '#submit' }],
+          assertions: [{ kind: 'visible-text', selector: '[role=status]', text: result }],
+        }],
+      }),
+    });
+  };
+  try {
+    const brokenResult = await evaluate(
+      broken,
+      '대표 상태를 재포장로 바꿨습니다. 판단 근거는 필요합니다.입니다.',
+    );
+    const fixedResult = await evaluate(
+      fixed,
+      '대표 상태를 재포장으로 바꿨습니다. 판단 근거: 최고 온도를 확인했습니다.',
+    );
+    assert.equal(brokenResult.receipt.outcomeResults[0]?.status, 'pass');
+    assert.equal(brokenResult.receipt.hardFloors.access, 'fail');
+    assert.equal(fixedResult.receipt.hardFloors.access, 'pass');
+  } finally {
+    rmSync(broken, { recursive: true, force: true });
+    rmSync(fixed, { recursive: true, force: true });
+  }
+});
+
+test('assertion timeout starts at the final triggering action, not during prerequisites', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'omd-browser-prerequisite-timeout-'));
+  try {
+    writeFileSync(join(root, 'index.html'), [
+      '<!doctype html><button id="prepare">Prepare</button><button id="submit">Submit</button>',
+      '<p role="status" hidden>Order submitted</p><script>',
+      'const block = () => { const end = performance.now() + 1100; while (performance.now() < end) {} };',
+      'document.querySelector("#prepare").onclick = block;',
+      'document.querySelector("#submit").onclick = () => { block(); document.querySelector("[role=status]").hidden = false; };',
+      '</script>',
+    ].join(''));
+    const input = request(root);
+    const result = await runTrustedBrowserEvaluation({
+      ...input,
+      manifest: parseTrustedLifecycleManifest({
+        schema: 'trusted-lifecycle-manifest-v1',
+        entryPath: 'index.html',
+        scripts: [{
+          outcomeRef: 'outcome:a',
+          actions: [
+            { kind: 'click', selector: '#prepare' },
+            { kind: 'click', selector: '#submit' },
+          ],
+          assertions: [{ kind: 'visible-text', selector: '[role=status]', text: 'Order submitted' }],
+        }],
+      }),
+    });
+    assert.equal(result.receipt.outcomeResults[0]?.status, 'pass');
+    assert.deepEqual(result.receipt.outcomeResults[0]?.findings, []);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('tall production pages publish viewport-sized captures', async () => {
   const root = mkdtempSync(join(tmpdir(), 'omd-browser-viewport-capture-'));
   try {

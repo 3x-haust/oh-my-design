@@ -18,6 +18,12 @@ import {
   adaptiveRouteAuthorityPath,
   requireAdaptiveRouteAuthority,
 } from './adaptive-route-authority.ts';
+import {
+  canonicalLocaleDesignJson,
+  parseLocaleDesignRoute,
+  routeLocaleDesignContext,
+  type LocaleDesignRoute,
+} from '../locale/design-context.ts';
 
 export const ADAPTIVE_ROUTE_POINTER_SCHEMA = 'adaptive-route-pointer-v1' as const;
 export const ADAPTIVE_ROUTE_SOURCE_POINTER_SCHEMA = 'adaptive-route-source-pointer-v1' as const;
@@ -78,11 +84,13 @@ export function publishAdaptiveRoute(
   input: unknown,
   writer: ProjectWriteAdapter,
   invocation: ProjectRunInvocation,
+  localeDesign?: LocaleDesignRoute,
 ): PublishedAdaptiveRoute {
   requireProjectWriteAdapter(root, writer);
   const release = acquireProjectMutationLock(root, invocation);
   try {
-    const record = routeAdaptiveFlow(input, { root, invocation });
+    if (localeDesign !== undefined) requireCurrentLocaleDesignContext(root, localeDesign);
+    const record = routeAdaptiveFlow(input, { root, invocation }, localeDesign);
     const sourceSha256 = adaptiveSourceContractSha256(record.sourceContract);
     const sourcePath = `route-sources/sha256-${sourceSha256}.json`;
     const recordSha256 = adaptiveRouteRecordSha256(record);
@@ -115,6 +123,30 @@ export function publishAdaptiveRoute(
   }
 }
 
+function requireCurrentLocaleDesignContext(root: string, expected: LocaleDesignRoute): void {
+  let bytes: Buffer;
+  try {
+    bytes = readStableProjectFile({
+      root,
+      path: resolve(root, '.omd', 'locale-design-context.json'),
+      label: 'locale design context',
+      fs,
+    });
+  } catch {
+    return failAdaptiveRoute('SOURCE_CONTRACT_MISMATCH');
+  }
+  let current: LocaleDesignRoute;
+  try {
+    current = routeLocaleDesignContext(JSON.parse(bytes.toString('utf8')) as unknown);
+  } catch {
+    return failAdaptiveRoute('SOURCE_CONTRACT_MISMATCH');
+  }
+  const parsedExpected = parseLocaleDesignRoute(expected);
+  if (canonicalLocaleDesignJson(current) !== canonicalLocaleDesignJson(parsedExpected)) {
+    return failAdaptiveRoute('SOURCE_CONTRACT_MISMATCH');
+  }
+}
+
 export function readPersistedRoute(root: string, invocation: ProjectRunInvocation): AdaptiveRouteRecord {
   try {
     if (invocation === undefined) return failAdaptiveRoute('ROUTE_AUTHORITY_REQUIRED');
@@ -144,8 +176,23 @@ export function readPersistedRoute(root: string, invocation: ProjectRunInvocatio
       if (hash(sourceBytes) !== sourcePointer.sha256 || hash(recordBytes) !== routePointer.sha256) {
         return failAdaptiveRoute('SOURCE_CONTRACT_MISMATCH');
       }
-      const record = parseRouteRecord(JSON.parse(recordBytes.toString('utf8')), { root, invocation });
-      const authorityBytes = adaptiveRouteAuthorityBytes(record, routePointer.sha256, invocation);
+      const persistedRecord: unknown = JSON.parse(recordBytes.toString('utf8'));
+      const legacyRecord = typeof persistedRecord === 'object'
+        && persistedRecord !== null
+        && !Array.isArray(persistedRecord)
+        && !Object.hasOwn(persistedRecord, 'projectMode');
+      const record = parseRouteRecord(persistedRecord, { root, invocation });
+      if (record.sourceContract.localeDesign !== undefined) {
+        requireCurrentLocaleDesignContext(root, record.sourceContract.localeDesign);
+      }
+      const authorityRecord = legacyRecord
+        ? Object.freeze({ ...record, sourceContractSha256: sourcePointer.sha256 })
+        : record;
+      const authorityBytes = adaptiveRouteAuthorityBytes(
+        authorityRecord,
+        routePointer.sha256,
+        invocation,
+      );
       requireAdaptiveRouteAuthority(root, invocation, authorityBytes);
       let persistedAuthority: Buffer;
       try {
@@ -154,8 +201,17 @@ export function readPersistedRoute(root: string, invocation: ProjectRunInvocatio
         return failAdaptiveRoute('ROUTE_AUTHORITY_REQUIRED');
       }
       if (!persistedAuthority.equals(authorityBytes)) return failAdaptiveRoute('ROUTE_AUTHORITY_REQUIRED');
-      if (record.sourceContractSha256 !== sourcePointer.sha256
-        || `${canonicalRouteJson(record.sourceContract)}\n` !== sourceBytes.toString('utf8')) {
+      const persistedSource = typeof persistedRecord === 'object'
+        && persistedRecord !== null
+        && !Array.isArray(persistedRecord)
+        ? Reflect.get(persistedRecord, 'sourceContract')
+        : undefined;
+      const sourceMatches = legacyRecord
+        ? Reflect.get(persistedRecord, 'sourceContractSha256') === sourcePointer.sha256
+          && `${canonicalRouteJson(persistedSource)}\n` === sourceBytes.toString('utf8')
+        : record.sourceContractSha256 === sourcePointer.sha256
+          && `${canonicalRouteJson(record.sourceContract)}\n` === sourceBytes.toString('utf8');
+      if (!sourceMatches) {
         return failAdaptiveRoute('SOURCE_CONTRACT_MISMATCH');
       }
       return record;

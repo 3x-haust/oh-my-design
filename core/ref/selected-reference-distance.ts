@@ -6,10 +6,10 @@ import { extractInvariants } from './invariants.ts';
 import { refIdentity } from './identity.ts';
 import { loadRefs } from './store.ts';
 import {
-  readValidatedReferenceUsage,
   referenceUsageV2Sha256,
   type ValidatedReferenceUsage,
 } from './reference-usage-snapshot.ts';
+import { validateReferenceUsage } from './reference-usage.ts';
 import {
   readReferenceSelectionV2,
   referenceSelectionV2Sha256,
@@ -67,7 +67,7 @@ const selectedUsedPieces = (bindings: CurrentBindings) => {
 };
 
 const currentBindings = (root: string): CurrentBindings => {
-  const validatedUsage = readValidatedReferenceUsage(root);
+  const validatedUsage = validateReferenceUsage(root);
   const selection = readReferenceSelectionV2(root);
   const candidate = validatedUsage.artifacts.assembly.candidates.find(
     (entry) => entry.id === selection.candidateId,

@@ -7,7 +7,7 @@ import {
   isWholePageCapture,
   slotClaimAndCapture,
 } from '../core/ref/board-granularity.ts';
-import type { Invariants, Reference } from '../core/types.ts';
+import type { Blueprint, Invariants, Reference } from '../core/types.ts';
 import { parseReferenceBoard } from '../core/ref/board-parser.ts';
 import { refIdentity } from '../core/ref/identity.ts';
 
@@ -241,6 +241,32 @@ test('a board that is mostly low-signal has nothing to be distinctive with', () 
   const finding = auditBoardGranularity(board).find((f) => f.id === 'REF-LOW-SIGNAL-BOARD');
   assert.ok(finding, 'two of three below the signal floor is a majority');
   assert.match(finding!.message, /score below 0\.4 design signal/);
+});
+
+test('the board signal gate honors measured component structure instead of requiring motion or hover', () => {
+  const flat = inv({ radiusLadder: [], elevationLevels: 0, motionDurations: [], easingVocab: [], weightLadder: [400], typeScale: [16], spacingLadder: [80], paddingWeight: 0, hoverCoverage: 0 });
+  const blueprint: Blueprint = {
+    selector: '.evidence-split',
+    capturedAt: '2026-08-31T00:00:00.000Z',
+    nodes: [
+      { id: 'root', role: 'container', children: ['copy', 'media'], box: { w: 1216, h: 560 } },
+      { id: 'copy', role: 'container', children: ['heading', 'list'], box: { w: 496, h: 528 } },
+      { id: 'heading', role: 'heading', children: [], box: { w: 496, h: 32 }, fontSize: 32, fontWeight: 500 },
+      { id: 'list', role: 'container', children: ['row-1', 'row-2', 'row-3'], box: { w: 496, h: 276 } },
+      { id: 'row-1', role: 'text', children: [], box: { w: 470, h: 56 }, fontSize: 16, fontWeight: 400 },
+      { id: 'row-2', role: 'text', children: [], box: { w: 470, h: 56 }, fontSize: 16, fontWeight: 600 },
+      { id: 'row-3', role: 'text', children: [], box: { w: 470, h: 84 }, fontSize: 16, fontWeight: 400 },
+      { id: 'media', role: 'container', children: ['image'], box: { w: 640, h: 389 } },
+      { id: 'image', role: 'image', children: [], box: { w: 640, h: 389 }, radius: 16 },
+    ],
+  };
+  const board = [
+    ref('https://a.example', 'split-a', '.split-a', { invariants: flat, blueprint }),
+    ref('https://b.example', 'split-b', '.split-b', { invariants: flat, blueprint: { ...blueprint, selector: '.split-b' } }),
+    ref('https://c.example', 'styled', '.styled', { invariants: inv() }),
+  ];
+  const finding = auditBoardGranularity(board).find((entry) => entry.id === 'REF-LOW-SIGNAL-BOARD');
+  assert.equal(finding, undefined);
 });
 
 test('the checker consumes board classifications and candidate zone bindings instead of auditing raw captures', () => {

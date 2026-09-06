@@ -73,6 +73,7 @@ test('lifecycle CLI exposes honest evaluate repair and finalize surfaces', () =>
     encoding: 'utf8',
   });
   assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /lifecycle plan/);
   assert.match(result.stdout, /run\|evaluate/);
   assert.match(result.stdout, /lifecycle repair/);
   assert.match(result.stdout, /lifecycle finalize/);
@@ -285,7 +286,7 @@ test('publishes trusted observation linked to outcome claim decision build trans
 
     const result = runLifecycle(root, manifest);
 
-    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.status, 0, `${result.stderr}\n${result.stdout}`);
     assert.match(result.stdout, /EVALUATION: PASS/);
     assert.doesNotMatch(result.stdout, /READY_FOR_FINALIZATION/);
     const receiptMatch = result.stdout.match(/receipt: (.+)/);
@@ -331,6 +332,80 @@ test('publishes trusted observation linked to outcome claim decision build trans
       observation.evidence?.trustedOutcome?.outcomeResults,
       redactObservationEvidence(receipt.outcomeResults),
     );
+
+    const rerun = runLifecycle(root, manifest);
+    assert.equal(rerun.status, 0, rerun.stderr);
+    assert.equal(rerun.stdout.match(/receipt: (.+)/)?.[1], receiptPath);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('Given a mobile-only action When lifecycle evaluates both viewports Then each proves its real state', () => {
+  const root = mkdtempSync(join(tmpdir(), 'omd-trusted-lifecycle-responsive-action-'));
+  try {
+    mkdirSync(join(root, '.omd'), { recursive: true });
+    writeFileSync(
+      join(root, '.omd', 'trusted-lifecycle-contract.json'),
+      JSON.stringify(projectContract),
+    );
+    writeFileSync(join(root, 'index.html'), [
+      '<link rel="stylesheet" href="data:text/css,body{}">',
+      '<label>설명 <input id="description"></label>',
+      '<button id="progress-toggle">전체 단계 보기</button>',
+      '<button id="progress-reset">다시 시작</button>',
+      '<p id="progress">6 / 6 요약</p>',
+      '<style>@media (max-width: 600px) { #progress { display: none; } #progress.open { display: block; } }</style>',
+      '<script>document.querySelector("#progress-toggle").addEventListener("click", () => document.querySelector("#progress").classList.add("open")); document.querySelector("#progress-reset").addEventListener("click", () => document.querySelector("#progress").classList.remove("open"));</script>',
+    ].join('\n'));
+    const manifest = join(root, 'manifest.json');
+    writeFileSync(manifest, JSON.stringify({
+      schema: 'trusted-lifecycle-manifest-v1',
+      entryPath: 'index.html',
+      scripts: [{
+        outcomeRef: 'mustHave:0',
+        actions: [{
+          kind: 'fill',
+          selector: '#description',
+          value: '싱크대 아래 배관에서 물방울이 보여요.',
+        }, {
+          kind: 'click',
+          selector: '#progress-toggle',
+          viewports: ['390x844'],
+        }],
+        assertions: [{
+          kind: 'visible-text',
+          selector: '#progress',
+          text: '6 / 6 요약',
+        }],
+      }, {
+        outcomeRef: 'mustNotHave:0',
+        actions: [{ kind: 'click', selector: '#progress-reset', viewports: ['390x844'] }],
+        assertions: [{ kind: 'absent-text', selector: '#progress.open', text: '6 / 6 요약' }],
+      }, {
+        outcomeRef: 'completionEvidence:0',
+        actions: [{ kind: 'click', selector: '#progress-toggle', viewports: ['390x844'] }],
+        assertions: [{ kind: 'visible-text', selector: '#progress', text: '6 / 6 요약' }],
+      }],
+    }));
+
+    const result = runLifecycle(root, manifest);
+
+    assert.equal(result.status, 0, `${result.stderr}\n${result.stdout}`);
+    assert.match(result.stdout, /EVALUATION: PASS/);
+    const receiptPath = result.stdout.match(/receipt: (.+)/)?.[1];
+    assert.ok(receiptPath);
+    const receipt = JSON.parse(readFileSync(join(root, receiptPath), 'utf8')) as {
+      captures: { outcomeRef: string; sha256: string; path: string }[];
+      outcomeResults: { outcomeRef: string }[];
+    };
+    assert.deepEqual(
+      [...new Set(receipt.captures.map((capture) => capture.outcomeRef))].sort(),
+      receipt.outcomeResults.map((outcome) => outcome.outcomeRef).sort(),
+    );
+    assert.equal(receipt.captures.length, 6);
+    const mobile = receipt.captures.filter((capture) => capture.path.includes('390x844'));
+    assert.notEqual(mobile[0]?.sha256, mobile[1]?.sha256);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

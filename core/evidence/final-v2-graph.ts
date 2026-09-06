@@ -16,7 +16,8 @@ import { parseReferenceHandoffReceipt, referenceHandoffPayloadSha256, validateDe
 import { motionResolutionProjectionSha256, parseReferenceSelectionV2, referenceSelectionV2Sha256, validateMotionResolutionProjection, validateReferenceSelectionV2 } from '../ref/reference-selection.ts';
 import { canonicalJson, projectRawReferenceBoard, sha256 } from '../ref/board-artifacts.ts';
 import { resolveReferenceBoard } from '../ref/board.ts';
-import { parseReferenceUsageV2, readValidatedReferenceUsage, referenceUsageV2Sha256 } from '../ref/reference-usage-snapshot.ts';
+import { parseReferenceUsageV2, referenceUsageV2Sha256 } from '../ref/reference-usage-snapshot.ts';
+import { validateReferenceUsage } from '../ref/reference-usage.ts';
 import {
   parseSelectedReferenceDistanceReceipt,
   selectedReferenceDistanceSha256,
@@ -32,6 +33,7 @@ import { validateCompositionContract } from '../composition-contract/index.ts';
 import { validateRenderedBeatResultAuthority } from '../render/index.ts';
 import { validateFinalBrowserObservations } from './final-v2-browser-observations.ts';
 import { validateTrustedOutcomeEvidence } from './final-v2-outcome-gate.ts';
+import { assertDesignQualityGreen } from './final-v2-design-quality.ts';
 import { readStableProjectFile, StableProjectFileReadError, type StableProjectFileSystem } from '../runtime/stable-project-file.ts';
 import {
   isAdaptiveFinalEvidenceV2Graph,
@@ -39,7 +41,10 @@ import {
   type AdaptiveFinalEvidenceV2Bindings,
   type AdaptiveFinalEvidenceV2Graph,
 } from './final-v2-adaptive-contract.ts';
-import { validateAdaptiveFinalEvidenceV2GraphFiles } from './final-v2-adaptive-files.ts';
+import {
+  REALITY_FIT_PASS_VALUE,
+  validateAdaptiveFinalEvidenceV2GraphFiles,
+} from './final-v2-adaptive-files.ts';
 
 export const FINAL_EVIDENCE_V2_GRAPH_SCHEMA = 'final-evidence-v2-graph' as const;
 export const FINAL_EVIDENCE_V2_WORKFLOW_GRAPH_SCHEMA = 'final-evidence-v2-workflow-graph-v1' as const;
@@ -48,15 +53,35 @@ const SHA256 = /^[a-f0-9]{64}$/;
 export type ArtifactReceipt = Readonly<{ path: string; schema: string; sha256: string }>;
 export type FinalReviewerLane = 'blindLane' | 'fidelityLane' | 'protocolLane';
 export type FinalReviewerLaneContract = Readonly<{
-  schema: 'blind-review-v1' | 'fidelity-review-v1' | 'protocol-review-v1';
-  verdictKeys: readonly [string, string];
-  floorDimensions: readonly [string, string];
+  schema: 'blind-review-v1' | 'blind-review-v2' | 'fidelity-review-v1' | 'protocol-review-v1';
+  verdictKeys: readonly string[];
+  floorDimensions: readonly string[];
+  requiresDesignQuality: boolean;
+  executionSchema: 'final-reviewer-execution-v1' | 'final-reviewer-execution-v2';
 }>;
 const FINAL_REVIEWER_LANE_CONTRACTS: Readonly<Record<FinalReviewerLane, FinalReviewerLaneContract>> = {
-  blindLane: { schema: 'blind-review-v1', verdictKeys: ['blindVisual', 'blindNarrative'], floorDimensions: ['composition', 'copy'] },
-  fidelityLane: { schema: 'fidelity-review-v1', verdictKeys: ['referenceFidelity', 'renderFidelity'], floorDimensions: ['desktop', 'mobile'] },
-  protocolLane: { schema: 'protocol-review-v1', verdictKeys: ['evidenceIntegrity', 'publicationProtocol'], floorDimensions: ['authority', 'currentness'] },
+  blindLane: { schema: 'blind-review-v2', verdictKeys: ['blindVisual', 'blindNarrative'], floorDimensions: ['composition', 'copy'], requiresDesignQuality: true, executionSchema: 'final-reviewer-execution-v2' },
+  fidelityLane: { schema: 'fidelity-review-v1', verdictKeys: ['referenceFidelity', 'renderFidelity'], floorDimensions: ['desktop', 'mobile'], requiresDesignQuality: false, executionSchema: 'final-reviewer-execution-v1' },
+  protocolLane: { schema: 'protocol-review-v1', verdictKeys: ['evidenceIntegrity', 'publicationProtocol'], floorDimensions: ['authority', 'currentness'], requiresDesignQuality: false, executionSchema: 'final-reviewer-execution-v1' },
 };
+const LEGACY_BLIND_REVIEW_CONTRACT: FinalReviewerLaneContract = {
+  schema: 'blind-review-v1',
+  verdictKeys: ['blindVisual', 'blindNarrative'],
+  floorDimensions: ['composition', 'copy'],
+  requiresDesignQuality: false,
+  executionSchema: 'final-reviewer-execution-v1',
+};
+function finalReviewerLaneContract(
+  label: FinalReviewerLane,
+  schema: unknown,
+): FinalReviewerLaneContract {
+  if (label === 'blindLane' && schema === LEGACY_BLIND_REVIEW_CONTRACT.schema) {
+    return LEGACY_BLIND_REVIEW_CONTRACT;
+  }
+  const contract = FINAL_REVIEWER_LANE_CONTRACTS[label];
+  if (schema !== contract.schema) fail(`${label} schema does not match its critical lane`);
+  return contract;
+}
 export type ArtSelectedFinalEvidenceV2Graph = Readonly<{
   schema: typeof FINAL_EVIDENCE_V2_GRAPH_SCHEMA;
   activation: ArtifactReceipt;
@@ -173,7 +198,7 @@ const RECEIPT_SCHEMAS: Readonly<Record<string, readonly string[]>> = {
   renderedBeats: ['rendered-beat-receipt-v1'],
   sourceSeal: ['source-seal-v1'],
   buildIdentity: ['omd-build-identity-v1'],
-  blindLane: ['blind-review-v1'],
+  blindLane: ['blind-review-v1', 'blind-review-v2'],
   fidelityLane: ['fidelity-review-v1'],
   protocolLane: ['protocol-review-v1'],
   observation: ['observation-v2'],
@@ -325,9 +350,8 @@ function validateTypedReceipt(label: string, value: Record<string, unknown>): vo
       case 'blindLane':
       case 'fidelityLane':
       case 'protocolLane': {
-        const contract = FINAL_REVIEWER_LANE_CONTRACTS[label];
-        exact(value, ['schema', 'artDirectionSha256', 'buildSha256', 'isolationReceipt', 'verdicts', 'criticalFloors', 'quorum', 'provenance', 'executionReceipts'], label);
-        if (value.schema !== contract.schema) fail(`${label} schema does not match its critical lane`);
+        const contract = finalReviewerLaneContract(label, value.schema);
+        exact(value, ['schema', 'artDirectionSha256', 'buildSha256', 'isolationReceipt', 'verdicts', 'criticalFloors', ...(contract.requiresDesignQuality ? ['designQuality'] : []), 'quorum', 'provenance', 'executionReceipts'], label);
         digest(value.artDirectionSha256, `${label}.artDirectionSha256`);
         digest(value.buildSha256, `${label}.buildSha256`);
         const isolation = object(value.isolationReceipt, `${label}.isolationReceipt`);
@@ -335,7 +359,10 @@ function validateTypedReceipt(label: string, value: Record<string, unknown>): vo
         if (isolation.schema !== 'reviewer-isolation-v1') fail(`${label} requires an isolation receipt`);
         const isolationSha256 = digest(isolation.sha256, `${label}.isolationReceipt.sha256`);
         const verdicts = object(value.verdicts, `${label}.verdicts`);
-        exact(verdicts, contract.verdictKeys, `${label}.verdicts`);
+        const verdictKeys = label === 'blindLane' && Object.hasOwn(verdicts, 'realityFit')
+          ? [...contract.verdictKeys, 'realityFit']
+          : contract.verdictKeys;
+        exact(verdicts, verdictKeys, `${label}.verdicts`);
         if (Object.values(verdicts).some((verdict) => verdict !== 'GREEN')) fail(`${label} requires all critical GREEN verdicts`);
         const floors = object(value.criticalFloors, `${label}.criticalFloors`);
         exact(floors, contract.floorDimensions, `${label}.criticalFloors`);
@@ -355,7 +382,16 @@ function validateTypedReceipt(label: string, value: Record<string, unknown>): vo
         const observations = array(provenance.observationSha256s, `${label}.provenance.observationSha256s`);
         const reviewers = array(provenance.reviewerIds, `${label}.provenance.reviewerIds`);
         if (observations.length === 0 || reviewers.length !== passed || new Set(reviewers).size !== reviewers.length) fail(`${label} provenance is incomplete or reuses a reviewer`);
+        if (new Set(observations).size !== observations.length) {
+          fail(`${label} does not bind the complete duplicate-free observed evidence set`);
+        }
         observations.forEach((item, index) => digest(item, `${label}.provenance.observationSha256s[${index}]`));
+        if (contract.requiresDesignQuality) {
+          assertDesignQualityGreen(value.designQuality, {
+            expectedObservationSha256s: observations.map((item, index) =>
+              digest(item, `${label}.provenance.observationSha256s[${index}]`)),
+          });
+        }
         reviewers.forEach((item, index) => stringValue(item, `${label}.provenance.reviewerIds[${index}]`));
         const executions = array(value.executionReceipts, `${label}.executionReceipts`);
         if (executions.length !== passed) fail(`${label} requires one completed host reviewer execution receipt per quorum member`);
@@ -418,6 +454,18 @@ function rejectRed(value: unknown, label: string): void {
     rejectRed(item, label);
   }
 }
+export function assertArtSelectedGreenfieldRealityFit(
+  projectMode: 'greenfield' | 'existing',
+  verdicts: unknown,
+): void {
+  const value = object(verdicts, 'blindLane.verdicts');
+  const actual = Object.hasOwn(value, 'realityFit')
+    ? stringValue(value.realityFit, 'blindLane.realityFit')
+    : '';
+  if (projectMode === 'greenfield' && actual !== REALITY_FIT_PASS_VALUE) {
+    fail('greenfield art-selected final evidence requires realityFit: GREEN');
+  }
+}
 function validateCompletedReviewerExecutions(
   root: string,
   fs: EvidenceGraphFs,
@@ -430,6 +478,7 @@ function validateCompletedReviewerExecutions(
   const expectedReviewers = array(provenance.reviewerIds, `${label}.provenance.reviewerIds`).map((value, index) => stringValue(value, `${label}.provenance.reviewerIds[${index}]`));
   const expectedObservations = array(provenance.observationSha256s, `${label}.provenance.observationSha256s`).map((value, index) => digest(value, `${label}.provenance.observationSha256s[${index}]`));
   const expectedIsolation = digest(object(lane.isolationReceipt, `${label}.isolationReceipt`).sha256, `${label}.isolationReceipt.sha256`);
+  const contract = finalReviewerLaneContract(label, lane.schema);
   const executions = array(lane.executionReceipts, `${label}.executionReceipts`);
   const completedReviewers = new Set<string>();
   for (const [index, descriptor] of executions.entries()) {
@@ -439,8 +488,8 @@ function validateCompletedReviewerExecutions(
     if (createHash('sha256').update(bytes).digest('hex') !== digest(item.sha256, `${label}.executionReceipts[${index}].sha256`)) fail(`${label} completed execution receipt bytes changed`);
     requireFinalReviewerLaneAuthorization(invocation, root, bytes);
     const execution = parseReceipt(bytes, `${label}.executionReceipts[${index}]`);
-    exact(execution, ['schema', 'lane', 'reviewerId', 'verdicts', 'criticalFloors', 'isolationReceiptSha256', 'observationSha256s', 'artDirectionSha256', 'buildSha256', 'briefSha256', 'browserSha256', 'childPid', 'sessionId', 'nonce', 'evidenceSha256', 'configurationSha256'], `${label}.executionReceipts[${index}]`);
-    if (execution.schema !== 'final-reviewer-execution-v1' || execution.lane !== label) fail(`${label} execution receipt is not a completed host reviewer execution for this lane`);
+    exact(execution, ['schema', 'lane', 'reviewerId', 'verdicts', 'criticalFloors', ...(contract.requiresDesignQuality ? ['designQuality'] : []), 'isolationReceiptSha256', 'observationSha256s', 'artDirectionSha256', 'buildSha256', 'briefSha256', 'browserSha256', 'childPid', 'sessionId', 'nonce', 'evidenceSha256', 'configurationSha256'], `${label}.executionReceipts[${index}]`);
+    if (execution.schema !== contract.executionSchema || execution.lane !== label) fail(`${label} execution receipt is not a completed host reviewer execution for this lane`);
     const reviewerId = stringValue(execution.reviewerId, `${label}.executionReceipts[${index}].reviewerId`);
     if (!expectedReviewers.includes(reviewerId) || completedReviewers.has(reviewerId)) fail(`${label} execution receipts do not cover the issued reviewer identities exactly once`);
     completedReviewers.add(reviewerId);
@@ -452,6 +501,14 @@ function validateCompletedReviewerExecutions(
     if (new Set(observations).size !== observations.length
       || observations.length !== expectedObservations.length
       || observations.some((value) => !expectedObservations.includes(value))) fail(`${label} execution receipt does not bind the complete duplicate-free lane observation set`);
+    if (contract.requiresDesignQuality) {
+      assertDesignQualityGreen(execution.designQuality, {
+        expectedObservationSha256s: expectedObservations,
+      });
+      if (canonical(execution.designQuality) !== canonical(lane.designQuality)) {
+        fail(`${label} execution receipt does not bind design quality`);
+      }
+    }
     const childPid = execution.childPid;
     if (typeof childPid !== 'number' || !Number.isSafeInteger(childPid) || childPid <= 0) fail(`${label} execution receipt child process is invalid`);
     const sessionId = stringValue(execution.sessionId, `${label}.executionReceipts[${index}].sessionId`);
@@ -528,7 +585,7 @@ export function validateFinalEvidenceV2GraphFiles(root: string, graphInput: unkn
   try {
     const currentSelection = validateReferenceSelectionV2(root);
     const currentHandoff = parseReferenceHandoffReceipt(parseReceipt(readStableRegularFile(root, fs, resolve(root, '.omd', 'reference-handoffs', 'art-direction.json'), 'current art-direction handoff'), 'current art-direction handoff'));
-    const currentUsage = readValidatedReferenceUsage(root);
+    const currentUsage = validateReferenceUsage(root);
     if (referenceSelectionV2Sha256(currentSelection) !== hashes.get('settledSelection')
       || currentHandoff.payloadSha256 !== handoff.payloadSha256
       || referenceUsageV2Sha256(currentUsage.usage) !== hashes.get('usage')) {
@@ -643,8 +700,8 @@ export function validateFinalEvidenceV2GraphFiles(root: string, graphInput: unkn
     ? selectedRegister : fail('art direction does not expose a selected copy register');
   const selectedCopyMotion = motionDecision === 'none' || motionDecision === 'one'
     ? motionDecision : fail('art direction does not expose a selected copy motion decision');
-  if (surface === 'product' && (selectedCopyMotion === 'one' || selectedCopyRegister === 'showpiece')) {
-    fail('product routes cannot publish a signature scene or showpiece register');
+  if (surface === 'product' && selectedCopyMotion === 'one' && selectedCopyRegister !== 'showpiece') {
+    fail('product routes cannot publish an unscoped signature scene');
   }
   if (surface === 'mixed') {
     const task = currentTaskEvidence ?? fail('mixed publication requires current task evidence');
@@ -681,6 +738,13 @@ export function validateFinalEvidenceV2GraphFiles(root: string, graphInput: unkn
   }
   if (copy.artDirectionSha256 !== hashes.get('artDirection')) fail('copy does not bind art direction semantics');
   const renderedBeats = values.get('renderedBeats') ?? fail('rendered Beat receipt is missing');
+  if (surface === 'product' && selectedCopyMotion === 'one') {
+    const task = currentTaskEvidence ?? fail('showpiece product motion requires current task evidence');
+    const taskTargets = new Set(task.tasks.map((entry) => `http://localhost${entry.production.route}`));
+    if (!taskTargets.has(stringValue(renderedBeats.target, 'renderedBeats.target'))) {
+      fail('showpiece product motion target is not scoped to a production task');
+    }
+  }
   if (referenceDistance !== undefined
     && (referenceDistance.route !== decision.route || referenceDistance.target !== renderedBeats.target)) {
     fail('selected reference distance does not bind art direction route and rendered target');
@@ -714,6 +778,10 @@ export function validateFinalEvidenceV2GraphFiles(root: string, graphInput: unkn
   const trustedOutcomeRoute = sourceSeal.route === undefined
     ? undefined
     : readPersistedRoute(root, invocation);
+  assertArtSelectedGreenfieldRealityFit(
+    trustedOutcomeRoute?.projectMode ?? 'existing',
+    object(values.get('blindLane') ?? fail('blindLane receipt is missing'), 'blindLane').verdicts,
+  );
   validateTrustedOutcomeEvidence({
     root,
     branch: 'art-selected',

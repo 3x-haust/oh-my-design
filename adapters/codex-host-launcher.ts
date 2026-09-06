@@ -6,6 +6,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'nod
 import { fileURLToPath } from 'node:url';
 import { type Writable } from 'node:stream';
 import { parse as parseToml } from 'smol-toml';
+import { codexCliContext } from './codex-cli-context.ts';
 import { canonicalSkillSourceBytes, createBuildIdentityFromSource, type BuildIdentity } from './build.ts';
 import {
   CODEX_HOST_LOADED_SKILL_RECEIPT_SCHEMA_VERSION,
@@ -17,6 +18,11 @@ import { HOST_PAYLOAD_AUTHORIZATION_PURPOSES, type HostPayloadAuthorizationPurpo
 import type { ProjectRunInvocation } from '../core/runtime/invocation.ts';
 import { adaptiveRouteAuthorityBytes, adaptiveRouteAuthorityPath } from '../core/route/adaptive-route-authority.ts';
 import { parseRouteRecord } from '../core/route/adaptive-route-record.ts';
+import {
+  CODEX_BROWSER_ROLES,
+  isBrokeredBrowserCliOperation,
+  type CodexBrowserRole,
+} from '../core/runtime/codex-browser-operation.ts';
 
 const PACKAGE_ROOT = fileURLToPath(new URL('..', import.meta.url));
 const AUTHORITY_REQUEST_SCHEMA = 'omd-codex-authority-request-v1';
@@ -27,20 +33,184 @@ const OWNER_EXEC_RESULT_SCHEMA = 'omd-codex-owner-exec-result-v1';
 const OWNER_PERSIST_REQUEST_SCHEMA = 'omd-codex-owner-persist-request-v1';
 const OWNER_PERSIST_ACK_SCHEMA = 'omd-codex-owner-persist-ack-v1';
 const OWNER_RESULT_SCHEMA = 'omd-production-owner-result-v1';
+const ROLE_EXEC_REQUEST_SCHEMA = 'omd-codex-role-exec-request-v1';
+const ROLE_EXEC_RESULT_SCHEMA = 'omd-codex-role-exec-result-v1';
+const BROWSER_EXEC_REQUEST_SCHEMA = 'omd-codex-browser-exec-request-v1';
+const BROWSER_EXEC_RESULT_SCHEMA = 'omd-codex-browser-exec-result-v1';
 const DELEGATED_ACTIVATION_SCHEMA = 'omd-codex-delegated-owner-activation-v1';
 const HOST_RECEIPT_SCHEMA = 'omd-host-project-write-receipt-v3';
 const SHA256 = /^[a-f0-9]{64}$/;
 const MAX_REQUEST_BYTES = 1024 * 1024;
 const MAX_OWNER_OUTPUT_BYTES = 64 * 1024 * 1024;
-const MAX_OWNER_TIMEOUT_MS = 60 * 60 * 1000;
+const MAX_BROWSER_OUTPUT_BYTES = 768 * 1024;
+const MAX_OWNER_TIMEOUT_MS = 2 * 60 * 60 * 1000;
 const DEFAULT_RECEIPT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 const RECEIPT_TTL_MS = 60_000;
 const OWNER_GRANT_TTL_MS = (2 * MAX_OWNER_TIMEOUT_MS) + RECEIPT_TTL_MS;
+
+function splitShellLine(line: string): readonly string[] {
+  const segments: string[] = [];
+  let current = '';
+  let quote: "'" | '"' | undefined;
+  let escaped = false;
+  const flush = (): void => {
+    const value = current.trim();
+    if (value !== '') segments.push(value);
+    current = '';
+  };
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index] ?? '';
+    if (escaped) {
+      current += char;
+      escaped = false;
+      continue;
+    }
+    if (char === '\\') {
+      current += char;
+      escaped = true;
+      continue;
+    }
+    if (quote !== undefined) {
+      current += char;
+      if (char === quote) quote = undefined;
+      continue;
+    }
+    if (char === "'" || char === '"') {
+      quote = char;
+      current += char;
+      continue;
+    }
+    const pair = line.slice(index, index + 2);
+    if (char === ';' || char === '|' || pair === '&&' || pair === '||') {
+      flush();
+      if (pair === '&&' || pair === '||') index += 1;
+      continue;
+    }
+    current += char;
+  }
+  flush();
+  return segments;
+}
+
+function executableProductionSegments(command: string): readonly string[] {
+  const segments: string[] = [];
+  let heredocDelimiter: string | undefined;
+  for (const line of command.split('\n')) {
+    if (heredocDelimiter !== undefined) {
+      if (line.trim() === heredocDelimiter) heredocDelimiter = undefined;
+      continue;
+    }
+    const heredoc = /<<-?\s*(?:'([^']+)'|"([^"]+)"|([A-Za-z_][A-Za-z0-9_]*))/.exec(line);
+    const commandLine = heredoc === null ? line : line.slice(0, heredoc.index);
+    segments.push(...splitShellLine(commandLine));
+    heredocDelimiter = heredoc?.[1] ?? heredoc?.[2] ?? heredoc?.[3];
+  }
+  return segments;
+}
+
+function isReadOnlyNameAudit(segment: string): boolean {
+  const words = segment.trim().split(/\s+/);
+  let index = 0;
+  if (words[index] === 'command') index += 1;
+  if (words[index] === 'env') {
+    index += 1;
+    while (/^[A-Za-z_][A-Za-z0-9_]*=/.test(words[index] ?? '')) index += 1;
+  }
+  const executable = basename(words[index] ?? '');
+  return executable === 'rg' || executable === 'grep' || executable === 'egrep' || executable === 'fgrep';
+}
+
+function prohibitedProductionTool(command: string): string | undefined {
+  for (const segment of executableProductionSegments(command)) {
+    if (isReadOnlyNameAudit(segment)) continue;
+    if (/\bomd(?:\.mjs)?\s+render\b/.test(segment)) return 'omd-render';
+    if (/\bomd(?:\.mjs)?\s+(?:ir|probe|lifecycle)\b/.test(segment)) return 'omd-browser-evidence';
+    if (/\bplaywright\b/.test(segment)) return 'playwright';
+    if (/\bbrowser-rs\b/.test(segment)) return 'browser-rs';
+    if (/\b(?:chromium|google-chrome|chrome)\b[^\n]*(?:--headless|--screenshot)/.test(segment)) return 'direct-chromium';
+  }
+  return undefined;
+}
+
 const DELEGATED_OPERATIONS = ['project-write'] as const;
 const DELEGATED_PAYLOAD_PURPOSES = [
   'adaptive-route-authority',
   'workflow-production-slice',
 ] as const satisfies readonly HostPayloadAuthorizationPurpose[];
+const NON_PRODUCTION_ROLES = [
+  'omd-framer', 'omd-scout', 'omd-writer', 'omd-typesetter',
+  'omd-composer', 'omd-sketch', 'omd-eye', 'omd-glance',
+] as const;
+type NonProductionRole = (typeof NON_PRODUCTION_ROLES)[number];
+const OFFICIAL_ROLES = ['omd-hand', ...NON_PRODUCTION_ROLES] as const;
+type OfficialRole = (typeof OFFICIAL_ROLES)[number];
+type RoleReasoningEffort = 'low' | 'medium' | 'high';
+type HostRoleOverride = Readonly<{ model?: string; reasoningEffort?: RoleReasoningEffort }>;
+type HostRoleOverrides = Readonly<Partial<Record<OfficialRole, HostRoleOverride>>>;
+type RoleExecutionConfiguration = Readonly<{
+  modelArgumentOmitted: boolean;
+  model?: string;
+  modelReasoningEffort: string;
+  configurationSha256: string;
+}>;
+
+const CODEX_MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/;
+
+export type ParsedCodexHostRoleOptions = Readonly<{
+  coordinatorArgs: readonly string[];
+  roleOverrides: HostRoleOverrides;
+}>;
+
+export function parseCodexHostRoleOptions(args: readonly string[]): ParsedCodexHostRoleOptions {
+  const coordinatorArgs: string[] = [];
+  const mutable = new Map<OfficialRole, { model?: string; reasoningEffort?: RoleReasoningEffort }>();
+  let optionParsing = true;
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index]!;
+    if (arg === '--') {
+      optionParsing = false;
+      coordinatorArgs.push(arg);
+      continue;
+    }
+    const kind = !optionParsing ? undefined
+      : arg === '--omd-role-model' || arg.startsWith('--omd-role-model=') ? 'model'
+        : arg === '--omd-role-effort' || arg.startsWith('--omd-role-effort=') ? 'effort'
+          : undefined;
+    if (kind === undefined) {
+      coordinatorArgs.push(arg);
+      continue;
+    }
+    const inlinePrefix = `--omd-role-${kind}=`;
+    const value = arg.startsWith(inlinePrefix) ? arg.slice(inlinePrefix.length) : args[index + 1];
+    if (value === undefined) throw new Error(`--omd-role-${kind} requires <role>=<value>`);
+    if (!arg.startsWith(inlinePrefix)) index += 1;
+    const separator = value.indexOf('=');
+    const role = value.slice(0, separator) as OfficialRole;
+    const selected = separator < 1 ? '' : value.slice(separator + 1);
+    if (!OFFICIAL_ROLES.includes(role)) throw new Error(`--omd-role-${kind} names an unknown official OMD role`);
+    if (selected === '') throw new Error(`--omd-role-${kind} requires <role>=<value>`);
+    const current = mutable.get(role) ?? {};
+    if (kind === 'model') {
+      if (current.model !== undefined) throw new Error(`duplicate --omd-role-model for ${role}`);
+      if (!CODEX_MODEL_ID.test(selected)) throw new Error(`--omd-role-model has an invalid model for ${role}`);
+      mutable.set(role, { ...current, model: selected });
+    } else {
+      if (current.reasoningEffort !== undefined) throw new Error(`duplicate --omd-role-effort for ${role}`);
+      if (selected !== 'low' && selected !== 'medium' && selected !== 'high') {
+        throw new Error(`--omd-role-effort must be low, medium, or high for ${role}`);
+      }
+      mutable.set(role, { ...current, reasoningEffort: selected });
+    }
+  }
+  const roleOverrides = Object.fromEntries(
+    [...mutable.entries()].sort(([left], [right]) => left.localeCompare(right))
+      .map(([role, override]) => [role, Object.freeze({ ...override })]),
+  ) as Partial<Record<OfficialRole, HostRoleOverride>>;
+  return Object.freeze({
+    coordinatorArgs: Object.freeze(coordinatorArgs),
+    roleOverrides: Object.freeze(roleOverrides),
+  });
+}
 
 type PayloadAuthorization = Readonly<{ purpose: HostPayloadAuthorizationPurpose; payloadSha256: string }>;
 type RequestedPayloadAuthorization = PayloadAuthorization & Readonly<{ payloadBase64: string; payload: Buffer }>;
@@ -80,6 +250,16 @@ type OwnerPersistRequest = RequestIdentity & Readonly<{
   resultSha256: string;
   result: Record<string, unknown>;
 }>;
+type RoleExecRequest = RequestIdentity & Readonly<{
+  schema: typeof ROLE_EXEC_REQUEST_SCHEMA;
+  role: NonProductionRole;
+  timeoutMs: number;
+  task: string;
+}>;
+type BrowserExecRequest = RequestIdentity & Readonly<{
+  schema: typeof BROWSER_EXEC_REQUEST_SCHEMA;
+  role: CodexBrowserRole;
+}>;
 type OwnerStorage = Readonly<{
   directory: string;
   receiptPath: string;
@@ -91,6 +271,7 @@ type RouteBinding = Readonly<{
   sourceSha256: string;
   authoritySha256: string;
   allowedPaths: readonly string[];
+  roles: readonly string[];
 }>;
 type OwnerChildBinding = Readonly<{
   pid: number;
@@ -103,6 +284,7 @@ type OwnerChildBinding = Readonly<{
   taskSha256: string;
   route: RouteBinding;
   expiresAt: number;
+  role?: CodexBrowserRole | NonProductionRole;
 }>;
 type OwnerBrokerState = {
   grant?: Readonly<{
@@ -114,12 +296,15 @@ type OwnerBrokerState = {
     route: RouteBinding;
   }>;
   children: Map<number, OwnerChildBinding>;
+  roleChildren: Map<string, OwnerChildBinding>;
   nextAttempt: 1 | 2 | 3;
   sessionIds: Set<string>;
   completed: boolean;
   trustedBrowserResults: Set<string>;
+  trustedFinalReviewerResults: Set<string>;
 };
 type OwnerRoleProfile = Readonly<{ name: 'omd-hand'; model_reasoning_effort: string; developer_instructions: string }>;
+type NonProductionRoleProfile = Readonly<{ name: NonProductionRole; model_reasoning_effort: string; developer_instructions: string }>;
 
 export type CodexHostLaunchResult = Readonly<{
   status: number;
@@ -281,6 +466,18 @@ function parseRequest(value: unknown): AuthorityRequest | undefined {
   return value as AuthorityRequest;
 }
 
+export function isCodexOwnerAuthorityRequest(
+  value: unknown,
+  canonicalOwnerCliPath: string,
+): boolean {
+  return isRecord(value)
+    && value.schema === AUTHORITY_REQUEST_SCHEMA
+    && value.cliPath === canonicalOwnerCliPath
+    && Array.isArray(value.argv)
+    && value.argv[2] === 'owner'
+    && (value.argv[3] === 'run' || value.argv[3] === 'repair');
+}
+
 function parseOwnerRequest(value: unknown): OwnerLaunchRequest | undefined {
   if (!isRecord(value) || !exactKeys(value, ['schema', 'requestId', 'clientPid', 'requesterPid', 'cliPath', 'activationPath', 'projectRoot', 'argv', 'activation', 'owner', 'taskSha256'])) return undefined;
   if (value.schema !== OWNER_REQUEST_SCHEMA || !validRequestIdentity(value) || value.owner !== 'omd-hand'
@@ -309,6 +506,31 @@ function parseOwnerPersistRequest(value: unknown): OwnerPersistRequest | undefin
   return value as OwnerPersistRequest;
 }
 
+function parseRoleExecRequest(value: unknown): RoleExecRequest | undefined {
+  if (!isRecord(value) || !exactKeys(value, [
+    'schema', 'requestId', 'clientPid', 'requesterPid', 'cliPath', 'activationPath',
+    'projectRoot', 'argv', 'activation', 'role', 'timeoutMs', 'task',
+  ])) return undefined;
+  if (value.schema !== ROLE_EXEC_REQUEST_SCHEMA || !validRequestIdentity(value)
+    || !NON_PRODUCTION_ROLES.includes(value.role as NonProductionRole)
+    || !Number.isSafeInteger(value.timeoutMs) || Number(value.timeoutMs) < 25
+    || Number(value.timeoutMs) > MAX_OWNER_TIMEOUT_MS
+    || typeof value.task !== 'string' || value.task.trim() === '') return undefined;
+  return value as RoleExecRequest;
+}
+
+function parseBrowserExecRequest(value: unknown): BrowserExecRequest | undefined {
+  if (!isRecord(value) || !exactKeys(value, [
+    'schema', 'requestId', 'clientPid', 'requesterPid', 'cliPath', 'activationPath',
+    'projectRoot', 'argv', 'activation', 'role',
+  ])) return undefined;
+  if (value.schema !== BROWSER_EXEC_REQUEST_SCHEMA || !validRequestIdentity(value)
+    || !CODEX_BROWSER_ROLES.includes(value.role as CodexBrowserRole)) return undefined;
+  return value as BrowserExecRequest;
+}
+
+export { isBrokeredBrowserCliOperation };
+
 type ProcessRecord = Readonly<{ ppid: number; command: string; started: string }>;
 
 function escapedRegExp(value: string): string { return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
@@ -330,21 +552,85 @@ export function isExactCanonicalCliInvocation(command: string, argv: readonly st
       return false;
     }
   }
-  return command.slice(scriptStart + canonicalCliPath.length).trim() === argv.slice(2).join(' ');
+  const observedTail = command.slice(
+    scriptStart + canonicalCliPath.length,
+  ).trim();
+  const expectedTail = argv.slice(2).join(' ');
+  if (observedTail === expectedTail) return true;
+  const visibleOperation = argv.slice(2, 4).join(' ');
+  if (
+    visibleOperation === ''
+    || (
+      observedTail !== visibleOperation
+      && !observedTail.startsWith(`${visibleOperation} `)
+    )
+  ) {
+    return false;
+  }
+  return true;
 }
 
 const PAYLOAD_OPERATION_PHASES: Readonly<Partial<Record<HostPayloadAuthorizationPurpose, readonly (readonly string[])[]>>> = Object.freeze({
-  // These are the only dynamic broker phases whose bytes are deterministically produced by the
-  // named canonical CLI operation. Reviewer, evaluator, browser, and final-result purposes require
-  // a separate host-observed producer and are deliberately not signing-oracle fallbacks.
+  // These are the only dynamic broker phases whose bytes are consumed and fully validated by the
+  // named canonical CLI operation. Reviewer, browser, and final-result purposes still require a
+  // separate host-observed producer and are deliberately not signing-oracle fallbacks.
   'adaptive-route-authority': Object.freeze([
     Object.freeze(['route', 'classify']),
     Object.freeze(['route', 'show']),
     Object.freeze(['route', 'check']),
+    Object.freeze(['stage', 'status']),
+    Object.freeze(['stage', 'resume']),
+    Object.freeze(['stage', 'require']),
+    Object.freeze(['brief']),
+    Object.freeze(['composition']),
+    Object.freeze(['deliberate', 'check']),
+    Object.freeze(['complete']),
+    Object.freeze(['completion']),
+    Object.freeze(['workflow']),
+    Object.freeze(['evidence', 'v2']),
+    Object.freeze(['repair']),
+    Object.freeze(['source']),
+    Object.freeze(['lifecycle']),
+    Object.freeze(['owner']),
+    Object.freeze(['locale', 'profile', '--publish']),
+    Object.freeze(['locale', 'profile-check']),
+    Object.freeze(['locale', 'source-capture']),
+    Object.freeze(['locale', 'source-stability']),
   ]),
   'workflow-production-slice': Object.freeze([
     Object.freeze(['workflow', 'slice']),
     Object.freeze(['owner', 'run']),
+    Object.freeze(['owner', 'mirror']),
+  ]),
+  'current-intent-ledger': Object.freeze([
+    Object.freeze(['intent', 'append']),
+    Object.freeze(['art-direction', 'check']),
+    Object.freeze(['evidence', 'v2', 'finalize']),
+    Object.freeze(['evidence', 'v2', 'check']),
+    Object.freeze(['completion', 'preflight']),
+    Object.freeze(['lifecycle', 'finalize']),
+  ]),
+  'evaluator-assessment': Object.freeze([
+    Object.freeze(['art-direction', 'check']),
+  ]),
+  'evaluator-result': Object.freeze([
+    Object.freeze(['art-direction', 'check']),
+  ]),
+  'approved-motion-recipe': Object.freeze([
+    Object.freeze(['art-direction', 'check']),
+  ]),
+  'final-reviewer-lane': Object.freeze([
+    Object.freeze(['review', 'publish']),
+    Object.freeze(['review', 'repair-publish']),
+    Object.freeze(['evidence', 'v2', 'finalize']),
+    Object.freeze(['evidence', 'v2', 'check']),
+    Object.freeze(['completion', 'preflight']),
+  ]),
+  'final-evidence-manifest': Object.freeze([
+    Object.freeze(['evidence', 'v2', 'finalize']),
+    Object.freeze(['lifecycle', 'finalize']),
+    Object.freeze(['evidence', 'v2', 'check']),
+    Object.freeze(['completion', 'preflight']),
   ]),
 });
 
@@ -356,12 +642,50 @@ export function codexPayloadAuthorizationPhaseError(argv: readonly string[], pur
     : `the ${purpose} payload requires an exact trusted host-observed CLI phase (received: ${operation.join(' ')})`;
 }
 
+export function workflowProductionSliceAuthorityError(
+  delegatedOwnerActive: boolean,
+  completedOwnerPersisted: boolean,
+  operation: readonly string[],
+): string | undefined {
+  if (delegatedOwnerActive) return undefined;
+  if (completedOwnerPersisted && operation[0] === 'workflow' && operation[1] === 'slice') return undefined;
+  return 'workflow production slice authority requires the active delegated owner or its persisted completed result';
+}
+
+export function isCodexFinalEvidenceContinuationPayload(
+  argv: readonly string[],
+  purpose: HostPayloadAuthorizationPurpose,
+  payload: unknown,
+): boolean {
+  const operation = argv.slice(2);
+  const finalization = (operation[0] === 'lifecycle' && operation[1] === 'finalize')
+    || (operation[0] === 'evidence' && operation[1] === 'v2' && operation[2] === 'finalize');
+  const verification = (operation[0] === 'evidence' && operation[1] === 'v2' && operation[2] === 'check')
+    || (operation[0] === 'completion' && operation[1] === 'preflight');
+  return (finalization || verification) && purpose === 'product-probe-result'
+    && isRecord(payload) && payload.schema === 'trusted-browser-receipt-v1';
+}
+
 function brokerPayloadAuthorizationError(
   request: AuthorityRequest,
   state: OwnerBrokerState,
 ): string | undefined {
   const authorization = request.requestedAuthorization;
   if (authorization === undefined) return undefined;
+  if (authorization.purpose === 'final-reviewer-lane') {
+    const operation = request.argv.slice(2);
+    if (operation[0] === 'review'
+      && (operation[1] === 'publish' || operation[1] === 'repair-publish')) {
+      state.trustedFinalReviewerResults.add(authorization.payloadSha256);
+      return undefined;
+    }
+    const finalization = (operation[0] === 'lifecycle' && operation[1] === 'finalize')
+      || (operation[0] === 'evidence' && operation[1] === 'v2' && operation[2] === 'finalize');
+    if (finalization && state.trustedFinalReviewerResults.has(authorization.payloadSha256)) return undefined;
+    if (operation[0] === 'lifecycle' && operation[1] === 'repair'
+      && state.trustedFinalReviewerResults.has(authorization.payloadSha256)) return undefined;
+    return codexPayloadAuthorizationPhaseError(request.argv, authorization.purpose);
+  }
   if (authorization.purpose !== 'product-probe-result') {
     return codexPayloadAuthorizationPhaseError(request.argv, authorization.purpose);
   }
@@ -383,16 +707,22 @@ function brokerPayloadAuthorizationError(
   }
   const finalization = (operation[0] === 'lifecycle' && operation[1] === 'finalize')
     || (operation[0] === 'evidence' && operation[1] === 'v2' && operation[2] === 'finalize');
+  if (isCodexFinalEvidenceContinuationPayload(request.argv, authorization.purpose, value)) {
+    return undefined;
+  }
   if (schema === 'trusted-browser-receipt-v1' && finalization
     && state.trustedBrowserResults.has(authorization.payloadSha256)) return undefined;
-  if (operation[0] === 'completion' && operation[1] === 'typography'
-    && operation[2] === 'applicability' && isRecord(value)
+  if (operation[0] === 'completion' && operation[1] === 'typography-applicability'
+    && isRecord(value)
     && isRecord(value.meta) && value.meta.source === 'dom') return undefined;
   return 'product probe payload was not observed from its exact trusted CLI producer phase';
 }
 function processRecord(pid: number): ProcessRecord | undefined {
   if (!Number.isSafeInteger(pid) || pid <= 0) return undefined;
-  const result = spawnSync('/bin/ps', ['-p', String(pid), '-o', 'ppid=', '-o', 'lstart=', '-o', 'command='], { encoding: 'utf8', env: { PATH: '' } });
+  const result = spawnSync('/bin/ps', ['-ww', '-p', String(pid), '-o', 'ppid=', '-o', 'lstart=', '-o', 'command='], {
+    encoding: 'utf8',
+    env: { PATH: '', LANG: 'en_US.UTF-8', LC_ALL: 'en_US.UTF-8' },
+  });
   if (result.status !== 0) return undefined;
   const match = /^\s*(\d+)\s+(.{24})\s+(.+)$/.exec(result.stdout.trim());
   if (match === null) return undefined;
@@ -454,6 +784,7 @@ function currentRouteBinding(projectRoot: string, invocation: ProjectRunInvocati
     sourceSha256: sourcePointer.sha256,
     authoritySha256: sha256(authorityBytes),
     allowedPaths: Object.freeze([...route.allowedPaths]),
+    roles: Object.freeze([...route.strategy.roles]),
   });
 }
 function sameRouteBinding(left: RouteBinding, right: RouteBinding): boolean {
@@ -463,6 +794,7 @@ function sameRouteBinding(left: RouteBinding, right: RouteBinding): boolean {
 type HostBinding = Readonly<{
   projectRoot: string;
   invocation: ProjectRunInvocation;
+  roleOverrides: HostRoleOverrides;
   invocationPath: string;
   invocationSha256: string;
   canonicalCliPath: string;
@@ -483,7 +815,11 @@ function commonRequestError(request: RequestIdentity, binding: HostBinding): str
   return undefined;
 }
 
-function delegatedRequestError(request: AuthorityRequest, binding: HostBinding, child: OwnerChildBinding): string | undefined {
+function delegatedRequestError(
+  request: RequestIdentity & Readonly<{ requestedAuthorization?: RequestedPayloadAuthorization }>,
+  binding: HostBinding,
+  child: OwnerChildBinding,
+): string | undefined {
   const childRecord = processRecord(child.pid);
   if (childRecord === undefined || processStartIdentity(child.pid, childRecord) !== child.processStartIdentity) return 'delegated owner activation names a dead or replaced child PID';
   const activationStat = lstatSync(child.activationPath);
@@ -508,9 +844,14 @@ function delegatedRequestError(request: AuthorityRequest, binding: HostBinding, 
 function authorityReceipt(requestValue: unknown, binding: HostBinding, state: OwnerBrokerState): unknown {
   const request = parseRequest(requestValue);
   if (request === undefined) return { error: 'malformed authority request' };
-  const child = [...state.children.values()].find((candidate) => candidate.activationPath === request.activationPath);
-  const ownerOnly = request.requestedAuthorization?.purpose === 'workflow-production-slice' && child === undefined
-    ? 'workflow production slice authority belongs only to the delegated omd-hand owner'
+  const child = [...state.children.values(), ...state.roleChildren.values()]
+    .find((candidate) => candidate.activationPath === request.activationPath);
+  const ownerOnly = request.requestedAuthorization?.purpose === 'workflow-production-slice'
+    ? workflowProductionSliceAuthorityError(
+      child !== undefined && child.role === undefined,
+      state.completed,
+      request.argv.slice(2),
+    )
     : undefined;
   const identityError = child === undefined ? commonRequestError(request, binding) : delegatedRequestError(request, binding, child);
   const phaseError = identityError === undefined ? brokerPayloadAuthorizationError(request, state) : undefined;
@@ -553,6 +894,49 @@ function ownerRoleProfile(codexHome: string): OwnerRoleProfile {
   return parsed as unknown as OwnerRoleProfile;
 }
 
+function nonProductionRoleProfile(codexHome: string, role: NonProductionRole): NonProductionRoleProfile {
+  const inputPath = join(codexHome, 'agents', `${role}.toml`);
+  const inputStat = lstatSync(inputPath);
+  if (inputStat.isSymbolicLink()) throw new Error('Codex role profile is symlinked');
+  const path = realpathSync(inputPath);
+  const stat = lstatSync(path);
+  if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('Codex role profile is unavailable');
+  const parsed = parseToml(readFileSync(path, 'utf8')) as unknown;
+  if (!isRecord(parsed) || parsed.name !== role
+    || typeof parsed.model_reasoning_effort !== 'string'
+    || !/^(?:low|medium|high|xhigh)$/.test(parsed.model_reasoning_effort)
+    || typeof parsed.developer_instructions !== 'string' || parsed.developer_instructions.trim() === '') {
+    throw new Error('Codex role profile is malformed');
+  }
+  return parsed as unknown as NonProductionRoleProfile;
+}
+
+function roleExecutionConfiguration(
+  role: OfficialRole,
+  profile: OwnerRoleProfile | NonProductionRoleProfile,
+  roleOverrides: HostRoleOverrides,
+  taskSha256: string,
+): RoleExecutionConfiguration {
+  const override = roleOverrides[role];
+  const modelReasoningEffort = override?.reasoningEffort ?? profile.model_reasoning_effort;
+  const modelArgumentOmitted = override?.model === undefined;
+  const identity = {
+    role,
+    taskSha256,
+    roleProfileSha256: sha256(canonicalJson(profile)),
+    modelArgumentOmitted,
+    model: override?.model ?? null,
+    modelReasoningEffort,
+    reasoningEffortSource: override?.reasoningEffort === undefined ? 'role-profile' : 'host-user-override',
+  };
+  return Object.freeze({
+    modelArgumentOmitted,
+    ...(override?.model === undefined ? {} : { model: override.model }),
+    modelReasoningEffort,
+    configurationSha256: sha256(canonicalJson(identity)),
+  });
+}
+
 function exactOwnerStorage(storage: OwnerStorage, runDirectory: string): string | undefined {
   try {
     const inputStat = lstatSync(storage.directory);
@@ -567,14 +951,30 @@ function exactOwnerStorage(storage: OwnerStorage, runDirectory: string): string 
   }
 }
 
-function validOwnerResult(result: Record<string, unknown>, request: OwnerPersistRequest, binding: HostBinding, storage: OwnerStorage): boolean {
-  const allowed = ['schema', 'owner', 'projectRoot', 'taskSha256', 'rolePromptSha256', 'host', 'transport', 'modelArgumentOmitted', 'attempts', 'sourceChanges', 'finalEvidence', 'result', 'failure', 'resumeCommand', 'receiptPath'];
+function hasExecutionConfiguration(value: Record<string, unknown>, expected: RoleExecutionConfiguration): boolean {
+  return value.modelArgumentOmitted === expected.modelArgumentOmitted
+    && value.model === expected.model
+    && value.modelReasoningEffort === expected.modelReasoningEffort
+    && value.configurationSha256 === expected.configurationSha256;
+}
+
+function validOwnerResult(
+  result: Record<string, unknown>,
+  request: OwnerPersistRequest,
+  binding: HostBinding,
+  storage: OwnerStorage,
+  role: OwnerRoleProfile,
+): boolean {
+  const allowed = ['schema', 'owner', 'projectRoot', 'taskSha256', 'rolePromptSha256', 'host', 'transport', 'modelArgumentOmitted', 'model', 'modelReasoningEffort', 'configurationSha256', 'attempts', 'sourceChanges', 'finalEvidence', 'result', 'failure', 'resumeCommand', 'receiptPath'];
   if (Object.keys(result).some((key) => !allowed.includes(key))) return false;
+  const expectedExecution = roleExecutionConfiguration('omd-hand', role, binding.roleOverrides, request.taskSha256);
   return result.schema === OWNER_RESULT_SCHEMA && result.owner === 'omd-hand'
     && result.projectRoot === binding.projectRoot && result.taskSha256 === request.taskSha256
     && typeof result.rolePromptSha256 === 'string' && SHA256.test(result.rolePromptSha256)
     && result.host === 'codex' && result.transport === 'codex-exec-stdio-jsonl'
-    && result.modelArgumentOmitted === true && Array.isArray(result.attempts) && result.attempts.length >= 1 && result.attempts.length <= 2
+    && hasExecutionConfiguration(result, expectedExecution)
+    && Array.isArray(result.attempts) && result.attempts.length >= 1 && result.attempts.length <= 2
+    && result.attempts.every((attempt) => isRecord(attempt) && hasExecutionConfiguration(attempt, expectedExecution))
     && Array.isArray(result.sourceChanges) && result.sourceChanges.every((path) => typeof path === 'string')
     && (result.result === 'completed' || result.result === 'failed')
     && (result.failure === undefined || typeof result.failure === 'string')
@@ -602,6 +1002,7 @@ function ownerGrant(requestValue: unknown, binding: HostBinding, storage: OwnerS
     expiresAt,
     route,
   };
+  const execution = roleExecutionConfiguration('omd-hand', role, binding.roleOverrides, request.taskSha256);
   return {
     schema: OWNER_GRANT_SCHEMA,
     host: 'codex', owner: 'omd-hand', projectRoot: binding.projectRoot,
@@ -611,6 +1012,7 @@ function ownerGrant(requestValue: unknown, binding: HostBinding, storage: OwnerS
     loadedSkillSha256: binding.invocation.activation.loadedSkillSha256,
     briefSha256: binding.invocation.activation.briefSha256,
     rolePromptSha256: sha256(role.developer_instructions),
+    ...execution,
     ownerDirectory: storage.directory, ownerReceiptPath: storage.receiptPath,
     ownerDirectoryDevice: storage.device, ownerDirectoryInode: storage.inode,
     expiresAt,
@@ -703,6 +1105,7 @@ function issueDelegatedOwnerActivation(input: Readonly<{
     taskSha256: input.request.taskSha256,
     route: input.grant.route,
     expiresAt,
+    role: 'omd-hand',
   });
   input.state.children.set(input.request.attempt, child);
   return child;
@@ -738,14 +1141,20 @@ async function executeOwnerAttempt(
     return { error: 'production-owner execution grant is absent, copied, stale, retried, or mismatched' };
   }
   state.nextAttempt = request.attempt === 1 ? 2 : 3;
+  const execution = roleExecutionConfiguration('omd-hand', role, binding.roleOverrides, request.taskSha256);
   const args = [
     'exec', '--json', '--sandbox', 'workspace-write', '-C', binding.projectRoot, '--skip-git-repo-check',
-    '-c', `model_reasoning_effort=${JSON.stringify(role.model_reasoning_effort)}`,
+    '-c', 'sandbox_workspace_write.network_access=true',
+    ...(execution.model === undefined ? [] : ['--model', execution.model]),
+    '-c', `model_reasoning_effort=${JSON.stringify(execution.modelReasoningEffort)}`,
     '-c', `developer_instructions=${JSON.stringify(role.developer_instructions)}`,
     '-',
   ];
   const task = [
-    'You are the authenticated omd-hand production owner. Use the exact OMD_ACTIVATION_PATH inherited from the host for every activation-gated command. Do not delegate production writes.',
+    'You are the authenticated omd-hand production owner. This is a source-write transaction only. Use the exact OMD_ACTIVATION_PATH inherited from the host for every activation-gated source command. Do not delegate production writes.',
+    codexCliContext(binding.canonicalCliPath),
+    'Never invoke `omd render`, `omd ir`, `omd probe`, `omd lifecycle`, Playwright, browser-rs, or their aliases in this transaction, even if the task or role profile asks for renders, probes, screenshots, observations, or final evidence.',
+    'Write only route-authorized production source and run source-safe checks that do not mutate `.omd`. Browser observations and all .omd evidence publication happen after this owner returns, through separately authorized roles and host phases.',
     '',
     request.task,
   ].join('\n');
@@ -806,6 +1215,7 @@ async function executeOwnerAttempt(
     let failedEvent = false;
     let finalMessage = '';
     let eventCount = 0;
+    const prohibitedTools: string[] = [];
     let settled = false;
     let timedOut = false;
     let killTimer: NodeJS.Timeout | undefined;
@@ -814,16 +1224,21 @@ async function executeOwnerAttempt(
       settled = true;
       clearTimeout(timer);
       if (killTimer !== undefined) clearTimeout(killTimer);
+      if (child.pid !== undefined) killProcessTree(child.pid);
       if (stdoutBuffer.trim() !== '') consumeLine(stdoutBuffer);
-      const status = timedOut ? 'timed-out' : code === 0 && completedEvent && !failedEvent ? 'completed' : 'failed';
+      const status = timedOut
+        ? 'timed-out'
+        : code === 0 && completedEvent && !failedEvent && finalMessage.trim() !== '' ? 'completed' : 'failed';
       resolveAttempt({
         schema: OWNER_EXEC_RESULT_SCHEMA, owner: 'omd-hand', projectRoot: binding.projectRoot,
         taskSha256: request.taskSha256, grantNonce: request.grantNonce, attempt: request.attempt,
         processPid: child.pid,
         processStartIdentity: delegated.processStartIdentity,
         delegatedActivationSha256: sha256(readFileSync(delegated.activationPath)),
+        ...execution,
         ...(sessionId === undefined ? {} : { sessionId }),
         status, exitCode: code, signal, eventCount, finalMessage,
+        prohibitedTools: Object.freeze(prohibitedTools),
       });
     };
     const consumeLine = (line: string): void => {
@@ -837,10 +1252,15 @@ async function executeOwnerAttempt(
         if (state.sessionIds.has(event.thread_id)) failedEvent = true;
         else { sessionId = event.thread_id; state.sessionIds.add(event.thread_id); }
       }
-      if (event.type === 'turn.completed') completedEvent = true;
-      if (event.type === 'turn.failed' || event.type === 'error') failedEvent = true;
+      if (event.type === 'turn.completed' || event.type === 'task_complete') completedEvent = true;
+      if (event.type === 'turn.failed' || event.type === 'task_failed' || event.type === 'error') failedEvent = true;
       if (event.type === 'item.completed' && isRecord(event.item)
         && event.item.type === 'agent_message' && typeof event.item.text === 'string') finalMessage = event.item.text;
+      if (event.type === 'item.completed' && isRecord(event.item)
+        && event.item.type === 'command_execution' && typeof event.item.command === 'string') {
+        const prohibited = prohibitedProductionTool(event.item.command);
+        if (prohibited !== undefined && !prohibitedTools.includes(prohibited)) prohibitedTools.push(prohibited);
+      }
     };
     const timer = setTimeout(() => {
       timedOut = true;
@@ -874,7 +1294,288 @@ async function executeOwnerAttempt(
   });
 }
 
-function persistOwnerResult(requestValue: unknown, binding: HostBinding, storage: OwnerStorage, state: OwnerBrokerState): unknown {
+async function executeNonProductionRole(
+  requestValue: unknown,
+  binding: HostBinding,
+  state: OwnerBrokerState,
+  codexBin: string,
+  codexHome: string,
+  env: NodeJS.ProcessEnv,
+  runDirectory: string,
+): Promise<unknown> {
+  const request = parseRoleExecRequest(requestValue);
+  if (request === undefined) return { error: 'malformed non-production role execution request' };
+  const rejected = commonRequestError(request, binding);
+  if (rejected !== undefined) return { error: rejected };
+  const route = currentRouteBinding(binding.projectRoot, binding.invocation);
+  if (!route.roles.includes(request.role)) return { error: `the current route did not select ${request.role}` };
+  const role = nonProductionRoleProfile(codexHome, request.role);
+  const execution = roleExecutionConfiguration(request.role, role, binding.roleOverrides, sha256(request.task));
+  const roleNonce = randomBytes(18).toString('base64url');
+  const workdir = mkdtempSync(join(runDirectory, `role-${request.role}-`));
+  const activationPath = join(runDirectory, `role-activation-${roleNonce}.json`);
+  writeFileSync(activationPath, `${canonicalJson(binding.invocation)}\n`, { flag: 'wx', mode: 0o400 });
+  chmodSync(activationPath, 0o400);
+  const args = [
+    'exec', '--json', '--sandbox', 'workspace-write',
+    '-C', workdir, '--add-dir', join(binding.projectRoot, '.omd'), '--skip-git-repo-check',
+    ...(request.role === 'omd-scout' || request.role === 'omd-eye' || request.role === 'omd-glance'
+      ? ['-c', 'sandbox_workspace_write.network_access=true']
+      : []),
+    ...(execution.model === undefined ? [] : ['--model', execution.model]),
+    '-c', `model_reasoning_effort=${JSON.stringify(execution.modelReasoningEffort)}`,
+    '-c', `developer_instructions=${JSON.stringify(role.developer_instructions)}`,
+    '-',
+  ];
+  const task = [
+    `You are the host-delegated ${request.role} role owner for ${binding.projectRoot}.`,
+    'OMD_ACTIVATION_PATH already names a JSON activation record consumed by OMD. Never source, execute, copy, or rewrite that file; let the CLI read the inherited environment variable.',
+    codexCliContext(binding.canonicalCliPath),
+    `Run project commands from ${binding.projectRoot}. Persist only artifacts owned by your role, using the publication method declared in your role instructions.`,
+    'Use named OMD CLI commands where your role requires them. Direct file writes are permitted only to paths your role explicitly owns and explicitly allows you to edit; they are not a fallback for a CLI-required record. Do not invent publication commands or write another role\'s artifacts.',
+    'Do not write production source and do not delegate your owned work.',
+    '',
+    request.task,
+  ].join('\n');
+  const childArgv = [codexBin, ...args];
+  return await new Promise<unknown>((resolveRole) => {
+    const gate = 'IFS= read -r omd_gate <&3 || exit 125; exec 3<&-; test -n "$omd_gate" || exit 126; unset omd_gate; exec "$@"';
+    const child = spawn('/bin/sh', ['-c', gate, 'omd-role-gate', codexBin, ...args], {
+      cwd: workdir,
+      detached: true,
+      env: {
+        ...env,
+        CODEX_HOME: codexHome,
+        OMD_ACTIVATION_PATH: activationPath,
+        OMD_NON_PRODUCTION_ROLE: request.role,
+      },
+      stdio: ['pipe', 'pipe', 'pipe', 'pipe'],
+    });
+    if (child.pid === undefined) {
+      rmSync(workdir, { recursive: true, force: true });
+      rmSync(activationPath, { force: true });
+      resolveRole({ error: 'non-production role child process did not expose a PID' });
+      return;
+    }
+    const record = processRecord(child.pid);
+    if (record === undefined || record.ppid !== process.pid) {
+      killProcessTree(child.pid);
+      resolveRole({ error: 'non-production role child process identity is unavailable' });
+      return;
+    }
+    const activationStat = lstatSync(activationPath);
+    const childBinding: OwnerChildBinding = Object.freeze({
+      pid: child.pid,
+      processStartIdentity: processStartIdentity(child.pid, record),
+      activationPath,
+      activationDevice: String(activationStat.dev),
+      activationInode: String(activationStat.ino),
+      argvSha256: sha256(canonicalJson(childArgv)),
+      sessionNonce: roleNonce,
+      taskSha256: sha256(request.task),
+      route,
+      expiresAt: Date.now() + request.timeoutMs + RECEIPT_TTL_MS,
+      role: request.role,
+    });
+    state.roleChildren.set(roleNonce, childBinding);
+    (child.stdio[3] as Writable).end(`${roleNonce}\n`);
+    let stdoutBuffer = '';
+    let stderrBuffer = '';
+    let outputBytes = 0;
+    let sessionId: string | undefined;
+    let completed = false;
+    let failed = false;
+    let finalMessage = '';
+    let eventCount = 0;
+    let settled = false;
+    const consumeLine = (line: string): void => {
+      if (line.trim() === '') return;
+      eventCount += 1;
+      let event: unknown;
+      try { event = JSON.parse(line) as unknown; } catch { failed = true; return; }
+      if (!isRecord(event) || typeof event.type !== 'string') { failed = true; return; }
+      if (event.type === 'thread.started' && typeof event.thread_id === 'string') sessionId = event.thread_id;
+      if (event.type === 'turn.completed') completed = true;
+      if (event.type === 'turn.failed' || event.type === 'error') failed = true;
+      if (event.type === 'item.completed' && isRecord(event.item)
+        && event.item.type === 'agent_message' && typeof event.item.text === 'string') finalMessage = event.item.text;
+    };
+    const finish = (code: number | null, signal: NodeJS.Signals | null): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (stdoutBuffer.trim() !== '') consumeLine(stdoutBuffer);
+      state.roleChildren.delete(roleNonce);
+      rmSync(workdir, { recursive: true, force: true });
+      rmSync(activationPath, { force: true });
+      const status = code === 0 && completed && !failed ? 'completed' : 'failed';
+      resolveRole({
+        schema: ROLE_EXEC_RESULT_SCHEMA,
+        role: request.role,
+        projectRoot: binding.projectRoot,
+        status,
+        exitCode: code,
+        signal,
+        eventCount,
+        finalMessage,
+        processPid: child.pid,
+        roleNonce,
+        ...execution,
+        buildSha256: binding.invocation.activation.buildSha256,
+        briefSha256: binding.invocation.activation.briefSha256,
+        ...(sessionId === undefined ? {} : { sessionId }),
+        ...(status === 'completed' ? {} : { failure: stderrBuffer.trim().slice(-4_000) || `ROLE_EXECUTION_FAILED:${code ?? 'unknown'}` }),
+      });
+    };
+    const timer = setTimeout(() => {
+      failed = true;
+      stderrBuffer = 'ROLE_TIMEOUT';
+      killProcessTree(child.pid!);
+    }, request.timeoutMs);
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', (chunk: string) => {
+      outputBytes += Buffer.byteLength(chunk);
+      if (outputBytes > MAX_OWNER_OUTPUT_BYTES) { failed = true; killProcessTree(child.pid!); return; }
+      stdoutBuffer += chunk;
+      for (;;) {
+        const newline = stdoutBuffer.indexOf('\n');
+        if (newline < 0) break;
+        consumeLine(stdoutBuffer.slice(0, newline));
+        stdoutBuffer = stdoutBuffer.slice(newline + 1);
+      }
+    });
+    child.stderr.on('data', (chunk: string) => {
+      outputBytes += Buffer.byteLength(chunk);
+      stderrBuffer = `${stderrBuffer}${chunk}`.slice(-4_000);
+      if (outputBytes > MAX_OWNER_OUTPUT_BYTES) killProcessTree(child.pid!);
+    });
+    child.once('error', () => finish(null, null));
+    child.once('exit', finish);
+    child.stdin.end(task);
+  });
+}
+
+async function executeBrokeredBrowserCommand(
+  requestValue: unknown,
+  binding: HostBinding,
+  state: OwnerBrokerState,
+  env: NodeJS.ProcessEnv,
+  runDirectory: string,
+): Promise<unknown> {
+  const request = parseBrowserExecRequest(requestValue);
+  if (request === undefined) return { error: 'malformed browser execution request' };
+  const owner = [...state.children.values(), ...state.roleChildren.values()]
+    .find((candidate) => candidate.activationPath === request.activationPath);
+  if (owner === undefined) return { error: 'browser execution requires a live delegated role owner' };
+  const rejected = delegatedRequestError(request, binding, owner);
+  if (rejected !== undefined) return { error: rejected };
+  if (owner.role !== request.role) return { error: 'browser execution role is copied or mismatched' };
+  const operation = request.argv.slice(2);
+  if (!isBrokeredBrowserCliOperation(request.role, operation)) {
+    return { error: `browser execution operation is not allowed for ${request.role}` };
+  }
+
+  const nonce = randomBytes(18).toString('base64url');
+  const activationPath = join(runDirectory, `browser-activation-${nonce}.json`);
+  writeFileSync(activationPath, `${canonicalJson(binding.invocation)}\n`, { flag: 'wx', mode: 0o400 });
+  chmodSync(activationPath, 0o400);
+  const childArgv = [process.execPath, binding.canonicalCliPath, ...operation];
+  return await new Promise<unknown>((resolveBrowser) => {
+    const gate = 'IFS= read -r omd_gate <&3 || exit 125; exec 3<&-; test -n "$omd_gate" || exit 126; unset omd_gate; exec "$@"';
+    const child = spawn('/bin/sh', ['-c', gate, 'omd-browser-gate', ...childArgv], {
+      cwd: binding.projectRoot,
+      detached: true,
+      env: {
+        ...env,
+        OMD_ACTIVATION_PATH: activationPath,
+        OMD_CODEX_BROWSER_BROKER_CHILD: '1',
+        ...(request.role === 'omd-hand'
+          ? { OMD_PRODUCTION_OWNER_ROLE: 'omd-hand', OMD_NON_PRODUCTION_ROLE: undefined }
+          : { OMD_NON_PRODUCTION_ROLE: request.role, OMD_PRODUCTION_OWNER_ROLE: undefined }),
+      },
+      stdio: ['ignore', 'pipe', 'pipe', 'pipe'],
+    });
+    if (child.pid === undefined) {
+      rmSync(activationPath, { force: true });
+      resolveBrowser({ error: 'browser execution child process did not expose a PID' });
+      return;
+    }
+    const record = processRecord(child.pid);
+    if (record === undefined || record.ppid !== process.pid) {
+      killProcessTree(child.pid);
+      rmSync(activationPath, { force: true });
+      resolveBrowser({ error: 'browser execution child process identity is unavailable' });
+      return;
+    }
+    const activationStat = lstatSync(activationPath);
+    const bindingKey = `browser-${nonce}`;
+    state.roleChildren.set(bindingKey, Object.freeze({
+      pid: child.pid,
+      processStartIdentity: processStartIdentity(child.pid, record),
+      activationPath,
+      activationDevice: String(activationStat.dev),
+      activationInode: String(activationStat.ino),
+      argvSha256: sha256(canonicalJson(childArgv)),
+      sessionNonce: nonce,
+      taskSha256: sha256(canonicalJson(operation)),
+      route: owner.route,
+      expiresAt: Math.min(owner.expiresAt, Date.now() + MAX_OWNER_TIMEOUT_MS),
+      role: request.role,
+    }));
+    (child.stdio[3] as Writable).end(`${nonce}\n`);
+    const childStdout = child.stdout;
+    const childStderr = child.stderr;
+    if (childStdout === null || childStderr === null) {
+      killProcessTree(child.pid);
+      state.roleChildren.delete(bindingKey);
+      rmSync(activationPath, { force: true });
+      resolveBrowser({ error: 'browser execution output channels are unavailable' });
+      return;
+    }
+    let stdout = '';
+    let stderr = '';
+    let outputBytes = 0;
+    let settled = false;
+    const finish = (code: number | null): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      state.roleChildren.delete(bindingKey);
+      rmSync(activationPath, { force: true });
+      resolveBrowser({
+        schema: BROWSER_EXEC_RESULT_SCHEMA,
+        role: request.role,
+        projectRoot: binding.projectRoot,
+        status: code ?? 1,
+        stdout,
+        stderr,
+      });
+    };
+    const onOutput = (stream: 'stdout' | 'stderr', chunk: string): void => {
+      outputBytes += Buffer.byteLength(chunk);
+      if (outputBytes > MAX_BROWSER_OUTPUT_BYTES) {
+        stderr = 'CODEX_BROWSER_OUTPUT_LIMIT';
+        killProcessTree(child.pid!);
+        return;
+      }
+      if (stream === 'stdout') stdout += chunk;
+      else stderr += chunk;
+    };
+    const timer = setTimeout(() => {
+      stderr = 'CODEX_BROWSER_TIMEOUT';
+      killProcessTree(child.pid!);
+    }, MAX_OWNER_TIMEOUT_MS);
+    childStdout.setEncoding('utf8');
+    childStderr.setEncoding('utf8');
+    childStdout.on('data', (chunk: string) => onOutput('stdout', chunk));
+    childStderr.on('data', (chunk: string) => onOutput('stderr', chunk));
+    child.once('error', () => finish(1));
+    child.once('exit', (code) => finish(code));
+  });
+}
+
+function persistOwnerResult(requestValue: unknown, binding: HostBinding, storage: OwnerStorage, state: OwnerBrokerState, role: OwnerRoleProfile): unknown {
   const request = parseOwnerPersistRequest(requestValue);
   if (request === undefined) return { error: 'malformed production-owner persistence request' };
   const rejected = commonRequestError(request, binding) ?? exactOwnerStorage(storage, dirname(storage.directory));
@@ -883,7 +1584,7 @@ function persistOwnerResult(requestValue: unknown, binding: HostBinding, storage
   if (grant === undefined || state.completed || grant.requesterPid !== request.requesterPid
     || grant.argvSha256 !== sha256(canonicalJson(request.argv)) || grant.taskSha256 !== request.taskSha256
     || grant.nonce !== request.grantNonce) return { error: 'production-owner persistence grant is absent, copied, stale, or mismatched' };
-  if (!validOwnerResult(request.result, request, binding, storage)) return { error: 'production-owner result is malformed or mismatched' };
+  if (!validOwnerResult(request.result, request, binding, storage, role)) return { error: 'production-owner result is malformed or mismatched' };
   try {
     writeFileSync(storage.receiptPath, `${canonicalJson(request.result)}\n`, { flag: 'wx', mode: 0o400 });
     chmodSync(storage.receiptPath, 0o400);
@@ -950,7 +1651,10 @@ export async function runCodexHostExec(
 ): Promise<CodexHostLaunchResult> {
   const packageRoot = realpathSync(dependencies.packageRoot ?? PACKAGE_ROOT);
   const env = dependencies.env ?? process.env;
-  const projectRoot = projectRootFromArgs(args, process.cwd());
+  const parsedRoleOptions = parseCodexHostRoleOptions(args);
+  const coordinatorArgs = parsedRoleOptions.coordinatorArgs;
+  const roleOverrides = parsedRoleOptions.roleOverrides;
+  const projectRoot = projectRootFromArgs(coordinatorArgs, process.cwd());
   const codexHomeInput = resolve(dependencies.codexHome ?? env.CODEX_HOME ?? join(homedir(), '.codex'));
   mkdirSync(codexHomeInput, { recursive: true, mode: 0o700 });
   const codexHome = realpathSync(codexHomeInput);
@@ -959,7 +1663,12 @@ export async function runCodexHostExec(
   const loadedSkillBytes = installedSkillBytes(packageRoot, installedSkillRoot);
   const observed = observeCodexLoadedSkill(buildIdentity, loadedSkillBytes);
   const launchId = randomBytes(24).toString('base64url');
-  const briefSha256 = sha256(canonicalJson({ launchId, projectRoot, codexArgv: args }));
+  const briefSha256 = sha256(canonicalJson({
+    launchId,
+    projectRoot,
+    codexArgv: coordinatorArgs,
+    ...(Object.keys(roleOverrides).length === 0 ? {} : { roleOverrides }),
+  }));
   const invocation = createCodexHostInvocation(buildIdentity, observed, { launchId, projectRoot, briefSha256 });
   const activationSha256 = sha256(`${canonicalJson(invocation.activation)}\n`);
   const loadedSkillReceipt: CodexHostLoadedSkillReceipt = Object.freeze({
@@ -978,10 +1687,12 @@ export async function runCodexHostExec(
   });
   const ownerBrokerState: OwnerBrokerState = {
     children: new Map<number, OwnerChildBinding>(),
+    roleChildren: new Map<string, OwnerChildBinding>(),
     nextAttempt: 1,
     sessionIds: new Set<string>(),
     completed: false,
     trustedBrowserResults: new Set<string>(),
+    trustedFinalReviewerResults: new Set<string>(),
   };
   let ownerRole: OwnerRoleProfile | undefined;
   const ownerCodexBin = resolveCodexHostExecutable(
@@ -1018,11 +1729,15 @@ export async function runCodexHostExec(
       let value: unknown;
       try { value = JSON.parse(body) as unknown; } catch { value = undefined; }
       const requestSchema = isRecord(value) ? value.schema : undefined;
-      const ownerRequest = requestSchema === OWNER_REQUEST_SCHEMA || requestSchema === OWNER_EXEC_REQUEST_SCHEMA || requestSchema === OWNER_PERSIST_REQUEST_SCHEMA;
-      const selectedCliPath = ownerRequest ? canonicalOwnerCliPath : canonicalCliPath;
+      const ownerRequest = requestSchema === OWNER_REQUEST_SCHEMA || requestSchema === OWNER_EXEC_REQUEST_SCHEMA
+        || requestSchema === OWNER_PERSIST_REQUEST_SCHEMA || requestSchema === ROLE_EXEC_REQUEST_SCHEMA;
+      const selectedCliPath = ownerRequest || isCodexOwnerAuthorityRequest(value, canonicalOwnerCliPath)
+        ? canonicalOwnerCliPath
+        : canonicalCliPath;
       const binding: HostBinding = {
         projectRoot,
         invocation,
+        roleOverrides,
         invocationPath,
         invocationSha256,
         canonicalCliPath: selectedCliPath,
@@ -1041,8 +1756,14 @@ export async function runCodexHostExec(
           ? ownerRole === undefined
             ? { error: 'production-owner execution has no prior role-bound grant' }
             : await executeOwnerAttempt(value, binding, ownerBrokerState, ownerRole, ownerCodexBin, codexHome, childEnvironment, files.runDirectory, privateKey)
+          : requestSchema === ROLE_EXEC_REQUEST_SCHEMA
+            ? await executeNonProductionRole(value, binding, ownerBrokerState, ownerCodexBin, codexHome, childEnvironment, files.runDirectory)
+          : requestSchema === BROWSER_EXEC_REQUEST_SCHEMA
+            ? await executeBrokeredBrowserCommand(value, binding, ownerBrokerState, childEnvironment, files.runDirectory)
           : requestSchema === OWNER_PERSIST_REQUEST_SCHEMA
-            ? persistOwnerResult(value, binding, ownerStorage, ownerBrokerState)
+            ? ownerRole === undefined
+              ? { error: 'production-owner persistence has no prior role-bound grant' }
+              : persistOwnerResult(value, binding, ownerStorage, ownerBrokerState, ownerRole)
             : authorityReceipt(value, binding, ownerBrokerState);
       const rejected = isRecord(authority) && typeof authority.error === 'string' ? authority.error : undefined;
       const response = rejected === undefined
@@ -1091,7 +1812,7 @@ export async function runCodexHostExec(
   let signal: NodeJS.Signals | null = null;
   try {
     requireUnchangedCodexExecutable(codexExecutable);
-    const codexArgs = ['exec', '--add-dir', files.authoritySocketPath, ...args.slice(1)];
+    const codexArgs = ['exec', '--add-dir', files.authoritySocketPath, ...coordinatorArgs.slice(1)];
     const child = spawn(codexBin, codexArgs, {
       cwd: projectRoot,
       env: childEnvironment,
@@ -1122,12 +1843,12 @@ export async function runCodexHostExec(
 
 export function codexHostUsage(): string {
   return [
-    'usage: omd-codex exec [codex exec options] [prompt]',
+    'usage: omd-codex exec [--omd-role-model <role>=<model>] [--omd-role-effort <role>=low|medium|high] [codex exec options] [prompt]',
     '       omd-codex owner run --agent omd-hand --input <task.md> [--timeout-ms <ms>]',
     '       oh-my-design codex exec [codex exec options] [prompt]',
     '',
     'Runs Codex with a host-owned, project- and invocation-bound OMD activation.',
-    'All Codex exec options are forwarded unchanged; OMD never selects a model.',
+    'Codex exec options are forwarded unchanged. Host-only role options are stripped and applied only by the broker.',
   ].join('\n');
 }
 

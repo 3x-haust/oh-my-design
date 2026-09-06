@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 import {
   adaptiveRouteAuthority,
   adaptiveRouteAuthorityBytes,
+  adaptiveRouteAuthorityPath,
   adaptiveRouteRecordSha256,
   AdaptiveRouteError,
   changedPathsForAdaptiveRoute,
@@ -23,6 +24,7 @@ import {
   routeAdaptiveFlow,
   type AdaptiveRouteErrorCode,
 } from '../core/route/index.ts';
+import { createAdaptiveSourceSealRoute } from '../core/source-seal/adaptive-inputs.ts';
 import {
   authorizeTestProjectRunPayloads,
   createTestProjectRunInvocation,
@@ -158,6 +160,55 @@ test('route records persist the exact selected model and immutable source bindin
   routeError(() => parseRouteRecord(forged), 'MODEL_IDENTITY_MISMATCH');
 });
 
+test('persisted pre-projectMode route and source pointers remain readable', () => {
+  const root = mkdtempSync(join(tmpdir(), 'omd-route-legacy-persisted-'));
+  const invocation = createTestProjectRunInvocation(root, 'legacy-persisted-route');
+  const current = structuredClone(routeAdaptiveFlow(fixture('copy-only')));
+  const source = { ...current.sourceContract } as Record<string, unknown>;
+  delete source.projectMode;
+  const sourceBytes = `${canonicalJson(source)}\n`;
+  const sourceSha256 = sha256(sourceBytes);
+  const legacy = {
+    ...current,
+    sourceContract: source,
+    sourceContractSha256: sourceSha256,
+  } as Record<string, unknown>;
+  delete legacy.projectMode;
+  const recordBytes = `${canonicalJson(legacy)}\n`;
+  const routeSha256 = sha256(recordBytes);
+  const authorityBytes = adaptiveRouteAuthorityBytes(
+    legacy as ReturnType<typeof routeAdaptiveFlow>,
+    routeSha256,
+    invocation,
+  );
+  authorizeTestProjectRunPayloads(root, invocation, [{
+    purpose: 'adaptive-route-authority',
+    payload: authorityBytes,
+  }]);
+  mkdirSync(join(root, '.omd', 'route-sources'), { recursive: true });
+  mkdirSync(join(root, '.omd', 'route-records'), { recursive: true });
+  mkdirSync(join(root, '.omd', 'route-authorities'), { recursive: true });
+  writeFileSync(join(root, '.omd', 'route-sources', `sha256-${sourceSha256}.json`), sourceBytes);
+  writeFileSync(join(root, '.omd', 'route-records', `sha256-${routeSha256}.json`), recordBytes);
+  writeFileSync(join(root, '.omd', adaptiveRouteAuthorityPath(authorityBytes)), authorityBytes);
+  writeFileSync(join(root, '.omd', 'route-source.json'), `${canonicalJson({
+    schema: 'adaptive-route-source-pointer-v1',
+    record: `route-sources/sha256-${sourceSha256}.json`,
+    sha256: sourceSha256,
+  })}\n`);
+  writeFileSync(join(root, '.omd', 'route.json'), `${canonicalJson({
+    schema: 'adaptive-route-pointer-v1',
+    record: `route-records/sha256-${routeSha256}.json`,
+    sha256: routeSha256,
+  })}\n`);
+  writeFileSync(join(root, '.omd', 'copy-deck.md'), '# Legacy copy\n');
+
+  assert.equal(readPersistedRoute(root, invocation).projectMode, 'existing');
+  const sealRoute = createAdaptiveSourceSealRoute(root, invocation);
+  assert.equal(sealRoute.record.path, `.omd/route-records/sha256-${routeSha256}.json`);
+  assert.equal(sealRoute.sourceContract.path, `.omd/route-sources/sha256-${sourceSha256}.json`);
+});
+
 test('route classify, show, and check remain usable with an exact host authority receipt', async () => {
   const root = mkdtempSync(join(tmpdir(), 'omd-route-cli-authority-'));
   const activation: ActivationContext = {
@@ -172,12 +223,16 @@ test('route classify, show, and check remain usable with an exact host authority
   const authority = adaptiveRouteAuthorityBytes(record, adaptiveRouteRecordSha256(record), invocation);
   writeFileSync(join(root, 'route-input.json'), JSON.stringify(fixture('copy-only')));
   writeFileSync(join(root, 'activation.json'), JSON.stringify(invocation));
+  writeFileSync(join(root, 'README.md'), 'committed project documentation\n');
   assert.equal(spawnSync('git', ['init', '-q'], { cwd: root }).status, 0);
-  assert.equal(spawnSync('git', ['add', 'route-input.json', 'activation.json'], { cwd: root }).status, 0);
+  assert.equal(spawnSync('git', ['add', 'route-input.json', 'activation.json', 'README.md'], { cwd: root }).status, 0);
   assert.equal(spawnSync('git', [
     '-c', 'user.name=OMD Test', '-c', 'user.email=omd@example.invalid',
     'commit', '-qm', 'fixture',
   ], { cwd: root }).status, 0);
+
+  writeFileSync(join(root, 'README.md'), 'pre-existing tracked work\n');
+  writeFileSync(join(root, 'notes.local.md'), 'pre-existing untracked work\n');
 
   const classify = await executeHostRouteCli(
     root, ['route', 'classify', '--input', 'route-input.json', '--json'], activation, authority,
@@ -194,6 +249,13 @@ test('route classify, show, and check remain usable with an exact host authority
   );
   assert.equal(check.status, 0, `${check.stderr}\n${check.stdout}`);
   assert.deepEqual(JSON.parse(check.stdout).outside, []);
+
+  writeFileSync(join(root, 'README.md'), 'route-time mutation of pre-existing tracked work\n');
+  const changedPreExisting = await executeHostRouteCli(
+    root, ['route', 'check'], activation, authority, 'route-check-dirty-baseline-nonce1',
+  );
+  assert.equal(changedPreExisting.status, 1, changedPreExisting.stderr);
+  assert.match(changedPreExisting.stderr, /ROUTE_SCOPE_EXCEEDED:[\s\S]*README\.md/);
 
   writeFileSync(join(root, 'LICENSE'), 'unrequested repository metadata\n');
   const exceeded = await executeHostRouteCli(

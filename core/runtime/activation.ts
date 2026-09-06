@@ -5,6 +5,7 @@ import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path
 import { fileURLToPath } from 'node:url';
 import type { ProjectRunInvocation } from './invocation.ts';
 import { requestCodexHostAuthority } from './codex-host-client.ts';
+import type { CodexBrowserRole } from './codex-browser-operation.ts';
 
 export const ACTIVATION_CONTEXT_SCHEMA_VERSION = 'activation-context-v2' as const;
 const HOST_PROJECT_WRITE_RECEIPT_SCHEMA = 'omd-host-project-write-receipt-v3' as const;
@@ -80,6 +81,7 @@ const invocationIdentities = new WeakMap<object, Readonly<{
 }>>();
 const executedCliPath = process.argv[1] ? realpathSync(resolve(process.argv[1])) : undefined;
 const canonicalCliPath = realpathSync(fileURLToPath(new URL('../../bin/omd.ts', import.meta.url)));
+const canonicalOwnerCliPath = realpathSync(fileURLToPath(new URL('../../bin/omd-codex.ts', import.meta.url)));
 const testRoot = fileURLToPath(new URL('../../test', import.meta.url));
 const canonicalTestRoot = existsSync(testRoot) ? realpathSync(testRoot) : undefined;
 const testEntrypoint = executedCliPath === undefined || canonicalTestRoot === undefined ? undefined : relative(canonicalTestRoot, executedCliPath);
@@ -103,6 +105,19 @@ function hasExactKeys(value: Record<string, unknown>, keys: readonly string[]): 
 function requireSha256(value: unknown, field: string): asserts value is string { if (typeof value !== 'string' || !SHA256.test(value)) throw new ActivationContextValidationError(`${field} must be a lowercase SHA-256 hash`); }
 function payloadSha256(bytes: Uint8Array): string { return createHash('sha256').update(bytes).digest('hex'); }
 function payloadAuthorizationKey(purpose: HostPayloadAuthorizationPurpose, payload: Uint8Array): string { return `${purpose}:${payloadSha256(payload)}`; }
+
+export function resolveCodexAuthorityCliPath(
+  executedPath: string | undefined,
+  argv: readonly string[],
+  cliPath = canonicalCliPath,
+  ownerCliPath = canonicalOwnerCliPath,
+): string | undefined {
+  if (executedPath === cliPath) return cliPath;
+  if (executedPath === ownerCliPath && argv[2] === 'owner' && (argv[3] === 'run' || argv[3] === 'repair')) {
+    return ownerCliPath;
+  }
+  return undefined;
+}
 
 export function validateActivationContext(value: unknown): ActivationContext {
   if (!isRecord(value) || !hasExactKeys(value, ['schemaVersion', 'buildSha256', 'loadedSkillSha256', 'briefSha256', 'hostCapability'])) throw new ActivationContextValidationError('context must contain exactly schemaVersion, buildSha256, loadedSkillSha256, briefSha256, and hostCapability');
@@ -199,12 +214,13 @@ function receiptFromCodexBroker(
       || dirname(canonicalPublicKeyPath) !== dirname(canonicalActivationPath)) return undefined;
     requireImmutableInvocationIdentity(invocation);
     const activation = validateActivationContext(invocation.activation);
-    if (activation.hostCapability.host !== 'codex' || executedCliPath !== canonicalCliPath) return undefined;
+    const brokerCliPath = resolveCodexAuthorityCliPath(executedCliPath, process.argv);
+    if (activation.hostCapability.host !== 'codex' || brokerCliPath === undefined) return undefined;
     const root = canonicalProjectRoot(projectRoot);
     const brokerResponse = requestCodexHostAuthority(socketPath, {
       schema: 'omd-codex-authority-request-v1',
       requesterPid: process.pid,
-      cliPath: canonicalCliPath,
+      cliPath: brokerCliPath,
       activationPath: canonicalActivationPath,
       projectRoot: root,
       argv: process.argv,
@@ -226,6 +242,68 @@ function receiptFromCodexBroker(
     consumedHostReceiptNonces.add(receipt.nonce);
     hostProjectWriteReceipts.set(invocation, receipt);
     return receipt;
+  } catch {
+    return undefined;
+  }
+}
+
+export type CodexBrokeredBrowserResult = Readonly<{
+  status: number;
+  stdout: string;
+  stderr: string;
+}>;
+
+export function requestCodexBrokeredBrowserCommand(
+  role: CodexBrowserRole,
+  projectRoot: string,
+): CodexBrokeredBrowserResult | undefined {
+  try {
+    const socketPath = process.env.OMD_CODEX_AUTHORITY_SOCKET;
+    const activationPath = process.env.OMD_ACTIVATION_PATH;
+    const publicKeyPath = process.env.OMD_CODEX_AUTHORITY_PUBLIC_KEY_PATH;
+    if (socketPath === undefined || activationPath === undefined || publicKeyPath === undefined
+      || process.env.OMD_CODEX_BROWSER_BROKER_CHILD === '1'
+      || executedCliPath !== canonicalCliPath) return undefined;
+    const canonicalActivationPath = realpathSync(activationPath);
+    const canonicalPublicKeyPath = realpathSync(publicKeyPath);
+    const activationFile = lstatSync(canonicalActivationPath);
+    const publicKeyFile = lstatSync(canonicalPublicKeyPath);
+    if (!activationFile.isFile() || activationFile.isSymbolicLink() || (activationFile.mode & 0o222) !== 0
+      || !publicKeyFile.isFile() || publicKeyFile.isSymbolicLink() || (publicKeyFile.mode & 0o222) !== 0
+      || dirname(canonicalPublicKeyPath) !== dirname(canonicalActivationPath)) return undefined;
+    const invocation = JSON.parse(readFileSync(canonicalActivationPath, 'utf8')) as unknown;
+    if (!isRecord(invocation) || !isRecord(invocation.activation)) return undefined;
+    const activation = validateActivationContext(invocation.activation);
+    if (activation.hostCapability.host !== 'codex') return undefined;
+    const root = canonicalProjectRoot(projectRoot);
+    const response = requestCodexHostAuthority(socketPath, {
+      schema: 'omd-codex-browser-exec-request-v1',
+      requesterPid: process.pid,
+      cliPath: canonicalCliPath,
+      activationPath: canonicalActivationPath,
+      projectRoot: root,
+      argv: process.argv,
+      activation,
+      role,
+    });
+    if (!isRecord(response) || !hasExactKeys(response, ['receipt', 'signature'])
+      || typeof response.signature !== 'string' || !isRecord(response.receipt)) return undefined;
+    const receipt = response.receipt;
+    if (!verify(
+      null,
+      Buffer.from(canonicalJson(receipt)),
+      createPublicKey(readFileSync(canonicalPublicKeyPath)),
+      Buffer.from(response.signature, 'base64'),
+    ) || !hasExactKeys(receipt, ['schema', 'role', 'projectRoot', 'status', 'stdout', 'stderr'])
+      || receipt.schema !== 'omd-codex-browser-exec-result-v1'
+      || receipt.role !== role || receipt.projectRoot !== root
+      || !Number.isSafeInteger(receipt.status) || Number(receipt.status) < 0
+      || typeof receipt.stdout !== 'string' || typeof receipt.stderr !== 'string') return undefined;
+    return {
+      status: Number(receipt.status),
+      stdout: receipt.stdout,
+      stderr: receipt.stderr,
+    };
   } catch {
     return undefined;
   }

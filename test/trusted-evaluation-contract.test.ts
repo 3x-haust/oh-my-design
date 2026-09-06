@@ -108,3 +108,59 @@ test('lifecycle manifest forbids caller-authored authority and closes its shape'
       && error.code === 'MALFORMED_TRUSTED_LIFECYCLE_MANIFEST',
   );
 });
+
+test('lifecycle manifest accepts one closed benchmark-bound entry surface', () => {
+  const manifest = {
+    schema: 'trusted-lifecycle-manifest-v1',
+    entryPath: 'index.html',
+    scripts: [],
+    entrySurface: {
+      benchmarkProjectionSha256: sha('a'),
+      prerequisiteTaskId: 'inspect-temperature',
+      dependentTaskId: 'choose-disposition',
+      purpose: {
+        selector: '[data-omd-purpose]',
+        text: 'Resolve cold-chain shipment exceptions',
+      },
+      workObject: {
+        selector: '[data-omd-work-object]',
+        anchorSelector: '[data-omd-work-anchor]',
+        anchorText: 'Shipment CX-204',
+      },
+      nextAction: {
+        selector: '[data-omd-next-action]',
+        accessibleName: 'Choose disposition',
+      },
+      trigger: {
+        kind: 'click',
+        selector: '#inspect-temperature',
+      },
+      consequence: {
+        selector: '#dispatch-constraint',
+        beforeText: 'Awaiting evidence',
+        afterText: 'Cold-chain inspection required',
+      },
+    },
+  } as const;
+
+  assert.deepEqual(parseTrustedLifecycleManifest(manifest).entrySurface, manifest.entrySurface);
+  const { nextAction: _nextAction, ...consequenceOnlyEntry } = manifest.entrySurface;
+  assert.deepEqual(
+    parseTrustedLifecycleManifest({ ...manifest, entrySurface: consequenceOnlyEntry }).entrySurface,
+    consequenceOnlyEntry,
+  );
+  assert.throws(
+    () => parseTrustedLifecycleManifest({
+      ...manifest,
+      entrySurface: {
+        ...manifest.entrySurface,
+        consequence: {
+          ...manifest.entrySurface.consequence,
+          afterText: manifest.entrySurface.consequence.beforeText,
+        },
+      },
+    }),
+    (error: unknown) => error instanceof TrustedEvaluationContractError
+      && error.code === 'MALFORMED_TRUSTED_LIFECYCLE_MANIFEST',
+  );
+});

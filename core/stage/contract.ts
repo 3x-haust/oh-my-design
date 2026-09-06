@@ -19,7 +19,7 @@ export const DELIVERY_RECEIPT_SCHEMA = 'stage-delivery-v1' as const;
 export const DELIVERY_LOG = '.omd/delivery.jsonl';
 
 export type StageId =
-  | 'domain' | 'depth' | 'frame' | 'acquisition' | 'scout' | 'reference-board'
+  | 'domain' | 'depth' | 'frame' | 'content-grain' | 'acquisition' | 'scout' | 'reference-board'
   | 'reference-selection' | 'art-direction' | 'copy' | 'type-proof' | 'composition';
 
 export type StageDefinition = {
@@ -36,6 +36,7 @@ export const STAGES: readonly StageDefinition[] = Object.freeze([
   { id: 'domain', owner: 'coordinator', artifact: '.omd/domain-brief.json', requiredContracts: ['protocol/domain-analysis.md'] },
   { id: 'depth', owner: 'coordinator', artifact: '.omd/depth.json', requiredContracts: ['protocol/design-deliberation.md'] },
   { id: 'frame', owner: 'omd-framer', artifact: '.omd/frame.md', requiredContracts: ['protocol/human-design-loop.md', 'theory/ux.md'] },
+  { id: 'content-grain', owner: 'omd-framer', artifact: '.omd/content-grain.json', requiredContracts: ['protocol/content-grain.md'] },
   { id: 'acquisition', owner: 'omd-framer', artifact: '.omd/acquisition-plan.json', requiredContracts: ['protocol/reference-assembly.md'] },
   { id: 'scout', owner: 'omd-scout', artifact: '.omd/scout.md', requiredContracts: ['protocol/reference-assembly.md'] },
   { id: 'reference-board', owner: 'omd-scout', artifact: '.omd/reference-board.json', requiredContracts: ['protocol/reference-assembly.md'] },
@@ -128,7 +129,11 @@ function routedStages(projectRoot: string, invocation?: ProjectRunInvocation): r
   const path = join(projectRoot, '.omd', 'route.json');
   if (!existsSync(path)) return STAGES;
   let routed: ReturnType<typeof readPersistedRoute>;
-  try { routed = readPersistedRoute(projectRoot, invocation ?? failStageAuthority()); } catch { throw new StageError('adaptive route record is malformed'); }
+  try {
+    routed = readPersistedRoute(projectRoot, invocation ?? failStageAuthority());
+  } catch (error) {
+    throw new StageError(`adaptive route record is malformed: ${error instanceof Error ? error.message : String(error)}`);
+  }
   const definitions = new Map<string, StageDefinition>(STAGES.map((stage) => [stage.id, stage]));
   return routed.strategy.stages.flatMap((stage) => {
     const definition = definitions.get(stage);

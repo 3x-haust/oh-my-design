@@ -177,6 +177,18 @@ test('the transfer boundary permits per-section layout fidelity and forbids only
   assert.match(composition, /across the entire page[\s\S]*full section order and overall silhouette/i);
   assert.match(composition, /tracing a whole reference page section-by-section into your whole page is the derivative failure/i);
 });
+test('unselected concept studies transport content relationships before testing rendered hypotheses', () => {
+  const contract = read('core/theory/imagegen.md').replace(/\s+/g, ' ');
+  // Contract transport only: these assertions do not score the aesthetics of any render.
+  assert.match(contract, /Before rendering an unselected concept study, the coordinator binds the actual content units, their proposed spatial relationship, and the predicted observable consequence in the existing decision record and generation prompt/);
+  assert.match(contract, /consequence is a visible spatial\/content relationship or an observed interaction state, not an inferred comprehension or conversion gain/);
+  assert.match(contract, /whole-page request[^.]*beginning, middle, and end[^.]*relevant transition/);
+  assert.match(contract, /one horizontal image per section: a landscape-format study render of each section, not an image embedded in the designed section/);
+  assert.match(contract, /After rendering, hide concept names and rationales and check whether the predicted relationship and consequence are actually visible/);
+  assert.match(contract, /If they are missing, the output does not validly test that hypothesis; it is not evidence that the concept is infeasible/);
+  assert.match(contract, /composer never contributes an upstream prompt or art-direction decision/);
+});
+
 test('roles keep composer downstream of the chosen draft without image-generation duties', () => {
   const scout = read('src/agents/scout.agent.yaml');
   const composer = read('src/agents/composer.agent.yaml');
@@ -186,8 +198,10 @@ test('roles keep composer downstream of the chosen draft without image-generatio
   const normalizedComposer = composer.replace(/\s+/g, ' ');
   const normalizedEye = eye.replace(/\s+/g, ' ');
 
-  assert.match(normalizedScout, /source screenshot is saved under `\.omd\/refs\/`, where the hand reads it for image-to-code fidelity/i);
-  assert.match(normalizedScout, /skin-abstracted blueprint, or the reference capture itself\. Make the draft lineage explicit/i);
+  assert.match(normalizedScout, /source screenshot is saved under `\.omd\/refs\/` as Scout-owned raw evidence/i);
+  assert.match(normalizedScout, /not automatically a Composer or Hand input/i);
+  assert.match(normalizedScout, /Several unique influences may bind one zone/i);
+  assert.match(normalizedScout, /sanitized assembly carries measured principles and a skin-abstracted blueprint/i);
   assert.match(normalizedComposer, /does not generate images, manage a draft cache, select a draft, or record a decision\./i);
   assert.match(normalizedComposer, /analyzes and translates the chosen draft into[\s\S]*consuming it solely as art-direction input/i);
   assert.doesNotMatch(normalizedComposer, /omd ref add .+--shot|\.omd\/\.cache\/imagegen|record the paths and the pick/i);
@@ -220,7 +234,7 @@ test('copy-eye provenance has one canonical format owner and role pointer', () =
   const loop = read('core/protocol/human-design-loop.md');
   const eye = read('src/agents/eye.agent.yaml');
   const hand = read('src/agents/hand.agent.yaml');
-  const exactFormat = /Mode: copy-editor[\s\S]*Review time: <ISO 8601 timestamp>[\s\S]*Reviewed copy-deck SHA-256: <64 lowercase hex>[\s\S]*Verdict: <non-empty verdict>[\s\S]*Findings:/;
+  const exactFormat = /Mode: copy-editor[\s\S]*Review time: <ISO 8601 timestamp>[\s\S]*Reviewed copy-deck SHA-256: <64 lowercase hex>[\s\S]*Verdict: CLEAN[\s\S]*Verdict: REVISE[\s\S]*Findings:/;
 
   assert.match(loop, /exclusively owns the exact copy-eye report format/i);
   assert.match(loop, exactFormat);
@@ -357,18 +371,38 @@ test('hand builds selected references to a blocking slot-scoped fidelity gate', 
   const hand = read('src/agents/hand.agent.yaml');
   const skill = read('src/skills/omd-scout/SKILL.md');
   const protocol = read('core/protocol/reference-assembly.md');
+  assert.match(hand.replace(/\s+/g, ' '), /raw file under `\.omd\/refs\/` is Scout provenance/i);
+  assert.match(skill.replace(/\s+/g, ' '), /raw file under `\.omd\/refs\/` is Scout provenance/i);
+  assert.match(protocol.replace(/\s+/g, ' '), /Raw captures remain Scout provenance/i);
   for (const raw of [hand, skill, protocol]) {
     const source = raw.replace(/\s+/g, ' ');
-    // The hand opens the selected reference's local part-image and builds against it image-to-code.
-    assert.match(source, /local part-image/i);
+    // Raw captures need an explicit selected visual projection; board-v3 still has promise proof.
+    assert.match(source, /omd ref[\s\S]*influence-proof/i);
     assert.match(source, /\.omd\/refs\//);
-    assert.match(source, /image-to-code fidelity/i);
     assert.match(source, /omd ref distance/i);
     assert.match(source, /bare[\s\S]*advisory/i);
     assert.match(source, /--selected[\s\S]*--gate[\s\S]*--json/i);
     assert.match(source, /0\.6/);
     assert.match(source, /(?:failed|missing)[\s\S]*(?:malformed|unmeasurable|stale)[\s\S]*blocks/i);
   }
+});
+
+test('selected visual packets expose only no-ship neutral geometry to downstream roles', () => {
+  const protocol = read('core/protocol/reference-assembly.md').replace(/\s+/g, ' ');
+  const composer = read('src/agents/composer.agent.yaml').replace(/\s+/g, ' ');
+  const hand = read('src/agents/hand.agent.yaml').replace(/\s+/g, ' ');
+  const scout = read('src/agents/scout.agent.yaml').replace(/\s+/g, ' ');
+  const skill = read('src/skills/omd-ultradesign/SKILL.md').replace(/\s+/g, ' ');
+  for (const source of [protocol, composer, hand, scout, skill]) assert.match(source, /omd ref visual-packet|reference-visual-packet/i);
+  for (const source of [protocol, composer, hand, skill]) {
+    assert.match(source, /no-ship/i);
+    assert.match(source, /source-free|source identity/i);
+  }
+  assert.match(protocol, /box proportion[\s\S]*grouping[\s\S]*nesting[\s\S]*whitespace/i);
+  assert.match(protocol, /drops source colour, copy, identity, imagery, and typeface/i);
+  assert.match(composer, /Never read `.omd\/reference-visual-packet-evidence\.json`/i);
+  assert.match(hand, /visual-packet-check --production/i);
+  assert.match(scout, /coordinator alone may run `omd ref visual-packet`/i);
 });
 
 test('scout captures by decision coverage, never by a targeted or announced reference count', () => {
@@ -388,7 +422,7 @@ test('scout captures by decision coverage, never by a targeted or announced refe
 test('the one-risk requirement is functional, not thematic, on a product surface', () => {
   const expressive = read('core/theory/expressive.md');
   const source = expressive.replace(/\s+/g, ' ');
-  assert.match(source, /On a `product` or quiet surface the risk is functional, not thematic/i);
+  assert.match(source, /On a `product` surface the risk is functional, not thematic/i);
   assert.match(source, /A named theme, a decorative metaphor, or a "memorable moment" is the wrong risk/i);
   assert.match(source, /"Memorable" is a marketing goal/i);
 });
@@ -428,12 +462,13 @@ test('expressive distills FWA distinctly and gates the horizontal gallery to sho
   assert.match(source, /composition\/horizontal-scroll-gallery\.md/);
 });
 
-test('the loop and eye gate colour strategy (60-30-10 / reserved accent)', () => {
+test('the loop and eye gate surface-conditional colour strategy', () => {
   const loop = read('core/protocol/human-design-loop.md').replace(/\s+/g, ' ');
   assert.match(loop, /Colour strategy is part of the GREEN target/i);
   assert.match(loop, /SLOP-DIFFUSE-ACCENT/);
   const eye = read('src/agents/eye.agent.yaml').replace(/\s+/g, ' ');
-  assert.match(eye, /verify a legible 60-30-10 distribution/i);
+  assert.match(eye, /For a `marketing` surface, verify a legible 60-30-10 distribution/i);
+  assert.match(eye, /For a product, verify semantic colour/i);
   assert.match(eye, /diffuse or multi-hue accent/i);
 });
 
@@ -463,14 +498,13 @@ test('marketing art direction is selected from evidence instead of a fixed candi
   assert.match(loop, /When a method is selected, its owner, artifact boundary, validation, browser fallback, and stop conditions/i);
 });
 
-test('the eye rejects a merely functional element as a marketing signature moment and demands a named departure', () => {
+test('the eye scopes signature departure to marketing and exempts product theatre', () => {
   const eye = read('src/agents/eye.agent.yaml').replace(/\s+/g, ' ');
   assert.match(eye, /A merely functional element — a working copy button, a form, a nav, or a terminal that only runs a command — is baseline function, never the signature moment/i);
-  assert.match(eye, /Clean, competent, and evenly balanced with no nameable departure is a distinction failure \(RED\)/i);
-  // register scoping preserved — product/quiet is exempt from the thematic floor
-  assert.match(eye, /on a `product` or quiet surface the correct risk is functional/i);
+  assert.match(eye, /Clean, competent, and evenly balanced marketing with no nameable departure is a distinction failure \(RED\)/i);
+  assert.match(eye, /on a `product` surface the correct risk is functional/i);
   const loop = read('core/protocol/human-design-loop.md').replace(/\s+/g, ' ');
-  assert.match(loop, /a merely functional element .* is baseline function, never the signature moment/i);
+  assert.match(loop, /A merely functional element is not a marketing signature, but it may correctly be the dominant product work object/i);
 });
 
 test('scout researches the real subject first and lets its identity anchor govern the gathering lanes', () => {
@@ -547,14 +581,12 @@ test('candidate axes must be genuinely divergent macro-layouts, not one stack re
   assert.match(sketch, /Realize that axis as its named\s+macro-layout family/i);
   assert.match(sketch, /never a cosmetic reskin of\s+the default single-column stack/i);
 });
-test('copy register is an authority-fit decision, not a soft default, and Korean copy avoids the spaced em-dash', () => {
+test('copy register is an authority-fit decision, not a soft default', () => {
   const voice = read('core/theory/voice.md').replace(/\s+/g, ' ');
   const writer = read('src/agents/writer.agent.yaml').replace(/\s+/g, ' ');
   // The speech level is chosen from audience + required authority; a soft 해요체 default on an authoritative landing is a miss.
   assert.match(voice, /Defaulting to a soft, conversational 해요체[\s\S]*is a register-fit miss, not a safe default/i);
   assert.match(writer, /Choose the register from this subject's audience and the authority its value claim needs/i);
-  // The writer proactively avoids the spaced em-dash in Korean copy (SLOP-KO-EMDASH catches it at render).
-  assert.match(writer, /Never use a spaced em-dash \( — \)\s*inside Korean copy/i);
 });
 test('the AI-SaaS tells name decorative geometric-glyph ornament, flagged as SLOP-ORNAMENT-GLYPH', () => {
   const expressive = read('core/theory/expressive.md').replace(/\s+/g, ' ');
@@ -622,7 +654,7 @@ test('captured role-② craft cannot override the selected exact motion decision
   const loop = read('core/protocol/human-design-loop.md').replace(/\s+/g, ' ');
   assert.match(loop, /never turns captured scroll craft into an additional motion obligation beyond the exact selected `motionDecision`/i);
   assert.match(loop, /Never default motion to `one`/);
-  assert.match(loop, /A `product`\/quiet surface[\s\S]*exempt/i);
+  assert.match(loop, /A `product` surface[\s\S]*exempt/i);
 });
 test('craft-usage motion authority stays in the owned protocol when applicable', () => {
   const loop = read('core/protocol/human-design-loop.md').replace(/\s+/g, ' ');
@@ -703,6 +735,13 @@ test('selected artifact ownership is enforced in both the loop and compact coord
   assert.match(skill, /production[\s\S]*to `omd-hand`/);
   assert.match(skill, /missing selected owner is a visible\s+blocker/i);
 });
+test('production owner transaction cannot mutate upstream or evidence artifacts', () => {
+  const hand = read('src/agents/hand.agent.yaml').replace(/\s+/g, ' ');
+  assert.match(hand, /source-owner transaction mutates only the route's `allowedPaths`/);
+  assert.match(hand, /does not write `\.omd\/` history, decisions, screenshots, observations, or caches/);
+  assert.match(hand, /Return proposed evidence and decision records in the final owner result/);
+  assert.match(hand, /Every source-owner `omd check` uses `--no-log`/);
+});
 test('the scout and the reference protocol require component-scoped capture', () => {
   const ra = read('core/protocol/reference-assembly.md').replace(/\s+/g, ' ');
   assert.match(ra, /## Capture granularity/);
@@ -733,6 +772,76 @@ test('scout can write only its owned synthesis while reference records stay CLI-
   assert.match(scout, /- Write - Edit - apply_patch deny: \[\]/);
   assert.match(scout, /Outside those command-owned records, write or edit only `\.omd\/scout\.md`/);
   assert.match(scout, /Never touch production source, another `\.omd\/` artifact/);
+});
+
+test('browser evidence requires a settled visible capture contract', () => {
+  const loop = read('core/protocol/human-design-loop.md').replace(/\s+/g, ' ');
+  const eye = read('src/agents/eye.agent.yaml').replace(/\s+/g, ' ');
+  for (const source of [loop, eye]) {
+    assert.match(source, /\[settled-capture-contract\]/);
+    assert.match(source, /getAnimations\(\)/);
+    assert.match(source, /display[\s\S]*visibility[\s\S]*opacity/);
+    assert.match(source, /omd capture --check --input/);
+  }
+});
+
+test('protocol review receives complete receipts and pair-distinct configurations', () => {
+  const loop = read('core/protocol/human-design-loop.md').replace(/\s+/g, ' ');
+  const eye = read('src/agents/eye.agent.yaml').replace(/\s+/g, ' ');
+  const skill = read('src/skills/omd-ultradesign/SKILL.md').replace(/\s+/g, ' ');
+  for (const source of [loop, eye, skill]) {
+    assert.match(source, /\[protocol-review-packet-contract\]/);
+    assert.match(source, /every primary screenshot[\s\S]*capture receipt/i);
+  }
+  for (const source of [loop, skill]) {
+    assert.match(source, /\[review-pair-configuration-contract\]/);
+    assert.match(source, /pair-distinct reviewer configuration/i);
+    assert.match(source, /identical evidence payload/i);
+  }
+  assert.match(loop, /\[host-authority-role-launch-contract\]/);
+  assert.match(loop, /serialize role launches/i);
+  assert.match(loop, /pre-execution authority rejection[\s\S]*not a review result/i);
+  for (const source of [loop, eye]) {
+    assert.match(source, /\[self-contained-review-packet-contract\]/);
+    assert.match(source, /full validated receipt projection/i);
+    assert.match(source, /never run bare `omd check`/i);
+    assert.match(source, /advisory warnings?[\s\S]*not automatic RED/i);
+    assert.match(source, /\[review-packet-proof-contract\]/);
+    assert.match(source, /exact `omd proof --check --json` result[\s\S]*`\[\]`/i);
+    assert.match(source, /full packet bytes[\s\S]*role input/i);
+    assert.match(source, /blind[\s\S]*no URLs[\s\S]*provenance/i);
+    assert.match(source, /benchmark applicability[\s\S]*reality boundary/i);
+  }
+  const hand = read('src/agents/hand.agent.yaml').replace(/\s+/g, ' ');
+  assert.match(hand, /\[semantic-heading-order-contract\]/);
+  assert.match(hand, /never skip a heading level/i);
+  assert.match(hand, /\[source-owner-browser-boundary\]/);
+  assert.match(hand, /Never invoke `omd render`, `omd ir`, `omd probe`, `omd lifecycle`, Playwright, browser-rs/);
+  assert.match(hand, /coordinator routes browser observation and every `\.omd` evidence publication after this owner returns/i);
+});
+
+test('production copy projection preserves omitted support and role multiplicity', () => {
+  const hand = read('src/agents/hand.agent.yaml').replace(/\s+/g, ' ');
+  const loop = read('core/protocol/human-design-loop.md').replace(/\s+/g, ' ');
+  for (const source of [hand, loop]) {
+    assert.match(source, /\[copy-role-multiplicity-contract\]/);
+    assert.match(source, /Supporting fact: none[\s\S]*zero support carriers/i);
+    assert.match(source, /visible-string multiset/i);
+  }
+});
+
+test('source-bound type and composition proofs are current before review', () => {
+  const sources = [
+    read('core/protocol/human-design-loop.md'),
+    read('src/agents/typesetter.agent.yaml'),
+    read('src/agents/composer.agent.yaml'),
+    read('src/agents/hand.agent.yaml'),
+    read('src/agents/eye.agent.yaml'),
+  ].map((source) => source.replace(/\s+/g, ' '));
+  for (const source of sources) {
+    assert.match(source, /\[source-bound-proof-currentness\]/);
+    assert.match(source, /omd proof --check/);
+  }
 });
 
 test('scout batches zone-bound captures without debugging browser transport', () => {
@@ -783,7 +892,7 @@ test('framer CLI writes its owned frame and acquisition plan without direct file
   assert.match(framer, /Never use a patch or file-write tool/);
 });
 
-test('the selected host model is immutable while OMD adjusts only role effort', () => {
+test('host model inheritance is default and role overrides are invocation-bound', () => {
   const skill = read('src/skills/omd-ultradesign/SKILL.md').replace(/\s+/g, ' ');
   assert.match(skill, /The session model belongs to the user/);
   assert.match(skill, /Codex child launches omit `model`/);
@@ -796,8 +905,18 @@ test('the selected host model is immutable while OMD adjusts only role effort', 
   assert.match(loop, /Claude agent metadata uses `model: inherit` and the role's `effort`/);
 
   const agents = read('AGENTS.md').replace(/\s+/g, ' ');
-  assert.match(agents, /the user chooses the model; OMD chooses only effort/);
+  assert.match(agents, /the user chooses the model and any invocation override/);
+  assert.match(agents, /Without an explicit host override, a Luna session keeps Luna for every OMD child and a Sol session keeps Sol/);
+  assert.match(agents, /--omd-role-model role=model/);
+  assert.match(agents, /--omd-role-effort role=low\|medium\|high/);
+  assert.match(agents, /A coordinator, role task, or installed agent profile must not invent an override/);
   assert.doesNotMatch(agents, /Sol \\(recommended\\)|Terra xhigh \\(recommended\\)|Luna high \\(recommended\\)/);
+});
+
+test('codex named roles never combine agent type with a full-history fork', () => {
+  const skill = read('src/skills/omd-ultradesign/SKILL.md').replace(/\s+/g, ' ');
+  assert.match(skill, /Never combine a named `agent_type` with a full-history fork/i);
+  assert.match(skill, /fresh role-bounded prompt/i);
 });
 
 test('the coordinator cannot claim completion without a current immutable final pointer', () => {
@@ -809,6 +928,29 @@ test('the coordinator cannot claim completion without a current immutable final 
   assert.match(skill, /never substitute\s+app tests, build output, screenshots, probes, or reviewer prose/i);
 });
 
+test('register comparison guidance separates upstream concepts and preserves host and motion authority', () => {
+  const adr = read('core/protocol/adr/marketing-motion-decision.md').replace(/\s+/g, ' ');
+  const protocol = read('core/protocol/design-deliberation.md').replace(/\s+/g, ' ');
+  const skeleton = INPUT_SKELETONS.find(input => input.name === 'art-direction-check')!;
+  assert.equal(skeleton.command, 'omd art-direction check --input .omd/.cache/art-direction-check.json --json');
+  assert.match(adr, /two or three distinct supported registers/);
+  assert.match(adr, /exactly one evidence-backed rejection for every nonwinner/);
+  assert.match(adr, /distinct concepts in the same register/);
+  assert.match(adr, /representative for a register only after the visible concept comparison/);
+  assert.match(adr, /singleton requires a matching current explicit user register lock/);
+  assert.match(adr, /Visible-evidence-only canonical singletons remain unsupported/);
+  assert.match(adr, /restrained and more-expressive realizations of that same concept while preserving its content-to-form invariants/);
+  assert.match(adr, /register studies, not evidence of distinct concept inventions/);
+  assert.match(adr, /neither a supported second register nor an explicit register lock exists[^.]*do not invent evidence/);
+  assert.match(protocol, /explicit current-user register lock is binding input, not a new fork requiring invented alternatives/);
+  assert.match(protocol, /command does not issue its own authority/);
+  assert.match(protocol, /Missing host publication authority blocks this publication path/);
+  assert.doesNotMatch(protocol, /local-check/);
+  assert.match(skeleton.constraints!.join(' '), /none rejects all pending slots[^;]*; slots:\[\] is valid only when no pending slots exist/);
+  const result = (skeleton.skeleton as { evaluatorResult: { motionResolution: { slots: unknown[] } } }).evaluatorResult;
+  assert.equal(result.motionResolution.slots.length, 1, 'the printed placeholder must not prescribe empty settlement');
+});
+
 test('deep deliberation detail stays externalized behind stage contracts', () => {
   const protocol = read('core/protocol/design-deliberation.md').replace(/\s+/g, ' ');
   assert.match(protocol, /OMD does not request, store, or grade hidden chain-of-thought/);
@@ -816,7 +958,7 @@ test('deep deliberation detail stays externalized behind stage contracts', () =>
   assert.match(protocol, /spawn three fresh `omd-eye` agents concurrently/);
   assert.match(protocol, /before render → observable fact → judgment → exact change → distinct after render → measured result/);
   assert.match(protocol, /zone job → captured reference identity → extracted principle → composition decision ID/);
-  assert.match(protocol, /`omd art-direction local-check` accepts only that moderator-owned receipt/);
+  assert.match(protocol, /`omd art-direction check` consumes that moderator-owned receipt through the current host-issued\s+invocation/);
   assert.match(protocol, /The eye is intentionally read-only/);
 
   const skill = read('src/skills/omd-ultradesign/SKILL.md').replace(/\s+/g, ' ');

@@ -1,11 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { validateCopyDeck, validateCopyDeckV2, validateCopyDeckV2AgainstSelectedArtDirection, validateCopyReviewReport, type RenderedBeat, type RenderedBeatProof } from '../core/copy/index.ts';
+import { copyDeckSha256, validateCopyDeck, validateCopyDeckV2, validateCopyDeckV2AgainstSelectedArtDirection, validateCopyReviewReport, type RenderedBeat, type RenderedBeatProof } from '../core/copy/index.ts';
 import { NO_CURRENT_USER_BEAT_EXCEPTION_RECEIPT_SHA256 } from '../core/art-direction/decision.ts';
 
 const CLI = fileURLToPath(new URL('../bin/omd.ts', import.meta.url));
@@ -39,6 +39,11 @@ function deck(scope: 'stateful' | 'navigation-only' | 'static' = 'stateful'): st
 - Register: 해요체
 - Breath: 한 문장에 한 메시지
 
+## Truth contract
+
+- Result boundary: navigation
+- Storage boundary: none
+
 ## Surface copy
 
 ### Home
@@ -61,6 +66,30 @@ ${stateFields}
 - 소리 내어 읽었고 해요체를 유지했습니다.
 `;
 }
+test('page summaries allow complete region copy without multiplying surfaces or weakening claim references', () => {
+  const complete = deck('static').replace(
+    '- Claim refs: F-001\n',
+    `- Claim refs: F-001, F-003
+
+#### Work
+Title: 실제로 바뀐 성능
+Body: 동시 접속자를 200명에서 5,000명으로 늘렸어요.
+
+#### Evidence
+Title: 측정 결과
+Body: Lighthouse 성능 점수를 31점에서 96점으로 높였어요.
+
+#### Next step
+Label: 첫 번째 프로젝트 보기
+`,
+  );
+  assert.deepEqual(validateCopyDeck(complete), []);
+  const unverified = complete.replace('Claim refs: F-001, F-003', 'Claim refs: F-001, F-002');
+  assert.ok(validateCopyDeck(unverified).some(v => /F-002/.test(v.message)));
+  const accidentalSurface = complete.replace('#### Evidence', '### Evidence');
+  assert.ok(validateCopyDeck(accidentalSurface).some(v => v.id === 'COPY-SURFACE'));
+});
+
 function v2Deck(): string {
   return `${deck()}
 
@@ -152,11 +181,11 @@ function multiSurfaceDeck(): string {
 ## Navigation and actions`);
 }
 
-function reviewReport(hash = 'a'.repeat(64)): string {
+function reviewReport(hash = 'a'.repeat(64), verdict = 'REVISE'): string {
   return `Mode: copy-editor
 Review time: 2026-07-14T12:34:56.000Z
 Reviewed copy-deck SHA-256: ${hash}
-Verdict: revise
+Verdict: ${verdict}
 Findings:
 - CTA label does not predict the next screen.
 `;
@@ -164,6 +193,20 @@ Findings:
 
 test('valid Korean surface copy and verified fact refs pass', () => {
   assert.deepEqual(validateCopyDeck(deck()), []);
+});
+
+test('support copy can be omitted with a reason but rejects unmarked commentary', () => {
+  const omitted = deck().replace(
+    'Supporting fact: 동시 접속자를 200명에서 5,000명으로 늘렸어요.',
+    'Supporting fact: none',
+  );
+  assert.deepEqual(validateCopyDeck(omitted), []);
+
+  const explained = omitted.replace('Supporting fact: none', 'Supporting fact: none — title already orients');
+  assert.deepEqual(validateCopyDeck(explained), []);
+
+  const ambiguous = omitted.replace('Supporting fact: none', 'Supporting fact: none title already orients');
+  assert.ok(validateCopyDeck(ambiguous).some((violation) => violation.id === 'COPY-SUPPORT'));
 });
 
 test('missing and empty decks fail, and CLI missing file exits 1 with JSON', () => {
@@ -199,6 +242,17 @@ test('voice contract requires exactly one Audience, Language, and Register field
   }
   const duplicate = deck().replace('- Language: ko', '- Language: ko\n- Language: en');
   assert.ok(validateCopyDeck(duplicate).some((v) => v.id === 'COPY-VOICE-CONTRACT' && v.message.includes('Language')));
+});
+
+test('truth contract accepts only typed result and storage boundaries', () => {
+  assert.ok(validateCopyDeck(deck().replace('Result boundary: navigation', 'Result boundary: success')).some((v) => v.id === 'COPY-TRUTH'));
+  assert.ok(validateCopyDeck(deck().replace('Storage boundary: none', 'Storage boundary: cloud-ish')).some((v) => v.id === 'COPY-TRUTH'));
+  assert.ok(validateCopyDeck(deck().replace('Storage boundary: none', 'Storage boundary: browser-storage')).some((v) => v.id === 'COPY-TRUTH'));
+  const tabPreview = deck()
+    .replace('Result boundary: navigation', 'Result boundary: local-preview')
+    .replace('Storage boundary: none', 'Storage boundary: tab-session');
+  assert.deepEqual(validateCopyDeck(tabPreview), []);
+  assert.deepEqual(validateCopyDeck(deck()), []);
 });
 
 test('invalid interaction scope fails', () => {
@@ -266,16 +320,55 @@ test('CLI accepts a valid non-empty copy deck', () => {
   assert.match(result.stdout, /passes all structural checks/);
 });
 
-test('copy review report gate accepts the exact format without comparing against the current deck', () => {
+test('copy review gate rejects a report for stale deck bytes and accepts the current deck', () => {
   assert.deepEqual(validateCopyReviewReport(reviewReport()), []);
   const dir = project();
   mkdirSync(join(dir, '.omd', '.cache'), { recursive: true });
-  writeFileSync(join(dir, '.omd', 'copy-deck.md'), deck());
+  const currentDeck = deck();
+  writeFileSync(join(dir, '.omd', 'copy-deck.md'), currentDeck);
   writeFileSync(join(dir, '.omd', '.cache', 'copy-eye.md'), reviewReport('b'.repeat(64)));
-  const result = spawnSync(process.execPath, [CLI, 'copy', '--review-check'], { cwd: dir, encoding: 'utf8' });
+  const stale = spawnSync(process.execPath, [CLI, 'copy', '--review-check', '--json'], { cwd: dir, encoding: 'utf8' });
+  assert.equal(stale.status, 1, stale.stdout + stale.stderr);
+  assert.ok((JSON.parse(stale.stdout) as Array<{ id: string }>).some((violation) => violation.id === 'COPY-REVIEW-STALE'));
+
+  const currentHash = copyDeckSha256(Buffer.from(currentDeck));
+  writeFileSync(join(dir, '.omd', '.cache', 'copy-eye.md'), reviewReport(currentHash));
+  const revise = spawnSync(process.execPath, [CLI, 'copy', '--review-check', '--json'], { cwd: dir, encoding: 'utf8' });
+  assert.equal(revise.status, 1, revise.stdout + revise.stderr);
+  assert.ok((JSON.parse(revise.stdout) as Array<{ id: string }>).some((violation) => violation.id === 'COPY-REVIEW-VERDICT'));
+
+  writeFileSync(join(dir, '.omd', '.cache', 'copy-eye.md'), reviewReport(currentHash, 'CLEAN'));
+  const current = spawnSync(process.execPath, [CLI, 'copy', '--review-check'], { cwd: dir, encoding: 'utf8' });
+  assert.equal(current.status, 0, current.stdout + current.stderr);
+  assert.match(current.stdout, /current copy-deck bytes/);
+  assert.match(current.stdout, /blindness and semantic quality are not proven/);
+});
+
+test('copy review publish persists only a structurally valid coordinator-preserved report', () => {
+  const dir = project();
+  const currentDeck = deck();
+  mkdirSync(join(dir, '.omd'), { recursive: true });
+  writeFileSync(join(dir, '.omd', 'copy-deck.md'), currentDeck);
+  const input = join(dir, 'copy-review-input.md');
+  const currentReport = reviewReport(copyDeckSha256(Buffer.from(currentDeck)));
+  writeFileSync(input, currentReport);
+  const result = spawnSync(
+    process.execPath,
+    [CLI, 'copy', 'review-publish', '--input', input, '--json'],
+    { cwd: dir, encoding: 'utf8' },
+  );
   assert.equal(result.status, 0, result.stdout + result.stderr);
-  assert.match(result.stdout, /report-structure checks only/);
-  assert.match(result.stdout, /blindness and semantic quality are not proven/);
+  assert.deepEqual(JSON.parse(result.stdout), { path: '.omd/.cache/copy-eye.md' });
+  assert.equal(readFileSync(join(dir, '.omd', '.cache', 'copy-eye.md'), 'utf8'), currentReport);
+
+  const invalid = join(dir, 'invalid-copy-review.md');
+  writeFileSync(invalid, 'Verdict: CLEAN\n');
+  const rejected = spawnSync(
+    process.execPath,
+    [CLI, 'copy', 'review-publish', '--input', invalid, '--json'],
+    { cwd: dir, encoding: 'utf8' },
+  );
+  assert.equal(rejected.status, 1);
 });
 
 test('forward-test shape without exact mode and reviewed-hash labels fails deterministically', () => {

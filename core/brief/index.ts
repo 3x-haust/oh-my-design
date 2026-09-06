@@ -15,6 +15,22 @@ import { STAGES, resolveRunState, type StageId } from '../stage/contract.ts';
 import { detectAppShell, renderTargetHint, type AppShell } from '../stack/shell.ts';
 import { readPersistedRoute, type RouteRecord } from '../route/index.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
+import { checkContentGrain, CONTENT_GRAIN_PATH } from '../content-grain/files.ts';
+import { readFrame, type RealityLedger } from '../frame/index.ts';
+import {
+  CANDIDATE_SELECTION_POINTER_PATH,
+  resolveCandidateSelection,
+  validateCandidateSelectionPointer,
+} from './candidate-selection.ts';
+import {
+  CULTURAL_DESIGN_PROJECTION_POINTER_PATH,
+  readCurrentCulturalDesignProfile,
+} from '../locale/cultural-profile-files.ts';
+import {
+  REFERENCE_LOCALE_BINDING_PATH,
+  referenceLocaleBindingSha256,
+  validateReferenceLocaleBindingCurrentness,
+} from '../ref/reference-locale-binding.ts';
 
 export {
   EVIDENCE_CLAIM_PUBLICATION_SCHEMA,
@@ -41,7 +57,7 @@ export {
 } from './task-outcome.ts';
 
 /** Stages the route can name that are not artifact stages in `STAGES`. */
-export const EXTRA_BRIEF_STAGES = ['production', 'independent-review', 'review'] as const;
+export const EXTRA_BRIEF_STAGES = ['candidate-generation', 'production', 'independent-review', 'review'] as const;
 export type BriefStage = StageId | (typeof EXTRA_BRIEF_STAGES)[number];
 
 /**
@@ -69,7 +85,35 @@ export type Brief = {
   readonly stage: BriefStage;
   readonly owner: string;
   readonly owns: readonly string[];
-  readonly route: { readonly name: string; readonly roles: readonly string[]; readonly references: string } | null;
+  readonly route: {
+    readonly name: string;
+    readonly projectMode: 'greenfield' | 'existing';
+    readonly roles: readonly string[];
+    readonly references: string;
+  } | null;
+  readonly contentGrain: {
+    readonly path: typeof CONTENT_GRAIN_PATH;
+    readonly schema: 'content-grain-v1';
+    readonly status: 'active' | 'no-stable-grain';
+    readonly sha256: string;
+  } | null;
+  readonly localeDesign: {
+    readonly decision: 'mechanics-only' | 'research';
+    readonly contextPath: '.omd/locale-design-context.json';
+    readonly contextSha256: string;
+    readonly surfaceLocale: string;
+    readonly marketRegion: string | null;
+    readonly audience: string | null;
+    readonly projection: null | Readonly<{
+      readonly path: typeof CULTURAL_DESIGN_PROJECTION_POINTER_PATH;
+      readonly sha256: string;
+    }>;
+    readonly referenceBinding: null | Readonly<{
+      readonly path: typeof REFERENCE_LOCALE_BINDING_PATH;
+      readonly sha256: string;
+    }>;
+  } | null;
+  readonly reality: RealityLedger | null;
   readonly references: readonly BriefReference[];
   /** Captures gathered but not printed. `omd ref list` shows them all. */
   readonly referencesOmitted: number;
@@ -82,10 +126,30 @@ export type Brief = {
   readonly blockers: readonly string[];
 };
 
+export function projectRealityForBrief(
+  root: string,
+  stage: BriefStage,
+  projectMode: 'greenfield' | 'existing',
+): Readonly<{ reality: RealityLedger | null; blocker: string | null }> {
+  const consumer = (
+    ['copy', 'composition', 'candidate-generation', 'production', 'independent-review', 'review'] as readonly BriefStage[]
+  ).includes(stage);
+  const reality = consumer ? readFrame(root)?.reality ?? null : null;
+  const blocker = consumer && projectMode === 'greenfield' && reality === null
+    ? 'greenfield reality ledger unavailable: run `omd frame set --reality <reality-ledger.json>`'
+    : null;
+  return Object.freeze({ reality, blocker });
+}
+
 const OWNER: Readonly<Record<string, string>> = {
-  production: 'omd-hand', 'independent-review': 'omd-eye', review: 'omd-eye',
+  'candidate-generation': 'omd-sketch',
+  production: 'omd-hand',
+  'independent-review': 'omd-eye',
+  review: 'omd-eye',
 };
 const OWNS: Readonly<Record<string, readonly string[]>> = {
+  scout: ['.omd/scout.md', '.omd/task-flow-benchmark.json'],
+  'candidate-generation': ['structurally distinct UX candidates and selected model metadata'],
   production: ['production source (every file the surface ships)'],
   'independent-review': ['the independent review verdict returned to the coordinator'],
   review: ['the independent review verdict returned to the coordinator'],
@@ -101,6 +165,7 @@ const JUDGED_BY: Readonly<Record<string, readonly BriefCheck[]>> = {
   scout: [
     { command: 'omd ref check', fails: 'the board is one-source, kinship-unresolved, low-signal, or zone-uncovered' },
     { command: 'omd ref audit', fails: 'captures were taken sequentially instead of in one batch' },
+    { command: 'omd benchmark check', fails: 'applicable product research lacks multiple bounded real-service task flows or its source contract is stale' },
   ],
   'reference-board': [{ command: 'omd ref check', fails: 'board evidence or the saved selection is stale' }],
   copy: [
@@ -108,9 +173,18 @@ const JUDGED_BY: Readonly<Record<string, readonly BriefCheck[]>> = {
     { command: 'omd locale check', fails: 'a declared locale has no Beat copy' },
   ],
   'type-proof': [{ command: 'omd check <specimen>', fails: 'type scale, leading, or contrast violates the committed ladders' }],
-  composition: [{ command: 'omd composition --check', fails: 'composition sections are incomplete or their inputs are stale' }],
+  composition: [
+    { command: 'omd composition --check', fails: 'composition sections are incomplete or their inputs are stale' },
+    { command: 'omd grain check --json', fails: 'selected Content Grain is missing, stale, or malformed' },
+  ],
+  'candidate-generation': [
+    { command: 'omd composition --check', fails: 'candidate inputs are stale or composition is invalid' },
+    { command: 'omd benchmark check', fails: 'candidate topology is not bound to the current task-flow benchmark' },
+    { command: 'omd check <candidate>', fails: 'candidate tokens, accessibility, or slop rules are violated' },
+  ],
   production: [
-    { command: 'omd check <page>', fails: 'tokens, accessibility, or slop rules are violated' },
+    { command: 'omd check <page> --no-log', fails: 'tokens, accessibility, or slop rules are violated' },
+    { command: 'omd grain check --json', fails: 'selected Content Grain is missing, stale, or malformed' },
     { command: 'omd complete check <page>', fails: 'a declared affordance is absent, inert, or keyboard-unreachable' },
     { command: 'omd route check --activation <host-issued-invocation.json>', fails: 'a file was written outside the route scope' },
     { command: 'omd slop scan <root>', fails: 'source-level slop candidates need triage' },
@@ -123,9 +197,10 @@ const JUDGED_BY: Readonly<Record<string, readonly BriefCheck[]>> = {
 const SCHEMAS: Readonly<Record<string, readonly string[]>> = {
   domain: ['domain-brief'],
   depth: ['depth-input'],
-  frame: ['functional-requirements'],
+  frame: ['functional-requirements', 'reality-ledger'],
+  'content-grain': ['content-grain'],
   acquisition: ['functional-requirements'],
-  'reference-board': ['reference-board'],
+  'reference-board': ['reference-board', 'reference-locale-binding'],
   'art-direction': ['art-direction-check'],
   copy: ['locale-contract'],
   production: ['route-input'],
@@ -179,19 +254,72 @@ export function briefReferences(root: string): readonly BriefReference[] {
   return out;
 }
 
+function selectedCandidateEvidence(root: string): readonly string[] {
+  const sketches = join(root, '.omd', '.cache', 'sketches');
+  const pointerPath = join(root, CANDIDATE_SELECTION_POINTER_PATH);
+  if (existsSync(pointerPath)) {
+    try {
+      return resolveCandidateSelection(
+        root,
+        validateCandidateSelectionPointer(JSON.parse(readFileSync(pointerPath, 'utf8'))),
+      );
+    } catch {
+      return [];
+    }
+  }
+  try {
+    return readdirSync(sketches, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && entry.name.endsWith('-selected'))
+      .flatMap((entry) => ['index.html', 'noun-swap-test.json', 'selection.json', 'ux-models.json']
+        .map((name) => `.omd/.cache/sketches/${entry.name}/${name}`)
+        .filter((path) => existsSync(join(root, path))))
+      .sort();
+  } catch {
+    return [];
+  }
+}
+
+function selectedStageInputs(
+  root: string,
+  selectedStages: readonly string[],
+  consumerStage: 'candidate-generation' | 'production',
+): Readonly<{ present: readonly string[]; missing: readonly string[] }> {
+  const consumerIndex = selectedStages.indexOf(consumerStage);
+  const upstreamStages = consumerIndex < 0 ? selectedStages : selectedStages.slice(0, consumerIndex);
+  const stageInputs = STAGES
+    .filter((stage) => upstreamStages.includes(stage.id))
+    .map((stage) => stage.artifact);
+  const candidateInputs = upstreamStages.includes('candidate-generation')
+    ? selectedCandidateEvidence(root)
+    : [];
+  const missing = stageInputs.filter((path) => !existsSync(join(root, path)));
+  if (upstreamStages.includes('candidate-generation') && candidateInputs.length === 0) {
+    missing.push('candidate-generation');
+  }
+  return Object.freeze({
+    present: Object.freeze([...stageInputs.filter((path) => existsSync(join(root, path))), ...candidateInputs]),
+    missing: Object.freeze(missing),
+  });
+}
+
 /** Renders and probes an earlier round already produced, so a revision compares instead of guessing. */
-function priorEvidence(root: string): readonly string[] {
+function priorEvidence(root: string, selectedInputs: readonly string[]): readonly string[] {
+  const durable = [
+    '.omd/task-flow-benchmark-projection.json',
+    '.omd/functional-requirements.json',
+    ...selectedInputs,
+  ].filter((path) => existsSync(join(root, path)));
   const dir = join(root, '.omd', '.cache');
   try {
-    return readdirSync(dir)
+    return [...durable, ...readdirSync(dir)
       .filter((name) =>
         /\.(png|json)$/.test(name)
         && /(render|desktop|mobile|shot|probe|filmstrip|review|squint|sharp|ir)/i.test(name))
       .sort()
       .slice(0, 8)
-      .map((name) => `.omd/.cache/${name}`);
+      .map((name) => `.omd/.cache/${name}`)];
   } catch {
-    return [];
+    return durable;
   }
 }
 
@@ -234,6 +362,107 @@ export function buildBrief(
   if (stage === 'production' && route?.references.decision === 'discover' && references.length === 0) {
     blockers.push('selected reference discovery has no gathered evidence');
   }
+  const selectedInputs = (stage === 'candidate-generation' || stage === 'production') && route !== null
+    ? selectedStageInputs(root, route.strategy.stages, stage)
+    : Object.freeze({ present: Object.freeze([]), missing: Object.freeze([]) });
+  for (const path of selectedInputs.missing) {
+    blockers.push(`selected ${stage} input missing: ${path}`);
+  }
+  const copyReviewPath = '.omd/.cache/copy-eye.md';
+  const copyReviewRequired = stage === 'production'
+    && route?.behavior.active.copyRepairWorkflow.status === 'selected';
+  const copyReviewPresent = copyReviewRequired && existsSync(join(root, copyReviewPath));
+  if (copyReviewRequired && !copyReviewPresent) {
+    blockers.push(`selected production input missing: ${copyReviewPath}`);
+  }
+  const contentGrainConsumer = (
+    ['composition', 'candidate-generation', 'production', 'independent-review', 'review'] as readonly BriefStage[]
+  ).includes(stage);
+  let contentGrain: Brief['contentGrain'] = null;
+  if (contentGrainConsumer && route?.strategy.stages.includes('content-grain')) {
+    try {
+      const current = checkContentGrain(root);
+      contentGrain = {
+        path: CONTENT_GRAIN_PATH,
+        schema: 'content-grain-v1',
+        status: current.status,
+        sha256: current.grainSha256,
+      };
+    } catch (error) {
+      blockers.push(`content grain unavailable: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  const localeRoute = route?.sourceContract.localeDesign;
+  const localeProjectionConsumer = (
+    ['composition', 'candidate-generation', 'production', 'independent-review', 'review'] as readonly BriefStage[]
+  ).includes(stage);
+  let localeDesign: Brief['localeDesign'] = localeRoute === undefined ? null : {
+    decision: localeRoute.decision as 'mechanics-only' | 'research',
+    contextPath: '.omd/locale-design-context.json',
+    contextSha256: localeRoute.contextSha256,
+    surfaceLocale: localeRoute.context.surfaceLocale,
+    marketRegion: localeRoute.context.marketRegion,
+    audience: localeRoute.context.audience,
+    projection: null,
+    referenceBinding: null,
+  };
+  if (localeRoute?.decision === 'research' && localeProjectionConsumer) {
+    try {
+      if (invocation === undefined) throw new Error('adaptive route authority is required');
+      const current = readCurrentCulturalDesignProfile(root, invocation);
+      localeDesign = {
+        ...localeDesign!,
+        projection: {
+          path: CULTURAL_DESIGN_PROJECTION_POINTER_PATH,
+          sha256: current.projectionSha256,
+        },
+      };
+    } catch (error) {
+      blockers.push(`cultural design projection unavailable: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    if (route?.strategy.stages.includes('reference-board')
+      && existsSync(join(root, '.omd', 'reference-board.json'))) {
+      try {
+        const binding = validateReferenceLocaleBindingCurrentness(root);
+        localeDesign = {
+          ...localeDesign!,
+          referenceBinding: {
+            path: REFERENCE_LOCALE_BINDING_PATH,
+            sha256: referenceLocaleBindingSha256(binding.projection),
+          },
+        };
+      } catch (error) {
+        blockers.push(`locale reference binding unavailable: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+  }
+  const projectedReality = projectRealityForBrief(root, stage, route?.projectMode ?? 'existing');
+  if (projectedReality.blocker !== null) blockers.push(projectedReality.blocker);
+  const judgedBy = (JUDGED_BY[stage] ?? []).filter((check) =>
+    (
+      check.command !== 'omd grain check --json'
+      || route === null
+      || route.strategy.stages.includes('content-grain')
+    )
+    && (
+      check.command !== 'omd locale check'
+      || existsSync(join(root, '.omd', 'locale.json'))
+    )
+  );
+  const localeJudgedBy = localeRoute?.decision === 'research' && localeProjectionConsumer
+    ? [{
+      command: 'omd locale profile-check --activation <host-issued-invocation.json>',
+      fails: 'the cultural profile, type proof, source bytes, remote source, or sanitized projection is stale',
+    }]
+    : [];
+  const localeReferenceJudgedBy = localeRoute?.decision === 'research'
+    && localeProjectionConsumer
+    && route?.strategy.stages.includes('reference-board')
+    ? [{
+      command: 'omd ref locale-bind-check --json',
+      fails: 'a local reference piece is not bound to the current profile decision, source receipt, board, or locale context',
+    }]
+    : [];
 
   return {
     stage,
@@ -241,18 +470,27 @@ export function buildBrief(
     owns: definition === undefined ? OWNS[stage] ?? [] : [definition.artifact],
     route: route === null ? null : {
       name: route.route,
+      projectMode: route.projectMode,
       roles: route.strategy.roles,
       references: route.references.decision === 'discover'
         ? `discover — ${route.references.intended}`
         : `skip — ${route.references.actual.description}`,
     },
+    contentGrain,
+    localeDesign,
+    reality: projectedReality.reality,
     references,
     referencesOmitted: gathered.length - references.length,
     contracts,
     schemas: (SCHEMAS[stage] ?? []).map((name) => ({ name, command: `omd schema ${name}` })),
     shell: shell.kind === 'browser' ? null : { kind: shell.kind, target: renderTargetHint(shell) },
-    judgedBy: JUDGED_BY[stage] ?? [],
-    prior: priorEvidence(root),
+    judgedBy: [...judgedBy, ...localeJudgedBy, ...localeReferenceJudgedBy],
+    prior: priorEvidence(root, [
+      ...selectedInputs.present,
+      ...(localeDesign?.projection === null || localeDesign === null ? [] : [localeDesign.projection.path]),
+      ...(localeDesign?.referenceBinding === null || localeDesign === null ? [] : [localeDesign.referenceBinding.path]),
+      ...(copyReviewPresent ? [copyReviewPath] : []),
+    ]),
     blockers,
   };
 }

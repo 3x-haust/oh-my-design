@@ -1,18 +1,35 @@
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash, createPublicKey, verify } from 'node:crypto';
-import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, watch, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { runCodexHostExec } from '../adapters/codex-host-launcher.ts';
+import { runProductionOwnerCli, validateProductionOwnerTimeout } from '../adapters/production-owner-runtime.ts';
 import { routeAdaptiveFlow } from '../core/route/adaptive-flow.ts';
 import { adaptiveRouteRecordSha256 } from '../core/route/adaptive-route-persistence.ts';
 import { canonicalRouteJson } from '../core/route/adaptive-source-contract.ts';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const OWNER_CLI = join(ROOT, 'bin', 'omd-codex.mjs');
+
+test('production owner accepts a bounded ninety-minute completion window', () => {
+  assert.equal(validateProductionOwnerTimeout(90 * 60 * 1000), 90 * 60 * 1000);
+  assert.throws(() => validateProductionOwnerTimeout(2 * 60 * 60 * 1000 + 1), /120 minutes/);
+});
+
+test('production owner CLI cannot inject host-owned model or effort overrides', async () => {
+  await assert.rejects(
+    runProductionOwnerCli(['run', '--omd-role-model', 'omd-hand=gpt-5.6-sol']),
+    /usage: omd-codex owner/,
+  );
+  await assert.rejects(
+    runProductionOwnerCli(['run', '--omd-role-effort', 'omd-hand=medium']),
+    /usage: omd-codex owner/,
+  );
+});
 
 function executable(path: string, source: string): string {
   writeFileSync(path, `#!/usr/bin/env node\n${source}`);
@@ -31,7 +48,7 @@ function project(prefix: string): string {
 
 function ownerCodexStub(path: string): string {
   return executable(path, `
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, symlinkSync, watch, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 const args = process.argv.slice(2);
@@ -40,6 +57,30 @@ const mode = process.env.OMD_TEST_OWNER_MODE;
 const attempt = Number(process.env.OMD_PRODUCTION_OWNER_ATTEMPT);
 const report = process.env.OMD_TEST_OWNER_ARGS;
 const delegatedActivation = process.env.OMD_ACTIVATION_PATH;
+const task = readFileSync(0, 'utf8');
+if (mode === 'receipt-race') {
+  const observerSource = [
+    "import { watch, writeFileSync } from 'node:fs';",
+    "import { join } from 'node:path';",
+    "const [root, ownerDirectory] = process.argv.slice(1);",
+    "const observer = watch(ownerDirectory, (_event, filename) => {",
+    "  if (filename !== 'result.json') return;",
+    "  observer.close();",
+    "  writeFileSync(join(root, '.omd', 'late-owner-mutation.json'), 'late mutation');",
+    "});",
+    "process.stdout.write('ready\\\\n');",
+  ].join('\\n');
+  const observer = spawn(process.execPath, ['--input-type=module', '-e', observerSource, root, process.env.OMD_CODEX_OWNER_DIRECTORY], {
+    stdio: ['ignore', 'pipe', 'ignore'],
+  });
+  await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('late mutation observer did not become ready')), 10_000);
+    observer.stdout.once('data', () => { clearTimeout(timer); resolve(); });
+    observer.once('error', (error) => { clearTimeout(timer); reject(error); });
+  });
+  observer.stdout.destroy();
+  observer.unref();
+}
 const routeEnv = { ...process.env };
 if (mode === 'parent-substitution') routeEnv.OMD_ACTIVATION_PATH = join(dirname(delegatedActivation), 'invocation.json');
 if (mode === 'copied-child-activation') {
@@ -61,15 +102,46 @@ if (mode === 'live-sibling-substitution') {
     });
   });
 }
-writeFileSync(report, JSON.stringify({ args, role: process.env.OMD_PRODUCTION_OWNER_ROLE,
+writeFileSync(report, JSON.stringify({ args, task, role: process.env.OMD_PRODUCTION_OWNER_ROLE,
   activation: delegatedActivation, attemptedActivation: routeEnv.OMD_ACTIVATION_PATH, showStatus: shown.status, showStderr: shown.stderr,
   checkStatus: checked.status, checkStderr: checked.stderr }));
 if (shown.status !== 0 || checked.status !== 0) process.exit(92);
 if (releasePromise) await releasePromise;
-if (args.includes('--model') || args.includes('-m') || args.includes('--listen') || args.includes('app-server')) process.exit(90);
-if (process.env.OMD_TEST_SENPI_MARKER && existsSync(process.env.OMD_TEST_SENPI_MARKER)) process.exit(91);
+const expectedModel = process.env.OMD_TEST_EXPECTED_ROLE_MODEL;
+const expectedEffort = process.env.OMD_TEST_EXPECTED_ROLE_EFFORT;
+if (expectedModel) {
+  const modelIndex = args.indexOf('--model');
+  if (modelIndex < 0 || args[modelIndex + 1] !== expectedModel || args.includes('-m')) process.exit(90);
+  if (!args.includes('model_reasoning_effort=' + JSON.stringify(expectedEffort))) process.exit(89);
+} else if (args.includes('--model') || args.includes('-m')) process.exit(90);
+if (args.includes('--listen') || args.includes('app-server')) process.exit(88);
+if (process.env.OMD_TEST_ALTERNATE_HOST_MARKER && existsSync(process.env.OMD_TEST_ALTERNATE_HOST_MARKER)) process.exit(91);
 const session = mode === 'reuse-session' ? 'session-reused' : 'session-' + attempt + '-' + process.pid;
 process.stdout.write(JSON.stringify({ type: 'thread.started', thread_id: session }) + '\\n');
+if (mode === 'prohibited-render') {
+  process.stdout.write(JSON.stringify({
+    type: 'item.completed',
+    item: { type: 'command_execution', command: 'omd render src/index.html -o /tmp/owner.png' },
+  }) + '\\n');
+}
+if (mode === 'allowed-check') {
+  process.stdout.write(JSON.stringify({
+    type: 'item.completed',
+    item: { type: 'command_execution', command: 'omd check src/index.html --no-log' },
+  }) + '\\n');
+}
+if (mode === 'forbidden-name-audit') {
+  process.stdout.write(JSON.stringify({
+    type: 'item.completed',
+    item: { type: 'command_execution', command: "rg -n 'omd (render|ir|probe|lifecycle)|playwright|browser-rs' index.html src || true" },
+  }) + '\\n');
+}
+if (mode === 'prohibited-playwright') {
+  process.stdout.write(JSON.stringify({
+    type: 'item.completed',
+    item: { type: 'command_execution', command: 'npx playwright test' },
+  }) + '\\n');
+}
 const stall = () => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0);
 if (mode === 'stall') stall();
 if (mode === 'unsafe-stall') {
@@ -80,7 +152,7 @@ if (mode === 'unsafe-stall') {
 }
 if (mode === 'retry' && attempt === 1) stall();
 if (mode === 'out-of-scope') writeFileSync(join(root, 'coordinator-or-owner-foreign.html'), 'foreign write');
-else {
+else if (mode !== 'no-op') {
   mkdirSync(join(root, 'src', 'copy'), { recursive: true });
   if (mode === 'symlink-output') symlinkSync('../../.omd/owner-task.md', join(root, 'src', 'copy', 'index.html'));
   else if (mode === 'special-output') {
@@ -89,8 +161,10 @@ else {
   } else writeFileSync(join(root, 'src', 'copy', 'index.html'), '<!doctype html><title>Owned by omd-hand</title>');
   if (mode === 'omd-mutation') writeFileSync(join(root, '.omd', 'owner-forged-finalization.json'), 'forged');
 }
-process.stdout.write(JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: 'Production source and evidence written.' } }) + '\\n');
-process.stdout.write(JSON.stringify({ type: 'turn.completed', usage: {} }) + '\\n');
+if (mode !== 'task-complete-no-message') {
+  process.stdout.write(JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: 'Production source and evidence written.' } }) + '\\n');
+}
+process.stdout.write(JSON.stringify({ type: mode === 'task-complete' || mode === 'task-complete-no-message' ? 'task_complete' : 'turn.completed', usage: {} }) + '\\n');
 `);
 }
 
@@ -141,7 +215,7 @@ if (${JSON.stringify(operation)} === 'owner-wrong-mode') chmodSync(env.OMD_CODEX
 const timeout = ['stall', 'unsafe-stall', 'retry'].includes(process.env.OMD_TEST_OWNER_MODE) ? '10000' : '20000';
 const args = ${JSON.stringify(operation)} === 'mismatch'
   ? ['owner', 'run', '--agent', 'omd-eye', '--input', '.omd/owner-task.md', '--timeout-ms', timeout, '--json']
-  : ['owner', 'run', '--agent', 'omd-hand', '--input', '.omd/owner-task.md', '--timeout-ms', timeout, '--json'];
+  : ['owner', ${JSON.stringify(operation)} === 'repair-mode' ? 'repair' : 'run', '--agent', 'omd-hand', '--input', '.omd/owner-task.md', '--timeout-ms', timeout, '--json'];
 const launch = () => spawnSync(process.execPath, [process.env.OMD_TEST_OWNER_CLI, ...args], {
   cwd: process.env.OMD_TEST_OWNER_CWD || process.cwd(), encoding: 'utf8', env,
 });
@@ -227,7 +301,9 @@ async function launchOwner(input: Readonly<{
   operation?: string;
   ownerCwd?: string;
   throughCli?: boolean;
-}>): Promise<{ report: CoordinatorReport; argsReport: string; senpiMarker: string; hostResult: Awaited<ReturnType<typeof runCodexHostExec>>; cleanup: () => void }> {
+  roleModel?: string;
+  roleEffort?: 'low' | 'medium' | 'high';
+}>): Promise<{ report: CoordinatorReport; argsReport: string; alternateHostMarker: string; hostResult: Awaited<ReturnType<typeof runCodexHostExec>>; cleanup: () => void }> {
   const parent = join(input.root, '..');
   const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const reportPath = join(parent, `owner-coordinator-${id}.json`);
@@ -237,13 +313,13 @@ async function launchOwner(input: Readonly<{
   const codexHome = join(parent, `owner-codex-home-${id}`);
   mkdirSync(join(codexHome, 'agents'), { recursive: true });
   copyFileSync(join(ROOT, 'dist', 'codex', 'agents', 'omd-hand.toml'), join(codexHome, 'agents', 'omd-hand.toml'));
-  const senpiMarker = join(parent, `senpi-must-not-run-${id}`);
+  const alternateHostMarker = join(parent, `alternate-host-must-not-run-${id}`);
   const ownerRelease = join(parent, `owner-release-${id}`);
-  const senpiBinDirectory = join(parent, `senpi-eperm-${id}`);
-  mkdirSync(senpiBinDirectory);
-  executable(join(senpiBinDirectory, 'senpi'), `
+  const alternateHostBinDirectory = join(parent, `alternate-host-eperm-${id}`);
+  mkdirSync(alternateHostBinDirectory);
+  executable(join(alternateHostBinDirectory, 'pi'), `
 import { writeFileSync } from 'node:fs';
-writeFileSync(${JSON.stringify(senpiMarker)}, 'listen EPERM');
+writeFileSync(${JSON.stringify(alternateHostMarker)}, 'listen EPERM');
 console.error('listen EPERM: loopback unavailable');
 process.exit(1);
 `);
@@ -254,15 +330,20 @@ process.exit(1);
     OMD_OWNER_CODEX_BIN: nestedCodex,
     OMD_TEST_OWNER_MODE: input.mode,
     OMD_TEST_OWNER_ARGS: argsReport,
-    OMD_TEST_SENPI_MARKER: senpiMarker,
+    OMD_TEST_ALTERNATE_HOST_MARKER: alternateHostMarker,
     OMD_TEST_OWNER_RELEASE: ownerRelease,
-    PATH: `${senpiBinDirectory}:${process.env.PATH ?? ''}`,
+    ...(input.roleModel === undefined ? {} : { OMD_TEST_EXPECTED_ROLE_MODEL: input.roleModel }),
+    ...(input.roleEffort === undefined ? {} : { OMD_TEST_EXPECTED_ROLE_EFFORT: input.roleEffort }),
+    PATH: `${alternateHostBinDirectory}:${process.env.PATH ?? ''}`,
     ...(input.ownerCwd === undefined ? {} : { OMD_TEST_OWNER_CWD: input.ownerCwd }),
   };
   let hostResult: Awaited<ReturnType<typeof runCodexHostExec>>;
   if (input.throughCli === true) {
     cpSync(join(ROOT, 'dist', 'codex', 'skills'), join(codexHome, 'skills'), { recursive: true });
-    const launched = spawn(process.execPath, [OWNER_CLI, 'exec', '-C', input.root, 'launch owner'], {
+    const launched = spawn(process.execPath, [OWNER_CLI, 'exec', '-C', input.root,
+      ...(input.roleModel === undefined ? [] : ['--omd-role-model', `omd-hand=${input.roleModel}`]),
+      ...(input.roleEffort === undefined ? [] : ['--omd-role-effort', `omd-hand=${input.roleEffort}`]),
+      'launch owner'], {
       cwd: input.root,
       env: { ...launchEnv, CODEX_HOME: codexHome, OMD_CODEX_BIN: topCodex },
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -286,7 +367,10 @@ process.exit(1);
       ownerDirectory: cliReport.ownerDirectory, ownerReceiptPath: join(cliReport.ownerDirectory, 'result.json'),
     };
   } else {
-    hostResult = await runCodexHostExec(['exec', '-C', input.root, 'launch owner'], {
+    hostResult = await runCodexHostExec(['exec', '-C', input.root,
+      ...(input.roleModel === undefined ? [] : ['--omd-role-model', `omd-hand=${input.roleModel}`]),
+      ...(input.roleEffort === undefined ? [] : ['--omd-role-effort', `omd-hand=${input.roleEffort}`]),
+      'launch owner'], {
       codexBin: topCodex,
       packageRoot: ROOT,
       codexHome,
@@ -297,9 +381,9 @@ process.exit(1);
   }
   const report = JSON.parse(readFileSync(reportPath, 'utf8')) as CoordinatorReport;
   return {
-    report, argsReport, senpiMarker, hostResult,
+    report, argsReport, alternateHostMarker, hostResult,
     cleanup: () => {
-      for (const path of [reportPath, argsReport, topCodex, nestedCodex, codexHome, senpiMarker, ownerRelease, senpiBinDirectory]) rmSync(path, { recursive: true, force: true });
+      for (const path of [reportPath, argsReport, topCodex, nestedCodex, codexHome, alternateHostMarker, ownerRelease, alternateHostBinDirectory]) rmSync(path, { recursive: true, force: true });
     },
   };
 }
@@ -307,6 +391,22 @@ process.exit(1);
 function parsedResult(report: CoordinatorReport): Record<string, unknown> {
   assert.equal(report.status, 0, `${report.stderr}\n${report.stdout}`);
   return JSON.parse(report.stdout) as Record<string, unknown>;
+}
+
+async function pathAppears(path: string, timeoutMs = 1_000): Promise<boolean> {
+  if (existsSync(path)) return true;
+  return await new Promise<boolean>((resolve) => {
+    const observer = watch(dirname(path), (_event, filename) => {
+      if (filename !== path.slice(dirname(path).length + 1)) return;
+      clearTimeout(timer);
+      observer.close();
+      resolve(true);
+    });
+    const timer = setTimeout(() => {
+      observer.close();
+      resolve(existsSync(path));
+    }, timeoutMs);
+  });
 }
 
 test('RED hypothesis 1: workspace-write need not mkdir in the host run before authenticated owner production', async () => {
@@ -358,7 +458,7 @@ test('RED hypothesis 3: host broker alone persists the authenticated separate-se
     assert.deepEqual(result.sourceChanges, ['src/copy/index.html']);
     assert.match(String(result.resumeCommand), /^cd '.+' && codex exec resume 'session-1-/);
     assert.equal(readFileSync(join(root, 'src', 'copy', 'index.html'), 'utf8'), '<!doctype html><title>Owned by omd-hand</title>');
-    const observed = JSON.parse(readFileSync(run.argsReport, 'utf8')) as { args: string[]; role: string; activation: string; showStatus: number; showStderr: string; checkStatus: number; checkStderr: string };
+    const observed = JSON.parse(readFileSync(run.argsReport, 'utf8')) as { args: string[]; task: string; role: string; activation: string; showStatus: number; showStderr: string; checkStatus: number; checkStderr: string };
     assert.equal(observed.showStatus, 0, observed.showStderr);
     assert.equal(observed.checkStatus, 0, observed.checkStderr);
     assert.notEqual(observed.activation, run.report.activation, 'the separate owner session must receive its own delegated activation');
@@ -389,6 +489,12 @@ test('RED hypothesis 3: host broker alone persists the authenticated separate-se
     assert.equal(payload.expiresAt > payload.issuedAt, true);
     assert.equal(verify(null, Buffer.from(canonicalRouteJson(payload)), createPublicKey(readFileSync(run.report.publicKey)), Buffer.from(delegated.delegation.signature, 'base64')), true);
     assert.equal(observed.role, 'omd-hand');
+    assert.match(observed.task, /source-write transaction only/);
+    assert.match(observed.task, /CLI binding: every `omd` command/);
+    assert.ok(observed.task.includes(join(ROOT, 'bin', 'omd.ts')));
+    assert.match(observed.task, /Do not use bare `omd`/);
+    assert.match(observed.task, /Never invoke `omd render`, `omd ir`, `omd probe`, `omd lifecycle`, Playwright, browser-rs, or their aliases/);
+    assert.match(observed.task, /Browser observations and all \.omd evidence publication happen after this owner returns/);
     assert.equal(observed.args[0], 'exec');
     assert.equal(observed.args.includes('--json'), true);
     assert.deepEqual(observed.args.slice(0, 4), ['exec', '--json', '--sandbox', 'workspace-write']);
@@ -396,13 +502,45 @@ test('RED hypothesis 3: host broker alone persists the authenticated separate-se
     assert.equal(observed.args.includes('-m'), false);
     assert.equal(observed.args.includes('--listen'), false);
     assert.equal(observed.args.includes('app-server'), false);
-    assert.equal(existsSync(run.senpiMarker), false, 'Codex owner transport must not try the Senpi loopback fallback');
+    assert.equal(existsSync(run.alternateHostMarker), false, 'Codex owner transport must not try an alternate-host loopback fallback');
     assert.equal(run.report.outerArgs[0], 'exec');
     assert.equal(run.report.outerArgs[1], '--add-dir');
     assert.equal(run.report.outerArgs.includes(run.hostResult.ownerDirectory), false, 'owner evidence is not added to the model-writable sandbox');
     assert.deepEqual(readdirSync(run.hostResult.ownerDirectory), ['result.json'], 'inner owner creates no host-side files or directories');
     assert.equal(statSync(run.hostResult.ownerReceiptPath).mode & 0o777, 0o400);
     assert.equal(existsSync(run.hostResult.authoritySocketPath), false);
+  } finally {
+    run.cleanup();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('host-owned Hand model and effort overrides reach only the signed production child configuration', async () => {
+  const root = project('omd-owner-role-override-');
+  const run = await launchOwner({
+    root,
+    mode: 'success',
+    roleModel: 'gpt-5.6-sol',
+    roleEffort: 'medium',
+  });
+  try {
+    assert.equal(run.hostResult.status, 0, run.hostResult.stderr);
+    const result = parsedResult(run.report);
+    const attempt = (result.attempts as Record<string, unknown>[])[0]!;
+    const observed = JSON.parse(readFileSync(run.argsReport, 'utf8')) as { args: string[] };
+    assert.equal(run.report.outerArgs.includes('--omd-role-model'), false);
+    assert.equal(run.report.outerArgs.includes('--omd-role-effort'), false);
+    assert.equal(observed.args[observed.args.indexOf('--model') + 1], 'gpt-5.6-sol');
+    assert.equal(observed.args.filter((arg) => arg.startsWith('model_reasoning_effort=')).length, 1);
+    assert.ok(observed.args.includes('model_reasoning_effort="medium"'));
+    assert.equal(result.modelArgumentOmitted, false);
+    assert.equal(result.model, 'gpt-5.6-sol');
+    assert.equal(result.modelReasoningEffort, 'medium');
+    assert.match(String(result.configurationSha256), /^[a-f0-9]{64}$/);
+    assert.equal(attempt.modelArgumentOmitted, false);
+    assert.equal(attempt.model, result.model);
+    assert.equal(attempt.modelReasoningEffort, result.modelReasoningEffort);
+    assert.equal(attempt.configurationSha256, result.configurationSha256);
   } finally {
     run.cleanup();
     rmSync(root, { recursive: true, force: true });
@@ -420,6 +558,37 @@ test('production owner cannot bypass repair after trusted observation exists', a
   try {
     assert.notEqual(run.report.status, 0);
     assert.match(`${run.report.stderr}\n${run.report.stdout}`, /OWNER_REPAIR_BYPASS/);
+    assert.equal(existsSync(join(root, 'src', 'copy', 'index.html')), false);
+  } finally {
+    run.cleanup();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('repair mode launches Hand for an external-mirror no-op after observation', async () => {
+  const root = project('omd-owner-repair-mirror-');
+  mkdirSync(join(root, '.omd', 'observation-v2'));
+  writeFileSync(join(root, '.omd', 'observation-v2', `sha256-${'a'.repeat(64)}.json`), '{}');
+  const run = await launchOwner({ root, mode: 'no-op', operation: 'repair-mode' });
+  try {
+    assert.equal(run.report.status, 0, `${run.report.stderr}\n${run.report.stdout}`);
+    const result = JSON.parse(run.report.stdout) as { result: string; attempts: unknown[] };
+    assert.equal(result.result, 'completed');
+    assert.equal(result.attempts.length, 1);
+  } finally {
+    run.cleanup();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('repair mode rolls back any Hand project mutation', async () => {
+  const root = project('omd-owner-repair-project-write-');
+  mkdirSync(join(root, '.omd', 'observation-v2'));
+  writeFileSync(join(root, '.omd', 'observation-v2', `sha256-${'a'.repeat(64)}.json`), '{}');
+  const run = await launchOwner({ root, mode: 'success', operation: 'repair-mode' });
+  try {
+    assert.notEqual(run.report.status, 0);
+    assert.match(`${run.report.stderr}\n${run.report.stdout}`, /OWNER_REPAIR_PROJECT_MUTATION/);
     assert.equal(existsSync(join(root, 'src', 'copy', 'index.html')), false);
   } finally {
     run.cleanup();
@@ -504,6 +673,128 @@ test('successful owner turns cannot retain .omd mutations', async () => {
   }
 });
 
+test('completed no-op ownership may bind existing in-scope source but not an empty project', async () => {
+  const existing = project('omd-owner-existing-source-');
+  mkdirSync(join(existing, 'src', 'copy'), { recursive: true });
+  writeFileSync(join(existing, 'src', 'copy', 'index.html'), '<main>already green</main>\n');
+  const accepted = await launchOwner({ root: existing, mode: 'no-op' });
+  try {
+    const result = parsedResult(accepted.report);
+    assert.equal(result.result, 'completed');
+    assert.deepEqual(result.sourceChanges, []);
+  } finally {
+    accepted.cleanup();
+    rmSync(existing, { recursive: true, force: true });
+  }
+
+  const empty = project('omd-owner-empty-no-op-');
+  const rejected = await launchOwner({ root: empty, mode: 'no-op' });
+  try {
+    assert.equal(rejected.report.status, 1);
+    const result = JSON.parse(rejected.report.stdout) as { failure?: string };
+    assert.equal(result.failure, 'OWNER_COMPLETED_WITHOUT_PRODUCTION_WRITE');
+  } finally {
+    rejected.cleanup();
+    rmSync(empty, { recursive: true, force: true });
+  }
+});
+
+test('production owner rejects and rolls back prohibited browser-render commands', async () => {
+  const root = project('omd-owner-prohibited-render-');
+  const run = await launchOwner({ root, mode: 'prohibited-render' });
+  try {
+    assert.equal(run.report.status, 1);
+    const result = JSON.parse(run.report.stdout) as { failure?: string };
+    assert.equal(result.failure, 'OWNER_PROHIBITED_PRODUCTION_TOOL:omd-render');
+    assert.equal(existsSync(join(root, 'src', 'copy', 'index.html')), false);
+  } finally {
+    run.cleanup();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('production owner permits the required source-safe no-log check', async () => {
+  const root = project('omd-owner-allowed-check-');
+  const run = await launchOwner({ root, mode: 'allowed-check' });
+  try {
+    const result = parsedResult(run.report);
+    assert.equal(result.result, 'completed');
+  } finally {
+    run.cleanup();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('production owner may audit forbidden tool names without being treated as executing them', async () => {
+  const root = project('omd-owner-forbidden-name-audit-');
+  const run = await launchOwner({ root, mode: 'forbidden-name-audit' });
+  try {
+    const result = parsedResult(run.report);
+    assert.equal(result.result, 'completed');
+  } finally {
+    run.cleanup();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('production owner still rejects an actual Playwright command', async () => {
+  const root = project('omd-owner-prohibited-playwright-');
+  const run = await launchOwner({ root, mode: 'prohibited-playwright' });
+  try {
+    assert.equal(run.report.status, 1);
+    const result = JSON.parse(run.report.stdout) as { failure?: string };
+    assert.equal(result.failure, 'OWNER_PROHIBITED_PRODUCTION_TOOL:playwright');
+    assert.equal(existsSync(join(root, 'src', 'copy', 'index.html')), false);
+  } finally {
+    run.cleanup();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('production owner accepts task_complete only with a final agent message and exit zero', async () => {
+  const root = project('omd-owner-task-complete-');
+  const run = await launchOwner({ root, mode: 'task-complete' });
+  try {
+    const result = parsedResult(run.report);
+    assert.equal(result.result, 'completed');
+  } finally {
+    run.cleanup();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('production owner rejects task_complete without a final agent message', async () => {
+  const root = project('omd-owner-task-complete-no-message-');
+  const run = await launchOwner({ root, mode: 'task-complete-no-message' });
+  try {
+    assert.equal(run.report.status, 1);
+    const result = JSON.parse(run.report.stdout) as { failure?: string };
+    assert.equal(result.failure, 'OWNER_RETRY_UNSAFE_PROJECT_MUTATION');
+    assert.equal(existsSync(join(root, 'src', 'copy', 'index.html')), false);
+  } finally {
+    run.cleanup();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('signed owner completion cannot race a surviving descendant project mutation', async () => {
+  const root = project('omd-owner-receipt-race-');
+  const lateMutation = join(root, '.omd', 'late-owner-mutation.json');
+  const run = await launchOwner({ root, mode: 'receipt-race' });
+  try {
+    const result = parsedResult(run.report);
+    assert.equal(result.result, 'completed');
+    assert.equal(
+      await pathAppears(lateMutation),
+      false,
+      'a descendant survived the signed execution receipt and mutated the project afterward',
+    );
+  } finally {
+    run.cleanup();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('symlink and special production outputs fail closed and are removed', async () => {
   for (const mode of ['symlink-output', 'special-output']) {
     const root = project(`omd-owner-${mode}-`);
@@ -552,7 +843,12 @@ test('owner mismatch, copied activation, and cross-project authority fail before
     }
     assert.match(runs[0]!.report.stderr, /OWNER_MISMATCH/);
     assert.match(runs[1]!.report.stderr, /OWNER_(?:ACTIVATION|HOST_BINDING)_INVALID/);
-    assert.equal(runs[2]!.report.status, 93, 'the cross-project coordinator must fail before owner launch');
+    assert.equal(runs[2]!.report.status, 1);
+    assert.match(
+      runs[2]!.report.stderr,
+      /OWNER_HOST_BINDING_INVALID/,
+      'the owner CLI must reject the cross-project binding before delegated production starts',
+    );
   } finally {
     for (const run of runs) run.cleanup();
     rmSync(first, { recursive: true, force: true });

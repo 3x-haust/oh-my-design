@@ -1,6 +1,7 @@
 {
   "schema": "adaptive-design-route-input-v1",
   "request": "Create a new medication-order review product with safe error recovery.",
+  "projectMode": "greenfield",
   "namedDependencies": [],
   "allowedPaths": ["src/medication/**"],
   "taskOutcome": {
@@ -106,13 +107,16 @@
   "strategyDecision": {
     "schema": "adaptive-strategy-decision-v1",
     "owner": "user-selected-model",
-    "roles": ["omd-framer", "omd-scout", "omd-composer", "omd-writer", "omd-hand", "omd-eye"],
+    "roles": ["omd-framer", "omd-scout", "omd-composer", "omd-sketch", "omd-writer", "omd-hand", "omd-eye"],
     "stages": [
       "frame",
+      "content-grain",
       "scout",
+      "reference-board",
       "safety-validation",
       "copy",
       "composition",
+      "candidate-generation",
       "production",
       "browser-evidence",
       "independent-review"
@@ -121,6 +125,7 @@
       { "id": "frame", "mode": "concurrent", "roles": ["omd-framer"] },
       { "id": "parallel-research-copy", "mode": "concurrent", "roles": ["omd-scout", "omd-writer"] },
       { "id": "composition", "mode": "concurrent", "roles": ["omd-composer"] },
+      { "id": "structural-candidates", "mode": "concurrent", "roles": ["omd-sketch"] },
       { "id": "production", "mode": "concurrent", "roles": ["omd-hand"] },
       { "id": "review", "mode": "concurrent", "roles": ["omd-eye"] }
     ],
@@ -145,11 +150,9 @@
       { "id": "domain", "reason": "The supplied clinical task and safety contracts already establish the bounded domain." },
       { "id": "depth", "reason": "The selected prototype method externalizes the unresolved safety-flow decisions." },
       { "id": "acquisition", "reason": "Discovery can target the named safety decisions without a separate acquisition artifact." },
-      { "id": "reference-board", "reason": "Measured decision evidence can flow directly to the selected composition work." },
       { "id": "reference-selection", "reason": "The route uses decision coverage rather than a candidate-board selection ritual." },
       { "id": "art-direction", "reason": "The restrained clinical surface has no unresolved expressive-direction decision." },
       { "id": "type-proof", "reason": "The restrained clinical system can use the existing verified type system." },
-      { "id": "candidate-generation", "reason": "Safety-flow alternatives are tested through the selected clinical prototype instead of a fixed visual candidate quota." },
       { "id": "image-first-draft", "reason": "The clinical route begins with validated safety outcomes rather than generated imagery." },
       { "id": "copy-repair-workflow", "reason": "This route authors initial clinical copy rather than repairing copy returned by a failed check." },
       { "id": "motion-one", "reason": "The restrained safety-critical task selects a static interaction contract." },

@@ -1,5 +1,6 @@
 {
   "schema": "adaptive-design-route-input-v1",
+  "projectMode": "existing",
   "request": "Fix the approved confirmation sentence on one existing screen.",
   "namedDependencies": [],
   "allowedPaths": ["src/copy/**"],
@@ -102,6 +103,7 @@
       { "id": "domain", "reason": "The existing named screen and terminology are already established." },
       { "id": "depth", "reason": "A one-line correction has no unresolved design-deliberation decision." },
       { "id": "frame", "reason": "The task changes no IA, flow, requirement, or screen boundary." },
+      { "id": "content-grain", "reason": "The copy-only request does not need content-morphology-driven composition." },
       { "id": "acquisition", "reason": "No reference acquisition is needed for unchanged structure and visuals." },
       { "id": "scout", "reason": "Reference discovery is explicitly skipped from sufficient existing evidence." },
       { "id": "reference-board", "reason": "No newly discovered reference evidence needs assembly." },

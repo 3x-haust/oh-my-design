@@ -15,6 +15,10 @@ import {
   isAdaptiveSourceSealRoute,
   type AdaptiveSourceSealRoute,
 } from './adaptive-inputs.ts';
+import {
+  type SourceBoundProofPath,
+  validateSourceBoundProofCurrentness,
+} from '../composition-contract/source-currentness.ts';
 
 export const SOURCE_SEAL_SCHEMA_VERSION = 1;
 
@@ -229,6 +233,12 @@ export function createSourceSeal(
   if (hasWorkflow && !hasAdaptiveRoute) throw new Error('WORKFLOW_ROUTE_REQUIRED: workflow source sealing requires an adaptive route');
   const route = hasAdaptiveRoute && invocation !== undefined ? createAdaptiveSourceSealRoute(root, invocation) : undefined;
   const workflow = hasWorkflow && invocation !== undefined ? createAdaptiveWorkflowSourceBinding(root, invocation) : undefined;
+  const proofPaths = ['.omd/type-proof.md', '.omd/composition.md']
+    .filter((path) => existsSync(join(root, path))) as SourceBoundProofPath[];
+  if (route !== undefined && proofPaths.length > 0) {
+    const findings = validateSourceBoundProofCurrentness(root, proofPaths);
+    if (findings.length > 0) throw new Error(`SOURCE_BOUND_PROOF_CURRENTNESS_RED:${JSON.stringify(findings)}`);
+  }
   const sources = listProductionSourceFiles(root).map((path) => ({
     path,
     sha256: hashBytes(readStableSourceFile(root, join(root, path))),
@@ -263,7 +273,48 @@ export function writeSourceSeal(rootInput: string, invocation: ProjectRunInvocat
   });
 }
 
-export function validateSourceSeal(rootInput: string, invocation?: ProjectRunInvocation): SourceSealFinding[] {
+function createContinuationSourceSeal(
+  root: string,
+  sealedAt: string,
+  route: AdaptiveSourceSealRoute,
+): SourceSealArtifact {
+  for (const receipt of [
+    route.pointer,
+    route.record,
+    route.sourcePointer,
+    route.sourceContract,
+    route.authority,
+  ]) {
+    const bytes = readStableSourceFile(root, join(root, receipt.path));
+    if (hashBytes(bytes) !== receipt.sha256) {
+      throw new Error(`adaptive route receipt changed after source seal: ${receipt.path}`);
+    }
+  }
+  const proofPaths = ['.omd/type-proof.md', '.omd/composition.md']
+    .filter((path) => existsSync(join(root, path))) as SourceBoundProofPath[];
+  if (proofPaths.length > 0) {
+    const findings = validateSourceBoundProofCurrentness(root, proofPaths);
+    if (findings.length > 0) {
+      throw new Error(`SOURCE_BOUND_PROOF_CURRENTNESS_RED:${JSON.stringify(findings)}`);
+    }
+  }
+  return {
+    schemaVersion: SOURCE_SEAL_SCHEMA_VERSION,
+    sealedAt,
+    inputs: adaptiveSourceSealInputHashes(route),
+    route,
+    sources: listProductionSourceFiles(root).map((path) => ({
+      path,
+      sha256: hashBytes(readStableSourceFile(root, join(root, path))),
+    })),
+  };
+}
+
+export function validateSourceSeal(
+  rootInput: string,
+  invocation?: ProjectRunInvocation,
+  continuationRoute?: AdaptiveSourceSealRoute,
+): SourceSealFinding[] {
   const root = resolve(rootInput);
   const path = join(root, '.omd', 'source-seal.json');
   if (!existsSync(path)) {
@@ -284,7 +335,9 @@ export function validateSourceSeal(rootInput: string, invocation?: ProjectRunInv
 
   let current: SourceSealArtifact;
   try {
-    current = invocation === undefined
+    current = continuationRoute !== undefined
+      ? createContinuationSourceSeal(root, sealed.sealedAt, continuationRoute)
+      : invocation === undefined
       ? createSourceSeal(root, sealed.sealedAt)
       : createSourceSeal(root, sealed.sealedAt, invocation);
   } catch (error) {

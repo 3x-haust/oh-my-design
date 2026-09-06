@@ -1,14 +1,25 @@
 import { createHash } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { artDirectionSha256, validateArtDirectionPointer, validateArtDirectionRecord } from '../art-direction/schema.ts';
 import { parseReferenceHandoffReceipt, validateDecisionBoundReferenceHandoffs } from '../ref/reference-handoff.ts';
 import { adaptiveRouteAuthorityBytes, adaptiveRouteAuthorityPath } from '../route/adaptive-route-authority.ts';
-import { adaptiveRouteRecordSha256, readPersistedRoute } from '../route/adaptive-route-persistence.ts';
-import { adaptiveSourceContractSha256, canonicalRouteJson } from '../route/adaptive-source-contract.ts';
+import {
+  ADAPTIVE_ROUTE_POINTER_SCHEMA,
+  ADAPTIVE_ROUTE_SOURCE_POINTER_SCHEMA,
+  readPersistedRoute,
+} from '../route/adaptive-route-persistence.ts';
+import { canonicalRouteJson } from '../route/adaptive-source-contract.ts';
 import type { AdaptiveRouteRecord } from '../route/adaptive-flow-domain.ts';
 import { intentLedgerSha256, validateIntentCurrentPointer, validateIntentLedger } from '../runtime/intent.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import { nodeStableProjectFileSystem, readStableProjectFile } from '../runtime/stable-project-file.ts';
+import { readCurrentCulturalDesignProfile } from '../locale/cultural-profile-files.ts';
+import {
+  REFERENCE_LOCALE_BINDING_EVIDENCE_PATH,
+  REFERENCE_LOCALE_BINDING_PATH,
+  validateReferenceLocaleBindingCurrentness,
+} from '../ref/reference-locale-binding.ts';
 
 export const ADAPTIVE_SOURCE_SEAL_ROUTE_SCHEMA = 'adaptive-source-seal-route-v1' as const;
 const SHA256 = /^[a-f0-9]{64}$/;
@@ -72,12 +83,36 @@ function currentArtDirection(root: string): readonly Receipt[] {
     receipt(root, '.omd/reference-handoffs/hand.json', 'hand reference handoff'),
   ]);
 }
-function stageBindings(root: string, record: AdaptiveRouteRecord, routeSha256: string, authoritySha256: string): readonly StageBinding[] {
+function stageBindings(
+  root: string,
+  record: AdaptiveRouteRecord,
+  routeSha256: string,
+  authoritySha256: string,
+  invocation: ProjectRunInvocation,
+): readonly StageBinding[] {
   return Object.freeze(APPROVED_INPUTS.map(([id, path]): StageBinding => {
     if (record.strategy.stages.includes(id)) {
-      const artifacts = path === null
+      let artifacts = path === null
         ? currentArtDirection(root)
         : Object.freeze([receipt(root, path, `${id} approved input`)]);
+      if (id === 'composition' && record.sourceContract.localeDesign?.decision === 'research') {
+        const locale = readCurrentCulturalDesignProfile(root, invocation);
+        const referenceBinding = record.strategy.stages.includes('reference-board')
+          && existsSync(resolve(root, '.omd/reference-board.json'))
+          ? validateReferenceLocaleBindingCurrentness(root)
+          : null;
+        artifacts = Object.freeze([
+          ...artifacts,
+          receipt(root, locale.profilePointerPath, 'cultural profile pointer'),
+          receipt(root, locale.profileRecordPath, 'cultural profile record'),
+          receipt(root, locale.projectionPointerPath, 'cultural projection pointer'),
+          receipt(root, locale.projectionRecordPath, 'cultural projection record'),
+          ...(referenceBinding === null ? [] : [
+            receipt(root, REFERENCE_LOCALE_BINDING_PATH, 'locale reference binding projection'),
+            receipt(root, REFERENCE_LOCALE_BINDING_EVIDENCE_PATH, 'locale reference binding evidence'),
+          ]),
+        ]);
+      }
       return Object.freeze({ id, status: 'selected', artifacts });
     }
     const skipped = record.strategy.skips.find((entry) => entry.id === id);
@@ -85,15 +120,47 @@ function stageBindings(root: string, record: AdaptiveRouteRecord, routeSha256: s
     return Object.freeze({ id, status: 'skipped', reason: skipped.reason, routeSha256, authoritySha256 });
   }));
 }
+function persistedPointer(
+  root: string,
+  path: '.omd/route.json' | '.omd/route-source.json',
+  schema: string,
+  prefix: 'route-records' | 'route-sources',
+): Readonly<{ record: string; sha256: string }> {
+  const value = json(root, path, `${prefix} pointer`);
+  if (!object(value) || Object.keys(value).length !== 3 || value.schema !== schema
+    || typeof value.record !== 'string' || typeof value.sha256 !== 'string'
+    || !SHA256.test(value.sha256)
+    || value.record !== `${prefix}/sha256-${value.sha256}.json`) {
+    throw new Error(`ADAPTIVE_SOURCE_POINTER_INVALID: ${path}`);
+  }
+  return Object.freeze({ record: value.record, sha256: value.sha256 });
+}
 
 export function createAdaptiveSourceSealRoute(root: string, invocation: ProjectRunInvocation): AdaptiveSourceSealRoute {
   const record = readPersistedRoute(root, invocation);
-  const routeSha256 = adaptiveRouteRecordSha256(record);
-  const sourceSha256 = adaptiveSourceContractSha256(record.sourceContract);
-  const authorityBytes = adaptiveRouteAuthorityBytes(record, routeSha256, invocation);
+  const routePointer = persistedPointer(
+    root,
+    '.omd/route.json',
+    ADAPTIVE_ROUTE_POINTER_SCHEMA,
+    'route-records',
+  );
+  const sourcePointer = persistedPointer(
+    root,
+    '.omd/route-source.json',
+    ADAPTIVE_ROUTE_SOURCE_POINTER_SCHEMA,
+    'route-sources',
+  );
+  const authorityRecord = record.sourceContractSha256 === sourcePointer.sha256
+    ? record
+    : Object.freeze({ ...record, sourceContractSha256: sourcePointer.sha256 });
+  const authorityBytes = adaptiveRouteAuthorityBytes(
+    authorityRecord,
+    routePointer.sha256,
+    invocation,
+  );
   const authoritySha256 = hash(authorityBytes);
-  const routePath = `.omd/route-records/sha256-${routeSha256}.json`;
-  const sourcePath = `.omd/route-sources/sha256-${sourceSha256}.json`;
+  const routePath = `.omd/${routePointer.record}`;
+  const sourcePath = `.omd/${sourcePointer.record}`;
   const authorityPath = `.omd/${adaptiveRouteAuthorityPath(authorityBytes)}`;
   return Object.freeze({
     schema: ADAPTIVE_SOURCE_SEAL_ROUTE_SCHEMA,
@@ -103,7 +170,7 @@ export function createAdaptiveSourceSealRoute(root: string, invocation: ProjectR
     sourceContract: receipt(root, sourcePath, 'adaptive route source contract'),
     authority: receipt(root, authorityPath, 'adaptive route authority'),
     selectedModel: record.selectedModel,
-    stages: stageBindings(root, record, routeSha256, authoritySha256),
+    stages: stageBindings(root, record, routePointer.sha256, authoritySha256, invocation),
   });
 }
 

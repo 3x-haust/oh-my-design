@@ -84,7 +84,10 @@ secondary, one accent — not three equals competing for attention.
 accent (CTAs, active states, critical notifications). This is not aesthetic orthodoxy — it
 is a reading law. Eye-tracking research (NN/g, "Visual Hierarchy and Attention") shows that
 equal colour distribution eliminates hierarchy: the eye cannot rank what weighs the same.
-The 60-30-10 split creates a reading order by making some things obviously heavier.
+The 60-30-10 split can create a reading order on marketing, editorial, and other broad
+compositions by making some things obviously heavier. It is not a universal product-UI ratio:
+task surfaces often need one dominant ground, several content surfaces sized by information
+architecture, and accent allocated by semantic state rather than area.
 
 Invert it and you get AI slop: the accent colour used for backgrounds, the dominant colour
 used for highlights. Everything reads as equally important, so nothing is important.
@@ -139,12 +142,11 @@ reads as native. Choose the temperature before choosing the accent, not after.
 
 ### Default ground and evidence threshold
 
-For a general product surface, the dominant 60% canvas defaults to true white (`#FFFFFF`).
-Near-white neutrals belong to the secondary 30% surface role rather than replacing the page
-background. This is not an absence of art direction: it protects content contrast,
-keeps large areas calm, and lets the secondary and accent roles carry identity without tinting
-every pixel. Build the 30% secondary role from restrained neutral or brand surfaces, then reserve
-the 10% accent for the primary action, selected state, and critical feedback.
+For a general product surface, the canvas defaults to true white (`#FFFFFF`).
+Near-white neutrals belong only to structurally secondary surfaces rather than replacing the page
+background. This is not an absence of art direction: it protects content contrast and keeps large
+areas calm. Allocate accent by semantic job — primary action, selection, focus, feedback, and
+critical state — rather than by a target percentage.
 
 Depart from the true-white dominant canvas only when explicit user preference, an established brand
 system, or subject-specific evidence makes a dark, tinted, or material ground meaningful. Words

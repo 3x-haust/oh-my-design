@@ -8,27 +8,38 @@
 
 [![OMD가 생성한 랜딩 페이지](docs/omd-landing.png)](https://3x-haust.github.io/oh-my-design/)
 
-위 랜딩 페이지는 OMD가 단일 원샷 프롬프트로 직접 생성한 결과물입니다 — 시각 출력은 손으로 다듬지 않았습니다. **[3x-haust.github.io/oh-my-design](https://3x-haust.github.io/oh-my-design/)** 에 배포되어 있으며, 소스는 [`example/`](example/) 에 있습니다.
+위 랜딩 페이지는 OMD가 단일 원샷 프롬프트로 직접 생성한 결과물입니다 — 시각 출력은 손으로 다듬지 않았습니다. **[3x-haust.github.io/oh-my-design](https://3x-haust.github.io/oh-my-design/)** 에 배포되어 있습니다.
 
 ## OMD란
 
 여기서 ‘사람처럼 디자인한다’는 것은 특정한 결과 스타일이 아니라 근거를 남기는 판단을 뜻합니다. 목표는 반복 가능한 프로세스이며, 결과는 차분할 수도 과감할 수도 익숙하거나 낯설 수도 있습니다. 일관되는 것은 결과의 생김새가 아니라 그 뒤에 남은 결정의 흐름입니다.
 
+콘셉트 탐색은 내용에서 출발합니다. 하나의 강한 아이디어로 화면 전체를 구성할 수 있고,
+서로 다른 안이 같은 브랜드 색을 사용할 수도 있습니다. 최종 페이지를 HTML과 CSS로 만들더라도
+시각 초안은 방향을 고르는 데 쓸 수 있습니다. 구현 가능한 안들의 실제 디자인과 과업 적합성을
+비교하며, 빌드나 초안 충실도 검사를 통과했다는 사실만으로 시각적 완성도를 판단하지 않습니다.
+
 Oh My Design(OMD)은 코딩 에이전트가 요청을 받자마자 완성 화면으로 뛰어드는 흐름을 막습니다. 어떤 문제를 푸는지 먼저 묻고, 근거를 기록하고, 글과 레이아웃을 분리하고, 익명 구조를 비교하고, 구현자의 의도를 모르는 리뷰어가 실제 렌더를 비평합니다.
 
-전체 흐름은 다음과 같습니다.
+전체 흐름은 모든 단계를 강제하는 체크리스트가 아니라 적응형입니다.
 
 ```text
-brief → evidence → copy → typography proof → composition contract → isolated structure → one production build
-      → rendered critique and interaction evidence → reframe
+outcome + facts + risk → selected methods and reasoned skips → one production build
+                       → real-surface interaction and visual evidence → causal repair or reframe
 ```
 
-OMD는 **Codex**와 **Claude Code** 안에서 동작합니다. 여섯 개의 사용자용 스킬, 아홉 개의 내부 파이프라인 에이전트, 로컬 `omd` CLI, 디자인 이론·레시피 팩, 그리고 `.omd/` 아래의 내구 프로젝트 기록을 제공합니다.
+과업 중심 제품 작업은 과업 흐름 벤치마크, 시맨틱 진입 표면 계약, 소스에 결속된 브라우저
+계획을 선택할 수 있고, 마케팅 작업은 다른 근거·카피·구성·모션 경로를 선택할 수 있습니다.
+두 경우 모두 사용자가 고른 모델을 유지합니다. 평가 selector는 호출자가 준 정답표가 아니라
+현재 과업 기록에서 유도하며, 정보가 부족한 그린필드 컨셉을 차별적으로 보이게 하려고 제품
+기능을 창작하지 않습니다.
+
+OMD는 **Codex**, **Claude Code**, 그리고 공개 **Pi extension API**를 구현한 호스트에서 동작합니다. 여섯 개의 사용자용 스킬, 아홉 개의 내부 파이프라인 에이전트, 로컬 `omd` CLI, 디자인 이론·레시피 팩, 그리고 `.omd/` 아래의 내구 프로젝트 기록을 제공합니다.
 
 ## 요구 사항
 
-- **Node.js 22.18 이상** (CLI가 TypeScript 진입점을 직접 실행합니다)
-- **Claude Code, Codex, 또는 둘 다** — 호스트 설정 디렉터리가 이미 존재해야 합니다
+- **Node.js 22.19 이상** (CLI가 TypeScript 진입점을 직접 실행합니다)
+- **Claude Code, Codex, 또는 Pi 호환 호스트**
 - 브라우저 공급자: 두 지원 플랫폼에서는 **browser-rs v0.1.10**을 우선 사용하고, 렌더·프로브·타이포그래피 증명을 위해 **Playwright + Chromium** 폴백을 유지합니다(아래 참고).
 
 ## 설치
@@ -45,6 +56,19 @@ omd doctor              # 런타임, Chromium, 프로젝트 쓰기 권한, 이�
 `oh-my-design install --host claude|codex` 로 install·doctor·uninstall 을 한 호스트로 한정할 수 있습니다. `uninstall` 은 `install` 이 한 일을 정확히 되돌리며, `.omd/` 디렉터리는 절대 건드리지 않습니다. 호스트 설치 뒤에는 browser-rs도 시도하고 `present`, `installed`, `unsupported`, `failed`를 보고합니다. browser-rs가 실패해도 정상 OMD/Playwright 호스트 설치를 롤백하지 않습니다.
 
 > 반드시 **스코프** 패키지 `@3xhaust/oh-my-design` 를 설치하세요. 스코프 없는 `oh-my-design` 은 무관한 다른 프로젝트입니다.
+
+### Pi 호환 호스트 — extension package
+
+OMD는 표준 Pi package입니다. Pi와 Senpi 같은 API 호환 fork는 동일한 extension과 canonical
+skill을 로드합니다. OMD가 Senpi 실행 파일을 탐색하거나 별도 프로세스로 실행하지 않습니다.
+
+```bash
+pi install npm:@3xhaust/oh-my-design
+```
+
+호환 fork에서는 그 호스트의 package 설치 명령에 같은 npm package를 전달합니다. Extension은
+프로젝트 doctor 검사용 `/omd`와 기존 OMD CLI를 구조화된 인자로 실행하는 `omd_cli` 도구를
+등록합니다. 공개 Pi extension/package API만 사용하며 fork 전용 API에는 의존하지 않습니다.
 
 ### Claude Code — 플러그인 마켓플레이스
 
@@ -63,6 +87,9 @@ cd oh-my-design
 npm install
 node bin/omd-install.ts install    # 감지된 호스트에 스킬+에이전트 복사
 node bin/omd.ts doctor
+
+# 전역 설치 없이 Pi에서 source extension을 시험합니다.
+pi -e ./extensions/omd.ts
 ```
 
 ### 브라우저 공급자와 Chromium (전역 설치 후)
@@ -117,7 +144,7 @@ brief blocks → fragment inventory → brick analysis → candidate assemblies
 → selected assembly → clean-room composite → production usage ledger → final provenance report
 ```
 
-인터페이스는 대화입니다. Codex/Claude는 후보 표와 최종 한/영 출처 표를 채팅에 직접 보여 줍니다. `omd-board` 실행 파일, DESIGN UI, HTML 보드, PNG 보드는 없습니다. `reference-board-v1`은 검증된 내부 `.omd/reference-board.json` 기록일 뿐이고, 패키지의 공개 bin은 `omd`, `oh-my-design`뿐입니다.
+인터페이스는 대화입니다. Codex/Claude는 후보 표와 최종 한/영 출처 표를 채팅에 직접 보여 줍니다. `omd-board` 실행 파일, DESIGN UI, HTML 보드, PNG 보드는 없습니다. 레퍼런스 보드는 검증된 내부 `.omd/reference-board.json` 기록이며, 패키지의 공개 bin은 `omd`, `oh-my-design`뿐입니다.
 
 대화 뒤에서 에이전트는 컴포넌트를 캡처하고, 근거를 검증하고, 채팅용 후보를 만들고, 사용자의 채팅 선택을 결속할 수 있습니다.
 
@@ -125,15 +152,21 @@ brief blocks → fragment inventory → brick analysis → candidate assemblies
 # 에이전트 내부 작업입니다. 사용자는 결과 Markdown을 채팅에서 검토합니다.
 omd ref add <url-or-local-page> --as <component> --selector '<css>' --blueprint --shot
 omd ref import-image ./local-fragment-input.json
+omd ref board --input candidate-assemblies.json
+# 시장 근거형 라우트는 출처가 제거된 슬롯-결정 binding도 만들고 검사합니다.
+omd ref locale-bind --input reference-locale-binding.json
+omd ref locale-bind-check
 omd ref check
 omd ref candidates
 omd ref select <candidate-id>
 omd ref check
 ```
 
-`omd ref candidates`는 출처 사이트/페이지, 캡처한 UI·이미지 부분, 제안 경로/컴포넌트, 가져올 점, 피할 점, 적용 방식을 담은 한국어 우선 Markdown 표를 출력합니다. 보드를 열지 않습니다. 선택은 검증된 원시 근거와 정제된 `reference-assembly-v1` 투영 양쪽의 해시에 결속됩니다.
+`omd ref candidates`는 출처 사이트/페이지, 캡처한 UI·이미지 부분, 제안 경로/컴포넌트, 가져올 점, 피할 점, 적용 방식을 담은 한국어 우선 Markdown 표를 출력합니다. 보드를 열지 않습니다. 선택은 검증된 원시 근거와 정제된 레퍼런스 조립 양쪽의 해시에 결속됩니다.
 
 ### 캡처, 클린룸 구성, 최종 추적성
+
+짧은 독립 컴포넌트 예제를 빈 페이지로 오인하지 않도록, 지정한 HTML 요소의 렌더 크기·표시 스타일·텍스트를 확인합니다. 이 확인이 시각적 품질 판정은 아닙니다. HTTP 403·서버 오류·봇 확인 화면은 계속 거부합니다.
 
 컴포넌트 부품은 selector로 범위를 정한 blueprint와 로컬 PNG입니다. Pinterest류 갤러리 및 유사 출처는 browser-rs로 **사용자가 지정한** 영역을 캡처하고 `omd ref import-image`가 그 로컬 PNG를 가져옵니다. 입력에는 절대 HTTP(S) `sourcePage`, 선택 `sourceImage`, 사람이 읽을 수 있는 `captureRegion`, 선택 `cropBox`, `licenseStatus`(`allowed`, `restricted`, `unknown`), 권리 메모, 시각 역할/원칙, 표준 provenance 시간이 기록됩니다. OMD는 원격 이미지를 스크래핑·핫링크·다운로드하거나 그 픽셀을 배포하지 않습니다.
 
@@ -143,9 +176,72 @@ composer는 정제된 선택 조립만 받습니다. 즉 전달 가능한 구조
 
 코드 근거가 있는 한/영 기능 감사, 공급자 한계, 검증 근거는 [`docs/lego-reference-audit.md`](docs/lego-reference-audit.md)를 참고하세요.
 
+## 실제 콘텐츠에 맞춘 디자인
+
+일반적인 `/ultradesign` 사용에는 스타일 용어가 필요 없습니다. 실제 자사 콘텐츠에 안정된
+형태가 있으면 OMD는 길이, 개수, 종횡비, 의미상 예외를 바탕으로 구성을 조정할 수 있습니다.
+결과에는 무엇이 그대로 유지됐는지와 데스크톱 및 모바일 근거 경로를 보여 주는 읽기 전용
+Fit Receipt가 포함됩니다. OMD는 원문 대신 해시, 프로젝트 상대 경로, 제한된 측정값을 저장하며,
+말하지 않은 취향을 추론하지 않습니다. 관련 CLI 명령은 전문가와 디버깅을 위한 표면일 뿐,
+일상 사용에 새 단계를 추가하지 않습니다.
+
+## 실제로 의도한 언어와 시장에 맞춘 디자인
+
+OMD는 로컬라이제이션을 문장 번역으로 보지 않고, 언어 코드를 국가 테마에 연결하지도 않습니다.
+대화 언어와 화면 로케일, 명시한 시장, 사용자와 과업, 도메인, 화면 유형, 브랜드 불변 조건을
+서로 분리합니다. `ja-JP`는 일본어 스크립트 역학의 근거가 될 수 있지만, 그 자체로 일본 시장의
+미감을 허가하지 않습니다. bare `zh`가 중국 본토로 조용히 바뀌지 않으며, `zh-CN`과 `zh-TW`도
+서로 다른 컨텍스트로 유지됩니다.
+
+일반적인 `/ultradesign` 사용에서는 화면 언어와 의도한 시장·사용자를 알려 주면 됩니다. 시장이나
+사용자에 대한 권한 있는 정보가 빠졌다면 OMD가 한 번의 집중 질문을 하고, 그래도 해결되지 않으면
+그 리서치 경로를 중단합니다. 언어 역학 전용 경로는 실제 대상 언어 카피와 타입 역학을 검사하지만
+문화 적합성을 주장하지 않습니다. 시장 근거형 경로는 명명된 결정마다 최신 표준, 동일 과업의
+글로벌 대응 표면 또는 정확한 부재, 목표 시장의 현지 1차 카테고리 근거, 반례를 모읍니다.
+`supported`/`shared` 메커니즘만 보존하고, 충돌은
+`contested`, 근거 부족은 시각 규칙이 아닌 `unknown`으로 남깁니다.
+비교 근거는 이름이 같은 기관의 일반 홈페이지가 아니라, 동일한 과업이나 카테고리를 제공하는
+표면이어야 합니다. 대응 표면의 부재는 신뢰 범위를 낮출 뿐, 근거 수렴에 찬성표를 주지 않습니다.
+
+전문가·디버깅용 표면입니다. 이 블록은 독립 quickstart가 아닙니다. 현재 라우트가 선택한 명령만
+실행합니다. 호스트 런처가 `OMD_ACTIVATION_PATH`를 제공하고, 각 `omd schema` 명령은 입력 골격을
+출력하며, source capture는 선언된 근거 출처마다 한 번씩 반복합니다.
+
+```sh
+omd schema locale-design-context
+omd locale plan --input .omd/locale-design-context.json --json
+omd route classify --input .omd/.cache/route-input.json \
+  --locale-context .omd/locale-design-context.json \
+  --activation "$OMD_ACTIVATION_PATH"
+omd locale source-capture --url https://example.org/current-source \
+  --activation "$OMD_ACTIVATION_PATH" --json
+omd locale profile --publish --input cultural-profile.json \
+  --activation "$OMD_ACTIVATION_PATH" --json
+omd locale profile-check --activation "$OMD_ACTIVATION_PATH" --json
+omd schema reference-locale-binding
+omd ref locale-bind --input reference-locale-binding.json --json
+omd ref locale-bind-check --json
+```
+
+프로필과 정제된 투영은 콘텐츠 주소화되며, 현재 출처 바이트, 대상 언어 타이포 증명, 라우트
+컨텍스트, 브랜드 불변 조건에 결속됩니다. 프로덕션 역할은 출처 URL이나 국가 스타일 프롬프트가
+아니라 출처가 제거된 투영만 받습니다. 에이전트 리뷰가 말할 수 있는 것은 근거 기반 적응까지입니다.
+명시된 목표 사용자 집단의 실제 구성원에게 독립적인 블라인드 평가를 복수로 받지 않았다면, OMD는 결과가 문화적으로
+토착적이거나 선호된다고 주장하지 않습니다.
+
+시장 근거형 라우트가 레퍼런스 보드도 사용한다면 locale binding이 마지막 연결을 닫습니다.
+각 현지 레퍼런스 슬롯은 자신이 구현하는 정확한 `supported` 또는 `shared` 프로필 결정을
+지정해야 합니다. 긍정적 전달에는 캡처된 현지 카테고리 컴포넌트가 필수이며 동일 과업의
+글로벌 출처를 함께 쓸 수 있습니다. anti-reference 전달에는 프로필이 인용한 반례가 필요합니다.
+`contested`와 `unknown` 결정은 조용히 디자인 규칙으로 바뀔 수 없습니다. Composer, Hand, Eye는
+출처가 제거된 슬롯-결정 투영만 봅니다. 출처 소유자 전용 ID와 캡처 해시는 이 downstream 역할에
+공개되지 않은 채 근거 기록에 남습니다.
+
 ## 휴먼 디자인 루프
 
-`omd-ultradesign` 이 다음 순서를 조율합니다.
+`omd-ultradesign` 은 아래 작업 중 해당되는 것만 조율합니다. 아래 목록은 전체 능력 지도이지
+보편적인 순서가 아닙니다. 적응형 라우트가 선택한 단계·방법, 의존 순서, 생략한 선택 항목의
+이유를 기록합니다.
 
 1. **프리플라이트** — 프로젝트 디렉터리를 고정하고, `omd doctor` 를 실행하고, 저장소를 점검하고, Figma 브리프는 `omd-figma` 로 라우팅합니다.
 2. **프레임** — 브리프를 캐물어 문제, 리프레임 가설, 주요 과업, 잦은 동작, 가장 비싼 오류를 근거와 함께 기록합니다.
@@ -155,7 +251,7 @@ composer는 정제된 선택 조립만 받습니다. 즉 전달 가능한 구조
 6. **블라인드 카피 리뷰** — 새 리뷰어는 브리프·카피·사실 원장·보이스 근거만 보고, 렌더·코드·레이아웃·근거·작성자는 보지 못합니다.
 7. **블라인드 타이포그래피 증명** — typesetter가 실제 카피 시편을 1280×900, 390×844에서 레이아웃 중립으로 렌더하고, 새 eye가 페이지 구조나 근거 없이 검토한 뒤 typesetter가 수정·재렌더합니다.
 8. **의도적 구성** — 새 composer가 경험의 축, 하나의 지배적 초점, 매스·리듬, 합당한 메커니즘 캐리어 또는 명시적 대안, 반응형 재구성, 후보 축을 정의합니다. `omd composition --check` 가 입력 신선도를 검증합니다.
-9. **구조적 발산** — 격리된 에이전트들이 동일한 컴포지션 계약을 받아 각 후보에 대해 고정 데스크톱/모바일과 보조 전체 페이지 연속성 증거를 렌더합니다.
+9. **구조적 발산** — 격리된 에이전트들이 동일한 컴포지션 계약을 받습니다. 일반 경로에서는 각 후보의 고정 데스크톱/모바일과 보조 전체 페이지 연속성 증거를 직접 렌더합니다. 정확한 후보 모션 장면이 호스트 근거 전용 계약을 사용하면 sketch는 그 하나의 프리프로덕션 장면만 구현하고, 모든 증거와 영수증은 호스트가 독립적으로 캡처합니다.
 10. **블라인드 선택** — 새 selector가 고정된 여덟 개 0–4 차원을 채점하고, 계약 위반이나 2 미만인 차원을 거부하며, 폴드 위의 폼을 CTA 도달과 동일시하지 않습니다.
 11. **한 번 구현** — 선택된 하나의 구조가 프로덕션 구현이 됩니다. builder는 또 다른 후보 집합을 만들지 않습니다.
 12. **구현 중 성찰** — builder가 시맨틱 체크포인트를 기록하고, 선택된 데스크톱/모바일 컨테이너에서 타입을 다시 증명한 뒤, 선택적 모션 전에 비주얼 체크포인트를 기록합니다.
@@ -181,15 +277,33 @@ Figma 파일과 명시적 시각 타깃은 이미 구조적 결정을 제공하�
 
 ## 내부 파이프라인 에이전트
 
-아홉 개의 에이전트는 루프의 구현 세부이며 공개 명령이 아닙니다. 구체적 모델을 고정하지 않고, 각자 세션에 선택된 모델을 상속합니다.
+아홉 개의 에이전트는 루프의 구현 세부이며 공개 명령이 아닙니다. 구체적 모델을 고정하지 않습니다. 기본적으로 사용자가 설정한 모델과 소스에 선언된 effort 단계를 사용합니다.
+
+Codex 호스트 실행 한 번에 한해, 패키지 기본값을 바꾸지 않고 공식 역할별 모델과
+`low`, `medium`, `high` effort를 사용자가 지정할 수 있습니다.
+
+```bash
+omd-codex exec -C /path/to/project \
+  --model gpt-6-astra -c 'model_reasoning_effort="medium"' \
+  --omd-role-model omd-eye=gpt-5.6-sol \
+  --omd-role-effort omd-eye=high \
+  --omd-role-model omd-hand=gpt-5.6-sol \
+  --omd-role-effort omd-hand=medium \
+  '$omd-ultradesign continue the current route'
+```
+
+매핑할 역할마다 두 호스트 전용 옵션을 반복합니다. 런처는 코디네이터를 시작하기 전에
+이 비공개 옵션을 제거하고 현재 실행에 결속하며, 브로커만 매핑된 자식에 적용합니다.
+매핑되지 않은 역할은 계속 모델 인자를 생략하고 에이전트 프로필의 effort를 유지합니다.
+`omd-codex role run`과 `omd-codex owner run`은 이 옵션을 받지 않습니다.
 
 | 에이전트 | 책임 | 쓰기 경계 |
 | --- | --- | --- |
 | `omd-framer` | 브리프를 캐묻고 근거 기반 프레임을 기록합니다. | 읽기 전용. frame CLI로 기록. |
 | `omd-scout` | 파이프라인 커버리지를 위한 측정 근거를 리서치합니다. | 읽기 전용. reference CLI로 기록. |
-| `omd-writer` | 카피 덱과 사실 원장을 쓰거나 수리합니다. | `.omd/copy-deck.md` 만. |
-| `omd-typesetter` | 구조 이전의 실제 카피 타이포그래피 증명을 만들고 수정합니다. | `.omd/type-proof.md` 와 `.omd/.cache/type-proof/`. |
-| `omd-composer` | 정제된 근거를 발산 전 신선한 컴포지션 계약으로 변환합니다. | `.omd/composition.md` 만. |
+| `omd-writer` | 카피 덱과 사실 원장을 쓰거나 수리합니다. | `.omd/copy-deck.md`만 직접 수정. |
+| `omd-typesetter` | 구조 이전의 실제 카피 타이포그래피 증명을 만들고 수정합니다. | `.omd/type-proof.md`와 `.omd/.cache/type-proof/` 직접 수정. |
+| `omd-composer` | 정제된 근거를 발산 전 신선한 컴포지션 계약으로 변환합니다. | `.omd/composition.md`만 직접 수정. |
 | `omd-sketch` | 실제 카피가 담긴 격리된 그레이스케일 구조 후보 하나를 만듭니다. | 자신의 캐시 후보 디렉터리만. |
 | `omd-hand` | 선택된 구조를 구현하고 두 개의 크래프트 체크포인트를 기록합니다. | 프로덕션 저장소와 선언된 OMD 기록. |
 | `omd-glance` | 스퀸트 렌더만으로 위계를 보고합니다. | 쓰기 없음. |
@@ -207,7 +321,7 @@ Claude Code는 에이전트 메타데이터에 선언된 거부 도구를 강제
 | 블라인드 카피 리뷰 | 리뷰 핸드오프 | 리뷰어는 렌더·소스·레이아웃·프레임·결정·작성자를 볼 수 없고 덱을 편집하지 않습니다. writer가 리뷰를 반영한 뒤 `omd copy --check` 를 다시 실행합니다. |
 | 타이포그래피 증명 | `.omd/type-proof.md`; 시편은 `.omd/.cache/type-proof/` | 실제 대상 언어 카피가 역할, 출처/라이선스, 글리프 커버리지, 요청/계산된 패밀리·굵기, 축, 폴백/로딩, 줄바꿈/잘림, 거부된 대안을 두 뷰포트에서 증명합니다. 브라우저 증거는 각 글리프에 쓰인 물리적 폰트를 식별하지 못합니다. |
 | 컴포지션 계약 | `.omd/composition.md` | 클린룸 composer가 정제된 근거를 받아 초점, CTA 경로, 메커니즘 캐리어/대안, 반응형 관계를 정의하며 폴드 위의 사진이나 폼을 요구하지 않습니다. 정확한 해시가 오래된 입력을 실패시킵니다. |
-| 구조 스케치 | `.omd/.cache/sketches/<id>/` | 각 후보는 고정 1280×900, 390×844 수용 렌더와 전체 페이지 데스크톱/모바일 연속성 증거를 제공합니다. 전체 페이지 캡처는 의존성/리듬만 알려줍니다. |
+| 구조 스케치 | `.omd/.cache/sketches/<id>/` | 각 후보는 일반적으로 고정 1280×900, 390×844 수용 렌더와 전체 페이지 데스크톱/모바일 연속성 증거를 제공합니다. 명시적 호스트 근거 전용 장면 계약에서는 Sketch가 후보 소스만 쓰고, 모든 렌더·영수증·광학 기록·검사·패킷은 호스트가 소유합니다. 전체 페이지 캡처는 의존성/리듬만 알려줍니다. |
 | 블라인드 선택 | `.omd/taste/preferences.jsonl` | selector는 익명 렌더와 정제된 과업 맥락만 보고, 후보 근거나 작성자는 보지 못합니다. `omd choose` 가 선택된 후보와 이유를 에이전트 선택으로 저장합니다. |
 | 프로덕션 빌드 | 저장소 소스 | 하나의 builder가 선택된 하나의 구조를 구현하고 카피 덱을 보존합니다. 구현 이유는 `.omd/decisions.md` 의 `omd decision` 항목으로 별도 기록됩니다. |
 | 프로덕션 근거 | `.omd/attribution.md` | builder가 출하된 토큰·모션·컴포지션·그래픽의 출처를 기록합니다. |
@@ -240,6 +354,7 @@ OMD는 결정적 검사와 렌더 리뷰를 결합합니다.
 | 계약 | `omd copy --check` 는 덱 구조와 사실 참조를 검증합니다. `omd composition --check` 는 컴포지션 섹션과 입력 신선도를 검증합니다. `omd source --seal/--check` 는 시맨틱 충실도 주장 없이 최종 승인 입력/소스 바이트를 검증합니다. `omd design --check` 는 디자인 계약 커버리지를 검증합니다. |
 | 타이포그래피 증명 | 레이아웃 중립 데스크톱/모바일 시편이 스케치 전에 실행되고, 선택 컨테이너 재증명이 시맨틱 구조 이후·비주얼 체크포인트 이전에 실행됩니다. 카피, 폰트/파일, 굵기/축, 컨테이너 폭 변경이 증명을 무효화합니다. |
 | 렌더 근거 | `omd render` 는 기본으로 정확한 뷰포트를 캡처합니다. `--full-page` 는 보조 연속성 근거, `--squint` 는 그레이스케일·블러로 위계를 분리, `--filmstrip` 은 로드 시점 프레임을 캡처합니다. |
+| 후보 승인 | `omd optical --input <raw.json> --json` 은 사각형 수집기와 독립적으로 저장된 원시 멤버 사각형에서 잘린 Q/I 합집합을 다시 계산합니다. `omd packet --check --input <packet.json> --json` 은 익명 리뷰 전에 모든 고정/전체 렌더, 완전한 캡처 영수증 투영, 뒤따르는 줄바꿈 없이 바이트가 정확히 `[]` 인 검사, 광학 보고서, 인터랙션 투영을 다시 해시하고 의미까지 검증합니다. |
 | 인터랙션 | `omd probe` 는 선언된 안전한 로컬 계획만 실행하고 기대·탭 순서 실패를 보고합니다. |
 | 소스 후보 | `omd slop scan [root] [--json]` 은 지원되는 프로덕션 소스를 쓰지 않고 읽습니다. 후보는 맥락적 분류가 필요하며 `omd check` 경고·점수·작성자 주장이 아닙니다. |
 | 디자인 린트 | `omd check` 는 `system`, `a11y`, `slop`, `motion`, `ux` 조건을 평가합니다. 대비·터치 영역 규칙은 오류이고, slop과 기타 품질 하한 규칙은 그렇게 작성된 경우 경고입니다. 어떤 발견이든 1로 종료하므로 CI에서 쓸 수 있습니다. |
@@ -269,7 +384,7 @@ slop 발견은 품질 하한이자 경고이며, 디자인이 AI로 생성되었
 
 - `frame.md`, `copy-deck.md`, `type-proof.md`, `composition.md`, `source-seal.json`, `design.md`, `decisions.md`
 - `attribution.md`, `motion-spec.md`, `craft.jsonl`, `config.json`
-- `refs/*.json`, `reference-board.json`, `reference-selection.json`, `reference-composite-lineage.json`, `reference-usage.json`, `reference-report.md`, 선언된 `probes/*.json`, `taste/preferences.jsonl`, `history.jsonl`
+- `refs/*.json`, `reference-board.json`, `reference-locale-binding.json`, `reference-locale-binding-evidence.json`, `reference-selection.json`, `reference-composite-lineage.json`, `reference-usage.json`, `reference-report.md`, 선언된 `probes/*.json`, `taste/preferences.jsonl`, `history.jsonl`
 
 생성된 IR, 렌더, 필름스트립, 스케치 후보, 프로브 결과, 스크래치 출력은 `.omd/.cache/` 아래에 있으며, 캐시를 지워도 디자인 의도가 사라지면 안 됩니다. `oh-my-design uninstall` 은 설치된 OMD 파일과 설정 변경을 제거하되 프로젝트의 `.omd/` 디렉터리는 보존합니다.
 
@@ -305,6 +420,8 @@ omd ref add <url|file> --as <component> [--selector "css"] [--image] [--blueprin
 omd ref list  |  omd ref distance <page> [--selected [--gate]] [--json]
 omd ref principles <source> --as <component> --add "..."
 omd ref show <source> --as <component>
+omd ref board --input candidate-assemblies.json
+omd ref locale-bind --input reference-locale-binding.json  |  omd ref locale-bind-check [--json]
 omd ref check [manifest] [--json]
 omd ref import-image <input.json> [--json]
 omd ref candidates [manifest]                 # 채팅용 한국어 우선 Markdown, 보드 UI 없음

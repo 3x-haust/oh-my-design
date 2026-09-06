@@ -127,27 +127,3 @@ test('the preload bridge globals are read from the built preload', () => {
   const web = project({ name: 'site' });
   assert.deepEqual([...bridgeGlobals(web, detectAppShell(web))], []);
 });
-
-// Senpi keeps no plugin cache, so the Codex uninstall path removed none of its OMD install and
-// still reported success.
-test('uninstalling Senpi removes its skills, roles, pack, and host contract only', async () => {
-  const { uninstall } = await import('../core/install/install.ts');
-  const home = mkdtempSync(join(tmpdir(), 'omd-senpi-home-'));
-  mkdirSync(join(home, 'skills', 'omd-ultradesign'), { recursive: true });
-  mkdirSync(join(home, 'skills', 'my-own-skill'), { recursive: true });
-  mkdirSync(join(home, 'omd-agents'), { recursive: true });
-  mkdirSync(join(home, 'omd-pack', 'theory'), { recursive: true });
-  writeFileSync(join(home, 'omd-agents', 'omd-hand.md'), 'role');
-  writeFileSync(join(home, 'omd-host.json'), '{}');
-  writeFileSync(join(home, 'settings.json'), '{"keep":true}');
-
-  const changes = uninstall([{ host: 'senpi', home }], { keepBrowser: true });
-  assert.equal(existsSync(join(home, 'skills', 'omd-ultradesign')), false);
-  assert.equal(existsSync(join(home, 'omd-agents')), false);
-  assert.equal(existsSync(join(home, 'omd-pack')), false);
-  assert.equal(existsSync(join(home, 'omd-host.json')), false);
-  // the user's own skill and settings survive, and a scoped uninstall keeps the shared browser
-  assert.equal(existsSync(join(home, 'skills', 'my-own-skill')), true);
-  assert.equal(readFileSync(join(home, 'settings.json'), 'utf8'), '{"keep":true}');
-  assert.ok(changes.some((line) => /browser-rs: kept/.test(line)), changes.join('\n'));
-});

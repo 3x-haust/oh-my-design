@@ -12,7 +12,8 @@ export type AdaptiveStageNode = Readonly<{
 export type AdaptiveStageGraph = Readonly<Record<AdaptiveStageId, AdaptiveStageNode>>;
 
 export const ADAPTIVE_STAGE_OWNERS = Object.freeze({
-  domain: 'coordinator', depth: 'coordinator', frame: 'omd-framer', acquisition: 'omd-framer',
+  domain: 'coordinator', depth: 'coordinator', frame: 'omd-framer',
+  'content-grain': 'omd-framer', acquisition: 'omd-framer',
   scout: 'omd-scout', 'reference-board': 'omd-scout', 'reference-selection': 'coordinator',
   'art-direction': 'coordinator', copy: 'omd-writer', 'type-proof': 'omd-typesetter',
   composition: 'omd-composer', 'candidate-generation': 'omd-sketch',
@@ -24,6 +25,7 @@ export const ADAPTIVE_STAGE_GRAPH = Object.freeze({
   domain: { prerequisites: [], afterIfSelected: [] },
   depth: { prerequisites: [], afterIfSelected: [] },
   frame: { prerequisites: [], afterIfSelected: ['domain'] },
+  'content-grain': { prerequisites: ['frame'], afterIfSelected: [] },
   acquisition: { prerequisites: ['frame'], afterIfSelected: [] },
   scout: { prerequisites: [], afterIfSelected: ['acquisition'] },
   'reference-board': { prerequisites: ['scout'], afterIfSelected: [] },
@@ -33,12 +35,14 @@ export const ADAPTIVE_STAGE_GRAPH = Object.freeze({
   'type-proof': { prerequisites: ['copy'], afterIfSelected: [] },
   composition: {
     prerequisites: ['frame', 'copy'],
-    afterIfSelected: ['scout', 'reference-selection', 'art-direction', 'type-proof'],
+    afterIfSelected: [
+      'content-grain', 'scout', 'reference-selection', 'art-direction', 'type-proof',
+    ],
   },
   'candidate-generation': { prerequisites: ['composition'], afterIfSelected: [] },
   'safety-validation': { prerequisites: [], afterIfSelected: [] },
   production: { prerequisites: [], afterIfSelected: [
-    'domain', 'depth', 'frame', 'acquisition', 'scout', 'reference-board',
+    'domain', 'depth', 'frame', 'content-grain', 'acquisition', 'scout', 'reference-board',
     'reference-selection', 'art-direction', 'copy', 'type-proof', 'composition',
     'candidate-generation', 'safety-validation',
   ] },

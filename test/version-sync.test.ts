@@ -31,3 +31,10 @@ test('codex .codex-plugin/plugin.json and .agents/plugins/marketplace.json versi
   assert.equal(codexMarketplace.version, pkg.version, '.agents/plugins/marketplace.json top-level version must match package.json');
   assert.equal(codexMarketplace.plugins[0]!.version, pkg.version, '.agents/plugins/marketplace.json plugins[0].version must match package.json');
 });
+
+test('release automation stays manual and paused until an explicit owner request', () => {
+  const workflow = readFileSync(join(root, '.github', 'workflows', 'release.yml'), 'utf8');
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.match(workflow, /if: \$\{\{ false \}\}/);
+  assert.doesNotMatch(workflow, /push:\s*\n\s*branches:/);
+});

@@ -14,6 +14,7 @@ import {
   type AdaptiveSourceContract,
 } from './adaptive-flow-domain.ts';
 import { routeReferenceDiscovery, type ReferenceDiscoveryInput } from '../ref/reference-discovery-routing.ts';
+import { parseLocaleDesignRoute, type LocaleDesignRoute } from '../locale/design-context.ts';
 
 function canonicalObject(value: object): string {
   const entries: string[] = [];
@@ -62,10 +63,15 @@ function modelSource(input: AdaptiveRouteInput): Readonly<{ now: number; routing
   });
 }
 
-export function adaptiveSourceContract(input: AdaptiveRouteInput): AdaptiveSourceContract {
+export function adaptiveSourceContract(
+  input: AdaptiveRouteInput,
+  localeDesign?: LocaleDesignRoute,
+): AdaptiveSourceContract {
+  const parsedLocaleDesign = localeDesign === undefined ? undefined : parseLocaleDesignRoute(localeDesign);
   return Object.freeze({
     schema: ADAPTIVE_SOURCE_CONTRACT_SCHEMA,
     request: input.request,
+    projectMode: input.projectMode,
     namedDependencies: input.namedDependencies,
     allowedPaths: input.allowedPaths,
     taskOutcome: parseTaskOutcomeContract(input.taskOutcome),
@@ -77,6 +83,7 @@ export function adaptiveSourceContract(input: AdaptiveRouteInput): AdaptiveSourc
     browserDecisionContext: input.browserDecisionContext,
     validatedLearningContext: input.validatedLearningContext,
     strategyDecision: input.strategyDecision,
+    ...(parsedLocaleDesign === undefined ? {} : { localeDesign: parsedLocaleDesign }),
   });
 }
 
@@ -84,6 +91,7 @@ export function sourceContractRouteInput(source: AdaptiveSourceContract): Adapti
   return Object.freeze({
     schema: ADAPTIVE_ROUTE_INPUT_SCHEMA,
     request: source.request,
+    projectMode: source.projectMode,
     namedDependencies: source.namedDependencies,
     allowedPaths: source.allowedPaths,
     taskOutcome: source.taskOutcome,

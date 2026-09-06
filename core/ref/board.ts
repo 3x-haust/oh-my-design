@@ -38,6 +38,16 @@ const componentPiece = (root: string, piece: Extract<ReferenceBoardPiece, { read
   if (reference.blueprint === undefined || reference.blueprint.selector !== reference.selector) fail(`reference ${piece.referenceId} is missing a matching blueprint`);
   const imagePath = reference.imagePath;
   if (imagePath === undefined || imagePath.trim() === '') throw new ReferenceBoardResolutionError(`reference ${piece.referenceId} is missing its imagePath`);
+  if (piece.binding !== undefined) {
+    if (reference.slot !== piece.binding.zoneId) fail(`reference ${piece.referenceId} was not captured for acquisition zone ${piece.binding.zoneId}`);
+    const viewport = reference.viewport ?? fail(`reference ${piece.referenceId} is missing a valid captured viewport`);
+    if (!Number.isInteger(viewport.width) || !Number.isInteger(viewport.height) || viewport.width < 1 || viewport.height < 1) {
+      fail(`reference ${piece.referenceId} is missing a valid captured viewport`);
+    }
+    if (viewport.width !== piece.binding.sourceViewport.width || viewport.height !== piece.binding.sourceViewport.height) {
+      fail(`reference ${piece.referenceId} captured viewport does not match binding.sourceViewport`);
+    }
+  }
   return { ...piece, reference, imagePath: trustedComponentCaptureImage(root, imagePath), transfer: componentCaptureTransfer(reference, piece.referenceId) };
 };
 const classifiedPiece = (piece: Extract<ReferenceBoardPiece, { readonly sourceKind: 'classified-reference' }>, references: ReadonlyMap<string, Reference>): ResolvedClassifiedReferencePiece => {
@@ -76,7 +86,8 @@ export function resolveReferenceBoard(root: string, manifest: ReferenceBoardMani
   const candidates: ResolvedReferenceBoardCandidate[] = manifest.candidates.map((candidate) => ({ ...candidate, pieces: candidate.pieces.map((piece) => resolvePiece(root, piece, references, imageFragments)) }));
   return {
     schemaVersion: manifest.schemaVersion,
-    ...(manifest.schemaVersion === 'reference-board-v2' ? { projectSha256: manifest.projectSha256 } : {}),
+    ...(manifest.schemaVersion !== 'reference-board-v1' ? { projectSha256: manifest.projectSha256 } : {}),
+    ...(manifest.schemaVersion === 'reference-board-v3' ? { acquisitionSha256: manifest.acquisitionSha256, localeContextSha256: manifest.localeContextSha256 } : {}),
     frameSha256: manifest.frameSha256,
     candidates,
   };

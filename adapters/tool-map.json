@@ -1,7 +1,7 @@
 {
-  "fileWrite": { "codex": "apply_patch", "claude": "Write|Edit", "senpi": "write|edit|apply_patch" },
-  "shell": { "codex": "Bash", "claude": "Bash", "senpi": "bash" },
-  "pluginRoot": { "codex": "${PLUGIN_ROOT}", "claude": "$CLAUDE_PLUGIN_ROOT", "senpi": "$OMD_SENPI_ROOT" },
-  "agentFormat": { "codex": "toml", "claude": "md", "senpi": "md" },
-  "hookLayout": { "codex": "file-per-hook", "claude": "single-file", "senpi": "none" }
+  "fileWrite": { "codex": "apply_patch", "claude": "Write|Edit" },
+  "shell": { "codex": "Bash", "claude": "Bash" },
+  "pluginRoot": { "codex": "${PLUGIN_ROOT}", "claude": "$CLAUDE_PLUGIN_ROOT" },
+  "agentFormat": { "codex": "toml", "claude": "md" },
+  "hookLayout": { "codex": "file-per-hook", "claude": "single-file" }
 }

@@ -60,6 +60,27 @@ test('a label inside an interactive ancestor still counts, and content needs onl
   assert.deepEqual(checkFunctionalCompleteness(declared, nodes), []);
 });
 
+test('a wrapping label connects its text sibling to the keyboard-reachable control', () => {
+  const declared = validateFunctionalRequirements(requirements(
+    { id: 'R-1', kind: 'action', statement: 'Visitor confirms the entered details', label: '입력 내용을 확인했습니다.' },
+  ));
+  const wired = [
+    node({ id: 'label', name: 'label.checkbox', children: ['input', 'text'] }),
+    node({ id: 'input', parent: 'label', interactive: true, focusable: true }),
+    node({ id: 'text', text: '입력 내용을 확인했습니다.', parent: 'label' }),
+  ];
+  assert.deepEqual(checkFunctionalCompleteness(declared, wired), []);
+
+  const unrelated = [
+    node({ id: 'copy', text: '입력 내용을 확인했습니다.' }),
+    node({ id: 'elsewhere', interactive: true, focusable: true }),
+  ];
+  assert.deepEqual(
+    checkFunctionalCompleteness(declared, unrelated).map((finding) => finding.id),
+    ['FUNC-INERT'],
+  );
+});
+
 test('a form label with no interactive field nearby is reported as inert', () => {
   const declared = validateFunctionalRequirements(requirements({ id: 'R-1', kind: 'form', statement: 'Visitor submits an email', label: '이메일' }));
   const wired = [
@@ -113,8 +134,14 @@ test('the frame owner persists functional requirements through the canonical sta
   assert.match(stages, /requiredContracts: \['protocol\/human-design-loop\.md', 'theory\/ux\.md'\]/);
 
   const brief = readFileSync(fileURLToPath(new URL('../core/brief/index.ts', import.meta.url)), 'utf8');
-  assert.match(brief, /frame: \['functional-requirements'\]/);
+  assert.match(brief, /frame: \['functional-requirements', 'reality-ledger'\]/);
+  assert.match(brief, /'\.omd\/functional-requirements\.json'/);
   assert.match(brief, /omd complete check <page>/);
+
+  const writer = readFileSync(fileURLToPath(new URL('../src/agents/writer.agent.yaml', import.meta.url)), 'utf8');
+  const hand = readFileSync(fileURLToPath(new URL('../src/agents/hand.agent.yaml', import.meta.url)), 'utf8');
+  assert.match(writer, /`\.omd\/functional-requirements\.json`/);
+  assert.match(hand, /`\.omd\/functional-requirements\.json`/);
 });
 
 test('complete set validates before persisting and rejects an invalid list', () => {

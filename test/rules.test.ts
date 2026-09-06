@@ -42,7 +42,7 @@ test('loadRules rejects a rule with a duplicate id', () => {
 test('check finds exactly the seeded violations', () => {
   const v = check(ir, builtin);
   const ids = v.map((x) => x.id).sort();
-  assert.deepEqual(ids, ['CONTRAST-001', 'HIT-002', 'SPACING-001', 'TOKEN-003', 'TOKEN-003', 'TOKEN-004', 'TOKEN-004', 'TOKEN-004', 'TOKEN-004']);
+  assert.deepEqual(ids, ['CONTRAST-001', 'SPACING-001', 'TOKEN-003', 'TOKEN-003', 'TOKEN-004', 'TOKEN-004', 'TOKEN-004', 'TOKEN-004']);
 });
 
 test('violations carry nodeId, path, value and an interpolated message', () => {
@@ -64,14 +64,31 @@ test('check output is deterministic — sorted by path then id', () => {
 
 test('layer filter selects rules by layer', () => {
   assert.equal(check(ir, builtin, { layers: [2] }).length, 0);
-  assert.equal(check(ir, builtin, { layers: [1] }).length, 9);
+  assert.equal(check(ir, builtin, { layers: [1] }).length, 8);
 });
 
 test('category filter selects rules by category', () => {
   const v = check(ir, builtin, { categories: ['a11y'] });
   assert.ok(v.length > 0);
   for (const violation of v) assert.equal(violation.category, 'a11y');
-  assert.deepEqual(v.map((x) => x.id).sort(), ['CONTRAST-001', 'HIT-002']);
+  assert.deepEqual(v.map((x) => x.id).sort(), ['CONTRAST-001']);
+});
+
+test('touch targets use the WCAG 2.2 AA 24px floor as an advisory warning', () => {
+  const root: RawNode = {
+    id: 'root', name: 'Root', type: 'FRAME', path: 'Root', parent: null,
+    box: { x: 0, y: 0, w: 390, h: 844 }, children: ['pass', 'fail'],
+  };
+  const target = (id: string, w: number): RawNode => ({
+    id, name: id, type: 'FRAME', path: `Root/${id}`, parent: 'root',
+    box: { x: 0, y: 0, w, h: 44 }, interactive: true, children: [],
+  });
+  const synthetic = normalize({ nodes: [root, target('pass', 28), target('fail', 20)] });
+  const rule = must(builtin.find((candidate) => candidate.id === 'HIT-002'), 'HIT-002');
+  const findings = check(synthetic, [rule]);
+  assert.deepEqual(findings.map(({ nodeId }) => nodeId), ['fail']);
+  assert.equal(rule.severity, 'warn');
+  assert.match(rule.message, /24x24/);
 });
 
 test('a rule whose when-expression throws is reported, not silently skipped', () => {

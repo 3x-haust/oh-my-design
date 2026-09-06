@@ -47,6 +47,11 @@ const detectorCases: Array<{
     negative: '<><p className="kicker">One</p><p className="kicker">Two</p><p className="label">Three</p></>',
   },
   {
+    id: 'repeated-heading-support-formula', extension: 'js',
+    positive: 'function screenHeader(title, lead) { const heading = `<h1>${title}</h1>`; return `${heading}<p class="lead">${lead}</p>`; }',
+    negative: 'function screenHeader(title, support) { return `<h1>${title}</h1>${support ? `<p class="context">${support}</p>` : ""}`; }',
+  },
+  {
     id: 'animated-status-glow', extension: 'tsx',
     positive: '<div className="status shadow-emerald-500"><span className="animate-ping" /> Online</div>',
     negative: '<div className="status-dot">Online</div><code className="animate-pulse">wait()</code>',

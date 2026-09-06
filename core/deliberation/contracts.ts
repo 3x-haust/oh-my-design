@@ -9,6 +9,9 @@ export const DELIBERATION_SCHEMA = 'design-deliberation-v1' as const;
 export const OBSERVATION_SCHEMA = 'visual-observation-v1' as const;
 export const ASSEMBLY_COVERAGE_SCHEMA = 'assembly-coverage-v1' as const;
 export const ACQUISITION_PLAN_SCHEMA = 'reference-acquisition-plan-v1' as const;
+export const ACQUISITION_PLAN_V2_SCHEMA = 'reference-acquisition-plan-v2' as const;
+export const REFERENCE_INFLUENCE_AXIS_VALUES = ['structure', 'proportion', 'density', 'rhythm', 'motion', 'content', 'voice', 'rejection'] as const;
+export type ReferenceInfluenceAxis = (typeof REFERENCE_INFLUENCE_AXIS_VALUES)[number];
 
 export type DecisionStage = 'frame' | 'copy' | 'type' | 'composition' | 'structure' | 'production' | 'refinement';
 export type DecisionRisk = 'low' | 'medium' | 'high' | 'critical';
@@ -84,11 +87,26 @@ export type AcquisitionZone = {
   readonly job: string;
   readonly required: boolean;
 };
-export type AcquisitionPlan = {
+export type AcquisitionPlanV1 = {
   readonly schema: typeof ACQUISITION_PLAN_SCHEMA;
   readonly owner: 'omd-framer';
   readonly zones: readonly AcquisitionZone[];
 };
+export type AcquisitionZoneV2 = AcquisitionZone & {
+  readonly decisionId: string;
+  readonly question: string;
+  readonly axes: readonly ReferenceInfluenceAxis[];
+  readonly requiredState: string;
+  readonly viewports: readonly { readonly width: number; readonly height: number }[];
+  readonly falsifier: string;
+};
+export type AcquisitionPlanV2 = {
+  readonly schema: typeof ACQUISITION_PLAN_V2_SCHEMA;
+  readonly owner: 'omd-framer';
+  readonly localeContextSha256: string | null;
+  readonly zones: readonly AcquisitionZoneV2[];
+};
+export type AcquisitionPlan = AcquisitionPlanV1 | AcquisitionPlanV2;
 
 export type AssemblyZone = {
   readonly id: string;
@@ -216,19 +234,47 @@ export function validateDeliberation(value: unknown, graph?: DecisionGraph): { r
 
 export function validateAcquisitionPlan(value: unknown): { readonly value?: AcquisitionPlan; readonly findings: readonly ContractFinding[] } {
   const out: ContractFinding[] = [];
-  if (!record(value) || !exact(value, ['owner', 'schema', 'zones']) || value.schema !== ACQUISITION_PLAN_SCHEMA || value.owner !== 'omd-framer' || !Array.isArray(value.zones) || value.zones.length === 0) {
-    finding(out, 'ACQUISITION-PLAN-INVALID', '$', 'expected a non-empty reference-acquisition-plan-v1');
+  if (!record(value) || (value.schema !== ACQUISITION_PLAN_SCHEMA && value.schema !== ACQUISITION_PLAN_V2_SCHEMA)) {
+    finding(out, 'ACQUISITION-PLAN-INVALID', '$', 'expected reference-acquisition-plan-v1 or reference-acquisition-plan-v2');
     return { findings: out };
   }
+  const isV2 = value.schema === ACQUISITION_PLAN_V2_SCHEMA;
+  const rootKeys = isV2 ? ['localeContextSha256', 'owner', 'schema', 'zones'] : ['owner', 'schema', 'zones'];
+  if (!exact(value, rootKeys) || value.owner !== 'omd-framer' || !Array.isArray(value.zones) || value.zones.length === 0) {
+    finding(out, 'ACQUISITION-PLAN-INVALID', '$', `expected a non-empty ${value.schema}`);
+    return { findings: out };
+  }
+  if (isV2 && value.localeContextSha256 !== null && !digest(value.localeContextSha256)) {
+    finding(out, 'ACQUISITION-LOCALE-CONTEXT', 'localeContextSha256', 'localeContextSha256 must be null or 64 lowercase hexadecimal characters');
+  }
   const ids = new Set<string>();
+  const decisionIds = new Set<string>();
   for (let i = 0; i < value.zones.length; i++) {
     const z = value.zones[i]; const path = `zones[${i}]`;
-    if (!record(z) || !exact(z, ['id', 'job', 'kind', 'required']) || !slug(z.id) || !['section', 'region', 'state'].includes(z.kind as string) || !text(z.job) || typeof z.required !== 'boolean') {
-      finding(out, 'ACQUISITION-ZONE-INVALID', path, 'zone needs a stable id, section/region/state kind, job, and required flag');
+    const zoneKeys = isV2
+      ? ['axes', 'decisionId', 'falsifier', 'id', 'job', 'kind', 'question', 'required', 'requiredState', 'viewports']
+      : ['id', 'job', 'kind', 'required'];
+    if (!record(z) || !exact(z, zoneKeys) || !slug(z.id) || !['section', 'region', 'state'].includes(z.kind as string) || !text(z.job) || typeof z.required !== 'boolean') {
+      finding(out, 'ACQUISITION-ZONE-INVALID', path, `zone does not match the closed ${value.schema} shape`);
       continue;
     }
     if (ids.has(z.id)) finding(out, 'ACQUISITION-ZONE-DUPLICATE', `${path}.id`, `duplicate zone ${z.id}`);
     ids.add(z.id);
+    if (!isV2) continue;
+    if (!slug(z.decisionId)) finding(out, 'ACQUISITION-DECISION-ID', `${path}.decisionId`, 'decisionId must be a lowercase kebab slug');
+    else if (decisionIds.has(z.decisionId)) finding(out, 'ACQUISITION-DECISION-DUPLICATE', `${path}.decisionId`, `duplicate decisionId ${z.decisionId}`);
+    else decisionIds.add(z.decisionId);
+    if (!text(z.question)) finding(out, 'ACQUISITION-QUESTION', `${path}.question`, 'question must name the decision the reference must answer');
+    if (!Array.isArray(z.axes) || z.axes.length === 0 || !z.axes.every((axis) => REFERENCE_INFLUENCE_AXIS_VALUES.includes(axis as ReferenceInfluenceAxis)) || new Set(z.axes).size !== z.axes.length) {
+      finding(out, 'ACQUISITION-AXES', `${path}.axes`, `axes must be unique values from ${REFERENCE_INFLUENCE_AXIS_VALUES.join('|')}`);
+    }
+    if (!text(z.requiredState)) finding(out, 'ACQUISITION-STATE', `${path}.requiredState`, 'requiredState must name the captured component state');
+    if (!Array.isArray(z.viewports) || z.viewports.length === 0 || z.viewports.some((viewport) => !record(viewport) || !exact(viewport, ['height', 'width']) || !Number.isSafeInteger(viewport.width) || !Number.isSafeInteger(viewport.height) || (viewport.width as number) < 1 || (viewport.height as number) < 1)) {
+      finding(out, 'ACQUISITION-VIEWPORTS', `${path}.viewports`, 'viewports must contain unique positive integer width/height pairs');
+    } else if (new Set(z.viewports.map((viewport) => `${(viewport as { width: number }).width}x${(viewport as { height: number }).height}`)).size !== z.viewports.length) {
+      finding(out, 'ACQUISITION-VIEWPORT-DUPLICATE', `${path}.viewports`, 'viewports must not contain duplicates');
+    }
+    if (!text(z.falsifier)) finding(out, 'ACQUISITION-FALSIFIER', `${path}.falsifier`, 'falsifier must name an observable failure');
   }
   if (!value.zones.some((z) => record(z) && z.required === true)) finding(out, 'ACQUISITION-NO-REQUIRED-ZONES', 'zones', 'at least one zone must require reference evidence');
   return out.length === 0 ? { value: value as AcquisitionPlan, findings: out } : { findings: out };

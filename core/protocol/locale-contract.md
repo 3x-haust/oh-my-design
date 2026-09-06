@@ -16,6 +16,56 @@ sentence. This contract states what a multi-locale run owes, and what it may not
 A run declares exactly one mode. Escalating mode mid-run invalidates the copy deck, because the
 lower mode's deck was written under an assumption the higher mode removes.
 
+These copy/operational modes do not authorize cultural art direction. Cultural design uses the
+separate `.omd/locale-design-context.json` contract. It records conversation language, surface
+locale, explicit market region, audience, domain, surface, desired fit, and brand invariants as
+distinct fields. A language is not a country, and a locale or likely script never implies a market,
+audience, register, or national aesthetic.
+
+## Cultural design routing
+
+The derived locale-design route has exactly three decisions:
+
+- `ask` — explicit market or audience authority is missing. Cultural framing and production stop.
+- `mechanics-only` — only script-aware copy and type mechanics are authorized. It makes no market
+  or cultural-fit claim.
+- `research` — explicit market and audience exist, so current evidence may inform bounded design
+  mechanisms for the named domain and surface.
+
+Research produces a content-addressed `cultural-design-profile-v1` bound to the exact context,
+brand invariants, type proof, and four evidence lanes: standard, global equivalent or recorded
+unavailability, native first-party category evidence, and counterexample. Each design axis is
+`supported`, `shared`, `contested`, or `unknown`. Only `supported` and `shared` mechanisms transfer
+automatically. `contested` requires an explicit downstream choice; `unknown` transfers nothing.
+
+Evidence-lane names are semantic obligations, not URL labels. A global equivalent is the same
+institution or product serving the same named task/category in another locale. A generic home,
+news, or institutional page does not qualify merely because its owner matches. Native-category
+evidence must expose the same user task in the target market, not merely the same industry noun.
+Current bytes prove capture and currentness; they do not by themselves prove task equivalence.
+
+A URL and digest typed into a profile are not evidence. Every retained source is first fetched
+through `omd locale source-capture`; the host-owned command records the current final URL or exact
+unavailability, capture time, context identity, immutable source bytes, and content-addressed
+receipt. When a successful source changes bytes across immediate currentness checks, use
+`omd locale source-stability`: it captures twice and is the only lane that may record observed byte
+instability as canonical unavailability. A later remote check accepts that receipt only while two
+immediate responses still disagree; a newly stable source becomes stale and must be reacquired.
+Profile publication re-reads those receipt and source bytes. It also hashes the current
+`.omd/type-proof.md` bytes rather than trusting the submitted type-proof digest. Missing, changed,
+cross-context, or self-attested evidence blocks publication before either profile pointer is written.
+
+Composer, hand, and blind reviewers consume only the source-free current cultural design
+projection. They do not receive source URLs, source identities, or the research rationale. This
+limits source imitation and prevents a country label from becoming a style preset. Conformance to
+the projection means evidence-grounded adaptation, not native cultural correctness. Only blind
+ratings from the named target audience may support a cultural-fit claim.
+
+When reference assembly is selected, `.omd/reference-locale-binding.json` additionally proves which
+candidate slot uses which supported/shared profile decision. Its private companion binds the exact
+captured source receipt; downstream roles receive only the source-free projection. A market-grounded
+board with no positive native-category binding does not pass merely because a cultural profile exists.
+
 ## Beat binding
 
 Beats are locale-independent. A Beat is the argument the page makes at that point; its wording is

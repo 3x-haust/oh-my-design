@@ -75,6 +75,17 @@ test('a copy-only fixture with sufficient evidence skips discovery with a reason
   });
 });
 
+test('a new marketing surface discovers references without impersonating a product work flow', () => {
+  const input = fixtureWith('new-product', 'taskNeed', 'new-marketing');
+  const routed = routeReferenceDiscovery(input);
+  assert.equal(routed.decision, 'discover');
+  assert.equal(routed.taskNeed, 'new-marketing');
+  assert.equal(
+    routed.recommendation.reason,
+    'A new marketing surface needs reference discovery before its direction is established.',
+  );
+});
+
 test('routing returns a detached immutable snapshot of mutable input', () => {
   const input = {
     schema: 'reference-discovery-input-v1',
@@ -156,6 +167,7 @@ test('contradictory uncertainty and evidence states fail closed', () => {
     { taskNeed: 'copy-only-edit', uncertainty: 'resolved', existingEvidence: 'insufficient' },
     { taskNeed: 'existing-product-change', uncertainty: 'resolved', existingEvidence: 'none' },
     { taskNeed: 'new-product', uncertainty: 'resolved', existingEvidence: 'sufficient' },
+    { taskNeed: 'new-marketing', uncertainty: 'resolved', existingEvidence: 'sufficient' },
   ];
 
   for (const contradiction of contradictions) {

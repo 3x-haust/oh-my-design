@@ -193,6 +193,19 @@ function ancestors(nodes: readonly RawNode[], node: RawNode): readonly RawNode[]
   return out;
 }
 
+function localControlFamily(nodes: readonly RawNode[], carrier: RawNode): readonly RawNode[] {
+  const parent = carrier.parent === null
+    ? undefined
+    : nodes.find((node) => node.id === carrier.parent);
+  const parentIsLabel = parent !== undefined && /^label(?:[.#]|$)/i.test(parent.name);
+  return [
+    carrier,
+    ...descendants(nodes, carrier),
+    ...ancestors(nodes, carrier),
+    ...(parentIsLabel ? descendants(nodes, parent) : []),
+  ];
+}
+
 /**
  * A requirement is satisfied when its affordance exists, is operable, and is reachable by keyboard.
  * `action` and `preference` need an interactive, focusable carrier; `form` needs a labelled field
@@ -220,12 +233,14 @@ export function checkFunctionalCompleteness(
       continue;
     }
 
-    const operable = carriers.filter((carrier) => carrier.interactive === true || descendants(nodes, carrier).some((node) => node.interactive === true) || ancestors(nodes, carrier).some((node) => node.interactive === true));
+    const operable = carriers.filter((carrier) =>
+      localControlFamily(nodes, carrier).some((node) => node.interactive === true));
     if (operable.length === 0) {
       findings.push({ id: 'FUNC-INERT', requirement: requirement.id, message: `${requirement.statement} — "${requirement.label}" is text, not an operable control.` });
       continue;
     }
-    const reachable = operable.some((carrier) => [carrier, ...ancestors(nodes, carrier)].some((node) => node.focusable === true));
+    const reachable = operable.some((carrier) =>
+      localControlFamily(nodes, carrier).some((node) => node.focusable === true));
     if (!reachable) {
       findings.push({ id: 'FUNC-UNREACHABLE', requirement: requirement.id, message: `${requirement.statement} — "${requirement.label}" is not reachable by keyboard.` });
     }

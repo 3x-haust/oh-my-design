@@ -7,9 +7,11 @@ import { trustedProjectRoot } from './board-security.ts';
 import { resolveReferenceBoard } from './board.ts';
 import type { ReferenceAssembly, ReferenceEvidenceProjection } from './board-projection.ts';
 import type { ReferenceBoardManifest, ResolvedReferenceBoard, ResolvedReferenceBoardPiece } from './board-contract.ts';
+import { localeDesignContextJsonSha256 } from '../locale/design-context.ts';
 
 export const REFERENCE_BOARD_EVIDENCE_SCHEMA_VERSION = 'reference-board-evidence-v1';
 export const REFERENCE_BOARD_EVIDENCE_V2_SCHEMA_VERSION = 'reference-board-evidence-v2';
+export const REFERENCE_BOARD_EVIDENCE_V3_SCHEMA_VERSION = 'reference-board-evidence-v3';
 
 export type RawBoardEvidence =
   | { readonly kind: 'component-capture'; readonly source: string; readonly component: string; readonly selector: string; readonly capturedAt: string; readonly imagePath: string; readonly imageSha256: string }
@@ -28,13 +30,16 @@ export type RawBoardPiece = {
   readonly avoid: string;
   readonly adaptation: string;
   readonly grid: { readonly column: number; readonly span: number; readonly order: number };
+  readonly binding?: ResolvedReferenceBoardPiece['binding'];
   readonly evidence: RawBoardEvidence;
 };
 
 export type RawReferenceBoard = {
-  readonly schemaVersion: typeof REFERENCE_BOARD_EVIDENCE_SCHEMA_VERSION | typeof REFERENCE_BOARD_EVIDENCE_V2_SCHEMA_VERSION;
+  readonly schemaVersion: typeof REFERENCE_BOARD_EVIDENCE_SCHEMA_VERSION | typeof REFERENCE_BOARD_EVIDENCE_V2_SCHEMA_VERSION | typeof REFERENCE_BOARD_EVIDENCE_V3_SCHEMA_VERSION;
   readonly projectSha256?: string;
   readonly frameSha256: string;
+  readonly acquisitionSha256?: string;
+  readonly localeContextSha256?: string | null;
   readonly candidates: readonly { readonly id: string; readonly label: string; readonly route: string; readonly rationale: string; readonly pieces: readonly RawBoardPiece[] }[];
 };
 
@@ -66,6 +71,7 @@ const common = (piece: ResolvedReferenceBoardPiece): Omit<RawBoardPiece, 'eviden
   targetComponent: piece.targetComponent, targetSelector: piece.targetSelector, taskIds: [...piece.taskIds],
   reason: piece.reason, take: [...piece.take], avoid: piece.avoid, adaptation: piece.adaptation,
   grid: { column: piece.grid.column, span: piece.grid.span, order: piece.grid.order },
+  ...(piece.binding === undefined ? {} : { binding: { ...piece.binding, sourceViewport: { ...piece.binding.sourceViewport }, targetViewports: piece.binding.targetViewports.map((viewport) => ({ ...viewport })) } }),
 });
 const rawPiece = (root: string, piece: ResolvedReferenceBoardPiece): RawBoardPiece => {
   switch (piece.sourceKind) {
@@ -93,8 +99,9 @@ const rawPiece = (root: string, piece: ResolvedReferenceBoardPiece): RawBoardPie
   }
 };
 export const projectRawReferenceBoard = (root: string, board: ResolvedReferenceBoard): RawReferenceBoard => ({
-  schemaVersion: board.schemaVersion === 'reference-board-v2' ? REFERENCE_BOARD_EVIDENCE_V2_SCHEMA_VERSION : REFERENCE_BOARD_EVIDENCE_SCHEMA_VERSION,
-  ...(board.schemaVersion === 'reference-board-v2' ? { projectSha256: board.projectSha256 } : {}),
+  schemaVersion: board.schemaVersion === 'reference-board-v3' ? REFERENCE_BOARD_EVIDENCE_V3_SCHEMA_VERSION : board.schemaVersion === 'reference-board-v2' ? REFERENCE_BOARD_EVIDENCE_V2_SCHEMA_VERSION : REFERENCE_BOARD_EVIDENCE_SCHEMA_VERSION,
+  ...(board.schemaVersion !== 'reference-board-v1' ? { projectSha256: board.projectSha256 } : {}),
+  ...(board.schemaVersion === 'reference-board-v3' ? { acquisitionSha256: board.acquisitionSha256, localeContextSha256: board.localeContextSha256 } : {}),
   frameSha256: board.frameSha256,
   candidates: board.candidates.map((candidate) => ({
     id: candidate.id, label: candidate.label, route: candidate.route, rationale: candidate.rationale,
@@ -106,12 +113,24 @@ export function readReferenceBoardArtifacts(root: string, manifestPath = join(ro
   const canonicalRoot = trustedProjectRoot(root);
   const parsed: unknown = JSON.parse(readFileSync(manifestPath, 'utf8'));
   const manifest = parseReferenceBoard(parsed);
-  if (manifest.schemaVersion === 'reference-board-v2') {
+  if (manifest.schemaVersion !== 'reference-board-v1') {
     if (manifest.projectSha256 !== referenceBoardProjectSha256(canonicalRoot)) throw new Error('reference board project binding is stale or cross-project');
     let frame: Buffer;
     try { frame = readFileSync(join(canonicalRoot, '.omd', 'frame.md')); }
     catch { throw new Error('reference board current frame is missing'); }
     if (sha256(frame) !== manifest.frameSha256) throw new Error('reference board frame is stale for the current frame');
+  }
+  if (manifest.schemaVersion === 'reference-board-v3') {
+    let acquisition: Buffer;
+    try { acquisition = readFileSync(join(canonicalRoot, '.omd', 'acquisition-plan.json')); }
+    catch { throw new Error('reference board current acquisition plan is missing'); }
+    if (sha256(acquisition) !== manifest.acquisitionSha256) throw new Error('reference board acquisition plan is stale');
+    if (manifest.localeContextSha256 !== null) {
+      let locale: Buffer;
+      try { locale = readFileSync(join(canonicalRoot, '.omd', 'locale-design-context.json')); }
+      catch { throw new Error('reference board current locale design context is missing'); }
+      if (localeDesignContextJsonSha256(locale) !== manifest.localeContextSha256) throw new Error('reference board locale design context is stale');
+    }
   }
   const resolved = resolveReferenceBoard(canonicalRoot, manifest);
   const raw = projectRawReferenceBoard(canonicalRoot, resolved);

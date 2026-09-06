@@ -3,6 +3,7 @@ import type { AdaptiveStrategyDecision } from './adaptive-flow-domain.ts';
 import { COPY_REPAIR_WORKFLOW } from './adaptive-copy-repair.ts';
 import { adaptiveMotionContract, type AdaptiveMotionContract } from './adaptive-motion-ambition.ts';
 import type { AdaptiveAttributionCategory } from './adaptive-attribution.ts';
+import { DESIGN_QUALITY_AXIS_FLOORS } from '../evidence/final-v2-design-quality.ts';
 
 export const ADAPTIVE_BEHAVIOR_SCHEMA = 'adaptive-behavior-contract-v1' as const;
 
@@ -53,7 +54,11 @@ const POLICY = {
     concurrency: 'independent-drafts', cacheOwner: 'coordinator', composerRole: 'selected-draft-consumer',
     composerForbidden: ['provider-prompt', 'generation', 'cache-management', 'draft-selection'],
     seedInputs: ['selected-references', 'skin-abstracted-blueprints', 'project-owned-inputs'],
-    minimumDistinctAnchors: 3, rejectPattern: 'left-text-right-image-default',
+    anchorCount: 'content-dependent', templateAssessment: 'visible-fit-not-family-name',
+    nonShippingIsSkipReason: false,
+    feasibilityEvidence: 'rendered-anchor-and-task-at-required-viewports',
+    selectionMerit: 'rendered-concept-task-and-craft',
+    costRole: 'explicit-budget-or-equivalent-candidate-tiebreak',
     chosenDraftShips: false, factualCarrierAllowed: false, distanceBlocksShipping: false,
   },
   visual: {
@@ -62,21 +67,44 @@ const POLICY = {
     productionBeforeFrameAndResearch: false, explicitStackRequestBuildAuthority: false,
     restrainedMarketingCarrier: ['scale', 'structure', 'display-type'], productDisplayExempt: true,
     marketingRequiresColourIdentity: true, marketingRequiresBuiltCarrier: true,
-    textOnlyMarketingPasses: false, colourDistribution: '60-30-10', colourlessMarketing: 'RED',
+    textOnlyMarketingPasses: false, colourDistribution: 'surface-conditional',
+    marketingColourDistribution: '60-30-10', productColourStrategy: 'semantic-action-state',
+    colourlessMarketing: 'RED',
     carrierOptions: [
       'gradient-mesh', 'noise-grain-texture', 'svg-geometric-pattern',
       'css-illustration-primitives', 'expressive-theory', 'motion-recipe',
     ],
-    carrierAbsenceClassification: 'hierarchy-defect', carrierStackingAllowed: false,
+    carrierAbsenceClassification: 'surface-conditional', productCarrierRequired: false,
+    carrierStackingAllowed: false,
     maximumSystematicDetailLayers: 1,
-    autonomousMarketingDirectionCount: 3, directionSelection: 'autonomous',
-    directionsRequireDistinctColourAndGenerator: true,
+    directionCount: 'ambition-and-uncertainty', directionSelection: 'autonomous',
+    directionCountCommitment: 'before-generation-with-evidence-reason',
+    directionDifference: 'content-generator-and-macro-composition',
+    sharedBrandColoursAllowed: true,
     userRegisterMotionLock: true, motionDefault: 'none', maximumTriggeredScenes: 1,
-    motionOneRequiresTriggeredScene: true, motionNoneRequiresStaticBreak: true,
+    motionOneRequiresTriggeredScene: true, motionNoneRequiresStaticBreak: false,
+    marketingMotionNoneRequiresStaticBreak: true,
     scrollEvidenceAddsMotionObligation: false, criticalReviewFloor: 3,
-    reviewVerdicts: ['signature-fit', 'narrative-fit', 'motion-fit', 'decision-fit'],
+    reviewVerdicts: ['signature-fit', 'narrative-fit', 'motion-fit', 'decision-fit', 'reality-fit'],
     allReviewVerdictsRequired: true, functionalElementIsSignature: false,
     quietProductExtraSignatureRequired: false,
+    designQualityAxes: [
+      'beautyDesirability', 'hierarchyComposition', 'domainSpecificity',
+      'humanAuthorship', 'usability', 'responsiveCraft',
+    ],
+    designQualityFloor: 3,
+    designQualityFloors: DESIGN_QUALITY_AXIS_FLOORS,
+    designQualityAggregation: 'conjunctive',
+    designQualityEvidence: 'localized-desktop-mobile',
+    fidelityCanSubstituteDesignQuality: false,
+    greenfield: {
+      input: 'prompt-only',
+      brand: 'supplied-or-explicitly-requested',
+      facts: 'verified-or-labelled-demo',
+      productDistinction: 'task-model-content-hierarchy-interaction',
+      referenceStart: 'domain-product-screens',
+      completion: 'desktop-mobile-reality-review',
+    },
   },
   assets: {
     dependencyPolicy: 'named-only', fabricateFactsOrAssets: false, mandatePhoto: false,
@@ -123,6 +151,29 @@ export type AdaptiveBehaviorContract = Readonly<{
     motion: AdaptiveMotionContract;
     attributionCategories: readonly AdaptiveAttributionCategory[];
     aiAssetDecisionIds: readonly string[];
+    designQuality: Readonly<{
+      axes: readonly [
+        'beautyDesirability',
+        'hierarchyComposition',
+        'domainSpecificity',
+        'humanAuthorship',
+        'usability',
+        'responsiveCraft',
+      ];
+      floor: 3;
+      floors: Readonly<{
+        beautyDesirability: 4;
+        hierarchyComposition: 4;
+        domainSpecificity: 3;
+        humanAuthorship: 3;
+        usability: 3;
+        responsiveCraft: 3;
+      }>;
+      aggregation: 'conjunctive';
+      candidateMode: 'structural' | 'integrated-visual';
+      evidence: 'localized-desktop-mobile';
+      fidelityCanSubstitute: false;
+    }>;
   }>;
 }>;
 
@@ -148,6 +199,22 @@ export function adaptiveBehaviorContract(
       motion: adaptiveMotionContract(expressiveDesignNeed, strategy),
       attributionCategories: strategy.attributionCategories,
       aiAssetDecisionIds: Object.freeze(strategy.aiAssets.map((asset) => asset.decision.decisionId)),
+      designQuality: Object.freeze({
+        axes: Object.freeze([
+          ...ADAPTIVE_BEHAVIOR_POLICY.visual.designQualityAxes,
+        ]) as AdaptiveBehaviorContract['active']['designQuality']['axes'],
+        floor: ADAPTIVE_BEHAVIOR_POLICY.visual.designQualityFloor,
+        floors: Object.freeze({
+          ...ADAPTIVE_BEHAVIOR_POLICY.visual.designQualityFloors,
+        }),
+        aggregation: ADAPTIVE_BEHAVIOR_POLICY.visual.designQualityAggregation,
+        candidateMode: expressiveDesignNeed === 'showpiece'
+          ? 'integrated-visual'
+          : 'structural',
+        evidence: ADAPTIVE_BEHAVIOR_POLICY.visual.designQualityEvidence,
+        fidelityCanSubstitute:
+          ADAPTIVE_BEHAVIOR_POLICY.visual.fidelityCanSubstituteDesignQuality,
+      }),
     }),
   });
 }

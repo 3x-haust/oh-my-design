@@ -7,7 +7,7 @@ export const MOTION_DECISIONS = ['none', 'one'] as const;
 export const LEGACY_ART_DIRECTION_RECORD_SCHEMA_VERSION = 'art-direction-record-v2' as const;
 export const ART_DIRECTION_RECORD_SCHEMA_VERSION = 'art-direction-record-v3' as const;
 export const ART_DIRECTION_POINTER_SCHEMA_VERSION = 'art-direction-current-v2' as const;
-/** Exactly the keys a caller may author in an `omd art-direction check|local-check` payload. */
+/** Exactly the keys a caller may author in an `omd art-direction check` payload. */
 export const ART_DIRECTION_CHECK_INPUT_KEYS = [
   'route', 'alternatives', 'references', 'eligibility', 'evaluatorAssessment', 'evaluatorResult',
   'beats', 'invocation', 'deliberation', 'implementationLane', 'fallbackPath', 'performanceAccessibilityBudget',
@@ -174,15 +174,22 @@ export function validateArtDirectionDecisionShape(value: unknown): ParsedArtDire
   }
   const hashes = ['activationSha256', 'intentSha256', 'boardSha256', 'preSelectionSha256', 'alternativesSha256', 'motionResolutionProjectionSha256', 'settledSelectionSha256', 'authorInvocationSha256', 'authorPayloadSha256', 'authorResultSha256', 'currentUserBeatExceptionReceiptSha256'];
   if (hashes.some((field) => typeof value[field] !== 'string' || !SHA256.test(value[field]))) throw new ArtDirectionValidationError('decision contains an invalid hash');
-  if (value.consideredAlternatives.length !== 3 || new Set(value.consideredAlternatives.map((alternative) => isRecord(alternative) ? alternative.register : '')).size !== 3
+  const alternativeCount = value.consideredAlternatives.length;
+  const registers = new Set(value.consideredAlternatives.map((alternative) => isRecord(alternative) ? alternative.register : ''));
+  // Shape validation is not current-user authority; the resolver verifies the actual register lock.
+  if (alternativeCount === 0 || registers.size !== alternativeCount || !registers.has(value.selectedRegister)
+    || (alternativeCount === 1 && value.source !== 'explicit-user')
     || value.consideredAlternatives.some((alternative) => !isRecord(alternative) || !exactKeys(alternative, alternativeKeys)
       || !isRegister(alternative.register) || !isMotionDecision(alternative.motionHypothesis)
       || (current && (!isNonEmptyStringArray(alternative.metaphorQualities) || !isNonEmptyStringArray(alternative.literalPropsToReject)))
       || !isNonEmptyStringArray(alternative.staticReferenceSlotIds) || !isStringArray(alternative.motionReferenceSlotIds)
       || !isNonEmptyStringArray(alternative.uxAccessibilityPerformanceRisks)
       || ['conceptRole', 'lawfulImplementationPath', 'macroCompositionHypothesis', 'rejectionCondition', 'subjectIdentityFit'].some((field) => typeof alternative[field] !== 'string' || alternative[field].trim() === ''))
-    || value.rejectedAlternatives.length !== 2 || value.rejectedAlternatives.some((rejected) => !isRecord(rejected)
+    || value.rejectedAlternatives.length !== alternativeCount - 1
+    || new Set(value.rejectedAlternatives.map(rejected => isRecord(rejected) ? rejected.register : '')).size !== alternativeCount - 1
+    || value.rejectedAlternatives.some((rejected) => !isRecord(rejected)
       || !exactKeys(rejected, REJECTION_KEYS) || !isRegister(rejected.register) || rejected.register === value.selectedRegister
+      || !registers.has(rejected.register)
       || typeof rejected.reason !== 'string' || rejected.reason.trim() === '' || !isNonEmptyStringArray(rejected.citedReferenceSlotIds))) {
     throw new ArtDirectionValidationError('decision alternatives or rejections have an invalid exact shape');
   }

@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import {
   FinalOutcomeGateError,
+  validateFinalOutcomeGate,
   validateTrustedOutcomeEvidence,
 } from '../core/evidence/final-v2-outcome-gate.ts';
 import { servedProjectTreeSha256 } from '../core/render/serve.ts';
@@ -20,7 +21,7 @@ import { writeBrowserDecisionFixture } from './helpers/browser-observation-decis
 
 const sha = (value: string | Uint8Array): string => createHash('sha256').update(value).digest('hex');
 
-function fixture(): Readonly<{
+function fixture(entrySurface = false): Readonly<{
   root: string;
   receipt: TrustedBrowserReceipt;
   evidence: unknown;
@@ -36,6 +37,24 @@ function fixture(): Readonly<{
   writeFileSync(join(root, '.omd', 'capture.png'), 'capture');
   writeBrowserDecisionFixture(root);
   const decisionGraphBytes = readFileSync(join(root, '.omd', 'decision-graph.json'));
+  const projectionBytes = Buffer.from(`${JSON.stringify({
+    schema: 'task-flow-benchmark-projection-v1',
+    benchmarkSha256: sha('benchmark'),
+    sourceContractSha256: sha('source'),
+    surface: 'product',
+    domain: 'cold-chain-logistics',
+    taskSteps: [
+      { id: 'inspect-temperature', intent: 'inspect evidence', dependsOn: [] },
+      { id: 'choose-disposition', intent: 'choose disposition', dependsOn: ['inspect-temperature'] },
+    ],
+    counterexamples: [
+      { id: 'dashboard-first', reason: 'hides the exception queue' },
+      { id: 'action-first', reason: 'acts before evidence review' },
+    ],
+  })}\n`);
+  if (entrySurface) {
+    writeFileSync(join(root, '.omd', 'task-flow-benchmark-projection.json'), projectionBytes);
+  }
   const receipt: TrustedBrowserReceipt = {
     schema: TRUSTED_BROWSER_RECEIPT_SCHEMA,
     runId: 'final-outcome-gate',
@@ -52,6 +71,14 @@ function fixture(): Readonly<{
     hardFloors: { behavior: 'pass', access: 'pass', safety: 'pass' },
     captures: [{ path: '.omd/capture.png', sha256: sha('capture'), width: 1280, height: 900 }],
     transcript: [`assertion-pass:${sha('assertion')}`],
+    ...(entrySurface ? {
+      entrySurface: {
+        benchmarkProjectionSha256: sha(projectionBytes),
+        prerequisiteTaskId: 'inspect-temperature',
+        dependentTaskId: 'choose-disposition',
+        status: 'pass' as const,
+      },
+    } : {}),
   };
   const receiptSha256 = trustedBrowserReceiptSha256(receipt);
   const receiptBytes = Buffer.from(`${canonicalJson(receipt)}\n`);
@@ -73,11 +100,73 @@ function fixture(): Readonly<{
       hardFloors: receipt.hardFloors,
       captureSha256s: receipt.captures.map((capture) => capture.sha256),
       transcriptSha256: sha(canonicalJson(receipt.transcript)),
+      ...(receipt.entrySurface === undefined ? {} : { entrySurface: receipt.entrySurface }),
     },
   };
   const invocation = createTestProjectRunInvocation(root, 'final-outcome-gate');
   return { root, receipt, evidence, invocation, receiptBytes, cleanup: () => rmSync(root, { recursive: true, force: true }) };
 }
+
+test('benchmark final gate requires a current passing entry surface edge', () => {
+  const value = fixture(true);
+  try {
+    authorizeTestProjectRunPayloads(value.root, value.invocation, [{
+      purpose: 'product-probe-result',
+      payload: value.receiptBytes,
+    }]);
+    const input = {
+      root: value.root,
+      branch: 'adaptive-omission' as const,
+      required: true,
+      invocation: value.invocation,
+      expected: {
+        routeSha256: value.receipt.routeSha256,
+        sourceContractSha256: value.receipt.sourceContractSha256,
+        buildSha256: value.receipt.activationBuildSha256,
+        entrySurfaceRequired: true,
+      },
+      observations: [{
+        evidence: value.evidence,
+        buildSha256: value.receipt.activationBuildSha256,
+      }],
+    };
+    assert.doesNotThrow(() => validateTrustedOutcomeEvidence(input));
+
+    writeFileSync(
+      join(value.root, '.omd', 'task-flow-benchmark-projection.json'),
+      '{}',
+    );
+    assert.throws(
+      () => validateTrustedOutcomeEvidence(input),
+      (error: unknown) => error instanceof FinalOutcomeGateError
+        && error.code === 'STALE_FINAL_OUTCOME_BINDING',
+    );
+  } finally { value.cleanup(); }
+});
+
+test('entry-surface machine RED is terminal despite otherwise passing declarations', () => {
+  const value = fixture(true);
+  try {
+    const trustedOutcome = (value.evidence as {
+      trustedOutcome: Record<string, unknown>;
+    }).trustedOutcome;
+    assert.throws(
+      () => validateFinalOutcomeGate({
+        branch: 'adaptive-omission',
+        trustedOutcome: {
+          ...trustedOutcome,
+          entrySurface: {
+            ...(trustedOutcome.entrySurface as Record<string, unknown>),
+            status: 'fail',
+          },
+        },
+        expectedProductionRevisionSha256: value.receipt.productionRevisionSha256,
+      }),
+      (error: unknown) => error instanceof FinalOutcomeGateError
+        && error.code === 'FINAL_ACCESS_FAILED',
+    );
+  } finally { value.cleanup(); }
+});
 
 test('final gate rejects a fabricated durable receipt and accepts exact host-authorized bytes', () => {
   const value = fixture();

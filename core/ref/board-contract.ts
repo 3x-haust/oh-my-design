@@ -1,8 +1,11 @@
 import type { BlueprintNode, Invariants, Reference } from '../types.ts';
+import type { ReferenceInfluenceAxis } from '../deliberation/contracts.ts';
 
 export const REFERENCE_BOARD_SCHEMA_VERSION = 'reference-board-v1' as const;
 export const REFERENCE_BOARD_V2_SCHEMA_VERSION = 'reference-board-v2' as const;
+export const REFERENCE_BOARD_V3_SCHEMA_VERSION = 'reference-board-v3' as const;
 export const REFERENCE_ASSEMBLY_SCHEMA_VERSION = 'reference-assembly-v1' as const;
+export const REFERENCE_ASSEMBLY_V2_SCHEMA_VERSION = 'reference-assembly-v2' as const;
 export const BOARD_TAKE_VALUES = ['structure', 'proportion', 'density', 'rhythm', 'motion', 'content', 'voice', 'rejection'] as const;
 export type BoardTake = (typeof BOARD_TAKE_VALUES)[number];
 export type BoardSourceKind = 'component-capture' | 'image-fragment' | 'classified-reference';
@@ -27,6 +30,19 @@ export type ReferenceBoardGrid = {
   readonly order: number;
 };
 
+export type ReferenceInfluenceBinding = {
+  readonly zoneId: string;
+  readonly decisionId: string;
+  readonly axis: ReferenceInfluenceAxis;
+  readonly sourceState: string;
+  readonly sourceViewport: { readonly width: number; readonly height: number };
+  readonly targetViewports: readonly { readonly width: number; readonly height: number }[];
+  readonly responsiveConsequence: string;
+  readonly conflictGroup: string | null;
+  readonly conflictResolution: string | null;
+  readonly falsifier: string;
+};
+
 type ReferenceBoardPieceBase = {
   readonly slotId: string;
   readonly referenceId: string;
@@ -39,6 +55,7 @@ type ReferenceBoardPieceBase = {
   readonly adaptation: string;
   readonly grid: ReferenceBoardGrid;
   readonly evidenceAxes: ReferenceEvidenceAxes;
+  readonly binding?: ReferenceInfluenceBinding;
 };
 
 export type ReferenceBoardComponentPiece = ReferenceBoardPieceBase & {
@@ -77,6 +94,14 @@ export type ReferenceBoardManifest =
     readonly schemaVersion: typeof REFERENCE_BOARD_V2_SCHEMA_VERSION;
     readonly projectSha256: string;
     readonly frameSha256: string;
+    readonly candidates: readonly ReferenceBoardCandidate[];
+  }
+  | {
+    readonly schemaVersion: typeof REFERENCE_BOARD_V3_SCHEMA_VERSION;
+    readonly projectSha256: string;
+    readonly frameSha256: string;
+    readonly acquisitionSha256: string;
+    readonly localeContextSha256: string | null;
     readonly candidates: readonly ReferenceBoardCandidate[];
   };
 
@@ -165,6 +190,8 @@ export type ResolvedReferenceBoard = {
   readonly schemaVersion: ReferenceBoardManifest['schemaVersion'];
   readonly projectSha256?: string;
   readonly frameSha256: string;
+  readonly acquisitionSha256?: string;
+  readonly localeContextSha256?: string | null;
   readonly candidates: readonly ResolvedReferenceBoardCandidate[];
 };
 

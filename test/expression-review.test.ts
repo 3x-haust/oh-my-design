@@ -135,3 +135,16 @@ test('expression review binds current full-expression inputs and remains support
   authority.cannotSubstitute = [];
   throwsCode(() => parseExpressionReview(authority, current()), 'EXPRESSION_REVIEW_MALFORMED');
 });
+
+test('expression review can block greenfield concept theatre as authenticity evidence', () => {
+  const reality = valid();
+  reality.verdict = 'revise';
+  reality.findings = [{
+    axis: 'authenticity',
+    severity: 'blocking',
+    evidence: 'The sharp product render invents a case number and documentary annotation absent from the brief.',
+  }];
+  const parsed = parseExpressionReview(reality, current());
+  assert.equal(parsed.findings[0]?.axis, 'authenticity');
+  assert.equal(parsed.verdict, 'revise');
+});

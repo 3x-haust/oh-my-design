@@ -21,6 +21,7 @@ export type TrustedBrowserCapture = Readonly<{
   sha256: string;
   width: number;
   height: number;
+  outcomeRef?: string;
 }>;
 
 export type TrustedBrowserReceipt = Readonly<{
@@ -47,6 +48,12 @@ export type TrustedBrowserReceipt = Readonly<{
   }>;
   captures: readonly TrustedBrowserCapture[];
   transcript: readonly string[];
+  entrySurface?: Readonly<{
+    benchmarkProjectionSha256: string;
+    prerequisiteTaskId: string;
+    dependentTaskId: string;
+    status: 'pass' | 'fail';
+  }>;
 }>;
 
 const SHA256 = /^[a-f0-9]{64}$/;
@@ -56,11 +63,19 @@ const TOP_KEYS = new Set([
   'decisionRefs', 'hardFloors', 'captures', 'transcript', 'productionPath',
   'testedUrl',
 ]);
+const ENTRY_TOP_KEYS = new Set([...TOP_KEYS, 'entrySurface']);
 const OUTCOME_KEYS = new Set(['outcomeRef', 'status', 'findings']);
 const FLOOR_KEYS = new Set(['behavior', 'access', 'safety']);
 const CAPTURE_KEYS = new Set(['path', 'sha256', 'width', 'height']);
+const OUTCOME_CAPTURE_KEYS = new Set(['path', 'sha256', 'width', 'height', 'outcomeRef']);
+const ENTRY_SURFACE_KEYS = new Set([
+  'benchmarkProjectionSha256',
+  'prerequisiteTaskId',
+  'dependentTaskId',
+  'status',
+]);
 const CODE = /^[a-z0-9]+(?:[-:][a-z0-9]+)*$/;
-const TRANSCRIPT = /^(?:action-click|assertion-pass|assertion-fail):[a-f0-9]{64}$/;
+const TRANSCRIPT = /^(?:action-click|action-fill|assertion-pass|assertion-fail):[a-f0-9]{64}$/;
 
 function malformed(): never {
   throw new TrustedBrowserReceiptError('MALFORMED_TRUSTED_BROWSER_RECEIPT');
@@ -99,7 +114,14 @@ function digest(value: unknown): string {
 }
 
 export function parseTrustedBrowserReceipt(input: unknown): TrustedBrowserReceipt {
-  const receipt = record(input, TOP_KEYS);
+  const candidate = input as Record<string, unknown> | null;
+  const receipt = record(
+    input,
+    candidate !== null && typeof candidate === 'object'
+      && Object.hasOwn(candidate, 'entrySurface')
+      ? ENTRY_TOP_KEYS
+      : TOP_KEYS,
+  );
   if (receipt.schema !== TRUSTED_BROWSER_RECEIPT_SCHEMA
     || typeof receipt.runId !== 'string' || receipt.runId === ''
     || !Array.isArray(receipt.outcomeResults) || receipt.outcomeResults.length === 0
@@ -122,8 +144,24 @@ export function parseTrustedBrowserReceipt(input: unknown): TrustedBrowserReceip
   }
   const floors = record(receipt.hardFloors, FLOOR_KEYS);
   if (Object.values(floors).some((value) => value !== 'pass' && value !== 'fail')) return malformed();
+  const entrySurface = receipt.entrySurface === undefined
+    ? undefined
+    : (() => {
+      const entry = record(receipt.entrySurface, ENTRY_SURFACE_KEYS);
+      if (typeof entry.prerequisiteTaskId !== 'string' || entry.prerequisiteTaskId === ''
+        || typeof entry.dependentTaskId !== 'string' || entry.dependentTaskId === ''
+        || (entry.status !== 'pass' && entry.status !== 'fail')) return malformed();
+      return Object.freeze({
+        benchmarkProjectionSha256: digest(entry.benchmarkProjectionSha256),
+        prerequisiteTaskId: entry.prerequisiteTaskId,
+        dependentTaskId: entry.dependentTaskId,
+        status: entry.status,
+      });
+    })();
   const captures = receipt.captures.map((candidate) => {
-    const capture = record(candidate, CAPTURE_KEYS);
+    const scoped = typeof candidate === 'object' && candidate !== null
+      && Object.hasOwn(candidate, 'outcomeRef');
+    const capture = record(candidate, scoped ? OUTCOME_CAPTURE_KEYS : CAPTURE_KEYS);
     if (typeof capture.path !== 'string' || capture.path === '' || capture.path.startsWith('/')
       || capture.path.includes('\\') || capture.path.split('/').some((part) => part === '' || part === '.' || part === '..')
       || !Number.isInteger(capture.width) || !Number.isInteger(capture.height)
@@ -133,6 +171,13 @@ export function parseTrustedBrowserReceipt(input: unknown): TrustedBrowserReceip
       sha256: digest(capture.sha256),
       width: capture.width as number,
       height: capture.height as number,
+      ...(capture.outcomeRef === undefined
+        ? {}
+        : {
+          outcomeRef: typeof capture.outcomeRef === 'string' && capture.outcomeRef !== ''
+            ? capture.outcomeRef
+            : malformed(),
+        }),
     });
   });
   return Object.freeze({
@@ -150,7 +195,7 @@ export function parseTrustedBrowserReceipt(input: unknown): TrustedBrowserReceip
     })(),
     testedUrl: (() => {
       if (typeof receipt.testedUrl !== 'string'
-        || !/^http:\/\/127\.0\.0\.1:\d+\/\S*$/.test(receipt.testedUrl)) return malformed();
+        || !/^http:\/\/127\.0\.0\.1(?::\d+)?\/\S*$/.test(receipt.testedUrl)) return malformed();
       return receipt.testedUrl;
     })(),
     decisionGraphSha256: digest(receipt.decisionGraphSha256),
@@ -164,5 +209,6 @@ export function parseTrustedBrowserReceipt(input: unknown): TrustedBrowserReceip
     }),
     captures: Object.freeze(captures),
     transcript: strings(receipt.transcript, TRANSCRIPT, false),
+    ...(entrySurface === undefined ? {} : { entrySurface }),
   });
 }

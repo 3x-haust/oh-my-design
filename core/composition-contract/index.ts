@@ -25,7 +25,7 @@ export const CURRENT_COMPOSITION_SECTIONS = [
 // validator (task evidence owns `## UX task coverage`). The composition contract only
 // recognizes the heading so it can be authored as normal LF Markdown; it never restates
 // or revalidates that section's internal schema.
-export const AUXILIARY_SECTIONS = ['UX task coverage'] as const;
+export const AUXILIARY_SECTIONS = ['UX task coverage', 'Production revision binding'] as const;
 
 export interface CompositionContractFinding {
   id: 'COMPOSITION-MISSING' | 'COMPOSITION-SECTION' | 'COMPOSITION-HASH' | 'COMPOSITION-STALE' | 'COMPOSITION-SCOUT' | 'COMPOSITION-SYNTHESIS';

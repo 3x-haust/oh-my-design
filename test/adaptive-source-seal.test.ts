@@ -35,7 +35,7 @@ function expressiveMedical(): unknown {
   }
   Reflect.set(designAxes, 'expressiveDesignNeed', 'showpiece');
   Reflect.set(strategy, 'roles', ['omd-framer', 'omd-scout', 'omd-writer', 'omd-typesetter', 'omd-composer', 'omd-sketch', 'omd-hand', 'omd-eye']);
-  Reflect.set(strategy, 'stages', ['frame', 'scout', 'safety-validation', 'art-direction', 'copy', 'type-proof', 'composition', 'candidate-generation', 'production', 'browser-evidence', 'independent-review']);
+  Reflect.set(strategy, 'stages', ['frame', 'content-grain', 'scout', 'reference-board', 'safety-validation', 'art-direction', 'copy', 'type-proof', 'composition', 'candidate-generation', 'production', 'browser-evidence', 'independent-review']);
   Reflect.set(strategy, 'executionWaves', [
     { id: 'frame', mode: 'concurrent', roles: ['omd-framer'] },
     { id: 'parallel-research-copy', mode: 'concurrent', roles: ['omd-scout', 'omd-writer'] },

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -77,34 +77,21 @@ test('Given a real offline installed tarball When each public command starts The
 
     const claudeHome = join(temporary, 'claude home');
     const codexHome = join(temporary, 'codex home');
-    const senpiHome = join(temporary, 'senpi home');
     mkdirSync(claudeHome);
     mkdirSync(codexHome);
-    mkdirSync(senpiHome);
     const environment = {
       ...process.env,
       HOME: temporary,
       CLAUDE_CONFIG_DIR: claudeHome,
       CODEX_HOME: codexHome,
-      SENPI_CODING_AGENT_DIR: senpiHome,
       OMD_BROWSER_RS_BIN: process.execPath,
     };
     const installer = installedCommand(consumer, 'oh-my-design');
-    for (const host of ['claude', 'codex', 'senpi'] as const) {
+    for (const host of ['claude', 'codex'] as const) {
       const install = process.platform === 'win32'
         ? run(process.execPath, [installer, 'install', `--host=${host}`], temporary, environment)
         : run(installer, ['install', `--host=${host}`], temporary, environment);
       assert.equal(install.status, 0, `${host} install: ${install.stderr}`);
-      if (host === 'senpi') {
-        const shippedSkills = readdirSync(join(consumer, PACKAGE, 'dist', 'senpi', 'skills')).sort();
-        assert.ok(shippedSkills.length > 0, 'packed Senpi distribution must ship skills');
-        for (const skill of shippedSkills) {
-          const shipped = join(consumer, PACKAGE, 'dist', 'senpi', 'skills', skill, 'SKILL.md');
-          const installedSkill = join(senpiHome, 'skills', skill, 'SKILL.md');
-          assert.equal(existsSync(installedSkill), true, `Senpi install must include shipped skill ${skill}`);
-          assert.deepEqual(readFileSync(installedSkill), readFileSync(shipped), `Senpi skill ${skill} must preserve packed bytes`);
-        }
-      }
       const doctor = process.platform === 'win32'
         ? run(process.execPath, [installer, 'doctor', `--host=${host}`], temporary, environment)
         : run(installer, ['doctor', `--host=${host}`], temporary, environment);

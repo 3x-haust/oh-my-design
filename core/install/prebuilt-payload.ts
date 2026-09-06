@@ -2,7 +2,6 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, sep } from 'node:path';
 import { parse as parseYaml } from 'yaml';
 import { createBuildIdentityFromSource, skillOpenaiMetadata } from '../../adapters/build.ts';
-import { emitSenpi } from '../../adapters/senpi.ts';
 import { emitClaude } from '../../adapters/claude.ts';
 import { emitCodex } from '../../adapters/codex.ts';
 import { substituter } from '../../adapters/tokens.ts';
@@ -43,9 +42,7 @@ export function expectedPrebuiltFiles(sourceRoot: string, host: Host): ReadonlyM
   const buildIdentity = createBuildIdentityFromSource(sourceRoot);
   const emitted = host === 'codex'
     ? emitCodex({ agents, version: packageVersion(sourceRoot), buildIdentity })
-    : host === 'senpi'
-      ? emitSenpi({ agents, buildIdentity })
-      : emitClaude({ agents, buildIdentity });
+    : emitClaude({ agents, buildIdentity });
   const files = new Map<string, ExpectedPrebuiltFile>();
   for (const [path, value] of Object.entries(emitted.files)) files.set(path, expectedValue(value));
 

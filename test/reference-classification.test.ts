@@ -124,7 +124,8 @@ test('canonical board authoring derives the versioned classification binding fro
   const root = project(context);
   reference(root, 'voice-guide', contentPrinciples);
   writeFileSync(join(root, '.omd', 'acquisition-plan.json'), JSON.stringify({
-    zones: [{ id: 'voice', required: true }],
+    schema: 'reference-acquisition-plan-v1', owner: 'omd-framer',
+    zones: [{ id: 'voice', kind: 'region', job: 'Preserve approved voice evidence.', required: true }],
   }));
   const candidate = (id: string) => ({
     id, label: id, route: '/', rationale: 'Use approved voice evidence.', pieces: [{

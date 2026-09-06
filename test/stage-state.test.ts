@@ -24,6 +24,16 @@ function write(dir: string, relative: string, content: string): void {
   writeFileSync(path, content);
 }
 
+test('content grain stage is owned by Framer and delivers the Grain artifact', () => {
+  const stage = STAGES.find(({ id }) => id === 'content-grain');
+  assert.deepEqual(stage, {
+    id: 'content-grain',
+    owner: 'omd-framer',
+    artifact: '.omd/content-grain.json',
+    requiredContracts: ['protocol/content-grain.md'],
+  });
+});
+
 test('every stage names a real owner, artifact, and existing pack contract', () => {
   assert.ok(STAGES.length >= 10);
   assert.equal(new Set(STAGES.map((stage) => stage.id)).size, STAGES.length);
@@ -84,7 +94,10 @@ test('an adaptive route preserves the selected model stage order instead of the 
   const invocation = publishTestAdaptiveRoute(dir, input);
 
   const state = resolveRunState(dir, PACK, invocation);
-  assert.deepEqual(state.stages.map((stage) => stage.stage), ['frame', 'scout', 'copy', 'composition']);
+  assert.deepEqual(
+    state.stages.map((stage) => stage.stage),
+    ['frame', 'content-grain', 'scout', 'reference-board', 'copy', 'composition'],
+  );
   assert.equal(state.current, 'frame');
 });
 
@@ -94,12 +107,16 @@ test('run state names the current stage and its blocking contracts after a parti
     ['.omd/domain-brief.json', '{}'],
     ['.omd/depth.json', '{}'],
     ['.omd/frame.md', '# frame'],
+    ['.omd/content-grain.json', '{}'],
     ['.omd/acquisition-plan.json', '{}'],
     ['.omd/scout.md', '# scout'],
   ] as const) write(dir, relative, body);
 
   const state = resolveRunState(dir, PACK);
-  assert.deepEqual(state.completed, ['domain', 'depth', 'frame', 'acquisition', 'scout']);
+  assert.deepEqual(
+    state.completed,
+    ['domain', 'depth', 'frame', 'content-grain', 'acquisition', 'scout'],
+  );
   assert.equal(state.current, 'reference-board');
 
   const resumed = JSON.parse(run(['stage', 'resume', '--json'], dir).stdout);

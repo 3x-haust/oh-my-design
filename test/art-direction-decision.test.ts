@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { test } from 'node:test';
-import { beatBudgetForRegister, canonicalArtDirectionReferences, exceedsCanonicalBeatBudget, NO_CURRENT_USER_BEAT_EXCEPTION_RECEIPT_SHA256, recipeDecisionProjectionSha256, resolveMarketingArtDirectionPure as resolveMarketingArtDirection } from '../core/art-direction/decision.ts';
+import { beatBudgetForRegister, canonicalArtDirectionReferences, exceedsCanonicalBeatBudget, NO_CURRENT_USER_BEAT_EXCEPTION_RECEIPT_SHA256, recipeDecisionProjectionSha256, resolveMarketingArtDirectionPure as resolveMarketingArtDirection, validateArtDirectionDecision } from '../core/art-direction/decision.ts';
 import type { NonAuthoritativeResolveMarketingArtDirectionInput as ResolveMarketingArtDirectionInput } from '../core/art-direction/decision.ts';
 import { canonicalJson } from '../core/ref/board-artifacts.ts';
 import { referenceHandoffPayloadSha256 } from '../core/ref/reference-handoff.ts';
@@ -184,6 +184,58 @@ function input(overrides: Partial<ResolveMarketingArtDirectionInput> = {}): Reso
     motionResolution: overrides.motionResolution ?? motionResolutionFor(resolved),
   };
 }
+
+test('two register alternatives resolve and retain exact n-minus-one rejections through record readback', () => {
+  const alternatives = defaultAlternatives(true).slice(1);
+  const evidence = evaluatorEvidence();
+  const resolved = input({ alternatives, evaluatorEvidence: { ...evidence, assessments: evidence.assessments.filter(item => item.register !== 'quiet') } });
+  const decision = resolveMarketingArtDirection(resolved);
+  assert.equal(decision.selectedRegister, 'showpiece');
+  assert.deepEqual(decision.rejectedAlternatives.map(item => item.register), ['confident']);
+  const record = {
+    schemaVersion: ART_DIRECTION_RECORD_SCHEMA_VERSION, decision, decisionSha256: artDirectionSha256(decision),
+    referenceHandoffSha256: hash('1'), intentLedgerSha256: decision.intentSha256,
+    activationSha256: decision.activationSha256, beatIds: ['B-1'],
+  };
+  assert.deepEqual(validateArtDirectionRecord(JSON.parse(canonicalJson(record))), record);
+  assert.deepEqual(validateArtDirectionDecision(decision, resolved.references, resolved.eligibility, resolved.referenceBindings, resolved.motionResolution), decision);
+  for (const rejectedAlternatives of [[], [...decision.rejectedAlternatives, decision.rejectedAlternatives[0]!], [{ ...decision.rejectedAlternatives[0]!, register: 'quiet' as const }], [{ ...decision.rejectedAlternatives[0]!, register: 'showpiece' as const }]]) {
+    assert.throws(() => validateArtDirectionDecisionShape({ ...decision, rejectedAlternatives }));
+    assert.throws(() => validateArtDirectionDecision({ ...decision, rejectedAlternatives }, resolved.references, resolved.eligibility, resolved.referenceBindings, resolved.motionResolution));
+  }
+  for (const malformed of [[], [alternatives[0]!, alternatives[0]!]]) {
+    assert.throws(() => resolveMarketingArtDirection({ ...resolved, alternatives: malformed }), /nonempty and register-distinct/);
+    assert.throws(() => validateArtDirectionDecisionShape({ ...decision, consideredAlternatives: malformed }));
+  }
+  assert.throws(() => resolveMarketingArtDirection({ ...resolved, evaluatorEvidence: evidence }), /assess every alternative exactly once/);
+  assert.throws(() => resolveMarketingArtDirection({ ...resolved, evaluatorEvidence: { ...evidence, assessments: evidence.assessments.slice(0, 2) } }), /missing a finite score/);
+});
+
+test('singleton requires a matching explicit register lock, never a motion lock or source label', () => {
+  const evidence = evaluatorEvidence();
+  const resolved = input({
+    alternatives: [alternative('quiet', 'none')], intent: { register: 'quiet', motionDecision: 'none' },
+    evaluatorEvidence: { ...evidence, assessments: evidence.assessments.filter(item => item.register === 'quiet') },
+    eligibility: { sceneRoles: [], fallbackAttempted: true },
+  });
+  const decision = resolveMarketingArtDirection(resolved);
+  assert.equal(decision.selectedRegister, 'quiet'); assert.deepEqual(decision.rejectedAlternatives, []);
+  assert.deepEqual(validateArtDirectionDecisionShape(JSON.parse(canonicalJson(decision))), decision);
+  assert.deepEqual(validateArtDirectionDecision(decision, resolved.references, resolved.eligibility, resolved.referenceBindings, resolved.motionResolution, resolved.intent), decision);
+  for (const intent of [{}, { motionDecision: 'none' as const }, { register: 'confident' as const }]) {
+    assert.throws(() => resolveMarketingArtDirection({ ...resolved, intent }), /matching current explicit register lock/);
+    assert.throws(() => validateArtDirectionDecision(decision, resolved.references, resolved.eligibility, resolved.referenceBindings, resolved.motionResolution, intent), /matching current explicit register lock/);
+  }
+  assert.throws(() => validateArtDirectionDecision(decision, resolved.references, resolved.eligibility, resolved.referenceBindings, resolved.motionResolution), /matching current explicit register lock/);
+  assert.throws(() => validateArtDirectionDecisionShape({ ...decision, source: 'agent-evidence' }));
+  assert.throws(() => resolveMarketingArtDirection({ ...resolved, motionResolution: { ...resolved.motionResolution, slots: [] } }), /slot|pending/);
+});
+
+test('a current user register lock still wins over the evaluator in a two-register comparison', () => {
+  const evidence = evaluatorEvidence();
+  const resolved = input({ alternatives: defaultAlternatives(true).slice(1), intent: { register: 'confident' }, evaluatorEvidence: { ...evidence, assessments: evidence.assessments.filter(item => item.register !== 'quiet') } });
+  assert.equal(resolveMarketingArtDirection(resolved).selectedRegister, 'confident');
+});
 
 test('explicit current-user register and motion locks win before composition', () => {
   const resolved = input({

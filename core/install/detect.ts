@@ -28,9 +28,5 @@ export function detectHosts(env: NodeJS.ProcessEnv = process.env, opts: DetectOp
   const codexHome = env['CODEX_HOME'] || join(home, '.codex');
   if (existsSync(codexHome)) detected.push({ host: 'codex', home: codexHome });
 
-  // Senpi keeps its config under `~/.senpi/agent` (or `SENPI_CODING_AGENT_DIR`) and loads skills
-  // from `<agentDir>/skills`, so that directory is the install target, not a plugin cache.
-  const senpiHome = env['SENPI_CODING_AGENT_DIR'] || join(home, '.senpi', 'agent');
-  if (existsSync(senpiHome)) detected.push({ host: 'senpi', home: senpiHome });
   return detected;
 }

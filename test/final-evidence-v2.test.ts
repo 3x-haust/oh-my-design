@@ -18,11 +18,12 @@ import { NO_CURRENT_USER_BEAT_EXCEPTION_RECEIPT_SHA256 } from '../core/art-direc
 import { EvidenceClaimError, type EvidenceClaimPublication } from '../core/brief/evidence-claims.ts';
 import { COPY_DECK_RECEIPT_SCHEMA_VERSION, copyDeckSha256, validateCanonicalCopyDeckReceipt } from '../core/copy/index.ts';
 import { CURRENT_COMPOSITION_SECTIONS } from '../core/composition-contract/index.ts';
+import { DESIGN_QUALITY_AXES } from '../core/evidence/final-v2-design-quality.ts';
 import { INTENT_CURRENT_POINTER_SCHEMA_VERSION, appendExplicitIntent, intentLedgerSha256, resolveCurrentUserBeatExceptionReceipt, type IntentLedger } from '../core/runtime/intent.ts';
 import { captureMotionEvidenceV2, validateMotionEvidenceV2 } from '../core/render/index.ts';
 import { authorizeTestProjectRunPayloads, authorizeTestTaskEvidencePayloads, createTestProjectRunInvocation, createTestProjectWriteAdapter } from './helpers/project-write.ts';
 import { createProjectWriteAdapter, requireProjectWriteAdapter, writeProjectFile } from '../core/runtime/project-write.ts';
-import { observationV2Sha256, readCurrentObservationV2, writeObservationV2 } from '../core/runtime/observation.ts';
+import { observationV2Sha256, readCurrentObservationV2, redactObservationEvidence, writeObservationV2 } from '../core/runtime/observation.ts';
 import { retainObservationV2 } from '../core/runtime/observation-retention.ts';
 import { writeBrowserDecisionFixture } from './helpers/browser-observation-decision-links.ts';
 import { registerFinalBrowserObservationCases } from './helpers/browser-observation-final-v2-cases.ts';
@@ -326,6 +327,11 @@ const copyDeckV2 = (
 - Language: en
 - Register: direct
 
+## Truth contract
+
+- Result boundary: navigation
+- Storage boundary: none
+
 ## Surface copy
 
 ### Launch
@@ -596,7 +602,7 @@ const manifest = (directory: string, decision: 'none' | 'one' = 'none', motionRe
   const firstSha256 = sha(canonical(JSON.parse(readFileSync(join(directory, first.path), 'utf8'))));
   const second = receipt(directory, 'observation-2', 'observation-v2', { schema: 'observation-v2', buildSha256: current.buildSha256, currentArtifact: { path: buildIdentity.path, sha256: buildIdentity.sha256 }, predecessorSha256: firstSha256, observedAt: '2026-01-01T00:01:00.000Z', evidence: browserFixture.evidence([{ testedState: 'mobile-loaded', path: mobileBeatCapture, sha256: sha(readFileSync(join(directory, mobileBeatCapture))), viewport: { width: 390, height: 844 } }, ...mobileSamples.map((capture, index) => ({ testedState: `mobile-temporal-${index + 1}`, ...capture, viewport: { width: 390, height: 844 } }))]) });
   const secondSha256 = sha(canonical(JSON.parse(readFileSync(join(directory, second.path), 'utf8'))));
-  const lane = (name: 'blind' | 'fidelity' | 'protocol', schema: 'blind-review-v1' | 'fidelity-review-v1' | 'protocol-review-v1') => {
+  const lane = (name: 'blind' | 'fidelity' | 'protocol', schema: 'blind-review-v2' | 'fidelity-review-v1' | 'protocol-review-v1') => {
     const contract = {
       blind: { verdicts: { blindVisual: 'GREEN', blindNarrative: 'GREEN' }, criticalFloors: { composition: 3, copy: 3 } },
       fidelity: { verdicts: { referenceFidelity: 'GREEN', renderFidelity: 'GREEN' }, criticalFloors: { desktop: 3, mobile: 3 } },
@@ -605,17 +611,49 @@ const manifest = (directory: string, decision: 'none' | 'one' = 'none', motionRe
     const sessionSha256 = sha(`${name}-isolation`);
     const reviewerIds = [`${name}-reviewer-a`, `${name}-reviewer-b`];
     const observationSha256s = [firstSha256, secondSha256];
+    const designQuality = {
+      schema: 'design-quality-contract-v1',
+      axes: DESIGN_QUALITY_AXES.map((axis) => ({
+        axis,
+        verdict: 'GREEN',
+        score:
+          axis === 'beautyDesirability' || axis === 'hierarchyComposition'
+            ? 4
+            : 3,
+        crossViewport: 'preserved',
+        criticalFailure: null,
+        evidence: [
+          {
+            observationSha256: firstSha256,
+            viewport: 'desktop',
+            state: 'initial',
+            region: 'primary work surface',
+            visibleCondition: 'The intended priority is visible.',
+            userConsequence: 'The next decision is legible.',
+          },
+          {
+            observationSha256: secondSha256,
+            viewport: 'mobile',
+            state: 'initial',
+            region: 'primary work surface',
+            visibleCondition: 'The priority is recomposed.',
+            userConsequence: 'Decision context remains available.',
+          },
+        ],
+      })),
+    };
     const processBase = { blind: 10_000, fidelity: 20_000, protocol: 30_000 }[name];
     const executionReceipts = reviewerIds.map((reviewerId, index) => receipt(
       directory,
       `${name}-execution-${index}`,
-      'final-reviewer-execution-v1',
+      name === 'blind' ? 'final-reviewer-execution-v2' : 'final-reviewer-execution-v1',
       {
-        schema: 'final-reviewer-execution-v1',
+        schema: name === 'blind' ? 'final-reviewer-execution-v2' : 'final-reviewer-execution-v1',
         lane: `${name}Lane`,
         reviewerId,
         verdicts: contract.verdicts,
         criticalFloors: contract.criticalFloors,
+        ...(name === 'blind' ? { designQuality } : {}),
         isolationReceiptSha256: sessionSha256,
         observationSha256s,
         artDirectionSha256: artDirectionSemanticSha256,
@@ -632,7 +670,9 @@ const manifest = (directory: string, decision: 'none' | 'one' = 'none', motionRe
     return receipt(directory, name, schema, {
       schema, artDirectionSha256: artDirectionSemanticSha256, buildSha256: current.buildSha256,
       isolationReceipt: { schema: 'reviewer-isolation-v1', sha256: sessionSha256 },
-      ...contract, quorum: { required: 2, passed: 2 },
+      ...contract,
+      ...(name === 'blind' ? { designQuality } : {}),
+      quorum: { required: 2, passed: 2 },
       provenance: { observationSha256s, reviewerIds, reviewerSessionSha256: sessionSha256 },
       executionReceipts: executionReceipts.map(({ path, sha256 }) => ({ path, sha256 })),
     });
@@ -668,7 +708,7 @@ const manifest = (directory: string, decision: 'none' | 'one' = 'none', motionRe
   const sourceSealValue = createSourceSeal(directory, '2026-01-01T00:00:00.000Z');
   writeFileSync(join(directory, '.omd', 'source-seal.json'), `${canonical(sourceSealValue)}\n`);
   const sourceSeal = { path: '.omd/source-seal.json', schema: 'source-seal-v1', sha256: sha(readFileSync(join(directory, '.omd', 'source-seal.json'))) };
-  const graph = { schema: 'final-evidence-v2-graph' as const, activation, intent, artDirection, board, selection, settledSelection: settledSelectionReceipt, handoff, usage, referenceDistance, copy, renderedBeats, sourceSeal, buildIdentity, blindLane: lane('blind', 'blind-review-v1'), fidelityLane: lane('fidelity', 'fidelity-review-v1'), protocolLane: lane('protocol', 'protocol-review-v1'), observations: [first, second] } as unknown as FinalEvidenceV2Manifest['graph'];
+  const graph = { schema: 'final-evidence-v2-graph' as const, activation, intent, artDirection, board, selection, settledSelection: settledSelectionReceipt, handoff, usage, referenceDistance, copy, renderedBeats, sourceSeal, buildIdentity, blindLane: lane('blind', 'blind-review-v2'), fidelityLane: lane('fidelity', 'fidelity-review-v1'), protocolLane: lane('protocol', 'protocol-review-v1'), observations: [first, second] } as unknown as FinalEvidenceV2Manifest['graph'];
   return decision === 'one'
     ? { schema: 'final-evidence-v2', motionDecision: 'one', claimPublication: claimPublication(), graph, motionEvidence: receipt(directory, 'motion', 'motion-evidence-v2', { schema: 'motion-evidence-v2', artDirectionHash: artDirectionSemanticSha256, motionDecision: 'one', observed: {}, scenes: [] }) }
     : { schema: 'final-evidence-v2', motionDecision: 'none', claimPublication: claimPublication(), graph, staticEvidence };
@@ -1292,7 +1332,26 @@ test('product routes reject a one signature scene even with current task evidenc
   const directory = root(); try {
     let input = manifest(directory, 'one');
     input = attachCurrentTaskEvidence(directory, input, 'product');
-    assert.throws(() => publishFinalEvidenceV2(directory, input), /product routes cannot publish a signature scene or showpiece register/);
+    assert.throws(() => publishFinalEvidenceV2(directory, input), /product routes cannot publish an unscoped signature scene/);
+  } finally { clean(directory); }
+});
+
+test('showpiece product motion publishes only when task evidence scopes its target', () => {
+  const directory = root(); try {
+    let input = manifest(directory, 'one', 'showpiece');
+    input = attachCurrentTaskEvidence(directory, input, 'product');
+    const invocation = finalEvidenceInvocation(directory);
+    authorizeTestProjectRunPayloads(
+      directory,
+      invocation,
+      finalEvidenceGraphAuthorizations(directory, input),
+    );
+    assert.doesNotThrow(() => validateFinalEvidenceV2GraphFiles(
+      directory,
+      input.graph,
+      finalEvidenceGraphFilesystem,
+      invocation,
+    ));
   } finally { clean(directory); }
 });
 
@@ -1393,6 +1452,30 @@ test('observation-v2 rejects forged currentness and persists only redacted hash-
     assert.equal(second.predecessorSha256, observationV2Sha256(first));
     assert.doesNotMatch(readFileSync(join(directory, '.omd', 'observation-v2.json'), 'utf8') + readFileSync(join(directory, '.omd', 'observation-v2', `sha256-${observationV2Sha256(first)}.json`), 'utf8'), /person@example\.com|super-secret-token/);
   } finally { clean(directory); }
+});
+
+test('observation-v2 preserves current trusted reference formats without weakening secret redaction', () => {
+  const digest = 'a'.repeat(64);
+  const decisionDigest = 'b'.repeat(64);
+  const trusted = [
+    `decision:${digest}:evidence-gated-case-workspace:${decisionDigest}`,
+    `outcome:${digest}:mustNotHave:0:${decisionDigest}`,
+    `outcome:${digest}:completionEvidence:1:${decisionDigest}`,
+  ];
+  assert.deepEqual(redactObservationEvidence(trusted), trusted);
+  assert.deepEqual(redactObservationEvidence({
+    prerequisiteTaskId: 'identify-exception-shipment',
+    dependentTaskId: 'inspect-temperature-excursion',
+  }), {
+    prerequisiteTaskId: 'identify-exception-shipment',
+    dependentTaskId: 'inspect-temperature-excursion',
+  });
+  assert.equal(
+    redactObservationEvidence(`decision:${digest}:invalid id:${decisionDigest}`),
+    'decision:[REDACTED]:invalid id:[REDACTED]',
+  );
+  assert.deepEqual(redactObservationEvidence({ prerequisiteTaskId: 'Bearer super-secret-token-value-123456' }), { prerequisiteTaskId: '[REDACTED]' });
+  assert.equal(redactObservationEvidence('Bearer super-secret-token-value-123456'), '[REDACTED]');
 });
 
 test('observation retention keeps graph-current records and requires a trusted writer', () => {

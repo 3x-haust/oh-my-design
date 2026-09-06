@@ -49,12 +49,24 @@ export type CodexOwnerPersistRequest = CodexHostRequestIdentity & Readonly<{
   result: Record<string, unknown>;
 }>;
 
+export type CodexRoleExecRequest = CodexHostRequestIdentity & Readonly<{
+  schema: 'omd-codex-role-exec-request-v1';
+  role: string;
+  timeoutMs: number;
+  task: string;
+}>;
+
+export type CodexBrowserExecRequest = CodexHostRequestIdentity & Readonly<{
+  schema: 'omd-codex-browser-exec-request-v1';
+  role: string;
+}>;
+
 /**
  * The TypeScript CLI cannot synchronously service a Node socket itself. A tiny host-owned helper
  * performs the exchange in a separate process while this process blocks; the broker verifies that
  * helper's real parent and the canonical OMD CLI process before issuing anything.
  */
-export function requestCodexHostAuthority(socketPath: string, request: CodexHostAuthorizationRequest | CodexOwnerLaunchRequest | CodexOwnerExecRequest | CodexOwnerPersistRequest): unknown {
+export function requestCodexHostAuthority(socketPath: string, request: CodexHostAuthorizationRequest | CodexOwnerLaunchRequest | CodexOwnerExecRequest | CodexOwnerPersistRequest | CodexRoleExecRequest | CodexBrowserExecRequest): unknown {
   const result = spawnSync(process.execPath, [CLIENT, socketPath], {
     input: JSON.stringify(request),
     encoding: 'utf8',

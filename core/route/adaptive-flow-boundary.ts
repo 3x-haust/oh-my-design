@@ -151,8 +151,8 @@ export function parseAdaptiveBrowserContext(value: unknown): AdaptiveBrowserDeci
   if (item.get('schema') !== ADAPTIVE_BROWSER_CONTEXT_SCHEMA) return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE');
   const status = item.get('status');
   if (status !== 'pending' && status !== 'validated') return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE');
-  const decisionIds = ids(item.get('decisionIds'), status === 'pending');
-  if ((status === 'pending' && decisionIds.length !== 0) || (status === 'validated' && decisionIds.length === 0))
+  const decisionIds = ids(item.get('decisionIds'), true);
+  if (status === 'validated' && decisionIds.length === 0)
     return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE');
   return Object.freeze({ schema: ADAPTIVE_BROWSER_CONTEXT_SCHEMA, status, decisionIds, reason: text(item.get('reason'), true) });
 }
@@ -177,11 +177,21 @@ function modelCapability(value: unknown): ModelCapabilityRouteInput {
 
 export function parseAdaptiveRouteInput(value: unknown): AdaptiveRouteInput {
   try {
-    const item = fields(value, ADAPTIVE_ROUTE_INPUT_KEYS, true);
+    const legacyKeys = ADAPTIVE_ROUTE_INPUT_KEYS.filter((key) => key !== 'projectMode');
+    const hasProjectMode = typeof value === 'object'
+      && value !== null
+      && !Array.isArray(value)
+      && Object.hasOwn(value, 'projectMode');
+    const item = fields(value, hasProjectMode ? ADAPTIVE_ROUTE_INPUT_KEYS : legacyKeys, true);
     if (item.get('schema') !== ADAPTIVE_ROUTE_INPUT_SCHEMA) return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE');
     return Object.freeze({
       schema: ADAPTIVE_ROUTE_INPUT_SCHEMA,
       request: text(item.get('request')),
+      projectMode: item.get('projectMode') === undefined
+        ? 'existing'
+        : item.get('projectMode') === 'greenfield' || item.get('projectMode') === 'existing'
+        ? item.get('projectMode') as 'greenfield' | 'existing'
+        : failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE'),
       namedDependencies: strings(item.get('namedDependencies'), true),
       allowedPaths: strings(item.get('allowedPaths')),
       taskOutcome: plainData(item.get('taskOutcome')), uxPolicy: plainData(item.get('uxPolicy')),

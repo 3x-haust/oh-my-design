@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -6,6 +7,7 @@ import {
   ADAPTIVE_ROUTE_RECORD_SCHEMA,
   ADAPTIVE_STAGE_GRAPH,
   ADAPTIVE_STAGE_IDS,
+  ADAPTIVE_STAGE_OWNERS,
   AdaptiveRouteError,
   MANDATORY_ADAPTIVE_GATES,
   parseRouteRecord,
@@ -15,8 +17,10 @@ import {
   validateAdaptiveStageOrder,
   type AdaptiveRouteErrorCode,
   type AdaptiveStageId,
+  type AdaptiveStageNode,
 } from '../core/route/index.ts';
 import { validateAdaptiveStrategyRails } from '../core/route/adaptive-flow.ts';
+import { canonicalRouteJson } from '../core/route/adaptive-source-contract.ts';
 
 const fixturePath = (name: string): string => fileURLToPath(new URL(`fixtures/adaptive-flow/${name}.json`, import.meta.url));
 const fixture = (name: string): unknown => JSON.parse(readFileSync(fixturePath(name), 'utf8'));
@@ -36,6 +40,56 @@ function routeError(run: () => unknown, code: AdaptiveRouteErrorCode): void {
   });
 }
 
+test('content grain is an optional dependency-ordered stage', () => {
+  const stage = 'content-grain' as AdaptiveStageId;
+  assert.ok(ADAPTIVE_STAGE_IDS.includes(stage));
+  assert.equal(Reflect.get(ADAPTIVE_STAGE_OWNERS, stage), 'omd-framer');
+  const grain = Reflect.get(ADAPTIVE_STAGE_GRAPH, stage) as AdaptiveStageNode | undefined;
+  assert.deepEqual(grain, {
+    prerequisites: ['frame'],
+    afterIfSelected: [],
+  });
+  assert.ok(ADAPTIVE_STAGE_GRAPH.composition.afterIfSelected.some((dependency) => dependency === stage));
+  assert.doesNotThrow(() => validateAdaptiveStageGraph(ADAPTIVE_STAGE_GRAPH));
+});
+
+test('genuine pre-projectMode route records retain their original source hash', () => {
+  const current = routeAdaptiveFlow(fixture('copy-only'));
+  const source = { ...current.sourceContract } as Record<string, unknown>;
+  delete source.projectMode;
+  const legacy = { ...current, sourceContract: source } as Record<string, unknown>;
+  delete legacy.projectMode;
+  legacy.sourceContractSha256 = createHash('sha256')
+    .update(`${canonicalRouteJson(source)}\n`)
+    .digest('hex');
+
+  assert.equal(parseRouteRecord(legacy).projectMode, 'existing');
+});
+
+test('pending browser evidence may name the decisions it will observe', () => {
+  const input = changed('copy-only', (value) => {
+    const context = Reflect.get(value, 'browserDecisionContext');
+    assert.ok(typeof context === 'object' && context !== null);
+    Reflect.set(context, 'decisionIds', ['booking-flow-complete']);
+  });
+  assert.deepEqual(
+    routeAdaptiveFlow(input).browserDecisions.decisionIds,
+    ['booking-flow-complete'],
+  );
+});
+
+test('design work routes content grain before composition', () => {
+  const routed = routeAdaptiveFlow(fixture('medical-new-product'));
+  assert.equal(routed.projectMode, 'greenfield');
+  const grainIndex = routed.strategy.stages.indexOf('content-grain' as AdaptiveStageId);
+  const frameIndex = routed.strategy.stages.indexOf('frame');
+  const compositionIndex = routed.strategy.stages.indexOf('composition');
+  assert.ok(grainIndex >= 0);
+  assert.ok(frameIndex < grainIndex);
+  assert.ok(grainIndex < compositionIndex);
+  assert.ok(routed.strategy.roles.includes('omd-framer'));
+});
+
 test('copy-only work skips unnecessary discovery and design stages with written reasons', () => {
   const routed = routeAdaptiveFlow(fixture('copy-only'));
 
@@ -51,7 +105,7 @@ test('copy-only work skips unnecessary discovery and design stages with written 
     'copy-repair-workflow',
   ]);
   assert.deepEqual(routed.strategy.skips.map((item) => item.id), [
-    'reference-discovery', 'domain', 'depth', 'frame', 'acquisition', 'scout',
+    'reference-discovery', 'domain', 'depth', 'frame', 'content-grain', 'acquisition', 'scout',
     'reference-board', 'reference-selection', 'art-direction', 'type-proof',
     'composition', 'candidate-generation', 'safety-validation', 'reflection-in-action',
     'reference-distance', 'image-first-draft', 'evidence-driven-refinement',
@@ -72,11 +126,11 @@ test('medical new-product work keeps safety, UX, evidence, and review while pres
 
   assert.equal(routed.strategy.owner, 'user-selected-model');
   assert.deepEqual(routed.strategy.roles, [
-    'omd-framer', 'omd-scout', 'omd-composer', 'omd-writer', 'omd-hand', 'omd-eye',
+    'omd-framer', 'omd-scout', 'omd-composer', 'omd-sketch', 'omd-writer', 'omd-hand', 'omd-eye',
   ]);
   assert.deepEqual(routed.strategy.stages, [
-    'frame', 'scout', 'safety-validation', 'copy', 'composition',
-    'production', 'browser-evidence', 'independent-review',
+    'frame', 'content-grain', 'scout', 'reference-board', 'safety-validation', 'copy',
+    'composition', 'candidate-generation', 'production', 'browser-evidence', 'independent-review',
   ]);
   assert.ok(routed.strategy.methods.includes('design-strategy-safety-recovery'));
   assert.ok(routed.strategy.methods.includes('reference-discovery'));
@@ -87,6 +141,33 @@ test('medical new-product work keeps safety, UX, evidence, and review while pres
   assert.deepEqual(routed.gates.slice(0, MANDATORY_ADAPTIVE_GATES.length), MANDATORY_ADAPTIVE_GATES);
   assert.equal(routed.strategy.stages.at(-2), 'browser-evidence');
   assert.equal(routed.strategy.stages.at(-1), 'independent-review');
+});
+
+test('greenfield new-product routes task-flow benchmark and UX candidates', () => {
+  const routed = routeAdaptiveFlow(fixture('medical-new-product'));
+  for (const stage of ['reference-board', 'composition', 'candidate-generation']) {
+    assert.ok(routed.strategy.stages.includes(stage as never), stage);
+  }
+  for (const role of ['omd-scout', 'omd-composer', 'omd-sketch']) {
+    assert.ok(routed.strategy.roles.includes(role as never), role);
+  }
+  assert.ok(routed.gates.includes('greenfield-task-flow-benchmark'));
+  assert.equal(routed.strategy.stages.includes('art-direction'), false);
+});
+
+test('greenfield new-marketing keeps discovery and expressive craft without impersonating a product task-flow benchmark', () => {
+  const routed = routeAdaptiveFlow(fixture('synth-marketing'));
+
+  assert.equal(routed.projectMode, 'greenfield');
+  assert.equal(routed.sourceContract.referenceDiscovery.taskNeed, 'new-marketing');
+  assert.equal(routed.references.decision, 'discover');
+  assert.equal(routed.gates.includes('greenfield-task-flow-benchmark'), false);
+  for (const stage of ['art-direction', 'composition', 'candidate-generation']) {
+    assert.ok(routed.strategy.stages.includes(stage as never), stage);
+  }
+  assert.deepEqual(routed.behavior.active.motion, { selected: true, ambition: 'award-level' });
+  assert.equal(routed.behavior.active.designQuality.candidateMode, 'integrated-visual');
+  assert.deepEqual(routed.strategy.attributionCategories, ['tokens', 'motion', 'composition']);
 });
 
 test('thin and deep fixtures are observably adaptive without universal role, stage, reference, or candidate quotas', () => {
@@ -269,14 +350,15 @@ test('strategy roles and stages are closed, duplicate-free, and dependency order
     const strategy = Reflect.get(value, 'strategyDecision');
     assert.ok(typeof strategy === 'object' && strategy !== null);
     Reflect.set(strategy, 'stages', [
-      'frame', 'scout', 'safety-validation', 'composition', 'copy',
+      'frame', 'scout', 'reference-board', 'safety-validation', 'composition',
+      'candidate-generation', 'copy',
       'production', 'browser-evidence', 'independent-review',
     ]);
   })), 'ADAPTIVE_STAGE_ORDER_INVALID');
 });
 
 test('every topological permutation passes and every dependency inversion fails', () => {
-  const nodes = ['frame', 'scout', 'safety-validation', 'copy', 'composition'] as const;
+  const nodes = ['frame', 'content-grain', 'scout', 'safety-validation', 'copy', 'composition'] as const;
   const permutations = (values: readonly string[]): readonly (readonly string[])[] => values.length === 0
     ? [[]]
     : values.flatMap((value, index) => permutations(values.filter((_, item) => item !== index))
@@ -286,9 +368,14 @@ test('every topological permutation passes and every dependency inversion fails'
     const value = changed('medical-new-product', (input) => {
       const strategy = Reflect.get(input, 'strategyDecision');
       assert.ok(typeof strategy === 'object' && strategy !== null);
-      Reflect.set(strategy, 'stages', [...order, 'production', 'browser-evidence', 'independent-review']);
+      const expanded = [...order];
+      expanded.splice(expanded.indexOf('scout') + 1, 0, 'reference-board');
+      expanded.splice(expanded.indexOf('composition') + 1, 0, 'candidate-generation');
+      Reflect.set(strategy, 'stages', [...expanded, 'production', 'browser-evidence', 'independent-review']);
     });
-    const topological = order.indexOf('composition') > order.indexOf('frame')
+    const topological = order.indexOf('content-grain') > order.indexOf('frame')
+      && order.indexOf('composition') > order.indexOf('content-grain')
+      && order.indexOf('composition') > order.indexOf('frame')
       && order.indexOf('composition') > order.indexOf('scout')
       && order.indexOf('composition') > order.indexOf('copy');
     if (topological) {
@@ -298,7 +385,7 @@ test('every topological permutation passes and every dependency inversion fails'
       routeError(() => routeAdaptiveFlow(value), 'ADAPTIVE_STAGE_ORDER_INVALID');
     }
   }
-  assert.equal(valid, 30);
+  assert.equal(valid, 72);
 });
 
 test('every graph edge accepts dependency order and rejects its inversion', () => {

@@ -2,6 +2,7 @@ import {
   BOARD_TAKE_VALUES,
   REFERENCE_BOARD_SCHEMA_VERSION,
   REFERENCE_BOARD_V2_SCHEMA_VERSION,
+  REFERENCE_BOARD_V3_SCHEMA_VERSION,
   ReferenceBoardValidationError,
   type BoardSourceKind,
   type BoardTake,
@@ -11,9 +12,11 @@ import {
   type ReferenceSignal,
   type ReferenceBoardCandidate,
   type ReferenceBoardGrid,
+  type ReferenceInfluenceBinding,
   type ReferenceBoardManifest,
   type ReferenceBoardPiece,
 } from './board-contract.ts';
+import { REFERENCE_INFLUENCE_AXIS_VALUES, type ReferenceInfluenceAxis } from '../deliberation/contracts.ts';
 import { hasAssemblyPayload, hasSelectorPayload, hasSourcePayload } from './board-sanitization.ts';
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -31,6 +34,11 @@ const assemblyText = (value: unknown, label: string): string => {
   return parsed;
 };
 const integer = (value: unknown, label: string): number => typeof value === 'number' && Number.isSafeInteger(value) ? value : fail(`${label} must be a safe integer`);
+const digest = (value: unknown, label: string): string => {
+  const parsed = nonEmpty(value, label);
+  return /^[0-9a-f]{64}$/.test(parsed) ? parsed : fail(`${label} must be 64 lowercase hexadecimal characters`);
+};
+const nullableAssemblyText = (value: unknown, label: string): string | null => value === null ? null : assemblyText(value, label);
 const localTargetSelector = (value: unknown, label: string): string => {
   const selector = nonEmpty(value, label);
   if (hasSelectorPayload(selector)) fail(`${label} must be a stable local CSS selector`);
@@ -116,6 +124,42 @@ const grid = (value: unknown, label: string): ReferenceBoardGrid => {
   return { column, span, order };
 };
 
+const influenceAxis = (value: unknown, label: string): ReferenceInfluenceAxis =>
+  REFERENCE_INFLUENCE_AXIS_VALUES.includes(value as ReferenceInfluenceAxis)
+    ? value as ReferenceInfluenceAxis
+    : fail(`${label} must be one of ${REFERENCE_INFLUENCE_AXIS_VALUES.join(', ')}`);
+const influenceBinding = (value: unknown, label: string): ReferenceInfluenceBinding => {
+  const parsed = record(value, label);
+  exactKeys(parsed, ['axis', 'conflictGroup', 'conflictResolution', 'decisionId', 'falsifier', 'responsiveConsequence', 'sourceState', 'sourceViewport', 'targetViewports', 'zoneId'], label);
+  const viewport = record(parsed['sourceViewport'], `${label}.sourceViewport`);
+  exactKeys(viewport, ['height', 'width'], `${label}.sourceViewport`);
+  const width = integer(viewport['width'], `${label}.sourceViewport.width`);
+  const height = integer(viewport['height'], `${label}.sourceViewport.height`);
+  if (width < 1 || height < 1) fail(`${label}.sourceViewport dimensions must be positive integers`);
+  const targetViewports = array(parsed['targetViewports'], `${label}.targetViewports`).map((value, index) => {
+    const target = record(value, `${label}.targetViewports[${index}]`); exactKeys(target, ['height', 'width'], `${label}.targetViewports[${index}]`);
+    const targetWidth = integer(target['width'], `${label}.targetViewports[${index}].width`); const targetHeight = integer(target['height'], `${label}.targetViewports[${index}].height`);
+    if (targetWidth < 1 || targetHeight < 1) fail(`${label}.targetViewports dimensions must be positive integers`);
+    return { width: targetWidth, height: targetHeight };
+  });
+  if (targetViewports.length === 0 || new Set(targetViewports.map((viewport) => `${viewport.width}x${viewport.height}`)).size !== targetViewports.length) fail(`${label}.targetViewports must be a non-empty unique viewport list`);
+  const conflictGroup = nullableAssemblyText(parsed['conflictGroup'], `${label}.conflictGroup`);
+  const conflictResolution = nullableAssemblyText(parsed['conflictResolution'], `${label}.conflictResolution`);
+  if ((conflictGroup === null) !== (conflictResolution === null)) fail(`${label} conflictGroup and conflictResolution must either both be null or both be non-null`);
+  return {
+    zoneId: assemblyText(parsed['zoneId'], `${label}.zoneId`),
+    decisionId: assemblyText(parsed['decisionId'], `${label}.decisionId`),
+    axis: influenceAxis(parsed['axis'], `${label}.axis`),
+    sourceState: assemblyText(parsed['sourceState'], `${label}.sourceState`),
+    sourceViewport: { width, height },
+    targetViewports,
+    responsiveConsequence: assemblyText(parsed['responsiveConsequence'], `${label}.responsiveConsequence`),
+    conflictGroup,
+    conflictResolution,
+    falsifier: assemblyText(parsed['falsifier'], `${label}.falsifier`),
+  };
+};
+
 const classification = (value: unknown, label: string): { readonly kind: 'content-only' | 'anti-reference'; readonly sha256: string } => {
   const parsed = record(value, label);
   exactKeys(parsed, ['kind', 'sha256'], label);
@@ -131,10 +175,11 @@ const piece = (value: unknown, label: string, version: ReferenceBoardManifest['s
   const parsed = record(value, label);
   const kind = sourceKind(parsed['sourceKind'], `${label}.sourceKind`);
   const classified = kind === 'classified-reference';
-  exactKeys(parsed, classified
+  const keys = classified
     ? ['slotId', 'sourceKind', 'referenceId', 'targetComponent', 'targetSelector', 'taskIds', 'reason', 'take', 'avoid', 'adaptation', 'grid', 'evidenceAxes', 'classification']
-    : ['slotId', 'sourceKind', 'referenceId', 'targetComponent', 'targetSelector', 'taskIds', 'reason', 'take', 'avoid', 'adaptation', 'grid', 'evidenceAxes'], label);
-  if (classified && version !== REFERENCE_BOARD_V2_SCHEMA_VERSION) fail(`${label}.sourceKind classified-reference requires ${REFERENCE_BOARD_V2_SCHEMA_VERSION}`);
+    : ['slotId', 'sourceKind', 'referenceId', 'targetComponent', 'targetSelector', 'taskIds', 'reason', 'take', 'avoid', 'adaptation', 'grid', 'evidenceAxes'];
+  exactKeys(parsed, version === REFERENCE_BOARD_V3_SCHEMA_VERSION ? [...keys, 'binding'] : keys, label);
+  if (classified && version === REFERENCE_BOARD_SCHEMA_VERSION) fail(`${label}.sourceKind classified-reference requires ${REFERENCE_BOARD_V2_SCHEMA_VERSION} or ${REFERENCE_BOARD_V3_SCHEMA_VERSION}`);
   const takes = strings(parsed['take'], `${label}.take`, true).map((entry, index) => take(entry, `${label}.take[${index}]`));
   if (new Set(takes).size !== takes.length) fail(`${label}.take must not contain duplicates`);
   if (version === REFERENCE_BOARD_SCHEMA_VERSION && takes.some((entry) => entry === 'content' || entry === 'voice' || entry === 'rejection')) {
@@ -147,6 +192,7 @@ const piece = (value: unknown, label: string, version: ReferenceBoardManifest['s
     taskIds: strings(parsed['taskIds'], `${label}.taskIds`, true, true), reason: assemblyText(parsed['reason'], `${label}.reason`),
     take: takes, avoid: assemblyText(parsed['avoid'], `${label}.avoid`), adaptation: assemblyText(parsed['adaptation'], `${label}.adaptation`), grid: grid(parsed['grid'], `${label}.grid`),
     evidenceAxes: axes,
+    ...(version === REFERENCE_BOARD_V3_SCHEMA_VERSION ? { binding: influenceBinding(parsed['binding'], `${label}.binding`) } : {}),
   };
   if (classified) {
     const binding = classification(parsed['classification'], `${label}.classification`);
@@ -158,7 +204,7 @@ const piece = (value: unknown, label: string, version: ReferenceBoardManifest['s
     if (axes.staticAxis !== 'absent' || axes.motionAxis !== 'absent') fail(`${label} nonvisual evidence cannot expose static or motion axes`);
     return { ...base, sourceKind: kind, classification: binding };
   }
-  if (version === REFERENCE_BOARD_V2_SCHEMA_VERSION
+  if (version !== REFERENCE_BOARD_SCHEMA_VERSION
     && (takes.some((entry) => entry === 'content' || entry === 'voice' || entry === 'rejection')
       || axes.signal === 'supporting-content' || axes.signal === 'anti-reference')) {
     fail(`${label} v2 nonvisual claims require sourceKind classified-reference`);
@@ -179,27 +225,51 @@ const candidate = (value: unknown, index: number, version: ReferenceBoardManifes
   if (new Set(slots).size !== slots.length) fail(`${label}.pieces slotId values must be unique`);
   const orders = pieces.map((entry) => entry.grid.order);
   if (new Set(orders).size !== orders.length) fail(`${label}.pieces grid.order values must be unique`);
+  if (version === REFERENCE_BOARD_V3_SCHEMA_VERSION) {
+    const claims = new Set<string>();
+    for (const entry of pieces) {
+      const binding = entry.binding ?? fail(`${label}.pieces binding is required for ${REFERENCE_BOARD_V3_SCHEMA_VERSION}`);
+      const key = [binding.zoneId, entry.referenceId, binding.axis, binding.sourceState, binding.sourceViewport.width, binding.sourceViewport.height].join('\u0000');
+      if (claims.has(key)) fail(`${label}.pieces must not duplicate a source part and axis for one zone`);
+      claims.add(key);
+    }
+    const byZoneAxis = new Map<string, ReferenceInfluenceBinding[]>();
+    for (const entry of pieces) {
+      const binding = entry.binding!; const key = `${binding.zoneId}\u0000${binding.axis}`;
+      const bucket = byZoneAxis.get(key); if (bucket) bucket.push(binding); else byZoneAxis.set(key, [binding]);
+    }
+    for (const [key, bindings] of byZoneAxis) {
+      if (bindings.length < 2) continue;
+      const groups = new Set(bindings.map((binding) => binding.conflictGroup));
+      const resolutions = new Set(bindings.map((binding) => binding.conflictResolution));
+      if (groups.size !== 1 || groups.has(null) || resolutions.size !== 1 || resolutions.has(null)) fail(`${label}.pieces same-axis influences for ${key.replace('\u0000', '/')} require one shared conflict group and resolution`);
+    }
+  }
   return { id: assemblyText(parsed['id'], `${label}.id`), label: assemblyText(parsed['label'], `${label}.label`), route: localRoute(parsed['route'], `${label}.route`), rationale: assemblyText(parsed['rationale'], `${label}.rationale`), pieces };
 };
 
 export function parseReferenceBoard(value: unknown): ReferenceBoardManifest {
   const parsed = record(value, 'reference board');
   const rawVersion = parsed['schemaVersion'];
-  if (rawVersion !== REFERENCE_BOARD_SCHEMA_VERSION && rawVersion !== REFERENCE_BOARD_V2_SCHEMA_VERSION) fail(`schemaVersion must be ${REFERENCE_BOARD_SCHEMA_VERSION} or ${REFERENCE_BOARD_V2_SCHEMA_VERSION}`);
+  if (rawVersion !== REFERENCE_BOARD_SCHEMA_VERSION && rawVersion !== REFERENCE_BOARD_V2_SCHEMA_VERSION && rawVersion !== REFERENCE_BOARD_V3_SCHEMA_VERSION) fail(`schemaVersion must be ${REFERENCE_BOARD_SCHEMA_VERSION}, ${REFERENCE_BOARD_V2_SCHEMA_VERSION}, or ${REFERENCE_BOARD_V3_SCHEMA_VERSION}`);
   const version = rawVersion as ReferenceBoardManifest['schemaVersion'];
-  exactKeys(parsed, version === REFERENCE_BOARD_V2_SCHEMA_VERSION
-    ? ['schemaVersion', 'projectSha256', 'frameSha256', 'candidates']
-    : ['schemaVersion', 'frameSha256', 'candidates'], 'reference board');
-  const projectSha256 = version === REFERENCE_BOARD_V2_SCHEMA_VERSION ? nonEmpty(parsed['projectSha256'], 'projectSha256') : undefined;
-  if (projectSha256 !== undefined && !/^[0-9a-f]{64}$/.test(projectSha256)) fail('projectSha256 must be 64 lowercase hexadecimal characters');
-  const frameSha256 = nonEmpty(parsed['frameSha256'], 'frameSha256');
-  if (!/^[0-9a-f]{64}$/.test(frameSha256)) fail('frameSha256 must be 64 lowercase hexadecimal characters');
+  exactKeys(parsed, version === REFERENCE_BOARD_V3_SCHEMA_VERSION
+    ? ['schemaVersion', 'projectSha256', 'frameSha256', 'acquisitionSha256', 'localeContextSha256', 'candidates']
+    : version === REFERENCE_BOARD_V2_SCHEMA_VERSION
+      ? ['schemaVersion', 'projectSha256', 'frameSha256', 'candidates']
+      : ['schemaVersion', 'frameSha256', 'candidates'], 'reference board');
+  const projectSha256 = version === REFERENCE_BOARD_SCHEMA_VERSION ? undefined : digest(parsed['projectSha256'], 'projectSha256');
+  const frameSha256 = digest(parsed['frameSha256'], 'frameSha256');
+  const acquisitionSha256 = version === REFERENCE_BOARD_V3_SCHEMA_VERSION ? digest(parsed['acquisitionSha256'], 'acquisitionSha256') : undefined;
+  const localeContextSha256 = version === REFERENCE_BOARD_V3_SCHEMA_VERSION
+    ? parsed['localeContextSha256'] === null ? null : digest(parsed['localeContextSha256'], 'localeContextSha256')
+    : undefined;
   const entries = array(parsed['candidates'], 'candidates');
   if (entries.length === 0) fail('candidates must be a non-empty array');
   const candidates = entries.map((entry, index) => candidate(entry, index, version));
   const ids = candidates.map((entry) => entry.id);
   if (new Set(ids).size !== ids.length) fail('candidate id values must be unique');
-  return version === REFERENCE_BOARD_V2_SCHEMA_VERSION
-    ? { schemaVersion: version, projectSha256: projectSha256!, frameSha256, candidates }
-    : { schemaVersion: version, frameSha256, candidates };
+  if (version === REFERENCE_BOARD_V3_SCHEMA_VERSION) return { schemaVersion: version, projectSha256: projectSha256!, frameSha256, acquisitionSha256: acquisitionSha256!, localeContextSha256: localeContextSha256!, candidates };
+  if (version === REFERENCE_BOARD_V2_SCHEMA_VERSION) return { schemaVersion: version, projectSha256: projectSha256!, frameSha256, candidates };
+  return { schemaVersion: version, frameSha256, candidates };
 }

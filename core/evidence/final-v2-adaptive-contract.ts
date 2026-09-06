@@ -36,6 +36,7 @@ export type AdaptiveFinalEvidenceV2Graph = Readonly<{
   blindLane: AdaptiveArtifactReceipt;
   fidelityLane: AdaptiveArtifactReceipt;
   protocolLane: AdaptiveArtifactReceipt;
+  contentFit?: AdaptiveArtifactReceipt;
   observations: readonly AdaptiveArtifactReceipt[];
 }>;
 export type AdaptiveFinalEvidenceV2Bindings = Readonly<{
@@ -75,17 +76,27 @@ function safePath(value: unknown, label: string): string {
   if (path.startsWith('/') || path.includes('\\') || path === '.' || path.split('/').some((part) => part === '' || part === '.' || part === '..')) return fail(`${label} is not project-relative`);
   return path;
 }
-function receipt(value: unknown, schema: string, label: string): AdaptiveArtifactReceipt {
+function receipt(
+  value: unknown,
+  schema: string | readonly string[],
+  label: string,
+): AdaptiveArtifactReceipt {
   const item = fields(value, ['path', 'schema', 'sha256'], label);
-  if (item.get('schema') !== schema) return fail(`${label} schema is invalid`);
-  return Object.freeze({ path: safePath(item.get('path'), `${label}.path`), schema, sha256: digest(item.get('sha256'), `${label}.sha256`) });
+  const actualSchema = text(item.get('schema'), `${label}.schema`);
+  const expected = Array.isArray(schema) ? schema : [schema];
+  if (!expected.includes(actualSchema)) return fail(`${label} schema is invalid`);
+  return Object.freeze({ path: safePath(item.get('path'), `${label}.path`), schema: actualSchema, sha256: digest(item.get('sha256'), `${label}.sha256`) });
 }
-function omission(value: unknown, expected: typeof OMISSIONS[number], route: AdaptiveSourceSealRoute, index: number): AdaptiveFinalOmission {
+function omission(value: unknown, route: AdaptiveSourceSealRoute, index: number): AdaptiveFinalOmission {
   const item = fields(value, ['id', 'status', 'routeSkipId', 'reason', 'routeSha256', 'authoritySha256'], `omissions[${index}]`);
+  const expected = OMISSIONS.find(([id]) => id === item.get('id'));
+  if (expected === undefined) return fail(`omissions[${index}] identity is invalid`);
   if (item.get('id') !== expected[0] || item.get('status') !== 'skipped' || item.get('routeSkipId') !== expected[1]) return fail(`omissions[${index}] identity is invalid`);
   const routeSha256 = digest(item.get('routeSha256'), `omissions[${index}].routeSha256`);
   const authoritySha256 = digest(item.get('authoritySha256'), `omissions[${index}].authoritySha256`);
   if (routeSha256 !== route.record.sha256 || authoritySha256 !== route.authority.sha256) return fail(`omissions[${index}] does not bind the route and authority`);
+  const stage = route.stages.find(({ id }) => id === expected[1]);
+  if (stage?.status === 'selected') return fail(`omissions[${index}] contradicts selected stage ${expected[1]}`);
   return Object.freeze({ id: expected[0], status: 'skipped', routeSkipId: expected[1], reason: text(item.get('reason'), `omissions[${index}].reason`), routeSha256, authoritySha256 });
 }
 function receipts(value: unknown, schema: string, label: string): readonly AdaptiveArtifactReceipt[] {
@@ -103,26 +114,37 @@ export function isAdaptiveFinalEvidenceV2Graph(value: unknown): value is Adaptiv
 }
 
 export function validateAdaptiveFinalEvidenceV2Graph(value: unknown): AdaptiveFinalEvidenceV2Graph {
-  const graph = fields(value, ['schema', 'activation', 'route', 'omissions', 'copy', 'sourceSeal', 'buildIdentity', 'blindLane', 'fidelityLane', 'protocolLane', 'observations'], 'graph');
+  const hasContentFit = typeof value === 'object' && value !== null && !Array.isArray(value)
+    && Reflect.ownKeys(value).includes('contentFit');
+  const graph = fields(value, ['schema', 'activation', 'route', 'omissions', 'copy', 'sourceSeal', 'buildIdentity', 'blindLane', 'fidelityLane', 'protocolLane', ...(hasContentFit ? ['contentFit'] : []), 'observations'], 'graph');
   if (graph.get('schema') !== FINAL_EVIDENCE_V2_ADAPTIVE_OMISSION_GRAPH_SCHEMA || !isAdaptiveSourceSealRoute(graph.get('route'))) fail('unsupported adaptive graph schema or route receipt');
   const route = graph.get('route');
   if (!isAdaptiveSourceSealRoute(route)) return fail('route receipt is invalid');
   skippedArt(route);
   const rawOmissions = graph.get('omissions');
   const omissionItems = Array.isArray(rawOmissions) ? rawOmissions : fail('omissions must be an array');
-  if (omissionItems.length !== OMISSIONS.length) fail('omissions do not cover the fixed adaptive terminal set');
-  const omissions = Object.freeze(OMISSIONS.map((expected, index) => omission(omissionItems[index], expected, route, index)));
+  if (omissionItems.length > OMISSIONS.length) fail('omissions exceed the adaptive terminal set');
+  const omissions = Object.freeze(omissionItems.map((value, index) => omission(value, route, index)));
+  const positions = omissions.map(({ id }) => OMISSIONS.findIndex(([expected]) => expected === id));
+  if (positions.some((position, index) => position < 0 || (index > 0 && position <= positions[index - 1]!))) {
+    fail('omissions must be unique and follow canonical adaptive terminal order');
+  }
   const result: AdaptiveFinalEvidenceV2Graph = Object.freeze({
     schema: FINAL_EVIDENCE_V2_ADAPTIVE_OMISSION_GRAPH_SCHEMA,
     activation: receipt(graph.get('activation'), 'activation-context-v2', 'activation'), route, omissions,
     copy: receipt(graph.get('copy'), 'copy-deck-v2', 'copy'), sourceSeal: receipt(graph.get('sourceSeal'), 'source-seal-v1', 'sourceSeal'),
     buildIdentity: receipt(graph.get('buildIdentity'), 'omd-build-identity-v1', 'buildIdentity'),
-    blindLane: receipt(graph.get('blindLane'), 'adaptive-blind-review-v1', 'blindLane'),
+    blindLane: receipt(
+      graph.get('blindLane'),
+      ['adaptive-blind-review-v1', 'adaptive-blind-review-v2', 'adaptive-blind-review-v3'],
+      'blindLane',
+    ),
     fidelityLane: receipt(graph.get('fidelityLane'), 'adaptive-fidelity-review-v1', 'fidelityLane'),
     protocolLane: receipt(graph.get('protocolLane'), 'adaptive-protocol-review-v1', 'protocolLane'),
+    ...(hasContentFit ? { contentFit: receipt(graph.get('contentFit'), 'content-fit-receipt-v1', 'contentFit') } : {}),
     observations: receipts(graph.get('observations'), 'observation-v2', 'observations'),
   });
-  const paths = [result.activation.path, ...[result.route.pointer, result.route.record, result.route.sourcePointer, result.route.sourceContract, result.route.authority].map((item) => item.path), result.copy.path, result.sourceSeal.path, result.buildIdentity.path, result.blindLane.path, result.fidelityLane.path, result.protocolLane.path, ...result.observations.map((item) => item.path)];
+  const paths = [result.activation.path, ...[result.route.pointer, result.route.record, result.route.sourcePointer, result.route.sourceContract, result.route.authority].map((item) => item.path), result.copy.path, result.sourceSeal.path, result.buildIdentity.path, result.blindLane.path, result.fidelityLane.path, result.protocolLane.path, ...(result.contentFit === undefined ? [] : [result.contentFit.path]), ...result.observations.map((item) => item.path)];
   if (new Set(paths).size !== paths.length) fail('receipt paths must be unique');
   return result;
 }

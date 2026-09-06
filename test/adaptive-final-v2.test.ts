@@ -23,7 +23,12 @@ import {
   deriveTrustedEvaluationIdentity,
 } from '../core/runtime/trusted-evaluation-contract.ts';
 import { checkAdaptiveWorkflow, publishAdaptiveWorkflowPlan } from '../core/design-development/workflow-persistence.ts';
-import { authorizeTestProjectRunPayloads, createTestProjectWriteAdapter, publishTestAdaptiveRoute } from './helpers/project-write.ts';
+import {
+  authorizeTestProjectRunPayloads,
+  createTestProjectRunInvocation,
+  createTestProjectWriteAdapter,
+  publishTestAdaptiveRoute,
+} from './helpers/project-write.ts';
 import { browserFixturePng, writeBrowserDecisionFixture } from './helpers/browser-observation-decision-links.ts';
 import {
   publishCompletenessRun,
@@ -32,6 +37,7 @@ import {
   WORKFLOW_COMPLETENESS_RUN_INPUT_SCHEMA,
 } from '../core/completion/evidence.ts';
 import { FUNCTIONAL_REQUIREMENTS_V2_SCHEMA } from '../core/completeness/index.ts';
+import { DESIGN_QUALITY_AXES } from '../core/evidence/final-v2-design-quality.ts';
 
 const fs = { readFile: readFileSync, lstat: lstatSync, open: openSync, fstat: fstatSync, close: closeSync };
 const sha = (value: string | Uint8Array): string => createHash('sha256').update(value).digest('hex');
@@ -68,7 +74,10 @@ function writeJson(root: string, path: string, value: unknown): void {
   writeFileSync(join(root, path), canonicalJson(value));
 }
 
-function omissions(route: ReturnType<typeof createAdaptiveSourceSealRoute>): readonly object[] {
+function omissions(
+  route: ReturnType<typeof createAdaptiveSourceSealRoute>,
+  routeInput: unknown,
+): readonly object[] {
   const mapping = [
     ['board', 'reference-board'], ['selection', 'reference-selection'], ['artDirection', 'art-direction'],
     ['handoff', 'art-direction'], ['usage', 'reference-selection'], ['renderedBeats', 'frame'],
@@ -77,12 +86,41 @@ function omissions(route: ReturnType<typeof createAdaptiveSourceSealRoute>): rea
   ] as const;
   const routeSha256 = route.record.sha256;
   const authoritySha256 = route.authority.sha256;
-  const skips = list(field(fixture(), 'strategyDecision'), 'skips');
-  return mapping.map(([id, routeSkipId]) => {
+  const skips = list(field(routeInput, 'strategyDecision'), 'skips');
+  return mapping.flatMap(([id, routeSkipId]) => {
     const skip = skips.find((entry) => text(entry, 'id') === routeSkipId);
-    if (skip === undefined) throw new Error(`missing ${routeSkipId} skip`);
-    return { id, status: 'skipped', routeSkipId, reason: text(skip, 'reason'), routeSha256, authoritySha256 };
+    return skip === undefined ? [] : [{
+      id, status: 'skipped', routeSkipId, reason: text(skip, 'reason'),
+      routeSha256, authoritySha256,
+    }];
   });
+}
+
+function fixtureWithSelectedUpstreamStages(): unknown {
+  const value = structuredClone(fixture());
+  const strategy = mutable(field(value, 'strategyDecision'));
+  Reflect.set(strategy, 'roles', [
+    ...list(strategy, 'roles'),
+    'omd-framer', 'omd-scout',
+  ]);
+  Reflect.set(strategy, 'stages', [
+    'frame', 'scout', 'reference-board', 'copy', 'production',
+    'browser-evidence', 'independent-review',
+  ]);
+  Reflect.set(strategy, 'executionWaves', [
+    { id: 'frame', mode: 'concurrent', roles: ['omd-framer'] },
+    { id: 'reference', mode: 'concurrent', roles: ['omd-scout'] },
+    { id: 'copy', mode: 'concurrent', roles: ['omd-writer'] },
+    { id: 'production', mode: 'concurrent', roles: ['omd-hand'] },
+    { id: 'review', mode: 'concurrent', roles: ['omd-eye'] },
+  ]);
+  const selected = new Set(['frame', 'scout', 'reference-board']);
+  Reflect.set(
+    strategy,
+    'skips',
+    list(strategy, 'skips').filter((entry) => !selected.has(text(entry, 'id'))),
+  );
+  return value;
 }
 
 function lane(
@@ -94,8 +132,39 @@ function lane(
   browserSha256: string,
   observationSha256: string,
 ): Readonly<{ path: string; schema: string; sha256: string }> {
+  const designQuality = {
+    schema: 'design-quality-contract-v1',
+    axes: DESIGN_QUALITY_AXES.map((axis) => ({
+      axis,
+      verdict: 'GREEN',
+      score:
+        axis === 'beautyDesirability' || axis === 'hierarchyComposition'
+          ? 4
+          : 3,
+      crossViewport: 'preserved',
+      criticalFailure: null,
+      evidence: [
+        {
+          observationSha256,
+          viewport: 'desktop',
+          state: 'initial',
+          region: 'primary work surface',
+          visibleCondition: 'The intended priority is visible.',
+          userConsequence: 'The next decision is legible.',
+        },
+        {
+          observationSha256,
+          viewport: 'mobile',
+          state: 'initial',
+          region: 'primary work surface',
+          visibleCondition: 'The priority is recomposed.',
+          userConsequence: 'Decision context remains available.',
+        },
+      ],
+    })),
+  };
   const configuration = name === 'blindLane'
-    ? { schema: 'adaptive-blind-review-v1', verdicts: { blindVisual: 'GREEN', blindNarrative: 'GREEN' }, criticalFloors: { composition: 3, copy: 3 } }
+    ? { schema: 'adaptive-blind-review-v3', verdicts: { blindVisual: 'GREEN', blindNarrative: 'GREEN' }, criticalFloors: { composition: 3, copy: 3 }, designQuality }
     : name === 'fidelityLane'
       ? { schema: 'adaptive-fidelity-review-v1', verdicts: { referenceFidelity: 'GREEN', renderFidelity: 'GREEN' }, criticalFloors: { desktop: 3, mobile: 3 } }
       : { schema: 'adaptive-protocol-review-v1', verdicts: { evidenceIntegrity: 'GREEN', publicationProtocol: 'GREEN' }, criticalFloors: { authority: 3, currentness: 3 } };
@@ -103,8 +172,14 @@ function lane(
   const reviewerIds = [`${name}-reviewer-1`, `${name}-reviewer-2`];
   const executionReceipts = reviewerIds.map((reviewerId, index) => {
     const value = {
-      schema: 'adaptive-final-reviewer-execution-v1', lane: name, reviewerId,
+      schema: name === 'blindLane'
+        ? 'adaptive-final-reviewer-execution-v2'
+        : 'adaptive-final-reviewer-execution-v1',
+      lane: name, reviewerId,
       verdicts: configuration.verdicts, criticalFloors: configuration.criticalFloors,
+      ...('designQuality' in configuration
+        ? { designQuality: configuration.designQuality }
+        : {}),
       isolationReceiptSha256, observationSha256s: [observationSha256], routeSha256, buildSha256, briefSha256, browserSha256,
       childPid: ({ blindLane: 100, fidelityLane: 200, protocolLane: 300 })[name] + index, sessionId: `${name}-session-${index}`, nonce: `${name}-nonce-${index}`,
       evidenceSha256: sha(`${name}:evidence:${index}`), configurationSha256: sha(`${name}:configuration:${index}`),
@@ -125,9 +200,19 @@ function lane(
   return receipt(root, path, configuration.schema);
 }
 
-function prepared(workflow = false): Readonly<{ root: string; invocation: ReturnType<typeof publishTestAdaptiveRoute>; manifest: unknown; graph: unknown }> {
+function prepared(
+  workflow = false,
+  routeInput: unknown = fixture(),
+): Readonly<{ root: string; invocation: ReturnType<typeof publishTestAdaptiveRoute>; manifest: unknown; graph: unknown }> {
   const root = project();
-  const invocation = publishTestAdaptiveRoute(root, fixture(), 'adaptive-copy-final-v2');
+  const selectedStages = list(field(routeInput, 'strategyDecision'), 'stages');
+  if (selectedStages.includes('type-proof')) {
+    writeFileSync(join(root, '.omd', 'type-proof.md'), '# Approved type proof\n');
+  }
+  if (selectedStages.includes('composition')) {
+    writeFileSync(join(root, '.omd', 'composition.md'), '# Approved composition\n');
+  }
+  const invocation = publishTestAdaptiveRoute(root, routeInput, 'adaptive-copy-final-v2');
   if (workflow) publishAdaptiveWorkflowPlan(root, {
     development: { schema: 'design-development-contract-v1', owner: 'user-selected-model', mode: 'direct', risks: [], investigations: [], referencePrinciples: [], rationale: 'No material uncertainty remains.' },
     evidence: [], investigations: [], rationale: 'Proceed directly without phantom proofs.',
@@ -264,7 +349,7 @@ function prepared(workflow = false): Readonly<{ root: string; invocation: Return
   }, invocation);
   const productionGraph = {
     schema: 'final-evidence-v2-adaptive-omission-graph', activation: receipt(root, activationPath, 'activation-context-v2'), route,
-    omissions: omissions(route), copy: receipt(root, '.omd/copy-deck.md', 'copy-deck-v2'), sourceSeal: receipt(root, '.omd/source-seal.json', workflow ? 'source-seal-v2' : 'source-seal-v1'),
+    omissions: omissions(route, routeInput), copy: receipt(root, '.omd/copy-deck.md', 'copy-deck-v2'), sourceSeal: receipt(root, '.omd/source-seal.json', workflow ? 'source-seal-v2' : 'source-seal-v1'),
     buildIdentity: buildReceipt,
     blindLane: lane(root, 'blindLane', route.record.sha256, invocation.current.buildSha256, invocation.current.briefSha256, sha(readFileSync(join(root, '.omd', 'decision-graph.json'))), observationReceipt.sha256),
     fidelityLane: lane(root, 'fidelityLane', route.record.sha256, invocation.current.buildSha256, invocation.current.briefSha256, sha(readFileSync(join(root, '.omd', 'decision-graph.json'))), observationReceipt.sha256),
@@ -306,15 +391,18 @@ function authorizeGraph(root: string, invocation: ReturnType<typeof publishTestA
   authorizeTestProjectRunPayloads(root, invocation, payloads);
 }
 
-function publishPrepared(value: ReturnType<typeof prepared>): void {
-  authorizeGraph(value.root, value.invocation, value.graph);
-  const validated = validateFinalEvidenceV2GraphFiles(value.root, value.graph, fs, value.invocation);
+function publishPrepared(
+  value: ReturnType<typeof prepared>,
+  invocation = value.invocation,
+): void {
+  authorizeGraph(value.root, invocation, value.graph);
+  const validated = validateFinalEvidenceV2GraphFiles(value.root, value.graph, fs, invocation);
   const submitted = {
     schema: field(value.manifest, 'schema'), motionDecision: field(value.manifest, 'motionDecision'),
     claimPublication: field(value.manifest, 'claimPublication'), graph: field(value.manifest, 'graph'), graphRootHash: validated.rootHash,
   };
-  authorizeTestProjectRunPayloads(value.root, value.invocation, [{ purpose: 'final-evidence-manifest', payload: Buffer.from(`${canonical(submitted)}\n`) }]);
-  publishFinalEvidenceV2(value.root, value.manifest, value.invocation);
+  authorizeTestProjectRunPayloads(value.root, invocation, [{ purpose: 'final-evidence-manifest', payload: Buffer.from(`${canonical(submitted)}\n`) }]);
+  publishFinalEvidenceV2(value.root, value.manifest, invocation);
 }
 
 test('authorized copy-only adaptive omission publication reaches immutable final-v2 currentness', () => {
@@ -329,6 +417,47 @@ test('authorized copy-only adaptive omission publication reaches immutable final
       { purpose: 'final-evidence-manifest', payload: readFileSync(join(value.root, '.omd', 'final-evidence-v2-runs', record)) },
     ]);
     assert.equal(field(checkFinalEvidenceV2(value.root, value.invocation).graph, 'schema'), 'final-evidence-v2-adaptive-omission-graph');
+  } finally { rmSync(value.root, { recursive: true, force: true }); }
+});
+
+test('selected adaptive stages require no contradictory skip receipts', () => {
+  const value = prepared(false, fixtureWithSelectedUpstreamStages());
+  try {
+    assert.deepEqual(
+      list(value.graph, 'omissions').map((entry) => text(entry, 'routeSkipId')),
+      [
+        'reference-selection', 'art-direction', 'art-direction', 'reference-selection',
+        'art-direction', 'motion-one', 'type-proof', 'composition',
+      ],
+    );
+    publishPrepared(value);
+    authorizeGraph(value.root, value.invocation, value.graph);
+    assert.equal(
+      field(checkFinalEvidenceV2(value.root, value.invocation).graph, 'schema'),
+      'final-evidence-v2-adaptive-omission-graph',
+    );
+  } finally { rmSync(value.root, { recursive: true, force: true }); }
+});
+
+test('sealed adaptive evidence finalizes under a continuation activation', () => {
+  const value = prepared();
+  try {
+    const continuation = createTestProjectRunInvocation(value.root, 'finalize existing sealed evidence');
+    assert.notEqual(continuation.current.briefSha256, value.invocation.current.briefSha256);
+    publishPrepared(value, continuation);
+    const pointer = readFileSync(join(value.root, '.omd', 'final-evidence-v2.json'));
+    const record = text(JSON.parse(pointer.toString('utf8')), 'record');
+    authorizeTestProjectRunPayloads(value.root, continuation, [
+      { purpose: 'final-reviewer-lane', payload: pointer },
+      {
+        purpose: 'final-evidence-manifest',
+        payload: readFileSync(join(value.root, '.omd', 'final-evidence-v2-runs', record)),
+      },
+    ]);
+    assert.equal(
+      field(checkFinalEvidenceV2(value.root, continuation).graph, 'schema'),
+      'final-evidence-v2-adaptive-omission-graph',
+    );
   } finally { rmSync(value.root, { recursive: true, force: true }); }
 });
 

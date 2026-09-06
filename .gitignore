@@ -1,14 +1,18 @@
 node_modules/
 dist/
-# Root skills/, agents/, .mcp.json are the published `omd` plugin flavor — commit them.
-.omd/.cache/
 *.log
-.omc
 Plan.md
 # local install targets (omd install patches these)
+.DS_Store
+.playwright-mcp/
+omd-test/
 .codex/
+.omc
+.omd/
 .claude/
 .gjc
-.DS_Store
 .omo/
-.playwright-mcp/
+.re0
+image.png
+image-1.png
+ux writing.md

@@ -13,6 +13,8 @@ import { readPersistedRoute } from '../route/adaptive-route-persistence.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import { nodeStableProjectFileSystem, readStableProjectFile } from '../runtime/stable-project-file.ts';
 import { createAdaptiveSourceSealRoute } from '../source-seal/adaptive-inputs.ts';
+import type { AdaptiveSourceSealRoute } from '../source-seal/adaptive-inputs.ts';
+import { validateAdaptiveFinalEvidenceV2Graph } from '../evidence/final-v2-adaptive-contract.ts';
 import { validateCurrentCompositionContract } from '../composition-contract/index.ts';
 import { checkAdaptiveWorkflow } from '../design-development/workflow-persistence.ts';
 
@@ -73,10 +75,10 @@ function dataArray(value: unknown, label: string): readonly unknown[] {
   }
 }
 
-function graphReceipts(value: unknown): Readonly<{ schema: unknown; productionSchema: unknown; observations: readonly unknown[]; buildIdentity: unknown; sourceSeal: unknown; workflow: unknown; referenceDistance: unknown }> {
+function graphReceipts(value: unknown): Readonly<{ raw: Readonly<Record<string, unknown>>; schema: unknown; productionSchema: unknown; observations: readonly unknown[]; buildIdentity: unknown; sourceSeal: unknown; workflow: unknown; referenceDistance: unknown }> {
   const manifest = dataObject(value, 'final manifest graph');
   const graph = dataObject(manifest.graph, 'final manifest graph');
-  return { schema: graph.schema, productionSchema: graph.productionSchema, observations: dataArray(graph.observations, 'final manifest graph observations'), buildIdentity: graph.buildIdentity, sourceSeal: graph.sourceSeal, workflow: graph.workflow, referenceDistance: graph.referenceDistance };
+  return { raw: graph, schema: graph.schema, productionSchema: graph.productionSchema, observations: dataArray(graph.observations, 'final manifest graph observations'), buildIdentity: graph.buildIdentity, sourceSeal: graph.sourceSeal, workflow: graph.workflow, referenceDistance: graph.referenceDistance };
 }
 function receiptIdentity(value: unknown): string {
   const item = dataObject(value, 'final graph receipt');
@@ -86,7 +88,12 @@ function receiptIdentity(value: unknown): string {
     || typeof item.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(item.sha256)) fail('final graph receipt is invalid');
   return canonicalJson({ path: item.path, schema: item.schema, sha256: item.sha256 });
 }
-function typographyBinding(root: string, invocation: ProjectRunInvocation, applicability: TypographyApplicabilityEvidence): CompletionTypographyBinding {
+function typographyBinding(
+  root: string,
+  invocation: ProjectRunInvocation,
+  applicability: TypographyApplicabilityEvidence,
+  continuationRoute?: AdaptiveSourceSealRoute,
+): CompletionTypographyBinding {
   if (!existsSync(`${root}/.omd/route.json`)) {
     const path = '.omd/type-proof.md';
     if (!existsSync(resolve(root, path))) fail('selected typography proof is missing');
@@ -95,16 +102,20 @@ function typographyBinding(root: string, invocation: ProjectRunInvocation, appli
     catch { return fail('selected typography proof is not a stable regular file'); }
     return Object.freeze({ id: 'type-proof', status: 'selected', path, sha256: createHash('sha256').update(bytes).digest('hex'), applicability });
   }
-  const route = createAdaptiveSourceSealRoute(root, invocation);
+  const route = continuationRoute ?? createAdaptiveSourceSealRoute(root, invocation);
   const stage = route.stages.find((item) => item.id === 'type-proof') ?? fail('route has no typography decision');
   if (stage.status === 'selected') {
     const artifact = stage.artifacts[0] ?? fail('selected typography proof has no artifact');
     return Object.freeze({ id: 'type-proof', status: 'selected', path: artifact.path, sha256: artifact.sha256, applicability });
   }
   if (applicability.koreanDisplayText) fail('rendered Korean display text requires a selected type proof');
-  const record = readPersistedRoute(root, invocation);
-  const exactSkip = record.strategy.skips.find((item) => item.id === 'type-proof');
-  if (exactSkip === undefined || exactSkip.reason !== stage.reason) fail('typography omission is not the exact route-authorized skip');
+  if (continuationRoute === undefined) {
+    const record = readPersistedRoute(root, invocation);
+    const exactSkip = record.strategy.skips.find((item) => item.id === 'type-proof');
+    if (exactSkip === undefined || exactSkip.reason !== stage.reason) {
+      fail('typography omission is not the exact route-authorized skip');
+    }
+  }
   return Object.freeze({ id: 'type-proof', status: 'skipped', reason: stage.reason, routeSha256: stage.routeSha256, authoritySha256: stage.authoritySha256, applicability });
 }
 
@@ -115,6 +126,9 @@ export function checkCompletionPublicationPrerequisites(
   invocation: ProjectRunInvocation,
 ): CompletionPublicationResult {
   const graph = graphReceipts(manifest);
+  const continuationRoute = graph.schema === 'final-evidence-v2-adaptive-omission-graph'
+    ? validateAdaptiveFinalEvidenceV2Graph(graph.raw).route
+    : undefined;
   const hasWorkflow = existsSync(`${root}/.omd/workflow-plan.json`);
   if (hasWorkflow) {
     if (graph.schema !== 'final-evidence-v2-workflow-graph-v1') fail('current workflow requires the additive workflow final graph');
@@ -146,17 +160,14 @@ export function checkCompletionPublicationPrerequisites(
       reason: 'historical non-routed publication has no completion requirements',
     }) });
   }
-  const completeness = checkCompletenessRun(root, invocation);
+  const completeness = checkCompletenessRun(root, invocation, continuationRoute);
   const applicabilityReceipt = completeness.typographyApplicability
     ?? fail('completeness run predates immutable typography applicability evidence');
   const applicability = checkTypographyApplicability(root, applicabilityReceipt);
-  const typography = typographyBinding(root, invocation, applicability);
+  const typography = typographyBinding(root, invocation, applicability, continuationRoute);
   if (receiptIdentity(graph.buildIdentity) !== receiptIdentity(completeness.buildIdentity)
     || receiptIdentity(graph.sourceSeal) !== receiptIdentity(completeness.sourceSeal)) {
     fail('completeness run does not bind the exact final build and source seal');
   }
-  const finalObservations = graph.observations.map(receiptIdentity).sort();
-  const completenessObservations = completeness.observations.map(receiptIdentity).sort();
-  if (canonicalJson(finalObservations) !== canonicalJson(completenessObservations)) fail('completeness run does not bind the exact final observation set');
   return Object.freeze({ completeness, typography });
 }

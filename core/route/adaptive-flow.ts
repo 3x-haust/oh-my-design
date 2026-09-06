@@ -26,6 +26,7 @@ import { adaptiveBehaviorContract } from './adaptive-behavior-contract.ts';
 import { adaptiveMotionContract } from './adaptive-motion-ambition.ts';
 import { validateAdaptiveAiAssetSelection } from './adaptive-ai-assets.ts';
 import { requiredAttributionCategories, validateAttributionCoverage } from './adaptive-attribution.ts';
+import { parseLocaleDesignRoute, type LocaleDesignRoute } from '../locale/design-context.ts';
 
 function requiredMethod(strategy: AdaptiveStrategyDecision, id: string): void {
   if (!strategy.methods.includes(id)) return failAdaptiveRoute('REQUIRED_METHOD_MISSING');
@@ -132,9 +133,40 @@ function validateContextMethods(input: ValidatedAdaptiveRouteInput): void {
   }
 }
 
-function validated(value: unknown): ValidatedAdaptiveRouteInput {
+function requiresTaskFlowBenchmark(
+  input: ValidatedAdaptiveRouteInput,
+): boolean {
+  return (
+    input.projectMode === 'greenfield' &&
+    input.referenceDiscovery.taskNeed === 'new-product'
+  );
+}
+
+function validateTaskFlowBenchmarkRoute(
+  input: ValidatedAdaptiveRouteInput,
+): void {
+  if (!requiresTaskFlowBenchmark(input)) return;
+  for (const stage of [
+    'scout',
+    'reference-board',
+    'composition',
+    'candidate-generation',
+  ] as const) {
+    if (!input.strategyDecision.stages.includes(stage)) {
+      failAdaptiveRoute('GREENFIELD_TASK_FLOW_STAGE_REQUIRED');
+    }
+  }
+  for (const role of ['omd-scout', 'omd-composer', 'omd-sketch'] as const) {
+    if (!input.strategyDecision.roles.includes(role)) {
+      failAdaptiveRoute('GREENFIELD_TASK_FLOW_ROLE_REQUIRED');
+    }
+  }
+}
+
+function validated(value: unknown, localeDesign?: LocaleDesignRoute): ValidatedAdaptiveRouteInput {
   const input: AdaptiveRouteInput = parseAdaptiveRouteInput(value);
-  const sourceContract = adaptiveSourceContract(input);
+  const parsedLocaleDesign = localeDesign === undefined ? undefined : parseLocaleDesignRoute(localeDesign);
+  const sourceContract = adaptiveSourceContract(input, parsedLocaleDesign);
   return Object.freeze({
     ...input,
     sourceContract,
@@ -147,15 +179,45 @@ function validated(value: unknown): ValidatedAdaptiveRouteInput {
       sourceContract.modelCapability.routingInput,
       sourceContract.modelCapability.now,
     ),
+    ...(parsedLocaleDesign === undefined ? {} : { localeDesign: parsedLocaleDesign }),
   });
+}
+
+function validateLocaleDesignRoute(input: ValidatedAdaptiveRouteInput): void {
+  const locale = input.localeDesign;
+  if (locale === undefined) return;
+  if (locale.decision === 'ask') return failAdaptiveRoute('LOCALE_DESIGN_CLARIFICATION_REQUIRED');
+  const strategy = input.strategyDecision;
+  if (locale.decision === 'research') {
+    const stages = ['scout', 'reference-board', 'reference-selection', 'copy', 'type-proof', 'composition'];
+    const roles = ['omd-scout', 'omd-writer', 'omd-typesetter', 'omd-composer'];
+    const methods = ['reference-discovery', 'parallel-reference-acquisition'];
+    if (stages.some((stage) => !strategy.stages.includes(stage))
+      || roles.some((role) => !strategy.roles.includes(role))
+      || methods.some((method) => !strategy.methods.includes(method))) {
+      return failAdaptiveRoute('LOCALE_DESIGN_RESEARCH_REQUIRED');
+    }
+    return;
+  }
+  const designProductionSelected = ['art-direction', 'composition', 'candidate-generation']
+    .some((stage) => strategy.stages.includes(stage));
+  if (designProductionSelected
+    && (!strategy.stages.includes('copy') || !strategy.stages.includes('type-proof')
+      || !strategy.roles.includes('omd-writer') || !strategy.roles.includes('omd-typesetter'))) {
+    return failAdaptiveRoute('LOCALE_DESIGN_TYPE_PROOF_REQUIRED');
+  }
 }
 
 export function routeAdaptiveFlow(
   value: unknown,
   authority?: Readonly<{ root: string; invocation: ProjectRunInvocation }>,
+  localeDesign?: LocaleDesignRoute,
 ): AdaptiveRouteRecord {
-  const input = validated(value);
+  const input = validated(value, localeDesign);
   const strategy = input.strategyDecision;
+  if (input.projectMode === 'greenfield' && !strategy.stages.includes('frame')) {
+    failAdaptiveRoute('GREENFIELD_FRAME_REQUIRED');
+  }
   validateAdaptiveStrategyRails(strategy);
   validateSafety(input);
   validateOptionalStageAccounting(strategy);
@@ -170,8 +232,16 @@ export function routeAdaptiveFlow(
     id: recommendation.id, kind: 'recommended_method', status: recommendation.status, reason: recommendation.reason,
   });
   validateContextMethods(input);
+  validateTaskFlowBenchmarkRoute(input);
+  validateLocaleDesignRoute(input);
 
   const policyGates = [
+    ...(requiresTaskFlowBenchmark(input)
+      ? ['greenfield-task-flow-benchmark']
+      : []),
+    ...(input.localeDesign === undefined
+      ? []
+      : [`locale-design:${input.localeDesign.decision}:${input.localeDesign.contextSha256}`]),
     ...input.uxPolicy.enforcedRailIds.map((id) => `hard-safety:${id}`),
     ...input.uxPolicy.requiredOutcomeIds.map((id) => `required-outcome:${id}`),
   ];
@@ -179,6 +249,7 @@ export function routeAdaptiveFlow(
     schema: ADAPTIVE_ROUTE_RECORD_SCHEMA,
     route: 'adaptive',
     request: input.request,
+    projectMode: input.projectMode,
     requiredOutcomes: input.taskOutcome.requiredOutcomes,
     prohibitedOutcomes: input.taskOutcome.prohibitedOutcomes,
     evidenceRequired: input.taskOutcome.evidenceRequired,

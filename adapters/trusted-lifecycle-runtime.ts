@@ -3,6 +3,7 @@ import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { isAbsolute, relative, resolve } from 'node:path';
 import { validateDecisionGraph } from '../core/deliberation/contracts.ts';
 import { canonicalJson } from '../core/ref/board-artifacts.ts';
+import { parseTaskFlowBenchmarkProjection } from '../core/ref/task-flow-benchmark.ts';
 import { adaptiveRouteRecordSha256, readPersistedRoute } from '../core/route/adaptive-route-persistence.ts';
 import { createLocalCliInvocation } from '../core/runtime/activation.ts';
 import { observationV2Sha256 } from '../core/runtime/observation.ts';
@@ -26,7 +27,11 @@ import {
 } from '../core/runtime/invocation.ts';
 import { nodeStableProjectFileSystem, readStableProjectFile } from '../core/runtime/stable-project-file.ts';
 import { writeTrustedEvaluationObservation } from '../core/runtime/trusted-evaluation-observation.ts';
-import { runTrustedBrowserEvaluation } from './trusted-browser-runner.ts';
+import {
+  runTrustedBrowserEvaluation,
+  TRUSTED_BROWSER_EVALUATOR_REVISION,
+} from './trusted-browser-runner.ts';
+import { deriveTrustedEvaluationPlanFromProject } from '../core/runtime/trusted-evaluation-plan.ts';
 
 const hash = (value: string | Uint8Array): string =>
   createHash('sha256').update(value).digest('hex');
@@ -106,6 +111,8 @@ export async function runTrustedLifecycle(input: Readonly<{
     return parseTrustedProjectContract(JSON.parse(contractBytes.toString('utf8')) as unknown);
   })() : undefined;
   const source = routed?.sourceContract ?? contract!;
+  const sourceContractSha256 = routed?.sourceContractSha256
+    ?? trustedProjectContractSha256(contract!);
   if (routed !== undefined) {
     requireProductProbeResultAuthorization(
       invocation,
@@ -114,8 +121,44 @@ export async function runTrustedLifecycle(input: Readonly<{
     );
   }
   requireExactEvaluationCoverage(source, manifest.scripts);
-  const sourceContractSha256 = routed?.sourceContractSha256
-    ?? trustedProjectContractSha256(contract!);
+  const benchmarkRequired = routed?.gates.includes('greenfield-task-flow-benchmark') === true;
+  if (!benchmarkRequired && manifest.entrySurface !== undefined) {
+    throw new Error('TRUSTED_ENTRY_SURFACE_NOT_APPLICABLE');
+  }
+  if (benchmarkRequired) {
+    const entrySurface = manifest.entrySurface;
+    if (entrySurface === undefined) throw new Error('TRUSTED_ENTRY_SURFACE_REQUIRED');
+    const benchmarkBytes = readStableProjectFile({
+      root,
+      path: resolve(root, '.omd/task-flow-benchmark-projection.json'),
+      label: 'trusted entry-surface benchmark projection',
+      fs,
+    });
+    if (hash(benchmarkBytes) !== entrySurface.benchmarkProjectionSha256) {
+      throw new Error('TRUSTED_ENTRY_SURFACE_PROJECTION_STALE');
+    }
+    let projectionInput: unknown;
+    try { projectionInput = JSON.parse(benchmarkBytes.toString('utf8')) as unknown; } catch {
+      throw new Error('TRUSTED_ENTRY_SURFACE_PROJECTION_INVALID');
+    }
+    let projection;
+    try {
+      projection = parseTaskFlowBenchmarkProjection(projectionInput, {
+        expectedSourceContractSha256: sourceContractSha256,
+      });
+    } catch {
+      throw new Error('TRUSTED_ENTRY_SURFACE_PROJECTION_INVALID');
+    }
+    const dependent = projection.taskSteps.find(({ id }) => id === entrySurface.dependentTaskId);
+    if (dependent === undefined
+      || !dependent.dependsOn.includes(entrySurface.prerequisiteTaskId)) {
+      throw new Error('TRUSTED_ENTRY_SURFACE_EDGE_INVALID');
+    }
+    const derivedManifest = deriveTrustedEvaluationPlanFromProject({ root, invocation });
+    if (!trustedEvaluationPlanBytes(derivedManifest).equals(trustedEvaluationPlanBytes(manifest))) {
+      throw new Error('TRUSTED_EVALUATION_PLAN_DERIVATION_MISMATCH');
+    }
+  }
   const identity = deriveTrustedEvaluationIdentity({
     sourceContractSha256,
     taskOutcome: source.taskOutcome,
@@ -167,6 +210,7 @@ export async function runTrustedLifecycle(input: Readonly<{
   };
   const runId = `sha256-${hash(canonicalJson({
     manifest: authorizedManifest,
+    evaluatorRevision: TRUSTED_BROWSER_EVALUATOR_REVISION,
     buildSha256: invocation.current.buildSha256,
     productionRevisionSha256,
   }))}`;

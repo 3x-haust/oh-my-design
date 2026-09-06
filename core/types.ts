@@ -309,8 +309,42 @@ export interface Frame {
    * loop over screen regions, never as a marketing message ladder.
    */
   uxSurface?: string;
+  reality?: RealityLedger;
+  entrySurface?: import('./frame/entry-surface-contract.ts').EntrySurfaceContract;
 
   [key: string]: unknown;
+}
+
+export const REALITY_CATEGORY_VALUES = [
+  'subject',
+  'brand',
+  'operation',
+  'person',
+  'metric',
+  'media',
+  'capability',
+] as const;
+export type RealityCategory = (typeof REALITY_CATEGORY_VALUES)[number];
+
+export const REALITY_STATUS_VALUES = [
+  'supplied',
+  'verified',
+  'demo',
+  'unknown',
+] as const;
+export type RealityStatus = (typeof REALITY_STATUS_VALUES)[number];
+
+export interface RealityFact {
+  category: RealityCategory;
+  status: RealityStatus;
+  statement: string;
+  source?: string;
+}
+
+export interface RealityLedger {
+  schema: 'reality-ledger-v1';
+  mode: 'greenfield' | 'existing';
+  facts: RealityFact[];
 }
 
 /**
@@ -386,6 +420,8 @@ export interface Invariants {
    * Empty when the probe was not run.
    */
   scrollChoreography: Array<{ step: number; fired: number; entered: number }>;
+  /** Explicit probe coverage; absent on legacy records, whose numeric conventions remain unchanged. */
+  measurementCoverage?: import('./ref/measurement-coverage.ts').MeasurementCoverage;
 }
 
 /**
@@ -608,6 +644,8 @@ export interface Reference {
   imagePath?: string;
   /** Viewport the capture was measured at. Evidence must say how wide it was seen. */
   viewport?: { width: number; height: number };
+  /** Executed disclosure preparation and observed visibility; not a semantic state proof. */
+  capturePreparation?: import('./ref/capture-preparation.ts').CapturePreparationReceipt;
 }
 
 /** How close a page sits to a reference. 1 is identical; the warning threshold is 0.6. */
@@ -616,6 +654,8 @@ export interface RefDistance {
   similarity: number;
   /** Which invariants drove the score, most-similar first. */
   drivers: string[];
+  /** Explicitly unmeasured axes excluded from this partial comparison, never agreement. */
+  unmeasuredComponents?: string[];
 }
 
 /**
@@ -676,7 +716,7 @@ export interface Choice {
 
 // ── adapters ──
 
-export type Host = 'codex' | 'claude' | 'senpi';
+export type Host = 'codex' | 'claude';
 
 export interface AbstractHook {
   id: string;
