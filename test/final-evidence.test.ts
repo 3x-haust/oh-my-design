@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -48,10 +48,9 @@ test('the CLI disables v1 finalization before opening a stale manifest or writin
   const item = fixture();
   try {
     const cli = join(process.cwd(), 'bin', 'omd.ts');
-    assert.throws(
-      () => execFileSync(process.execPath, [cli, 'evidence', 'finalize', '--input', item.manifest, '--json'], { cwd: item.root, encoding: 'utf8' }),
-      /LEGACY_PUBLICATION_DISABLED/,
-    );
+    const result = spawnSync(process.execPath, [cli, 'evidence', 'finalize', '--input', item.manifest, '--json'], { cwd: item.root, encoding: 'utf8', shell: false });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /LEGACY_PUBLICATION_DISABLED/);
     assertNoV1Publication(item.root);
   } finally {
     cleanup(item.root);

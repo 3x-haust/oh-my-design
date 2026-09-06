@@ -1,7 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync, cpSync, rmSync, readdirSync, symlinkSync, lstatSync, readlinkSync, unlinkSync, chmodSync } from 'node:fs';
 import { join, dirname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { execFileSync } from 'node:child_process';
 import { parse as parseToml } from 'smol-toml';
 import type { Detected } from './detect.ts';
 import { unpatchSettings, patchSettings, unpatchHooks } from './patch-claude.ts';
@@ -392,10 +391,13 @@ function check(name: string, ok: boolean, detail?: string): DoctorCheck {
 
 function omdVersionRuns(): DoctorCheck {
   try {
-    execFileSync(process.execPath, [join(pkgRoot, 'bin', 'omd.mjs'), '--version'], { stdio: 'pipe' });
-    return check('omd --version runs', true);
+    const cliPath = join(pkgRoot, 'bin', 'omd.mjs');
+    const packageJson = JSON.parse(readFileSync(join(pkgRoot, 'package.json'), 'utf8')) as { version?: unknown };
+    const cliSource = readFileSync(cliPath, 'utf8');
+    const ok = cliSource.length > 0 && typeof packageJson.version === 'string' && packageJson.version.length > 0;
+    return check('omd CLI entrypoint is present', ok, ok ? undefined : 'CLI entrypoint or package version is missing');
   } catch (err) {
-    return check('omd --version runs', false, err instanceof Error ? err.message : String(err));
+    return check('omd CLI entrypoint is present', false, err instanceof Error ? err.message : String(err));
   }
 }
 

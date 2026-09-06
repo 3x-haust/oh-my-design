@@ -77,6 +77,7 @@ function processRun(path: string, args: readonly string[], timeoutMs: number): P
       child = spawn(path, args, {
         detached: process.platform !== 'win32',
         stdio: ['pipe', 'pipe', 'pipe'],
+        shell: false,
       });
     } catch (error) {
       if (error instanceof Error) finish({ kind: 'completed', stdout: '', stderr: '', detail: error.message });

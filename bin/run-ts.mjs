@@ -9,7 +9,7 @@ export function runTypeScriptEntry(entry) {
   const child = spawn(
     process.execPath,
     ['--import', require.resolve('tsx'), fileURLToPath(entry), ...process.argv.slice(2)],
-    { stdio: 'inherit' },
+    { stdio: 'inherit', shell: false },
   );
   const handlers = SIGNALS.map((signal) => ({ signal, handler: () => child.kill(signal) }));
   for (const { signal, handler } of handlers) process.once(signal, handler);

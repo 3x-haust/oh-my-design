@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { chmodSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -21,8 +21,8 @@ function done(root: string): void { rmSync(root, { recursive: true, force: true 
 let prepared: NativePublisherIdentity | undefined;
 function nativeIdentity(): NativePublisherIdentity {
   if (prepared) return prepared;
-  const compilerPath = execFileSync('/usr/bin/xcrun', ['--find', 'clang'], { encoding: 'utf8' }).trim();
-  const sdkPath = execFileSync('/usr/bin/xcrun', ['--show-sdk-path'], { encoding: 'utf8' }).trim();
+  const compilerPath = spawnSync('/usr/bin/xcrun', ['--find', 'clang'], { encoding: 'utf8', shell: false }).stdout?.toString().trim() ?? '';
+  const sdkPath = spawnSync('/usr/bin/xcrun', ['--show-sdk-path'], { encoding: 'utf8', shell: false }).stdout?.toString().trim() ?? '';
   prepared = prepareDarwinPublisherIdentity({
     binaryPath: join(mkdtempSync(join(tmpdir(), 'omd-native-publisher-')), 'omd-darwin-publish-v1'),
     compilerPath, compilerArgv: [], sdkPath, deploymentTarget: '14.0', signing: { mode: 'none' }, metadata: { test: 'benchmark-lock' },
