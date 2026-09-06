@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { deflateSync, crc32 } from 'node:zlib';
@@ -364,7 +364,7 @@ test('v1 finalization is disabled before filesystem safety validation', () => {
   } finally { cleanup(linked.root); }
   const special = fixture();
   try {
-    const fifo = join(special.root, '.omd', '.cache', 'evidence.fifo'); execFileSync('mkfifo', [fifo]);
+    const fifo = join(special.root, '.omd', '.cache', 'evidence.fifo'); spawnSync('mkfifo', [fifo], { shell: false });
     mutate(special, value => { ((value.artifacts as Array<Record<string, unknown>>)[2]!).path = '.omd/.cache/evidence.fifo'; });
     assert.equal(lstatSync(fifo).isFIFO(), true);
     assertLegacyPublicationDisabled(special);
@@ -534,14 +534,14 @@ test('the CLI rejects v1 finalization and checks a historical manifest as JSON',
   try {
     const cli = join(process.cwd(), 'bin', 'omd.ts');
     assert.throws(
-      () => execFileSync(process.execPath, [cli, 'evidence', 'finalize', '--input', item.manifest, '--json'], { cwd: item.root, encoding: 'utf8' }),
+      () => spawnSync(process.execPath, [cli, 'evidence', 'finalize', '--input', item.manifest, '--json'], { cwd: item.root, encoding: 'utf8', shell: false }).stdout?.toString() ?? '',
       /LEGACY_PUBLICATION_DISABLED/,
     );
     assert.equal(existsSync(join(item.root, '.omd', '.final-evidence.lock')), false);
     assert.equal(existsSync(join(item.root, '.omd', 'final-evidence.json')), false);
     assert.equal(existsSync(join(item.root, '.omd', 'final-evidence-runs')), false);
     seedHistoricalFinalEvidence(item);
-    const checked = JSON.parse(execFileSync(process.execPath, [cli, 'evidence', 'check', '--json'], { cwd: item.root, encoding: 'utf8' })) as FinalEvidenceManifest;
+    const checked = JSON.parse(spawnSync(process.execPath, [cli, 'evidence', 'check', '--json'], { cwd: item.root, encoding: 'utf8', shell: false }).stdout?.toString() ?? '') as FinalEvidenceManifest;
     assert.equal(checked.runId, 'run-1');
   } finally { cleanup(item.root); }
 });

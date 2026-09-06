@@ -85,7 +85,7 @@ export async function runBrowserRsSmoke(options: BrowserRsSmokeOptions): Promise
 
 function timeout(value: number | undefined, fallback: number, label: string): number { const result = value ?? fallback; if (!Number.isInteger(result) || result <= 0 || result > MAX_TIMEOUT_MS) throw new BrowserRsSmokeError(`${label} timeout must be a positive integer no greater than ${MAX_TIMEOUT_MS}ms`); return result; }
 
-function spawnBrowserRs(binary: string, args: readonly string[], environment: NodeJS.ProcessEnv): ChildProcessWithoutNullStreams { return spawn(binary, args, { stdio: ['pipe', 'pipe', 'pipe'], env: environment }); }
+function spawnBrowserRs(binary: string, args: readonly string[], environment: NodeJS.ProcessEnv): ChildProcessWithoutNullStreams { return spawn(binary, args, { stdio: ['pipe', 'pipe', 'pipe'], env: environment, shell: false }); }
 
 async function localFixture(path: string): Promise<LocalFixture> {
   const bytes = await readFile(path);

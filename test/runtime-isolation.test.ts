@@ -201,6 +201,7 @@ process.stdout.write(JSON.stringify(report));
   const result = spawnSync(process.execPath, [entrypoint, canonicalProjectRoot, ...argv], {
     cwd: canonicalProjectRoot,
     encoding: 'utf8',
+    shell: false,
   });
   assert.equal(result.status, 0, result.stderr);
   return JSON.parse(result.stdout) as LocalCliReport;
@@ -225,6 +226,7 @@ function executePipeHostReceipt(projectRoot: string, args: readonly string[], re
       cwd: projectRoot,
       env: { ...process.env, OMD_HOST_PROJECT_WRITE_FD: '3' },
       stdio: ['ignore', 'pipe', 'pipe', 'pipe'],
+      shell: false,
     });
     assert.equal(child.stdio.length, 4, 'host child must expose four stdio channels');
     const stdoutChannel = child.stdout;
@@ -295,6 +297,7 @@ function executeCallerJsonCli(projectRoot: string) {
   return spawnSync(process.execPath, [binPath, 'config', 'set', 'checkpoint', 'both', '--activation', 'activation.json'], {
     cwd: projectRoot,
     encoding: 'utf8',
+    shell: false,
   });
 }
 function executeHostIssuedCliTwice(projectRoot: string, nonce: string) {
@@ -330,8 +333,10 @@ const [binPath, projectRoot] = process.argv.slice(2);
 const launch = () => spawnSync(process.execPath, [binPath, 'config', 'set', 'checkpoint', 'both', '--activation', 'activation.json'], {
   cwd: projectRoot,
   encoding: 'utf8',
+    shell: false,
   env: { ...process.env, OMD_HOST_PROJECT_WRITE_FD: '3' },
   stdio: ['ignore', 'pipe', 'pipe', 3],
+  shell: false,
 });
 const first = launch();
 const second = launch();

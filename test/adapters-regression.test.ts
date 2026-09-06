@@ -394,7 +394,7 @@ async function reviewerMcpTranscript(
     '--session-id', receipt.processBinding.sessionId,
     '--nonce', receipt.processBinding.nonce,
     '--host', receipt.host,
-  ], { cwd: root });
+  ], { cwd: root, shell: false });
   let stdout = '';
   let stderr = '';
   child.stdout.setEncoding('utf8');
@@ -437,8 +437,8 @@ test('the correctly bound host invokes the real reviewer MCP proxy once without 
   );
   const { adapter: forgedAdapter, receipt: forgedReceipt } = reviewerReceipt('codex');
   const borrowerSource = `import { connect } from 'node:net'; const socket=connect(${JSON.stringify(reviewerSocketPath(forgedReceipt.launchId))}); socket.on('connect',()=>console.log(process.pid)); setTimeout(() => {}, 30000);`;
-  const launcherSource = `import { spawn } from 'node:child_process'; spawn(process.execPath,['--input-type=module','--eval',${JSON.stringify(borrowerSource)}],{stdio:['ignore','inherit','inherit']}); setTimeout(() => {}, 30000);`;
-  const launcher = spawn(process.execPath, ['--input-type=module', '--eval', launcherSource]);
+  const launcherSource = `import { spawn } from 'node:child_process'; spawn(process.execPath,['--input-type=module','--eval',${JSON.stringify(borrowerSource)}],{stdio:['ignore','inherit','inherit'],shell:false}); setTimeout(() => {}, 30000);`;
+  const launcher = spawn(process.execPath, ['--input-type=module', '--eval', launcherSource], { shell: false });
   const borrowedPid = await new Promise<number>((resolvePid, reject) => {
     let output = '';
     launcher.stdout.setEncoding('utf8');

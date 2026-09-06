@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -75,7 +75,7 @@ function writeSupportedHelpFixture(path: string): void {
 }
 
 function runningPid(path: string): number | undefined {
-  const output = execFileSync('/bin/ps', ['-axo', 'pid=,command='], { encoding: 'utf8' });
+  const output = spawnSync('/bin/ps', ['-axo', 'pid=,command='], { encoding: 'utf8', shell: false }).stdout?.toString() ?? '';
   const match = output.split('\n').find((line) => line.includes(path));
   if (match === undefined) return undefined;
   const pid = Number(match.trim().split(/\s+/, 1)[0]);

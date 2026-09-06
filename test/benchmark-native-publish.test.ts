@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { closeSync, constants, linkSync, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -11,8 +11,8 @@ let preparedIdentity: NativePublisherIdentity | undefined;
 
 function nativeIdentity(): NativePublisherIdentity {
   if (preparedIdentity) return preparedIdentity;
-  const compilerPath = execFileSync('/usr/bin/xcrun', ['--find', 'clang'], { encoding: 'utf8' }).trim();
-  const sdkPath = execFileSync('/usr/bin/xcrun', ['--show-sdk-path'], { encoding: 'utf8' }).trim();
+  const compilerPath = spawnSync('/usr/bin/xcrun', ['--find', 'clang'], { encoding: 'utf8', shell: false }).stdout?.toString().trim() ?? '';
+  const sdkPath = spawnSync('/usr/bin/xcrun', ['--show-sdk-path'], { encoding: 'utf8', shell: false }).stdout?.toString().trim() ?? '';
   preparedIdentity = prepareDarwinPublisherIdentity({
     binaryPath: join(mkdtempSync(join(tmpdir(), 'omd-native-publisher-')), 'omd-darwin-publish-v1'),
     compilerPath,

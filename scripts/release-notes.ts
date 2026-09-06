@@ -1,21 +1,15 @@
-#!/usr/bin/env node
 /**
  * scripts/release-notes.ts — generate structured release notes.
  *
  * Pure function (no I/O — safe to unit-test):
  *   buildReleaseNotes({ version, prevTag, summary, prs, testCount }) → markdown
  *
- * CLI (gathers real data via git + gh, then calls the pure function):
- *   node scripts/release-notes.ts --version X.Y.Z [--prev vX.Y.Z] [--test-count N]
- *   Prints release notes markdown to stdout.
+ * The module is intentionally pure. Callers gather repository data separately
+ * and pass it into the exported functions.
  */
 
-import { execFileSync } from 'node:child_process';
-import { pathToFileURL } from 'node:url';
 
 const REPO = 'https://github.com/3x-haust/oh-my-design';
-const OWNER_REPO = '3x-haust/oh-my-design';
-
 export interface PrEntry {
   number: number;
   title: string;
@@ -109,76 +103,3 @@ export function parsePrsFromCommitMessages(messages: string[]): PrEntry[] {
   return result.sort((a, b) => a.number - b.number);
 }
 
-// ── CLI helpers (I/O — excluded from unit tests) ─────────────────────────────
-
-function exec(cmd: string, args: string[]): string {
-  try {
-    return execFileSync(cmd, args, { encoding: 'utf8' }).trim();
-  } catch {
-    return '';
-  }
-}
-
-function getPrevTag(explicit: string | undefined): string {
-  if (explicit) return explicit;
-  // Most-recent tag reachable from HEAD^ (the commit before current HEAD)
-  const tag = exec('git', ['describe', '--tags', '--abbrev=0', 'HEAD^']);
-  return tag || 'v0.0.0';
-}
-
-function getMergedPrsSince(prevTag: string): PrEntry[] {
-  // The commit range prevTag..HEAD is the exact set the release ships. Read it
-  // from local git — the release workflow fetches full history and tags
-  // (fetch-depth: 0), so `git log` resolves the range without any network call.
-  // Each squash-merge subject is "<title> (#N)", so PR numbers parse straight
-  // from the subjects. The GitHub compare API is avoided on purpose: it does not
-  // resolve a literal "HEAD" ref server-side, which silently emptied the list.
-  //
-  // A missing/unknown prevTag (first release) makes the range invalid; exec()
-  // returns '' and we fall back to an empty list ("initial release").
-  const range = prevTag && prevTag !== 'v0.0.0' ? `${prevTag}..HEAD` : 'HEAD';
-  const raw = exec('git', ['log', range, '--format=%s']);
-  if (!raw) return [];
-
-  const subjects = raw.split('\n').filter(Boolean);
-  return parsePrsFromCommitMessages(subjects);
-}
-
-function run(argv: string[]): void {
-  const args = argv.slice(2);
-
-  const flag = (name: string): string | undefined => {
-    const idx = args.indexOf(name);
-    return idx >= 0 ? args[idx + 1] : undefined;
-  };
-
-  const versionArg = flag('--version');
-  const prevArg = flag('--prev');
-  const testCountArg = flag('--test-count');
-
-  if (!versionArg || !/^\d+\.\d+\.\d+/.test(versionArg)) {
-    process.stderr.write(
-      'Usage: node scripts/release-notes.ts --version X.Y.Z [--prev vX.Y.Z] [--test-count N]\n',
-    );
-    process.exit(1);
-  }
-
-  const prevTag = getPrevTag(prevArg);
-  const prs = getMergedPrsSince(prevTag);
-  const summary =
-    exec('git', ['log', '-1', '--format=%s']) || `Release v${versionArg}`;
-  const testCount = testCountArg ? parseInt(testCountArg, 10) : 0;
-
-  const notes = buildReleaseNotes({
-    version: versionArg,
-    prevTag,
-    summary,
-    prs,
-    testCount,
-  });
-  process.stdout.write(notes + '\n');
-}
-
-if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
-  run(process.argv);
-}

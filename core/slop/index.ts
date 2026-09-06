@@ -145,7 +145,7 @@ function classAttributes(source: string): ClassAttribute[] {
   const tagPattern = /<([a-z][\w.-]*)\b[^>]*>/gi;
   for (const tagMatch of source.matchAll(tagPattern)) {
     const tagSource = tagMatch[0];
-    const attr = /\bclass(?:Name)?\s*=\s*(?:\{\s*)?(["'`])([\s\S]*?)\1\s*\}?/i.exec(tagSource);
+    const attr = tagSource.match(/\bclass(?:Name)?\s*=\s*(?:\{\s*)?(["'`])([\s\S]*?)\1\s*\}?/i);
     if (!attr) continue;
     found.push({
       value: attr[2]!,
@@ -190,7 +190,7 @@ function detectMidSentenceBreak(source: string, path: string): SlopSourceCandida
 }
 
 function detectAllTransition(source: string, path: string): SlopSourceCandidate | null {
-  const match = /\btransition-all\b|\btransition\s*:\s*all(?:\s|;|!|$)/i.exec(source);
+  const match = source.match(/\btransition-all\b|\btransition\s*:\s*all(?:\s|;|!|$)/i);
   return match ? candidate('all-property-transition', path, source, match.index, [
     match[0].toLowerCase().includes('transition-all') ? 'syntax:utility' : 'syntax:declaration',
     'property:all',
@@ -279,13 +279,13 @@ function detectOrdinalRun(source: string, path: string): SlopSourceCandidate | n
 
 function findEscapedIdentifierCall(source: string, identifier: string): number | null {
   const escaped = identifier.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const match = new RegExp(`(^|[^\\w$])(${escaped})\\s*\\(`, 'm').exec(source);
+  const match = source.match(new RegExp(`(^|[^\\w$])(${escaped})\\s*\\(`, 'm'));
   return match ? match.index + match[1]!.length : null;
 }
 
 function detectFontPair(source: string, path: string): SlopSourceCandidate | null {
-  const inter = /(?:font-family\s*:[^;{}]*|fontFamily\s*[:=][^,;\n}]*|fonts?\.[a-z]+\s*\([^)]*)\bInter\b/i.exec(source);
-  const partner = /(?:font-family\s*:[^;{}]*|fontFamily\s*[:=][^,;\n}]*|fonts?\.[a-z]+\s*\([^)]*)\b(Space\s+Grotesk|Geist|Manrope|Plus\s+Jakarta(?:\s+Sans)?)\b/i.exec(source);
+  const inter = source.match(/(?:font-family\s*:[^;{}]*|fontFamily\s*[:=][^,;\n}]*|fonts?\.[a-z]+\s*\([^)]*)\bInter\b/i);
+  const partner = source.match(/(?:font-family\s*:[^;{}]*|fontFamily\s*[:=][^,;\n}]*|fonts?\.[a-z]+\s*\([^)]*)\b(Space\s+Grotesk|Geist|Manrope|Plus\s+Jakarta(?:\s+Sans)?)\b/i);
   if (inter && partner) {
     return candidate('default-font-pair', path, source, Math.max(inter.index, partner.index), [
       'family:inter', `family:${partner[1]!.toLowerCase().replace(/\s+/g, '-')}`, 'context:same-file',
@@ -295,7 +295,7 @@ function detectFontPair(source: string, path: string): SlopSourceCandidate | nul
   for (const imported of source.matchAll(/import\s*\{([^}]+)\}\s*from\s*['"]next\/font\/google['"]/g)) {
     const names = new Map<string, string>();
     for (const item of imported[1]!.split(',')) {
-      const parsed = /^\s*(Inter|Space_Grotesk|Geist|Manrope|Plus_Jakarta_Sans)(?:\s+as\s+([A-Za-z_$][\w$]*))?\s*$/.exec(item);
+      const parsed = item.match(/^\s*(Inter|Space_Grotesk|Geist|Manrope|Plus_Jakarta_Sans)(?:\s+as\s+([A-Za-z_$][\w$]*))?\s*$/);
       if (parsed) names.set(parsed[1]!, parsed[2] ?? parsed[1]!);
     }
     const interLocal = names.get('Inter');

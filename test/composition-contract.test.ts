@@ -435,7 +435,7 @@ test('absent scout passes only with an explicit N/A reason', () => {
 
 test('missing composition file fails explicit command and JSON is stable', () => {
   const { root } = setup(false);
-  const missing = spawnSync(process.execPath, [cli, 'composition', '--check', '--json'], { cwd: root, encoding: 'utf8' });
+  const missing = spawnSync(process.execPath, [cli, 'composition', '--check', '--json'], { cwd: root, encoding: 'utf8', shell: false });
   assert.equal(missing.status, 1);
   assert.equal((JSON.parse(missing.stdout) as Array<{ id: string }>)[0]?.id, 'COMPOSITION-MISSING');
 });
@@ -443,7 +443,7 @@ test('missing composition file fails explicit command and JSON is stable', () =>
 test('CLI exits zero for a fresh contract and emits an empty JSON array', () => {
   const { root, values } = setup();
   writeFileSync(join(root, '.omd', 'composition.md'), artifact(values));
-  const result = spawnSync(process.execPath, [cli, 'composition', '--check', '--json'], { cwd: root, encoding: 'utf8' });
+  const result = spawnSync(process.execPath, [cli, 'composition', '--check', '--json'], { cwd: root, encoding: 'utf8', shell: false });
   assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(JSON.parse(result.stdout), []);
   assert.ok(readFileSync(join(root, '.omd', 'composition.md'), 'utf8').includes('## Transfer boundary'));
@@ -453,7 +453,7 @@ test('CLI emits JSON findings for missing lineage artifacts', () => {
   const fingerprints = fixtureFingerprints.get(values)!;
   writeFileSync(join(root, '.omd', 'composition.md'), artifact(values));
   rmSync(join(root, '.omd', 'motion-resolutions', `sha256-${fingerprints.motionResolutionProjection}.json`));
-  const result = spawnSync(process.execPath, [cli, 'composition', '--check', '--json'], { cwd: root, encoding: 'utf8' });
+  const result = spawnSync(process.execPath, [cli, 'composition', '--check', '--json'], { cwd: root, encoding: 'utf8', shell: false });
   assert.equal(result.status, 1);
   assert.ok((JSON.parse(result.stdout) as Array<{ id: string }>).some((finding) => finding.id === 'COMPOSITION-STALE'));
 });

@@ -80,7 +80,7 @@ export function validateTaskCoverageMatrix(matrix: string): string[] {
 
     for (const [index, field] of TASK_COVERAGE_FIELDS.entries()) {
       const column = columns[index] ?? '';
-      const match = new RegExp(`^${field}:\\s*(.+)$`).exec(column);
+      const match = column.match(new RegExp(`^${field}:\\s*(.+)$`));
       const value = match?.[1]?.trim() ?? '';
       if (!value) {
         errors.push(`${id} is missing ${field}`);
