@@ -149,6 +149,36 @@ test('reference board rejects page/image captures and incomplete component captu
   for (const entry of invalid) { writeBoard(directory, manifest([candidate('one', entry.referenceId)])); assert.throws(() => loadReferenceBoard(directory)); }
 });
 
+test('bound component captures require the actual capture viewport to match the declared viewport', (context) => {
+  const directory = root(context); const entry = capture(directory, 'viewport');
+  const binding = {
+    zoneId: 'hero', decisionId: 'hero-hierarchy', axis: 'structure', sourceState: 'initial',
+    sourceViewport: { width: 1280, height: 900 }, targetViewports: [{ width: 1280, height: 900 }],
+    responsiveConsequence: 'Preserve the primary reading order.', conflictGroup: null, conflictResolution: null,
+    falsifier: 'The primary reading order changes.',
+  };
+  writeBoard(directory, manifest([candidate('one', entry.referenceId, [piece(entry.referenceId, { binding })])], {
+    schemaVersion: 'reference-board-v3', projectSha256: 'b'.repeat(64), acquisitionSha256: 'c'.repeat(64), localeContextSha256: null,
+  }));
+  for (const viewport of [{ width: 1440, height: 900 }, { width: 1280, height: 800 }]) {
+    saveRef(directory, { ...entry.ref, slot: 'hero', viewport }, createTestProjectWriteAdapter(directory));
+    assert.throws(() => loadReferenceBoard(directory), /captured viewport does not match binding.sourceViewport/);
+  }
+  for (const viewport of [undefined, null, {}, '1280x900', { width: 1280 }, { width: '1280', height: 900 }, { width: 0, height: 900 }, { width: 1280, height: -1 }, { width: 1280.5, height: 900 }, { width: 1280, height: 900.5 }]) {
+    saveRef(directory, { ...entry.ref, slot: 'hero', viewport } as Reference, createTestProjectWriteAdapter(directory));
+    assert.throws(() => loadReferenceBoard(directory), /missing a valid captured viewport/);
+  }
+  saveRef(directory, { ...entry.ref, slot: 'hero', viewport: { width: 1280, height: 900 } }, createTestProjectWriteAdapter(directory));
+  // The component PNG is a 1x1 crop: its dimensions do not represent the browser viewport.
+  assert.doesNotThrow(() => loadReferenceBoard(directory));
+});
+
+test('legacy unbound component captures remain valid without a recorded viewport', (context) => {
+  const directory = root(context); const entry = capture(directory, 'legacy-viewport');
+  writeBoard(directory, manifest([candidate('one', entry.referenceId)]));
+  assert.doesNotThrow(() => loadReferenceBoard(directory));
+});
+
 test('reference board rejects untrusted image paths, symlinks, and forged PNG bytes', (context) => {
   // Given: a valid capture whose persisted image reference is progressively attacked.
   const directory = root(context); const entry = capture(directory, 'secured');

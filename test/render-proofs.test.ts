@@ -1,15 +1,17 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { isAbsolute, join } from 'node:path';
+import { basename, dirname, isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { createHash } from 'node:crypto';
 import { captureMotionEvidenceV2, captureRenderedBeatReceipt, validateMotionEvidenceV2 } from '../core/render/index.ts';
-import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
+import { authorizeTestProjectRunPayloads, createTestProjectRunInvocation, createTestProjectWriteAdapter } from './helpers/project-write.ts';
+import { createProjectWriteAdapter } from '../core/runtime/project-write.ts';
 import { validatePostRenderBeatProof } from '../core/copy/index.ts';
+import { canonicalJson } from '../core/ref/board-artifacts.ts';
 // `omd render --proofs` renders all four sketch/craft proofs (fixed + full-page, desktop + mobile)
 // over ONE browser launch instead of four — the render-heavy sketch/craft steps' speed lever.
 
@@ -37,18 +39,32 @@ test('captures a real file URL load scene with path-backed ROI receipts', async 
   writeFileSync(page, `<!doctype html><html><style>
     html, body { width: 100%; height: 100%; margin: 0; }
     html { background: #111; }
-    #scene { width: 240px; height: 180px; background: #111; animation: production-scene 4000ms linear 150ms forwards; }
-    @keyframes production-scene { to { background: #eee; } }
-    @media (prefers-reduced-motion: reduce) { #scene { animation: none !important; background: #eee; } }
-  </style><body><main id="scene">motion</main></body></html>`);
+    #scene { width: 240px; height: 180px; background: #111; }
+  </style><body><main id="scene">motion</main><script>
+    const scene = document.querySelector('#scene');
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) scene.style.background = '#eee';
+    else {
+      const animation = scene.animate([{ background: '#111' }, { background: '#eee' }], { duration: 1, fill: 'forwards' });
+      animation.pause();
+      animation.currentTime = 0;
+    }
+  </script></body></html>`);
   const buildHash = createHash('sha256').update('build').digest('hex');
+  const artDirectionHash = createHash('sha256').update('direction').digest('hex');
+  const invocation = createTestProjectRunInvocation(dir);
   const evidence = await captureMotionEvidenceV2(page, {
     viewport: { width: 390, height: 300 }, outDir: dir, runId: 'run-1', buildHash,
-    artDirectionHash: createHash('sha256').update('direction').digest('hex'),
+    artDirectionHash, route: '/motion', taskId: 'motion-proof', invocation,
     referenceSlotId: 'motion-reference', selector: '#scene',
-    trigger: 'load', intervalMs: 160, adapter: createTestProjectWriteAdapter(dir),
+    trigger: 'load', intervalMs: 160, adapter: createProjectWriteAdapter(dir, invocation),
   });
-  assert.equal(validateMotionEvidenceV2(evidence, { motionDecision: 'one', buildHash, root: dir }).scenes.length, 1);
+  const currentMotion = { motionDecision: 'one' as const, buildHash, artDirectionHash, root: dir, invocation, route: '/motion', target: page, taskId: 'motion-proof' };
+  authorizeTestProjectRunPayloads(dir, invocation, [{ purpose: 'motion-result', payload: Buffer.from(canonicalJson(evidence)) }]);
+  assert.equal(validateMotionEvidenceV2(evidence, currentMotion).scenes.length, 1);
+  const authorizeMotion = (value: unknown): void => authorizeTestProjectRunPayloads(dir, invocation, [{ purpose: 'motion-result', payload: Buffer.from(canonicalJson(value)) }]);
+  const forgedResult = structuredClone(evidence);
+  (forgedResult as { observed: { taskId: string } }).observed.taskId = 'forged-task';
+  assert.throws(() => validateMotionEvidenceV2(forgedResult, currentMotion), /host receipt does not authorize the exact motion-result payload/);
   assert.equal(evidence.scenes[0]!.boundary, 'selector');
   assert.equal(evidence.scenes[0]!.activeAnimationCount, 1);
   const capturePaths = [
@@ -60,55 +76,69 @@ test('captures a real file URL load scene with path-backed ROI receipts', async 
   assert.equal(capturePaths.every(path => !isAbsolute(path) && existsSync(join(dir, path))), true);
   const forged = JSON.parse(JSON.stringify(evidence)) as { scenes: { mid: { capture: { bytesBase64: string } }; start: { capture: { bytesBase64: string } } }[] };
   forged.scenes[0]!.mid.capture.bytesBase64 = forged.scenes[0]!.start.capture.bytesBase64;
-  assert.throws(() => validateMotionEvidenceV2(forged, { root: dir, motionDecision: 'one' }), /bytes do not match|path does not contain/);
+  authorizeMotion(forged);
+  assert.throws(() => validateMotionEvidenceV2(forged, currentMotion), /bytes do not match|path does not contain/);
   const wrongRoi = JSON.parse(JSON.stringify(evidence)) as { scenes: { roi: { x: number; y: number; width: number; height: number } }[] };
   wrongRoi.scenes[0]!.roi = { x: 0, y: 0, width: 390, height: 300 };
+  authorizeMotion(wrongRoi);
   assert.throws(
-    () => validateMotionEvidenceV2(wrongRoi, { root: dir, motionDecision: 'one' }),
+    () => validateMotionEvidenceV2(wrongRoi, currentMotion),
     /whole viewport/,
   );
   const tinyPulse = JSON.parse(JSON.stringify(evidence)) as { scenes: { calibration: { noiseFloor: number; roiEnergy: number } }[] };
   tinyPulse.scenes[0]!.calibration.roiEnergy = tinyPulse.scenes[0]!.calibration.noiseFloor;
-  assert.throws(() => validateMotionEvidenceV2(tinyPulse, { root: dir, motionDecision: 'one' }), /energy/);
+  authorizeMotion(tinyPulse);
+  assert.throws(() => validateMotionEvidenceV2(tinyPulse, currentMotion), /energy/);
   const wrongTrigger = JSON.parse(JSON.stringify(evidence)) as { scenes: { trigger: string }[] };
   wrongTrigger.scenes[0]!.trigger = 'pointer';
-  assert.throws(() => validateMotionEvidenceV2(wrongTrigger, { root: dir, motionDecision: 'one' }), /does not match the executed trigger transcript/);
+  authorizeMotion(wrongTrigger);
+  assert.throws(() => validateMotionEvidenceV2(wrongTrigger, currentMotion), /trigger must be load/);
   const extraTrigger = JSON.parse(JSON.stringify(evidence)) as { observed: { triggerTranscript: unknown[] } };
   extraTrigger.observed.triggerTranscript.push({ event: 'scroll', timestampMs: 1 });
-  assert.throws(() => validateMotionEvidenceV2(extraTrigger, { root: dir, motionDecision: 'one' }), /exactly one observed trigger/);
+  authorizeMotion(extraTrigger);
+  assert.throws(() => validateMotionEvidenceV2(extraTrigger, currentMotion), /exactly one observed trigger/);
   const staleFrames = JSON.parse(JSON.stringify(evidence)) as { scenes: { mid: { capture: unknown }; start: { capture: unknown } }[] };
   staleFrames.scenes[0]!.mid.capture = staleFrames.scenes[0]!.start.capture;
-  assert.throws(() => validateMotionEvidenceV2(staleFrames, { root: dir, motionDecision: 'one' }), /ROI energy does not match/);
+  authorizeMotion(staleFrames);
+  assert.throws(() => validateMotionEvidenceV2(staleFrames, currentMotion), /ROI energy does not match/);
+  const absoluteFrame = JSON.parse(JSON.stringify(evidence)) as { scenes: { start: { capture: { path: string } } }[] };
+  absoluteFrame.scenes[0]!.start.capture.path = join(dir, evidence.scenes[0]!.start.capture.path);
+  authorizeMotion(absoluteFrame);
+  assert.throws(() => validateMotionEvidenceV2(absoluteFrame, currentMotion), /normalized project-relative/);
+  const traversalFrame = JSON.parse(JSON.stringify(evidence)) as { scenes: { start: { capture: { path: string } } }[] };
+  traversalFrame.scenes[0]!.start.capture.path = `../${evidence.scenes[0]!.start.capture.path}`;
+  authorizeMotion(traversalFrame);
+  assert.throws(() => validateMotionEvidenceV2(traversalFrame, currentMotion), /normalized project-relative/);
+  const escapedFrame = JSON.parse(JSON.stringify(evidence)) as { scenes: { start: { capture: { path: string } } }[] };
+  const captured = evidence.scenes[0]!.start.capture.path;
+  symlinkSync(dirname(join(dir, captured)), join(dir, 'escape'));
+  escapedFrame.scenes[0]!.start.capture.path = `escape/${basename(captured)}`;
+  authorizeMotion(escapedFrame);
+  assert.throws(() => validateMotionEvidenceV2(escapedFrame, currentMotion), /escapes the project root|could not be opened without following links/);
+  const malformedInvocation = createTestProjectRunInvocation(dir);
+  const malformedArtDirectionHash = createHash('sha256').update('unrelated-direction').digest('hex');
   await assert.rejects(() => captureMotionEvidenceV2(page, {
     viewport: { width: 390, height: 300 }, outDir: dir, runId: 'unrelated', buildHash,
-    artDirectionHash: createHash('sha256').update('direction').digest('hex'),
+    artDirectionHash: malformedArtDirectionHash, route: '/malformed-roi', taskId: 'malformed-roi',
+    invocation: malformedInvocation,
     referenceSlotId: 'motion-reference', selector: 'html',
-    trigger: 'load', intervalMs: 160, adapter: createTestProjectWriteAdapter(dir),
+    trigger: 'load', intervalMs: 160, adapter: createProjectWriteAdapter(dir, malformedInvocation),
   }), /selector-local region/);
 });
 
-test('captures selector-local scroll and pointer scenes only after their declared browser triggers execute', async () => {
+test('rejects scroll and pointer motion evidence despite host-authorized collector receipts', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'omd-motion-triggers-'));
   const buildHash = createHash('sha256').update('trigger-build').digest('hex');
   for (const trigger of ['scroll', 'pointer'] as const) {
     const page = join(dir, `${trigger}.html`);
-    writeFileSync(page, `<!doctype html><html><style>
-      html, body { margin: 0; min-height: 1200px; } #scene { position: fixed; left: 20px; top: 20px; width: 240px; height: 180px; background: #111; }
-      @media (prefers-reduced-motion: reduce) { #scene { background: #eee; } }
-    </style><body><main id="scene">${trigger}</main><script>
-      const scene = document.querySelector('#scene');
-      document.addEventListener('${trigger === 'scroll' ? 'scroll' : 'pointermove'}', () => {
-        if (!matchMedia('(prefers-reduced-motion: reduce)').matches) scene.animate([{ background: '#111' }, { background: '#eee' }], { duration: 1000, fill: 'forwards' });
-      }, { once: true, passive: true });
-    </script></body></html>`);
-    const evidence = await captureMotionEvidenceV2(page, {
-      viewport: { width: 390, height: 300 }, outDir: dir, runId: trigger, buildHash,
-      artDirectionHash: createHash('sha256').update(`trigger-${trigger}`).digest('hex'),
-      referenceSlotId: 'motion-reference', selector: '#scene', trigger, intervalMs: 160, adapter: createTestProjectWriteAdapter(dir),
-    });
-    assert.equal(evidence.observed.triggerTranscript[0]!.event, trigger);
-    assert.equal(evidence.scenes[0]!.trigger, trigger);
-    assert.equal(validateMotionEvidenceV2(evidence, { root: dir, motionDecision: 'one', buildHash }).scenes.length, 1);
+    const artDirectionHash = createHash('sha256').update(`trigger-${trigger}`).digest('hex');
+    const invocation = createTestProjectRunInvocation(dir);
+    await assert.rejects(() => captureMotionEvidenceV2(page, {
+      viewport: { width: 390, height: 300 }, outDir: dir, runId: trigger, buildHash, artDirectionHash,
+      route: `/motion-${trigger}`, taskId: `motion-${trigger}`, invocation,
+      referenceSlotId: 'motion-reference', selector: '#scene', trigger, intervalMs: 160,
+      adapter: createProjectWriteAdapter(dir, invocation),
+    }), /only supports the load trigger/);
   }
 });
 test('rendered Beat receipts use semantic DOM regions rather than visible wrappers', async () => {
@@ -117,6 +147,7 @@ test('rendered Beat receipts use semantic DOM regions rather than visible wrappe
   const prose = 'Semantic Beat evidence must contain enough ordinary rendered text to make this a real browser page rather than a hollow response. '.repeat(3);
   const capture = async (name: string, body: string, beatIds: string[]) => {
     const page = join(dir, `${name}.html`);
+    const invocation = createTestProjectRunInvocation(dir);
     writeFileSync(page, `<!doctype html><html><style>
       html, body { margin: 0; } main, section { min-height: 160px; padding: 24px; }
       .overlap { position: absolute; top: 0; left: 0; width: 300px; min-height: 160px; }
@@ -125,6 +156,10 @@ test('rendered Beat receipts use semantic DOM regions rather than visible wrappe
       adapter: createTestProjectWriteAdapter(dir),
       out: join(dir, `${name}.json`),
       artDirectionHash: hash,
+      buildSha256: hash,
+      route: `/${name}`,
+      taskId: name,
+      invocation,
       copyDeckSha256: hash,
       beatIds,
     });

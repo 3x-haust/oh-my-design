@@ -1,100 +1,185 @@
-import { test } from 'node:test';
+import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  aiAssetDecisionAuthorityBytes,
+  commitAiAssetDecision,
+  validateAiImageUsage,
+} from '../core/asset-sourcing/index.ts';
+import { PhotoLicenseError, validatePhotoProvenance } from '../core/graphics/photo-license.ts';
+import {
+  ADAPTIVE_BEHAVIOR_POLICY,
+  AdaptiveRouteError,
+  parseRouteRecord,
+  routeAdaptiveFlow,
+  validateAttributionCoverage,
+} from '../core/route/index.ts';
+import {
+  authorizeTestProjectRunPayloads,
+  createTestProjectRunInvocation,
+  createTestProjectWriteAdapter,
+} from './helpers/project-write.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
-const read = (path: string): string => readFileSync(join(root, path), 'utf8');
+const temporaryRoots: string[] = [];
+after(() => {
+  for (const path of temporaryRoots) rmSync(path, { recursive: true, force: true });
+});
+const fixture = (): object => JSON.parse(readFileSync(
+  join(root, 'test/fixtures/adaptive-flow/copy-only.json'), 'utf8',
+));
 
-test('hand and composer state the three-path asset sourcing precedence with duotone default', () => {
-  const hand = read('src/agents/hand.agent.yaml');
-  const composer = read('src/agents/composer.agent.yaml');
+test('asset precedence, fallback, and dependency authority are machine contracts', () => {
+  const assets = ADAPTIVE_BEHAVIOR_POLICY.assets;
+  assert.equal(assets.dependencyPolicy, 'named-only');
+  assert.deepEqual(assets.sourcePrecedence, [
+    'user-asset', 'free-license-photo', 'conditional-ai', 'additive-webgl',
+  ]);
+  assert.deepEqual(assets.fallback, ['user-asset', 'css-svg']);
+  assert.equal(assets.placeholderFinalAllowed, false);
+  assert.equal(assets.sourcingOverridesCarrierDecision, false);
+  assert.equal(ADAPTIVE_BEHAVIOR_POLICY.visual.userRegisterMotionLock, true);
+  assert.equal(ADAPTIVE_BEHAVIOR_POLICY.visual.directionCount, 'ambition-and-uncertainty');
+  assert.equal(ADAPTIVE_BEHAVIOR_POLICY.visual.motionOneRequiresTriggeredScene, true);
+  assert.equal(ADAPTIVE_BEHAVIOR_POLICY.visual.motionNoneRequiresStaticBreak, false);
+  assert.equal(ADAPTIVE_BEHAVIOR_POLICY.visual.marketingMotionNoneRequiresStaticBreak, true);
 
-  for (const source of [hand, composer]) {
-    assert.match(source, /asset sourcing precedence|OMD's precedence/i);
-    assert.match(source, /\(default\)[\s\S]*user-provided asset[\s\S]*duotone/i);
-    assert.match(source, /\(conditional\)[\s\S]*AI-generated imagery/i);
-    assert.match(source, /\(additive\)[\s\S]*WebGL\/3D/i);
+  const input = fixture();
+  Reflect.set(input, 'namedDependencies', ['existing-design-system']);
+  const route = routeAdaptiveFlow(input);
+  assert.deepEqual(route.namedDependencies, ['existing-design-system']);
+  assert.deepEqual(route.sourceContract.namedDependencies, ['existing-design-system']);
+  assert.deepEqual(route.allowedPaths, ['src/copy/**']);
+});
+
+test('free photography requires lawful provenance while mood boards remain study-only', () => {
+  const photo = validatePhotoProvenance({
+    source: 'Openverse', sourcePage: 'https://openverse.org/image/example', license: 'CC-BY',
+    photographer: 'Example Creator', attribution: 'Example Creator, CC-BY',
+    localPath: 'public/example.jpg', altText: 'A quiet atmospheric landscape',
+  });
+  assert.equal(photo.license, 'CC-BY');
+  assert.deepEqual(ADAPTIVE_BEHAVIOR_POLICY.assets.freePhotoProvenance, [
+    'source', 'license', 'attribution',
+  ]);
+  assert.equal(ADAPTIVE_BEHAVIOR_POLICY.assets.moodBoardUse, 'study-only');
+  assert.throws(() => validatePhotoProvenance({
+    ...photo, source: 'Pinterest', license: 'all-rights-reserved',
+  }), PhotoLicenseError);
+});
+
+test('AI imagery is conditional and binds exact provenance to a current immutable omd decision', () => {
+  const assets = ADAPTIVE_BEHAVIOR_POLICY.assets;
+  assert.deepEqual(assets.aiZones, ['abstract', 'atmospheric']);
+  assert.deepEqual(assets.aiProvenance, [
+    'prompt', 'provider', 'trusted-project-current-omd-decision',
+    'host-ai-asset-decision-authority',
+  ]);
+  assert.equal(assets.factualCarrierAiAllowed, false);
+  assert.equal(assets.fabricateFactsOrAssets, false);
+  assert.equal(assets.mandatePhoto, false);
+
+  const projectRoot = mkdtempSync(join(tmpdir(), 'omd-phase2-ai-authority-'));
+  temporaryRoots.push(projectRoot);
+  const invocation = createTestProjectRunInvocation(projectRoot, 'phase2-ai-asset');
+  const decisionInput = {
+    decisionId: 'hero-atmosphere', prompt: 'soft cobalt atmospheric field',
+    provider: 'host-imagegen', reason: 'The abstract launch carrier is selected by art direction.',
+  };
+  const authority = aiAssetDecisionAuthorityBytes(projectRoot, decisionInput, invocation);
+  authorizeTestProjectRunPayloads(projectRoot, invocation, [{ purpose: 'ai-asset-decision', payload: authority }]);
+  const decision = commitAiAssetDecision(
+    projectRoot, decisionInput, createTestProjectWriteAdapter(projectRoot, invocation), invocation,
+  );
+  const usage = {
+    zone: 'atmospheric' as const, hostHasImageGen: true,
+    provenance: { prompt: decisionInput.prompt, provider: decisionInput.provider },
+    decision, currentDecision: decision, projectRoot, invocation,
+  };
+  assert.deepEqual(validateAiImageUsage(usage), { allowed: true, violations: [] });
+
+  const mutations: readonly (readonly [string, object])[] = [
+    ['missing decision', { ...usage, decision: undefined }],
+    ['uncommitted decision', { ...usage, decision: { ...decision, status: 'draft' } }],
+    ['tampered decision', { ...usage, decision: { ...decision, decisionSha256: 'c'.repeat(64) } }],
+    ['mismatched prompt', { ...usage, provenance: { ...usage.provenance, prompt: 'different prompt' } }],
+    ['mismatched provider', { ...usage, provenance: { ...usage.provenance, provider: 'other-provider' } }],
+    ['stale current reference', { ...usage, currentDecision: { ...usage.currentDecision, decisionSha256: 'a'.repeat(64) } }],
+    ['missing current reference', { ...usage, currentDecision: undefined }],
+  ];
+  for (const [label, mutation] of mutations) {
+    const result = validateAiImageUsage(mutation as Parameters<typeof validateAiImageUsage>[0]);
+    assert.equal(result.allowed, false, label);
+    assert.ok(result.violations.some((entry) => entry.includes('decision')), label);
   }
+
+  const routedInput = fixture();
+  const strategy = Reflect.get(routedInput, 'strategyDecision');
+  const methods = Reflect.get(strategy, 'methods');
+  const skips = Reflect.get(strategy, 'skips');
+  assert.ok(Array.isArray(methods) && Array.isArray(skips));
+  Reflect.set(strategy, 'methods', [...methods, 'ai-shipped-asset']);
+  Reflect.set(strategy, 'skips', skips.filter((entry) => Reflect.get(entry, 'id') !== 'ai-shipped-asset'));
+  Reflect.set(strategy, 'aiAssets', [{
+    assetId: 'hero-atmosphere', zone: 'atmospheric', ...usage.provenance,
+    decision, currentDecision: usage.currentDecision,
+  }]);
+  Reflect.set(strategy, 'attributionCategories', ['tokens', 'graphics']);
+  const routed = routeAdaptiveFlow(routedInput, { root: projectRoot, invocation });
+  assert.deepEqual(routed.behavior.active.aiAssetDecisionIds, ['hero-atmosphere']);
+  assert.deepEqual(routed.behavior.active.attributionCategories, ['tokens', 'graphics']);
+
+  const forged = structuredClone(routed);
+  Reflect.set(forged.strategy.aiAssets[0]?.currentDecision ?? {}, 'decisionSha256', 'b'.repeat(64));
+  assert.throws(
+    () => parseRouteRecord(forged, { root: projectRoot, invocation }),
+    AdaptiveRouteError,
+  );
 });
 
-test('a free-license real-photography path exists, and mood boards are study-only never lifted verbatim', () => {
-  const hand = read('src/agents/hand.agent.yaml');
-  const composer = read('src/agents/composer.agent.yaml');
-  const protocol = read('core/protocol/human-design-loop.md');
-  for (const source of [hand, composer, protocol]) {
-    // Real photos may be sourced from a free-license library and recorded with attribution.
-    assert.match(source, /free-license\s+library\s+\(Unsplash,\s+Pexels,\s+Openverse,\s+Wikimedia\s+Commons;\s+CC0\s+or\s+CC-BY\)/i);
-    assert.match(source, /recorded\s+with\s+its\s+source,\s+license,\s+and\s+attribution/i);
-    // Copyrighted mood boards are studied only, never lifted verbatim into the shipped page.
-    assert.match(source, /Pinterest,\s+Dribbble,\s+Mobbin[\s\S]*never\s+lifted\s+verbatim/i);
+test('adaptive attribution coverage is exact and conditionally derived from selected contracts', () => {
+  assert.deepEqual(validateAttributionCoverage(['tokens'], ['tokens']), ['tokens']);
+  assert.deepEqual(validateAttributionCoverage(
+    ['tokens', 'motion', 'composition', 'graphics'],
+    ['tokens', 'motion', 'composition', 'graphics'],
+  ), ['tokens', 'motion', 'composition', 'graphics']);
+  for (const mutation of [
+    ['tokens', 'motion', 'graphics'],
+    ['tokens', 'motion', 'composition', 'graphics', 'graphics'],
+    ['tokens', 'motion', 'composition', 'graphics', 'photography'],
+  ]) {
+    assert.throws(
+      () => validateAttributionCoverage(mutation, ['tokens', 'motion', 'composition', 'graphics']),
+      AdaptiveRouteError,
+    );
   }
+  assert.deepEqual(routeAdaptiveFlow(fixture()).behavior.active.attributionCategories, ['tokens']);
+  const medical = JSON.parse(readFileSync(
+    join(root, 'test/fixtures/adaptive-flow/medical-new-product.json'), 'utf8',
+  ));
+  assert.deepEqual(routeAdaptiveFlow(medical).behavior.active.attributionCategories, [
+    'tokens', 'composition',
+  ]);
+
+  const missing = fixture();
+  const strategy = Reflect.get(missing, 'strategyDecision');
+  assert.ok(typeof strategy === 'object' && strategy !== null);
+  Reflect.set(strategy, 'attributionCategories', ['tokens', 'composition']);
+  assert.throws(() => routeAdaptiveFlow(missing), AdaptiveRouteError);
 });
 
-test('hand and composer confine AI-generated imagery to abstract/atmospheric zones and forbid factual carriers', () => {
-  const hand = read('src/agents/hand.agent.yaml');
-  const composer = read('src/agents/composer.agent.yaml');
-
-  for (const source of [hand, composer]) {
-    assert.match(source, /host environment declares\s+image-generation\s+capability/i);
-    assert.match(source, /(?:only for|only when the .* zone permits)\s+an?\s+abstract or atmospheric\s+zone/i);
-    assert.match(source, /factual[\s\S]*team photo, product screenshot, real person, (?:or )?logo/i);
-    assert.match(source, /never\s+(?:be satisfied by AI-generated imagery|for a\s+factual\s+carrier)/i);
-  }
+test('WebGL remains additive behind precedence, budget, and semantic fallback', () => {
+  assert.deepEqual(ADAPTIVE_BEHAVIOR_POLICY.assets.webglRequires, [
+    'hand-precedence', 'performance-budget', 'semantic-fallback',
+  ]);
+  assert.equal(ADAPTIVE_BEHAVIOR_POLICY.assets.sourcePrecedence.at(-1), 'additive-webgl');
 });
 
-test('hand and composer require committed provenance for AI-generated imagery', () => {
-  const hand = read('src/agents/hand.agent.yaml');
-  const composer = read('src/agents/composer.agent.yaml');
-
-  assert.match(hand, /committed provenance \(the prompt and the\s+provider\) recorded with `omd decision`/i);
-  assert.match(composer, /committed\s+provenance \(prompt and provider\)/i);
-});
-
-test('hand and composer gate WebGL/3D on hand precedence, a performance budget, and a non-canvas semantic fallback', () => {
-  const hand = read('src/agents/hand.agent.yaml');
-  const composer = read('src/agents/composer.agent.yaml');
-
-  for (const source of [hand, composer]) {
-    assert.match(source, /hand\s+precedence \(an explicit user request or a greenfield concept\s+necessity\)/i);
-    assert.match(source, /declared performance budget/i);
-    assert.match(source, /non-canvas semantic fallback/i);
-  }
-});
-
-test('hand and composer fall back to user asset or CSS\\/SVG per the placeholder policy when no path applies', () => {
-  const hand = read('src/agents/hand.agent.yaml');
-  const composer = read('src/agents/composer.agent.yaml');
-
-  for (const source of [hand, composer]) {
-    assert.match(source, /existing\s+CSS\/SVG graphics recipes/i);
-    assert.match(source, /grey box is a\s+defect, never the final answer/i);
-  }
-});
-
-test('asset sourcing preserves evidence-bound carrier and dependency locks', () => {
-  const protocol = read('core/protocol/human-design-loop.md');
-  const hand = read('src/agents/hand.agent.yaml');
-  const composer = read('src/agents/composer.agent.yaml');
-
-  // G0 stack precedence + no-unnecessary-dependencies lock (hand only).
-  assert.match(hand, /Framework scaffold dependencies[\s\S]*are allowed[\s\S]*do not add unnecessary dependencies to an existing project/);
-
-  // G1 media/carrier locks preserved verbatim on both agents.
-  assert.match(hand, /Do not mandate a photo or invent product facts\/assets/);
-  assert.match(composer, /never mandate a photo or invent facts\/assets/);
-  assert.match(hand, /Never fabricate assets, data, or product facts to justify a\s+carrier/i);
-  assert.match(composer, /Never invent the asset or fact the carrier depends\s+on/i);
-
-  // Autonomous direction selection is locked by explicit user input and never defaults to motion.
-  assert.match(protocol, /explicit current-user register or motion instruction is a lock[\s\S]*never inferred from silence/i);
-  assert.match(protocol, /compare exactly three evidence-grounded directions silently[\s\S]*do not ask the user/i);
-  assert.match(protocol, /`none` is legal[\s\S]*adequate static proof[\s\S]*`one` is legal only when one declared motion hypothesis is eligible/i);
-  assert.match(hand, /`motionDecision: one` requires exactly one real[\s\S]*triggered scene/i);
-  assert.match(hand, /`motionDecision: none` permits no[\s\S]*triggered scene[\s\S]*designed static template break/i);
-
-  // The asset sections narrow *how*, not whether/what, a carrier is sourced.
-  assert.match(hand, /never overrides the carrier\s+or restraint rules above/i);
-  assert.match(composer, /never overrides the media-role or restraint rules above/i);
+test('persisted asset handoff and dependency policy cannot be weakened', () => {
+  const record = structuredClone(routeAdaptiveFlow(fixture()));
+  Reflect.set(record.behavior.policy.assets, 'fabricateFactsOrAssets', true);
+  assert.throws(() => parseRouteRecord(record), AdaptiveRouteError);
 });

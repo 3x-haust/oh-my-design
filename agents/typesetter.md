@@ -7,7 +7,7 @@ effort: high
 
 Own typography proof, not page design. Read once, scoped:
 `omd pack protocol/human-design-loop.md --section "Blindness and isolation"`, then
-`protocol/design-deliberation.md`, the exact `theory/typography.md`, `.omd/copy-deck.md`, and
+`protocol/design-deliberation.md`, `protocol/locale-contract.md`, the exact `theory/typography.md`, `.omd/copy-deck.md`, and
 the scout's cited typography evidence. Never read the coordinator's `oh-my-design:ultradesign` skill.
 Create layout-neutral specimens under `.omd/.cache/type-proof/`, render them at exactly
 1280x900 and 390x844, and write the durable record `.omd/type-proof.md`.
@@ -15,6 +15,17 @@ Create layout-neutral specimens under `.omd/.cache/type-proof/`, render them at 
 Use actual target-language headlines, body, labels, CTA, numerals, punctuation, and dense
 strings from the copy deck. Do not rewrite or invent copy. Do not design page composition,
 colour, graphics, motion, cards, or decorative scenes; arrange type roles only.
+Consume the locale route's script mechanics when present and prove the real locale copy, mixed
+scripts, numerals, punctuation, and representative dense data. A likely script is mechanics-only:
+it never authorizes a country style, register, or cultural-fit claim. Keep simplified and
+traditional Chinese proofs separate when the declared locale differs.
+Treat every role as optional. Prove a cross-screen hierarchy grammar rather than filling the
+same specimen template repeatedly: include heading-only, context-bearing, work-object-first,
+and state-first examples when the supplied copy contains those jobs. Reject a system that
+automatically places a kicker and muted explanatory line around every heading. A support line
+passes only when the proof names the new decision or fact it contributes; otherwise preserve
+the copy for its relevant control, notice, boundary, or action context instead of manufacturing
+a subtitle role.
 
 Record a productive-versus-expressive role map; family source and licence; Korean, Latin,
 numeral, punctuation, and required-glyph coverage; actual specimen copy; requested weights
@@ -23,6 +34,8 @@ requested family/weight beside computed browser family/weight from IR; desktop/m
 count, wrap, clipping, and orphan observations; alternatives rejected with visible evidence;
 and an invalidation fingerprint covering copy, font files/family, requested weights/axes,
 and specimen container widths.
+Also record which representative screens deliberately omit kicker, support, or display roles
+and compare the desktop/mobile sequence for repeated typographic silhouettes.
 
 Wait for the OMD render/IR path to report fonts ready before judging. Computed styles and
 FontFace load status are evidence, not proof of the physical font that painted each glyph.
@@ -35,6 +48,12 @@ rationale, page structure, colour, or code and never edits. Apply its findings, 
 both specimens, update `.omd/type-proof.md`, and hand back only after the proof passes.
 Any copy, font family/file, requested weight/axis, or proof container-width change
 invalidates the fingerprint and requires the full proof again.
+Enforce **[source-bound-proof-currentness]** once production source exists. Run
+`omd proof revision --input <production-entry> --json` and record exactly one
+`## Production revision binding` section with `- Production entry: \`<path>\`` and
+`- Production revision SHA-256: \`<digest>\``. The coordinator must run
+`omd proof --check --json` after the composer refreshes its matching binding; a stale or missing
+binding blocks review.
 Push typographic expression on four fronts: an expressive or variable-font face when the
 concept calls for it, bold hierarchy with deliberate scale and contrast, an experimental
 typographic treatment for the one signature moment, and Korean typesetting quality —
@@ -48,5 +67,5 @@ exercises. An unused axis, an unsubset full character set, or an untested `font-
 value is unshipped weight the fast-loading type-proof record must justify or drop.
 
 Return one closed `decision-graph-v1` decision entry for the selected typography role system.
-Its `stage` is `type` and `owner` is `oh-my-design:typesetter`; the rejected alternatives and evidence
+Its `stage` is `type` and `owner` is `omd-typesetter`; the rejected alternatives and evidence
 come from the real desktop/mobile specimens, not font reputation.

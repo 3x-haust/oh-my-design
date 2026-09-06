@@ -20,6 +20,14 @@ test('loadRules reads every builtin rule and validates required fields', () => {
   }
 });
 
+test('calibrated visual convergence rules stay warnings and do not claim authorship', () => {
+  for (const id of ['SLOP-GRADIENT', 'SLOP-RADIUS-MONOCULTURE', 'SLOP-TRIPLE-CARD']) {
+    const rule = must(builtin.find((candidate) => candidate.id === id), id);
+    assert.equal(rule.severity, 'warn');
+    assert.doesNotMatch(rule.message, /AI[- ]authorship|signature of every|generated landing page|nobody decided|confession/i);
+  }
+});
+
 test('loadRules rejects a rule missing category', () => {
   assert.throws(
     () => loadRules(new URL('./fixtures/rules-missing-category/', import.meta.url).pathname),
@@ -34,7 +42,7 @@ test('loadRules rejects a rule with a duplicate id', () => {
 test('check finds exactly the seeded violations', () => {
   const v = check(ir, builtin);
   const ids = v.map((x) => x.id).sort();
-  assert.deepEqual(ids, ['CONTRAST-001', 'HIT-002', 'SPACING-001', 'TOKEN-003', 'TOKEN-003', 'TOKEN-004', 'TOKEN-004', 'TOKEN-004', 'TOKEN-004']);
+  assert.deepEqual(ids, ['CONTRAST-001', 'SPACING-001', 'TOKEN-003', 'TOKEN-003', 'TOKEN-004', 'TOKEN-004', 'TOKEN-004', 'TOKEN-004']);
 });
 
 test('violations carry nodeId, path, value and an interpolated message', () => {
@@ -56,14 +64,31 @@ test('check output is deterministic — sorted by path then id', () => {
 
 test('layer filter selects rules by layer', () => {
   assert.equal(check(ir, builtin, { layers: [2] }).length, 0);
-  assert.equal(check(ir, builtin, { layers: [1] }).length, 9);
+  assert.equal(check(ir, builtin, { layers: [1] }).length, 8);
 });
 
 test('category filter selects rules by category', () => {
   const v = check(ir, builtin, { categories: ['a11y'] });
   assert.ok(v.length > 0);
   for (const violation of v) assert.equal(violation.category, 'a11y');
-  assert.deepEqual(v.map((x) => x.id).sort(), ['CONTRAST-001', 'HIT-002']);
+  assert.deepEqual(v.map((x) => x.id).sort(), ['CONTRAST-001']);
+});
+
+test('touch targets use the WCAG 2.2 AA 24px floor as an advisory warning', () => {
+  const root: RawNode = {
+    id: 'root', name: 'Root', type: 'FRAME', path: 'Root', parent: null,
+    box: { x: 0, y: 0, w: 390, h: 844 }, children: ['pass', 'fail'],
+  };
+  const target = (id: string, w: number): RawNode => ({
+    id, name: id, type: 'FRAME', path: `Root/${id}`, parent: 'root',
+    box: { x: 0, y: 0, w, h: 44 }, interactive: true, children: [],
+  });
+  const synthetic = normalize({ nodes: [root, target('pass', 28), target('fail', 20)] });
+  const rule = must(builtin.find((candidate) => candidate.id === 'HIT-002'), 'HIT-002');
+  const findings = check(synthetic, [rule]);
+  assert.deepEqual(findings.map(({ nodeId }) => nodeId), ['fail']);
+  assert.equal(rule.severity, 'warn');
+  assert.match(rule.message, /24x24/);
 });
 
 test('a rule whose when-expression throws is reported, not silently skipped', () => {
@@ -89,20 +114,44 @@ test('team rules can reference frame concepts (Layer 2)', () => {
   assert.ok(violation.message.includes('null'));
 });
 
-test('SLOP-GRADIENT fires when both stops sit in the 240-290deg violet band', () => {
-  const root: RawNode = {
-    id: 'r1',
-    name: 'Hero',
-    type: 'FRAME',
-    path: 'Hero',
-    parent: null,
-    box: { x: 0, y: 0, w: 100, h: 100 },
-    children: [],
-    gradient: 'linear-gradient(135deg, #4f46e5, #a855f7)',
-  };
-  const synthetic = normalize({ nodes: [root] });
+const violetGradient = 'linear-gradient(135deg, #4f46e5, #a855f7)';
+
+const gradientNode = (id: string, gradientRole?: string): RawNode => ({
+  id,
+  name: 'GradientRegion',
+  type: 'FRAME',
+  path: `Root/${id}`,
+  parent: 'root',
+  box: { x: 0, y: 0, w: 100, h: 100 },
+  children: [],
+  gradient: violetGradient,
+  ...(gradientRole ? { gradientRole } : {}),
+} as RawNode);
+
+test('SLOP-GRADIENT fires on repeated violet gradients without a named role', () => {
+  const synthetic = normalize({ nodes: [
+    accentRoot(['g1', 'g2']),
+    gradientNode('g1'),
+    gradientNode('g2'),
+  ] });
   const v = check(synthetic, builtin, { categories: ['slop'] });
   assert.ok(v.some((x) => x.id === 'SLOP-GRADIENT'));
+});
+
+test('SLOP-GRADIENT does not treat one violet gradient as a genericity signature', () => {
+  const synthetic = normalize({ nodes: [accentRoot(['g1']), gradientNode('g1')] });
+  const v = check(synthetic, builtin, { categories: ['slop'] });
+  assert.ok(!v.some((x) => x.id === 'SLOP-GRADIENT'));
+});
+
+test('SLOP-GRADIENT exempts repeated gradients with explicit semantic roles', () => {
+  const synthetic = normalize({ nodes: [
+    accentRoot(['g1', 'g2']),
+    gradientNode('g1', 'hero-atmosphere'),
+    gradientNode('g2', 'data-intensity'),
+  ] });
+  const v = check(synthetic, builtin, { categories: ['slop'] });
+  assert.ok(!v.some((x) => x.id === 'SLOP-GRADIENT'));
 });
 
 const accentRoot = (children: string[]): RawNode => ({
@@ -187,6 +236,30 @@ test('SLOP-TIGHT-LEADING fires on a crammed paragraph, not on well-led body', ()
   assert.ok(tight.some((x) => x.id === 'SLOP-TIGHT-LEADING'));
   const roomy = runSlop([accentRoot(['a']), richText('a', { text: para, lineHeight: 1.5 })]);
   assert.ok(!roomy.some((x) => x.id === 'SLOP-TIGHT-LEADING'));
+});
+
+test('SLOP-RADIUS-MONOCULTURE requires the same radius across interactive and surfaced content roles', () => {
+  const nodes = Array.from({ length: 8 }, (_unused, index) => makeChildNode('root', {
+    id: `rounded${index}`,
+    radius: { value: 12, token: 'radius-md' },
+    interactive: index < 3,
+    ...(index >= 3 ? {
+      // Raw/Figma IR predates the optional authored flag; an own, non-inherited fill is still a surface.
+      fill: { value: '#FFFFFF', token: 'surface' },
+    } : {}),
+  }, index));
+  const v = runSlop([makeRootNode({ children: nodes.map((node) => node.id) }), ...nodes]);
+  assert.ok(v.some((x) => x.id === 'SLOP-RADIUS-MONOCULTURE'));
+});
+
+test('SLOP-RADIUS-MONOCULTURE does not fire when one radius is confined to controls', () => {
+  const controls = Array.from({ length: 8 }, (_unused, index) => makeChildNode('root', {
+    id: `control${index}`,
+    radius: { value: 12, token: 'radius-control' },
+    interactive: true,
+  }, index));
+  const v = runSlop([makeRootNode({ children: controls.map((node) => node.id) }), ...controls]);
+  assert.ok(!v.some((x) => x.id === 'SLOP-RADIUS-MONOCULTURE'));
 });
 
 test('TOKEN-004 fires on a hardcoded radius, not on a tokenised one', () => {
@@ -276,7 +349,7 @@ test('SLOP-COPY-KO does not fire when the same connectives appear without a comm
   }
 });
 
-test('SLOP-COPY-KO fires on AI structural openers 살펴보겠습니다 and 알아보겠습니다', () => {
+test('SLOP-COPY-KO fires on document-cadence openers 살펴보겠습니다 and 알아보겠습니다', () => {
   const positives = [
     '이번 글에서는 주요 기능을 살펴보겠습니다.',
     '이 제품에 대해 자세히 알아보겠습니다.',
@@ -575,7 +648,7 @@ test('SLOP-EMOJI-HEADING does not fire on a button with a plain arrow (not emoji
 
 // ── SLOP-COPY widened phrases ─────────────────────────────────────────────────
 
-test('SLOP-COPY fires on new widened AI stock phrases', () => {
+test('SLOP-COPY fires on widened interchangeable stock phrases', () => {
   const positives = [
     'Say goodbye to manual work.',
     'Blazing fast performance for every team.',
@@ -597,6 +670,20 @@ test('SLOP-COPY does not fire on legitimate uses of similar words', () => {
   for (const text of negatives) {
     const v = check(makeTextIr(text), builtin, { categories: ['slop'] });
     assert.ok(!v.some((x) => x.id === 'SLOP-COPY'), `unexpected SLOP-COPY for: ${text}`);
+  }
+});
+
+test('SLOP-PLACEHOLDER-COPY fires on exact visible placeholder nodes', () => {
+  for (const text of ['Lorem ipsum dolor sit amet.', 'Your headline here', '[PLACEHOLDER]', 'TODO copy']) {
+    const v = check(makeTextIr(text), builtin, { categories: ['slop'] });
+    assert.ok(v.some((x) => x.id === 'SLOP-PLACEHOLDER-COPY'), `expected placeholder warning for: ${text}`);
+  }
+});
+
+test('SLOP-PLACEHOLDER-COPY does not fire when real copy discusses placeholder concepts', () => {
+  for (const text of ['Replace placeholder copy before publishing.', 'The TODO list contains three assigned tasks.', 'Use the placeholder attribute to show an input hint.']) {
+    const v = check(makeTextIr(text), builtin, { categories: ['slop'] });
+    assert.ok(!v.some((x) => x.id === 'SLOP-PLACEHOLDER-COPY'), `unexpected placeholder warning for: ${text}`);
   }
 });
 
@@ -708,6 +795,30 @@ test('SLOP-NESTED-CARDS fires when a surfaced node sits inside another surfaced 
   };
   const v = check(normalize({ nodes: [outerCard, innerCard] }), builtin, { categories: ['slop'] });
   assert.ok(v.some((x) => x.id === 'SLOP-NESTED-CARDS'), 'expected SLOP-NESTED-CARDS for surfaced node inside surfaced parent');
+});
+
+test('SLOP-TRIPLE-CARD fires only when surfaced peer cards have equal visual rank', () => {
+  const cards = Array.from({ length: 3 }, (_unused, index) => makeChildNode('root', {
+    id: `card${index}`,
+    name: 'FeatureCard',
+    box: { x: index * 220, y: 0, w: 200, h: 180 },
+    radius: { value: 12, token: 'radius-card' },
+    shadow: { value: '0 2px 8px rgba(0,0,0,.12)', token: 'elevation-1' },
+  }, index));
+  const v = runSlop([makeRootNode({ children: cards.map((node) => node.id) }), ...cards]);
+  assert.ok(v.some((x) => x.id === 'SLOP-TRIPLE-CARD'));
+});
+
+test('SLOP-TRIPLE-CARD does not fire when one surfaced card is visibly ranked larger', () => {
+  const cards = Array.from({ length: 3 }, (_unused, index) => makeChildNode('root', {
+    id: `card${index}`,
+    name: 'FeatureCard',
+    box: { x: index * 220, y: 0, w: index === 0 ? 320 : 200, h: index === 0 ? 240 : 180 },
+    radius: { value: 12, token: 'radius-card' },
+    shadow: { value: '0 2px 8px rgba(0,0,0,.12)', token: 'elevation-1' },
+  }, index));
+  const v = runSlop([makeRootNode({ children: cards.map((node) => node.id) }), ...cards]);
+  assert.ok(!v.some((x) => x.id === 'SLOP-TRIPLE-CARD'));
 });
 
 test('SLOP-NESTED-CARDS does not fire when the inner node has no shadow', () => {

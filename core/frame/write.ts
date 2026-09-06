@@ -1,10 +1,14 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { stringify } from 'yaml';
-import { readFrame } from './index.ts';
+import { readFrame, type RealityLedger } from './index.ts';
 import { normalizeUxSurface, validateTaskCoverageMatrix } from './check-ux.ts';
 import type { Choice } from '../types.ts';
 import { type ProjectWriteAdapter, requireProjectWriteAdapter } from '../runtime/project-write.ts';
+import {
+  parseEntrySurfaceContract,
+  type EntrySurfaceContract,
+} from './entry-surface-contract.ts';
 
 
 const designDir = (cwd: string): string => join(cwd, '.omd');
@@ -37,6 +41,8 @@ export function writeFrameRecord(cwd: string, opts: {
   uxCostliestError?: string;
   uxSurface?: unknown;
   taskCoverageMatrix?: unknown;
+  reality?: RealityLedger;
+  entrySurface?: EntrySurfaceContract;
 }, adapter?: ProjectWriteAdapter): string {
   if (!opts.why || opts.why.trim().length < 10) {
     throw new Error(
@@ -79,6 +85,10 @@ export function writeFrameRecord(cwd: string, opts: {
   if (opts.uxFrequentAction?.trim()) frontmatter['uxFrequentAction'] = opts.uxFrequentAction.trim();
   if (opts.uxCostliestError?.trim()) frontmatter['uxCostliestError'] = opts.uxCostliestError.trim();
   if (normalizedSurface) frontmatter['uxSurface'] = normalizedSurface;
+  if (opts.reality !== undefined) frontmatter['reality'] = opts.reality;
+  if (opts.entrySurface !== undefined) {
+    frontmatter['entrySurface'] = parseEntrySurfaceContract(opts.entrySurface);
+  }
 
   writeFrame(cwd, frontmatter, body, adapter);
   return join(designDir(cwd), 'frame.md');

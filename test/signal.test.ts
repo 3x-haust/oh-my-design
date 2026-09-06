@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { designSignal, LOW_SIGNAL } from '../core/ref/signal.ts';
-import type { Invariants } from '../core/types.ts';
+import type { Blueprint, Invariants } from '../core/types.ts';
 
 const CLI = fileURLToPath(new URL('../bin/omd.ts', import.meta.url));
 const SLOP = fileURLToPath(new URL('./fixtures/slop.html', import.meta.url));
@@ -51,6 +51,22 @@ const DANLUU: Invariants = {
   animatedProperties: [], hasReducedMotion: false, scrollChoreography: [],
 };
 
+const STRUCTURED_SPLIT: Blueprint = {
+  selector: '.evidence-split',
+  capturedAt: '2026-08-31T00:00:00.000Z',
+  nodes: [
+    { id: 'root', role: 'container', children: ['copy', 'media'], box: { w: 1216, h: 560 } },
+    { id: 'copy', role: 'container', children: ['heading', 'list'], box: { w: 496, h: 528 } },
+    { id: 'heading', role: 'heading', children: [], box: { w: 496, h: 32 }, fontSize: 32, fontWeight: 500 },
+    { id: 'list', role: 'container', children: ['row-1', 'row-2', 'row-3'], box: { w: 496, h: 276 } },
+    { id: 'row-1', role: 'text', children: [], box: { w: 470, h: 56 }, fontSize: 16, fontWeight: 400 },
+    { id: 'row-2', role: 'text', children: [], box: { w: 470, h: 56 }, fontSize: 16, fontWeight: 600 },
+    { id: 'row-3', role: 'text', children: [], box: { w: 470, h: 84 }, fontSize: 16, fontWeight: 400 },
+    { id: 'media', role: 'container', children: ['image'], box: { w: 640, h: 389 } },
+    { id: 'image', role: 'image', children: [], box: { w: 640, h: 389 }, radius: 16 },
+  ],
+};
+
 test('a danluu-shaped page scores low and names what is missing', () => {
   const { score, missing } = designSignal(DANLUU);
   assert.ok(score <= 0.25, `expected <= 0.25, got ${score}`);
@@ -63,6 +79,23 @@ test('a Linear-shaped page scores high with little or nothing missing', () => {
   const { score, missing } = designSignal(LINEAR);
   assert.ok(score >= 0.75, `expected >= 0.75, got ${score}`);
   assert.ok(missing.length <= 2, `expected a short missing list, got ${missing.join(',')}`);
+});
+
+test('a measured static split component clears the signal floor through structural composition', () => {
+  const result = designSignal(DANLUU, STRUCTURED_SPLIT);
+  assert.ok(result.score >= LOW_SIGNAL, `expected measured structure to clear ${LOW_SIGNAL}, got ${result.score}`);
+});
+
+test('node volume or a lone media shell cannot masquerade as structural composition', () => {
+  const mediaShell: Blueprint = {
+    selector: '.embed',
+    capturedAt: '2026-08-31T00:00:00.000Z',
+    nodes: [
+      { id: 'root', role: 'container', children: ['image'], box: { w: 640, h: 400 } },
+      { id: 'image', role: 'image', children: [], box: { w: 640, h: 400 } },
+    ],
+  };
+  assert.ok(designSignal(DANLUU, mediaShell).score < LOW_SIGNAL);
 });
 
 test('boundary: exactly meeting every threshold scores 1', () => {

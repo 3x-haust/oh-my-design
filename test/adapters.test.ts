@@ -67,19 +67,15 @@ test('all adapter flavors emit exactly one browser-rs launcher', () => {
     const mcp = jsonFile<McpFile>(emitted, '.mcp.json');
     assert.deepEqual(Object.keys(mcp.mcpServers), ['browser-rs']);
     const server = must(mcp.mcpServers['browser-rs'], 'browser-rs');
-    assert.equal(server.command, 'sh');
+    assert.equal(server.command, '/bin/sh');
+    assert.doesNotMatch(server.command, /\/Users\/|\\Users\\/);
     assert.equal(server.args[0], '-c');
-    assert.equal(server.args.length, 2);
-    assert.match(must(server.args[1], 'launcher'), /--headless/);
-    assert.match(must(server.args[1], 'launcher'), /--user-data-dir=\$profile_dir/);
-    // A background stdio MCP server must keep the client pipe on stdin (`<&0`); a bare `&`
-    // redirects stdin to /dev/null so the server never receives `initialize` and the host marks
-    // it failed. Lock the stdin reconnection on the launch line.
-    assert.match(must(server.args[1], 'launcher'), /--user-data-dir=\$profile_dir" <&0 &/);
-    // Claude Code interpolates ${NAME} in an MCP config as a required variable, so a bare shell
-    // ${localvar} (no :- default, no :?/% modifier) breaks the plugin with "Missing environment
-    // variables: <name>". Every ${...} in the launcher must carry a default/modifier — no bare locals.
-    assert.doesNotMatch(must(server.args[1], 'launcher'), /\$\{[A-Za-z_][A-Za-z0-9_]*\}/);
+    assert.equal(server.args.length, 4);
+    const launcher = must(server.args[3], 'launcher');
+    assert.match(launcher, /--headless/);
+    assert.match(launcher, /--user-data-dir=/);
+    assert.match(launcher, /stdio: \['pipe', 'pipe', 'pipe', 'ipc'\]/);
+    assert.doesNotMatch(launcher, /sleep\s+\d/);
   }
 });
 
@@ -196,4 +192,25 @@ test('pluginizeSkill rewrites cross-references and leaves no bare omd- token', (
 test('pluginizeSkill rewrites omd-figma cross-references to the oh-my-design: plugin form', () => {
   const { source } = pluginizeSkill('---\nname: omd-ultradesign\n---\n\nHand off to `omd-figma` for Figma links.\n');
   assert.ok(source.includes('oh-my-design:figma'), `expected oh-my-design:figma: ${source}`);
+});
+
+test('pluginizeSkill preserves executable production-owner agent arguments', () => {
+  const command = 'omd-codex owner run --agent omd-hand --input <task.md> --json';
+  const { source } = pluginizeSkill(`---\nname: omd-ultradesign\n---\n\n${command}\n`);
+  assert.match(source, /--agent omd-hand\b/);
+  assert.doesNotMatch(source, /--agent oh-my-design:hand\b/);
+});
+
+test('plugin flavor preserves machine-consumed owner and moderator identities', () => {
+  const source = [
+    'Emit `owner: omd-hand`.',
+    'The `owner` is `omd-writer`.',
+    'Emit `moderator: omd-eye`.',
+    'Then ask omd-eye to review the result.',
+  ].join('\n');
+  const rewritten = pluginizeSkill(`---\nname: omd-ultradesign\n---\n\n${source}\n`).source;
+  assert.match(rewritten, /owner: omd-hand/);
+  assert.match(rewritten, /`owner` is `omd-writer`/);
+  assert.match(rewritten, /moderator: omd-eye/);
+  assert.match(rewritten, /ask oh-my-design:eye/);
 });

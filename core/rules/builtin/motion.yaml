@@ -63,7 +63,7 @@
 
 # Three or more animated nodes, every one with the same duration, and the easing
 # vocabulary contains only CSS keyword defaults (ease, ease-in, ease-out, ease-in-out,
-# linear). This is the signature of generated work: "500ms ease-in-out on everything."
+# linear). The observable problem is role collapse: entrance, hover, and exit feel identical.
 # A considered motion system varies duration by role (entrance is slower than hover;
 # exit is faster than entrance) and uses a measured easing curve from the motion study.
 #
@@ -77,4 +77,4 @@
   when: "node.parent === null"
   value: "(() => { const animated = ir.nodes.filter(n => n.motion && n.motion.durations && n.motion.durations.length > 0); if (animated.length < 3) return null; const allDurations = animated.flatMap(n => n.motion.durations); const unique = [...new Set(allDurations)]; if (unique.length !== 1) return null; const allEasings = [...new Set(animated.flatMap(n => n.motion.easings))]; const defaults = new Set(['ease','linear','ease-in','ease-out','ease-in-out','step-start','step-end']); if (!allEasings.every(e => defaults.has(e))) return null; return { count: animated.length, duration: unique[0], easings: allEasings }; })()"
   assert: "value === null"
-  message: "Motion uniform signature: {value}. Every animated node shares one duration and only CSS keyword easings. This is the generated-work signature. Vary duration by role (entrance ≠ hover ≠ exit) and use a measured easing curve (cubic-bezier) from the motion study rather than keyword defaults."
+  message: "Motion role monoculture: {value}. Every animated node shares one duration and only CSS keyword easings, so entrance, hover, and exit communicate no distinct temporal role. Vary duration by interaction consequence and use a measured easing curve from the motion study; one intentionally uniform state family is the contextual exception."

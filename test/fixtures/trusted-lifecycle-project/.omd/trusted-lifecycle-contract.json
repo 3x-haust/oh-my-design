@@ -1,0 +1,47 @@
+{
+  "schema": "trusted-project-contract-v1",
+  "taskOutcome": {
+    "schema": "task-outcome-contract-v1",
+    "goal": "Submit an order",
+    "mustHave": [
+      "Order submission succeeds"
+    ],
+    "mustNotHave": [
+      "Submit twice"
+    ],
+    "completionEvidence": [
+      "Visible Order submitted status"
+    ],
+    "strategyFreedom": [
+      "Visual treatment"
+    ]
+  },
+  "evidenceClaims": {
+    "schema": "evidence-claim-publication-v1",
+    "claims": [
+      {
+        "id": "claim:user-role",
+        "text": "The user is a buyer",
+        "status": "confirmed",
+        "userEvidence": [
+          {
+            "kind": "explicit-user-evidence",
+            "source": "user-message",
+            "reference": "brief:1",
+            "excerpt": "buyer"
+          }
+        ]
+      }
+    ],
+    "userFacts": [
+      "claim:user-role"
+    ],
+    "workingContext": []
+  },
+  "allowedPaths": [
+    "index.html"
+  ],
+  "decisionRefs": [
+    "decision:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:0"
+  ]
+}

@@ -2,12 +2,20 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { COMPOSITION_SECTIONS, SYNTHESIS_AXES, SYNTHESIS_SECTION, validateCompositionContract, validateCompositionContractSource } from '../core/composition-contract/index.ts';
-import { resolveMarketingArtDirection } from '../core/art-direction/decision.ts';
+import {
+  COMPOSITION_SECTIONS,
+  CURRENT_COMPOSITION_SECTIONS,
+  SYNTHESIS_AXES,
+  SYNTHESIS_SECTION,
+  validateCompositionContract,
+  validateCompositionContractSource,
+  validateCurrentCompositionContractSource,
+} from '../core/composition-contract/index.ts';
+import { canonicalArtDirectionReferences, resolveMarketingArtDirectionPure as resolveMarketingArtDirection } from '../core/art-direction/decision.ts';
 import {
   ART_DIRECTION_POINTER_SCHEMA_VERSION,
   ART_DIRECTION_RECORD_SCHEMA_VERSION,
@@ -24,10 +32,10 @@ import {
   INTENT_LEDGER_SCHEMA_VERSION,
   intentLedgerSha256,
 } from '../core/runtime/intent.ts';
-import { createTestProjectRunInvocation, createTestProjectWriteAdapter } from './helpers/project-write.ts';
+import { createTestProjectRunInvocation, createTestProjectWriteAdapter, publishTestAdaptiveRoute } from './helpers/project-write.ts';
 
 const cli = fileURLToPath(new URL('../bin/omd.ts', import.meta.url));
-const temp = (): string => mkdtempSync(join(tmpdir(), 'omd-composition-'));
+const temp = (): string => realpathSync(mkdtempSync(join(tmpdir(), 'omd-composition-')));
 const hash = (value: string): string => createHash('sha256').update(value).digest('hex');
 const refKey = (source: string, component: string): string => `ref-${createHash('sha256').update(`${source}\0${component}`).digest('hex').slice(0, 16)}`;
 const defaultFingerprints = {
@@ -87,10 +95,7 @@ function persistValidCurrentArtDirection(root: string): { artDirectionRecord: st
   }], invocation);
   const selectionSha256 = referenceSelectionV2Sha256(selection);
   const handoff = writeReferenceHandoffReceipt(root, 'art-direction', invocation).receipt;
-  const references = [
-    { slotId: 'static', signal: 'high-visual-system' as const, positive: true, lawful: true, motionObligation: 'none' as const },
-    { slotId: 'motion', signal: 'high-motion' as const, positive: true, lawful: true, motionObligation: 'none' as const },
-  ];
+  const references = canonicalArtDirectionReferences(selection);
   const ledger = {
     schemaVersion: INTENT_LEDGER_SCHEMA_VERSION,
     events: [{
@@ -109,6 +114,8 @@ function persistValidCurrentArtDirection(root: string): { artDirectionRecord: st
   const alternative = (register: 'quiet' | 'confident' | 'showpiece') => ({
     register,
     subjectIdentityFit: `${register} fits the composition fixture`,
+    metaphorQualities: [`${register} precision`, 'measured cadence'],
+    literalPropsToReject: ['compass', 'paper map'],
     staticReferenceSlotIds: ['static'],
     motionReferenceSlotIds: [],
     conceptRole: `${register} composition role`,
@@ -246,6 +253,31 @@ function setup(withScout = true): { root: string; values: Record<string, string>
   return { root, values };
 }
 
+function adaptiveCompositionRoute(selectArtDirection: boolean): unknown {
+  const value: unknown = JSON.parse(readFileSync(new URL('fixtures/adaptive-flow/medical-new-product.json', import.meta.url), 'utf8'));
+  if (typeof value !== 'object' || value === null) throw new Error('adaptive composition fixture is invalid');
+  const strategy = Reflect.get(value, 'strategyDecision');
+  if (typeof strategy !== 'object' || strategy === null) throw new Error('adaptive composition strategy is missing');
+  const roles = Reflect.get(strategy, 'roles');
+  const stages = Reflect.get(strategy, 'stages');
+  const waves = Reflect.get(strategy, 'executionWaves');
+  const skips = Reflect.get(strategy, 'skips');
+  if (!Array.isArray(roles) || !Array.isArray(stages) || !Array.isArray(waves) || !Array.isArray(skips)) {
+    throw new Error('adaptive composition strategy lists are missing');
+  }
+  Reflect.set(strategy, 'roles', [...roles, 'omd-typesetter']);
+  Reflect.set(strategy, 'stages', stages.flatMap((stage) => stage === 'copy'
+    ? [...(selectArtDirection ? ['art-direction'] : []), 'copy', 'type-proof']
+    : stage === 'composition' || stage !== 'type-proof' ? [stage] : []));
+  Reflect.set(strategy, 'executionWaves', waves.flatMap((wave) => {
+    if (typeof wave !== 'object' || wave === null || Reflect.get(wave, 'id') !== 'composition') return [wave];
+    return [{ id: 'type-proof', mode: 'concurrent', roles: ['omd-typesetter'] }, wave];
+  }));
+  Reflect.set(strategy, 'skips', skips.filter((entry) => typeof entry !== 'object' || entry === null
+    || (Reflect.get(entry, 'id') !== 'type-proof' && (!selectArtDirection || Reflect.get(entry, 'id') !== 'art-direction'))));
+  return value;
+}
+
 function artifact(values: Record<string, string>, scoutNA?: string): string {
   const fingerprints = fixtureFingerprints.get(values) ?? defaultFingerprints;
   const fingerprint = [
@@ -259,6 +291,22 @@ function artifact(values: Record<string, string>, scoutNA?: string): string {
     `- Composer handoff SHA-256: ${fingerprints.composerHandoff}`,
   ].join('\n');
   return COMPOSITION_SECTIONS.map((section) => `## ${section}\n\n${section === 'Input fingerprint' ? fingerprint : `Decision for ${section}.`}`).join('\n\n');
+}
+const colourRoles = `| Role | Token/value | Intended use |
+| --- | --- | --- |
+| Dominant | \`--canvas\` / \`#FFFFFF\` | Page canvas |
+| Secondary | \`--surface\` / \`#F4F5F7\` | Grouped surfaces |
+| Accent | \`--accent\` / \`#2457FF\` | Primary action and selected state |
+| Semantic success | \`--success\` / \`#18794E\` | Success feedback only |
+| Semantic error | \`--error\` / \`#C62A2F\` | Error feedback only |`;
+function currentArtifact(values: Record<string, string>, scoutNA?: string): string {
+  const legacy = artifact(values, scoutNA);
+  return legacy.replace('\n\n## Transfer boundary', `\n\n## Colour roles\n\n${colourRoles}\n\n## Transfer boundary`);
+}
+function artSkippedArtifact(values: Record<string, string>): string {
+  return artifact(values).split('\n')
+    .filter((line) => !/^- (?:Art direction record|Motion resolution projection|Settled selection|Composer handoff) SHA-256:/.test(line))
+    .join('\n');
 }
 function synthesis(feature = 'Inbox triage workspace', sourceRef = 'LIN-LAYOUT', selector = '[data-region="inbox"]', route = '/inbox'): string {
   const axes = SYNTHESIS_AXES.map((axis, index) => `- ${axis} | ${index === 1 ? 'adapt' : 'N/A'} | ${index === 1 ? 'Queue and detail panel remain visible together.' : 'N/A'} | ${index === 1 ? 'Fit the relationship to the current task flow.' : 'This reference has no evidence for this axis.'}`).join('\n');
@@ -288,6 +336,58 @@ test('complete matching composition contract passes', () => {
   assert.deepEqual(validateCompositionContract(root), []);
 });
 
+// Three competing failure hypotheses are exercised independently below:
+// 1. omission prose in composition is authority (it is not),
+// 2. any persisted route is enough without its exact source and host authority (it is not), and
+// 3. any optional-stage skip can stand in for the art-direction skip (it cannot).
+test('an exact current adaptive art-direction skip authorizes composition without phantom art lineage', () => {
+  const root = temp();
+  const omd = join(root, '.omd');
+  mkdirSync(omd, { recursive: true });
+  const values: Record<string, string> = {
+    'frame.md': 'adaptive-frame-v1', 'scout.md': 'adaptive-scout-v1',
+    'copy-deck.md': 'adaptive-copy-v1', 'type-proof.md': 'adaptive-type-v1',
+  };
+  for (const [name, value] of Object.entries(values)) writeFileSync(join(omd, name), value);
+  const omitted = artSkippedArtifact(values);
+  writeFileSync(join(omd, 'composition.md'), omitted);
+  const invocation = publishTestAdaptiveRoute(root, adaptiveCompositionRoute(false), 'adaptive-composition-art-skip');
+
+  assert.ok(validateCompositionContractSource({
+    contract: omitted, frame: hash(values['frame.md']!), scout: hash(values['scout.md']!),
+    copyDeck: hash(values['copy-deck.md']!), typeProof: hash(values['type-proof.md']!),
+  }).some((finding) => finding.id === 'COMPOSITION-HASH'), 'caller input cannot self-authorize omitted art lineage');
+  assert.ok(validateCompositionContract(root).some((finding) => finding.id === 'COMPOSITION-STALE'), 'route presence without current authority fails closed');
+  writeFileSync(join(omd, 'composition.md'), omitted.replace(
+    /(- Type proof SHA-256: [a-f0-9]{64})/,
+    '$1\n- Art direction record SHA-256: N/A — route says this is optional',
+  ));
+  assert.ok(validateCompositionContract(root, invocation).some((finding) => finding.id === 'COMPOSITION-HASH'), 'caller prose cannot replace the authority-bound omission');
+  writeFileSync(join(omd, 'composition.md'), omitted);
+  assert.deepEqual(validateCompositionContract(root, invocation), []);
+  for (const path of ['art-direction.json', 'intent-current.json', 'reference-handoffs/composer.json', 'reference-handoffs/hand.json']) {
+    assert.equal(existsSync(join(omd, path)), false, `${path} must not be manufactured for a skipped stage`);
+  }
+});
+
+test('an adaptive route that selects art direction still requires its current valid lineage and identity', () => {
+  const missing = temp();
+  mkdirSync(join(missing, '.omd'), { recursive: true });
+  const missingValues: Record<string, string> = {
+    'frame.md': 'selected-frame-v1', 'scout.md': 'selected-scout-v1',
+    'copy-deck.md': 'selected-copy-v1', 'type-proof.md': 'selected-type-v1',
+  };
+  for (const [name, value] of Object.entries(missingValues)) writeFileSync(join(missing, '.omd', name), value);
+  writeFileSync(join(missing, '.omd', 'composition.md'), artSkippedArtifact(missingValues));
+  const missingInvocation = publishTestAdaptiveRoute(missing, adaptiveCompositionRoute(true), 'adaptive-composition-art-selected-missing');
+  assert.ok(validateCompositionContract(missing, missingInvocation).some((finding) => finding.id === 'COMPOSITION-STALE'));
+
+  const current = setup();
+  writeFileSync(join(current.root, '.omd', 'composition.md'), artifact(current.values));
+  const currentInvocation = publishTestAdaptiveRoute(current.root, adaptiveCompositionRoute(true), 'adaptive-composition-art-selected-current');
+  assert.deepEqual(validateCompositionContract(current.root, currentInvocation), []);
+});
+
 test('pure validator accepts supplied digests without filesystem access', () => {
   const values = {
     'frame.md': 'frame-v1',
@@ -303,6 +403,28 @@ test('pure validator accepts supplied digests without filesystem access', () => 
     scout: hash(values['scout.md']!),
     ...defaultFingerprints,
   }), []);
+});
+test('legacy composition bytes remain valid while the current publication contract requires structured colour roles', () => {
+  const values = {
+    'frame.md': 'frame-v1',
+    'copy-deck.md': 'copy-v1',
+    'type-proof.md': 'type-v1',
+    'scout.md': 'scout-v1',
+  };
+  const inputs = {
+    frame: hash(values['frame.md']), copyDeck: hash(values['copy-deck.md']),
+    typeProof: hash(values['type-proof.md']), scout: hash(values['scout.md']),
+    ...defaultFingerprints,
+  };
+  const historical = artifact(values);
+  assert.deepEqual(validateCompositionContractSource({ contract: historical, ...inputs }), []);
+  assert.equal(Buffer.from(historical).toString(), historical, 'compatibility validation leaves historical bytes untouched');
+  assert.ok(validateCurrentCompositionContractSource({ contract: historical, ...inputs })
+    .some((finding) => finding.path.endsWith('#Colour roles') && /required section/.test(finding.message)));
+  assert.deepEqual(validateCurrentCompositionContractSource({ contract: currentArtifact(values), ...inputs }), []);
+  assert.deepEqual(CURRENT_COMPOSITION_SECTIONS, [
+    ...COMPOSITION_SECTIONS.slice(0, -1), 'Colour roles', 'Transfer boundary',
+  ]);
 });
 test('pure validator fails closed for every absent lineage digest', () => {
   const values = {
@@ -593,11 +715,18 @@ test('closed parser rejects unknown or duplicate H2 sections and fingerprint key
   }
 });
 
-test('UX task coverage is an allowed auxiliary section and Unicode separators fail closed', () => {
+test('owned auxiliary sections are allowed once and Unicode separators fail closed', () => {
   const { values, digests } = baseInputs();
   const complete = artifact(values);
   const withCoverage = `${complete}\n\n## UX task coverage\n\nT1 | production: / | locator: [data-task="save"] |\n`;
   assert.deepEqual(validateCompositionContractSource({ contract: withCoverage, ...digests }), []);
+  const revision = 'a'.repeat(64);
+  const withProductionBinding = `${complete}\n\n## Production revision binding\n\n- Production entry: \`src/index.html\`\n- Production revision SHA-256: \`${revision}\`\n`;
+  assert.deepEqual(validateCompositionContractSource({ contract: withProductionBinding, ...digests }), []);
+  assert.ok(validateCompositionContractSource({
+    contract: `${withProductionBinding}\n\n## Production revision binding\n\n- Production entry: \`src/index.html\`\n- Production revision SHA-256: \`${revision}\`\n`,
+    ...digests,
+  }).some((finding) => /duplicate H2 section/.test(finding.message)));
   const hidden = `${complete}\n\nTask evidence binding:\u2028## UX task coverage\n\nT1 | production: / | locator: [data-task="save"] |\n`;
   assert.ok(validateCompositionContractSource({ contract: hidden, ...digests }).some((finding) => /Unicode line or paragraph separator/.test(finding.message)));
   for (const separator of ['\u2028', '\u2029', '\u0085', '\u000B', '\u000C']) {

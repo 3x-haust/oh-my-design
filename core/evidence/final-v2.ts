@@ -11,6 +11,7 @@ import {
   openSync,
   readFileSync,
   readdirSync,
+  realpathSync,
   renameSync,
   rmSync,
   unlinkSync,
@@ -24,38 +25,59 @@ import { relative, resolve } from 'node:path';
 import {
   type ArtifactReceipt,
   type FinalEvidenceV2Graph,
+  type FinalEvidenceV2GraphVariant,
+  type FinalEvidenceV2GraphBindings,
+  type FinalEvidenceV2GraphBindingsVariant,
+  type WorkflowArtSelectedFinalEvidenceV2Graph,
+  type WorkflowAdaptiveFinalEvidenceV2Graph,
+  isWorkflowAdaptiveFinalEvidenceV2Graph,
+  isWorkflowArtSelectedFinalEvidenceV2Graph,
   validateFinalEvidenceV2Graph,
   validateFinalEvidenceV2GraphFiles,
 } from './final-v2-graph.ts';
+import { isAdaptiveFinalEvidenceV2Graph, type AdaptiveFinalEvidenceV2Graph } from './final-v2-adaptive-contract.ts';
 import { validateArtDirectionPointer, validateArtDirectionRecord } from '../art-direction/schema.ts';
+import { parseEvidenceClaimPublication, type EvidenceClaimPublication } from '../brief/evidence-claims.ts';
 import { validateStaticDirectionEvidenceV1 } from '../art-direction/static-evidence.ts';
-import { validateMotionEvidenceV2 } from '../render/index.ts';
-import { hasHostBoundLocalProjectWriteAuthority, requireHostPayloadAuthorization } from '../runtime/activation.ts';
-import { requireFinalEvidenceManifestAuthorization, requireStaticEvidenceResultAuthorization, type ProjectRunInvocation } from '../runtime/invocation.ts';
+import { validateMotionEvidenceV2, validateRenderedBeatResultAuthority } from '../render/index.ts';
+import { hasHostBoundLocalProjectWriteAuthority } from '../runtime/activation.ts';
+import { requireFinalEvidenceManifestAuthorization, requireMotionCollectorAuthorization, requireStaticEvidenceResultAuthorization, type ProjectRunInvocation } from '../runtime/invocation.ts';
 import { acquireProjectMutationLock } from '../runtime/project-write.ts';
+import { preflightFinalEvidenceGraph, revalidateFinalEvidenceGraph } from './final-v2-publication-preflight.ts';
+import { checkCompletionPublicationPrerequisites } from '../completion/publication.ts';
 export const FINAL_EVIDENCE_V2_SCHEMA = 'final-evidence-v2';
 export const FINAL_EVIDENCE_V2_POINTER_SCHEMA = 'final-evidence-v2-pointer';
 export const FINAL_EVIDENCE_V2_LOCK_TTL_MS = 15 * 60 * 1000;
 export const FINAL_EVIDENCE_V2_GC_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 export type MotionDecision = 'none' | 'one';
-export type FinalEvidenceV2FaultPoint =
-  | 'lock-write' | 'lock-fsync' | 'lock-directory-sync'
-  | 'record-temp-write' | 'record-temp-fsync' | 'record-rename' | 'runs-directory-sync'
-  | 'revalidate' | 'pointer-temp-write' | 'pointer-temp-fsync' | 'pointer-rename'
-  | 'pointer-directory-sync' | 'lock-unlink' | 'lock-directory-sync'
-  | 'gc-runs-claim' | 'gc-quarantine-claim' | 'gc-runs-restore' | 'gc-quarantine-restore';
-
-export type FinalEvidenceV2Bindings = FinalEvidenceV2Graph;
+export type FinalEvidenceV2Bindings = FinalEvidenceV2GraphBindings;
 export type MotionEvidenceV2Binding = ArtifactReceipt & Readonly<{ schema: 'motion-evidence-v2' }>;
 export type StaticDirectionEvidenceV1Binding = ArtifactReceipt & Readonly<{ schema: 'static-direction-evidence-v1' }>;
 export interface FinalEvidenceV2Manifest {
   schema: typeof FINAL_EVIDENCE_V2_SCHEMA;
   motionDecision: MotionDecision;
-  graph: FinalEvidenceV2Graph;
+  claimPublication: EvidenceClaimPublication;
+  graph: Exclude<FinalEvidenceV2Graph, AdaptiveFinalEvidenceV2Graph>;
   graphRootHash?: string;
   motionEvidence?: MotionEvidenceV2Binding;
   staticEvidence?: StaticDirectionEvidenceV1Binding;
+}
+export interface WorkflowArtSelectedFinalEvidenceV2Manifest extends Omit<FinalEvidenceV2Manifest, 'graph'> {
+  graph: WorkflowArtSelectedFinalEvidenceV2Graph;
+}
+export interface AdaptiveOmissionFinalEvidenceV2Manifest {
+  schema: typeof FINAL_EVIDENCE_V2_SCHEMA;
+  motionDecision: 'none';
+  claimPublication: EvidenceClaimPublication;
+  graph: AdaptiveFinalEvidenceV2Graph | WorkflowAdaptiveFinalEvidenceV2Graph;
+  graphRootHash?: string;
+  motionEvidence?: never;
+  staticEvidence?: never;
+}
+export type FinalEvidenceV2ManifestVariant = FinalEvidenceV2Manifest | WorkflowArtSelectedFinalEvidenceV2Manifest | AdaptiveOmissionFinalEvidenceV2Manifest;
+function isAdaptiveFinalEvidenceV2Manifest(value: FinalEvidenceV2ManifestVariant): value is AdaptiveOmissionFinalEvidenceV2Manifest {
+  return isAdaptiveFinalEvidenceV2Graph(value.graph) || isWorkflowAdaptiveFinalEvidenceV2Graph(value.graph);
 }
 
 export interface FinalEvidenceV2Pointer {
@@ -64,10 +86,10 @@ export interface FinalEvidenceV2Pointer {
   sha256: string;
 }
 
-export interface FinalEvidenceV2FileSystem {
+interface FinalEvidenceV2FileSystem {
   mkdir(path: string, options: { recursive: true }): void;
   open(path: string, flags: string | number, mode: number): number;
-  write(fd: number, bytes: string): void;
+  write(fd: number, bytes: string | Buffer, offset?: number, length?: number): number;
   writeFile(path: string, bytes: string, options: { flag: string; mode: number }): void;
   readFile(path: string | number): Buffer;
   rename(from: string, to: string): void;
@@ -75,20 +97,12 @@ export interface FinalEvidenceV2FileSystem {
   unlink(path: string): void;
   rm(path: string, options: { force: true; recursive?: boolean }): void;
   utimes(path: string, atime: Date, mtime: Date): void;
-  lstat(path: string): { isFile(): boolean; isDirectory(): boolean; isSymbolicLink(): boolean; mtimeMs: number; dev?: number; ino?: number; nlink?: number };
-  fstat(fd: number): { isFile(): boolean; isDirectory(): boolean; isSymbolicLink(): boolean; dev?: number; ino?: number; nlink?: number };
+  lstat(path: string): { isFile(): boolean; isDirectory(): boolean; isSymbolicLink(): boolean; size: number; mtimeMs: number; ctimeMs: number; dev?: number; ino?: number; nlink?: number };
+  fstat(fd: number): { isFile(): boolean; isDirectory(): boolean; isSymbolicLink(): boolean; size: number; mtimeMs: number; ctimeMs: number; dev?: number; ino?: number; nlink?: number };
   readdir(path: string): string[];
   fsync(fd: number): void;
   close(fd: number): void;
   exists(path: string): boolean;
-}
-export interface FinalEvidenceV2Seams {
-  fs?: Partial<FinalEvidenceV2FileSystem>;
-  fault?: (point: FinalEvidenceV2FaultPoint) => void;
-  now?: () => number;
-  pid?: () => number;
-  hostname?: () => string;
-  processAlive?: (pid: number, hostname: string) => boolean | undefined;
 }
 
 export interface FinalEvidenceV2GcResult {
@@ -100,7 +114,6 @@ export interface FinalEvidenceV2GcResult {
 const SHA256 = /^[a-f0-9]{64}$/;
 const RECORD = /^sha256-([a-f0-9]{64})\.json$/;
 const LOCK = '.final-evidence-v2.lock';
-const RECOVERY_LOCK = '.final-evidence-v2-recovery.lock';
 
 function canonical(value: unknown): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value);
@@ -133,13 +146,18 @@ function fileName(value: unknown): string {
 }
 
 /** Validates receipt descriptors. Files are validated only by the publisher/checker against the project root. */
-export function validateFinalEvidenceV2Manifest(value: unknown): FinalEvidenceV2Manifest {
+export function validateFinalEvidenceV2ManifestVariant(value: unknown): FinalEvidenceV2ManifestVariant {
   const manifest = object(value, 'manifest');
-  exact(manifest, ['schema', 'motionDecision', 'graph', 'graphRootHash', 'motionEvidence', 'staticEvidence'].filter((key) => key in manifest), 'manifest');
+  exact(manifest, ['schema', 'motionDecision', 'claimPublication', 'graph', 'graphRootHash', 'motionEvidence', 'staticEvidence'].filter((key) => key in manifest), 'manifest');
   if (manifest.schema !== FINAL_EVIDENCE_V2_SCHEMA) fail('unsupported manifest schema');
   if (manifest.motionDecision !== 'none' && manifest.motionDecision !== 'one') fail('motionDecision must be none or one');
+  const claimPublication = parseEvidenceClaimPublication(manifest.claimPublication);
   const graph = validateFinalEvidenceV2Graph(manifest.graph);
-  if (manifest.graphRootHash !== undefined) digest(manifest.graphRootHash, 'graphRootHash');
+  const graphRootHash = manifest.graphRootHash === undefined ? undefined : digest(manifest.graphRootHash, 'graphRootHash');
+  if (isAdaptiveFinalEvidenceV2Graph(graph) || isWorkflowAdaptiveFinalEvidenceV2Graph(graph)) {
+    if (manifest.motionDecision !== 'none' || manifest.motionEvidence !== undefined || manifest.staticEvidence !== undefined) fail('adaptive omission manifests require motionDecision none and no art evidence branch');
+    return { schema: FINAL_EVIDENCE_V2_SCHEMA, motionDecision: 'none', claimPublication, graph, ...(graphRootHash === undefined ? {} : { graphRootHash }) };
+  }
   const receipt = (value: unknown, label: string, schema: string): ArtifactReceipt & { schema: typeof schema } => {
     const item = object(value, label);
     exact(item, ['path', 'schema', 'sha256'], label);
@@ -149,26 +167,42 @@ export function validateFinalEvidenceV2Manifest(value: unknown): FinalEvidenceV2
   };
   if (manifest.motionDecision === 'one') {
     if (manifest.staticEvidence !== undefined || manifest.motionEvidence === undefined) fail('one requires exactly one motion evidence and no static evidence');
-    return { schema: FINAL_EVIDENCE_V2_SCHEMA, motionDecision: 'one', graph, ...(manifest.graphRootHash === undefined ? {} : { graphRootHash: manifest.graphRootHash as string }), motionEvidence: receipt(manifest.motionEvidence, 'motionEvidence', 'motion-evidence-v2') as MotionEvidenceV2Binding };
+    const motionEvidence = receipt(manifest.motionEvidence, 'motionEvidence', 'motion-evidence-v2') as MotionEvidenceV2Binding;
+    if (isWorkflowArtSelectedFinalEvidenceV2Graph(graph)) return { schema: FINAL_EVIDENCE_V2_SCHEMA, motionDecision: 'one', claimPublication, graph, ...(graphRootHash === undefined ? {} : { graphRootHash }), motionEvidence };
+    return { schema: FINAL_EVIDENCE_V2_SCHEMA, motionDecision: 'one', claimPublication, graph, ...(graphRootHash === undefined ? {} : { graphRootHash }), motionEvidence };
   }
   if (manifest.motionEvidence !== undefined || manifest.staticEvidence === undefined) fail('none requires exactly one static evidence and no motion evidence');
-  return { schema: FINAL_EVIDENCE_V2_SCHEMA, motionDecision: 'none', graph, ...(manifest.graphRootHash === undefined ? {} : { graphRootHash: manifest.graphRootHash as string }), staticEvidence: receipt(manifest.staticEvidence, 'staticEvidence', 'static-direction-evidence-v1') as StaticDirectionEvidenceV1Binding };
+  const staticEvidence = receipt(manifest.staticEvidence, 'staticEvidence', 'static-direction-evidence-v1') as StaticDirectionEvidenceV1Binding;
+  if (isWorkflowArtSelectedFinalEvidenceV2Graph(graph)) return { schema: FINAL_EVIDENCE_V2_SCHEMA, motionDecision: 'none', claimPublication, graph, ...(graphRootHash === undefined ? {} : { graphRootHash }), staticEvidence };
+  return { schema: FINAL_EVIDENCE_V2_SCHEMA, motionDecision: 'none', claimPublication, graph, ...(graphRootHash === undefined ? {} : { graphRootHash }), staticEvidence };
 }
+export function validateFinalEvidenceV2Manifest(value: unknown): FinalEvidenceV2Manifest;
+export function validateFinalEvidenceV2Manifest(value: unknown) { return validateFinalEvidenceV2ManifestVariant(value); }
 
-function filesystem(seams: FinalEvidenceV2Seams): FinalEvidenceV2FileSystem {
-  const defaults: FinalEvidenceV2FileSystem = {
-    mkdir: mkdirSync, open: openSync, write: (fd, bytes) => { writeSync(fd, bytes); }, writeFile: writeFileSync, readFile: readFileSync, rename: renameSync, link: linkSync,
+function filesystem(): FinalEvidenceV2FileSystem {
+  return {
+    mkdir: mkdirSync, open: openSync, write: (fd, bytes, offset, length) => typeof bytes === 'string'
+      ? writeSync(fd, bytes, offset) : writeSync(fd, bytes, offset ?? 0, length ?? bytes.byteLength), writeFile: writeFileSync, readFile: readFileSync, rename: renameSync, link: linkSync,
     unlink: unlinkSync, rm: rmSync, lstat: lstatSync, fstat: fstatSync, readdir: readdirSync, fsync: fsyncSync, close: closeSync, exists: existsSync, utimes: utimesSync,
   };
-  return { ...defaults, ...seams.fs };
 }
-function invokeFault(seams: FinalEvidenceV2Seams, point: FinalEvidenceV2FaultPoint): void { seams.fault?.(point); }
-function rootPath(rootInput: string): string { return resolve(rootInput); }
+function rootPath(rootInput: string): string {
+  try {
+    const root = realpathSync(resolve(rootInput));
+    const stat = lstatSync(root);
+    if (!stat.isDirectory() || stat.isSymbolicLink()) fail('project root is unsafe');
+    return root;
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith('final-evidence-v2:')) throw error;
+    fail('project root must be an existing real directory');
+  }
+}
 function requireFinalEvidenceV2Authority(rootInput: string, invocation: ProjectRunInvocation): string {
-  if (!hasHostBoundLocalProjectWriteAuthority(invocation, rootInput)) {
+  const root = rootPath(rootInput);
+  if (!hasHostBoundLocalProjectWriteAuthority(invocation, root)) {
     fail('a current host-issued project invocation bound to this project root is required');
   }
-  return rootPath(rootInput);
+  return root;
 }
 function ensureDirectory(fs: FinalEvidenceV2FileSystem, path: string): void {
   fs.mkdir(path, { recursive: true });
@@ -187,19 +221,22 @@ function regular(fs: FinalEvidenceV2FileSystem, path: string): void {
   const stat = fs.lstat(path);
   if (!stat.isFile() || stat.isSymbolicLink()) fail(`unsafe file: ${path}`);
 }
-function sameFileIdentity(left: { dev?: number; ino?: number }, right: { dev?: number; ino?: number }): boolean {
-  return left.dev !== undefined && left.ino !== undefined && left.dev === right.dev && left.ino === right.ino;
+function sameFileIdentity(left: { dev?: number; ino?: number; size: number; mtimeMs: number; ctimeMs: number }, right: { dev?: number; ino?: number; size: number; mtimeMs: number; ctimeMs: number }): boolean {
+  return left.dev !== undefined && left.ino !== undefined && left.dev === right.dev && left.ino === right.ino
+    && left.size === right.size && left.mtimeMs === right.mtimeMs && left.ctimeMs === right.ctimeMs;
 }
 function readStableRegularFile(fs: FinalEvidenceV2FileSystem, path: string, label: string): Buffer {
-  regular(fs, path);
+  const before = fs.lstat(path);
+  if (!before.isFile() || before.isSymbolicLink()) fail(`${label} is not a regular non-symlink file`);
   const fd = fs.open(path, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW, 0o600);
   try {
     const opened = fs.fstat(fd);
     const entry = fs.lstat(path);
-    if (!opened.isFile() || !entry.isFile() || entry.isSymbolicLink() || !sameFileIdentity(opened, entry)) fail(`${label} changed or is not a regular non-symlink file`);
+    if (!opened.isFile() || !entry.isFile() || entry.isSymbolicLink() || !sameFileIdentity(before, opened) || !sameFileIdentity(opened, entry)) fail(`${label} changed or is not a regular non-symlink file`);
     const bytes = fs.readFile(fd);
+    const after = fs.fstat(fd);
     const current = fs.lstat(path);
-    if (!current.isFile() || current.isSymbolicLink() || !sameFileIdentity(opened, current)) fail(`${label} changed while it was read`);
+    if (!sameFileIdentity(opened, after) || !current.isFile() || current.isSymbolicLink() || !sameFileIdentity(opened, current)) fail(`${label} changed while it was read`);
     return bytes;
   } finally {
     fs.close(fd);
@@ -221,7 +258,7 @@ function requireRealNestedProjectPaths(root: string, value: unknown, fs: FinalEv
     return;
   }
   if (value === null || typeof value !== 'object') return;
-  for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+  for (const [key, item] of Object.entries(value)) {
     if (key === 'path' && typeof item === 'string') {
       if (item.includes('\0') || item.includes('\\') || item.startsWith('/') || /^[A-Za-z]:\//.test(item) || item.split('/').some((part) => !part || part === '.' || part === '..')) fail(`${label}.${key} is not a safe project-relative path`);
       const path = resolve(root, item);
@@ -235,11 +272,10 @@ function requireRealNestedProjectPaths(root: string, value: unknown, fs: FinalEv
 }
 function temporary(directory: string, stem: string): string { return resolve(directory, `.${stem}.${process.pid}.${randomBytes(12).toString('hex')}.tmp`); }
 function parseJsonBytes(bytes: Buffer, label: string): unknown {
-  try { return JSON.parse(bytes.toString('utf8')) as unknown; } catch { fail(`${label} is not valid JSON`); }
+  try { return JSON.parse(bytes.toString('utf8')); } catch { fail(`${label} is not valid JSON`); }
 }
 function readJson(fs: FinalEvidenceV2FileSystem, path: string, label: string): unknown {
-  regular(fs, path);
-  return parseJsonBytes(fs.readFile(path), label);
+  return parseJsonBytes(readStableRegularFile(fs, path, label), label);
 }
 function pointerFrom(bytes: Buffer): FinalEvidenceV2Pointer {
   const pointer = object(parseJsonBytes(bytes, 'pointer'), 'pointer');
@@ -247,20 +283,25 @@ function pointerFrom(bytes: Buffer): FinalEvidenceV2Pointer {
   if (pointer.schema !== FINAL_EVIDENCE_V2_POINTER_SCHEMA) fail('unsupported pointer schema');
   return { schema: FINAL_EVIDENCE_V2_POINTER_SCHEMA, record: fileName(pointer.record), sha256: digest(pointer.sha256, 'pointer.sha256') };
 }
-function paths(root: string): { omd: string; runs: string; pointer: string; lock: string; recovery: string; quarantine: string; gcJournal: string; gcRunsClaim: string; gcQuarantineClaim: string } {
+function paths(root: string): { omd: string; runs: string; consumptions: string; pointer: string; lock: string; publicationJournal: string; quarantine: string; gcJournal: string; gcRunsClaim: string; gcQuarantineClaim: string } {
   const omd = resolve(root, '.omd');
   return {
-    omd, runs: resolve(omd, 'final-evidence-v2-runs'), pointer: resolve(omd, 'final-evidence-v2.json'),
-    lock: resolve(omd, LOCK), recovery: resolve(omd, RECOVERY_LOCK), quarantine: resolve(omd, 'final-evidence-v2-quarantine'),
+    omd, runs: resolve(omd, 'final-evidence-v2-runs'), consumptions: resolve(omd, 'final-evidence-v2-motion-consumptions'), pointer: resolve(omd, 'final-evidence-v2.json'),
+    lock: resolve(omd, LOCK), publicationJournal: resolve(omd, '.final-evidence-v2-publication.journal'), quarantine: resolve(omd, 'final-evidence-v2-quarantine'),
     gcJournal: resolve(omd, '.final-evidence-v2-gc.journal'),
     gcRunsClaim: resolve(omd, '.final-evidence-v2-gc-runs.claim'),
     gcQuarantineClaim: resolve(omd, '.final-evidence-v2-gc-quarantine.claim'),
   };
 }
-function validateBackedManifest(root: string, fs: FinalEvidenceV2FileSystem, value: unknown, invocation?: ProjectRunInvocation): FinalEvidenceV2Manifest {
-  const manifest = validateFinalEvidenceV2Manifest(value);
+function validateBackedManifest(root: string, fs: FinalEvidenceV2FileSystem, value: unknown, invocation?: ProjectRunInvocation, consumeMotionAuthorizations = false): FinalEvidenceV2ManifestVariant {
+  const manifest = validateFinalEvidenceV2ManifestVariant(value);
   const graph = validateFinalEvidenceV2GraphFiles(root, manifest.graph, fs, invocation ?? fail('a fresh host invocation is required to validate final evidence'));
   if (manifest.graphRootHash !== graph.rootHash) fail('graph root hash changed');
+  if (graph.bindings.branch === 'adaptive-omission') {
+    if ((!isAdaptiveFinalEvidenceV2Graph(manifest.graph) && !isWorkflowAdaptiveFinalEvidenceV2Graph(manifest.graph)) || canonical(manifest.claimPublication) !== canonical(graph.bindings.claimPublication)) fail('claim publication does not match the adaptive source contract');
+    return manifest;
+  }
+  if (isAdaptiveFinalEvidenceV2Manifest(manifest)) fail('adaptive graph bindings are inconsistent');
   const artDirectionPath = resolve(root, manifest.graph.artDirection.path);
   requireRealAncestors(root, artDirectionPath, fs, 'art direction');
   const artDirection = validateArtDirectionRecord(readJson(fs, artDirectionPath, 'art direction'));
@@ -282,11 +323,31 @@ function validateBackedManifest(root: string, fs: FinalEvidenceV2FileSystem, val
   if ((evidenceObject.schema ?? evidenceObject.schemaVersion) !== evidence.schema) fail('evidence branch schema changed');
   if (evidenceObject.artDirectionHash !== graph.bindings.artDirectionSha256) fail('evidence branch provenance does not bind the selected semantic art direction');
   if (manifest.motionDecision === 'one') {
+    if (invocation === undefined) fail('motion evidence requires the fresh host invocation');
+    requireMotionCollectorAuthorization(invocation, root, evidenceBytes, consumeMotionAuthorizations);
+    const observedMotion = object(evidenceObject.observed, 'motion evidence observed');
+    const observedRoute = typeof observedMotion.route === 'string' ? observedMotion.route : fail('motion evidence route is missing');
+    const observedTarget = typeof observedMotion.target === 'string' ? observedMotion.target : fail('motion evidence target is missing');
+    const observedTaskId = typeof observedMotion.taskId === 'string' ? observedMotion.taskId : fail('motion evidence task is missing');
+    const task = graph.bindings.motionTask;
+    if (task !== undefined && (observedTaskId !== task.taskId || observedRoute !== task.route || !task.targets.includes(observedTarget))) {
+      fail('motion evidence does not bind the current task-derived route, task, and host-authorized live target');
+    }
+    const route = task?.route ?? observedRoute;
+    const target = task === undefined ? observedTarget : task.targets.find((candidate) => candidate === observedTarget)
+      ?? fail('motion evidence target is not a current task-authorized probe target');
+    const taskId = task?.taskId ?? observedTaskId;
+    if (task === undefined && route !== artDirection.decision.route) fail('motion evidence route is not the current art-direction route');
     const motion = validateMotionEvidenceV2(evidenceObject, {
       motionDecision: 'one',
       artDirectionHash: graph.bindings.artDirectionSha256,
       buildHash: graph.bindings.buildSha256,
       root,
+      invocation,
+      route,
+      target,
+      taskId,
+      consumeResult: consumeMotionAuthorizations,
     });
     if (motion.scenes.length !== 1) fail('motion evidence must prove exactly one scene');
     const observed = object(evidenceObject.observed, 'motion evidence observed');
@@ -310,6 +371,7 @@ function validateBackedManifest(root: string, fs: FinalEvidenceV2FileSystem, val
     const canonicalBeatPath = resolve(root, manifest.graph.renderedBeats.path);
     requireRealAncestors(root, canonicalBeatPath, fs, 'canonical rendered Beat receipt');
     if (canonical(evidenceObject.beatReceipt) !== canonical(readJson(fs, canonicalBeatPath, 'canonical rendered Beat receipt'))) fail('static evidence does not embed the graph-canonical Beat and copy receipt');
+    const canonicalBeatReceipt = object(evidenceObject.beatReceipt, 'static evidence beat receipt');
     validateStaticDirectionEvidenceV1(evidenceObject, {
       motionDecision: 'none',
       selectedRegister: artDirection.decision.selectedRegister,
@@ -321,46 +383,273 @@ function validateBackedManifest(root: string, fs: FinalEvidenceV2FileSystem, val
       runId: graph.bindings.activation.buildSha256,
       observationRoot: root,
       invocation,
+      route: artDirection.decision.route,
+      target: typeof canonicalBeatReceipt.target === 'string' && canonicalBeatReceipt.target.length > 0
+        ? canonicalBeatReceipt.target
+        : fail('static evidence beat target is invalid'),
+      taskId: typeof canonicalBeatReceipt.taskId === 'string' && canonicalBeatReceipt.taskId.length > 0
+        ? canonicalBeatReceipt.taskId
+        : fail('static evidence beat task is invalid'),
     });
   }
+  if (consumeMotionAuthorizations) consumeRenderedBeatAuthorization(root, fs, manifest, graph.bindings, invocation ?? fail('rendered Beat consumption requires a fresh host invocation'));
   return manifest;
 }
-function recordFor(root: string, fs: FinalEvidenceV2FileSystem, runDirectory: string, pointer: FinalEvidenceV2Pointer, invocation: ProjectRunInvocation): FinalEvidenceV2Manifest {
+function consumeRenderedBeatAuthorization(
+  root: string,
+  fs: FinalEvidenceV2FileSystem,
+  manifest: FinalEvidenceV2Manifest | WorkflowArtSelectedFinalEvidenceV2Manifest,
+  bindings: FinalEvidenceV2GraphBindings,
+  invocation: ProjectRunInvocation,
+): void {
+  const receipt = manifest.graph.renderedBeats;
+  const bytes = readStableRegularFile(fs, resolve(root, receipt.path), 'rendered Beat receipt before consumption');
+  if (hash(bytes) !== receipt.sha256) fail('rendered Beat receipt hash changed before consumption');
+  const result = object(parseJsonBytes(bytes, 'rendered Beat receipt'), 'rendered Beat receipt');
+  const task = bindings.motionTask;
+  const route = task?.route ?? (typeof result.route === 'string' ? result.route : fail('rendered Beat route is invalid'));
+  const taskId = task?.taskId ?? (typeof result.taskId === 'string' ? result.taskId : fail('rendered Beat task is invalid'));
+  const targets = task?.targets ?? [typeof result.target === 'string' ? result.target : fail('rendered Beat target is invalid')];
+  let error: unknown;
+  for (const target of targets) {
+    try {
+      validateRenderedBeatResultAuthority(result, {
+        invocation, root, buildSha256: bindings.buildSha256, artDirectionHash: bindings.artDirectionSha256, route, target, taskId, consumeResult: true,
+      });
+      return;
+    } catch (caught) {
+      error = caught instanceof Error ? caught : new Error(String(caught));
+    }
+  }
+  fail(`rendered Beat result cannot be consumed: ${error instanceof Error ? error.message : String(error)}`);
+}
+function recordFor(root: string, fs: FinalEvidenceV2FileSystem, runDirectory: string, pointer: FinalEvidenceV2Pointer, invocation: ProjectRunInvocation): FinalEvidenceV2ManifestVariant {
   const path = resolve(runDirectory, pointer.record);
   requireRealAncestors(root, path, fs, 'final evidence record');
   const bytes = readStableRegularFile(fs, path, 'final evidence record');
   if (hash(bytes) !== pointer.sha256 || pointer.record !== `sha256-${pointer.sha256}.json`) fail('pointer does not identify an intact immutable record');
-  return validateBackedManifest(root, fs, JSON.parse(bytes.toString('utf8')) as unknown, invocation);
+  return validateBackedManifest(root, fs, parseJsonBytes(bytes, 'final evidence record'), invocation);
 }
-function committedRecord(fs: FinalEvidenceV2FileSystem, location: ReturnType<typeof paths>, invocation: ProjectRunInvocation): string | undefined {
-  if (!fs.exists(location.pointer)) return undefined;
+function committedManifest(
+  fs: FinalEvidenceV2FileSystem,
+  location: ReturnType<typeof paths>,
+  invocation: ProjectRunInvocation,
+): Readonly<{ record: string; manifest: FinalEvidenceV2ManifestVariant }> {
+  if (!directoryExists(fs, location.pointer)) fail('a current final evidence manifest is required');
   const pointer = pointerFrom(readStableRegularFile(fs, location.pointer, 'final evidence pointer'));
-  recordFor(location.omd === '' ? location.omd : resolve(location.omd, '..'), fs, location.runs, pointer, invocation);
-  return pointer.record;
+  const root = resolve(location.omd, '..');
+  const record = resolve(location.runs, pointer.record);
+  requireRealAncestors(root, record, fs, 'final evidence record');
+  const bytes = readStableRegularFile(fs, record, 'final evidence record');
+  if (hash(bytes) !== pointer.sha256 || pointer.record !== `sha256-${pointer.sha256}.json`) fail('pointer does not identify an intact immutable record');
+  requireFinalEvidenceManifestAuthorization(invocation, root, bytes);
+  const manifest = validateBackedManifest(root, fs, parseJsonBytes(bytes, 'final evidence record'), invocation);
+  assertRequiredMotionConsumptions(root, fs, location, requiredMotionConsumptions(root, fs, manifest, invocation, pointer.sha256));
+  return { record: pointer.record, manifest };
+}
+function committedRecord(fs: FinalEvidenceV2FileSystem, location: ReturnType<typeof paths>, invocation: ProjectRunInvocation): string {
+  return committedManifest(fs, location, invocation).record;
+}
+const MOTION_CONSUMPTION_SCHEMA = 'final-evidence-v2-motion-consumption-v1';
+
+interface MotionConsumption {
+  schema: typeof MOTION_CONSUMPTION_SCHEMA;
+  projectRoot: string;
+  buildSha256: string;
+  briefSha256: string;
+  collectorSha256: string;
+  motionResultSha256: string;
+  manifestSha256: string;
+}
+
+function motionConsumption(root: string, fs: FinalEvidenceV2FileSystem, manifest: FinalEvidenceV2ManifestVariant, invocation: ProjectRunInvocation, manifestSha256: string): MotionConsumption | undefined {
+  if (manifest.motionDecision !== 'one' || manifest.motionEvidence === undefined) return undefined;
+  const evidencePath = resolve(root, manifest.motionEvidence.path);
+  requireRealAncestors(root, evidencePath, fs, 'motion evidence');
+  const collectorBytes = readStableRegularFile(fs, evidencePath, 'motion evidence');
+  if (hash(collectorBytes) !== manifest.motionEvidence.sha256) fail('motion evidence hash changed before consumption');
+  const result = object(parseJsonBytes(collectorBytes, 'motion evidence'), 'motion evidence');
+  return {
+    schema: MOTION_CONSUMPTION_SCHEMA,
+    projectRoot: root,
+    buildSha256: invocation.current.buildSha256,
+    briefSha256: invocation.current.briefSha256,
+    collectorSha256: hash(collectorBytes),
+    motionResultSha256: hash(Buffer.from(canonical(result))),
+    manifestSha256,
+  };
+}
+function renderedBeatConsumption(root: string, fs: FinalEvidenceV2FileSystem, manifest: FinalEvidenceV2Manifest | WorkflowArtSelectedFinalEvidenceV2Manifest, invocation: ProjectRunInvocation, manifestSha256: string): MotionConsumption {
+  const receipt = manifest.graph.renderedBeats;
+  const receiptPath = resolve(root, receipt.path);
+  requireRealAncestors(root, receiptPath, fs, 'rendered Beat receipt');
+  const receiptBytes = readStableRegularFile(fs, receiptPath, 'rendered Beat receipt');
+  if (hash(receiptBytes) !== receipt.sha256) fail('rendered Beat receipt hash changed before consumption');
+  return {
+    schema: MOTION_CONSUMPTION_SCHEMA,
+    projectRoot: root,
+    buildSha256: invocation.current.buildSha256,
+    briefSha256: invocation.current.briefSha256,
+    collectorSha256: hash(receiptBytes),
+    motionResultSha256: hash(Buffer.from(canonical(object(parseJsonBytes(receiptBytes, 'rendered Beat receipt'), 'rendered Beat receipt')))),
+    manifestSha256,
+  };
+}
+function requiredMotionConsumptions(root: string, fs: FinalEvidenceV2FileSystem, manifest: FinalEvidenceV2ManifestVariant, invocation: ProjectRunInvocation, manifestSha256: string): readonly MotionConsumption[] {
+  if (isAdaptiveFinalEvidenceV2Manifest(manifest)) return [];
+  const motion = motionConsumption(root, fs, manifest, invocation, manifestSha256);
+  return [renderedBeatConsumption(root, fs, manifest, invocation, manifestSha256), ...(motion === undefined ? [] : [motion])];
+}
+
+function assertRequiredMotionConsumptions(root: string, fs: FinalEvidenceV2FileSystem, location: ReturnType<typeof paths>, consumptions: readonly MotionConsumption[]): void {
+  if (!fs.exists(location.consumptions)) fail('required motion consumption is missing');
+  const directory = openStableDirectory(fs, location.consumptions, 'motion consumption directory');
+  try {
+    for (const consumption of consumptions) {
+      const bytes = Buffer.from(`${canonical(consumption)}\n`);
+      const record = resolve(location.consumptions, `sha256-${hash(bytes)}.json`);
+      assertStableDirectory(fs, location.consumptions, directory, 'motion consumption directory during committed validation');
+      if (!fs.exists(record)) fail('required motion consumption is missing');
+      requireRealAncestors(root, record, fs, 'required motion consumption');
+      if (!readStableRegularFile(fs, record, 'required motion consumption').equals(bytes)) fail('required motion consumption is corrupt');
+    }
+    assertStableDirectory(fs, location.consumptions, directory, 'motion consumption directory after committed validation');
+  } finally {
+    fs.close(directory.fd);
+  }
+}
+
+function validateMotionConsumption(value: unknown): MotionConsumption {
+  const record = object(value, 'motion consumption');
+  exact(record, ['schema', 'projectRoot', 'buildSha256', 'briefSha256', 'collectorSha256', 'motionResultSha256', 'manifestSha256'], 'motion consumption');
+  if (record.schema !== MOTION_CONSUMPTION_SCHEMA || typeof record.projectRoot !== 'string' || record.projectRoot === '') fail('motion consumption is invalid');
+  return {
+    schema: MOTION_CONSUMPTION_SCHEMA,
+    projectRoot: record.projectRoot,
+    buildSha256: digest(record.buildSha256, 'motion consumption buildSha256'),
+    briefSha256: digest(record.briefSha256, 'motion consumption briefSha256'),
+    collectorSha256: digest(record.collectorSha256, 'motion consumption collectorSha256'),
+    motionResultSha256: digest(record.motionResultSha256, 'motion consumption motionResultSha256'),
+    manifestSha256: digest(record.manifestSha256, 'motion consumption manifestSha256'),
+  };
+}
+function assertMotionConsumptionsAvailable(root: string, fs: FinalEvidenceV2FileSystem, location: ReturnType<typeof paths>, consumptions: readonly MotionConsumption[]): void {
+  if (new Set(consumptions.map((item) => item.collectorSha256)).size !== consumptions.length
+    || new Set(consumptions.map((item) => item.motionResultSha256)).size !== consumptions.length) {
+    fail('motion collector or result is duplicated within the publication');
+  }
+  ensureDirectory(fs, location.consumptions);
+  const directory = openStableDirectory(fs, location.consumptions, 'motion consumption directory');
+  try {
+    for (const name of fs.readdir(location.consumptions)) {
+      if (!RECORD.test(name)) fail('motion consumption directory contains an invalid record name');
+      assertStableDirectory(fs, location.consumptions, directory, 'motion consumption directory during preflight');
+      const recordBytes = readStableRegularFile(fs, resolve(location.consumptions, name), 'motion consumption record');
+      if (name !== `sha256-${hash(recordBytes)}.json`) fail('motion consumption record is not immutable');
+      const existing = validateMotionConsumption(parseJsonBytes(recordBytes, 'motion consumption record'));
+      if (existing.projectRoot !== root) fail('motion consumption project root is invalid');
+      if (consumptions.some((item) => existing.collectorSha256 === item.collectorSha256 || existing.motionResultSha256 === item.motionResultSha256)) {
+        fail('motion collector or result has already been durably consumed');
+      }
+    }
+    assertStableDirectory(fs, location.consumptions, directory, 'motion consumption directory after preflight');
+  } finally {
+    fs.close(directory.fd);
+  }
+}
+
+function persistMotionConsumption(root: string, fs: FinalEvidenceV2FileSystem, location: ReturnType<typeof paths>, consumption: MotionConsumption): void {
+  ensureDirectory(fs, location.consumptions);
+  const directory = openStableDirectory(fs, location.consumptions, 'motion consumption directory');
+  const bytes = `${canonical(consumption)}\n`;
+  const record = resolve(location.consumptions, `sha256-${hash(bytes)}.json`);
+  try {
+    for (const name of fs.readdir(location.consumptions)) {
+      if (!RECORD.test(name)) fail('motion consumption directory contains an invalid record name');
+      assertStableDirectory(fs, location.consumptions, directory, 'motion consumption directory during traversal');
+      const recordPath = resolve(location.consumptions, name);
+      const recordBytes = readStableRegularFile(fs, recordPath, 'motion consumption record');
+      if (name !== `sha256-${hash(recordBytes)}.json`) fail('motion consumption record is not immutable');
+      const existing = validateMotionConsumption(parseJsonBytes(recordBytes, 'motion consumption record'));
+      if (existing.projectRoot !== root) fail('motion consumption project root is invalid');
+      if (existing.collectorSha256 === consumption.collectorSha256 || existing.motionResultSha256 === consumption.motionResultSha256) {
+        if (recordPath === record && recordBytes.equals(Buffer.from(bytes))) return;
+        fail('motion collector or result has already been durably consumed');
+      }
+    }
+    assertStableDirectory(fs, location.consumptions, directory, 'motion consumption directory before write');
+    const prepared = temporary(location.consumptions, 'final-evidence-v2-motion-consumption');
+    try {
+      fs.writeFile(prepared, bytes, { flag: 'wx', mode: 0o600 });
+      syncFile(fs, prepared);
+      assertStableDirectory(fs, location.consumptions, directory, 'motion consumption directory before commit');
+      try { fs.link(prepared, record); } catch (error: unknown) {
+        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+        requireRealAncestors(root, record, fs, 'motion consumption record');
+        if (!readStableRegularFile(fs, record, 'motion consumption record').equals(Buffer.from(bytes))) fail('motion consumption record collision');
+        fail('motion collector or result has already been durably consumed');
+      }
+      cleanupTemp(fs, prepared);
+      assertStableDirectory(fs, location.consumptions, directory, 'motion consumption directory after commit');
+      syncDirectory(fs, location.consumptions);
+    } finally {
+      cleanupTemp(fs, prepared);
+    }
+  } finally {
+    fs.close(directory.fd);
+  }
+}
+type PublicationJournal = Readonly<{ schema: 'final-evidence-v2-publication-journal'; manifestSha256: string; pointer: FinalEvidenceV2Pointer }>;
+function writePublicationJournal(fs: FinalEvidenceV2FileSystem, location: ReturnType<typeof paths>, journal: PublicationJournal): void {
+  if (fs.exists(location.publicationJournal)) fail('publication recovery is already in progress');
+  const temp = temporary(location.omd, 'final-evidence-v2-publication-journal');
+  try {
+    fs.writeFile(temp, `${canonical(journal)}\n`, { flag: 'wx', mode: 0o600 });
+    syncFile(fs, temp);
+    fs.rename(temp, location.publicationJournal);
+    syncDirectory(fs, location.omd);
+  } finally {
+    cleanupTemp(fs, temp);
+  }
+}
+function readPublicationJournal(fs: FinalEvidenceV2FileSystem, location: ReturnType<typeof paths>): PublicationJournal {
+  const value = object(readJson(fs, location.publicationJournal, 'publication journal'), 'publication journal');
+  exact(value, ['schema', 'manifestSha256', 'pointer'], 'publication journal');
+  if (value.schema !== 'final-evidence-v2-publication-journal') fail('publication recovery is ambiguous');
+  const pointer = pointerFrom(Buffer.from(`${canonical(value.pointer)}\n`));
+  const manifestSha256 = digest(value.manifestSha256, 'publication journal manifest hash');
+  if (pointer.record !== `sha256-${manifestSha256}.json` || pointer.sha256 !== manifestSha256) fail('publication recovery is ambiguous');
+  return { schema: 'final-evidence-v2-publication-journal', manifestSha256, pointer };
+}
+function removePublicationJournal(fs: FinalEvidenceV2FileSystem, location: ReturnType<typeof paths>): void {
+  regular(fs, location.publicationJournal);
+  fs.unlink(location.publicationJournal);
+  syncDirectory(fs, location.omd);
 }
 
 /** Checks only the current pointer and its named immutable record. Orphan records are deliberately ignored. */
-export function checkFinalEvidenceV2(rootInput: string, invocation?: ProjectRunInvocation, seams: FinalEvidenceV2Seams = {}): FinalEvidenceV2Manifest {
+export function checkFinalEvidenceV2(rootInput: string, invocation?: ProjectRunInvocation): FinalEvidenceV2Manifest;
+export function checkFinalEvidenceV2(rootInput: string, invocation?: ProjectRunInvocation) {
+  if (arguments.length !== 2) fail('check does not accept caller-controlled seams');
   if (invocation === undefined) fail('a fresh host invocation is required to check final v2 evidence');
   const root = requireFinalEvidenceV2Authority(rootInput, invocation);
-  const fs = filesystem(seams);
+  const fs = filesystem();
   const location = paths(root);
-  requireRealAncestors(root, location.pointer, fs, 'final evidence pointer');
-  const pointerBytes = readStableRegularFile(fs, location.pointer, 'final evidence pointer');
-  requireHostPayloadAuthorization(invocation, root, 'final-reviewer-lane', pointerBytes);
-  return recordFor(root, fs, location.runs, pointerFrom(pointerBytes), invocation);
+  const committed = committedManifest(fs, location, invocation);
+  return committed.manifest;
 }
 
-function requireCurrentGraphIdentity(root: string, fs: FinalEvidenceV2FileSystem, manifest: FinalEvidenceV2Manifest, invocation: ProjectRunInvocation): void {
+function requireCurrentGraphIdentity(root: string, fs: FinalEvidenceV2FileSystem, manifest: FinalEvidenceV2ManifestVariant, invocation: ProjectRunInvocation): void {
   const bindings = validateFinalEvidenceV2GraphFiles(root, manifest.graph, fs, invocation).bindings;
-  if (bindings.activation.buildSha256 !== invocation.current.buildSha256
+  if (bindings.branch !== 'adaptive-omission'
+    && (bindings.activation.buildSha256 !== invocation.current.buildSha256
     || bindings.activation.loadedSkillSha256 !== invocation.current.loadedSkillSha256
-    || bindings.activation.briefSha256 !== invocation.current.briefSha256) {
+    || bindings.activation.briefSha256 !== invocation.current.briefSha256)) {
     fail('graph activation, task, and source identities are not current');
   }
 }
-function lockPayload(operation: 'publication' | 'gc', manifestHash: string, seams: FinalEvidenceV2Seams): string {
-  return `${canonical({ schema: 'final-evidence-v2-lock', operation, hash: manifestHash, host: seams.hostname?.() ?? localHostname(), pid: seams.pid?.() ?? process.pid, startedAt: seams.now?.() ?? Date.now() })}\n`;
+function lockPayload(operation: 'publication' | 'gc', manifestHash: string): string {
+  return `${canonical({ schema: 'final-evidence-v2-lock', operation, hash: manifestHash, host: localHostname(), pid: process.pid, startedAt: Date.now() })}\n`;
 }
 type StableLock = Readonly<{ fd: number; dev: number; ino: number }>;
 type StableDirectory = Readonly<{ fd: number; dev: number; ino: number }>;
@@ -396,16 +685,56 @@ function directoryExists(fs: FinalEvidenceV2FileSystem, path: string): boolean {
     throw error;
   }
 }
+function writeFully(fs: FinalEvidenceV2FileSystem, fd: number, bytes: string): void {
+  const content = Buffer.from(bytes, 'utf8');
+  let offset = 0;
+  while (offset < content.byteLength) {
+    const written = fs.write(fd, content, offset, content.byteLength - offset);
+    if (!Number.isSafeInteger(written) || written <= 0) fail('lock write made no progress');
+    offset += written;
+  }
+}
 function acquire(fs: FinalEvidenceV2FileSystem, path: string, bytes: string): StableLock {
-  try {
-    const fd = fs.open(path, fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_NOFOLLOW, 0o600);
+  const directory = resolve(path, '..');
+  const prepared = temporary(directory, 'final-evidence-v2-lock');
+  let preparedFd: number | undefined;
+  let lockFd: number | undefined;
+  let claimed: { dev: number; ino: number } | undefined;
+  const cleanClaim = (): void => {
+    if (claimed === undefined) return;
     try {
-      const opened = fs.fstat(fd); const entry = fs.lstat(path);
-      if (!opened.isFile() || entry.isSymbolicLink() || !entry.isFile() || opened.dev === undefined || opened.ino === undefined || entry.dev !== opened.dev || entry.ino !== opened.ino || (opened.nlink !== undefined && opened.nlink !== 1)) fail('lock changed during acquisition');
-      fs.write(fd, bytes);
-      return { fd, dev: opened.dev, ino: opened.ino };
-    } catch (error) { fs.close(fd); throw error; }
+      const entry = fs.lstat(path);
+      if (entry.isFile() && !entry.isSymbolicLink() && entry.dev === claimed.dev && entry.ino === claimed.ino) fs.unlink(path);
+    } catch (error: unknown) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    }
+  };
+  try {
+    preparedFd = fs.open(prepared, fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_NOFOLLOW, 0o600);
+    writeFully(fs, preparedFd, bytes);
+    fs.fsync(preparedFd);
+    fs.close(preparedFd);
+    preparedFd = undefined;
+    fs.link(prepared, path);
+    const entry = fs.lstat(path);
+    if (!entry.isFile() || entry.isSymbolicLink() || entry.dev === undefined || entry.ino === undefined || (entry.nlink !== undefined && entry.nlink !== 2)) {
+      fail('lock changed during acquisition');
+    }
+    claimed = { dev: entry.dev, ino: entry.ino };
+    fs.unlink(prepared);
+    syncDirectory(fs, directory);
+    lockFd = fs.open(path, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW, 0o600);
+    const opened = fs.fstat(lockFd);
+    const current = fs.lstat(path);
+    if (!opened.isFile() || current.isSymbolicLink() || !current.isFile() || opened.dev === undefined || opened.ino === undefined || current.dev !== opened.dev || current.ino !== opened.ino || (opened.nlink !== undefined && opened.nlink !== 1)) {
+      fail('lock changed during acquisition');
+    }
+    claimed = undefined;
+    return { fd: lockFd, dev: opened.dev, ino: opened.ino };
   } catch (error: unknown) {
+    if (lockFd !== undefined) fs.close(lockFd);
+    if (preparedFd !== undefined) fs.close(preparedFd);
+    try { cleanClaim(); } finally { cleanupTemp(fs, prepared); }
     if ((error as NodeJS.ErrnoException).code === 'EEXIST') fail('publication is already in progress');
     throw error;
   }
@@ -424,15 +753,14 @@ function releaseLock(fs: FinalEvidenceV2FileSystem, path: string, lock: StableLo
 function cleanupTemp(fs: FinalEvidenceV2FileSystem, path: string): void {
   try { fs.unlink(path); } catch (error: unknown) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
 }
-function lockOwnerAlive(pid: number, host: string, seams: FinalEvidenceV2Seams): boolean | undefined {
-  const observed = seams.processAlive?.(pid, host);
-  if (observed !== undefined) return observed;
-  if (host !== (seams.hostname?.() ?? localHostname())) return undefined;
+function lockOwnerAlive(pid: number, host: string): boolean | undefined {
+  if (host !== localHostname()) return undefined;
   try {
     process.kill(pid, 0);
     return true;
   } catch (error: unknown) {
-    return (error as NodeJS.ErrnoException).code === 'ESRCH' ? false : undefined;
+    if (!(error instanceof Error)) return undefined;
+    return 'code' in error && error.code === 'ESRCH' ? false : undefined;
   }
 }
 function claimStableDirectory(
@@ -446,14 +774,14 @@ function claimStableDirectory(
   assertStableDirectory(fs, path, directory, `${label} before ownership claim`);
   fs.rename(path, claimed);
   const stat = fs.lstat(claimed);
-  if (!stat.isDirectory() || stat.isSymbolicLink() || !sameFileIdentity(stat, directory)) {
+  if (!stat.isDirectory() || stat.isSymbolicLink() || stat.dev !== directory.dev || stat.ino !== directory.ino) {
     fail(`${label} changed during ownership claim`);
   }
 }
 
 function restoreClaimedDirectory(fs: FinalEvidenceV2FileSystem, claimed: string, path: string, directory: StableDirectory, label: string): void {
   const stat = fs.lstat(claimed);
-  if (!stat.isDirectory() || stat.isSymbolicLink() || !sameFileIdentity(stat, directory) || directoryExists(fs, path)) {
+  if (!stat.isDirectory() || stat.isSymbolicLink() || stat.dev !== directory.dev || stat.ino !== directory.ino || directoryExists(fs, path)) {
     fail(`${label} cannot be safely restored`);
   }
   fs.rename(claimed, path);
@@ -539,15 +867,21 @@ function recoverGcJournal(fs: FinalEvidenceV2FileSystem, location: ReturnType<ty
 }
 
 /** Publishes an immutable content-addressed record; pointer rename is the only commit marker. */
-export function publishFinalEvidenceV2(rootInput: string, input: unknown, invocation: ProjectRunInvocation, seams: FinalEvidenceV2Seams = {}): string {
-  const submitted = validateFinalEvidenceV2Manifest(input);
+export function publishFinalEvidenceV2(rootInput: string, input: unknown, invocation: ProjectRunInvocation): string {
+  if (arguments.length !== 3) fail('publication does not accept caller-controlled seams');
+  const submitted = validateFinalEvidenceV2ManifestVariant(input);
   if (submitted.graphRootHash !== undefined) fail('publisher computes graphRootHash from receipts');
-  const fs = filesystem(seams);
+  const fs = filesystem();
   const root = requireFinalEvidenceV2Authority(rootInput, invocation);
-  const releaseMutation = acquireProjectMutationLock(root, invocation);
+  // allow: SIZE_OK - the oversized legacy sole publisher retains only these calls so authority acquisition and atomic pointer commit remain one non-transferable boundary.
+  const graphPreflight = { root, graph: submitted.graph, fs, invocation };
+  const preflightGraph = preflightFinalEvidenceGraph(graphPreflight);
+  checkCompletionPublicationPrerequisites(root, submitted, invocation);
+  const releaseMutation = acquireProjectMutationLock(root, invocation, { nonReentrant: true });
   try {
-  const graph = validateFinalEvidenceV2GraphFiles(root, submitted.graph, fs, invocation);
-  const manifest: FinalEvidenceV2Manifest = { ...submitted, graphRootHash: graph.rootHash };
+  const graph = revalidateFinalEvidenceGraph(preflightGraph, graphPreflight);
+  checkCompletionPublicationPrerequisites(root, submitted, invocation);
+  const manifest: FinalEvidenceV2ManifestVariant = { ...submitted, graphRootHash: graph.rootHash };
   validateBackedManifest(root, fs, manifest, invocation);
   requireCurrentGraphIdentity(root, fs, manifest, invocation);
   const location = paths(root);
@@ -557,53 +891,68 @@ export function publishFinalEvidenceV2(rootInput: string, input: unknown, invoca
   const manifestHash = hash(bytes);
   let lockFd: StableLock | undefined;
   try {
-    lockFd = acquire(fs, location.lock, lockPayload('publication', manifestHash, seams));
-    invokeFault(seams, 'lock-write'); assertStableLock(fs, location.lock, lockFd, 'before fsync'); fs.fsync(lockFd.fd); invokeFault(seams, 'lock-fsync'); assertStableLock(fs, location.lock, lockFd, 'before directory sync'); syncDirectory(fs, location.omd); invokeFault(seams, 'lock-directory-sync'); assertStableLock(fs, location.lock, lockFd, 'after directory sync');
+    lockFd = acquire(fs, location.lock, lockPayload('publication', manifestHash)); assertStableLock(fs, location.lock, lockFd, 'before fsync'); fs.fsync(lockFd.fd); assertStableLock(fs, location.lock, lockFd, 'before directory sync'); syncDirectory(fs, location.omd); assertStableLock(fs, location.lock, lockFd, 'after directory sync');
     ensureDirectory(fs, location.runs);
     assertStableLock(fs, location.lock, lockFd, 'after runs directory creation');
-    requireFinalEvidenceV2Authority(rootInput, invocation);
+    requireFinalEvidenceV2Authority(root, invocation);
     validateBackedManifest(root, fs, manifest, invocation);
     requireCurrentGraphIdentity(root, fs, manifest, invocation);
+    checkCompletionPublicationPrerequisites(root, manifest, invocation);
+    if (directoryExists(fs, location.pointer)) {
+      const current = pointerFrom(readStableRegularFile(fs, location.pointer, 'final evidence pointer'));
+      if (current.record === `sha256-${manifestHash}.json`) {
+        committedManifest(fs, location, invocation);
+        return location.pointer;
+      }
+    }
 
     const record = resolve(location.runs, `sha256-${manifestHash}.json`);
     const recordTemp = temporary(location.runs, 'final-evidence-v2-record');
     try {
-      fs.writeFile(recordTemp, bytes, { flag: 'wx', mode: 0o600 }); invokeFault(seams, 'record-temp-write');
-      syncFile(fs, recordTemp); invokeFault(seams, 'record-temp-fsync');
+      fs.writeFile(recordTemp, bytes, { flag: 'wx', mode: 0o600 });
+      syncFile(fs, recordTemp);
       try { fs.link(recordTemp, record); } catch (error: unknown) {
         if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
         requireRealAncestors(root, record, fs, 'content-addressed record');
         if (!readStableRegularFile(fs, record, 'content-addressed record').equals(Buffer.from(bytes))) fail('content-addressed record collision');
       }
-      cleanupTemp(fs, recordTemp);
-      invokeFault(seams, 'record-rename'); syncDirectory(fs, location.runs); invokeFault(seams, 'runs-directory-sync');
+      cleanupTemp(fs, recordTemp); syncDirectory(fs, location.runs);
     } finally { cleanupTemp(fs, recordTemp); }
-
-    invokeFault(seams, 'revalidate');
     // Re-parse the persisted immutable bytes immediately before the commit marker.
     const persisted = readStableRegularFile(fs, record, 'immutable record');
     if (!persisted.equals(Buffer.from(bytes)) || hash(persisted) !== manifestHash) fail('immutable record changed before commit');
-    requireFinalEvidenceV2Authority(rootInput, invocation);
-    validateBackedManifest(root, fs, JSON.parse(persisted.toString('utf8')) as unknown, invocation);
+    requireFinalEvidenceV2Authority(root, invocation);
+    validateBackedManifest(root, fs, parseJsonBytes(persisted, 'persisted final evidence record'), invocation);
     requireCurrentGraphIdentity(root, fs, manifest, invocation);
+    checkCompletionPublicationPrerequisites(root, manifest, invocation);
 
     const pointer: FinalEvidenceV2Pointer = { schema: FINAL_EVIDENCE_V2_POINTER_SCHEMA, record: `sha256-${manifestHash}.json`, sha256: manifestHash };
     const pointerTemp = temporary(location.omd, 'final-evidence-v2-pointer');
     try {
-      fs.writeFile(pointerTemp, `${canonical(pointer)}\n`, { flag: 'wx', mode: 0o600 }); invokeFault(seams, 'pointer-temp-write');
-      syncFile(fs, pointerTemp); invokeFault(seams, 'pointer-temp-fsync');
+      fs.writeFile(pointerTemp, `${canonical(pointer)}\n`, { flag: 'wx', mode: 0o600 });
+      syncFile(fs, pointerTemp);
       regular(fs, pointerTemp);
-      if (!fs.readFile(pointerTemp).equals(Buffer.from(`${canonical(pointer)}\n`))) fail('pointer temporary changed before commit');
-      validateBackedManifest(root, fs, JSON.parse(persisted.toString('utf8')) as unknown, invocation);
+      if (!readStableRegularFile(fs, pointerTemp, 'pointer temporary').equals(Buffer.from(`${canonical(pointer)}\n`))) fail('pointer temporary changed before commit');
+      const consumptions = requiredMotionConsumptions(root, fs, manifest, invocation, manifestHash);
+      assertMotionConsumptionsAvailable(root, fs, location, consumptions);
+      writePublicationJournal(fs, location, { schema: 'final-evidence-v2-publication-journal', manifestSha256: manifestHash, pointer });
+      consumptions.forEach((consumption) => persistMotionConsumption(root, fs, location, consumption));
+      validateBackedManifest(root, fs, parseJsonBytes(persisted, 'persisted final evidence record'), invocation, true);
       requireCurrentGraphIdentity(root, fs, manifest, invocation);
-      fs.rename(pointerTemp, location.pointer); invokeFault(seams, 'pointer-rename');
-      syncDirectory(fs, location.omd); invokeFault(seams, 'pointer-directory-sync');
+      checkCompletionPublicationPrerequisites(root, manifest, invocation);
+      fs.rename(pointerTemp, location.pointer);
+      syncDirectory(fs, location.omd);
+      removePublicationJournal(fs, location);
     } finally { cleanupTemp(fs, pointerTemp); }
     return location.pointer;
   } finally {
     if (lockFd !== undefined) {
-      try { releaseLock(fs, location.lock, lockFd); invokeFault(seams, 'lock-unlink'); syncDirectory(fs, location.omd); invokeFault(seams, 'lock-directory-sync'); } catch (error: unknown) {
-        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      if (fs.exists(location.publicationJournal)) {
+        fs.close(lockFd.fd);
+      } else {
+        try { releaseLock(fs, location.lock, lockFd); syncDirectory(fs, location.omd); } catch (error: unknown) {
+          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+        }
       }
     }
   }
@@ -611,25 +960,49 @@ export function publishFinalEvidenceV2(rootInput: string, input: unknown, invoca
     releaseMutation();
   }
 }
+function recoverPublicationJournal(root: string, fs: FinalEvidenceV2FileSystem, location: ReturnType<typeof paths>, manifestHash: string, invocation: ProjectRunInvocation): void {
+  if (!fs.exists(location.publicationJournal)) fail('publication recovery is missing its transaction journal');
+  const journal = readPublicationJournal(fs, location);
+  if (journal.manifestSha256 !== manifestHash) fail('publication recovery does not match the intended transaction');
+  const manifest = recordFor(root, fs, location.runs, journal.pointer, invocation);
+  const consumptions = requiredMotionConsumptions(root, fs, manifest, invocation, manifestHash);
+  consumptions.forEach((consumption) => persistMotionConsumption(root, fs, location, consumption));
+  assertRequiredMotionConsumptions(root, fs, location, consumptions);
+  if (fs.exists(location.pointer)) {
+    const current = pointerFrom(readStableRegularFile(fs, location.pointer, 'final evidence pointer'));
+    if (canonical(current) !== canonical(journal.pointer)) fail('publication recovery conflicts with the current pointer');
+  } else {
+    const temp = temporary(location.omd, 'final-evidence-v2-recovery-pointer');
+    try {
+      fs.writeFile(temp, `${canonical(journal.pointer)}\n`, { flag: 'wx', mode: 0o600 });
+      syncFile(fs, temp);
+      regular(fs, temp);
+      if (!readStableRegularFile(fs, temp, 'publication recovery pointer').equals(Buffer.from(`${canonical(journal.pointer)}\n`))) fail('publication recovery pointer changed before commit');
+      fs.rename(temp, location.pointer);
+      syncDirectory(fs, location.omd);
+    } finally {
+      cleanupTemp(fs, temp);
+    }
+  }
+  removePublicationJournal(fs, location);
+}
 
 /** Removes only an unambiguously stale lock. A live, malformed, or ambiguous lock fails closed. */
-export function recoverFinalEvidenceV2Lock(rootInput: string, invocation: ProjectRunInvocation, seams: FinalEvidenceV2Seams = {}): boolean {
-  const fs = filesystem(seams);
+export function recoverFinalEvidenceV2Lock(rootInput: string, invocation: ProjectRunInvocation): boolean {
+  if (arguments.length !== 2) fail('lock recovery does not accept caller-controlled seams');
+  const fs = filesystem();
   const root = requireFinalEvidenceV2Authority(rootInput, invocation);
   const location = paths(root);
-  const releaseMutation = acquireProjectMutationLock(root, invocation);
-  try {
-  if (!fs.exists(location.lock)) return false;
-  ensureDirectory(fs, location.omd);
-  let recoveryFd: StableLock | undefined;
+  const releaseMutation = acquireProjectMutationLock(root, invocation, { nonReentrant: true });
   let staleFd: number | undefined;
   try {
-    recoveryFd = acquire(fs, location.recovery, lockPayload('publication', 'recovery', seams));
+    ensureDirectory(fs, location.omd);
+    if (!fs.exists(location.lock)) return false;
     staleFd = fs.open(location.lock, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW, 0o600);
     const staleIdentity = fs.fstat(staleFd);
     const staleEntry = fs.lstat(location.lock);
     if (!staleIdentity.isFile() || staleEntry.isSymbolicLink() || !staleEntry.isFile() || staleIdentity.dev === undefined || staleIdentity.ino === undefined || staleEntry.dev !== staleIdentity.dev || staleEntry.ino !== staleIdentity.ino || (staleIdentity.nlink !== undefined && staleIdentity.nlink !== 1)) fail('lock recovery is ambiguous');
-    const lock = object(readJson(fs, location.lock, 'lock'), 'lock');
+    const lock = object(parseJsonBytes(fs.readFile(staleFd), 'lock'), 'lock');
     exact(lock, ['schema', 'operation', 'hash', 'host', 'pid', 'startedAt'], 'lock');
     const lockOperation = lock.operation === 'publication' || lock.operation === 'gc' ? lock.operation : fail('lock recovery is ambiguous');
     const lockHash = typeof lock.hash === 'string' && SHA256.test(lock.hash) ? lock.hash : fail('lock recovery is ambiguous');
@@ -637,8 +1010,8 @@ export function recoverFinalEvidenceV2Lock(rootInput: string, invocation: Projec
     const lockPid = typeof lock.pid === 'number' && Number.isSafeInteger(lock.pid) && lock.pid > 0 ? lock.pid : fail('lock recovery is ambiguous');
     const lockStartedAt = typeof lock.startedAt === 'number' && Number.isSafeInteger(lock.startedAt) ? lock.startedAt : fail('lock recovery is ambiguous');
     if (lock.schema !== 'final-evidence-v2-lock') fail('lock recovery is ambiguous');
-    if ((seams.now?.() ?? Date.now()) - lockStartedAt < FINAL_EVIDENCE_V2_LOCK_TTL_MS) fail('lock is not stale');
-    if (lockOwnerAlive(lockPid, lockHost, seams) !== false) fail('lock owner liveness is ambiguous');
+    if (Date.now() - lockStartedAt < FINAL_EVIDENCE_V2_LOCK_TTL_MS) fail('lock is not stale');
+    if (lockOwnerAlive(lockPid, lockHost) !== false) fail('lock owner liveness is ambiguous');
     if (lockOperation === 'gc') {
       if (!fs.exists(location.gcJournal)
         && (directoryExists(fs, location.gcRunsClaim) || directoryExists(fs, location.gcQuarantineClaim))) {
@@ -646,12 +1019,15 @@ export function recoverFinalEvidenceV2Lock(rootInput: string, invocation: Projec
       }
       if (fs.exists(location.gcJournal)) recoverGcJournal(fs, location);
     }
-    if (fs.exists(location.pointer)) recordFor(rootPath(rootInput), fs, location.runs, pointerFrom(readStableRegularFile(fs, location.pointer, 'final evidence pointer')), invocation);
     if (lockOperation === 'publication') {
-      const intendedRecord = resolve(location.runs, `sha256-${lockHash}.json`);
-      if (!fs.exists(intendedRecord)) fail('publication recovery is missing its intended immutable record');
-      recordFor(rootPath(rootInput), fs, location.runs, { schema: FINAL_EVIDENCE_V2_POINTER_SCHEMA, record: `sha256-${lockHash}.json`, sha256: lockHash }, invocation);
+      if (fs.exists(location.publicationJournal)) {
+        recoverPublicationJournal(root, fs, location, lockHash, invocation);
+      } else if (fs.exists(location.pointer)) {
+        const current = pointerFrom(readStableRegularFile(fs, location.pointer, 'final evidence pointer'));
+        if (current.sha256 === lockHash) committedManifest(fs, location, invocation);
+      }
     }
+    if (fs.exists(location.publicationJournal)) fail('publication recovery remains incomplete');
     const current = fs.lstat(location.lock); const opened = fs.fstat(staleFd);
     if (current.isSymbolicLink() || !current.isFile() || opened.dev !== staleIdentity.dev || opened.ino !== staleIdentity.ino || current.dev !== staleIdentity.dev || current.ino !== staleIdentity.ino || (opened.nlink !== undefined && opened.nlink !== 1)) fail('lock changed before recovery');
     fs.close(staleFd); staleFd = undefined;
@@ -659,33 +1035,32 @@ export function recoverFinalEvidenceV2Lock(rootInput: string, invocation: Projec
     return true;
   } finally {
     if (staleFd !== undefined) fs.close(staleFd);
-    if (recoveryFd !== undefined) { releaseLock(fs, location.recovery, recoveryFd); syncDirectory(fs, location.omd); }
-  }
-  } finally {
     releaseMutation();
   }
 }
 
 /** Conservative two-stage orphan retention. Mutations serialize with publication and require an explicit non-dry-run call. */
-export function garbageCollectFinalEvidenceV2(rootInput: string, invocation: ProjectRunInvocation, options: { dryRun?: boolean; now?: number; seams?: FinalEvidenceV2Seams } = {}): FinalEvidenceV2GcResult {
-  const seams = options.seams ?? {};
-  const fs = filesystem(seams);
-  const root = options.dryRun === false ? requireFinalEvidenceV2Authority(rootInput, invocation) : rootPath(rootInput);
+export function garbageCollectFinalEvidenceV2(rootInput: string, invocation: ProjectRunInvocation, options: { dryRun?: boolean; now?: number } = {}): FinalEvidenceV2GcResult {
+  if (arguments.length < 2 || arguments.length > 3 || Object.keys(options).some((key) => key !== 'dryRun' && key !== 'now')) fail('garbage collection does not accept caller-controlled seams');
+  const fs = filesystem();
+  const root = requireFinalEvidenceV2Authority(rootInput, invocation);
   const location = paths(root);
   const active = { ...location };
-  const now = options.now ?? seams.now?.() ?? Date.now();
+  const now = options.now ?? Date.now();
   const dryRun = options.dryRun !== false;
   const result: FinalEvidenceV2GcResult = { dryRun, quarantined: [], deleted: [] };
-  const releaseMutation = dryRun ? undefined : acquireProjectMutationLock(root, invocation);
+  const releaseMutation = dryRun ? undefined : acquireProjectMutationLock(root, invocation, { nonReentrant: true });
   try {
   let lockFd: StableLock | undefined;
   let runsDirectory: StableDirectory | undefined;
   let quarantineDirectory: StableDirectory | undefined;
   let journal: GcJournal | undefined;
+  let cleanupComplete = false;
   try {
+    if (fs.exists(location.pointer)) committedRecord(fs, location, invocation);
     if (!dryRun) {
       ensureDirectory(fs, location.omd);
-      lockFd = acquire(fs, location.lock, lockPayload('gc', hash('gc'), seams));
+      lockFd = acquire(fs, location.lock, lockPayload('gc', hash('gc')));
       assertStableLock(fs, location.lock, lockFd, 'before fsync');
       fs.fsync(lockFd.fd);
       assertStableLock(fs, location.lock, lockFd, 'before directory sync');
@@ -705,7 +1080,6 @@ export function garbageCollectFinalEvidenceV2(rootInput: string, invocation: Pro
         journal = { ...journal, runs: gcJournalParent(location.runs, location.gcRunsClaim, runsDirectory, 'claimed') };
         writeGcJournal(fs, location, journal);
         active.runs = location.gcRunsClaim;
-        invokeFault(seams, 'gc-runs-claim');
       }
     }
     if (directoryExists(fs, location.quarantine)) {
@@ -718,13 +1092,12 @@ export function garbageCollectFinalEvidenceV2(rootInput: string, invocation: Pro
         journal = { ...journal, quarantine: gcJournalParent(location.quarantine, location.gcQuarantineClaim, quarantineDirectory, 'claimed') };
         writeGcJournal(fs, location, journal);
         active.quarantine = location.gcQuarantineClaim;
-        invokeFault(seams, 'gc-quarantine-claim');
       }
     }
 
     if (runsDirectory !== undefined) {
       assertStableDirectory(fs, active.runs, runsDirectory, 'GC runs parent before committed-record traversal');
-      const committed = committedRecord(fs, active, invocation);
+      const committed = fs.exists(location.pointer) ? committedRecord(fs, active, invocation) : undefined;
       assertStableDirectory(fs, active.runs, runsDirectory, 'GC runs parent after committed-record traversal');
       const runNames = fs.readdir(active.runs);
       assertStableDirectory(fs, active.runs, runsDirectory, 'GC runs parent after traversal');
@@ -734,7 +1107,7 @@ export function garbageCollectFinalEvidenceV2(rootInput: string, invocation: Pro
         const path = resolve(active.runs, name);
         regular(fs, path);
         const source = fs.lstat(path);
-        const bytes = fs.readFile(path);
+        const bytes = readStableRegularFile(fs, path, 'GC run record');
         if (hash(bytes) !== RECORD.exec(name)?.[1] || now - source.mtimeMs < FINAL_EVIDENCE_V2_GC_TTL_MS) continue;
         result.quarantined.push(name);
         if (!dryRun) {
@@ -748,11 +1121,10 @@ export function garbageCollectFinalEvidenceV2(rootInput: string, invocation: Pro
             journal = { ...journal, quarantine: gcJournalParent(location.quarantine, location.gcQuarantineClaim, quarantineDirectory, 'claimed') };
             writeGcJournal(fs, location, journal);
             active.quarantine = location.gcQuarantineClaim;
-            invokeFault(seams, 'gc-quarantine-claim');
           }
           assertStableDirectory(fs, active.runs, runsDirectory, 'GC runs parent before move');
           assertStableDirectory(fs, active.quarantine, quarantineDirectory, 'GC quarantine parent before move');
-          if (committedRecord(fs, active, invocation) === name) {
+          if (fs.exists(location.pointer) && committedRecord(fs, active, invocation) === name) {
             result.quarantined.pop();
             continue;
           }
@@ -795,31 +1167,33 @@ export function garbageCollectFinalEvidenceV2(rootInput: string, invocation: Pro
     return result;
   } finally {
     try {
-      if (journal?.quarantine !== undefined && quarantineDirectory !== undefined) {
+      if (journal?.quarantine !== undefined && quarantineDirectory !== undefined && directoryExists(fs, location.gcQuarantineClaim)) {
         journal = { ...journal, quarantine: gcJournalParent(location.quarantine, location.gcQuarantineClaim, quarantineDirectory, 'restoring') };
         writeGcJournal(fs, location, journal);
-        invokeFault(seams, 'gc-quarantine-restore');
         restoreClaimedDirectory(fs, location.gcQuarantineClaim, location.quarantine, quarantineDirectory, 'GC quarantine parent');
         syncDirectory(fs, location.omd);
         journal = { ...journal, quarantine: gcJournalParent(location.quarantine, location.gcQuarantineClaim, quarantineDirectory, 'restored') };
         writeGcJournal(fs, location, journal);
       }
-      if (journal?.runs !== undefined && runsDirectory !== undefined) {
+      if (journal?.runs !== undefined && runsDirectory !== undefined && directoryExists(fs, location.gcRunsClaim)) {
         journal = { ...journal, runs: gcJournalParent(location.runs, location.gcRunsClaim, runsDirectory, 'restoring') };
         writeGcJournal(fs, location, journal);
-        invokeFault(seams, 'gc-runs-restore');
         restoreClaimedDirectory(fs, location.gcRunsClaim, location.runs, runsDirectory, 'GC runs parent');
         syncDirectory(fs, location.omd);
         journal = { ...journal, runs: gcJournalParent(location.runs, location.gcRunsClaim, runsDirectory, 'restored') };
         writeGcJournal(fs, location, journal);
       }
       if (journal !== undefined) removeGcJournal(fs, location);
+      cleanupComplete = true;
     } finally {
       if (quarantineDirectory !== undefined) fs.close(quarantineDirectory.fd);
       if (runsDirectory !== undefined) fs.close(runsDirectory.fd);
       if (lockFd !== undefined) {
-        try { releaseLock(fs, location.lock, lockFd); syncDirectory(fs, location.omd); } catch (error: unknown) {
-          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+        if (cleanupComplete) {
+          releaseLock(fs, location.lock, lockFd);
+          syncDirectory(fs, location.omd);
+        } else {
+          fs.close(lockFd.fd);
         }
       }
     }

@@ -40,6 +40,7 @@ const legalSurfaceRegisterMotion: readonly Pick<LegalCell, 'surface' | 'kind' | 
   { surface: 'marketing', kind: 'showpiece', expectedDecision: 'one' },
   { surface: 'marketing', kind: 'quiet', expectedDecision: 'none' },
   { surface: 'product', kind: 'quiet', expectedDecision: 'none' },
+  { surface: 'product', kind: 'showpiece', expectedDecision: 'one' },
   { surface: 'editorial', kind: 'silent-evidence', expectedDecision: 'one' },
   { surface: 'editorial', kind: 'showpiece', expectedDecision: 'one' },
   { surface: 'editorial', kind: 'quiet', expectedDecision: 'none' },

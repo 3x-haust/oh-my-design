@@ -6,6 +6,7 @@ const BASE = {
   version: '0.12.0',
   prevTag: 'v0.11.0',
   summary: 'add structured release notes and visual-target loop',
+  compatibility: 'Existing task and reference records remain readable through explicit legacy readers.',
   prs: [
     { number: 29, title: 'feat: release notes automation' },
     { number: 30, title: 'feat: visual target diff loop' },
@@ -113,11 +114,24 @@ test('changelog URL prefixes bare version numbers with v', () => {
 
 // ── Compatibility section ─────────────────────────────────────────────────────
 
-test('Compatibility section states no breaking changes', () => {
-  const md = buildReleaseNotes(BASE);
+test('Compatibility section renders the release-specific statement', () => {
+  const md = buildReleaseNotes({ ...BASE, compatibility: 'Breaking: task evidence producers must emit current capture authorizations.' });
   const section =
     md.split('## Compatibility')[1]?.split('## Validation')[0] ?? '';
-  assert.match(section, /No breaking changes/);
+  assert.match(section, /Breaking: task evidence producers must emit current capture authorizations\./);
+  assert.doesNotMatch(section, /No breaking changes/);
+});
+
+test('Compatibility section makes an omitted assessment explicit instead of claiming no breakage', () => {
+  const { compatibility: _compatibility, ...withoutCompatibility } = BASE;
+  const md = buildReleaseNotes(withoutCompatibility);
+  const section = md.split('## Compatibility')[1]?.split('## Validation')[0] ?? '';
+  assert.match(section, /Compatibility impact was not specified/);
+  assert.doesNotMatch(section, /No breaking changes/);
+});
+
+test('Compatibility rejects an explicitly empty statement', () => {
+  assert.throws(() => buildReleaseNotes({ ...BASE, compatibility: '   ' }), /non-empty statement/);
 });
 
 // ── Validation section ────────────────────────────────────────────────────────

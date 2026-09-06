@@ -1,7 +1,12 @@
 {
   "name": "@3xhaust/oh-my-design",
   "version": "0.19.0",
-  "description": "Design cognition loop for Codex and Claude Code — frame, diverge, see, reframe",
+  "description": "Design cognition loop for Codex, Claude Code, and Pi-compatible agents — frame, diverge, see, reframe",
+  "keywords": [
+    "pi-package",
+    "design",
+    "coding-agent"
+  ],
   "type": "module",
   "publishConfig": {
     "access": "public"
@@ -9,6 +14,7 @@
   "bin": {
     "omd": "./bin/omd.mjs",
     "oh-my-design": "./bin/omd-install.mjs",
+    "omd-codex": "./bin/omd-codex.mjs",
     "omd-reviewer-evidence-proxy": "./bin/omd-reviewer-evidence-proxy.mjs",
     "omd-harness-v2": "./bin/omd-harness-v2.mjs"
   },
@@ -16,18 +22,28 @@
     "bin",
     "core",
     "adapters",
+    "extensions",
     "src",
     "scripts",
     "dist",
     "README.md",
     "LICENSE"
   ],
+  "pi": {
+    "extensions": [
+      "./extensions/omd.ts"
+    ],
+    "skills": [
+      "./src/skills"
+    ]
+  },
   "engines": {
-    "node": ">=22.18"
+    "node": ">=22.19"
   },
   "scripts": {
-    "test": "node --test 'test/*.test.ts'",
+    "test": "node --test --test-concurrency=4 'test/*.test.ts'",
     "test:obligations": "node --test test/obligations-v2.test.ts",
+    "test:completion": "node --test test/completeness.test.ts test/completion-regression.test.ts test/adaptive-final-v2.test.ts",
     "test:harness-v2": "node --test test/obligations-v2.test.ts test/reference-handoff-v2.test.ts test/final-evidence-v2.test.ts test/harness-v2-cli.test.ts test/static-direction-evidence.test.ts test/runtime-isolation.test.ts test/harness-v2-quality.test.ts",
     "benchmark:harness-v2": "node bin/omd-harness-v2.mjs",
     "test:benchmark-harness-v2": "node --test test/harness-v2-benchmark.test.ts",
@@ -44,8 +60,12 @@
     "yaml": "^2.6.0"
   },
   "license": "MIT",
+  "peerDependencies": {
+    "typebox": "*"
+  },
   "devDependencies": {
     "@types/node": "^26.1.1",
+    "typebox": "^1.3.13",
     "typescript": "^7.0.2"
   }
 }

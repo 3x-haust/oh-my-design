@@ -230,6 +230,22 @@ function emitPlugin(agents: AbstractAgent[], skills: Skill[]): void {
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, typeof content === 'string' ? content : `${JSON.stringify(content, null, 2)}\n`);
   }
+  const version = packageVersion(root);
+  for (const relativePath of [
+    '.claude-plugin/plugin.json',
+    '.codex-plugin/plugin.json',
+    '.claude-plugin/marketplace.json',
+    '.agents/plugins/marketplace.json',
+  ]) {
+    const path = join(root, relativePath);
+    const manifest = JSON.parse(readFileSync(path, 'utf8')) as {
+      version?: string;
+      plugins?: Array<{ version?: string }>;
+    };
+    if (manifest.version !== undefined) manifest.version = version;
+    for (const plugin of manifest.plugins ?? []) plugin.version = version;
+    writeFileSync(path, `${JSON.stringify(manifest, null, 2)}\n`);
+  }
 
   console.log(`plugin (root): ${pluginized.length} skills, ${agents.length} agents`);
 }

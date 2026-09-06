@@ -2,11 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { resolveMarketingArtDirection } from '../core/art-direction/decision.ts';
+import { canonicalArtDirectionReferences, resolveMarketingArtDirectionPure as resolveMarketingArtDirection } from '../core/art-direction/decision.ts';
 import {
   ART_DIRECTION_POINTER_SCHEMA_VERSION,
   ART_DIRECTION_RECORD_SCHEMA_VERSION,
@@ -85,8 +85,9 @@ function persistCurrentArtDirectionWithHandoffs(root: string): void {
     schemaVersion: INTENT_CURRENT_POINTER_SCHEMA_VERSION, record: ledgerPath, sha256: ledgerSha256,
   }));
   const alternative = (register: 'quiet' | 'confident' | 'showpiece') => ({
-    register, subjectIdentityFit: `${register} fits the fixture.`, staticReferenceSlotIds: ['static'],
-    motionReferenceSlotIds: [], conceptRole: `${register} fixture role`,
+    register, subjectIdentityFit: `${register} fits the fixture.`,
+    metaphorQualities: [`${register} precision`, 'measured cadence'], literalPropsToReject: ['compass', 'paper map'],
+    staticReferenceSlotIds: ['static'], motionReferenceSlotIds: [], conceptRole: `${register} fixture role`,
     macroCompositionHypothesis: 'Template-breaking editorial departure.', motionHypothesis: 'none' as const,
     uxAccessibilityPerformanceRisks: ['Reduced motion remains available.'],
     lawfulImplementationPath: 'CSS and SVG implementation.', rejectionCondition: 'Another direction scores higher.',
@@ -108,7 +109,7 @@ function persistCurrentArtDirectionWithHandoffs(root: string): void {
     selectionSha256: referenceSelectionV2Sha256(selection), route: '/', intent: { register: 'quiet', motionDecision: 'none' },
     motionResolution,
     alternatives,
-    references: [{ slotId: 'static', signal: 'high-visual-system', positive: true, lawful: true, motionObligation: 'none' }],
+    references: canonicalArtDirectionReferences(selection),
     referenceBindings: {
       selection, handoff: artHandoff, canonicalSelectionSha256: referenceSelectionV2Sha256(selection),
       canonicalHandoffSha256: artHandoff.payloadSha256,
@@ -197,6 +198,19 @@ test('source collection ignores excluded metadata links but still rejects source
   );
 });
 
+test('legacy composition and persisted source-seal bytes remain unchanged by compatibility checks', () => {
+  const root = setup();
+  const invocation = createTestProjectRunInvocation(root);
+  writeSourceSeal(root, invocation);
+  const compositionPath = join(root, '.omd', 'composition.md');
+  const sealPath = join(root, '.omd', 'source-seal.json');
+  const compositionBefore = readFileSync(compositionPath);
+  const sealBefore = readFileSync(sealPath);
+  assert.deepEqual(validateSourceSeal(root), []);
+  assert.deepEqual(readFileSync(compositionPath), compositionBefore);
+  assert.deepEqual(readFileSync(sealPath), sealBefore);
+});
+
 test('source check passes fresh seal and ignores generated, dependency, cache, and lockfile changes', () => {
   const root = setup();
   writeSourceSeal(root, createTestProjectRunInvocation(root));
@@ -256,6 +270,17 @@ test('source check fails missing seal and stale approved input or production sou
   assert.ok(validateSourceSeal(root).some((item) => item.id === 'SOURCE-SEAL-STALE' && item.path === '.omd/copy-deck.md'));
 });
 
+test('source sealing requires both current decision-bound downstream handoffs', () => {
+  const root = setup();
+  persistCurrentArtDirectionWithHandoffs(root);
+  rmSync(join(root, '.omd', 'reference-handoffs', 'composer.json'));
+  const sealed = spawnSync(process.execPath, [cli, 'source', '--seal', root], { encoding: 'utf8' });
+  assert.notEqual(sealed.status, 0);
+  assert.match(
+    sealed.stderr,
+    /DECISION_BOUND_REFERENCE_HANDOFFS_REQUIRED: resolve art direction before composition, build, or finalization/,
+  );
+});
 test('CLI seals, checks, and reports stale bytes without claiming semantic fidelity', () => {
   const root = setup();
   const missingDecision = spawnSync(process.execPath, [cli, 'source', '--seal', root], { encoding: 'utf8' });

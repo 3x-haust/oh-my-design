@@ -1,10 +1,13 @@
 import { createHash } from 'node:crypto';
-import { canonicalJson } from '../ref/board-artifacts.ts';
-import { referenceHandoffPayloadSha256 } from '../ref/reference-handoff.ts';
-import { materializeSettledReferenceSelection, motionResolutionProjectionSha256, referenceSelectionV2Sha256, resolveMotionProjection } from '../ref/reference-selection.ts';
+import { realpathSync } from 'node:fs';
+import { canonicalJson, readReferenceBoardArtifacts, sha256 } from '../ref/board-artifacts.ts';
+import { referenceHandoffPayloadSha256, validateReferenceHandoffCurrentness } from '../ref/reference-handoff.ts';
+import { materializeSettledReferenceSelection, motionResolutionProjectionSha256, projectRunInvocationSha256, readContainedRegularFile, readPreReferenceSelectionV2, referenceSelectionV2Sha256, resolveMotionProjection } from '../ref/reference-selection.ts';
 import type { ReferenceHandoffReceipt } from '../ref/reference-handoff.ts';
 import type { MotionResolutionProjection, ReferenceSelectionV2 } from '../ref/reference-selection.ts';
-import type { IntentLock } from '../runtime/intent.ts';
+import { requireApprovedMotionRecipeAuthorization, requireCurrentIntentLedgerAuthorization, requireCurrentUserIntentEventAuthorization, requireEvaluatorAssessmentAuthorization, requireEvaluatorResultAuthorization, validateCurrentProjectRun, type ProjectRunInvocation } from '../runtime/invocation.ts';
+import { eventHash, intentLedgerSha256, resolveCurrentUserIntent, validateIntentCurrentPointer, validateIntentLedger, type IntentLock } from '../runtime/intent.ts';
+import { artDirectionSha256 } from './schema.ts';
 import {
   ART_DIRECTION_SCHEMA_VERSION,
   ArtDirectionValidationError,
@@ -100,7 +103,7 @@ export type CanonicalReferenceBindings = {
   readonly handoff: ReferenceHandoffReceipt;
 };
 
-export type ResolveMarketingArtDirectionInput = {
+export type NonAuthoritativeResolveMarketingArtDirectionInput = {
   readonly activationSha256: string;
   readonly intentSha256: string;
   readonly boardSha256: string;
@@ -120,8 +123,30 @@ export type ResolveMarketingArtDirectionInput = {
   /** Null is the explicit no-exception state; a hash must be the exact host-authorized Beat-exception event receipt. */
   readonly beatExceptionReceiptSha256?: string | null;
 };
+/**
+ * Authoritative resolution owns every provenance digest. Callers may propose
+ * alternatives and settlement dispositions, but cannot label them as current.
+ */
+export type ResolveMarketingArtDirectionInput = {
+  readonly root: string;
+  readonly invocation: ProjectRunInvocation;
+  readonly intentLedgerBytes: Uint8Array;
+  readonly evaluatorAssessmentBytes: Uint8Array;
+  readonly evaluatorResultBytes: Uint8Array;
+  readonly route: string;
+  readonly alternatives: readonly ArtDirectionAlternative[];
+  readonly eligibility: ArtDirectionEligibility;
+  readonly implementationLane: string;
+  readonly fallbackPath: string;
+  readonly performanceAccessibilityBudget: string;
+  /** Exact host-authorized bytes of the current Beat exception event, when one exists. */
+  readonly beatExceptionEventBytes?: Uint8Array;
+  /** Exact host-authorized recipe bytes are required when a recipe settles motion. */
+  readonly approvedMotionRecipeBytes?: Uint8Array;
+};
 
 const SHA256 = /^[a-f0-9]{64}$/;
+const consumedEvaluatorEvidence = new Set<string>();
 /**
  * Canonical explicit absence marker. It is not an intent-ledger hash and can never authorize
  * an over-budget Beat set.
@@ -145,7 +170,7 @@ const FORBIDDEN_NONE_RATIONALE = /\b(category|anti-reference|restraint|capabilit
 const DECISION_KEYS = [
   'schemaVersion', 'activationSha256', 'intentSha256', 'boardSha256', 'preSelectionSha256', 'route', 'source',
   'consideredAlternatives', 'alternativesSha256', 'selectedRegister', 'motionDecision', 'conceptRole',
-  'selectedStaticReferenceSlotIds', 'selectedMotionReferenceSlotIds', 'implementationLane', 'fallbackPath',
+  'metaphorQualities', 'literalPropsToReject', 'selectedStaticReferenceSlotIds', 'selectedMotionReferenceSlotIds', 'implementationLane', 'fallbackPath',
   'performanceAccessibilityBudget', 'rejectedAlternatives', 'motionResolutionProjectionSha256', 'settledSelectionSha256',
   'authorInvocationSha256', 'authorPayloadSha256', 'authorResultSha256', 'currentUserBeatExceptionReceiptSha256',
 ] as const;
@@ -188,13 +213,22 @@ function citedReferences(slotIds: readonly string[], references: readonly ArtDir
  * The references array a check payload must carry is a pure projection of the settled selection.
  * Exported so the CLI can emit it instead of asking a coordinator to retype it byte-exactly.
  */
-export function canonicalArtDirectionReferences(selection: ReferenceSelectionV2): readonly ArtDirectionReference[] {
+export type CanonicalArtDirectionReference = ArtDirectionReference & {
+  readonly staticAxis: ReferenceSelectionV2['slots'][number]['staticAxis'];
+  readonly motionAxis: ReferenceSelectionV2['slots'][number]['motionAxis'];
+  readonly obligationDisposition: ReferenceSelectionV2['slots'][number]['obligationDisposition'];
+};
+
+export function canonicalArtDirectionReferences(selection: ReferenceSelectionV2): readonly CanonicalArtDirectionReference[] {
   return selection.slots.map((slot) => ({
     slotId: slot.slotId,
     signal: slot.signal,
-    positive: slot.rights === 'lawful' && slot.signal !== 'anti-reference',
+    positive: slot.rights === 'lawful' && slot.signal !== 'anti-reference' && slot.obligationDisposition === 'used',
     lawful: slot.rights === 'lawful',
-    motionObligation: 'none',
+    motionObligation: slot.motionAxis === 'available' && slot.obligationDisposition === 'used' ? 'accepted' : 'none',
+    staticAxis: slot.staticAxis,
+    motionAxis: slot.motionAxis,
+    obligationDisposition: slot.obligationDisposition,
   }));
 }
 function canonicalReferences(bindings: CanonicalReferenceBindings): readonly ArtDirectionReference[] {
@@ -234,12 +268,19 @@ function requireCanonicalReferences(references: readonly ArtDirectionReference[]
   if (canonicalJson(references) !== canonicalJson(canonical)) throw new ArtDirectionValidationError('references do not match canonical selected alternatives');
 }
 
-function validateAlternative(alternative: ArtDirectionAlternative, references: readonly ArtDirectionReference[]): void {
+function validateAlternative(
+  alternative: ArtDirectionAlternative,
+  references: readonly ArtDirectionReference[],
+): void {
   if (typeof alternative !== 'object' || alternative === null || !hasExactKeys(alternative, [
-    'register', 'subjectIdentityFit', 'staticReferenceSlotIds', 'motionReferenceSlotIds', 'conceptRole',
-    'macroCompositionHypothesis', 'motionHypothesis', 'uxAccessibilityPerformanceRisks',
-    'lawfulImplementationPath', 'rejectionCondition',
+    'register', 'subjectIdentityFit', 'metaphorQualities', 'literalPropsToReject',
+    'staticReferenceSlotIds', 'motionReferenceSlotIds', 'conceptRole', 'macroCompositionHypothesis',
+    'motionHypothesis', 'uxAccessibilityPerformanceRisks', 'lawfulImplementationPath', 'rejectionCondition',
   ]) || !isRegister(alternative.register) || !isMotionDecision(alternative.motionHypothesis)
+    || !Array.isArray(alternative.metaphorQualities) || alternative.metaphorQualities.length === 0
+    || !alternative.metaphorQualities.every((quality) => typeof quality === 'string' && quality.trim() !== '')
+    || !Array.isArray(alternative.literalPropsToReject) || alternative.literalPropsToReject.length === 0
+    || !alternative.literalPropsToReject.every((prop) => typeof prop === 'string' && prop.trim() !== '')
     || !Array.isArray(alternative.staticReferenceSlotIds) || !Array.isArray(alternative.motionReferenceSlotIds)
     || !Array.isArray(alternative.uxAccessibilityPerformanceRisks)
     || !['subjectIdentityFit', 'conceptRole', 'macroCompositionHypothesis', 'lawfulImplementationPath', 'rejectionCondition']
@@ -257,11 +298,31 @@ function validateAlternative(alternative: ArtDirectionAlternative, references: r
     rejectionCondition: alternative.rejectionCondition,
   })) requireText(value, field);
   if (alternative.staticReferenceSlotIds.length === 0) throw new ArtDirectionValidationError(`${alternative.register} must cite a static/layout reference`);
-  citedReferences([...alternative.staticReferenceSlotIds, ...alternative.motionReferenceSlotIds], references).forEach((reference) => {
-    if (!reference.lawful || !reference.positive || reference.signal === 'anti-reference') {
-      throw new ArtDirectionValidationError(`${alternative.register} cites non-positive or unlawful evidence`);
+  if (new Set(alternative.staticReferenceSlotIds).size !== alternative.staticReferenceSlotIds.length
+    || new Set(alternative.motionReferenceSlotIds).size !== alternative.motionReferenceSlotIds.length
+    || new Set([...alternative.staticReferenceSlotIds, ...alternative.motionReferenceSlotIds]).size
+      !== alternative.staticReferenceSlotIds.length + alternative.motionReferenceSlotIds.length) {
+    throw new ArtDirectionValidationError(`${alternative.register} cannot cite a reference slot more than once`);
+  }
+  const projected = citedReferences([...alternative.staticReferenceSlotIds, ...alternative.motionReferenceSlotIds], references);
+  for (const reference of projected) {
+    if (!reference.lawful || reference.signal === 'anti-reference') {
+      throw new ArtDirectionValidationError(`${alternative.register} cites unlawful evidence`);
     }
-  });
+  }
+  for (const reference of citedReferences(alternative.staticReferenceSlotIds, references)) {
+    const slot = reference as ArtDirectionReference & { readonly staticAxis?: string; readonly obligationDisposition?: string };
+    if (!reference.positive || slot.staticAxis !== 'available' || slot.obligationDisposition !== 'used') {
+      throw new ArtDirectionValidationError(`${alternative.register} static evidence must be lawful and used`);
+    }
+  }
+  for (const reference of citedReferences(alternative.motionReferenceSlotIds, references)) {
+    const slot = reference as ArtDirectionReference & { readonly motionAxis?: string; readonly obligationDisposition?: string };
+    if (reference.signal !== 'high-motion' || slot.motionAxis !== 'available'
+      || (slot.obligationDisposition !== 'used' && slot.obligationDisposition !== 'not-applicable')) {
+      throw new ArtDirectionValidationError(`${alternative.register} motion evidence must be a lawful canonical motion slot`);
+    }
+  }
 }
 
 function resolveMotionCompatibleEvaluatorChoice(
@@ -316,7 +377,7 @@ function resolveEvaluatorChoice(
     const difference = byAssessment.get(right.register)!.score - byAssessment.get(left.register)!.score;
     return difference === 0 ? left.register.localeCompare(right.register) : difference;
   });
-  if (byAssessment.get(ranked[0]!.register)!.score === byAssessment.get(ranked[1]!.register)!.score) {
+  if (ranked.length > 1 && byAssessment.get(ranked[0]!.register)!.score === byAssessment.get(ranked[1]!.register)!.score) {
     throw new ArtDirectionValidationError('evaluator evidence must produce one unambiguous winning alternative');
   }
   if (ranked[0]!.uxAccessibilityPerformanceRisks.length === 0) throw new ArtDirectionValidationError('selected alternative must state UX, accessibility, and performance risks');
@@ -350,7 +411,20 @@ function validateRecipeReceipt(receipt: ApprovedMotionRecipeReceipt | boolean, d
 
 function validateEligibility(decision: ArtDirectionDecision, references: readonly ArtDirectionReference[], eligibility: ArtDirectionEligibility, resolution: MotionResolutionProjection): void {
   const selected = byRegister(decision.consideredAlternatives, decision.selectedRegister);
-  const selectedReferences = citedReferences([...decision.selectedStaticReferenceSlotIds, ...decision.selectedMotionReferenceSlotIds], references);
+  if (new Set(decision.selectedStaticReferenceSlotIds).size !== decision.selectedStaticReferenceSlotIds.length
+    || new Set(decision.selectedMotionReferenceSlotIds).size !== decision.selectedMotionReferenceSlotIds.length
+    || new Set([...decision.selectedStaticReferenceSlotIds, ...decision.selectedMotionReferenceSlotIds]).size
+      !== decision.selectedStaticReferenceSlotIds.length + decision.selectedMotionReferenceSlotIds.length) {
+    throw new ArtDirectionValidationError('selected reference slots must be distinct');
+  }
+  const selectedStaticReferences = citedReferences(decision.selectedStaticReferenceSlotIds, references);
+  const selectedMotionReferences = citedReferences(decision.selectedMotionReferenceSlotIds, references);
+  if (selectedStaticReferences.some((reference) => !reference.positive || !reference.lawful
+    || (reference as ArtDirectionReference & { readonly staticAxis?: string; readonly obligationDisposition?: string }).staticAxis !== 'available'
+    || (reference as ArtDirectionReference & { readonly staticAxis?: string; readonly obligationDisposition?: string }).obligationDisposition !== 'used')) {
+    throw new ArtDirectionValidationError('selected static references must be distinct lawful used static evidence');
+  }
+  const selectedReferences = [...selectedStaticReferences, ...selectedMotionReferences];
   const slotId = eligibility.selectedMotionReferenceSlotId;
   const recipe = eligibility.approvedMotionRecipe;
   if (slotId !== undefined && recipe !== undefined) throw new ArtDirectionValidationError('one accepts either a selected reference slot or an approved recipe receipt, never both');
@@ -359,7 +433,7 @@ function validateEligibility(decision: ArtDirectionDecision, references: readonl
     if (!selectedReferences.some((reference) => reference.signal === 'high-visual-system' && reference.positive && reference.lawful)) throw new ArtDirectionValidationError('one requires a lawful high-visual-system reference');
     if (slotId !== undefined) {
       if (decision.selectedMotionReferenceSlotIds.length !== 1 || decision.selectedMotionReferenceSlotIds[0] !== slotId
-        || !selectedReferences.some((reference) => reference.slotId === slotId && reference.signal === 'high-motion' && reference.positive && reference.lawful)) {
+        || !selectedMotionReferences.some((reference) => reference.slotId === slotId && reference.signal === 'high-motion' && reference.lawful)) {
         throw new ArtDirectionValidationError('one requires exactly one lawful evaluator-selected motion reference slot');
       }
     } else if (recipe !== undefined) {
@@ -374,8 +448,8 @@ function validateEligibility(decision: ArtDirectionDecision, references: readonl
   if (eligibility.sceneRoles.length !== 0) throw new ArtDirectionValidationError('none cannot declare a signature scene');
   if (!selectedReferences.some((reference) => reference.signal === 'high-visual-system' && reference.positive && reference.lawful)) throw new ArtDirectionValidationError('none requires a lawful selected high-visual-system static reference');
   const staticMinimum: Record<Register, number> = { quiet: 1, confident: 2, showpiece: 3 };
-  if (decision.selectedStaticReferenceSlotIds.length < staticMinimum[decision.selectedRegister]) {
-    throw new ArtDirectionValidationError(`none ${decision.selectedRegister} requires ${staticMinimum[decision.selectedRegister]} selected static references`);
+  if (new Set(decision.selectedStaticReferenceSlotIds).size < staticMinimum[decision.selectedRegister]) {
+    throw new ArtDirectionValidationError(`none ${decision.selectedRegister} requires ${staticMinimum[decision.selectedRegister]} distinct lawful used static references`);
   }
   if (!eligibility.fallbackAttempted || !/\b(css|svg|static|reduced.motion)\b/i.test(decision.fallbackPath)) throw new ArtDirectionValidationError('none requires a tried lawful CSS/SVG/static or reduced-motion fallback');
   if (!/\b(template|departure|break)\b/i.test(selected.macroCompositionHypothesis)) throw new ArtDirectionValidationError('none requires a declared template-breaking macro departure');
@@ -389,7 +463,7 @@ function validateEligibility(decision: ArtDirectionDecision, references: readonl
     }
   }
 }
-function validateMotionResolution(resolution: MotionResolutionProjection, input: ResolveMarketingArtDirectionInput, motionDecision: MotionDecision): { readonly digest: string; readonly settledSelectionSha256: string; readonly projection: MotionResolutionProjection } {
+function validateMotionResolution(resolution: MotionResolutionProjection, input: NonAuthoritativeResolveMarketingArtDirectionInput, motionDecision: MotionDecision): { readonly digest: string; readonly settledSelectionSha256: string; readonly projection: MotionResolutionProjection } {
   const alternativesSha256 = createHash('sha256').update(canonicalJson(input.alternatives)).digest('hex');
   const settled = resolveMotionProjection({ ...resolution, selection: input.referenceBindings.selection });
   if (settled.activationSha256 !== input.activationSha256 || settled.alternativesSha256 !== alternativesSha256
@@ -412,7 +486,7 @@ function validateMotionResolution(resolution: MotionResolutionProjection, input:
   return { digest: motionResolutionProjectionSha256(settled), settledSelectionSha256: referenceSelectionV2Sha256(settledSelection), projection: settled };
 }
 
-export function validateArtDirectionDecision(decision: ArtDirectionDecision, references: readonly ArtDirectionReference[], eligibility: ArtDirectionEligibility, referenceBindings?: CanonicalReferenceBindings, motionResolution?: MotionResolutionProjection): ArtDirectionDecision {
+export function validateArtDirectionDecision(decision: ArtDirectionDecision, references: readonly ArtDirectionReference[], eligibility: ArtDirectionEligibility, referenceBindings?: CanonicalReferenceBindings, motionResolution?: MotionResolutionProjection, intent?: IntentLock): ArtDirectionDecision {
   const canonical = referenceBindings === undefined ? references : validateReferenceBindings(referenceBindings);
   if (referenceBindings !== undefined) {
     if (decision.preSelectionSha256 !== referenceBindings.canonicalSelectionSha256) throw new ArtDirectionValidationError('decision pre-selection hash does not bind the canonical selection');
@@ -421,16 +495,21 @@ export function validateArtDirectionDecision(decision: ArtDirectionDecision, ref
   }
   if (!hasExactKeys(decision, DECISION_KEYS) || decision.schemaVersion !== ART_DIRECTION_SCHEMA_VERSION || !decision.route || decision.compositionSha256 !== undefined || decision.userPrompt !== undefined) throw new ArtDirectionValidationError('decision has an invalid pre-composition shape');
   [decision.activationSha256, decision.intentSha256, decision.boardSha256, decision.preSelectionSha256, decision.alternativesSha256, decision.motionResolutionProjectionSha256, decision.settledSelectionSha256, decision.authorInvocationSha256, decision.authorPayloadSha256, decision.authorResultSha256, decision.currentUserBeatExceptionReceiptSha256].forEach((value, index) => requireHash(value, `hash ${index}`));
-  if (decision.consideredAlternatives.length !== 3 || new Set(decision.consideredAlternatives.map((alternative) => alternative.register)).size !== 3) throw new ArtDirectionValidationError('decision must compare exactly quiet, confident, and showpiece');
+  if (decision.consideredAlternatives.length === 0 || new Set(decision.consideredAlternatives.map((alternative) => alternative.register)).size !== decision.consideredAlternatives.length) throw new ArtDirectionValidationError('decision alternatives must be nonempty and register-distinct');
+  if (decision.consideredAlternatives.length === 1 && (intent?.register !== decision.selectedRegister || decision.source !== 'explicit-user')) throw new ArtDirectionValidationError('singleton requires a matching current explicit register lock');
   decision.consideredAlternatives.forEach((alternative) => validateAlternative(alternative, canonical));
   if (decision.alternativesSha256 !== createHash('sha256').update(canonicalJson(decision.consideredAlternatives)).digest('hex')) throw new ArtDirectionValidationError('decision alternatives hash is stale');
   const selected = byRegister(decision.consideredAlternatives, decision.selectedRegister);
-  if (selected.motionHypothesis !== decision.motionDecision || selected.conceptRole !== decision.conceptRole) throw new ArtDirectionValidationError('selection must preserve the chosen alternative');
-  if (decision.rejectedAlternatives.length !== 2
-    || new Set(decision.rejectedAlternatives.map((rejected) => rejected.register)).size !== 2
+  if (selected.motionHypothesis !== decision.motionDecision || selected.conceptRole !== decision.conceptRole
+    || canonicalJson(selected.metaphorQualities) !== canonicalJson(decision.metaphorQualities)
+    || canonicalJson(selected.literalPropsToReject) !== canonicalJson(decision.literalPropsToReject)) {
+    throw new ArtDirectionValidationError('selection must preserve the chosen alternative and metaphor contract');
+  }
+  if (decision.rejectedAlternatives.length !== decision.consideredAlternatives.length - 1
+    || new Set(decision.rejectedAlternatives.map((rejected) => rejected.register)).size !== decision.consideredAlternatives.length - 1
     || decision.rejectedAlternatives.some((rejected) => rejected.register === decision.selectedRegister
       || rejected.reason.trim().length === 0 || rejected.citedReferenceSlotIds.length === 0)) {
-    throw new ArtDirectionValidationError('decision must record two distinct evidenced rejected alternatives');
+    throw new ArtDirectionValidationError('decision must record every nonwinner exactly once as an evidenced rejected alternative');
   }
   for (const rejected of decision.rejectedAlternatives) {
     const alternative = byRegister(decision.consideredAlternatives, rejected.register);
@@ -453,13 +532,25 @@ export function validateArtDirectionDecision(decision: ArtDirectionDecision, ref
     || referenceSelectionV2Sha256(settledSelection) !== decision.settledSelectionSha256) {
     throw new ArtDirectionValidationError('decision does not bind the exact authorized motion settlement');
   }
+  for (const slotId of decision.selectedMotionReferenceSlotIds) {
+    const settledSlot = settledSelection.slots.find((slot) => slot.slotId === slotId);
+    if (settledSlot?.rights !== 'lawful' || settledSlot.signal !== 'high-motion'
+      || settledSlot.motionAxis !== 'available' || settledSlot.obligationDisposition !== 'used') {
+      throw new ArtDirectionValidationError('selected motion references must be distinct lawful used motion evidence');
+    }
+  }
   validateEligibility(decision, canonical, eligibility, motionResolution);
   return decision;
 }
 
-export function resolveMarketingArtDirection(input: ResolveMarketingArtDirectionInput): ArtDirectionDecision {
+/**
+ * Deterministic validation and selection only. This function does not establish
+ * currentness or host authority; use resolveMarketingArtDirection at boundaries.
+ */
+export function resolveMarketingArtDirectionPure(input: NonAuthoritativeResolveMarketingArtDirectionInput): ArtDirectionDecision {
   if (input.route.trim().length === 0) throw new ArtDirectionValidationError('route must not be empty');
-  if (input.alternatives.length !== 3 || new Set(input.alternatives.map((alternative) => alternative.register)).size !== 3) throw new ArtDirectionValidationError('silent marketing requires exactly three alternatives');
+  if (input.alternatives.length === 0 || new Set(input.alternatives.map((alternative) => alternative.register)).size !== input.alternatives.length) throw new ArtDirectionValidationError('marketing alternatives must be nonempty and register-distinct');
+  if (input.alternatives.length === 1 && input.intent.register !== input.alternatives[0]!.register) throw new ArtDirectionValidationError('singleton requires a matching current explicit register lock');
   const canonical = validateReferenceBindings(input.referenceBindings);
   if (input.selectionSha256 !== input.referenceBindings.canonicalSelectionSha256) throw new ArtDirectionValidationError('selection hash does not bind the canonical selection');
   if (input.boardSha256 !== input.referenceBindings.selection.captureSha256) throw new ArtDirectionValidationError('board hash does not bind the current canonical selection');
@@ -493,6 +584,8 @@ export function resolveMarketingArtDirection(input: ResolveMarketingArtDirection
     selectedRegister: selected.register,
     motionDecision,
     conceptRole: selected.conceptRole,
+    metaphorQualities: selected.metaphorQualities,
+    literalPropsToReject: selected.literalPropsToReject,
     selectedStaticReferenceSlotIds: selected.staticReferenceSlotIds,
     selectedMotionReferenceSlotIds: motionDecision === 'one' && input.eligibility.selectedMotionReferenceSlotId !== undefined
       ? [input.eligibility.selectedMotionReferenceSlotId]
@@ -508,5 +601,208 @@ export function resolveMarketingArtDirection(input: ResolveMarketingArtDirection
     authorResultSha256: input.evaluatorEvidence.resultSha256,
     currentUserBeatExceptionReceiptSha256: resolveBeatExceptionReceipt(input.beatExceptionReceiptSha256),
   };
-  return validateArtDirectionDecision(decision, canonical, input.eligibility, input.referenceBindings, motionResolution.projection);
+  return validateArtDirectionDecision(decision, canonical, input.eligibility, input.referenceBindings, motionResolution.projection, input.intent);
+}
+export function resolveMarketingArtDirection(input: ResolveMarketingArtDirectionInput): ArtDirectionDecision {
+  let root: string;
+  try {
+    root = realpathSync(input.root);
+  } catch {
+    throw new ArtDirectionValidationError('project root is missing or unreadable');
+  }
+  validateCurrentProjectRun(input.invocation);
+  try {
+    requireCurrentIntentLedgerAuthorization(input.invocation, root, input.intentLedgerBytes);
+    requireEvaluatorAssessmentAuthorization(input.invocation, root, input.evaluatorAssessmentBytes);
+    requireEvaluatorResultAuthorization(input.invocation, root, input.evaluatorResultBytes);
+    if (input.approvedMotionRecipeBytes !== undefined) {
+      requireApprovedMotionRecipeAuthorization(input.invocation, root, input.approvedMotionRecipeBytes);
+    }
+  } catch (error) {
+    throw new ArtDirectionValidationError(error instanceof Error ? error.message : 'missing host authorization');
+  }
+
+  let ledger;
+  try {
+    const pointer = validateIntentCurrentPointer(JSON.parse(readContainedRegularFile(root, '.omd/intent-current.json', 'current intent pointer').toString('utf8')));
+    if (pointer.record !== `intent-runs/sha256-${pointer.sha256}.json`) {
+      throw new ArtDirectionValidationError('current intent pointer record does not match its immutable digest');
+    }
+    const currentLedgerBytes = readContainedRegularFile(root, `.omd/${pointer.record}`, 'current immutable intent ledger');
+    const currentLedger = validateIntentLedger(JSON.parse(currentLedgerBytes.toString('utf8')));
+    if (intentLedgerSha256(currentLedger) !== pointer.sha256 || !Buffer.from(input.intentLedgerBytes).equals(currentLedgerBytes)) {
+      throw new ArtDirectionValidationError('authorized intent ledger bytes do not match the current immutable intent record');
+    }
+    ledger = currentLedger;
+  } catch (error) {
+    throw new ArtDirectionValidationError(error instanceof Error ? error.message : 'current intent ledger is invalid');
+  }
+  const terminalBeatException = ledger.events.at(-1);
+  const beatExceptionReceiptSha256 = terminalBeatException?.kind === 'current-user-beat-exception'
+    ? eventHash(terminalBeatException)
+    : null;
+  if (beatExceptionReceiptSha256 === null) {
+    if (input.beatExceptionEventBytes !== undefined) throw new ArtDirectionValidationError('Beat exception bytes are present without a current Beat exception');
+  } else {
+    if (input.beatExceptionEventBytes === undefined) throw new ArtDirectionValidationError('current Beat exception requires its exact host-authorized event bytes');
+    let event: unknown;
+    try {
+      event = JSON.parse(Buffer.from(input.beatExceptionEventBytes).toString('utf8'));
+      requireCurrentUserIntentEventAuthorization(input.invocation, root, input.beatExceptionEventBytes);
+    } catch (error) {
+      throw new ArtDirectionValidationError(error instanceof Error ? error.message : 'missing current-user Beat exception authorization');
+    }
+    const currentBeatEvent = terminalBeatException;
+    if (currentBeatEvent === undefined || currentBeatEvent.kind !== 'current-user-beat-exception'
+      || eventHash(currentBeatEvent) !== beatExceptionReceiptSha256
+      || canonicalJson(event) !== canonicalJson({
+        eventId: currentBeatEvent.eventId,
+        currentUser: currentBeatEvent.currentUser,
+        kind: currentBeatEvent.kind,
+        lock: currentBeatEvent.lock,
+        recordedAt: currentBeatEvent.recordedAt,
+      })) {
+      throw new ArtDirectionValidationError('Beat exception bytes do not identify the current intent-ledger receipt');
+    }
+  }
+
+  const selection = readPreReferenceSelectionV2(root);
+  const artifacts = readReferenceBoardArtifacts(root);
+  const candidate = artifacts.raw.candidates.find((entry) => entry.id === selection.candidateId);
+  if (candidate === undefined) {
+    throw new ArtDirectionValidationError('current selected board candidate is missing');
+  }
+  if (input.route !== candidate.route) {
+    throw new ArtDirectionValidationError('requested route does not match the current selected board candidate');
+  }
+  let handoffValue: unknown;
+  try {
+    handoffValue = JSON.parse(readContainedRegularFile(root, '.omd/reference-handoffs/art-direction.json', 'current art-direction handoff').toString('utf8'));
+  } catch {
+    throw new ArtDirectionValidationError('current art-direction handoff is missing or invalid JSON');
+  }
+  const handoff = validateReferenceHandoffCurrentness(root, handoffValue);
+  let assessmentValue: unknown;
+  let resultValue: unknown;
+  try {
+    assessmentValue = JSON.parse(Buffer.from(input.evaluatorAssessmentBytes).toString('utf8'));
+    resultValue = JSON.parse(Buffer.from(input.evaluatorResultBytes).toString('utf8'));
+  } catch {
+    throw new ArtDirectionValidationError('authorized evaluator evidence bytes are invalid JSON');
+  }
+  if (typeof assessmentValue !== 'object' || assessmentValue === null || Array.isArray(assessmentValue)
+    || typeof resultValue !== 'object' || resultValue === null || Array.isArray(resultValue)) {
+    throw new ArtDirectionValidationError('authorized evaluator evidence bytes have an invalid shape');
+  }
+  const assessment = assessmentValue as Record<string, unknown>;
+  const result = resultValue as Record<string, unknown>;
+  const assessmentKeys = ['alternatives', 'alternativesSha256', 'assessments', 'boardSha256', 'handoffSha256', 'intentSha256', 'preSelectionSha256', 'route', 'taskIds'];
+  const resultKeys = result.approvedMotionRecipeReceipt === undefined
+    ? ['alternativesSha256', 'boardSha256', 'handoffSha256', 'intentSha256', 'motionResolution', 'preSelectionSha256', 'route', 'taskIds', 'winner']
+    : ['alternativesSha256', 'approvedMotionRecipe', 'approvedMotionRecipeReceipt', 'boardSha256', 'handoffSha256', 'intentSha256', 'motionResolution', 'preSelectionSha256', 'route', 'taskIds', 'winner'];
+  if (!hasExactKeys(assessment, assessmentKeys) || !hasExactKeys(result, resultKeys)
+    || !Array.isArray(assessment.assessments) || !Array.isArray(assessment.alternatives)
+    || typeof result.motionResolution !== 'object' || result.motionResolution === null || Array.isArray(result.motionResolution)) {
+    throw new ArtDirectionValidationError('authorized evaluator evidence bytes have an invalid exact shape');
+  }
+  const taskIds = [...new Set(candidate.pieces.flatMap((piece) => piece.taskIds))].sort();
+  const intentSha256 = intentLedgerSha256(ledger);
+  const preSelectionSha256 = referenceSelectionV2Sha256(selection);
+  const alternativesSha256 = createHash('sha256').update(canonicalJson(assessment.alternatives)).digest('hex');
+  const lineage = {
+    route: candidate.route,
+    taskIds,
+    boardSha256: selection.captureSha256,
+    preSelectionSha256,
+    handoffSha256: handoff.payloadSha256,
+    intentSha256,
+    alternativesSha256,
+  };
+  for (const [field, value] of Object.entries(lineage)) {
+    if (canonicalJson((assessment as Record<string, unknown>)[field]) !== canonicalJson(value)
+      || canonicalJson((result as Record<string, unknown>)[field]) !== canonicalJson(value)) {
+      throw new ArtDirectionValidationError(`authorized evaluator evidence does not bind current ${field}`);
+    }
+  }
+  const rankedWinner = [...(assessment.assessments as Array<Record<string, unknown>>)]
+    .sort((left, right) => Number(right.score) - Number(left.score) || String(left.register).localeCompare(String(right.register)))[0];
+  if (typeof result.winner !== 'string' || rankedWinner?.register !== result.winner) {
+    throw new ArtDirectionValidationError('authorized evaluator result winner does not match the assessment ranking');
+  }
+  const resultMotion = result.motionResolution as Record<string, unknown>;
+  const evaluatorEvidence: EvaluatorAuthoredResolutionEvidence = {
+    assessments: assessment.assessments as never,
+    invocationSha256: projectRunInvocationSha256(input.invocation),
+    payloadSha256: sha256(input.evaluatorAssessmentBytes),
+    resultSha256: sha256(input.evaluatorResultBytes),
+  };
+  const activationSha256 = artDirectionSha256(input.invocation.activation);
+  const { approvedMotionRecipe: _callerRecipe, buildSha256: _callerBuild, selectedMotionReferenceSlotId: _callerSlot, ...eligibility } = input.eligibility;
+  const approvedMotionRecipe = result.approvedMotionRecipeReceipt;
+  if (approvedMotionRecipe !== undefined) {
+    const approvedRecipeBytes = input.approvedMotionRecipeBytes;
+    if (approvedRecipeBytes === undefined
+      || typeof approvedMotionRecipe !== 'object' || approvedMotionRecipe === null
+      || sha256(approvedRecipeBytes) !== (approvedMotionRecipe as Record<string, unknown>).recipeSha256
+      || Buffer.from(approvedRecipeBytes).toString('utf8') !== (approvedMotionRecipe as Record<string, unknown>).recipeBytes) {
+      throw new ArtDirectionValidationError('authorized evaluator result recipe does not bind exact approved recipe bytes');
+    }
+    if (canonicalJson(result.approvedMotionRecipe) !== Buffer.from(approvedRecipeBytes).toString('utf8')) {
+      throw new ArtDirectionValidationError('authorized evaluator result does not contain the exact approved recipe');
+    }
+  } else if (input.approvedMotionRecipeBytes !== undefined) {
+    throw new ArtDirectionValidationError('approved motion recipe bytes are present without an authorized evaluator result receipt');
+  }
+  const selectedMotionReferenceSlotId = Array.isArray(resultMotion.slots)
+    ? (resultMotion.slots.find((slot) => typeof slot === 'object' && slot !== null && (slot as Record<string, unknown>).obligationDisposition === 'used') as Record<string, unknown> | undefined)?.slotId
+    : undefined;
+  const derivedEligibility: ArtDirectionEligibility = {
+    ...eligibility,
+    buildSha256: input.invocation.activation.buildSha256,
+    ...(typeof selectedMotionReferenceSlotId === 'string' ? { selectedMotionReferenceSlotId } : {}),
+    ...(approvedMotionRecipe === undefined ? {} : { approvedMotionRecipe: approvedMotionRecipe as ApprovedMotionRecipeReceipt }),
+  };
+  const motionResolution = resolveMotionProjection({
+    activationSha256,
+    alternativesSha256,
+    handoffSha256: handoff.payloadSha256,
+    evaluatorInvocationSha256: evaluatorEvidence.invocationSha256,
+    evaluatorPayloadSha256: evaluatorEvidence.payloadSha256,
+    evaluatorResultSha256: evaluatorEvidence.resultSha256,
+    motionDecision: resultMotion.motionDecision as never,
+    slots: resultMotion.slots as never,
+    ...(resultMotion.approvedRecipe === undefined ? {} : { approvedRecipe: resultMotion.approvedRecipe as never }),
+    selection,
+  });
+  const decision = resolveMarketingArtDirectionPure({
+    activationSha256,
+    intentSha256,
+    boardSha256: selection.captureSha256,
+    selectionSha256: preSelectionSha256,
+    route: lineage.route,
+    intent: resolveCurrentUserIntent(ledger),
+    alternatives: assessment.alternatives as readonly ArtDirectionAlternative[],
+    references: canonicalArtDirectionReferences(selection),
+    referenceBindings: {
+      canonicalSelectionSha256: preSelectionSha256,
+      canonicalHandoffSha256: handoff.payloadSha256,
+      selection,
+      handoff,
+    },
+    evaluatorEvidence,
+    motionResolution,
+    eligibility: derivedEligibility,
+    implementationLane: input.implementationLane,
+    fallbackPath: input.fallbackPath,
+    performanceAccessibilityBudget: input.performanceAccessibilityBudget,
+    beatExceptionReceiptSha256,
+  });
+  const assessmentIdentity = `assessment:${evaluatorEvidence.payloadSha256}`;
+  const resultIdentity = `result:${evaluatorEvidence.resultSha256}`;
+  if (consumedEvaluatorEvidence.has(assessmentIdentity) || consumedEvaluatorEvidence.has(resultIdentity)) {
+    throw new ArtDirectionValidationError('authorized evaluator assessment or result bytes have already been consumed');
+  }
+  consumedEvaluatorEvidence.add(assessmentIdentity);
+  consumedEvaluatorEvidence.add(resultIdentity);
+  return decision;
 }

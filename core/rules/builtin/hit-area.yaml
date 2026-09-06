@@ -1,8 +1,8 @@
 id: HIT-002
 layer: 1
 category: a11y
-severity: error
+severity: warn
 when: "node.computed.isInteractive && !node.inline"
 value: "node.computed.hitArea"
-assert: "value.w >= 44 && value.h >= 44"
-message: "Hit area {value} is smaller than the 44x44 minimum"
+assert: "value.w >= 24 && value.h >= 24"
+message: "Hit area {value} is smaller than the WCAG 2.2 AA 24x24 minimum"

@@ -37,13 +37,39 @@ terminology, and words to avoid:
 
 For Korean, choose one register, read every line aloud, and keep one breath per sentence.
 
+## Truth contract
+
+Declare exactly one typed boundary for the strongest result and persistence the product can
+verify:
+
+- **Result boundary**: `navigation` | `local-preview` | `request-sent` |
+  `request-received` | `appointment-confirmed` | `service-completed` | `not-applicable`
+- **Storage boundary**: `none` | `browser-memory` | `tab-session` |
+  `browser-persistent` | `remote`
+
+These values govern every action, confirmation, status, and summary line. A later desired
+outcome never upgrades the current boundary.
+
 ## Surface copy
 
 Give every page or surface its own H3 block with exactly one `Main message`, `Supporting fact`,
-`Next action`, and `Claim refs` field. Include real title, body, label, CTA, and representative
-data. Do not repeat the same proposition across title/body/CTA. A CTA predicts what happens
-immediately after activation. `Claim refs` is exactly `none` or a comma-separated explicit ID
-list such as `F-001, F-004`; commentary or garbage suffixes are invalid.
+`Next action`, and `Claim refs` field. `Supporting fact` is `none` or
+`none — <omission reason>` when the state, progress, work object, field, or main message already
+supplies orientation; otherwise it is one
+distinct fact, consequence, constraint, or recovery cue. It is an optional role with an explicit
+omission value, never a slot to fill. Include real title, body, label, CTA, and representative data.
+Do not repeat the same proposition across title/body/CTA. A CTA predicts what happens immediately
+after activation. `Claim refs` is exactly `none` or a comma-separated explicit ID list such as
+`F-001, F-004`; commentary or garbage suffixes are invalid.
+
+Those four fields summarize the page's message; they are not a content budget. Under that page's H3,
+use H4 subheadings for the actual copy of every frame-owned region, including its titles, explanation,
+evidence, labels, and applicable actions. Keep the four summary fields single and include all factual
+claim IDs in the page's `Claim refs`. Content depth follows the site's purpose and requested scope:
+a complete landing's persuasion journey, a product's work and states, or an editorial reading path
+cannot be replaced by hero copy alone. Conversely, a component request does not authorize a whole site.
+Name missing essential evidence for the frame owner; do not silently omit a region, repeat a promise
+to pad length, or invent product facts to fill it.
 
 Portfolio and landing heroes state audience value or proven work; they do not narrate the
 document or design process with lines such as “과정을 남깁니다” or “순서대로 씁니다.”

@@ -121,3 +121,21 @@ test('a normal well-populated page produces no block reason', () => {
   const longBody = 'x'.repeat(1500);
   assert.equal(detectBlockReason('Linear — Project Management', longBody.length, 200), null);
 });
+
+test('a measured nonempty component can resolve only the short-body heuristic', () => {
+  assert.equal(detectBlockReason('Error summary example', 93, 200, true), null);
+  assert.equal(detectBlockReason('Success banner example', 122, 200, true), null);
+  assert.match(detectBlockReason('Example', 93, 200)!, /near-empty body/);
+  assert.match(detectBlockReason('Example', 0, 200, true)!, /near-empty body/);
+  assert.match(detectBlockReason('Example', 93, null, true)!, /near-empty body/);
+  assert.match(detectBlockReason('Example', 93, 404, true)!, /near-empty body/);
+});
+
+test('scoped component evidence cannot override HTTP errors or challenge titles', () => {
+  for (const status of [403, 500, 502, 503]) {
+    assert.equal(detectBlockReason('Example', 93, status, true), `HTTP ${status}`);
+  }
+  for (const title of ['Just a moment...', 'Access Denied', 'Checking your browser']) {
+    assert.match(detectBlockReason(title, 122, 200, true)!, /challenge page/);
+  }
+});

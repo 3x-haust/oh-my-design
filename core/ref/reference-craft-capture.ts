@@ -11,9 +11,7 @@
 // It also records whether the part keeps a baseline under reduced motion (content present). The
 // result is a validated `reference-craft-v1`; `verifyCraftReproduction` then gates a build against it.
 
-import { pathToFileURL } from 'node:url';
-import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { resolveRenderTarget } from '../render/serve.ts';
 import { chromium } from 'playwright';
 import { computeEnergy } from '../motion/energy.ts';
 import { waitForDocumentFonts } from '../render/index.ts';
@@ -38,13 +36,6 @@ export type ReferenceCraftCaptureOptions = {
   readonly selector?: string | null;
   readonly settleIntervalMs?: number;
 };
-
-function toUrl(target: string): string {
-  if (/^https?:\/\//.test(target)) return target;
-  const path = resolve(target);
-  if (!existsSync(path)) throw new Error(`no such page: ${target}`);
-  return pathToFileURL(path).href;
-}
 
 const wait = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
@@ -133,7 +124,8 @@ export async function captureReferenceCraft(target: string, opts: ReferenceCraft
   const interval = Math.max(1, Math.floor(opts.settleIntervalMs ?? DEFAULT_SETTLE_INTERVAL_MS));
   const viewport = { width: opts.viewport.width, height: opts.viewport.height };
   const selector = opts.selector ?? null;
-  const url = toUrl(target);
+  const resolved = await resolveRenderTarget(target);
+  const url = resolved.url;
 
   const browser = await chromium.launch({ headless: true });
   try {
@@ -189,5 +181,6 @@ export async function captureReferenceCraft(target: string, opts: ReferenceCraft
     });
   } finally {
     await browser.close();
+    await resolved.close();
   }
 }

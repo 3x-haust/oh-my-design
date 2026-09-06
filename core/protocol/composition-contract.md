@@ -14,9 +14,12 @@ section order wholesale is a derivative failure, not fidelity. It still writes t
 and uses its own real assets rather than lifting the source's literal text or photographs. Read `theory/layout.md` and
 `theory/ux.md` exactly before writing.
 
-Use these H2 sections exactly and keep each non-empty. When the project has user-provided
-references (`omd ref add --from-user`), the additional `## Reference synthesis` section is
-required as well; `omd composition --check` enforces it.
+Use these H2 sections exactly and keep each non-empty. `## Colour roles` is the additive
+current-authoring boundary: historical composition artifacts without it remain readable and retain
+byte identity, but every newly authored composition and terminal publication must include and pass
+its structured rows. When the project has user-provided references (`omd ref add --from-user`), the
+additional `## Reference synthesis` section is required as well; `omd composition --check` enforces
+historical/current section validity without rewriting either artifact.
 
 Before writing any section, read the frame's `uxSurface` classification. It selects the
 grammar (see `theory/ux.md` §Surface types): a `marketing` surface composes as a message
@@ -123,6 +126,20 @@ content truth. Two candidates that share one macro-layout family and differ only
 column width, type scale, or the vertical spacing of the same single-column stack — are one axis, not
 two, and are a divergence failure, not a candidate set. Name each axis's macro-layout family so the
 difference is legible before any sketch is built.
+
+## Colour roles
+
+Write exactly one row for each role. Tokens may resolve to a colour value, and semantic roles may
+use `none` when the surface has no such state. The Accent row must reserve its use for the primary
+action, selected state, or critical state rather than decoration.
+
+| Role | Token/value | Intended use |
+| --- | --- | --- |
+| Dominant | `--canvas` / `#FFFFFF` | Page canvas |
+| Secondary | `--surface` / `#F4F5F7` | Grouped surfaces |
+| Accent | `--accent` / `#2457FF` | Primary action and selected state |
+| Semantic success | `--success` / `#18794E` or `none` | Success feedback only |
+| Semantic error | `--error` / `#C62A2F` or `none` | Error feedback only |
 
 ## Transfer boundary
 

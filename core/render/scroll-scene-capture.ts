@@ -14,9 +14,7 @@
 // This capture is NOT wired into the motion decision, render entrypoints, or final-evidence yet
 // (increment 1c). It is invoked only by its own test.
 
-import { pathToFileURL } from 'node:url';
-import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { resolveRenderTarget } from './serve.ts';
 import { chromium } from 'playwright';
 import { computeEnergy } from '../motion/energy.ts';
 import { waitForDocumentFonts } from './index.ts';
@@ -37,13 +35,6 @@ export type ScrollSceneRequest = {
   /** Recorded for provenance; the fixed-position capture measures the whole viewport at that scroll. */
   readonly roiSelector: string;
 };
-
-function toUrl(target: string): string {
-  if (/^https?:\/\//.test(target)) return target;
-  const path = resolve(target);
-  if (!existsSync(path)) throw new Error(`no such page: ${target}`);
-  return pathToFileURL(path).href;
-}
 
 /** Resolve the browser to a fixed scroll offset and let two animation frames settle. */
 async function holdScroll(page: import('playwright').Page, fraction: number): Promise<void> {
@@ -77,7 +68,8 @@ export async function captureScrollSceneEvidence(
   if (opts.scenes.length > MAX_SCROLL_SCENES) throw new Error(`a scroll journey is bounded to ${MAX_SCROLL_SCENES} scenes`);
   const interval = Math.max(1, Math.floor(opts.settleIntervalMs ?? DEFAULT_SETTLE_INTERVAL_MS));
   const viewport = { width: opts.viewport.width, height: opts.viewport.height };
-  const url = toUrl(target);
+  const resolved = await resolveRenderTarget(target);
+  const url = resolved.url;
 
   const browser = await chromium.launch({ headless: true });
   try {
@@ -140,5 +132,6 @@ export async function captureScrollSceneEvidence(
     return validateScrollSceneEvidence(record);
   } finally {
     await browser.close();
+    await resolved.close();
   }
 }

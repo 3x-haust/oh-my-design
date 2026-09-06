@@ -4,27 +4,52 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
+import { INPUT_SKELETONS } from '../core/schema/inputs.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const read = (path: string): string => readFileSync(join(root, path), 'utf8');
 const sha256 = (path: string): string => createHash('sha256').update(readFileSync(join(root, path))).digest('hex');
 
-test('durable protocol, coordinator, and hand share the same stack precedence', () => {
-  const sources = [
+test('the adaptive route decides which stages and reference work exist without quotas', () => {
+  const skill = read('src/skills/omd-ultradesign/SKILL.md');
+  const scout = read('src/agents/scout.agent.yaml').replace(/\s+/g, ' ');
+  const hand = read('src/agents/hand.agent.yaml').replace(/\s+/g, ' ');
+  assert.match(skill, /omd route classify --input \.omd\/\.cache\/route-input\.json --json/);
+  assert.match(skill, /Launch only the roles and stages selected by the route/);
+  assert.match(skill, /there\s+is no reference quota/);
+  assert.match(skill, /A UI request does not authorize repository\s+publication/);
+  assert.match(skill, /Roles do not inspect `core\/\*\*`/);
+  assert.match(scout, /only when the adaptive route selects it/);
+  assert.match(scout, /no reference quota and no default candidate count/i);
+  assert.match(hand, /Write only\s*inside its `allowedPaths`/);
+  assert.ok(INPUT_SKELETONS.some((input) => input.command
+    === 'omd route classify --input .omd/.cache/route-input.json --json --activation <host-issued-invocation.json>'));
+});
+
+test('the loop pulls a derived stage brief instead of carrying the rules in prose', () => {
+  const skill = read('src/skills/omd-ultradesign/SKILL.md');
+  const hand = read('src/agents/hand.agent.yaml').replace(/\s+/g, ' ');
+  assert.match(skill, /At each selected stage boundary run `omd brief <stage>`/);
+  assert.match(skill, /derived from current disk state/);
+  assert.match(skill, /Pass it unchanged to the\s+selected owner/);
+  assert.match(hand, /Start with `omd brief production`/);
+  for (const role of ['hand', 'scout', 'eye', 'composer', 'writer']) {
+    assert.match(read(`src/agents/${role}.agent.yaml`), /Bash\(omd brief:\*\)/, role);
+  }
+});
+
+test('durable protocol and hand own stack detail while the coordinator consumes detected evidence', () => {
+  for (const source of [
     read('core/protocol/human-design-loop.md'),
-    read('src/skills/omd-ultradesign/SKILL.md'),
     read('src/agents/hand.agent.yaml'),
-  ];
-  for (const source of sources) {
+  ]) {
     const contract = source.replace(/\s+/g, ' ');
     assert.match(contract, /plain HTML\/CSS\/JS/);
     assert.match(contract, /only when the user explicitly asks for one or the surface is a genuinely stateful application/i);
     assert.match(contract, /build in an existing (?:project's|repository's) stack/i);
     assert.match(contract, /never pins the stack/i);
-    // the React-forcing default was removed
-    assert.doesNotMatch(contract, /React \+ Vite \+ TypeScript only for a truly blank greenfield/);
-    assert.doesNotMatch(contract, /Plain HTML greenfield requires an explicit user request/i);
   }
+  assert.match(read('src/skills/omd-ultradesign/SKILL.md'), /omd stack --json/);
 });
 
 test('hand records stack evidence before first write and preserves existing surfaces', () => {
@@ -35,13 +60,12 @@ test('hand records stack evidence before first write and preserves existing surf
   assert.match(hand, /a static page and needs no framework/);
 });
 
-test('copy is an isolated writer-editor boundary before sketches', () => {
+test('selected copy work remains an isolated writer boundary', () => {
   const skill = read('src/skills/omd-ultradesign/SKILL.md');
   const writer = read('src/agents/writer.agent.yaml');
   const eye = read('src/agents/eye.agent.yaml');
-  assert.ok(skill.indexOf('Spawn `omd-writer`') < skill.indexOf('omd-sketch'));
-  assert.match(skill, /omd copy --check[\s\S]*fresh `omd-eye` in copy-editor mode[\s\S]*writer[\s\S]*omd copy --check/);
-  assert.match(skill, /coordinator does not author copy/i);
+  assert.match(skill, /copy deck to `omd-writer`/);
+  assert.match(skill, /copy isolation[\s\S]*conditional methods/);
   assert.match(writer, /only `.omd\/copy-deck\.md`/);
   assert.match(writer, /Never edit UI, code, components, styles, layout/);
   assert.match(eye, /copy-editor mode[\s\S]*Do not receive or inspect renders, code, layout, build\s+rationale/);
@@ -67,24 +91,22 @@ test('UX acceptance and probe applicability do not fabricate recovery states', (
   const protocol = read('core/protocol/human-design-loop.md');
   const hand = read('src/agents/hand.agent.yaml');
   const eye = read('src/agents/eye.agent.yaml');
-  const skill = read('src/skills/omd-ultradesign/SKILL.md');
-  for (const source of [protocol, skill, hand, eye]) {
+  for (const source of [protocol, hand, eye]) {
     const contract = source.replace(/\s+/g, ' ');
     for (const phrase of ['primary task', 'frequent action', 'costliest', 'reachable state', 'visible feedback', 'mobile reach']) {
       assert.match(contract, new RegExp(phrase, 'i'));
     }
   }
-  for (const source of [protocol, skill, hand]) {
+  for (const source of [protocol, hand]) {
     assert.match(source, /stateful[\s\S]*primary\.json[\s\S]*recovery\.json[\s\S]*navigation-only[\s\S]*primary probe[\s\S]*static[\s\S]*N\/A/i);
   }
+  assert.match(read('src/skills/omd-ultradesign/SKILL.md'), /task states[\s\S]*required by the outcome and UX\s*contracts/);
   const handContract = hand.replace(/\s+/g, ' ');
   for (const phrase of ['native semantics', 'Preserve entered form values on error', 'block duplicate submission', 'reduced motion']) {
     assert.match(handContract, new RegExp(phrase, 'i'));
   }
   assert.match(eye, /no\s+interaction claim without matching probe evidence/i);
   assert.match(protocol, /Never add fake error, empty, or\s+recovery UI/);
-  assert.doesNotMatch(protocol, /navigation-only requires[^.]*recovery\.json/i);
-  assert.doesNotMatch(protocol, /static requires[^.]*probe/i);
 });
 
 test('Claude plugin reference rewriting knows writer and composer', () => {
@@ -93,7 +115,7 @@ test('Claude plugin reference rewriting knows writer and composer', () => {
   assert.match(claude, /AGENT_REF[^\n]*composer/);
 });
 
-test('composition is fresh, isolated, and shared before structural divergence', () => {
+test('composition is isolated and supplied before production', () => {
   const protocol = read('core/protocol/human-design-loop.md');
   const skill = read('src/skills/omd-ultradesign/SKILL.md');
   const composer = read('src/agents/composer.agent.yaml');
@@ -101,10 +123,9 @@ test('composition is fresh, isolated, and shared before structural divergence', 
   const eye = read('src/agents/eye.agent.yaml');
   const hand = read('src/agents/hand.agent.yaml');
 
-  assert.ok(skill.indexOf('Spawn a fresh `omd-composer`') < skill.indexOf('omd-sketch'));
-  for (const source of [protocol, skill, composer, hand]) {
-    assert.match(source, /omd composition --check/);
-  }
+  assert.match(skill, /composition to `omd-composer`/);
+  assert.match(skill, /composition[\s\S]*conditional methods/);
+  for (const source of [protocol, composer, hand]) assert.match(source, /omd composition --check/);
   assert.match(composer, /owns? only `.omd\/composition\.md`|write only `.omd\/composition\.md`/i);
   assert.match(composer, /raw screenshots[\s\S]*URLs[\s\S]*candidate renders/i);
   assert.match(sketch, /approved typography and\s+composition contracts[\s\S]*one axis assigned/i);
@@ -114,7 +135,6 @@ test('composition is fresh, isolated, and shared before structural divergence', 
 test('reference synthesis ABI has one owner and roles route sanitized multi-axis records', () => {
   const composition = read('core/protocol/composition-contract.md');
   const loop = read('core/protocol/human-design-loop.md');
-  const skill = read('src/skills/omd-ultradesign/SKILL.md');
   const scout = read('src/agents/scout.agent.yaml');
   const composer = read('src/agents/composer.agent.yaml');
   const eye = read('src/agents/eye.agent.yaml');
@@ -122,22 +142,14 @@ test('reference synthesis ABI has one owner and roles route sanitized multi-axis
   assert.match(composition, /^## Reference synthesis$/m);
   assert.match(composition, /structurally\s+validated[\s\S]*closed\s+Markdown\s+ABI/i);
   assert.match(composition, /Use every axis exactly once[\s\S]*Disposition is\s+exactly/i);
-  for (const source of [scout, composer, eye, skill]) {
-    assert.match(source, /protocol\/composition-contract\.md/);
-  }
+  for (const source of [scout, composer, eye]) assert.match(source, /protocol\/composition-contract\.md/);
   assert.match(scout, /Never pass raw URLs, screenshots, pixels/i);
   assert.match(composer, /raw screenshots[\s\S]*pixels[\s\S]*reference URLs/i);
   assert.match(eye, /never source identity, rationale, URLs, screenshots, pixels, or source descriptions/i);
-  assert.match(skill, /raw URLs, screenshots, pixels/i);
   assert.match(scout, /emit one sanitized[\s\S]*strict `## Reference synthesis`[\s\S]*exact axis keys[\s\S]*dispositions[\s\S]*reasons/i);
-  assert.match(scout, /do not rename, omit, duplicate, or locally redefine/i);
-  assert.match(composer, /Serialize[\s\S]*strict `## Reference synthesis` Markdown ABI[\s\S]*do not define, reinterpret, or supplement a parallel schema/i);
-  assert.match(composer, /without omissions or duplicates/i);
-  assert.match(eye, /failed `omd composition --check`[\s\S]*missing or duplicate canonical axis or destination selector[\s\S]*blocker/i);
-  assert.match(eye, /clean validator result does not replace[\s\S]*visual and[\s\S]*probe-supported correspondence/i);
-  assert.match(skill, /composition protocol alone[\s\S]*strict `## Reference synthesis` Markdown ABI[\s\S]*no duplicate schema, heading, axis, or selector/i);
+  assert.match(composer, /Serialize[\s\S]*strict `## Reference synthesis` Markdown ABI/i);
+  assert.match(eye, /failed `omd composition --check`[\s\S]*blocker/i);
   assert.match(loop, /list→detail workspace[\s\S]*non-default, non-first object[\s\S]*object-local state/i);
-  assert.match(loop, /declared temporal compatibility window[\s\S]*within that window[\s\S]*expired-window reply/i);
 });
 
 test('references are composed section by section from parts across references, never traced whole', () => {
@@ -165,6 +177,18 @@ test('the transfer boundary permits per-section layout fidelity and forbids only
   assert.match(composition, /across the entire page[\s\S]*full section order and overall silhouette/i);
   assert.match(composition, /tracing a whole reference page section-by-section into your whole page is the derivative failure/i);
 });
+test('unselected concept studies transport content relationships before testing rendered hypotheses', () => {
+  const contract = read('core/theory/imagegen.md').replace(/\s+/g, ' ');
+  // Contract transport only: these assertions do not score the aesthetics of any render.
+  assert.match(contract, /Before rendering an unselected concept study, the coordinator binds the actual content units, their proposed spatial relationship, and the predicted observable consequence in the existing decision record and generation prompt/);
+  assert.match(contract, /consequence is a visible spatial\/content relationship or an observed interaction state, not an inferred comprehension or conversion gain/);
+  assert.match(contract, /whole-page request[^.]*beginning, middle, and end[^.]*relevant transition/);
+  assert.match(contract, /one horizontal image per section: a landscape-format study render of each section, not an image embedded in the designed section/);
+  assert.match(contract, /After rendering, hide concept names and rationales and check whether the predicted relationship and consequence are actually visible/);
+  assert.match(contract, /If they are missing, the output does not validly test that hypothesis; it is not evidence that the concept is infeasible/);
+  assert.match(contract, /composer never contributes an upstream prompt or art-direction decision/);
+});
+
 test('roles keep composer downstream of the chosen draft without image-generation duties', () => {
   const scout = read('src/agents/scout.agent.yaml');
   const composer = read('src/agents/composer.agent.yaml');
@@ -174,8 +198,10 @@ test('roles keep composer downstream of the chosen draft without image-generatio
   const normalizedComposer = composer.replace(/\s+/g, ' ');
   const normalizedEye = eye.replace(/\s+/g, ' ');
 
-  assert.match(normalizedScout, /source screenshot is saved under `\.omd\/refs\/`, where the hand reads it for image-to-code fidelity/i);
-  assert.match(normalizedScout, /skin-abstracted blueprint, or the reference capture itself\. Make the draft lineage explicit/i);
+  assert.match(normalizedScout, /source screenshot is saved under `\.omd\/refs\/` as Scout-owned raw evidence/i);
+  assert.match(normalizedScout, /not automatically a Composer or Hand input/i);
+  assert.match(normalizedScout, /Several unique influences may bind one zone/i);
+  assert.match(normalizedScout, /sanitized assembly carries measured principles and a skin-abstracted blueprint/i);
   assert.match(normalizedComposer, /does not generate images, manage a draft cache, select a draft, or record a decision\./i);
   assert.match(normalizedComposer, /analyzes and translates the chosen draft into[\s\S]*consuming it solely as art-direction input/i);
   assert.doesNotMatch(normalizedComposer, /omd ref add .+--shot|\.omd\/\.cache\/imagegen|record the paths and the pick/i);
@@ -183,126 +209,70 @@ test('roles keep composer downstream of the chosen draft without image-generatio
   assert.match(normalizedEye, /both task performance and visual composition across desktop and mobile/i);
 });
 
-test('focal hierarchy, carrier, four-proof sketches, and selector floor share one contract', () => {
+test('focal hierarchy and selector floor stay in their owned contracts', () => {
   const composition = read('core/protocol/composition-contract.md');
   const loop = read('core/protocol/human-design-loop.md');
-  const skill = read('src/skills/omd-ultradesign/SKILL.md');
   const composer = read('src/agents/composer.agent.yaml');
   const sketch = read('src/agents/sketch.agent.yaml');
   const eye = read('src/agents/eye.agent.yaml');
   const hand = read('src/agents/hand.agent.yaml');
 
   assert.match(composition, /^## Focal hierarchy$/m);
-  for (const source of [composition, composer, skill, hand]) {
+  for (const source of [composition, composer, hand]) {
     assert.match(source, /dominant anchor[\s\S]*visual-mass\s+budget[\s\S]*value\/proof\/CTA/i);
     assert.match(source, /photo is never mandatory|never mandate a photo|never a\s+mandatory photo|Do not mandate a photo/i);
-    assert.doesNotMatch(source, /(?:photo|photograph) (?:is|required|must be) (?:mandatory|required)/i);
   }
-  for (const source of [composition, loop, composer, skill, sketch, eye, hand]) {
-    assert.match(source, /visible(?: primary)? CTA[\s\S]*predictable (?:completion path|path to completion)|visible CTA (?:plus|and|with)(?: a)? predictable\s+(?:completion path|path to completion)/i);
-    assert.match(source, /terminal form|full form|form\/control surface/i);
-  }
-  for (const source of [composition, composer, skill]) {
-    assert.match(source, /(?:alternate|explicit) non-media mental-model carrier[\s\S]*limitation/i);
-    assert.match(source, /none because\s+no approved photo/i);
-  }
-
   assert.match(sketch, /four structural proofs[\s\S]*1280x900[\s\S]*390x844[\s\S]*full-page desktop[\s\S]*full-page mobile/i);
-  assert.match(sketch, /Full-page captures[\s\S]*only for narrative dependency and composition rhythm/i);
-  assert.match(skill, /Every candidate renders exactly four proofs[\s\S]*--full-page/i);
-
-  for (const source of [loop, skill, eye]) {
-    assert.match(source, /0\s+(?:=\s*)?absent\/broken[\s\S]*1\s+(?:=\s*)?weak[\s\S]*2\s+(?:=\s*)?adequate[\s\S]*3\s+(?:=\s*)?strong[\s\S]*4\s+(?:=\s*)?exceptional/i);
-    assert.match(source, /eight integer(?:s| scores)[\s\S]*eight one-sentence[\s\S]*arithmetic mean/i);
-    assert.match(source, /(?:(?:dimension\s+below 2|below 2\s+on any dimension)[\s\S]*(?:reject|rejects)|reject[\s\S]*dimension\s+below 2)/i);
-    assert.match(source, /Scores? 1 (?:and|or) 3[^\n]*interpolat/i);
-    assert.match(source, /Task\/CTA clarity[\s\S]*0: no immediate primary CTA[\s\S]*4: an immediate primary CTA, predictable\s+completion path/i);
-    assert.match(source, /Narrative dependency[\s\S]*0: sections are interchangeable[\s\S]*4: every section[\s\S]*removal or reordering/i);
-    assert.match(source, /Composition rhythm[\s\S]*0: alignment, visual mass, negative space, span, and density[\s\S]*4: alignment, visual mass, negative\s+space, span, and density vary deliberately/i);
-    assert.match(source, /Concept-specific form[\s\S]*0: the result is a generic template[\s\S]*4: motif, anchor, and carrier arise from the domain/i);
-    assert.match(source, /Responsive hierarchy[\s\S]*0: mobile is a shrunken\/stacked desktop[\s\S]*4: deliberate mobile recomposition/i);
-    assert.match(source, /Type\/copy accommodation[\s\S]*0: real copy truncates[\s\S]*4: real Korean copy[\s\S]*fully integrated/i);
-    assert.match(source, /Interaction\/form usability risk[\s\S]*0: the primary task cannot succeed[\s\S]*4: task success, immediate feedback/i);
-    assert.match(source, /Accessibility\/implementation cost[\s\S]*0: contrast, focus\/order, reflow, or target reach[\s\S]*4:[\s\S]*applicable finish details/i);
+  for (const source of [loop, eye]) {
+    assert.match(source, /0\s+(?:=\s*)?absent\/broken[\s\S]*4\s+(?:=\s*)?exceptional/i);
+    assert.match(source, /eight integer(?:s| scores)[\s\S]*arithmetic mean/i);
   }
   assert.match(eye, /do not reward a terminal form[\s\S]*above the fold/i);
-  assert.match(eye, /concept-specific-form credit only[\s\S]*functional\s+relationship/i);
 });
 
-test('copy-eye provenance has one canonical format owner and role pointers', () => {
+test('copy-eye provenance has one canonical format owner and role pointer', () => {
   const loop = read('core/protocol/human-design-loop.md');
-  const skill = read('src/skills/omd-ultradesign/SKILL.md');
   const eye = read('src/agents/eye.agent.yaml');
   const hand = read('src/agents/hand.agent.yaml');
-  const roles = [skill, eye];
-  const exactFormat = /Mode: copy-editor[\s\S]*Review time: <ISO 8601 timestamp>[\s\S]*Reviewed copy-deck SHA-256: <64 lowercase hex>[\s\S]*Verdict: <non-empty verdict>[\s\S]*Findings:/;
+  const exactFormat = /Mode: copy-editor[\s\S]*Review time: <ISO 8601 timestamp>[\s\S]*Reviewed copy-deck SHA-256: <64 lowercase hex>[\s\S]*Verdict: CLEAN[\s\S]*Verdict: REVISE[\s\S]*Findings:/;
 
   assert.match(loop, /exclusively owns the exact copy-eye report format/i);
   assert.match(loop, exactFormat);
-  assert.equal([loop, ...roles].filter((source) => exactFormat.test(source)).length, 1);
-
-  for (const source of roles) {
-    assert.match(source, /(?:protocol\/human-design-loop\.md[\s\S]*exact copy-eye report format|exact copy-eye report format[\s\S]*protocol\/human-design-loop\.md)/i);
-    assert.doesNotMatch(source, exactFormat);
-    assert.match(source, /\.omd\/\.cache\/copy-eye\.md/);
-    assert.match(source, /omd copy --review-check/);
-    assert.match(source, /structure only[\s\S]*does not\s+prove[\s\S]*blindness/i);
-    assert.match(source, /(?:does not|must not) compare[\s\S]*reviewed hash[\s\S]*current\s+deck/i);
-    assert.match(source, /final\s+`?omd copy --check`?[\s\S]*separate evidence/i);
-    assert.match(source, /never\s+(?:replace|overwrite|substitute)[\s\S]*(?:final\s+deck hash|later writer-revised\/final deck hash)/i);
-  }
-
-  assert.match(loop, /preserv[\s\S]*omd copy --review-check[\s\S]*writer revision/i);
-  assert.match(skill, /preserv[\s\S]*omd copy --review-check[\s\S]*writer revision/i);
-  for (const source of [loop, skill, hand]) {
+  assert.doesNotMatch(eye, exactFormat);
+  assert.match(eye, /\.omd\/\.cache\/copy-eye\.md/);
+  assert.match(eye, /omd copy --review-check/);
+  for (const source of [loop, hand]) {
     assert.match(source, /omd source --seal[\s\S]*omd source --check/);
     assert.match(source, /byte-freshness\s+evidence|byte freshness/i);
-    assert.match(source, /(?:does\s+not\s+(?:claim|prove)|never\s+claim\s+it\s+proves)\s+semantic/i);
-    assert.match(source, /project root (?:that )?contain(?:s|ing)? `?\.omd\/?`?,? (?:not|never) a nested output\s+directory/i);
-    assert.match(source, /Never move, rename, or delete\s+a project symlink to make sealing pass/);
   }
 });
 
-test('UX task coverage schema has one canonical owner and mapping pointers', () => {
+test('UX task coverage schema has one canonical owner and composer pointer', () => {
   const loop = read('core/protocol/human-design-loop.md');
   const composer = read('src/agents/composer.agent.yaml');
-  const skill = read('src/skills/omd-ultradesign/SKILL.md');
-  const roles = [composer, skill];
   const exactRow = /T# \| production: \/route \| locator: selector \|/;
 
   assert.match(loop, /exclusively owns the exact `## UX task coverage` schema/i);
   assert.match(loop, exactRow);
-  assert.equal([loop, ...roles].filter((source) => exactRow.test(source)).length, 1);
-
-  for (const source of roles) {
-    assert.match(source, /protocol\/human-design-loop\.md[\s\S]*do not restate or alter that protocol-owned schema/i);
-    assert.doesNotMatch(source, exactRow);
-  }
+  assert.doesNotMatch(composer, exactRow);
+  assert.match(composer, /protocol\/human-design-loop\.md[\s\S]*do not restate or alter that protocol-owned schema/i);
   assert.match(composer, /map every applicable stable `T#` row[\s\S]*`Task coverage matrix`[\s\S]*omd composition --check/i);
 });
 test('all-rejected structural selection has one isolated no-winner recovery round', () => {
   const loop = read('core/protocol/human-design-loop.md');
-  const skill = read('src/skills/omd-ultradesign/SKILL.md');
   const eye = read('src/agents/eye.agent.yaml');
   const sketch = read('src/agents/sketch.agent.yaml');
   const composer = read('src/agents/composer.agent.yaml');
 
-  for (const source of [loop, skill, eye]) {
+  for (const source of [loop, eye]) {
     assert.match(source, /no winner/i);
-    assert.match(source, /never lowers?\s+the floor[\s\S]*selects?\s+the\s+closest candidate/i);
     assert.match(source, /visible evidence only[\s\S]*contract-level[\s\S]*execution-level/i);
   }
-  for (const source of [loop, skill]) {
-    assert.match(source, /contract-level[\s\S]*fresh composer[\s\S]*new\s+(?:composition\s+)?hash[\s\S]*invalidates?\s+every\s+old candidate/i);
-    assert.match(source, /execution-level[\s\S]*(?:exactly )?one bounded (?:replacement|recovery) round[\s\S]*fresh sketch contexts?/i);
-    assert.match(source, /same approved contracts[\s\S]*(?:assigned )?axis[\s\S]*only its own sanitized visible[\s\S]*(?:never|do not pass) numeric scores/i);
-    assert.match(source, /fresh selector[\s\S]*If\s+(?:none|no\s+replacement)\s+passes[\s\S]*(?:reframe\s+and stop|reframe\/stop)[\s\S]*Never\s+(?:create|an automatic|retry)/i);
-  }
-  assert.match(eye, /candidate-local visible[\s\S]*coordinator can sanitize/i);
+  assert.match(loop, /contract-level[\s\S]*fresh composer[\s\S]*invalidates?\s+every\s+old candidate/i);
+  assert.match(loop, /execution-level[\s\S]*(?:exactly )?one bounded (?:replacement|recovery) round/i);
   assert.match(eye, /one bounded replacement round[\s\S]*Never recommend a second replacement round/i);
-  assert.match(sketch, /single bounded replacement round[\s\S]*fresh context[\s\S]*same approved contracts[\s\S]*only your own sanitized visible/i);
-  assert.match(sketch, /Never receive or infer numeric scores[\s\S]*prior candidate[\s\S]*another candidate[\s\S]*rationale/i);
-  assert.match(composer, /contract-level no-winner recovery round[\s\S]*sanitized shared visible contract conflict[\s\S]*Never receive candidate renders, numeric scores[\s\S]*new composition\s+hash[\s\S]*invalidates every old candidate/i);
+  assert.match(sketch, /single bounded replacement round[\s\S]*fresh context/i);
+  assert.match(composer, /contract-level no-winner recovery round[\s\S]*new composition\s+hash/i);
 });
 
 test('layout-composition eval keeps frozen facts, blind dimensions, and two held-out tasks', () => {
@@ -334,26 +304,20 @@ test('layout-composition eval keeps frozen facts, blind dimensions, and two held
   assert.match(heldout, /Scenario 01 as the development task[\s\S]*Scenarios 02 and 03 sealed as held-out/);
 });
 
-test('source candidates are scanned, blindly triaged, repaired, and rescanned without becoming lint', () => {
+test('source candidates are triaged by the owned protocol and roles, not duplicated in the coordinator', () => {
   const protocol = read('core/protocol/slop-review.md');
   const loop = read('core/protocol/human-design-loop.md');
-  const skill = read('src/skills/omd-ultradesign/SKILL.md');
   const eye = read('src/agents/eye.agent.yaml');
   const hand = read('src/agents/hand.agent.yaml');
   const writer = read('src/agents/writer.agent.yaml');
 
-  assert.ok(skill.indexOf('Production source now exists') < skill.indexOf('Now render sharp'));
-  assert.ok(skill.indexOf('Now render sharp') < skill.lastIndexOf('`omd slop scan`'));
   assert.match(protocol, /confirmed[\s\S]*dismissed[\s\S]*needs-render/);
-  assert.match(protocol, /`needs-render` is transitional[\s\S]*both `untriaged = 0` and `needs-render = 0`[\s\S]*not `candidates = 0`/);
+  assert.match(protocol, /`needs-render` is transitional[\s\S]*both `untriaged = 0` and `needs-render = 0`/);
   assert.match(loop, /Candidate presence is not a\s+failed gate/);
-  assert.match(skill, /Final untriaged and needs-render counts are both zero/);
-  assert.match(protocol, /never added together or\s+double-counted/i);
   assert.match(protocol, /rendered IR is authoritative/i);
-  assert.match(eye, /candidate id, controlled signals, and review question[\s\S]*Never receive candidate path,[\s\S]*source line\/excerpt,[\s\S]*authorship/i);
+  assert.match(eye, /candidate id, controlled signals, and review question/i);
   assert.match(hand, /repair only confirmed visual\/source candidates[\s\S]*rerender[\s\S]*`omd check`[\s\S]*rescan/i);
-  assert.match(writer, /sole deck owner[\s\S]*repair the deck first[\s\S]*production\s+source to omd-hand/i);
-  assert.match(protocol, /only `omd-writer` may modify `.omd\/copy-deck\.md`/);
+  assert.match(writer, /sole deck owner[\s\S]*repair the deck first/i);
 });
 
 test('source-review provenance is conceptual and does not recreate an upstream catalogue', () => {
@@ -399,26 +363,46 @@ test('scout rejects derivative or convergent references, not premium sites using
     assert.match(source, /reject[\s\S]*only when it is derivative or convergent/i);
     // ...while premium, intentional design using common patterns is explicitly protected.
     assert.match(source, /premium, first-party, intentional/i);
-    assert.match(source, /convergence without an author/i);
+    assert.doesNotMatch(source, /convergence without an author/i);
   }
 });
 
-test('hand builds a user-directed reference to fidelity; ref distance is advisory', () => {
+test('hand builds selected references to a blocking slot-scoped fidelity gate', () => {
   const hand = read('src/agents/hand.agent.yaml');
   const skill = read('src/skills/omd-scout/SKILL.md');
   const protocol = read('core/protocol/reference-assembly.md');
+  assert.match(hand.replace(/\s+/g, ' '), /raw file under `\.omd\/refs\/` is Scout provenance/i);
+  assert.match(skill.replace(/\s+/g, ' '), /raw file under `\.omd\/refs\/` is Scout provenance/i);
+  assert.match(protocol.replace(/\s+/g, ' '), /Raw captures remain Scout provenance/i);
   for (const raw of [hand, skill, protocol]) {
     const source = raw.replace(/\s+/g, ' ');
-    // The hand opens the selected reference's local part-image and builds against it image-to-code.
-    assert.match(source, /local part-image/i);
+    // Raw captures need an explicit selected visual projection; board-v3 still has promise proof.
+    assert.match(source, /omd ref[\s\S]*influence-proof/i);
     assert.match(source, /\.omd\/refs\//);
-    assert.match(source, /image-to-code fidelity/i);
-    // ref distance no longer blocks shipping — it is advisory.
     assert.match(source, /omd ref distance/i);
-    assert.match(source, /advisory/i);
-    assert.match(source, /never blocks shipping/i);
-    assert.doesNotMatch(source, /omd ref distance` still (?:gates|blocks|guards)/i);
+    assert.match(source, /bare[\s\S]*advisory/i);
+    assert.match(source, /--selected[\s\S]*--gate[\s\S]*--json/i);
+    assert.match(source, /0\.6/);
+    assert.match(source, /(?:failed|missing)[\s\S]*(?:malformed|unmeasurable|stale)[\s\S]*blocks/i);
   }
+});
+
+test('selected visual packets expose only no-ship neutral geometry to downstream roles', () => {
+  const protocol = read('core/protocol/reference-assembly.md').replace(/\s+/g, ' ');
+  const composer = read('src/agents/composer.agent.yaml').replace(/\s+/g, ' ');
+  const hand = read('src/agents/hand.agent.yaml').replace(/\s+/g, ' ');
+  const scout = read('src/agents/scout.agent.yaml').replace(/\s+/g, ' ');
+  const skill = read('src/skills/omd-ultradesign/SKILL.md').replace(/\s+/g, ' ');
+  for (const source of [protocol, composer, hand, scout, skill]) assert.match(source, /omd ref visual-packet|reference-visual-packet/i);
+  for (const source of [protocol, composer, hand, skill]) {
+    assert.match(source, /no-ship/i);
+    assert.match(source, /source-free|source identity/i);
+  }
+  assert.match(protocol, /box proportion[\s\S]*grouping[\s\S]*nesting[\s\S]*whitespace/i);
+  assert.match(protocol, /drops source colour, copy, identity, imagery, and typeface/i);
+  assert.match(composer, /Never read `.omd\/reference-visual-packet-evidence\.json`/i);
+  assert.match(hand, /visual-packet-check --production/i);
+  assert.match(scout, /coordinator alone may run `omd ref visual-packet`/i);
 });
 
 test('scout captures by decision coverage, never by a targeted or announced reference count', () => {
@@ -438,7 +422,7 @@ test('scout captures by decision coverage, never by a targeted or announced refe
 test('the one-risk requirement is functional, not thematic, on a product surface', () => {
   const expressive = read('core/theory/expressive.md');
   const source = expressive.replace(/\s+/g, ' ');
-  assert.match(source, /On a `product` or quiet surface the risk is functional, not thematic/i);
+  assert.match(source, /On a `product` surface the risk is functional, not thematic/i);
   assert.match(source, /A named theme, a decorative metaphor, or a "memorable moment" is the wrong risk/i);
   assert.match(source, /"Memorable" is a marketing goal/i);
 });
@@ -461,12 +445,11 @@ test('voice cites Toss as a documented example, never a voice to copy', () => {
   assert.match(voice, /do not web-search a product's copy strings to imitate/i);
 });
 
-test('there is no direct-build escape; register gates distinctive, never whether the loop runs', () => {
+test('every route retains evidence, production, observation, and blind review', () => {
   const skill = read('src/skills/omd-ultradesign/SKILL.md').replace(/\s+/g, ' ');
-  assert.match(skill, /exactly one structural-skip route/i);
-  assert.match(skill, /is NOT a skip route/);
-  assert.match(skill, /never whether the loop runs/i);
-  assert.match(skill, /routing defect, not a lawful shortcut/i);
+  assert.match(skill, /production evidence, accessibility, or independent review/i);
+  assert.match(skill, /Production remains owned by `omd-hand`/i);
+  assert.match(skill, /decision-linked browser evidence, and a fresh independent `omd-eye` review/i);
   const expressive = read('core/theory/expressive.md').replace(/\s+/g, ' ');
   assert.match(expressive, /gates how "distinctive" is judged, never whether the loop runs/i);
 });
@@ -479,12 +462,13 @@ test('expressive distills FWA distinctly and gates the horizontal gallery to sho
   assert.match(source, /composition\/horizontal-scroll-gallery\.md/);
 });
 
-test('the loop and eye gate colour strategy (60-30-10 / reserved accent)', () => {
+test('the loop and eye gate surface-conditional colour strategy', () => {
   const loop = read('core/protocol/human-design-loop.md').replace(/\s+/g, ' ');
   assert.match(loop, /Colour strategy is part of the GREEN target/i);
   assert.match(loop, /SLOP-DIFFUSE-ACCENT/);
   const eye = read('src/agents/eye.agent.yaml').replace(/\s+/g, ' ');
-  assert.match(eye, /verify a legible 60-30-10 distribution/i);
+  assert.match(eye, /For a `marketing` surface, verify a legible 60-30-10 distribution/i);
+  assert.match(eye, /For a product, verify semantic colour/i);
   assert.match(eye, /diffuse or multi-hue accent/i);
 });
 
@@ -506,28 +490,21 @@ test('data-viz theory gates chart honesty and is wired into hand and eye', () =>
   assert.match(eye, /data visualization, verify it does not lie/i);
 });
 
-test('marketing art direction is silently resolved from evidence instead of defaulting to one motion direction', () => {
+test('marketing art direction is selected from evidence instead of a fixed candidate ritual', () => {
   const loop = read('core/protocol/human-design-loop.md').replace(/\s+/g, ' ');
-  assert.match(loop, /explicit current-user register or motion instruction is a lock/i);
-  assert.match(loop, /For `marketing`, compare exactly three evidence-grounded directions silently/i);
-  assert.match(loop, /do not ask the user to choose or approve a direction/i);
-  assert.match(loop, /`none` is legal when the selected direction has adequate static proof/i);
-  assert.match(loop, /`one` is legal only when one declared motion hypothesis is eligible and activated by the selected direction/i);
+  assert.match(loop, /art direction[\s\S]*present only when selected by the typed route/i);
+  assert.match(loop, /No route has a universal capture or candidate quota/i);
   assert.doesNotMatch(loop, /motion defaults to `one`/i);
-  assert.match(loop, /before the composer receives inputs/i);
-  assert.match(loop, /only the selected, hash-bound decision, selected capture visibility, and applicable evidence bindings/i);
-  assert.match(loop, /separate blind-quality and fidelity reviewers in isolated lanes/i);
-  assert.match(loop, /never literalized into shipped copy/i);
+  assert.match(loop, /When a method is selected, its owner, artifact boundary, validation, browser fallback, and stop conditions/i);
 });
 
-test('the eye rejects a merely functional element as a marketing signature moment and demands a named departure', () => {
+test('the eye scopes signature departure to marketing and exempts product theatre', () => {
   const eye = read('src/agents/eye.agent.yaml').replace(/\s+/g, ' ');
   assert.match(eye, /A merely functional element — a working copy button, a form, a nav, or a terminal that only runs a command — is baseline function, never the signature moment/i);
-  assert.match(eye, /Clean, competent, and evenly balanced with no nameable departure is a distinction failure \(RED\)/i);
-  // register scoping preserved — product/quiet is exempt from the thematic floor
-  assert.match(eye, /on a `product` or quiet surface the correct risk is functional/i);
+  assert.match(eye, /Clean, competent, and evenly balanced marketing with no nameable departure is a distinction failure \(RED\)/i);
+  assert.match(eye, /on a `product` surface the correct risk is functional/i);
   const loop = read('core/protocol/human-design-loop.md').replace(/\s+/g, ' ');
-  assert.match(loop, /a merely functional element .* is baseline function, never the signature moment/i);
+  assert.match(loop, /A merely functional element is not a marketing signature, but it may correctly be the dominant product work object/i);
 });
 
 test('scout researches the real subject first and lets its identity anchor govern the gathering lanes', () => {
@@ -553,27 +530,19 @@ test('scout researches the real subject first and lets its identity anchor gover
   assert.match(proto, /it governs the colour and motif every other lane serves/i);
 });
 
-test('the run closes by reporting usage (elapsed + tokens) in the final chat, never fabricated', () => {
+test('the run closes with measured usage, never fabricated', () => {
   const loop = read('core/protocol/human-design-loop.md').replace(/\s+/g, ' ');
   assert.match(loop, /Close the final chat handback with this run's usage: run `omd usage`/i);
   assert.match(loop, /never replaced by a fabricated number/i);
-  const skill = read('src/skills/omd-ultradesign/SKILL.md').replace(/\s+/g, ' ');
-  assert.match(skill, /close the final chat response with this run's usage: run `omd usage`/i);
 });
 
-test('the coordinator auto-selects the strongest reference candidate and never asks the user to pick', () => {
+test('reference selection remains model-owned and evidence-bound when selected', () => {
   const proto = read('core/protocol/reference-assembly.md').replace(/\s+/g, ' ');
-  assert.match(proto, /The coordinator selects the strongest candidate itself/i);
-  assert.match(proto, /never pauses to ask the user to pick a candidate/i);
-  const loop = read('core/protocol/human-design-loop.md').replace(/\s+/g, ' ');
-  assert.match(loop, /the coordinator selects the strongest itself/i);
-  assert.match(loop, /does not ask the user to pick a candidate/i);
-  const skill = read('src/skills/omd-ultradesign/SKILL.md').replace(/\s+/g, ' ');
-  assert.match(skill, /The coordinator selects the strongest candidate itself and records it with `omd ref select`/i);
-  assert.match(skill, /does not pause to ask the user to pick a candidate/i);
+  assert.match(proto, /adaptive route may select discovery alone/);
+  assert.match(proto, /no universal stage count,[\s\S]*reference quota, or candidate quota/);
   const scout = read('src/agents/scout.agent.yaml').replace(/\s+/g, ' ');
-  assert.match(scout, /The coordinator selects the strongest candidate itself/i);
-  assert.match(scout, /never asks the user to pick a candidate/i);
+  assert.match(scout, /only when the adaptive route selects it/);
+  assert.match(scout, /intended and actual evidence use/i);
 });
 
 test('a landing page for a tool is classified marketing, not product', () => {
@@ -612,14 +581,12 @@ test('candidate axes must be genuinely divergent macro-layouts, not one stack re
   assert.match(sketch, /Realize that axis as its named\s+macro-layout family/i);
   assert.match(sketch, /never a cosmetic reskin of\s+the default single-column stack/i);
 });
-test('copy register is an authority-fit decision, not a soft default, and Korean copy avoids the spaced em-dash', () => {
+test('copy register is an authority-fit decision, not a soft default', () => {
   const voice = read('core/theory/voice.md').replace(/\s+/g, ' ');
   const writer = read('src/agents/writer.agent.yaml').replace(/\s+/g, ' ');
   // The speech level is chosen from audience + required authority; a soft 해요체 default on an authoritative landing is a miss.
   assert.match(voice, /Defaulting to a soft, conversational 해요체[\s\S]*is a register-fit miss, not a safe default/i);
   assert.match(writer, /Choose the register from this subject's audience and the authority its value claim needs/i);
-  // The writer proactively avoids the spaced em-dash in Korean copy (SLOP-KO-EMDASH catches it at render).
-  assert.match(writer, /Never use a spaced em-dash \( — \)\s*inside Korean copy/i);
 });
 test('the AI-SaaS tells name decorative geometric-glyph ornament, flagged as SLOP-ORNAMENT-GLYPH', () => {
   const expressive = read('core/theory/expressive.md').replace(/\s+/g, ' ');
@@ -642,9 +609,9 @@ test('craft names smooth in-page navigation with a reduced-motion fallback', () 
   assert.match(craft, /scroll-behavior: smooth[\s\S]*scrollIntoView\(\{ behavior: 'smooth'/i);
   assert.match(craft, /Under `prefers-reduced-motion: reduce` it reverts to an instant jump/i);
 });
-test('the loop runs domain analysis before framing and records domain-brief.json', () => {
+test('selected domain analysis records its typed artifact without becoming a universal predecessor', () => {
   const loop = read('core/protocol/human-design-loop.md').replace(/\s+/g, ' ');
-  assert.match(loop, /preflight -> domain analysis -> frame/);
+  assert.match(loop, /When the adaptive route selects domain analysis/);
   assert.match(loop, /## Domain analysis/);
   assert.match(loop, /records `\.omd\/domain-brief\.json`[\s\S]*`domain-brief-v1`[\s\S]*`omd domain check`/i);
   assert.match(loop, /two-role reference queries \(component design and top-tier craft\)/i);
@@ -676,28 +643,25 @@ test('the scout consumes the domain brief and measures role-② craft references
   assert.match(scout, /lets `omd craft-fidelity` prove the built reproduction actually moves/);
   assert.match(scout, /- Bash\(omd craft-capture:\*\)/);
 });
-test('the ultradesign skill runs domain analysis before framing', () => {
+test('adaptive routing supplies selected contracts instead of duplicating them in the coordinator', () => {
   const skill = read('src/skills/omd-ultradesign/SKILL.md').replace(/\s+/g, ' ');
-  assert.match(skill, /## 0\.5 Domain analysis/);
-  assert.match(skill, /write `\.omd\/domain-brief\.json`, then validate it with `omd domain check`/);
-  assert.match(skill, /Domain analysis, the framer, and the scout always run first/);
-  assert.match(skill, /Pass the validated brief to the framer[\s\S]*and to the scout/);
-  // the domain section precedes the frame section
-  assert.ok(skill.indexOf('## 0.5 Domain analysis') < skill.indexOf('## 1. Frame and concept hypothesis'));
+  assert.match(skill, /only the roles and stages selected by the route/);
+  assert.match(skill, /For each contract named by the selected stage/);
+  const stage = read('core/stage/contract.ts');
+  assert.match(stage, /id: 'domain'[\s\S]*artifact: '\.omd\/domain-brief\.json'/);
 });
 test('captured role-② craft cannot override the selected exact motion decision', () => {
   const loop = read('core/protocol/human-design-loop.md').replace(/\s+/g, ' ');
   assert.match(loop, /never turns captured scroll craft into an additional motion obligation beyond the exact selected `motionDecision`/i);
   assert.match(loop, /Never default motion to `one`/);
-  assert.match(loop, /A `product`\/quiet surface[\s\S]*exempt/i);
+  assert.match(loop, /A `product` surface[\s\S]*exempt/i);
 });
-test('the loop and the ultradesign skill run omd craft-usage without minting motion authority', () => {
+test('craft-usage motion authority stays in the owned protocol when applicable', () => {
   const loop = read('core/protocol/human-design-loop.md').replace(/\s+/g, ' ');
-  assert.match(loop, /Production review order[\s\S]*runs `omd craft-usage <page> --surface <surface>`/);
+  assert.match(loop, /When a method is selected, its owner, artifact boundary, validation, browser fallback, and stop conditions/i);
   assert.match(loop, /never turns captured scroll craft into an additional motion obligation beyond the exact selected `motionDecision`/);
-  const skill = read('src/skills/omd-ultradesign/SKILL.md').replace(/\s+/g, ' ');
-  assert.match(skill, /`omd craft-usage <page> --surface <surface>` audits captured role-② reference signatures/);
-  assert.match(skill, /never an instruction to add motion beyond its selected `motionDecision`/);
+  const skill = read('src/skills/omd-ultradesign/SKILL.md');
+  assert.match(skill, /task states, viewports, interaction[\s\S]*required by the outcome and UX/);
 });
 test('the loop and the hand install pack recipes instead of reimplementing them', () => {
   const loop = read('core/protocol/human-design-loop.md').replace(/\s+/g, ' ');
@@ -759,21 +723,24 @@ test('the award-bar eval scores against the rubric, tokens, installs, and no-JS 
   const nojs = read('evals/award-bar/graders/content-survives-no-js.md').replace(/\s+/g, ' ');
   assert.match(nojs, /content accessible with no JS/);
 });
-test('artifact ownership is enforced in both the loop and the executable skill', () => {
+test('selected artifact ownership is enforced in both the loop and compact coordinator', () => {
   const loop = read('core/protocol/human-design-loop.md').replace(/\s+/g, ' ');
-  assert.match(loop, /Artifact ownership is enforced, not advisory/);
+  assert.match(loop, /Artifact ownership is enforced whenever an artifact is selected/);
   assert.match(loop, /`\.omd\/composition\.md` to the composer/);
   assert.match(loop, /every production source file to the hand/);
-  assert.match(loop, /it never writes an owned artifact itself/);
-  assert.match(loop, /have no inline path and no skippable condition/);
 
-  const skill = read('src/skills/omd-ultradesign/SKILL.md').replace(/\s+/g, ' ');
-  assert.match(skill, /\*\*Artifact ownership is not advisory\.\*\*/);
-  assert.match(skill, /\*\*Spawn `omd-composer`\. The coordinator never writes `\.omd\/composition\.md` itself\.\*\*/);
-  assert.match(skill, /\*\*Spawn `omd-sketch` for the candidates and a fresh `omd-eye` to select between them\.\*\*/);
-  assert.match(skill, /\*\*Spawn `omd-hand`\. The coordinator never writes production source itself\*\*/);
-  // the ownership table must precede the stages it governs
-  assert.ok(skill.indexOf('Artifact ownership is not advisory') < skill.indexOf('## 4. Composition contract'));
+  const skill = read('src/skills/omd-ultradesign/SKILL.md');
+  assert.match(skill, /Artifact ownership remains exclusive whenever an artifact is selected/);
+  assert.match(skill, /composition to `omd-composer`/);
+  assert.match(skill, /production[\s\S]*to `omd-hand`/);
+  assert.match(skill, /missing selected owner is a visible\s+blocker/i);
+});
+test('production owner transaction cannot mutate upstream or evidence artifacts', () => {
+  const hand = read('src/agents/hand.agent.yaml').replace(/\s+/g, ' ');
+  assert.match(hand, /source-owner transaction mutates only the route's `allowedPaths`/);
+  assert.match(hand, /does not write `\.omd\/` history, decisions, screenshots, observations, or caches/);
+  assert.match(hand, /Return proposed evidence and decision records in the final owner result/);
+  assert.match(hand, /Every source-owner `omd check` uses `--no-log`/);
 });
 test('the scout and the reference protocol require component-scoped capture', () => {
   const ra = read('core/protocol/reference-assembly.md').replace(/\s+/g, ' ');
@@ -807,6 +774,76 @@ test('scout can write only its owned synthesis while reference records stay CLI-
   assert.match(scout, /Never touch production source, another `\.omd\/` artifact/);
 });
 
+test('browser evidence requires a settled visible capture contract', () => {
+  const loop = read('core/protocol/human-design-loop.md').replace(/\s+/g, ' ');
+  const eye = read('src/agents/eye.agent.yaml').replace(/\s+/g, ' ');
+  for (const source of [loop, eye]) {
+    assert.match(source, /\[settled-capture-contract\]/);
+    assert.match(source, /getAnimations\(\)/);
+    assert.match(source, /display[\s\S]*visibility[\s\S]*opacity/);
+    assert.match(source, /omd capture --check --input/);
+  }
+});
+
+test('protocol review receives complete receipts and pair-distinct configurations', () => {
+  const loop = read('core/protocol/human-design-loop.md').replace(/\s+/g, ' ');
+  const eye = read('src/agents/eye.agent.yaml').replace(/\s+/g, ' ');
+  const skill = read('src/skills/omd-ultradesign/SKILL.md').replace(/\s+/g, ' ');
+  for (const source of [loop, eye, skill]) {
+    assert.match(source, /\[protocol-review-packet-contract\]/);
+    assert.match(source, /every primary screenshot[\s\S]*capture receipt/i);
+  }
+  for (const source of [loop, skill]) {
+    assert.match(source, /\[review-pair-configuration-contract\]/);
+    assert.match(source, /pair-distinct reviewer configuration/i);
+    assert.match(source, /identical evidence payload/i);
+  }
+  assert.match(loop, /\[host-authority-role-launch-contract\]/);
+  assert.match(loop, /serialize role launches/i);
+  assert.match(loop, /pre-execution authority rejection[\s\S]*not a review result/i);
+  for (const source of [loop, eye]) {
+    assert.match(source, /\[self-contained-review-packet-contract\]/);
+    assert.match(source, /full validated receipt projection/i);
+    assert.match(source, /never run bare `omd check`/i);
+    assert.match(source, /advisory warnings?[\s\S]*not automatic RED/i);
+    assert.match(source, /\[review-packet-proof-contract\]/);
+    assert.match(source, /exact `omd proof --check --json` result[\s\S]*`\[\]`/i);
+    assert.match(source, /full packet bytes[\s\S]*role input/i);
+    assert.match(source, /blind[\s\S]*no URLs[\s\S]*provenance/i);
+    assert.match(source, /benchmark applicability[\s\S]*reality boundary/i);
+  }
+  const hand = read('src/agents/hand.agent.yaml').replace(/\s+/g, ' ');
+  assert.match(hand, /\[semantic-heading-order-contract\]/);
+  assert.match(hand, /never skip a heading level/i);
+  assert.match(hand, /\[source-owner-browser-boundary\]/);
+  assert.match(hand, /Never invoke `omd render`, `omd ir`, `omd probe`, `omd lifecycle`, Playwright, browser-rs/);
+  assert.match(hand, /coordinator routes browser observation and every `\.omd` evidence publication after this owner returns/i);
+});
+
+test('production copy projection preserves omitted support and role multiplicity', () => {
+  const hand = read('src/agents/hand.agent.yaml').replace(/\s+/g, ' ');
+  const loop = read('core/protocol/human-design-loop.md').replace(/\s+/g, ' ');
+  for (const source of [hand, loop]) {
+    assert.match(source, /\[copy-role-multiplicity-contract\]/);
+    assert.match(source, /Supporting fact: none[\s\S]*zero support carriers/i);
+    assert.match(source, /visible-string multiset/i);
+  }
+});
+
+test('source-bound type and composition proofs are current before review', () => {
+  const sources = [
+    read('core/protocol/human-design-loop.md'),
+    read('src/agents/typesetter.agent.yaml'),
+    read('src/agents/composer.agent.yaml'),
+    read('src/agents/hand.agent.yaml'),
+    read('src/agents/eye.agent.yaml'),
+  ].map((source) => source.replace(/\s+/g, ' '));
+  for (const source of sources) {
+    assert.match(source, /\[source-bound-proof-currentness\]/);
+    assert.match(source, /omd proof --check/);
+  }
+});
+
 test('scout batches zone-bound captures without debugging browser transport', () => {
   const scout = read('src/agents/scout.agent.yaml').replace(/\s+/g, ' ');
   assert.match(scout, /run `omd ref add-batch` once/);
@@ -836,7 +873,9 @@ test('scout batches zone-bound captures without debugging browser transport', ()
   assert.match(scout, /\.site-component-preview \.usa-button/);
   assert.match(scout, /bound to the same exact zone ID/);
   assert.match(scout, /`omd ref board --input <candidate-assemblies\.json>`/);
-  assert.match(scout, /Do not guess or hand-write the internal board schema/);
+  assert.match(scout, /run `omd schema reference-board` once and copy its exact skeleton and grid constraints/);
+  assert.match(scout, /exactly `grid: \{column,span,order\}`/);
+  assert.match(scout, /never CSS-grid fields such as `columns`, `rows`, or `gap`/);
   assert.match(scout, /requires every candidate to cover every required acquisition zone/);
   assert.match(scout, /If it returns `REF-PRINCIPLE-UNSAFE`, rewrite the same observed rule/);
   assert.match(scout, /This wording repair is not a capture repair batch/);
@@ -853,90 +892,86 @@ test('framer CLI writes its owned frame and acquisition plan without direct file
   assert.match(framer, /Never use a patch or file-write tool/);
 });
 
-test('the selected host model is immutable while OMD adjusts only role effort', () => {
+test('host model inheritance is default and role overrides are invocation-bound', () => {
   const skill = read('src/skills/omd-ultradesign/SKILL.md').replace(/\s+/g, ' ');
-  assert.match(skill, /The user's session model is immutable for this run/);
-  assert.match(skill, /On Codex, omit `model` from every `spawn_agent` call/);
-  assert.match(skill, /on Claude Code, use the installed agent whose metadata says `model: inherit`/);
-  assert.match(skill, /This applies to every named pipeline agent and every ad-hoc worker/);
-  assert.match(skill, /A child `send_message` is progress only, never its handback/);
-  assert.match(skill, /Wait until the child agent state is `completed`/);
-  assert.match(skill, /Allow at least fifteen minutes for its first final state/);
-  assert.match(skill, /Six empty chat polls are not a timeout/);
+  assert.match(skill, /The session model belongs to the user/);
+  assert.match(skill, /Codex child launches omit `model`/);
+  assert.match(skill, /Claude agents use `model: inherit`/);
+  assert.match(skill, /coordinator retains the real child\/process identifier, waits for actual completion/);
 
   const loop = read('core/protocol/human-design-loop.md').replace(/\s+/g, ' ');
   assert.match(loop, /Model ownership belongs to the user/);
   assert.match(loop, /Codex child launches omit `model` and may pass only `reasoning_effort`/);
   assert.match(loop, /Claude agent metadata uses `model: inherit` and the role's `effort`/);
-  assert.match(loop, /A user-selected Luna run remains Luna in the framer, scout, writer, typesetter, composer, sketch, eye, glance, hand, and ad-hoc workers/);
 
   const agents = read('AGENTS.md').replace(/\s+/g, ' ');
-  assert.match(agents, /the user chooses the model; OMD chooses only effort/);
-  assert.match(agents, /A recommendation, benchmark, role name, or belief that another model would perform better is never authority/);
+  assert.match(agents, /the user chooses the model and any invocation override/);
+  assert.match(agents, /Without an explicit host override, a Luna session keeps Luna for every OMD child and a Sol session keeps Sol/);
+  assert.match(agents, /--omd-role-model role=model/);
+  assert.match(agents, /--omd-role-effort role=low\|medium\|high/);
+  assert.match(agents, /A coordinator, role task, or installed agent profile must not invent an override/);
   assert.doesNotMatch(agents, /Sol \\(recommended\\)|Terra xhigh \\(recommended\\)|Luna high \\(recommended\\)/);
 });
 
-test('ultradesign externalizes decisions, deliberation, visual observation, and complete assembly', () => {
+test('codex named roles never combine agent type with a full-history fork', () => {
+  const skill = read('src/skills/omd-ultradesign/SKILL.md').replace(/\s+/g, ' ');
+  assert.match(skill, /Never combine a named `agent_type` with a full-history fork/i);
+  assert.match(skill, /fresh role-bounded prompt/i);
+});
+
+test('the coordinator cannot claim completion without a current immutable final pointer', () => {
+  const skill = read('src/skills/omd-ultradesign/SKILL.md');
+  assert.match(skill, /run `omd completion preflight --activation "\$OMD_ACTIVATION_PATH"`/);
+  assert.match(skill, /MUST NOT say (?:the work|it) is complete/i);
+  assert.match(skill, /final-evidence-v2\.json/);
+  assert.match(skill, /report the exact host-authority blocker/i);
+  assert.match(skill, /never substitute\s+app tests, build output, screenshots, probes, or reviewer prose/i);
+});
+
+test('register comparison guidance separates upstream concepts and preserves host and motion authority', () => {
+  const adr = read('core/protocol/adr/marketing-motion-decision.md').replace(/\s+/g, ' ');
+  const protocol = read('core/protocol/design-deliberation.md').replace(/\s+/g, ' ');
+  const skeleton = INPUT_SKELETONS.find(input => input.name === 'art-direction-check')!;
+  assert.equal(skeleton.command, 'omd art-direction check --input .omd/.cache/art-direction-check.json --json');
+  assert.match(adr, /two or three distinct supported registers/);
+  assert.match(adr, /exactly one evidence-backed rejection for every nonwinner/);
+  assert.match(adr, /distinct concepts in the same register/);
+  assert.match(adr, /representative for a register only after the visible concept comparison/);
+  assert.match(adr, /singleton requires a matching current explicit user register lock/);
+  assert.match(adr, /Visible-evidence-only canonical singletons remain unsupported/);
+  assert.match(adr, /restrained and more-expressive realizations of that same concept while preserving its content-to-form invariants/);
+  assert.match(adr, /register studies, not evidence of distinct concept inventions/);
+  assert.match(adr, /neither a supported second register nor an explicit register lock exists[^.]*do not invent evidence/);
+  assert.match(protocol, /explicit current-user register lock is binding input, not a new fork requiring invented alternatives/);
+  assert.match(protocol, /command does not issue its own authority/);
+  assert.match(protocol, /Missing host publication authority blocks this publication path/);
+  assert.doesNotMatch(protocol, /local-check/);
+  assert.match(skeleton.constraints!.join(' '), /none rejects all pending slots[^;]*; slots:\[\] is valid only when no pending slots exist/);
+  const result = (skeleton.skeleton as { evaluatorResult: { motionResolution: { slots: unknown[] } } }).evaluatorResult;
+  assert.equal(result.motionResolution.slots.length, 1, 'the printed placeholder must not prescribe empty settlement');
+});
+
+test('deep deliberation detail stays externalized behind stage contracts', () => {
   const protocol = read('core/protocol/design-deliberation.md').replace(/\s+/g, ' ');
   assert.match(protocol, /OMD does not request, store, or grade hidden chain-of-thought/);
   assert.match(protocol, /A landing page with a new art direction is L4/);
-  assert.match(protocol, /Domain-brief `surfaces` are pages\/screens/);
   assert.match(protocol, /spawn three fresh `omd-eye` agents concurrently/);
   assert.match(protocol, /before render → observable fact → judgment → exact change → distinct after render → measured result/);
   assert.match(protocol, /zone job → captured reference identity → extracted principle → composition decision ID/);
-  assert.match(protocol, /same concrete model and identical prompt bytes/);
-  assert.match(protocol, /`omd art-direction local-check` accepts only that moderator-owned receipt/);
+  assert.match(protocol, /`omd art-direction check` consumes that moderator-owned receipt through the current host-issued\s+invocation/);
   assert.match(protocol, /The eye is intentionally read-only/);
-  assert.match(protocol, /"id": "<kebab-case-deliberation-id>"/);
-  assert.match(protocol, /"decisionId": "<existing-kebab-case-decision-id>"/);
-  assert.match(protocol, /`position` is one non-empty string, not an object/);
-  assert.match(protocol, /There is no top-level `inputSha256`, perspective `lens`, or other metadata/);
 
   const skill = read('src/skills/omd-ultradesign/SKILL.md').replace(/\s+/g, ' ');
-  assert.match(skill, /`omd depth classify --input \.omd\/depth\.json --json`/);
-  assert.match(skill, /spawn three fresh `omd-eye` contexts concurrently in UX, art-direction, and production perspective modes/);
-  assert.match(skill, /Require `omd deliberate check` to pass/);
-  assert.match(skill, /coordinator must not author or paraphrase them/);
-  assert.match(skill, /When no activation was supplied, use the moderator-bound local lane/);
-  assert.match(skill, /`omd art-direction local-check --input <decision-check\.json>`/);
-  assert.match(skill, /`omd art-direction alternatives-sha --input <alternatives\.json> --json`/);
-  assert.match(skill, /never reimplement canonical JSON hashing in shell or ad-hoc JavaScript/);
-  assert.match(skill, /`omd art-direction check-input`/);
-  assert.match(skill, /Never retype the references array by hand/);
-  assert.match(skill, /A rejected gate is only terminal when an owner role failed/);
-  assert.match(skill, /repair the bytes and rerun the same command/);
-  assert.match(skill, /Run `omd stage resume` first and continue at the stage it names/);
-  assert.match(skill, /`omd stage deliver --stage <stage> --contract <pack-relative\.md>`/);
-  assert.match(skill, /Never end a run because a gate told you to do the next thing/);
-  assert.match(skill, /Never claim a role received a contract without its receipt/);
-  assert.match(skill, /`omd cue --path <file> --symbol <symbol> --field <name>=<value>`/);
-  assert.match(skill, /Cues resolve only from those deterministic inputs/);
-  assert.match(skill, /Record cost at each stage boundary with `omd stage record --stage <stage>`/);
-  assert.match(skill, /`omd complete check <page>`/);
-  assert.match(skill, /It adds no style rule; it only proves the page does what the brief said it would/);
-  assert.match(skill, /`omd locale check` must pass before ship/);
-  assert.match(skill, /Every poll is a full turn/);
-  assert.match(skill, /never poll a capture, render, or build stage more often than every five minutes/);
-  assert.match(skill, /Read once, read what you were given — the coordinator included/);
-  assert.match(skill, /Answer the depth input honestly; every field is a cost lever/);
-  assert.match(skill, /At L1 and L2 the retained judgment roles run at `medium`/);
-  assert.match(skill, /Effort changes depth of thought, never model identity/);
-  assert.match(skill, /`omd schema depth-input` instead of inferring keys from `core\/`/);
-  assert.match(skill, /the OMD CLI spawns `browser-rs` itself over stdio for each capture/);
-  assert.match(skill, /Never start a long-lived `browser-rs`, pick a port, or debug a listening socket/);
-  assert.match(skill, /do not attempt or claim v2 publication/);
-  assert.match(skill, /`omd deliberate preserve --input/);
-  assert.match(skill, /A read-only moderator response is the required success path/);
-  assert.match(skill, /Paste the literal closed `design-deliberation-v1` key skeleton/);
-  assert.match(skill, /use a plain string for each `position`, and return JSON only/);
+  assert.match(skill, /Use `\.omd\/route\.json` as the machine-consumed strategy/);
+  assert.match(skill, /delivered contracts/);
+  assert.match(skill, /omd stage resume/);
+  assert.match(skill, /omd stage deliver --stage <stage> --contract <pack-relative-path>/);
+  assert.match(skill, /File\/symbol cues come from `omd cue`/);
 
   const framer = read('src/agents/framer.agent.yaml').replace(/\s+/g, ' ');
   assert.match(framer, /You also own `\.omd\/acquisition-plan\.json`/);
-  assert.match(framer, /`omd acquisition set --zones/);
   const hand = read('src/agents/hand.agent.yaml').replace(/\s+/g, ' ');
   assert.match(hand, /You own `\.omd\/observations\/\*\.json`/);
-  assert.match(hand, /every required zone must bind reference identity → principle → composer decision → production selector → final fidelity evidence/);
   const eye = read('src/agents/eye.agent.yaml').replace(/\s+/g, ' ');
   assert.match(eye, /In L4 perspective mode/);
-  assert.match(eye, /Do not majority-vote/);
 });

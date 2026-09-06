@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
+import { packOfflineWorkspaceDependencies } from './helpers/packed-install.ts';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const NPM = process.platform === 'win32' ? 'npm.cmd' : 'npm';
@@ -16,7 +17,7 @@ function run(command: string, args: readonly string[], cwd: string, input?: stri
   return result;
 }
 
-test('packed reviewer evidence proxy starts its shipped MCP runtime', () => {
+test('packed reviewer evidence proxy rejects caller-forged launch configuration', () => {
   const temporary = mkdtempSync(join(tmpdir(), 'omd-installed-reviewer-proxy-'));
   const packs = join(temporary, 'packs');
   const consumer = join(temporary, 'consumer');
@@ -25,7 +26,8 @@ test('packed reviewer evidence proxy starts its shipped MCP runtime', () => {
     const packed = run(NPM, ['pack', '--json', '--ignore-scripts', '--pack-destination', packs], ROOT);
     assert.equal(packed.status, 0, packed.stderr);
     const archive = join(packs, (JSON.parse(packed.stdout) as readonly { filename: string }[])[0]!.filename);
-    const installed = run(NPM, ['install', '--offline', '--ignore-scripts', '--no-audit', '--no-fund', archive], consumer);
+    const dependencies = packOfflineWorkspaceDependencies(ROOT, packs);
+    const installed = run(NPM, ['install', '--offline', '--ignore-scripts', '--no-audit', '--no-fund', archive, ...dependencies], consumer);
     assert.equal(installed.status, 0, installed.stderr);
     const packageRoot = join(consumer, 'node_modules', '@3xhaust', 'oh-my-design');
     const manifest = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8')) as { bin: Record<string, string> };
@@ -47,9 +49,9 @@ test('packed reviewer evidence proxy starts its shipped MCP runtime', () => {
     const started = process.platform === 'win32'
       ? run(process.execPath, [executable, ...proxyArgs], temporary, '{"jsonrpc":"2.0","id":1,"method":"initialize"}\n')
       : run(executable, proxyArgs, temporary, '{"jsonrpc":"2.0","id":1,"method":"initialize"}\n');
-    assert.equal(started.status, 0, started.stderr);
-    assert.match(started.stdout, /"serverInfo":\{"name":"omd-reviewer-evidence-proxy","version":"1"\}/);
-    assert.doesNotMatch(started.stderr, /ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING/);
+    assert.notEqual(started.status, 0);
+    assert.match(started.stderr, /requires the emitted process-bound host-specific reviewer configuration/);
+    assert.doesNotMatch(started.stdout, /serverInfo/);
   } finally { rmSync(temporary, { recursive: true, force: true }); }
 });
 
@@ -62,7 +64,8 @@ test('packed harness v2 ships an authoritative runner bin rather than a test lau
     const packed = run(NPM, ['pack', '--json', '--ignore-scripts', '--pack-destination', packs], ROOT);
     assert.equal(packed.status, 0, packed.stderr);
     const archive = join(packs, (JSON.parse(packed.stdout) as readonly { filename: string }[])[0]!.filename);
-    const installed = run(NPM, ['install', '--offline', '--ignore-scripts', '--no-audit', '--no-fund', archive], consumer);
+    const dependencies = packOfflineWorkspaceDependencies(ROOT, packs);
+    const installed = run(NPM, ['install', '--offline', '--ignore-scripts', '--no-audit', '--no-fund', archive, ...dependencies], consumer);
     assert.equal(installed.status, 0, installed.stderr);
     const packageRoot = join(consumer, 'node_modules', '@3xhaust', 'oh-my-design');
     const manifest = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8')) as { bin: Record<string, string>; scripts: Record<string, string> };

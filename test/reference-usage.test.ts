@@ -6,7 +6,7 @@ import { join, relative } from 'node:path';
 import test, { type TestContext } from 'node:test';
 import { persistImageFragment } from '../core/ref/image-fragment.ts';
 import { refIdentity } from '../core/ref/identity.ts';
-import { motionResolutionProjectionSha256, persistSettledReferenceSelection, readPreReferenceSelectionV2, readReferenceSelectionV2, referenceSelectionV2Sha256, resolveMotionProjection, selectReferenceCandidateV2, type ReferenceSelectionV2 } from '../core/ref/reference-selection.ts';
+import { motionResolutionProjectionSha256, persistMotionResolutionProjection, persistSettledReferenceSelection, projectRunInvocationSha256, readPreReferenceSelectionV2, readReferenceSelectionV2, referenceSelectionV2Sha256, resolveMotionProjection, selectReferenceCandidateV2, type ReferenceSelectionV2 } from '../core/ref/reference-selection.ts';
 import { createReferenceHandoffReceipt, writeReferenceHandoffReceipt } from '../core/ref/reference-handoff.ts';
 import { parseReferenceUsageV2, type ReferenceUsageInput, validateReferenceUsage } from '../core/ref/reference-usage.ts';
 import { formatReferenceReport, referenceReportPath, referenceReportSnapshot } from '../core/ref/reference-report.ts';
@@ -15,8 +15,9 @@ import { prepareReferenceUsage, readValidatedReferenceUsage } from '../core/ref/
 import { writeReferenceUsageRecord } from '../core/ref/reference-usage-files.ts';
 import { refImagePath, saveRef } from '../core/ref/store.ts';
 import type { Blueprint, Invariants, Reference } from '../core/types.ts';
-import { createTestProjectRunInvocation, createTestProjectWriteAdapter } from './helpers/project-write.ts';
-import { ART_DIRECTION_POINTER_SCHEMA_VERSION, ART_DIRECTION_RECORD_SCHEMA_VERSION, artDirectionSha256 } from '../core/art-direction/schema.ts';
+import { authorizeTestProjectRunPayloads, createTestProjectRunInvocation, createTestProjectWriteAdapter } from './helpers/project-write.ts';
+import { ART_DIRECTION_POINTER_SCHEMA_VERSION, LEGACY_ART_DIRECTION_RECORD_SCHEMA_VERSION, artDirectionSha256 } from '../core/art-direction/schema.ts';
+import { writeObservationV2 } from '../core/runtime/observation.ts';
 
 const chunk = (type: string, bytes: Buffer): Buffer => {
   const length = Buffer.alloc(4); length.writeUInt32BE(bytes.length);
@@ -49,14 +50,34 @@ const persistDecisionSettlement = (
     rejectionCondition: 'A stronger lawful alternative is selected.',
   });
   const alternatives = [alternative('quiet'), alternative('confident'), alternative('showpiece')];
+  const selectedAlternative = alternatives[0]!;
+  const assessmentBytes = Buffer.from(canonicalJson({ assessments: [] }));
+  const resultBytes = Buffer.from(canonicalJson({
+    route: '/shop',
+    taskIds: ['T1', 'T2'],
+    boardSha256: selection.captureSha256,
+    preSelectionSha256: referenceSelectionV2Sha256(selection),
+    handoffSha256: handoff.payloadSha256,
+    intentSha256: hash('intent'),
+    alternativesSha256: hash(canonicalJson(alternatives)),
+    winner: 'quiet',
+    motionResolution: {
+      motionDecision: 'none',
+      slots: [{ slotId: 'footer-links', obligationDisposition: 'rejected', obligationReason: 'Motion evidence was reviewed and rejected for the static implementation.' }],
+    },
+  }));
+  authorizeTestProjectRunPayloads(root, invocation, [
+    { purpose: 'evaluator-assessment', payload: assessmentBytes },
+    { purpose: 'evaluator-result', payload: resultBytes },
+  ]);
   const motion = resolveMotionProjection({
     activationSha256: artDirectionSha256(invocation.activation), alternativesSha256: hash(canonicalJson(alternatives)),
-    handoffSha256: handoff.payloadSha256, evaluatorInvocationSha256: hash('invocation'),
-    evaluatorPayloadSha256: hash('payload'), evaluatorResultSha256: hash('result'),
+    handoffSha256: handoff.payloadSha256, evaluatorInvocationSha256: projectRunInvocationSha256(invocation),
+    evaluatorPayloadSha256: sha256(assessmentBytes), evaluatorResultSha256: sha256(resultBytes),
     motionDecision: 'none', slots: [{ slotId: 'footer-links', obligationDisposition: 'rejected', obligationReason: 'Motion evidence was reviewed and rejected for the static implementation.' }], selection,
   });
-  const motionSha256 = motionResolutionProjectionSha256(motion);
-  writer.write(`.omd/motion-resolutions/sha256-${motionSha256}.json`, canonicalJson(motion));
+  const persistedMotion = persistMotionResolutionProjection(root, { ...motion, selection }, { assessmentBytes, resultBytes }, invocation);
+  const motionSha256 = motionResolutionProjectionSha256(persistedMotion.projection);
   const settledSelection = persistSettledReferenceSelection(root, selection, motionSha256, invocation);
   const decision = {
     schemaVersion: 'art-direction-v1' as const, activationSha256: motion.activationSha256,
@@ -65,17 +86,18 @@ const persistDecisionSettlement = (
     motionResolutionProjectionSha256: motionSha256, settledSelectionSha256: referenceSelectionV2Sha256(settledSelection),
     authorInvocationSha256: motion.evaluatorInvocationSha256, authorPayloadSha256: motion.evaluatorPayloadSha256,
     authorResultSha256: motion.evaluatorResultSha256, currentUserBeatExceptionReceiptSha256: hash('no-exception'),
-    route: '/shop', source: 'agent-evidence' as const, selectedRegister: 'quiet' as const, motionDecision: 'none' as const,
-    selectedStaticReferenceSlotIds: ['hero-card'], selectedMotionReferenceSlotIds: [], consideredAlternatives: alternatives,
-    conceptRole: 'Quiet local commerce hierarchy', rejectedAlternatives: [
-      { register: 'confident' as const, citedReferenceSlotIds: ['hero-card'], reason: 'Quiet best supports the local hierarchy.' },
-      { register: 'showpiece' as const, citedReferenceSlotIds: ['hero-card'], reason: 'Showpiece overstates the local hierarchy.' },
-    ],
+    route: '/shop', source: 'agent-evidence' as const, selectedRegister: selectedAlternative.register, motionDecision: selectedAlternative.motionHypothesis,
+    selectedStaticReferenceSlotIds: selectedAlternative.staticReferenceSlotIds, selectedMotionReferenceSlotIds: selectedAlternative.motionReferenceSlotIds, consideredAlternatives: alternatives,
+    conceptRole: selectedAlternative.conceptRole, rejectedAlternatives: alternatives.slice(1).map((alternative) => ({
+      register: alternative.register,
+      citedReferenceSlotIds: [...alternative.staticReferenceSlotIds, ...alternative.motionReferenceSlotIds],
+      reason: alternative.rejectionCondition,
+    })),
     implementationLane: 'browser', fallbackPath: 'CSS and SVG static fallback',
     performanceAccessibilityBudget: 'Within the declared budget',
   };
   const record = {
-    schemaVersion: ART_DIRECTION_RECORD_SCHEMA_VERSION, decision, decisionSha256: artDirectionSha256(decision),
+    schemaVersion: LEGACY_ART_DIRECTION_RECORD_SCHEMA_VERSION, decision, decisionSha256: artDirectionSha256(decision),
     referenceHandoffSha256: handoff.payloadSha256, intentLedgerSha256: decision.intentSha256,
     activationSha256: decision.activationSha256, beatIds: ['B-1'],
   };
@@ -86,6 +108,7 @@ const persistDecisionSettlement = (
     schemaVersion: ART_DIRECTION_POINTER_SCHEMA_VERSION, record: recordPath, sha256: artDirectionSha256Value,
   }));
   writeReferenceHandoffReceipt(root, 'composer', invocation);
+  writeReferenceHandoffReceipt(root, 'hand', invocation);
   return settledSelection;
 };
 
@@ -108,7 +131,26 @@ const fixture = (context: TestContext): Fixture => {
     { slotId: 'footer-links', obligationDisposition: 'not-applicable', obligationReason: 'Available motion awaits evaluator resolution.' },
   ], invocation);
   const settledSelection = persistDecisionSettlement(root, selection, invocation, writer);
-  writeFileSync(join(root, '.omd', 'attribution.md'), '| Group | Source |\n|---|---|\n| color | theory/local |\n'); writeFileSync(join(root, 'src', 'shop.ts'), 'export const shop = true;\n');
+  writeFileSync(join(root, '.omd', 'attribution.md'), '| Group | Source |\n|---|---|\n| color | theory/local |\n');
+  writeFileSync(join(root, 'src', 'shop.ts'), 'export const shop = true;\n');
+  writeFileSync(join(root, 'src', 'shop-hero.observation.ts'), canonicalJson({ schema: 'reference-production-observation-v1', slotId: 'hero-card', route: '/shop', component: 'ShopHero', selector: '[data-omd="shop-hero"]', taskIds: ['T1'], buildSha256: 'b'.repeat(64) }));
+  writeFileSync(join(root, 'src', 'shop-mosaic.observation.ts'), canonicalJson({ schema: 'reference-production-observation-v1', slotId: 'mosaic-fragment', route: '/shop', component: 'ShopHero', selector: '[data-omd="shop-hero"]', taskIds: ['T1'], buildSha256: 'b'.repeat(64) }));
+  writeFileSync(join(root, 'src', 'shop-footer.observation.ts'), canonicalJson({ schema: 'reference-production-observation-v1', slotId: 'footer-links', route: '/shop', component: 'ShopFooter', selector: '[data-omd="shop-footer"]', taskIds: ['T2'], buildSha256: 'b'.repeat(64) }));
+  const buildIdentityPath = '.omd/build-identity.json';
+  const buildIdentityBytes = canonicalJson({ schemaVersion: 'omd-build-identity-v1', packageVersion: '1.0.0', buildSha256: 'b'.repeat(64), sourceSkillSha256: 'c'.repeat(64) });
+  writeFileSync(join(root, buildIdentityPath), buildIdentityBytes);
+  writeObservationV2(root, {
+    currentArtifact: { path: buildIdentityPath, sha256: sha256(Buffer.from(buildIdentityBytes)) },
+    buildSha256: 'b'.repeat(64),
+    observedAt: '2026-07-18T00:00:00.000Z',
+    evidence: {
+      referenceProductionObservations: [
+        { schema: 'reference-production-observation-v1', slotId: 'hero-card', route: '/shop', component: 'ShopHero', selector: '[data-omd="shop-hero"]', taskIds: ['T1'], buildSha256: 'b'.repeat(64) },
+        { schema: 'reference-production-observation-v1', slotId: 'mosaic-fragment', route: '/shop', component: 'ShopHero', selector: '[data-omd="shop-hero"]', taskIds: ['T1'], buildSha256: 'b'.repeat(64) },
+        { schema: 'reference-production-observation-v1', slotId: 'footer-links', route: '/shop', component: 'ShopFooter', selector: '[data-omd="shop-footer"]', taskIds: ['T2'], buildSha256: 'b'.repeat(64) },
+      ],
+    },
+  }, writer);
   return { root, invocation, writer, selection: settledSelection };
 };
 const usageRows = (value: Fixture) => {
@@ -117,7 +159,17 @@ const usageRows = (value: Fixture) => {
     if (slot === undefined) throw new Error(`fixture must select ${slotId}`);
     return slot.obligationDisposition === 'used' ? 'used' : slot.signal === 'anti-reference' ? 'anti-reference' : 'rejected';
   };
-  return [{ slotId: 'hero-card', status: statusFor('hero-card'), target: { route: '/shop', component: 'ShopHero', selector: '[data-omd="shop-hero"]' }, borrowedProperties: ['vertical hierarchy'], nonBorrowedProperties: ['source copy'], transformation: 'Rebuilt with local tokens.', evidence: { path: 'src/shop.ts', selector: '[data-omd="shop-hero"]' }, verificationNote: 'Rendered hero is independently implemented.' }, { slotId: 'mosaic-fragment', status: statusFor('mosaic-fragment'), target: { route: '/shop', component: 'ShopHero', selector: '[data-omd="shop-hero"]' }, borrowedProperties: [], nonBorrowedProperties: ['source pixels and composition'], transformation: 'Used a local generated gradient instead.', evidence: { path: 'src/shop.ts', selector: '[data-omd="shop-hero"]' }, verificationNote: 'No captured image bytes ship.' }, { slotId: 'footer-links', status: statusFor('footer-links'), target: { route: '/shop', component: 'ShopFooter', selector: '[data-omd="shop-footer"]' }, borrowedProperties: [], nonBorrowedProperties: ['dense source grouping'], transformation: 'Deliberately expanded local link spacing.', evidence: { path: 'src/shop.ts', selector: '[data-omd="shop-footer"]' }, verificationNote: 'The final footer rejects the observed grouping.' }];
+  const evidence = (path: string, selector: string) => ({ path, selector, sha256: sha256(readFileSync(join(value.root, path))) });
+  const productionObservation = (slotId: string, target: { readonly route: string; readonly component: string; readonly selector: string }, taskIds: readonly string[]) => ({
+    schema: 'reference-production-observation-v1' as const, slotId, ...target, taskIds, buildSha256: 'b'.repeat(64),
+  });
+  const heroTarget = { route: '/shop', component: 'ShopHero', selector: '[data-omd="shop-hero"]' };
+  const footerTarget = { route: '/shop', component: 'ShopFooter', selector: '[data-omd="shop-footer"]' };
+  return [
+    { slotId: 'hero-card', taskIds: ['T1'], status: statusFor('hero-card'), target: heroTarget, borrowedProperties: ['vertical hierarchy'], nonBorrowedProperties: ['source copy'], transformation: 'Rebuilt with local tokens.', evidence: evidence('src/shop-hero.observation.ts', heroTarget.selector), productionObservation: productionObservation('hero-card', heroTarget, ['T1']), verificationNote: 'Rendered hero is independently implemented.' },
+    { slotId: 'mosaic-fragment', taskIds: ['T1'], status: statusFor('mosaic-fragment'), target: heroTarget, borrowedProperties: [], nonBorrowedProperties: ['source pixels and composition'], transformation: 'Used a local generated gradient instead.', evidence: evidence('src/shop-mosaic.observation.ts', heroTarget.selector), productionObservation: productionObservation('mosaic-fragment', heroTarget, ['T1']), verificationNote: 'No captured image bytes ship.' },
+    { slotId: 'footer-links', taskIds: ['T2'], status: statusFor('footer-links'), target: footerTarget, borrowedProperties: [], nonBorrowedProperties: ['dense source grouping'], transformation: 'Deliberately expanded local link spacing.', evidence: evidence('src/shop-footer.observation.ts', footerTarget.selector), productionObservation: productionObservation('footer-links', footerTarget, ['T2']), verificationNote: 'The final footer rejects the observed grouping.' },
+  ];
 };
 const recordUsage = (value: Fixture, input: ReferenceUsageInput) => {
   const usage = prepareReferenceUsage(value.root, input);
@@ -206,6 +258,10 @@ test('usage ledger rejects incomplete, ambiguous, injected, and non-selected row
   assert.throws(() => recordUsage(value, { rows: [{ ...first, verificationNote: 'ALM\u061cLRM\u200eRLM\u200f' }, ...rows.slice(1)] }));
   assert.throws(() => recordUsage(value, { rows: [{ ...first, borrowedProperties: ['[x](https://source.example)'] }, ...rows.slice(1)] }));
   assert.throws(() => recordUsage(value, { rows: [{ ...first, evidence: { ...first.evidence, path: '../outside.ts' } }, ...rows.slice(1)] }));
+  assert.throws(() => recordUsage(value, { rows: [{ ...first, evidence: { ...first.evidence, sha256: '0'.repeat(64) } }, ...rows.slice(1)] }));
+  assert.throws(() => recordUsage(value, { rows: [{ ...first, productionObservation: { ...first.productionObservation, component: 'ForgedComponent' } }, ...rows.slice(1)] }));
+  assert.throws(() => recordUsage(value, { rows: [{ ...first, taskIds: ['T2'], productionObservation: { ...first.productionObservation, taskIds: ['T2'] } }, ...rows.slice(1)] }), /taskIds/);
+  assert.throws(() => recordUsage(value, { rows: [{ ...first, evidence: { ...first.evidence, path: 'src/self-authored.usage.json' } }, ...rows.slice(1)] }), /\.usage\.json/);
   const persisted = recordUsage(value, { rows });
   assert.throws(() => parseReferenceUsageV2({ ...persisted, unrecognized: 'field' }));
 });
@@ -215,19 +271,28 @@ test('usage ledger rejects stale upstream records and missing or symlinked produ
   const stale = fixture(context); recordUsage(stale, { rows: usageRows(stale) }); writeFileSync(join(stale.root, '.omd', 'attribution.md'), 'changed\n');
   const staleHash = fixture(context); recordUsage(staleHash, { rows: usageRows(staleHash) }); const stalePath = join(staleHash.root, '.omd', 'reference-usage-v2.json'); writeFileSync(stalePath, readFileSync(stalePath, 'utf8').replace(/"captureSha256":"[0-9a-f]{64}"/, `"captureSha256":"${'0'.repeat(64)}"`));
   const replacedBoard = fixture(context); recordUsage(replacedBoard, { rows: usageRows(replacedBoard) }); const boardPath = join(replacedBoard.root, '.omd', 'reference-board.json'); writeFileSync(boardPath, readFileSync(boardPath, 'utf8').replace('Selected clean-room assembly', 'Replacement assembly'));
-  const missing = fixture(context); recordUsage(missing, { rows: usageRows(missing) }); rmSync(join(missing.root, 'src', 'shop.ts'));
-  const linked = fixture(context); symlinkSync(join(linked.root, 'src', 'shop.ts'), join(linked.root, 'src', 'linked.ts'));
+  const missing = fixture(context); recordUsage(missing, { rows: usageRows(missing) }); rmSync(join(missing.root, 'src', 'shop-hero.observation.ts'));
+  const linked = fixture(context); symlinkSync(join(linked.root, 'src', 'shop-hero.observation.ts'), join(linked.root, 'src', 'linked.ts'));
   const linkedRows = usageRows(linked).map((row) => ({ ...row, evidence: { ...row.evidence, path: 'src/linked.ts' } }));
   const swapped = fixture(context); recordUsage(swapped, { rows: usageRows(swapped) }); const pointerPath = join(swapped.root, '.omd', 'reference-pre-selection-v2.json'); const pointer = JSON.parse(readFileSync(pointerPath, 'utf8')) as { schemaVersion: string; record: string; sha256: string }; writeFileSync(pointerPath, canonicalJson({ ...pointer, record: `pre-reference-selections/sha256-${referenceSelectionV2Sha256(readReferenceSelectionV2(swapped.root))}.json` }));
   const missingRecord = fixture(context); recordUsage(missingRecord, { rows: usageRows(missingRecord) }); const missingPointer = JSON.parse(readFileSync(join(missingRecord.root, '.omd', 'reference-pre-selection-v2.json'), 'utf8')) as { record: string }; rmSync(join(missingRecord.root, '.omd', missingPointer.record));
   const linkedPointer = fixture(context); recordUsage(linkedPointer, { rows: usageRows(linkedPointer) }); const linkedPointerPath = join(linkedPointer.root, '.omd', 'reference-pre-selection-v2.json'); rmSync(linkedPointerPath); symlinkSync(join(linkedPointer.root, '.omd', 'reference-selection-v2.json'), linkedPointerPath);
+  const staleObservation = fixture(context);
+  recordUsage(staleObservation, { rows: usageRows(staleObservation) });
+  const buildIdentityBytes = readFileSync(join(staleObservation.root, '.omd', 'build-identity.json'));
+  writeObservationV2(staleObservation.root, {
+    currentArtifact: { path: '.omd/build-identity.json', sha256: sha256(buildIdentityBytes) },
+    buildSha256: 'b'.repeat(64),
+    observedAt: '2026-07-19T00:00:00.000Z',
+    evidence: { referenceProductionObservations: [usageRows(staleObservation)[0]!.productionObservation] },
+  }, staleObservation.writer);
 
   // When / Then: changed bindings, absence, and symlink indirection cannot validate or record usage.
-  assert.throws(() => validateReferenceUsage(stale.root)); assert.throws(() => validateReferenceUsage(staleHash.root)); assert.throws(() => validateReferenceUsage(replacedBoard.root)); assert.throws(() => validateReferenceUsage(missing.root)); assert.throws(() => recordUsage(linked, { rows: linkedRows })); assert.throws(() => validateReferenceUsage(swapped.root)); assert.throws(() => validateReferenceUsage(missingRecord.root)); assert.throws(() => validateReferenceUsage(linkedPointer.root));
+  assert.throws(() => validateReferenceUsage(stale.root)); assert.throws(() => validateReferenceUsage(staleHash.root)); assert.throws(() => validateReferenceUsage(replacedBoard.root)); assert.throws(() => validateReferenceUsage(missing.root)); assert.throws(() => recordUsage(linked, { rows: linkedRows })); assert.throws(() => validateReferenceUsage(swapped.root)); assert.throws(() => validateReferenceUsage(missingRecord.root)); assert.throws(() => validateReferenceUsage(linkedPointer.root)); assert.throws(() => validateReferenceUsage(staleObservation.root), /host-observed/);
 });
 
 test('usage validation rejects every substituted settlement carrier', (context) => {
-  for (const carrier of ['art-direction-pointer', 'art-direction-record', 'art-direction-handoff', 'motion-resolution', 'settled-selection', 'composer-handoff'] as const) {
+  for (const carrier of ['art-direction-pointer', 'art-direction-record', 'art-direction-handoff', 'motion-resolution', 'settled-selection', 'composer-handoff', 'hand-handoff'] as const) {
     const value = fixture(context);
     recordUsage(value, { rows: usageRows(value) });
     const pointerPath = join(value.root, '.omd', 'art-direction.json');
@@ -241,6 +306,7 @@ test('usage validation rejects every substituted settlement carrier', (context) 
       'motion-resolution': join(value.root, '.omd', 'motion-resolutions', `sha256-${record.decision.motionResolutionProjectionSha256}.json`),
       'settled-selection': join(value.root, '.omd', 'settled-reference-selections', `sha256-${record.decision.settledSelectionSha256}.json`),
       'composer-handoff': join(value.root, '.omd', 'reference-handoffs', 'composer.json'),
+      'hand-handoff': join(value.root, '.omd', 'reference-handoffs', 'hand.json'),
     };
     if (carrier === 'art-direction-pointer') {
       const current = JSON.parse(readFileSync(paths[carrier], 'utf8')) as { sha256: string };
@@ -259,7 +325,7 @@ test('report generation never leaks raw artifact paths and preserves a prior rep
   const value = fixture(context); recordUsage(value, { rows: usageRows(value) }); const report = generateReport(value); const path = referenceReportPath(value.root); const repeat = generateReport(value);
 
   // When: production evidence disappears after the prior report was atomically published.
-  const before = readFileSync(path); rmSync(join(value.root, 'src', 'shop.ts'));
+  const before = readFileSync(path); rmSync(join(value.root, 'src', 'shop-hero.observation.ts'));
 
   // Then: the chat report excludes raw artifact carriers and a failed refresh preserves prior bytes.
   assert.equal(repeat, report); assert.deepEqual(readFileSync(path), Buffer.from(report)); assert.match(report, /pinterest\.example\/pin\/handmade-tiles/); assert.match(report, /warm tile mosaic, top-right image fragment/); assert.match(report, /Carry only hierarchy/); assert.doesNotMatch(report, /\.\./); assert.doesNotMatch(report, /imagePath|imageSha256|\.\.\//); assert.throws(() => generateReport(value)); assert.deepEqual(readFileSync(path), before);

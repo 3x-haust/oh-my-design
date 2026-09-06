@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { STAGES, readDeliveryReceipts, requireStage, resolveRunState } from '../core/stage/contract.ts';
+import { publishTestAdaptiveRoute } from './helpers/project-write.ts';
 import { evaluateStageBudget, readStageUsage, serializeStageUsage, STAGE_USAGE_LOG, STAGE_USAGE_SCHEMA, stageCosts } from '../core/stage/usage.ts';
 
 // Stage state is the loop's answer to a run that died mid-stage or lost its context to compaction.
@@ -22,6 +23,16 @@ function write(dir: string, relative: string, content: string): void {
   mkdirSync(join(path, '..'), { recursive: true });
   writeFileSync(path, content);
 }
+
+test('content grain stage is owned by Framer and delivers the Grain artifact', () => {
+  const stage = STAGES.find(({ id }) => id === 'content-grain');
+  assert.deepEqual(stage, {
+    id: 'content-grain',
+    owner: 'omd-framer',
+    artifact: '.omd/content-grain.json',
+    requiredContracts: ['protocol/content-grain.md'],
+  });
+});
 
 test('every stage names a real owner, artifact, and existing pack contract', () => {
   assert.ok(STAGES.length >= 10);
@@ -75,18 +86,37 @@ test('delivery unblocks a stage and an edited contract invalidates its receipt',
   assert.deepEqual(stale.undeliveredContracts, ['protocol/human-design-loop.md', 'theory/ux.md']);
 });
 
+test('an adaptive route preserves the selected model stage order instead of the canonical table order', () => {
+  const dir = project();
+  const input = JSON.parse(readFileSync(fileURLToPath(
+    new URL('fixtures/adaptive-flow/medical-new-product.json', import.meta.url),
+  ), 'utf8'));
+  const invocation = publishTestAdaptiveRoute(dir, input);
+
+  const state = resolveRunState(dir, PACK, invocation);
+  assert.deepEqual(
+    state.stages.map((stage) => stage.stage),
+    ['frame', 'content-grain', 'scout', 'reference-board', 'copy', 'composition'],
+  );
+  assert.equal(state.current, 'frame');
+});
+
 test('run state names the current stage and its blocking contracts after a partial run', () => {
   const dir = project();
   for (const [relative, body] of [
     ['.omd/domain-brief.json', '{}'],
     ['.omd/depth.json', '{}'],
     ['.omd/frame.md', '# frame'],
+    ['.omd/content-grain.json', '{}'],
     ['.omd/acquisition-plan.json', '{}'],
     ['.omd/scout.md', '# scout'],
   ] as const) write(dir, relative, body);
 
   const state = resolveRunState(dir, PACK);
-  assert.deepEqual(state.completed, ['domain', 'depth', 'frame', 'acquisition', 'scout']);
+  assert.deepEqual(
+    state.completed,
+    ['domain', 'depth', 'frame', 'content-grain', 'acquisition', 'scout'],
+  );
   assert.equal(state.current, 'reference-board');
 
   const resumed = JSON.parse(run(['stage', 'resume', '--json'], dir).stdout);

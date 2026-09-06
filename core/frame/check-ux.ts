@@ -1,4 +1,5 @@
-import type { Violation } from '../types.ts';
+import { parse } from 'yaml';
+import type { Frame, Violation } from '../types.ts';
 import { readFrame } from './index.ts';
 
 export type UxSurface = 'marketing' | 'product' | 'editorial' | 'mixed';
@@ -119,7 +120,20 @@ function taskCoverageMatrixSections(body: string): string[] {
  */
 export function checkFrameUx(cwd: string): Violation[] {
   const frame = readFrame(cwd);
-  if (!frame) return [];
+  return frame === null ? [] : validateFrameUx(frame);
+}
+
+export function validateFrameUxBytes(bytes: Uint8Array): Violation[] {
+  const text = Buffer.from(bytes).toString('utf8');
+  if (!text.startsWith('---\n')) return validateFrameUx({ body: text });
+  const closeIndex = text.indexOf('\n---', 3);
+  if (closeIndex === -1) return validateFrameUx({ body: text });
+  const frontmatter = (parse(text.slice(4, closeIndex)) ?? {}) as Partial<Frame>;
+  const rest = text.slice(closeIndex + 4);
+  return validateFrameUx({ ...frontmatter, body: rest.startsWith('\n') ? rest.slice(1) : rest });
+}
+
+function validateFrameUx(frame: Frame): Violation[] {
 
   const missing: string[] = [];
 

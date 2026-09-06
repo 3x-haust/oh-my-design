@@ -81,13 +81,15 @@ test('patchConfigToml registers agents and enables required features', () => {
   }
 });
 
-test('patchConfigToml preserves the user settings it did not author', () => {
-  const cfg = parseToml(patchConfigToml(EXISTING_TOML, { agents: AGENTS })) as unknown as CodexConfig;
+test('patchConfigToml preserves the user settings and foreign hooks it did not author', () => {
+  const foreignHook = '\n[hooks.state."foreign-plugin:hooks.json:session_start:0:0"]\ntrusted_hash = "sha256:abc123"\n';
+  const cfg = parseToml(patchConfigToml(`${EXISTING_TOML}${foreignHook}`, { agents: AGENTS })) as unknown as CodexConfig;
   assert.equal(cfg.model, 'gpt-5.5');
   assert.equal(must(cfg.features, 'features').js_repl, false, 'must merge features, never clobber');
   const agents = must(cfg.agents, 'agents');
   assert.equal(agents.max_threads, 1000);
   assert.equal(must(agents.explorer, 'explorer').config_file, './agents/explorer.toml');
+  assert.match(patchConfigToml(`${EXISTING_TOML}${foreignHook}`, { agents: AGENTS }), /foreign-plugin:hooks\.json:session_start:0:0/);
 });
 
 test('patchConfigToml is idempotent — patching twice equals patching once', () => {
@@ -209,6 +211,7 @@ test('Claude plugin install registers the plugin, prunes any direct duplicate, a
     assert.ok(settings.permissions?.allow?.includes('Bash(omd composition:*)'));
     assert.ok(settings.permissions?.allow?.includes('Bash(shasum:*)'));
     assert.ok(settings.permissions?.allow?.includes('Bash(omd source:*)'));
+    assert.ok(settings.permissions?.allow?.includes('Bash(omd workflow:*)'));
     assert.equal(
       settings.hooks?.PreToolUse?.some((entry) => entry.hooks.some((hook) => hook.command.includes('omd.ts'))) ?? false,
       false,
@@ -450,8 +453,11 @@ test('install links the omd CLI to this build so omd pack dir serves the current
     const changes = await install([detected], { browser: UNSUPPORTED_BROWSER.browser, cliBinDir: binDir });
     assert.ok(lstatSync(join(binDir, 'omd')).isSymbolicLink(), 'omd is a symlink');
     assert.ok(lstatSync(join(binDir, 'oh-my-design')).isSymbolicLink(), 'oh-my-design is a symlink');
+    assert.ok(lstatSync(join(binDir, 'omd-codex')).isSymbolicLink(), 'omd-codex is a symlink');
     assert.equal(readlinkSync(join(binDir, 'omd')), OMD_SHIM);
     assert.equal(readlinkSync(join(binDir, 'oh-my-design')), INSTALL_SHIM);
+    assert.equal(readlinkSync(join(binDir, 'omd-codex')), join(PACKAGE_ROOT, 'bin', 'omd-codex.mjs'));
+    assert.ok(changes.some((c) => c.startsWith('cli: linked omd-codex -> ') && c.endsWith('omd-codex.mjs')));
     assert.ok(changes.some((c) => c.startsWith('cli: linked omd -> ') && c.endsWith('omd.mjs')));
 
     const result = (await doctor([detected], { ...UNSUPPORTED_BROWSER_DOCTOR, cliBinDir: binDir }))[0]!;

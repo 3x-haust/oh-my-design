@@ -2,6 +2,7 @@ import {
   type ActivationContext,
   ActivationContextValidationError,
   type HostPayloadAuthorizationPurpose,
+  requireImmutableInvocationIdentity,
   isHostDerivedLocalCliInvocation,
   requireHostPayloadAuthorization,
   requireSameBuildActivation,
@@ -48,6 +49,7 @@ export function validateCurrentProjectRun(invocation: ProjectRunInvocation): Act
       throw new InvocationValidationError('current run identity is required');
     }
     const activation = validateActivationContext(invocation.activation);
+    requireImmutableInvocationIdentity(invocation);
     requireSameBuildActivation(
       activation,
       invocation.current.buildSha256,
@@ -96,6 +98,24 @@ function requirePurposeBoundPayload(
   return activation;
 }
 
+/** An adaptive route is authority only when the launcher bound its immutable manifest bytes. */
+export function requireAdaptiveRouteAuthorityAuthorization(
+  invocation: ProjectRunInvocation,
+  projectRoot: string,
+  authorityBytes: Uint8Array,
+): ActivationContext {
+  return requirePurposeBoundPayload(invocation, projectRoot, 'adaptive-route-authority', authorityBytes);
+}
+
+/** An AI asset decision is committed only when the launcher bound its project/invocation payload. */
+export function requireAiAssetDecisionAuthorization(
+  invocation: ProjectRunInvocation,
+  projectRoot: string,
+  authorityBytes: Uint8Array,
+): ActivationContext {
+  return requirePurposeBoundPayload(invocation, projectRoot, 'ai-asset-decision', authorityBytes);
+}
+
 /** A current-user intent event is authority only when the launcher bound its exact bytes. */
 export function requireCurrentUserIntentEventAuthorization(
   invocation: ProjectRunInvocation,
@@ -137,6 +157,62 @@ export function requireApprovedMotionRecipeAuthorization(
 ): ActivationContext {
   return requirePurposeBoundPayload(invocation, projectRoot, 'approved-motion-recipe', receiptBytes);
 }
+/**
+ * A motion collector receipt is authority only when the launcher bound its exact
+ * invocation payload. The receipt may be consumed exactly once by the verifier.
+ */
+const consumedMotionCollectorPayloads = new WeakMap<object, Set<string>>();
+export function requireMotionCollectorAuthorization(
+  invocation: ProjectRunInvocation,
+  projectRoot: string,
+  collectorBytes: Uint8Array,
+  consume = false,
+): ActivationContext {
+  const activation = requirePurposeBoundPayload(invocation, projectRoot, 'motion-evidence', collectorBytes);
+  if (consume) {
+    const key = `${projectRoot}:${Buffer.from(collectorBytes).toString('base64')}`;
+    const consumed = consumedMotionCollectorPayloads.get(invocation) ?? new Set<string>();
+    if (consumed.has(key)) throw new InvocationValidationError('motion collector receipt has already been consumed');
+    consumed.add(key);
+    consumedMotionCollectorPayloads.set(invocation, consumed);
+  }
+  return activation;
+}
+const consumedMotionResultPayloads = new WeakMap<object, Set<string>>();
+export function requireMotionResultAuthorization(
+  invocation: ProjectRunInvocation,
+  projectRoot: string,
+  resultBytes: Uint8Array,
+  consume = false,
+): ActivationContext {
+  const activation = requirePurposeBoundPayload(invocation, projectRoot, 'motion-result', resultBytes);
+  if (consume) {
+    const key = `${projectRoot}:${Buffer.from(resultBytes).toString('base64')}`;
+    const consumed = consumedMotionResultPayloads.get(invocation) ?? new Set<string>();
+    if (consumed.has(key)) throw new InvocationValidationError('motion result has already been consumed');
+    consumed.add(key);
+    consumedMotionResultPayloads.set(invocation, consumed);
+  }
+  return activation;
+}
+
+const consumedRenderedBeatResultPayloads = new WeakMap<object, Set<string>>();
+export function requireRenderedBeatResultAuthorization(
+  invocation: ProjectRunInvocation,
+  projectRoot: string,
+  resultBytes: Uint8Array,
+  consume = false,
+): ActivationContext {
+  const activation = requirePurposeBoundPayload(invocation, projectRoot, 'rendered-beat-result', resultBytes);
+  if (consume) {
+    const key = `${projectRoot}:${Buffer.from(resultBytes).toString('base64')}`;
+    const consumed = consumedRenderedBeatResultPayloads.get(invocation) ?? new Set<string>();
+    if (consumed.has(key)) throw new InvocationValidationError('rendered Beat result has already been consumed');
+    consumed.add(key);
+    consumedRenderedBeatResultPayloads.set(invocation, consumed);
+  }
+  return activation;
+}
 
 export function requireFinalReviewerLaneAuthorization(
   invocation: ProjectRunInvocation,
@@ -144,6 +220,20 @@ export function requireFinalReviewerLaneAuthorization(
   laneBytes: Uint8Array,
 ): ActivationContext {
   return requirePurposeBoundPayload(invocation, projectRoot, 'final-reviewer-lane', laneBytes);
+}
+export function requireProductProbeResultAuthorization(
+  invocation: ProjectRunInvocation,
+  projectRoot: string,
+  resultBytes: Uint8Array,
+): ActivationContext {
+  return requirePurposeBoundPayload(invocation, projectRoot, 'product-probe-result', resultBytes);
+}
+export function requireProductCaptureResultAuthorization(
+  invocation: ProjectRunInvocation,
+  projectRoot: string,
+  captureBytes: Uint8Array,
+): ActivationContext {
+  return requirePurposeBoundPayload(invocation, projectRoot, 'product-capture-result', captureBytes);
 }
 export function requireStaticReviewReceiptAuthorization(
   invocation: ProjectRunInvocation,
@@ -159,6 +249,14 @@ export function requireStaticEvidenceResultAuthorization(
   resultBytes: Uint8Array,
 ): ActivationContext {
   return requirePurposeBoundPayload(invocation, projectRoot, 'static-evidence-result', resultBytes);
+}
+
+export function requireWorkflowProductionSliceAuthorization(
+  invocation: ProjectRunInvocation,
+  projectRoot: string,
+  sliceBytes: Uint8Array,
+): ActivationContext {
+  return requirePurposeBoundPayload(invocation, projectRoot, 'workflow-production-slice', sliceBytes);
 }
 
 export function requireFinalEvidenceManifestAuthorization(

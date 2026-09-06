@@ -3,6 +3,7 @@ import { join, basename } from 'node:path';
 import type { Invariants, Reference } from '../types.ts';
 import { type ProjectWriteAdapter, requireProjectWriteAdapter } from '../runtime/project-write.ts';
 import { hasAssemblyPayload } from './board-sanitization.ts';
+import { referenceMeasuredInvariants } from './measurement-coverage.ts';
 
 /** Backfills invariants written before typography/motion/interaction measurement existed. */
 function withInvariantDefaults(invariants: Invariants | null | undefined): Invariants | null {
@@ -82,7 +83,7 @@ export function loadRefs(cwd: string): Reference[] {
           ...(parsed.selector !== undefined ? { selector: parsed.selector } : {}),
           ...(parsed.slot !== undefined ? { slot: parsed.slot } : {}),
           ...(parsed.captureBatchId !== undefined ? { captureBatchId: parsed.captureBatchId } : {}),
-          invariants: withInvariantDefaults(parsed.invariants),
+          invariants: referenceMeasuredInvariants({ invariants: withInvariantDefaults(parsed.invariants), ...(parsed.capturePreparation === undefined ? {} : { capturePreparation: parsed.capturePreparation }) }),
           principles: parsed.principles ?? [],
           ...(parsed.slopCount !== undefined ? { slopCount: parsed.slopCount } : {}),
           ...(parsed.origin !== undefined ? { origin: parsed.origin } : {}),
@@ -94,6 +95,10 @@ export function loadRefs(cwd: string): Reference[] {
           ...(parsed.blueprint !== undefined ? { blueprint: parsed.blueprint } : {}),
           // imagePath is absent on references captured before --shot was introduced.
           ...(parsed.imagePath !== undefined ? { imagePath: parsed.imagePath } : {}),
+          // viewport is absent on references captured before capture width was recorded; a board
+          // with no recorded viewport cannot prove it is desktop evidence rather than a phone crop.
+          ...(parsed.viewport !== undefined ? { viewport: parsed.viewport } : {}),
+          ...(parsed.capturePreparation !== undefined ? { capturePreparation: parsed.capturePreparation } : {}),
         });
       }
     } catch {

@@ -1,11 +1,12 @@
+# Release automation is intentionally paused for 1.0.0. Re-enable only on an explicit owner request.
 name: Release
 
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:
 
 jobs:
   release:
+    if: ${{ false }}
     runs-on: ubuntu-latest
     permissions:
       contents: write

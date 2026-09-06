@@ -6,7 +6,7 @@
 #
 # Category 'slop' is used here because UX convergence-to-the-mean (two identical
 # primary buttons, no exits from error states) is in the same family as visual
-# convergence-to-the-mean — correct, competent, anonymously generated. Each rule
+# convergence-to-the-mean — correct and competent but weakly fitted to the task. Each rule
 # is a warning; a deliberate choice can be overridden with an omd decision record.
 #
 # Candidate studied and dropped:

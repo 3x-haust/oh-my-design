@@ -67,7 +67,7 @@ test('ref add-batch captures many references over one browser with per-reference
   const manifest = join(dir, 'refs.json');
   writeFileSync(manifest, JSON.stringify([
     { source: SLOP, as: 'cards', selector: '.cards', blueprint: true, shot: true },
-    { source: SLOP, as: 'hero', selector: '.hero' },
+    { source: SLOP, as: 'hero', selector: '.hero', energy: false },
   ]));
   const result = run(['ref', 'add-batch', manifest], dir);
   assert.equal(result.status, 0, result.stderr);
@@ -83,8 +83,11 @@ test('ref add-batch captures many references over one browser with per-reference
   assert.ok(cards.imagePath !== undefined && existsSync(join(dir, cards.imagePath)), 'cards shot exists');
   assert.equal(hero.blueprint, undefined, 'hero had no --blueprint');
   assert.equal(hero.imagePath, undefined, 'hero had no shot');
-  // Batch skips the energy pass (motion refs use single-ref add) — output-neutral for these.
-  assert.equal(cards.energyCurve ?? null, null);
+  // Desktop evidence with motion measured by default: a board captured at phone width and with no
+  // energy curve is why builds had nothing to reason about for a desktop layout or a scroll effect.
+  assert.ok(cards.energyCurve != null, 'batch measures motion by default');
+  assert.ok((cards.viewport?.width ?? 0) >= 1024, 'batch captures desktop evidence');
+  assert.equal(hero.energyCurve ?? null, null, 'energy: false opts one reference out');
 });
 
 test('ref add-batch reports a failed reference without failing the whole batch', () => {

@@ -7,20 +7,25 @@ import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import { crc32, deflateSync } from 'node:zlib';
-import { artDirectionSha256 } from '../core/art-direction/schema.ts';
+import { ART_DIRECTION_RECORD_SCHEMA_VERSION, artDirectionSha256 } from '../core/art-direction/schema.ts';
 import { NO_CURRENT_USER_BEAT_EXCEPTION_RECEIPT_SHA256, recipeDecisionProjectionSha256 } from '../core/art-direction/decision.ts';
 import { intentLedgerSha256, resolveCurrentUserBeatExceptionReceipt } from '../core/runtime/intent.ts';
 import { refIdentity } from '../core/ref/identity.ts';
+import { parseReferenceUsageV2, referenceUsageV2Sha256 } from '../core/ref/reference-usage-snapshot.ts';
+import { canonicalJson as canonicalBoardJson } from '../core/ref/board-artifacts.ts';
 import { refImagePath, saveRef } from '../core/ref/store.ts';
 import { motionResolutionProjectionSha256, persistMotionResolutionProjection, readPreReferenceSelectionV2, referenceSelectionV2Sha256 } from '../core/ref/reference-selection.ts';
 import { COPY_DECK_RECEIPT_SCHEMA_VERSION, copyDeckSha256, validateCanonicalCopyDeckReceipt } from '../core/copy/index.ts';
 import type { Blueprint, Invariants, Reference } from '../core/types.ts';
-import { createTestProjectRunInvocation, createTestProjectWriteAdapter } from './helpers/project-write.ts';
+import { authorizeTestProjectRunPayloads, authorizeTestTaskEvidencePayloads, createTestProjectRunInvocation, createTestProjectWriteAdapter } from './helpers/project-write.ts';
 import { writeSourceSeal } from '../core/source-seal/index.ts';
 import { publishTaskEvidence } from '../core/evidence/task.ts';
+import { CURRENT_COMPOSITION_SECTIONS } from '../core/composition-contract/index.ts';
 import { validateFinalEvidenceV2Graph } from '../core/evidence/final-v2-graph.ts';
+import { writeObservationV2 } from '../core/runtime/observation.ts';
+import { writeBrowserDecisionFixture } from './helpers/browser-observation-decision-links.ts';
 
-import { captureRenderedBeatReceipt, renderFilmstrip, renderPage } from '../core/render/index.ts';
+import { captureRenderedBeatReceipt, renderFilmstrip } from '../core/render/index.ts';
 const CLI = fileURLToPath(new URL('../bin/omd.ts', import.meta.url));
 const project = (): string => mkdtempSync(join(tmpdir(), 'omd-harness-v2-cli-'));
 let hostReceiptSequence = 0;
@@ -49,6 +54,11 @@ const copyDeckV2 = (selectedRegister: 'quiet' | 'confident' | 'showpiece', motio
 - Audience: People evaluating the launch.
 - Language: en
 - Register: direct
+
+## Truth contract
+
+- Result boundary: navigation
+- Storage boundary: none
 
 ## Surface copy
 
@@ -91,11 +101,13 @@ const copyDeckV2 = (selectedRegister: 'quiet' | 'confident' | 'showpiece', motio
 const runMutation = (cwd: string, args: string[], invocation: { activation: { hostCapability: { host: 'claude' | 'codex' }; buildSha256: string; loadedSkillSha256: string; briefSha256: string } }, payloadAuthorizations: readonly { purpose: string; payload: string | Buffer }[] = []): Promise<{ status: number | null; stdout: string; stderr: string }> => {
   const childArgv = [CLI, ...args];
   const receipt = {
-    schema: 'omd-host-project-write-receipt-v2',
+    schema: 'omd-host-project-write-receipt-v3',
     host: invocation.activation.hostCapability.host,
     hostAuthentication: {
       host: invocation.activation.hostCapability.host,
       mechanism: 'inherited-ipc',
+      parentPid: process.pid,
+      parentExecutableSha256: sha(readFileSync(process.execPath)),
     },
     projectRoot: realpathSync(cwd),
     argvSha256: sha(canonical([process.execPath, ...childArgv])),
@@ -127,7 +139,7 @@ const runMutation = (cwd: string, args: string[], invocation: { activation: { ho
     receiptPipe.end(canonical(receipt));
   });
 };
-const receipt = (root: string, name: string, schema: string, value: object): Record<string, string> => {
+const receipt = (root: string, name: string, schema: string, value: object): { readonly path: string; readonly schema: string; readonly sha256: string } => {
   const path = join('.omd', 'receipts', `${name}.json`); const bytes = `${canonical(value)}\n`;
   mkdirSync(join(root, '.omd', 'receipts'), { recursive: true }); writeFileSync(join(root, path), bytes);
   return { path, schema, sha256: sha(bytes) };
@@ -140,7 +152,8 @@ type ArtDirectionBudgetOptions = {
 };
 
 const manifest = async (root: string, motionDecision: 'none' | 'one' = 'none', budgetOptions: ArtDirectionBudgetOptions = {}): Promise<any> => {
-  const activationValue = { schemaVersion: 'activation-context-v2', buildSha256: sha('build'), loadedSkillSha256: sha('skill'), briefSha256: sha('brief'), hostCapability: { host: 'codex' as const } };
+  const taskInvocation = createTestProjectRunInvocation(root);
+  const activationValue = { schemaVersion: 'activation-context-v2' as const, buildSha256: taskInvocation.current.buildSha256, loadedSkillSha256: sha('skill'), briefSha256: sha('brief'), hostCapability: { host: 'codex' as const } };
   const activation = receipt(root, 'activation', 'activation-context-v2', activationValue);
   const invocation = { activation: activationValue, current: { buildSha256: activationValue.buildSha256, loadedSkillSha256: activationValue.loadedSkillSha256, briefSha256: activationValue.briefSha256 } };
   const invocationPath = writeManifest(root, 'invocation.json', invocation);
@@ -148,7 +161,7 @@ const manifest = async (root: string, motionDecision: 'none' | 'one' = 'none', b
   const invariants: Invariants = { spacingLadder: [8], radiusLadder: [4], elevationLevels: 0, centeredRatio: 0, tokenCoverage: 1, paddingWeight: 8, typeScale: [], fontFamilies: [], weightLadder: [], motionDurations: [], easingVocab: [], animatedShare: 0, hoverCoverage: 0, focusCoverage: 0, animatedProperties: [], hasReducedMotion: false, scrollChoreography: [] };
   const blueprint: Blueprint = { selector: '#hero', capturedAt: '2026-01-01T00:00:00.000Z', nodes: [{ id: 'hero', role: 'container', children: [], box: { w: 160, h: 40 } }] };
   const source = 'https://capture.example/hero'; const component = 'hero'; const image = refImagePath(root, { source, component });
-  const reference: Reference = { source, component, kind: 'component', capturedAt: '2026-01-01T00:00:00.000Z', selector: '#hero', invariants, principles: ['Keep the hierarchy.'], blueprint, imagePath: relative(root, image) };
+  const reference: Reference = { source, component, kind: 'component', capturedAt: '2026-01-01T00:00:00.000Z', selector: '#hero', invariants, principles: ['Keep the hierarchy.'], blueprint, imagePath: relative(root, image), viewport: { width: 1280, height: 900 } };
   saveRef(root, reference, createTestProjectWriteAdapter(root)); writeFileSync(image, png);
   const needsSecondStatic = budgetOptions.selectedRegister === 'confident';
   const boardValue = { schemaVersion: 'reference-board-v1', frameSha256: sha('frame'), candidates: [{ id: 'candidate', label: 'Candidate', route: '/', rationale: 'Lawful evidence', pieces: [{ slotId: 'static', sourceKind: 'component-capture', referenceId: refIdentity(source, component), targetComponent: 'Hero', targetSelector: '#hero', taskIds: ['T1'], reason: 'Use structure', take: ['structure'], avoid: 'Avoid copying', adaptation: 'Adapt lawfully', evidenceAxes: { rights: 'lawful', signal: 'high-visual-system', staticAxis: 'available', motionAxis: 'absent' }, grid: { column: 1, span: needsSecondStatic ? 6 : 12, order: 0 } }, ...(needsSecondStatic ? [{ slotId: 'static-secondary', sourceKind: 'component-capture', referenceId: refIdentity(source, component), targetComponent: 'Hero detail', targetSelector: '#hero', taskIds: ['T1'], reason: 'Use supporting structure', take: ['structure'], avoid: 'Avoid copying', adaptation: 'Adapt lawfully', evidenceAxes: { rights: 'lawful', signal: 'high-visual-system', staticAxis: 'available', motionAxis: 'absent' }, grid: { column: 7, span: 6, order: 1 } }] : [])] }] };
@@ -161,12 +174,10 @@ const manifest = async (root: string, motionDecision: 'none' | 'one' = 'none', b
   const appended = await runMutation(root, ['intent', 'append', '--input', intentInput], invocation, [{ purpose: 'current-user-intent-event', payload: canonicalPayload(intentEvent) }]);
   assert.equal(appended.status, 0, appended.stderr);
   const alternatives = [
-    { register: 'quiet', subjectIdentityFit: 'Quiet editorial framing fits the subject.', staticReferenceSlotIds: ['static'], motionReferenceSlotIds: [], conceptRole: 'Editorial clarity', macroCompositionHypothesis: 'Template-breaking asymmetric editorial departure.', motionHypothesis: 'none', uxAccessibilityPerformanceRisks: ['Reduced motion remains available.'], lawfulImplementationPath: 'CSS and SVG implementation.', rejectionCondition: 'The visual-system evidence better supports another documented direction.' },
-    { register: 'confident', subjectIdentityFit: 'Confident framing fits the subject.', staticReferenceSlotIds: needsSecondStatic ? ['static', 'static-secondary'] : ['static'], motionReferenceSlotIds: [], conceptRole: 'Launch transition', macroCompositionHypothesis: selectedRegister === 'confident' ? 'Template-breaking confident editorial departure.' : 'Layered promotional composition.', motionHypothesis: selectedRegister === 'confident' ? 'none' : 'one', uxAccessibilityPerformanceRisks: ['Reduced motion remains available.'], lawfulImplementationPath: 'CSS and SVG implementation.', rejectionCondition: 'The static evidence does not establish the required motion scene.' },
-    { register: 'showpiece', subjectIdentityFit: 'Showpiece framing fits the subject.', staticReferenceSlotIds: ['static'], motionReferenceSlotIds: [], conceptRole: 'Signature reveal', macroCompositionHypothesis: 'Layered promotional composition.', motionHypothesis: 'one', uxAccessibilityPerformanceRisks: ['Reduced motion remains available.'], lawfulImplementationPath: 'CSS and SVG implementation.', rejectionCondition: 'The static evidence does not establish the required motion scene.' },
+    { register: 'quiet', subjectIdentityFit: 'Quiet editorial framing fits the subject.', metaphorQualities: ['quiet precision', 'measured cadence'], literalPropsToReject: ['compass', 'paper map'], staticReferenceSlotIds: ['static'], motionReferenceSlotIds: [], conceptRole: 'Editorial clarity', macroCompositionHypothesis: 'Template-breaking asymmetric editorial departure.', motionHypothesis: 'none', uxAccessibilityPerformanceRisks: ['Reduced motion remains available.'], lawfulImplementationPath: 'CSS and SVG implementation.', rejectionCondition: 'The visual-system evidence better supports another documented direction.' },
+    { register: 'confident', subjectIdentityFit: 'Confident framing fits the subject.', metaphorQualities: ['confident precision', 'measured cadence'], literalPropsToReject: ['compass', 'paper map'], staticReferenceSlotIds: needsSecondStatic ? ['static', 'static-secondary'] : ['static'], motionReferenceSlotIds: [], conceptRole: 'Launch transition', macroCompositionHypothesis: selectedRegister === 'confident' ? 'Template-breaking confident editorial departure.' : 'Layered promotional composition.', motionHypothesis: selectedRegister === 'confident' ? 'none' : 'one', uxAccessibilityPerformanceRisks: ['Reduced motion remains available.'], lawfulImplementationPath: 'CSS and SVG implementation.', rejectionCondition: 'The static evidence does not establish the required motion scene.' },
+    { register: 'showpiece', subjectIdentityFit: 'Showpiece framing fits the subject.', metaphorQualities: ['showpiece precision', 'measured cadence'], literalPropsToReject: ['compass', 'paper map'], staticReferenceSlotIds: ['static'], motionReferenceSlotIds: [], conceptRole: 'Signature reveal', macroCompositionHypothesis: 'Layered promotional composition.', motionHypothesis: 'one', uxAccessibilityPerformanceRisks: ['Reduced motion remains available.'], lawfulImplementationPath: 'CSS and SVG implementation.', rejectionCondition: 'The static evidence does not establish the required motion scene.' },
   ];
-  const evaluatorAssessment = { assessments: alternatives.map((alternative) => ({ register: alternative.register, score: alternative.register === selectedRegister ? 3 : 1, subjectIdentityRationale: `${alternative.register} subject assessment.`, conceptRoleRationale: `${alternative.register} role assessment.`, uxAccessibilityPerformanceRationale: `${alternative.register} accessibility assessment.`, lawfulFeasibilityRationale: `${alternative.register} lawful assessment.`, referenceEvidenceRationale: `${alternative.register} evidence assessment.`, rejectionRationale: `${alternative.register} ranking assessment.` })) };
-  const evaluatorResult = { winner: selectedRegister, alternativesSha256: sha(canonicalPayload(alternatives)), motionResolution: { motionDecision: 'none', slots: [] } };
   if (budgetOptions.beatException) {
     const beatExceptionEvent = { eventId: 'current-user-beat-exception', currentUser: true, kind: 'current-user-beat-exception', lock: {}, recordedAt: '2026-01-01T00:00:01.000Z' };
     const currentIntentRecord = (JSON.parse(readFileSync(join(root, '.omd', 'intent-current.json'), 'utf8')) as { record: string }).record;
@@ -177,8 +188,35 @@ const manifest = async (root: string, motionDecision: 'none' | 'one' = 'none', b
     ]);
     assert.equal(appendedException.status, 0, appendedException.stderr);
   }
+  const currentSelection = readPreReferenceSelectionV2(root);
+  const currentHandoff = JSON.parse(readFileSync(join(root, '.omd', 'reference-handoffs', 'art-direction.json'), 'utf8')) as { payloadSha256: string };
+  const currentIntentPointer = JSON.parse(readFileSync(join(root, '.omd', 'intent-current.json'), 'utf8')) as { record: string; sha256: string };
+  const alternativesSha256 = sha(canonicalBoardJson(alternatives));
+  const evaluatorLineage = {
+    route: '/',
+    taskIds: ['T1'],
+    boardSha256: currentSelection.captureSha256,
+    preSelectionSha256: referenceSelectionV2Sha256(currentSelection),
+    handoffSha256: currentHandoff.payloadSha256,
+    intentSha256: currentIntentPointer.sha256,
+    alternativesSha256,
+  };
+  const evaluatorAssessment = {
+    alternatives,
+    ...evaluatorLineage,
+    assessments: alternatives.map((alternative) => ({ register: alternative.register, score: alternative.register === selectedRegister ? 3 : 1, subjectIdentityRationale: `${alternative.register} subject assessment.`, conceptRoleRationale: `${alternative.register} role assessment.`, uxAccessibilityPerformanceRationale: `${alternative.register} accessibility assessment.`, lawfulFeasibilityRationale: `${alternative.register} lawful assessment.`, referenceEvidenceRationale: `${alternative.register} evidence assessment.`, rejectionRationale: `${alternative.register} ranking assessment.` })),
+  };
+  const evaluatorResult = { ...evaluatorLineage, winner: selectedRegister, motionResolution: { motionDecision: 'none', slots: [] } };
   const artInput = writeManifest(root, 'art-direction-input.json', { invocation, route: '/', alternatives, references: [{ slotId: 'static', signal: 'high-visual-system', positive: true, lawful: true, motionObligation: 'none' }, ...(needsSecondStatic ? [{ slotId: 'static-secondary', signal: 'high-visual-system', positive: true, lawful: true, motionObligation: 'none' }] : [])], evaluatorAssessment, evaluatorResult, eligibility: { sceneRoles: [], fallbackAttempted: true, qualityGates: { blindSignatureGreen: true, narrativeGreen: true, motionFitGreen: true, fidelityDecisionFitGreen: true, macroLandingScore: 3, staticReferenceInfluenceScore: 3, templateBreakingLandingScore: 3 } }, beats: budgetOptions.beats ?? ['B-1'], implementationLane: 'browser', fallbackPath: 'CSS/SVG static reduced-motion fallback.', performanceAccessibilityBudget: 'Within the declared accessibility and performance budget.' });
-  const directed = await runMutation(root, ['art-direction', 'check', '--input', artInput], invocation, [{ purpose: 'evaluator-assessment', payload: canonicalPayload(evaluatorAssessment) }, { purpose: 'evaluator-result', payload: canonicalPayload(evaluatorResult) }, { purpose: 'current-intent-ledger', payload: readFileSync(join(root, '.omd', (JSON.parse(readFileSync(join(root, '.omd', 'intent-current.json'), 'utf8')) as { record: string }).record)) }]);
+  const directed = await runMutation(root, ['art-direction', 'check', '--input', artInput], invocation, [
+    { purpose: 'evaluator-assessment', payload: canonicalBoardJson(evaluatorAssessment) },
+    { purpose: 'evaluator-result', payload: canonicalBoardJson(evaluatorResult) },
+    { purpose: 'current-intent-ledger', payload: readFileSync(join(root, '.omd', (JSON.parse(readFileSync(join(root, '.omd', 'intent-current.json'), 'utf8')) as { record: string }).record)) },
+    ...(budgetOptions.beatException ? [{
+      purpose: 'current-user-intent-event',
+      payload: canonicalBoardJson({ eventId: 'current-user-beat-exception', currentUser: true, kind: 'current-user-beat-exception', lock: {}, recordedAt: '2026-01-01T00:00:01.000Z' }),
+    }] : []),
+  ]);
   if (budgetOptions.stopAfterArtDirection) return { directed };
   assert.equal(directed.status, 0, directed.stderr);
   const callerScoresInput = writeManifest(root, 'art-direction-caller-scores.json', {
@@ -241,7 +279,7 @@ const manifest = async (root: string, motionDecision: 'none' | 'one' = 'none', b
   }));
   const artDirection = {
     path: currentArtDirectionRecord,
-    schema: 'art-direction-record-v2',
+    schema: ART_DIRECTION_RECORD_SCHEMA_VERSION,
     sha256: sha(artDirectionBytes),
   };
   assert.equal(artRecord.activationSha256, artDirectionSha256(activationValue));
@@ -253,8 +291,18 @@ const manifest = async (root: string, motionDecision: 'none' | 'one' = 'none', b
   assert.equal(artRecord.referenceHandoffSha256, JSON.parse(readFileSync(join(root, '.omd', 'reference-handoffs', 'art-direction.json'), 'utf8')).payloadSha256);
   const attribution = 'Reference attribution.';
   writeFileSync(join(root, '.omd', 'attribution.md'), attribution);
-  writeFileSync(join(root, 'evidence.html'), '<main id="hero">Evidence</main>');
+  const productionObservation = { schema: 'reference-production-observation-v1', slotId: 'static', route: '/', component: 'Hero', selector: '#hero', taskIds: ['T1'], buildSha256: activationValue.buildSha256 };
+  mkdirSync(join(root, 'src'), { recursive: true });
+  writeFileSync(join(root, 'src', 'Hero.tsx'), canonicalPayload(productionObservation));
+  const buildIdentity = receipt(root, 'build', 'omd-build-identity-v1', { schemaVersion: 'omd-build-identity-v1', packageVersion: '1.0.0', buildSha256: activationValue.buildSha256, sourceSkillSha256: activationValue.loadedSkillSha256 });
+  writeObservationV2(root, {
+    currentArtifact: { path: buildIdentity.path, sha256: buildIdentity.sha256 },
+    buildSha256: activationValue.buildSha256,
+    evidence: { referenceProductionObservations: [productionObservation] },
+    observedAt: '2026-01-01T00:00:00.000Z',
+  }, createTestProjectWriteAdapter(root));
   const composerHandoffValue = JSON.parse(readFileSync(join(root, '.omd', 'reference-handoffs', 'composer.json'), 'utf8')) as { payloadSha256: string };
+  const handHandoffValue = JSON.parse(readFileSync(join(root, '.omd', 'reference-handoffs', 'hand.json'), 'utf8')) as { payloadSha256: string };
   const usageValue = {
     schemaVersion: 'reference-usage-v2',
     captureSha256: selectionValue.captureSha256,
@@ -265,13 +313,41 @@ const manifest = async (root: string, motionDecision: 'none' | 'one' = 'none', b
     motionResolutionProjectionSha256: artRecord.decision.motionResolutionProjectionSha256,
     settledSelectionSha256: artRecord.decision.settledSelectionSha256,
     composerHandoffSha256: composerHandoffValue.payloadSha256,
+    handHandoffSha256: handHandoffValue.payloadSha256,
     attributionSha256: sha(attribution),
-    rows: [{ slotId: 'static', status: 'used', target: { route: '/', component: 'Hero', selector: '#hero' }, borrowedProperties: ['structure'], nonBorrowedProperties: ['branding'], transformation: 'Adapted structure', evidence: { path: 'evidence.html', selector: '#hero' }, verificationNote: 'Verified' }],
+    rows: [{ slotId: 'static', taskIds: ['T1'], status: 'used', target: { route: '/', component: 'Hero', selector: '#hero' }, borrowedProperties: ['structure'], nonBorrowedProperties: ['branding'], transformation: 'Adapted structure', evidence: { path: 'src/Hero.tsx', selector: '#hero', sha256: sha(readFileSync(join(root, 'src', 'Hero.tsx'))) }, productionObservation, verificationNote: 'Verified' }],
   };
   writeFileSync(join(root, '.omd', 'reference-usage-v2.json'), JSON.stringify(usageValue));
   const usageChecked = run(root, ['ref', 'usage-check']);
   assert.equal(usageChecked.status, 0, usageChecked.stderr);
   const usage = receipt(root, 'usage', 'reference-usage-v2', usageValue);
+  const referenceDistanceValue = {
+    schemaVersion: 'selected-reference-distance-v1',
+    selectionSha256: settledSelectionSemantic,
+    usageSha256: referenceUsageV2Sha256(parseReferenceUsageV2(usageValue)),
+    buildSha256: activationValue.buildSha256,
+    candidateId: settledSelectionValue.candidateId,
+    route: '/',
+    target: 'http://localhost/',
+    viewport: { width: 1280, height: 900 },
+    threshold: 0.6,
+    verdict: 'pass',
+    comparisons: [{
+      slotId: 'static',
+      referenceId: refIdentity(source, component),
+      sourceSelector: '#hero',
+      targetSelector: '#hero',
+      similarity: 1,
+      drivers: [],
+    }],
+  };
+  const referenceDistancePath = join(root, '.omd', 'selected-reference-distance.json');
+  writeFileSync(referenceDistancePath, canonical(referenceDistanceValue));
+  const referenceDistance = {
+    path: join('.omd', 'selected-reference-distance.json'),
+    schema: 'selected-reference-distance-v1',
+    sha256: sha(readFileSync(referenceDistancePath)),
+  };
   const copyDeck = copyDeckV2(artRecord.decision.selectedRegister, artRecord.decision.motionDecision, currentUserBeatExceptionReceiptSha256);
   writeFileSync(join(root, '.omd', 'copy-deck.md'), copyDeck);
   const copyValue = {
@@ -291,11 +367,6 @@ const manifest = async (root: string, motionDecision: 'none' | 'one' = 'none', b
   });
   const copy = receipt(root, 'copy', COPY_DECK_RECEIPT_SCHEMA_VERSION, copyValue);
   let renderedBeats: Record<string, string>;
-  const buildIdentity = receipt(root, 'build', 'omd-build-identity-v1', { schemaVersion: 'omd-build-identity-v1', packageVersion: '1.0.0', buildSha256: activationValue.buildSha256, sourceSkillSha256: activationValue.loadedSkillSha256 });
-  const firstValue = { schema: 'observation-v2', buildSha256: activationValue.buildSha256, currentArtifact: { path: buildIdentity.path, sha256: buildIdentity.sha256 }, predecessorSha256: null, observedAt: '2026-01-01T00:00:00.000Z', evidence: {} };
-  const first = receipt(root, 'observation-1', 'observation-v2', firstValue);
-  const secondValue = { schema: 'observation-v2', buildSha256: activationValue.buildSha256, currentArtifact: { path: buildIdentity.path, sha256: buildIdentity.sha256 }, predecessorSha256: sha(canonical(firstValue)), observedAt: '2026-01-01T00:01:00.000Z', evidence: {} };
-  const second = receipt(root, 'observation-2', 'observation-v2', secondValue);
   const lane = (name: 'blind' | 'fidelity' | 'protocol', schema: 'blind-review-v1' | 'fidelity-review-v1' | 'protocol-review-v1') => {
     const contract = {
       blind: { verdicts: { blindVisual: 'GREEN', blindNarrative: 'GREEN' }, criticalFloors: { composition: 3, copy: 3 } },
@@ -303,11 +374,33 @@ const manifest = async (root: string, motionDecision: 'none' | 'one' = 'none', b
       protocol: { verdicts: { evidenceIntegrity: 'GREEN', publicationProtocol: 'GREEN' }, criticalFloors: { authority: 3, currentness: 3 } },
     }[name];
     const sessionSha256 = sha(`${name}-isolation`);
+    const reviewerIds = [`${name}-reviewer-a`, `${name}-reviewer-b`];
+    const observationSha256s = [sha(canonical(firstValue)), sha(canonical(secondValue))];
+    const processBase = { blind: 10_000, fidelity: 20_000, protocol: 30_000 }[name];
+    const executionReceipts = reviewerIds.map((reviewerId, index) => receipt(root, `${name}-execution-${index}`, 'final-reviewer-execution-v1', {
+      schema: 'final-reviewer-execution-v1',
+      lane: `${name}Lane`,
+      reviewerId,
+      verdicts: contract.verdicts,
+      criticalFloors: contract.criticalFloors,
+      isolationReceiptSha256: sessionSha256,
+      observationSha256s,
+      artDirectionSha256: artDirectionSemantic,
+      buildSha256: activationValue.buildSha256,
+      briefSha256: activationValue.briefSha256,
+      browserSha256: sha(`${name}-browser-${index}`),
+      childPid: processBase + index,
+      sessionId: `${name}-session-${index}`,
+      nonce: `${name}-nonce-${index}`,
+      evidenceSha256: sha(`${name}-evidence-${index}`),
+      configurationSha256: sha(`${name}-configuration-${index}`),
+    }));
     return receipt(root, name, schema, {
       schema, artDirectionSha256: artDirectionSemantic, buildSha256: activationValue.buildSha256,
       isolationReceipt: { schema: 'reviewer-isolation-v1', sha256: sessionSha256 },
       ...contract, quorum: { required: 2, passed: 2 },
-      provenance: { observationSha256s: [sha(canonical(firstValue)), sha(canonical(secondValue))], reviewerIds: [`${name}-reviewer-a`, `${name}-reviewer-b`], reviewerSessionSha256: sessionSha256 },
+      provenance: { observationSha256s, reviewerIds, reviewerSessionSha256: sessionSha256 },
+      executionReceipts: executionReceipts.map(({ path, sha256 }) => ({ path, sha256 })),
     });
   };
   const staticRunId = activationValue.buildSha256;
@@ -317,26 +410,38 @@ const manifest = async (root: string, motionDecision: 'none' | 'one' = 'none', b
   const staticSource = join(root, 'static-evidence.html');
   writeFileSync(staticSource, '<!doctype html><style>body{margin:0;background:#123;color:white}main{min-height:900px;padding:40px}</style><main data-omd-beat="B-1">Browser-observed static direction</main>');
   const staticAdapter = createTestProjectWriteAdapter(root);
-  const capture = async (name: string, width: number, height: number) => {
-    const path = staticEvidencePath(`${name}.png`);
-    const output = staticEvidenceOutput(`${name}.png`);
-    await renderPage(staticSource, { viewport: { width, height }, out: output, adapter: staticAdapter });
-    return { path, sha256: sha(readFileSync(output)) };
-  };
   const temporal = async (name: string, width: number, height: number) => {
     const frames = await renderFilmstrip(staticSource, { viewport: { width, height }, out: staticEvidenceOutput(`${name}.html`), frames: 4, interval: 350, adapter: staticAdapter });
     return frames.slice(0, 3).map((output) => ({ path: relative(root, output), sha256: sha(readFileSync(output)) })) as [{ path: string; sha256: string }, { path: string; sha256: string }, { path: string; sha256: string }];
   };
-  const desktopObserved = await capture('desktop', 1280, 900);
-  const mobileObserved = await capture('mobile', 390, 844);
   const desktopTemporal = await temporal('desktop-temporal', 1280, 900);
   const mobileTemporal = await temporal('mobile-temporal', 390, 844);
-  const observedSha256 = sha(JSON.stringify([desktopObserved, mobileObserved, ...desktopTemporal, ...mobileTemporal].map((observation) => observation.sha256)));
-  const staticBeatReceipt = await captureRenderedBeatReceipt(staticSource, { adapter: staticAdapter, out: staticEvidenceOutput('rendered-beats.json'), artDirectionHash: artDirectionSemantic, copyDeckSha256: copyValue.copyDeckSha256, beatIds: artRecord.beatIds });
+  const staticBeatReceipt = { ...await captureRenderedBeatReceipt(staticSource, { adapter: staticAdapter, out: staticEvidenceOutput('rendered-beats.json'), artDirectionHash: artDirectionSemantic, copyDeckSha256: copyValue.copyDeckSha256, beatIds: artRecord.beatIds, buildSha256: activationValue.buildSha256, route: '/', taskId: 'T1', invocation }), target: 'http://localhost/' };
+  const beatCaptures = staticBeatReceipt.captures ?? assert.fail('rendered Beat captures are missing');
+  const desktopBeatCapture = beatCaptures.find((item) => item.viewport.width === 1280 && item.viewport.height === 900) ?? assert.fail('desktop Beat capture is missing');
+  const mobileBeatCapture = beatCaptures.find((item) => item.viewport.width === 390 && item.viewport.height === 844) ?? assert.fail('mobile Beat capture is missing');
+  const desktopObserved = { path: desktopBeatCapture.path, sha256: desktopBeatCapture.sha256 };
+  const mobileObserved = { path: mobileBeatCapture.path, sha256: mobileBeatCapture.sha256 };
+  const browserDecisions = writeBrowserDecisionFixture(root);
+  const firstValue = {
+    schema: 'observation-v2', buildSha256: activationValue.buildSha256,
+    currentArtifact: { path: buildIdentity.path, sha256: buildIdentity.sha256 },
+    predecessorSha256: null, observedAt: '2026-01-01T00:00:00.000Z',
+    evidence: browserDecisions.evidence([{ ...desktopObserved, testedState: 'desktop-current', viewport: { width: 1280, height: 900 } }]),
+  };
+  const first = receipt(root, 'observation-1', 'observation-v2', firstValue);
+  const secondValue = {
+    schema: 'observation-v2', buildSha256: activationValue.buildSha256,
+    currentArtifact: { path: buildIdentity.path, sha256: buildIdentity.sha256 },
+    predecessorSha256: sha(canonical(firstValue)), observedAt: '2026-01-01T00:01:00.000Z',
+    evidence: browserDecisions.evidence([{ ...mobileObserved, testedState: 'mobile-current', viewport: { width: 390, height: 844 } }]),
+  };
+  const second = receipt(root, 'observation-2', 'observation-v2', secondValue);
+  const observationManifestSha256 = sha(JSON.stringify([desktopObserved, mobileObserved, ...desktopTemporal, ...mobileTemporal].map((observation) => ({ path: observation.path, sha256: observation.sha256 }))));
   const review = (role: 'signature' | 'narrative' | 'motionFit' | 'fidelity' | 'fallback' | 'blind', actor: 'host-reviewer' | 'host-evaluator') => {
     const path = staticEvidencePath(`${role}-${actor}.json`);
     const output = staticEvidenceOutput(`${role}-${actor}.json`);
-    const value = { schema: 'static-review-receipt-v1', role, actor, verdict: 'pass', artDirectionHash: artDirectionSemantic, buildHash: activationValue.buildSha256, selectionSha256: selectionSemantic, handoffSha256: handoffValue.payloadSha256, observedSha256 };
+    const value = { schema: 'static-review-receipt-v1', role, verdict: 'pass', artDirectionHash: artDirectionSemantic, buildHash: activationValue.buildSha256, selectionSha256: selectionSemantic, handoffSha256: handoffValue.payloadSha256, runId: staticRunId, route: '/', target: 'http://localhost/', taskId: 'T1', observationManifestSha256, launchId: `${role}-${actor}-launch`, sessionId: `${role}-${actor}-session`, processIdentity: `${role}-${actor}-process`, configurationSha256: sha(`${role}-${actor}-configuration`) };
     writeFileSync(output, JSON.stringify(value));
     return { path, sha256: sha(readFileSync(output)) };
   };
@@ -344,18 +449,24 @@ const manifest = async (root: string, motionDecision: 'none' | 'one' = 'none', b
     schema: 'static-direction-evidence-v1',
     artDirectionHash: artDirectionSemantic,
     motionDecision: 'none',
-    expected: { artDirectionHash: artDirectionSemantic, selectionSha256: selectionSemantic, handoffSha256: handoffValue.payloadSha256, buildHash: activationValue.buildSha256, runId: staticRunId },
-    observed: { runId: staticRunId, buildHash: activationValue.buildSha256, selectionSha256: selectionSemantic, handoffSha256: handoffValue.payloadSha256, observedSha256 },
+    expected: { artDirectionHash: artDirectionSemantic, selectionSha256: selectionSemantic, handoffSha256: handoffValue.payloadSha256, buildHash: activationValue.buildSha256, runId: staticRunId, route: '/', target: 'http://localhost/', taskId: 'T1' },
+    observed: { runId: staticRunId, buildHash: activationValue.buildSha256, selectionSha256: selectionSemantic, handoffSha256: handoffValue.payloadSha256, route: '/', target: 'http://localhost/', taskId: 'T1', observationManifestSha256 },
     beatReceipt: staticBeatReceipt,
     observations: { desktop: { capture: desktopObserved, width: 1280, height: 900 }, mobile: { capture: mobileObserved, width: 390, height: 844 }, temporalSamples: { desktop: desktopTemporal, mobile: mobileTemporal } },
     reviewReceipts: { signature: review('signature', 'host-reviewer'), narrative: review('narrative', 'host-evaluator'), motionFit: review('motionFit', 'host-reviewer'), fidelity: review('fidelity', 'host-evaluator'), fallback: review('fallback', 'host-reviewer'), blind: review('blind', 'host-evaluator') },
   });
   renderedBeats = receipt(root, 'beats', 'rendered-beat-receipt-v1', staticBeatReceipt);
   writeFileSync(join(root, '.omd', 'type-proof.md'), 'type-proof');
-  writeFileSync(join(root, '.omd', 'composition.md'), 'composition');
   writeFileSync(join(root, 'brief.js'), 'brief');
   writeFileSync(join(root, 'skill.js'), 'skill');
-  publishValidTaskEvidence(root);
+  publishValidTaskEvidence(root, {
+    invocation: taskInvocation,
+    copyDeck,
+    artDirectionSha256: artDirectionSemantic,
+    motionResolutionSha256: artRecord.decision.motionResolutionProjectionSha256,
+    settledSelectionSha256: artRecord.decision.settledSelectionSha256,
+    composerHandoffSha256: composerHandoffValue.payloadSha256,
+  });
   const taskEvidence = {
     path: join('.omd', 'task-evidence.json'),
     schema: 'task-evidence-v1',
@@ -370,10 +481,16 @@ const manifest = async (root: string, motionDecision: 'none' | 'one' = 'none', b
     schema: 'source-seal-v1',
     sha256: sha(readFileSync(join(root, '.omd', 'source-seal.json'))),
   };
-  const graph = { schema: 'final-evidence-v2-graph', activation, intent, artDirection, board, selection, settledSelection, handoff, usage, copy, renderedBeats, sourceSeal, buildIdentity, blindLane, fidelityLane, protocolLane, taskEvidence, observations: [first, second] };
+  const graph = { schema: 'final-evidence-v2-graph', activation, intent, artDirection, board, selection, settledSelection, handoff, usage, referenceDistance, copy, renderedBeats, sourceSeal, buildIdentity, blindLane, fidelityLane, protocolLane, taskEvidence, observations: [first, second] };
+  const claimPublication = {
+    schema: 'evidence-claim-publication-v1',
+    claims: [{ id: 'fixture-hypothesis', text: 'The fixture direction may satisfy the task.', status: 'hypothesis', basis: 'The final reviewers validate the built result.' }],
+    userFacts: [],
+    workingContext: ['fixture-hypothesis'],
+  };
   return motionDecision === 'one'
-    ? { schema: 'final-evidence-v2', motionDecision, graph, motionEvidence: receipt(root, 'motion', 'motion-evidence-v2', { schema: 'motion-evidence-v2', artDirectionHash: artDirectionSemantic, motionDecision: 'one', observed: {}, scenes: [] }) }
-    : { schema: 'final-evidence-v2', motionDecision, graph, staticEvidence };
+    ? { schema: 'final-evidence-v2', motionDecision, claimPublication, graph, motionEvidence: receipt(root, 'motion', 'motion-evidence-v2', { schema: 'motion-evidence-v2', artDirectionHash: artDirectionSemantic, motionDecision: 'one', observed: {}, scenes: [] }) }
+    : { schema: 'final-evidence-v2', motionDecision, claimPublication, graph, staticEvidence };
 };
 const finalizationAuthorizations = (root: string, input: string): { purpose: string; payload: Buffer }[] => {
   const manifestBytes = readFileSync(input);
@@ -387,10 +504,44 @@ const finalizationAuthorizations = (root: string, input: string): { purpose: str
     { purpose: 'final-evidence-manifest', payload: manifestBytes },
     { purpose: 'final-evidence-manifest', payload: Buffer.from(canonicalPayload({ ...value, graphRootHash })) },
     { purpose: 'current-intent-ledger', payload: readFileSync(join(root, graph.intent!.path)) },
-    ...['blindLane', 'fidelityLane', 'protocolLane'].map((lane) => ({ purpose: 'final-reviewer-lane', payload: readFileSync(join(root, graph[lane]!.path)) })),
+    ...['blindLane', 'fidelityLane', 'protocolLane'].flatMap((lane) => {
+      const laneBytes = readFileSync(join(root, graph[lane]!.path));
+      const laneValue = JSON.parse(laneBytes.toString('utf8')) as { executionReceipts: Array<{ path: string }> };
+      return [
+        { purpose: 'final-reviewer-lane', payload: laneBytes },
+        ...laneValue.executionReceipts.map(({ path }) => ({ purpose: 'final-reviewer-lane', payload: readFileSync(join(root, path)) })),
+      ];
+    }),
+    ...(() => {
+      const taskBytes = readFileSync(join(root, graph.taskEvidence!.path));
+      const taskValue = JSON.parse(taskBytes.toString('utf8')) as {
+        tasks: Array<{
+          probes: Array<{ resultPath: string }>;
+          invalidSubmit?: { resultPath: string };
+          renders: Array<{ authorization: unknown }>;
+          transient?: Array<{ authorization: unknown }>;
+        }>;
+      };
+      return [
+        ...taskValue.tasks.flatMap(task =>
+          [...task.probes, ...(task.invalidSubmit === undefined ? [] : [task.invalidSubmit])]
+            .map(({ resultPath }) => ({ purpose: 'product-probe-result', payload: readFileSync(join(root, resultPath)) })),
+        ),
+        ...taskValue.tasks.flatMap(task =>
+          [...task.renders, ...(task.transient ?? [])]
+            .map(({ authorization }) => ({ purpose: 'product-capture-result', payload: Buffer.from(canonical(authorization)) })),
+        ),
+      ];
+    })(),
+    { purpose: 'rendered-beat-result', payload: Buffer.from(canonicalPayload(JSON.parse(readFileSync(join(root, graph.renderedBeats!.path), 'utf8')))) },
   ];
   const staticEvidence = value.staticEvidence as { path: string } | undefined;
-  if (staticEvidence === undefined) return authorizations;
+  if (staticEvidence === undefined) {
+    const motionEvidence = value.motionEvidence as { path: string } | undefined;
+    if (motionEvidence === undefined) return authorizations;
+    const motionBytes = readFileSync(join(root, motionEvidence.path));
+    return [...authorizations, { purpose: 'motion-evidence', payload: motionBytes }, { purpose: 'motion-result', payload: Buffer.from(canonicalPayload(JSON.parse(motionBytes.toString('utf8')))) }];
+  }
   const staticBytes = readFileSync(join(root, staticEvidence.path));
   const staticValue = JSON.parse(staticBytes.toString('utf8')) as { reviewReceipts: Record<string, { path: string }> };
   return [
@@ -413,7 +564,42 @@ const checkAuthorizations = (root: string): { purpose: string; payload: Buffer }
     { purpose: 'final-reviewer-lane', payload: pointer },
     { purpose: 'final-evidence-manifest', payload: recordBytes },
     { purpose: 'current-intent-ledger', payload: readFileSync(join(root, graph.intent!.path)) },
-    ...['blindLane', 'fidelityLane', 'protocolLane'].map((lane) => ({ purpose: 'final-reviewer-lane', payload: readFileSync(join(root, graph[lane]!.path)) })),
+    ...['blindLane', 'fidelityLane', 'protocolLane'].flatMap((lane) => {
+      const laneBytes = readFileSync(join(root, graph[lane]!.path));
+      const laneValue = JSON.parse(laneBytes.toString('utf8')) as { executionReceipts: Array<{ path: string }> };
+      return [
+        { purpose: 'final-reviewer-lane', payload: laneBytes },
+        ...laneValue.executionReceipts.map(({ path }) => ({ purpose: 'final-reviewer-lane', payload: readFileSync(join(root, path)) })),
+      ];
+    }),
+    ...(() => {
+      const taskBytes = readFileSync(join(root, graph.taskEvidence!.path));
+      const taskValue = JSON.parse(taskBytes.toString('utf8')) as {
+        tasks: Array<{
+          probes: Array<{ resultPath: string }>;
+          invalidSubmit?: { resultPath: string };
+          renders: Array<{ authorization: unknown }>;
+          transient?: Array<{ authorization: unknown }>;
+        }>;
+      };
+      return [
+        ...taskValue.tasks.flatMap(task =>
+          [...task.probes, ...(task.invalidSubmit === undefined ? [] : [task.invalidSubmit])]
+            .map(({ resultPath }) => ({ purpose: 'product-probe-result', payload: readFileSync(join(root, resultPath)) })),
+        ),
+        ...taskValue.tasks.flatMap(task =>
+          [...task.renders, ...(task.transient ?? [])]
+            .map(({ authorization }) => ({ purpose: 'product-capture-result', payload: Buffer.from(canonical(authorization)) })),
+        ),
+      ];
+    })(),
+    { purpose: 'rendered-beat-result', payload: Buffer.from(canonicalPayload(JSON.parse(readFileSync(join(root, graph.renderedBeats!.path), 'utf8')))) },
+    ...(() => {
+      const motionEvidence = value.motionEvidence as { path: string } | undefined;
+      if (motionEvidence === undefined) return [];
+      const motionBytes = readFileSync(join(root, motionEvidence.path));
+      return [{ purpose: 'motion-evidence', payload: motionBytes }, { purpose: 'motion-result', payload: Buffer.from(canonicalPayload(JSON.parse(motionBytes.toString('utf8')))) }];
+    })(),
     ...(() => {
       const staticEvidence = value.staticEvidence as { path: string } | undefined;
       if (staticEvidence === undefined) return [];
@@ -439,9 +625,10 @@ const staticCheckInput = (root: string): { invocation: Parameters<typeof runMuta
   };
 };
 const staticCheckAuthorizations = (root: string, input: ReturnType<typeof staticCheckInput>): { purpose: string; payload: Buffer }[] => {
-  const evidence = { ...input.capture, schema: 'static-direction-evidence-v1', reviewReceipts: input.reviewReceipts };
+  const evidence: Record<string, unknown> = { ...input.capture, schema: 'static-direction-evidence-v1', reviewReceipts: input.reviewReceipts };
   return [
     { purpose: 'static-evidence-result', payload: Buffer.from(canonicalPayload(evidence)) },
+    { purpose: 'rendered-beat-result', payload: Buffer.from(`${canonical(evidence.beatReceipt)}\n`) },
     ...Object.values(input.reviewReceipts).map(({ path }) => ({ purpose: 'static-review-receipt', payload: readFileSync(join(root, path)) })),
   ];
 };
@@ -457,22 +644,57 @@ function writeFinalEvidenceManifest(root: string, name: string, value: unknown):
   return path;
 }
 
-function publishValidTaskEvidence(root: string): void {
+function publishValidTaskEvidence(root: string, bindings: { invocation: Parameters<typeof publishTaskEvidence>[2]; copyDeck: string; artDirectionSha256: string; motionResolutionSha256: string; settledSelectionSha256: string; composerHandoffSha256: string }): void {
   const frame = '---\nuxTask: Save the edited document\nuxFrequentAction: Save document changes\nuxCostliestError: Lose an unsaved document edit\nuxSurface: product\n---\n\n## Task coverage matrix\n\nT1 | goal: save | start: editor | actions: edit | success: saved | recovery: retry | viewports: desktop, mobile | requirements: none\n';
-  const composition = '## UX task coverage\n\nT1 | production: /editor | locator: #save |\n';
+  const compositionFingerprint = [
+    `- Frame SHA-256: ${sha(frame)}`,
+    `- Copy deck SHA-256: ${sha(bindings.copyDeck)}`,
+    `- Type proof SHA-256: ${sha('type-proof')}`,
+    '- Scout SHA-256: N/A — the fixture uses only local lawful reference artifacts and performs no external scout pass.',
+    `- Art direction record SHA-256: ${bindings.artDirectionSha256}`,
+    `- Motion resolution projection SHA-256: ${bindings.motionResolutionSha256}`,
+    `- Settled selection SHA-256: ${bindings.settledSelectionSha256}`,
+    `- Composer handoff SHA-256: ${bindings.composerHandoffSha256}`,
+  ].join('\n');
+  const colourRoles = `| Role | Token/value | Intended use |
+| --- | --- | --- |
+| Dominant | #FFFFFF | Primary canvas |
+| Secondary | #F5F5F5 | Secondary surfaces |
+| Accent | #005FCC | Primary action and selected state |
+| Semantic success | #137333 | Confirmed success state |
+| Semantic error | #B3261E | Critical error state |`;
+  const composition = `${CURRENT_COMPOSITION_SECTIONS.map(section =>
+    `## ${section}\n\n${section === 'Input fingerprint' ? compositionFingerprint : section === 'Colour roles' ? colourRoles : `Decision for ${section}.`}`,
+  ).join('\n\n')}\n\n## UX task coverage\n\nT1 | production: / | locator: #save |\n`;
   writeFileSync(join(root, '.omd', 'frame.md'), frame);
   writeFileSync(join(root, '.omd', 'composition.md'), composition);
   mkdirSync(join(root, '.omd', '.cache'), { recursive: true });
   const put = (name: string, value: unknown) => { const bytes = Buffer.from(JSON.stringify(value)); const path = `.omd/.cache/${name}`; writeFileSync(join(root, path), bytes); return { path, sha256: sha(bytes) }; };
   const probe = (name: string, recovery: boolean) => ({ name, destructive: false, steps: [...(recovery ? [{ action: 'fill', selector: '#title', value: 'Recovered title', expect: [{ type: 'attribute', selector: '#title', name: 'value', value: 'Recovered title' }] }] : []), { action: 'click', selector: '#save', expect: [{ type: 'visible', selector: '#save' }] }, { action: 'click', selector: '#saved', expect: [{ type: 'text', selector: '#saved', value: 'Saved' }] }] });
-  const evidenceProbe = (role: 'primary' | 'recovery', viewport: 'desktop' | 'mobile', recovery: boolean) => { const dimensions = viewport === 'desktop' ? { width: 1280, height: 900 } : { width: 390, height: 844 }; const value = probe(`${role} save ${viewport}`, recovery); const prefix = `task-${role}-${viewport}`; const plan = put(`${prefix}-plan.json`, value); const result = put(`${prefix}-result.json`, { name: value.name, target: 'http://localhost/editor', viewport: dimensions, steps: value.steps.map(step => ({ action: step.action, selector: step.selector, ...(step.action === 'fill' ? { value: step.value } : {}), ok: true, expectations: step.expect.map(expectation => ({ ...expectation, ok: true })) })), warnings: [] }); return { planPath: plan.path, planSha256: plan.sha256, resultPath: result.path, resultSha256: result.sha256, role, viewport }; };
+  const evidenceProbe = (role: 'primary' | 'recovery', viewport: 'desktop' | 'mobile', recovery: boolean) => { const dimensions = viewport === 'desktop' ? { width: 1280, height: 900 } : { width: 390, height: 844 }; const value = probe(`${role} save ${viewport}`, recovery); const prefix = `task-${role}-${viewport}`; const plan = put(`${prefix}-plan.json`, value); const result = put(`${prefix}-result.json`, { name: value.name, target: 'http://localhost/', viewport: dimensions, steps: value.steps.map(step => ({ action: step.action, selector: step.selector, ...(step.action === 'fill' ? { value: step.value } : {}), ok: true, expectations: step.expect.map(expectation => ({ ...expectation, ok: true })) })), warnings: [] }); return { planPath: plan.path, planSha256: plan.sha256, resultPath: result.path, resultSha256: result.sha256, role, viewport }; };
   const desktop = screenshot(1280, 900); const mobile = screenshot(390, 844);
   const desktopPath = '.omd/.cache/task-desktop.png'; const mobilePath = '.omd/.cache/task-mobile.png';
   writeFileSync(join(root, desktopPath), desktop); writeFileSync(join(root, mobilePath), mobile);
-  const evidence = { schemaVersion: 1, surface: 'product', frame: { path: '.omd/frame.md', sha256: sha(frame) }, composition: { path: '.omd/composition.md', sha256: sha(composition) }, tasks: [{ id: 'T1', context: 'production', production: { route: '/editor', locator: '#save', workObject: 'document' }, probes: [evidenceProbe('primary', 'desktop', false), evidenceProbe('primary', 'mobile', false), evidenceProbe('recovery', 'desktop', true), evidenceProbe('recovery', 'mobile', true)], renders: [{ path: desktopPath, sha256: sha(desktop), viewport: 'desktop' }, { path: mobilePath, sha256: sha(mobile), viewport: 'mobile' }] }] };
+  const invocation = bindings.invocation;
+  const capture = (path: string, sha256: string, viewport: 'desktop' | 'mobile', executionId: string) => ({
+    path,
+    sha256,
+    viewport,
+    authorization: { schemaVersion: 1, buildSha256: invocation.current.buildSha256, executionId, taskId: 'T1', route: '/', target: 'http://localhost/', viewport, capturePath: path, captureSha256: sha256, role: 'render' as const },
+  });
+  const evidence = { schemaVersion: 1, buildSha256: invocation.current.buildSha256, surface: 'product', frame: { path: '.omd/frame.md', sha256: sha(frame) }, composition: { path: '.omd/composition.md', sha256: sha(composition) }, tasks: [{ id: 'T1', context: 'production', production: { route: '/', locator: '#save', workObject: 'document' }, probes: [evidenceProbe('primary', 'desktop', false), evidenceProbe('primary', 'mobile', false), evidenceProbe('recovery', 'desktop', true), evidenceProbe('recovery', 'mobile', true)], renders: [capture(desktopPath, sha(desktop), 'desktop', 'T1-render-desktop'), capture(mobilePath, sha(mobile), 'mobile', 'T1-render-mobile')] }] };
   const input = join(root, '.omd', '.cache', 'task-evidence-manifest.json');
   writeFileSync(input, JSON.stringify(evidence));
-  publishTaskEvidence(root, input, createTestProjectRunInvocation(root));
+  authorizeTestTaskEvidencePayloads(root, invocation, {
+    probeResults: evidence.tasks.flatMap(task =>
+      task.probes.map(probe => readFileSync(join(root, probe.resultPath))),
+    ),
+    captureResults: [],
+  });
+  authorizeTestProjectRunPayloads(root, invocation, evidence.tasks.flatMap(task =>
+    task.renders.map(render => ({ purpose: 'product-capture-result' as const, payload: Buffer.from(canonical(render.authorization)) })),
+  ));
+  publishTaskEvidence(root, input, invocation);
 }
 test('doctor and preflight are read-only', () => {
   const root = project();
@@ -487,7 +709,7 @@ test('doctor and preflight are read-only', () => {
   assert.equal(existsSync(join(root, '.omd')), false);
 });
 
-test('moderator-bound local art direction unlocks ordinary sessions without host publication authority', () => {
+test('local moderator artifacts cannot bypass host-authorized art-direction publication', () => {
   const root = project();
   const source = 'https://capture.example/local-hero'; const component = 'hero';
   const image = refImagePath(root, { source, component });
@@ -502,9 +724,9 @@ test('moderator-bound local art direction unlocks ordinary sessions without host
   assert.equal(selected.status, 0, selected.stderr);
 
   const alternatives = [
-    { register: 'quiet', subjectIdentityFit: 'Quiet editorial framing fits the subject.', staticReferenceSlotIds: ['static'], motionReferenceSlotIds: [], conceptRole: 'Editorial clarity', macroCompositionHypothesis: 'Template-breaking asymmetric editorial departure.', motionHypothesis: 'none', uxAccessibilityPerformanceRisks: ['Reduced motion remains available.'], lawfulImplementationPath: 'CSS and SVG implementation.', rejectionCondition: 'The evidence better supports another direction.' },
-    { register: 'confident', subjectIdentityFit: 'Confident framing fits the subject.', staticReferenceSlotIds: ['static'], motionReferenceSlotIds: [], conceptRole: 'Launch transition', macroCompositionHypothesis: 'Layered promotional composition.', motionHypothesis: 'one', uxAccessibilityPerformanceRisks: ['Reduced motion remains available.'], lawfulImplementationPath: 'CSS and SVG implementation.', rejectionCondition: 'The evidence does not establish the required motion scene.' },
-    { register: 'showpiece', subjectIdentityFit: 'Showpiece framing fits the subject.', staticReferenceSlotIds: ['static'], motionReferenceSlotIds: [], conceptRole: 'Signature reveal', macroCompositionHypothesis: 'Sculptural promotional composition.', motionHypothesis: 'one', uxAccessibilityPerformanceRisks: ['Reduced motion remains available.'], lawfulImplementationPath: 'CSS and SVG implementation.', rejectionCondition: 'The evidence does not establish the required motion scene.' },
+    { register: 'quiet', subjectIdentityFit: 'Quiet editorial framing fits the subject.', metaphorQualities: ['quiet precision', 'measured cadence'], literalPropsToReject: ['compass', 'paper map'], staticReferenceSlotIds: ['static'], motionReferenceSlotIds: [], conceptRole: 'Editorial clarity', macroCompositionHypothesis: 'Template-breaking asymmetric editorial departure.', motionHypothesis: 'none', uxAccessibilityPerformanceRisks: ['Reduced motion remains available.'], lawfulImplementationPath: 'CSS and SVG implementation.', rejectionCondition: 'The evidence better supports another direction.' },
+    { register: 'confident', subjectIdentityFit: 'Confident framing fits the subject.', metaphorQualities: ['confident precision', 'measured cadence'], literalPropsToReject: ['compass', 'paper map'], staticReferenceSlotIds: ['static'], motionReferenceSlotIds: [], conceptRole: 'Launch transition', macroCompositionHypothesis: 'Layered promotional composition.', motionHypothesis: 'one', uxAccessibilityPerformanceRisks: ['Reduced motion remains available.'], lawfulImplementationPath: 'CSS and SVG implementation.', rejectionCondition: 'The evidence does not establish the required motion scene.' },
+    { register: 'showpiece', subjectIdentityFit: 'Showpiece framing fits the subject.', metaphorQualities: ['showpiece precision', 'measured cadence'], literalPropsToReject: ['compass', 'paper map'], staticReferenceSlotIds: ['static'], motionReferenceSlotIds: [], conceptRole: 'Signature reveal', macroCompositionHypothesis: 'Sculptural promotional composition.', motionHypothesis: 'one', uxAccessibilityPerformanceRisks: ['Reduced motion remains available.'], lawfulImplementationPath: 'CSS and SVG implementation.', rejectionCondition: 'The evidence does not establish the required motion scene.' },
   ];
   const alternativesSha256 = sha(canonicalPayload(alternatives));
   const perspective = (position: string) => ({ inputSha256: alternativesSha256, position, evidence: ['reference:static'], objections: [], conditions: ['Preserve the primary task.'] });
@@ -515,10 +737,11 @@ test('moderator-bound local art direction unlocks ordinary sessions without host
   const evaluatorResult = { winner: 'quiet', alternativesSha256, motionResolution: { motionDecision: 'none', slots: [] } };
   const input = writeManifest(root, 'local-art-direction.json', { route: '/', alternatives, references: [{ slotId: 'static', signal: 'high-visual-system', positive: true, lawful: true, motionObligation: 'none' }], evaluatorAssessment, evaluatorResult, eligibility: { sceneRoles: [], fallbackAttempted: true, qualityGates: { blindSignatureGreen: true, narrativeGreen: true, motionFitGreen: true, fidelityDecisionFitGreen: true, macroLandingScore: 3, staticReferenceInfluenceScore: 3, templateBreakingLandingScore: 3 } }, beats: ['B-1'], implementationLane: 'browser', fallbackPath: 'CSS/SVG static reduced-motion fallback.', performanceAccessibilityBudget: 'Within the declared accessibility and performance budget.', deliberation: '.omd/deliberations/art-direction.json' });
   const directed = run(root, ['art-direction', 'local-check', '--input', input, '--json']);
-  assert.equal(directed.status, 0, directed.stderr);
-  assert.equal(existsSync(join(root, '.omd', 'art-direction.json')), true);
-  assert.equal(existsSync(join(root, '.omd', 'reference-handoffs', 'composer.json')), true);
-  assert.equal(existsSync(join(root, '.omd', 'reference-handoffs', 'hand.json')), true);
+  assert.notEqual(directed.status, 0);
+  assert.match(directed.stderr, /usage: omd art-direction/);
+  assert.equal(existsSync(join(root, '.omd', 'art-direction.json')), false);
+  assert.equal(existsSync(join(root, '.omd', 'reference-handoffs', 'composer.json')), false);
+  assert.equal(existsSync(join(root, '.omd', 'reference-handoffs', 'hand.json')), false);
 });
 test('art direction rejects over-budget Beat sets before settlement and accepts a host-authorized exception', async () => {
   for (const [selectedRegister, count] of [['quiet', 6], ['confident', 8]] as const) {
@@ -555,27 +778,82 @@ test('art direction rejects over-budget Beat sets before settlement and accepts 
   assert.notEqual(record.decision.currentUserBeatExceptionReceiptSha256, NO_CURRENT_USER_BEAT_EXCEPTION_RECEIPT_SHA256);
 });
 
+test('printed evaluator skeletons publish complete evidence while missing, extra, and stale lineage fail', async () => {
+  const { inputSkeleton } = await import('../core/schema/inputs.ts');
+  const root = project();
+  try {
+    const prepared = await manifest(root, 'none', { stopAfterArtDirection: true });
+    assert.equal(prepared.directed.status, 0, prepared.directed.stderr);
+    const fixture = JSON.parse(readFileSync(join(root, 'art-direction-input.json'), 'utf8'));
+    const template = inputSkeleton('art-direction-check').skeleton as Record<string, unknown>;
+    // Fill only fields exposed by the public skeleton. Missing nested help cannot be supplied
+    // by spreading the complete fixture, which would conceal the real transport regression.
+    const fill = (shape: unknown, value: any): any => {
+      if (Array.isArray(shape)) {
+        assert.ok(Array.isArray(value));
+        return shape.length === 0 ? value : value.map((entry: unknown) => fill(shape[0], entry));
+      }
+      if (shape !== null && typeof shape === 'object') {
+        return Object.fromEntries(Object.entries(shape).map(([key, nested]) => {
+          assert.ok(Object.hasOwn(value, key), `fixture lacks printed field ${key}`);
+          return [key, fill(nested, value[key])];
+        }));
+      }
+      assert.equal(typeof shape, typeof value);
+      return value;
+    };
+    const assessment = fill(template.evaluatorAssessment, fixture.evaluatorAssessment);
+    const result = fill(template.evaluatorResult, fixture.evaluatorResult);
+    assert.deepEqual(assessment, fixture.evaluatorAssessment);
+    assert.deepEqual(result, fixture.evaluatorResult);
+    const publish = async (nextAssessment: Record<string, unknown>, nextResult: Record<string, unknown>) => {
+      const input = writeManifest(root, 'printed-evaluator-input.json', {
+        ...fixture, evaluatorAssessment: nextAssessment, evaluatorResult: nextResult,
+      });
+      const intent = JSON.parse(readFileSync(join(root, '.omd/intent-current.json'), 'utf8'));
+      return runMutation(root, ['art-direction', 'check', '--input', input], fixture.invocation, [
+        { purpose: 'evaluator-assessment', payload: canonicalBoardJson(nextAssessment) },
+        { purpose: 'evaluator-result', payload: canonicalBoardJson(nextResult) },
+        { purpose: 'current-intent-ledger', payload: readFileSync(join(root, '.omd', intent.record)) },
+      ]);
+    };
+    const valid = await publish(assessment, result);
+    assert.equal(valid.status, 0, valid.stderr);
+    const { boardSha256: _missing, ...missingBoard } = assessment;
+    for (const [nextAssessment, nextResult, expected] of [
+      [missingBoard, result, /invalid exact shape/],
+      [assessment, { ...result, undocumented: true }, /ART_DIRECTION_EVALUATOR_RESULT_INVALID: result has unknown or missing keys/],
+      [assessment, { ...result, intentSha256: sha('stale intent') }, /does not bind current intentSha256/],
+      [assessment, { ...result, alternativesSha256: sha(JSON.stringify(assessment.alternatives, null, 2)) }, /ART_DIRECTION_EVALUATOR_RESULT_INVALID: result must bind the exact alternatives/],
+    ] as const) {
+      const rejected = await publish(nextAssessment, nextResult);
+      assert.notEqual(rejected.status, 0);
+      assert.match(rejected.stderr, expected);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('motion persistence rejects a projection replayed from another invocation activation', async () => {
   const root = project();
   const value = await manifest(root);
   assert.equal(value.motionDecision, 'none');
   const invocation = createTestProjectRunInvocation(root);
   const selection = readPreReferenceSelectionV2(root);
+  const directionPointer = JSON.parse(readFileSync(join(root, '.omd', 'art-direction.json'), 'utf8')) as { record: string };
+  const direction = JSON.parse(readFileSync(join(root, '.omd', directionPointer.record), 'utf8')) as { decision: { motionResolutionProjectionSha256: string } };
+  const projection = JSON.parse(readFileSync(join(root, '.omd', 'motion-resolutions', `sha256-${direction.decision.motionResolutionProjectionSha256}.json`), 'utf8'));
+  const artInput = JSON.parse(readFileSync(join(root, 'art-direction-input.json'), 'utf8')) as { evaluatorAssessment: unknown; evaluatorResult: unknown };
   assert.throws(
     () => persistMotionResolutionProjection(root, {
+      ...projection,
       activationSha256: sha('another-authorizing-invocation'),
-      alternativesSha256: sha('alternatives'),
-      handoffSha256: sha('handoff'),
-      evaluatorInvocationSha256: sha('evaluator-invocation'),
-      evaluatorPayloadSha256: sha('assessment'),
-      evaluatorResultSha256: sha('result'),
-      motionDecision: 'none',
-      slots: [],
       selection,
     }, {
-      assessmentBytes: Buffer.from('assessment'),
-      resultBytes: Buffer.from('result'),
-    }, invocation, 'local-moderator'),
+      assessmentBytes: Buffer.from(canonicalBoardJson(artInput.evaluatorAssessment)),
+      resultBytes: Buffer.from(canonicalBoardJson(artInput.evaluatorResult)),
+    }, invocation),
     /exact authorizing invocation activation/,
   );
 });
@@ -625,7 +903,7 @@ test('static-check accepts exact receipt-v2 review authorizations for the curren
   const value = await manifest(root);
   assert.equal(value.motionDecision, 'none');
   const input = staticCheckInput(root);
-  const path = writeManifest(root, 'static-check.json', input);
+  const path = writeManifest(root, 'static-check.json', { invocation: input.invocation, ...input.capture });
   const checked = await runMutation(root, ['evidence', 'static-check', '--input', path], input.invocation, staticCheckAuthorizations(root, input));
   assert.equal(checked.status, 0, checked.stderr);
 });
@@ -676,8 +954,10 @@ test('recipe-backed one derives its receipt projection from the authorized evalu
     const alternatives = (['quiet', 'confident', 'showpiece'] as const).map((register) => ({
       register,
       subjectIdentityFit: `${register} framing fits the subject.`,
+      metaphorQualities: [`${register} precision`, 'measured cadence'],
+      literalPropsToReject: ['compass', 'paper map'],
       staticReferenceSlotIds: ['static'],
-      motionReferenceSlotIds: ['motion'],
+      motionReferenceSlotIds: [],
       conceptRole: `${register} transition`,
       macroCompositionHypothesis: 'Template-breaking asymmetric editorial departure.',
       motionHypothesis: 'one' as const,
@@ -685,7 +965,20 @@ test('recipe-backed one derives its receipt projection from the authorized evalu
       lawfulImplementationPath: 'CSS and SVG implementation.',
       rejectionCondition: 'Another documented direction better fits the evidence.',
     }));
-    const assessment = { assessments: alternatives.map((alternative, index) => ({
+    const recipeSelection = readPreReferenceSelectionV2(root);
+    const recipeHandoff = JSON.parse(readFileSync(join(root, '.omd', 'reference-handoffs', 'art-direction.json'), 'utf8')) as { payloadSha256: string };
+    const recipeIntent = JSON.parse(readFileSync(join(root, '.omd', 'intent-current.json'), 'utf8')) as { sha256: string };
+    const recipeAlternativesSha256 = sha(canonicalBoardJson(alternatives));
+    const recipeLineage = {
+      route: '/',
+      taskIds: ['T1'],
+      boardSha256: recipeSelection.captureSha256,
+      preSelectionSha256: referenceSelectionV2Sha256(recipeSelection),
+      handoffSha256: recipeHandoff.payloadSha256,
+      intentSha256: recipeIntent.sha256,
+      alternativesSha256: recipeAlternativesSha256,
+    };
+    const assessment = { alternatives, ...recipeLineage, assessments: alternatives.map((alternative, index) => ({
       register: alternative.register,
       score: 3 - index,
       subjectIdentityRationale: `${alternative.register} subject assessment.`,
@@ -699,7 +992,7 @@ test('recipe-backed one derives its receipt projection from the authorized evalu
     const recipeBytes = canonicalPayload(recipe);
     const recipeSha256 = sha(recipeBytes);
     const projection = recipeDecisionProjectionSha256({
-      alternativesSha256: sha(canonicalPayload(alternatives)),
+      alternativesSha256: recipeAlternativesSha256,
       winner: 'quiet',
       motionDecision: 'one',
       slots: [{ slotId: 'motion', obligationDisposition: 'rejected' }],
@@ -714,8 +1007,8 @@ test('recipe-backed one derives its receipt projection from the authorized evalu
       decisionSha256: projection,
     };
     const evaluatorResult = {
+      ...recipeLineage,
       winner: 'quiet',
-      alternativesSha256: sha(canonicalPayload(alternatives)),
       motionResolution: {
         motionDecision: 'one',
         slots: [{ slotId: 'motion', obligationDisposition: 'rejected', obligationReason: 'The evaluator selected the approved recipe.' }],

@@ -8,6 +8,7 @@ export type SlopSourceCandidateId =
   | 'mid-sentence-break'
   | 'all-property-transition'
   | 'repeated-kicker-treatment'
+  | 'repeated-heading-support-formula'
   | 'animated-status-glow'
   | 'rounded-accent-callout'
   | 'decorative-ordinal-run'
@@ -56,13 +57,17 @@ const REASONS: Record<SlopSourceCandidateId, Pick<SlopSourceCandidate, 'reason' 
     reason: 'The same kicker-like treatment repeats across at least three content blocks.',
     reviewQuestion: 'Does each repeated label carry useful hierarchy, or has it become a default decoration?',
   },
+  'repeated-heading-support-formula': {
+    reason: 'A shared screen header requires explanatory support beneath every heading, making unrelated screens use one typographic formula.',
+    reviewQuestion: 'Which screens genuinely need new explanatory context, and which should let the heading, work object, field legend, or state carry orientation alone?',
+  },
   'animated-status-glow': {
     reason: 'A live-state label combines luminous styling with a ping or pulse treatment.',
     reviewQuestion: 'Does this state need continuous visual urgency, or would a quiet status remain legible?',
   },
   'rounded-accent-callout': {
-    reason: 'A callout combines rounded corners with a thick coloured left edge.',
-    reviewQuestion: 'Which one treatment communicates the aside most clearly without stacking both?',
+    reason: 'A callout combines rounded corners with a thick coloured left edge, stacking two containment signals.',
+    reviewQuestion: 'Does the established callout role require both signals, or would one preserve hierarchy with less noise?',
   },
   'decorative-ordinal-run': {
     reason: 'A display treatment repeats zero-padded ordinals across a three-step run.',
@@ -191,7 +196,7 @@ function detectMidSentenceBreak(source: string, path: string): SlopSourceCandida
 
 function detectAllTransition(source: string, path: string): SlopSourceCandidate | null {
   const match = source.match(/\btransition-all\b|\btransition\s*:\s*all(?:\s|;|!|$)/i);
-  return match ? candidate('all-property-transition', path, source, match.index, [
+  return match ? candidate('all-property-transition', path, source, match.index!, [
     match[0].toLowerCase().includes('transition-all') ? 'syntax:utility' : 'syntax:declaration',
     'property:all',
   ]) : null;
@@ -223,6 +228,37 @@ function detectKickerCluster(source: string, path: string): SlopSourceCandidate 
     ]);
   }
   return null;
+}
+
+function detectHeadingSupportFormula(source: string, path: string): SlopSourceCandidate | null {
+  const supportRole = '(?:lead|subtitle|subhead|support|description|intro|dek)';
+  const functions = /function\s+[A-Za-z_$][\w$]*\s*\(([^)]*)\)|(?:const|let)\s+[A-Za-z_$][\w$]*\s*=\s*\(([^)]*)\)\s*=>/g;
+  for (const match of source.matchAll(functions)) {
+    const parameters = (match[1] ?? match[2] ?? '').split(',').map((item) => item.trim());
+    const title = parameters.find((item) => /^(?:title|heading|headline)$/i.test(item));
+    const support = parameters.find((item) => new RegExp(`^${supportRole}$`, 'i').test(item));
+    if (!title || !support) continue;
+    const region = source.slice(match.index!, match.index! + 1600);
+    const headingIndex = region.search(/<h[1-3]\b|(?:const|let)\s+heading\s*=/i);
+    const supportIndex = region.search(new RegExp(`<p\\b[^>]*(?:class(?:Name)?\\s*=\\s*["'][^"']*${supportRole}|\\$\\{\\s*${support}\\s*\\})`, 'i'));
+    if (headingIndex < 0 || supportIndex <= headingIndex) continue;
+    const beforeSupport = region.slice(0, supportIndex);
+    const escaped = support.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (new RegExp(`${escaped}\\s*(?:\\?|&&)`).test(beforeSupport)) continue;
+    return candidate('repeated-heading-support-formula', path, source, match.index!, [
+      'role:shared-screen-header', 'pattern:required-support',
+    ]);
+  }
+
+  const sequences = [...source.matchAll(new RegExp(
+    `<h[1-3]\\b[^>]*>[\\s\\S]{0,300}?<\\/h[1-3]\\s*>\\s*<p\\b[^>]*class(?:Name)?\\s*=\\s*["'][^"']*${supportRole}`,
+    'gi',
+  ))];
+  return sequences.length >= 3
+    ? candidate('repeated-heading-support-formula', path, source, sequences[2]!.index!, [
+      'role:repeated-heading-support', 'cluster:3-plus',
+    ])
+    : null;
 }
 
 function detectAnimatedStatus(source: string, path: string): SlopSourceCandidate | null {
@@ -280,14 +316,14 @@ function detectOrdinalRun(source: string, path: string): SlopSourceCandidate | n
 function findEscapedIdentifierCall(source: string, identifier: string): number | null {
   const escaped = identifier.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const match = source.match(new RegExp(`(^|[^\\w$])(${escaped})\\s*\\(`, 'm'));
-  return match ? match.index + match[1]!.length : null;
+  return match ? match.index! + match[1]!.length : null;
 }
 
 function detectFontPair(source: string, path: string): SlopSourceCandidate | null {
   const inter = source.match(/(?:font-family\s*:[^;{}]*|fontFamily\s*[:=][^,;\n}]*|fonts?\.[a-z]+\s*\([^)]*)\bInter\b/i);
   const partner = source.match(/(?:font-family\s*:[^;{}]*|fontFamily\s*[:=][^,;\n}]*|fonts?\.[a-z]+\s*\([^)]*)\b(Space\s+Grotesk|Geist|Manrope|Plus\s+Jakarta(?:\s+Sans)?)\b/i);
   if (inter && partner) {
-    return candidate('default-font-pair', path, source, Math.max(inter.index, partner.index), [
+    return candidate('default-font-pair', path, source, Math.max(inter.index!, partner.index!), [
       'family:inter', `family:${partner[1]!.toLowerCase().replace(/\s+/g, '-')}`, 'context:same-file',
     ]);
   }
@@ -374,6 +410,7 @@ function detectCandidates(source: string, path: string, extension: string): Slop
     detectMidSentenceBreak(masked, path),
     detectAllTransition(masked, path),
     detectKickerCluster(masked, path),
+    detectHeadingSupportFormula(masked, path),
     detectAnimatedStatus(masked, path),
     detectRoundedCallout(masked, path),
     detectOrdinalRun(masked, path),

@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { test } from 'node:test';
-import { beatBudgetForRegister, exceedsCanonicalBeatBudget, NO_CURRENT_USER_BEAT_EXCEPTION_RECEIPT_SHA256, recipeDecisionProjectionSha256, resolveMarketingArtDirection } from '../core/art-direction/decision.ts';
-import type { ResolveMarketingArtDirectionInput } from '../core/art-direction/decision.ts';
+import { beatBudgetForRegister, canonicalArtDirectionReferences, exceedsCanonicalBeatBudget, NO_CURRENT_USER_BEAT_EXCEPTION_RECEIPT_SHA256, recipeDecisionProjectionSha256, resolveMarketingArtDirectionPure as resolveMarketingArtDirection, validateArtDirectionDecision } from '../core/art-direction/decision.ts';
+import type { NonAuthoritativeResolveMarketingArtDirectionInput as ResolveMarketingArtDirectionInput } from '../core/art-direction/decision.ts';
 import { canonicalJson } from '../core/ref/board-artifacts.ts';
 import { referenceHandoffPayloadSha256 } from '../core/ref/reference-handoff.ts';
 import {
@@ -11,8 +11,17 @@ import {
   parseReferenceSelectionV2,
   referenceSelectionV2Sha256,
 } from '../core/ref/reference-selection.ts';
-import type { MotionResolutionProjection } from '../core/ref/reference-selection.ts';
-import type { ArtDirectionAlternative, ArtDirectionReference } from '../core/art-direction/schema.ts';
+import type { MotionResolutionProjection, ReferenceSelectionV2 } from '../core/ref/reference-selection.ts';
+import {
+  ART_DIRECTION_RECORD_SCHEMA_VERSION,
+  ART_DIRECTION_SCHEMA_VERSION,
+  LEGACY_ART_DIRECTION_RECORD_SCHEMA_VERSION,
+  artDirectionSha256,
+  validateArtDirectionDecisionShape,
+  validateArtDirectionRecord,
+  type ArtDirectionAlternative,
+  type ArtDirectionReference,
+} from '../core/art-direction/schema.ts';
 
 const hash = (char: string): string => char.repeat(64);
 
@@ -47,6 +56,8 @@ function alternative(register: 'quiet' | 'confident' | 'showpiece', motionHypoth
   return {
     register,
     subjectIdentityFit: `${register} fits the subject`,
+    metaphorQualities: [`${register} precision`, 'measured momentum'],
+    literalPropsToReject: ['compass', 'paper map'],
     staticReferenceSlotIds: ['static'],
     motionReferenceSlotIds: motionHypothesis === 'one' ? ['motion'] : [],
     conceptRole: `${register} concept role`,
@@ -157,7 +168,7 @@ function input(overrides: Partial<ResolveMarketingArtDirectionInput> = {}): Reso
     route: overrides.route ?? '/launch',
     intent: overrides.intent ?? {},
     alternatives: overrides.alternatives ?? defaultAlternatives(hasAvailablePositiveMotion),
-    references: overrides.references ?? references,
+    references: overrides.references ?? canonicalArtDirectionReferences(bindings.selection),
     referenceBindings: bindings,
     evaluatorEvidence: overrides.evaluatorEvidence ?? evaluatorEvidence(),
     eligibility: overrides.eligibility ?? {
@@ -173,6 +184,58 @@ function input(overrides: Partial<ResolveMarketingArtDirectionInput> = {}): Reso
     motionResolution: overrides.motionResolution ?? motionResolutionFor(resolved),
   };
 }
+
+test('two register alternatives resolve and retain exact n-minus-one rejections through record readback', () => {
+  const alternatives = defaultAlternatives(true).slice(1);
+  const evidence = evaluatorEvidence();
+  const resolved = input({ alternatives, evaluatorEvidence: { ...evidence, assessments: evidence.assessments.filter(item => item.register !== 'quiet') } });
+  const decision = resolveMarketingArtDirection(resolved);
+  assert.equal(decision.selectedRegister, 'showpiece');
+  assert.deepEqual(decision.rejectedAlternatives.map(item => item.register), ['confident']);
+  const record = {
+    schemaVersion: ART_DIRECTION_RECORD_SCHEMA_VERSION, decision, decisionSha256: artDirectionSha256(decision),
+    referenceHandoffSha256: hash('1'), intentLedgerSha256: decision.intentSha256,
+    activationSha256: decision.activationSha256, beatIds: ['B-1'],
+  };
+  assert.deepEqual(validateArtDirectionRecord(JSON.parse(canonicalJson(record))), record);
+  assert.deepEqual(validateArtDirectionDecision(decision, resolved.references, resolved.eligibility, resolved.referenceBindings, resolved.motionResolution), decision);
+  for (const rejectedAlternatives of [[], [...decision.rejectedAlternatives, decision.rejectedAlternatives[0]!], [{ ...decision.rejectedAlternatives[0]!, register: 'quiet' as const }], [{ ...decision.rejectedAlternatives[0]!, register: 'showpiece' as const }]]) {
+    assert.throws(() => validateArtDirectionDecisionShape({ ...decision, rejectedAlternatives }));
+    assert.throws(() => validateArtDirectionDecision({ ...decision, rejectedAlternatives }, resolved.references, resolved.eligibility, resolved.referenceBindings, resolved.motionResolution));
+  }
+  for (const malformed of [[], [alternatives[0]!, alternatives[0]!]]) {
+    assert.throws(() => resolveMarketingArtDirection({ ...resolved, alternatives: malformed }), /nonempty and register-distinct/);
+    assert.throws(() => validateArtDirectionDecisionShape({ ...decision, consideredAlternatives: malformed }));
+  }
+  assert.throws(() => resolveMarketingArtDirection({ ...resolved, evaluatorEvidence: evidence }), /assess every alternative exactly once/);
+  assert.throws(() => resolveMarketingArtDirection({ ...resolved, evaluatorEvidence: { ...evidence, assessments: evidence.assessments.slice(0, 2) } }), /missing a finite score/);
+});
+
+test('singleton requires a matching explicit register lock, never a motion lock or source label', () => {
+  const evidence = evaluatorEvidence();
+  const resolved = input({
+    alternatives: [alternative('quiet', 'none')], intent: { register: 'quiet', motionDecision: 'none' },
+    evaluatorEvidence: { ...evidence, assessments: evidence.assessments.filter(item => item.register === 'quiet') },
+    eligibility: { sceneRoles: [], fallbackAttempted: true },
+  });
+  const decision = resolveMarketingArtDirection(resolved);
+  assert.equal(decision.selectedRegister, 'quiet'); assert.deepEqual(decision.rejectedAlternatives, []);
+  assert.deepEqual(validateArtDirectionDecisionShape(JSON.parse(canonicalJson(decision))), decision);
+  assert.deepEqual(validateArtDirectionDecision(decision, resolved.references, resolved.eligibility, resolved.referenceBindings, resolved.motionResolution, resolved.intent), decision);
+  for (const intent of [{}, { motionDecision: 'none' as const }, { register: 'confident' as const }]) {
+    assert.throws(() => resolveMarketingArtDirection({ ...resolved, intent }), /matching current explicit register lock/);
+    assert.throws(() => validateArtDirectionDecision(decision, resolved.references, resolved.eligibility, resolved.referenceBindings, resolved.motionResolution, intent), /matching current explicit register lock/);
+  }
+  assert.throws(() => validateArtDirectionDecision(decision, resolved.references, resolved.eligibility, resolved.referenceBindings, resolved.motionResolution), /matching current explicit register lock/);
+  assert.throws(() => validateArtDirectionDecisionShape({ ...decision, source: 'agent-evidence' }));
+  assert.throws(() => resolveMarketingArtDirection({ ...resolved, motionResolution: { ...resolved.motionResolution, slots: [] } }), /slot|pending/);
+});
+
+test('a current user register lock still wins over the evaluator in a two-register comparison', () => {
+  const evidence = evaluatorEvidence();
+  const resolved = input({ alternatives: defaultAlternatives(true).slice(1), intent: { register: 'confident' }, evaluatorEvidence: { ...evidence, assessments: evidence.assessments.filter(item => item.register !== 'quiet') } });
+  assert.equal(resolveMarketingArtDirection(resolved).selectedRegister, 'confident');
+});
 
 test('explicit current-user register and motion locks win before composition', () => {
   const resolved = input({
@@ -196,6 +259,8 @@ test('explicit current-user register and motion locks win before composition', (
   assert.equal(decision.selectedRegister, 'quiet');
   assert.equal(decision.motionDecision, 'none');
   assert.equal(decision.consideredAlternatives.length, 3);
+  assert.deepEqual(decision.metaphorQualities, ['quiet precision', 'measured momentum']);
+  assert.deepEqual(decision.literalPropsToReject, ['compass', 'paper map']);
   assert.equal(decision.preSelectionSha256, selectionSha256);
   assert.equal(
     decision.motionResolutionProjectionSha256,
@@ -209,6 +274,111 @@ test('explicit current-user register and motion locks win before composition', (
   }]);
   assert.equal(decision.currentUserBeatExceptionReceiptSha256, NO_CURRENT_USER_BEAT_EXCEPTION_RECEIPT_SHA256);
   assert.equal('userPrompt' in decision, false);
+});
+
+test('art direction rejects empty anti-literal metaphor bindings', () => {
+  const baseline = defaultAlternatives(true);
+  for (const [field, value] of [
+    ['metaphorQualities', []],
+    ['metaphorQualities', ['']],
+    ['literalPropsToReject', []],
+    ['literalPropsToReject', ['  ']],
+  ] as const) {
+    const alternatives = baseline.map((candidate, index) => index === 0
+      ? { ...candidate, [field]: value }
+      : candidate) as readonly ArtDirectionAlternative[];
+    assert.throws(
+      () => resolveMarketingArtDirection(input({ alternatives })),
+      /alternative has an invalid exact shape/,
+    );
+  }
+});
+
+test('persisted decisions must preserve the selected alternative metaphor contract exactly', () => {
+  const decision = resolveMarketingArtDirection(input({
+    evaluatorEvidence: evaluatorEvidence({ quiet: 2, confident: 9, showpiece: 8 }),
+  }));
+  assert.equal(ART_DIRECTION_SCHEMA_VERSION, 'art-direction-v2');
+  assert.equal(ART_DIRECTION_RECORD_SCHEMA_VERSION, 'art-direction-record-v3');
+  assert.equal(decision.schemaVersion, 'art-direction-v2');
+  assert.equal(validateArtDirectionDecisionShape(decision), decision);
+  const record = {
+    schemaVersion: ART_DIRECTION_RECORD_SCHEMA_VERSION,
+    decision,
+    decisionSha256: artDirectionSha256(decision),
+    referenceHandoffSha256: hash('1'),
+    intentLedgerSha256: decision.intentSha256,
+    activationSha256: decision.activationSha256,
+    beatIds: ['B-1'],
+  };
+  assert.equal(validateArtDirectionRecord(record).schemaVersion, 'art-direction-record-v3');
+  assert.throws(
+    () => validateArtDirectionRecord({ ...record, schemaVersion: LEGACY_ART_DIRECTION_RECORD_SCHEMA_VERSION }),
+    /invalid shape or content hash/,
+  );
+  assert.throws(
+    () => validateArtDirectionDecisionShape({ ...decision, metaphorQualities: ['different quality'] }),
+    /does not bind the selected metaphor contract/,
+  );
+  assert.throws(
+    () => validateArtDirectionDecisionShape({ ...decision, literalPropsToReject: ['different prop'] }),
+    /does not bind the selected metaphor contract/,
+  );
+});
+
+test('historical v1 decisions and record-v2 bytes remain readable without metaphor fields', () => {
+  const current = resolveMarketingArtDirection(input({
+    evaluatorEvidence: evaluatorEvidence({ quiet: 2, confident: 9, showpiece: 8 }),
+  }));
+  const legacyAlternatives = current.consideredAlternatives.map((alternative) => {
+    const { metaphorQualities: _qualities, literalPropsToReject: _props, ...legacy } = alternative;
+    return legacy;
+  });
+  const {
+    metaphorQualities: _qualities,
+    literalPropsToReject: _props,
+    schemaVersion: _schemaVersion,
+    ...decisionWithoutMetaphor
+  } = current;
+  const legacyDecision = {
+    ...decisionWithoutMetaphor,
+    schemaVersion: 'art-direction-v1',
+    consideredAlternatives: legacyAlternatives,
+    alternativesSha256: createHash('sha256').update(canonicalJson(legacyAlternatives)).digest('hex'),
+  };
+  const legacyRecord = {
+    schemaVersion: LEGACY_ART_DIRECTION_RECORD_SCHEMA_VERSION,
+    decision: legacyDecision,
+    decisionSha256: artDirectionSha256(legacyDecision),
+    referenceHandoffSha256: hash('1'),
+    intentLedgerSha256: legacyDecision.intentSha256,
+    activationSha256: legacyDecision.activationSha256,
+    beatIds: ['B-1'],
+  };
+  const bytes = canonicalJson(legacyRecord);
+  const parsed = JSON.parse(bytes);
+
+  assert.deepEqual(validateArtDirectionDecisionShape(parsed.decision), legacyDecision);
+  assert.deepEqual(validateArtDirectionRecord(parsed), legacyRecord);
+  assert.throws(
+    () => validateArtDirectionRecord({ ...legacyRecord, schemaVersion: ART_DIRECTION_RECORD_SCHEMA_VERSION }),
+    /invalid shape or content hash/,
+  );
+  assert.equal(canonicalJson(parsed), bytes);
+  assert.equal(artDirectionSha256(parsed), artDirectionSha256(legacyRecord));
+});
+
+test('schema versions cannot be used to bypass or retrofit the metaphor contract', () => {
+  const current = resolveMarketingArtDirection(input());
+  const { metaphorQualities: _qualities, literalPropsToReject: _props, ...missing } = current;
+  assert.throws(
+    () => validateArtDirectionDecisionShape(missing),
+    /invalid exact shape/,
+  );
+  assert.throws(
+    () => validateArtDirectionDecisionShape({ ...current, schemaVersion: 'art-direction-v1' }),
+    /invalid exact shape/,
+  );
 });
 
 test('silent marketing selects the uniquely highest evaluator score', () => {
@@ -424,4 +594,58 @@ test('canonical Beat budgets require a non-canonical current-user exception rece
   assert.equal(beatBudgetForRegister('showpiece'), 7);
   assert.equal(exceedsCanonicalBeatBudget('quiet', ['B-1', 'B-2', 'B-3', 'B-4', 'B-5', 'B-6'], NO_CURRENT_USER_BEAT_EXCEPTION_RECEIPT_SHA256), true);
   assert.equal(exceedsCanonicalBeatBudget('confident', ['B-1', 'B-2', 'B-3', 'B-4', 'B-5', 'B-6', 'B-7', 'B-8'], hash('e')), false);
+});
+test('art references preserve canonical axes and rejected slots cannot be promoted or counted twice', () => {
+  const projected = canonicalArtDirectionReferences({
+    ...selection,
+    slots: [
+      selection.slots[0]!,
+      { ...selection.slots[1]!, obligationDisposition: 'rejected', obligationReason: 'Evaluator rejected this motion evidence.' },
+    ],
+  });
+  assert.deepEqual(projected[1], {
+    slotId: 'motion',
+    signal: 'high-motion',
+    positive: false,
+    lawful: true,
+    motionObligation: 'none',
+    staticAxis: 'absent',
+    motionAxis: 'available',
+    obligationDisposition: 'rejected',
+  });
+  assert.throws(() => resolveMarketingArtDirection(input({
+    alternatives: [
+      { ...alternative('quiet', 'none'), staticReferenceSlotIds: ['static', 'static'] },
+      { ...alternative('confident', 'one'), motionReferenceSlotIds: ['motion'] },
+      { ...alternative('showpiece', 'one'), motionReferenceSlotIds: ['motion'] },
+    ],
+  })), /cannot cite a reference slot more than once/);
+  assert.throws(() => resolveMarketingArtDirection(input({
+    alternatives: [
+      alternative('quiet', 'none'),
+      { ...alternative('confident', 'one'), motionReferenceSlotIds: ['motion', 'motion'] },
+      { ...alternative('showpiece', 'one'), motionReferenceSlotIds: ['motion'] },
+    ],
+  })), /cannot cite a reference slot more than once/);
+  const rejectedStaticSelection: ReferenceSelectionV2 = {
+    ...selection,
+    slots: [{ ...selection.slots[0]!, obligationDisposition: 'rejected', obligationReason: 'Evaluator rejected this static evidence.' }, selection.slots[1]!],
+  };
+  const rejectedStaticSha256 = referenceSelectionV2Sha256(rejectedStaticSelection);
+  const rejectedStaticHandoffWithoutHash = {
+    ...handoffWithoutHash,
+    preSelectionSha256: rejectedStaticSha256,
+  };
+  const rejectedStaticHandoff = {
+    ...rejectedStaticHandoffWithoutHash,
+    payloadSha256: referenceHandoffPayloadSha256(rejectedStaticHandoffWithoutHash),
+  };
+  assert.throws(() => resolveMarketingArtDirection(input({
+    referenceBindings: {
+      canonicalSelectionSha256: rejectedStaticSha256,
+      canonicalHandoffSha256: rejectedStaticHandoff.payloadSha256,
+      selection: rejectedStaticSelection,
+      handoff: rejectedStaticHandoff,
+    },
+  })), /static evidence must be lawful and used/);
 });

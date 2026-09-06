@@ -136,31 +136,21 @@ statistical mean of AI design output, not a brand decision.
 
 ## Linter notes
 
-The `SLOP-GRADIENT` rule fires on the following hue combinations because they are the
-statistical signature of AI-generated design output — the default gradient every model
-reaches for when asked to "make it look good":
+A single gradient is not a `SLOP-GRADIENT` finding. The rule requires a compound: at
+least two rendered regions use saturated indigo-to-violet stops (230–300deg) and neither
+region names the gradient's semantic job. Repetition can blur section purpose when the
+same atmospheric treatment is asked to carry hero emphasis, data meaning, and decoration.
 
-- **Indigo → violet** (hue range 240–290deg): the single most overused gradient in AI
-  design. Any `background: linear-gradient` or `radial-gradient` whose two dominant
-  stops land in this band fires `SLOP-GRADIENT`. If the brand genuinely uses indigo and
-  violet, the decision must be recorded in `omd decision` with the brand's hex values
-  and the reference that supports the choice.
+When a gradient has a real job, expose it on that element with
+`data-omd-gradient-role="hero-atmosphere"`, `data-omd-gradient-role="data-intensity"`, or
+another concise role from the composition contract. This is per-element evidence, not a
+page-wide waiver: two other unassigned gradients still trigger the warning. A warm sand
+mesh, a single brand focal gradient, and role-named data gradients remain outside the
+compound.
 
-- **Purple → pink** (hue range 280–330deg): a secondary AI-default combination.
-  Frequently appears in "premium" and "AI product" contexts. Same rule applies.
-
-- **Electric blue → teal** (hue range 190–240deg): common in tech startup contexts.
-  Fires `SLOP-GRADIENT` in these ranges at saturation above 70%.
-
-The mesh gradient technique is not itself flagged — layered radial gradients at lower
-saturation using the brand's actual hue values are expected and correct. The linter
-fires on the specific hue bands above, not on mesh gradients per se. A mesh using
-`hsl(30deg 40% 80%)` (warm sand) and `hsl(170deg 30% 75%)` (cool sage) is clean.
-A mesh using `hsl(260deg 80% 60%)` and `hsl(310deg 70% 60%)` fires the rule.
-
-**The test**: before committing a mesh gradient, read the HSL values of the dominant
-stops. If both stops land in the flagged hue bands, record the brand reason or choose
-a different hue combination. The mesh technique is sound; the hue selection is the risk.
+**The test**: name what each repeated gradient changes for the user. If two regions have
+no distinct answer, keep one focal use or remove the extra decoration. Then verify text
+contrast at every stop; a named role does not excuse unreadable content.
 
 ## Do not combine with
 

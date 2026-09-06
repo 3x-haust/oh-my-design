@@ -127,6 +127,7 @@ test('printed input skeletons carry exactly the keys their validators accept', a
   const { INPUT_SKELETONS, inputSkeleton } = await import('../core/schema/inputs.ts');
   const { DEPTH_INPUT_KEYS } = await import('../core/deliberation/depth.ts');
   const { ART_DIRECTION_CHECK_INPUT_KEYS } = await import('../core/art-direction/schema.ts');
+  const { parseTaskFlowBenchmark } = await import('../core/ref/task-flow-benchmark.ts');
 
   const depth = inputSkeleton('depth-input');
   assert.deepEqual(Object.keys(depth.skeleton as object).sort(), [...DEPTH_INPUT_KEYS].sort());
@@ -134,20 +135,115 @@ test('printed input skeletons carry exactly the keys their validators accept', a
   const authored = Object.keys(check.skeleton as object);
   assert.ok(authored.every((key) => (ART_DIRECTION_CHECK_INPUT_KEYS as readonly string[]).includes(key)), authored.join(','));
   assert.ok(!authored.includes('invocation'), 'the local lane never authors an invocation');
-  assert.equal(INPUT_SKELETONS.length, 6);
+  const directionHelp = check.constraints?.join(' ') ?? '';
+  assert.match(directionHelp, /complete evaluator-owned evidence/);
+  assert.match(directionHelp, /source-free inputs and exact lineage before it judges/);
+  assert.match(directionHelp, /exactly one assessment per unique alternative register/);
+  assert.match(directionHelp, /highest numeric score, with ascending register-name tie-break/);
+  assert.match(directionHelp, /do not use a raw file digest/);
+  assert.match(directionHelp, /both approvedMotionRecipe and approvedMotionRecipeReceipt/);
+  assert.match(directionHelp, /exact receipt-bound evaluatorAssessment and evaluatorResult payload serialization/);
+  assert.match(directionHelp, /not permission to reconstruct unseen judgments/);
+  assert.equal(INPUT_SKELETONS.length, 18);
+  const lifecycle = inputSkeleton('trusted-lifecycle-manifest');
+  assert.deepEqual(
+    Object.keys(lifecycle.skeleton as object).sort(),
+    ['entryPath', 'entrySurface', 'schema', 'scripts'],
+  );
 
   const locale = inputSkeleton('locale-contract');
   const { LOCALE_CONTRACT_KEYS } = await import('../core/locale/contract.ts');
   assert.deepEqual(Object.keys(locale.skeleton as object).sort(), [...LOCALE_CONTRACT_KEYS].sort());
+  const localeDesign = inputSkeleton('locale-design-context');
+  const { LOCALE_DESIGN_CONTEXT_KEYS } = await import('../core/locale/design-context.ts');
+  assert.deepEqual(Object.keys(localeDesign.skeleton as object), [...LOCALE_DESIGN_CONTEXT_KEYS]);
+  const culturalProfile = inputSkeleton('cultural-design-profile');
+  const { CULTURAL_DESIGN_PROFILE_KEYS } = await import('../core/locale/cultural-profile.ts');
+  assert.deepEqual(Object.keys(culturalProfile.skeleton as object), [...CULTURAL_DESIGN_PROFILE_KEYS]);
   const functional = inputSkeleton('functional-requirements');
   assert.deepEqual(Object.keys(functional.skeleton as object).sort(), ['requirements', 'schema']);
+  const reality = inputSkeleton('reality-ledger');
+  assert.deepEqual(Object.keys(reality.skeleton as object).sort(), ['facts', 'mode', 'schema']);
+  const board = inputSkeleton('reference-board');
+  assert.deepEqual(Object.keys(board.skeleton as object), ['candidates']);
+  const boardCandidates = (board.skeleton as { candidates: { pieces: { grid: object; binding: object }[] }[] }).candidates;
+  assert.equal(boardCandidates.length, 2);
+  assert.deepEqual(Object.keys(boardCandidates[0]!.pieces[0]!.grid), ['column', 'span', 'order']);
+  assert.match(board.constraints?.join('\n') ?? '', /grid\.column is 1\.\.12[\s\S]*unique non-negative integer/);
+  assert.deepEqual(Object.keys(boardCandidates[0]!.pieces[0]!.binding), ['zoneId', 'decisionId', 'axis', 'sourceState', 'sourceViewport', 'targetViewports', 'responsiveConsequence', 'conflictGroup', 'conflictResolution', 'falsifier']);
+  const localeBinding = inputSkeleton('reference-locale-binding');
+  assert.deepEqual(Object.keys(localeBinding.skeleton as object), ['bindings']);
+  assert.deepEqual(
+    Object.keys((localeBinding.skeleton as { bindings: object[] }).bindings[0]!),
+    ['candidateId', 'slotId', 'localeDecisionId'],
+  );
+  const acquisition = inputSkeleton('acquisition-plan');
+  assert.deepEqual(Object.keys(acquisition.skeleton as object), ['schema', 'owner', 'localeContextSha256', 'zones']);
+  const benchmark = inputSkeleton('task-flow-benchmark');
+  assert.deepEqual(Object.keys(benchmark.skeleton as object), [
+    'schema', 'surface', 'domain', 'sourceContractSha256', 'sources', 'taskSteps', 'counterexamples',
+  ]);
+  assert.doesNotThrow(() => parseTaskFlowBenchmark(benchmark.skeleton));
+  const entrySurface = inputSkeleton('entry-surface-contract');
+  assert.deepEqual(Object.keys(entrySurface.skeleton as object), [
+    'schema', 'entryPath', 'prerequisiteTaskId', 'dependentTaskId', 'purposeText',
+    'workObjectAnchorText', 'nextActionName', 'beforeText', 'afterText', 'outcomeWitnesses',
+  ]);
+  assert.doesNotMatch(JSON.stringify(entrySurface.skeleton), /selector/i);
 
   const dir = project();
   const printed = run(['schema', 'depth-input', '--json'], dir);
   assert.equal(printed.status, 0, printed.stderr);
   assert.deepEqual(JSON.parse(printed.stdout).skeleton, depth.skeleton);
+  const printedBoard = run(['schema', 'reference-board'], dir);
+  assert.equal(printedBoard.status, 0, printedBoard.stderr);
+  assert.match(printedBoard.stdout, /every piece grid contains exactly column, span, order/);
+  assert.match(printedBoard.stdout, /"grid": \{\s+"column": 1,\s+"span": 12,\s+"order": 0/s);
   const listed = run(['schema', 'list', '--json'], dir);
-  assert.deepEqual(JSON.parse(listed.stdout).map((entry: { name: string }) => entry.name), ['domain-brief', 'depth-input', 'art-direction-check', 'locale-contract', 'functional-requirements', 'decision-graph']);
+  assert.deepEqual(JSON.parse(listed.stdout).map((entry: { name: string }) => entry.name), ['route-input', 'reality-ledger', 'domain-brief', 'depth-input', 'content-grain', 'acquisition-plan', 'reference-board', 'reference-capture-preparation', 'reference-locale-binding', 'task-flow-benchmark', 'art-direction-check', 'locale-contract', 'locale-design-context', 'cultural-design-profile', 'functional-requirements', 'decision-graph', 'entry-surface-contract', 'trusted-lifecycle-manifest']);
+});
+
+test('reality-ledger schema exposes its closed category vocabulary', async () => {
+  const { inputSkeleton } = await import('../core/schema/inputs.ts');
+  const reality = inputSkeleton('reality-ledger');
+  const constraints = reality.constraints?.join('\n') ?? '';
+  assert.match(
+    constraints,
+    /subject, brand, operation, person, metric, media, capability/,
+  );
+  assert.match(constraints, /supplied, verified, demo, unknown/);
+
+  const printed = run(['schema', 'reality-ledger']);
+  assert.equal(printed.status, 0, printed.stderr);
+  assert.match(
+    printed.stdout,
+    /subject, brand, operation, person, metric, media, capability/,
+  );
+});
+
+test('schema prints a source-bound Content Grain skeleton', () => {
+  const dir = project();
+  const printed = run(['schema', 'content-grain', '--json'], dir);
+  assert.equal(printed.status, 0, printed.stderr);
+  const parsed = JSON.parse(printed.stdout) as {
+    name: string;
+    path: string;
+    skeleton: {
+      schema: string;
+      status: string;
+      sources: Array<{ path: string; sha256: string }>;
+      traits: unknown[];
+      fixtures: unknown[];
+    };
+  };
+  assert.equal(parsed.name, 'content-grain');
+  assert.equal(parsed.path, '.omd/content-grain.json');
+  assert.equal(parsed.skeleton.schema, 'content-grain-v1');
+  assert.equal(parsed.skeleton.status, 'active');
+  assert.equal(parsed.skeleton.sources[0]?.path, 'content/catalog.json');
+  assert.match(parsed.skeleton.sources[0]?.sha256 ?? '', /^[a-f0-9]{64}$/);
+  assert.equal(parsed.skeleton.traits.length, 1);
+  assert.equal(parsed.skeleton.fixtures.length, 2);
 });
 
 test('the printed depth skeleton classifies and a shapeless input names every missing key', () => {
@@ -181,9 +277,8 @@ test('stage status reports the derived run state through the CLI', () => {
   assert.equal(resumed.current, 'frame');
 });
 
-// The check payload's `references` array must equal this projection byte-for-byte, so emitting it
-// is the only way a coordinator can stop retyping it. Rights and anti-reference signal decide
-// `positive`/`lawful`; motion obligations stay pending until the evaluator settles them.
+// The check payload's `references` array must equal this projection byte-for-byte. Settled
+// disposition, rights, signal, and static/motion axes jointly decide positive lawful use.
 test('canonical check references project rights and signal from the settled selection', async () => {
   const { canonicalArtDirectionReferences } = await import('../core/art-direction/decision.ts');
   const slot = (slotId: string, signal: string, rights: string) => ({
@@ -198,8 +293,26 @@ test('canonical check references project rights and signal from the settled sele
     ],
   } as never);
   assert.deepEqual(references, [
-    { slotId: 'hero', signal: 'high-visual-system', positive: true, lawful: true, motionObligation: 'none' },
-    { slotId: 'avoid', signal: 'anti-reference', positive: false, lawful: true, motionObligation: 'none' },
-    { slotId: 'unlicensed', signal: 'supporting-component', positive: false, lawful: false, motionObligation: 'none' },
+    { slotId: 'hero', signal: 'high-visual-system', positive: false, lawful: true, motionObligation: 'none', staticAxis: 'available', motionAxis: 'absent', obligationDisposition: 'not-applicable' },
+    { slotId: 'avoid', signal: 'anti-reference', positive: false, lawful: true, motionObligation: 'none', staticAxis: 'available', motionAxis: 'absent', obligationDisposition: 'not-applicable' },
+    { slotId: 'unlicensed', signal: 'supporting-component', positive: false, lawful: false, motionObligation: 'none', staticAxis: 'available', motionAxis: 'absent', obligationDisposition: 'not-applicable' },
   ]);
+});
+// Role ② craft evidence is declared by the domain brief, not the acquisition plan, so a board can
+// cover every zone and still have gathered only half the roles the protocol names.
+test('declared craft queries with no measured craft record fail the board audit', () => {
+  const dir = project();
+  writeFile(dir, '.omd/domain-brief.json', JSON.stringify({
+    schema: 'domain-brief-v1', request: 'r', domain: 'd', summary: 's',
+    surfaces: [{ name: 'landing', purpose: 'p' }], coreObjects: ['o'], audience: 'a',
+    referenceQueries: { component: ['nav'], craft: ['awwwards editorial motion'] }, researched: false,
+  }));
+  writeFile(dir, '.omd/refs/still.json', JSON.stringify({
+    source: 'https://a.example', component: 'nav', kind: 'component', selector: '.nav',
+    capturedAt: '2026-07-28T00:00:00.000Z', slot: 'nav', principles: [],
+    invariants: { spacingLadder: [8], radiusLadder: [4], elevationLevels: 1, centeredRatio: 0, tokenCoverage: 1, paddingWeight: 8, typeScale: [16], fontFamilies: ['inter'], weightLadder: [400], motionDurations: [], easingVocab: [], animatedShare: 0, hoverCoverage: 0, focusCoverage: 0, animatedProperties: [], hasReducedMotion: false, scrollChoreography: [] },
+  }));
+  const blocked = run(['ref', 'granularity', '--json'], dir);
+  assert.equal(blocked.status, 1);
+  assert.ok(JSON.parse(blocked.stdout).findings.some((f: { id: string }) => f.id === 'REF-CRAFT-UNGATHERED'));
 });

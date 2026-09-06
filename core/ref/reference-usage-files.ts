@@ -62,7 +62,7 @@ export const readTrustedReferenceUsageSnapshot = (root: string, path: string, la
 
 export function trustedProductionEvidencePath(root: string, path: string): string {
   const first = path.split('/')[0];
-  if (first === undefined || prohibitedEvidenceRoots.has(first) || !productionExtensions.has(extname(path).toLowerCase())) return fail('evidence.path must name a project-local production source file');
+  if (first === undefined || prohibitedEvidenceRoots.has(first) || (!productionExtensions.has(extname(path).toLowerCase()) && !path.endsWith('.usage.json'))) return fail('evidence.path must name a project-local production source file');
   return trustedReferenceUsageFile(root, path, 'production evidence');
 }
 

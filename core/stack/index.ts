@@ -1,4 +1,5 @@
 import { discoverEvidence } from '../design/index.ts';
+import { detectAppShell, type AppShell } from './shell.ts';
 
 /**
  * Deterministic stack routing. The default is plain HTML/CSS/JS: a landing, marketing, or content
@@ -13,10 +14,13 @@ export interface StackDecision {
   framework: string | null;
   greenfield: boolean;
   reason: string;
+  /** Where the UI runs. An Electron/Tauri renderer is a web UI but never a website. */
+  shell: AppShell;
 }
 
 export function computeStack(cwd: string): StackDecision {
   const ev = discoverEvidence(cwd);
+  const shell = detectAppShell(cwd);
 
   if (ev.hasPackageJson && ev.framework) {
     return {
@@ -24,6 +28,7 @@ export function computeStack(cwd: string): StackDecision {
       framework: ev.framework,
       greenfield: false,
       reason: `existing ${ev.framework} project (package.json) — build in it and add no unnecessary dependencies`,
+      shell,
     };
   }
 
@@ -34,6 +39,7 @@ export function computeStack(cwd: string): StackDecision {
       framework: ev.framework,
       greenfield: false,
       reason: `existing toolchain (${marker}) — preserve and investigate it, never replace it with a different stack`,
+      shell,
     };
   }
 
@@ -46,5 +52,6 @@ export function computeStack(cwd: string): StackDecision {
       + 'Reach for a framework (React + Vite + TypeScript, or another) only when the user explicitly '
       + 'asks for one or the surface is a genuinely stateful application (dashboard, console, CRUD, '
       + 'editor); a static landing or content page needs no framework.',
+    shell,
   };
 }

@@ -1,0 +1,9 @@
+{
+  "schema": "trusted-lifecycle-manifest-v1",
+  "entryPath": "index.html",
+  "authority": {
+    "purpose": "trusted-browser-receipt",
+    "sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+  },
+  "scripts": []
+}

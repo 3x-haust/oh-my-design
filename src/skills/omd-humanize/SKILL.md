@@ -45,8 +45,11 @@ Identify these before rewriting:
 - **Facts and quotes** — the allowed factual ledger, uncertainty, and exact quotations.
 
 In an OMD run, derive this contract from `.omd/copy-deck.md`: Voice contract `Audience`,
-`Language`, and `Register`, then each surface's `Main message`, `Supporting fact`, `Next
-action`, and `Claim refs`. Only `verified` facts may support shipped claims. `open` and
+`Language`, and `Register`; typed Truth contract `Result boundary` and `Storage boundary`;
+then each surface's `Main message`, `Supporting fact`, `Next
+action`, and `Claim refs`. `Supporting fact: none` or `none — <omission reason>` is a deliberate
+omission when another visible role already provides orientation; support copy that exists must add a distinct fact, consequence,
+constraint, or recovery cue. Only `verified` facts may support shipped claims. `open` and
 `fixture` facts cannot ship. When speaker, listener, situation, intent, genre, register,
 fact status, or quote status is missing, return the gap to `omd-writer`; do not guess.
 

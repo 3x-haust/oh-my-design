@@ -6,6 +6,8 @@ import {
   type ValidatedReferenceUsage,
 } from './reference-usage-snapshot.ts';
 import type { ReferenceUsageInput } from './reference-usage-parser.ts';
+import { readContainedRegularFile, readReferenceSelectionV2 } from './reference-selection.ts';
+import { validateReferenceInfluenceProofCurrentness } from './reference-influence-proof.ts';
 import { requireProjectWriteAdapter, type ProjectWriteAdapter } from '../runtime/project-write.ts';
 export { REFERENCE_USAGE_SCHEMA_VERSION, REFERENCE_USAGE_STATUSES, parseReferenceUsage, parseReferenceUsageInput, ReferenceUsageValidationError, type ReferenceUsageEvidence, type ReferenceUsageInput, type ReferenceUsageRow, type ReferenceUsageStatus, type ReferenceUsageTarget } from './reference-usage-parser.ts';
 export {
@@ -28,5 +30,15 @@ export function recordReferenceUsage(root: string, input: ReferenceUsageInput, w
 }
 
 export function validateReferenceUsage(root: string): ValidatedReferenceUsage {
-  return readValidatedReferenceUsage(root);
+  const validated = readValidatedReferenceUsage(root);
+  if (validated.artifacts.assembly.schemaVersion === 'reference-assembly-v2') {
+    let proofValue: unknown;
+    try { proofValue = JSON.parse(readContainedRegularFile(root, '.omd/reference-influence-proof.json', 'reference influence proof').toString('utf8')); }
+    catch (error) { throw error instanceof Error ? error : new Error('reference influence proof is missing or invalid'); }
+    const proof = validateReferenceInfluenceProofCurrentness(root, proofValue, validated.artifacts.assembly, readReferenceSelectionV2(root));
+    const buildHashes = new Set(validated.pieces.map((piece) => piece.usage.productionObservation.buildSha256));
+    if (buildHashes.size !== 1 || !buildHashes.has(proof.buildSha256)) throw new Error('reference influence proof does not bind the current production build');
+    if (proof.verdict !== 'pass') throw new Error('reference influence proof did not pass every used influence and target viewport');
+  }
+  return validated;
 }

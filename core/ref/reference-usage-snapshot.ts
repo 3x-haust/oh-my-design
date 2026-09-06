@@ -6,10 +6,13 @@ import type { ReferenceAssemblyPiece } from './board-projection.ts';
 import { readTrustedProductionEvidence, readTrustedReferenceUsageSnapshot, sameReferenceUsageSnapshot, trustedProductionEvidencePath, trustedReferenceUsageFile, writeReferenceUsageRecord, type ReferenceUsageFileSnapshot } from './reference-usage-files.ts';
 import { parseReferenceSelectionV2, referenceSelectionV2Sha256, type ReferenceSelectionV2 } from './reference-selection.ts';
 import { validateArtDirectionPointer, validateArtDirectionRecord } from '../art-direction/schema.ts';
+import { observationV2Sha256, validateObservationV2, type ObservationV2 } from '../runtime/observation.ts';
 import { parseReferenceHandoffReceipt, referencePositiveMotion, validateReferenceSettlementSnapshot } from './reference-handoff.ts';
-import { parseReferenceUsageInput, ReferenceUsageValidationError, type ReferenceUsageRow } from './reference-usage-parser.ts';
+import { parseLegacyReferenceUsageInput, parseReferenceProductionObservation, parseReferenceUsageInput, ReferenceUsageValidationError, type LegacyReferenceUsageRow, type ReferenceProductionObservation, type ReferenceUsageRow } from './reference-usage-parser.ts';
 
 export const REFERENCE_USAGE_V2_SCHEMA_VERSION = 'reference-usage-v2' as const;
+/** The historical v2 shape predates hand-handoff and host-observation bindings. It is read-only. */
+export const LEGACY_REFERENCE_USAGE_V2_SCHEMA_VERSION = 'reference-usage-v2' as const;
 const ATTEMPTS = 3;
 const usageRelativePath = '.omd/reference-usage-v2.json';
 const attributionRelativePath = '.omd/attribution.md';
@@ -18,17 +21,20 @@ const selectionRelativePath = '.omd/reference-selection-v2.json';
 const preSelectionPointerRelativePath = '.omd/reference-pre-selection-v2.json';
 const artDirectionPointerRelativePath = '.omd/art-direction.json';
 const composerHandoffRelativePath = '.omd/reference-handoffs/composer.json';
+const handHandoffRelativePath = '.omd/reference-handoffs/hand.json';
 const artDirectionHandoffRelativePath = '.omd/reference-handoffs/art-direction.json';
 const SHA256 = /^[a-f0-9]{64}$/;
+const observationPointerRelativePath = '.omd/observation-v2.json';
 
-export type ReferenceUsageV2 = Readonly<{ schemaVersion: typeof REFERENCE_USAGE_V2_SCHEMA_VERSION; captureSha256: string; assemblySha256: string; projectionSha256: string; selectionSha256: string; artDirectionSha256: string; motionResolutionProjectionSha256: string; settledSelectionSha256: string; composerHandoffSha256: string; attributionSha256: string; rows: readonly ReferenceUsageRow[] }>;
+export type ReferenceUsageV2 = Readonly<{ schemaVersion: typeof REFERENCE_USAGE_V2_SCHEMA_VERSION; captureSha256: string; assemblySha256: string; projectionSha256: string; selectionSha256: string; artDirectionSha256: string; motionResolutionProjectionSha256: string; settledSelectionSha256: string; composerHandoffSha256: string; handHandoffSha256: string; attributionSha256: string; rows: readonly ReferenceUsageRow[] }>;
+export type LegacyReferenceUsageV2 = Readonly<{ schemaVersion: typeof LEGACY_REFERENCE_USAGE_V2_SCHEMA_VERSION; captureSha256: string; assemblySha256: string; projectionSha256: string; selectionSha256: string; artDirectionSha256: string; motionResolutionProjectionSha256: string; settledSelectionSha256: string; composerHandoffSha256: string; attributionSha256: string; rows: readonly LegacyReferenceUsageRow[] }>;
 export type ValidatedReferenceUsagePiece = { readonly usage: ReferenceUsageRow; readonly raw: RawBoardPiece; readonly assembly: ReferenceAssemblyPiece };
 export type ValidatedReferenceUsage = { readonly usage: ReferenceUsageV2; readonly artifacts: ReferenceBoardArtifacts; readonly attribution: string; readonly pieces: readonly ValidatedReferenceUsagePiece[] };
 type SnapshotInput = ReferenceUsageFileSnapshot;
 type SnapshotReaders = { readonly readUsage: (root: string) => SnapshotInput; readonly readAttribution: (root: string) => SnapshotInput; readonly readBoard: (root: string) => SnapshotInput; readonly readSelection: (root: string) => SnapshotInput; readonly readArtifacts: (root: string, board: ReferenceUsageFileSnapshot) => ReferenceBoardArtifacts; readonly readEvidence: (root: string, path: string) => SnapshotInput };
-type BindingSnapshots = { readonly attribution: ReferenceUsageFileSnapshot; readonly board: ReferenceUsageFileSnapshot; readonly selection: ReferenceUsageFileSnapshot; readonly artDirectionPointer: ReferenceUsageFileSnapshot; readonly artDirectionRecord: ReferenceUsageFileSnapshot; readonly artDirectionHandoff: ReferenceUsageFileSnapshot; readonly preSelectionPointer: ReferenceUsageFileSnapshot; readonly preSelectionRecord: ReferenceUsageFileSnapshot; readonly motionResolution: ReferenceUsageFileSnapshot; readonly immutableSettledSelection: ReferenceUsageFileSnapshot; readonly composerHandoff: ReferenceUsageFileSnapshot };
-type ReferenceUsageBindings = { readonly bytes: BindingSnapshots; readonly artifacts: ReferenceBoardArtifacts; readonly selection: ReferenceSelectionV2; readonly settlement: DecisionSettlement };
-type DecisionSettlement = { readonly artDirectionSha256: string; readonly motionResolutionProjectionSha256: string; readonly settledSelectionSha256: string; readonly composerHandoffSha256: string };
+type BindingSnapshots = { readonly attribution: ReferenceUsageFileSnapshot; readonly board: ReferenceUsageFileSnapshot; readonly selection: ReferenceUsageFileSnapshot; readonly artDirectionPointer: ReferenceUsageFileSnapshot; readonly artDirectionRecord: ReferenceUsageFileSnapshot; readonly artDirectionHandoff: ReferenceUsageFileSnapshot; readonly preSelectionPointer: ReferenceUsageFileSnapshot; readonly preSelectionRecord: ReferenceUsageFileSnapshot; readonly motionResolution: ReferenceUsageFileSnapshot; readonly immutableSettledSelection: ReferenceUsageFileSnapshot; readonly composerHandoff: ReferenceUsageFileSnapshot; readonly handHandoff: ReferenceUsageFileSnapshot; readonly observationPointer: ReferenceUsageFileSnapshot; readonly observationRecord: ReferenceUsageFileSnapshot; readonly observationArtifact: ReferenceUsageFileSnapshot };
+type ReferenceUsageBindings = { readonly bytes: BindingSnapshots; readonly artifacts: ReferenceBoardArtifacts; readonly selection: ReferenceSelectionV2; readonly settlement: DecisionSettlement; readonly observation: ObservationV2; readonly observedRows: readonly ReferenceProductionObservation[] };
+type DecisionSettlement = { readonly artDirectionSha256: string; readonly motionResolutionProjectionSha256: string; readonly settledSelectionSha256: string; readonly composerHandoffSha256: string; readonly handHandoffSha256: string };
 type EvidenceSnapshot = { readonly path: string; readonly snapshot: ReferenceUsageFileSnapshot };
 type CheckedRows = { readonly pieces: readonly ValidatedReferenceUsagePiece[]; readonly evidence: readonly EvidenceSnapshot[] };
 
@@ -48,13 +54,56 @@ const parsePreSelectionPointer = (snapshot: ReferenceUsageFileSnapshot): { reado
   if (record !== `pre-reference-selections/sha256-${digest}.json`) fail('pre-selection pointer record does not match its hash');
   return { schemaVersion: 'reference-pre-selection-pointer-v1', sha256: digest, record };
 };
+const parseObservationPointer = (snapshot: ReferenceUsageFileSnapshot): { readonly schema: 'observation-v2-pointer'; readonly sha256: string; readonly record: string } => {
+  const value = parse(snapshot, 'observation pointer', (input): Record<string, unknown> => isRecord(input) ? input : fail('observation pointer must be an object'));
+  if (Object.keys(value).sort().join(',') !== 'record,schema,sha256' || value.schema !== 'observation-v2-pointer') fail('observation pointer has unknown or missing keys');
+  const digest = hash(value.sha256, 'observation pointer sha256');
+  const record = typeof value.record === 'string' ? value.record : fail('observation pointer record must be a string');
+  if (record !== `.omd/observation-v2/sha256-${digest}.json`) fail('observation pointer record does not match its hash');
+  return { schema: 'observation-v2-pointer', sha256: digest, record };
+};
+const observedProductionRows = (observation: ObservationV2): readonly ReferenceProductionObservation[] => {
+  const evidence = isRecord(observation.evidence)
+    ? observation.evidence
+    : fail('current host observation must contain referenceProductionObservations');
+  const rawRows = Array.isArray(evidence.referenceProductionObservations)
+    ? evidence.referenceProductionObservations
+    : fail('current host observation must contain referenceProductionObservations');
+  if (Object.keys(evidence).sort().join(',') !== 'referenceProductionObservations' || rawRows.length === 0) fail('current host observation must contain referenceProductionObservations');
+  const rows: readonly ReferenceProductionObservation[] = rawRows.map((row: unknown) => parseReferenceProductionObservation(row));
+  if (new Set(rows.map((row: ReferenceProductionObservation) => row.slotId)).size !== rows.length) fail('current host observation must not duplicate production slot observations');
+  return rows;
+};
+const artifactBuild = (snapshot: ReferenceUsageFileSnapshot): string => {
+  const value = parse(snapshot, 'observation current artifact', (input): Record<string, unknown> => isRecord(input) ? input : fail('observation current artifact must be an object'));
+  if (Object.keys(value).sort().join(',') !== 'buildSha256,packageVersion,schemaVersion,sourceSkillSha256' || value.schemaVersion !== 'omd-build-identity-v1') fail('observation current artifact must be the canonical build identity');
+  return hash(value.buildSha256, 'observation current artifact buildSha256');
+};
+
+export function parseLegacyReferenceUsageV2(value: unknown): LegacyReferenceUsageV2 {
+  if (!isRecord(value)) return fail('legacy reference usage v2 must be an object');
+  const expected = ['artDirectionSha256', 'assemblySha256', 'attributionSha256', 'captureSha256', 'composerHandoffSha256', 'motionResolutionProjectionSha256', 'projectionSha256', 'rows', 'schemaVersion', 'selectionSha256', 'settledSelectionSha256'];
+  const keys = Object.keys(value).sort();
+  if (keys.length !== expected.length || keys.some((key, index) => key !== expected[index])) return fail('legacy reference usage v2 has unknown or missing keys');
+  if (value.schemaVersion !== LEGACY_REFERENCE_USAGE_V2_SCHEMA_VERSION) return fail(`schemaVersion must be ${LEGACY_REFERENCE_USAGE_V2_SCHEMA_VERSION}`);
+  const input = parseLegacyReferenceUsageInput({ rows: value.rows });
+  return { schemaVersion: LEGACY_REFERENCE_USAGE_V2_SCHEMA_VERSION, captureSha256: hash(value.captureSha256, 'captureSha256'), assemblySha256: hash(value.assemblySha256, 'assemblySha256'), projectionSha256: hash(value.projectionSha256, 'projectionSha256'), selectionSha256: hash(value.selectionSha256, 'selectionSha256'), artDirectionSha256: hash(value.artDirectionSha256, 'artDirectionSha256'), motionResolutionProjectionSha256: hash(value.motionResolutionProjectionSha256, 'motionResolutionProjectionSha256'), settledSelectionSha256: hash(value.settledSelectionSha256, 'settledSelectionSha256'), composerHandoffSha256: hash(value.composerHandoffSha256, 'composerHandoffSha256'), attributionSha256: hash(value.attributionSha256, 'attributionSha256'), rows: input.rows };
+}
+
+/** Parses bytes emitted by the original reference-usage-v2 writer. */
+export function parseLegacyReferenceUsageV2Record(bytes: Uint8Array | string): LegacyReferenceUsageV2 {
+  const source = typeof bytes === 'string' ? bytes : Buffer.from(bytes).toString('utf8');
+  let value: unknown;
+  try { value = JSON.parse(source); } catch { return fail('legacy reference usage v2 record must be valid JSON'); }
+  return parseLegacyReferenceUsageV2(value);
+}
 
 export function parseReferenceUsageV2(value: unknown): ReferenceUsageV2 {
   if (!isRecord(value)) return fail('reference usage v2 must be an object');
-  const expected = ['artDirectionSha256', 'assemblySha256', 'attributionSha256', 'captureSha256', 'composerHandoffSha256', 'motionResolutionProjectionSha256', 'projectionSha256', 'rows', 'schemaVersion', 'selectionSha256', 'settledSelectionSha256']; const keys = Object.keys(value).sort();
+  const expected = ['artDirectionSha256', 'assemblySha256', 'attributionSha256', 'captureSha256', 'composerHandoffSha256', 'handHandoffSha256', 'motionResolutionProjectionSha256', 'projectionSha256', 'rows', 'schemaVersion', 'selectionSha256', 'settledSelectionSha256']; const keys = Object.keys(value).sort();
   if (keys.length !== expected.length || keys.some((key, index) => key !== expected[index])) return fail('reference usage v2 has unknown or missing keys'); if (value.schemaVersion !== REFERENCE_USAGE_V2_SCHEMA_VERSION) return fail(`schemaVersion must be ${REFERENCE_USAGE_V2_SCHEMA_VERSION}`);
   const input = parseReferenceUsageInput({ rows: value.rows });
-  return { schemaVersion: REFERENCE_USAGE_V2_SCHEMA_VERSION, captureSha256: hash(value.captureSha256, 'captureSha256'), assemblySha256: hash(value.assemblySha256, 'assemblySha256'), projectionSha256: hash(value.projectionSha256, 'projectionSha256'), selectionSha256: hash(value.selectionSha256, 'selectionSha256'), artDirectionSha256: hash(value.artDirectionSha256, 'artDirectionSha256'), motionResolutionProjectionSha256: hash(value.motionResolutionProjectionSha256, 'motionResolutionProjectionSha256'), settledSelectionSha256: hash(value.settledSelectionSha256, 'settledSelectionSha256'), composerHandoffSha256: hash(value.composerHandoffSha256, 'composerHandoffSha256'), attributionSha256: hash(value.attributionSha256, 'attributionSha256'), rows: input.rows };
+  return { schemaVersion: REFERENCE_USAGE_V2_SCHEMA_VERSION, captureSha256: hash(value.captureSha256, 'captureSha256'), assemblySha256: hash(value.assemblySha256, 'assemblySha256'), projectionSha256: hash(value.projectionSha256, 'projectionSha256'), selectionSha256: hash(value.selectionSha256, 'selectionSha256'), artDirectionSha256: hash(value.artDirectionSha256, 'artDirectionSha256'), motionResolutionProjectionSha256: hash(value.motionResolutionProjectionSha256, 'motionResolutionProjectionSha256'), settledSelectionSha256: hash(value.settledSelectionSha256, 'settledSelectionSha256'), composerHandoffSha256: hash(value.composerHandoffSha256, 'composerHandoffSha256'), handHandoffSha256: hash(value.handHandoffSha256, 'handHandoffSha256'), attributionSha256: hash(value.attributionSha256, 'attributionSha256'), rows: input.rows };
 }
 export const referenceUsageV2Sha256 = (usage: ReferenceUsageV2): string => sha256(canonicalJson(usage));
 const artifactsFrom = (root: string, reader: SnapshotReaders, board: ReferenceUsageFileSnapshot): ReferenceBoardArtifacts => { const artifacts = reader.readArtifacts(root, board); const manifest = parse(board, 'reference board', parseReferenceBoard); if (canonicalJson(manifest) !== canonicalJson(artifacts.manifest) || canonicalJson(artifacts.raw) !== artifacts.boardBytes || canonicalJson(artifacts.assembly) !== artifacts.assemblyBytes || canonicalJson(artifacts.projection) !== artifacts.projectionBytes) fail('board artifacts do not derive from the exact sampled board bytes'); return artifacts; };
@@ -69,7 +118,18 @@ const captureOnce = (root: string, reader: SnapshotReaders): ReferenceUsageBindi
   const motionResolution = read(root, `.omd/motion-resolutions/sha256-${record.decision.motionResolutionProjectionSha256}.json`, 'motion resolution projection');
   const immutableSettledSelection = read(root, `.omd/settled-reference-selections/sha256-${record.decision.settledSelectionSha256}.json`, 'immutable settled selection');
   const composerHandoff = read(root, composerHandoffRelativePath, 'composer handoff'); const composer = parse(composerHandoff, 'composer handoff', parseReferenceHandoffReceipt);
-  const artifacts = artifactsFrom(root, reader, board); const selection = parse(selectionSnapshot, 'reference selection v2', parseReferenceSelectionV2);
+  const handHandoff = read(root, handHandoffRelativePath, 'hand handoff'); const hand = parse(handHandoff, 'hand handoff', parseReferenceHandoffReceipt);
+  const observationPointer = read(root, observationPointerRelativePath, 'current host observation pointer');
+  const observationPointerValue = parseObservationPointer(observationPointer);
+  const observationRecord = read(root, observationPointerValue.record, 'current host observation record');
+  const observation = parse(observationRecord, 'current host observation record', validateObservationV2);
+  if (sha256(observationRecord.bytes) !== observationPointerValue.sha256 || observationV2Sha256(observation) !== observationPointerValue.sha256) fail('current host observation pointer is stale');
+  const observationArtifact = read(root, observation.currentArtifact.path, 'observation current artifact');
+  if (sha256(observationArtifact.bytes) !== observation.currentArtifact.sha256 || artifactBuild(observationArtifact) !== observation.buildSha256) fail('current host observation does not bind the current build artifact');
+  const observedRows = observedProductionRows(observation);
+  const artifacts = artifactsFrom(root, reader, board); const selection = parse(selectionSnapshot, 'reference selection v2', parseReferenceSelectionV2); const selectedCandidate = artifacts.assembly.candidates.find((candidate) => candidate.id === selection.candidateId);
+  if (selectedCandidate === undefined) fail('selected candidate is unavailable from bound assembly');
+  const currentCandidate = selectedCandidate ?? fail('selected candidate is unavailable from bound assembly');
   if (preSelectionPointer.bytes.toString('utf8') !== canonicalJson(prePointer)) fail('immutable pre-selection pointer is not canonical');
   if (prePointer.record !== `pre-reference-selections/sha256-${prePointer.sha256}.json`) fail('immutable pre-selection pointer record path is stale');
   if (prePointer.sha256 !== referenceSelectionV2Sha256(preSelection)) fail('immutable pre-selection pointer digest is stale');
@@ -84,17 +144,27 @@ const captureOnce = (root: string, reader: SnapshotReaders): ReferenceUsageBindi
     captureSha256: sha256(artifacts.boardBytes),
     assemblySha256: sha256(artifacts.assemblyBytes),
     projectionSha256: sha256(artifacts.projectionBytes),
+    selectedCandidateRoute: currentCandidate.route,
+    selectedCandidateSlotIds: currentCandidate.pieces.map((piece) => piece.slotId),
+    selectedCandidateTaskIds: [...new Set(currentCandidate.pieces.flatMap((piece) => piece.taskIds))],
   });
   if (composerHandoff.bytes.toString('utf8') !== canonicalJson(composer)
     || composer.role !== 'composer'
+    || handHandoff.bytes.toString('utf8') !== canonicalJson(hand)
+    || hand.role !== 'hand'
     || composer.artDirectionSha256 !== settlement.artDirectionSha256
+    || hand.artDirectionSha256 !== settlement.artDirectionSha256
     || composer.preSelectionSha256 !== prePointer.sha256
+    || hand.preSelectionSha256 !== prePointer.sha256
     || composer.motionResolutionProjectionSha256 !== settlement.motionResolutionProjectionSha256
+    || hand.motionResolutionProjectionSha256 !== settlement.motionResolutionProjectionSha256
     || composer.settledSelectionSha256 !== settlement.settledSelectionSha256
-    || canonicalJson(composer.positiveMotion) !== canonicalJson(referencePositiveMotion(settlement.settledSelection))) {
-    fail('composer handoff disagrees with the current art direction settlement');
+    || hand.settledSelectionSha256 !== settlement.settledSelectionSha256
+    || canonicalJson(composer.positiveMotion) !== canonicalJson(referencePositiveMotion(settlement.settledSelection))
+    || canonicalJson(hand.positiveMotion) !== canonicalJson(referencePositiveMotion(settlement.settledSelection))) {
+    fail('composer and hand handoffs disagree with the current art direction settlement');
   }
-  const before = { attribution, board, selection: selectionSnapshot, artDirectionPointer, artDirectionRecord, artDirectionHandoff, preSelectionPointer, preSelectionRecord, motionResolution, immutableSettledSelection, composerHandoff };
+  const before = { attribution, board, selection: selectionSnapshot, artDirectionPointer, artDirectionRecord, artDirectionHandoff, preSelectionPointer, preSelectionRecord, motionResolution, immutableSettledSelection, composerHandoff, handHandoff, observationPointer, observationRecord, observationArtifact };
   const after = captureSettlementBytes(root, reader, before);
   if (!sameBindings(before, after)) return undefined;
   if (canonicalJson(selection) !== canonicalJson(settlement.settledSelection)
@@ -102,24 +172,72 @@ const captureOnce = (root: string, reader: SnapshotReaders): ReferenceUsageBindi
     || selection.assemblySha256 !== sha256(artifacts.assemblyBytes)
     || selection.projectionSha256 !== sha256(artifacts.projectionBytes)) return undefined;
   validateSelectionAgainstArtifacts(selection, artifacts);
-  return { bytes: before, artifacts, selection, settlement: { artDirectionSha256: settlement.artDirectionSha256, motionResolutionProjectionSha256: settlement.motionResolutionProjectionSha256, settledSelectionSha256: settlement.settledSelectionSha256, composerHandoffSha256: composer.payloadSha256 } };
+  return { bytes: before, artifacts, selection, settlement: { artDirectionSha256: settlement.artDirectionSha256, motionResolutionProjectionSha256: settlement.motionResolutionProjectionSha256, settledSelectionSha256: settlement.settledSelectionSha256, composerHandoffSha256: composer.payloadSha256, handHandoffSha256: hand.payloadSha256 }, observation, observedRows };
 };
-const captureSettlementBytes = (root: string, reader: SnapshotReaders, before: BindingSnapshots): BindingSnapshots => ({ attribution: observed(reader.readAttribution(root), 'attribution'), board: observed(reader.readBoard(root), 'reference board'), selection: observed(reader.readSelection(root), 'reference selection v2'), artDirectionPointer: read(root, artDirectionPointerRelativePath, 'art direction pointer'), artDirectionRecord: read(root, relativePath(before.artDirectionRecord.identity.path, root), 'art direction record'), artDirectionHandoff: read(root, artDirectionHandoffRelativePath, 'art direction handoff'), preSelectionPointer: read(root, preSelectionPointerRelativePath, 'pre-selection pointer'), preSelectionRecord: read(root, relativePath(before.preSelectionRecord.identity.path, root), 'immutable pre-selection record'), motionResolution: read(root, relativePath(before.motionResolution.identity.path, root), 'motion resolution projection'), immutableSettledSelection: read(root, relativePath(before.immutableSettledSelection.identity.path, root), 'immutable settled selection'), composerHandoff: read(root, composerHandoffRelativePath, 'composer handoff') });
+const captureSettlementBytes = (root: string, reader: SnapshotReaders, before: BindingSnapshots): BindingSnapshots => ({ attribution: observed(reader.readAttribution(root), 'attribution'), board: observed(reader.readBoard(root), 'reference board'), selection: observed(reader.readSelection(root), 'reference selection v2'), artDirectionPointer: read(root, artDirectionPointerRelativePath, 'art direction pointer'), artDirectionRecord: read(root, relativePath(before.artDirectionRecord.identity.path, root), 'art direction record'), artDirectionHandoff: read(root, artDirectionHandoffRelativePath, 'art direction handoff'), preSelectionPointer: read(root, preSelectionPointerRelativePath, 'pre-selection pointer'), preSelectionRecord: read(root, relativePath(before.preSelectionRecord.identity.path, root), 'immutable pre-selection record'), motionResolution: read(root, relativePath(before.motionResolution.identity.path, root), 'motion resolution projection'), immutableSettledSelection: read(root, relativePath(before.immutableSettledSelection.identity.path, root), 'immutable settled selection'), composerHandoff: read(root, composerHandoffRelativePath, 'composer handoff'), handHandoff: read(root, handHandoffRelativePath, 'hand handoff'), observationPointer: read(root, observationPointerRelativePath, 'current host observation pointer'), observationRecord: read(root, relativePath(before.observationRecord.identity.path, root), 'current host observation record'), observationArtifact: read(root, relativePath(before.observationArtifact.identity.path, root), 'observation current artifact') });
 const relativePath = (path: string, root: string): string => {
   const value = relative(realpathSync(root), path);
   return value !== '' && value !== '..' && !value.startsWith(`..${sep}`) && !isAbsolute(value)
     ? value
     : fail('trusted decision snapshot escaped project root');
 };
-const checkBindings = (usage: ReferenceUsageV2, binding: ReferenceUsageBindings): void => { if (usage.captureSha256 !== sha256(binding.artifacts.boardBytes) || usage.assemblySha256 !== sha256(binding.artifacts.assemblyBytes) || usage.projectionSha256 !== sha256(binding.artifacts.projectionBytes)) fail('usage does not bind the exact board-derived capture, assembly, and projection'); if (usage.selectionSha256 !== referenceSelectionV2Sha256(binding.selection)) fail('usage does not bind the exact settled v2 selection'); const settlement = binding.settlement; if (usage.artDirectionSha256 !== settlement.artDirectionSha256 || usage.motionResolutionProjectionSha256 !== settlement.motionResolutionProjectionSha256 || usage.settledSelectionSha256 !== settlement.settledSelectionSha256 || usage.composerHandoffSha256 !== settlement.composerHandoffSha256) fail('usage does not bind the current decision-bound settlement'); if (usage.attributionSha256 !== sha256(binding.bytes.attribution.bytes)) fail('attribution hash does not match exact attribution bytes'); };
-const checkRows = (root: string, reader: SnapshotReaders, usage: ReferenceUsageV2, binding: ReferenceUsageBindings): CheckedRows | undefined => { const candidate = binding.artifacts.projection.candidates.find((entry) => entry.id === binding.selection.candidateId); const rawCandidate = binding.artifacts.raw.candidates.find((entry) => entry.id === binding.selection.candidateId); const assemblyCandidate = binding.artifacts.assembly.candidates.find((entry) => entry.id === binding.selection.candidateId); if (candidate === undefined || rawCandidate === undefined || assemblyCandidate === undefined) return fail('selected candidate is unavailable from bound v2 artifacts'); if (usage.rows.length !== binding.selection.slots.length || candidate.pieces.length !== binding.selection.slots.length) return fail('usage rows must cover every selected v2 slot exactly once'); const rows = new Map(usage.rows.map((row) => [row.slotId, row])); const selectionSlots = new Map(binding.selection.slots.map((slot) => [slot.slotId, slot])); const raw = new Map(rawCandidate.pieces.map((piece) => [piece.slotId, piece])); if (rows.size !== usage.rows.length) return fail('usage rows must not duplicate v2 slots'); const pieces: ValidatedReferenceUsagePiece[] = []; const evidence: EvidenceSnapshot[] = []; for (const assembly of assemblyCandidate.pieces) { const row = rows.get(assembly.slotId); const slot = selectionSlots.get(assembly.slotId); const rawPiece = raw.get(assembly.slotId); if (row === undefined || slot === undefined || rawPiece === undefined) return fail(`usage is missing selected v2 slotId ${assembly.slotId}`); if (row.target.route !== rawCandidate.route || row.target.component !== rawPiece.targetComponent || row.target.selector !== rawPiece.targetSelector) return fail(`usage target must exactly match selected slotId ${assembly.slotId}`); const expectedStatus = slot.obligationDisposition === 'used' ? 'used' : slot.signal === 'anti-reference' ? 'anti-reference' : 'rejected'; if (row.status !== expectedStatus) return fail(`usage status must preserve v2 disposition for ${assembly.slotId}`); let before: ReferenceUsageFileSnapshot; let after: ReferenceUsageFileSnapshot; try { before = observed(reader.readEvidence(root, row.evidence.path), 'production evidence'); after = observed(reader.readEvidence(root, row.evidence.path), 'production evidence'); } catch (error) { if (unstableRead(error)) return undefined; throw error; } if (!sameReferenceUsageSnapshot(before, after)) return undefined; pieces.push({ usage: row, raw: rawPiece, assembly }); evidence.push({ path: row.evidence.path, snapshot: before }); } return { pieces, evidence }; };
+const checkBindings = (usage: ReferenceUsageV2, binding: ReferenceUsageBindings): void => { if (usage.captureSha256 !== sha256(binding.artifacts.boardBytes) || usage.assemblySha256 !== sha256(binding.artifacts.assemblyBytes) || usage.projectionSha256 !== sha256(binding.artifacts.projectionBytes)) fail('usage does not bind the exact board-derived capture, assembly, and projection'); if (usage.selectionSha256 !== referenceSelectionV2Sha256(binding.selection)) fail('usage does not bind the exact settled v2 selection'); const settlement = binding.settlement; if (usage.artDirectionSha256 !== settlement.artDirectionSha256 || usage.motionResolutionProjectionSha256 !== settlement.motionResolutionProjectionSha256 || usage.settledSelectionSha256 !== settlement.settledSelectionSha256 || usage.composerHandoffSha256 !== settlement.composerHandoffSha256 || usage.handHandoffSha256 !== settlement.handHandoffSha256) fail('usage does not bind the current decision-bound settlement'); if (usage.attributionSha256 !== sha256(binding.bytes.attribution.bytes)) fail('attribution hash does not match exact attribution bytes'); };
+const evidenceMatches = (snapshot: ReferenceUsageFileSnapshot, row: ReferenceUsageRow): boolean =>
+  sha256(snapshot.bytes) === row.evidence.sha256 && snapshot.bytes.toString('utf8') === canonicalJson(row.productionObservation);
+const checkRows = (root: string, reader: SnapshotReaders, usage: ReferenceUsageV2, binding: ReferenceUsageBindings): CheckedRows | undefined => {
+  const candidate = binding.artifacts.projection.candidates.find((entry) => entry.id === binding.selection.candidateId);
+  const rawCandidate = binding.artifacts.raw.candidates.find((entry) => entry.id === binding.selection.candidateId);
+  const assemblyCandidate = binding.artifacts.assembly.candidates.find((entry) => entry.id === binding.selection.candidateId);
+  if (candidate === undefined || rawCandidate === undefined || assemblyCandidate === undefined) return fail('selected candidate is unavailable from bound v2 artifacts');
+  if (usage.rows.length !== binding.selection.slots.length || candidate.pieces.length !== binding.selection.slots.length) return fail('usage rows must cover every selected v2 slot exactly once');
+  const rows = new Map(usage.rows.map((row) => [row.slotId, row]));
+  const selectionSlots = new Map(binding.selection.slots.map((slot) => [slot.slotId, slot]));
+  const raw = new Map(rawCandidate.pieces.map((piece) => [piece.slotId, piece]));
+  if (rows.size !== usage.rows.length) return fail('usage rows must not duplicate v2 slots');
+  const pieces: ValidatedReferenceUsagePiece[] = [];
+  const evidence: EvidenceSnapshot[] = [];
+  for (const assembly of assemblyCandidate.pieces) {
+    const row = rows.get(assembly.slotId);
+    const slot = selectionSlots.get(assembly.slotId);
+    const rawPiece = raw.get(assembly.slotId);
+    if (row === undefined || slot === undefined || rawPiece === undefined) return fail(`usage is missing selected v2 slotId ${assembly.slotId}`);
+    if (row.evidence.path.endsWith('.usage.json')) return fail('self-authored .usage.json cannot certify production observation');
+    if (row.target.route !== rawCandidate.route || row.target.component !== rawPiece.targetComponent || row.target.selector !== rawPiece.targetSelector) return fail(`usage target must exactly match selected slotId ${assembly.slotId}`);
+    if (canonicalJson(row.taskIds) !== canonicalJson(rawPiece.taskIds) || canonicalJson(row.taskIds) !== canonicalJson(assembly.taskIds)) return fail(`usage taskIds must exactly preserve selected slotId ${assembly.slotId} task identities`);
+    const expectedStatus = slot.obligationDisposition === 'used' ? 'used' : slot.signal === 'anti-reference' ? 'anti-reference' : 'rejected';
+    if (row.status !== expectedStatus) return fail(`usage status must preserve v2 disposition for ${assembly.slotId}`);
+    const observedRow = binding.observedRows.find((entry) => entry.slotId === row.slotId);
+    if (observedRow === undefined || canonicalJson(observedRow) !== canonicalJson(row.productionObservation) || observedRow.buildSha256 !== binding.observation.buildSha256) {
+      return fail(`production observation for ${row.slotId} is not present in the current host-observed build`);
+    }
+    let before: ReferenceUsageFileSnapshot;
+    let after: ReferenceUsageFileSnapshot;
+    try {
+      before = observed(reader.readEvidence(root, row.evidence.path), 'production evidence');
+      after = observed(reader.readEvidence(root, row.evidence.path), 'production evidence');
+    } catch (error) {
+      if (unstableRead(error)) return undefined;
+      throw error;
+    }
+    if (!sameReferenceUsageSnapshot(before, after)) return undefined;
+    if (!evidenceMatches(before, row) || !evidenceMatches(after, row)) return fail(`production observation bytes do not match ${row.evidence.path}`);
+    pieces.push({ usage: row, raw: rawPiece, assembly });
+    evidence.push({ path: row.evidence.path, snapshot: before });
+  }
+  if (binding.observedRows.length !== usage.rows.length) fail('current host observation must cover the selected production rows exactly');
+  return { pieces, evidence };
+};
 const stableUsage = (root: string, reader: SnapshotReaders): { usage: ReferenceUsageV2; snapshot: ReferenceUsageFileSnapshot } | undefined => { try { const before = observed(reader.readUsage(root), 'reference usage v2'); const usage = parse(before, 'reference usage v2', parseReferenceUsageV2); const after = observed(reader.readUsage(root), 'reference usage v2'); return sameReferenceUsageSnapshot(before, after) ? { usage, snapshot: before } : undefined; } catch (error) { if (unstableRead(error)) return undefined; throw error; } };
-const sameEvidence = (root: string, reader: SnapshotReaders, evidence: readonly EvidenceSnapshot[]): boolean => evidence.every((entry) => sameReferenceUsageSnapshot(entry.snapshot, observed(reader.readEvidence(root, entry.path), 'production evidence')));
-const validated = (root: string, reader: SnapshotReaders): ValidatedReferenceUsage => { for (let attempt = 0; attempt < ATTEMPTS; attempt += 1) { const current = stableUsage(root, reader); if (current === undefined) continue; let binding: ReferenceUsageBindings | undefined; try { binding = captureOnce(root, reader); } catch (error) { if (unstableRead(error)) continue; throw error; } if (binding === undefined) continue; checkBindings(current.usage, binding); const checked = checkRows(root, reader, current.usage, binding); if (checked === undefined) continue; const final = captureOnce(root, reader); const finalUsage = stableUsage(root, reader); if (final !== undefined && finalUsage !== undefined && sameBindings(binding.bytes, final.bytes) && sameReferenceUsageSnapshot(current.snapshot, finalUsage.snapshot) && sameEvidence(root, reader, checked.evidence)) return { usage: current.usage, artifacts: binding.artifacts, attribution: binding.bytes.attribution.bytes.toString('utf8'), pieces: checked.pieces }; } return fail('could not obtain a coherent v2 reference usage snapshot'); };
+const sameEvidence = (root: string, reader: SnapshotReaders, evidence: readonly EvidenceSnapshot[], rows: readonly ReferenceUsageRow[]): boolean => evidence.every((entry) => {
+  const row = rows.find((candidate) => candidate.evidence.path === entry.path);
+  const current = observed(reader.readEvidence(root, entry.path), 'production evidence');
+  return row !== undefined && sameReferenceUsageSnapshot(entry.snapshot, current) && evidenceMatches(current, row);
+});
+const validated = (root: string, reader: SnapshotReaders): ValidatedReferenceUsage => { for (let attempt = 0; attempt < ATTEMPTS; attempt += 1) { const current = stableUsage(root, reader); if (current === undefined) continue; let binding: ReferenceUsageBindings | undefined; try { binding = captureOnce(root, reader); } catch (error) { if (unstableRead(error)) continue; throw error; } if (binding === undefined) continue; checkBindings(current.usage, binding); const checked = checkRows(root, reader, current.usage, binding); if (checked === undefined) continue; const final = captureOnce(root, reader); const finalUsage = stableUsage(root, reader); if (final !== undefined && finalUsage !== undefined && sameBindings(binding.bytes, final.bytes) && sameReferenceUsageSnapshot(current.snapshot, finalUsage.snapshot) && sameEvidence(root, reader, checked.evidence, current.usage.rows)) return { usage: current.usage, artifacts: binding.artifacts, attribution: binding.bytes.attribution.bytes.toString('utf8'), pieces: checked.pieces }; } return fail('could not obtain a coherent v2 reference usage snapshot'); };
 export const referenceUsagePath = (root: string): string => join(root, usageRelativePath);
 export const trustedProductionEvidence = trustedProductionEvidencePath;
 export function readValidatedReferenceUsage(root: string): ValidatedReferenceUsage { return validated(root, defaultReaders); }
-export function prepareReferenceUsage(root: string, value: unknown): ReferenceUsageV2 { const input = parseReferenceUsageInput(value); for (let attempt = 0; attempt < ATTEMPTS; attempt += 1) { let binding: ReferenceUsageBindings | undefined; try { binding = captureOnce(root, defaultReaders); } catch (error) { if (unstableRead(error)) continue; throw error; } if (binding === undefined) continue; const settlement = binding.settlement; const usage: ReferenceUsageV2 = { schemaVersion: REFERENCE_USAGE_V2_SCHEMA_VERSION, captureSha256: sha256(binding.artifacts.boardBytes), assemblySha256: sha256(binding.artifacts.assemblyBytes), projectionSha256: sha256(binding.artifacts.projectionBytes), selectionSha256: referenceSelectionV2Sha256(binding.selection), artDirectionSha256: settlement.artDirectionSha256, motionResolutionProjectionSha256: settlement.motionResolutionProjectionSha256, settledSelectionSha256: settlement.settledSelectionSha256, composerHandoffSha256: settlement.composerHandoffSha256, attributionSha256: sha256(binding.bytes.attribution.bytes), rows: input.rows }; const checked = checkRows(root, defaultReaders, usage, binding); if (checked === undefined) continue; const final = captureOnce(root, defaultReaders); if (final !== undefined && sameBindings(binding.bytes, final.bytes) && sameEvidence(root, defaultReaders, checked.evidence)) return usage; } return fail('could not obtain a coherent v2 reference usage snapshot'); }
+export function prepareReferenceUsage(root: string, value: unknown): ReferenceUsageV2 { const input = parseReferenceUsageInput(value); for (let attempt = 0; attempt < ATTEMPTS; attempt += 1) { let binding: ReferenceUsageBindings | undefined; try { binding = captureOnce(root, defaultReaders); } catch (error) { if (unstableRead(error)) continue; throw error; } if (binding === undefined) continue; const settlement = binding.settlement; const usage: ReferenceUsageV2 = { schemaVersion: REFERENCE_USAGE_V2_SCHEMA_VERSION, captureSha256: sha256(binding.artifacts.boardBytes), assemblySha256: sha256(binding.artifacts.assemblyBytes), projectionSha256: sha256(binding.artifacts.projectionBytes), selectionSha256: referenceSelectionV2Sha256(binding.selection), artDirectionSha256: settlement.artDirectionSha256, motionResolutionProjectionSha256: settlement.motionResolutionProjectionSha256, settledSelectionSha256: settlement.settledSelectionSha256, composerHandoffSha256: settlement.composerHandoffSha256, handHandoffSha256: settlement.handHandoffSha256, attributionSha256: sha256(binding.bytes.attribution.bytes), rows: input.rows }; const checked = checkRows(root, defaultReaders, usage, binding); if (checked === undefined) continue; const final = captureOnce(root, defaultReaders); if (final !== undefined && sameBindings(binding.bytes, final.bytes) && sameEvidence(root, defaultReaders, checked.evidence, usage.rows)) return usage; } return fail('could not obtain a coherent v2 reference usage snapshot'); }
 export const writeReferenceUsage = (root: string, body: string): void => writeReferenceUsageRecord(root, 'reference-usage-v2.json', body, 'reference usage v2');
 export const writeReferenceUsageV2 = (root: string, usage: ReferenceUsageV2): void => writeReferenceUsage(root, canonicalJson(usage));
 export const writeReferenceReport = (root: string, body: string): void => writeReferenceUsageRecord(root, 'reference-report.md', body, 'reference report');

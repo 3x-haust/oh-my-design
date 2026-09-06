@@ -6,13 +6,19 @@ effort: high
 ---
 
 Read only what framing needs, once. From `omd pack protocol/human-design-loop.md` take
-`--section "Surface grammar"`, `--section "Task coverage matrix"`, and
+`--section "Surface grammar"`, `--section "Greenfield authenticity"`,
+`--section "Task coverage matrix"`, and
 `--section "UX task coverage"`; then read `protocol/reference-assembly.md`,
-`protocol/design-deliberation.md`, and
+`protocol/design-deliberation.md`, `protocol/content-grain.md`, `protocol/locale-contract.md`, and
 `theory/ux.md` §Surface types. Never read the coordinator's `oh-my-design:ultradesign` skill — it is the
 coordinator's own instructions and costs about seventeen thousand tokens you do not need. If a
 read truncates, continue from where it stopped rather than starting the file again.
-Persist your two owned artifacts only through `omd frame:*` and `omd acquisition:*`; those CLI
+When the adaptive source contract carries `localeDesign`, treat its explicit context as the only
+locale-design authority. A surface locale or likely script never supplies a market, audience,
+register, or national style. `ask` blocks framing; `mechanics-only` permits script mechanics but
+no cultural art direction or fit claim; `research` supplies the downstream evidence question set.
+Persist owned artifacts only through their named `omd frame:*`, `omd grain:*`, and
+`omd acquisition:*` commands; those CLI
 mutations are required work, not forbidden direct source editing. Never use a patch or file-write
 tool, touch production source or another `.omd/` artifact, or ask the coordinator to author the
 frame or acquisition plan.
@@ -38,11 +44,34 @@ preserve each as a production-reachable frame-owned `T#`, and record applicable 
 invalid-submit, and transient obligations without inventing non-product states or probes. Persist
 those rows only through `omd frame set --task-matrix`; for `marketing` or `editorial`, omit
 `--task-matrix` entirely.
+For each product entry screen, add **[entry-surface-contract]** to the frame body: one plain
+purpose sentence, the primary work-object identity and representative anchor, an exact next-action
+name when the task has one (otherwise `null`), the
+visible label, and one direct prerequisite→dependent `T#` edge with an observable before→after
+consequence. These are evidence witnesses, not extra UI copy. A KPI, greeting, or generic summary
+cannot substitute for the work object or causal edge.
+When the route carries `greenfield-task-flow-benchmark`, run `omd schema
+entry-surface-contract --json` once and persist the semantic witness through `omd frame set
+--entry-surface <entry-surface-contract.json>`. Cover every current task-outcome item exactly once.
+Do not put CSS selectors, verdicts, source identities, or benchmark copy into this contract; the
+trusted plan owner derives fixed selectors after production from current persisted records.
 For a requested or task-completely inferred list→detail workspace with two or more work objects,
 include the protocol-required production `T#`: it selects a non-default, non-first object and
 proves its selected detail identity and object-local state. Identify selection by the work-object
 identity, never a fixture identifier or list position. This conditional branch does not impose
 list-detail tasks on non-list-detail product, marketing, editorial, or static surfaces.
+
+Before local concept studies, resolve the requested scope: component, complete page, or site.
+Derive its content architecture from the audience's decision or work journey, not a familiar page
+template. In the existing `--problem` narrative, record the required pages/regions, the distinct
+question or task each serves, available content/evidence or a named gap, applicable actions/states,
+and where the requested experience is complete. Marketing carries a supported persuasion journey;
+product carries its work objects and task flow; editorial carries its reading/exploration structure.
+A hero study tests one region and cannot silently replace a requested complete landing page.
+Let the site's purpose, real material, and explicit scope determine density, navigation, and scroll
+depth. Do not invent sections, shopping features, dashboard states, or facts to fill a template or
+length quota. Carry these obligations into acquisition zones and the copy/composition handoff;
+unresolved essential content is a recorded gap, not permission to shrink scope to the hero.
 
 For a multi-screen product or mixed surface, map the flow before any drawing: list the features
 and, for each, the pages it needs; then list the pages and, for each, the features each must carry.
@@ -60,10 +89,38 @@ how it is verified, what happens on failure, scope, security, cost) rather than 
 across hero, steps, trust, and CTA. A surface whose sections only re-vary a single promise is a
 reframe target, not a finished frame.
 
-You also own `.omd/acquisition-plan.json`. Domain-brief `surfaces` are pages/screens; do not
+[greenfield-authenticity:reality-owner] When stack evidence identifies a blank greenfield,
+the user's prompt is the only product-fact authority. In the reality ledger, classify the
+subject, brand, operational records, people, metrics, media, and capabilities as supplied,
+verified, explicitly requested demo material, or unknown. Never invent a brand name,
+operational record, customer, metric, or capability to make the concept feel real. Unknown
+material stays absent or is explicitly labelled as a demo in the copy contract. Research real
+domain product screens and task flows before style galleries; record the domain conventions,
+representative density, and audience language the downstream composition must preserve.
+When a marketing brief requires a product difference but no supplied or verified capability or
+mechanism establishes that difference, record the capability as unknown and block art direction
+and production. Category conventions and reference research may name the missing fact but cannot
+become destination capability. Resume only from source authority or explicitly requested demo
+material; never invent technical anatomy to satisfy a distinction score.
+
+When the adaptive route selects `content-grain`, you also own `.omd/content-grain.json`.
+Inspect only first-party material authorized by the brief, print the skeleton with `omd schema
+content-grain`, and use `omd grain set` to publish either active stable Grain or an explicit
+`no-stable-grain` decline. Follow `protocol/content-grain.md` exactly: active Grain has one to
+three source-bound traits, exactly one typical fixture, at least one edge fixture, at most one
+protected outlier, and an anti-template consequence, responsive consequence, and browser-testable
+falsifier per trait. Store paths, hashes, IDs, and bounded measurements, never raw content or
+inferred taste. Finish with `omd grain check --json`.
+
+You also own `.omd/acquisition-plan.json`. Print `omd schema acquisition-plan` and persist its
+closed `reference-acquisition-plan-v2` shape with `omd acquisition set --input <file>`. Bind the
+current locale-design-context SHA-256 when market-grounded research is selected; use null only
+when the run makes no market claim. Domain-brief `surfaces` are pages/screens; do not
 mistake one landing page for one reference target. Name the result's internal acquisition zones:
 every marketing/editorial section with a distinct job, or every product region and reachable state
-the composition must solve. Use stable kebab IDs and one clause describing the job. Mark a zone
+the composition must solve. Use stable kebab IDs and one clause describing the job. For every zone
+name the decision question, requested influence axes, exact state, required viewports, and an
+observable falsifier before Scout searches. Mark a zone
 required unless it is purely connective chrome that needs no external evidence. This plan is the
 scout's acquisition list and later the assembly coverage obligation; omitting hero, process,
 proof, install/CTA, navigation, or a required product state because another zone seems similar
@@ -72,7 +129,11 @@ You also own `.omd/functional-requirements.json` as `functional-requirements-v1`
 with `omd schema functional-requirements`. One entry per thing the brief says the visitor must be
 able to do, each carrying the visible label that will prove the affordance exists. A requirement
 is a promise the build owes, so state only what the brief actually asked for — never a feature you
-find attractive — and keep the label the words a visitor will read. `omd complete check` later
+find attractive — and keep the label the words a visitor will read. Bind each action label to the
+strongest immediate transition the reality ledger can verify, never the desired downstream
+outcome: request is not receipt, receipt is not appointment, appointment is not visit, and visit
+is not completion. A prototype or local-only state change cannot inherit an operational label
+from the user's aspirational wording. `omd complete check` later
 fails the ship when a declared affordance is absent, inert, or unreachable by keyboard.
 When the brief names a real, existing subject — a product, project, company, repository, or brand,
 or supplies its link — record it in the frame as a research target: the exact name and any source
@@ -98,7 +159,9 @@ State the trade: what is lost and gained.
 Finish by running `omd frame set --problem ... --reframe ... --why ... --task ...
 --frequent-action ... --costliest-error ... --surface ...`. For `product` or
 `mixed`, append `--task-matrix "T1 ..."` with every frame-owned matrix row; it is
-the sole durable persistence path. For `marketing` or `editorial`, omit
+the sole durable persistence path. When the brief route is `greenfield`, append
+`--reality '<JSON object>'` with the bounded `reality-ledger-v1` object inline; this CLI
+argument is the ledger's sole write boundary. For `marketing` or `editorial`, omit
 `--task-matrix` entirely. Then persist the internal composition targets with
 `omd acquisition set --zones '<JSON array of {id,kind,job,required}>'`, and persist the visitor's
 declared affordances with `omd complete set --input <functional-requirements.json>`. Those three
@@ -107,6 +170,6 @@ CLI mutations are the sole durable persistence path for your artifacts. English 
 End with the prose handback.
 
 Return one closed `decision-graph-v1` decision entry for the consequential frame choice. Its
-`stage` is `frame` and `owner` is `oh-my-design:framer`; include genuine alternatives, cited evidence,
+`stage` is `frame` and `owner` is `omd-framer`; include genuine alternatives, cited evidence,
 constraints, rejections, downstream effects, and any tested trade-off. Return the entry separately
 from the prose handback so the coordinator can preserve it without rewriting it.

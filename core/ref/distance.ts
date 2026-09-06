@@ -1,4 +1,5 @@
 import type { Invariants, Reference, RefDistance } from '../types.ts';
+import { referenceMeasuredInvariants } from './measurement-coverage.ts';
 
 /**
  * Jaccard: shared rungs over total distinct rungs.
@@ -116,6 +117,12 @@ function arrayFor(inv: Invariants, key: (typeof ARRAY_COMPONENTS)[number]): read
  */
 const ZERO_EXCLUDABLE_COMPONENTS = ['hoverCoverage', 'focusCoverage'] as const satisfies readonly Component[];
 
+/** These are the only weighted axes backed by the skipped probes; CSS motion ladders remain measured by DOM extraction. */
+export function unmeasuredComponents(a: Invariants, b: Invariants): Component[] {
+  return a.measurementCoverage?.interactionProbe === 'not-measured' || b.measurementCoverage?.interactionProbe === 'not-measured'
+    ? [...ZERO_EXCLUDABLE_COMPONENTS] : [];
+}
+
 /**
  * F1: an empty ladder is not "measured and maximally different" — it is unmeasured. A
  * pre-typography reference defaults typeScale/fontFamilies/weightLadder/motionDurations/
@@ -129,12 +136,13 @@ const ZERO_EXCLUDABLE_COMPONENTS = ['hoverCoverage', 'focusCoverage'] as const s
  * simply never used the feature, since there is nothing there to have agreed on.
  */
 function excludedComponents(a: Invariants, b: Invariants): ReadonlySet<Component> {
-  const excluded = new Set<Component>();
+  const excluded = new Set<Component>(unmeasuredComponents(a, b));
   for (const key of ARRAY_COMPONENTS) {
     if (arrayFor(a, key).length === 0 || arrayFor(b, key).length === 0) excluded.add(key);
   }
   for (const key of ZERO_EXCLUDABLE_COMPONENTS) {
-    if (a[key] === 0 || b[key] === 0) excluded.add(key);
+    if ((a[key] === 0 && a.measurementCoverage?.interactionProbe !== 'measured')
+      || (b[key] === 0 && b.measurementCoverage?.interactionProbe !== 'measured')) excluded.add(key);
   }
   return excluded;
 }
@@ -181,6 +189,8 @@ export interface KinshipPair {
   /** Source URL of the second reference. */
   b: string;
   similarity: number;
+  /** Similarity covers measured components only when this list is present. */
+  unmeasuredComponents?: string[];
 }
 
 /**
@@ -193,7 +203,7 @@ export interface KinshipPair {
  * cluster here. That is the contamination signal.
  */
 export function topKinshipPairs(refs: Reference[], threshold = 0.85, topN = 3): KinshipPair[] {
-  const measured = refs.filter(
+  const measured = refs.map(ref => ({ ...ref, invariants: referenceMeasuredInvariants(ref) })).filter(
     (r): r is Reference & { invariants: Invariants } => r.invariants !== null,
   );
   const pairs: KinshipPair[] = [];
@@ -201,7 +211,8 @@ export function topKinshipPairs(refs: Reference[], threshold = 0.85, topN = 3): 
     for (let j = i + 1; j < measured.length; j++) {
       const sim = similarity(measured[i]!.invariants, measured[j]!.invariants);
       if (sim >= threshold) {
-        pairs.push({ a: measured[i]!.source, b: measured[j]!.source, similarity: sim });
+        const unknown = unmeasuredComponents(measured[i]!.invariants, measured[j]!.invariants);
+        pairs.push({ a: measured[i]!.source, b: measured[j]!.source, similarity: sim, ...(unknown.length ? { unmeasuredComponents: unknown } : {}) });
       }
     }
   }
@@ -210,6 +221,7 @@ export function topKinshipPairs(refs: Reference[], threshold = 0.85, topN = 3): 
 
 export function distances(page: Invariants, refs: Reference[]): RefDistance[] {
   return refs
+    .map(ref => ({ ...ref, invariants: referenceMeasuredInvariants(ref) }))
     .filter((ref): ref is Reference & { invariants: Invariants } => ref.invariants !== null)
     .map((ref) => {
       const scores = componentScores(page, ref.invariants);
@@ -219,7 +231,8 @@ export function distances(page: Invariants, refs: Reference[]): RefDistance[] {
       const drivers = (Object.keys(WEIGHTS) as Component[])
         .filter((key) => !excluded.has(key) && scores[key] >= 0.8)
         .sort((x, y) => scores[y] - scores[x]);
-      return { reference: ref.source, similarity: similarity(page, ref.invariants), drivers };
+      const unknown = unmeasuredComponents(page, ref.invariants);
+      return { reference: ref.source, similarity: similarity(page, ref.invariants), drivers, ...(unknown.length ? { unmeasuredComponents: unknown } : {}) };
     })
     .sort((a, b) => b.similarity - a.similarity);
 }

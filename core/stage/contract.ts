@@ -12,12 +12,14 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { readPersistedRoute } from '../route/index.ts';
+import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 
 export const DELIVERY_RECEIPT_SCHEMA = 'stage-delivery-v1' as const;
 export const DELIVERY_LOG = '.omd/delivery.jsonl';
 
 export type StageId =
-  | 'domain' | 'depth' | 'frame' | 'acquisition' | 'scout' | 'reference-board'
+  | 'domain' | 'depth' | 'frame' | 'content-grain' | 'acquisition' | 'scout' | 'reference-board'
   | 'reference-selection' | 'art-direction' | 'copy' | 'type-proof' | 'composition';
 
 export type StageDefinition = {
@@ -34,6 +36,7 @@ export const STAGES: readonly StageDefinition[] = Object.freeze([
   { id: 'domain', owner: 'coordinator', artifact: '.omd/domain-brief.json', requiredContracts: ['protocol/domain-analysis.md'] },
   { id: 'depth', owner: 'coordinator', artifact: '.omd/depth.json', requiredContracts: ['protocol/design-deliberation.md'] },
   { id: 'frame', owner: 'omd-framer', artifact: '.omd/frame.md', requiredContracts: ['protocol/human-design-loop.md', 'theory/ux.md'] },
+  { id: 'content-grain', owner: 'omd-framer', artifact: '.omd/content-grain.json', requiredContracts: ['protocol/content-grain.md'] },
   { id: 'acquisition', owner: 'omd-framer', artifact: '.omd/acquisition-plan.json', requiredContracts: ['protocol/reference-assembly.md'] },
   { id: 'scout', owner: 'omd-scout', artifact: '.omd/scout.md', requiredContracts: ['protocol/reference-assembly.md'] },
   { id: 'reference-board', owner: 'omd-scout', artifact: '.omd/reference-board.json', requiredContracts: ['protocol/reference-assembly.md'] },
@@ -122,9 +125,33 @@ export function validateDeliveryReceipt(value: unknown): DeliveryReceipt {
  * A receipt only counts while the contract's bytes still match: an edited protocol invalidates the
  * handoff that quoted the old text, exactly like every other digest-bound record in the loop.
  */
-export function resolveRunState(projectRoot: string, packRoot: string): RunState {
+function routedStages(projectRoot: string, invocation?: ProjectRunInvocation): readonly StageDefinition[] {
+  const path = join(projectRoot, '.omd', 'route.json');
+  if (!existsSync(path)) return STAGES;
+  let routed: ReturnType<typeof readPersistedRoute>;
+  try {
+    routed = readPersistedRoute(projectRoot, invocation ?? failStageAuthority());
+  } catch (error) {
+    throw new StageError(`adaptive route record is malformed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  const definitions = new Map<string, StageDefinition>(STAGES.map((stage) => [stage.id, stage]));
+  return routed.strategy.stages.flatMap((stage) => {
+    const definition = definitions.get(stage);
+    return definition === undefined ? [] : [definition];
+  });
+}
+
+function failStageAuthority(): never {
+  throw new StageError('adaptive route authority is required');
+}
+
+export function resolveRunState(
+  projectRoot: string,
+  packRoot: string,
+  invocation?: ProjectRunInvocation,
+): RunState {
   const receipts = readDeliveryReceipts(projectRoot);
-  const stages = STAGES.map((stage) => {
+  const stages = routedStages(projectRoot, invocation).map((stage) => {
     const delivered: string[] = [];
     const undelivered: string[] = [];
     for (const contract of stage.requiredContracts) {
@@ -165,10 +192,16 @@ export type StageRequirement = {
  * cannot detect for itself: an earlier owner never produced its artifact, and a contract this
  * stage must obey was never delivered with its current bytes.
  */
-export function requireStage(projectRoot: string, packRoot: string, id: string): StageRequirement {
+export function requireStage(
+  projectRoot: string,
+  packRoot: string,
+  id: string,
+  invocation?: ProjectRunInvocation,
+): StageRequirement {
   const definition = stageDefinition(id);
-  const state = resolveRunState(projectRoot, packRoot);
-  const index = STAGES.findIndex((stage) => stage.id === definition.id);
+  const state = resolveRunState(projectRoot, packRoot, invocation);
+  const index = state.stages.findIndex((stage) => stage.stage === definition.id);
+  if (index < 0) throw new StageError(`stage ${definition.id} is not selected by the adaptive route`);
   const missingArtifacts = state.stages
     .slice(0, index)
     .filter((stage) => !stage.present)

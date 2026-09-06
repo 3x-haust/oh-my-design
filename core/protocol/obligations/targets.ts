@@ -23,7 +23,7 @@ export const EXECUTABLE_OBLIGATION_TEST_CASES = [
   { id: 'final-evidence-v2-cardinality', file: 'test/final-evidence-v2.test.ts', title: 'motion evidence accepts one observed scene and rejects empty or multi-scene branches', applicableTo: ['exact-final-artifact-cardinality'] },
   { id: 'art-direction-activation', file: 'test/runtime-isolation.test.ts', title: 'activation rejects caller-supplied authority fields', applicableTo: ['activation'] },
   { id: 'final-evidence-v2-guarded-writes', file: 'test/runtime-isolation.test.ts', title: 'guarded writes reject missing and stale activation before mutating', applicableTo: ['guarded-writes'] },
-  { id: 'prompt-isolated-lanes', file: 'test/prompt-contract.test.ts', title: 'copy is an isolated writer-editor boundary before sketches', applicableTo: ['isolated-lanes'] },
+  { id: 'prompt-isolated-lanes', file: 'test/prompt-contract.test.ts', title: 'selected copy work remains an isolated writer boundary', applicableTo: ['isolated-lanes'] },
   { id: 'final-evidence-v2-sole-publisher', file: 'test/final-evidence-v2.test.ts', title: 'v2 publishes only a complete receipt graph and checker revalidates backing artifacts', applicableTo: ['sole-v2-publication'] },
 ] as const satisfies readonly ExecutableObligationTestCase[];
 

@@ -26,7 +26,7 @@ test('a hardcoded fill and an off-grid padding are both caught', () => {
   assert.deepEqual(at('div.card-bad').map((v) => v.id).sort(), ['SPACING-001', 'TOKEN-003']);
 });
 
-test('grey-on-grey and a 38px tall button are both caught', () => {
+test('grey-on-grey and a sub-24px button are both caught', () => {
   const ids = at('button.pay').map((v) => v.id).sort();
   assert.ok(ids.includes('CONTRAST-001'));
   assert.ok(ids.includes('HIT-002'));
@@ -40,7 +40,7 @@ test('user-agent defaults are not reported as defects', () => {
   assert.deepEqual(spacing, [], 'UA default padding must not be a finding');
 });
 
-test('inline links are exempt from the 44px target rule', () => {
+test('inline links are exempt from the 24px target rule', () => {
   const inline = ir.nodes.filter((n) => n.inline && n.computed.isInteractive);
   for (const n of inline) assert.equal(check(ir, rules).filter((v) => v.nodeId === n.id && v.id === 'HIT-002').length, 0);
 });
@@ -65,6 +65,11 @@ const consideredViolations = check(consideredIr, rules);
 test('slop.html is clean on a11y — slop is orthogonal to defects', () => {
   const a11y = check(slopIr, rules, { categories: ['a11y'] });
   assert.deepEqual(a11y, []);
+});
+
+test('DOM extraction preserves an explicit gradient role for contextual review', () => {
+  const hero = must(slopIr.nodes.find((node) => node.path.endsWith('div.hero')), 'slop hero');
+  assert.equal(hero.gradientRole, 'hero-atmosphere');
 });
 
 test('slop.html fires every slop heuristic', () => {

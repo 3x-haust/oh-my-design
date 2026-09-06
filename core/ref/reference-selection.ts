@@ -1,9 +1,9 @@
-import { existsSync, lstatSync, readFileSync, type Stats } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { closeSync, constants as fsConstants, existsSync, fstatSync, lstatSync, openSync, readFileSync } from 'node:fs';
+import type { Stats } from 'node:fs';
+import { join, relative, resolve, sep } from 'node:path';
 import { canonicalJson, readReferenceBoardArtifacts, sha256 } from './board-artifacts.ts';
 import type { ReferenceAxis, ReferenceRights, ReferenceSignal } from './board-projection.ts';
-import { requireApprovedMotionRecipeAuthorization, requireEvaluatorAssessmentAuthorization, requireEvaluatorResultAuthorization, type ProjectRunInvocation } from '../runtime/invocation.ts';
-import { isHostDerivedLocalCliInvocation } from '../runtime/activation.ts';
+import { requireApprovedMotionRecipeAuthorization, requireEvaluatorAssessmentAuthorization, requireEvaluatorResultAuthorization, validateCurrentProjectRun, type ProjectRunInvocation } from '../runtime/invocation.ts';
 import { ProjectWriteError, replaceProjectFileAtomically, writeImmutableProjectFile } from '../runtime/project-write.ts';
 import { artDirectionSha256 } from '../art-direction/schema.ts';
 
@@ -71,6 +71,27 @@ export type MotionResolutionEvidenceBytes = {
   readonly resultBytes: Uint8Array;
   readonly approvedRecipeBytes?: Uint8Array;
 };
+type AuthorizedMotionSettlement = {
+  readonly route: string;
+  readonly taskIds: readonly string[];
+  readonly boardSha256: string;
+  readonly preSelectionSha256: string;
+  readonly handoffSha256: string;
+  readonly intentSha256: string;
+  readonly alternativesSha256: string;
+  readonly motionResolution: Record<string, unknown>;
+};
+const consumedMotionSettlementAuthorities = new WeakMap<object, Set<string>>();
+const issuedMotionSettlementAuthorities = new WeakMap<object, Set<string>>();
+/**
+ * Provenance is the exact current run that the host authorized, never a caller-selected
+ * SHA-shaped label.
+ */
+export const projectRunInvocationSha256 = (invocation: ProjectRunInvocation): string => {
+  validateCurrentProjectRun(invocation);
+  return sha256(canonicalJson(invocation));
+};
+
 
 export function motionResolutionProjectionSha256(projection: MotionResolutionProjection): string {
   return sha256(canonicalJson(validateMotionResolutionProjection(projection)));
@@ -94,21 +115,107 @@ const preSelectionV2Path = (root: string): string => join(root, '.omd', 'referen
 const selectionV2Path = (root: string): string => join(root, '.omd', 'reference-selection-v2.json');
 const sha = (value: unknown, label: string): string => typeof value === 'string' && /^[0-9a-f]{64}$/.test(value) ? value : fail(`${label} must be 64 lowercase hexadecimal characters`);
 const string = (value: unknown, label: string): string => typeof value === 'string' && value.trim() !== '' ? value : fail(`${label} must be a non-empty string`);
+const strings = (value: unknown, label: string): readonly string[] => {
+  const source = Array.isArray(value) ? value : fail(`${label} must be an array of non-empty strings`);
+  const entries: string[] = [];
+  for (const entry of source) {
+    if (typeof entry !== 'string' || entry.trim() === '') fail(`${label} must be an array of non-empty strings`);
+    entries.push(entry);
+  }
+  if (new Set(entries).size !== entries.length) fail(`${label} must not contain duplicates`);
+  return entries.sort();
+};
+const parseAuthorizedMotionSettlement = (bytes: Uint8Array): AuthorizedMotionSettlement => {
+  let value: unknown;
+  try { value = JSON.parse(Buffer.from(bytes).toString('utf8')); } catch { return fail('authorized evaluator result is invalid JSON'); }
+  if (!isRecord(value)) fail('authorized evaluator result must be an object');
+  const record = value as Record<string, unknown>;
+  if (Buffer.from(bytes).toString('utf8') !== canonicalJson(record)) fail('authorized evaluator result must be canonical JSON bytes');
+  const hasRecipe = record['approvedMotionRecipeReceipt'] !== undefined;
+  const expected = hasRecipe
+    ? ['alternativesSha256', 'approvedMotionRecipe', 'approvedMotionRecipeReceipt', 'boardSha256', 'handoffSha256', 'intentSha256', 'motionResolution', 'preSelectionSha256', 'route', 'taskIds', 'winner']
+    : ['alternativesSha256', 'boardSha256', 'handoffSha256', 'intentSha256', 'motionResolution', 'preSelectionSha256', 'route', 'taskIds', 'winner'];
+  const keys = Object.keys(record).sort();
+  if (keys.length !== expected.length || keys.some((key, index) => key !== expected[index])) fail('authorized evaluator result has an invalid settlement shape');
+  const motionResolution = record['motionResolution'];
+  if (!isRecord(motionResolution)) fail('authorized evaluator result has an invalid motion settlement');
+  return {
+    route: string(record['route'], 'authorized evaluator result route'),
+    taskIds: strings(record['taskIds'], 'authorized evaluator result taskIds'),
+    boardSha256: sha(record['boardSha256'], 'authorized evaluator result boardSha256'),
+    preSelectionSha256: sha(record['preSelectionSha256'], 'authorized evaluator result preSelectionSha256'),
+    handoffSha256: sha(record['handoffSha256'], 'authorized evaluator result handoffSha256'),
+    intentSha256: sha(record['intentSha256'], 'authorized evaluator result intentSha256'),
+    alternativesSha256: sha(record['alternativesSha256'], 'authorized evaluator result alternativesSha256'),
+    motionResolution: motionResolution as Record<string, unknown>,
+  };
+};
+const consumeMotionSettlementAuthority = (invocation: ProjectRunInvocation, root: string, resultBytes: Uint8Array): void => {
+  const key = `${resolve(root)}:${sha256(resultBytes)}`;
+  const consumed = consumedMotionSettlementAuthorities.get(invocation) ?? new Set<string>();
+  if (consumed.has(key)) fail('authorized evaluator settlement has already been persisted for this invocation');
+  consumed.add(key);
+  consumedMotionSettlementAuthorities.set(invocation, consumed);
+};
+const settlementAuthorityKey = (root: string, digest: string): string => `${resolve(root)}:${digest}`;
+const issueMotionSettlementAuthority = (invocation: ProjectRunInvocation, root: string, digest: string): void => {
+  const issued = issuedMotionSettlementAuthorities.get(invocation) ?? new Set<string>();
+  issued.add(settlementAuthorityKey(root, digest));
+  issuedMotionSettlementAuthorities.set(invocation, issued);
+};
+const consumeIssuedMotionSettlementAuthority = (invocation: ProjectRunInvocation, root: string, digest: string): void => {
+  const issued = issuedMotionSettlementAuthorities.get(invocation);
+  const key = settlementAuthorityKey(root, digest);
+  if (issued === undefined || !issued.delete(key)) fail('current settlement read requires an unconsumed host-issued evaluator settlement authority');
+};
 const preSelectionRecordPath = (digest: string): string => `pre-reference-selections/sha256-${digest}.json`;
 const sameFile = (left: Stats, right: Stats): boolean => left.dev === right.dev && left.ino === right.ino && left.size === right.size;
-const readRegularFile = (path: string, label: string): string => {
+const rejectSymlinkAncestors = (root: string, path: string, label: string): void => {
+  const canonicalRoot = resolve(root);
+  const rootStat = lstatSync(canonicalRoot);
+  if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) fail(`${label} project root must be a non-symlink directory`);
+  const relativePath = relative(canonicalRoot, resolve(path));
+  if (relativePath === '' || relativePath === '..' || relativePath.startsWith(`..${sep}`)) fail(`${label} escapes project root`);
+  let ancestor = canonicalRoot;
+  for (const part of relativePath.split(sep).slice(0, -1)) {
+    ancestor = join(ancestor, part);
+    const stat = lstatSync(ancestor);
+    if (!stat.isDirectory() || stat.isSymbolicLink()) fail(`${label} has a symbolic-link or non-directory ancestor`);
+  }
+};
+export function readContainedRegularFile(root: string, relativePath: string, label: string): Buffer {
+  const path = resolve(root, relativePath);
   try {
-    const before = lstatSync(path);
-    if (!before.isFile() || before.isSymbolicLink()) return fail(`${label} must be a regular non-symlink file`);
-    const body = readFileSync(path, 'utf8');
-    const after = lstatSync(path);
-    if (!after.isFile() || after.isSymbolicLink() || !sameFile(before, after)) return fail(`${label} changed while it was read`);
-    return body;
+    const sample = (): { readonly bytes: Buffer; readonly stat: Stats } => {
+      rejectSymlinkAncestors(root, path, label);
+      const before = lstatSync(path);
+      if (!before.isFile() || before.isSymbolicLink()) return fail(`${label} must be a regular non-symlink file`);
+      const descriptor = openSync(path, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
+      try {
+        const opened = fstatSync(descriptor);
+        if (!opened.isFile() || !sameFile(before, opened)) return fail(`${label} changed before it was opened`);
+        const bytes = readFileSync(descriptor);
+        const after = fstatSync(descriptor);
+        if (!after.isFile() || !sameFile(opened, after) || bytes.length !== after.size) return fail(`${label} changed while it was read`);
+        rejectSymlinkAncestors(root, path, label);
+        const final = lstatSync(path);
+        if (!final.isFile() || final.isSymbolicLink() || !sameFile(after, final)) return fail(`${label} changed while it was read`);
+        return { bytes, stat: final };
+      } finally {
+        closeSync(descriptor);
+      }
+    };
+    const first = sample();
+    const second = sample();
+    if (!sameFile(first.stat, second.stat) || !first.bytes.equals(second.bytes)) return fail(`${label} changed during final resampling`);
+    return first.bytes;
   } catch (error) {
     if (error instanceof ReferenceSelectionValidationError) throw error;
     return fail(`${label} is missing or unreadable`);
   }
-};
+}
+const readRegularFile = (root: string, relativePath: string, label: string): string =>
+  readContainedRegularFile(root, relativePath, label).toString('utf8');
 const parsePreSelectionPointer = (value: unknown): ReferencePreSelectionPointer => {
   if (!isRecord(value) || Object.keys(value).sort().join(',') !== 'record,schemaVersion,sha256'
     || value['schemaVersion'] !== REFERENCE_PRE_SELECTION_POINTER_SCHEMA_VERSION) return fail('pre-selection pointer has unknown or missing keys');
@@ -118,7 +225,7 @@ const parsePreSelectionPointer = (value: unknown): ReferencePreSelectionPointer 
   return { schemaVersion: REFERENCE_PRE_SELECTION_POINTER_SCHEMA_VERSION, sha256: digest, record };
 };
 const readImmutablePreSelectionRecord = (root: string, digest: string, record: string): ReferenceSelectionV2 => {
-  const body = readRegularFile(join(root, '.omd', record), 'immutable pre-selection record');
+  const body = readRegularFile(root, `.omd/${record}`, 'immutable pre-selection record');
   try {
     const selection = parseReferenceSelectionV2(JSON.parse(body));
     if (body !== canonicalJson(selection) || referenceSelectionV2Sha256(selection) !== digest) fail('immutable pre-selection record does not match its hash');
@@ -130,7 +237,7 @@ const readImmutablePreSelectionRecord = (root: string, digest: string, record: s
 };
 export const readPersistedMotionResolution = (root: string, digest: string): MotionResolutionProjection => {
   const expectedDigest = sha(digest, 'motion resolution sha256');
-  const body = readRegularFile(join(root, '.omd', 'motion-resolutions', `sha256-${expectedDigest}.json`), 'persisted motion resolution');
+  const body = readRegularFile(root, `.omd/motion-resolutions/sha256-${expectedDigest}.json`, 'persisted motion resolution');
   try {
     const projection = validateMotionResolutionProjection(JSON.parse(body));
     if (body !== canonicalJson(projection) || motionResolutionProjectionSha256(projection) !== expectedDigest) fail('persisted motion resolution does not match its hash');
@@ -145,7 +252,7 @@ const writeImmutableContentAddressed = (root: string, relativePath: string, cont
     writeImmutableProjectFile({ projectRoot: root, relativePath, content, invocation });
   } catch (error) {
     if (!(error instanceof ProjectWriteError) || !error.reason.startsWith('immutable project artifact already exists:')) throw error;
-    if (readRegularFile(join(root, relativePath), 'immutable project artifact') !== content) fail('immutable project artifact does not match its content address');
+    if (readRegularFile(root, relativePath, 'immutable project artifact') !== content) fail('immutable project artifact does not match its content address');
   }
 };
 const persistImmutablePreSelection = (root: string, selection: ReferenceSelectionV2, invocation: ProjectRunInvocation): ReferencePreSelectionPointer => {
@@ -293,28 +400,67 @@ export function persistMotionResolutionProjection(
   input: ResolveMotionProjectionInput,
   evidence: MotionResolutionEvidenceBytes,
   invocation: ProjectRunInvocation,
-  authorization: 'host' | 'local-moderator' = 'host',
 ): { readonly path: string; readonly projection: MotionResolutionProjection } {
-  const projection = resolveMotionProjection(input);
-  if (projection.activationSha256 !== artDirectionSha256(invocation.activation)) {
-    return fail('motion resolution does not bind the exact authorizing invocation activation');
+  const authorized = parseAuthorizedMotionSettlement(evidence.resultBytes);
+  const selection = readPreReferenceSelectionV2(root);
+  const artifacts = readReferenceBoardArtifacts(root);
+  const selectedCandidate = artifacts.raw.candidates.find((entry) => entry.id === selection.candidateId)
+    ?? fail('authorized evaluator settlement selected candidate is unavailable from the current board');
+  const candidateTaskIds = [...new Set(selectedCandidate.pieces.flatMap((piece) => piece.taskIds))].sort();
+  if (authorized.boardSha256 !== selection.captureSha256
+    || authorized.preSelectionSha256 !== referenceSelectionV2Sha256(selection)
+    || authorized.route !== selectedCandidate.route
+    || canonicalJson(authorized.taskIds) !== canonicalJson(candidateTaskIds)) {
+    fail('authorized evaluator settlement does not bind the current selected board route and tasks');
   }
-  if (sha256(evidence.assessmentBytes) !== projection.evaluatorPayloadSha256 || sha256(evidence.resultBytes) !== projection.evaluatorResultSha256
-    || (projection.approvedRecipe !== undefined && (evidence.approvedRecipeBytes === undefined || sha256(evidence.approvedRecipeBytes) !== projection.approvedRecipe.recipeSha256))) return fail('motion resolution evidence bytes do not match evaluator provenance');
-  if (authorization === 'host') {
-    try {
-      requireEvaluatorAssessmentAuthorization(invocation, root, evidence.assessmentBytes);
-      requireEvaluatorResultAuthorization(invocation, root, evidence.resultBytes);
-      if (projection.approvedRecipe !== undefined) requireApprovedMotionRecipeAuthorization(invocation, root, evidence.approvedRecipeBytes!);
-    } catch (error) {
-      return fail(error instanceof Error ? error.message : 'missing evaluator host authorization');
-    }
-  } else if (!isHostDerivedLocalCliInvocation(invocation) || projection.approvedRecipe !== undefined) {
-    return fail('local moderator persistence requires CLI-derived local authority and forbids unapproved motion recipes');
+  const motionKeys = Object.keys(authorized.motionResolution).sort();
+  const expectedMotionKeys = authorized.motionResolution['approvedRecipe'] === undefined
+    ? ['motionDecision', 'slots']
+    : ['approvedRecipe', 'motionDecision', 'slots'];
+  if (motionKeys.length !== expectedMotionKeys.length || motionKeys.some((key, index) => key !== expectedMotionKeys[index])) {
+    fail('authorized evaluator result motion settlement has unknown or missing keys');
+  }
+  const projection = resolveMotionProjection({
+    activationSha256: artDirectionSha256(invocation.activation),
+    alternativesSha256: authorized.alternativesSha256,
+    handoffSha256: authorized.handoffSha256,
+    evaluatorInvocationSha256: projectRunInvocationSha256(invocation),
+    evaluatorPayloadSha256: sha256(evidence.assessmentBytes),
+    evaluatorResultSha256: sha256(evidence.resultBytes),
+    motionDecision: authorized.motionResolution['motionDecision'] as never,
+    slots: authorized.motionResolution['slots'] as never,
+    ...(authorized.motionResolution['approvedRecipe'] === undefined ? {} : { approvedRecipe: authorized.motionResolution['approvedRecipe'] as never }),
+    selection,
+  });
+  if (input.activationSha256 !== projection.activationSha256) {
+    fail('motion settlement must bind the exact authorizing invocation activation');
+  }
+  if (referenceSelectionV2Sha256(input.selection) !== referenceSelectionV2Sha256(selection)
+    || input.alternativesSha256 !== projection.alternativesSha256
+    || input.handoffSha256 !== projection.handoffSha256
+    || input.evaluatorInvocationSha256 !== projection.evaluatorInvocationSha256
+    || input.evaluatorPayloadSha256 !== projection.evaluatorPayloadSha256
+    || input.evaluatorResultSha256 !== projection.evaluatorResultSha256
+    || input.motionDecision !== projection.motionDecision
+    || canonicalJson(input.slots) !== canonicalJson(projection.slots)
+    || canonicalJson(input.approvedRecipe) !== canonicalJson(projection.approvedRecipe)) {
+    fail('motion settlement must derive exclusively from the authorized evaluator result bytes');
+  }
+  if (projection.approvedRecipe !== undefined && (evidence.approvedRecipeBytes === undefined || sha256(evidence.approvedRecipeBytes) !== projection.approvedRecipe.recipeSha256)) {
+    fail('motion resolution evidence bytes do not match evaluator provenance');
+  }
+  try {
+    requireEvaluatorAssessmentAuthorization(invocation, root, evidence.assessmentBytes);
+    requireEvaluatorResultAuthorization(invocation, root, evidence.resultBytes);
+    if (projection.approvedRecipe !== undefined) requireApprovedMotionRecipeAuthorization(invocation, root, evidence.approvedRecipeBytes!);
+  } catch (error) {
+    return fail(error instanceof Error ? error.message : 'missing evaluator host authorization');
   }
   const digest = motionResolutionProjectionSha256(projection);
   const relativePath = `.omd/motion-resolutions/sha256-${digest}.json`;
+  consumeMotionSettlementAuthority(invocation, root, evidence.resultBytes);
   writeImmutableContentAddressed(root, relativePath, canonicalJson(projection), invocation);
+  issueMotionSettlementAuthority(invocation, root, digest);
   return { path: relativePath, projection };
 }
 
@@ -335,14 +481,16 @@ export function persistSettledReferenceSelection(
   const motion = readPersistedMotionResolution(root, motionResolutionSha256);
   if (motion.selectionSha256 !== referenceSelectionV2Sha256(preSelection)) fail('persisted motion resolution does not bind the immutable pre-selection');
   if (motion.activationSha256 !== artDirectionSha256(invocation.activation)) fail('persisted motion resolution does not bind the current invocation');
+  if (motion.evaluatorInvocationSha256 !== projectRunInvocationSha256(invocation)) fail('persisted motion resolution does not bind the current evaluator invocation');
   const settled = materializeSettledReferenceSelection(preSelection, { ...motion, selection: preSelection });
   const digest = referenceSelectionV2Sha256(settled);
+  consumeIssuedMotionSettlementAuthority(invocation, root, motionResolutionSha256);
   writeImmutableContentAddressed(root, `.omd/settled-reference-selections/sha256-${digest}.json`, canonicalJson(settled), invocation);
   writeAtomically(root, '.omd/reference-selection-v2.json', canonicalJson(settled), invocation);
   return settled;
 }
 export function readPreReferenceSelectionV2(root: string): ReferenceSelectionV2 {
-  const body = readRegularFile(preSelectionV2Path(root), 'pre-selection pointer');
+  const body = readRegularFile(root, '.omd/reference-pre-selection-v2.json', 'pre-selection pointer');
   try {
     const pointer = parsePreSelectionPointer(JSON.parse(body));
     if (body !== canonicalJson(pointer)) fail('pre-selection pointer is not canonical');
@@ -353,13 +501,13 @@ export function readPreReferenceSelectionV2(root: string): ReferenceSelectionV2 
   }
 }
 export function readReferenceSelection(root: string): ReferenceSelection {
-  try { return parseReferenceSelection(JSON.parse(readFileSync(selectionPath(root), 'utf8'))); }
+  try { return parseReferenceSelection(JSON.parse(readContainedRegularFile(root, '.omd/reference-selection.json', 'reference selection').toString('utf8'))); }
   catch (error) { if (error instanceof ReferenceSelectionValidationError) throw error; return fail('record is missing or invalid JSON'); }
 }
 
 export function readReferenceSelectionV2(root: string): ReferenceSelectionV2 {
   try {
-    const body = readRegularFile(selectionV2Path(root), 'settled v2 selection');
+    const body = readRegularFile(root, '.omd/reference-selection-v2.json', 'settled v2 selection');
     const selection = parseReferenceSelectionV2(JSON.parse(body));
     if (body !== canonicalJson(selection)) fail('settled v2 selection is not canonical');
     return selection;
@@ -435,6 +583,13 @@ export function selectReferenceCandidateV2(root: string, candidateId: string, di
   if (!selection.slots.some((slot) => slot.signal === 'high-visual-system' && slot.rights === 'lawful' && slot.obligationDisposition === 'used')) fail('selection requires one lawful high-visual-system positive used slot');
   const pointer = persistImmutablePreSelection(root, selection, invocation);
   writeAtomically(root, '.omd/reference-pre-selection-v2.json', canonicalJson(pointer), invocation);
+  // A new pre-selection supersedes any settled-selection pointer left by an earlier
+  // board or lap. Publish the current canonical bytes here as the protocol's v2
+  // selection pointer; art direction will replace them with the motion-settled
+  // form once its evaluator-owned resolution is persisted. Without this write,
+  // `omd ref select` can immediately make `omd ref check` fail by validating the
+  // freshly selected board and a historical settled pointer at the same time.
+  writeAtomically(root, '.omd/reference-selection-v2.json', canonicalJson(selection), invocation);
   return selection;
 }
 export function selectReferenceCandidateV2Autonomously(root: string, candidateId: string, invocation: ProjectRunInvocation): ReferenceSelectionV2 {

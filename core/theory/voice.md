@@ -549,13 +549,13 @@ conclusion is about domain specialisation in attention heads, not about copy reg
 - 배민 UX Writing interview (bcut.baemin.com/6287/) — first UX writer mandate: clear
   communication and consistency of voice; register as a designed commitment, not a default
 - Qian et al. (2025). "Enhancing Human-Like Responses in Large Language Models."
-  arxiv.org/abs/2501.05032 — DPO fine-tuning removes robotic formal register; self-intro
-  disclaimers, impersonal deflection, and encyclopedic structure identified as primary tells;
-  79–90% preference for natural responses with no benchmark degradation
+  arxiv.org/abs/2501.05032 — dialogue preference evidence for register fit; not static UI
+  authorship evidence and not authority for phrase-level lint
 - Jiang et al. (2025). "How Human-Like Are Large Language Models? A Register-Aware
   Linguistic Evaluation Framework." arxiv.org/abs/2605.23651 — LLMs over-produce
   nominalisations, longer words, attributive adjectives, and present-participle constructions
-  across all registers; human instructive text is more persuasive and more lexically variable
+  in its studied corpora; aggregate register findings do not transfer to isolated UI strings
+  or establish authorship
 - Ou et al. (2024). "DialogBench: Evaluating LLMs as Human-Like Dialogue Systems."
   aclanthology.org/2024.naacl-long.341 — DIALOGUE-ONLY: benchmark for conversational
   agents; finding that assistant-AI positioning weakens emotional naturalness transfers as
@@ -567,6 +567,26 @@ conclusion is about domain specialisation in attention heads, not about copy reg
   aclanthology.org/2025.sicon-1.10 — EXCLUDED: backchannels, overlap, and turn-taking in
   real-time text chatbots; findings are dialogue-system-specific and do not apply to static
   page copy
+
+---
+
+## Operational state is grammar
+
+Consequential product copy names only the strongest transition the system can verify. A local
+preview is not a sent request; sent is not received; received is not an appointment; an
+appointment is not a visit; a visit is not completion. Likewise, in-memory state, tab-scoped
+session storage, persistent browser storage, and remote persistence are different claims.
+
+Record those limits in the copy deck's typed Truth contract before writing action,
+confirmation, status, or summary text. If a frozen requirement label exceeds either boundary,
+return it to the framer instead of preserving an overclaim or inventing a softer downstream
+synonym. Confirmation copy names the achieved boundary first. It adds a reference, next actor,
+timing, or recovery only when that information exists and changes what the user can do.
+
+This separation follows the state distinctions visible in GOV.UK confirmation patterns,
+NHS online request outcomes, and Seoul 120's receipt-to-result flow. It is conditional rather
+than a universal service-stage template: an atomic system may truthfully complete more than
+one transition, but the evidence must establish every transition the copy names.
 
 ---
 
@@ -586,6 +606,12 @@ conclusion is about domain specialisation in attention heads, not about copy reg
 - **W3C Writing for Web Accessibility** — https://www.w3.org/WAI/tips/writing/ — writer:
   descriptive headings/link text and plain language. Hand: expose the same meaning to
   assistive technology.
+- **GOV.UK confirmation pages** — https://design-system.service.gov.uk/patterns/confirmation-pages/
+  — writer/eye: name the completed boundary and include useful next-step truth.
+- **NHS online GP forms** — https://www.nhs.uk/nhs-services/gps/using-an-online-form-to-contact-your-gp-surgery/
+  — writer/eye: keep request submission and downstream service response distinct.
+- **Seoul 120 civil complaints** — https://www.120dasan.or.kr/dsnc/main/contents.do?menuNo=200022
+  — writer/eye: receipt, transfer, processing, and result remain distinct operational states.
 
 Ownership is deliberate. `omd-writer` establishes facts, audience language, voice, and
 surface copy in `.omd/copy-deck.md`. Copy-editor eye judges fact fidelity, scan, repetition,

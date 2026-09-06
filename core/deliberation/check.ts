@@ -12,6 +12,9 @@ import {
 } from './contracts.ts';
 import { classifyDepth, type DepthInput, type DepthResult } from './depth.ts';
 export type DeliberationRunPhase = 'prebuild' | 'final';
+export type DeliberationRunApplicability = {
+  readonly depth: 'required' | 'skipped';
+};
 
 export type DeliberationRunReport = {
   readonly ok: boolean;
@@ -24,11 +27,21 @@ export type DeliberationRunReport = {
 const parse = (path: string): unknown => JSON.parse(readFileSync(path, 'utf8'));
 const missing = (path: string, message: string): ContractFinding => ({ id: 'DELIBERATION-ARTIFACT-MISSING', path, message });
 
-export function checkDeliberationRun(cwd: string, phase: DeliberationRunPhase = 'final'): DeliberationRunReport {
+export function checkDeliberationRun(
+  cwd: string,
+  phase: DeliberationRunPhase = 'final',
+  applicability: DeliberationRunApplicability = { depth: 'required' },
+): DeliberationRunReport {
   const dir = join(cwd, '.omd'); const findings: ContractFinding[] = [];
   const depthPath = join(dir, 'depth.json');
   let depth: DepthResult | undefined;
-  if (!existsSync(depthPath)) findings.push(missing('.omd/depth.json', 'classify loop depth before design work'));
+  if (applicability.depth === 'skipped') {
+    if (existsSync(depthPath)) findings.push({
+      id: 'DEPTH-INAPPLICABLE',
+      path: '.omd/depth.json',
+      message: 'the authenticated adaptive route skips depth, so a depth artifact would conflict with the selected workflow',
+    });
+  } else if (!existsSync(depthPath)) findings.push(missing('.omd/depth.json', 'classify loop depth before design work'));
   else {
     try { depth = classifyDepth(parse(depthPath) as DepthInput); }
     catch (error) { findings.push({ id: 'DEPTH-INVALID', path: '.omd/depth.json', message: error instanceof Error ? error.message : String(error) }); }

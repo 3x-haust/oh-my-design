@@ -38,7 +38,7 @@ export interface TextSlopCandidate {
 
 const REASONS: Record<TextSlopCandidateId, Pick<TextSlopCandidate, 'reason' | 'reviewQuestion'>> = {
   'fast-paced-world': {
-    reason: '"In today\'s fast-paced world" is a stock AI-copy scene-setter that rarely carries product-specific meaning.',
+    reason: '"In today\'s fast-paced world" is an interchangeable scene-setter that delays product-specific meaning.',
     reviewQuestion: 'Does this opener say anything a reader could not have guessed, or can it be cut entirely?',
   },
   'unlock-the-power': {
@@ -58,7 +58,7 @@ const REASONS: Record<TextSlopCandidateId, Pick<TextSlopCandidate, 'reason' | 'r
     reviewQuestion: 'Can this sentence lead with the point directly instead of announcing its own importance?',
   },
   'delve-into': {
-    reason: '"Delve into" is a well-known LLM tic used as a generic transition into any topic.',
+    reason: '"Delve into" is a generic transition that names no concrete next action or subject relationship.',
     reviewQuestion: 'Can this transition be replaced with a specific verb describing what actually happens next?',
   },
   'game-changer': {
@@ -78,19 +78,19 @@ const REASONS: Record<TextSlopCandidateId, Pick<TextSlopCandidate, 'reason' | 'r
     reviewQuestion: 'Can this idiom be removed so the sentence states its conclusion directly?',
   },
   'ko-journey-metaphor': {
-    reason: '"여정(journey)" as a growth/experience metaphor ("여정을 담다/그리다/시작하다") is a stock AI-portfolio flourish that adds no concrete fact.',
+    reason: '"여정(journey)" as a growth/experience metaphor ("여정을 담다/그리다/시작하다") is an interchangeable portfolio flourish that adds no concrete fact.',
     reviewQuestion: 'What concrete project, date, or outcome does this stand in for, and can the copy state that instead of the journey metaphor?',
   },
   'ko-story-vessel': {
-    reason: '"이야기를 담다" (to contain a story) is an AI marketing collocation that asserts narrative without naming it.',
+    reason: '"이야기를 담다" (to contain a story) is a generic marketing collocation that asserts narrative without naming it.',
     reviewQuestion: 'What is the specific story or fact, and can the copy show it rather than announce that it holds one?',
   },
   'ko-melt-in': {
-    reason: '"녹여내다" (to melt/dissolve in) is overwrought AI-purple prose standing in for "included" or "expressed".',
+    reason: '"녹여내다" (to melt/dissolve in) is overwrought purple prose standing in for "included" or "expressed".',
     reviewQuestion: 'Can this be replaced with the plain verb (담다/구현하다/설명하다) for what actually happened?',
   },
   'ko-craft-mold': {
-    reason: '"빚어내다" (to craft/mold) is decorative AI-purple prose rarely grounded in a real making process.',
+    reason: '"빚어내다" (to craft/mold) is decorative purple prose rarely grounded in a real making process.',
     reviewQuestion: 'Was something literally shaped, or is this an inflated verb for "만들다/구축하다" a plainer word states better?',
   },
   'ko-bestow': {
@@ -98,15 +98,15 @@ const REASONS: Record<TextSlopCandidateId, Pick<TextSlopCandidate, 'reason' | 'r
     reviewQuestion: 'What is actually provided, and can the copy say 제공/보여줌 plainly instead of the gift-giving flourish?',
   },
   'supercharge-your': {
-    reason: '"Supercharge your <noun>" is a stock AI-SaaS landing headline that promises intensity without a concrete mechanism.',
+    reason: '"Supercharge your <noun>" is an interchangeable landing headline that promises intensity without a concrete mechanism.',
     reviewQuestion: 'What specifically gets faster or better, by how much, and can the copy state that instead of "supercharge"?',
   },
   'work-smarter': {
-    reason: '"Work smarter, not harder" is a decades-old motivational cliché recycled by AI marketing copy.',
+    reason: '"Work smarter, not harder" is a decades-old motivational cliché that names no removed step or mechanism.',
     reviewQuestion: 'What concrete step does the product remove, and can the copy name it instead of the slogan?',
   },
   'unlock-your': {
-    reason: '"Unlock your creativity/potential/productivity" is a generic AI-SaaS template promise with no specific claim.',
+    reason: '"Unlock your creativity/potential/productivity" is a generic template promise with no specific claim.',
     reviewQuestion: 'What was actually blocked before, and what unblocks it — can the copy say that plainly?',
   },
   'ai-powered': {
@@ -114,15 +114,15 @@ const REASONS: Record<TextSlopCandidateId, Pick<TextSlopCandidate, 'reason' | 'r
     reviewQuestion: 'What does the AI actually do here that a reader cares about, and can the copy lead with that outcome?',
   },
   'ten-x-hype': {
-    reason: '"10x your/faster" is an unverifiable order-of-magnitude hype figure typical of AI landing pages.',
+    reason: '"10x your/faster" is an unverifiable order-of-magnitude hype figure without a measured before/after.',
     reviewQuestion: 'Is there a measured before/after that supports a multiplier, or should the copy drop the number?',
   },
   'no-code-required': {
-    reason: '"No code required" is a stock no-code/AI marketing tag that rarely reflects the actual workflow.',
+    reason: '"No code required" is a stock category tag that rarely reflects the actual setup workflow.',
     reviewQuestion: 'What does setup actually take, and can the copy describe the real first step instead?',
   },
   'the-future-of': {
-    reason: '"The future of <domain>" is an empty futurist frame common to AI product copy.',
+    reason: '"The future of <domain>" is an empty futurist frame that makes no present-tense product claim.',
     reviewQuestion: 'What does the product do today, concretely, that the copy can state instead of gesturing at the future?',
   },
   'next-generation': {
@@ -130,11 +130,11 @@ const REASONS: Record<TextSlopCandidateId, Pick<TextSlopCandidate, 'reason' | 'r
     reviewQuestion: 'What specific capability is new here, and can the copy name it instead of the generation claim?',
   },
   'heavy-lifting': {
-    reason: '"Let AI do the heavy lifting" is a stock AI-assistant phrase that hides what the tool actually automates.',
+    reason: '"Let AI do the heavy lifting" is an interchangeable assistant phrase that hides what the tool actually automates.',
     reviewQuestion: 'What specific task is automated, and can the copy name that task instead of the idiom?',
   },
   'effortless-creation': {
-    reason: '"Effortless creation/design/automation" is an AI-SaaS filler pairing that asserts ease without evidence.',
+    reason: '"Effortless creation/design/automation" is a filler pairing that asserts ease without evidence.',
     reviewQuestion: 'What concrete step is removed to make it easier, and can the copy show that rather than assert "effortless"?',
   },
 };
@@ -195,7 +195,7 @@ function maskCode(text: string): string {
   return chars.join('');
 }
 
-/** Scan copy-deck / rendered plain-or-markdown text for narrow AI-cliche phrases. Non-gating and advisory only. */
+/** Scan copy-deck / rendered plain-or-markdown text for narrow interchangeable phrases. Non-gating and advisory only. */
 export function scanTextSlop(text: string): TextSlopCandidate[] {
   if (!text) return [];
   // Narrow by design: literal phrase patterns. Zero-width / invisible-unicode splits

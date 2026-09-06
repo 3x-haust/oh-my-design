@@ -33,6 +33,30 @@ One family can cover both roles. Two families can be justified when their visibl
 creates a useful distinction. Start with one or two families and add another only when a
 specimen proves the existing set cannot express a required role.
 
+## Hierarchy is a content decision, not a filled template
+
+A role map defines available treatments; it does not require every screen or section to fill
+every role. In particular, do not normalize a product into `kicker → title → muted explanatory
+subtitle` at every state. That stack is useful only when all three lines add different information.
+When the progress region already names the step, a duplicate kicker is noise. When a field legend,
+work object, notice, or current state already explains the action, a sentence directly beneath the
+title is not hierarchy; it is repeated orientation.
+
+Audit the grammar across the whole surface, not one screen at a time:
+
+- list which screens use heading alone, heading plus genuinely new context, work-object-first
+  orientation, state-first feedback, or an inline instruction near the affected control;
+- reject a shared header primitive that requires support copy for every screen;
+- keep support copy where the user needs it to decide or recover, even when that means moving it
+  beside the field, boundary, or action rather than deleting it;
+- vary hierarchy because screen jobs differ, never to manufacture visual variety;
+- compare desktop and mobile captures as a sequence and fail when unrelated states repeat the same
+  typographic silhouette despite different tasks.
+
+The proof must demonstrate omission as well as presence: at least one representative state where a
+heading stands alone because no support role is needed, and every supplied support line must name
+the new fact or decision it contributes.
+
 ## Target-language and glyph coverage
 
 List the scripts and symbols that the product actually uses. For a Korean product this often
@@ -114,6 +138,7 @@ Performance claims belong to measured project output, never a fixed file-size pr
 `.omd/type-proof.md` records:
 
 - role map and target task/register;
+- cross-screen hierarchy grammar, including where optional roles are deliberately omitted and why;
 - family source, licence, hosting, scripts, glyphs, weights, and axes;
 - actual copy specimens;
 - requested and computed family/weight evidence;

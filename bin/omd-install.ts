@@ -8,6 +8,8 @@ import { install, uninstall, doctor } from '../core/install/install.ts';
 import { installBrowserRs, resolveBrowserRs, uninstallBrowserRs } from '../core/install/browser-rs.ts';
 import { doctorBrowserProvider } from '../core/install/browser-provider.ts';
 import { runBrowserRsSmoke } from '../core/install/browser-rs-smoke.ts';
+import { codexHostUsage, runCodexHostCli } from '../adapters/codex-host-launcher.ts';
+import { productionOwnerUsage, runProductionOwnerCli } from '../adapters/production-owner-runtime.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const cliBinDir = join(homedir(), '.local', 'bin');
@@ -23,6 +25,8 @@ function usage(): never {
     + '  browser doctor [--json]                          inspect browser-rs provider health\n'
     + '  browser smoke --fixture <probe.html> --out <png> [--json]\n'
     + '                                                  run the bounded local provider smoke\n'
+    + '  codex exec [codex exec options] [prompt]         launch Codex with host-owned OMD authority\n'
+    + '  codex owner run --agent omd-hand --input task.md launch the bounded production owner\n'
     + '  project doctor: omd doctor\n'
     + '  --version   print the oh-my-design package version',
   );
@@ -145,11 +149,23 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (cmd === 'codex') {
+    if (args.length === 0 || args[0] === '--help' || args[0] === '-h') {
+      console.log(`${codexHostUsage()}\n\n${productionOwnerUsage()}`);
+      return;
+    }
+    process.exitCode = args[0] === 'owner'
+      ? await runProductionOwnerCli(args.slice(1))
+      : await runCodexHostCli(args);
+    return;
+  }
+
   if (cmd !== 'install' && cmd !== 'uninstall' && cmd !== 'doctor') usage();
 
   const hostArg = args.find((a) => a.startsWith('--host'))?.split('=')[1] ?? args[args.indexOf('--host') + 1];
 
-  let hosts = detectHosts();
+  const detected = detectHosts();
+  let hosts = detected;
   if (hostArg) {
     hosts = hosts.filter((h) => h.host === hostArg);
     if (hosts.length === 0) {
@@ -170,7 +186,8 @@ async function main(): Promise<void> {
   }
 
   if (cmd === 'uninstall') {
-    for (const line of uninstall(hosts)) console.log(line);
+    // A scoped uninstall leaves the other hosts working, so it must not take their browser with it.
+    for (const line of uninstall(hosts, { keepBrowser: hosts.length < detected.length })) console.log(line);
     return;
   }
 

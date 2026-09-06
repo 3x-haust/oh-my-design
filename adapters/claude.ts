@@ -148,15 +148,18 @@ export function emitClaude({
 // flavor is a second, parallel emission: same agents, same MCP server, but names stripped
 // of their "omd-" prefix and cross-references rewritten to the "oh-my-design:" plugin form.
 
-// "omd-scout" is both an agent and a skill name; either pattern maps it to
-// "oh-my-design:scout" — harmless overlap, the contexts (subagent spawn vs. skill mention)
-// differ. Agent pattern runs first only to keep the read order obvious; running skill
-// pattern first would be equally correct since neither pattern's output can match the
-// other's input. "omd-figma" is skill-only — it has no agent counterpart.
-const AGENT_REF = /\bomd-(composer|framer|eye|glance|hand|scout|sketch|typesetter|writer)\b/g;
-const SKILL_REF = /\bomd-(ultradesign|humanize|critique|coach|figma|scout)\b/g;
+// Marketplace references use the plugin namespace, but executable `--agent omd-hand`
+// arguments remain host CLI identifiers rather than Claude plugin references.
+const AGENT_REF = /\bomd-(composer|framer|eye|glance|hand|scout|sketch|typesetter|writer|ultradesign|humanize|critique|coach|figma)\b/g;
 
-const pluginizeRefs = (text: string): string => text.replace(AGENT_REF, 'oh-my-design:$1').replace(SKILL_REF, 'oh-my-design:$1');
+const pluginizeRefs = (text: string): string => text.replace(
+  AGENT_REF,
+  (match, name: string, offset: number) => {
+    const linePrefix = text.slice(text.lastIndexOf('\n', offset) + 1, offset);
+    const machineIdentity = /(?:--agent(?:=|\s+)|(?:owner|moderator)(?:`|"|')?(?:\s+is|\s*[:=])\s*(?:`|"|')?)$/.test(linePrefix);
+    return machineIdentity ? match : `oh-my-design:${name}`;
+  },
+);
 
 const stripOmdPrefix = (name: string): string => (name.startsWith('omd-') ? name.slice(4) : name);
 

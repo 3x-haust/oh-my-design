@@ -1,6 +1,7 @@
 import type { Blueprint, BlueprintNode, Invariants, Reference } from '../types.ts';
 import { ReferenceBoardResolutionError, type ComponentCaptureTransfer, type SanitizedBlueprintNode } from './board-contract.ts';
 import { hasAssemblyPayload } from './board-sanitization.ts';
+import { parseMeasurementCoverage, referenceMeasuredInvariants } from './measurement-coverage.ts';
 
 const fail = (reason: string): never => { throw new ReferenceBoardResolutionError(reason); };
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -31,6 +32,7 @@ const copyInvariants = (value: Invariants): Invariants => ({
   weightLadder: [...value.weightLadder], motionDurations: [...value.motionDurations], easingVocab: [...value.easingVocab], animatedShare: value.animatedShare,
   hoverCoverage: value.hoverCoverage, focusCoverage: value.focusCoverage, animatedProperties: [...value.animatedProperties], hasReducedMotion: value.hasReducedMotion,
   scrollChoreography: value.scrollChoreography.map((entry) => ({ step: entry.step, fired: entry.fired, entered: entry.entered })),
+  ...(value.measurementCoverage === undefined ? {} : { measurementCoverage: parseMeasurementCoverage(value.measurementCoverage) }),
 });
 
 const sanitizedBlueprint = (reference: Reference, referenceId: string): { readonly nodes: readonly SanitizedBlueprintNode[] } => {
@@ -62,7 +64,7 @@ const sanitizedBlueprint = (reference: Reference, referenceId: string): { readon
 };
 
 export function componentCaptureTransfer(reference: Reference, referenceId: string): ComponentCaptureTransfer {
-  const invariants = reference.invariants;
+  const invariants = referenceMeasuredInvariants(reference);
   if (!measuredInvariants(invariants)) return fail(`reference ${referenceId} is missing measured invariants`);
   if (!texts(reference.principles) || reference.principles.length === 0) fail(`reference ${referenceId} has an empty or invalid principle`);
   return { invariants: copyInvariants(invariants), principles: [...reference.principles], blueprint: sanitizedBlueprint(reference, referenceId) };

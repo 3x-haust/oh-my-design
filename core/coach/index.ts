@@ -1,5 +1,7 @@
 import type { CoachReport, Category, Recurring, Run } from '../types.ts';
 
+export * from './validated-learning.ts';
+
 /** Below this many runs, a trend is noise, not a signal. */
 const MIN_RUNS_FOR_CONFIDENCE = 4;
 
@@ -51,9 +53,11 @@ const byCodeUnit = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0
 export function analyse(history: Run[], decisions: string[]): CoachReport {
   const confident = history.length >= MIN_RUNS_FOR_CONFIDENCE;
 
-  const span = history.length === 0
+  const firstRun = history[0];
+  const lastRun = history.at(-1);
+  const span = firstRun === undefined || lastRun === undefined
     ? null
-    : { from: history[0]!.ts, to: history[history.length - 1]!.ts };
+    : { from: firstRun.ts, to: lastRun.ts };
 
   const ruleIds = new Set<string>();
   for (const run of history) for (const ruleId of Object.keys(run.counts)) ruleIds.add(ruleId);

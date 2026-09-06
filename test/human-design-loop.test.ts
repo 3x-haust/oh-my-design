@@ -5,9 +5,20 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { parse } from 'yaml';
 import { extractIr, renderPage, waitForDocumentFonts } from '../core/render/index.ts';
 import { decodePng } from '../core/motion/energy.ts';
 import { readProbePlan, runProbe, type ProbePlan } from '../core/probe/index.ts';
+import {
+  ADAPTIVE_BEHAVIOR_POLICY,
+  ADAPTIVE_STAGE_GRAPH,
+  ADAPTIVE_STAGE_OWNERS,
+  AdaptiveRouteError,
+  COPY_REPAIR_WORKFLOW,
+  parseRouteRecord,
+  routeAdaptiveFlow,
+  validateCopyRepairWorkflow,
+} from '../core/route/index.ts';
 import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
@@ -142,83 +153,92 @@ test('probe refuses remote targets', async () => {
   }), /remote targets/);
 });
 
-test('prompt contract keeps content-first isolation and checkpoint defaults executable', () => {
-  const protocol = readFileSync(join(root, 'core/protocol/human-design-loop.md'), 'utf8');
-  const skill = readFileSync(join(root, 'src/skills/omd-ultradesign/SKILL.md'), 'utf8');
-  const eye = readFileSync(join(root, 'src/agents/eye.agent.yaml'), 'utf8');
-  const glance = readFileSync(join(root, 'src/agents/glance.agent.yaml'), 'utf8');
-  const scout = readFileSync(join(root, 'src/agents/scout.agent.yaml'), 'utf8');
-  const framer = readFileSync(join(root, 'src/agents/framer.agent.yaml'), 'utf8');
-  const writer = readFileSync(join(root, 'src/agents/writer.agent.yaml'), 'utf8');
-  const typesetter = readFileSync(join(root, 'src/agents/typesetter.agent.yaml'), 'utf8');
-  const composer = readFileSync(join(root, 'src/agents/composer.agent.yaml'), 'utf8');
-  const sketch = readFileSync(join(root, 'src/agents/sketch.agent.yaml'), 'utf8');
-  for (const phrase of ['copy deck', 'sketch', 'squint glance', 'checkpoint: none']) {
-    assert.match(protocol, new RegExp(phrase.replace(/ /g, '\\s+')));
+test('adaptive process contracts preserve ownership, isolation, checkpoints, and executable gates', () => {
+  const input = JSON.parse(readFileSync(join(root, 'test/fixtures/adaptive-flow/copy-only.json'), 'utf8'));
+  const route = routeAdaptiveFlow(input);
+  const process = route.behavior.policy.process;
+
+  assert.deepEqual(process.artifactOwners, {
+    copyDeck: 'omd-writer', typeProof: 'omd-typesetter', composition: 'omd-composer',
+    candidates: 'omd-sketch', production: 'omd-hand', review: 'omd-eye', squint: 'omd-glance',
+  });
+  assert.deepEqual(process.checkpointSequence, [
+    'semantic-render-change', 'typography-reproof', 'visual-render-change',
+  ]);
+  assert.equal(process.checkpointNone, 'no-human-approval-wait');
+  assert.equal(process.squintBeforeSharp, true);
+  assert.equal(process.showpieceLensCount, 1);
+  assert.deepEqual(process.reviewIsolation.fidelityAllowed, ['selected-projections', 'handoff-receipts']);
+  assert.deepEqual(process.reviewIsolation.glanceAllowed, ['squint-renders']);
+  assert.deepEqual(process.typeProof.viewports, ['1280x900', '390x844']);
+  assert.deepEqual(process.typeProof.reject, ['fallback', 'tofu', 'faux', 'invented-type-scale']);
+  assert.deepEqual(process.immutableInputs, ['frame', 'copy-deck', 'type-proof', 'scout-summary']);
+  assert.deepEqual(process.preferenceOrder, [
+    'current-brief', 'current-user-feedback', 'project-taste', 'model-judgment',
+  ]);
+  assert.deepEqual(route.behavior.policy.references.coverage, [
+    'domain', 'competitors', 'audience-language', 'typography', 'voice', 'motion', 'components',
+  ]);
+  assert.deepEqual(process.roleCapabilities.requiredTools, [
+    'Bash(omd pack:*)', 'Bash(omd copy:*)', 'Bash(omd composition:*)',
+    'Bash(shasum:*)', 'Bash(omd source:*)',
+  ]);
+  assert.deepEqual(process.evidenceChecks, [
+    'copy-check', 'motion-spec-before-code', 'attribution', 'finish-pass', 'design-check',
+    'reference-distance-advisory', 'target-diff', 'site-check', 'sharp-desktop-mobile',
+    'filmstrip-when-applicable', 'humanize-review', 'declared-probes', 'non-deterministic-craft-review',
+  ]);
+  assert.deepEqual(ADAPTIVE_STAGE_GRAPH.composition.prerequisites, ['frame', 'copy']);
+  assert.deepEqual(ADAPTIVE_STAGE_GRAPH['candidate-generation'].prerequisites, ['composition']);
+  assert.equal(ADAPTIVE_STAGE_OWNERS.production, 'omd-hand');
+  assert.equal(ADAPTIVE_STAGE_OWNERS['independent-review'], 'omd-eye');
+  assert.ok(route.strategy.skips.some((skip) => skip.id === 'composition' && skip.reason.trim() !== ''));
+  assert.deepEqual(route.behavior.active.copyRepairWorkflow, {
+    status: 'selected', steps: COPY_REPAIR_WORKFLOW,
+  });
+
+  for (const role of ['framer', 'scout', 'sketch', 'hand', 'eye', 'writer', 'typesetter', 'composer']) {
+    const agent = parse(readFileSync(join(root, `src/agents/${role}.agent.yaml`), 'utf8'));
+    const allow = Reflect.get(agent, 'allow');
+    assert.ok(Array.isArray(allow) && allow.includes('Bash(omd pack:*)'), role);
   }
-  assert.ok(skill.indexOf('.omd/copy-deck.md') < skill.indexOf('omd-sketch'));
-  assert.ok(skill.indexOf('omd-typesetter') < skill.indexOf('omd-sketch'), 'type proof must precede sketches');
-  assert.ok(skill.indexOf('omd-composer') < skill.indexOf('omd-sketch'), 'composition contract must precede sketches');
-  assert.ok(skill.indexOf('semantic checkpoint') < skill.indexOf('re-proves typography'));
-  assert.ok(skill.indexOf('re-proves typography') < skill.indexOf('visual checkpoint'));
-  assert.ok(skill.indexOf('--squint') < skill.indexOf('Now render sharp'));
-  assert.match(skill, /showpiece only[\s\S]*exactly one dominant-technique lens/);
-  assert.match(skill, /checkpoint: none[\s\S]*no approval waits/);
-  assert.match(eye, /Never open `\.omd\/frame\.md`[\s\S]*\.omd\/decisions\.md[\s\S]*\.omd\/refs\//);
-  assert.match(eye, /fidelity-projection exception is limited to those artifacts[\s\S]*never inspect raw\s+source material or\s+unselected references/i);
-  assert.match(glance, /squint render paths and nothing else/);
-  assert.match(scout, /domain, direct competitors, user\/community language,[\s\S]*every required component/);
-  assert.match(framer, /current brief > explicit current user feedback > prior explicit project taste > agent/);
-  for (const name of ['framer', 'scout', 'sketch', 'hand', 'eye', 'writer', 'typesetter', 'composer']) {
-    assert.match(readFileSync(join(root, `src/agents/${name}.agent.yaml`), 'utf8'), /Bash\(omd pack:\*\)/, `${name} needs pack permission`);
-  }
-  assert.match(readFileSync(join(root, 'core/install/install.ts'), 'utf8'), /'Bash\(omd pack:\*\)'/);
-  assert.match(readFileSync(join(root, 'core/install/install.ts'), 'utf8'), /'Bash\(omd copy:\*\)'/);
-  assert.match(readFileSync(join(root, 'core/install/install.ts'), 'utf8'), /'Bash\(omd composition:\*\)'/);
-  assert.match(readFileSync(join(root, 'core/install/install.ts'), 'utf8'), /'Bash\(shasum:\*\)'/);
-  assert.match(readFileSync(join(root, 'core/install/install.ts'), 'utf8'), /'Bash\(omd source:\*\)'/);
-  assert.match(writer, /write or revise only `.omd\/copy-deck\.md`/i);
-  assert.match(typesetter, /\.omd\/type-proof\.md/);
-  assert.match(typesetter, /1280x900 and 390x844/);
-  assert.match(typesetter, /Do not design page composition,?\s+colour, graphics, motion/i);
-  assert.match(eye, /typography-proof mode[\s\S]*fallback or tofu[\s\S]*faux/);
-  assert.match(composer, /Own only `.omd\/composition\.md`/);
-  assert.match(composer, /SHA-256 fingerprints[\s\S]*scout\.md/);
-  assert.match(sketch, /approved typography and\s+composition contracts/);
-  assert.match(sketch, /Preserve the approved typography roles[\s\S]*both contracts exactly[\s\S]*Do not invent[\s\S]*new type\s+scale/i);
-  assert.match(eye, /sketch-selector mode[\s\S]*sanitized composition contract[\s\S]*Reject candidates that invent a new scale/i);
-  const contract = protocol.replace(/\s+/g, ' ');
-  assert.match(contract, /typesetter proof[\s\S]*structural sketches/);
-  for (const gate of [
-    /omd-writer[\s\S]*omd copy --check[\s\S]*copy-editor mode[\s\S]*writer[\s\S]*omd copy --check/i,
-    /before any animation code[\s\S]*\.omd\/motion-spec\.md[\s\S]*only its\s+declared scenes/i,
-    /\.omd\/attribution\.md[\s\S]*tokens, motion, composition, and graphics/i,
-    /craft\/finish-pass\.md[\s\S]*skipped item/i,
-    /\.omd\/design\.md[\s\S]*omd design --check/i,
-    /always run `omd ref distance <page>`[\s\S]*advisory[\s\S]*never blocks shipping/i,
-    /\.omd\/target\/manifest\.json[\s\S]*bounded `omd target diff` repair loop/i,
-    /multi-page output[\s\S]*omd check --site/i,
-    /sharp desktop and mobile[\s\S]*filmstrip[\s\S]*humanize review[\s\S]*declared(?:\/applicable)? probe/i,
-  ]) assert.match(contract, gate);
-  assert.match(eye, /non-deterministic hierarchy[\s\S]*theory\/craft\.md[\s\S]*theory\/expressive\.md[\s\S]*craft\/finish-pass\.md/);
-  assert.ok(existsSync(join(root, 'dist/codex/core/protocol/human-design-loop.md')));
-  assert.ok(existsSync(join(root, 'dist/claude/core/protocol/human-design-loop.md')));
-  assert.ok(existsSync(join(root, 'dist/codex/agents/omd-typesetter.toml')));
-  assert.ok(existsSync(join(root, 'dist/claude/agents/omd-typesetter.md')));
-  assert.ok(existsSync(join(root, 'dist/codex/agents/omd-composer.toml')));
-  assert.ok(existsSync(join(root, 'dist/claude/agents/omd-composer.md')));
+
+  const forged = structuredClone(route);
+  Reflect.set(forged.behavior.policy.process, 'squintBeforeSharp', false);
+  assert.throws(() => parseRouteRecord(forged), AdaptiveRouteError);
 });
 
-test('typographic hero contracts are proof-based, not fixed size quotas', () => {
-  const files = [
-    'core/theory/expressive.md',
-    'core/composition/typographic-hero.md',
-    'evals/korean-showpiece/graders/composition-contract-visible.md',
-    'evals/korean-showpiece/graders/showpiece-register.md',
-  ].map((path) => readFileSync(join(root, path), 'utf8')).join('\n');
-  assert.doesNotMatch(files, /90\s*[–-]\s*200px|12vw|font-size\s*[≥>]=?\s*72px|viewport-fill(?:ing)?[^.\n]*(?:pass|success|condition)/i);
-  assert.doesNotMatch(files, /11ch|4rem|font-weight:\s*var\([^)]*,\s*700\)|0\.96/);
-  assert.match(files, /type-proof\.md|typography proof/i);
-  assert.match(files, /huge Hangul/i);
-  assert.match(files, /fallback|tofu|faux/i);
+test('copy repair is an exact writer-check-editor-writer-recheck workflow or a typed full skip', () => {
+  assert.deepEqual(validateCopyRepairWorkflow([
+    'writer', 'copy-check', 'copy-editor', 'writer', 'copy-recheck',
+  ]), COPY_REPAIR_WORKFLOW);
+  const malformed = [
+    ['writer', 'copy-check', 'copy-editor', 'writer'],
+    ['writer', 'copy-check', 'copy-editor', 'copy-editor', 'writer', 'copy-recheck'],
+    ['copy-check', 'writer', 'copy-editor', 'writer', 'copy-recheck'],
+    ['writer', 'copy-check', 'proofreader', 'writer', 'copy-recheck'],
+  ];
+  for (const workflow of malformed) {
+    assert.throws(() => validateCopyRepairWorkflow(workflow), AdaptiveRouteError);
+  }
+
+  const skipped = routeAdaptiveFlow(JSON.parse(readFileSync(
+    join(root, 'test/fixtures/adaptive-flow/medical-new-product.json'), 'utf8',
+  )));
+  assert.equal(skipped.behavior.active.copyRepairWorkflow.status, 'skipped');
+  assert.ok(skipped.strategy.skips.some((entry) => entry.id === 'copy-repair-workflow' && entry.reason.trim() !== ''));
+
+  const forged = structuredClone(routeAdaptiveFlow(JSON.parse(readFileSync(
+    join(root, 'test/fixtures/adaptive-flow/copy-only.json'), 'utf8',
+  ))));
+  Reflect.set(forged.behavior.active.copyRepairWorkflow, 'steps', [
+    'writer', 'copy-check', 'copy-editor', 'copy-recheck',
+  ]);
+  assert.throws(() => parseRouteRecord(forged), AdaptiveRouteError);
+});
+
+test('typography policy is proof-based and contains no fixed size quota', () => {
+  assert.equal(ADAPTIVE_BEHAVIOR_POLICY.process.typeProof.scope, 'typography-only');
+  assert.equal(Object.hasOwn(ADAPTIVE_BEHAVIOR_POLICY.process.typeProof, 'minimumFontSize'), false);
+  assert.equal(Object.hasOwn(ADAPTIVE_BEHAVIOR_POLICY.process.typeProof, 'viewportFillQuota'), false);
 });

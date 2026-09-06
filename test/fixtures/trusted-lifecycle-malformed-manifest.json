@@ -1,0 +1,6 @@
+{
+  "schema": "trusted-lifecycle-manifest-v1",
+  "entryPath": "../outside.html",
+  "scripts": [],
+  "success": true
+}

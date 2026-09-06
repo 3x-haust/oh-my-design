@@ -1,6 +1,25 @@
-# Korean line breaking is intentionally not a deterministic rule. W3C KLREQ documents
-# word-based and character-based Hangul breaking practices, and the IR cannot judge whether
-# a contextual wrap is acceptable from `word-break` alone. `KO-KEEP-ALL` was therefore
-# removed. Route Korean wrapping to the actual-copy desktop/mobile typography proof, where
-# visible breaks, container width, copy, face, and hierarchy can be reviewed together.
-[]
+# Korean display wrapping is a production contract, while ordinary body copy remains a
+# contextual KLREQ choice. Headings, blockquotes, and data-omd-display regions are marked
+# by dom.ts as displayText. Their safe default is word-break: keep-all plus text-wrap:
+# balance. Character-based breaking is accepted only when the display context carries the
+# exact machine-readable data-omd-korean-wrap="character" override; balance still applies.
+- id: KO-DISPLAY-WRAP
+  layer: 1
+  category: a11y
+  severity: warn
+  when: "node.displayText === true && Boolean(node.text) && /[\\u1100-\\u11ff\\u3130-\\u318f\\ua960-\\ua97f\\uac00-\\ud7af\\ud7b0-\\ud7ff]/u.test(node.text)"
+  value: "node.wordBreak + '/' + node.textWrap"
+  assert: "node.textWrap === 'balance' && (node.wordBreak === 'keep-all' || node.koreanWrap === 'character')"
+  message: "Korean display text uses {value}. Display roles require word-break: keep-all and text-wrap: balance by default. Character-based breaking is allowed only with the contextual data-omd-korean-wrap=\"character\" override; body text remains a KLREQ contextual choice."
+
+# Rendered geometry, not string length, decides this rule. Ignore whitespace and punctuation
+# when counting the final line: a punctuation-only line has no meaningful grapheme and must
+# not be mislabeled, while a single Hangul grapheme followed by punctuation is still an orphan.
+- id: KO-DISPLAY-ORPHAN
+  layer: 1
+  category: a11y
+  severity: warn
+  when: "node.displayText === true && Boolean(node.text) && Array.isArray(node.textLines) && node.textLines.length > 1"
+  value: "(() => { const last = node.textLines[node.textLines.length - 1]; const meaningful = last.graphemes.filter(g => /[\\p{L}\\p{N}]/u.test(g.text)); if (meaningful.length !== 1) return null; return /[\\u1100-\\u11ff\\u3130-\\u318f\\ua960-\\ua97f\\uac00-\\ud7af\\ud7b0-\\ud7ff]/u.test(meaningful[0].text) ? meaningful[0].text : null; })()"
+  assert: "value === null"
+  message: "The final rendered display line contains only the Korean grapheme \"{value}\" after punctuation is ignored. Rebalance the copy, measure, or type size so the final line carries more than one meaningful grapheme."

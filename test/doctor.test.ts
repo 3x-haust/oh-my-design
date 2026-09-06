@@ -31,13 +31,13 @@ test('omd doctor prints a line for each expected check', () => {
 
 test('omd doctor reports node version check', () => {
   const r = run(['doctor'], project());
-  assert.match(r.stdout, /node >=22\.18/);
+  assert.match(r.stdout, /node >=22\.19/);
 });
 
 test('omd doctor passes the node version check on the current runtime', () => {
   const r = run(['doctor'], project());
-  // We require node >=22.18; the test suite itself runs on this node, so it must pass.
-  assert.match(r.stdout, /^pass\s+node >=22\.18/m);
+  // We require node >=22.19; the test suite itself runs on this node, so it must pass.
+  assert.match(r.stdout, /^pass\s+node >=22\.19/m);
 });
 
 test('omd doctor reports theory-pack presence', () => {

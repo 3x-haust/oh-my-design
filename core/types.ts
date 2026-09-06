@@ -35,6 +35,16 @@ export interface RawNode {
   /** True when the node carries a rule border on top and/or bottom but not a full box — a divider between rows. */
   divider?: boolean;
   color?: Hex;
+  /**
+   * Computed paints used to audit rendered colour roles after CSS custom properties resolve.
+   * Semantic success/error exemptions require explicit DOM evidence; hue alone is never authority.
+   */
+  paintColors?: Array<{
+    property: 'background' | 'border' | 'text';
+    value: Hex;
+    token: string | null;
+    semanticRole: 'success' | 'error' | null;
+  }>;
   interactive?: boolean;
   inline?: boolean;
 
@@ -47,6 +57,8 @@ export interface RawNode {
   shadow?: Styled;
   /** The raw `background-image` when it is a gradient. */
   gradient?: string;
+  /** Explicit semantic job from data-omd-gradient-role; absent for unclassified decoration. */
+  gradientRole?: string;
   textAlign?: 'left' | 'center' | 'right' | 'justify';
 
   // Typography, set only on text-bearing nodes.
@@ -58,6 +70,18 @@ export interface RawNode {
   fontWeight?: number;
   /** line-height as a ratio to font-size, 2dp. 'normal' resolves to 1.2. */
   lineHeight?: number;
+
+  /** True for text in a heading, blockquote, or an ancestor marked data-omd-display. */
+  displayText?: boolean;
+  /** Explicit data-omd-korean-wrap="character" contextual exception for display text. */
+  koreanWrap?: 'character';
+  /**
+   * Direct-text graphemes grouped by their rendered line after document fonts are ready.
+   * Descendant element text is measured on its own IR node, never folded into this geometry.
+   */
+  textLines?: Array<{
+    graphemes: Array<{ text: string; box: Box }>;
+  }>;
 
   /**
    * Computed word-break value, captured on text-bearing nodes.
@@ -79,11 +103,7 @@ export interface RawNode {
    */
   overflow?: string;
 
-  /**
-   * Set when background-clip: text is combined with a gradient on this node — the
-   * gradient-text tell: a gradient clipped to the text shape, sacrificing legibility
-   * for an effect that every generated landing page now shows.
-   */
+  /** Set when background-clip: text is combined with a gradient on this node. */
   clipText?: boolean;
 
   /**
@@ -160,9 +180,8 @@ export interface Computed {
   hitArea: { w: number; h: number };
   isInteractive: boolean;
   /**
-   * How many siblings share this node's shape: same tag, same child count, same radius
-   * and shadow. Three of them in a row is the feature-card grid every generated landing
-   * page reaches for when nobody decided what matters most.
+   * How many siblings share this node's visual rank: same component name, child count,
+   * radius and shadow, with no material area departure. This never infers authorship.
    */
   identicalSiblings: number;
 }
@@ -172,6 +191,8 @@ export type Node = RawNode & { computed: Computed };
 export interface Stats {
   spacingHistogram: Record<string, number>;
   colorHistogram: Record<string, number>;
+  /** Non-semantic rendered paints across background, border, and text. */
+  computedColorHistogram: Record<string, number>;
   orphanStyles: Hex[];
   componentReuse: Record<string, number>;
 
@@ -219,9 +240,9 @@ export type Layer = 1 | 2;
 
 /**
  * `a11y` and `system` are defects: something is measurably wrong.
- * `slop` is different. Nothing here is broken — the design has simply converged on the
- * mean of everything the model has seen. Each rule is a heuristic and can be wrong about
- * a deliberate choice, which is why every one of them is a warning and none is an error.
+ * `slop` is different. These warnings identify observable convergence compounds that may
+ * flatten hierarchy or specificity; they do not identify who made the work. Each rule can
+ * be wrong about a deliberate choice, which is why every one is a warning and none an error.
  * `motion` covers craft defects in animation execution: missing reduced-motion support,
  * layout thrash, uniform rhythm. Separate from `slop` because these are implementation
  * correctness issues, not design-mean convergence failures.
@@ -288,8 +309,42 @@ export interface Frame {
    * loop over screen regions, never as a marketing message ladder.
    */
   uxSurface?: string;
+  reality?: RealityLedger;
+  entrySurface?: import('./frame/entry-surface-contract.ts').EntrySurfaceContract;
 
   [key: string]: unknown;
+}
+
+export const REALITY_CATEGORY_VALUES = [
+  'subject',
+  'brand',
+  'operation',
+  'person',
+  'metric',
+  'media',
+  'capability',
+] as const;
+export type RealityCategory = (typeof REALITY_CATEGORY_VALUES)[number];
+
+export const REALITY_STATUS_VALUES = [
+  'supplied',
+  'verified',
+  'demo',
+  'unknown',
+] as const;
+export type RealityStatus = (typeof REALITY_STATUS_VALUES)[number];
+
+export interface RealityFact {
+  category: RealityCategory;
+  status: RealityStatus;
+  statement: string;
+  source?: string;
+}
+
+export interface RealityLedger {
+  schema: 'reality-ledger-v1';
+  mode: 'greenfield' | 'existing';
+  facts: RealityFact[];
 }
 
 /**
@@ -365,6 +420,8 @@ export interface Invariants {
    * Empty when the probe was not run.
    */
   scrollChoreography: Array<{ step: number; fired: number; entered: number }>;
+  /** Explicit probe coverage; absent on legacy records, whose numeric conventions remain unchanged. */
+  measurementCoverage?: import('./ref/measurement-coverage.ts').MeasurementCoverage;
 }
 
 /**
@@ -585,6 +642,10 @@ export interface Reference {
    * The kinship gate (`ref distance <= 0.6`) still gates the shipped build.
    */
   imagePath?: string;
+  /** Viewport the capture was measured at. Evidence must say how wide it was seen. */
+  viewport?: { width: number; height: number };
+  /** Executed disclosure preparation and observed visibility; not a semantic state proof. */
+  capturePreparation?: import('./ref/capture-preparation.ts').CapturePreparationReceipt;
 }
 
 /** How close a page sits to a reference. 1 is identical; the warning threshold is 0.6. */
@@ -593,6 +654,8 @@ export interface RefDistance {
   similarity: number;
   /** Which invariants drove the score, most-similar first. */
   drivers: string[];
+  /** Explicitly unmeasured axes excluded from this partial comparison, never agreement. */
+  unmeasuredComponents?: string[];
 }
 
 /**

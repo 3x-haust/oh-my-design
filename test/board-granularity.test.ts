@@ -7,7 +7,9 @@ import {
   isWholePageCapture,
   slotClaimAndCapture,
 } from '../core/ref/board-granularity.ts';
-import type { Reference } from '../core/types.ts';
+import type { Blueprint, Invariants, Reference } from '../core/types.ts';
+import { parseReferenceBoard } from '../core/ref/board-parser.ts';
+import { refIdentity } from '../core/ref/identity.ts';
 
 const ref = (source: string, component: string, selector?: string, extra: Partial<Reference> = {}): Reference => ({
   source,
@@ -183,4 +185,148 @@ test('an honestly named board raises no mismatch', () => {
     ref('https://c.com', 'site-footer', 'footer'),
   ];
   assert.ok(!auditBoardGranularity(board).some((f) => f.id === 'REF-NAME-MISMATCH'));
+});
+
+// Zone coverage counts evidence; it cannot see that all of it agrees with itself. A real run
+// covered all six zones from one design system, carried a 0.93 kinship pair, and left four
+// low-signal captures on the board — each invisible to every check that existed.
+
+const inv = (over: Partial<Invariants> = {}): Invariants => ({
+  spacingLadder: [8, 16], radiusLadder: [4], elevationLevels: 1, centeredRatio: 0, tokenCoverage: 0.8,
+  paddingWeight: 16, typeScale: [14, 16, 24, 40], fontFamilies: ['inter'], weightLadder: [400, 700],
+  motionDurations: [200], easingVocab: ['ease-out'], animatedShare: 0.1, hoverCoverage: 0.5,
+  focusCoverage: 0.9, animatedProperties: ['opacity'], hasReducedMotion: true, scrollChoreography: [],
+  ...over,
+} as Invariants);
+
+test('a board drawn mostly from one source is reported even when every zone is covered', () => {
+  const board = [
+    ref('https://one.example/a', 'nav', '.nav', { invariants: inv(), slot: 'nav' }),
+    ref('https://one.example/b', 'cards', '.cards', { invariants: inv({ radiusLadder: [8] }), slot: 'proof' }),
+    ref('https://one.example/c', 'steps', '.steps', { invariants: inv({ spacingLadder: [4, 12] }), slot: 'process' }),
+    ref('https://other.example/d', 'hero', '.hero', { invariants: inv({ typeScale: [16, 20, 64] }), slot: 'hero' }),
+  ];
+  const finding = auditBoardGranularity(board).find((f) => f.id === 'REF-SOURCE-CONCENTRATION');
+  assert.ok(finding, 'three of four captures share one host');
+  assert.match(finding!.message, /3 of 4 component captures come from one source/);
+
+  const spread = [
+    ref('https://one.example/a', 'nav', '.nav', { invariants: inv(), slot: 'nav' }),
+    ref('https://two.example/b', 'cards', '.cards', { invariants: inv({ radiusLadder: [8] }), slot: 'proof' }),
+    ref('https://three.example/c', 'steps', '.steps', { invariants: inv({ spacingLadder: [4, 12] }), slot: 'process' }),
+    ref('https://four.example/d', 'hero', '.hero', { invariants: inv({ typeScale: [16, 20, 64] }), slot: 'hero' }),
+  ];
+  assert.ok(!auditBoardGranularity(spread).some((f) => f.id === 'REF-SOURCE-CONCENTRATION'));
+});
+
+test('two captures that measure the same design are one reference counted twice', () => {
+  const twin = inv();
+  const board = [
+    ref('https://a.example', 'alert', '.alert', { invariants: twin, slot: 'scope' }),
+    ref('https://b.example', 'process', '.process', { invariants: twin, slot: 'process' }),
+    ref('https://c.example', 'hero', '.hero', { invariants: inv({ typeScale: [12, 48], radiusLadder: [0], elevationLevels: 0, spacingLadder: [2, 40] }), slot: 'hero' }),
+  ];
+  const finding = auditBoardGranularity(board).find((f) => f.id === 'REF-KINSHIP-UNRESOLVED');
+  assert.ok(finding, 'identical invariants must surface as one reference twice');
+  assert.match(finding!.message, /measure the same design/);
+});
+
+test('a board that is mostly low-signal has nothing to be distinctive with', () => {
+  const flat = inv({ radiusLadder: [], elevationLevels: 0, motionDurations: [], easingVocab: [], weightLadder: [], typeScale: [], spacingLadder: [] });
+  const board = [
+    ref('https://a.example', 'one', '.one', { invariants: flat, slot: 'a' }),
+    ref('https://b.example', 'two', '.two', { invariants: flat, slot: 'b' }),
+    ref('https://c.example', 'three', '.three', { invariants: inv(), slot: 'c' }),
+  ];
+  const finding = auditBoardGranularity(board).find((f) => f.id === 'REF-LOW-SIGNAL-BOARD');
+  assert.ok(finding, 'two of three below the signal floor is a majority');
+  assert.match(finding!.message, /score below 0\.4 design signal/);
+});
+
+test('the board signal gate honors measured component structure instead of requiring motion or hover', () => {
+  const flat = inv({ radiusLadder: [], elevationLevels: 0, motionDurations: [], easingVocab: [], weightLadder: [400], typeScale: [16], spacingLadder: [80], paddingWeight: 0, hoverCoverage: 0 });
+  const blueprint: Blueprint = {
+    selector: '.evidence-split',
+    capturedAt: '2026-08-31T00:00:00.000Z',
+    nodes: [
+      { id: 'root', role: 'container', children: ['copy', 'media'], box: { w: 1216, h: 560 } },
+      { id: 'copy', role: 'container', children: ['heading', 'list'], box: { w: 496, h: 528 } },
+      { id: 'heading', role: 'heading', children: [], box: { w: 496, h: 32 }, fontSize: 32, fontWeight: 500 },
+      { id: 'list', role: 'container', children: ['row-1', 'row-2', 'row-3'], box: { w: 496, h: 276 } },
+      { id: 'row-1', role: 'text', children: [], box: { w: 470, h: 56 }, fontSize: 16, fontWeight: 400 },
+      { id: 'row-2', role: 'text', children: [], box: { w: 470, h: 56 }, fontSize: 16, fontWeight: 600 },
+      { id: 'row-3', role: 'text', children: [], box: { w: 470, h: 84 }, fontSize: 16, fontWeight: 400 },
+      { id: 'media', role: 'container', children: ['image'], box: { w: 640, h: 389 } },
+      { id: 'image', role: 'image', children: [], box: { w: 640, h: 389 }, radius: 16 },
+    ],
+  };
+  const board = [
+    ref('https://a.example', 'split-a', '.split-a', { invariants: flat, blueprint }),
+    ref('https://b.example', 'split-b', '.split-b', { invariants: flat, blueprint: { ...blueprint, selector: '.split-b' } }),
+    ref('https://c.example', 'styled', '.styled', { invariants: inv() }),
+  ];
+  const finding = auditBoardGranularity(board).find((entry) => entry.id === 'REF-LOW-SIGNAL-BOARD');
+  assert.equal(finding, undefined);
+});
+
+test('the checker consumes board classifications and candidate zone bindings instead of auditing raw captures', () => {
+  const flat = inv({ radiusLadder: [], elevationLevels: 0, motionDurations: [], easingVocab: [], weightLadder: [], typeScale: [], spacingLadder: [] });
+  const visual = [
+    ref('https://visual-a.example', 'visual-a', '.visual-a'),
+    ref('https://visual-b.example', 'visual-b', '.visual-b'),
+    ref('https://visual-c.example', 'visual-c', '.visual-c'),
+  ];
+  const nonvisual = [
+    ref('https://content-a.example', 'content-a', '.content-a', { invariants: flat }),
+    ref('https://content-b.example', 'content-b', '.content-b', { invariants: flat }),
+    ref('https://content-c.example', 'content-c', '.content-c', { invariants: flat }),
+    ref('https://anti.example', 'anti', '.anti', { invariants: flat }),
+  ];
+  const visualPiece = (entry: Reference, slotId: string, order: number) => ({
+    slotId, sourceKind: 'component-capture', referenceId: refIdentity(entry.source, entry.component),
+    targetComponent: slotId, targetSelector: `[data-zone="${slotId}"]`, taskIds: [`zone-${slotId}`], reason: 'Use only the declared visual evidence.',
+    take: ['structure'], avoid: 'Do not copy source expression.', adaptation: 'Apply the rule locally.', grid: { column: 1, span: 12, order },
+    evidenceAxes: { rights: 'lawful', signal: 'high-visual-system', staticAxis: 'available', motionAxis: 'absent' },
+  });
+  const classifiedPiece = (entry: Reference, slotId: string, order: number, kind: 'content-only' | 'anti-reference') => ({
+    slotId, sourceKind: 'classified-reference', referenceId: refIdentity(entry.source, entry.component),
+    targetComponent: slotId, targetSelector: `[data-zone="${slotId}"]`, taskIds: [`zone-${slotId}`], reason: 'Use only the declared nonvisual evidence.',
+    take: kind === 'content-only' ? ['content'] : ['rejection'], avoid: 'Do not infer source pixels.', adaptation: 'Apply the rule locally.',
+    grid: { column: 1, span: 12, order }, evidenceAxes: { rights: 'lawful', signal: kind === 'content-only' ? 'supporting-content' : 'anti-reference', staticAxis: 'absent', motionAxis: 'absent' },
+    classification: { kind, sha256: 'c'.repeat(64) },
+  });
+  const manifest = parseReferenceBoard({
+    schemaVersion: 'reference-board-v2', projectSha256: 'b'.repeat(64), frameSha256: 'a'.repeat(64), candidates: [{
+      id: 'candidate', label: 'Candidate', route: '/', rationale: 'Mixed typed evidence.',
+      pieces: [
+        ...visual.map((entry, index) => visualPiece(entry, `visual-${index}`, index)),
+        ...nonvisual.slice(0, 3).map((entry, index) => classifiedPiece(entry, index === 0 ? 'voice' : `content-${index}`, index + 3, 'content-only')),
+        classifiedPiece(nonvisual[3]!, 'rejected-style', 6, 'anti-reference'),
+      ],
+    }],
+  });
+  const rawIds = auditBoardGranularity([...visual, ...nonvisual]).map((finding) => finding.id);
+  assert.ok(rawIds.includes('REF-LOW-SIGNAL-BOARD'));
+  assert.ok(rawIds.includes('REF-KINSHIP-UNRESOLVED'));
+
+  const findings = auditBoardGranularity([...visual, ...nonvisual], {
+    board: manifest,
+    zones: ['visual-0', 'visual-1', 'visual-2', 'voice'],
+  });
+  assert.ok(!findings.some((finding) => finding.id === 'REF-LOW-SIGNAL-BOARD'));
+  assert.ok(!findings.some((finding) => finding.id === 'REF-KINSHIP-UNRESOLVED'));
+  assert.ok(!findings.some((finding) => finding.id === 'REF-ZONE-UNCOVERED'));
+
+  const legacy = parseReferenceBoard({
+    schemaVersion: 'reference-board-v1', frameSha256: 'a'.repeat(64), candidates: [{
+      id: 'legacy', label: 'Legacy', route: '/', rationale: 'Caller signals alone are not classification authority.',
+      pieces: nonvisual.map((entry, index) => ({
+        ...visualPiece(entry, `legacy-${index}`, index),
+        evidenceAxes: { rights: 'lawful', signal: index === 3 ? 'anti-reference' : 'supporting-content', staticAxis: 'available', motionAxis: 'absent' },
+      })),
+    }],
+  });
+  const legacyIds = auditBoardGranularity([...visual, ...nonvisual], { board: legacy }).map((finding) => finding.id);
+  assert.ok(legacyIds.includes('REF-LOW-SIGNAL-BOARD'), 'legacy signal strings cannot forge a capture waiver');
+  assert.ok(legacyIds.includes('REF-KINSHIP-UNRESOLVED'), 'legacy anti-reference signals cannot waive kinship without a classification binding');
 });

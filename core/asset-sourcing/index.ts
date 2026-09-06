@@ -28,6 +28,27 @@
  * "success" result for a capability the environment cannot exercise.
  */
 
+import {
+  AiAssetDecisionError,
+  requireCommittedAiAssetDecision,
+  type AiAssetDecisionReference,
+} from './ai-decision.ts';
+import type { ProjectRunInvocation } from '../runtime/invocation.ts';
+export {
+  AI_ASSET_DECISION_AUTHORITY_SCHEMA,
+  AI_ASSET_DECISION_RECORD_SCHEMA,
+  AI_ASSET_DECISION_REFERENCE_SCHEMA,
+  AiAssetDecisionError,
+  aiAssetDecisionAuthorityBytes,
+  commitAiAssetDecision,
+  requireCommittedAiAssetDecision,
+  type AiAssetDecisionBinding,
+  type AiAssetDecisionInput,
+  type AiAssetDecisionRecord,
+  type AiAssetDecisionReference,
+  type CommittedAiAssetDecision,
+} from './ai-decision.ts';
+
 export type AssetZone = 'factual' | 'abstract' | 'atmospheric' | 'structural';
 
 export type AssetStrategy =
@@ -107,6 +128,10 @@ export interface AiImageUsageInputs {
     prompt?: string;
     provider?: string;
   };
+  decision?: AiAssetDecisionReference;
+  currentDecision?: AiAssetDecisionReference;
+  projectRoot?: string;
+  invocation?: ProjectRunInvocation;
 }
 
 export interface AiImageUsageValidation {
@@ -116,8 +141,8 @@ export interface AiImageUsageValidation {
 
 /**
  * Gate for whether a specific AI-generated image is permitted to ship.
- * Pure validation — the actual image generation call is a Phase 2 runtime
- * adapter concern (see module header); this only decides admissibility.
+ * Shipping validation reads the current immutable decision from the trusted
+ * project root and requires exact host authorization for the current invocation.
  */
 export function validateAiImageUsage(inputs: AiImageUsageInputs): AiImageUsageValidation {
   const violations: string[] = [];
@@ -138,6 +163,21 @@ export function validateAiImageUsage(inputs: AiImageUsageInputs): AiImageUsageVa
 
   if (!inputs.provenance?.provider) {
     violations.push('provenance missing: provider is required to record how the image was generated.');
+  }
+
+  try {
+    if (inputs.projectRoot === undefined || inputs.invocation === undefined) {
+      throw new AiAssetDecisionError('trusted project root and current invocation are required');
+    }
+    requireCommittedAiAssetDecision(inputs.projectRoot, {
+      prompt: inputs.provenance?.prompt,
+      provider: inputs.provenance?.provider,
+      decision: inputs.decision,
+      currentDecision: inputs.currentDecision,
+    }, inputs.invocation);
+  } catch (error) {
+    const reason = error instanceof AiAssetDecisionError ? error.message : 'unreadable binding';
+    violations.push(`decision binding: ${reason}`);
   }
 
   return {

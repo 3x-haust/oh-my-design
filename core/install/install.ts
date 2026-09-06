@@ -58,8 +58,10 @@ const OMD_ALLOW = [
   'Bash(omd frame:*)', 'Bash(omd ref:*)', 'Bash(omd choose:*)',
   'Bash(omd decision:*)', 'Bash(omd taste:*)', 'Bash(omd coach:*)',
   'Bash(omd probe:*)', 'Bash(omd config:*)', 'Bash(omd craft:*)', 'Bash(omd copy:*)',
-  'Bash(omd composition:*)',
+  'Bash(omd composition:*)', 'Bash(omd complete:*)', 'Bash(omd completion:*)',
   'Bash(omd text-slop:*)', 'Bash(omd visual-richness:*)', 'Bash(omd stack:*)',
+  'Bash(omd route:*)', 'Bash(omd workflow:*)', 'Bash(omd status:*)', 'Bash(omd clean:*)', 'Bash(omd schema:*)',
+  'Bash(omd stage:*)', 'Bash(omd cue:*)', 'Bash(omd brief:*)',
   'Bash(omd source:*)', 'Bash(omd pack:*)', 'Bash(shasum:*)',
 ];
 
@@ -266,6 +268,7 @@ export function linkCli(binDir: string, changes: string[]): void {
   const links: ReadonlyArray<readonly [string, string]> = [
     ['omd', join(pkgRoot, 'bin', 'omd.mjs')],
     ['oh-my-design', join(pkgRoot, 'bin', 'omd-install.mjs')],
+    ['omd-codex', join(pkgRoot, 'bin', 'omd-codex.mjs')],
   ];
   for (const [name, target] of links) {
     try {
@@ -331,7 +334,11 @@ function claudePluginFreshnessNote(d: Detected, changes: string[]): void {
   }
 }
 
-export type UninstallOptions = { readonly browser?: BrowserRsDependencies };
+/**
+ * `keepBrowser` retains the shared browser provider when only one host is being removed. Uninstalling
+ * OMD from one host must not break another installed host that uses the same `browser-rs`.
+ */
+export type UninstallOptions = { readonly browser?: BrowserRsDependencies; readonly keepBrowser?: boolean };
 
 export function uninstall(hosts: Detected[], options: UninstallOptions = {}): string[] {
   const changes: string[] = [];
@@ -339,7 +346,8 @@ export function uninstall(hosts: Detected[], options: UninstallOptions = {}): st
     if (d.host === 'claude') uninstallClaude(d, changes);
     else uninstallCodex(d, changes);
   }
-  changes.push(browserUninstallChange(uninstallBrowserRs(options.browser)));
+  if (options.keepBrowser === true) changes.push('browser-rs: kept (other hosts still have OMD installed)');
+  else changes.push(browserUninstallChange(uninstallBrowserRs(options.browser)));
   return changes;
 }
 
@@ -510,7 +518,9 @@ export async function doctor(hosts: Detected[], options: DoctorOptions = {}): Pr
   const browserCheck = browserProviderCheck(await doctorBrowserProvider(options.browser));
   const cliCheck = options.cliBinDir === undefined ? undefined : cliLinkCheck(options.cliBinDir);
   return hosts.map((d) => {
-    const checks = d.host === 'claude' ? doctorClaude(d) : doctorCodex(d);
+    const checks = d.host === 'claude'
+      ? doctorClaude(d)
+      : doctorCodex(d);
     checks.push(versionCheck);
     if (cliCheck !== undefined) checks.push(cliCheck);
     checks.push(browserCheck);

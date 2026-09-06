@@ -60,6 +60,27 @@ test('a label inside an interactive ancestor still counts, and content needs onl
   assert.deepEqual(checkFunctionalCompleteness(declared, nodes), []);
 });
 
+test('a wrapping label connects its text sibling to the keyboard-reachable control', () => {
+  const declared = validateFunctionalRequirements(requirements(
+    { id: 'R-1', kind: 'action', statement: 'Visitor confirms the entered details', label: '입력 내용을 확인했습니다.' },
+  ));
+  const wired = [
+    node({ id: 'label', name: 'label.checkbox', children: ['input', 'text'] }),
+    node({ id: 'input', parent: 'label', interactive: true, focusable: true }),
+    node({ id: 'text', text: '입력 내용을 확인했습니다.', parent: 'label' }),
+  ];
+  assert.deepEqual(checkFunctionalCompleteness(declared, wired), []);
+
+  const unrelated = [
+    node({ id: 'copy', text: '입력 내용을 확인했습니다.' }),
+    node({ id: 'elsewhere', interactive: true, focusable: true }),
+  ];
+  assert.deepEqual(
+    checkFunctionalCompleteness(declared, unrelated).map((finding) => finding.id),
+    ['FUNC-INERT'],
+  );
+});
+
 test('a form label with no interactive field nearby is reported as inert', () => {
   const declared = validateFunctionalRequirements(requirements({ id: 'R-1', kind: 'form', statement: 'Visitor submits an email', label: '이메일' }));
   const wired = [
@@ -100,19 +121,27 @@ test('the gate runs against a real page and separates satisfied from unsatisfied
   assert.deepEqual(JSON.parse(blocked.stdout).findings.map((finding: { id: string }) => finding.id), ['FUNC-MISSING', 'FUNC-UNREACHABLE']);
 });
 
-// The framer owns the requirement list because it is the role that interrogates the brief, and it
-// persists through the CLI like its other artifacts rather than writing the file directly.
-
-test('the framer owns and persists functional requirements through the CLI', () => {
+// The frame stage owns the requirement list and persists it through the CLI. The stage brief carries
+// that contract; the thin coordinator does not duplicate an artifact-ownership table.
+test('the frame owner persists functional requirements through the canonical stage brief', () => {
   const framer = readFileSync(fileURLToPath(new URL('../src/agents/framer.agent.yaml', import.meta.url)), 'utf8').replace(/\s+/g, ' ');
   assert.match(framer, /Bash\(omd complete:\*\)/);
   assert.match(framer, /You also own `\.omd\/functional-requirements\.json` as `functional-requirements-v1`/);
   assert.match(framer, /persist the visitor's declared affordances with `omd complete set --input <functional-requirements\.json>`/);
 
-  const skill = readFileSync(fileURLToPath(new URL('../src/skills/omd-ultradesign/SKILL.md', import.meta.url)), 'utf8');
-  assert.match(skill, /\| `\.omd\/functional-requirements\.json` \| `omd-framer` \| §1 \|/);
-  assert.match(skill, /\| `\.omd\/delivery\.jsonl`, `\.omd\/stage-usage\.jsonl` \| the `omd stage` CLI \(never hand-edited\) \| §0–§9 \|/);
-  assert.match(skill, /`\.omd\/locale\.json` is the other coordinator-owned routing input/);
+  const stages = readFileSync(fileURLToPath(new URL('../core/stage/contract.ts', import.meta.url)), 'utf8');
+  assert.match(stages, /id: 'frame', owner: 'omd-framer', artifact: '\.omd\/frame\.md'/);
+  assert.match(stages, /requiredContracts: \['protocol\/human-design-loop\.md', 'theory\/ux\.md'\]/);
+
+  const brief = readFileSync(fileURLToPath(new URL('../core/brief/index.ts', import.meta.url)), 'utf8');
+  assert.match(brief, /frame: \['functional-requirements', 'reality-ledger'\]/);
+  assert.match(brief, /'\.omd\/functional-requirements\.json'/);
+  assert.match(brief, /omd complete check <page>/);
+
+  const writer = readFileSync(fileURLToPath(new URL('../src/agents/writer.agent.yaml', import.meta.url)), 'utf8');
+  const hand = readFileSync(fileURLToPath(new URL('../src/agents/hand.agent.yaml', import.meta.url)), 'utf8');
+  assert.match(writer, /`\.omd\/functional-requirements\.json`/);
+  assert.match(hand, /`\.omd\/functional-requirements\.json`/);
 });
 
 test('complete set validates before persisting and rejects an invalid list', () => {

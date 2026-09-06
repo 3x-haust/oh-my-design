@@ -185,6 +185,14 @@ test('every candidate is shaped as a non-gating writer-owned advisory', () => {
   assert.equal(candidate!.phrase, 'Unlock the power of');
 });
 
+test('text candidates describe copy consequences without claiming who wrote them', () => {
+  for (const fixture of detectorCases) {
+    const candidate = scanTextSlop(fixture.positive).find((item) => item.candidateId === fixture.id);
+    assert.ok(candidate, fixture.id);
+    assert.doesNotMatch(candidate.reason, /stock AI|AI[- ](?:SaaS|marketing|portfolio)|recycled by AI|LLM tic|typical of AI/i, fixture.id);
+  }
+});
+
 test('line numbers are computed from the original, unmasked text', () => {
   const text = ['First line stays clean.', 'Second line has a game-changer moment.'].join('\n');
   const [candidate] = scanTextSlop(text);

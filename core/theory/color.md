@@ -84,7 +84,10 @@ secondary, one accent — not three equals competing for attention.
 accent (CTAs, active states, critical notifications). This is not aesthetic orthodoxy — it
 is a reading law. Eye-tracking research (NN/g, "Visual Hierarchy and Attention") shows that
 equal colour distribution eliminates hierarchy: the eye cannot rank what weighs the same.
-The 60-30-10 split creates a reading order by making some things obviously heavier.
+The 60-30-10 split can create a reading order on marketing, editorial, and other broad
+compositions by making some things obviously heavier. It is not a universal product-UI ratio:
+task surfaces often need one dominant ground, several content surfaces sized by information
+architecture, and accent allocated by semantic state rather than area.
 
 Invert it and you get AI slop: the accent colour used for backgrounds, the dominant colour
 used for highlights. Everything reads as equally important, so nothing is important.
@@ -120,10 +123,10 @@ is a start; choosing muted sage green instead of saturated lime is the actual de
 Backgrounds are not neutral. A warm background (slightly yellow, cream, warm grey) creates
 a different psychological environment than a cool one (blue-grey, neutral-white, near-black).
 
-**Warm backgrounds**: approachable, organic, human. Appropriate for products where
-connection and warmth are the value proposition — communication tools, creative tools,
-consumer apps. The warmth carries even at very low saturation; a barely-tinted cream reads
-differently from a cool white.
+**Warm backgrounds**: approachable, organic, human. Use them as a dominant canvas only when
+connection or warmth is an explicit brand or subject requirement — not merely because the surface
+is consumer-facing, creative, editorial, or expressive. The warmth carries even at very low
+saturation; a barely-tinted cream still reads as a material choice, not as neutral white.
 
 **Cool backgrounds**: crisp, precise, efficient. Appropriate for productivity tools,
 fintech, developer tools. Signals that the environment is here to help you work, not to be
@@ -136,6 +139,26 @@ platforms. The absence of warmth or coolness is deliberate.
 The background temperature sets the emotional register for every colour that sits on it.
 A warm accent on a cool background reads as a guest; the same accent on a warm background
 reads as native. Choose the temperature before choosing the accent, not after.
+
+### Default ground and evidence threshold
+
+For a general product surface, the canvas defaults to true white (`#FFFFFF`).
+Near-white neutrals belong only to structurally secondary surfaces rather than replacing the page
+background. This is not an absence of art direction: it protects content contrast and keeps large
+areas calm. Allocate accent by semantic job — primary action, selection, focus, feedback, and
+critical state — rather than by a target percentage.
+
+Depart from the true-white dominant canvas only when explicit user preference, an established brand
+system, or subject-specific evidence makes a dark, tinted, or material ground meaningful. Words
+such as "editorial", "premium", "cultural", "handcrafted", or "magazine-like" are not that
+evidence by themselves. Translate those metaphors into hierarchy, rhythm, typography, image
+treatment, and composition rather than literal paper beige, faux print texture, or a uniformly
+sepia surface.
+
+The role split must remain legible in the rendered interface. Small accent-coloured text still
+meets 4.5:1 contrast against its actual ground; large text and non-text interface boundaries meet
+3:1. If the chosen accent cannot carry small text, keep the hue for larger actions and use a darker
+role-compatible tone for labels.
 
 ---
 

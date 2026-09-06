@@ -2,7 +2,7 @@
  * scripts/release-notes.ts — generate structured release notes.
  *
  * Pure function (no I/O — safe to unit-test):
- *   buildReleaseNotes({ version, prevTag, summary, prs, testCount }) → markdown
+ *   buildReleaseNotes({ version, prevTag, summary, compatibility, prs, testCount }) → markdown
  *
  * The module is intentionally pure. Callers gather repository data separately
  * and pass it into the exported functions.
@@ -19,6 +19,8 @@ export interface ReleaseNotesInput {
   version: string;
   prevTag: string;
   summary: string;
+  /** Exact release-specific compatibility statement. Omit rather than claim unverified compatibility. */
+  compatibility?: string;
   prs: PrEntry[];
   testCount: number;
 }
@@ -30,6 +32,10 @@ export interface ReleaseNotesInput {
 export function buildReleaseNotes(opts: ReleaseNotesInput): string {
   const { version, prevTag, summary, prs, testCount } = opts;
   const tag = version.startsWith('v') ? version : `v${version}`;
+  const compatibility = opts.compatibility === undefined
+    ? '_Compatibility impact was not specified for this release._'
+    : opts.compatibility.trim();
+  if (compatibility === '') throw new Error('compatibility must be a non-empty statement when provided');
 
   const prLink = (n: number): string =>
     `[#${n}](${REPO}/pull/${n})`;
@@ -59,7 +65,7 @@ export function buildReleaseNotes(opts: ReleaseNotesInput): string {
     '',
     '## Compatibility',
     '',
-    'No breaking changes.',
+    compatibility,
     '',
     '## Validation',
     '',

@@ -1,0 +1,125 @@
+{
+  "schema": "adaptive-design-route-input-v1",
+  "projectMode": "existing",
+  "request": "Fix the approved confirmation sentence on one existing screen.",
+  "namedDependencies": [],
+  "allowedPaths": ["src/copy/**"],
+  "taskOutcome": {
+    "schema": "task-outcome-contract-v1",
+    "goal": "Ship the approved confirmation sentence without changing behavior or layout.",
+    "mustHave": ["The approved sentence is visible in the existing confirmation state."],
+    "mustNotHave": ["Do not change the confirmation flow or visual system."],
+    "completionEvidence": ["A linked browser observation shows the sentence in the confirmation state."],
+    "strategyFreedom": ["Choose the edit and verification order."]
+  },
+  "uxPolicy": {
+    "schema": "ux-policy-v1",
+    "decisions": [
+      { "id": "approved-copy-visible", "kind": "required_outcome", "status": "required" }
+    ]
+  },
+  "evidenceClaims": {
+    "schema": "evidence-claim-publication-v1",
+    "claims": [
+      {
+        "id": "approved-sentence",
+        "text": "The supplied sentence is approved copy.",
+        "status": "confirmed",
+        "userEvidence": [
+          {
+            "kind": "explicit-user-evidence",
+            "source": "user-message",
+            "reference": "message-1",
+            "excerpt": "Fix the approved confirmation sentence only."
+          }
+        ]
+      }
+    ],
+    "userFacts": ["approved-sentence"],
+    "workingContext": []
+  },
+  "referenceDiscovery": {
+    "schema": "reference-discovery-input-v1",
+    "taskNeed": "copy-only-edit",
+    "uncertainty": "resolved",
+    "existingEvidence": "sufficient",
+    "intendedUse": "Preserve the approved product voice and verified terminology.",
+    "existingEvidenceUse": "The approved sentence and current screen directly constrain this edit.",
+    "skipReason": "The approved sentence and unchanged visual system make new discovery unnecessary."
+  },
+  "designAxes": {
+    "schema": "design-axis-input-v1",
+    "taskSize": "small",
+    "failureRisk": "low",
+    "uxNeed": "baseline",
+    "expressiveDesignNeed": "restrained"
+  },
+  "modelCapability": {
+    "now": 1500,
+    "routingInput": {
+      "schema": "model-capability-probe-routing-input-v1",
+      "selectedModel": {
+        "selection": "host-user-selection",
+        "provider": "host-provider",
+        "modelId": "host-model",
+        "revision": "2026-08-11"
+      },
+      "profile": null
+    }
+  },
+  "browserDecisionContext": {
+    "schema": "adaptive-browser-decision-context-v1",
+    "status": "pending",
+    "decisionIds": [],
+    "reason": "The copy edit has not yet been rendered; final evidence must link its browser observation."
+  },
+  "validatedLearningContext": {
+    "schema": "adaptive-learning-context-v1",
+    "status": "none",
+    "learningIds": [],
+    "reason": "No validated reusable learning applies to this one-line correction."
+  },
+  "strategyDecision": {
+    "schema": "adaptive-strategy-decision-v1",
+    "owner": "user-selected-model",
+    "roles": ["omd-writer", "omd-hand", "omd-eye"],
+    "stages": ["copy", "production", "browser-evidence", "independent-review"],
+    "executionWaves": [
+      { "id": "copy", "mode": "concurrent", "roles": ["omd-writer"] },
+      { "id": "production", "mode": "concurrent", "roles": ["omd-hand"] },
+      { "id": "review", "mode": "concurrent", "roles": ["omd-eye"] }
+    ],
+    "methods": [
+      "design-strategy-balanced-delivery",
+      "model-capability-probe",
+      "evidence-claim-accounting",
+      "decision-linked-browser-observation",
+      "copy-repair-workflow"
+    ],
+    "aiAssets": [],
+    "attributionCategories": ["tokens"],
+    "skips": [
+      { "id": "reference-discovery", "reason": "Existing approved evidence fully constrains the copy-only edit." },
+      { "id": "domain", "reason": "The existing named screen and terminology are already established." },
+      { "id": "depth", "reason": "A one-line correction has no unresolved design-deliberation decision." },
+      { "id": "frame", "reason": "The task changes no IA, flow, requirement, or screen boundary." },
+      { "id": "content-grain", "reason": "The copy-only request does not need content-morphology-driven composition." },
+      { "id": "acquisition", "reason": "No reference acquisition is needed for unchanged structure and visuals." },
+      { "id": "scout", "reason": "Reference discovery is explicitly skipped from sufficient existing evidence." },
+      { "id": "reference-board", "reason": "No newly discovered reference evidence needs assembly." },
+      { "id": "reference-selection", "reason": "There is no reference board from which to select." },
+      { "id": "art-direction", "reason": "The approved visual direction is unchanged." },
+      { "id": "type-proof", "reason": "Typography is outside the requested copy correction." },
+      { "id": "composition", "reason": "The existing layout and visual system are unchanged." },
+      { "id": "candidate-generation", "reason": "No structural alternative is needed for a copy-only correction." },
+      { "id": "safety-validation", "reason": "The copy correction has no high-risk safety outcome." },
+      { "id": "reflection-in-action", "reason": "The unchanged layout needs direct browser confirmation, not an extra craft cycle." },
+      { "id": "reference-distance", "reason": "No reference work is selected for the copy-only correction." },
+      { "id": "image-first-draft", "reason": "The approved existing visual surface needs no generated design draft." },
+      { "id": "evidence-driven-refinement", "reason": "One clean copy verification pass is sufficient when every required gate is green." },
+      { "id": "motion-one", "reason": "The existing static copy-only surface has no selected motion scene." },
+      { "id": "ai-shipped-asset", "reason": "The copy repair does not add or replace a shipped visual asset." }
+    ],
+    "rationale": "Edit the owned copy, implement it in place, collect linked browser evidence, and obtain independent review."
+  }
+}
