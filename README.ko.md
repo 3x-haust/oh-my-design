@@ -1,6 +1,8 @@
 # Oh My Design
 
-비주얼 스타일이 아니라, 코딩 에이전트를 위한 디자인 프로세스입니다. OMD는 모델이 모든 결정을 근거로 얻어내게 만듭니다. 브리프를 캐묻고, 근거를 모으고, 실제 카피를 쓰고, 타이포그래피를 증명하고, 의도적으로 구성하고, 한 번 구현하고, 렌더를 살핀 뒤 다시 정의합니다.
+**사람처럼 디자인하는 AI.** OMD는 디자인 요청을 질문, 근거, 대안, 실제 콘텐츠와 렌더 실험으로
+이어갑니다. 모델은 필요한 방법을 선택하고, 관찰한 결과에 따라 기존 선택을 수정하거나
+유지하거나 문제부터 다시 정의합니다.
 
 [English](README.md)
 
@@ -13,6 +15,10 @@
 ## OMD란
 
 여기서 ‘사람처럼 디자인한다’는 것은 특정한 결과 스타일이 아니라 근거를 남기는 판단을 뜻합니다. 목표는 반복 가능한 프로세스이며, 결과는 차분할 수도 과감할 수도 익숙하거나 낯설 수도 있습니다. 일관되는 것은 결과의 생김새가 아니라 그 뒤에 남은 결정의 흐름입니다.
+
+[디자인 실행 계약](core/protocol/design-practice.md)이 선택된 작업 안에서 이 기준을 구체화합니다.
+[조사·구현 기록](docs/human-design-research-20260913.md)은 14개 출처와 적용 원칙을 연결하고,
+동작 검증과 사람 수준의 품질 주장을 구분합니다.
 
 콘셉트 탐색은 내용에서 출발합니다. 하나의 강한 아이디어로 화면 전체를 구성할 수 있고,
 서로 다른 안이 같은 브랜드 색을 사용할 수도 있습니다. 최종 페이지를 HTML과 CSS로 만들더라도
@@ -168,13 +174,21 @@ omd ref check
 
 짧은 독립 컴포넌트 예제를 빈 페이지로 오인하지 않도록, 지정한 HTML 요소의 렌더 크기·표시 스타일·텍스트를 확인합니다. 이 확인이 시각적 품질 판정은 아닙니다. HTTP 403·서버 오류·봇 확인 화면은 계속 거부합니다.
 
+같은 컴포넌트의 데스크톱·모바일 관찰은 모두 보존하되 서로 다른 출처처럼 세지 않습니다. 상태 보존 캡처는 기존 포커스나 명시적으로 연 메뉴를 관찰하며, 측정하지 않은 인터랙션·모션은 미확인으로 남깁니다. 자세한 범위는 [캡처 프로토콜](core/protocol/reference-assembly.md#capturing-an-existing-state-or-open-disclosure)을 참고하세요.
+
+모션 참고 수집은 백그라운드 요청이 계속되어도 로드된 컴포넌트를 관찰할 수 있습니다. 반환된 측정값에는 여전히 실제 화면 검토가 필요하며, 디자인 품질이나 접근성의 인증서는 아닙니다.
+
 컴포넌트 부품은 selector로 범위를 정한 blueprint와 로컬 PNG입니다. Pinterest류 갤러리 및 유사 출처는 browser-rs로 **사용자가 지정한** 영역을 캡처하고 `omd ref import-image`가 그 로컬 PNG를 가져옵니다. 입력에는 절대 HTTP(S) `sourcePage`, 선택 `sourceImage`, 사람이 읽을 수 있는 `captureRegion`, 선택 `cropBox`, `licenseStatus`(`allowed`, `restricted`, `unknown`), 권리 메모, 시각 역할/원칙, 표준 provenance 시간이 기록됩니다. OMD는 원격 이미지를 스크래핑·핫링크·다운로드하거나 그 픽셀을 배포하지 않습니다.
 
-composer는 정제된 선택 조립만 받습니다. 즉 전달 가능한 구조/원칙/geometry만 받고 출처 URL, **원본 selector**, provenance, 스크린샷, 로컬 출처 이미지, 원시 픽셀은 받지 않습니다. 구현에서 선택 부품을 목적지에 연결할 수 있도록 **대상 `targetSelector`**는 의도적으로 유지합니다. `.omd/reference-composite-lineage.json`에는 해시로 결속된 `generated` 클린룸 합성 또는 `unavailable` 이유가 기록됩니다. 호스트 이미지 생성이 가능하면 독립적인 컨셉 초안 2~3개를 병렬 생성해 비교할 수 있으며, 새 이미지 공급자나 API 키 계층은 추가하지 않습니다. 사용할 수 없으면 CSS/SVG/근거 폴백을 사용합니다. 기존 모션, `prefers-reduced-motion`, WebGL/3D 게이트는 변하지 않습니다.
+composer는 정제된 선택 조립만 받습니다. 즉 전달 가능한 구조/원칙/geometry만 받고 출처 URL, **원본 selector**, provenance, 스크린샷, 로컬 출처 이미지, 원시 픽셀은 받지 않습니다. 구현에서 선택 부품을 목적지에 연결할 수 있도록 **대상 `targetSelector`**는 의도적으로 유지합니다. `.omd/reference-composite-lineage.json`에는 해시로 결속된 `generated` 클린룸 합성 또는 `unavailable` 이유가 기록됩니다. 호스트 이미지 생성이 가능하면 아직 풀리지 않은 디자인 질문에 맞춰 초안 수를 정하고 독립적인 컨셉을 병렬 생성해 비교할 수 있으며, 새 이미지 공급자나 API 키 계층은 추가하지 않습니다. 사용할 수 없으면 CSS/SVG/근거 폴백을 사용합니다. 기존 모션, `prefers-reduced-motion`, WebGL/3D 게이트는 변하지 않습니다.
 
 구현 중에는 선택한 각 출처 부품이 `.omd/reference-usage.json`에서 `used`, `rejected`, `anti-reference` 행을 받습니다. `.omd/reference-report.md`와 최종 채팅 답변은 상태, 출처 사이트/페이지, 정확한 캡처 UI·이미지 영역, 배포 경로/컴포넌트/selector, 차용한 속성, 명시적으로 차용하지 않은 속성, 변환, 프로덕션 근거 경로·selector·검증 메모를 한/영 표로 제공합니다.
 
 코드 근거가 있는 한/영 기능 감사, 공급자 한계, 검증 근거는 [`docs/lego-reference-audit.md`](docs/lego-reference-audit.md)를 참고하세요.
+
+### Codex에서 초기 시안 비교
+
+디자인 방향이 아직 열려 있다면 `omd-codex`로 실행한 Codex에서 제공된 콘텐츠로 잠정 HTML 시안을 만들 수 있습니다. 전체 구성이 승인되기 전에도 데스크톱·모바일 렌더를 보며 어떤 배치가 내용을 더 잘 전달하는지 비교할 수 있습니다. 선택적으로 만드는 이 시안은 실제 제작물과 분리되며, 참고자료 조사·카피·조판 확인·최종 리뷰를 대신하지 않습니다. HTML 시안 기능이지 이미지 생성 서비스나 디자인 품질 보장은 아닙니다. 지원 호스트의 작업 방식은 [시안 프로토콜](core/theory/imagegen.md#provisional-source-studies)을 참고하세요.
 
 ## 실제 콘텐츠에 맞춘 디자인
 
@@ -325,7 +339,7 @@ Claude Code는 에이전트 메타데이터에 선언된 거부 도구를 강제
 | 블라인드 선택 | `.omd/taste/preferences.jsonl` | selector는 익명 렌더와 정제된 과업 맥락만 보고, 후보 근거나 작성자는 보지 못합니다. `omd choose` 가 선택된 후보와 이유를 에이전트 선택으로 저장합니다. |
 | 프로덕션 빌드 | 저장소 소스 | 하나의 builder가 선택된 하나의 구조를 구현하고 카피 덱을 보존합니다. 구현 이유는 `.omd/decisions.md` 의 `omd decision` 항목으로 별도 기록됩니다. |
 | 프로덕션 근거 | `.omd/attribution.md` | builder가 출하된 토큰·모션·컴포지션·그래픽의 출처를 기록합니다. |
-| 크래프트 체크포인트 | `.omd/craft.jsonl` | 하나의 시맨틱과 하나의 비주얼 체크포인트가 각각 관찰과 그로 인한 구체적 변경을 기록합니다. |
+| 크래프트 체크포인트 | `.omd/craft.jsonl` | 선택된 시맨틱·비주얼 체크포인트가 관찰 기준, 렌더, 수정·유지·재정의 판단을 기록합니다. 명시적 판단은 PNG 바이트에 연결되며 최종 승인을 대신하지 않습니다. |
 | 소스 후보 분류 | 원시 JSON은 `.omd/.cache/`; 근거는 `.omd/decisions.md` | `omd slop scan` 이 소스 발췌 없이 통제된 신호를 노출합니다. `needs-render` 는 과도기이며, 최종 미분류·needs-render 수는 모두 0입니다. |
 | 렌더 리뷰 | 캐시 렌더, 필름스트립, 프로브 출력 | 스퀸트 리뷰어는 스퀸트 렌더만 봅니다. 날카로운 리뷰어는 정제된 과업 맥락과 측정 출력을 받되, builder의 근거는 받지 않습니다. |
 | Reframe | `.omd/frame.md` 개정 | `omd frame reframe` 는 원래 프레이밍을 지우지 않고 렌더가 드러낸 것을 덧붙입니다. |
@@ -413,7 +427,7 @@ omd decision "what" --why "why"
 omd taste record "subject" --kind selection|praise|rejection|overrule --evidence "verbatim" --from-user
 omd taste profile [--all]
 omd config set checkpoint none|concept|structure|both  |  omd config show
-omd craft checkpoint semantic|visual --render path --observed "..." --changed "..."
+omd craft checkpoint semantic|visual --render path --observed "..." --decision revise|retain|reframe --criterion "..." --reason "..." [--changed "..."]
 omd craft status [--json]
 
 omd ref add <url|file> --as <component> [--selector "css"] [--image] [--blueprint]

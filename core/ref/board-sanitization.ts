@@ -18,6 +18,12 @@ const sourceRecordId = /(?:^|[^a-z0-9-])(?:fragment|ref)-[0-9a-f]{16}(?=$|[^a-z0
 const imageBase64 = /iVBORw0KGgo|data:image/i;
 const longBase64 = /(?:^|[^A-Za-z0-9+/=])[A-Za-z0-9+/]{128,}={0,2}(?=$|[^A-Za-z0-9+/=])/;
 const sourceArtifactToken = /^\s*(?:capture|screenshot|crop|reference|image)\s*$/i;
+// A slash between two known measurement units is valid prose (for example `3.1 mm/s`),
+// but arbitrary slash-separated tokens remain a local/source-path carrier.  Keep the
+// exception narrow and require a numeric value immediately before the unit ratio.
+const measurementUnit = '(?:mm|cm|km|μm|um|m|in|ft|px|pt|em|rem|vh|vw|vmin|vmax|ms|s|sec|secs|min|mins|h|hr|hrs|d|day|days|kg|g|mg|lb|lbs|n|kn|w|kw|wh|kwh|v|a|hz|khz|%|yr|yrs|year|years|mo|month|months)';
+const measurementRatio = new RegExp(`(?<![A-Za-z0-9._/\\\\-])${measurementUnit}\\s*/\\s*${measurementUnit}(?![A-Za-z0-9_-])`, 'giu');
+const numericMeasurementPrefix = /(?:^|[\s([{,:;!?→←↔⇢–—=+\-])[-+]?\d+(?:[.,]\d+)?\s*$/u;
 const dnsLabel = '[a-z0-9](?:[a-z0-9-]*[a-z0-9])?';
 const dnsTerminalLabel = '[a-z](?:[a-z0-9-]*[a-z0-9])?';
 const dnsHost = new RegExp(`(?:^|[^\\w.-])(?:${dnsLabel}\\.)+${dnsTerminalLabel}\\.?(?=$|[^\\w.-])`, 'i');
@@ -62,6 +68,41 @@ export function hasSourcePayload(value: string): boolean {
 
 export function hasAssemblyPayload(value: string): boolean {
   return hasSourcePayload(value) || localArtifactPayload(value);
+}
+
+/**
+ * Falsifiers are the one assembly field that may name a measured rate such as `3.1 mm/s`.
+ * Mask only a recognized unit ratio when it has a numeric prefix and is not path-adjacent;
+ * the original value is still returned by the parser, so exact acquisition-zone matching is
+ * unchanged.  All other assembly text continues through the strict global sanitizer.
+ */
+export function hasFalsifierAssemblyPayload(value: string): boolean {
+  // Inspect the original bytes before any unit masking.  In particular, `\\s*` below
+  // must never normalize a control character hidden between the two units.
+  if (hasSourcePayload(value)) return true;
+  let cursor = 0;
+  let masked = '';
+  let unsafeMeasurementPath = false;
+  let unrecognizedMeasurementRatio = false;
+  for (const match of value.matchAll(measurementRatio)) {
+    const index = match.index ?? 0;
+    const token = match[0];
+    const before = value.slice(0, index);
+    const after = value.slice(index + token.length);
+    if (!numericMeasurementPrefix.test(before)) {
+      unrecognizedMeasurementRatio = true;
+      continue;
+    }
+    // A slash/backslash or a filename-like suffix makes the token part of a path, not prose.
+    if (/^[\\/]/.test(after) || /^\.[A-Za-z0-9_-]/.test(after)) {
+      unsafeMeasurementPath = true;
+      continue;
+    }
+    masked += value.slice(cursor, index) + 'unit-ratio';
+    cursor = index + token.length;
+  }
+  masked += value.slice(cursor);
+  return unsafeMeasurementPath || unrecognizedMeasurementRatio || hasAssemblyPayload(masked);
 }
 
 export function hasSelectorPayload(value: string): boolean {

@@ -19,6 +19,7 @@ import {
   type SourceBoundProofPath,
   validateSourceBoundProofCurrentness,
 } from '../composition-contract/source-currentness.ts';
+import { FIXED_DERIVED_PROJECT_ROOTS } from '../runtime/derived-project-tree.ts';
 
 export const SOURCE_SEAL_SCHEMA_VERSION = 1;
 
@@ -30,8 +31,8 @@ const SOURCE_EXTENSIONS = new Set([
 
 const EXCLUDED_DIRECTORIES = new Set([
   '.cache', '.git', '.next', '.nuxt', '.omd', '.output', '.svelte-kit',
-  '__tests__', 'build', 'cache', 'coverage', 'dist', 'e2e', 'generated',
-  'node_modules', 'out', 'temp', 'test', 'tests', 'tmp', 'vendor',
+  '__tests__', 'build', 'cache', 'coverage', 'e2e', 'generated',
+  ...FIXED_DERIVED_PROJECT_ROOTS, 'out', 'temp', 'test', 'tests', 'tmp', 'vendor',
 ]);
 
 const EXCLUDED_FILES = new Set([

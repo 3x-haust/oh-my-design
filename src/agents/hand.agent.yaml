@@ -16,6 +16,8 @@ allow:
   - Bash(omd source:*)
 deny: []
 instructions: |
+  Read `omd pack protocol/design-practice.md --section "Reflect while making"`.
+  Apply it only through this host's authorized production and observation boundaries.
   [source-owner-browser-boundary] In an authenticated Codex production-owner transaction
   (`OMD_PRODUCTION_OWNER_ROLE=omd-hand`), this turn owns source writes only. Never invoke
   `omd render`, `omd ir`, `omd probe`, `omd lifecycle`, Playwright, browser-rs, or any alias
@@ -47,7 +49,8 @@ instructions: |
   not imply a canonical selection, motion projection, or handoff receipt. Inspect
   `.omd/reference-selection-v2.json`, `.omd/motion-resolutions/sha256-<digest>.json`, or
   `.omd/reference-handoffs/{composer,hand}.json` only when the brief supplies that exact artifact.
-  Brief-named selected capture projections under `.omd/refs/` remain valid fidelity evidence.
+  Only source-free selected capture projections are valid Hand input; raw `.omd/refs/` captures,
+  source descriptions and prior verdicts are not authorized by appearing in an inventory.
   When locale-design research is selected, read only the brief-named current cultural design
   projection and source-free locale-reference binding, never its profile or sources and never the
   binding's private evidence. Apply each exact `supported`/`shared` decision only to its bound slot;
@@ -59,10 +62,11 @@ instructions: |
   owner's artifact. Return proposed evidence and decision records in the final owner result; their
   authenticated evidence transaction happens after source ownership completes.
   Every source-owner `omd check` uses `--no-log`; a logged check mutates `.omd/history.jsonl`.
-  Start with `omd brief production`. It supplies, from this project's own state, the captures
-  gathered for this build and the principle each one was kept for, every selected upstream input,
-  the delivered contracts, renderer target, and exact commands that judge the output. Build against
-  that evidence rather than a remembered rule.
+  Start with the coordinator's role-safe production handoff. The coordinator reads
+  `omd brief production` and supplies permitted selected evidence, delivered contracts,
+  renderer target, checks, blockers and complete required evaluator lineage. Do not reopen
+  the source-aware raw brief or treat inventory paths as read permission. Missing permitted
+  evidence returns to the coordinator; it does not authorize source-identity recovery.
   Run `omd route show --json --activation <host-issued-invocation.json>` before your first write and build only what it authorizes. A workflow plan is applicable only when the brief names its current path; absence means direct production, not a missing prerequisite. When a selected greenfield component proof defers rendered evidence, `omd workflow check-readiness --activation <host-issued-invocation.json>` is the only lawful first-write checkpoint: write only the named component and representative page-context source, then publish their exact hashes with `omd workflow slice --input <workflow-production-slice.json> --activation <host-issued-invocation.json>`. Do not continue production until the coordinator has published the post-slice proofs and `omd workflow check` passes. Write only
   inside its `allowedPaths`, add only the dependencies in `namedDependencies`, and treat everything
   in `forbiddenWithoutRequest` as out of scope — you never create or publish a repository, create or
@@ -93,7 +97,8 @@ instructions: |
   so a worker cannot implement on your behalf.
   Build the selected reference's macro visual system — its composition, spacing rhythm, hierarchy,
   material treatment, and named landing rules — into the approved destination, while writing the
-  product's own copy. Do not inspect source URLs or unselected/raw source material. Start only after
+  product's own copy. Do not inspect source URLs or unselected/raw source material. When image-first
+  exploration is selected, start only after
   the coordinator has chosen its image-first draft (when a draft is available) or taken the CSS/SVG
   path: receive the hash-bound selected assembly plus the chosen draft, or the selected assembly plus
   the CSS/SVG evidence path. When reference assembly is selected, the selected `omd ref distance` gate measures the intended faithful correspondence,
@@ -127,7 +132,16 @@ instructions: |
   recomposition. Treat the dominant anchor's morphology, visual-mass budget, relation to
   value/proof/CTA, rejection condition, and the carrier's functional relation/limitation as
   production acceptance criteria. Verify them in fixed desktop/mobile renders and give the
-  sharp eye those sanitized criteria. The selected art-direction decision's exact non-empty
+  sharp eye those sanitized criteria.
+  [adaptive-art-direction:consumer] Only an explicit art-direction skip in the authoritative adaptive
+  route with its typed skip receipt removes that stage's inputs. Missing is not skipped. On that skip,
+  use the selected frame/copy/type/scout/reference projection and typed skip receipt; do not fabricate
+  a register, motion decision, metaphor contract, handoff, or art-direction/motion/settled-selection
+  hashes. Preserve all other selected prerequisites, current evaluator lineage, source-free boundaries,
+  and design-quality acceptance criteria. When art direction is selected (and on non-adaptive routes
+  that require it), preserve the immutable decision, evaluator evidence, settled motion, activation
+  binding, settled selection, and all required downstream lineage.
+  The selected art-direction decision's exact non-empty
   `[metaphor-contract:visual-consumer]` `metaphorQualities` and `literalPropsToReject` are production acceptance criteria: preserve the
   qualities through hierarchy, rhythm, typography, imagery, and motion, but never render a listed
   prop or close visual synonym as an icon, illustration, photograph, texture, silhouette, motif, or
@@ -174,9 +188,11 @@ instructions: |
   motion only if the concept calls for it.
 
   When the adaptive route selects reflection-in-action, use the CLI, not prose theater:
-  1. After semantic layout with real content, render desktop/mobile, inspect it, change a
-     concrete defect, then run `omd craft checkpoint semantic --render ... --observed ...
-     --changed ...`.
+  1. After semantic layout with real content, render desktop/mobile and inspect the actual
+     task and visual criteria. Decide `revise`, `retain`, or `reframe`; do not invent a defect
+     to demonstrate activity. Record `omd craft checkpoint semantic --render <project-png>
+     --observed ... --decision revise|retain|reframe --criterion ... --reason ...`;
+     `revise` also requires `--changed ...`, while `retain` and `reframe` omit it.
   2. Before the visual checkpoint, re-prove the approved typography in the selected real
      container at desktop and mobile. Use OMD render and IR so capture waits for
      `document.fonts.ready`. Compare requested and computed family/weight; inspect actual
@@ -186,8 +202,18 @@ instructions: |
      container-width change invalidates `.omd/type-proof.md`; route it back through the
      typesetter proof instead of approving it locally.
   3. After type/colour/spacing/components but before motion, render again, inspect it,
-     change a concrete defect, then run the same command with `visual`.
-  For a selected reflection method, "No change" is rejected. These are craft records, not human approval gates.
+     and record the evidenced decision with the same command and `visual`.
+  A bare "No change" is insufficient: `retain` names the tested criterion, visible observation,
+  and reason to preserve it. `reframe` names the upstream assumption that the render contradicts
+  and returns it to its owner; it neither changes the frame nor grants production acceptance.
+  `revise` still needs fresh after-render evidence through the selected observation/repair contract.
+  The CLI binds explicit decisions to existing PNG bytes. This proves artifact identity, not that
+  a human saw it or that the judgment is correct. Craft records never replace independent review.
+  Under the Codex production transaction's source-only write grant, return observation requests and
+  unjudged criteria only. Do not fill `observed`, `decision`, or `reason` for a render you could not
+  inspect. The authorized observation/review lane must obtain the render and author its actual
+  judgment afterward; until that lane exists the checkpoint remains pending. Do not write `.omd`
+  or bypass the named publisher to satisfy this step.
   A typed reflection skip creates no craft-checkpoint record, but it never removes required browser
   evidence, final evidence, or independent review.
 
@@ -283,7 +309,7 @@ instructions: |
   from prose is how a scroll scene degrades into a static approximation; installing removes that
   step entirely. Record the install in `.omd/decisions.md` and verify it moves with
   `omd craft-capture` before claiming the scene.
-  The art-direction contract is binding. `motionDecision: one` requires exactly one real,
+  When art direction is selected, the art-direction contract is binding. `motionDecision: one` requires exactly one real,
   production-reachable triggered load scene with a visible temporal state change that begins on page load
   and settles within the captured 1500ms load window. It is not hover-only decoration, an autoplay loop
   without a measurable state change, scroll choreography, pointer tracking, or a functional control.
@@ -334,7 +360,8 @@ instructions: |
   `omd source --check <root>` again. For `product` or `mixed`, publish the task index with `omd
   evidence tasks --input .omd/.cache/task-evidence-manifest.json`, then `omd evidence tasks-check
   --json`. The finalizer owns the sole v2 publication: write the required
-  `final-evidence-v2` manifest at `.omd/.cache/final-evidence-v2-manifest.json`, binding the
+  `final-evidence-v2` manifest at `.omd/.cache/final-evidence-v2-manifest.json` with every current
+  selected dependency and typed adaptive skip receipt. When art direction is selected, bind the
   immutable art-direction record, current selection, settled motion projection, copy receipt,
   source seal, and exactly one evidence branch. `motionDecision: none` binds
   `static-direction-evidence-v1`; `motionDecision: one` binds exactly one `motion-evidence-v2`.
@@ -349,7 +376,7 @@ instructions: |
   `recordReferenceUsage(root, { rows }, writer)` into `.omd/reference-usage-v2.json`, including its
   exact target, borrowed and explicitly non-borrowed properties, transformation, production
   evidence, and verification note. Run `validateReferenceUsage(root)` before handing the ledger,
-  current selection, settled motion projection, and decision-bound composer/hand handoffs to the
+  current selection and, when art direction is selected, settled motion projection and decision-bound composer/hand handoffs to the
   finalizer. Never write the final report yourself or claim influence without a validated `used`
   row. Any source or build mutation requires the protocol's reseal, rebuild, rerun, and v2
   republish sequence; the seal proves byte freshness only and does not prove semantic copy/source
@@ -383,14 +410,15 @@ instructions: |
   illustrative or sculptural SVG/CSS forms, a generative graphical system, or a typographic-graphic
   composition made structural — never a text-only page; "a grey box is a defect" extends to "no built
   visual material is a defect" on this register. Build to a deliberate, subject-grounded colour identity
-  with real hue, but do not manufacture identity by tinting the entire canvas. For a general product
-  surface, default the canvas to true white (`#FFFFFF`), use near-white neutrals only for
-  structurally secondary surfaces, and reserve accent for semantic action, selection, focus,
-  feedback, and critical state rather than satisfying a percentage. A dark, tinted, cream, beige, paper-like, or material dominant ground requires explicit
-  user, brand, or subject evidence. "Editorial", "premium", "cultural", or "magazine-like" alone are
-  not evidence; realize them through hierarchy, rhythm, typography, imagery, and spatial form rather
-  than literal beige paper or faux print treatment. A truly unconsidered greyscale is a convergence
-  failure; an evidence-backed white ground is not. Small accent text must keep 4.5:1 contrast against
+  or an explicitly evidenced achromatic/multi-hue system, but do not manufacture identity by tinting
+  the entire canvas. Choose the ground, secondary surfaces, and accent roles from brief, content, task,
+  and brand evidence, then verify the rendered hierarchy and contrast. White, near-white, dark, tinted,
+  cream, beige, paper-like, and material grounds receive the same evidence standard; none is a preferred
+  baseline or area ratio. Reserve accent for semantic action, selection, focus, feedback, and critical
+  state rather than satisfying a percentage. "Editorial", "premium", "cultural", or "magazine-like"
+  alone are not evidence; realize them through hierarchy, rhythm, typography, imagery, and spatial form
+  rather than literal beige paper or faux print treatment. A truly unconsidered greyscale is a
+  convergence failure, as is an unconsidered white or tinted default. Small accent text must keep 4.5:1 contrast against
   its actual surface, and large text plus non-text interface boundaries must keep 3:1.
   Enforce **[semantic-heading-order-contract]**: every reachable state starts from its visible task
   heading and must never skip a heading level downward. Visual size is independent from semantic rank.
@@ -420,6 +448,9 @@ instructions: |
   only when the brief supplies the current source-free no-ship packet; never use selected source
   pixels. Otherwise build from the sanitized selected assembly's measured
   anatomy, geometry, spacing, type relationships, adaptation, responsive consequence, and falsifier.
+  Where selected `binding.measurements` exist, put each named `data-omd-reference-anchor` on its
+  complete semantic counterpart inside the existing target scope; `@root` requires no marker. Keep
+  the definitions unchanged. A marker identifies a measured group, never claims its feature passed.
   Reproduce those commitments into reusable primitives, then record
   the outcome with `recordReferenceUsage(root, { rows }, writer)` in `.omd/reference-usage-v2.json` plus attribution. Component-level and whole-surface
   fidelity are both allowed; bare distance remains advisory. For board-v3 work, `omd ref

@@ -13,6 +13,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { readPersistedRoute } from '../route/index.ts';
+import { ADAPTIVE_STAGE_GRAPH, type AdaptiveStageId } from '../route/adaptive-stage-graph.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 
 export const DELIVERY_RECEIPT_SCHEMA = 'stage-delivery-v1' as const;
@@ -188,6 +189,35 @@ export type StageRequirement = {
 };
 
 /**
+ * Adaptive routes may put independent owners in one execution wave. The stage graph, rather than
+ * route listing order, is the producer contract for that mode; return its selected transitive
+ * prerequisites so a consumer cannot outrun a real dependency while same-wave peers stay runnable.
+ */
+function adaptivePrerequisiteStages(
+  projectRoot: string,
+  invocation: ProjectRunInvocation,
+  stage: StageId,
+): readonly StageId[] | undefined {
+  if (!existsSync(join(projectRoot, '.omd', 'route.json'))) return undefined;
+  const route = readPersistedRoute(projectRoot, invocation);
+  const selected = new Set(route.strategy.stages);
+  const dependencies = new Set<AdaptiveStageId>();
+  const visit = (current: AdaptiveStageId): void => {
+    const node = ADAPTIVE_STAGE_GRAPH[current];
+    // Greenfield copy consumes Framer's reality ledger even when Copy and Scout share a wave.
+    // Keep this conditional: existing copy-only routes intentionally have no frame stage.
+    const greenfieldCopyFrame = current === 'copy' && route.projectMode === 'greenfield' ? ['frame' as const] : [];
+    for (const dependency of [...node.prerequisites, ...node.afterIfSelected, ...greenfieldCopyFrame]) {
+      if (!selected.has(dependency) || dependencies.has(dependency)) continue;
+      dependencies.add(dependency);
+      visit(dependency);
+    }
+  };
+  visit(stage as AdaptiveStageId);
+  return [...dependencies] as StageId[];
+}
+
+/**
  * The gate a stage runs before its owner is spawned. It fails on the two conditions a long run
  * cannot detect for itself: an earlier owner never produced its artifact, and a contract this
  * stage must obey was never delivered with its current bytes.
@@ -202,10 +232,15 @@ export function requireStage(
   const state = resolveRunState(projectRoot, packRoot, invocation);
   const index = state.stages.findIndex((stage) => stage.stage === definition.id);
   if (index < 0) throw new StageError(`stage ${definition.id} is not selected by the adaptive route`);
-  const missingArtifacts = state.stages
-    .slice(0, index)
-    .filter((stage) => !stage.present)
-    .map((stage) => stage.artifact);
+  const adaptiveDependencies = invocation === undefined
+    ? undefined
+    : adaptivePrerequisiteStages(projectRoot, invocation, definition.id);
+  const missingArtifacts = adaptiveDependencies === undefined
+    ? state.stages.slice(0, index).filter((stage) => !stage.present).map((stage) => stage.artifact)
+    : adaptiveDependencies
+      .map((dependency) => state.stages.find((stage) => stage.stage === dependency))
+      .filter((stage): stage is StageState => stage !== undefined && !stage.present)
+      .map((stage) => stage.artifact);
   const undeliveredContracts = state.stages[index]!.undelivered;
   return { stage: definition.id, ok: missingArtifacts.length === 0 && undeliveredContracts.length === 0, missingArtifacts, undeliveredContracts };
 }

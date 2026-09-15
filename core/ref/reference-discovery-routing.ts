@@ -7,11 +7,10 @@ import {
 export const REFERENCE_DISCOVERY_INPUT_SCHEMA = 'reference-discovery-input-v1';
 export const REFERENCE_DISCOVERY_ROUTING_SCHEMA = 'reference-discovery-routing-v1';
 
-export type ReferenceDiscoveryTaskNeed =
-  | 'new-product'
-  | 'new-marketing'
-  | 'existing-product-change'
-  | 'copy-only-edit';
+export const REFERENCE_DISCOVERY_TASK_NEEDS = Object.freeze([
+  'new-product', 'new-marketing', 'existing-product-change', 'copy-only-edit',
+] as const);
+export type ReferenceDiscoveryTaskNeed = (typeof REFERENCE_DISCOVERY_TASK_NEEDS)[number];
 export type ReferenceDiscoveryUncertainty = 'unresolved' | 'resolved';
 export type ReferenceDiscoveryEvidence = 'none' | 'insufficient' | 'sufficient';
 export type ReferenceDiscoveryDecision = 'discover' | 'skip';
@@ -37,8 +36,8 @@ export class ReferenceDiscoveryRoutingError extends Error {
   override readonly name = 'ReferenceDiscoveryRoutingError';
   readonly code: ReferenceDiscoveryRoutingErrorCode;
 
-  constructor(code: ReferenceDiscoveryRoutingErrorCode) {
-    super(code);
+  constructor(code: ReferenceDiscoveryRoutingErrorCode, detail?: string) {
+    super(detail === undefined ? code : `${code}: ${detail}`);
     this.code = code;
   }
 }
@@ -77,8 +76,8 @@ const INPUT_KEYS = [
 ];
 const INPUT_KEY_SET = new Set<string>(INPUT_KEYS);
 
-function fail(code: ReferenceDiscoveryRoutingErrorCode): never {
-  throw new ReferenceDiscoveryRoutingError(code);
+function fail(code: ReferenceDiscoveryRoutingErrorCode, detail?: string): never {
+  throw new ReferenceDiscoveryRoutingError(code, detail);
 }
 
 function objectValue(input: unknown): object {
@@ -102,10 +101,12 @@ function requireExactKeys(input: object): void {
     return fail('UNEXPECTED_REFERENCE_DISCOVERY_FIELD');
   }
   if (!Object.hasOwn(input, 'skipReason')) {
-    return fail('REFERENCE_DISCOVERY_SKIP_REASON_REQUIRED');
+    return fail('REFERENCE_DISCOVERY_SKIP_REASON_REQUIRED',
+      'skipReason is a required key: use null for selected discovery, or a non-empty reason for skipped discovery.');
   }
   if (keys.length !== INPUT_KEYS.length || INPUT_KEYS.some((key) => !Object.hasOwn(input, key))) {
-    return fail('MALFORMED_REFERENCE_DISCOVERY_INPUT');
+    return fail('MALFORMED_REFERENCE_DISCOVERY_INPUT',
+      `Required keys: ${INPUT_KEYS.join(', ')}. Selected discovery retains existingEvidenceUse and skipReason as explicit null values.`);
   }
 }
 
@@ -117,13 +118,10 @@ function text(input: unknown): string {
 }
 
 function taskNeed(input: unknown): ReferenceDiscoveryTaskNeed {
-  switch (input) {
-    case 'new-product': return input;
-    case 'new-marketing': return input;
-    case 'existing-product-change': return input;
-    case 'copy-only-edit': return input;
-    default: return fail('MALFORMED_REFERENCE_DISCOVERY_INPUT');
+  if (typeof input !== 'string' || !REFERENCE_DISCOVERY_TASK_NEEDS.includes(input as ReferenceDiscoveryTaskNeed)) {
+    return fail('MALFORMED_REFERENCE_DISCOVERY_INPUT');
   }
+  return input as ReferenceDiscoveryTaskNeed;
 }
 
 function uncertainty(input: unknown): ReferenceDiscoveryUncertainty {
@@ -155,7 +153,8 @@ function assertConsistentState(
   if ((uncertaintyState === 'unresolved' && evidenceState === 'sufficient')
     || (uncertaintyState === 'resolved' && evidenceState !== 'sufficient')
     || ((need === 'new-product' || need === 'new-marketing') && uncertaintyState === 'resolved')) {
-    return fail('CONTRADICTORY_REFERENCE_DISCOVERY_STATE');
+    return fail('CONTRADICTORY_REFERENCE_DISCOVERY_STATE',
+      'New product/marketing or unresolved discovery requires uncertainty=unresolved and existingEvidence=none|insufficient. Resolved existing work requires existingEvidence=sufficient.');
   }
 }
 
@@ -196,7 +195,8 @@ function parse(input: unknown): ReferenceDiscoveryRouting {
 
   if (decision === 'discover') {
     if (existingUse !== null || reasonInput !== null) {
-      return fail('CONTRADICTORY_REFERENCE_DISCOVERY_STATE');
+      return fail('CONTRADICTORY_REFERENCE_DISCOVERY_STATE',
+        'Discovery is selected: existingEvidenceUse and skipReason must both be explicit null, not omitted or explanatory strings.');
     }
     const reason = need === 'new-product'
       ? 'A new product needs reference discovery before its direction is established.'
@@ -219,9 +219,11 @@ function parse(input: unknown): ReferenceDiscoveryRouting {
   }
 
   if (typeof reasonInput !== 'string' || reasonInput.trim().length === 0) {
-    return fail('REFERENCE_DISCOVERY_SKIP_REASON_REQUIRED');
+    return fail('REFERENCE_DISCOVERY_SKIP_REASON_REQUIRED',
+      'Discovery is skipped: skipReason must explain why existing evidence is sufficient.');
   }
-  if (existingUse === null) return fail('CONTRADICTORY_REFERENCE_DISCOVERY_STATE');
+  if (existingUse === null) return fail('CONTRADICTORY_REFERENCE_DISCOVERY_STATE',
+    'Discovery is skipped: existingEvidenceUse must describe the existing evidence actually used.');
   const actual: ReferenceDiscoveryActualUse = Object.freeze({
     status: 'existing-evidence',
     description: existingUse,

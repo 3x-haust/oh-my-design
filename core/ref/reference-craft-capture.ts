@@ -130,7 +130,10 @@ export async function captureReferenceCraft(target: string, opts: ReferenceCraft
   const browser = await chromium.launch({ headless: true });
   try {
     const page = await browser.newPage({ viewport });
-    await page.goto(url, { waitUntil: 'networkidle' });
+    // A loaded, inspectable component can keep video or live requests open indefinitely.
+    // Match the render path's load/fonts boundary; network silence is not source readiness.
+    await page.goto(url, { waitUntil: 'load' });
+    await page.locator(selector ?? 'body').first().waitFor({ state: 'attached', timeout: 5000 });
     await waitForDocumentFonts(page);
 
     // 1. Load-window motion: does the part animate at rest, at the top of the page, over time?
@@ -161,7 +164,8 @@ export async function captureReferenceCraft(target: string, opts: ReferenceCraft
     let reducedMotionSafe: boolean;
     try {
       await reducedPage.emulateMedia({ reducedMotion: 'reduce' });
-      await reducedPage.goto(url, { waitUntil: 'networkidle' });
+      await reducedPage.goto(url, { waitUntil: 'load' });
+      await reducedPage.locator(selector ?? 'body').first().waitFor({ state: 'attached', timeout: 5000 });
       await waitForDocumentFonts(reducedPage);
       await scrollIntoView(reducedPage, selector);
       await settleFrames(reducedPage);

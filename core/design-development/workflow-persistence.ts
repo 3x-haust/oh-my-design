@@ -138,7 +138,7 @@ function routeContext(root: string, invocation: ProjectRunInvocation) {
   const authorityBytes = adaptiveRouteAuthorityBytes(routeRecord, routeSha256, invocation);
   const persisted = read(root, `.omd/${adaptiveRouteAuthorityPath(authorityBytes)}`, 'workflow route authority');
   if (!persisted.equals(authorityBytes)) fail('workflow route authority is stale');
-  return { routeRecord, routeAuthorityBytes: authorityBytes };
+  return { routeRecord, routeAuthorityBytes: authorityBytes, authority: { root, invocation } };
 }
 function backedReceipt(root: string, value: WorkflowArtifactReceipt, label: string): Buffer {
   const bytes = read(root, value.path, label);

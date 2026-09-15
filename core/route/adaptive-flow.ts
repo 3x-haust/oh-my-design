@@ -29,16 +29,16 @@ import { requiredAttributionCategories, validateAttributionCoverage } from './ad
 import { parseLocaleDesignRoute, type LocaleDesignRoute } from '../locale/design-context.ts';
 
 function requiredMethod(strategy: AdaptiveStrategyDecision, id: string): void {
-  if (!strategy.methods.includes(id)) return failAdaptiveRoute('REQUIRED_METHOD_MISSING');
+  if (!strategy.methods.includes(id)) return failAdaptiveRoute('REQUIRED_METHOD_MISSING', `strategyDecision.methods must include ${id}`);
 }
 
 function validateRecommendation(strategy: AdaptiveStrategyDecision, value: RecommendedMethodDecision): void {
   const skipped = strategy.skips.some((entry) => entry.id === value.id);
   if (value.status === 'selected') {
-    if (skipped || !strategy.methods.includes(value.id)) return failAdaptiveRoute('REQUIRED_METHOD_MISSING');
+    if (skipped || !strategy.methods.includes(value.id)) return failAdaptiveRoute('REQUIRED_METHOD_MISSING', `selected method ${value.id} must appear in strategyDecision.methods and must not also appear in skips`);
     return;
   }
-  if (!skipped) return failAdaptiveRoute('OPTIONAL_SKIP_REASON_REQUIRED');
+  if (!skipped) return failAdaptiveRoute('OPTIONAL_SKIP_REASON_REQUIRED', `skipped recommendation ${value.id} needs a non-empty strategyDecision.skips reason`);
 }
 
 export function validateAdaptiveStrategyRails(strategy: AdaptiveStrategyDecision): void {
@@ -47,6 +47,11 @@ export function validateAdaptiveStrategyRails(strategy: AdaptiveStrategyDecision
   }
   for (const stage of strategy.stages) {
     if (!ADAPTIVE_STAGE_IDS.includes(stage as never)) return failAdaptiveRoute('UNKNOWN_ADAPTIVE_STAGE');
+  }
+  // A study makes provisional material for the selected design owners; it owns no stage publication.
+  if (strategy.roles.includes('omd-study')
+    && (!strategy.stages.includes('art-direction') || !strategy.stages.includes('composition'))) {
+    return failAdaptiveRoute('REQUIRED_METHOD_MISSING', 'omd-study requires selected art-direction and composition stages');
   }
   const skipped = new Set(strategy.skips.map((entry) => entry.id));
   if (MANDATORY_ADAPTIVE_GATES.some((gate) => skipped.has(gate))) return failAdaptiveRoute('HARD_GATE_CANNOT_SKIP');
@@ -76,13 +81,13 @@ export function validateOptionalStageAccounting(strategy: AdaptiveStrategyDecisi
   for (const stage of OPTIONAL_STAGE_IDS) {
     const included = strategy.stages.includes(stage);
     const skipped = strategy.skips.some((entry) => entry.id === stage);
-    if (!included && !skipped) return failAdaptiveRoute('OPTIONAL_SKIP_REASON_REQUIRED');
+    if (!included && !skipped) return failAdaptiveRoute('OPTIONAL_SKIP_REASON_REQUIRED', `optional stage ${stage} must be selected or have a non-empty strategyDecision.skips reason`);
     if (included && skipped) return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE');
   }
   for (const method of OPTIONAL_METHOD_IDS) {
     const included = strategy.methods.includes(method);
     const skipped = strategy.skips.some((entry) => entry.id === method);
-    if (!included && !skipped) return failAdaptiveRoute('OPTIONAL_SKIP_REASON_REQUIRED');
+    if (!included && !skipped) return failAdaptiveRoute('OPTIONAL_SKIP_REASON_REQUIRED', `optional method ${method} must be selected or have a non-empty strategyDecision.skips reason`);
     if (included && skipped) return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE');
   }
 }
@@ -192,10 +197,17 @@ function validateLocaleDesignRoute(input: ValidatedAdaptiveRouteInput): void {
     const stages = ['scout', 'reference-board', 'reference-selection', 'copy', 'type-proof', 'composition'];
     const roles = ['omd-scout', 'omd-writer', 'omd-typesetter', 'omd-composer'];
     const methods = ['reference-discovery', 'parallel-reference-acquisition'];
-    if (stages.some((stage) => !strategy.stages.includes(stage))
-      || roles.some((role) => !strategy.roles.includes(role))
-      || methods.some((method) => !strategy.methods.includes(method))) {
-      return failAdaptiveRoute('LOCALE_DESIGN_RESEARCH_REQUIRED');
+    const missingStages = stages.filter((stage) => !strategy.stages.includes(stage));
+    const missingRoles = roles.filter((role) => !strategy.roles.includes(role));
+    const missingMethods = methods.filter((method) => !strategy.methods.includes(method));
+    if (missingStages.length || missingRoles.length || missingMethods.length) {
+      const missing = [
+        missingStages.length ? `stages: ${missingStages.join(', ')}` : undefined,
+        missingRoles.length ? `roles: ${missingRoles.join(', ')}` : undefined,
+        missingMethods.length ? `methods: ${missingMethods.join(', ')}` : undefined,
+      ].filter(Boolean).join('; ');
+      return failAdaptiveRoute('LOCALE_DESIGN_RESEARCH_REQUIRED',
+        `locale research requires strategyDecision to select missing ${missing}. Update the strategy and dependent execution waves before route classification; source receipts and the cultural profile are collected after the research route is published, not required to classify it.`);
     }
     return;
   }

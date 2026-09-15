@@ -66,3 +66,47 @@ test('checkTokenDrift catches values that landed off the committed ladders', () 
   assert.match(drift!.message, /type sizes 15 are not on the committed scale/);
   assert.match(drift!.message, /spacing steps 13 are not on the committed scale/);
 });
+
+const responsive = (overrides = {}) => commit({
+  schema: 'token-commit-v2',
+  typeScale: [14, 18, 24, 32, 48, 72],
+  responsiveTypeScales: [{ maxWidth: 640, typeScale: [14, 18, 24, 36, 42] }],
+  ...overrides,
+});
+
+test('responsive scales validate independently; the same union is still invalid as one scale', () => {
+  assert.doesNotThrow(() => validateTokenCommit(responsive()));
+  assert.throws(() => validateTokenCommit(commit({ typeScale: [14, 18, 24, 32, 36, 42, 48, 72] })), /below the/);
+});
+
+test('responsive drift uses the first inclusive width cap and never a union', () => {
+  const system = validateTokenCommit(responsive({ responsiveTypeScales: [
+    { maxWidth: 640, typeScale: [14, 18, 24, 36, 42] },
+    { maxWidth: 1024, typeScale: [14, 18, 24, 40, 64] },
+  ] }));
+  const observed = (size: number) => ({ typeScale: [size], spacingScale: [8] });
+  assert.equal(checkTokenDrift(system, observed(42), 640), null);
+  assert.equal(checkTokenDrift(system, observed(64), 641), null);
+  assert.equal(checkTokenDrift(system, observed(64), 1024), null);
+  assert.equal(checkTokenDrift(system, observed(72), 1025), null);
+  assert.equal(checkTokenDrift(system, observed(72), 390)?.id, 'TOKEN-DRIFT');
+  assert.equal(checkTokenDrift(system, observed(42), 1280)?.id, 'TOKEN-DRIFT');
+  for (const width of [undefined, 0, -1, NaN, Infinity]) {
+    assert.throws(() => checkTokenDrift(system, observed(42), width), /viewport width/);
+  }
+});
+
+test('every responsive context retains the existing scale floors and closed shape', () => {
+  for (const typeScale of [[14, 18], [14, 15, 24, 42], [14, 18, 24, 24], [14, 18, 24, Infinity], [14, 17, 21, 26]]) {
+    assert.throws(() => validateTokenCommit(responsive({ responsiveTypeScales: [{ maxWidth: 640, typeScale }] })), TokenCommitError);
+  }
+  for (const responsiveTypeScales of [[], null, [{ maxWidth: 0, typeScale: [14, 18, 24, 42] }],
+    [{ maxWidth: Infinity, typeScale: [14, 18, 24, 42] }],
+    [{ maxWidth: 640, typeScale: [14, 18, 24, 42], extra: true }],
+    [640, 640].map(maxWidth => ({ maxWidth, typeScale: [14, 18, 24, 42] })),
+    [640, 390].map(maxWidth => ({ maxWidth, typeScale: [14, 18, 24, 42] })),
+  ]) assert.throws(() => validateTokenCommit(responsive({ responsiveTypeScales })), TokenCommitError);
+  assert.throws(() => validateTokenCommit(responsive({ typeScale: [14, 15, 24, 42] })), TokenCommitError);
+  assert.throws(() => validateTokenCommit(responsive({ schema: TOKEN_COMMIT_SCHEMA })), /unknown or missing keys/);
+  assert.doesNotThrow(() => validateTokenCommit(responsive({ register: 'product', responsiveTypeScales: [{ maxWidth: 640, typeScale: [14, 17, 21, 26] }] })));
+});

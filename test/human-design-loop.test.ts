@@ -163,7 +163,7 @@ test('adaptive process contracts preserve ownership, isolation, checkpoints, and
     candidates: 'omd-sketch', production: 'omd-hand', review: 'omd-eye', squint: 'omd-glance',
   });
   assert.deepEqual(process.checkpointSequence, [
-    'semantic-render-change', 'typography-reproof', 'visual-render-change',
+    'semantic-render-decision', 'typography-reproof', 'visual-render-decision',
   ]);
   assert.equal(process.checkpointNone, 'no-human-approval-wait');
   assert.equal(process.squintBeforeSharp, true);

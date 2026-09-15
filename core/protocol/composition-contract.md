@@ -8,9 +8,12 @@ The composer receives a sanitized frame/concept, clean copy deck, sanitized appr
 contract, and the scout's distilled transferable principles/invariants with source trust.
 It composes section by section: each section is assigned the single best-fit reference part for that
 section's job, and different sections may draw from different references, so the page is a deliberate
-composition of parts — not one reference reproduced whole. The hand builds each section against its
-assigned reference part with image-to-code fidelity; tracing one reference's entire page layout and
-section order wholesale is a derivative failure, not fidelity. It still writes the product's own copy
+composition of parts — not one reference reproduced whole. The hand builds each section from the
+assigned source-free reference projection's measured anatomy, geometry, and treatment with measured-part
+fidelity; when explicitly selected, the no-ship visual packet may add neutral box proportion, grouping,
+nesting, and whitespace evidence. Hand never inspects Scout-owned source pixels or private packet
+evidence. Tracing one reference's entire page layout and section order wholesale is a derivative
+failure, not fidelity. It still writes the product's own copy
 and uses its own real assets rather than lifting the source's literal text or photographs. Read `theory/layout.md` and
 `theory/ux.md` exactly before writing.
 
@@ -88,6 +91,8 @@ satisfies task reach; the terminal form or control surface does not have to appe
 first viewport and earns no credit merely for being visible there. State a visible rejection
 condition for a candidate whose anchor loses dominance, crowds the task cue, or becomes
 detached from the concept.
+
+**[type-composition-boundary]** Record the content-to-treatment assignments here, following [the typography evidence boundary](../theory/typography.md#role-map). Compare the intended anchor with the largest competing text mass at each required viewport, including the purpose heading, rather than budgeting only the anchor's coloured box. State which optical relationship makes one primary and the other supporting. Choose only among already proved treatments for those exact strings and conditions; preserve explicit user locks and already selected assignments. If the available treatments cannot express that relationship, return the exact unresolved relationship to Typesetter for proof and review before dependent sketches. Refresh the composition fingerprint after the owner updates the proof; do not manufacture a passing fingerprint or freeze the conflict because both specimens were legible. This section adds no new artifact or numeric salience gate, and its prose does not establish rendered dominance.
 
 The anchor may be lawful product/evidence media, an explanatory graphic, real interaction or
 data, or concept-bearing typography. A photo is never mandatory. Do not invent product facts,

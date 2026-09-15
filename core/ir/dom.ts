@@ -287,7 +287,15 @@ export function extractInPage(maxNodes: number, selector?: string | null): RawIr
     if (nodes.length >= maxNodes) return;
     const rect = el.getBoundingClientRect();
     const cs = getComputedStyle(el);
-    if (rect.width === 0 || rect.height === 0 || cs.display === 'none' || cs.visibility === 'hidden') return;
+    if (cs.display === 'none' || cs.visibility === 'hidden') return;
+    // display:contents has no principal box, but its element descendants still paint.
+    // Attach them to the nearest measured layout parent; never invent wrapper geometry.
+    // A boxless capture root remains unsupported rather than creating multiple fake roots.
+    if (cs.display === 'contents') {
+      if (parentId !== null) for (const child of Array.from(el.children)) walk(child, parentId);
+      return;
+    }
+    if (rect.width === 0 || rect.height === 0) return;
 
     const id = `n${nodes.length}`;
     const bg = toHex(cs.backgroundColor);
@@ -313,6 +321,19 @@ export function extractInPage(maxNodes: number, selector?: string | null): RawIr
       box: { x: Math.round(rect.x), y: Math.round(rect.y), w: Math.round(rect.width), h: Math.round(rect.height) },
       children: [],
     };
+
+    const declaredReferenceAnchor = el.getAttribute('data-omd-reference-anchor');
+    const referenceAnchor = declaredReferenceAnchor && /^[a-z][a-z0-9-]{0,63}$/.test(declaredReferenceAnchor)
+      ? declaredReferenceAnchor : parentId === null ? '@root' : null;
+    if (referenceAnchor) {
+      let visible = true;
+      for (let ancestor: Element | null = el; ancestor; ancestor = ancestor.parentElement) {
+        const style = getComputedStyle(ancestor);
+        if (style.display === 'none' || style.visibility === 'hidden' || style.visibility === 'collapse'
+          || Number(style.opacity) <= 0) { visible = false; break; }
+      }
+      node.referenceMeasurement = { anchor: referenceAnchor, fontSize: px(cs.fontSize), visible };
+    }
 
     if (bg) node.fill = { value: bg, token: nameOf(bg), authored: declares(authored, 'background') };
     const paintColors: NonNullable<RawIr['nodes'][number]['paintColors']> = [];

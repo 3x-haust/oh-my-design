@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 import { createHash } from 'node:crypto';
-import { accessSync, constants, existsSync, readFileSync, readdirSync, realpathSync, unlinkSync } from 'node:fs';
-import { join, dirname, resolve, relative } from 'node:path';
+import { accessSync, closeSync, constants, existsSync, fstatSync, lstatSync, openSync, readFileSync, readdirSync, realpathSync, unlinkSync } from 'node:fs';
+import { join, dirname, isAbsolute, resolve, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { stringify } from 'yaml';
+import { extractPackSections, PackSectionError } from '../core/pack-sections.ts';
 import { runTrustedLifecycle } from '../adapters/trusted-lifecycle-runtime.ts';
 import { parseRealityLedger, readFrame } from '../core/frame/index.ts';
 import { writeFrameRecord, reframe, setGenerator, logDecision, logChoice, logTaste, tasteProfile } from '../core/frame/write.ts';
@@ -80,6 +81,7 @@ interface Opts {
   out?: string;
   output?: string;
   agent?: string;
+  candidate?: string;
   stack?: string;
   viewport?: string;
   preparation?: string;
@@ -108,6 +110,9 @@ interface Opts {
   render?: string;
   observed?: string;
   changed?: string;
+  decision?: string;
+  criterion?: string;
+  reason?: string;
   kind?: string;
   evidence?: string;
   aiAssetId?: string;
@@ -120,6 +125,7 @@ interface Opts {
   sourceSha?: string;
   review?: string;
   mirror?: string;
+  ownerReceipt?: string;
   phase?: string;
   activation?: string;
   /** Capture a full-resolution structural blueprint of the selected component. */
@@ -230,6 +236,7 @@ const ALIASES: Record<string, keyof Opts> = {
   'locale-context': 'localeContext',
   'ai-asset-id': 'aiAssetId',
   'entry-surface': 'entrySurface',
+  'owner-receipt': 'ownerReceipt',
 };
 
 function parseArgs(args: string[]): Opts {
@@ -584,10 +591,13 @@ async function cmdCraft(sub: string | undefined, opts: Opts): Promise<never> {
   if (sub === 'checkpoint') {
     const phase = opts._[0];
     if (phase !== 'semantic' && phase !== 'visual') {
-      throw new Error('usage: omd craft checkpoint semantic|visual --render <path> --observed "..." --changed "..."');
+      throw new Error('usage: omd craft checkpoint semantic|visual --render <path> --observed "..." --decision revise|retain|reframe --criterion "..." --reason "..." [--changed "..."]');
     }
     console.log(recordCraft(process.cwd(), {
       phase, render: opts.render ?? '', observed: opts.observed ?? '', changed: opts.changed ?? '',
+      ...(opts.decision === undefined ? {} : { decision: opts.decision }),
+      ...(opts.criterion === undefined ? {} : { criterion: opts.criterion }),
+      ...(opts.reason === undefined ? {} : { reason: opts.reason }),
     }, projectWriterFromActivation(opts, 'omd craft checkpoint')));
     process.exit(0);
   }
@@ -595,7 +605,7 @@ async function cmdCraft(sub: string | undefined, opts: Opts): Promise<never> {
     const records = readCraft(process.cwd());
     if (opts.json) process.stdout.write(JSON.stringify(records));
     else if (!records.length) console.log('No craft checkpoints recorded.');
-    else for (const record of records) console.log(`${record.phase}: ${record.observed} -> ${record.changed} (${record.render})`);
+    else for (const record of records) console.log(`${record.phase}: ${record.observed} -> ${record.decision ?? 'revise'}: ${record.changed || record.reason} (${record.render})`);
     process.exit(0);
   }
   throw new Error('usage: omd craft checkpoint ... | omd craft status [--json]');
@@ -1223,7 +1233,7 @@ async function cmdRefDistance(opts: Opts): Promise<never> {
       if (opts.json === true) console.log(JSON.stringify(receipt));
       else {
         for (const row of receipt.comparisons) {
-          console.log(`${row.slotId.padEnd(24)} ${row.similarity.toFixed(2)}  ${row.targetSelector}`);
+          console.log(`${row.slotId.padEnd(24)} ${row.similarity.toFixed(2)}  ${row.targetSelector}  [${row.geometry ? 'promised-axis geometry' : 'style-invariant diagnostic'}; not visual-percent]`);
         }
         console.log(`verdict: ${receipt.verdict}`);
       }
@@ -1307,6 +1317,34 @@ async function cmdRefCheck(opts: Opts): Promise<never> {
   process.exit(findings.length > 0 ? 1 : 0);
 }
 
+async function cmdRefVerify(opts: Opts): Promise<never> {
+  if (opts._.length > 1) throw new Error('usage: omd ref verify [page] [--candidate id] [--json]');
+  if (process.env.OMD_PRODUCTION_OWNER_ROLE === 'omd-hand') {
+    throw new Error('reference verification belongs after the source-write-only production transaction');
+  }
+  if (process.env.OMD_NON_PRODUCTION_ROLE && process.env.OMD_NON_PRODUCTION_ROLE !== 'omd-scout') {
+    throw new Error('source-aware reference verification is not a source-free reviewer or downstream owner input');
+  }
+  const { verifyReferenceEvidence } = await import('../core/ref/reference-verification.ts');
+  const target = opts._[0];
+  const report = await verifyReferenceEvidence(process.cwd(), {
+    ...(typeof opts.candidate === 'string' ? { candidateId: opts.candidate } : {}),
+    ...(target === undefined ? {} : { extract: (selector: string, viewport: { width: number; height: number }) =>
+      rawIrFor({ ...opts, viewport: `${viewport.width}x${viewport.height}` }, target, selector) }),
+  });
+  // A pipe write can outlive this turn; exiting immediately truncates large reports.
+  // Drain the original bytes before preserving the verifier's existing exit status.
+  await new Promise<void>((resolveWrite, rejectWrite) => {
+    process.stdout.write(`${JSON.stringify(report, null, opts.json ? undefined : 2)}\n`, error => {
+      if (error) rejectWrite(error);
+      else resolveWrite();
+    });
+  });
+  process.exit(report.rows.some(row => row.acquisition === 'unmeasured-geometry'
+    || ('targetError' in row && row.targetError !== null)
+    || (target !== undefined && 'missingAxes' in row && row.missingAxes.length > 0)) ? 1 : 0);
+}
+
 async function cmdRefLocaleBind(opts: Opts): Promise<never> {
   if (!opts.input || opts._.length > 0) {
     throw new Error('usage: omd ref locale-bind --input <reference-locale-bindings.json> [--json]');
@@ -1357,13 +1395,8 @@ async function cmdRefLocaleBindCheck(opts: Opts): Promise<never> {
 async function auditBoardForCheck(board: import('../core/ref/board-contract.ts').ReferenceBoardManifest): Promise<readonly { id: string; message: string; refs: readonly string[] }[]> {
   const { loadRefs } = await import('../core/ref/store.ts');
   const { auditBoardGranularity } = await import('../core/ref/board-granularity.ts');
-  const { validateAcquisitionPlan } = await import('../core/deliberation/contracts.ts');
-  let zones: string[] | undefined;
-  try {
-    const plan = validateAcquisitionPlan(JSON.parse(readFileSync(join(process.cwd(), '.omd', 'acquisition-plan.json'), 'utf8')));
-    zones = plan.value?.zones.filter((zone) => zone.required).map((zone) => zone.id);
-  } catch { zones = undefined; }
-  return auditBoardGranularity(loadRefs(process.cwd()), zones === undefined || zones.length === 0 ? { board } : { zones, board });
+  const { acquisitionAuditScope } = await import('../core/ref/acquisition-audit.ts');
+  return auditBoardGranularity(loadRefs(process.cwd()), { ...acquisitionAuditScope(process.cwd()), board });
 }
 async function cmdRefV2Check(opts: Opts): Promise<never> {
   if (!opts.input || opts._.length > 0) throw new Error('usage: omd ref v2-check --input <reference-handoff.json> [--json]');
@@ -1480,6 +1513,20 @@ async function cmdRefSelect(opts: Opts): Promise<never> {
   const handoff = writeReferenceHandoffReceipt(process.cwd(), 'art-direction', invocation);
   if (opts.json) process.stdout.write(`${JSON.stringify({ selection, handoff })}\n`);
   else console.log(`selected ${selection.candidateId}; wrote ${handoff.path}`);
+  process.exit(0);
+}
+
+async function cmdRefHandoff(opts: Opts): Promise<never> {
+  const role = opts._[0];
+  if (opts._.length !== 1 || opts.out !== undefined || opts.input !== undefined
+    || (role !== 'art-direction' && role !== 'composer' && role !== 'hand')) {
+    throw new Error('usage: omd ref handoff <art-direction|composer|hand> [--json]');
+  }
+  const { readSelectedReferenceHandoff } = await import('../core/ref/selected-handoff.ts');
+  const result = readSelectedReferenceHandoff(process.cwd(), role);
+  await new Promise<void>((done, reject) => {
+    process.stdout.write(`${JSON.stringify(result, null, opts.json ? undefined : 2)}\n`, error => error ? reject(error) : done());
+  });
   process.exit(0);
 }
 
@@ -1909,8 +1956,42 @@ function cmdCopy(opts: Opts): never {
 }
 
 async function cmdReview(mode: string | undefined, opts: Opts): Promise<never> {
-  if ((mode !== 'publish' && mode !== 'repair-publish') || !opts.input || opts._.length > 0) {
-    throw new Error('usage: omd review publish|repair-publish --input <publication.json> [--activation <host-issued-invocation.json>] [--json]');
+  if (mode === 'evidence-projection') {
+    if (!opts.input || opts._.length > 0) {
+      throw new Error('usage: omd review evidence-projection --input <observation-projection-input.json> [--json]');
+    }
+    const {
+      buildDesignQualityObservationProjection,
+    } = await import('../core/evidence/final-v2-browser-observations.ts');
+    const { nodeStableProjectFileSystem } = await import('../core/runtime/stable-project-file.ts');
+    const projection = buildDesignQualityObservationProjection(
+      process.cwd(),
+      nodeStableProjectFileSystem(),
+      inputJson(opts.input, 'omd review evidence-projection'),
+    );
+    if (opts.json) process.stdout.write(JSON.stringify(projection));
+    else console.log(JSON.stringify(projection, null, 2));
+    process.exit(0);
+  }
+  if (mode === 'final-packet') {
+    if (!opts.input || opts._.length > 0) {
+      throw new Error('usage: omd review final-packet --input <packet-input.json> --activation <host-issued-invocation.json> [--json]');
+    }
+    const invocation = invocationFromActivation(opts, 'omd review final-packet');
+    requireSourceBoundProofCurrentness(process.cwd());
+    const { publishFinalRenderReviewerPacket } = await import('../core/runtime/final-render-review.ts');
+    const result = publishFinalRenderReviewerPacket({
+      root: process.cwd(),
+      invocation,
+      writer: projectWriter(invocation),
+      packetInput: inputJson(opts.input, 'omd review final-packet'),
+    });
+    if (opts.json) process.stdout.write(JSON.stringify(result));
+    else console.log(result.path);
+    process.exit(0);
+  }
+  if ((mode !== 'publish' && mode !== 'repair-publish' && mode !== 'refinement-publish') || !opts.input || opts._.length > 0) {
+    throw new Error('usage: omd review evidence-projection|final-packet|publish|repair-publish|refinement-publish --input <input.json> [--activation <host-issued-invocation.json>] [--json]');
   }
   const publicKeyPath = process.env.OMD_CODEX_AUTHORITY_PUBLIC_KEY_PATH;
   if (publicKeyPath === undefined) throw new Error('FINAL_REVIEW_ROLE_AUTHORITY_REJECTED: trusted Codex host is required');
@@ -1920,6 +2001,23 @@ async function cmdReview(mode: string | undefined, opts: Opts): Promise<never> {
     buildFinalReviewerPublication,
     buildProductionRepairReviewPublication,
   } = await import('../adapters/final-reviewer-publication.ts');
+  if (mode === 'refinement-publish') {
+    const { buildRefinementReviewerPublication } = await import('../adapters/refinement-reviewer-publication.ts');
+    const publication = buildRefinementReviewerPublication(inputJson(opts.input, command), {
+      projectRoot: process.cwd(),
+      buildSha256: invocation.current.buildSha256,
+      briefSha256: invocation.current.briefSha256,
+      publicKeyPath,
+      invocation,
+    });
+    requireFinalReviewerLaneAuthorization(invocation, process.cwd(), publication.review.bytes);
+    const writer = projectWriter(invocation);
+    for (const execution of publication.executions) writer.writeContentAddressed(execution.path, execution.bytes);
+    writer.writeContentAddressed(publication.review.path, publication.review.bytes);
+    if (opts.json) process.stdout.write(JSON.stringify({ path: publication.review.path, sha256: publication.review.sha256 }));
+    else console.log(publication.review.path);
+    process.exit(0);
+  }
   if (mode === 'repair-publish') {
     const artifact = buildProductionRepairReviewPublication(inputJson(opts.input, command), {
       projectRoot: process.cwd(),
@@ -1937,6 +2035,7 @@ async function cmdReview(mode: string | undefined, opts: Opts): Promise<never> {
     buildSha256: invocation.current.buildSha256,
     briefSha256: invocation.current.briefSha256,
     publicKeyPath,
+    invocation,
   });
   const writer = projectWriter(invocation);
   for (const artifact of [...publication.executions, publication.lane]) {
@@ -2206,6 +2305,16 @@ async function cmdRecipe(mode: string | undefined, opts: Opts): Promise<never> {
 }
 
 
+async function cmdRefDiscoveryPlan(opts: Opts): Promise<never> {
+  if (opts._.length !== 0) throw new Error('usage: omd ref discover-plan [--json] [--activation <host-issued-invocation.json>]');
+  const { readPersistedRoute } = await import('../core/route/index.ts');
+  const { buildReferenceDiscoveryPlan } = await import('../core/ref/discovery-plan.ts');
+  const route = readPersistedRoute(process.cwd(), invocationFromActivation(opts, 'omd ref discover-plan'));
+  const plan = buildReferenceDiscoveryPlan(process.cwd(), route);
+  process.stdout.write(`${JSON.stringify(plan, null, opts.json ? undefined : 2)}\n`);
+  process.exit(0);
+}
+
 /** Fails when the captured board holds no parts to compose section by section. */
 async function cmdRefGranularity(opts: Opts): Promise<never> {
   const { loadRefs } = await import('../core/ref/store.ts');
@@ -2213,15 +2322,7 @@ async function cmdRefGranularity(opts: Opts): Promise<never> {
   // Domain-brief surfaces are pages/screens. Reference coverage instead follows the framer's
   // section/region/state acquisition plan — otherwise one landing-page surface falsely looks covered
   // by one nav capture while its hero, proof, process, and CTA have no evidence.
-  const planPath = join(process.cwd(), '.omd', 'acquisition-plan.json');
-  let zones: string[] | undefined;
-  if (existsSync(planPath)) {
-    try {
-      const { validateAcquisitionPlan } = await import('../core/deliberation/contracts.ts');
-      const result = validateAcquisitionPlan(JSON.parse(readFileSync(planPath, 'utf8')));
-      zones = result.value?.zones.filter((zone) => zone.required).map((zone) => zone.id);
-    } catch { zones = undefined; }
-  }
+  const { acquisitionAuditScope } = await import('../core/ref/acquisition-audit.ts');
   let board: import('../core/ref/board-contract.ts').ReferenceBoardManifest | undefined;
   const boardManifestPath = join(process.cwd(), '.omd', 'reference-board.json');
   if (existsSync(boardManifestPath)) {
@@ -2229,12 +2330,26 @@ async function cmdRefGranularity(opts: Opts): Promise<never> {
     board = readReferenceBoardArtifacts(process.cwd()).manifest;
   }
   const boardOption = board === undefined ? {} : { board };
-  const findings = auditBoardGranularity(loadRefs(process.cwd()), zones === undefined || zones.length === 0 ? boardOption : { zones, ...boardOption });
-  // Role ② craft evidence is declared by the domain brief, not by the acquisition plan, so a board
-  // can cover every zone and still have gathered only half the roles the protocol names. A run
-  // observed doing exactly that produced a correct page with no measured craft to be ambitious with.
+  const findings = auditBoardGranularity(loadRefs(process.cwd()), { ...acquisitionAuditScope(process.cwd()), ...boardOption });
+  // Current routes own motion applicability; the optional domain stage cannot erase it.
+  const routePath = join(process.cwd(), '.omd/route.json');
+  if (existsSync(routePath)) {
+    const { readPersistedRoute } = await import('../core/route/index.ts');
+    const { buildReferenceDiscoveryPlan, missingDiscoveryMotionEvidence } = await import('../core/ref/discovery-plan.ts');
+    const { readCapturedCraftSignals } = await import('../core/ref/craft-usage.ts');
+    const route = readPersistedRoute(process.cwd(), invocationFromActivation(opts, 'omd ref granularity'));
+    const discovery = buildReferenceDiscoveryPlan(process.cwd(), route);
+    if (missingDiscoveryMotionEvidence(discovery, readCapturedCraftSignals(join(process.cwd(), '.omd/refs')))) {
+      findings.push({
+        id: 'REF-CRAFT-UNGATHERED',
+        message: 'The selected motion-one route has no measured changing reference state. Run the automatic discovery motion lane and capture its relevant live sequence with `omd craft-capture`; a static screenshot, search result, or skipped domain stage does not supply motion evidence.',
+        refs: ['selected method: motion-one', 'plan: omd ref discover-plan --json'],
+      });
+    }
+  }
+  // Preserve the legacy domain-query check only for projects without an adaptive route.
   const briefPath = join(process.cwd(), '.omd', 'domain-brief.json');
-  if (existsSync(briefPath)) {
+  if (!existsSync(routePath) && existsSync(briefPath)) {
     try {
       const brief = JSON.parse(readFileSync(briefPath, 'utf8')) as { referenceQueries?: { craft?: unknown[] } };
       const declared = brief.referenceQueries?.craft ?? [];
@@ -2383,9 +2498,10 @@ async function cmdTokens(mode: string | undefined, opts: Opts): Promise<never> {
     const { parseViewport, extractIr } = await import('../core/render/index.ts');
     const { normalize } = await import('../core/ir/normalize.ts');
     const { extractInvariants } = await import('../core/ref/invariants.ts');
-    const ir = normalize(await extractIr(opts.page, { viewport: parseViewport(opts.viewport ?? '1440x900') }));
+    const viewport = parseViewport(opts.viewport ?? '1440x900');
+    const ir = normalize(await extractIr(opts.page, { viewport }));
     const invariants = extractInvariants(ir);
-    drift = checkTokenDrift(commit, { typeScale: invariants.typeScale, spacingScale: invariants.spacingLadder });
+    drift = checkTokenDrift(commit, { typeScale: invariants.typeScale, spacingScale: invariants.spacingLadder }, viewport.width);
   }
 
   if (opts.json) process.stdout.write(JSON.stringify({ ok: drift === null, commit, findings: drift ? [drift] : [] }));
@@ -2536,7 +2652,7 @@ function cmdSource(mode: string | undefined, opts: Opts): never {
 }
 function inputJson(path: string, command: string): unknown {
   try {
-    return JSON.parse(readFileSync(resolve(path), 'utf8')) as unknown;
+    return JSON.parse(readFileSync(path === '-' ? 0 : resolve(path), 'utf8')) as unknown;
   } catch (error) {
     throw new Error(`${command} could not read valid JSON from ${path}: ${error instanceof Error ? error.message : String(error)}`);
   }
@@ -2554,6 +2670,41 @@ function inputJsonBytes(path: string, command: string): Buffer {
     return readFileSync(resolve(path));
   } catch (error) {
     throw new Error(`${command} could not read bytes from ${path}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+function inputExternalReadonlyBytes(path: string, command: string, projectRoot: string): Buffer {
+  const selected = resolve(path);
+  let descriptor: number | undefined;
+  try {
+    const before = lstatSync(selected);
+    const canonical = realpathSync(selected);
+    const outside = relative(projectRoot, canonical);
+    if (!before.isFile() || before.isSymbolicLink() || (before.mode & 0o777) !== 0o400
+      || (outside !== '..' && !outside.startsWith(`..${sep}`) && !isAbsolute(outside))) {
+      throw new Error('must be an external 0400 regular non-symlink file');
+    }
+    descriptor = openSync(selected, constants.O_RDONLY | constants.O_NOFOLLOW);
+    const opened = fstatSync(descriptor);
+    const current = lstatSync(selected);
+    const same = (left: typeof before, right: typeof before): boolean => left.dev === right.dev
+      && left.ino === right.ino && left.size === right.size && left.mtimeMs === right.mtimeMs
+      && left.ctimeMs === right.ctimeMs;
+    if (!opened.isFile() || !current.isFile() || current.isSymbolicLink()
+      || (opened.mode & 0o777) !== 0o400 || (current.mode & 0o777) !== 0o400
+      || !same(before, opened) || !same(opened, current)) {
+      throw new Error('changed before it could be read');
+    }
+    const bytes = readFileSync(descriptor);
+    const after = fstatSync(descriptor);
+    const final = lstatSync(selected);
+    if (!final.isFile() || final.isSymbolicLink() || (final.mode & 0o777) !== 0o400
+      || !same(opened, after) || !same(opened, final)) throw new Error('changed while it was read');
+    return bytes;
+  } catch (error) {
+    throw new Error(`${command} could not read exact owner receipt bytes from ${path}: ${error instanceof Error ? error.message : String(error)}`);
+  } finally {
+    if (descriptor !== undefined) closeSync(descriptor);
   }
 }
 
@@ -3014,20 +3165,52 @@ async function cmdArtDirection(mode: string | undefined, opts: Opts): Promise<ne
     process.exit(0);
   }
   if (mode === 'check-input') {
-    if (opts.input !== undefined || opts._.length > 0) throw new Error('usage: omd art-direction check-input [--route /] [--json]');
+    if (opts._.length > 0) throw new Error('usage: omd art-direction check-input [--input <alternatives.json>] [--route /] [--json]');
     const { inputSkeleton } = await import('../core/schema/inputs.ts');
-    const selection = validatePreReferenceSelectionV2(process.cwd());
+    const { readReferenceBoardArtifacts } = await import('../core/ref/board-artifacts.ts');
+    const { createEmptyIntentLedger } = await import('../core/runtime/intent.ts');
+    const projectRoot = process.cwd();
+    const selection = validatePreReferenceSelectionV2(projectRoot);
+    const candidate = readReferenceBoardArtifacts(projectRoot).raw.candidates.find((entry) => entry.id === selection.candidateId);
+    if (candidate === undefined) throw new Error('ART_DIRECTION_REFERENCE_CANDIDATE_REQUIRED: current selected candidate is missing');
+    if (opts.route !== undefined && opts.route !== candidate.route) throw new Error('ART_DIRECTION_ROUTE_STALE: requested route does not match the selected candidate');
+    const handoff = validateReferenceHandoffCurrentness(projectRoot, JSON.parse(readContainedRegularFile(projectRoot, '.omd/reference-handoffs/art-direction.json', 'art-direction handoff').toString('utf8')));
+    if (handoff.role !== 'art-direction') throw new Error('ART_DIRECTION_REFERENCE_HANDOFF_REQUIRED: current handoff is not for art direction');
+    // Preview the publisher's no-lock default without creating an intent or claiming user input.
+    let intentSha256 = intentLedgerSha256(createEmptyIntentLedger());
+    if (existsSync(join(projectRoot, '.omd/intent-current.json'))) {
+      const pointer = validateIntentCurrentPointer(JSON.parse(readContainedRegularFile(projectRoot, '.omd/intent-current.json', 'intent current pointer').toString('utf8')));
+      if (pointer.record !== `intent-runs/sha256-${pointer.sha256}.json`) throw new Error('ART_DIRECTION_INTENT_STALE: current pointer record does not match its immutable digest');
+      const ledger = validateIntentLedger(JSON.parse(readContainedRegularFile(projectRoot, `.omd/${pointer.record}`, 'current intent ledger').toString('utf8')));
+      intentSha256 = intentLedgerSha256(ledger);
+      if (intentSha256 !== pointer.sha256) throw new Error('ART_DIRECTION_INTENT_STALE: current pointer does not match the immutable ledger');
+    }
     const skeleton = inputSkeleton('art-direction-check').skeleton as Record<string, unknown>;
+    const supplied = opts.input === undefined ? undefined : inputJson(opts.input, 'omd art-direction check-input');
+    const alternatives = supplied === undefined ? undefined : Array.isArray(supplied) ? supplied : isRecord(supplied) && Array.isArray(supplied.alternatives) ? supplied.alternatives : undefined;
+    if (supplied !== undefined && alternatives === undefined) throw new Error('ART_DIRECTION_ALTERNATIVES_INVALID: input must be an alternatives array or contain an alternatives array');
+    const lineage = {
+      route: candidate.route,
+      taskIds: [...new Set(candidate.pieces.flatMap((piece) => piece.taskIds))].sort(),
+      boardSha256: selection.captureSha256,
+      preSelectionSha256: referenceSelectionV2Sha256(selection),
+      handoffSha256: handoff.payloadSha256,
+      intentSha256,
+      ...(alternatives === undefined ? {} : { alternativesSha256: sha256(canonicalJson(alternatives)) }),
+    };
     const payload = {
       ...skeleton,
-      route: opts.route ?? skeleton.route,
+      route: candidate.route,
       references: canonicalArtDirectionReferences(selection),
+      ...(alternatives === undefined ? {} : { alternatives }),
+      evaluatorAssessment: { ...(skeleton.evaluatorAssessment as Record<string, unknown>), ...lineage, ...(alternatives === undefined ? {} : { alternatives }) },
+      evaluatorResult: { ...(skeleton.evaluatorResult as Record<string, unknown>), ...lineage },
     };
     console.log(JSON.stringify(payload, null, opts.json ? 0 : 2));
     process.exit(0);
   }
   if (mode !== 'check' || !opts.input || opts._.length > 0) {
-    throw new Error('usage: omd art-direction check|alternatives-sha|check-input --input <json> [--json]');
+    throw new Error('usage: omd art-direction check|alternatives-sha --input <json> [--json], or check-input [--input <alternatives.json>] [--route /] [--json]');
   }
   const command = 'omd art-direction check';
   const payload = inputJson(opts.input, command);
@@ -3035,7 +3218,9 @@ async function cmdArtDirection(mode: string | undefined, opts: Opts): Promise<ne
   const allowed = new Set<string>(ART_DIRECTION_CHECK_INPUT_KEYS);
   if (Object.keys(payload).some((key) => !allowed.has(key))) throw new Error('ART_DIRECTION_CALLER_DECISION_FORBIDDEN: evaluator choices, scores, and motion sources must remain inside the evaluator bytes');
   const { alternatives, references, eligibility, evaluatorAssessment, evaluatorResult, beats, invocation, route, implementationLane, fallbackPath, performanceAccessibilityBudget } = payload;
-  const run = validateProjectRunInvocation(invocation);
+  const run = activationInputPath(opts) === undefined
+    ? validateProjectRunInvocation(invocation)
+    : invocationFromActivation(opts, command);
   if (evaluatorAssessment === undefined || evaluatorResult === undefined) throw new Error('ART_DIRECTION_EVALUATOR_AUTHORIZATION_REQUIRED: evaluator assessment and result payloads are required');
   const assessmentBytes = Buffer.from(canonicalJson(evaluatorAssessment));
   const resultBytes = Buffer.from(canonicalJson(evaluatorResult));
@@ -3098,7 +3283,7 @@ async function cmdArtDirection(mode: string | undefined, opts: Opts): Promise<ne
   const handoff = validateReferenceHandoffCurrentness(process.cwd(), inputJson(handoffPath, 'art-direction reference handoff'));
   const selection = validatePreReferenceSelectionV2(process.cwd());
   const { persistMotionResolutionProjection, persistSettledReferenceSelection, motionResolutionProjectionSha256 } = await import('../core/ref/reference-selection.ts');
-  if (!Array.isArray(beats) || !beats.every((beat) => typeof beat === 'string' && /^B-\d+$/.test(beat)) || new Set(beats).size !== beats.length) throw new Error('ART_DIRECTION_BEATS_INVALID: beats must be unique stable B-<number> IDs');
+  if (!Array.isArray(beats) || beats.length === 0 || !beats.every((beat) => typeof beat === 'string' && /^B-\d+$/.test(beat)) || new Set(beats).size !== beats.length) throw new Error('ART_DIRECTION_BEATS_INVALID: beats must be a non-empty set of unique stable B-<number> IDs grounded in the content regions');
   const motionInput = {
     activationSha256: artDirectionSha256(run.activation),
     alternativesSha256: closedResult.alternativesSha256,
@@ -3780,7 +3965,7 @@ async function cmdTargetList(): Promise<never> {
  */
 function cmdPack(sub: string | undefined, ...rest: string[]): never {
   const packsRoot = join(root, 'core');
-  // `--section "<heading>"` prints one `##` section, and repeats to print several in file order. A
+  // `--section "<heading>"` prints one ##–###### section with descendants, in requested order. A
   // role that needs the framing rules should not pay for the whole protocol: the loop file alone
   // costs about sixteen thousand tokens to read.
   const sections: string[] = [];
@@ -3829,20 +4014,13 @@ function cmdPack(sub: string | undefined, ...rest: string[]): never {
       process.stdout.write(body);
       process.exit(0);
     }
-    const headings = body.match(/^##\s+.+$/gm) ?? [];
-    const printed: string[] = [];
-    for (const section of sections) {
-      const heading = new RegExp(`^##\\s+${section.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`, 'im');
-      const match = heading.exec(body);
-      if (match === null) {
-        console.error(`pack section not found: ${section}\nsections in ${sub}:\n${headings.join('\n')}`);
-        process.exit(1);
-      }
-      const tail = body.slice(match.index);
-      const next = /^##\s+/m.exec(tail.slice(match[0].length));
-      printed.push(next === null ? tail : tail.slice(0, match[0].length + next.index));
+    try {
+      process.stdout.write(extractPackSections(body, sections));
+    } catch (error) {
+      if (!(error instanceof PackSectionError)) throw error;
+      console.error(`${error.message}\nsections in ${sub}:\n${error.available.join('\n')}`);
+      process.exit(1);
     }
-    process.stdout.write(printed.join('\n'));
     process.exit(0);
   }
 
@@ -4257,6 +4435,12 @@ function usage(): never {
     + '\n'
     + '  lifecycle plan|run --project <dir> [--manifest <json>]\n'
     + '                                               trusted browser evaluation and observation\n'
+    + '  lifecycle refinement-evidence --project <dir> --activation <json> --json\n'
+    + '                                               verified before/after PNG packet for isolated Eye review\n'
+    + '  lifecycle refine --project <dir> --activation <json> --review <content-addressed-review>\n'
+    + '                                               commit an evidence-bound refinement checkpoint\n'
+    + '  lifecycle refinement-rollback --project <dir> --activation <json> --review <content-addressed-review>\n'
+    + '                                               atomically restore a reviewer-preferred baseline\n'
     + '  frame show\n'
     + '  frame set --problem P --reframe R --why EVIDENCE\n'
     + '            [--task T --frequent-action A --costliest-error E --surface S --task-matrix "T1 …" --entry-surface contract.json]\n'
@@ -4268,7 +4452,7 @@ function usage(): never {
     + '  taste record "subject" --kind selection|praise|rejection|overrule --evidence "verbatim" --from-user\n'
     + '  taste profile [--all]\n'
     + '  config set checkpoint none|concept|structure|both | config show\n'
-    + '  craft checkpoint semantic|visual --render P --observed "..." --changed "..."\n'
+    + '  craft checkpoint semantic|visual --render P --observed "..." --decision revise|retain|reframe --criterion "..." --reason "..." [--changed "..."]\n'
     + '  craft status [--json]\n'
     + '\n'
     + '  ref add <url|file> --as <component> [--selector "css"] [--image] [--blueprint]\n'
@@ -4277,6 +4461,7 @@ function usage(): never {
     + '  ref add ... --selector ".nav" --blueprint --shot  also save the component screenshot beside its blueprint\n'
     + '  ref add ... --no-energy --preparation <json>  prepare explicit disclosure clicks and verify visibility before capture\n'
     + '  ref add-batch <manifest.json>               capture zone-bound references in parallel over one browser\n'
+    + '  ref discover-plan [--json]                  derive automatic search lanes from the current task; no user URLs required\n'
     + '  ref board --input candidate-assemblies.json   author and persist a validated board from captured source/component pieces\n'
     + '  ref locale-bind --input bindings.json         bind local reference pieces to current cultural evidence decisions\n'
     + '  ref locale-bind-check                         revalidate board/profile/source locale bindings\n'
@@ -4285,7 +4470,9 @@ function usage(): never {
     + '  ref principles <source> --as C --add "..."   record why a reference works\n'
     + '  ref show <source> --as C                    invariants + principles\n'
     + '  ref check [manifest] [--json]               validate board evidence and any saved selection\n'
+    + '  ref verify [page] [--candidate id] [--json] inspect acquisition and measured layout transfer\n'
     + '  ref v2-check --input handoff.json [--json]  validate the canonical v2 reference handoff\n'
+    + '  ref handoff <art-direction|composer|hand> [--json]  export current selected source-free feature content\n'
     + '  ref import-image <input.json> [--json]      save a provenance-bound image fragment\n'
     + '  ref candidates [manifest]                   print chat-ready Korean-first candidate Markdown\n'
     + '  ref select <candidate-id> [--json]          bind a closed candidate selection to its evidence\n'
@@ -4300,7 +4487,10 @@ function usage(): never {
     + '  copy --check [--json]                       validate required copy deck structure and fact refs\n'
     + '  copy --review-check [--json]                validate copy-eye structure and current deck hash\n'
     + '  copy review-publish --input <report>         preserve a validated blind copy-eye report\n'
+    + '  review evidence-projection --input <observation-projection-input.json>  emit source-free aggregate/state/viewport/capture bindings for final Eyes\n'
+    + '  review final-packet --input <packet-input.json>  publish the current anonymous production-image packet for two isolated final Eyes\n'
     + '  review publish --input <publication.json>    persist two host-signed Eye results as one quorum lane\n'
+    + '  review refinement-publish --input <publication.json>  persist two independent Eye comparison votes\n'
     + '  candidate select --input <pointer.json>       bind production to one validated Sketch candidate\n'
     + '  copy v2 check [--json]                      validate selected register and stable v2 Beat IDs\n'
     + '  composition --check [--activation <invocation>] [--json]  validate composition sections and input freshness\n'
@@ -4309,7 +4499,7 @@ function usage(): never {
     + '  packet --check --input <packet.json> [--json] validate complete anonymous candidate review evidence\n'
     + '  proof revision --input <entry> [--json]     hash the current production revision\n'
     + '  proof --check [--json]                      validate type/composition production revision bindings\n'
-    + '  acquisition set --zones <json-array>          persist framer-owned section/region/state reference targets\n'
+    + '  acquisition set --input <json-file|->        persist framer-owned v2 reference targets; - reads stdin\n'
     + '  brief <stage> [--json]                      what this stage owns, its evidence, and what will judge it\n'
     + '  route classify --input route-input.json [--locale-context .omd/locale-design-context.json]  validate an adaptive contract-derived strategy and lock scope\n'
     + '  route show | route check [--json]           the chosen route, and writes outside its scope\n'
@@ -4412,7 +4602,10 @@ async function main(): Promise<never> {
       'Usage:',
       '  omd lifecycle plan --project <dir> [--output .omd/.cache/trusted-lifecycle-manifest.json] --activation <json>',
       '  omd lifecycle run|evaluate --project <dir> --manifest <json> [--activation <json>]',
-      '  omd lifecycle repair --project <dir> --activation <json> --review <json> --mirror <dir>',
+      '  omd lifecycle repair --project <dir> --activation <json> --review <json> --mirror <dir> --owner-receipt <json>',
+      '  omd lifecycle refinement-evidence --project <dir> --activation <json> --json',
+      '  omd lifecycle refine --project <dir> --activation <json> --review <content-addressed-review>',
+      '  omd lifecycle refinement-rollback --project <dir> --activation <json> --review <content-addressed-review>',
       '  omd lifecycle finalize --project <dir> --activation <json> --input <final-v2.json>',
     ].join('\n'));
     process.exit(0);
@@ -4459,7 +4652,7 @@ async function main(): Promise<never> {
   }
   if (cmd === 'lifecycle' && sub === 'repair') {
     const opts = parseArgs(args.slice(2));
-    if (!opts.project || !opts.activation || !opts.review || !opts.mirror) return usage();
+    if (!opts.project || !opts.activation || !opts.review || !opts.mirror || !opts.ownerReceipt) return usage();
     const project = realpathSync(resolve(opts.project));
     const invocation = validateProjectRunInvocation(
       inputJson(opts.activation, 'omd lifecycle repair activation'),
@@ -4474,6 +4667,7 @@ async function main(): Promise<never> {
       invocation,
       review: review as Parameters<typeof stageProductionRepair>[0]['review'],
       mirrorRoot: realpathSync(resolve(opts.mirror)),
+      ownerReceipt: inputExternalReadonlyBytes(opts.ownerReceipt, 'omd lifecycle repair owner receipt', project),
     });
     const outcome = applyProductionRepair({
       root: project,
@@ -4482,6 +4676,67 @@ async function main(): Promise<never> {
       staged,
     });
     console.log(opts.json ? JSON.stringify(outcome) : `REPAIR: COMMITTED\noutcome: ${outcome.outcomePath}`);
+    process.exit(0);
+  }
+  if (cmd === 'lifecycle' && sub === 'refinement-evidence') {
+    const opts = parseArgs(args.slice(2));
+    if (!opts.project || !opts.activation || opts._.length > 0) return usage();
+    const project = realpathSync(resolve(opts.project));
+    const invocation = validateProjectRunInvocation(
+      inputJson(opts.activation, 'omd lifecycle refinement-evidence activation'),
+    );
+    const {
+      publishRenderedRefinementReviewerPacket,
+    } = await import('../core/runtime/rendered-refinement.ts');
+    const packet = publishRenderedRefinementReviewerPacket({
+      root: project,
+      invocation,
+      writer: createProjectWriteAdapter(project, invocation),
+    });
+    if (opts.json) process.stdout.write(JSON.stringify(packet));
+    else console.log(packet.path);
+    process.exit(0);
+  }
+  if (cmd === 'lifecycle' && sub === 'refine') {
+    const opts = parseArgs(args.slice(2));
+    if (!opts.project || !opts.activation || !opts.review || opts._.length > 0) return usage();
+    const project = realpathSync(resolve(opts.project));
+    const invocation = validateProjectRunInvocation(
+      inputJson(opts.activation, 'omd lifecycle refine activation'),
+    );
+    const { commitRenderedRefinementCheckpoint } = await import('../core/runtime/rendered-refinement.ts');
+    const checkpoint = commitRenderedRefinementCheckpoint({
+      root: project,
+      invocation,
+      writer: createProjectWriteAdapter(project, invocation),
+      reviewPath: relative(project, resolve(project, opts.review)),
+    });
+    console.log(opts.json ? JSON.stringify(checkpoint) : `REFINEMENT: ${checkpoint.status.toUpperCase()}\naction: ${checkpoint.action}`);
+    process.exit(checkpoint.status === 'regress' ? 1 : 0);
+  }
+  if (cmd === 'lifecycle' && sub === 'refinement-rollback') {
+    const opts = parseArgs(args.slice(2));
+    if (!opts.project || !opts.activation || !opts.review || opts._.length > 0) return usage();
+    const project = realpathSync(resolve(opts.project));
+    const invocation = validateProjectRunInvocation(
+      inputJson(opts.activation, 'omd lifecycle refinement-rollback activation'),
+    );
+    const reviewPath = relative(project, resolve(project, opts.review));
+    const {
+      recoverRejectedProductionRepairRollback,
+      rollbackRejectedProductionRepair,
+      validateRejectedProductionRepairRollback,
+    } = await import('../core/runtime/production-repair.ts');
+    const writer = createProjectWriteAdapter(project, invocation);
+    const recovery = recoverRejectedProductionRepairRollback({ root: project, invocation, writer, reviewPath });
+    const rolledBack = recovery.status === 'rolled-back'
+      ? recovery.outcome!
+      : rollbackRejectedProductionRepair({ root: project, invocation, writer, reviewPath });
+    const verified = validateRejectedProductionRepairRollback({ root: project, invocation, reviewPath });
+    if (canonicalJson(rolledBack) !== canonicalJson(verified)) {
+      throw new Error('REPAIR_ROLLBACK_STALE: rollback result did not revalidate');
+    }
+    console.log(opts.json ? JSON.stringify(verified) : `REFINEMENT: ROLLED BACK\npath: ${verified.path}`);
     process.exit(0);
   }
   if (cmd === 'lifecycle' && sub === 'finalize') {
@@ -4545,6 +4800,7 @@ async function main(): Promise<never> {
 
   if (cmd === 'ref') {
     const opts = parseArgs(args.slice(2));
+    if (sub === 'discover-plan') return cmdRefDiscoveryPlan(opts);
     if (sub === 'add') return cmdRefAdd(opts);
     if (sub === 'add-batch') return cmdRefAddBatch(opts);
     if (sub === 'board') return cmdRefBoard(opts);
@@ -4555,6 +4811,7 @@ async function main(): Promise<never> {
     if (sub === 'principles') return cmdRefPrinciples(opts);
     if (sub === 'show') return cmdRefShow(opts);
     if (sub === 'check') return cmdRefCheck(opts);
+    if (sub === 'verify') return cmdRefVerify(opts);
     if (sub === 'v2-check') return cmdRefV2Check(opts);
     if (sub === 'v2' && args[2] === 'check') return cmdRefV2Check(parseArgs(args.slice(3)));
     if (sub === 'usage') return cmdRefUsage(opts);
@@ -4565,6 +4822,7 @@ async function main(): Promise<never> {
     if (sub === 'import-image') return cmdRefImportImage(opts);
     if (sub === 'candidates') return cmdRefCandidates(opts);
     if (sub === 'select') return cmdRefSelect(opts);
+    if (sub === 'handoff') return cmdRefHandoff(opts);
     if (sub === 'audit') return cmdRefAudit(opts);
     if (sub === 'granularity') return cmdRefGranularity(opts);
     return usage();

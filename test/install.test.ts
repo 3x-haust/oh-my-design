@@ -4,7 +4,7 @@ import { chmodSync, cpSync, existsSync, lstatSync, mkdtempSync, mkdirSync, readF
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parse as parseToml } from 'smol-toml';
+import { parse as parseToml, stringify as stringifyToml } from 'smol-toml';
 import { patchConfigToml, unpatchConfigToml, trustedHashKey } from '../core/install/patch-codex.ts';
 import { patchSettings, unpatchSettings, patchAllow, unpatchHooks } from '../core/install/patch-claude.ts';
 import type { Settings } from '../core/install/patch-claude.ts';
@@ -95,6 +95,31 @@ test('patchConfigToml preserves the user settings and foreign hooks it did not a
 test('patchConfigToml is idempotent — patching twice equals patching once', () => {
   const once = patchConfigToml(EXISTING_TOML, { agents: AGENTS });
   assert.equal(patchConfigToml(once, { agents: AGENTS }), once);
+});
+
+test('reinstall preserves serialized agent tables and browser policies after marker comments are removed', () => {
+  const configured = parseToml(patchConfigToml(EXISTING_TOML, { agents: AGENTS }));
+  configured.mcp_servers = { 'browser-rs': { command: 'browser-rs', tools: {
+    browser_navigate: { approval_mode: 'approve' }, browser_evaluate: { approval_mode: 'prompt' },
+  } } };
+  const serialized = stringifyToml(configured);
+  const patched = patchConfigToml(serialized, { agents: [...AGENTS, 'omd-new-role'] });
+  const next = parseToml(patched);
+  assert.deepEqual(next.mcp_servers, configured.mcp_servers);
+  assert.equal(next.model, configured.model);
+  for (const name of AGENTS) assert.deepEqual(asRecord(next.agents)[name], asRecord(configured.agents)[name]);
+  assert.deepEqual(asRecord(next.agents)['omd-new-role'], { config_file: './agents/omd-new-role.toml' });
+  assert.equal(unpatchConfigToml(patched), serialized, 'only the newly managed entry is removed');
+  assert.equal(patchConfigToml(patched, { agents: [...AGENTS, 'omd-new-role'] }), patched);
+});
+
+test('an existing user-owned role configuration is neither replaced nor declared twice', () => {
+  const input = `${EXISTING_TOML}\n[agents."omd-scout"]\nconfig_file = "./custom/scout.toml"\n`;
+  const patched = patchConfigToml(input, { agents: ['omd-scout', 'omd-writer'] });
+  const agents = asRecord(parseToml(patched).agents);
+  assert.deepEqual(agents['omd-scout'], { config_file: './custom/scout.toml' });
+  assert.deepEqual(agents['omd-writer'], { config_file: './agents/omd-writer.toml' });
+  assert.equal(unpatchConfigToml(patched), input);
 });
 
 test('patchConfigToml writes a removable marker block', () => {

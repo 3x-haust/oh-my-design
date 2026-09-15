@@ -33,7 +33,7 @@ export function validateAttributionCoverage(
     || new Set(values).size !== values.length
     || values.some((entry, index) => entry !== expected[index])
     || values.some((entry) => !ADAPTIVE_ATTRIBUTION_CATEGORIES.includes(entry as never))) {
-    return failAdaptiveRoute('ATTRIBUTION_COVERAGE_INVALID');
+    return failAdaptiveRoute('ATTRIBUTION_COVERAGE_INVALID', `strategyDecision.attributionCategories must be exactly [${expected.join(', ')}] in that order for the selected strategy`);
   }
   return Object.freeze([...expected]);
 }

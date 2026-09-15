@@ -10,7 +10,7 @@ import type {
 } from './board-contract.ts';
 import { copyImageFragmentTransfer } from './board-fragment.ts';
 import { copyComponentCaptureTransfer } from './board-transfer.ts';
-import { REFERENCE_ASSEMBLY_SCHEMA_VERSION, REFERENCE_ASSEMBLY_V2_SCHEMA_VERSION } from './board-contract.ts';
+import { REFERENCE_ASSEMBLY_SCHEMA_VERSION, REFERENCE_ASSEMBLY_V2_SCHEMA_VERSION, copyReferenceInfluenceBinding } from './board-contract.ts';
 import type { ReferenceInfluenceBinding } from './board-contract.ts';
 
 export type ReferenceAssemblyPiece = {
@@ -79,7 +79,7 @@ const projectPiece = (piece: ResolvedReferenceBoardPiece): ReferenceAssemblyPiec
     slotId: piece.slotId, targetComponent: piece.targetComponent, targetSelector: piece.targetSelector, taskIds: [...piece.taskIds],
     reason: piece.reason, take: [...piece.take], avoid: piece.avoid, adaptation: piece.adaptation,
     grid: { column: piece.grid.column, span: piece.grid.span, order: piece.grid.order },
-    ...(piece.binding === undefined ? {} : { binding: { ...piece.binding, sourceViewport: { ...piece.binding.sourceViewport }, targetViewports: piece.binding.targetViewports.map((viewport) => ({ ...viewport })) } }),
+    ...(piece.binding === undefined ? {} : { binding: copyReferenceInfluenceBinding(piece.binding) }),
   };
   switch (piece.sourceKind) {
     case 'component-capture': return { ...common, transfer: copyComponentCaptureTransfer(piece.transfer) };
@@ -95,7 +95,7 @@ const projectPiece = (piece: ResolvedReferenceBoardPiece): ReferenceAssemblyPiec
 
 const projectEvidencePiece = (piece: ResolvedReferenceBoardPiece): ReferenceEvidenceProjectionPiece => ({
   slotId: piece.slotId,
-  ...(piece.binding === undefined ? {} : { binding: { ...piece.binding, sourceViewport: { ...piece.binding.sourceViewport }, targetViewports: piece.binding.targetViewports.map((viewport) => ({ ...viewport })) } }),
+  ...(piece.binding === undefined ? {} : { binding: copyReferenceInfluenceBinding(piece.binding) }),
   ...piece.evidenceAxes,
 });
 

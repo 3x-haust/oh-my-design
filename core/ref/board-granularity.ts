@@ -14,7 +14,7 @@ import type { Invariants, Reference } from '../types.ts';
 import { referenceMeasuredInvariants } from './measurement-coverage.ts';
 import type { ReferenceBoardManifest } from './board-contract.ts';
 import { designSignal, LOW_SIGNAL } from './signal.ts';
-import { similarity, unmeasuredComponents } from './distance.ts';
+import { hasComparableDesignVocabulary, referenceCaptureFamilyKey, similarity, uncomparedComponents } from './distance.ts';
 import { refIdentity } from './identity.ts';
 
 /** Host of a capture source; a local fixture path is its own bucket. */
@@ -27,13 +27,40 @@ type MeasuredReference = Reference & { readonly invariants: Invariants };
 const measured = (refs: readonly Reference[]): readonly MeasuredReference[] =>
   refs.map(ref => ({ ...ref, invariants: referenceMeasuredInvariants(ref) })).filter((ref): ref is MeasuredReference => ref.invariants !== null && ref.kind !== 'image');
 
-/** Pairs that measure the same design closely enough to be one reference recorded twice. */
+// CSS identifiers and attribute values can be case-sensitive; heuristic slot normalization is
+// deliberately separate from identity.
+const familyKey = referenceCaptureFamilyKey;
+function families<T extends Reference>(refs: readonly T[]): T[][] {
+  const groups = new Map<string, T[]>();
+  for (const ref of refs) {
+    const key = familyKey(ref);
+    const group = groups.get(key);
+    if (group) group.push(ref); else groups.set(key, [ref]);
+  }
+  return [...groups.values()];
+}
+function viewportKey(ref: Reference): string | null {
+  const v = ref.viewport;
+  return v && Number.isFinite(v.width) && Number.isFinite(v.height) && v.width > 0 && v.height > 0
+    ? `${v.width}x${v.height}` : null;
+}
+
+/** Pairs with similar measured vocabularies that need a redundancy decision. */
 function kinshipPairs(refs: readonly MeasuredReference[]): readonly { a: string; b: string; similarity: number; partial: boolean }[] {
   const pairs: { a: string; b: string; similarity: number; partial: boolean }[] = [];
-  for (let i = 0; i < refs.length; i++) {
-    for (let j = i + 1; j < refs.length; j++) {
-      const score = similarity(refs[i]!.invariants, refs[j]!.invariants);
-      if (score >= KINSHIP_THRESHOLD) pairs.push({ a: label(refs[i]!), b: label(refs[j]!), similarity: score, partial: unmeasuredComponents(refs[i]!.invariants, refs[j]!.invariants).length > 0 });
+  const groups = families(refs);
+  for (let i = 0; i < groups.length; i++) {
+    for (let j = i + 1; j < groups.length; j++) {
+      // All variants participate: one representative could hide cross-source kinship.
+      let witness: typeof pairs[number] | undefined;
+      for (const a of groups[i]!) for (const b of groups[j]!) {
+        if (!hasComparableDesignVocabulary(a.invariants, b.invariants)) continue;
+        const score = similarity(a.invariants, b.invariants);
+        if (score >= KINSHIP_THRESHOLD && (!witness || score > witness.similarity)) {
+          witness = { a: label(a), b: label(b), similarity: score, partial: uncomparedComponents(a.invariants, b.invariants).length > 0 };
+        }
+      }
+      if (witness) pairs.push(witness);
     }
   }
   return pairs;
@@ -73,7 +100,7 @@ export const CONCENTRATION_MIN_CAPTURES = 4;
 export const SOURCE_CONCENTRATION_SHARE = 0.5;
 export const SOURCE_CONCENTRATION_MIN_CAPTURES = 4;
 
-/** `topKinshipPairs` already measures this; below it the pair is close enough to be one reference. */
+/** At or above this threshold the pair is close enough to be one reference. */
 export const KINSHIP_THRESHOLD = 0.85;
 
 /**
@@ -123,7 +150,7 @@ export function slotClaimAndCapture(ref: Pick<Reference, 'component' | 'selector
 }
 
 export type GranularityFinding = {
-  readonly id: 'REF-WHOLE-PAGE' | 'REF-DUPLICATE-CAPTURE' | 'REF-NO-PARTS' | 'REF-PART-CONCENTRATION' | 'REF-ZONE-UNCOVERED' | 'REF-NAME-MISMATCH' | 'REF-SOURCE-CONCENTRATION' | 'REF-KINSHIP-UNRESOLVED' | 'REF-LOW-SIGNAL-BOARD' | 'REF-CRAFT-UNGATHERED' | 'REF-NO-DESKTOP-EVIDENCE';
+  readonly id: 'REF-WHOLE-PAGE' | 'REF-MISSING-ANATOMY' | 'REF-DUPLICATE-CAPTURE' | 'REF-NO-PARTS' | 'REF-PART-CONCENTRATION' | 'REF-ZONE-UNCOVERED' | 'REF-NAME-MISMATCH' | 'REF-SOURCE-CONCENTRATION' | 'REF-KINSHIP-UNRESOLVED' | 'REF-LOW-SIGNAL-BOARD' | 'REF-CRAFT-UNGATHERED' | 'REF-NO-DESKTOP-EVIDENCE';
   readonly message: string;
   /** Reference identifiers the finding is about, as `source (component)`. */
   readonly refs: readonly string[];
@@ -144,21 +171,41 @@ export function isWholePageCapture(ref: Pick<Reference, 'selector'> & { blueprin
 }
 
 /**
+ * Historical captures could select an iframe and save its painted screenshot while the
+ * top-document extractor recorded only the replaced element's box. Keep this deliberately
+ * narrow: a one-node leaf component is legitimate unless its own selector explicitly targets
+ * an iframe. Fresh captures reject this at the render boundary before a record is written.
+ */
+export function isOpaqueFrameCapture(
+  ref: Pick<Reference, 'selector'> & { blueprint?: Reference['blueprint'] },
+): boolean {
+  const selector = (ref.blueprint?.selector ?? ref.selector ?? '').trim().toLowerCase();
+  const explicitlyTargetsIframe = /(^|[\s>+~,(])iframe(?=$|[#.:[\s>+~,)])/i.test(selector);
+  const nodes = ref.blueprint?.nodes;
+  return explicitlyTargetsIframe && nodes?.length === 1
+    && nodes[0]!.role === 'container' && nodes[0]!.children.length === 0;
+}
+
+/**
  * Audits a captured board for the granularity section-granular composition requires.
  *
  * Image references are excluded from the part count: they carry reasoning, not anatomy, so they
  * cannot answer "how is this component built" even though they are lawful board members.
+ * Required-zone auditing needs opts.zones; the native ref check caller supplies the current
+ * acquisition plan after resolving the board's evidence. A standalone call without it is partial.
  */
 export function auditBoardGranularity(
   refs: readonly Reference[],
-  opts: { readonly zones?: readonly string[]; readonly board?: ReferenceBoardManifest } = {},
+  opts: { readonly zones?: readonly string[]; readonly appearanceZones?: readonly string[]; readonly board?: ReferenceBoardManifest } = {},
 ): GranularityFinding[] {
   const findings: GranularityFinding[] = [];
   const boardPieces = opts.board?.candidates.flatMap((candidate) => candidate.pieces);
+  const componentClaims = boardPieces === undefined ? undefined : new Set(boardPieces
+    .filter((piece) => piece.sourceKind === 'component-capture').map((piece) => piece.referenceId));
   const visuallyClaimed = boardPieces === undefined ? undefined : new Set(boardPieces
-    // Only the v2 classified source kind has a hash-bound nonvisual parser result. Legacy signal
-    // strings remain visual claims: treating caller-authored supporting-content as authority would
-    // let a forged board waive capture without classification currentness.
+    // Native board resolution validates image-fragment PNGs and provenance separately. They are
+    // still visual claims for required-zone coverage, but do not live in the component registry.
+    // Only classified references waive visual claims; legacy signal strings cannot do so.
     .filter((piece) => piece.sourceKind !== 'classified-reference')
     .map((piece) => piece.referenceId));
   // A reference used for any visual claim remains visual: a simultaneous content-only use cannot
@@ -171,8 +218,12 @@ export function auditBoardGranularity(
   const visualSlots = new Set(boardVisualPieces?.map((piece) => (piece.binding?.zoneId ?? piece.slotId).trim().toLowerCase()) ?? []);
   const visualReferences = new Set(boardVisualPieces?.map((piece) => piece.referenceId) ?? []);
   const measurable = audited.filter((ref) => ref.kind !== 'image');
+  const missingAnatomy = measurable.filter(isOpaqueFrameCapture);
+  // Opaque frame boxes are preserved as historical records, but are not measurements of the
+  // component shown in their screenshots. They cannot establish parts, coverage, or kinship.
+  const anatomical = measurable.filter((ref) => !isOpaqueFrameCapture(ref));
 
-  const missingVisualReferences = visuallyClaimed === undefined ? [] : [...visuallyClaimed].filter((referenceId) => !audited.some((ref) => refIdentity(ref.source, ref.component) === referenceId));
+  const missingVisualReferences = componentClaims === undefined ? [] : [...componentClaims].filter((referenceId) => !audited.some((ref) => refIdentity(ref.source, ref.component) === referenceId));
   if (missingVisualReferences.length > 0) {
     findings.push({
       id: 'REF-NO-PARTS',
@@ -180,7 +231,17 @@ export function auditBoardGranularity(
       refs: missingVisualReferences,
     });
   }
-  const wholePage = measurable.filter((ref) => isWholePageCapture(ref));
+  if (missingAnatomy.length > 0) {
+    findings.push({
+      id: 'REF-MISSING-ANATOMY',
+      message:
+        `${missingAnatomy.length} reference${missingAnatomy.length === 1 ? '' : 's'} selected an iframe whose screenshot contains an embedded page, but whose blueprint measures only the opaque frame box. `
+        + 'Inspect the intended iframe and state, open its resolved embedded document URL, and recapture a selector inside that document. These records are preserved, but cannot count as component anatomy, required-zone coverage, or kinship evidence.',
+      refs: missingAnatomy.map(label),
+    });
+  }
+
+  const wholePage = anatomical.filter((ref) => isWholePageCapture(ref));
   if (wholePage.length > 0) {
     findings.push({
       id: 'REF-WHOLE-PAGE',
@@ -190,23 +251,21 @@ export function auditBoardGranularity(
     });
   }
 
-  const bySourceSelector = new Map<string, Reference[]>();
-  for (const ref of measurable) {
-    const key = `${ref.source}\u0000${captureSelector(ref)}`;
-    const bucket = bySourceSelector.get(key);
-    if (bucket) bucket.push(ref); else bySourceSelector.set(key, [ref]);
-  }
-  const duplicates = [...bySourceSelector.values()].filter((bucket) => bucket.length > 1);
+  const duplicates = families(anatomical).filter(bucket => bucket.length > 1 && (
+    bucket.some(ref => viewportKey(ref) === null) || new Set(bucket.map(viewportKey)).size !== bucket.length
+  ));
   if (duplicates.length > 0) {
     findings.push({
       id: 'REF-DUPLICATE-CAPTURE',
       message:
-        `${duplicates.length} source${duplicates.length === 1 ? ' was' : 's were'} captured more than once at the same selector, producing references with identical measurements under different component names. The board reads larger than it is: renaming one capture does not make it a second piece of evidence. Capture a different part of that source, or drop the duplicate.`,
+        `${duplicates.length} source-selector families contain repeated or unknown viewports. Distinct explicit viewports are complementary observations of one family; renaming one capture does not make it a second piece of evidence. Keep responsive variants, but resolve same-viewport aliases or missing viewport evidence.`,
       refs: duplicates.flatMap((bucket) => bucket.map(label)),
     });
   }
 
-  const parts = measurable.filter((ref) => !isWholePageCapture(ref));
+  const partRecords = anatomical.filter((ref) => !isWholePageCapture(ref));
+  // Counts/diversity use families; geometry, names and zone coverage retain every record.
+  const parts = families(partRecords).map(group => group[0]!);
   const legacyCountGate = opts.board?.schemaVersion !== 'reference-board-v3';
   if (legacyCountGate && ((visuallyClaimed === undefined && parts.length < MIN_PART_CAPTURES)
     || (visuallyClaimed !== undefined && visualReferences.size > 0 && parts.length < MIN_PART_CAPTURES))) {
@@ -221,7 +280,7 @@ export function auditBoardGranularity(
   // Name truth: a reference whose name claims one slot while its capture proves another hides the
   // board's real shape. Read as a list of component names the board looks varied; measured by
   // selector it is the same part repeatedly, and only the mismatch explains the gap.
-  const mislabelled = measurable
+  const mislabelled = anatomical
     .map((ref) => ({ ref, ...slotClaimAndCapture(ref) }))
     .filter((entry) => entry.claimed !== null && entry.captured !== null && entry.claimed !== entry.captured);
   if (mislabelled.length > 0) {
@@ -256,10 +315,17 @@ export function auditBoardGranularity(
   // Coverage is per composition zone, by name. Domain surfaces are pages/screens and cannot tell a
   // board that studied the nav five times from one that covered every section/region/state inside it.
   if (opts.zones !== undefined && opts.zones.length > 0) {
+    const anatomicalReferenceIds = new Set(partRecords.map((ref) => refIdentity(ref.source, ref.component)));
+    // A v3 board has already resolved and hashed each image fragment. Only the current
+    // Framer plan may select static appearance coverage; images never earn anatomy credit.
+    const appearanceZones = new Set(opts.board?.schemaVersion === 'reference-board-v3'
+      ? opts.appearanceZones?.map(zone => zone.trim().toLowerCase()) ?? [] : []);
     const covered = opts.board === undefined
-      ? new Set(parts.map((ref) => (ref.slot ?? '').trim().toLowerCase()).filter((slot) => slot !== ''))
+      ? new Set(partRecords.map((ref) => (ref.slot ?? '').trim().toLowerCase()).filter((slot) => slot !== ''))
       : new Set(opts.zones.map((zone) => zone.trim().toLowerCase()).filter((zone) => opts.board!.candidates.every((candidate) => candidate.pieces.some((piece) => (
         (piece.binding?.zoneId ?? piece.slotId).trim().toLowerCase() === zone && piece.evidenceAxes.signal !== 'anti-reference'
+        && ((piece.sourceKind === 'component-capture' && anatomicalReferenceIds.has(piece.referenceId))
+          || (appearanceZones.has(zone) && piece.sourceKind === 'image-fragment'))
       )))));
     const uncovered = opts.zones.filter((zone) => !covered.has(zone.trim().toLowerCase()));
     const uncoveredVisual = opts.board === undefined ? uncovered : uncovered.filter((zone) => visualSlots.has(zone.trim().toLowerCase()));
@@ -268,7 +334,7 @@ export function auditBoardGranularity(
         id: 'REF-ZONE-UNCOVERED',
         message: covered.size === 0
           ? `no capture is bound to a composition zone, so none of the ${opts.zones.length} required zones has evidence: ${opts.zones.join(', ')}. Bind each capture with \`omd ref add … --slot <zone>\`; an unbound board can be counted but not checked.`
-          : `${uncoveredVisual.length} of ${opts.zones.length} required composition zones have no capture bound to them: ${uncoveredVisual.join(', ')}. Those visual claims compose from nothing. Capture the part that answers each with \`omd ref add <url> --as <component> --slot <zone> --selector "<css>" --blueprint --shot\`.`,
+          : `${uncoveredVisual.length} of ${opts.zones.length} required composition zones lack their declared evidence kind: ${uncoveredVisual.join(', ')}. Measured zones need scoped component anatomy; only a Framer-declared visible-appearance zone may use a current provenance-bound image. Preserve the required state and acquire its actual evidence.`,
         refs: uncoveredVisual.map((zone) => `zone: ${zone}`),
       });
     }
@@ -295,15 +361,14 @@ export function auditBoardGranularity(
     }
   }
 
-  // Kinship: two captures that measure the same is one reference recorded twice. `omd ref list`
-  // reports the pair as a warning; a board that carries it unresolved is a contamination signal,
-  // so an unmarked pair belongs here rather than in advice the scout may pass over.
-  const kin = kinshipPairs(measured(measurable));
+  // Kinship is a measured-vocabulary convergence signal, never a provenance verdict.
+  // The same family semantics and comparability floor also govern `omd ref list`.
+  const kin = kinshipPairs(measured(anatomical));
   if (kin.length > 0) {
     findings.push({
       id: 'REF-KINSHIP-UNRESOLVED',
       message:
-        `${kin.length} reference pair${kin.length === 1 ? '' : 's'} measure the same design (${kin.map((pair) => `${pair.a} ≈ ${pair.b} at ${pair.similarity.toFixed(2)}${pair.partial ? ' on measured axes only; interaction remains unknown' : ''}`).join('; ')}). Two captures that agree this closely are one piece of evidence counted twice, and the board reads wider than it is. Drop the weaker capture, replace it with a source that disagrees, or record it deliberately as an anti-reference.`,
+        `${kin.length} reference pair${kin.length === 1 ? '' : 's'} have similar measured design vocabularies (${kin.map((pair) => `${pair.a} ≈ ${pair.b} at ${pair.similarity.toFixed(2)}${pair.partial ? ' on comparable axes only; omitted axes remain unknown' : ''}`).join('; ')}). This is a convergence signal, not proof of shared provenance or identical task anatomy. Resolve redundant visual influences by retaining the stronger observation, finding complementary evidence, or recording an actual anti-reference.`,
       refs: kin.flatMap((pair) => [pair.a, pair.b]),
     });
   }
@@ -311,23 +376,29 @@ export function auditBoardGranularity(
   // Signal: a page that makes almost no visual decisions cannot teach one. `omd ref add` warns per
   // capture; nothing checked the board as a whole, and a board that is mostly low-signal has no
   // visual evidence left to compose from once the content is stripped.
-  const lowSignal = measured(measurable).filter((ref) => designSignal(ref.invariants, ref.blueprint).score < LOW_SIGNAL);
-  if (measured(measurable).length > 0 && lowSignal.length / measured(measurable).length > LOW_SIGNAL_MAJORITY_SHARE) {
+  // One conservative vote per family: a strong sibling cannot erase a low-signal observation.
+  const anatomicalMeasurements = families(measured(anatomical));
+  const lowSignal = anatomicalMeasurements.flatMap(group => {
+    const weak = group.filter(ref => designSignal(ref.invariants, ref.blueprint).score < LOW_SIGNAL)
+      .sort((a, b) => label(a).localeCompare(label(b)));
+    return weak.length ? [weak[0]!] : [];
+  });
+  if (anatomicalMeasurements.length > 0 && lowSignal.length / anatomicalMeasurements.length > LOW_SIGNAL_MAJORITY_SHARE) {
     findings.push({
       id: 'REF-LOW-SIGNAL-BOARD',
       message:
-        `${lowSignal.length} of ${measured(measurable).length} measured captures score below ${LOW_SIGNAL} design signal, so the board is mostly pages that make almost no visual decisions. They can support content or scope claims, but a build composed from them has nothing to be distinctive with. Capture at least one high-signal source per visual zone, or record these as content-only evidence.`,
+        `${lowSignal.length} of ${anatomicalMeasurements.length} measured source-selector families have observations that score below ${LOW_SIGNAL} design signal. Each family votes once and any low-signal variant retains that vote; strong siblings cannot erase weak observations. Capture high-signal evidence for the needed visual zones or use weak captures only for nonvisual claims.`,
       refs: lowSignal.map(label),
     });
   }
   // Desktop evidence: a board captured only at phone width has never seen the composition it is
   // being asked to produce. The measurements are real, but they describe a column.
-  const sized = parts.filter((ref) => ref.viewport !== undefined);
-  if (sized.length > 0 && !sized.some((ref) => (ref.viewport?.width ?? 0) >= DESKTOP_EVIDENCE_WIDTH)) {
+  const sized = partRecords.filter((ref) => ref.viewport !== undefined);
+  if (sized.length > 0 && !sized.some((ref) => viewportKey(ref) !== null && (ref.viewport?.width ?? 0) >= DESKTOP_EVIDENCE_WIDTH)) {
     findings.push({
       id: 'REF-NO-DESKTOP-EVIDENCE',
       message:
-        `every capture was measured below ${DESKTOP_EVIDENCE_WIDTH}px wide (widest: ${Math.max(...sized.map((ref) => ref.viewport?.width ?? 0))}px), so the board holds phone-width column fragments and no desktop composition. A build asked for a desktop layout is then composing from evidence that never showed one. Recapture at 1440x900, which is now the reference default.`,
+        `no capture has a valid viewport at least ${DESKTOP_EVIDENCE_WIDTH}px wide, so the board has no desktop composition evidence. A malformed viewport cannot establish desktop coverage. Recapture at 1440x900, which is now the reference default.`,
       refs: sized.map(label),
     });
   }

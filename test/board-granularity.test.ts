@@ -4,12 +4,14 @@ import {
   MIN_PART_CAPTURES,
   auditBoardGranularity,
   captureSelector,
+  isOpaqueFrameCapture,
   isWholePageCapture,
   slotClaimAndCapture,
 } from '../core/ref/board-granularity.ts';
 import type { Blueprint, Invariants, Reference } from '../core/types.ts';
 import { parseReferenceBoard } from '../core/ref/board-parser.ts';
 import { refIdentity } from '../core/ref/identity.ts';
+import { similarity, topKinshipPairs } from '../core/ref/distance.ts';
 
 const ref = (source: string, component: string, selector?: string, extra: Partial<Reference> = {}): Reference => ({
   source,
@@ -82,6 +84,46 @@ test('image references carry reasoning, not anatomy, so they do not count as par
   assert.ok(!ids.includes('REF-WHOLE-PAGE'), 'an unscoped image is not reported as a whole-page capture');
 });
 
+test('resolved image fragments supplement a board without pretending to be component registry entries', () => {
+  const references = parts(MIN_PART_CAPTURES);
+  const piece = (referenceId: string, sourceKind: 'component-capture' | 'image-fragment', index: number) => ({
+    slotId: `zone-${index}`, sourceKind, referenceId, targetComponent: 'Content group', targetSelector: `.group-${index}`,
+    taskIds: ['T1'], reason: 'Keep the content relationship visible.', take: ['structure'],
+    avoid: 'Do not copy source assets.', adaptation: 'Use the project content and verify the rendered result.',
+    grid: { column: 1, span: 12, order: index },
+    evidenceAxes: { rights: 'unknown', signal: 'supporting-component', staticAxis: 'available', motionAxis: 'absent' },
+  });
+  const image = piece('fragment-0123456789abcdef', 'image-fragment', references.length);
+  const board = parseReferenceBoard({
+    schemaVersion: 'reference-board-v1', frameSha256: 'a'.repeat(64),
+    candidates: [{ id: 'one', label: 'One', route: '/', rationale: 'Use complementary evidence.', pieces: [
+      ...references.map((ref, index) => piece(refIdentity(ref.source, ref.component), 'component-capture', index)), image,
+    ] }],
+  });
+  assert.deepEqual(auditBoardGranularity(references, { board }), [], 'fragment resolution belongs to the native board reader');
+  const uncovered = auditBoardGranularity(references, { board, zones: [image.slotId] });
+  assert.ok(uncovered.some(finding => finding.id === 'REF-ZONE-UNCOVERED'), 'a fragment does not waive measured zone coverage');
+  const imagesOnly = parseReferenceBoard({ ...board, candidates: [{ ...board.candidates[0], pieces: [image] }] });
+  const missing = auditBoardGranularity([], { board: imagesOnly, zones: [image.slotId] });
+  assert.ok(missing.some(finding => finding.id === 'REF-NO-PARTS'), 'a fragment never counts as component anatomy');
+  assert.ok(missing.some(finding => finding.id === 'REF-ZONE-UNCOVERED'));
+  const contentOnly = parseReferenceBoard({
+    ...board, schemaVersion: 'reference-board-v2', projectSha256: 'b'.repeat(64), candidates: [board.candidates[0], {
+      ...board.candidates[0], id: 'two', pieces: board.candidates[0]!.pieces.map((entry, index) => index === 0 ? {
+        ...entry, sourceKind: 'classified-reference', take: ['content'],
+        evidenceAxes: { rights: 'unknown', signal: 'supporting-content', staticAxis: 'absent', motionAxis: 'absent' },
+        classification: { kind: 'content-only', sha256: 'c'.repeat(64) },
+      } : entry),
+    }],
+  });
+  assert.ok(auditBoardGranularity(references, { board: contentOnly, zones: ['zone-0'] })
+    .some(finding => finding.id === 'REF-ZONE-UNCOVERED'), 'a candidate cannot borrow another candidate\'s anatomical use for a classified claim');
+  const wholePage = references.map((reference, index) => index === 0 ? { ...reference, selector: 'body' } : reference);
+  const wholePageFindings = auditBoardGranularity(wholePage, { board, zones: ['zone-0'] });
+  assert.ok(wholePageFindings.some(finding => finding.id === 'REF-WHOLE-PAGE'));
+  assert.ok(wholePageFindings.some(finding => finding.id === 'REF-ZONE-UNCOVERED'), 'a page-root capture is not measured part coverage');
+});
+
 test('an empty board reports the missing parts rather than passing vacuously', () => {
   const ids = auditBoardGranularity([]).map((f) => f.id);
   assert.deepEqual(ids, ['REF-NO-PARTS']);
@@ -131,7 +173,7 @@ test('coverage names exactly the surfaces with no bound capture', () => {
   ];
   const finding = auditBoardGranularity(board, { zones: ['hero', 'process-loop', 'install', 'skills-table', 'proof'] })
     .find((f) => f.id === 'REF-ZONE-UNCOVERED')!;
-  assert.match(finding.message, /2 of 5 required composition zones have no capture bound to them: process-loop, proof/);
+  assert.match(finding.message, /2 of 5 required composition zones lack their declared evidence kind: process-loop, proof/);
   assert.deepEqual([...finding.refs], ['zone: process-loop', 'zone: proof']);
 });
 
@@ -199,6 +241,164 @@ const inv = (over: Partial<Invariants> = {}): Invariants => ({
   ...over,
 } as Invariants);
 
+test('responsive observations are one family, not duplicate evidence or self-kinship', () => {
+  const mobile = ref('https://paired.example', 'mobile', '.part', { viewport: { width: 390, height: 844 }, invariants: inv(), slot: 'mobile-zone' });
+  const desktop = { ...mobile, component: 'desktop', viewport: { width: 1280, height: 900 }, slot: 'desktop-zone' };
+  for (const variant of [desktop, { ...desktop, invariants: inv({ typeScale: [20, 80] }) }]) {
+    assert.deepEqual(topKinshipPairs([mobile, variant]), [], 'list and audit agree on responsive families');
+    const findings = auditBoardGranularity([mobile, variant], { zones: ['mobile-zone', 'desktop-zone'] });
+    assert.ok(findings.some(f => f.id === 'REF-NO-PARTS'), 'two viewports cannot fill the three-part quota');
+    for (const id of ['REF-DUPLICATE-CAPTURE', 'REF-KINSHIP-UNRESOLVED', 'REF-NO-DESKTOP-EVIDENCE', 'REF-ZONE-UNCOVERED']) {
+      assert.ok(!findings.some(f => f.id === id), id);
+    }
+  }
+  const { viewport: _viewport, ...unknownViewport } = desktop;
+  for (const variant of [
+    { ...desktop, viewport: mobile.viewport! }, unknownViewport,
+    { ...desktop, viewport: { width: 0, height: 900 } },
+    { ...desktop, selector: '.claimed-other', viewport: mobile.viewport!, blueprint: { selector: '.part', nodes: [], capturedAt: '' } },
+  ]) assert.ok(auditBoardGranularity([mobile, variant]).some(f => f.id === 'REF-DUPLICATE-CAPTURE'));
+});
+
+test('responsive variants neither manufacture source diversity nor alter family concentration', () => {
+  const board = [
+    ref('https://one.example/a', 'one', '.one'), ref('https://one.example/b', 'two', '.two'),
+    ref('https://one.example/c', 'three', '.three'), ref('https://other.example', 'four', '.four'),
+  ];
+  const variants = Array.from({ length: 8 }, (_, i) => ({ ...board[3]!, component: `four-${i}`, viewport: { width: 400 + i, height: 900 } }));
+  assert.ok(auditBoardGranularity([...board.slice(0, 3), ...variants]).some(f => f.id === 'REF-SOURCE-CONCENTRATION'));
+  const navs = [ref('https://a.example', 'nav-a', 'nav'), ref('https://b.example', 'nav-b', 'nav'), board[2]!, board[3]!];
+  const copies = Array.from({ length: 8 }, (_, i) => ({ ...board[3]!, component: `four-${i}`, viewport: { width: 400 + i, height: 900 } }));
+  assert.ok(auditBoardGranularity([...navs.slice(0, 3), ...copies]).some(f => f.id === 'REF-PART-CONCENTRATION'));
+});
+
+test('case-sensitive CSS identities stay distinct and malformed desktop viewports prove nothing', () => {
+  const first = ref('https://case.example', 'upper', '#Card', { viewport: { width: 1280, height: 900 }, invariants: inv() });
+  const second = { ...first, component: 'lower', selector: '#card' };
+  const findings = auditBoardGranularity([first, second]);
+  assert.ok(!findings.some(f => f.id === 'REF-DUPLICATE-CAPTURE'));
+  assert.ok(findings.some(f => f.id === 'REF-KINSHIP-UNRESOLVED'), 'distinct case-sensitive components remain cross-family comparisons');
+  assert.ok(auditBoardGranularity([{ ...first, viewport: { width: 1280, height: 0 } }]).some(f => f.id === 'REF-NO-DESKTOP-EVIDENCE'));
+});
+
+test('cross-family kinship checks every variant and reports each family pair once', () => {
+  const entries = [
+    ref('https://a.example', 'first', '.part', { viewport: { width: 390, height: 844 }, invariants: inv({ typeScale: [2, 200], spacingLadder: [1, 100] }) }),
+    ref('https://a.example', 'second', '.part', { viewport: { width: 1280, height: 900 }, invariants: inv() }),
+    ref('https://b.example', 'third', '.part', { viewport: { width: 390, height: 844 }, invariants: inv() }),
+    ref('https://b.example', 'fourth', '.part', { viewport: { width: 1280, height: 900 }, invariants: inv() }),
+  ];
+  const finding = auditBoardGranularity(entries).find(f => f.id === 'REF-KINSHIP-UNRESOLVED');
+  assert.ok(finding); assert.equal(finding.refs.length, 2);
+  assert.ok(finding.refs.includes('https://a.example (second)'));
+  assert.equal(topKinshipPairs(entries).length, 1, 'variants cannot crowd the list with one family pair');
+});
+
+test('empty wrapper vocabulary cannot establish kinship with an unrelated text component', () => {
+  // Observed on a native first-party app picture and a scoped Korean title: the
+  // extractor measured the picture element, not the app depicted inside it.
+  const wrapper = inv({ spacingLadder: [], radiusLadder: [], typeScale: [], fontFamilies: [],
+    weightLadder: [], motionDurations: [], easingVocab: [], elevationLevels: 0,
+    centeredRatio: 0, tokenCoverage: 1, paddingWeight: 0, animatedShare: 0,
+    hoverCoverage: 0, focusCoverage: 0 });
+  const title = { ...wrapper, spacingLadder: [16], typeScale: [24], fontFamilies: ['reader sans'], weightLadder: [600] };
+  const entries = [ref('https://app.example', 'picture', 'img', { invariants: wrapper }),
+    ref('https://reader.example', 'title', 'h2', { invariants: title })];
+  assert.equal(similarity(wrapper, title), 1, 'raw distance remains a partial scalar comparison');
+  assert.deepEqual(topKinshipPairs(entries), []);
+  assert.ok(!auditBoardGranularity(entries).some(f => f.id === 'REF-KINSHIP-UNRESOLVED'));
+  const rounded = entries.map(entry => ({ ...entry, invariants: { ...entry.invariants!, radiusLadder: [4] } }));
+  assert.deepEqual(topKinshipPairs(rounded), [], 'a shared ordinary radius cannot supply missing typography and spacing');
+  assert.ok(!auditBoardGranularity(rounded).some(f => f.id === 'REF-KINSHIP-UNRESOLVED'));
+
+  const duplicateTitle = ref('https://other.example', 'title', 'h2', { invariants: title });
+  assert.equal(topKinshipPairs([entries[1]!, duplicateTitle]).length, 1);
+  assert.ok(topKinshipPairs([entries[1]!, duplicateTitle])[0]!.unmeasuredComponents?.includes('motionDurations'));
+  assert.ok(auditBoardGranularity([entries[1]!, duplicateTitle]).some(f => f.id === 'REF-KINSHIP-UNRESOLVED'),
+    'shared measured typography remains a kinship signal, not evidence of independent provenance');
+});
+
+test('family signal is conservative and independent of variant count or input order', () => {
+  const flat = inv({ radiusLadder: [], elevationLevels: 0, motionDurations: [], easingVocab: [], weightLadder: [], typeScale: [], spacingLadder: [] });
+  const weak = ref('https://a.example', 'weak', '.part', { invariants: flat });
+  const entries = [weak, ref('https://b.example', 'weak-b', '.part', { invariants: flat }), ref('https://c.example', 'strong', '.part', { invariants: inv() }),
+    ...Array.from({ length: 8 }, (_, i) => ({ ...weak, component: `strong-sibling-${i}`, invariants: inv(), viewport: { width: 400 + i, height: 900 } }))];
+  for (const order of [entries, [...entries].reverse()]) {
+    const finding = auditBoardGranularity(order).find(f => f.id === 'REF-LOW-SIGNAL-BOARD');
+    assert.ok(finding); assert.match(finding.message, /2 of 3 measured source-selector families/);
+  }
+});
+
+test('legacy opaque iframe boxes fail as missing anatomy without condemning legitimate leaf components', () => {
+  const frameBlueprint = (selector: string): Blueprint => ({
+    selector,
+    capturedAt: '2026-09-06T00:00:00.000Z',
+    nodes: [{ id: 'frame', role: 'container', children: [], box: { w: 809, h: 290 }, fillRole: 'bg' }],
+  });
+  const leafBlueprint: Blueprint = {
+    selector: '.status-dot',
+    capturedAt: '2026-09-06T00:00:00.000Z',
+    nodes: [{ id: 'dot', role: 'container', children: [], box: { w: 12, h: 12 }, fillRole: 'accent' }],
+  };
+  const sameHostMeasurements = inv({
+    spacingLadder: [], radiusLadder: [], typeScale: [], fontFamilies: [], weightLadder: [],
+    motionDurations: [], easingVocab: [], elevationLevels: 0, centeredRatio: 0,
+    tokenCoverage: 1, paddingWeight: 0, animatedShare: 0, hoverCoverage: 0.88, focusCoverage: 1,
+  });
+  const error = ref('https://docs.example/error', 'inline-error', 'iframe.example-frame', {
+    slot: 'request-validation', invariants: sameHostMeasurements, blueprint: frameBlueprint('iframe.example-frame'),
+  });
+  const success = ref('https://docs.example/success', 'success-banner', 'main > iframe#success', {
+    slot: 'request-confirmation', invariants: sameHostMeasurements, blueprint: frameBlueprint('main > iframe#success'),
+  });
+  const leaf = ref('https://status.example', 'status-dot', '.status-dot', {
+    slot: 'status', invariants: sameHostMeasurements, blueprint: leafBlueprint,
+  });
+
+  assert.equal(isOpaqueFrameCapture(error), true);
+  assert.equal(isOpaqueFrameCapture(success), true);
+  assert.equal(isOpaqueFrameCapture(leaf), false, 'a genuine one-node leaf is not an opaque-frame capture');
+
+  const findings = auditBoardGranularity([error, success, leaf], {
+    zones: ['request-validation', 'request-confirmation', 'status'],
+  });
+  const missing = findings.find((finding) => finding.id === 'REF-MISSING-ANATOMY');
+  assert.ok(missing);
+  assert.deepEqual(missing.refs, [
+    'https://docs.example/error (inline-error)',
+    'https://docs.example/success (success-banner)',
+  ]);
+  assert.match(missing.message, /resolved embedded document URL/i);
+  const uncovered = findings.find((finding) => finding.id === 'REF-ZONE-UNCOVERED');
+  assert.ok(uncovered);
+  assert.match(uncovered.message, /request-validation/);
+  assert.match(uncovered.message, /request-confirmation/);
+  assert.doesNotMatch(uncovered.message, /status(?:,|\.|$)/);
+  assert.ok(!findings.some((finding) => finding.id === 'REF-KINSHIP-UNRESOLVED'), 'opaque host-page scalars cannot establish kinship');
+
+  const piece = (entry: Reference, slotId: string, order: number) => ({
+    slotId, sourceKind: 'component-capture', referenceId: refIdentity(entry.source, entry.component),
+    targetComponent: slotId, targetSelector: `[data-zone="${slotId}"]`, taskIds: [`zone-${slotId}`],
+    reason: 'Use the measured component.', take: ['structure'], avoid: 'Do not copy source expression.',
+    adaptation: 'Apply the measured relation locally.', grid: { column: 1, span: 12, order },
+    evidenceAxes: { rights: 'lawful', signal: 'high-visual-system', staticAxis: 'available', motionAxis: 'absent' },
+  });
+  const manifest = parseReferenceBoard({
+    schemaVersion: 'reference-board-v2', projectSha256: 'b'.repeat(64), frameSha256: 'a'.repeat(64),
+    candidates: [{ id: 'candidate', label: 'Candidate', route: '/', rationale: 'Bound component evidence.', pieces: [
+      piece(error, 'request-validation', 0), piece(success, 'request-confirmation', 1), piece(leaf, 'status', 2),
+    ] }],
+  });
+  const boundFindings = auditBoardGranularity([error, success, leaf], {
+    zones: ['request-validation', 'request-confirmation', 'status'], board: manifest,
+  });
+  const boundUncovered = boundFindings.find((finding) => finding.id === 'REF-ZONE-UNCOVERED');
+  assert.ok(boundUncovered);
+  assert.match(boundUncovered.message, /request-validation/);
+  assert.match(boundUncovered.message, /request-confirmation/);
+  assert.doesNotMatch(boundUncovered.message, /status(?:,|\.|$)/);
+});
+
 test('a board drawn mostly from one source is reported even when every zone is covered', () => {
   const board = [
     ref('https://one.example/a', 'nav', '.nav', { invariants: inv(), slot: 'nav' }),
@@ -219,7 +419,7 @@ test('a board drawn mostly from one source is reported even when every zone is c
   assert.ok(!auditBoardGranularity(spread).some((f) => f.id === 'REF-SOURCE-CONCENTRATION'));
 });
 
-test('two captures that measure the same design are one reference counted twice', () => {
+test('matching measured vocabularies flag possible redundant visual influence', () => {
   const twin = inv();
   const board = [
     ref('https://a.example', 'alert', '.alert', { invariants: twin, slot: 'scope' }),
@@ -227,8 +427,9 @@ test('two captures that measure the same design are one reference counted twice'
     ref('https://c.example', 'hero', '.hero', { invariants: inv({ typeScale: [12, 48], radiusLadder: [0], elevationLevels: 0, spacingLadder: [2, 40] }), slot: 'hero' }),
   ];
   const finding = auditBoardGranularity(board).find((f) => f.id === 'REF-KINSHIP-UNRESOLVED');
-  assert.ok(finding, 'identical invariants must surface as one reference twice');
-  assert.match(finding!.message, /measure the same design/);
+  assert.ok(finding, 'identical invariants must surface as possible redundant influence');
+  assert.match(finding!.message, /similar measured design vocabularies/);
+  assert.match(finding!.message, /not proof of shared provenance/);
 });
 
 test('a board that is mostly low-signal has nothing to be distinctive with', () => {
@@ -270,7 +471,7 @@ test('the board signal gate honors measured component structure instead of requi
 });
 
 test('the checker consumes board classifications and candidate zone bindings instead of auditing raw captures', () => {
-  const flat = inv({ radiusLadder: [], elevationLevels: 0, motionDurations: [], easingVocab: [], weightLadder: [], typeScale: [], spacingLadder: [] });
+  const flat = inv({ radiusLadder: [], elevationLevels: 0, motionDurations: [], easingVocab: [], weightLadder: [400], typeScale: [16], spacingLadder: [8] });
   const visual = [
     ref('https://visual-a.example', 'visual-a', '.visual-a'),
     ref('https://visual-b.example', 'visual-b', '.visual-b'),

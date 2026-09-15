@@ -47,6 +47,11 @@ terminal form/control surface or treat its visibility as an advantage. Represent
 lawful mechanism carrier, or the approved alternate carrier and limitation, with enough
 grayscale structure to judge its functional relationship. Do not invent, replace,
 or tune a new type scale or composition recipe to make a candidate look stronger.
+Follow the composition's explicit content-to-treatment assignments; do not promote every H1
+to the largest proved treatment. A neutral type specimen alone does not establish the page's
+dominant anchor. Resolve competition through the assigned structural freedoms; if that would
+require an unapproved treatment, report the exact conflict and never silently change a size,
+weight, or measure. Existing owner proof and fresh rendered selection still apply.
 [design-quality-contract:v1] When the brief's `designQuality.candidateMode` is
 `integrated-visual`, realize the composition contract's approved aesthetic thesis, colour
 roles, typography, optical hierarchy, state surfaces, and responsive finish at reviewable

@@ -16,7 +16,7 @@ service, provider, or runtime.
 | Stage | Sole owner | Validated input | Durable/cache output | Machine check, function, or command | Explicit fallback or stop |
 |---|---|---|---|---|---|
 | brief blocks | `omd-framer` | Current user brief, cited user/evidence records, explicit-user taste profile, and applicable task constraints | Durable `.omd/frame.md`, including the task coverage matrix only where the surface requires it | `omd frame set …`; `omd frame show` must read the completed record | Missing cited evidence or required frame fields stops reference work at the brief; do not invent taste, task, or a reference target. |
-| fragment inventory | `omd-scout` | Valid brief blocks, user URLs first, component inventory, and user-directed capture permission | Durable measured component records and local captures under `.omd/refs/`; provenance-bound image fragments under `.omd/refs/fragments/`; raw captures remain scout-local | `omd ref add … --selector … --blueprint --shot` for a measured component; `omd ref import-image <input.json>` for a local user-directed image-region capture | Initialize/capability-check `browser-rs` first for interactive research and capture. Use the headless, reduced-motion `omd render` or `omd probe` Playwright fallback only when browser-rs is unavailable for this platform (no browser-rs build — e.g. an arm Linux host) or the user declines to install/use browser-rs. Record which applies in the stage handback; if no lawful local capture can be made, omit the fragment and report the coverage gap. Never scrape, hotlink, or ship source pixels. |
+| fragment inventory | `omd-scout` | Valid brief blocks, user URLs first, component inventory, and user-directed capture permission | Durable measured component records and local captures under `.omd/refs/`; provenance-bound image fragments under `.omd/refs/fragments/`; raw captures remain scout-local | `omd ref add … --selector … --blueprint --shot` for a measured component; `omd ref import-image <input.json>` for a local user-directed image-region capture | Capability-check `browser-rs` first through the supported browser doctor. For ordinary component inspection, use the headless, reduced-motion `omd render`, `omd ir`, or `omd probe` fallback when that provider is not callable on the current host/connection, has no platform build, or the user declines it. Record the actual limitation; a transient failure is not permission to switch. User-directed image-region capture still requires the actual supporting browser tool. If no lawful local capture can be made, omit the fragment and report the coverage gap. Never scrape, hotlink, or ship source pixels. |
 | brick analysis | `omd-scout` | The validated fragment inventory, measured invariants/blueprints, rights/provenance, task blocks, and coverage gaps | Durable sanitized brick principles in the retained `.omd/refs/*.json` records plus `.omd/scout.md`; source identities and raw pixels remain only in the fragment inventory | `omd ref principles …` refuses an unmeasured source; candidate `omd ref check` rejects an empty or contaminated transferable brick | A contaminated, duplicate, rights-unclear-for-use, or unmeasurable fragment is a rejected or anti-reference brick. If no lawful sanitized brick can answer a required decision, stop candidate assembly for that decision and report the gap. |
 | candidate assemblies | `omd-scout` | Validated fragment inventory, sanitized brick analysis, and frame/task targets | Durable `.omd/reference-board.json` as internal raw evidence; canonical capture, sanitized assembly, and typed projection remain behind the reference commands | Run `omd schema reference-board`, copy its exact skeleton and grid constraints, then `omd ref board --input <candidate-assemblies.json>` derives identities/frame binding and persists the validated board; then `omd ref check`; then `omd ref candidates` | A failed check, missing required zone in either candidate, stale PNG/provenance, contaminated selector/text, or no viable candidate stops before chat presentation. Do not infer or extend the printed schema, open/emit/ask the user to inspect an HTML, PNG, or board UI, or run `omd-board`. |
 | locale-reference binding (market-grounded reference work only) | `omd-scout` | Current market-grounded board plus its current cultural profile, projection, and captured-source receipts | Source-free `.omd/reference-locale-binding.json` and private `.omd/reference-locale-binding-evidence.json` | Run `omd schema reference-locale-binding`, then `omd ref locale-bind --input <bindings.json>`, then `omd ref locale-bind-check`; `omd ref check` also requires it for a market-bound v3 board | A source URL not present in the profile, an unavailable source, a positive use outside `native-category`/same-task `global-equivalent`, transfer from `contested`/`unknown`, a silent unbound matching source, or a candidate with no native first-party component stops selection. |
@@ -43,14 +43,95 @@ Every reference serves one of two roles, and the domain brief's `referenceQuerie
   faint, or scroll-dropping reproduction fails — the craft reference does not pass just because a
   generation was attempted. This is how the "seeing is not building" gap is closed with evidence.
 
+`omd craft-capture … --json` returns its measured `reference-craft-v1` on stdout; it does not
+automatically publish a file. When retention is required, the owning role preserves the actual output
+at an authorized evidence path without reconstructing its values. Capture waits for document load,
+the named DOM target, and fonts rather than for background network traffic to stop. These readiness
+checks do not replace inspection of the actual source state. Legacy v1 pixel energy covers the
+viewport, while the selector controls scrolling and the DOM-content baseline check. It is not
+selector-isolated motion or complete reduced-motion visibility/accessibility proof; those claims
+still require the selected scoped evidence and real rendered inspection.
+
+## Automatic discovery without supplied URLs
+
+Selected discovery starts with `omd ref discover-plan --json`. This read-only plan is derived from
+the current route, explicit request, locale context and Framer-owned acquisition decisions. It does
+not depend on the optional domain-analysis stage. Existing domain queries supplement it only while
+they describe the current request. The user supplies the task, not a required reference list.
+
+Scout turns each selected lane into current searches: subject identity, task/component anatomy,
+visual craft beyond the product category, and the plan's motion investigation. New marketing may
+investigate a motion candidate without selecting it for production; selected `motion-one` additionally
+requires positive measured evidence. Explicit preferences
+for a reference region or gallery belong in those searches; a language alone does not imply a
+country's style or a target market. Directories such as Awwwards, FWA and GDWEB are lead sources,
+not fixed winners or a visual preset. Search results lead to the actual site and relevant case study;
+live desktop/mobile inspection, scoped captures and motion measurements establish the evidence.
+
+### User-shared posts and component directories
+
+Inspect the supplied link first and distinguish an actual interface from a post recommending
+resources. Read its visible caption and destinations; a short extracted body does not override a
+readable capture. A login pane alone does not make the visible public material unavailable. Apply
+the existing blocked-source rules to the actual page state and do not infer hidden content.
+
+For a resource post, retain the acquisition chain from post to directory entry to original site.
+Supahero (`https://supahero.io/`) can seed hero research, Navbar Gallery
+(`https://navbar.gallery/`) navigation, and Footer Design (`https://footer.design/`) footers.
+These are optional component leads: select one only for an unresolved decision in the current
+surface. A hero or footer gallery adds no hero or footer requirement to a mobile task screen.
+Inspect the original component at the relevant viewport and state when it is accessible. If only
+a thumbnail, screenshot or video preview is available, record that evidence kind and limit transfer
+to visible appearance or recorded motion. It proves neither internal DOM measurements nor live
+product behavior. An accessible interactive embedded component can supply live evidence for the
+states actually inspected; embedding alone does not make it static.
+
+Use the user's explicitly selected available search transport, including Aside CLI when requested;
+otherwise use the host's native search. Preserve its actual output and chosen/rejected leads. Missing
+transport is a capability gap, not permission to claim an unexecuted search. This does not change
+Scout's browser-rs capture ownership or downstream source-free transfer.
+
+Scout records actual queries, inspected/rejected leads and native capture identities in its existing
+synthesis. This is disclosed provenance, not a tamper-proof search receipt or a substitute for native
+capture. No extra reference quota or discovery artifact is introduced. Selected `motion-one` cannot
+pass `omd ref granularity` with only still captures merely because domain analysis was skipped.
+The settled source-free assembly carries measured relationships and motion parameters into
+composition and production; existing usage, fidelity and browser checks prove their actual use.
+
+### Host-executed authenticated discovery
+
+If the selected search CLI fails inside a role because host credentials are unavailable there,
+Scout returns the exact read-only request and actual error in its existing synthesis. The coordinator
+may execute that same user-authorized discovery request through the installed CLI in its own host
+environment. Use structured arguments, preserve the user's account/model settings, and retain the
+actual argv, stdout, stderr and exit status. Converting shell quoting to an argv array must preserve
+the executable, subcommand, flags and prompt; never execute supplied shell syntax. Do not forward arbitrary role shell commands, copy
+credentials into the role, weaken its sandbox or create a new authentication flow.
+
+A successful host execution supplies raw search material to Scout; it does not make the failed
+role execution successful. Scout still inspects the leads with browser-rs, evaluates their evidence,
+and owns capture, synthesis and publication. A partial or failed host search remains incomplete.
+The coordinator never converts its transport output into a reference board or approved selection
+on Scout's behalf. This recovery changes execution location only, not the selected provider,
+publication ownership, evidence requirements or source-free boundary.
+
 ## Capture granularity
 
 A board is assembled from parts. Every measured reference is captured at the specific component it
 studies (`omd ref add <url> --as <component> --selector "<css>" --blueprint --shot`); a capture
 scoped to a page root — `main`, `body`, `html`, `:root` — measures the whole document and yields a
 page average with no component anatomy, so section-granular composition has nothing to take from it.
-Two captures of the same source at the same selector are one piece of evidence under two names and
-make the board read larger than it is.
+For a compact component demo, an unscoped `omd ir` failure with `near-empty body` does not establish
+that the site is blocked. Inspect the visible page and retry the known component through
+`omd ref add … --selector "<visible-component>" --blueprint --shot --no-energy`.
+The existing scoped check still rejects document roots, hidden/empty content, HTTP errors and
+challenge pages. A successful scoped capture proves only that component and its visible state;
+it does not satisfy a different acquisition state or waive missing product evidence.
+Captures of the same source at the same measured selector form one reference family. Distinct explicit
+viewports are complementary observations, not duplicates or independent sources. Same or unknown
+viewports still trigger duplicate findings. Part counts, concentration, and signal votes count each
+family once. Any low-signal variant retains a conservative low-signal family vote. Cross-family kinship
+checks all variants; zone, anatomy, naming, and desktop checks retain each individual capture.
 
 Granularity alone is not coverage. Five captures that collapse onto two slots — three navs and two
 install blocks — are two parts studied repeatedly while every other zone carries no evidence, and
@@ -64,6 +145,33 @@ axes, exact state, target viewports, and observable falsifier before the scout s
 binds to one of those zones (`omd ref add … --slot <zone>`), and a board is finished only when every
 required zone has at least one bound capture.
 
+### Complementary states and evidence kinds
+
+Each zone has one inspectable `requiredState`, and every bound piece must truthfully match it.
+If a decision needs both an error example and a separate initial product form, Framer gives those
+mandatory companions separate required zones and unique decision IDs. Preserve a mapping to the
+original task, relationships and falsifier; these evidence zones do not add product screens. A broad
+state that hides the difference, or relabelling a source observation, does not repair the plan.
+
+A zone normally requires measured component anatomy. Framer may explicitly declare
+`evidenceRequirement: {kind: "visible-appearance", reason: "<source-free reason>"}` when the
+question concerns static visible structure, proportion, density or rhythm. The current resolved
+board must then contain a matching component capture or provenance-bound image for that zone in
+every candidate. Images remain unable to satisfy measured zones or supply internal DOM, font,
+motion, interaction or responsive measurements. Their exact state, observed capture viewport,
+provenance and current PNG bytes remain required. Keep independently needed measurements and
+later typography, behavior and production proofs as separate mandatory obligations. Missing source
+access alone does not justify changing a measured question to appearance.
+Framer checks the question and falsifier, not just the axis label: an exact source ratio, gap,
+font metric or responsive comparison still needs measurement evidence. The reason names what
+appearance can establish and what remains for a separate proof. Scout independently inspects
+every retained capture against the declared state and records visibility and limits; a matching
+state string, PNG hash or viewport field is not semantic verification. Source-free projections keep
+the image evidence kind. Reports distinguish appearance coverage from anatomical coverage, and
+reusing an image across candidates never increases independent evidence. A successful reference
+check establishes these declared coverage and integrity constraints only; it is not visual approval
+or completion of the route's typography, behavior, production and independent review gates.
+
 `omd ref granularity` audits granularity and zone coverage and reports `REF-WHOLE-PAGE`,
 `REF-DUPLICATE-CAPTURE`, `REF-NO-PARTS`, `REF-PART-CONCENTRATION`, `REF-ZONE-UNCOVERED`, and
 `REF-NAME-MISMATCH`. A capture is named for what it holds: a reference called `*-hero-*` captured at
@@ -72,7 +180,7 @@ finding means the board must be recaptured at component scope across the zones t
 nothing; a board of whole-page captures can only be traced, and tracing a whole page is the
 derivative failure the transfer boundary forbids.
 
-## Capturing an open disclosure
+## Capturing an existing state or open disclosure
 
 When a required source state is an open menu or disclosure, print `omd schema reference-capture-preparation`.
 Pass its closed JSON object through `omd ref add … --preparation <json> --no-energy`, or embed it as
@@ -82,6 +190,10 @@ clicks on `button[type=button]` controls with `aria-expanded` and `aria-controls
 element must have an explicit `visible` or `hidden` assertion. Arbitrary scripts, form submission,
 typing, navigation, and inferred actions are unsupported. Use this only for a known local disclosure
 interaction, never a purchase, message, or remote mutation disguised as a control.
+
+For an already-present state, use `actions: []` with one to eight assertions. For example,
+`{"selector":"#search:focus","state":"visible"}` checks actual existing focus without moving it.
+This grants no focus, typing, or script action. A missing initial state fails instead of being restored.
 
 Visibility is checked after preparation and again around capture. A failed assertion publishes no
 new screenshot or reference record. `capturePreparation` preserves executed actions, observed visibility,
@@ -104,7 +216,81 @@ separate navigation would measure the initial state. Captures without preparatio
 
 When the brief names a real, existing subject — a product, project, company, repository, or brand, or supplies its link — the scout's fragment-inventory stage first establishes what that subject actually is (a web search plus the linked repository/README and any wordmark or brand the source already ships) and fixes the subject's own identity anchor: its real palette and motif. This anchor is not one measured reference among many; it governs the colour and motif every other lane serves, and is never outvoted by category evidence. A palette or motif taken from the product category's default instead of the subject's own identity is a rejected, not a shippable, synthesis.
 
+Keep explicit brand/user invariants distinct from an observed example treatment. A first-party
+example page is not, by ownership alone, an immutable palette, type or motif requirement. State the
+basis and uncertainty in the existing subject-anchor record. Without an established invariant, its
+tokens are evidence for synthesis, not a lock against current-user visual rejection. Established
+identity still cannot be outvoted by category defaults.
+
 ## Chat-first presentation and selection
+
+### Acquisition, transfer and similarity verification
+
+Before accepting reference-backed art direction, run `omd ref verify --json` after `omd ref check`.
+Inspect the actual source component captures, not merely their filenames or the Scout's principles:
+does each visible part contain the declared source state and the typography/composition relationship
+the destination needs? The report exposes candidate/slot, original source, scoped capture, viewport,
+promise, falsifier and missing geometry. `semanticState: requires-visible-inspection` is deliberately
+not a machine pass. A reachable URL, a valid hash or a matching declared state string cannot establish
+semantic suitability. Record the visible finding and its exact capture in the existing decision record;
+repair only the missing or misframed evidence. Content-only evidence never pads visual coverage.
+Distinguish task anatomy from the desired craft: a documentation article can explain a sequence
+without establishing the destination's visual ambition. Do not label a supporting component a
+high-visual-system source merely because it is reachable, first-party, or covers a required zone.
+Inspect the reference relationship implicated by the current brief and human feedback before
+accepting it as craft evidence; record what it does and does not establish.
+
+Measured blueprints retain component-relative positions. A source-free visual packet preserves those
+positions with one uniform scale; missing legacy positions require recapture, never a guessed flex/grid
+layout. Select that packet when a spatial reference relationship needs visual transfer. Raw pixels,
+source names and copy still remain outside Composer/Hand and the blind final beauty review.
+
+For a runnable study or production page, run `omd ref verify <page> --candidate <id> --json`.
+It measures the actual assigned destination selectors at the captured source viewports, and reports
+source/target geometry, per-axis scores and unmatched anchors. Run before claiming that a reference
+was visibly used, not only after a finished page. Anchor matching is a role/area-rank heuristic, not
+semantic matching. Inspect the paired captures for the declared feature and falsifier; geometry alone
+does not prove them. Check each additional required responsive viewport separately. A bitmap draft
+has no DOM geometry: mark that comparison unmeasured, inspect visible relationships and resolve it in
+real-font/runnable proof before freeze. Never present draft taste, a matching file hash, or the author's
+`featureObserved` flag as an independent transfer verification.
+
+Whole-component correspondence can compare unlike units: one heading with nested spans against
+one text node, a five-line body against a one-line body, or terminal descendants against an explanatory
+diagram. In that case a low aggregate does not establish loss of a named type ratio, column ratio or
+block gap. Do not force source line counts, add filler, split text or discard useful content to improve it.
+
+The whole-component density diagnostic compares union occupied area on the same normalized grid.
+It does not penalize different HTML roles or item counts a second time. Role correspondence remains
+separately reported and affects the structural axes; equal density alone establishes neither matching
+content nor semantic transfer.
+
+For a specific measured relationship, Scout may declare `binding.measurements` through the existing
+board publisher before production. Read `omd schema reference-feature-measurements`. Select the exact
+source node indices from the current measured blueprint and name the meaningful destination groups;
+Composer/Hand retain those names as `data-omd-reference-anchor` markers inside the existing complete
+target scope. `@root` names that complete scope. Markers identify the counterpart; they do not assert
+that its geometry or meaning is correct. Preserve the full promised relationship and falsifier, not a
+convenient isolated element. A wrong source/target scope returns to its owner; it is not repaired by
+changing the axis or moving the marker onto unrelated content.
+
+The native verifier reads the actual rendered boxes and computed font sizes for every declared
+counterpart. It records both witnesses and values, recomputes each quantity, rejects absent, duplicate,
+hidden or unmeasurable counterparts, and binds the same definitions/source witnesses into the current
+selected-distance receipt. A source recapture, definition change or production change needs fresh
+evidence. A schema example's indices are not defaults. Source nodes/target groups must be visibly the
+semantic roles claimed in the promise; the machine cannot establish that interpretation. Every other
+required viewport still needs its own measurements and visible responsive consequence.
+
+The numeric diagnostics are not perceptual percentages, authorship judgments or beauty scores.
+For v2 geometry promises with declared features, the selected-distance gate uses the weakest declared
+quantity; whole-component geometry and style-invariant similarity remain separately labelled diagnostics.
+Without declared features it retains the weakest promised whole-component axis. The existing `0.6`
+threshold is unchanged, and a feature declaration is not a waiver of an acquisition or quality obligation.
+Missing positions or an unmeasured promised axis
+cannot pass. Content/voice/rejection keep their own proof obligations and are not layout-distance slots.
+Motion remains a measured sequence comparison. Final blind Eye quality judgments stay separate from
+this source-aware fidelity check, so matching an unsuitable reference cannot prove a good design.
 
 The scout runs `omd ref check` and then `omd ref candidates`. It pastes the command's
 Markdown table directly into the Codex or Claude conversation. That table is the only
@@ -125,6 +311,19 @@ falsifier, current assembly/selection/build hashes, an axis-compatible evidence 
 project-contained evidence file whose bytes are re-hashed. A missing feature fails; similarity on
 another axis cannot compensate for it.
 The coordinator selects the strongest candidate itself and records the canonical v2 selection with `omd ref select`; it produces `.omd/reference-selection-v2.json` and the art-direction receipt, then `omd ref check` verifies currentness. Before composition and production, resolve every pending lawful positive-motion slot into the hash-addressed `.omd/motion-resolutions/sha256-<digest>.json` projection. The art-direction decision writes the composer and hand receipts under `.omd/reference-handoffs/`; both must bind that same decision, capture, assembly, projection, selection, and positive-motion dispositions. Disclose the selection and reason in `.omd/decisions.md`; do not pause to ask the user to pick a candidate. A candidate the user explicitly named still wins.
+
+`omd ref handoff <art-direction|composer|hand> --json` exports the actual current selected
+source-free feature content. This read-only command validates the persisted role receipt,
+selection, capture, assembly, and projection before returning measured transfers and their evidence
+axes. `art-direction` also includes available lawful motion marked `pending-motion-review` for
+the evaluator to decide. Composer and Hand receive only settled `used` pieces after genuine art
+direction publication. Unselected candidates and rejected or unlawful pieces are omitted. The
+export's `sha256` binds its content; `referenceHandoffSha256` binds the existing lineage receipt.
+The receipt's older `payloadSha256` is a receipt digest, not a feature payload. Supply the complete
+export unchanged with the permitted owner inputs. `omd brief` remains coordinator intake; its raw
+reference inventory is not an owner packet. An unavailable export is a blocker, not permission to
+reconstruct content from the private board. A route that skipped canonical art direction retains
+its existing selected-input contract and does not acquire a receipt obligation from this command.
 
 For market-grounded work, the board alone does not prove that a “local” source came from the current
 locale research. `reference-locale-binding-v1` joins an exact candidate slot to one cultural decision
@@ -172,24 +371,38 @@ records its choice before composer starts.
 When the CSS/SVG fallback and composition are selected, the fallback is closed before its dependent
 composition work. Skipped composition or sketch methods create no phantom downstream artifact.
 
-Composer has no outgoing edge to either route. It starts only after the coordinator has chosen a draft
+Composer has no outgoing edge to either route. When image-first drafting is selected, it starts only after the coordinator has chosen a draft
 and hands it over, or has taken the CSS/SVG fallback. This permits real brief, copy, register, palette,
 type, and other project-owned material in coordinator prompts without granting composer an upstream role.
 
 ## Browser boundary
 
 For interactive visual research and user-directed region capture, use `browser-rs` first.
-Use the deterministic Playwright paths `omd render` and `omd probe` only when browser-rs is unavailable
-for this platform (no browser-rs build — e.g. an arm Linux host) or the user declines to install/use
-browser-rs; never as a convenience second provider and never on a transient failure.
+After the supported browser doctor, use the deterministic Playwright paths `omd render`, `omd ir`,
+and `omd probe` for ordinary component inspection when the provider is not callable on the current
+host/connection, has no platform build, or the user declines to install/use browser-rs. Record the
+actual limitation in the stage handback; an installed healthy binary does not prove an exposed tool.
+Never switch as a convenience second provider or on an unexplained transient failure. User-directed
+image-region capture still requires the actual supporting browser tool; never invent a manual
+region-capture CLI or a user-declined receipt.
 The fallback remains headless and reduced-motion. Preserve measured motion only when it is
 relevant, honor the existing motion and WebGL/3D gates, and do not add a provider, API-key
 flow, or runtime.
 
-The scout's internal raw evidence record stays scout-side. Composer starts after the coordinator has chosen its image-first draft: on
+The scout's internal raw evidence record stays scout-side. When image-first exploration is selected,
+Composer starts after the coordinator has chosen its image-first draft: on
 the capable route it receives the canonical v2 selection, current motion-resolution projection,
 decision-bound composer receipt, selected assembly, and coordinator-chosen draft; on the unavailable
-route it receives those same bound artifacts plus the CSS/SVG fallback. Board-v3 makes each influence
+route it receives those same bound artifacts plus the CSS/SVG fallback. Only an explicit art-direction
+skip in the authoritative adaptive route with its typed skip receipt removes the direction-owned
+motion-resolution projection and decision-bound handoff obligations. Missing is not skipped. That
+branch receives the current selected source-free reference projection and typed skip receipt, with no
+fabricated register, motion decision, metaphor contract, draft, handoff, or art-direction/motion/settled-selection
+hashes; all other selected prerequisites, evaluator lineage, and quality criteria remain binding.
+Independently selected image-first drafting still requires its chosen draft or authorized CSS/SVG
+fallback, without inferring a motion decision from that method.
+Reference assembly alone does not select image-first exploration; an explicitly skipped method
+retains its recorded skip reason and creates no draft obligation. Board-v3 makes each influence
 a unique slot bound to an acquisition zone, decision, primary axis, source state/viewport, target
 viewports, responsive consequence, optional reconciled conflict, and falsifier. Several influences may
 shape one destination zone; downstream roles resolve their commitments into one system and verify each

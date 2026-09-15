@@ -5,6 +5,11 @@ import { isAbsolute, relative, resolve, sep } from 'node:path';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import type { ProjectWriteAdapter } from '../runtime/project-write.ts';
 import { nodeStableProjectFileSystem, readStableProjectFile } from '../runtime/stable-project-file.ts';
+import {
+  fixedDerivedProjectRoot,
+  isFixedDerivedProjectPath,
+  validateFixedDerivedProjectRoots,
+} from '../runtime/derived-project-tree.ts';
 import type { AdaptiveRouteRecord } from './adaptive-flow-domain.ts';
 import { canonicalRouteJson } from './adaptive-source-contract.ts';
 
@@ -69,6 +74,8 @@ function projectPath(root: string, path: string): string {
 /** Captures regular project files without following links; OMD's own audit tree is scope-exempt. */
 function filesystemSnapshot(rootInput: string): readonly ScopeEntry[] {
   const root = canonicalRoot(rootInput);
+  try { validateFixedDerivedProjectRoots(root); }
+  catch (error) { return fail(error instanceof Error ? error.message : 'scope scan cannot verify derived project roots'); }
   const entries: ScopeEntry[] = [];
   const walk = (directory: string, relativeDirectory: string): void => {
     const before = lstatSync(directory);
@@ -82,7 +89,10 @@ function filesystemSnapshot(rootInput: string): readonly ScopeEntry[] {
       const absolute = projectPath(root, path);
       const stat = lstatSync(absolute);
       if (stat.isSymbolicLink()) return fail(`scope scan cannot verify symlink path: ${path}`);
-      if (stat.isDirectory()) walk(absolute, path);
+      const derivedRoot = relativeDirectory === '' ? fixedDerivedProjectRoot(path) : undefined;
+      if (stat.isDirectory() && derivedRoot !== undefined) {
+        continue;
+      } else if (stat.isDirectory()) walk(absolute, path);
       else if (stat.isFile()) {
         const bytes = readStableProjectFile({ root, path: absolute, label: `route scope file ${path}`, fs });
         entries.push(Object.freeze({ path, sha256: hash(bytes), mode: stat.mode & 0o7777 }));
@@ -146,7 +156,11 @@ function gitScopeEntry(root: string, path: string): ScopeEntry {
   return Object.freeze({ path, sha256: hash(bytes), mode: stat.mode & 0o7777 });
 }
 function gitScopeSnapshot(root: string): readonly ScopeEntry[] {
-  return Object.freeze(gitDirtyPaths(root).map((path) => gitScopeEntry(root, path)));
+  try { validateFixedDerivedProjectRoots(root); }
+  catch (error) { return fail(error instanceof Error ? error.message : 'scope scan cannot verify derived project roots'); }
+  return Object.freeze(gitDirtyPaths(root)
+    .filter((path) => path !== '.omd' && !path.startsWith('.omd/') && !isFixedDerivedProjectPath(path))
+    .map((path) => gitScopeEntry(root, path)));
 }
 function identity(invocation: ProjectRunInvocation): ScopeEvidence['invocation'] {
   return Object.freeze({

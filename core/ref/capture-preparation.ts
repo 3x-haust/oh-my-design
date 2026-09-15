@@ -28,7 +28,8 @@ function selector(value: unknown): string {
 export function parseCapturePreparation(value: unknown): CapturePreparation {
   const input = record(value, ['schema', 'actions', 'assertions'], 'input');
   if (input.schema !== CAPTURE_PREPARATION_SCHEMA) return fail(`schema must be ${CAPTURE_PREPARATION_SCHEMA}`);
-  if (!Array.isArray(input.actions) || input.actions.length < 1 || input.actions.length > 8) return fail('actions must contain 1 to 8 explicit disclosure clicks');
+  // Empty actions observe an existing state without perturbing it; assertions remain mandatory.
+  if (!Array.isArray(input.actions) || input.actions.length > 8) return fail('actions must contain 0 to 8 explicit disclosure clicks');
   if (!Array.isArray(input.assertions) || input.assertions.length < 1 || input.assertions.length > 8) return fail('assertions must contain 1 to 8 observations');
   return {
     schema: CAPTURE_PREPARATION_SCHEMA,
@@ -50,6 +51,14 @@ export async function observeCapturePreparation(page: Page, preparation: Capture
   const observations: CapturePreparationReceipt['observations'] = [];
   for (const assertion of preparation.assertions) {
     const target = page.locator(assertion.selector);
+    // A visible assertion may name content mounted by ordinary asynchronous hydration.
+    // Wait for that actual element before checking uniqueness; an immediate count of
+    // zero otherwise rejects the state before the existing visibility wait can run.
+    // Hidden assertions still require an existing element, so a typo cannot pass.
+    if (assertion.state === 'visible') {
+      try { await target.waitFor({ state: 'attached', timeout: 2000 }); }
+      catch { return fail(`assertion ${assertion.selector} must identify exactly one existing element`); }
+    }
     if (await target.count() !== 1) return fail(`assertion ${assertion.selector} must identify exactly one existing element`);
     await target.waitFor({ state: assertion.state, timeout: 2000 });
     if (await target.count() !== 1 || await target.isVisible() !== (assertion.state === 'visible')) return fail(`assertion ${assertion.selector} did not remain ${assertion.state}`);

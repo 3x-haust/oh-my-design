@@ -1,9 +1,10 @@
-import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import test from 'node:test';
+import { extractPackSections, PackSectionError } from '../core/pack-sections.ts';
 
 // Reading the whole pack is what made a run expensive: the loop protocol alone is ~16k tokens and
 // every role reloaded it, some in overlapping slices after truncation. Roles now cite the sections
@@ -24,7 +25,7 @@ const SOURCES = [
 function citedSections(body: string): readonly { readonly file: string; readonly section: string }[] {
   const cited: { file: string; section: string }[] = [];
   let file: string | undefined;
-  const pattern = /(?:omd pack\s+(\S+\.md)[^\n]*?)?--section\s+"([^"]+)"/g;
+  const pattern = /omd pack\s+(\S+\.md)|--section\s+"([^"]+)"/g;
   for (const match of body.replace(/\n\s*/g, ' ').matchAll(pattern)) {
     if (match[1] !== undefined) file = match[1];
     // `--section "<heading>"` in prose is the placeholder documenting the flag, not a citation.
@@ -32,6 +33,17 @@ function citedSections(body: string): readonly { readonly file: string; readonly
   }
   return cited;
 }
+
+test('a whole-pack read cannot steal sections from a later named pack', () => {
+  const body = 'Read `omd pack protocol/design-practice.md`. Then read '
+    + '`omd pack protocol/human-design-loop.md --section "Surface grammar"` '
+    + 'and `--section "Divergence and checkpoints"`.';
+  assert.deepEqual(citedSections(body), [
+    { file: 'protocol/human-design-loop.md', section: 'Surface grammar' },
+    { file: 'protocol/human-design-loop.md', section: 'Divergence and checkpoints' },
+  ]);
+  assert.deepEqual(citedSections('Read `omd pack protocol/design-practice.md`.'), []);
+});
 
 test('every pack section a role cites exists in the file it names', () => {
   const checked: string[] = [];
@@ -90,4 +102,23 @@ test('repeated --section prints every requested section in one call', () => {
   const partial = run(['pack', 'protocol/human-design-loop.md', '--section', 'Surface grammar', '--section', 'Nope']);
   assert.equal(partial.status, 1);
   assert.match(partial.stderr, /pack section not found: Nope/);
+});
+
+test('nested section selection includes its children, excludes siblings, and ignores fenced headings', () => {
+  const body = '# Pack\n## Parent\nOverview\n### Handoff\nRule\n```md\n## Fake\n### Handoff\n```\n#### Detail\nDetail rule\n### Sibling\nOther rule\n## Next\nEnd\n';
+  assert.equal(extractPackSections(body, ['handoff']), '### Handoff\nRule\n```md\n## Fake\n### Handoff\n```\n#### Detail\nDetail rule\n');
+  assert.match(extractPackSections(body, ['Parent']), /### Sibling/);
+  assert.doesNotMatch(extractPackSections(body, ['Parent']), /## Next/);
+  assert.equal(extractPackSections(body, ['Detail']), '#### Detail\nDetail rule\n');
+  assert.throws(() => extractPackSections(body, ['Fake']), (error: unknown) => error instanceof PackSectionError && !error.available.includes('## Fake'));
+  assert.throws(() => extractPackSections(body + '### Handoff\nDuplicate\n', ['Handoff']), /ambiguous/);
+});
+
+test('the actual Evidence handoff subheading is accessible through the advertised pack CLI', () => {
+  const result = spawnSync(process.execPath, [new URL('../bin/omd.ts', import.meta.url).pathname,
+    'pack', 'protocol/human-design-loop.md', '--section', 'Evidence handoff'], { encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /^### Evidence handoff/);
+  assert.match(result.stdout, /source-aware brief is not a role-safe packet/);
+  assert.doesNotMatch(result.stdout, /^## Divergence and checkpoints/m);
 });

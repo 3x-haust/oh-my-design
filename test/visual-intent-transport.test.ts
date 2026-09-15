@@ -18,7 +18,8 @@ test('a selected first-party concept keeps visual authority across the productio
     assert.match(source, /before (?:typography|type) or structure freezes/i);
     assert.match(source, /load-bearing (?:visible )?invariants/i);
   }
-  assert.match(skill, /For concept formation, first-party targets[\s\S]*theory\/imagegen\.md[\s\S]*protocol\/human-design-loop\.md/i);
+  assert.match(skill, /Selected `content-grain`, art direction, concept formation, colour, and refinement methods follow their native protocols and stage briefs/i);
+  assert.match(skill, /For concept formation, follow `theory\/imagegen\.md` and `protocol\/human-design-loop\.md`/i);
   assert.match(imagegen, /concept-making and production owners may receive the exact target/i);
   assert.match(loop, /competitive and gallery sources remain scout-only and source-isolated/i);
   assert.match(skill, /External references stay sanitized/i);
@@ -43,7 +44,7 @@ test('ambition examples widen invention without becoming a style recipe', () => 
     assert.match(source, /concrete visible deficiency|observable criteria grounded in the actual brief/i);
     assert.match(source, /familiarity|“familiar”/i);
   }
-  assert.match(skill, /ambition examples[\s\S]*only rendered hypotheses can win/i);
+  assert.match(skill, /Selected `content-grain`, art direction, concept formation, colour, and refinement methods follow their native protocols and stage briefs[\s\S]*rendered hypotheses win/i);
 });
 
 test('concept inquiry begins from subject behavior instead of a preset composition menu', () => {
@@ -59,13 +60,13 @@ test('concept inquiry begins from subject behavior instead of a preset compositi
 test('conceptual hypotheses remain unresolved until visible evidence exists', () => {
   const imagegen = read('core/theory/imagegen.md');
   const loop = read('core/protocol/human-design-loop.md');
-  const skill = read('src/skills/omd-ultradesign/SKILL.md');
 
   for (const source of [imagegen, loop]) {
     assert.match(source, /(?:hypotheses|ideas)[\s\S]{0,120}(?:visible experiments|made visible)/i);
     assert.match(source, /(?:prose|Prose)[\s\S]{0,80}metadata[\s\S]{0,100}(?:winner|choose)/i);
   }
-  assert.match(skill, /only rendered hypotheses can win/i);
+  assert.match(imagegen, /metadata cannot select a winner before the ideas are rendered/i);
+  assert.match(imagegen, /chooses one from visible evidence only/i);
   assert.doesNotMatch(loop, /creates and selects two-to-three independent image-first drafts/i);
 });
 
@@ -101,16 +102,17 @@ test('visual selection can reject all adequate candidates and metadata cannot ac
 test('bound concept invariants cannot be weakened during implementation', () => {
   const imagegen = read('core/theory/imagegen.md');
   const loop = read('core/protocol/human-design-loop.md');
-  const skill = read('src/skills/omd-ultradesign/SKILL.md');
   for (const source of [imagegen, loop]) {
     assert.match(source, /Hand cannot (?:relax|waive)/i);
     assert.match(source, /owning (?:design )?stage[\s\S]{0,100}(?:visible evidence|current-user direction)/i);
   }
-  assert.match(skill, /Hand cannot relax bound invariants/i);
+  assert.match(imagegen, /Hand cannot relax it during implementation/i);
 });
 
 test('colour policy remains evidence-led instead of imposing one universal ground', () => {
-  const skill = read('src/skills/omd-ultradesign/SKILL.md');
-  assert.match(skill, /No dominant ground or neutral palette is a universal default/i);
-  assert.doesNotMatch(skill, /Product uses true white/i);
+  const color = read('core/theory/color.md');
+  const loop = read('core/protocol/human-design-loop.md');
+  assert.match(color, /It is not a universal product-UI ratio/i);
+  assert.match(loop, /Colour remains an intentional subject-grounded choice[\s\S]*never a variety quota or a silent default/i);
+  assert.doesNotMatch(loop, /Product uses true white/i);
 });

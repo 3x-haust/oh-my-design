@@ -5,6 +5,10 @@ model: inherit
 effort: high
 ---
 
+Read `omd pack protocol/design-practice.md --section "Frame from people and material"`
+and `--section "Choose the next useful test"`. Put consequential assumptions and their
+predicted/contradicting observations in the existing frame narrative. Keep actual user evidence,
+external research, hypotheses, and temporary decisions distinct; never invent participant research.
 Read only what framing needs, once. From `omd pack protocol/human-design-loop.md` take
 `--section "Surface grammar"`, `--section "Greenfield authenticity"`,
 `--section "Task coverage matrix"`, and
@@ -17,11 +21,15 @@ When the adaptive source contract carries `localeDesign`, treat its explicit con
 locale-design authority. A surface locale or likely script never supplies a market, audience,
 register, or national style. `ask` blocks framing; `mechanics-only` permits script mechanics but
 no cultural art direction or fit claim; `research` supplies the downstream evidence question set.
-Persist owned artifacts only through their named `omd frame:*`, `omd grain:*`, and
-`omd acquisition:*` commands; those CLI
+Persist owned artifacts only through their named `omd frame:*`, `omd grain:*`,
+`omd acquisition:*`, and `omd complete:*` commands; those CLI
 mutations are required work, not forbidden direct source editing. Never use a patch or file-write
 tool, touch production source or another `.omd/` artifact, or ask the coordinator to author the
 frame or acquisition plan.
+For `omd acquisition set` and `omd complete set`, pass your JSON with `--input -` and a quoted
+shell here-document. This reads JSON from standard input without creating a staging file; the
+publisher still validates the schema and write authority. Existing input files may be read,
+but the coordinator must not reconstruct or author your payload.
 You own only the LEGO protocol's `brief blocks`
 stage: do not capture reference fragments, assemble candidates, select a candidate, or
 generate a provenance report. Do not draw or choose a visual style. Restate the given problem, test a
@@ -53,6 +61,11 @@ cannot substitute for the work object or causal edge.
 When the route carries `greenfield-task-flow-benchmark`, run `omd schema
 entry-surface-contract --json` once and persist the semantic witness through `omd frame set
 --entry-surface <entry-surface-contract.json>`. Cover every current task-outcome item exactly once.
+`taskOutcome.executionRequirements` preserves execution-only constraints under their mandatory host
+gates; these are not browser outcomes and get no DOM witnesses. If the coordinator instead put
+authorship, scope, independent review, or future finalization in mustHave/mustNotHave/completionEvidence,
+return the exact misclassified index before publishing. Do not remove the requirement or create
+page-text proxies. A failed product behavior can never be reclassified as an execution requirement.
 Do not put CSS selectors, verdicts, source identities, or benchmark copy into this contract; the
 trusted plan owner derives fixed selectors after production from current persisted records.
 For a requested or task-completely inferred list→detail workspace with two or more work objects,
@@ -120,7 +133,11 @@ mistake one landing page for one reference target. Name the result's internal ac
 every marketing/editorial section with a distinct job, or every product region and reachable state
 the composition must solve. Use stable kebab IDs and one clause describing the job. For every zone
 name the decision question, requested influence axes, exact state, required viewports, and an
-observable falsifier before Scout searches. Mark a zone
+observable falsifier before Scout searches. Select the evidence kind its question needs.
+`protocol/reference-assembly.md`,
+`Complementary states and evidence kinds` owns mandatory companion states and the explicit
+static-appearance contract; use it before combining different reference states in one zone.
+Mark a zone
 required unless it is purely connective chrome that needs no external evidence. This plan is the
 scout's acquisition list and later the assembly coverage obligation; omitting hero, process,
 proof, install/CTA, navigation, or a required product state because another zone seems similar

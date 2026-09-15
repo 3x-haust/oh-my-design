@@ -18,6 +18,7 @@ import {
   adaptiveRouteRecordSha256,
   AdaptiveRouteError,
   changedPathsForAdaptiveRoute,
+  pathsOutsideScope,
   parseRouteRecord,
   publishAdaptiveRoute,
   readPersistedRoute,
@@ -315,6 +316,120 @@ test('non-git scope evidence fails closed on symlinks even inside an allowed pat
     () => changedPathsForAdaptiveRoute(root, record, adaptiveRouteRecordSha256(record), invocation),
     /cannot verify symlink path/,
   );
+});
+
+test('non-git scope ignores only validated npm dependencies and Vite output', () => {
+  const root = mkdtempSync(join(tmpdir(), 'omd-route-derived-tree-'));
+  writeFileSync(join(root, '.gitignore'), 'node_modules\ndist\nLICENSE\n');
+  const invocation = publishAuthorized(root, 'copy-only', 'scope-derived-tree');
+  mkdirSync(join(root, 'src', 'copy'), { recursive: true });
+  writeFileSync(join(root, 'src', 'copy', 'index.ts'), 'export const ready = true;\n');
+  mkdirSync(join(root, 'node_modules', '.bin'), { recursive: true });
+  mkdirSync(join(root, 'node_modules', 'vite', 'bin'), { recursive: true });
+  writeFileSync(join(root, 'node_modules', 'vite', 'bin', 'vite.js'), 'process.exit(0);\n');
+  symlinkSync('../vite/bin/vite.js', join(root, 'node_modules', '.bin', 'vite'));
+  mkdirSync(join(root, 'dist', 'assets'), { recursive: true });
+  writeFileSync(join(root, 'dist', 'index.html'), '<script src="./assets/app.js"></script>\n');
+  writeFileSync(join(root, 'dist', 'assets', 'app.js'), 'console.log("built");\n');
+  const record = readPersistedRoute(root, invocation);
+
+  const changed = changedPathsForAdaptiveRoute(
+    root, record, adaptiveRouteRecordSha256(record), invocation,
+  );
+  assert.deepEqual(changed, ['src/copy/index.ts']);
+  assert.deepEqual(pathsOutsideScope(record, changed), []);
+
+  writeFileSync(join(root, 'LICENSE'), 'an ignored name is not a route-scope exemption\n');
+  const withIgnoredMutation = changedPathsForAdaptiveRoute(
+    root, record, adaptiveRouteRecordSha256(record), invocation,
+  );
+  assert.deepEqual(pathsOutsideScope(record, withIgnoredMutation), ['LICENSE']);
+});
+
+test('fixed derived roots reject root links, escaping npm bin links, and linked Vite output', () => {
+  const cases: ReadonlyArray<Readonly<{ name: string; prepare(root: string): void; expected: RegExp }>> = [
+    {
+      name: 'linked dependency root',
+      prepare(root) { symlinkSync('.omd', join(root, 'node_modules'), 'dir'); },
+      expected: /derived project root must be a real directory: node_modules/,
+    },
+    {
+      name: 'escaping npm bin link',
+      prepare(root) {
+        mkdirSync(join(root, 'node_modules', '.bin'), { recursive: true });
+        symlinkSync('../../.omd/route.json', join(root, 'node_modules', '.bin', 'vite'));
+      },
+      expected: /derived project tree contains an unsafe symlink/,
+    },
+    {
+      name: 'linked Vite output',
+      prepare(root) {
+        mkdirSync(join(root, 'dist'));
+        symlinkSync('../.omd/route.json', join(root, 'dist', 'index.html'));
+      },
+      expected: /derived project tree contains an unsafe symlink/,
+    },
+  ];
+  for (const item of cases) {
+    const root = mkdtempSync(join(tmpdir(), 'omd-route-derived-link-'));
+    const invocation = publishAuthorized(root, 'copy-only', `scope-${item.name}`);
+    item.prepare(root);
+    const record = readPersistedRoute(root, invocation);
+    assert.throws(
+      () => changedPathsForAdaptiveRoute(root, record, adaptiveRouteRecordSha256(record), invocation),
+      item.expected,
+      item.name,
+    );
+  }
+});
+
+test('Git scope prunes fixed derived roots without relying on ignore rules', () => {
+  const root = mkdtempSync(join(tmpdir(), 'omd-route-git-derived-tree-'));
+  assert.equal(spawnSync('git', ['init', '-q'], { cwd: root }).status, 0);
+  writeFileSync(join(root, '.gitignore'), 'coverage\n');
+  const invocation = publishAuthorized(root, 'copy-only', 'git-scope-derived-tree');
+  mkdirSync(join(root, 'src', 'copy'), { recursive: true });
+  writeFileSync(join(root, 'src', 'copy', 'index.ts'), 'export const ready = true;\n');
+  mkdirSync(join(root, 'node_modules', '.bin'), { recursive: true });
+  mkdirSync(join(root, 'node_modules', 'vite', 'bin'), { recursive: true });
+  writeFileSync(join(root, 'node_modules', 'vite', 'bin', 'vite.js'), 'process.exit(0);\n');
+  symlinkSync('../vite/bin/vite.js', join(root, 'node_modules', '.bin', 'vite'));
+  mkdirSync(join(root, 'dist'));
+  writeFileSync(join(root, 'dist', 'index.html'), '<main>built</main>\n');
+  const record = readPersistedRoute(root, invocation);
+
+  assert.deepEqual(changedPathsForAdaptiveRoute(
+    root, record, adaptiveRouteRecordSha256(record), invocation,
+  ), ['src/copy/index.ts']);
+});
+
+test('Git ignore rules cannot conceal a dangling or escaping fixed derived root', () => {
+  const cases: ReadonlyArray<Readonly<{ name: string; prepare(root: string): void }>> = [
+    {
+      name: 'dangling root',
+      prepare(root) { symlinkSync('missing-dependency-tree', join(root, 'node_modules'), 'dir'); },
+    },
+    {
+      name: 'escaping bin link',
+      prepare(root) {
+        mkdirSync(join(root, 'node_modules', '.bin'), { recursive: true });
+        symlinkSync('../../.omd/route.json', join(root, 'node_modules', '.bin', 'vite'));
+      },
+    },
+  ];
+  for (const item of cases) {
+    const root = mkdtempSync(join(tmpdir(), 'omd-route-git-hidden-derived-'));
+    assert.equal(spawnSync('git', ['init', '-q'], { cwd: root }).status, 0);
+    writeFileSync(join(root, '.gitignore'), 'node_modules/\ndist/\n');
+    const invocation = publishAuthorized(root, 'copy-only', `git-hidden-${item.name}`);
+    item.prepare(root);
+    const record = readPersistedRoute(root, invocation);
+    assert.throws(
+      () => changedPathsForAdaptiveRoute(root, record, adaptiveRouteRecordSha256(record), invocation),
+      /derived project (?:root must be a real directory|tree contains an unsafe symlink)/,
+      item.name,
+    );
+  }
 });
 
 test('scope evidence is route-current and content-addressed history survives reclassification', () => {

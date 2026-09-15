@@ -33,7 +33,12 @@ import { validateCompositionContract } from '../composition-contract/index.ts';
 import { validateRenderedBeatResultAuthority } from '../render/index.ts';
 import { validateFinalBrowserObservations } from './final-v2-browser-observations.ts';
 import { validateTrustedOutcomeEvidence } from './final-v2-outcome-gate.ts';
-import { assertDesignQualityGreen } from './final-v2-design-quality.ts';
+import {
+  aggregateDesignQualityContracts,
+  assertDesignQualityGreen,
+  type DesignQualityContract,
+  type DesignQualityObservationBinding,
+} from './final-v2-design-quality.ts';
 import { readStableProjectFile, StableProjectFileReadError, type StableProjectFileSystem } from '../runtime/stable-project-file.ts';
 import {
   isAdaptiveFinalEvidenceV2Graph,
@@ -472,6 +477,7 @@ function validateCompletedReviewerExecutions(
   invocation: ProjectRunInvocation,
   label: FinalReviewerLane,
   lane: Record<string, unknown>,
+  observationBindings: readonly DesignQualityObservationBinding[],
   usedExecutions: Set<string>,
 ): void {
   const provenance = object(lane.provenance, `${label}.provenance`);
@@ -481,6 +487,12 @@ function validateCompletedReviewerExecutions(
   const contract = finalReviewerLaneContract(label, lane.schema);
   const executions = array(lane.executionReceipts, `${label}.executionReceipts`);
   const completedReviewers = new Set<string>();
+  const executionFloors: Record<string, number>[] = [];
+  const executionDesignQuality: DesignQualityContract[] = [];
+  const executionVerdictClaims: string[] = [];
+  const executionFloorClaims: string[] = [];
+  const configurations = new Set<string>();
+  const evidenceSha256s = new Set<string>();
   for (const [index, descriptor] of executions.entries()) {
     const item = object(descriptor, `${label}.executionReceipts[${index}]`);
     const executionPath = stringValue(item.path, `${label}.executionReceipts[${index}].path`);
@@ -488,13 +500,31 @@ function validateCompletedReviewerExecutions(
     if (createHash('sha256').update(bytes).digest('hex') !== digest(item.sha256, `${label}.executionReceipts[${index}].sha256`)) fail(`${label} completed execution receipt bytes changed`);
     requireFinalReviewerLaneAuthorization(invocation, root, bytes);
     const execution = parseReceipt(bytes, `${label}.executionReceipts[${index}]`);
-    exact(execution, ['schema', 'lane', 'reviewerId', 'verdicts', 'criticalFloors', ...(contract.requiresDesignQuality ? ['designQuality'] : []), 'isolationReceiptSha256', 'observationSha256s', 'artDirectionSha256', 'buildSha256', 'briefSha256', 'browserSha256', 'childPid', 'sessionId', 'nonce', 'evidenceSha256', 'configurationSha256'], `${label}.executionReceipts[${index}]`);
+    exact(execution, ['schema', 'lane', 'reviewerId', 'verdicts', 'criticalFloors', ...(contract.requiresDesignQuality ? ['designQuality'] : []), ...(execution.findings === undefined ? [] : ['findings']), 'isolationReceiptSha256', 'observationSha256s', 'artDirectionSha256', 'buildSha256', 'briefSha256', 'browserSha256', 'childPid', 'sessionId', 'nonce', 'evidenceSha256', 'configurationSha256'], `${label}.executionReceipts[${index}]`);
     if (execution.schema !== contract.executionSchema || execution.lane !== label) fail(`${label} execution receipt is not a completed host reviewer execution for this lane`);
     const reviewerId = stringValue(execution.reviewerId, `${label}.executionReceipts[${index}].reviewerId`);
     if (!expectedReviewers.includes(reviewerId) || completedReviewers.has(reviewerId)) fail(`${label} execution receipts do not cover the issued reviewer identities exactly once`);
     completedReviewers.add(reviewerId);
-    if (canonical(execution.verdicts) !== canonical(lane.verdicts) || canonical(execution.criticalFloors) !== canonical(lane.criticalFloors)
-      || digest(execution.isolationReceiptSha256, `${label}.executionReceipts[${index}].isolationReceiptSha256`) !== expectedIsolation
+    const executionVerdicts = object(execution.verdicts, `${label}.executionReceipts[${index}].verdicts`);
+    const laneVerdicts = object(lane.verdicts, `${label}.verdicts`);
+    exact(executionVerdicts, Object.keys(laneVerdicts), `${label}.executionReceipts[${index}].verdicts`);
+    if (Object.values(executionVerdicts).some((verdict) => verdict !== 'GREEN')) {
+      fail(`${label} execution receipt is RED`);
+    }
+    executionVerdictClaims.push(canonical(execution.verdicts));
+    const floors = object(execution.criticalFloors, `${label}.executionReceipts[${index}].criticalFloors`);
+    exact(floors, contract.floorDimensions, `${label}.executionReceipts[${index}].criticalFloors`);
+    const parsedFloors: Record<string, number> = {};
+    for (const dimension of contract.floorDimensions) {
+      const value = floors[dimension];
+      if (typeof value !== 'number' || !Number.isFinite(value) || value < 3) {
+        fail(`${label} execution receipt critical floor ${dimension} is invalid`);
+      }
+      parsedFloors[dimension] = Number(value);
+    }
+    executionFloors.push(parsedFloors);
+    executionFloorClaims.push(canonical(execution.criticalFloors));
+    if (digest(execution.isolationReceiptSha256, `${label}.executionReceipts[${index}].isolationReceiptSha256`) !== expectedIsolation
       || execution.artDirectionSha256 !== lane.artDirectionSha256 || execution.buildSha256 !== lane.buildSha256
       || execution.briefSha256 !== invocation.activation.briefSha256) fail(`${label} execution receipt does not bind the lane verdict, floors, isolation, current brief, art direction, and build`);
     const observations = array(execution.observationSha256s, `${label}.executionReceipts[${index}].observationSha256s`).map((value, observationIndex) => digest(value, `${label}.executionReceipts[${index}].observationSha256s[${observationIndex}]`));
@@ -502,12 +532,15 @@ function validateCompletedReviewerExecutions(
       || observations.length !== expectedObservations.length
       || observations.some((value) => !expectedObservations.includes(value))) fail(`${label} execution receipt does not bind the complete duplicate-free lane observation set`);
     if (contract.requiresDesignQuality) {
-      assertDesignQualityGreen(execution.designQuality, {
+      executionDesignQuality.push(assertDesignQualityGreen(execution.designQuality, {
         expectedObservationSha256s: expectedObservations,
-      });
-      if (canonical(execution.designQuality) !== canonical(lane.designQuality)) {
-        fail(`${label} execution receipt does not bind design quality`);
-      }
+        expectedObservationBindings: observationBindings,
+      }));
+    }
+    if (execution.findings !== undefined) {
+      const findings = array(execution.findings, `${label}.executionReceipts[${index}].findings`);
+      findings.forEach((finding, findingIndex) =>
+        stringValue(finding, `${label}.executionReceipts[${index}].findings[${findingIndex}]`));
     }
     const childPid = execution.childPid;
     if (typeof childPid !== 'number' || !Number.isSafeInteger(childPid) || childPid <= 0) fail(`${label} execution receipt child process is invalid`);
@@ -515,12 +548,45 @@ function validateCompletedReviewerExecutions(
     const nonce = stringValue(execution.nonce, `${label}.executionReceipts[${index}].nonce`);
     const configurationSha256 = digest(execution.configurationSha256, `${label}.executionReceipts[${index}].configurationSha256`);
     digest(execution.browserSha256, `${label}.executionReceipts[${index}].browserSha256`);
-    digest(execution.evidenceSha256, `${label}.executionReceipts[${index}].evidenceSha256`);
-    const identities = [`process:${childPid}`, `session:${sessionId}`, `nonce:${nonce}`, `configuration:${configurationSha256}`];
-    if (identities.some((identity) => usedExecutions.has(identity))) fail('completed host reviewer execution receipts cannot reuse a process, session, nonce, or configuration');
+    evidenceSha256s.add(digest(execution.evidenceSha256, `${label}.executionReceipts[${index}].evidenceSha256`));
+    configurations.add(configurationSha256);
+    const identities = [`process:${childPid}`, `session:${sessionId}`, `nonce:${nonce}`];
+    if (identities.some((identity) => usedExecutions.has(identity))) fail('completed host reviewer execution receipts cannot reuse a process, session, or nonce');
     identities.forEach((identity) => usedExecutions.add(identity));
   }
   if (completedReviewers.size !== expectedReviewers.length) fail(`${label} execution receipts do not cover the final quorum`);
+  const sharedNativeBlind = contract.requiresDesignQuality
+    && configurations.size === 1 && evidenceSha256s.size === 1;
+  const exactLegacyBlind = contract.requiresDesignQuality
+    && configurations.size === executions.length
+    && new Set(executionVerdictClaims).size === 1
+    && new Set(executionFloorClaims).size === 1
+    && new Set(executionDesignQuality.map((quality) => canonical(quality))).size === 1;
+  const originalNonVisual = !contract.requiresDesignQuality
+    && configurations.size === executions.length;
+  if (!sharedNativeBlind && !exactLegacyBlind && !originalNonVisual) {
+    fail(`${label} execution receipts do not satisfy native or exact legacy quorum isolation`);
+  }
+  if ((exactLegacyBlind || originalNonVisual)) {
+    for (const configuration of configurations) {
+      const identity = `configuration:${configuration}`;
+      if (usedExecutions.has(identity)) {
+        fail('completed host reviewer execution receipts cannot reuse a legacy configuration');
+      }
+      usedExecutions.add(identity);
+    }
+  }
+  const aggregateFloors = Object.fromEntries(contract.floorDimensions.map((dimension) => [
+    dimension,
+    Math.min(...executionFloors.map((floors) => floors[dimension]!)),
+  ]));
+  if (canonical(aggregateFloors) !== canonical(lane.criticalFloors)) {
+    fail(`${label} critical floor aggregate is forged`);
+  }
+  if (contract.requiresDesignQuality
+    && canonical(aggregateDesignQualityContracts(executionDesignQuality)) !== canonical(lane.designQuality)) {
+    fail(`${label} design quality aggregate is forged`);
+  }
 }
 
 export function validateFinalEvidenceV2GraphFiles(root: string, graphInput: FinalEvidenceV2Graph, fs: EvidenceGraphFs, invocation: ProjectRunInvocation): { graph: FinalEvidenceV2Graph; rootHash: string; bindings: FinalEvidenceV2GraphBindings };
@@ -773,8 +839,15 @@ export function validateFinalEvidenceV2GraphFiles(root: string, graphInput: unkn
   if (!sealedSources.includes(activation.briefSha256) || !sealedSources.includes(activation.loadedSkillSha256)) {
     fail('source seal does not bind the active task brief and loaded skill identities');
   }
+  const observationHashes = graph.observations.map((_, index) => hashes.get(`observations[${index}]`) ?? fail('observation semantic hash is missing'));
   // allow: SIZE_OK - this pre-existing graph orchestrator keeps one call at the immutable receipt join; browser parsing and stable reads live in the bounded responsibility module.
-  validateFinalBrowserObservations(root, fs, graph.observations.map((_, index) => (values.get(`observations[${index}]`) ?? fail(`observation ${index} receipt is missing`)).evidence));
+  const observationBindings = validateFinalBrowserObservations(
+    root,
+    fs,
+    graph.observations.map((_, index) =>
+      (values.get(`observations[${index}]`) ?? fail(`observation ${index} receipt is missing`)).evidence),
+    observationHashes,
+  );
   const trustedOutcomeRoute = sourceSeal.route === undefined
     ? undefined
     : readPersistedRoute(root, invocation);
@@ -810,7 +883,6 @@ export function validateFinalEvidenceV2GraphFiles(root: string, graphInput: unkn
       };
     }),
   });
-  const observationHashes = graph.observations.map((_, index) => hashes.get(`observations[${index}]`) ?? fail('observation semantic hash is missing'));
   if (new Set(observationHashes).size !== observationHashes.length) fail('graph observations must be a duplicate-free exact set');
   const criticalReviewerIds = new Set<string>();
   const completedReviewerExecutions = new Set<string>();
@@ -824,12 +896,18 @@ export function validateFinalEvidenceV2GraphFiles(root: string, graphInput: unkn
     if (new Set(laneObservationHashes).size !== laneObservationHashes.length
       || laneObservationHashes.length !== observedHashes.size
       || laneObservationHashes.some((item) => !observedHashes.has(item))) fail(`${label} does not bind the complete duplicate-free observed evidence set`);
+    if (label === 'blindLane') {
+      assertDesignQualityGreen(lane.designQuality, {
+        expectedObservationSha256s: observationHashes,
+        expectedObservationBindings: observationBindings,
+      });
+    }
     for (const reviewerId of array(provenance.reviewerIds, `${label}.provenance.reviewerIds`)) {
       const reviewer = stringValue(reviewerId, `${label}.provenance.reviewerIds`);
       if (criticalReviewerIds.has(reviewer)) fail('critical reviewer identities must be unique across final lanes');
       criticalReviewerIds.add(reviewer);
     }
-    validateCompletedReviewerExecutions(root, fs, invocation, label, lane, completedReviewerExecutions);
+    validateCompletedReviewerExecutions(root, fs, invocation, label, lane, observationBindings, completedReviewerExecutions);
     rejectRed(lane, label);
   }
   let predecessor: string | null = null;

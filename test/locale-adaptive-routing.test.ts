@@ -30,11 +30,12 @@ const context = (overrides: Record<string, unknown> = {}): Record<string, unknow
 });
 
 test('no-context routes retain canonical bytes without injecting locale context', () => {
-  // Intentional concept-formation policy revision: these remain full byte snapshots,
-  // not dynamically computed expectations. Historical route files are never rewritten.
+  // Intentional craft-policy revision: the semantic/visual checkpoint labels now end in
+  // render-decision. Replacing those two labels with render-change reproduces both prior hashes.
+  // These remain fixed snapshots; historical route files are never rewritten.
   for (const [name, expectedHash, expectedBytes] of [
-    ['copy-only', 'b95b205695ba14f8f0655debafb5aae8351acaa74992dd7490a9b36f573be873', 16276],
-    ['synth-marketing', 'b9e58e9acd8319f94b26b17c1574ae79712f753673eb62fa725c936d19261c1e', 16884],
+    ['copy-only', 'cfd33345cb504a838d1339ea888f4f7d2d2a91603e33b064f0daf85295d390ba', 16332],
+    ['synth-marketing', 'cfa0abeb3e5b211264a87f3790aa53691992d5d37ac9e4617589c9961e5d7d85', 16940],
   ] as const) {
     const bytes = `${canonicalRouteJson(routeAdaptiveFlow(fixture(name)))}\n`;
     assert.equal(Buffer.byteLength(bytes), expectedBytes);
@@ -64,7 +65,15 @@ test('research reuses the existing scout, reference, copy, type, and composition
   Reflect.set(strategy, 'skips', [...skips, { id: 'type-proof', reason: 'Caller tried to skip locale type evidence.' }]);
   assert.throws(
     () => routeAdaptiveFlow(missingType, undefined, research),
-    (error: unknown) => error instanceof AdaptiveRouteError && error.code === 'LOCALE_DESIGN_RESEARCH_REQUIRED',
+    (error: unknown) => {
+      assert.ok(error instanceof AdaptiveRouteError);
+      assert.equal(error.code, 'LOCALE_DESIGN_RESEARCH_REQUIRED');
+      assert.match(error.message, /missing stages: type-proof/);
+      assert.doesNotMatch(error.message, /missing roles:/);
+      assert.match(error.message, /collected after the research route is published/);
+      assert.match(error.message, /not required to classify it/);
+      return true;
+    },
   );
 });
 

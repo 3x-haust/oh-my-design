@@ -12,6 +12,7 @@ import type {
   TrustedLifecycleManifest,
 } from '../core/runtime/trusted-evaluation-contract.ts';
 import { serveProjectEntry } from '../core/render/serve.ts';
+import { waitForDocumentFonts } from '../core/render/index.ts';
 
 type Binding = Readonly<{
   runId: string;
@@ -51,9 +52,82 @@ const VIEWPORTS = Object.freeze([
   Object.freeze({ id: '1280x900' as const, width: 1280, height: 900 }),
   Object.freeze({ id: '390x844' as const, width: 390, height: 844 }),
 ]);
-export const TRUSTED_BROWSER_EVALUATOR_REVISION = 'trusted-browser-evaluator-v5' as const;
+export const TRUSTED_BROWSER_EVALUATOR_REVISION = 'trusted-browser-evaluator-v6' as const;
 
 const sha256 = (bytes: Buffer): string => createHash('sha256').update(bytes).digest('hex');
+
+/**
+ * Observe the painted state after frame-scheduled CSS/WAAPI work, without disabling animations.
+ * Infinite animations and arbitrary later timers are not claimed to have finished. A timeout
+ * fails the browser outcome; it never converts an intermediate screenshot into passing evidence.
+ */
+async function settleTrustedRender(page: Page): Promise<boolean> {
+  try {
+    await waitForDocumentFonts(page);
+    return await page.evaluate(async () => {
+      let expired = false;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      // Keep serialized browser callbacks self-contained under both native TypeScript and tsx;
+      // named local function expressions can acquire module-only __name helpers under tsx.
+      const settling = (async (): Promise<boolean> => {
+        await new Promise<void>((resolveFrames) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolveFrames())));
+        while (!expired) {
+          const animations = document.getAnimations().filter((animation) =>
+            (animation.playState === 'running' || animation.pending)
+            && Number.isFinite(animation.effect?.getComputedTiming().endTime));
+          if (animations.length !== 0) {
+            await Promise.all(animations.map((animation) => animation.finished.catch(() => undefined)));
+          }
+          await new Promise<void>((resolveFrames) =>
+            requestAnimationFrame(() => requestAnimationFrame(() => resolveFrames())));
+          if (document.getAnimations().every((animation) =>
+            (animation.playState !== 'running' && !animation.pending)
+            || !Number.isFinite(animation.effect?.getComputedTiming().endTime))) return !expired;
+        }
+        return false;
+      })();
+      try {
+        return await Promise.race([
+          settling,
+          new Promise<false>((resolveTimeout) => {
+            timer = setTimeout(() => { expired = true; resolveTimeout(false); }, 5_000);
+          }),
+        ]);
+      } finally {
+        if (timer !== undefined) clearTimeout(timer);
+      }
+    });
+  } catch { return false; }
+}
+
+async function resultIsRendered(page: Page, selector: string, text: string): Promise<boolean> {
+  return page.locator(selector).filter({ hasText: text }).evaluateAll((elements) => {
+    const element = elements.length === 1 ? elements[0] : undefined;
+    if (element === undefined) return false;
+    const box = element.getBoundingClientRect();
+    if (box.width <= 0 || box.height <= 0) return false;
+    const ownStyle = getComputedStyle(element);
+    if (ownStyle.visibility === 'hidden' || ownStyle.visibility === 'collapse') return false;
+    for (let ancestor: Element | null = element; ancestor !== null; ancestor = ancestor.parentElement) {
+      const style = getComputedStyle(ancestor);
+      if (style.display === 'none' || Number(style.opacity) <= 0) return false;
+    }
+    return true;
+  }).catch(() => false);
+}
+
+async function waitForRenderedResult(page: Page, selector: string, text: string): Promise<boolean> {
+  const deadline = performance.now() + 2_000;
+  try {
+    await page.locator(selector).filter({ hasText: text }).waitFor({ state: 'visible', timeout: 2_000 });
+    do {
+      if (await resultIsRendered(page, selector, text)) return true;
+      await page.evaluate(() => new Promise<void>((resolveFrame) => requestAnimationFrame(() => resolveFrame())));
+    } while (performance.now() < deadline);
+  } catch { /* A missing or replaced state is a measured failed signal. */ }
+  return false;
+}
 
 async function collectInteractiveLabelFindings(
   page: Page,
@@ -101,14 +175,16 @@ async function collectInteractiveLabelFindings(
       let clipped = element instanceof HTMLElement
         && (element.scrollWidth > element.clientWidth + 1
           || element.scrollHeight > element.clientHeight + 1);
+      let viewportFixed = false;
       let ancestor: Element | null = element;
-      while (!clipped && ancestor !== null && ancestor !== document.documentElement) {
+      while (ancestor !== null && ancestor !== document.documentElement) {
         const ancestorStyle = getComputedStyle(ancestor);
+        viewportFixed ||= ancestorStyle.position === 'fixed';
         const clipsX = ancestorStyle.overflowX === 'hidden' || ancestorStyle.overflowX === 'clip';
         const clipsY = ancestorStyle.overflowY === 'hidden' || ancestorStyle.overflowY === 'clip';
         if (clipsX || clipsY) {
           const ancestorBox = ancestor.getBoundingClientRect();
-          clipped = textBoxes.some((textBox) =>
+          clipped ||= textBoxes.some((textBox) =>
             (clipsX && (textBox.left < ancestorBox.left - 1
               || textBox.right > ancestorBox.right + 1))
             || (clipsY && (textBox.top < ancestorBox.top - 1
@@ -116,9 +192,18 @@ async function collectInteractiveLabelFindings(
         }
         ancestor = ancestor.parentElement;
       }
+      // A viewport is a window into a scrollable document. Crossing its top/bottom edge does
+      // not cut off a label that the reader can bring into view. Fixed controls and document
+      // content outside the reachable scroll extent still fail, as do actual clipping ancestors.
+      const scrollRoot = document.scrollingElement ?? document.documentElement;
+      const documentClipsY = [document.documentElement, document.body].some((root) =>
+        ['hidden', 'clip'].includes(getComputedStyle(root).overflowY));
       clipped ||= textBoxes.some((textBox) =>
-        textBox.left < -1 || textBox.top < -1
-        || textBox.right > innerWidth + 1 || textBox.bottom > innerHeight + 1);
+        textBox.left < -1 || textBox.right > innerWidth + 1
+        || ((textBox.top < -1 || textBox.bottom > innerHeight + 1)
+          && (viewportFixed || documentClipsY
+            || textBox.top + scrollY < -1
+            || textBox.bottom + scrollY > scrollRoot.scrollHeight + 1)));
       return [Object.freeze({ tokenSplit, clipped })];
     });
   });
@@ -327,9 +412,16 @@ export async function runTrustedBrowserEvaluation(input: Readonly<{
           if (reset === null || !reset.ok()) safetyFindings.add('browser-navigation-failed');
         }
         await page.keyboard.press('Tab');
-        const focusable = page.locator('button, a[href], input, select, textarea, [tabindex]').first();
-        const focused = await focusable.count() > 0
-          && await focusable.evaluate((element) => element === document.activeElement).catch(() => false);
+        // Browser tab order skips hidden, disabled and inert elements and may differ from DOM
+        // order. Inspect the element actually reached instead of comparing with the first tag.
+        const focused = await page.evaluate(() => {
+          let element = document.activeElement;
+          while (element?.shadowRoot?.activeElement) element = element.shadowRoot.activeElement;
+          return element !== null && element !== document.body
+            && element !== document.documentElement
+            && element.matches('button, a[href], input, select, textarea, [tabindex], [contenteditable]')
+            && !element.matches(':disabled') && element.closest('[inert]') === null;
+        }).catch(() => false);
         if (!focused) accessFindings.add(`keyboard-focus-missing:${viewport.width}x${viewport.height}`);
         await collectInteractiveLabelFindings(page, viewport, accessFindings);
         await collectRenderedKoreanCopyFindings(page, viewport, accessFindings);
@@ -346,14 +438,11 @@ export async function runTrustedBrowserEvaluation(input: Readonly<{
           // measured boolean immediately so a fast timeout can never become an unhandled rejection.
           const initiallyVisible = await Promise.all(script.assertions.map((assertion) =>
             assertion.kind === 'visible-text'
-              ? page.locator(assertion.selector).filter({ hasText: assertion.text })
-                .isVisible().catch(() => false)
+              ? resultIsRendered(page, assertion.selector, assertion.text)
               : false));
           const visibleSignals = () => script.assertions.map((assertion) =>
             assertion.kind === 'visible-text'
-              ? page.locator(assertion.selector).filter({ hasText: assertion.text })
-                .waitFor({ state: 'visible', timeout: 2_000 })
-                .then(() => true, () => false)
+              ? waitForRenderedResult(page, assertion.selector, assertion.text)
               : undefined);
           let signals = actions.length === 0 ? visibleSignals() : [];
           for (const [actionIndex, action] of actions.entries()) {
@@ -370,9 +459,16 @@ export async function runTrustedBrowserEvaluation(input: Readonly<{
               findings.add('required-action-unavailable');
             }
           }
+          const observedSignals = await Promise.all(signals.map((signal) => signal ?? false));
+          if (!await settleTrustedRender(page)) findings.add('required-render-not-settled');
           for (const [index, assertion] of script.assertions.entries()) {
+            const rendered = assertion.kind !== 'visible-text'
+              || await resultIsRendered(page, assertion.selector, assertion.text);
+            if (assertion.kind === 'visible-text' && !rendered) {
+              findings.add('required-result-not-rendered');
+            }
             const passed = assertion.kind === 'visible-text'
-              ? await signals[index] && (transitionActions.length === 0 || !initiallyVisible[index])
+              ? observedSignals[index] && rendered && (transitionActions.length === 0 || !initiallyVisible[index])
               : !await page.locator(assertion.selector).filter({ hasText: assertion.text })
                 .isVisible().catch(() => false);
             if (passed) {
@@ -387,15 +483,16 @@ export async function runTrustedBrowserEvaluation(input: Readonly<{
           }
           await collectInteractiveLabelFindings(page, viewport, accessFindings);
           await collectRenderedKoreanCopyFindings(page, viewport, accessFindings);
+          const captureBytes = await page.screenshot({ fullPage: false });
+          const captureSha256 = sha256(captureBytes);
           const capturePath = join(
             output,
-            `${viewport.width}x${viewport.height}-${String(scriptIndex).padStart(2, '0')}-${sha256(Buffer.from(script.outcomeRef)).slice(0, 12)}.png`,
+            `${viewport.width}x${viewport.height}-${String(scriptIndex).padStart(2, '0')}-${sha256(Buffer.from(script.outcomeRef)).slice(0, 12)}-sha256-${captureSha256}.png`,
           );
-          const captureBytes = await page.screenshot({ fullPage: false });
           input.artifacts.write(capturePath, captureBytes);
           captures.push(Object.freeze({
             path: capturePath,
-            sha256: sha256(captureBytes),
+            sha256: captureSha256,
             width: viewport.width,
             height: viewport.height,
             outcomeRef: script.outcomeRef,
@@ -428,6 +525,10 @@ export async function runTrustedBrowserEvaluation(input: Readonly<{
   });
   const behaviorStatus = outcomeResults.every((result) => result.status === 'pass')
     ? 'pass' as const : 'fail' as const;
+  // Keep the measured reasons inside the signed transcript so repair can identify the failed
+  // viewport and condition. A bare access/safety status cannot explain what must change.
+  transcript.push(...[...accessFindings].sort().map((finding) => `access-finding:${finding}`));
+  transcript.push(...[...safetyFindings].sort().map((finding) => `safety-finding:${finding}`));
   const receipt: TrustedBrowserReceipt = Object.freeze({
     schema: TRUSTED_BROWSER_RECEIPT_SCHEMA,
     runId: input.binding.runId,

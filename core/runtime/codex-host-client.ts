@@ -19,6 +19,15 @@ type CodexHostRequestIdentity = Readonly<{
   }>;
 }>;
 
+export type CodexOwnerRepairBinding = Readonly<{
+  mirrorRoot: string;
+  mirrorDevice: string;
+  mirrorInode: string;
+  mirrorBaselineSha256: string;
+  observationPointerSha256: string;
+  observationSha256: string;
+}>;
+
 export type CodexHostAuthorizationRequest = CodexHostRequestIdentity & Readonly<{
   schema: 'omd-codex-authority-request-v1';
   requestedAuthorization?: Readonly<{ purpose: string; payloadSha256: string; payloadBase64: string }>;
@@ -28,6 +37,8 @@ export type CodexOwnerLaunchRequest = CodexHostRequestIdentity & Readonly<{
   schema: 'omd-codex-owner-launch-request-v1';
   owner: 'omd-hand';
   taskSha256: string;
+  mode: 'production' | 'repair';
+  repair?: CodexOwnerRepairBinding;
 }>;
 
 export type CodexOwnerExecRequest = CodexHostRequestIdentity & Readonly<{
@@ -38,6 +49,8 @@ export type CodexOwnerExecRequest = CodexHostRequestIdentity & Readonly<{
   attempt: 1 | 2;
   timeoutMs: number;
   task: string;
+  mode: 'production' | 'repair';
+  repair?: CodexOwnerRepairBinding;
 }>;
 
 export type CodexOwnerPersistRequest = CodexHostRequestIdentity & Readonly<{
@@ -47,6 +60,18 @@ export type CodexOwnerPersistRequest = CodexHostRequestIdentity & Readonly<{
   grantNonce: string;
   resultSha256: string;
   result: Record<string, unknown>;
+  mode: 'production' | 'repair';
+  repair?: CodexOwnerRepairBinding;
+}>;
+
+export type CodexOwnerAbortRequest = CodexHostRequestIdentity & Readonly<{
+  schema: 'omd-codex-owner-abort-request-v1';
+  owner: 'omd-hand';
+  taskSha256: string;
+  grantNonce: string;
+  mode: 'production' | 'repair';
+  repair?: CodexOwnerRepairBinding;
+  failure: string;
 }>;
 
 export type CodexRoleExecRequest = CodexHostRequestIdentity & Readonly<{
@@ -54,6 +79,7 @@ export type CodexRoleExecRequest = CodexHostRequestIdentity & Readonly<{
   role: string;
   timeoutMs: number;
   task: string;
+  reviewerPacket?: Readonly<{ path: string; sha256: string }>;
 }>;
 
 export type CodexBrowserExecRequest = CodexHostRequestIdentity & Readonly<{
@@ -66,7 +92,7 @@ export type CodexBrowserExecRequest = CodexHostRequestIdentity & Readonly<{
  * performs the exchange in a separate process while this process blocks; the broker verifies that
  * helper's real parent and the canonical OMD CLI process before issuing anything.
  */
-export function requestCodexHostAuthority(socketPath: string, request: CodexHostAuthorizationRequest | CodexOwnerLaunchRequest | CodexOwnerExecRequest | CodexOwnerPersistRequest | CodexRoleExecRequest | CodexBrowserExecRequest): unknown {
+export function requestCodexHostAuthority(socketPath: string, request: CodexHostAuthorizationRequest | CodexOwnerLaunchRequest | CodexOwnerExecRequest | CodexOwnerPersistRequest | CodexOwnerAbortRequest | CodexRoleExecRequest | CodexBrowserExecRequest): unknown {
   const result = spawnSync(process.execPath, [CLIENT, socketPath], {
     input: JSON.stringify(request),
     encoding: 'utf8',

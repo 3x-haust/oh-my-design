@@ -95,11 +95,11 @@ export function validateAdaptiveStageOrder(strategy: AdaptiveStrategyDecision): 
     if (current === undefined) return failAdaptiveRoute('ADAPTIVE_STAGE_ORDER_INVALID');
     for (const prerequisite of node.prerequisites) {
       const index = selected.get(prerequisite);
-      if (index === undefined || index >= current) return failAdaptiveRoute('ADAPTIVE_STAGE_ORDER_INVALID');
+      if (index === undefined || index >= current) return failAdaptiveRoute('ADAPTIVE_STAGE_ORDER_INVALID', `strategyDecision.stages must include ${prerequisite} before ${stage}`);
     }
     for (const dependency of node.afterIfSelected) {
       const index = selected.get(dependency);
-      if (index !== undefined && index >= current) return failAdaptiveRoute('ADAPTIVE_STAGE_ORDER_INVALID');
+      if (index !== undefined && index >= current) return failAdaptiveRoute('ADAPTIVE_STAGE_ORDER_INVALID', `selected stage ${dependency} must precede ${stage} in strategyDecision.stages`);
     }
   }
 }

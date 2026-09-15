@@ -108,6 +108,26 @@ function v2Deck(): string {
 | B-2 | F-003 |
 `;
 }
+test('public copy protocol exposes a fillable selected art-direction contract with exact receipt syntax', () => {
+  const protocol = readFileSync(fileURLToPath(new URL('../core/protocol/copy-deck.md', import.meta.url)), 'utf8');
+  const template = protocol.match(/```markdown\n(## Art direction contract\n[\s\S]*?)\n```/)?.[1];
+  assert.ok(template, 'the writer needs the public v2 Markdown shape, not only prose field descriptions');
+  const section = template
+    .replace('<selected-register>', 'confident')
+    .replace('<selected-motion-decision>', 'none')
+    .replaceAll('<verified-fact-ids>', 'F-001')
+    .replace('<selected-exception-receipt-sha256>', NO_CURRENT_USER_BEAT_EXCEPTION_RECEIPT_SHA256)
+    .replace('<selected-beat-id>', 'B-1');
+  const complete = `${deck().replace('# Copy deck', '# Copy')}\n${section}`;
+  assert.deepEqual(validateCopyDeckV2(complete), []);
+  assert.deepEqual(validateCopyDeckV2AgainstSelectedArtDirection(complete, {
+    selectedRegister: 'confident', motionDecision: 'none', beatIds: ['B-1'],
+    currentUserBeatExceptionReceiptSha256: NO_CURRENT_USER_BEAT_EXCEPTION_RECEIPT_SHA256,
+  }), []);
+  const wrongLabel = complete.replace('receipt SHA-256:', 'receipt:');
+  assert.ok(validateCopyDeckV2(wrongLabel).some(v => v.id === 'COPY-ART-DIRECTION-EXCEPTION'));
+});
+
 test('v2 canonical no-exception and typed positive exception schemas agree with selected direction', () => {
   const noExceptionSelected = {
     selectedRegister: 'confident' as const,
@@ -118,6 +138,9 @@ test('v2 canonical no-exception and typed positive exception schemas agree with 
   const canonical = v2Deck().replace('# Copy deck', '# Copy');
   assert.deepEqual(validateCopyDeckV2(canonical), []);
   assert.deepEqual(validateCopyDeckV2AgainstSelectedArtDirection(canonical, noExceptionSelected), []);
+  const inventedException = canonical.replace('N/A — no host-authorized Beat exception', 'current-user: host-authorized Beat exception');
+  assert.ok(validateCopyDeckV2AgainstSelectedArtDirection(inventedException, noExceptionSelected)
+    .some(v => v.id === 'COPY-ART-DIRECTION-BEAT-EXCEPTION'), 'a canonical no-exception receipt cannot authorize a positive declaration');
 
   const receipt = 'c'.repeat(64);
   const positive = canonical

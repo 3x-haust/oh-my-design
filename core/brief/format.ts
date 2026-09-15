@@ -22,6 +22,18 @@ export function formatBrief(brief: Brief): string {
       `${brief.contentGrain.path} — ${brief.contentGrain.status} @ ${brief.contentGrain.sha256.slice(0, 12)}`,
     ]);
   }
+  if (brief.designQuality != null) {
+    const quality = brief.designQuality;
+    section('quality', [
+      `candidateMode: ${quality.candidateMode}`,
+      `axes: ${quality.axes.join(', ')}`,
+      `floor: ${quality.floor}`,
+      `floors: ${quality.axes.map((axis) => `${axis}=${quality.floors[axis]}`).join(', ')}`,
+      `aggregation: ${quality.aggregation}`,
+      `evidence: ${quality.evidence}`,
+      `fidelityCanSubstitute: ${quality.fidelityCanSubstitute}`,
+    ]);
+  }
   if (brief.localeDesign !== null) {
     section('locale', [
       `${brief.localeDesign.decision} — ${brief.localeDesign.surfaceLocale}`,
@@ -43,6 +55,13 @@ export function formatBrief(brief: Brief): string {
       )),
     ]);
   }
+  if (brief.discovery != null) {
+    section('discovery', [
+      `${brief.discovery.command} — automatic; user reference URLs are optional`,
+      `lanes: ${brief.discovery.lanes.join(', ')}`,
+      ...(brief.discovery.motionEvidenceRequired ? ['positive motion evidence required even when domain analysis is skipped'] : []),
+    ]);
+  }
   section('references', [
     ...brief.references.map((entry) => {
       const take = entry.take.length === 0 ? '' : `  take: ${entry.take[0]}`;
@@ -51,6 +70,12 @@ export function formatBrief(brief: Brief): string {
     ...(brief.referencesOmitted > 0 ? [`+${brief.referencesOmitted} more — omd ref list`] : []),
   ]);
   section('contracts', brief.contracts.map((entry) => `${entry.path}${entry.delivered ? '' : '  (undelivered)'}`));
+  if (brief.referenceHandoff != null) {
+    section('reference data', [
+      brief.referenceHandoff.command,
+      `${brief.referenceHandoff.pieces} selected pieces @ ${brief.referenceHandoff.sha256}`,
+    ]);
+  }
   section('inputs', brief.schemas.map((entry) => `${entry.name}: ${entry.command}`));
   if (brief.shell !== null) section('shell', [`${brief.shell.kind} — ${brief.shell.target}`]);
   section('judged by', brief.judgedBy.map((entry) => `${entry.command}  →  fails when ${entry.fails}`));

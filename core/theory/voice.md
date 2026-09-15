@@ -5,6 +5,10 @@ polish can rescue it. A forced line break, repeated cadence, or empty hedge can 
 contextual review, but no individual signal establishes authorship. This file records the
 jobs those patterns can obstruct and the repairs that preserve evidence.
 
+For marketing, adoption, landing and homepage work, pair this language guidance with
+`theory/web-copy.md`: supported reader value, message hierarchy, formula selection and
+independent comprehension. Removing awkward wording does not by itself establish a useful offer.
+
 ---
 
 ## Statistical observations are not writing instructions
@@ -27,17 +31,18 @@ let sentence shape follow. Detector scores and stylometric thresholds never gate
 
 The finding that shaped modern web writing came from Jakob Nielsen and John Morkes in 1997.
 In their study of how users approached web pages, 79 percent of test users always scanned
-any new page — only 16 percent read word by word. Twenty-three years later, Nielsen's 2020
-follow-up confirmed the proportion had not moved. Scanning is not a failure mode; it is the
-default mode of a reader whose attention is distributed across millions of competing pages.
+any new page — only 16 percent read word by word. Kate Moran's 2020 review of later
+eyetracking studies reports that scanning remains common; it does not establish that those
+exact 1997 percentages stayed constant. Reading effort varies with task, motivation, focus
+and individual habits. [NN/G, 2020](https://www.nngroup.com/articles/how-people-read-online/)
 
 The same pair published the implications in "Concise, SCANNABLE, and Objective: How to Write
 for the Web" (Morkes and Nielsen, 1997). Testing five writing styles against a control, they
 found the concise version scored 58% higher in measured usability, the scannable version 47%
 higher, and the objective version (no promotional language) 27% higher. A site that was all
 three simultaneously scored 124% higher. A follow-up rewriting Sun.com pages produced 159%
-improvement. These are not marginal effects; they are the largest usability gains in the
-literature for a single intervention class.
+improvement in its measured usability. These are historical study-specific results, not
+conversion forecasts, universal effect sizes or a ranking against all other interventions.
 
 Nielsen's 2006 eye-tracking study of 232 users across thousands of pages documented the
 F-pattern: a full sweep of the first line, a shorter sweep of a second line, then a vertical

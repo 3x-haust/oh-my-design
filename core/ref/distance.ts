@@ -107,6 +107,22 @@ function arrayFor(inv: Invariants, key: (typeof ARRAY_COMPONENTS)[number]): read
 }
 
 /**
+ * Kinship needs shared measured typography and spacing. An image wrapper has empty ladders;
+ * renormalising its incidental scalar defaults against a heading can return 1.0,
+ * but that says nothing about whether the depicted app and heading share a design.
+ * Keep distance scoring separate: this only limits claims of reference kinship.
+ */
+export function hasComparableDesignVocabulary(a: Invariants, b: Invariants): boolean {
+  return (['spacingLadder', 'typeScale', 'fontFamilies', 'weightLadder'] as const)
+    .every(key => arrayFor(a, key).length > 0 && arrayFor(b, key).length > 0);
+}
+
+/** Explicit viewport variants of the same URL/selector remain one evidence family. */
+export function referenceCaptureFamilyKey(ref: Reference): string {
+  return `${ref.source}\u0000${(ref.blueprint?.selector ?? ref.selector ?? '').trim()}`;
+}
+
+/**
  * Scalar components where 0 is ambiguous: a page where every interactive element truly
  * fails to respond scores identically to a page that was never probed at all (an
  * unmeasured pre-interaction reference, or a probe failure). Both read as `hoverCoverage:
@@ -146,6 +162,9 @@ function excludedComponents(a: Invariants, b: Invariants): ReadonlySet<Component
   }
   return excluded;
 }
+
+/** All axes omitted by the score, including empty ladders and ambiguous legacy probes. */
+export const uncomparedComponents = (a: Invariants, b: Invariants): Component[] => [...excludedComponents(a, b)];
 
 /**
  * Weighted GEOMETRIC mean, not arithmetic.
@@ -206,17 +225,24 @@ export function topKinshipPairs(refs: Reference[], threshold = 0.85, topN = 3): 
   const measured = refs.map(ref => ({ ...ref, invariants: referenceMeasuredInvariants(ref) })).filter(
     (r): r is Reference & { invariants: Invariants } => r.invariants !== null,
   );
-  const pairs: KinshipPair[] = [];
+  const pairs = new Map<string, KinshipPair>();
   for (let i = 0; i < measured.length; i++) {
     for (let j = i + 1; j < measured.length; j++) {
+      const familyA = referenceCaptureFamilyKey(measured[i]!);
+      const familyB = referenceCaptureFamilyKey(measured[j]!);
+      if (familyA === familyB) continue;
+      if (!hasComparableDesignVocabulary(measured[i]!.invariants, measured[j]!.invariants)) continue;
       const sim = similarity(measured[i]!.invariants, measured[j]!.invariants);
       if (sim >= threshold) {
-        const unknown = unmeasuredComponents(measured[i]!.invariants, measured[j]!.invariants);
-        pairs.push({ a: measured[i]!.source, b: measured[j]!.source, similarity: sim, ...(unknown.length ? { unmeasuredComponents: unknown } : {}) });
+        const key = JSON.stringify([familyA, familyB].sort());
+        const unknown = uncomparedComponents(measured[i]!.invariants, measured[j]!.invariants);
+        if (!pairs.has(key) || pairs.get(key)!.similarity < sim) {
+          pairs.set(key, { a: measured[i]!.source, b: measured[j]!.source, similarity: sim, ...(unknown.length ? { unmeasuredComponents: unknown } : {}) });
+        }
       }
     }
   }
-  return pairs.sort((x, y) => y.similarity - x.similarity).slice(0, topN);
+  return [...pairs.values()].sort((x, y) => y.similarity - x.similarity).slice(0, topN);
 }
 
 export function distances(page: Invariants, refs: Reference[]): RefDistance[] {

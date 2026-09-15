@@ -1,3 +1,5 @@
+import { parse as parseToml } from 'smol-toml';
+
 const MARKER_BEGIN = '# ── OMD BEGIN (do not edit; managed by oh-my-design) ──';
 const MARKER_END = '# ── OMD END ──';
 const FEATURE_KEYS = ['hooks', 'plugins', 'plugin_hooks', 'multi_agent'] as const;
@@ -10,7 +12,12 @@ export function patchConfigToml(text: string, opts: { agents?: string[] } = {}):
 
   // Rewrite rather than bail out when already patched: an upgrade that adds an agent must
   // register it, and bailing would leave it silently missing.
-  const lines = unpatchConfigToml(text).split('\n');
+  const unpatched = unpatchConfigToml(text);
+  const lines = unpatched.split('\n');
+  // Other configuration tools may serialize TOML and remove our marker comments.
+  // Existing agent tables then belong to the preserved input: do not redeclare
+  // them or overwrite a user-selected config_file when reinstalling OMD.
+  const currentAgents = parseToml(unpatched).agents;
 
   const featuresIdx = lines.findIndex((l) => l.trim() === '[features]');
   let inlineFeatures = '';
@@ -37,6 +44,7 @@ export function patchConfigToml(text: string, opts: { agents?: string[] } = {}):
   }
 
   const agentBlock = agents
+    .filter(name => !(currentAgents && typeof currentAgents === 'object' && Object.hasOwn(currentAgents, name)))
     .map((name) => `[agents.${name}]\nconfig_file = "./agents/${name}.toml"`)
     .join('\n\n');
 

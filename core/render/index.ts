@@ -185,6 +185,36 @@ async function assertNotBlocked(
   if (reason !== null) throw new BlockedPageError(reason);
 }
 
+/**
+ * A selected iframe is a painted replaced element in its host document: an element
+ * screenshot includes the child page, but a DOM walk can see only the iframe box. Do
+ * not persist that box as measured component anatomy. The frame URL is surfaced so the
+ * caller can inspect the intended example/state and recapture inside its own document.
+ */
+async function assertSelectorIsMeasurableDom(
+  page: import('playwright').Page,
+  selector: string | null,
+): Promise<void> {
+  if (selector === null) return;
+  const element = await page.$(selector);
+  if (element === null) return;
+  const frame = await element.evaluate((selected) => {
+    if (!(selected instanceof HTMLIFrameElement)) return null;
+    return {
+      url: selected.src || selected.contentWindow?.location.href || 'about:srcdoc',
+      title: selected.title.trim(),
+    };
+  }).finally(() => element.dispose());
+  if (frame === null) return;
+  const title = frame.title === '' ? '' : ` (${JSON.stringify(frame.title)})`;
+  throw new Error(
+    `reference selector ${JSON.stringify(selector)} matches an opaque iframe${title}; `
+    + `the host document can measure only the frame box, not its component anatomy. `
+    + `Embedded document: ${frame.url}. Inspect the intended iframe and state, then recapture `
+    + 'that embedded URL with a selector inside its document; do not assume the first matching frame is the intended state.',
+  );
+}
+
 export interface Viewport { width: number; height: number }
 
 const FONT_READY_TIMEOUT_MS = 5000;
@@ -651,7 +681,17 @@ async function extractIrCore(
   probe = true,
 ): Promise<RawIr> {
   // Fail fast on blocked/challenge pages before attempting DOM extraction.
-  await assertNotBlocked(page, httpStatus, resolvedUrl, selector);
+  try {
+    await assertNotBlocked(page, httpStatus, resolvedUrl, selector);
+  } catch (error) {
+    // A sparse host containing only an iframe still deserves the actionable embedded URL;
+    // HTTP and challenge-page failures retain their stronger block diagnosis.
+    if (error instanceof BlockedPageError && error.reason.startsWith('near-empty body')) {
+      await assertSelectorIsMeasurableDom(page, selector);
+    }
+    throw error;
+  }
+  await assertSelectorIsMeasurableDom(page, selector);
   const raw = await page.evaluate(
     browserEvaluationExpression(extractInPage.toString(), `${MAX_NODES}, ${JSON.stringify(selector ?? null)}`),
   ) as RawIr;
@@ -679,7 +719,7 @@ export async function capturePageForRef(
   const preparation = opts.preparation === undefined ? undefined : parseCapturePreparation(opts.preparation);
   return onPage(browser, target, viewport, async (page, httpStatus, resolvedUrl) => {
     const executedActions = preparation ? await prepareReferenceCapture(page, preparation) : undefined;
-    // Hover/tab probes can close disclosures; null means not measured, never observed absence.
+    // Hover/tab probes can close disclosures or move initial focus; null means not measured.
     const raw = await extractIrCore(page, httpStatus, resolvedUrl, opts.selector ?? null, preparation === undefined);
     if (preparation) await observeCapturePreparation(page, preparation);
     let shotSaved = false;

@@ -14,6 +14,7 @@ import { adaptiveRouteRecordSha256, readPersistedRoute } from '../route/adaptive
 import { pathsOutsideScope } from '../route/adaptive-route-record.ts';
 import {
   requireFinalReviewerLaneAuthorization,
+  requireProductionOwnerRepairAuthorization,
   type ProjectRunInvocation,
 } from './invocation.ts';
 import { observationV2Sha256, validateObservationV2 } from './observation.ts';
@@ -31,6 +32,7 @@ import {
 
 const SHA256 = /^[a-f0-9]{64}$/;
 const JOURNAL_PATH = '.omd/.production-repair.journal';
+const ROLLBACK_JOURNAL_PATH = '.omd/.production-repair-rollback.journal';
 const HANDOFF_PATH = '.omd/observation-v2-repair-predecessor.json';
 const fs = nodeStableProjectFileSystem();
 
@@ -43,7 +45,13 @@ export type ProductionRepairErrorCode =
   | 'STALE_REPAIR_BASE'
   | 'NO_OP_REPAIR'
   | 'MULTI_FILE_REPAIR'
-  | 'UNRESOLVED_REPAIR_JOURNAL';
+  | 'REPAIR_OWNER_RECEIPT_REQUIRED'
+  | 'REPAIR_OWNER_RECEIPT_STALE'
+  | 'REPAIR_OWNER_RECEIPT_REPLAY'
+  | 'UNRESOLVED_REPAIR_JOURNAL'
+  | 'REPAIR_ROLLBACK_REVIEW_INVALID'
+  | 'REPAIR_ROLLBACK_STALE'
+  | 'UNRESOLVED_REPAIR_ROLLBACK_JOURNAL';
 
 export class ProductionRepairError extends Error {
   readonly code: ProductionRepairErrorCode;
@@ -58,6 +66,7 @@ export class ProductionRepairError extends Error {
 export type ProductionRepairOutcome = Readonly<{
   status: 'committed';
   path: string;
+  mode: number;
   beforeTreeSha256: string;
   afterTreeSha256: string;
   outcomePath: string;
@@ -90,6 +99,7 @@ type StageRecord = Readonly<{
   routeSha256: string;
   sliceSha256: string;
   observationPointerSha256: string;
+  ownerReceiptSha256: string;
 }>;
 
 const stagedRepairs = new WeakMap<StagedProductionRepair, StageRecord>();
@@ -337,6 +347,11 @@ function currentRepairScope(root: string, invocation: ProjectRunInvocation): Rea
   return Object.freeze({ paths, receipt: Object.freeze({ sha256: hash(bytes) }) });
 }
 
+/** Read-only current scope identity for consumers that revalidate a committed repair outcome. */
+export function currentProductionRepairScopeSha256(root: string, invocation: ProjectRunInvocation): string {
+  return currentRepairScope(realpathSync(root), invocation).receipt.sha256;
+}
+
 export function createProductionRepairMirror(input: Readonly<{
   root: string;
   invocation: ProjectRunInvocation;
@@ -410,8 +425,14 @@ function requirePrivateMirror(root: string, mirrorRoot: string): string {
   return real;
 }
 
-function mirrorFiles(root: string): readonly string[] {
-  const result: string[] = [];
+function mirrorSnapshot(root: string): Readonly<{
+  files: ReadonlyMap<string, Readonly<{ bytes: Buffer; mode: number }>>;
+  treeSha256: string;
+}> {
+  const files = new Map<string, Readonly<{ bytes: Buffer; mode: number }>>();
+  const tree: Array<Record<string, unknown>> = [{
+    path: '.', kind: 'directory', mode: lstatSync(root).mode & 0o7777,
+  }];
   const visit = (directory: string): void => {
     for (const name of readdirSync(directory).sort()) {
       const absolute = resolve(directory, name);
@@ -419,15 +440,93 @@ function mirrorFiles(root: string): readonly string[] {
       if (metadata.isSymbolicLink() || (!metadata.isDirectory() && !metadata.isFile())) {
         throw new ProductionRepairError('MALFORMED_STAGED_REPAIR');
       }
-      if (metadata.isDirectory()) visit(absolute);
-      else result.push(relative(root, absolute).split(sep).join('/'));
+      const path = relative(root, absolute).split(sep).join('/');
+      const mode = metadata.mode & 0o7777;
+      if (metadata.isDirectory()) {
+        tree.push({ path, kind: 'directory', mode });
+        visit(absolute);
+      } else {
+        const bytes = stableRead(root, path, `repair owner mirror source ${path}`);
+        tree.push({ path, kind: 'file', mode, sha256: hash(bytes) });
+        files.set(path, Object.freeze({ bytes, mode }));
+      }
     }
   };
   try { visit(root); } catch (error) {
     if (error instanceof ProductionRepairError) throw error;
     throw new ProductionRepairError('MALFORMED_STAGED_REPAIR');
   }
-  return result;
+  return Object.freeze({ files, treeSha256: hash(canonicalJson(tree)) });
+}
+
+type ProductionOwnerRepairReceipt = Readonly<{
+  bytes: Buffer;
+  sha256: string;
+  mirrorRoot: string;
+  mirrorDevice: string;
+  mirrorInode: string;
+  mirrorBaselineSha256: string;
+  mirrorFinalSha256: string;
+  observationPointerSha256: string;
+  observationSha256: string;
+  changedPath: string;
+}>;
+
+function productionOwnerRepairReceipt(
+  root: string,
+  input: unknown,
+): ProductionOwnerRepairReceipt {
+  if (!(input instanceof Uint8Array)) throw new ProductionRepairError('REPAIR_OWNER_RECEIPT_REQUIRED');
+  const bytes = Buffer.from(input);
+  let value: unknown;
+  try { value = JSON.parse(bytes.toString('utf8')); } catch {
+    throw new ProductionRepairError('REPAIR_OWNER_RECEIPT_STALE');
+  }
+  const allowed = [
+    'schema', 'owner', 'projectRoot', 'taskSha256', 'rolePromptSha256', 'host', 'transport',
+    'modelArgumentOmitted', 'model', 'modelReasoningEffort', 'configurationSha256', 'attempts',
+    'sourceChanges', 'mode', 'repair', 'finalEvidence', 'result', 'failure', 'resumeCommand', 'receiptPath',
+  ];
+  if (typeof value !== 'object' || value === null || Array.isArray(value)
+    || Object.getPrototypeOf(value) !== Object.prototype
+    || Object.keys(value).some((key) => !allowed.includes(key))
+    || !bytes.equals(Buffer.from(`${canonicalJson(value)}\n`))) {
+    throw new ProductionRepairError('REPAIR_OWNER_RECEIPT_STALE');
+  }
+  const record = value as Record<string, unknown>;
+  if (record.schema !== 'omd-production-owner-result-v1' || record.owner !== 'omd-hand'
+    || record.projectRoot !== root || record.host !== 'codex'
+    || record.transport !== 'codex-exec-stdio-jsonl' || record.mode !== 'repair'
+    || record.result !== 'completed' || !Array.isArray(record.sourceChanges) || record.sourceChanges.length !== 0
+    || !Array.isArray(record.attempts) || record.attempts.length < 1 || record.attempts.length > 2
+    || typeof record.receiptPath !== 'string' || !isAbsolute(record.receiptPath)) {
+    throw new ProductionRepairError('REPAIR_OWNER_RECEIPT_STALE');
+  }
+  const repair = record.repair;
+  if (!exactObject(repair, [
+    'mirrorRoot', 'mirrorDevice', 'mirrorInode', 'mirrorBaselineSha256', 'mirrorFinalSha256',
+    'observationPointerSha256', 'observationSha256', 'changedPaths',
+  ]) || typeof repair.mirrorRoot !== 'string' || !isAbsolute(repair.mirrorRoot)
+    || typeof repair.mirrorDevice !== 'string' || repair.mirrorDevice === ''
+    || typeof repair.mirrorInode !== 'string' || repair.mirrorInode === ''
+    || !['mirrorBaselineSha256', 'mirrorFinalSha256', 'observationPointerSha256', 'observationSha256']
+      .every((key) => typeof repair[key] === 'string' && SHA256.test(repair[key] as string))
+    || !Array.isArray(repair.changedPaths) || repair.changedPaths.length !== 1) {
+    throw new ProductionRepairError('REPAIR_OWNER_RECEIPT_STALE');
+  }
+  let changedPath: string;
+  try { changedPath = safePath(repair.changedPaths[0]); } catch {
+    throw new ProductionRepairError('REPAIR_OWNER_RECEIPT_STALE');
+  }
+  return Object.freeze({
+    bytes, sha256: hash(bytes), mirrorRoot: repair.mirrorRoot,
+    mirrorDevice: repair.mirrorDevice, mirrorInode: repair.mirrorInode,
+    mirrorBaselineSha256: repair.mirrorBaselineSha256 as string,
+    mirrorFinalSha256: repair.mirrorFinalSha256 as string,
+    observationPointerSha256: repair.observationPointerSha256 as string,
+    observationSha256: repair.observationSha256 as string,
+    changedPath,
+  });
 }
 
 /**
@@ -439,6 +538,7 @@ export function stageProductionRepair(input: Readonly<{
   invocation: ProjectRunInvocation;
   review: ProductionRepairReview;
   mirrorRoot: string;
+  ownerReceipt: Uint8Array;
 }>): StagedProductionRepair {
   const reviewed = snapshotReview(input.review);
   const reviewPaths = reviewed.paths;
@@ -455,8 +555,18 @@ export function stageProductionRepair(input: Readonly<{
   const scope = currentRepairScope(input.root, input.invocation);
   const paths = scope.paths;
   const mirrorRoot = requirePrivateMirror(input.root, input.mirrorRoot);
-  const files = mirrorFiles(mirrorRoot);
-  if (files.length !== paths.length || files.some((path, index) => path !== paths[index])) {
+  const owner = productionOwnerRepairReceipt(realpathSync(input.root), input.ownerReceipt);
+  const mirrorMetadata = lstatSync(mirrorRoot);
+  const snapshot = mirrorSnapshot(mirrorRoot);
+  const files = [...snapshot.files.keys()];
+  if (files.length !== paths.length || files.some((path, index) => path !== paths[index])
+    || owner.mirrorRoot !== mirrorRoot
+    || owner.mirrorDevice !== String(mirrorMetadata.dev)
+    || owner.mirrorInode !== String(mirrorMetadata.ino)
+    || owner.mirrorBaselineSha256 === owner.mirrorFinalSha256
+    || owner.mirrorFinalSha256 !== snapshot.treeSha256
+    || owner.observationPointerSha256 !== hash(observation.pointer)
+    || owner.observationSha256 !== observation.sha256) {
     throw new ProductionRepairError('MALFORMED_STAGED_REPAIR');
   }
   const changes: Array<Readonly<{ path: string; before: Buffer; after: Buffer; mode: number }>> = [];
@@ -464,10 +574,13 @@ export function stageProductionRepair(input: Readonly<{
     let before: Buffer; let after: Buffer;
     try {
       before = stableRead(input.root, path, `repair production source ${path}`);
-      after = stableRead(mirrorRoot, path, `staged repair source ${path}`);
+      const mirrored = snapshot.files.get(path);
+      if (mirrored === undefined) throw new Error('missing repair owner mirror source');
+      after = mirrored.bytes;
     } catch { throw new ProductionRepairError('MALFORMED_STAGED_REPAIR'); }
     const beforeMetadata = lstatSync(resolve(input.root, path));
-    const afterMetadata = lstatSync(resolve(mirrorRoot, path));
+    const afterMetadata = snapshot.files.get(path);
+    if (afterMetadata === undefined) throw new ProductionRepairError('MALFORMED_STAGED_REPAIR');
     const mode = beforeMetadata.mode & 0o777;
     if ((afterMetadata.mode & 0o777) !== mode) throw new ProductionRepairError('MALFORMED_STAGED_REPAIR');
     if (!before.equals(after)) changes.push({ path, before, after, mode });
@@ -475,6 +588,7 @@ export function stageProductionRepair(input: Readonly<{
   if (changes.length === 0) throw new ProductionRepairError('NO_OP_REPAIR');
   if (changes.length !== 1) throw new ProductionRepairError('MULTI_FILE_REPAIR');
   const change = changes[0] as (typeof changes)[number];
+  if (owner.changedPath !== change.path) throw new ProductionRepairError('MALFORMED_STAGED_REPAIR');
   if (change.after.byteLength === 0) throw new ProductionRepairError('MALFORMED_STAGED_REPAIR');
   if (!within(change.path, route.allowedPaths) || !reviewPaths.includes(change.path)) {
     throw new ProductionRepairError('REPAIR_PATH_OUTSIDE_ROUTE');
@@ -486,6 +600,13 @@ export function stageProductionRepair(input: Readonly<{
   }
   if (scope.sourceSha256s !== undefined
     && scope.sourceSha256s.get(change.path) !== beforeSha256) throw new ProductionRepairError('STALE_REPAIR_BASE');
+  try { requireProductionOwnerRepairAuthorization(input.invocation, input.root, owner.bytes, true); }
+  catch (error) {
+    if (error instanceof Error && /already been consumed/i.test(error.message)) {
+      throw new ProductionRepairError('REPAIR_OWNER_RECEIPT_REPLAY');
+    }
+    throw new ProductionRepairError('REPAIR_OWNER_RECEIPT_REQUIRED');
+  }
   const stage = Object.freeze({ schema: 'opaque-staged-production-repair-v1' as const });
   stagedRepairs.set(stage, Object.freeze({
     root: realpathSync(input.root), invocation: input.invocation, review: reviewed.review, reviewBytes: reviewed.bytes,
@@ -493,6 +614,7 @@ export function stageProductionRepair(input: Readonly<{
     beforeSha256, afterSha256, mode: change.mode,
     routeSha256: adaptiveRouteRecordSha256(route), sliceSha256: scope.receipt.sha256,
     observationPointerSha256: hash(observation.pointer),
+    ownerReceiptSha256: owner.sha256,
   }));
   return stage;
 }
@@ -519,16 +641,18 @@ type RepairJournal = Readonly<{
 }>;
 
 function repairOutcomeBytes(value: Readonly<{
-  path: string; beforeTreeSha256: string; afterTreeSha256: string; routeSha256: string;
+  path: string; mode: number; beforeTreeSha256: string; afterTreeSha256: string; routeSha256: string;
   sliceSha256: string; reviewSha256: string; predecessorSha256: string;
-}>): Buffer {
-  return Buffer.from(`${canonicalJson({
-    schema: 'omd-production-repair-outcome-v2', outcome: 'committed', path: value.path,
+}>, schema: 'omd-production-repair-outcome-v2' | 'omd-production-repair-outcome-v3' = 'omd-production-repair-outcome-v3'): Buffer {
+  const common = {
+    schema, outcome: 'committed', path: value.path,
     beforeTreeSha256: value.beforeTreeSha256, afterTreeSha256: value.afterTreeSha256,
     routeSha256: value.routeSha256, sliceSha256: value.sliceSha256,
     reviewSha256: value.reviewSha256, predecessorSha256: value.predecessorSha256,
-  })}
-`);
+  };
+  return Buffer.from(`${canonicalJson(schema === 'omd-production-repair-outcome-v3'
+    ? { ...common, mode: value.mode }
+    : common)}\n`);
 }
 
 function writeAtomic(
@@ -568,6 +692,9 @@ export function applyProductionRepair(input: Readonly<{
     if (optionalStableRead(input.root, JOURNAL_PATH, 'production repair journal') !== null) {
       throw new ProductionRepairError('UNRESOLVED_REPAIR_JOURNAL');
     }
+    if (optionalStableRead(input.root, ROLLBACK_JOURNAL_PATH, 'production repair rollback journal') !== null) {
+      throw new ProductionRepairError('UNRESOLVED_REPAIR_ROLLBACK_JOURNAL');
+    }
     requireFinalReviewerLaneAuthorization(input.invocation, input.root, Buffer.from(stage.reviewBytes));
     const observation = currentObservation(input.root);
     const route = readPersistedRoute(input.root, input.invocation);
@@ -590,7 +717,8 @@ export function applyProductionRepair(input: Readonly<{
 
     const routeSha256 = adaptiveRouteRecordSha256(route);
     const outcome = repairOutcomeBytes({
-      path: stage.path, beforeTreeSha256: stage.beforeSha256, afterTreeSha256: stage.afterSha256,
+      path: stage.path, mode: stage.mode,
+      beforeTreeSha256: stage.beforeSha256, afterTreeSha256: stage.afterSha256,
       routeSha256, sliceSha256: stage.sliceSha256, reviewSha256: hash(stage.reviewBytes),
       predecessorSha256: observation.sha256,
     });
@@ -604,6 +732,10 @@ export function applyProductionRepair(input: Readonly<{
     if (priorHandoff !== null) throw new ProductionRepairError('UNRESOLVED_REPAIR_JOURNAL');
     input.writer.writeContentAddressed(`.omd/production-repair-blobs/sha256-${stage.beforeSha256}.bin`, stage.before);
     input.writer.writeContentAddressed(`.omd/production-repair-blobs/sha256-${stage.afterSha256}.bin`, stage.after);
+    input.writer.writeContentAddressed(
+      `.omd/final-review/repairs/sha256-${hash(stage.reviewBytes)}.json`,
+      Buffer.from(stage.reviewBytes),
+    );
     const base = {
       schema: 'omd-production-repair-journal-v2' as const,
       path: stage.path, mode: stage.mode, outcomePath, outcomeBase64: outcome.toString('base64'),
@@ -633,7 +765,7 @@ export function applyProductionRepair(input: Readonly<{
     input.writer.remove(JOURNAL_PATH);
     consumedStages.add(input.staged);
     return Object.freeze({
-      status: 'committed', path: stage.path, beforeTreeSha256: stage.beforeSha256,
+      status: 'committed', path: stage.path, mode: stage.mode, beforeTreeSha256: stage.beforeSha256,
       afterTreeSha256: stage.afterSha256, outcomePath,
     });
   } finally {
@@ -713,7 +845,11 @@ function validateRetentionBytes(bytes: Buffer | null, predecessorSha256: string)
 `))) throw new ProductionRepairError('UNRESOLVED_REPAIR_JOURNAL');
 }
 
-function recoverySlicePaths(root: string, invocation: ProjectRunInvocation, journal: RepairJournal): readonly string[] {
+function recoverySlicePaths(
+  root: string,
+  invocation: ProjectRunInvocation,
+  journal: Pick<RepairJournal, 'routeSha256' | 'sliceSha256' | 'path' | 'beforeTreeSha256'>,
+): readonly string[] {
   const route = readPersistedRoute(root, invocation);
   if (adaptiveRouteRecordSha256(route) !== journal.routeSha256) throw new ProductionRepairError('UNRESOLVED_REPAIR_JOURNAL');
   if (optionalStableRead(root, '.omd/workflow-production-slice.json', 'repair recovery production slice pointer') === null) {
@@ -754,6 +890,510 @@ function recoverySlicePaths(root: string, invocation: ProjectRunInvocation, jour
   return paths;
 }
 
+/** Revalidates the immutable pre-repair scope while allowing only the reviewed target to differ. */
+export function validateCommittedProductionRepairScope(input: Readonly<{
+  root: string;
+  invocation: ProjectRunInvocation;
+  routeSha256: string;
+  sliceSha256: string;
+  path: string;
+  beforeTreeSha256: string;
+}>): void {
+  recoverySlicePaths(realpathSync(input.root), input.invocation, input);
+}
+
+type RejectedRefinementCheckpoint = Readonly<{
+  sha256: string;
+  reviewSha256: string;
+  evidenceSha256: string;
+  productionRepairOutcomeSha256: string;
+  beforeObservationSha256: string;
+  afterObservationSha256: string;
+}>;
+
+type RejectedRepairOutcome = Readonly<{
+  sha256: string;
+  path: string;
+  mode: number;
+  beforeTreeSha256: string;
+  afterTreeSha256: string;
+  routeSha256: string;
+  sliceSha256: string;
+  reviewSha256: string;
+  predecessorSha256: string;
+}>;
+
+type RollbackJournalState = 'prepared' | 'source-restored' | 'pointer-restored';
+type RepairRollbackJournal = Readonly<{
+  schema: 'omd-production-repair-rollback-journal-v1';
+  state: RollbackJournalState;
+  reviewPath: string;
+  checkpointSha256: string;
+  productionRepairOutcomeSha256: string;
+  path: string;
+  mode: number;
+  beforeTreeSha256: string;
+  afterTreeSha256: string;
+  beforeObservationSha256: string;
+  afterObservationSha256: string;
+}>;
+
+export type RejectedProductionRepairRollbackOutcome = Readonly<{
+  status: 'rolled-back';
+  path: string;
+  mode: number;
+  beforeTreeSha256: string;
+  afterTreeSha256: string;
+  beforeObservationSha256: string;
+  rejectedAfterObservationSha256: string;
+  productionRepairOutcomeSha256: string;
+  checkpointSha256: string;
+  reviewSha256: string;
+}>;
+
+type RollbackContext = Readonly<{
+  root: string;
+  reviewPath: string;
+  checkpoint: RejectedRefinementCheckpoint;
+  outcome: RejectedRepairOutcome;
+  before: Buffer;
+  beforePointer: Buffer;
+  afterPointer: Buffer;
+  sourceIsBefore: boolean;
+  pointerIsBefore: boolean;
+}>;
+
+function rollbackFail(code: 'REPAIR_ROLLBACK_REVIEW_INVALID' | 'REPAIR_ROLLBACK_STALE'
+  | 'UNRESOLVED_REPAIR_ROLLBACK_JOURNAL'): never {
+  throw new ProductionRepairError(code);
+}
+
+function rollbackArtifactPath(value: unknown, pattern: RegExp): string {
+  if (typeof value !== 'string' || value.includes('\0') || value.includes('\\')
+    || value.startsWith('/') || value.split('/').some((segment) => segment === '' || segment === '.' || segment === '..')
+    || !pattern.test(value)) return rollbackFail('REPAIR_ROLLBACK_REVIEW_INVALID');
+  return value;
+}
+
+function canonicalArtifact(root: string, path: string, label: string, code: 'REPAIR_ROLLBACK_REVIEW_INVALID'
+  | 'REPAIR_ROLLBACK_STALE' | 'UNRESOLVED_REPAIR_ROLLBACK_JOURNAL'): Readonly<{ bytes: Buffer; value: Record<string, unknown> }> {
+  let bytes: Buffer; let value: unknown;
+  try {
+    bytes = stableRead(root, path, label);
+    value = JSON.parse(bytes.toString('utf8'));
+  } catch { return rollbackFail(code); }
+  if (typeof value !== 'object' || value === null || Array.isArray(value)
+    || Object.getPrototypeOf(value) !== Object.prototype
+    || !bytes.equals(Buffer.from(`${canonicalJson(value)}\n`))) return rollbackFail(code);
+  return Object.freeze({ bytes, value: value as Record<string, unknown> });
+}
+
+function refinementVariantAlias(observationSha256: string): string {
+  return `variant-${hash(`rendered-refinement\0${observationSha256}`).slice(0, 16)}`;
+}
+
+function parseRejectedCheckpoint(root: string): RejectedRefinementCheckpoint {
+  const pointer = canonicalArtifact(
+    root, '.omd/refinement-checkpoint.json', 'repair rollback checkpoint pointer', 'REPAIR_ROLLBACK_STALE',
+  );
+  if (!exactObject(pointer.value, ['schema', 'record', 'sha256'])
+    || pointer.value.schema !== 'adaptive-rendered-refinement-checkpoint-pointer-v1'
+    || typeof pointer.value.sha256 !== 'string' || !SHA256.test(pointer.value.sha256)
+    || pointer.value.record !== `.omd/refinement/checkpoints/sha256-${pointer.value.sha256}.json`) {
+    return rollbackFail('REPAIR_ROLLBACK_STALE');
+  }
+  const sha256 = pointer.value.sha256;
+  const record = canonicalArtifact(root, pointer.value.record as string, 'repair rollback checkpoint', 'REPAIR_ROLLBACK_STALE');
+  if (hash(record.bytes) !== sha256 || !exactObject(record.value, [
+    'schema', 'status', 'comparison', 'action', 'countsRound', 'beforeObservationSha256',
+    'afterObservationSha256', 'evidenceSha256', 'reviewSha256', 'productionRepairOutcomeSha256',
+    'target', 'remainingCriteria', 'previousCheckpointSha256',
+  ]) || record.value.schema !== 'adaptive-rendered-refinement-checkpoint-v1'
+    || record.value.status !== 'regress' || record.value.comparison !== 'before'
+    || record.value.action !== 'rollback' || record.value.countsRound !== true
+    || !Array.isArray(record.value.remainingCriteria)
+    || (record.value.target !== null && typeof record.value.target !== 'string')
+    || (record.value.previousCheckpointSha256 !== null
+      && (typeof record.value.previousCheckpointSha256 !== 'string' || !SHA256.test(record.value.previousCheckpointSha256)))
+    || !['beforeObservationSha256', 'afterObservationSha256', 'evidenceSha256', 'reviewSha256',
+      'productionRepairOutcomeSha256'].every((key) => typeof record.value[key] === 'string'
+        && SHA256.test(record.value[key] as string))) return rollbackFail('REPAIR_ROLLBACK_STALE');
+  let childBefore = record.value.beforeObservationSha256 as string;
+  let priorSha256 = record.value.previousCheckpointSha256 as string | null;
+  const seen = new Set([sha256]);
+  while (priorSha256 !== null) {
+    if (seen.has(priorSha256)) return rollbackFail('REPAIR_ROLLBACK_STALE');
+    seen.add(priorSha256);
+    const prior = canonicalArtifact(
+      root, `.omd/refinement/checkpoints/sha256-${priorSha256}.json`,
+      'repair rollback predecessor checkpoint', 'REPAIR_ROLLBACK_STALE',
+    );
+    if (hash(prior.bytes) !== priorSha256 || !exactObject(prior.value, [
+      'schema', 'status', 'comparison', 'action', 'countsRound', 'beforeObservationSha256',
+      'afterObservationSha256', 'evidenceSha256', 'reviewSha256', 'productionRepairOutcomeSha256',
+      'target', 'remainingCriteria', 'previousCheckpointSha256',
+    ]) || prior.value.schema !== 'adaptive-rendered-refinement-checkpoint-v1'
+      || !['improve', 'regress', 'reframe', 'plateau', 'preserved'].includes(String(prior.value.status))
+      || !['after', 'before', 'tie', 'disagreement'].includes(String(prior.value.comparison))
+      || !['continue', 'complete', 'rollback', 'stop'].includes(String(prior.value.action))
+      || prior.value.countsRound !== true || !Array.isArray(prior.value.remainingCriteria)
+      || !['beforeObservationSha256', 'afterObservationSha256', 'evidenceSha256', 'reviewSha256',
+        'productionRepairOutcomeSha256'].every((key) => typeof prior.value[key] === 'string'
+          && SHA256.test(prior.value[key] as string))
+      || (prior.value.previousCheckpointSha256 !== null
+        && (typeof prior.value.previousCheckpointSha256 !== 'string'
+          || !SHA256.test(prior.value.previousCheckpointSha256)))) return rollbackFail('REPAIR_ROLLBACK_STALE');
+    const accepted = prior.value.action === 'rollback'
+      ? prior.value.beforeObservationSha256 : prior.value.afterObservationSha256;
+    if (accepted !== childBefore) return rollbackFail('REPAIR_ROLLBACK_STALE');
+    childBefore = prior.value.beforeObservationSha256 as string;
+    priorSha256 = prior.value.previousCheckpointSha256 as string | null;
+  }
+  return Object.freeze({
+    sha256,
+    reviewSha256: record.value.reviewSha256 as string,
+    evidenceSha256: record.value.evidenceSha256 as string,
+    productionRepairOutcomeSha256: record.value.productionRepairOutcomeSha256 as string,
+    beforeObservationSha256: record.value.beforeObservationSha256 as string,
+    afterObservationSha256: record.value.afterObservationSha256 as string,
+  });
+}
+
+function validateRejectedReview(
+  root: string,
+  invocation: ProjectRunInvocation,
+  reviewPathInput: string,
+  checkpoint: RejectedRefinementCheckpoint,
+  routeSha256: string,
+): string {
+  const reviewPath = rollbackArtifactPath(
+    reviewPathInput, /^\.omd\/final-review\/refinements\/sha256-([a-f0-9]{64})\.json$/,
+  );
+  const addressed = /sha256-([a-f0-9]{64})\.json$/.exec(reviewPath)?.[1];
+  const review = canonicalArtifact(root, reviewPath, 'repair rollback refinement review', 'REPAIR_ROLLBACK_REVIEW_INVALID');
+  if (addressed === undefined || hash(review.bytes) !== addressed || addressed !== checkpoint.reviewSha256
+    || !exactObject(review.value, [
+      'schema', 'winnerAlias', 'evidenceSha256', 'transportSha256', 'routeSha256', 'buildSha256',
+      'briefSha256', 'remainingCriteria', 'votes', 'quorum', 'provenance', 'executionReceipts',
+    ]) || review.value.schema !== 'adaptive-refinement-review-v1'
+    || review.value.winnerAlias !== refinementVariantAlias(checkpoint.beforeObservationSha256)
+    || review.value.evidenceSha256 !== checkpoint.evidenceSha256
+    || review.value.routeSha256 !== routeSha256
+    || review.value.buildSha256 !== invocation.current.buildSha256
+    || review.value.briefSha256 !== invocation.current.briefSha256
+    || typeof review.value.transportSha256 !== 'string' || !SHA256.test(review.value.transportSha256)
+    || !Array.isArray(review.value.remainingCriteria)
+    || !Array.isArray(review.value.votes) || review.value.votes.length !== 2
+    || !Array.isArray(review.value.executionReceipts) || review.value.executionReceipts.length !== 2) {
+    return rollbackFail('REPAIR_ROLLBACK_REVIEW_INVALID');
+  }
+  const quorum = review.value.quorum;
+  if (!exactObject(quorum, ['required', 'passed']) || quorum.required !== 2 || quorum.passed !== 2) {
+    return rollbackFail('REPAIR_ROLLBACK_REVIEW_INVALID');
+  }
+  const winnerAlias = review.value.winnerAlias;
+  for (const voteValue of review.value.votes) {
+    if (!exactObject(voteValue, ['reviewerId', 'winnerAlias', 'remainingCriteria', 'findings'])
+      || typeof voteValue.reviewerId !== 'string' || voteValue.winnerAlias !== winnerAlias
+      || !Array.isArray(voteValue.remainingCriteria) || !Array.isArray(voteValue.findings)) {
+      return rollbackFail('REPAIR_ROLLBACK_REVIEW_INVALID');
+    }
+  }
+  for (const receiptValue of review.value.executionReceipts) {
+    if (!exactObject(receiptValue, ['path', 'sha256']) || typeof receiptValue.path !== 'string'
+      || !/^\.omd\/final-review\/refinement-executions\/sha256-[a-f0-9]{64}\.json$/.test(receiptValue.path)
+      || typeof receiptValue.sha256 !== 'string' || !SHA256.test(receiptValue.sha256)
+      || !receiptValue.path.endsWith(`sha256-${receiptValue.sha256}.json`)) {
+      return rollbackFail('REPAIR_ROLLBACK_REVIEW_INVALID');
+    }
+    let execution: Buffer;
+    try { execution = stableRead(root, receiptValue.path, 'repair rollback reviewer execution'); }
+    catch { return rollbackFail('REPAIR_ROLLBACK_REVIEW_INVALID'); }
+    if (hash(execution) !== receiptValue.sha256) return rollbackFail('REPAIR_ROLLBACK_REVIEW_INVALID');
+  }
+  try { requireFinalReviewerLaneAuthorization(invocation, root, review.bytes); }
+  catch { return rollbackFail('REPAIR_ROLLBACK_REVIEW_INVALID'); }
+  return reviewPath;
+}
+
+function rollbackObservationPointer(root: string, sha256: string): Buffer {
+  const recordPath = `.omd/observation-v2/sha256-${sha256}.json`;
+  const record = canonicalArtifact(root, recordPath, 'repair rollback observation', 'REPAIR_ROLLBACK_STALE');
+  let observation: ReturnType<typeof validateObservationV2>;
+  try { observation = validateObservationV2(record.value); } catch { return rollbackFail('REPAIR_ROLLBACK_STALE'); }
+  if (hash(record.bytes) !== sha256 || observationV2Sha256(observation) !== sha256) {
+    return rollbackFail('REPAIR_ROLLBACK_STALE');
+  }
+  return Buffer.from(`${canonicalJson({ schema: 'observation-v2-pointer', record: recordPath, sha256 })}\n`);
+}
+
+function parseRejectedRepairOutcome(root: string, checkpoint: RejectedRefinementCheckpoint): RejectedRepairOutcome {
+  const sha256 = checkpoint.productionRepairOutcomeSha256;
+  const path = `.omd/production-repairs/sha256-${sha256}.json`;
+  const artifact = canonicalArtifact(root, path, 'repair rollback committed outcome', 'REPAIR_ROLLBACK_STALE');
+  if (hash(artifact.bytes) !== sha256 || !exactObject(artifact.value, [
+    'schema', 'outcome', 'path', 'mode', 'beforeTreeSha256', 'afterTreeSha256', 'routeSha256',
+    'sliceSha256', 'reviewSha256', 'predecessorSha256',
+  ]) || artifact.value.schema !== 'omd-production-repair-outcome-v3' || artifact.value.outcome !== 'committed'
+    || typeof artifact.value.mode !== 'number' || !Number.isInteger(artifact.value.mode)
+    || artifact.value.mode < 0 || artifact.value.mode > 0o777
+    || !['beforeTreeSha256', 'afterTreeSha256', 'routeSha256', 'sliceSha256', 'reviewSha256',
+      'predecessorSha256'].every((key) => typeof artifact.value[key] === 'string'
+        && SHA256.test(artifact.value[key] as string))) return rollbackFail('REPAIR_ROLLBACK_STALE');
+  let productionPath: string;
+  try { productionPath = safePath(artifact.value.path); } catch { return rollbackFail('REPAIR_ROLLBACK_STALE'); }
+  return Object.freeze({
+    sha256, path: productionPath, mode: artifact.value.mode,
+    beforeTreeSha256: artifact.value.beforeTreeSha256 as string,
+    afterTreeSha256: artifact.value.afterTreeSha256 as string,
+    routeSha256: artifact.value.routeSha256 as string,
+    sliceSha256: artifact.value.sliceSha256 as string,
+    reviewSha256: artifact.value.reviewSha256 as string,
+    predecessorSha256: artifact.value.predecessorSha256 as string,
+  });
+}
+
+function resolveRollbackContext(
+  rootInput: string,
+  invocation: ProjectRunInvocation,
+  reviewPathInput: string,
+  phase: 'before' | 'during' | 'after',
+): RollbackContext {
+  const root = realpathSync(rootInput);
+  if (optionalStableRead(root, JOURNAL_PATH, 'repair rollback production repair journal') !== null) {
+    return rollbackFail('REPAIR_ROLLBACK_STALE');
+  }
+  const checkpoint = parseRejectedCheckpoint(root);
+  let route: ReturnType<typeof readPersistedRoute>;
+  try { route = readPersistedRoute(root, invocation); } catch { return rollbackFail('REPAIR_ROLLBACK_STALE'); }
+  const routeSha256 = adaptiveRouteRecordSha256(route);
+  const reviewPath = validateRejectedReview(root, invocation, reviewPathInput, checkpoint, routeSha256);
+  const outcome = parseRejectedRepairOutcome(root, checkpoint);
+  if (outcome.routeSha256 !== routeSha256
+    || outcome.predecessorSha256 !== checkpoint.beforeObservationSha256) return rollbackFail('REPAIR_ROLLBACK_STALE');
+  try {
+    validateCommittedProductionRepairScope({
+      root, invocation, routeSha256: outcome.routeSha256, sliceSha256: outcome.sliceSha256,
+      path: outcome.path, beforeTreeSha256: outcome.beforeTreeSha256,
+    });
+  } catch { return rollbackFail('REPAIR_ROLLBACK_STALE'); }
+  const beforePointer = rollbackObservationPointer(root, checkpoint.beforeObservationSha256);
+  const afterPointer = rollbackObservationPointer(root, checkpoint.afterObservationSha256);
+  const afterRecord = canonicalArtifact(
+    root, `.omd/observation-v2/sha256-${checkpoint.afterObservationSha256}.json`,
+    'repair rollback rejected observation', 'REPAIR_ROLLBACK_STALE',
+  );
+  if (afterRecord.value.predecessorSha256 !== checkpoint.beforeObservationSha256) {
+    return rollbackFail('REPAIR_ROLLBACK_STALE');
+  }
+  const repairReview = canonicalArtifact(
+    root, `.omd/final-review/repairs/sha256-${outcome.reviewSha256}.json`,
+    'repair rollback original repair review', 'REPAIR_ROLLBACK_STALE',
+  );
+  let originalReview: ValidatedReview;
+  try { originalReview = snapshotReview(repairReview.value); } catch { return rollbackFail('REPAIR_ROLLBACK_STALE'); }
+  if (hash(repairReview.bytes) !== outcome.reviewSha256
+    || !repairReview.bytes.equals(Buffer.from(originalReview.bytes))
+    || originalReview.review.observationPointerSha256 !== hash(beforePointer)
+    || originalReview.review.beforeSha256 !== outcome.beforeTreeSha256
+    || originalReview.review.afterSha256 !== outcome.afterTreeSha256
+    || !originalReview.paths.includes(outcome.path)) return rollbackFail('REPAIR_ROLLBACK_STALE');
+  try { requireFinalReviewerLaneAuthorization(invocation, root, repairReview.bytes); }
+  catch { return rollbackFail('REPAIR_ROLLBACK_STALE'); }
+  let before: Buffer; let after: Buffer;
+  try {
+    before = stableRead(root, `.omd/production-repair-blobs/sha256-${outcome.beforeTreeSha256}.bin`, 'repair rollback before blob');
+    after = stableRead(root, `.omd/production-repair-blobs/sha256-${outcome.afterTreeSha256}.bin`, 'repair rollback after blob');
+  } catch { return rollbackFail('REPAIR_ROLLBACK_STALE'); }
+  if (hash(before) !== outcome.beforeTreeSha256 || hash(after) !== outcome.afterTreeSha256) {
+    return rollbackFail('REPAIR_ROLLBACK_STALE');
+  }
+  let source: Buffer; let sourceMode: number;
+  try {
+    source = stableRead(root, outcome.path, 'repair rollback current production source');
+    sourceMode = lstatSync(resolve(root, outcome.path)).mode & 0o777;
+  } catch { return rollbackFail('REPAIR_ROLLBACK_STALE'); }
+  const sourceSha256 = hash(source);
+  const sourceIsBefore = sourceSha256 === outcome.beforeTreeSha256;
+  const sourceIsAfter = sourceSha256 === outcome.afterTreeSha256;
+  if (sourceMode !== outcome.mode || (phase === 'before' ? !sourceIsAfter : phase === 'after' ? !sourceIsBefore : (!sourceIsBefore && !sourceIsAfter))) {
+    return rollbackFail('REPAIR_ROLLBACK_STALE');
+  }
+  const pointer = optionalStableRead(root, '.omd/observation-v2.json', 'repair rollback current observation pointer');
+  if (pointer === null) return rollbackFail('REPAIR_ROLLBACK_STALE');
+  const pointerIsBefore = pointer.equals(beforePointer);
+  const pointerIsAfter = pointer.equals(afterPointer);
+  if (phase === 'before' ? !pointerIsAfter : phase === 'after' ? !pointerIsBefore : (!pointerIsBefore && !pointerIsAfter)) {
+    return rollbackFail('REPAIR_ROLLBACK_STALE');
+  }
+  if (optionalStableRead(root, HANDOFF_PATH, 'repair rollback predecessor handoff') !== null) {
+    return rollbackFail('REPAIR_ROLLBACK_STALE');
+  }
+  return Object.freeze({ root, reviewPath, checkpoint, outcome, before, beforePointer, afterPointer, sourceIsBefore, pointerIsBefore });
+}
+
+function rollbackJournalBytes(value: RepairRollbackJournal): Buffer {
+  return Buffer.from(`${canonicalJson(value)}\n`);
+}
+
+function rollbackJournal(context: RollbackContext, state: RollbackJournalState): RepairRollbackJournal {
+  return Object.freeze({
+    schema: 'omd-production-repair-rollback-journal-v1', state, reviewPath: context.reviewPath,
+    checkpointSha256: context.checkpoint.sha256,
+    productionRepairOutcomeSha256: context.outcome.sha256,
+    path: context.outcome.path, mode: context.outcome.mode,
+    beforeTreeSha256: context.outcome.beforeTreeSha256,
+    afterTreeSha256: context.outcome.afterTreeSha256,
+    beforeObservationSha256: context.checkpoint.beforeObservationSha256,
+    afterObservationSha256: context.checkpoint.afterObservationSha256,
+  });
+}
+
+function parseRollbackJournal(bytes: Buffer): RepairRollbackJournal {
+  let value: unknown;
+  try { value = JSON.parse(bytes.toString('utf8')); } catch { return rollbackFail('UNRESOLVED_REPAIR_ROLLBACK_JOURNAL'); }
+  if (!exactObject(value, [
+    'schema', 'state', 'reviewPath', 'checkpointSha256', 'productionRepairOutcomeSha256', 'path', 'mode',
+    'beforeTreeSha256', 'afterTreeSha256', 'beforeObservationSha256', 'afterObservationSha256',
+  ]) || value.schema !== 'omd-production-repair-rollback-journal-v1'
+    || !['prepared', 'source-restored', 'pointer-restored'].includes(String(value.state))
+    || typeof value.mode !== 'number' || !Number.isInteger(value.mode) || value.mode < 0 || value.mode > 0o777
+    || !['checkpointSha256', 'productionRepairOutcomeSha256', 'beforeTreeSha256', 'afterTreeSha256',
+      'beforeObservationSha256', 'afterObservationSha256'].every((key) => typeof value[key] === 'string'
+        && SHA256.test(value[key] as string))
+    || !bytes.equals(Buffer.from(`${canonicalJson(value)}\n`))) {
+    return rollbackFail('UNRESOLVED_REPAIR_ROLLBACK_JOURNAL');
+  }
+  let reviewPath: string; let path: string;
+  try {
+    reviewPath = rollbackArtifactPath(value.reviewPath, /^\.omd\/final-review\/refinements\/sha256-[a-f0-9]{64}\.json$/);
+    path = safePath(value.path);
+  } catch { return rollbackFail('UNRESOLVED_REPAIR_ROLLBACK_JOURNAL'); }
+  return Object.freeze({ ...value, reviewPath, path }) as RepairRollbackJournal;
+}
+
+function rollbackOutcome(context: RollbackContext): RejectedProductionRepairRollbackOutcome {
+  return Object.freeze({
+    status: 'rolled-back', path: context.outcome.path, mode: context.outcome.mode,
+    beforeTreeSha256: context.outcome.beforeTreeSha256,
+    afterTreeSha256: context.outcome.afterTreeSha256,
+    beforeObservationSha256: context.checkpoint.beforeObservationSha256,
+    rejectedAfterObservationSha256: context.checkpoint.afterObservationSha256,
+    productionRepairOutcomeSha256: context.outcome.sha256,
+    checkpointSha256: context.checkpoint.sha256,
+    reviewSha256: context.checkpoint.reviewSha256,
+  });
+}
+
+/**
+ * Applies the current authenticated two-Eye `before` decision as a bounded inverse transaction.
+ * Immutable repair, reviewer, checkpoint, observation, capture, and blob history is retained.
+ */
+export function rollbackRejectedProductionRepair(input: Readonly<{
+  root: string;
+  invocation: ProjectRunInvocation;
+  writer: ProjectWriteAdapter;
+  reviewPath: string;
+}>): RejectedProductionRepairRollbackOutcome {
+  requireProjectWriteAdapterForInvocation(input.root, input.writer, input.invocation);
+  const release = acquireProjectMutationLock(input.root, input.invocation);
+  let transactionStarted = false;
+  try {
+    if (optionalStableRead(input.root, ROLLBACK_JOURNAL_PATH, 'production repair rollback journal') !== null) {
+      return rollbackFail('UNRESOLVED_REPAIR_ROLLBACK_JOURNAL');
+    }
+    const context = resolveRollbackContext(input.root, input.invocation, input.reviewPath, 'during');
+    if (context.sourceIsBefore && context.pointerIsBefore) return rollbackOutcome(context);
+    if (context.sourceIsBefore || context.pointerIsBefore) return rollbackFail('REPAIR_ROLLBACK_STALE');
+    const writeJournal = (state: RollbackJournalState): void => writeAtomic(
+      context.root, input.invocation, ROLLBACK_JOURNAL_PATH, rollbackJournalBytes(rollbackJournal(context, state)),
+    );
+    writeJournal('prepared');
+    transactionStarted = true;
+    writeTarget(context.root, input.invocation, context.outcome.path, context.before, context.outcome.mode);
+    writeJournal('source-restored');
+    writeAtomic(context.root, input.invocation, '.omd/observation-v2.json', context.beforePointer);
+    writeJournal('pointer-restored');
+    input.writer.remove(ROLLBACK_JOURNAL_PATH);
+    return rollbackOutcome(context);
+  } catch (error) {
+    if (error instanceof ProductionRepairError) throw error;
+    throw new ProductionRepairError(transactionStarted
+      ? 'UNRESOLVED_REPAIR_ROLLBACK_JOURNAL'
+      : 'REPAIR_ROLLBACK_STALE');
+  } finally { release(); }
+}
+
+/** Completes a fully authenticated interrupted rollback; ambiguous combinations remain journaled. */
+export function recoverRejectedProductionRepairRollback(input: Readonly<{
+  root: string;
+  invocation: ProjectRunInvocation;
+  writer: ProjectWriteAdapter;
+  reviewPath: string;
+}>): Readonly<{ status: 'clean' | 'rolled-back'; outcome?: RejectedProductionRepairRollbackOutcome }> {
+  requireProjectWriteAdapterForInvocation(input.root, input.writer, input.invocation);
+  if (optionalStableRead(input.root, ROLLBACK_JOURNAL_PATH, 'production repair rollback journal') === null) {
+    return Object.freeze({ status: 'clean' });
+  }
+  const release = acquireProjectMutationLock(input.root, input.invocation);
+  try {
+    const bytes = optionalStableRead(input.root, ROLLBACK_JOURNAL_PATH, 'production repair rollback journal');
+    if (bytes === null) return Object.freeze({ status: 'clean' });
+    const journal = parseRollbackJournal(bytes);
+    let requestedReviewPath: string;
+    try {
+      requestedReviewPath = rollbackArtifactPath(
+        input.reviewPath, /^\.omd\/final-review\/refinements\/sha256-[a-f0-9]{64}\.json$/,
+      );
+    } catch { return rollbackFail('UNRESOLVED_REPAIR_ROLLBACK_JOURNAL'); }
+    if (requestedReviewPath !== journal.reviewPath) {
+      return rollbackFail('UNRESOLVED_REPAIR_ROLLBACK_JOURNAL');
+    }
+    let context: RollbackContext;
+    try { context = resolveRollbackContext(input.root, input.invocation, requestedReviewPath, 'during'); }
+    catch { return rollbackFail('UNRESOLVED_REPAIR_ROLLBACK_JOURNAL'); }
+    const expected = rollbackJournal(context, journal.state);
+    if (!rollbackJournalBytes(expected).equals(bytes)) return rollbackFail('UNRESOLVED_REPAIR_ROLLBACK_JOURNAL');
+    if ((!context.sourceIsBefore && context.pointerIsBefore)
+      || (journal.state === 'source-restored' && !context.sourceIsBefore)
+      || (journal.state === 'pointer-restored' && (!context.sourceIsBefore || !context.pointerIsBefore))) {
+      return rollbackFail('UNRESOLVED_REPAIR_ROLLBACK_JOURNAL');
+    }
+    const writeJournal = (state: RollbackJournalState): void => writeAtomic(
+      context.root, input.invocation, ROLLBACK_JOURNAL_PATH, rollbackJournalBytes(rollbackJournal(context, state)),
+    );
+    if (!context.sourceIsBefore) {
+      writeTarget(context.root, input.invocation, context.outcome.path, context.before, context.outcome.mode);
+    }
+    writeJournal('source-restored');
+    if (!context.pointerIsBefore) writeAtomic(context.root, input.invocation, '.omd/observation-v2.json', context.beforePointer);
+    writeJournal('pointer-restored');
+    input.writer.remove(ROLLBACK_JOURNAL_PATH);
+    return Object.freeze({ status: 'rolled-back', outcome: rollbackOutcome(context) });
+  } catch (error) {
+    if (error instanceof ProductionRepairError) throw error;
+    throw new ProductionRepairError('UNRESOLVED_REPAIR_ROLLBACK_JOURNAL');
+  } finally { release(); }
+}
+
+/** Proves the rollback pointer/source lineage is complete and no transaction residue remains. */
+export function validateRejectedProductionRepairRollback(input: Readonly<{
+  root: string;
+  invocation: ProjectRunInvocation;
+  reviewPath: string;
+}>): RejectedProductionRepairRollbackOutcome {
+  try {
+    if (optionalStableRead(input.root, ROLLBACK_JOURNAL_PATH, 'production repair rollback journal') !== null) {
+      return rollbackFail('UNRESOLVED_REPAIR_ROLLBACK_JOURNAL');
+    }
+    return rollbackOutcome(resolveRollbackContext(input.root, input.invocation, input.reviewPath, 'after'));
+  }
+  catch (error) {
+    if (error instanceof ProductionRepairError) throw error;
+    return rollbackFail('REPAIR_ROLLBACK_STALE');
+  }
+}
+
 function restoreOptional(root: string, invocation: ProjectRunInvocation, writer: ProjectWriteAdapter, path: string, base64: string | null): void {
   if (base64 === null) writer.remove(path);
   else writeAtomic(root, invocation, path, Buffer.from(base64, 'base64'));
@@ -765,6 +1405,9 @@ export function recoverProductionRepair(input: Readonly<{
   writer: ProjectWriteAdapter;
 }>): Readonly<{ status: 'clean' | 'rolled-back' }> {
   requireProjectWriteAdapterForInvocation(input.root, input.writer, input.invocation);
+  if (optionalStableRead(input.root, ROLLBACK_JOURNAL_PATH, 'production repair rollback journal') !== null) {
+    throw new ProductionRepairError('UNRESOLVED_REPAIR_ROLLBACK_JOURNAL');
+  }
   if (optionalStableRead(input.root, JOURNAL_PATH, 'production repair journal') === null) return Object.freeze({ status: 'clean' });
   const release = acquireProjectMutationLock(input.root, input.invocation);
   try {
@@ -783,7 +1426,15 @@ export function recoverProductionRepair(input: Readonly<{
     if ((retentionBytes === null ? null : hash(retentionBytes)) !== review.retentionPointerSha256) {
       throw new ProductionRepairError('UNRESOLVED_REPAIR_JOURNAL');
     }
-    const expectedOutcome = repairOutcomeBytes(value);
+    let rawOutcome: unknown;
+    try { rawOutcome = JSON.parse(outcome.toString('utf8')); } catch { throw new ProductionRepairError('UNRESOLVED_REPAIR_JOURNAL'); }
+    const outcomeSchema = typeof rawOutcome === 'object' && rawOutcome !== null && !Array.isArray(rawOutcome)
+      ? (rawOutcome as Record<string, unknown>).schema : undefined;
+    if (outcomeSchema !== 'omd-production-repair-outcome-v2'
+      && outcomeSchema !== 'omd-production-repair-outcome-v3') {
+      throw new ProductionRepairError('UNRESOLVED_REPAIR_JOURNAL');
+    }
+    const expectedOutcome = repairOutcomeBytes(value, outcomeSchema);
     if (!reviewBytes.equals(Buffer.from(reviewed.bytes)) || hash(reviewBytes) !== value.reviewSha256
       || review.beforeSha256 !== value.beforeTreeSha256 || review.afterSha256 !== value.afterTreeSha256
       || !review.suggestedPaths.includes(value.path) || hash(before) !== value.beforeTreeSha256

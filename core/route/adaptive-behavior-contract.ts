@@ -13,7 +13,7 @@ const POLICY = {
       copyDeck: 'omd-writer', typeProof: 'omd-typesetter', composition: 'omd-composer',
       candidates: 'omd-sketch', production: 'omd-hand', review: 'omd-eye', squint: 'omd-glance',
     },
-    checkpointSequence: ['semantic-render-change', 'typography-reproof', 'visual-render-change'],
+    checkpointSequence: ['semantic-render-decision', 'typography-reproof', 'visual-render-decision'],
     checkpointNone: 'no-human-approval-wait', squintBeforeSharp: true, showpieceLensCount: 1,
     preferenceOrder: ['current-brief', 'current-user-feedback', 'project-taste', 'model-judgment'],
     reviewIsolation: {
@@ -68,8 +68,8 @@ const POLICY = {
     restrainedMarketingCarrier: ['scale', 'structure', 'display-type'], productDisplayExempt: true,
     marketingRequiresColourIdentity: true, marketingRequiresBuiltCarrier: true,
     textOnlyMarketingPasses: false, colourDistribution: 'surface-conditional',
-    marketingColourDistribution: '60-30-10', productColourStrategy: 'semantic-action-state',
-    colourlessMarketing: 'RED',
+    marketingColourDistribution: 'evidence-grounded-visible-hierarchy', productColourStrategy: 'semantic-action-state',
+    colourlessMarketing: 'contextual-visible-hierarchy',
     carrierOptions: [
       'gradient-mesh', 'noise-grain-texture', 'svg-geometric-pattern',
       'css-illustration-primitives', 'expressive-theory', 'motion-recipe',

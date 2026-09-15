@@ -40,6 +40,60 @@ test('reference board accepts human prose with ratios and non-path slashes', () 
   assert.doesNotThrow(() => parseReferenceBoard(value.board));
 });
 
+test('reference board accepts the exact NARO measurement falsifier without changing its bytes', () => {
+  const value = fixture();
+  const falsifier = 'Any of 7.8→3.1 mm/s, 18%, or 9 hours appears without a visible demo qualifier or reads as a real customer guarantee.';
+  value.board['schemaVersion'] = 'reference-board-v3';
+  value.board['projectSha256'] = 'b'.repeat(64);
+  value.board['acquisitionSha256'] = 'c'.repeat(64);
+  value.board['localeContextSha256'] = null;
+  value.piece['binding'] = {
+    zoneId: 'naro-proof', decisionId: 'naro-proof', axis: 'structure', sourceState: 'initial',
+    sourceViewport: { width: 1280, height: 900 }, targetViewports: [{ width: 1280, height: 900 }],
+    responsiveConsequence: 'Keep the proof readable at every target viewport.', conflictGroup: null, conflictResolution: null, falsifier,
+  };
+
+  const parsed = parseReferenceBoard(value.board);
+  assert.equal(parsed.candidates[0]?.pieces[0]?.binding?.falsifier, falsifier);
+});
+
+test('falsifier measurement exceptions reject paths and unrelated carriers', () => {
+  const forbidden = [
+    'Any 3.1 mm/s/capture appears.',
+    'Any capture/3.1 mm/s appears.',
+    'Any 3.1 mm/s.png appears.',
+    'Any 3.1 mm/s.txt appears.',
+    'Any 3.1 mm/s and https://source.example appears.',
+    'Any 3.1 mm/s and <img src=x> appears.',
+    'Any 3.1 mm/s and text\u0000payload appears.',
+    'Any 3.1 mm\n/s appears.',
+    'Any 3.1 mm/\ts appears.',
+    'Any 3.1 mm/s%2fsecret appears.',
+    'Any 3.1 mm/s and assets/reference/crop appears.',
+    'Any mm/s appears without a numeric value.',
+    'Any 3.1 foo/bar appears.',
+  ];
+  for (const falsifier of forbidden) {
+    const value = fixture();
+    value.board['schemaVersion'] = 'reference-board-v3';
+    value.board['projectSha256'] = 'b'.repeat(64);
+    value.board['acquisitionSha256'] = 'c'.repeat(64);
+    value.board['localeContextSha256'] = null;
+    value.piece['binding'] = {
+      zoneId: 'naro-proof', decisionId: 'naro-proof', axis: 'structure', sourceState: 'initial',
+      sourceViewport: { width: 1280, height: 900 }, targetViewports: [{ width: 1280, height: 900 }],
+      responsiveConsequence: 'Keep the proof readable at every target viewport.', conflictGroup: null, conflictResolution: null, falsifier,
+    };
+    assert.throws(() => parseReferenceBoard(value.board), falsifier);
+  }
+});
+
+test('non-falsifier assembly fields keep strict path handling for measurement prose', () => {
+  const value = fixture();
+  value.piece['reason'] = 'Use the measured 3.1 mm/s proof.';
+  assert.throws(() => parseReferenceBoard(value.board), /reason must not include source, pixel, markup, or control payloads/);
+});
+
 test('reference board keeps typed local candidate routes outside prose path detection', () => {
   const value = fixture();
   value.candidate['route'] = '/assets/reference/crop';

@@ -23,6 +23,7 @@ const measuredInvariants = (value: unknown): value is Invariants => isRecord(val
 const blueprintNode = (value: unknown): value is BlueprintNode => isRecord(value)
   && typeof value['id'] === 'string' && value['id'].trim() !== '' && Array.isArray(value['children']) && value['children'].every((child) => typeof child === 'string' && child.trim() !== '')
   && isRecord(value['box']) && finite(value['box']['w']) && finite(value['box']['h']) && role(value['role'])
+  && optional(value, 'position', (input) => isRecord(input) && finite(input['x'], -Infinity) && finite(input['y'], -Infinity))
   && optional(value, 'padding', tuple) && optional(value, 'gap', finite) && optional(value, 'direction', direction) && optional(value, 'fontSize', finite) && optional(value, 'fontWeight', finite) && optional(value, 'lineHeight', finite) && optional(value, 'radius', finite)
   && optional(value, 'hasShadow', (input) => typeof input === 'boolean') && optional(value, 'fillRole', colorRole) && optional(value, 'textRole', colorRole) && optional(value, 'motionDurations', finiteNumbers) && optional(value, 'motionEasings', texts) && optional(value, 'textLength', textLength);
 const measuredBlueprint = (value: unknown): value is Blueprint => isRecord(value) && Array.isArray(value['nodes']) && value['nodes'].every(blueprintNode);
@@ -51,6 +52,7 @@ const sanitizedBlueprint = (reference: Reference, referenceId: string): { readon
     });
     return {
       role: node.role, children, box: { w: node.box.w, h: node.box.h },
+      ...(node.position === undefined ? {} : { position: { x: node.position.x, y: node.position.y } }),
       ...(node.padding === undefined ? {} : { padding: [...node.padding] }), ...(node.gap === undefined ? {} : { gap: node.gap }),
       ...(node.direction === undefined ? {} : { direction: node.direction }), ...(node.fontSize === undefined ? {} : { fontSize: node.fontSize }),
       ...(node.fontWeight === undefined ? {} : { fontWeight: node.fontWeight }), ...(node.lineHeight === undefined ? {} : { lineHeight: node.lineHeight }),
@@ -75,6 +77,7 @@ export function copyComponentCaptureTransfer(transfer: ComponentCaptureTransfer)
     invariants: copyInvariants(transfer.invariants), principles: [...transfer.principles],
     blueprint: { nodes: transfer.blueprint.nodes.map((node): SanitizedBlueprintNode => ({
       role: node.role, children: [...node.children], box: { w: node.box.w, h: node.box.h },
+      ...(node.position === undefined ? {} : { position: { x: node.position.x, y: node.position.y } }),
       ...(node.padding === undefined ? {} : { padding: [...node.padding] }), ...(node.gap === undefined ? {} : { gap: node.gap }),
       ...(node.direction === undefined ? {} : { direction: node.direction }), ...(node.fontSize === undefined ? {} : { fontSize: node.fontSize }),
       ...(node.fontWeight === undefined ? {} : { fontWeight: node.fontWeight }), ...(node.lineHeight === undefined ? {} : { lineHeight: node.lineHeight }),

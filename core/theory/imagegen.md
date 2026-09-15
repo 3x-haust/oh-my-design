@@ -15,7 +15,7 @@ committed provenance recorded via `omd decision`.
 ## Draft seeding and the shipped surface
 
 The raw reference board is scout-only evidence. An image-first draft may be seeded from the selected
-`reference-assembly-v1`, the selected references, a project rough built on the committed design system,
+`reference-assembly-v1`, sanitized evidence from selected external references, a project rough built on the committed design system,
 and project-owned concept material (the brief, real product content, committed palette/type/material,
 and local design decisions). Use only the candidate bound by the current hash-bound selection. The
 assembly supplies measured evidence; it does not choose the concept or outrank explicit first-party
@@ -38,22 +38,207 @@ not a style recipe. Keep content-grounded spatial, media, interaction, typograph
 ideas available until visible experiments show what serves the brief. These are possibilities, not a
 taxonomy or technique quota, and a new concept may depart from every example.
 
+## Native capability and default choice
+
+On Codex, inspect the current native tool inventory for image generation before choosing or skipping
+visual experiments. Codex is a reason to check first, not proof that a particular deployment exposes
+the tool. On any host with a callable image tool, unsettled confident/showpiece marketing defaults to
+image-first concept exploration. A one-sentence landing request does not need to ask for images.
+Use the built-in tool without requesting an API key or changing the user's model. Do not invent an
+image CLI, use a separately billed API, or choose a different image model as an automatic fallback.
+
+Native image generation is not an external design harness. An OMD-only run still uses its host's
+image tool, renderer and browser. Not shipping bitmaps, choosing HTML/CSS/SVG production, or lacking
+approved composition does not establish tool unavailability. Record the actual callable capability
+or exact tool absence/failure in the existing decision record. A current settled target or a bounded
+edit may need implementation rather than new concepts; otherwise an available image lane precedes
+HTML exploration. Use a small HTML study later to test the chosen image's risky type, geometry or
+interaction at actual viewports. Do not replace the visual direction with an easier coded study.
+
+## Provisional image studies
+
+When first-party facts are sufficient but reference acquisition or copy approval is still running,
+the coordinator may generate provisional images in parallel with those owners. Before generation,
+record the hypothesis count and evidence-based reason, actual content units, content-to-form
+relationship, predicted visible consequence, primary action and intended viewports. Keep full prompts
+in coordinator-owned task files and record their paths and SHA-256 identities through `omd decision`.
+Label facts, provisional copy, provisional visual choices and any current user target distinctly.
+Use exact real target-language copy in the prompt; an image's text remains unapproved until the
+copy and typography owners verify it. For independent concepts, use independent prompts and calls.
+
+These early drafts use only supplied or verified first-party material. They do not consume raw
+Scout-owned gallery pixels, invent an approved assembly, or select a reference winner. Generate
+section-sized horizontal images with readable text, not an unreadable tall webpage board. Compare
+the governing relationship first, then carry feasible candidates through the relevant middle and
+ending sections before a whole-page direction is settled. No fixed image or section quota applies.
+
+Use the built-in tool's actual returned file. Copy the decision images non-destructively into
+`.omd/.cache/imagegen/` and retain their prompts before production ownership begins. Do not assume
+a temporary output path or fabricate image bytes, paths or tool receipts. Inspect every retained
+image; a file's existence is not a visual judgment. Record what visibly works, what fails and what
+must survive code translation, without converting a provisional choice into stage approval.
+
+Once the selected measured reference assembly, approved copy and type proof exist, reconcile the
+chosen provisional images against them. Regenerate a conflicting section or revise the owning
+contract from evidence; do not preserve invented facts or silently discard the image's strongest
+relationship. Composer receives the retained first-party images and their status through the existing
+handoff. Hand implements accessible HTML/CSS/JS from the approved composition. The mockup itself
+never becomes a page-sized image, and final blind Eyes receive only anonymous production renders.
+Apply only the route's selected contracts; lawful skips use their declared evidence without invented
+replacement artifacts. Final reviewers also receive their permitted source-free task and constraint packet.
+
+Before presenting a provisional image as an improvement or accepting a reference-backed direction,
+complete `protocol/reference-assembly.md` §Acquisition, transfer and similarity verification. A draft
+generated while research was pending is not evidence that those references influenced it. Compare
+the actual visible source relationships with the draft, name what transferred and what did not,
+and resolve missing proof in the runnable type/geometry study. Repeated visual rejection pauses
+further speculative generation until the implicated acquisition and transfer gaps are inspected.
+
 `omd ref distance` measures the SHIPPED build against every saved reference as an advisory fidelity
 signal — it reports closeness and never blocks shipping. The shipped surface obeys the committed design
 system, not the raw draft, and a factual carrier is never AI-generated.
+
+## Reopen a rejected visual direction
+
+**[visual-feedback:route]** Record the user's actual feedback and its scope before another generation.
+A bounded correction to an accepted direction preserves its unaffected target relationships and may
+edit that image. A broad rejection of decoration, typography or the overall look, or a local revision
+that leaves the same complaint unresolved, reopens the direction. It is not an instruction to become
+quiet, use thinner type, remove all imagery, or retain the current palette and layout.
+
+Separate verified product facts and explicit brand/user invariants from provisional visual choices.
+An observed example page's tokens are not immutable brand law. Keep supported facts, useful task
+references and explicit invariants; release unaccepted type, motif, palette and composition choices.
+Do not invent approval for any of them merely because the previous prompt said to preserve them.
+
+Generate fresh independent concepts, not image edits anchored to the rejected draft. Omit rejected
+images from positive reference-image inputs and recent-image inclusion. Keep them as negative
+comparison evidence only, outside generation conditioning. Retain an image seed only for an explicitly
+accepted target or a genuinely bounded edit. Preserve reference isolation; this does not authorize
+feeding raw gallery pixels to a generator or production owner.
+
+Revisit only the evidence gaps implicated by the rejection. If existing references establish task
+anatomy but not the desired visual craft, Scout inspects current live typography and composition,
+including actual target-language display/body relationships, spacing, detail roles and relevant motion.
+A directory page, search result, or unsupported principle is not a craft study. Keep useful captures;
+do not restart unrelated acquisition or require the user to supply references.
+Before generating again after repeated rejection, complete the acquisition and transfer inspection
+in `protocol/reference-assembly.md` §Acquisition, transfer and similarity verification. Pending
+research cannot yet influence a draft. Keep the failed drafts as evidence and resolve that gap first.
+
+Before generation, state the material-specific type and composition hypothesis from that evidence:
+what the real copy makes prominent, how letterform/weight/line breaks and secondary text relate, and
+what each visual detail does. "Human-made", "premium", an oversized headline, or a product-labelled
+diagram does not establish those choices. Do not manufacture handwriting, distress or irregularity as
+proof of authorship. Real-font proof remains necessary; generated lettering cannot settle it.
+
+Compare the actual new images with the recorded complaint and current brief. A relative favourite
+among unresolved candidates is not an accepted direction. Render a repair that changes the governing
+visual relationship before freezing it; a promise to fix generic type or arbitrary geometry later is
+not visible evidence that the complaint has been resolved. No universal style ban, candidate quota,
+new score, or claim of human provenance follows from this procedure.
+
+## Provisional source studies
+
+The native Codex host can delegate one HTML/CSS hypothesis to `omd-study` before approved Frame,
+copy, type or composition artifacts exist. This helper makes material for a selected `art-direction`
+stage; it does not perform or publish that stage. Select the helper explicitly with art direction
+and composition, give it an execution wave before Composer and Hand, and otherwise retain the route's
+existing stage dependencies. It can run alongside Framer/Scout/Writer. Do not run it merely because
+the capability exists: a settled current target may need implementation rather than fresh exploration.
+Check the image lane above first. Use this source helper for an observed image-capability fallback
+or a concrete implementation-risk test, not as the default concept generator when images are available.
+
+Before generation, use the existing decision record to state the number of hypotheses and why, their
+actual content units, proposed spatial relationship, observable consequence, primary action and
+desktop/mobile viewports. Each task identifies its first-party source and provisional/approved status.
+Keep full hypotheses in the coordinator-owned task files; record their paths and SHA-256 identities
+with a concise one-line `omd decision <what> --why <why>` before launch. The count and reason belong
+in that record; the linked files carry the content units and hypotheses. Do not inline a long
+multiline brief into command arguments or use a post-render rewrite as the pre-generation record.
+Supply only the relevant original content or explicitly authorized demo facts and one hypothesis;
+do not forward raw external references, other studies, winner claims or process instructions as UI
+copy. An unknown capability cannot be turned into study content. If selected external reference work
+is unfinished, these are first-party-only provisional studies, not settled reference-based art direction.
+Later reference, copy, type and composition obligations remain unchanged.
+
+A bounded repair of a selected native study may receive that one study as a read-only source baseline,
+identified by its completed native role result, exact entry path and SHA-256, with explicitly named
+local assets. This is a repair input, not a seed for independent alternatives. The helper verifies the
+supplied identities and writes only its new host-granted leaf; the coordinator does not seed or patch
+that output directory. A missing baseline returns to the coordinator as an input problem. A successful
+child process without a nonempty regular `index.html` is not a completed source artifact.
+
+Run `omd-codex role run --agent omd-study --input <one-task.md> --json`. The host alone chooses a fresh
+`.omd/.cache/studies/study-<id>/` leaf and returns `studyDirectory` in the signed role result.
+The helper writes `index.html` and local study assets only there. It gets no delegated publication,
+browser or other-role authority. Do not substitute a caller-chosen directory or all of `.omd` as its
+write grant. Hosts without this explicit native directory grant do not support this lane; use their
+existing supported visual method or record the capability limitation. HTML study support is not an
+image-generation capability claim.
+
+After the role's actual completion, the coordinator runs
+`omd render <studyDirectory>/index.html --proofs -o <studyDirectory>/proof` for real desktop/mobile
+fixed and full-page captures. Inspect the actual images without concept names or author rationales:
+first check that the hypothesized content relationship is visible, then judge task fit, ambition,
+craft and responsive behavior. No applicable winner means repair or reconsider, not closest-wins.
+Record a provisional choice only after this inspection, with source/render paths and the few visible
+relationships worth preserving. This is local design decision material, never `omd candidate select`,
+a review verdict, production completion, or evidence of human equivalence.
+
+Composer may receive the chosen first-party study and its provisional status as a visual seed, like
+the project-owned rough below. It reconciles the visible relationships with current approved facts,
+copy, typography and reference evidence in the normal composition contract. The study cannot approve
+itself or force an unsupported claim downstream. Hand remains the sole production author. Final
+blind Eyes receive no study, author identity or selection rationale.
+
+## Carry a selected image into source
+
+When the user requests an image-to-code workflow and the visual direction is unresolved, generate and
+select the image through the available image lane before implementing it. An existing settled target
+can proceed directly to implementation; do not regenerate it merely to repeat the method.
+
+**[image-source:fidelity]** When an image is selected as an implementation target, pass its actual
+project-owned file, SHA-256 identity and intended viewport to the source owner. The owner must inspect
+the image; a prose summary of its layout is not a substitute. If it cannot view the file, return that
+missing input rather than silently implementing an approximation. This also applies to `omd-study`.
+An exploratory image that has not been selected remains decision material, not an implementation target.
+
+Preserve the selected image's component proportions, alignment, spacing rhythm, type relationships
+and control anatomy as well as its macro composition. Reconcile generated text and artifacts with
+the authoritative content, real-font proof, interaction and accessibility requirements. Record the
+necessary adaptations in the existing owner handoff; do not quietly replace the visual treatment with
+default controls or an easier layout. Exact generated lettering or unsupported UI is never authoritative.
+
+After the owner finishes, capture the actual source at the target viewport. The authorized observer
+compares target and render side by side at readable scale, including the controls or regions implicated
+by feedback. A squint render cannot establish detail fidelity. For a select, for example, inspect the
+rendered text, caret and both edge insets rather than only the outer box; retain keyboard and native
+selection semantics when adjusting its appearance. Use DOM geometry to resolve a visible discrepancy,
+not as a substitute for inspecting it. No universal inset, pixel-match percentage or styling rule follows.
+Zooms or crops for this comparison derive from the unchanged target and current render; retain their
+source bindings. Regenerating a detail creates new decision material, not a closer view of existing evidence.
+
+In the existing decision/craft record, identify the target and current source/render, the observed
+deviations and their dispositions. Unexplained loss of selected craft requires an owner-authored repair
+and a fresh comparison before claiming faithful implementation. Source completion, working interactions
+and possession of the target PNG do not establish that match. This adds no approval stage, new publisher
+or production authority; `omd-study` stays source-only and final blind review remains isolated.
 
 ## When image-first applies
 
 Image-first is for confident/showpiece register work where the visual composition is a first-class
 deliverable — landing pages, marketing sites, portfolios, brand/editorial pages, redesigns where the
-look is the point. For a quiet register (dashboard, docs, tool) it is usually unnecessary; the content
-is the event and a mockup adds nothing. Skip it and record why.
+look is the point. For a settled tool or document surface whose current uncertainty is behavioral,
+it may add nothing; skip it with that reason. A quiet register is not an exemption when the user requests
+image-to-code implementation or when unresolved visual craft is the task. Use the available image lane
+for that uncertainty, then apply the selected-image comparison above.
 
 When the host provides an image-generation capability and image-first applies, the order is
 **mandatory**:
 
 1. **Generate** — before composer starts, the coordinator/host derives the generation directions and
-   independent prompts from the hash-bound selected assembly, the selected references, any project
+   independent prompts from the hash-bound selected assembly, sanitized selected-reference evidence, any project
    rough, and the permitted project-owned inputs. Before generation, record the candidate count and
    its evidence-based reason in the existing decision record. Unresolved competing concepts need
    comparison; one candidate is appropriate only when the brief or current evidence already settles
@@ -64,8 +249,8 @@ When the host provides an image-generation capability and image-first applies, t
    clears the applicable task, concept, craft, and ambition floors,
    and stores them under `.omd/.cache/imagegen/`. The composer never contributes an upstream prompt or
    art-direction decision. One horizontal image per section for a multi-section page — never one tall
-   board with unreadable text. Do not crop an old image for a detail view; regenerate that section
-   fresh, keeping the same palette/type/radius/treatment.
+   board with unreadable text. To explore a new section design, generate that section fresh with the
+   selected palette/type/radius/treatment. This does not prohibit a crop or zoom for fidelity inspection.
    A project-owned rough — a quick pass built on the committed design system — is a permitted seed:
    feed it plus the committed palette/type/material so the draft fleshes out ("구체화") that rough. The
    build then redesigns the draft back onto the design system's tokens, spacing, and component rules;
@@ -137,6 +322,9 @@ Reasoning the layout in the abstract is exactly what produces the symmetric, box
 concrete art direction to react to instead of a reasonable-sounding description.
 
 ## Anti-literal generation contract
+
+This section applies when the route selects the typed art-direction contract; it does not invent a
+metaphor method or fields outside that contract.
 
 Before selection, each non-authoritative visual study consumes its own art-direction alternative's
 exact non-empty `metaphorQualities` and `literalPropsToReject`. It does not publish composition,

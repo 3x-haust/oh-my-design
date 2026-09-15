@@ -25,6 +25,7 @@ import {
   trustedEvaluationPlanBytes,
 } from '../core/runtime/trusted-evaluation-contract.ts';
 import { runTrustedLifecycle } from '../adapters/trusted-lifecycle-runtime.ts';
+import { redactObservationEvidence } from '../core/runtime/observation.ts';
 import { writeBrowserDecisionFixture } from './helpers/browser-observation-decision-links.ts';
 import {
   authorizeTestProjectRunPayloads,
@@ -47,12 +48,17 @@ const taskOutcome = {
   mustNotHave: ['Do not claim that the shipment is ready for release.'],
   completionEvidence: ['The inspection consequence is visible at both required viewports.'],
   strategyFreedom: ['Choose the quiet product composition without inventing shipment facts.'],
+  executionRequirements: [{
+    requirement: 'Use the authorized writer and complete independent review and terminal preflight.',
+    enforcedBy: ['project-write-boundary', 'independent-review', 'completion-preflight'] as const,
+  }],
 };
-const entrySurfaceInput = () => ({
+const defaultTaskIds = ['inspect-temperature-evidence', 'record-disposition-result'] as const;
+const entrySurfaceInput = (taskIds: readonly [string, string] = defaultTaskIds) => ({
   schema: 'entry-surface-contract-v1',
   entryPath: 'src/cold-chain/index.html',
-  prerequisiteTaskId: 'inspect-temperature-evidence',
-  dependentTaskId: 'record-disposition-result',
+  prerequisiteTaskId: taskIds[0],
+  dependentTaskId: taskIds[1],
   purposeText: 'Resolve cold-chain shipment exceptions',
   workObjectAnchorText: 'Shipment under review',
   nextActionName: 'Choose disposition',
@@ -74,10 +80,10 @@ const entrySurfaceInput = () => ({
   ],
 });
 
-function projection(sourceContractSha256: string) {
+function projection(sourceContractSha256: string, taskIds: readonly [string, string] = defaultTaskIds, surface: 'product' | 'editorial' = 'product') {
   return projectTaskFlowBenchmark(parseTaskFlowBenchmark({
     schema: 'task-flow-benchmark-v1',
-    surface: 'product',
+    surface,
     domain: 'cold-chain-shipment-exception',
     sourceContractSha256,
     sources: [
@@ -94,12 +100,12 @@ function projection(sourceContractSha256: string) {
     ],
     taskSteps: [
       {
-        id: 'inspect-temperature-evidence', intent: 'inspect supplied temperature evidence',
+        id: taskIds[0], intent: 'inspect supplied temperature evidence',
         dependsOn: [], evidenceSourceIds: ['authority-a', 'authority-b'],
       },
       {
-        id: 'record-disposition-result', intent: 'record a qualified disposition result',
-        dependsOn: ['inspect-temperature-evidence'], evidenceSourceIds: ['authority-a', 'authority-b'],
+        id: taskIds[1], intent: 'record a qualified disposition result',
+        dependsOn: [taskIds[0]], evidenceSourceIds: ['authority-a', 'authority-b'],
       },
     ],
     counterexamples: [
@@ -159,6 +165,38 @@ test('entry-surface contract is selector-free, closed, and outcome-complete', ()
     (error: unknown) => error instanceof EntrySurfaceContractError
       && error.code === 'MALFORMED_ENTRY_SURFACE_CONTRACT',
   );
+});
+
+test('entry witnesses preserve canonical frame task IDs without admitting arbitrary uppercase selectors', () => {
+  const input = entrySurfaceInput(['T2', 'T3']);
+  const parsed = parseEntrySurfaceContract(input);
+  assert.equal(parsed.prerequisiteTaskId, 'T2');
+  assert.equal(parsed.dependentTaskId, 'T3');
+  assert.doesNotThrow(() => requireEntrySurfaceOutcomeCoverage(parsed, taskOutcome));
+
+  for (const invalidId of ['T0', 'T01', 'T-2', 'Task2', 'T2"]', `T${'2'.repeat(64)}`]) {
+    assert.throws(
+      () => parseEntrySurfaceContract({ ...input, prerequisiteTaskId: invalidId }),
+      (error: unknown) => error instanceof EntrySurfaceContractError
+        && error.code === 'MALFORMED_ENTRY_SURFACE_CONTRACT',
+      invalidId,
+    );
+  }
+});
+
+test('observation redaction preserves valid frame IDs only in the typed task fields', () => {
+  const taskId = `T${'2'.repeat(30)}`;
+  assert.deepEqual(redactObservationEvidence({
+    prerequisiteTaskId: taskId,
+    dependentTaskId: 'T3',
+    note: taskId,
+    token: taskId,
+  }), {
+    prerequisiteTaskId: taskId,
+    dependentTaskId: 'T3',
+    note: '[REDACTED]',
+    token: '[REDACTED]',
+  });
 });
 
 test('trusted plan derives every selector and outcome script from semantic records', () => {
@@ -223,7 +261,8 @@ test('trusted plan derives every selector and outcome script from semantic recor
   assert.equal(consequenceOnly.entrySurface?.nextAction, undefined);
 });
 
-test('routed lifecycle accepts only the current derived plan and drives its real surface', async () => {
+for (const taskIds of [defaultTaskIds, ['T2', 'T3'] as const]) {
+test(`routed lifecycle preserves ${taskIds[0]} and rejects a substituted plan on its real surface`, async () => {
   const root = mkdtempSync(join(tmpdir(), 'omd-trusted-plan-browser-'));
   try {
     const invocation = publishTestAdaptiveRoute(root, routeInput(), 'trusted-plan-browser');
@@ -232,11 +271,11 @@ test('routed lifecycle accepts only the current derived plan and drives its real
     writeFrame(root, {
       why: 'The user requires evidence inspection before disposition.',
       uxSurface: 'product',
-      entrySurface: parseEntrySurfaceContract(entrySurfaceInput()),
+      entrySurface: parseEntrySurfaceContract(entrySurfaceInput(taskIds)),
     }, '# Cold-chain fixture frame', writer);
     writer.write(
       '.omd/task-flow-benchmark-projection.json',
-      `${JSON.stringify(projection(route.sourceContractSha256))}\n`,
+      `${JSON.stringify(projection(route.sourceContractSha256, taskIds))}\n`,
     );
     writer.mkdir('src/cold-chain');
     writer.write('src/cold-chain/index.html', [
@@ -244,12 +283,12 @@ test('routed lifecycle accepts only the current derived plan and drives its real
       '<h1 data-omd-purpose>Resolve cold-chain shipment exceptions</h1>',
       '<section data-omd-work-object>',
       '<h2 data-omd-work-anchor>Shipment under review</h2>',
-      '<p data-omd-consequence-for="record-disposition-result">Temperature evidence required</p>',
-      '<button data-omd-task-id="inspect-temperature-evidence">Inspect temperature evidence</button>',
+      `<p data-omd-consequence-for="${taskIds[1]}">Temperature evidence required</p>`,
+      `<button data-omd-task-id="${taskIds[0]}">Inspect temperature evidence</button>`,
       '<button data-omd-next-action disabled>Choose disposition</button>',
       '</section></main><script>',
-      'document.querySelector("[data-omd-task-id=inspect-temperature-evidence]").onclick=()=>{',
-      'document.querySelector("[data-omd-consequence-for=record-disposition-result]").textContent="Qualified determination required";',
+      `document.querySelector("[data-omd-task-id=${taskIds[0]}]").onclick=()=>{`,
+      `document.querySelector("[data-omd-consequence-for=${taskIds[1]}]").textContent="Qualified determination required";`,
       'document.querySelector("[data-omd-next-action]").disabled=false;',
       '};</script></body></html>',
     ].join(''));
@@ -301,8 +340,10 @@ test('routed lifecycle accepts only the current derived plan and drives its real
     rmSync(root, { recursive: true, force: true });
   }
 });
+}
 
-test('project derivation binds the current route, frame, and benchmark bytes', () => {
+for (const surface of ['product', 'editorial'] as const) {
+test(`project derivation binds the current route, ${surface} frame, and benchmark bytes`, () => {
   const root = mkdtempSync(join(tmpdir(), 'omd-trusted-plan-project-'));
   try {
     const invocation = publishTestAdaptiveRoute(root, routeInput(), 'trusted-plan-project');
@@ -310,10 +351,10 @@ test('project derivation binds the current route, frame, and benchmark bytes', (
     const writer = createTestProjectWriteAdapter(root, invocation);
     writeFrame(root, {
       why: 'The user requires evidence inspection before disposition.',
-      uxSurface: 'product',
+      uxSurface: surface,
       entrySurface: parseEntrySurfaceContract(entrySurfaceInput()),
     }, '# Cold-chain fixture frame', writer);
-    const benchmarkProjection = projection(route.sourceContractSha256);
+    const benchmarkProjection = projection(route.sourceContractSha256, defaultTaskIds, surface);
     writer.write(
       '.omd/task-flow-benchmark-projection.json',
       `${JSON.stringify(benchmarkProjection)}\n`,
@@ -322,8 +363,9 @@ test('project derivation binds the current route, frame, and benchmark bytes', (
     const manifest = deriveTrustedEvaluationPlanFromProject({ root, invocation });
     assert.equal(manifest.entryPath, 'src/cold-chain/index.html');
     assert.equal(manifest.entrySurface?.dependentTaskId, 'record-disposition-result');
+    assert.equal(manifest.scripts.length, 3);
 
-    const stale = projection('b'.repeat(64));
+    const stale = projection('b'.repeat(64), defaultTaskIds, surface);
     writeFileSync(
       join(root, '.omd/task-flow-benchmark-projection.json'),
       `${JSON.stringify(stale)}\n`,
@@ -337,6 +379,7 @@ test('project derivation binds the current route, frame, and benchmark bytes', (
     rmSync(root, { recursive: true, force: true });
   }
 });
+}
 
 test('trusted plan rejects a benchmark that does not own the direct task edge', () => {
   const sourceContractSha256 = 'a'.repeat(64);

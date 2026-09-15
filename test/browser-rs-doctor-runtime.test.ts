@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, watch, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -75,31 +75,77 @@ function writeSupportedHelpFixture(path: string): void {
 }
 
 function pidFromFile(path: string): number {
-  const pid = Number(readFileSync(path, 'utf8').trim());
-  if (!Number.isSafeInteger(pid)) throw new Error(`fixture wrote an invalid PID: ${path}`);
+  const value = readFileSync(path, 'utf8').trim();
+  const pid = Number(value);
+  if (!/^\d+$/.test(value) || !Number.isSafeInteger(pid) || pid <= 1) {
+    throw new Error(`fixture wrote an invalid PID: ${path}`);
+  }
   return pid;
 }
 
-function pidFiles(parent: string, paths: readonly string[], signal: AbortSignal): Promise<readonly number[]> {
+function pidFiles(paths: readonly string[], signal: AbortSignal): Promise<readonly number[]> {
   return new Promise((resolve, reject) => {
-    const names = new Set(paths.map((path) => path.slice(parent.length + 1)));
-    const watcher = watch(parent);
+    let settled = false;
+    const observe = (): void => finish();
     const onAbort = (): void => finish(signal.reason instanceof Error ? signal.reason : new Error('PID sentinel observation aborted'));
     const finish = (error?: Error): void => {
+      if (settled) return;
       if (error === undefined && !paths.every(existsSync)) return;
-      watcher.close();
+      // A creation observation may precede the shell's write. Never interpret an empty file as PID 0
+      // (the caller's process group), and wait for the actual numeric sentinel instead.
+      if (error === undefined && paths.some(path => readFileSync(path, 'utf8').trim() === '')) return;
+      let pids: readonly number[] = [];
+      if (error === undefined) {
+        try { pids = paths.map(pidFromFile); }
+        catch (cause) { error = cause instanceof Error ? cause : new Error(String(cause)); }
+      }
+      settled = true;
+      clearInterval(observationTimer);
       signal.removeEventListener('abort', onAbort);
       if (error !== undefined) reject(error);
-      else resolve(paths.map(pidFromFile));
+      else resolve(pids);
     };
+    // Directory notification setup can race an immediate shell write on macOS. Observe the
+    // sentinel contents themselves by bounded-interval polling; the provider's timeout stays
+    // unchanged and only the actual positive numeric sentinel can establish process identity.
+    const observationTimer = setInterval(observe, 25);
     signal.addEventListener('abort', onAbort, { once: true });
-    watcher.on('change', (_event, changed) => {
-      if (changed !== null && names.has(changed.toString())) finish();
-    });
-    watcher.once('error', finish);
-    finish();
+    if (signal.aborted) onAbort();
+    else finish();
   });
 }
+
+test('provider PID parsing rejects empty, process-group and non-decimal sentinels', () => {
+  const root = mkdtempSync(join(tmpdir(), 'omd-browser-rs-pid-'));
+  const path = join(root, 'provider.pid');
+  try {
+    for (const invalid of ['', ' ', '0', '1', '-42', '0x123', '1.5', 'Infinity']) {
+      writeFileSync(path, invalid);
+      assert.throws(() => pidFromFile(path), /invalid PID/);
+    }
+    writeFileSync(path, '12345\n');
+    assert.equal(pidFromFile(path), 12345);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('provider PID observation waits for a nonempty sentinel and rejects an aborted observer', { timeout: 5_000 }, async (context) => {
+  const root = mkdtempSync(join(tmpdir(), 'omd-browser-rs-pid-observation-'));
+  const path = join(root, 'provider.pid');
+  const controller = new AbortController();
+  try {
+    writeFileSync(path, '');
+    const observed = pidFiles([path], context.signal);
+    writeFileSync(path, '12345\n');
+    assert.deepEqual(await observed, [12345]);
+    controller.abort(new Error('test observer ended'));
+    await assert.rejects(pidFiles([path], controller.signal), /test observer ended/);
+  } finally {
+    controller.abort();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 
 function running(pid: number): boolean {
   try {
@@ -119,7 +165,7 @@ test('browser-rs doctor bounds and reaps a real SIGTERM-ignoring help provider',
   try {
     // Given: a zero-output direct shell provider that ignores SIGTERM and blocks on inherited stdin.
     writeTimeoutFixture(binary, childPidPath);
-    const pidReady = pidFiles(root, [childPidPath], context.signal);
+    const pidReady = pidFiles([childPidPath], context.signal);
 
     // When: doctor probes the real provider while the test captures its unique direct process PID.
     const doctor = doctorBrowserRs({
@@ -181,7 +227,7 @@ test('browser-rs doctor bounds and reaps a descendant that inherits its help pip
   try {
     // Given: a direct shell parent and SIGTERM-ignoring child that both block on inherited standard input.
     writeInheritedPipeFixture(binary, parentPidPath, childPidPath);
-    const pidsReady = pidFiles(root, [parentPidPath, childPidPath], context.signal);
+    const pidsReady = pidFiles([parentPidPath, childPidPath], context.signal);
 
     // When: doctor starts the parent and the test observes both processes before its deadline.
     const doctor = doctorBrowserRs({

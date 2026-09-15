@@ -8,7 +8,7 @@ export const REFERENCE_VISUAL_PACKET_EVIDENCE_SCHEMA = 'reference-visual-packet-
 export const GEOMETRY_NEUTRALIZATION_SCHEMA = 'geometry-neutralization-v1' as const;
 
 const DROPPED = ['color', 'copy', 'identity', 'imagery', 'typeface'] as const;
-const PRESERVED = ['box-proportion', 'grouping', 'nesting', 'whitespace'] as const;
+const PRESERVED = ['box-proportion', 'grouping', 'nesting', 'whitespace', 'relative-position'] as const;
 const GEOMETRY_AXES = new Set(['structure', 'proportion', 'density', 'rhythm']);
 
 type PacketEntry = {
@@ -80,48 +80,30 @@ const requireComponentCaptureEvidence = (value: RawBoardEvidence, slotId: string
 
 function placeBlueprint(nodes: readonly BlueprintNode[]): readonly Placed[] {
   if (nodes.length < 3) fail('geometry neutralization requires at least three measured nodes');
+  if (nodes.some(node => node.position === undefined || !Number.isFinite(node.position.x) || !Number.isFinite(node.position.y))) {
+    fail('measured relative positions are missing; recapture the component, never reconstruct its layout');
+  }
+  const left = Math.min(0, ...nodes.map(node => node.position!.x));
+  const top = Math.min(0, ...nodes.map(node => node.position!.y));
+  const width = Math.max(...nodes.map(node => node.position!.x + node.box.w)) - left;
+  const height = Math.max(...nodes.map(node => node.position!.y + node.box.h)) - top;
+  if (width <= 0 || height <= 0) fail('measured component bounds are empty');
+  const scale = Math.min(920 / width, 560 / height);
   const placed: Placed[] = [];
   const active = new Set<number>();
   const visited = new Set<number>();
-  const visit = (index: number, x: number, y: number, width: number, height: number, depth: number): void => {
+  const visit = (index: number, depth: number): void => {
     if (active.has(index)) fail('blueprint contains a cycle');
     if (visited.has(index)) return;
     if (nodes[index] === undefined) fail('blueprint contains an unknown node index');
     const node = nodes[index]!;
     active.add(index); visited.add(index);
-    placed.push({ index, x: round(x), y: round(y), width: round(Math.max(1, width)), height: round(Math.max(1, height)), depth });
-    const children = node.children.map((child) => nodes[child] ?? fail('blueprint child is missing'));
-    if (children.length > 0) {
-      const [paddingTop = 0, paddingRight = 0, paddingBottom = 0, paddingLeft = 0] = node.padding ?? [0, 0, 0, 0];
-      const scaleX = width / Math.max(1, node.box.w); const scaleY = height / Math.max(1, node.box.h);
-      const top = Math.min(height * .2, paddingTop * scaleY); const right = Math.min(width * .2, paddingRight * scaleX);
-      const bottom = Math.min(height * .2, paddingBottom * scaleY); const left = Math.min(width * .2, paddingLeft * scaleX);
-      const innerX = x + left; const innerY = y + top;
-      const innerW = Math.max(1, width - left - right); const innerH = Math.max(1, height - top - bottom);
-      const sumW = children.reduce((sum, child) => sum + Math.max(1, child.box.w), 0);
-      const sumH = children.reduce((sum, child) => sum + Math.max(1, child.box.h), 0);
-      const horizontalError = Math.abs(sumW - node.box.w) / Math.max(1, node.box.w);
-      const verticalError = Math.abs(sumH - node.box.h) / Math.max(1, node.box.h);
-      const horizontal = horizontalError <= verticalError;
-      const gap = Math.min(horizontal ? innerW : innerH, Math.max(2, (node.gap ?? 6) * (horizontal ? scaleX : scaleY)));
-      const distributable = Math.max(1, (horizontal ? innerW : innerH) - gap * Math.max(0, children.length - 1));
-      let cursor = horizontal ? innerX : innerY;
-      for (let childOffset = 0; childOffset < children.length; childOffset += 1) {
-        const child = children[childOffset]!; const childIndex = node.children[childOffset]!;
-        if (horizontal) {
-          const childW = distributable * Math.max(1, child.box.w) / sumW;
-          const childH = Math.min(innerH, innerH * Math.max(1, child.box.h) / Math.max(1, node.box.h));
-          visit(childIndex, cursor, innerY, childW, childH, depth + 1); cursor += childW + gap;
-        } else {
-          const childH = distributable * Math.max(1, child.box.h) / sumH;
-          const childW = Math.min(innerW, innerW * Math.max(1, child.box.w) / Math.max(1, node.box.w));
-          visit(childIndex, innerX, cursor, childW, childH, depth + 1); cursor += childH + gap;
-        }
-      }
-    }
+    placed.push({ index, x: round(20 + (node.position!.x - left) * scale), y: round(20 + (node.position!.y - top) * scale),
+      width: round(node.box.w * scale), height: round(node.box.h * scale), depth });
+    for (const child of node.children) visit(child, depth + 1);
     active.delete(index);
   };
-  visit(0, 20, 20, 920, 560, 0);
+  visit(0, 0);
   if (visited.size !== nodes.length) fail('blueprint contains unreachable nodes');
   return placed;
 }

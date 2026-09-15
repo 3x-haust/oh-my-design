@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import test from 'node:test';
@@ -16,14 +16,15 @@ import { assertReferenceVisualPacketNotShipped, buildReferenceVisualPacket, vali
 import type { Blueprint, Invariants, Reference } from '../core/types.ts';
 import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
 import { inputSkeleton } from '../core/schema/inputs.ts';
+import { verifyReferenceEvidence } from '../core/ref/reference-verification.ts';
 
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNgYGAAAAAEAAH2FzhVAAAAAElFTkSuQmCC', 'base64');
 const HASH = 'a'.repeat(64);
 const INVARIANTS: Invariants = { spacingLadder: [8], radiusLadder: [4], elevationLevels: 0, centeredRatio: 0, tokenCoverage: 1, paddingWeight: 8, typeScale: [], fontFamilies: [], weightLadder: [], motionDurations: [], easingVocab: [], animatedShare: 0, hoverCoverage: 0, focusCoverage: 0, animatedProperties: [], hasReducedMotion: false, scrollChoreography: [] };
 const blueprint = (selector: string): Blueprint => ({ selector, capturedAt: '2026-09-02T00:00:00.000Z', nodes: [
-  { id: `${selector}-root`, role: 'container', children: [`${selector}-label`, `${selector}-value`], box: { w: 240, h: 120 }, direction: 'HORIZONTAL', gap: 12 },
-  { id: `${selector}-label`, role: 'text', children: [], box: { w: 72, h: 24 }, textLength: 'label' },
-  { id: `${selector}-value`, role: 'heading', children: [], box: { w: 156, h: 48 }, textLength: 'phrase' },
+  { id: `${selector}-root`, role: 'container', children: [`${selector}-label`, `${selector}-value`], box: { w: 240, h: 120 }, position: { x: 0, y: 0 }, direction: 'HORIZONTAL', gap: 12 },
+  { id: `${selector}-label`, role: 'text', children: [], box: { w: 72, h: 24 }, position: { x: 0, y: 12 }, textLength: 'label' },
+  { id: `${selector}-value`, role: 'heading', children: [], box: { w: 156, h: 48 }, position: { x: 84, y: 48 }, textLength: 'phrase' },
 ] });
 
 const acquisition = () => ({
@@ -82,6 +83,42 @@ test('acquisition v2 closes decision, locale, state, viewport, and falsifier fie
   assert.ok(validateAcquisitionPlan(duplicateViewport).findings.some((finding) => finding.id === 'ACQUISITION-VIEWPORT-DUPLICATE'));
 });
 
+test('acquisition verification exposes real source bindings and does not claim semantic inspection', async context => {
+  const { root, input } = fixture(context);
+  const board = authorReferenceBoard(root, input);
+  writeFileSync(join(root, '.omd/reference-board.json'), canonicalJson(board));
+  const report = await verifyReferenceEvidence(root, { candidateId: 'facts-first' });
+  assert.equal(report.rows.length, 2);
+  assert.ok(report.rows.every(row => row.acquisition === 'measured-component' && row.semanticState === 'requires-visible-inspection'));
+  assert.ok(report.rows.every(row => row.comparison === null));
+  assert.ok(report.rows.every(row => 'sourceSelector' in row && row.sourceSelector));
+  await assert.rejects(() => verifyReferenceEvidence(root, { candidateId: 'invented' }), /does not exist/);
+  const refs = loadRefs(root); const old = refs[0]!;
+  delete old.blueprint!.nodes[0]!.position;
+  saveRef(root, old, createTestProjectWriteAdapter(root));
+  const changed = await verifyReferenceEvidence(root, { candidateId: 'facts-first' });
+  assert.ok(changed.rows.some(row => row.acquisition === 'unmeasured-geometry'));
+});
+
+test('declared feature bindings retain source-free numeric correspondence and reject invalid captured nodes before publication', context => {
+  const { root, input } = fixture(context);
+  const withFeatures = structuredClone(input) as any;
+  withFeatures.candidates[0].pieces[0].binding.measurements = [
+    { id: 'label-value-offset', quantity: 'left-edge-offset', sourceNodes: [1, 2], targetAnchors: ['label', 'value'] },
+  ];
+  const board = authorReferenceBoard(root, withFeatures);
+  writeFileSync(join(root, '.omd/reference-board.json'), canonicalJson(board));
+  const artifacts = readReferenceBoardArtifacts(root);
+  const projected = artifacts.assembly.candidates.find(candidate => candidate.id === 'facts-first')!.pieces[0]!.binding!;
+  assert.deepEqual(projected.measurements, withFeatures.candidates[0].pieces[0].binding.measurements);
+  assert.doesNotMatch(artifacts.assemblyBytes, /events\.example\.kr|calendar\.example\.kr|sourceSelector/);
+  (projected.measurements![0]!.sourceNodes as number[])[0] = 999;
+  assert.deepEqual(artifacts.resolved.candidates.find(candidate => candidate.id === 'facts-first')!.pieces[0]!.binding!.measurements![0]!.sourceNodes, [1, 2]);
+  withFeatures.candidates[0].pieces[0].binding.measurements[0].sourceNodes = [1, 999];
+  assert.throws(() => authorReferenceBoard(root, withFeatures), /source node 999/);
+  assert.deepEqual(JSON.parse(readFileSync(join(root, '.omd/reference-board.json'), 'utf8')), board, 'invalid definitions cannot replace the existing board');
+});
+
 test('reference-state guidance separates observed sources from destination outcomes', () => {
   const plan = inputSkeleton('acquisition-plan');
   assert.ok(plan.constraints);
@@ -90,6 +127,24 @@ test('reference-state guidance separates observed sources from destination outco
   const board = inputSkeleton('reference-board');
   assert.ok(board.constraints);
   assert.match(board.constraints.join(' '), /truthfully describe the captured reference state and match zone.requiredState/);
+});
+
+test('Framer rejects non-transferable state and falsifier payloads before Scout builds a board', () => {
+  for (const payload of ['The Node.js 22.19 prerequisite is absent.', 'See https://example.com/source.', 'The .omd/refs/capture.png is hidden.', '<button>Install</button>']) {
+    for (const field of ['requiredState', 'falsifier'] as const) {
+      const input = acquisition();
+      input.zones[0]![field] = payload;
+      const checked = validateAcquisitionPlan(input);
+      assert.equal(checked.value, undefined, `${field}: ${payload}`);
+      assert.ok(checked.findings.some(finding => finding.path === `zones[0].${field}` && finding.id.endsWith('-PAYLOAD')));
+    }
+  }
+  const transferable = acquisition();
+  transferable.zones[0]!.requiredState = 'Installation steps and the runtime prerequisite are visible.';
+  transferable.zones[0]!.falsifier = 'The setup order is unclear or the stated runtime prerequisite is missing.';
+  assert.ok(validateAcquisitionPlan(transferable).value);
+  transferable.zones[0]!.falsifier = 'The displayed rate loses its 3.1 mm/s value.';
+  assert.ok(validateAcquisitionPlan(transferable).value, 'the existing bounded measurement-ratio exception is preserved');
 });
 
 test('plan repair guidance does not weaken exact reference-state binding', (context) => {
@@ -183,6 +238,13 @@ test('selected visual packet neutralizes one lawful influence reproducibly and c
   for (const leaked of ['events.example.kr', 'calendar.example.kr', 'ref-', 'sourceCaptureSha256', '<text', '<image']) assert.doesNotMatch(publicBytes, new RegExp(leaked));
   assert.equal(first.packet.noShip, true); assert.equal(first.packet.sourceFree, true);
   assert.deepEqual(first.packet.entries[0]?.sanitizer.dropped, ['color', 'copy', 'identity', 'imagery', 'typeface']);
+  assert.ok(first.packet.entries[0]?.sanitizer.preserved.includes('relative-position'));
+  // The measured 240×120 group scales uniformly by 920/240. Its deliberately
+  // offset children must not be rearranged into a guessed horizontal flex row.
+  const geometry = [...first.assets.values()][0]!;
+  assert.match(geometry, /<rect x="22" y="22" width="916" height="456"/);
+  assert.match(geometry, /<rect x="22" y="107" width="114\.24" height="10"/);
+  assert.match(geometry, /<rect x="344" y="287" width="403\.92" height="18"/);
 
   mkdirSync(join(root, '.omd', 'reference-visual-packets'), { recursive: true });
   for (const [assetPath, content] of first.assets) writeFileSync(join(root, assetPath), content);
@@ -199,4 +261,17 @@ test('selected visual packet neutralizes one lawful influence reproducibly and c
   assert.throws(() => buildReferenceVisualPacket(root, rejected, ['event-detail-structure']), /not a used lawful selection/);
   const assetPath = [...first.assets.keys()][0]!; writeFileSync(join(root, assetPath), '<svg/>');
   assert.throws(() => validateReferenceVisualPacketCurrentness(root, selection), /packet asset .* is stale/);
+
+  // Rebind a genuine legacy capture, so rejection is for missing geometry and
+  // not merely a stale board/selection hash.
+  const legacy = loadRefs(root).find(reference => reference.component === 'fact-stack')!;
+  delete legacy.blueprint!.nodes[2]!.position;
+  saveRef(root, legacy, createTestProjectWriteAdapter(root));
+  writeFileSync(path, canonicalJson(authorReferenceBoard(root, input)));
+  const current = readReferenceBoardArtifacts(root, path);
+  const legacySelection: ReferenceSelectionV2 = {
+    ...selection, captureSha256: sha256(current.boardBytes),
+    assemblySha256: sha256(current.assemblyBytes), projectionSha256: sha256(current.projectionBytes),
+  };
+  assert.throws(() => buildReferenceVisualPacket(root, legacySelection, ['event-detail-structure']), /measured relative positions are missing; recapture/);
 });

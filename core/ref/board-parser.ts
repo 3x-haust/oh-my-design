@@ -17,7 +17,8 @@ import {
   type ReferenceBoardPiece,
 } from './board-contract.ts';
 import { REFERENCE_INFLUENCE_AXIS_VALUES, type ReferenceInfluenceAxis } from '../deliberation/contracts.ts';
-import { hasAssemblyPayload, hasSelectorPayload, hasSourcePayload } from './board-sanitization.ts';
+import { hasAssemblyPayload, hasFalsifierAssemblyPayload, hasSelectorPayload, hasSourcePayload } from './board-sanitization.ts';
+import { parseReferenceFeatureMeasurements } from './feature-measurement.ts';
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 const fail = (reason: string): never => { throw new ReferenceBoardValidationError(reason); };
@@ -31,6 +32,11 @@ const nonEmpty = (value: unknown, label: string): string => typeof value === 'st
 const assemblyText = (value: unknown, label: string): string => {
   const parsed = nonEmpty(value, label);
   if (hasAssemblyPayload(parsed)) fail(`${label} must not include source, pixel, markup, or control payloads`);
+  return parsed;
+};
+const falsifierText = (value: unknown, label: string): string => {
+  const parsed = nonEmpty(value, label);
+  if (hasFalsifierAssemblyPayload(parsed)) fail(`${label} must not include source, pixel, markup, or control payloads`);
   return parsed;
 };
 const integer = (value: unknown, label: string): number => typeof value === 'number' && Number.isSafeInteger(value) ? value : fail(`${label} must be a safe integer`);
@@ -130,7 +136,8 @@ const influenceAxis = (value: unknown, label: string): ReferenceInfluenceAxis =>
     : fail(`${label} must be one of ${REFERENCE_INFLUENCE_AXIS_VALUES.join(', ')}`);
 const influenceBinding = (value: unknown, label: string): ReferenceInfluenceBinding => {
   const parsed = record(value, label);
-  exactKeys(parsed, ['axis', 'conflictGroup', 'conflictResolution', 'decisionId', 'falsifier', 'responsiveConsequence', 'sourceState', 'sourceViewport', 'targetViewports', 'zoneId'], label);
+  exactKeys(parsed, ['axis', 'conflictGroup', 'conflictResolution', 'decisionId', 'falsifier', 'responsiveConsequence', 'sourceState', 'sourceViewport', 'targetViewports', 'zoneId',
+    ...(parsed['measurements'] === undefined ? [] : ['measurements'])], label);
   const viewport = record(parsed['sourceViewport'], `${label}.sourceViewport`);
   exactKeys(viewport, ['height', 'width'], `${label}.sourceViewport`);
   const width = integer(viewport['width'], `${label}.sourceViewport.width`);
@@ -156,7 +163,8 @@ const influenceBinding = (value: unknown, label: string): ReferenceInfluenceBind
     responsiveConsequence: assemblyText(parsed['responsiveConsequence'], `${label}.responsiveConsequence`),
     conflictGroup,
     conflictResolution,
-    falsifier: assemblyText(parsed['falsifier'], `${label}.falsifier`),
+    falsifier: falsifierText(parsed['falsifier'], `${label}.falsifier`),
+    ...(parsed['measurements'] === undefined ? {} : { measurements: parseReferenceFeatureMeasurements(parsed['measurements'], String(parsed['axis'])) }),
   };
 };
 
@@ -194,6 +202,10 @@ const piece = (value: unknown, label: string, version: ReferenceBoardManifest['s
     evidenceAxes: axes,
     ...(version === REFERENCE_BOARD_V3_SCHEMA_VERSION ? { binding: influenceBinding(parsed['binding'], `${label}.binding`) } : {}),
   };
+  if (base.binding?.measurements && kind !== 'component-capture') fail(`${label} declared measurements require a captured component blueprint`);
+  if (kind === 'image-fragment' && (axes.motionAxis !== 'absent' || takes.includes('motion'))) {
+    fail(`${label} a static image fragment cannot supply motion evidence`);
+  }
   if (classified) {
     const binding = classification(parsed['classification'], `${label}.classification`);
     if (binding.kind === 'content-only') {

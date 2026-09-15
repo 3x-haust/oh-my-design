@@ -28,8 +28,10 @@ test('canonical visual roles carry the machine-consumed anti-literal sentinels',
 
   const coordinator = read('src/skills/omd-ultradesign/SKILL.md');
   assert.ok(coordinator.includes('[metaphor-contract:typed-router]'));
-  assert.ok(coordinator.includes('metaphorQualities'));
-  assert.ok(coordinator.includes('literalPropsToReject'));
+  // The coordinator forwards the typed object, while each visual consumer above
+  // owns the field-level contract. Do not require a second copy of those fields.
+  assert.match(coordinator, /pass the immutable visual contract unchanged to visual owners/);
+  assert.match(coordinator, /writer receives only its copy-safe projection/);
 });
 
 test('canonical authoring prompts route the current versioned decision contract', () => {

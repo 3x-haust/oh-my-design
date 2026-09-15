@@ -20,6 +20,7 @@ import { loadRefs } from './store.ts';
 import { componentCaptureTransfer } from './board-transfer.ts';
 import type { Reference } from '../types.ts';
 import { parseReferenceClassification, referenceClassificationSha256 } from './reference-classification.ts';
+import { sourceFeatureWitness } from './feature-measurement.ts';
 
 export * from './board-contract.ts';
 export { projectReferenceAssembly } from './board-projection.ts';
@@ -47,6 +48,7 @@ const componentPiece = (root: string, piece: Extract<ReferenceBoardPiece, { read
     if (viewport.width !== piece.binding.sourceViewport.width || viewport.height !== piece.binding.sourceViewport.height) {
       fail(`reference ${piece.referenceId} captured viewport does not match binding.sourceViewport`);
     }
+    for (const measurement of piece.binding.measurements ?? []) sourceFeatureWitness(reference.blueprint, measurement);
   }
   return { ...piece, reference, imagePath: trustedComponentCaptureImage(root, imagePath), transfer: componentCaptureTransfer(reference, piece.referenceId) };
 };

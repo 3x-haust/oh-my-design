@@ -11,13 +11,13 @@
 // has enough range to carry hierarchy. It never invents values.
 
 export const TOKEN_COMMIT_SCHEMA = 'token-commit-v1' as const;
+export const RESPONSIVE_TOKEN_COMMIT_SCHEMA = 'token-commit-v2' as const;
+export const TOKEN_COMMIT_KEYS = ['schema', 'register', 'typeScale', 'spacingScale', 'colorRoles', 'fontRoles'] as const;
+export const RESPONSIVE_TOKEN_COMMIT_KEYS = [...TOKEN_COMMIT_KEYS, 'responsiveTypeScales'] as const;
 
-/**
- * A type scale carries hierarchy only when its steps are separated enough to read as different.
- * Measured references run 3–8 rungs; two adjacent body sizes are not a scale.
- */
+/** Existing minimum rung policy; these checks do not establish visual quality. */
 export const MIN_TYPE_RUNGS = 4;
-/** Consecutive rungs must differ by at least this ratio, or the step is invisible. */
+/** Existing minimum adjacent-rung ratio policy. */
 export const MIN_TYPE_RATIO = 1.15;
 /** A display moment: the largest rung must be at least this multiple of the smallest. */
 export const MIN_DISPLAY_RATIO = 2.5;
@@ -26,8 +26,7 @@ export const MIN_SPACING_RUNGS = 4;
 /** Registers whose correct risk is functional are exempt from the display-moment requirement. */
 export const DISPLAY_EXEMPT_REGISTERS: ReadonlySet<string> = new Set(['quiet', 'product']);
 
-export type TokenCommit = {
-  readonly schema: typeof TOKEN_COMMIT_SCHEMA;
+type TokenCommitBase = {
   /** The register these tokens serve; governs which floors apply. */
   readonly register: string;
   /** Font sizes in px, ascending, no duplicates. */
@@ -39,6 +38,15 @@ export type TokenCommit = {
   /** Font families by role; at least one. */
   readonly fontRoles: Readonly<Record<string, string>>;
 };
+
+export type TokenCommit = TokenCommitBase & (
+  | { readonly schema: typeof TOKEN_COMMIT_SCHEMA }
+  | { readonly schema: typeof RESPONSIVE_TOKEN_COMMIT_SCHEMA; readonly responsiveTypeScales: readonly {
+    /** Inclusive CSS viewport-width cap; first matching cap wins, base scale above all caps. */
+    readonly maxWidth: number;
+    readonly typeScale: readonly number[];
+  }[] }
+);
 
 export class TokenCommitError extends Error {
   override readonly name = 'TokenCommitError';
@@ -84,40 +92,54 @@ function asStringMap(value: unknown, label: string, required: readonly string[])
   return out;
 }
 
-/**
- * Validates a token commitment. Throws `TokenCommitError` on any violation.
- *
- * Beyond well-formedness this enforces the ranges that make a scale a scale: enough rungs, a real
- * ratio between them, and — on a register whose job is to persuade — a display moment. A page whose
- * type scale is two adjacent body sizes cannot express hierarchy no matter how it is composed.
- */
-export function validateTokenCommit(value: unknown): TokenCommit {
-  const record = asRecord(value, 'commit must be an object');
-  exactKeys(record, ['colorRoles', 'fontRoles', 'register', 'schema', 'spacingScale', 'typeScale'], 'commit has unknown or missing keys');
-  if (record.schema !== TOKEN_COMMIT_SCHEMA) fail(`schema must be ${TOKEN_COMMIT_SCHEMA}`);
-  const register = typeof record.register === 'string' && record.register.trim() !== ''
-    ? record.register.trim()
-    : fail('register must be a non-empty string');
-
-  const typeScale = asLadder(record.typeScale, 'typeScale', MIN_TYPE_RUNGS);
+/** Applies the same existing scale policy independently to each viewport context. */
+function asTypeScale(value: unknown, label: string, register: string): number[] {
+  const typeScale = asLadder(value, label, MIN_TYPE_RUNGS);
   for (let i = 1; i < typeScale.length; i += 1) {
     const ratio = typeScale[i]! / typeScale[i - 1]!;
     if (ratio < MIN_TYPE_RATIO) {
-      fail(`typeScale steps ${typeScale[i - 1]}→${typeScale[i]} differ by ${ratio.toFixed(2)}×, below the ${MIN_TYPE_RATIO}× minimum — the step is invisible and the scale stops carrying hierarchy`);
+      fail(`${label} steps ${typeScale[i - 1]}→${typeScale[i]} differ by ${ratio.toFixed(2)}×, below the ${MIN_TYPE_RATIO}× minimum`);
     }
   }
   if (!DISPLAY_EXEMPT_REGISTERS.has(register)) {
     const displayRatio = typeScale[typeScale.length - 1]! / typeScale[0]!;
     if (displayRatio < MIN_DISPLAY_RATIO) {
-      fail(`typeScale spans only ${displayRatio.toFixed(2)}× from ${typeScale[0]} to ${typeScale[typeScale.length - 1]}; a \`${register}\` surface needs a display moment of at least ${MIN_DISPLAY_RATIO}×`);
+      fail(`${label} spans only ${displayRatio.toFixed(2)}× from ${typeScale[0]} to ${typeScale[typeScale.length - 1]}; a \`${register}\` surface needs a display moment of at least ${MIN_DISPLAY_RATIO}×`);
     }
   }
+  return typeScale;
+}
+
+/** Validates the closed commitment shape and every scale; never invents design values. */
+export function validateTokenCommit(value: unknown): TokenCommit {
+  const record = asRecord(value, 'commit must be an object');
+  const schema = record.schema;
+  if (schema !== TOKEN_COMMIT_SCHEMA && schema !== RESPONSIVE_TOKEN_COMMIT_SCHEMA) fail(`schema must be ${TOKEN_COMMIT_SCHEMA} or ${RESPONSIVE_TOKEN_COMMIT_SCHEMA}`);
+  exactKeys(record, schema === TOKEN_COMMIT_SCHEMA ? TOKEN_COMMIT_KEYS : RESPONSIVE_TOKEN_COMMIT_KEYS, 'commit has unknown or missing keys');
+  const register = typeof record.register === 'string' && record.register.trim() !== ''
+    ? record.register.trim()
+    : fail('register must be a non-empty string');
+  const typeScale = asTypeScale(record.typeScale, 'typeScale', register);
 
   const spacingScale = asLadder(record.spacingScale, 'spacingScale', MIN_SPACING_RUNGS);
   const colorRoles = asStringMap(record.colorRoles, 'colorRoles', ['accent']);
   const fontRoles = asStringMap(record.fontRoles, 'fontRoles', []);
 
-  return { schema: TOKEN_COMMIT_SCHEMA, register, typeScale, spacingScale, colorRoles, fontRoles };
+  const base = { register, typeScale, spacingScale, colorRoles, fontRoles };
+  if (schema === TOKEN_COMMIT_SCHEMA) return { schema, ...base };
+  const rawScales: unknown[] = Array.isArray(record.responsiveTypeScales) && record.responsiveTypeScales.length > 0
+    ? record.responsiveTypeScales : fail('responsiveTypeScales must be a non-empty array');
+  let previousWidth = 0;
+  const responsiveTypeScales = rawScales.map((raw, index) => {
+    const label = `responsiveTypeScales[${index}]`;
+    const entry = asRecord(raw, `${label} must be an object`);
+    exactKeys(entry, ['maxWidth', 'typeScale'], `${label} has unknown or missing keys`);
+    const maxWidth = typeof entry.maxWidth === 'number' && Number.isFinite(entry.maxWidth) && entry.maxWidth > previousWidth
+      ? entry.maxWidth : fail(`${label}.maxWidth must be positive, finite and strictly ascending with no duplicates`);
+    previousWidth = maxWidth;
+    return { maxWidth, typeScale: asTypeScale(entry.typeScale, `${label}.typeScale`, register) };
+  });
+  return { schema: RESPONSIVE_TOKEN_COMMIT_SCHEMA, ...base, responsiveTypeScales };
 }
 
 export type TokenDrift = {
@@ -130,12 +152,18 @@ export type TokenDrift = {
  * observed value sits on a committed rung — the point of committing tokens is that the build lands
  * on them rather than inventing neighbours.
  */
-export function checkTokenDrift(commit: TokenCommit, observed: { readonly typeScale: readonly number[]; readonly spacingScale: readonly number[] }): TokenDrift | null {
-  const offType = observed.typeScale.filter((size) => !commit.typeScale.includes(size));
+export function checkTokenDrift(commit: TokenCommit, observed: { readonly typeScale: readonly number[]; readonly spacingScale: readonly number[] }, viewportWidth?: number): TokenDrift | null {
+  let typeScale = commit.typeScale;
+  if (commit.schema === RESPONSIVE_TOKEN_COMMIT_SCHEMA) {
+    const width = typeof viewportWidth === 'number' && Number.isFinite(viewportWidth) && viewportWidth > 0
+      ? viewportWidth : fail('responsive drift requires a positive finite viewport width');
+    typeScale = commit.responsiveTypeScales.find(entry => width <= entry.maxWidth)?.typeScale ?? commit.typeScale;
+  }
+  const offType = observed.typeScale.filter((size) => !typeScale.includes(size));
   const offSpacing = observed.spacingScale.filter((step) => !commit.spacingScale.includes(step));
   if (offType.length === 0 && offSpacing.length === 0) return null;
   const parts: string[] = [];
-  if (offType.length > 0) parts.push(`type sizes ${offType.join(', ')} are not on the committed scale [${commit.typeScale.join(', ')}]`);
+  if (offType.length > 0) parts.push(`type sizes ${offType.join(', ')} are not on the committed scale [${typeScale.join(', ')}]`);
   if (offSpacing.length > 0) parts.push(`spacing steps ${offSpacing.join(', ')} are not on the committed scale [${commit.spacingScale.join(', ')}]`);
   return {
     id: 'TOKEN-DRIFT',

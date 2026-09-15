@@ -72,3 +72,23 @@ test('design quality cannot collapse into the existing review mean', () => {
   assert.ok(!Object.hasOwn(visual, 'designQualityWeights'));
   assert.ok(!Object.hasOwn(visual, 'overallDesignScore'));
 });
+
+test('final blind reviewers receive the trusted source-free observation projection', () => {
+  const eye = readFileSync(new URL('../src/agents/eye.agent.yaml', import.meta.url), 'utf8');
+  const coordinator = readFileSync(new URL('../src/skills/omd-ultradesign/SKILL.md', import.meta.url), 'utf8');
+  const protocol = readFileSync(new URL('../core/protocol/human-design-loop.md', import.meta.url), 'utf8');
+  for (const contract of [eye, protocol]) {
+    assert.match(contract, /design-quality-observation-projection-v1/);
+    assert.match(contract, /aggregate observation/i);
+    assert.match(contract, /viewport/);
+    assert.match(contract, /state/);
+  }
+  // The initial final packet now transports the trusted projection together with
+  // actual images; a separate metadata-only projection is not the launch path.
+  assert.match(coordinator, /omd schema final-render-reviewer-packet/);
+  assert.match(coordinator, /omd review final-packet/);
+  assert.match(coordinator, /aggregate observation-v2 chain/);
+  assert.match(coordinator, /exact viewport\/state from a projected row/);
+  assert.match(coordinator, /every anonymous production image block/);
+  assert.match(eye, /copy `viewport` and\s+`state` exactly/);
+});

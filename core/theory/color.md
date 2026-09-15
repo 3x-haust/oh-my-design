@@ -1,308 +1,232 @@
 # Colour — decision material
 
-The question "what colour should this be" is not answered by preference. It is answered by
-the domain the product sits in, the register the concept demands, and what the colour will
-be required to do. Preference is the noise; these are the signal.
+Colour is a system of roles, not a mood-board verdict. Choose it from the work the surface must
+support: brand recognition, hierarchy, interaction, status, data distinction, and readable content.
+The user owns explicit brand preferences. Research and references may reveal conventions, but they
+do not overrule supplied brand assets or turn a category stereotype into a requirement.
+
+For every important choice, record: **condition → colour role → evidence → rendered check**. Name
+the role before choosing a value: canvas, surface, text, border, action, focus, selection, success,
+warning, error, or data series. A swatch without a role is not yet a design decision.
 
 ---
 
 ## Domain conventions and why they exist
 
-Colour conventions are not arbitrary. They are residues of what worked — or what users
-learned to expect — in each industry. Violating them requires a reason proportional to the
-cost of breaking the expectation.
+Category palettes can be useful reference evidence because repeated exposure may create user
+expectations. They are not laws and do not prove psychological effects. Do not infer trust from
+blue, health from green, appetite from red, luxury from black, or technical credibility from a
+dark theme. Industry, age, and country labels are too coarse to authorize those conclusions.
 
-**Fintech and banking.** Blue, deployed consistently since the 1980s, carries a specific
-claim: trustworthiness and institutional stability. Elliot & Maier (2014,
-*Color-in-Context*) map blue to cognitive associations with calm, reliability, and
-competence — properties banking literally sells. Navy amplifies authority; desaturated
-mid-blue reads as honest and measured; bright cobalt reads as technology-forward. If your
-fintech product is positioning *against* legacy banking (neobanks, crypto wallets), the
-blue is exactly what you reject — but you are then making a claim and you must support it.
-Breaking the convention is valid. Breaking it without knowing you broke it is not.
+Use domain evidence in this order:
 
-**Healthcare.** Green and white. White signals cleanliness — a hospital ceiling rather than
-a brand choice, but one that research has made load-bearing. Green is associated with
-healing and growth in Western contexts (Itten, *The Art of Color*, 1961). The danger zone
-is red: Elliot & Maier's color-in-context research documents a reliable anxiety response to
-red in evaluative contexts — patients waiting for results are already in an elevated state.
-High-saturation red raises it further. Red is reserved for confirmed errors only; everything
-else uses softer treatment.
+1. Apply explicit user direction and verified brand tokens.
+2. Inspect real, current products that serve the same task and audience. Record the colour roles,
+   not just their hex values.
+3. Identify the convention's functional purpose: recognition, warning, wayfinding, dense-work
+   comfort, data distinction, or something else.
+4. Keep, adapt, or reject it based on the destination's task and concept. Record the reason when
+   the choice carries material risk.
+5. Test the choice in the complete rendered surface and in its real interactive states.
 
-**Education.** Warm palettes — orange, amber, warm yellow — encode approachability and
-curiosity. IBM Design Language classifies warm hues as "energetic and optimistic," which
-is correct for learning contexts where the interaction cost is effort. Blue appears in
-formal educational contexts (universities, certifications) where authority is the value
-being sold.
-
-**Food and beverage.** Red and yellow reliably increase appetite and urgency — McDonald's
-is not branding folklore, it is a tested outcome. Brown and warm earth tones signal
-naturalness and craft (artisan bread, coffee, fermented anything). Green signals health and
-freshness, especially in plant-based or organic positioning. Cold blues and purples suppress
-appetite; avoid them unless the product is a diet tool and suppression is the point.
-
-**Developer tools.** Dark backgrounds with green or blue accent are so established they
-read as genre, not style. If you are building a developer tool, dark mode is not an
-aesthetic option — it is the expected register. Material Design classifies this as a "dark
-theme" preference, not a style preference, for productivity contexts. Deviating succeeds
-only when the product is deliberately positioned at non-technical users who happen to use
-developer tooling (Vercel's white marketing site, Linear's light mode). Colour the UI dark
-and the marketing light.
-
-**Luxury.** Black, deep navy, warm off-white, metallics. High contrast without brightness.
-The signal is restraint: a luxury product does not shout. IBM Design Language codes the
-"premium" register as low saturation, high value contrast, accents used sparingly. Any
-saturated colour in a luxury context reads as a mistake unless it is the brand's exact
-signature colour.
+A developer tool may be light, dark, or themeable. A healthcare product may use red safely when
+the role is unmistakable. A premium brand may be bright. Judge whether the system works for this
+brand and task, not whether it resembles an industry costume.
 
 ---
 
 ## Harmony schemes: when to use each
 
-These are not visual preferences. Each scheme produces a different relationship between
-elements, and the wrong scheme undermines the concept regardless of the individual colours.
+Hue relationships are compositional tools, not meanings.
 
-**Complementary** (opposite on the hue wheel — blue/orange, red/green, purple/yellow):
-high tension, high contrast, high energy. Use when the concept demands urgency or power.
-Use for a single CTA accent against a neutral ground — never for large fields of both
-colours simultaneously, which produces visual vibration that is measurably harder to read.
+**Complementary** pairs create strong hue separation. Use them when two roles need clear visual
+distinction, then check text contrast, colour-vision simulations, and the rendered area of each
+colour. Large adjacent saturated fields can compete, but that is a rendered judgment rather than
+a universal ban.
 
-**Analogous** (adjacent hues — blue/blue-green/green): low tension, harmonious, cohesive.
-Use when the concept demands calm, trust, or continuity. Fintech blue into teal is
-analogous; its visual cohesion is the point, not the accident.
+**Analogous** hues can make a palette feel related. They often need stronger lightness, shape, or
+label differences when they encode separate states because hue proximity can weaken distinction.
 
-**Triadic** (three equally spaced hues): balanced energy, more complex than analogous but
-less aggressive than complementary. Use when the product has genuinely distinct feature
-areas that benefit from colour differentiation. Hard to execute; requires one dominant, one
-secondary, one accent — not three equals competing for attention.
+**Triadic or multi-hue** palettes can support several categories or a deliberately expressive
+composition. They do not require a fixed dominant/secondary/accent hierarchy; the hierarchy must
+follow the content and semantic roles.
+
+Start with the fewest hues that express the required roles. Add a hue only when it improves a
+specific distinction or the authorized brand expression.
 
 ---
 
 ## The 60-30-10 distribution
 
-60% dominant (backgrounds, large surfaces), 30% secondary (components, containers), 10%
-accent (CTAs, active states, critical notifications). This is not aesthetic orthodoxy — it
-is a reading law. Eye-tracking research (NN/g, "Visual Hierarchy and Attention") shows that
-equal colour distribution eliminates hierarchy: the eye cannot rank what weighs the same.
-The 60-30-10 split can create a reading order on marketing, editorial, and other broad
-compositions by making some things obviously heavier. It is not a universal product-UI ratio:
-task surfaces often need one dominant ground, several content surfaces sized by information
-architecture, and accent allocated by semantic state rather than area.
+60-30-10 is a composition heuristic, not a reading law or an acceptance threshold. It can prompt a
+useful question on broad marketing compositions: is there a dominant field, supporting material,
+and a restrained accent? The exact percentages are neither measurable proof of hierarchy nor a
+substitute for reviewing the page.
 
-Invert it and you get AI slop: the accent colour used for backgrounds, the dominant colour
-used for highlights. Everything reads as equally important, so nothing is important.
+It is not a universal product-UI ratio. Product colour follows semantic frequency: an error colour
+appears when there is an error, selection colour follows selected objects, and surfaces follow the
+information architecture. Marketing colour follows the concept, brand, imagery, and content; a
+split layout, immersive photograph, or monochrome identity may not resemble 60-30-10 at all.
+
+Evaluate the rendered composition at normal size and at a squint. Primary content and actions
+should rank correctly, repeated accents should not create false importance, and critical states
+must remain distinct. If the hierarchy fails, adjust area, contrast, placement, typography, or
+spacing as appropriate rather than forcing a percentage.
 
 ---
 
 ## Saturation and register
 
-Saturation is a signal about urgency and authority. This relationship is consistent across
-Itten's original colour theory and validated in Material Design's colour system (2023):
+Saturation changes prominence, but its social meaning depends on context. High saturation is not
+inherently young, playful, anxious, or inappropriate for a regulated field; low saturation is not
+inherently mature, safe, or premium.
 
-**High saturation** reads as urgent, energetic, playful. Appropriate for: alerts, primary
-CTAs, food brands, entertainment, consumer apps targeting younger users. Inappropriate for:
-banking, legal software, health monitoring, anything where the user is already in an
-elevated state. Anxiety does not need more stimulation.
+Choose saturation by role and surroundings:
 
-**Mid saturation** reads as friendly and accessible without aggression. The safe register
-for most consumer products — present without shouting.
+- Preserve verified brand colour unless adaptation is authorized.
+- Give interactive and status colours enough separation from their actual adjacent colours.
+- Check whether repeated chroma overwhelms content or whether muted colours become indistinct.
+- Check small coloured text independently; a vivid hue may still have insufficient luminance
+  contrast, while a muted one may pass.
+- Compare candidate palettes in full desktop and mobile renders, not isolated swatches.
 
-**Low saturation (muted)** reads as authoritative, mature, premium. Appropriate for:
-enterprise tools, luxury brands, healthcare, editorial products. IBM Design Language
-explicitly codes low-saturation palettes as "professional" and reserves high saturation for
-interactive states only.
-
-A colour decision without a saturation decision is half a decision. The hue is the genre;
-the saturation is the register within that genre. Choosing green for a healthcare product
-is a start; choosing muted sage green instead of saturated lime is the actual decision.
+If reducing saturation improves the composition, do it because the render demonstrates excess
+competition, not because the audience or industry supposedly demands restraint.
 
 ---
 
 ## Background temperature
 
-Backgrounds are not neutral. A warm background (slightly yellow, cream, warm grey) creates
-a different psychological environment than a cool one (blue-grey, neutral-white, near-black).
+Warm, cool, tinted, white, grey, and dark grounds are all available. None is universally neutral.
+The ground affects perceived contrast, image treatment, brand recognition, and the amount of visual
+weight carried by every surface above it.
 
-**Warm backgrounds**: approachable, organic, human. Use them as a dominant canvas only when
-connection or warmth is an explicit brand or subject requirement — not merely because the surface
-is consumer-facing, creative, editorial, or expressive. The warmth carries even at very low
-saturation; a barely-tinted cream still reads as a material choice, not as neutral white.
-
-**Cool backgrounds**: crisp, precise, efficient. Appropriate for productivity tools,
-fintech, developer tools. Signals that the environment is here to help you work, not to be
-pleasant. Cool surfaces say "focus."
-
-**True neutral** (pure white or near-black): no temperature signal. Appropriate when the
-content itself must carry all the temperature — photography sites, portfolio tools, editorial
-platforms. The absence of warmth or coolness is deliberate.
-
-The background temperature sets the emotional register for every colour that sits on it.
-A warm accent on a cool background reads as a guest; the same accent on a warm background
-reads as native. Choose the temperature before choosing the accent, not after.
+Choose a ground from supplied brand guidance, content, task duration, imagery, theme expectations,
+and measured reference evidence. Compare plausible candidates with real copy and components. Check
+whether the ground supports the intended hierarchy without flattening boundaries or colouring every
+content asset unintentionally.
 
 ### Default ground and evidence threshold
 
-For a general product surface, the canvas defaults to true white (`#FFFFFF`).
-Near-white neutrals belong only to structurally secondary surfaces rather than replacing the page
-background. This is not an absence of art direction: it protects content contrast and keeps large
-areas calm. Allocate accent by semantic job — primary action, selection, focus, feedback, and
-critical state — rather than by a target percentage.
+There is no universal white-canvas default. When evidence is sparse, begin with the least
+committal plausible candidates rather than silently encoding a house style: for example, one light
+neutral and one dark or tinted alternative when both fit the task. Render them with the actual
+brand mark, imagery, dense content, controls, and states. Select the candidate that best supports
+the brief and record why.
 
-Depart from the true-white dominant canvas only when explicit user preference, an established brand
-system, or subject-specific evidence makes a dark, tinted, or material ground meaningful. Words
-such as "editorial", "premium", "cultural", "handcrafted", or "magazine-like" are not that
-evidence by themselves. Translate those metaphors into hierarchy, rhythm, typography, image
-treatment, and composition rather than literal paper beige, faux print texture, or a uniformly
-sepia surface.
-
-The role split must remain legible in the rendered interface. Small accent-coloured text still
-meets 4.5:1 contrast against its actual ground; large text and non-text interface boundaries meet
-3:1. If the chosen accent cannot carry small text, keep the hue for larger actions and use a darker
-role-compatible tone for labels.
+An explicit brand system or user preference is authority. Locale research may influence a ground
+only through the evidence-bearing locale profile; a locale, script, market label, or metaphor such
+as "editorial" or "premium" does not itself authorize beige, white, black, or any other ground.
 
 ---
 
 ## Dark mode: the rules for colour adjustment
 
-Dark mode is not "light mode inverted." It is a different palette built on different
-physics. The three most common errors:
+Dark mode is a separate rendered theme, not an inverted light palette. It is also not mandatory for
+developer tools or any other category. Offer or prioritize it when the brief, existing product,
+platform convention, user preference, or observed working conditions support it.
 
-**Pure black (#000000) is the wrong dark background.** On OLED panels, pure black pixels
-are off — the transition between lit and unlit pixels as you scroll produces a strobing
-effect that users feel as discomfort without being able to name. More importantly, pure
-black gives zero depth: every surface is on the same plane, so the elevation system
-(cards, modals, tooltips) collapses. Google's Material Design dark theme specification uses
-#121212 as the baseline surface; layers of elevation are expressed as white-tint overlays
-at increasing opacity (4%, 8%, 12%, 16%, 24%). This preserves the depth system without
-fighting the contrast requirements.
+For a dark candidate:
 
-**Saturated accent colours vibrate on dark backgrounds.** A brand colour calibrated for
-a white ground carries too much energy when placed over dark grey — the eye perceives it as
-louder than intended, a phenomenon called simultaneous contrast. The fix is desaturation:
-reduce the accent's saturation by 20–30% for the dark palette. The colour reads as the same
-brand colour; it no longer shouts. Uxcel's dark mode guidelines and Material Design 3's
-tonal palette system both prescribe this adjustment explicitly.
+- Choose the ground and elevation model together. Pure black is valid when it serves the brand,
+  display behavior, or contrast strategy; near-black is valid when it gives the surface hierarchy
+  better separation. Neither is universally correct.
+- Re-evaluate every brand, action, focus, status, chart, and illustration colour against its actual
+  dark surroundings. Do not apply a blanket desaturation percentage.
+- Specify text colours per surface. Opacity tokens can be useful, but composited results vary with
+  the background; fixed colours can be equally valid. Test the final computed colours rather than
+  prescribing universal opacity tiers.
+- Render hover, focus, active, selected, disabled, error, overlays, and forced-colour or high-
+  contrast adaptations where applicable. A palette that works only in the resting state is not
+  complete.
 
-**Text hierarchy uses opacity, not grey values.** On dark surfaces, secondary text is not
-a specific grey hex — it is white at reduced opacity. Material Design's dark theme
-recommendation: primary text at 87% opacity, secondary text at 60%, disabled/hint text at
-38%. The reason is practical: the surface colour changes across the elevation system, and
-fixed hex values for text will fail the contrast requirements on the wrong surface. Opacity
-scales with whatever it sits on; a fixed grey does not.
-
-Condition → choice → reason: when the background lightness is below L\* 25 (very dark),
-desaturate all chromatic accents and express text hierarchy through white-opacity tiers,
-not through separate grey values.
+Keep light and dark tokens tied to the same semantic roles, even when their values and contrast
+relationships differ.
 
 ---
 
 ## Accessibility contrast: APCA vs WCAG 2
 
-The WCAG 2.x contrast ratio (minimum 4.5:1 for body text, 3:1 for large text) has been
-the accessibility floor since 2008. It has a fundamental flaw: it computes contrast as a
-static ratio between two colours, and treats a light-weight 12px label identically to a
-bold 24px heading at the same colour values. The same contrast ratio on different text
-produces radically different readability outcomes.
+WCAG 2.2 is the current W3C Recommendation. At Level AA, ordinary text and images of text require
+at least 4.5:1 contrast against their background; large-scale text requires at least 3:1, with the
+criterion's stated exceptions. Visible information needed to identify user-interface components
+and states, and graphical objects needed to understand content, generally requires 3:1 against
+adjacent colours. Colour must not be the only visual means of conveying information.
 
-The Advanced Perceptual Contrast Algorithm (APCA), developed by Andrew Somers, corrects
-this. APCA calculates a lightness contrast value (Lc) that accounts for font size and
-weight simultaneously — a thin 14px label and a bold 32px heading require different
-minimum contrast scores. The model is based on human visual perception of spatial frequency
-and luminance, not arithmetic ratios. The W3C has confirmed APCA as the contrast model for
-the forthcoming WCAG 3.0 standard.
+Apply those checks to final rendered combinations, including gradients, images, overlays,
+transparency, themes, and interactive states. Preserve visible focus, labels, icons, patterns, or
+other redundant cues for semantic states. Do not assume that green/red or any hue pair is
+self-explanatory.
 
-The practical consequence today: WCAG 2.x compliance is required for legal accessibility
-standards in most jurisdictions — it is the floor. APCA thinking is the ceiling: use it to
-catch situations where a WCAG 2.x-passing colour combination still fails at small sizes or
-light weights. A muted secondary label in a fintech dashboard might pass 4.5:1 against its
-background while being genuinely difficult to read at 11px regular weight. APCA flags it;
-WCAG 2.x does not.
+APCA is an experimental perceptual contrast method that can be used as an additional design probe.
+It is not part of WCAG 2.2, and W3C has not confirmed it as the final contrast model for WCAG 3.
+WCAG 3 remains an incomplete Working Draft whose requirements can change. Do not substitute an APCA
+score for applicable WCAG 2.2 conformance checks or present APCA as legal compliance. If a team uses
+APCA, record the implementation and thresholds used, then validate the result with real font size,
+weight, rendering, and user needs.
 
-Condition → choice → reason: when the design includes small text (below 16px) or thin
-weights (300–400) in informational roles, verify not just the WCAG 2.x ratio but the Lc
-score under APCA. The APCA Contrast Checker tool at git.apcacontrast.com provides the
-calculation. Do not stop at compliance; stop at legibility.
+Contrast numbers are necessary checks, not a full legibility verdict. Also inspect text size and
+weight, typeface, spacing, glare, content behind text, disabled-state meaning, and zoom. When a
+combination technically passes but remains hard to read, improve it.
 
 ---
 
 ## Cultural colour conventions: East Asian and Korean markets
 
-Western colour psychology does not travel without adjustment. The two most commercially
-significant divergences for Korean and East Asian markets:
+Do not assign a colour meaning from a country-sized stereotype. Red, white, gold, and every other
+hue can carry multiple and conflicting meanings within Korean and East Asian contexts depending on
+task, generation, subculture, ceremony, brand, and placement.
 
-**Red signals prosperity, not danger.** In Western UI convention, red is reserved for
-errors, alerts, and destructive actions — a reliable association built on traffic signals,
-fire, and blood. In Korean and broader East Asian contexts, red historically signals good
-fortune, celebration, and vitality. Red envelopes (홍보봉투) carry money at celebrations;
-red text appears in festive and auspicious contexts. A Korean e-commerce product using red
-for a sale badge is following cultural convention, not violating the error-colour rule. The
-consequence for product design: the error-state semantic for red must be established
-explicitly through context (icon, label, placement) when designing for Korean audiences,
-not assumed from the colour alone.
+Locale-grounded colour decisions follow the project's locale contract:
 
-**White carries mourning associations.** In Western contexts, white is sterile, clean,
-minimal. In traditional Korean and East Asian mourning customs, white is the colour of
-death and funerals. Contemporary Korean design has largely absorbed the global white-equals-
-clean convention for digital products, but white-dominant aesthetics in healthcare or
-financial products touching elderly Korean users carry a risk of misread that does not
-exist in Western markets. A warm off-white or a cream-tinted background removes the
-ambiguity without sacrificing the clean register.
+- Keep interface language, market region, audience, task, and brand identity separate.
+- Transfer only mechanisms marked `supported` or `shared` in the evidence-backed locale profile.
+- Treat `contested` findings as decisions to resolve and `unknown` findings as no rule.
+- Use current native first-party task references and counterexamples; do not infer cultural fit from
+  a same-owner homepage or a single competitor.
+- Describe what was observed: role, placement, neighboring cues, frequency, and state. Do not turn
+  an observation into a claim about what a population feels.
+- Pair status colour with text, iconography, shape, or position so meaning does not depend on a
+  cultural association or colour perception alone.
 
-**Gold and yellow signal prestige.** Where luxury Western products typically reach for
-black, navy, and restraint, East Asian luxury context extends to gold as a prestige signal
-— associated with royalty, success, and premium quality across Korean, Chinese, and
-Japanese markets. This legitimises gold accents in premium Korean product design in ways
-that would read as garish in a Western luxury context.
-
-Condition → choice → reason: when the primary market is Korean or East Asian, audit every
-colour's semantic layer against the target culture's conventions before treating Western
-colour psychology as ground truth.
+Only evaluation with the named target audience can support a claim of cultural fit. In its absence,
+describe the result as evidence-grounded adaptation, not culturally correct design.
 
 ---
 
 ## Data visualisation palettes vs UI palettes
 
-These are different systems serving different purposes, and conflating them produces both
-ugly charts and a broken UI colour system.
+UI and data visualisation colours have different semantic jobs, even when they share brand values.
+Maintain distinct tokens and names so an action colour cannot silently become a data category and a
+data series cannot look selected or erroneous by accident.
 
-**UI palettes** are built for hierarchy. The accent is one colour, used at one saturation,
-in one role. Introducing six distinct categorical colours into a UI palette creates visual
-chaos: the eye cannot rank what cannot be compared. UI palettes need three to five tones
-from one or two hue families, and one semantically loaded accent.
+Choose the visualisation scheme from the data relationship:
 
-**Data visualisation palettes** are built for distinction. The primary requirement is that
-every category is unambiguously different from every other under multiple viewing conditions
-— colour blindness, screen glare, printout. The standard approach (Color Brewer, a research
-project by Cynthia Brewer at Penn State) provides tested categorical palettes of 3–12
-colours calibrated for perceptual distance. These palettes are deliberately non-hierarchical:
-no one colour should read as more important than another in a categorical context.
+- categorical: distinguish unordered groups;
+- sequential: show ordered magnitude with a perceptually ordered ramp;
+- diverging: show movement around a meaningful midpoint;
+- status or threshold: encode the defined domain meaning and provide redundant cues.
 
-The failure mode is using the UI brand colour as the first category colour in a chart and
-the UI secondary as the second. The user reads the first bar as "primary action" and the
-second bar as "secondary action" — a UI reading that corrupts the data reading. Separate
-the systems. The chart's categorical blue is not the button's blue; they are different
-tokens with different semantics.
+Check series and marks against the chart background and against one another. Test legends, direct
+labels, hover and selection states, small marks, light and dark themes, colour-vision simulations,
+grayscale or print when relevant, and representative real data. Add labels, patterns, line styles,
+or shapes whenever colour alone would carry meaning.
 
-Condition → choice → reason: when the product includes data visualisation, create and
-maintain a separate visualisation token set. Borrow nothing from the UI palette except the
-neutral surfaces and the background.
+A proven visualization palette such as ColorBrewer can be a starting point, not automatic evidence
+that it works in this chart. The number and area of marks, display conditions, and surrounding UI
+still determine the rendered result.
 
 ---
 
 ## Sources
 
-- Itten, *The Art of Color* (1961) — hue relationships and the psychological force of colour
-- Elliot & Maier, "Color-in-Context Theory" (2014) — empirical mapping of colour to
-  psychological state in evaluative contexts
-- IBM Design Language (2023) — enterprise colour system and saturation register
-  classification
-- Material Design 3 (2023) — dynamic colour system, role definitions, tonal palettes, dark
-  theme surface specification (#121212 baseline, white overlay elevation)
-- NN/g, "Visual Hierarchy and Attention" — eye-tracking evidence for the reading-order
-  effect of colour weight distribution
-- Uxcel, "12 Principles of Dark Mode Design" (2023) — desaturation guidelines for accent
-  colours on dark surfaces
-- APCA / Andrew Somers, git.apcacontrast.com — Advanced Perceptual Contrast Algorithm;
-  the contrast model for forthcoming WCAG 3.0
-- Brewer, Color Brewer (colorbrewer2.org) — perceptually calibrated categorical palettes
-  for data visualisation
+- [W3C, Web Content Accessibility Guidelines (WCAG) 2.2](https://www.w3.org/TR/WCAG22/) —
+  normative contrast, non-text contrast, and use-of-colour requirements
+- [W3C WAI, Understanding SC 1.4.1: Use of Color](https://www.w3.org/WAI/WCAG22/Understanding/use-of-color) —
+  visible alternatives to colour-only information
+- [W3C WAI, WCAG 3 Introduction](https://www.w3.org/WAI/standards-guidelines/wcag/wcag3-intro/) —
+  current draft status and warning that requirements will change
+- [W3C, W3C Accessibility Guidelines (WCAG) 3.0 Working Draft](https://www.w3.org/TR/wcag-3.0/) —
+  developing requirements; not a W3C Recommendation
+- [Brewer, ColorBrewer](https://colorbrewer2.org/) — candidate categorical, sequential, and
+  diverging schemes that still require destination testing

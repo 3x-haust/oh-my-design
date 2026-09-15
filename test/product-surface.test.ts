@@ -43,8 +43,9 @@ test('canonical product grammar rejects landing-page assumptions', () => {
 test('adaptive routing delegates selected requirements to stage briefs instead of coordinator prose', () => {
   const skill = read('src/skills/omd-ultradesign/SKILL.md');
   assert.match(skill, /omd brief <stage>/);
-  assert.match(skill, /Pass it unchanged to the\s+selected owner/);
-  assert.match(skill, /only the roles and stages selected by the route/);
+  assert.match(skill, /read `omd brief <stage>` as coordinator intake/i);
+  assert.match(skill, /§Evidence handoff/);
+  assert.match(skill, /only the roles\/stages selected by the route/);
   assert.match(skill, /Candidate generation, framing, copy isolation, typography proof, composition[\s\S]*conditional methods/);
 
   const brief = read('core/brief/index.ts');
@@ -130,8 +131,8 @@ test('canonical protocol owns product task evidence and conditional regressions'
 test('Figma supplies structure evidence while fresh review and UX invariants remain mandatory', () => {
   const skill = read('src/skills/omd-ultradesign/SKILL.md');
   assert.match(skill, /A supplied Figma frame is structure evidence/);
-  assert.match(skill, /Whether framing[\s\S]*alternative generation is useful is decided by the adaptive route/);
-  assert.match(skill, /never removes\s+required UX outcomes, production evidence, accessibility, or independent review/);
+  assert.match(skill, /the adaptive route decides whether\s+framing or alternatives are useful/);
+  assert.match(skill, /without removing UX outcomes, production evidence, accessibility,\s+or independent review/);
 
   const hand = compact(read('src/agents/hand.agent.yaml'));
   assert.match(hand, /Figma structural-bypass route[\s\S]*\.omd\/figma\/snapshot\.json/);

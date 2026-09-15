@@ -66,7 +66,7 @@ export type ReviewerLaunchReceipt = {
 };
 export type ReviewerObservedLoadedSkillReceipt = {
   readonly host: ReviewerHost;
-  readonly authority: 'production-host-loaded-skill' | 'runner-benchmark';
+  readonly authority: 'production-host-loaded-skill' | 'production-host-delegated-reviewer' | 'runner-benchmark';
   readonly loadedSkillReceipt: object;
   readonly hostPid: number;
   readonly hostExecutableSha256: string;
@@ -94,8 +94,9 @@ const observedLoadedSkillReceipts = new WeakSet<ReviewerObservedLoadedSkillRecei
 const observedSkillLaunchers = new WeakMap<ReviewerObservedLoadedSkillReceipt, ReviewerMcpAdapter>();
 const launchBundles = new WeakSet<ReviewerLaunchBundle>();
 const bundleLaunchers = new WeakMap<ReviewerLaunchBundle, ReviewerMcpAdapter>();
-const verifiedEvidenceProofs = new WeakMap<ReviewerLaunchReceipt, Readonly<{ sha256: string; launchId: string; configurationSha256: string; childPid: number }>>();
+const verifiedEvidenceProofs = new WeakMap<ReviewerLaunchReceipt, Readonly<{ sha256: string; launchId: string; configurationSha256: string; childPid: number; verifiedAt: number }>>();
 const completedReviewerLaunches = new WeakSet<ReviewerLaunchReceipt>();
+const completedReviewerLaunchIds = new Set<string>();
 const bundledReviewerLaunches = new WeakSet<ReviewerLaunchReceipt>();
 const consumedReviewerLaunches = new WeakSet<ReviewerLaunchReceipt>();
 type ProductionParentAuthority = Readonly<{
@@ -103,12 +104,19 @@ type ProductionParentAuthority = Readonly<{
   readonly hostPid: number;
   readonly hostExecutableSha256: string;
 }>;
+type DelegatedProductionParentAuthority = Readonly<{
+  readonly kind: 'delegated-production-host';
+  readonly hostPid: number;
+  readonly hostExecutableSha256: string;
+  readonly reviewerPid: number;
+  readonly reviewerExecutableSha256: string;
+}>;
 type BenchmarkParentAuthority = Readonly<{
   readonly kind: 'benchmark-reviewer';
   readonly interpreterSha256: string;
   readonly targetSha256: string;
 }>;
-type ParentAuthority = ProductionParentAuthority | BenchmarkParentAuthority;
+type ParentAuthority = ProductionParentAuthority | DelegatedProductionParentAuthority | BenchmarkParentAuthority;
 const observedParentAuthorities = new WeakMap<ReviewerObservedLoadedSkillReceipt, ParentAuthority>();
 const reviewerProxyTarget = resolve(fileURLToPath(import.meta.url));
 const reviewerProxyInterpreter = realpathSync(process.execPath);
@@ -135,22 +143,38 @@ function processInfo(pid: number): ProcessInfo {
   });
 }
 
+function processDescendsFrom(child: ProcessInfo, ancestorPid: number): boolean {
+  const seen = new Set<number>([child.pid]);
+  let parentPid = child.parentPid;
+  for (let depth = 0; depth < 8; depth += 1) {
+    if (parentPid === ancestorPid) return true;
+    if (parentPid <= 1 || seen.has(parentPid)) return false;
+    seen.add(parentPid);
+    try { parentPid = processInfo(parentPid).parentPid; } catch { return false; }
+  }
+  return false;
+}
+
 function requireProxyChild(pid: number, expectedArgs: readonly string[], receipt: ReviewerLaunchReceipt): ProcessInfo {
   const child = processInfo(pid);
   const proxy = receipt.proxyBinding;
   const expectedCommand = [process.execPath, proxy.targetPath, ...expectedArgs];
+  const delegated = receipt.processBinding.parentPid !== receipt.processBinding.reviewerPid;
+  const boundToReviewer = delegated
+    ? processDescendsFrom(child, receipt.processBinding.reviewerPid)
+    : child.parentPid === receipt.processBinding.reviewerPid;
   if (expectedCommand.some((argument) => /\s/.test(argument))) {
     throw new ReviewerLaunchError('reviewer proxy exact argv contains an unsupported whitespace-bearing path or argument');
   }
   if (
-    child.parentPid !== receipt.processBinding.reviewerPid
+    !boundToReviewer
     || child.executableSha256 !== executableSha256(process.execPath)
     || executableSha256(proxy.targetPath) !== proxy.targetSha256
     || executableSha256(proxy.stagedPath) !== proxy.stagedSha256
     || child.command.length !== expectedCommand.length
     || expectedCommand.some((argument, index) => child.command[index] !== argument)
   ) {
-    throw new ReviewerLaunchError('reviewer proxy child PID, parent, exact argv, target bytes, or configuration does not match');
+    throw new ReviewerLaunchError('reviewer proxy child PID, bounded parent chain, exact argv, target bytes, or configuration does not match');
   }
   return child;
 }
@@ -159,14 +183,21 @@ function requireParentAuthority(child: ProcessInfo, authority: ParentAuthority, 
   if (
     reviewer.pid !== receipt.processBinding.reviewerPid
     || reviewer.executableSha256 !== receipt.processBinding.reviewerExecutableSha256
-    || child.parentPid !== reviewer.pid
   ) {
-    throw new ReviewerLaunchError('reviewer proxy child is not an immediate child of the designated reviewer');
+    throw new ReviewerLaunchError(`designated reviewer process identity changed after proxy-child verification (executable=${reviewer.executableSha256.slice(0, 12)}/${receipt.processBinding.reviewerExecutableSha256.slice(0, 12)})`);
   }
   if (
     authority.kind === 'production-host'
     && reviewer.pid === authority.hostPid
     && reviewer.executableSha256 === authority.hostExecutableSha256
+  ) return;
+  if (
+    authority.kind === 'delegated-production-host'
+    && reviewer.pid === authority.reviewerPid
+    && reviewer.parentPid === authority.hostPid
+    && reviewer.executableSha256 === authority.reviewerExecutableSha256
+    && receipt.processBinding.parentPid === authority.hostPid
+    && receipt.processBinding.parentExecutableSha256 === authority.hostExecutableSha256
   ) return;
   if (
     authority.kind === 'benchmark-reviewer'
@@ -242,7 +273,7 @@ function reviewerProxyArgs(receipt: ReviewerLaunchReceipt): readonly string[] {
 }
 function opaquePayload(value: unknown): Uint8Array {
   if (typeof value === 'string') return new Uint8Array(Buffer.from(value));
-  if (value instanceof Uint8Array) return value.slice();
+  if (value instanceof Uint8Array) return new Uint8Array(value);
   throw new ReviewerLaunchError('reviewer evidence must be opaque bytes or text');
 }
 type BrokerLaunch = {
@@ -313,8 +344,10 @@ function startBroker(launch: BrokerLaunch): void {
           launchId: launch.receipt.launchId,
           configurationSha256: launch.receipt.configurationSha256,
           childPid: claim.childPid!,
+          verifiedAt: Date.now(),
         }));
         completedReviewerLaunches.add(launch.receipt);
+        completedReviewerLaunchIds.add(launch.receipt.launchId);
         const base64 = Buffer.from(launch.evidence).toString('base64');
         closeBroker(launch.receipt.launchId);
         socket.end(JSON.stringify({ base64 }));
@@ -408,7 +441,7 @@ export class ReviewerMcpAdapter {
     this.#bindingTtlMs = bindingTtlMs;
   }
 
-  launch(request: ReviewerLaunchRequest): ReviewerLaunchReceipt {
+  #launch(request: ReviewerLaunchRequest, delegatedGate = false): ReviewerLaunchReceipt {
     requireHash(request.buildSha256, 'buildSha256');
     requireHash(request.loadedSkillSha256, 'loadedSkillSha256');
     requireHash(request.briefSha256, 'briefSha256');
@@ -429,7 +462,10 @@ export class ReviewerMcpAdapter {
       throw new ReviewerLaunchError('reviewer launch requires an exact parent process, designated reviewer, lane, runner, session, nonce, and expiry binding');
     }
     const designatedReviewer = processInfo(processBinding.reviewerPid);
-    if (designatedReviewer.executableSha256 !== processBinding.reviewerExecutableSha256) {
+    if ((!delegatedGate && designatedReviewer.executableSha256 !== processBinding.reviewerExecutableSha256)
+      || (delegatedGate && (designatedReviewer.parentPid !== process.pid
+        || processBinding.parentPid !== process.pid
+        || processBinding.parentExecutableSha256 !== executableSha256(process.execPath)))) {
       throw new ReviewerLaunchError('designated reviewer PID does not match its pinned executable bytes');
     }
     const proxyBinding: ReviewerProxyBinding = request.proxyBinding ?? Object.freeze({
@@ -473,6 +509,16 @@ export class ReviewerMcpAdapter {
     }
     return receipt;
   }
+  launch(request: ReviewerLaunchRequest): ReviewerLaunchReceipt {
+    return this.#launch(request);
+  }
+  /** Host-only pre-exec binding for a gated child that keeps its PID when it execs the reviewer. */
+  launchDelegated(request: ReviewerLaunchRequest): ReviewerLaunchReceipt {
+    if (request.processBinding === undefined) {
+      throw new ReviewerLaunchError('delegated reviewer launch requires an exact gated child binding');
+    }
+    return this.#launch(request, true);
+  }
   observeLoadedSkill(host: ProductionReviewerHost, observed: object, expectedSha256: string): ReviewerObservedLoadedSkillReceipt {
     requireHash(expectedSha256, 'expectedSha256');
     const proof=observed as { loadedSkillSha256?: unknown };
@@ -488,6 +534,41 @@ export class ReviewerMcpAdapter {
       kind: 'production-host',
       hostPid: process.pid,
       hostExecutableSha256,
+    }));
+    return receipt;
+  }
+  observeDelegatedReviewer(
+    host: ProductionReviewerHost,
+    observed: object,
+    expectedSha256: string,
+    reviewerPid: number,
+    reviewerExecutableSha256: string,
+  ): ReviewerObservedLoadedSkillReceipt {
+    requireHash(expectedSha256, 'expectedSha256');
+    requireHash(reviewerExecutableSha256, 'reviewerExecutableSha256');
+    const proof = observed as { loadedSkillSha256?: unknown };
+    const gated = processInfo(reviewerPid);
+    if (proof.loadedSkillSha256 !== expectedSha256 || gated.parentPid !== process.pid) {
+      throw new ReviewerLaunchError('delegated reviewer is not the host-gated child with observed loaded-skill bytes');
+    }
+    const hostExecutableSha256 = executableSha256(process.execPath);
+    const receipt: ReviewerObservedLoadedSkillReceipt = Object.freeze({
+      host,
+      authority: 'production-host-delegated-reviewer',
+      loadedSkillReceipt: observed,
+      hostPid: process.pid,
+      hostExecutableSha256,
+      reviewerExecutableSha256,
+      loadedSkillSha256: expectedSha256,
+    });
+    observedLoadedSkillReceipts.add(receipt);
+    observedSkillLaunchers.set(receipt, this);
+    observedParentAuthorities.set(receipt, Object.freeze({
+      kind: 'delegated-production-host',
+      hostPid: process.pid,
+      hostExecutableSha256,
+      reviewerPid,
+      reviewerExecutableSha256,
     }));
     return receipt;
   }
@@ -546,6 +627,11 @@ export class ReviewerMcpAdapter {
       )
     ) {
       throw new ReviewerLaunchError('production reviewer launch does not match the host-observed designated reviewer authority');
+    }
+    if (authority.kind === 'delegated-production-host'
+      && (reviewerLaunchReceipt.processBinding.reviewerPid !== authority.reviewerPid
+        || reviewerLaunchReceipt.processBinding.reviewerExecutableSha256 !== authority.reviewerExecutableSha256)) {
+      throw new ReviewerLaunchError('delegated production reviewer launch does not match the host-gated child authority');
     }
     launch.parentAuthority = authority;
     if (bundledReviewerLaunches.has(reviewerLaunchReceipt)) {
@@ -621,10 +707,12 @@ export class ReviewerMcpAdapter {
       browserSha256: expected.browserSha256,
     });
     const proof = verifiedEvidenceProofs.get(receipt);
-    if (!proof || consumedReviewerLaunches.has(receipt) || Date.now() >= Date.parse(receipt.processBinding.expiresAt)) {
+    if (!proof || consumedReviewerLaunches.has(receipt)
+      || proof.verifiedAt >= Date.parse(receipt.processBinding.expiresAt)) {
       throw new ReviewerLaunchError('reviewer launch bundle is reused, expired, or has no live one-use challenge');
     }
     consumedReviewerLaunches.add(receipt);
+    completedReviewerLaunchIds.delete(receipt.launchId);
     verifiedEvidenceProofs.delete(receipt);
     return Object.freeze({ evidenceSha256: proof.sha256, childPid: proof.childPid, sessionId: receipt.processBinding.sessionId, nonce: receipt.processBinding.nonce });
   }
@@ -688,7 +776,10 @@ export class ReviewerMcpAdapter {
   }
 
   dispose(): void {
-    for (const launchId of this.#launchIds) closeBroker(launchId);
+    for (const launchId of this.#launchIds) {
+      closeBroker(launchId);
+      completedReviewerLaunchIds.delete(launchId);
+    }
     this.#launchIds.clear();
   }
 }
@@ -722,6 +813,7 @@ export function requireReviewerLaunchReceipt(
 ): ReviewerLaunchReceipt {
   requireIssuedReviewerLaunchReceipt(receipt, expected);
   if (!completedReviewerLaunches.has(receipt)) {
+    if (completedReviewerLaunchIds.has(receipt.launchId)) return receipt;
     throw new ReviewerLaunchError('reviewer launch has no completed process-authenticated evidence handshake');
   }
   return receipt;
@@ -740,7 +832,7 @@ export function reviewerEvidenceSha256(receipt: ReviewerLaunchReceipt): string {
   if (!proof
     || proof.launchId !== receipt.launchId
     || proof.configurationSha256 !== receipt.configurationSha256
-    || Date.now() >= Date.parse(receipt.processBinding.expiresAt)) {
+    || proof.verifiedAt >= Date.parse(receipt.processBinding.expiresAt)) {
     throw new ReviewerLaunchError('reviewer evidence has no verified child/process/configuration/capability handshake');
   }
   verifiedEvidenceProofs.delete(receipt);
@@ -845,16 +937,125 @@ export async function runReviewerEvidenceProxyStdio(argv: readonly string[]): Pr
       }
       try {
         const bytes = await consumeBrokerEvidence(launchId, brokerSocket!, configurationSha256!, runnerId!, sessionId!, nonce!, host as ReviewerHost);
-        const base64 = Buffer.from(bytes).toString('base64');
         if (hasId) {
-          process.stdout.write(`${jsonRpcResult(id, {
-            content: [{ type: 'text', text: base64 }],
-            structuredContent: {
-              base64,
-              byteLength: bytes.byteLength,
-              sha256: createHash('sha256').update(bytes).digest('hex'),
-            },
-          })}\n`);
+          let visual: Record<string, unknown> | undefined;
+          try {
+            const parsed = JSON.parse(Buffer.from(bytes).toString('utf8')) as unknown;
+            if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
+              && ((parsed as Record<string, unknown>).schema === 'adaptive-rendered-refinement-reviewer-transport-v1'
+                || (parsed as Record<string, unknown>).schema === 'adaptive-final-render-reviewer-transport-v1')) {
+              visual = parsed as Record<string, unknown>;
+            }
+          } catch { /* generic evidence remains opaque */ }
+          if (visual === undefined) {
+            const base64 = Buffer.from(bytes).toString('base64');
+            process.stdout.write(`${jsonRpcResult(id, {
+              content: [{ type: 'text', text: base64 }],
+              structuredContent: {
+                base64,
+                byteLength: bytes.byteLength,
+                sha256: createHash('sha256').update(bytes).digest('hex'),
+              },
+            })}\n`);
+          } else {
+            const evidence = visual.evidence;
+            if (typeof evidence !== 'object' || evidence === null || Array.isArray(evidence)) {
+              throw new ReviewerLaunchError('Visual reviewer evidence is malformed');
+            }
+            const evidenceRecord = evidence as Record<string, unknown>;
+            const content: Array<Record<string, unknown>> = [{
+              type: 'text',
+              text: JSON.stringify(visual.schema === 'adaptive-final-render-reviewer-transport-v1'
+                ? {
+                  schema: visual.schema,
+                  evidenceSha256: visual.evidenceSha256,
+                  candidateAlias: evidenceRecord.candidateAlias,
+                  context: evidenceRecord.context,
+                  observationProjection: evidenceRecord.observationProjection,
+                  outputContract: visual.outputContract,
+                }
+                : {
+                  schema: visual.schema,
+                  evidenceSha256: visual.evidenceSha256,
+                  outputContract: visual.outputContract,
+                }),
+            }];
+            const metadata: Array<Record<string, unknown>> = [];
+            if (visual.schema === 'adaptive-rendered-refinement-reviewer-transport-v1') {
+              if (!Array.isArray(evidenceRecord.variants)) throw new ReviewerLaunchError('Rendered refinement evidence is malformed');
+              for (const candidate of evidenceRecord.variants) {
+                if (typeof candidate !== 'object' || candidate === null || Array.isArray(candidate)) {
+                  throw new ReviewerLaunchError('Rendered refinement variant is malformed');
+                }
+                const variant = candidate as Record<string, unknown>;
+                if (typeof variant.alias !== 'string' || !Array.isArray(variant.renders)) {
+                  throw new ReviewerLaunchError('Rendered refinement variant is malformed');
+                }
+                const renders: Array<Record<string, unknown>> = [];
+                for (const candidateRender of variant.renders) {
+                  if (typeof candidateRender !== 'object' || candidateRender === null || Array.isArray(candidateRender)) {
+                    throw new ReviewerLaunchError('Rendered refinement render is malformed');
+                  }
+                  const render = candidateRender as Record<string, unknown>;
+                  if (typeof render.pngBase64 !== 'string') throw new ReviewerLaunchError('Rendered refinement image is missing');
+                  const label = {
+                    alias: variant.alias,
+                    viewport: render.viewport,
+                    width: render.width,
+                    height: render.height,
+                    outcomeRef: render.outcomeRef,
+                    sha256: render.sha256,
+                  };
+                  renders.push(label);
+                  content.push({ type: 'text', text: JSON.stringify(label) });
+                  content.push({ type: 'image', data: render.pngBase64, mimeType: 'image/png' });
+                }
+                metadata.push({ alias: variant.alias, renders });
+              }
+            } else {
+              if (typeof evidenceRecord.candidateAlias !== 'string' || !Array.isArray(evidenceRecord.renders)) {
+                throw new ReviewerLaunchError('Final render evidence is malformed');
+              }
+              for (const candidateRender of evidenceRecord.renders) {
+                if (typeof candidateRender !== 'object' || candidateRender === null || Array.isArray(candidateRender)) {
+                  throw new ReviewerLaunchError('Final render is malformed');
+                }
+                const render = candidateRender as Record<string, unknown>;
+                if (typeof render.pngBase64 !== 'string') throw new ReviewerLaunchError('Final render image is missing');
+                const label = {
+                  alias: evidenceRecord.candidateAlias,
+                  observationSha256: render.observationSha256,
+                  browserObservationSha256: render.browserObservationSha256,
+                  viewport: render.viewport,
+                  state: render.state,
+                  width: render.width,
+                  height: render.height,
+                  captureSha256: render.captureSha256,
+                };
+                metadata.push(label);
+                content.push({ type: 'text', text: JSON.stringify(label) });
+                content.push({ type: 'image', data: render.pngBase64, mimeType: 'image/png' });
+              }
+            }
+            process.stdout.write(`${jsonRpcResult(id, {
+              content,
+              structuredContent: {
+                schema: visual.schema,
+                evidenceSha256: visual.evidenceSha256,
+                outputContract: visual.outputContract,
+                ...(visual.schema === 'adaptive-rendered-refinement-reviewer-transport-v1'
+                  ? { variants: metadata }
+                  : {
+                    candidateAlias: evidenceRecord.candidateAlias,
+                    context: evidenceRecord.context,
+                    observationProjection: evidenceRecord.observationProjection,
+                    renders: metadata,
+                  }),
+                byteLength: bytes.byteLength,
+                sha256: createHash('sha256').update(bytes).digest('hex'),
+              },
+            })}\n`);
+          }
         }
       } catch (error) {
         if (hasId) process.stdout.write(`${jsonRpcError(id, -32000, error instanceof Error ? error.message : 'Evidence unavailable')}\n`);

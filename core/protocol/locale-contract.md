@@ -22,6 +22,12 @@ locale, explicit market region, audience, domain, surface, desired fit, and bran
 distinct fields. A language is not a country, and a locale or likely script never implies a market,
 audience, register, or national aesthetic.
 
+An explicit request to study a region's websites or award galleries is a reference-acquisition
+preference, not by itself a claim about the destination's market or that audience's cultural fit.
+Preserve that preference in current discovery queries. Do not drop it, infer it from language, or
+turn it into a country-wide style preset. Script mechanics and the existing target audience remain
+separate; a genuine market-fit request still follows the research route below.
+
 ## Cultural design routing
 
 The derived locale-design route has exactly three decisions:
@@ -43,6 +49,17 @@ institution or product serving the same named task/category in another locale. A
 news, or institutional page does not qualify merely because its owner matches. Native-category
 evidence must expose the same user task in the target market, not merely the same industry noun.
 Current bytes prove capture and currentness; they do not by themselves prove task equivalence.
+
+A Scout-selected native reference is a research choice, not a fixed subject constraint. If it has
+no verified same-task counterpart in another locale, make a bounded search for another native
+first-party source and its genuine cross-locale task pair before declaring the evidence lane
+exhausted. Preserve user-required references and the named task, market, and audience; do not replace
+those constraints to obtain an easier pair. An English-looking URL that serves the same untranslated
+page is not an equivalent. Search results are leads only: reacquire both pages through the native
+source commands and inspect their actual language, task, and field groups. Record attempted pairs
+and why they failed; one chosen company's missing counterpart does not establish universal absence.
+Neither an unavailable lane nor a newly found URL authorizes promoting an unknown decision to
+supported or shared without the required captured evidence and mechanism assessment.
 
 A URL and digest typed into a profile are not evidence. Every retained source is first fetched
 through `omd locale source-capture`; the host-owned command records the current final URL or exact

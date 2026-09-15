@@ -14,6 +14,9 @@ allow:
   - Bash(shasum:*)
 deny: []
 instructions: |
+  Read `omd pack protocol/design-practice.md --section "Explore without fixation"`.
+  Derive content-to-form alternatives from the actual unanswered question. Recombining a rejected
+  principle requires a new owned composition and rendered test, not a silent change of the winner.
   Own only `.omd/composition.md`. Read once, scoped. From
   `omd pack protocol/human-design-loop.md` take `--section "Surface grammar"`,
   `--section "Greenfield authenticity"`,
@@ -23,7 +26,16 @@ instructions: |
   `theory/layout.md`, `theory/color.md`, and `theory/ux.md` under
   `omd pack dir`. Never read the coordinator's `omd-ultradesign` skill. Read another named section
   only when a gate cites it. Receive only the sanitized frame/concept, clean copy deck, sanitized
-  approved typography contract, scout's distilled transferable principles, and the immutable
+  approved typography contract, and scout's distilled transferable principles for the selected stages.
+  [adaptive-art-direction:consumer] Branch on the authoritative adaptive route: only an explicit
+  art-direction skip with its typed skip receipt removes that stage's inputs. Missing is not skipped.
+  On that skip, compose from the selected frame/copy/type/scout/reference projection and typed skip
+  receipt; do not fabricate a register, motion decision, metaphor contract, image draft, handoff, or
+  art-direction/motion/settled-selection hashes. Preserve all other selected prerequisites, current
+  evaluator lineage, source-free boundaries, and design-quality acceptance criteria.
+  Independently selected image-first exploration still requires its coordinator-chosen draft or
+  authorized CSS/SVG fallback; the art-direction skip does not remove that selected prerequisite.
+  When art direction is selected (and on non-adaptive routes that require it), receive the immutable
   selected `art-direction-v2` decision from its `art-direction-record-v3` record resolved from `.omd/art-direction.json`, with its matching
   `motionDecision: none|one`, selected immutable register (quiet/confident/showpiece), selected slots,
   activation binding, and settled selection as input facts; never infer motion from register, re-open
@@ -33,7 +45,7 @@ instructions: |
   while rejecting every listed prop and close visual synonym as an icon, illustration, photograph,
   texture, silhouette, or motif. Never turn either field into visible copy, a caption, or a rendered
   negative instruction.
-  When reference assembly applies, begin after the coordinator/host has generated its image-first
+  When the route selects image-first exploration, begin after the coordinator/host has generated its image-first
   drafts and chosen one. When a draft is available, receive the hash-bound sanitized selected
   assembly and coordinator-chosen draft reference, then analyze and translate that draft into the
   composition contract. When the host has no image capability, receive the selected assembly and
@@ -52,6 +64,9 @@ instructions: |
   `.omd/reference-visual-packet-evidence.json`, `.omd/refs/`, or another packet entry; never infer
   source identity, colour, copy, imagery, typeface, brand, or asset direction from the neutral study;
   never cite, embed, copy, trace, or ship the SVG.
+  Preserve selected `binding.measurements` names and corresponding complete semantic groups in the
+  composition. They become `data-omd-reference-anchor` markers for actual measurement, not visible
+  copy or approval flags. Do not change their source indices, quantities, axis or counterpart meaning.
   When locale-design research is selected, consume only the current resolved
   `.omd/cultural-design-projection.json`, never the cultural profile, source identities, URLs, or
   research rationale. When the brief names `.omd/reference-locale-binding.json`, use its source-free
@@ -160,6 +175,10 @@ instructions: |
   thesis: the product-specific relationship among type, proportion, density, colour, geometry,
   and state change that should make the interface desirable to use. In `## Focal hierarchy`,
   name the intended first four attention stops and the optical relationships that produce them.
+  Apply `protocol/composition-contract.md` **[type-composition-boundary]** before candidate
+  axes: specimen approval is not page-hierarchy approval. Resolve the heading/anchor attention
+  relationship using the supplied proved treatments and exact selected assignments; return a
+  missing treatment to Typesetter instead of propagating a known competition into every axis.
   Assign containment by role before drawing regions: decide which content stays open on the
   canvas, which earns a tonal field, which needs only a local separator, and which genuinely
   needs elevation. Reusing a full rectangular border or the same surface recipe for unrelated
@@ -188,8 +207,9 @@ instructions: |
   On a `marketing` surface, when assigning a media role or alternate carrier,
   prefer an actively purposeful visual
   carrier rather than a bare placeholder: gradient-mesh, noise-grain texture, svg-geometric patterns, css-illustration primitives,
-  `theory/expressive.md`, or a `motion/recipes/` entry, fitted to the immutable selected art
-  direction and anchor's domain mechanism. `motionDecision: one` requires exactly the settled,
+  `theory/expressive.md`, or a selected `motion/recipes/` entry, fitted to the anchor's domain mechanism
+  and, when art direction is selected, its immutable selected art direction. For selected art direction,
+  `motionDecision: one` requires exactly the settled,
   concept-bearing activated scene; on these surfaces `motionDecision: none` requires no activated scene and a
   purposeful static template break that realizes the selected macro visual system. Neither branch
   follows from the register, and neither permits a generic, carrierless, evenly spaced composition.
@@ -213,8 +233,9 @@ instructions: |
   material — photographs, slides, a portrait, data — assign it as a first-class structural
   carrier, not text-in-boxes with the material unused; unused authentic material is a
   distinction failure. Record the named template and the departure in the contract rationale.
-  Image-first composition (read `theory/imagegen.md`) follows the immutable selected
-  `motionDecision`, not the register: wait for the coordinator/host to finish generating and
+  When image-first exploration is selected, image-first composition (read `theory/imagegen.md`) follows
+  the immutable selected `motionDecision` only when art direction is selected, never inferring one
+  from the register or the image-first method. In either case, wait for the coordinator/host to finish generating and
   choosing the selected draft before composing. The coordinator/host derives generation directions
   and prompts from the selected assembly, selected references, project rough, and permitted
   project-owned inputs, generates only the independent drafts justified by the selected method,
@@ -225,7 +246,8 @@ instructions: |
   The chosen draft
   is a design reference, never a shipped page asset; bare `omd ref distance <page>` remains advisory,
   while the hand owns the blocking selected-slot gate after current usage and build observation. When
-  image capability is unavailable, use the settled selected assembly with CSS/SVG graphics recipes.
+  image capability is unavailable, use the current selected assembly with CSS/SVG graphics recipes,
+  retaining settled direction bindings when art direction is selected.
   Never request or inspect the internal raw evidence record.
 
   Record SHA-256 fingerprints for `.omd/frame.md`, `.omd/copy-deck.md`,

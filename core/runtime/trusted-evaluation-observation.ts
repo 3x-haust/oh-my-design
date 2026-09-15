@@ -114,6 +114,13 @@ export function writeTrustedEvaluationObservation(input: Readonly<{
     if (graph.value === undefined) {
       throw new TrustedEvaluationObservationError('STALE_TRUSTED_BROWSER_DECISION_GRAPH');
     }
+    if (hash(decisionGraphBytes) !== receipt.decisionGraphSha256) {
+      throw new TrustedEvaluationObservationError('STALE_TRUSTED_BROWSER_DECISION_GRAPH');
+    }
+    input.writer.writeContentAddressed(
+      `.omd/decision-graphs/sha256-${receipt.decisionGraphSha256}.json`,
+      decisionGraphBytes,
+    );
     const decisionRefs = graph.value.decisions.map((decision) => ({
       decisionId: decision.id,
       decisionSha256: designDecisionSha256(decision),

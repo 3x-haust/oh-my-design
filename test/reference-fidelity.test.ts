@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { Invariants } from '../core/types.ts';
+import { compareReferenceGeometry, type GeometrySignature } from '../core/ref/geometry-comparison.ts';
 import {
   SELECTED_REFERENCE_DISTANCE_THRESHOLD,
   createSelectedReferenceDistanceReceipt,
@@ -126,4 +127,22 @@ test('selected receipt builder rejects empty and duplicate slot assignments', ()
     ...input(),
     slots: [input().slots[0]!, input().slots[0]!],
   }));
+});
+
+test('the promised geometry axis gates transfer even when every style invariant agrees', () => {
+  const source: GeometrySignature = { schema: 'reference-geometry-v1', aspectRatio: 2, gaps: [.02], anchors: [
+    { role: 'heading', x: 0, y: .1, w: .3, h: .3, type: 3 },
+    { role: 'image', x: .7, y: .1, w: .3, h: .6, type: null },
+  ] };
+  const target = structuredClone(source);
+  target.anchors = target.anchors.map(anchor => ({ ...anchor, x: anchor.role === 'heading' ? .7 : 0 }));
+  const geometry = compareReferenceGeometry(source, target);
+  const receipt = createSelectedReferenceDistanceReceipt({ ...input(), slots: [{ ...input().slots[0]!, geometry, geometryAxes: ['structure'] }] });
+  assert.equal(receipt.comparisons[0]!.styleSimilarity, 1);
+  assert.equal(receipt.verdict, 'fail');
+  assert.ok(receipt.comparisons[0]!.similarity < .6);
+  assert.deepEqual(parseSelectedReferenceDistanceReceipt(JSON.parse(JSON.stringify(receipt))), receipt);
+  assert.throws(() => parseSelectedReferenceDistanceReceipt({ ...receipt, verdict: 'pass', comparisons: [{ ...receipt.comparisons[0]!, similarity: 1 }] }), /weakest/);
+  const unmeasured = compareReferenceGeometry({ ...source, gaps: [] }, { ...source, gaps: [] });
+  assert.equal(createSelectedReferenceDistanceReceipt({ ...input(), slots: [{ ...input().slots[0]!, geometry: unmeasured, geometryAxes: ['rhythm'] }] }).verdict, 'fail');
 });

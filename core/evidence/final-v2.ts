@@ -43,6 +43,7 @@ import { validateMotionEvidenceV2, validateRenderedBeatResultAuthority } from '.
 import { hasHostBoundLocalProjectWriteAuthority } from '../runtime/activation.ts';
 import { requireFinalEvidenceManifestAuthorization, requireMotionCollectorAuthorization, requireStaticEvidenceResultAuthorization, type ProjectRunInvocation } from '../runtime/invocation.ts';
 import { acquireProjectMutationLock } from '../runtime/project-write.ts';
+import { validateCurrentRenderedRefinementCheckpoint } from '../runtime/rendered-refinement.ts';
 import { preflightFinalEvidenceGraph, revalidateFinalEvidenceGraph } from './final-v2-publication-preflight.ts';
 import { checkCompletionPublicationPrerequisites } from '../completion/publication.ts';
 export const FINAL_EVIDENCE_V2_SCHEMA = 'final-evidence-v2';
@@ -295,8 +296,17 @@ function paths(root: string): { omd: string; runs: string; consumptions: string;
 }
 function validateBackedManifest(root: string, fs: FinalEvidenceV2FileSystem, value: unknown, invocation?: ProjectRunInvocation, consumeMotionAuthorizations = false): FinalEvidenceV2ManifestVariant {
   const manifest = validateFinalEvidenceV2ManifestVariant(value);
-  const graph = validateFinalEvidenceV2GraphFiles(root, manifest.graph, fs, invocation ?? fail('a fresh host invocation is required to validate final evidence'));
+  const currentInvocation = invocation ?? fail('a fresh host invocation is required to validate final evidence');
+  const graph = validateFinalEvidenceV2GraphFiles(root, manifest.graph, fs, currentInvocation);
   if (manifest.graphRootHash !== graph.rootHash) fail('graph root hash changed');
+  const refinement = validateCurrentRenderedRefinementCheckpoint({ root, invocation: currentInvocation });
+  if (refinement.required) {
+    const terminalObservation = manifest.graph.observations.at(-1)
+      ?? fail('a completed refinement requires a terminal final observation');
+    if (terminalObservation.sha256 !== refinement.checkpoint.afterObservationSha256) {
+      fail('terminal final observation does not match the current completed refinement checkpoint');
+    }
+  }
   if (graph.bindings.branch === 'adaptive-omission') {
     if ((!isAdaptiveFinalEvidenceV2Graph(manifest.graph) && !isWorkflowAdaptiveFinalEvidenceV2Graph(manifest.graph)) || canonical(manifest.claimPublication) !== canonical(graph.bindings.claimPublication)) fail('claim publication does not match the adaptive source contract');
     return manifest;

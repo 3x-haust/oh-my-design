@@ -29,6 +29,8 @@ export interface RawNode {
   parent: string | null;
   box: Box;
   children: string[];
+  /** Explicit target correspondence for declared reference features; values come from the renderer. */
+  referenceMeasurement?: { anchor: string; fontSize: number; visible: boolean };
   layout?: Layout;
   fill?: Styled;
   radius?: Styled;
@@ -531,8 +533,10 @@ export interface BlueprintNode {
   role: NodeRole;
   /** IDs of direct children, in document order. */
   children: string[];
-  /** Bounding box dimensions. Position is intentionally omitted (component-relative). */
+  /** Bounding box dimensions. */
   box: { w: number; h: number };
+  /** Measured component-relative position. Absent on legacy captures; never infer it. */
+  position?: { x: number; y: number };
   // layout — present when the node declared flex/grid or any padding
   padding?: [number, number, number, number];
   /** Non-zero gap between children. Absent when 0 or unmeasured. */

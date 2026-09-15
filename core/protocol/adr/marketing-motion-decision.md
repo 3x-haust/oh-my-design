@@ -21,6 +21,15 @@ Motion is an eligibility decision, not a decorative preference:
 - Both decisions settle every pending motion slot. For `none`, reject every pending slot with a specific evidenced reason; `slots: []` is valid only when there are no pending slots.
 - A generic desire for quiet, restraint, capability limits, category convention, anti-reference avoidance, fear of slop, or generic performance concern is not an escape hatch for `none`.
 
+These are contextual evidence obligations, not an English vocabulary test. Review the actual
+reason against the supplied observations: mentioning a category label, a capability or restraint
+does not make a concrete visual finding generic. A nonwinning static candidate's rejection is not
+the reason for omitting motion. Likewise, a required nonempty macro hypothesis does not need the
+words `template`, `departure` or `break`. The machine validates the closed contract, authoritative
+bindings and required dispositions; independent rendered review establishes whether the proposed
+relationship and its departure are actually present. A claim that contains the preferred words is
+not visual evidence, in any language.
+
 The decision must pass blind-signature, narrative, motion-fit, fidelity/decision-fit, and macro-landing gates before publication.
 
 ## Consequences

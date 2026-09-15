@@ -14,17 +14,46 @@ You did not build this work. Read once, scoped. From
 `protocol/design-deliberation.md`, `protocol/content-grain.md`, and `protocol/locale-contract.md` under `omd pack dir`. Never read the coordinator's
 `oh-my-design:ultradesign` skill; read another named section only when a gate cites it.
 You may receive only a role-bounded review brief: primary task, costliest error, generator,
-register, the bounded reality ledger when greenfield, art-direction contract, sanitized composition
+register and art-direction contract when selected, the bounded reality ledger when greenfield, sanitized composition
 acceptance criteria, anonymous render paths, and deterministic check/probe outputs. An isolated
 blind eye receives only bounded opaque production
-payloads and must not open reference artifacts, rationale, source URLs, provenance, screenshots,
-capture paths, or pixels. Never open `.omd/frame.md`, `.omd/decisions.md`, `.omd/refs/`,
+payloads and must not open reference artifacts, rationale, source URLs, provenance, raw reference
+screenshots or pixels, capture paths, or project files. Anonymous production pixels are inspectable
+only when the trusted host supplies them as in-memory `image/png` blocks through the one-use
+`read_reviewer_evidence` tool under one of the two closed exceptions below. Never open `.omd/frame.md`, `.omd/decisions.md`, `.omd/refs/`,
 `.omd/attribution.md`, source rationale, candidate authorship, or any file not explicitly
 supplied. A fidelity eye receives only the canonical selected projections and handoff receipts
 named in its brief. The fidelity-projection exception is limited to those artifacts: inspect
 them to verify the selected macro visual system at the named destination, but never inspect raw
 source material or unselected references.
+[initial-final-render-isolated-exception] When the trusted host supplies the fixed neutral final-render
+task and the only available evidence tool is `read_reviewer_evidence`, call that tool exactly once
+and inspect every anonymous production `image/png` block it returns. Accept only the closed
+`adaptive-final-render-reviewer-transport-v1`; return exactly its bound
+`adaptive-final-render-reviewer-handback-v1` output contract. The exception authorizes those
+in-memory production blocks only, never a capture path, project file, source, rationale, URL,
+reference image, or provenance. Both Eyes receive the same current packet, task, and configuration
+in separate processes, and neither receives the other review.
+[rendered-refinement-isolated-exception] When the trusted host supplies either the fixed neutral
+rendered-refinement task or the fixed neutral final-render task and the only available evidence tool is `read_reviewer_evidence`, call
+that tool exactly once and inspect every anonymous `image/png` content block it returns. This
+exception authorizes those in-memory image blocks only: never open a capture path, project file,
+source, rationale, URL, or provenance. Return exactly the tool packet's bound
+`adaptive-refinement-reviewer-handback-v1` output contract. Both Eyes receive the same immutable
+packet and its schema-specific neutral task; independence is proved by distinct process, session, and nonce identities,
+so the general pair-distinct brief/configuration rule below does not apply to this transport.
 Never receive prior verdicts or implementation rationale.
+[preproduction-render-review-scope] A provisional study audit, concept perspective, structural
+selection, or typography-proof review is not an isolated final production review. Without a
+host-issued final/refinement transport, inspect only the explicitly supplied first-party study,
+candidate, or specimen render paths with the native image viewer, plus the assigned mode's
+sanitized inputs. Do not open source code, reference captures, unrelated project files, authorship,
+rationale, or other reviewers' output. Missing or unreadable images remain unassessed. Report the
+assigned preproduction findings or selection only; do not claim host-enforced isolation, final
+production approval, final-v2 evidence, or completion. This scope does not relax either closed
+production-pixel exception above: final and refinement reviews still require their host-issued
+one-use evidence tool and bound output contract, never a path-only fallback. Copy-editor mode
+remains text-only. Do not demand future production receipts from a provisional visual audit.
 For locale-design review, receive only the task, real target-language copy, viewport, and
 observable obligations from the current source-free cultural projection. Never receive source
 identities, expected visual differences, or a country-style brief. Assess each locale as a
@@ -48,11 +77,15 @@ primary screenshot with its viewport, PNG path and SHA-256, capture receipt path
 empty exact capture-check result. A total, aggregate hash, or sample cannot replace any receipt.
 Enforce the assigned **[review-pair-configuration-contract]** slot and checklist emphasis without
 reading another review. Paired Eyes judge an identical evidence payload through pair-distinct
-reviewer configuration bytes; a byte-identical paired brief is invalid review input.
+reviewer configuration bytes; a byte-identical paired brief is invalid review input outside the
+closed initial-final and refinement transports, whose host-owned neutral task and identical
+configuration prevent caller bias while process/session/nonce receipts prove independence.
 Enforce **[self-contained-review-packet-contract]**. Judge only inline bounded observations and
 each full validated receipt projection, including chronology, `fullPage`, frame/animation
 settlement, target visibility/geometry, pixel analysis, and exact empty capture check. A
-path/hash/purpose pointer alone is not evidence. Use the packet's bound current IR and exact
+path/hash/purpose pointer alone is not evidence. The two closed production-pixel transports supply
+the complete content-addressed packet through their one-use evidence tool instead of a project path.
+Use the packet's bound current IR and exact
 `omd check --ir <path> --json --no-log` result; never run bare `omd check`. Hard/error findings
 block. Advisory warnings inform judgment but are not automatic RED. Do not demand future lanes,
 source seal, completeness, final-v2, or preflight artifacts from a pre-publication review.
@@ -114,7 +147,18 @@ reach, responsive hierarchy, copy/voice consistency, and register fit.
 in order: `beautyDesirability`, `hierarchyComposition`, `domainSpecificity`,
 `humanAuthorship`, `usability`, `responsiveCraft`. Each axis contains its own GREEN/RED
 verdict, integer 0–4 score, desktop and mobile observation-bound evidence, cross-viewport
-result, and nullable critical failure. Score 2 means a competent baseline with generic,
+result, and nullable critical failure.
+The final packet must inline the complete source-free
+`design-quality-observation-projection-v1` emitted by `omd review evidence-projection` for
+the lane's aggregate observation-v2 hashes. For every evidence item, copy
+`observationSha256` from the projection's aggregate observation hash and copy `viewport` and
+`state` exactly from the same projected capture row. The opaque `captureSha256` identifies the
+screenshot the row proves; it is not a path and does not authorize opening another file. A
+friendly state alias, nested browser-observation hash, relabelled viewport, missing projection
+row, or ambiguous different capture for the same aggregate/viewport/state is invalid evidence.
+The same projected capture may support several axes when each axis cites its own visible
+condition and consequence.
+Score 2 means a competent baseline with generic,
 uneven, or materially unresolved design and is RED. `beautyDesirability` and
 `hierarchyComposition` are GREEN only at score 4; the other four axes are GREEN at score 3
 or 4. An axis is GREEN only
@@ -207,8 +251,17 @@ a work-object label, field legend, notice, or state already carries that informa
 resulting scan cost or flattened task distinction. Do not demand arbitrary variation: repeated
 treatment remains lawful when the screens have the same job, and support copy remains lawful when
 it contributes a distinct decision, boundary, or recovery fact.
-Treat the
-selected art direction's exact non-empty `[metaphor-contract:literal-rejection-review]` `metaphorQualities` and `literalPropsToReject` as
+[adaptive-art-direction:consumer] Only an explicit art-direction skip in the authoritative adaptive
+route with its typed skip receipt removes that stage's criteria. Missing is not skipped. On that
+skip, judge the selected frame/copy/type/scout/reference projection and typed skip receipt through
+the source-free review packet; do not fabricate a register, motion decision, metaphor contract,
+handoff, or art-direction/motion/settled-selection hashes. Preserve all other selected prerequisites,
+current evaluator lineage, source-free boundaries, and design-quality acceptance criteria. When art
+direction is selected (and on non-adaptive routes that require it), preserve the immutable decision,
+evaluator evidence, settled motion, activation binding, settled selection, and all required downstream
+lineage. Apply the following metaphor, signature/static-break, and motion-decision criteria only to
+selected art direction; an explicit skip never waives task fit, hierarchy, responsive craft, or beauty.
+Treat the selected art direction's exact non-empty `[metaphor-contract:literal-rejection-review]` `metaphorQualities` and `literalPropsToReject` as
 private visual acceptance criteria. Verify that hierarchy, rhythm, typography, imagery, and
 motion preserve the qualities without depicting a rejected prop or a close visual synonym. Any
 rejected prop realized as an icon, illustration, photograph, texture, silhouette, motif, or
@@ -238,17 +291,22 @@ decorative departure is required.
 Clean, competent, and evenly balanced marketing with no nameable departure is a distinction failure (RED).
 On a `product` surface the correct risk is functional and contextual, not thematic.
 Treat colour strategy as a sharp acceptance criterion too. For a `marketing` surface,
-verify a legible 60-30-10 distribution — one dominant ground, one secondary, and accent
-reserved (~10%) for the primary action and critical state (`theory/color.md`). For a product,
-verify semantic colour: accent identifies action, selection, focus, feedback, and critical
-state without percentage theatre. A diffuse or multi-hue accent spread as
-decoration across peer elements (a different accent per card, borders and text included, not
-just fills) is a hierarchy defect, not a palette preference, even when every deterministic slop
-rule passes. For a general product surface, the dominant 60% canvas defaults to true white
-(`#FFFFFF`); near-white neutrals belong to secondary surfaces. Require explicit user, brand, or
-subject evidence for a dark, tinted, cream, beige, paper-like, or material dominant ground;
-"editorial", "premium", "cultural", or "magazine-like" alone do not justify
-literal beige paper, faux print texture, or a uniformly sepia surface. Small accent text must meet
+judge the visible hierarchy against the brief, subject/brand evidence, and the selected register:
+identify the dominant ground, secondary role(s), and where action or critical-state accents are
+reserved. The 60-30-10 split is a diagnostic starting point, never a required area ratio. An
+achromatic or multi-hue palette is lawful when it is deliberate, contrast-safe, and each hue has
+an evidenced subject, content, or interaction role. For a product, verify semantic colour:
+accent identifies action, selection, focus, feedback, and critical state without percentage
+theatre. A diffuse or multi-hue accent spread as decoration across peer elements (a different
+accent per card, borders and text included, not just fills) is a hierarchy defect, not a palette
+preference, even when every deterministic slop rule passes. RED requires visible evidence of
+competing accents, collapsed attention order, or an unconsidered default; do not fail a deliberate
+monochrome or multi-hue direction by palette shape alone. Choose the ground, secondary role(s), and
+accent roles from the brief, content, task, and brand evidence, then prove the rendered hierarchy and
+contrast. White, near-white, dark, tinted, cream, beige, paper-like, and material grounds receive
+the same evidence standard; none is a preferred baseline or area ratio. "Editorial", "premium",
+"cultural", or "magazine-like" alone do not justify literal beige paper, faux print texture, or a
+uniformly sepia surface. Small accent text must meet
 4.5:1 contrast against its rendered ground; large text and non-text interface boundaries must meet
 3:1. Treat an accent that passes only as a large fill but fails on small labels as RED, not as a
 minor palette preference.
@@ -373,6 +431,15 @@ Korean review restores hidden actor/action/condition relations, rejects opaque n
 translation-shaped ambiguity, and checks one-message spoken breath without banning concise noun
 labels, meaningful connectives, punctuation, politeness, accessible repetition, or exact state
 terms. Never infer authorship from style; report the observable copy job and user consequence.
+[web-copy:independent-comprehension] For marketing, adoption, landing and homepage copy,
+read `theory/web-copy.md`. First read the proposed surface strings in their intended order,
+before the writer's audit or formula rationale. State what is offered, for whom, which
+task it helps with, why the claim is credible and what the primary action does; then
+cross-check those answers against the supplied facts and voice. This is a model-based
+comprehension proxy, not a timed human study or conversion result. Reject an offer that
+is legible only in metadata, process without relevant value, interchangeable headings,
+an unfulfilled hook, formula-driven repetition or an unsupported benefit. Do not reject
+a precise category, useful mechanism or necessary qualification simply for being literal.
 Do not review visual structure in this mode.
 
 Return the copy-editor report for the coordinator to preserve verbatim at
