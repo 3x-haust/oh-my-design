@@ -5,7 +5,8 @@ and headings are English. Actual surface copy and verbatim audience/source quota
 in the target language. The writer owns this file; layout and implementation agents consume
 it without silently rewriting it.
 
-Use these H2 sections exactly and keep every section non-empty.
+Use the applicable H2 sections exactly and keep each included section non-empty. The Art direction
+contract section is conditional as specified below; the other sections are required.
 
 ## Sources and fact ledger
 
@@ -97,6 +98,41 @@ primary copy; recovery copy and both probes are N/A with reasons. Write error, e
 disabled, offline, and recovery strings only where the product can actually reach those
 states. Never fabricate error or empty UI to satisfy a checklist.
 
+## Art direction contract
+
+Include this section only when art direction is selected. Copy the selected register, motion
+decision, non-empty immutable Beat IDs and exact exception receipt from the coordinator's copy-safe
+projection. The coordinator assigns stable `B-<number>` IDs to the evidenced content regions before
+publishing art direction; Writer maps those supplied IDs to verified facts, not new IDs. An empty
+selected Beat set returns to the art-direction owner for corrected publication. It is not a reason
+to invent a user exception, weaken copy validation or fabricate a region.
+
+Use the exact field names below. The copy section's schema literal remains `art-direction-v1`;
+it is not the schema version of the immutable direction record. Replace the angle-bracket values
+from the supplied projection and fact ledger. Use exactly one Beat table with one row per selected ID.
+The receipt field includes the literal `SHA-256` suffix.
+
+```markdown
+## Art direction contract
+
+- Schema: art-direction-v1
+- Register: <selected-register>
+- motionDecision: <selected-motion-decision>
+- Evidence IDs: <verified-fact-ids>
+- Current-user exception: N/A — no host-authorized Beat exception
+- Current-user Beat-exception receipt SHA-256: <selected-exception-receipt-sha256>
+
+| Beat ID | Evidence IDs |
+| --- | --- |
+| <selected-beat-id> | <verified-fact-ids> |
+```
+
+The shown exception declaration applies only to the canonical no-exception receipt. For a real
+host-authorized current-user exception, use exactly `Current-user exception: current-user: host-authorized Beat exception`
+and bind its exact selected receipt. Neither a register
+choice nor an oversized content plan creates that authority. This section is analytical metadata;
+none of its field names, hashes or instructions are surface copy.
+
 ## Humanize audit
 
 Record these fields for the reviewed surface:
@@ -113,6 +149,12 @@ Also record proposition repetition, CTA prediction, terminology, read-aloud/regi
 emotion, and applicable error/empty/recovery/accessibility checks. This is a review record,
 not a style score or detector report. Missing input-contract context is a gap for the writer,
 not permission for another agent to invent it.
+
+For marketing/adoption copy, `theory/web-copy.md` adds a compact **Marketing message map**
+within this audit: region, reader question, actual answer, verified fact IDs, and the
+selected method's concrete wording/order change. Formula names alone do not prove application.
+This remains analytical metadata; the reader-facing offer must be understandable without it.
+The existing copy decision entry records distinct opening angles and the selected strategy.
 
 The deterministic gate rejects only missing structure, invalid scope/state applicability,
 unresolved exact sentinels, and broken explicit fact references. It never judges AI-ness,

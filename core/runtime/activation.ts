@@ -27,6 +27,7 @@ export const HOST_PAYLOAD_AUTHORIZATION_PURPOSES = [
   'product-probe-result',
   'product-capture-result',
   'workflow-production-slice',
+  'production-owner-repair',
   'final-evidence-manifest',
 ] as const;
 export type HostPayloadAuthorizationPurpose = (typeof HOST_PAYLOAD_AUTHORIZATION_PURPOSES)[number];
@@ -71,8 +72,11 @@ const HOST_PROJECT_WRITE_DESCRIPTOR = 3;
 const localCliInvocations = new WeakSet<object>();
 const localCliProjectRoots = new WeakMap<object, string>();
 const hostProjectWriteReceipts = new WeakMap<object, HostProjectWriteReceipt>();
+// Diagnostics are not authority and never participate in receipt validation or issuance.
+const hostProjectWriteFailures = new WeakMap<object, string>();
 const consumedHostReceiptNonces = new Set<string>();
 const testPayloadAuthorizations = new WeakMap<object, { readonly projectRoot: string; readonly authorizations: ReadonlySet<string>; }>();
+const observedCodexAiDecisions = new WeakMap<object, { readonly projectRoot: string; readonly digests: Set<string> }>();
 const invocationIdentities = new WeakMap<object, Readonly<{
   host: HostCapability['host'];
   buildSha256: string;
@@ -197,6 +201,7 @@ function receiptFromCodexBroker(
   projectRoot: string,
   requestedAuthorization?: HostPayloadAuthorization & Readonly<{ payloadBase64: string }>,
 ): HostProjectWriteReceipt | undefined {
+  hostProjectWriteFailures.delete(invocation);
   try {
     const socketPath = process.env.OMD_CODEX_AUTHORITY_SOCKET;
     const activationPath = process.env.OMD_ACTIVATION_PATH;
@@ -227,6 +232,11 @@ function receiptFromCodexBroker(
       activation,
       ...(requestedAuthorization === undefined ? {} : { requestedAuthorization }),
     });
+    if (isRecord(brokerResponse) && hasExactKeys(brokerResponse, ['error'])
+      && typeof brokerResponse.error === 'string' && brokerResponse.error.trim() !== '') {
+      hostProjectWriteFailures.set(invocation, brokerResponse.error.replace(/\s+/g, ' ').slice(0, 1_000));
+      return undefined;
+    }
     if (!isRecord(brokerResponse) || !hasExactKeys(brokerResponse, ['receipt', 'signature']) || typeof brokerResponse.signature !== 'string' || !/^[A-Za-z0-9+/]+={0,2}$/.test(brokerResponse.signature) || !isRecord(brokerResponse.receipt)) return undefined;
     const value = brokerResponse.receipt;
     const signature = Buffer.from(brokerResponse.signature, 'base64');
@@ -347,6 +357,28 @@ function receiptFromInheritedFd(invocation: ProjectRunInvocation, projectRoot: s
   }
 }
 export type TestPayloadAuthorization = Readonly<{ purpose: HostPayloadAuthorizationPurpose; payload: Uint8Array; }>;
+/** Retain exact decisions already authorized by this issuing host, for its own route validation.
+ * This is process-local: a role, ordinary CLI command, or imported script cannot seed this cache.
+ */
+export function recordCodexHostAiDecision(invocation: ProjectRunInvocation, projectRoot: string, payload: Uint8Array): void {
+  if (!NODE_TEST_MODE && !(executedCliPath === canonicalOwnerCliPath && process.argv[2] === 'exec')) {
+    throw new ActivationContextValidationError('AI decision observation belongs to the issuing Codex host');
+  }
+  requireImmutableInvocationIdentity(invocation);
+  if (invocation.activation.hostCapability.host !== 'codex' || !(payload instanceof Uint8Array)) {
+    throw new ActivationContextValidationError('AI decision observation requires the Codex invocation and exact bytes');
+  }
+  const root = canonicalProjectRoot(projectRoot);
+  const prior = observedCodexAiDecisions.get(invocation);
+  if (prior !== undefined && prior.projectRoot !== root) throw new ActivationContextValidationError('AI decision observation is cross-project');
+  const entry = prior ?? { projectRoot: root, digests: new Set<string>() };
+  entry.digests.add(payloadSha256(payload));
+  observedCodexAiDecisions.set(invocation, entry);
+}
+export function hasCodexHostAiDecision(invocation: ProjectRunInvocation, projectRoot: string, digest: string): boolean {
+  const observed = observedCodexAiDecisions.get(invocation);
+  return observed?.projectRoot === canonicalProjectRoot(projectRoot) && observed.digests.has(digest);
+}
 export function authorizeTestPayloads(invocation: ProjectRunInvocation, projectRoot: string, authorizations: readonly TestPayloadAuthorization[]): void {
   if (!NODE_TEST_MODE) throw new ActivationContextValidationError('test payload authorization is available only in the Node test runner');
   requireImmutableInvocationIdentity(invocation);
@@ -369,6 +401,7 @@ export function requireHostPayloadAuthorization(invocation: ProjectRunInvocation
   if (!(payload instanceof Uint8Array)) throw new ActivationContextValidationError('authorized payload must be exact bytes');
   requireImmutableInvocationIdentity(invocation);
   const canonicalRoot = canonicalProjectRoot(projectRoot);
+  if (purpose === 'ai-asset-decision' && hasCodexHostAiDecision(invocation, canonicalRoot, payloadSha256(payload))) return;
   const testAuthorization = testPayloadAuthorizations.get(invocation);
   if (testAuthorization?.projectRoot === canonicalRoot && testAuthorization.authorizations.has(payloadAuthorizationKey(purpose, payload))) return;
   const requestedAuthorization = {
@@ -394,3 +427,6 @@ export function hasHostBoundLocalProjectWriteAuthority(invocation: object, proje
   } catch { return false; }
 }
 export function hostBoundLocalProjectRoot(invocation: object): string | undefined { return localCliProjectRoots.get(invocation); }
+export function hostProjectWriteAuthorityFailure(invocation: object): string | undefined {
+  return hostProjectWriteFailures.get(invocation);
+}

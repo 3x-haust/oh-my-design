@@ -75,7 +75,7 @@ const ENTRY_SURFACE_KEYS = new Set([
   'status',
 ]);
 const CODE = /^[a-z0-9]+(?:[-:][a-z0-9]+)*$/;
-const TRANSCRIPT = /^(?:action-click|action-fill|assertion-pass|assertion-fail):[a-f0-9]{64}$/;
+const TRANSCRIPT = /^(?:(?:action-click|action-fill|assertion-pass|assertion-fail):[a-f0-9]{64}|(?:access|safety)-finding:[a-z0-9]+(?:[-:][a-z0-9]+)*)$/;
 
 function malformed(): never {
   throw new TrustedBrowserReceiptError('MALFORMED_TRUSTED_BROWSER_RECEIPT');
@@ -144,6 +144,12 @@ export function parseTrustedBrowserReceipt(input: unknown): TrustedBrowserReceip
   }
   const floors = record(receipt.hardFloors, FLOOR_KEYS);
   if (Object.values(floors).some((value) => value !== 'pass' && value !== 'fail')) return malformed();
+  const transcript = strings(receipt.transcript, TRANSCRIPT, false);
+  for (const floor of ['access', 'safety'] as const) {
+    if (floors[floor] === 'pass' && transcript.some((entry) => entry.startsWith(`${floor}-finding:`))) {
+      return malformed();
+    }
+  }
   const entrySurface = receipt.entrySurface === undefined
     ? undefined
     : (() => {
@@ -208,7 +214,7 @@ export function parseTrustedBrowserReceipt(input: unknown): TrustedBrowserReceip
       safety: floors.safety as 'pass' | 'fail',
     }),
     captures: Object.freeze(captures),
-    transcript: strings(receipt.transcript, TRANSCRIPT, false),
+    transcript,
     ...(entrySurface === undefined ? {} : { entrySurface }),
   });
 }

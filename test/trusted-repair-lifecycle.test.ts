@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, relative, sep } from 'node:path';
 import { test } from 'node:test';
 
 import {
@@ -23,10 +23,14 @@ import {
   ProductionRepairError,
   applyProductionRepair,
   productionRepairReviewBytes,
+  recoverRejectedProductionRepairRollback,
   recoverProductionRepair,
+  rollbackRejectedProductionRepair,
   stageProductionRepair,
   type ProductionRepairReview,
+  validateRejectedProductionRepairRollback,
 } from '../core/runtime/production-repair.ts';
+import { observationV2Sha256, writeObservationV2 } from '../core/runtime/observation.ts';
 import {
   authorizeTestProjectRunPayloads,
   createTestProjectWriteAdapter,
@@ -38,10 +42,15 @@ const fixture = (): unknown => JSON.parse(readFileSync(new URL('./fixtures/adapt
 const productionPath = 'src/copy/index.html';
 const contextPath = 'src/copy/context.html';
 
-function publishObservation(root: string, observedAt = '2026-01-01T00:00:00.000Z'): Buffer {
+function publishObservation(
+  root: string,
+  buildSha256: string,
+  currentArtifact: Readonly<{ path: string; sha256: string }>,
+  observedAt = '2026-01-01T00:00:00.000Z',
+): Buffer {
   const observation = {
-    schema: 'observation-v2', observedAt, buildSha256: 'b'.repeat(64),
-    currentArtifact: { path: '.omd/build.json', sha256: 'c'.repeat(64) }, predecessorSha256: null, evidence: {},
+    schema: 'observation-v2', observedAt, buildSha256,
+    currentArtifact, predecessorSha256: null, evidence: {},
   };
   const bytes = Buffer.from(`${canonicalJson(observation)}\n`);
   const sha256 = hash(bytes);
@@ -51,12 +60,16 @@ function publishObservation(root: string, observedAt = '2026-01-01T00:00:00.000Z
   const pointer = Buffer.from(`${canonicalJson({ schema: 'observation-v2-pointer', record, sha256 })}\n`);
   writeFileSync(join(root, '.omd', 'observation-v2.json'), pointer);
   writeFileSync(join(root, '.omd', 'observation-v2-retention.json'), `${canonicalJson({
-    schema: 'observation-v2-retention', currentArtifactSha256: 'c'.repeat(64), retained: [sha256],
+    schema: 'observation-v2-retention', currentArtifactSha256: currentArtifact.sha256, retained: [sha256],
   })}\n`);
   return pointer;
 }
 
-function publishSlice(value: ReturnType<typeof project>): void {
+function publishSlice(value: Readonly<{
+  root: string;
+  invocation: ReturnType<typeof publishTestAdaptiveRoute>;
+  writer: ReturnType<typeof createTestProjectWriteAdapter>;
+}>): void {
   const evidencePath = '.omd/workflow-evidence.json';
   writeFileSync(join(value.root, evidencePath), '{"risk":"component context"}\n');
   const evidenceSha256 = hash(readFileSync(join(value.root, evidencePath)));
@@ -100,8 +113,15 @@ function project(withSlice = true) {
   const writer = createTestProjectWriteAdapter(root, invocation);
   const value = { root, invocation, writer };
   if (withSlice) publishSlice(value);
-  publishObservation(root);
-  return value;
+  const buildPath = '.omd/build.json';
+  const buildBytes = Buffer.from(`${canonicalJson({
+    schemaVersion: 'omd-build-identity-v1', packageVersion: 'test',
+    buildSha256: invocation.current.buildSha256, sourceSkillSha256: invocation.current.loadedSkillSha256,
+  })}\n`);
+  writeFileSync(join(root, buildPath), buildBytes);
+  const currentArtifact = { path: buildPath, sha256: hash(buildBytes) };
+  publishObservation(root, invocation.current.buildSha256, currentArtifact);
+  return { ...value, currentArtifact };
 }
 
 function review(
@@ -151,6 +171,52 @@ function mirror(value: ReturnType<typeof project>, changes: Readonly<Record<stri
   return root;
 }
 
+function mirrorTreeSha256(root: string): string {
+  const tree: Array<Record<string, unknown>> = [{ path: '.', kind: 'directory', mode: lstatSync(root).mode & 0o7777 }];
+  const visit = (directory: string): void => {
+    for (const name of readdirSync(directory).sort()) {
+      const absolute = join(directory, name);
+      const path = relative(root, absolute).split(sep).join('/');
+      const metadata = lstatSync(absolute);
+      const mode = metadata.mode & 0o7777;
+      if (metadata.isDirectory()) {
+        tree.push({ path, kind: 'directory', mode });
+        visit(absolute);
+      } else {
+        tree.push({ path, kind: 'file', mode, sha256: hash(readFileSync(absolute)) });
+      }
+    }
+  };
+  visit(root);
+  return hash(canonicalJson(tree));
+}
+
+function ownerReceipt(
+  value: ReturnType<typeof project>,
+  mirrorRoot: string,
+  changedPaths: readonly string[] = [productionPath],
+): Buffer {
+  const canonicalMirror = realpathSync(mirrorRoot);
+  const mirror = lstatSync(canonicalMirror);
+  const pointer = readFileSync(join(value.root, '.omd', 'observation-v2.json'));
+  const observationSha256 = (JSON.parse(pointer.toString('utf8')) as { sha256: string }).sha256;
+  const final = mirrorTreeSha256(canonicalMirror);
+  const bytes = Buffer.from(`${canonicalJson({
+    schema: 'omd-production-owner-result-v1', owner: 'omd-hand', projectRoot: realpathSync(value.root),
+    host: 'codex', transport: 'codex-exec-stdio-jsonl', mode: 'repair', result: 'completed',
+    taskSha256: hash(`repair:${canonicalMirror}`), rolePromptSha256: hash('repair-role'),
+    modelArgumentOmitted: true, modelReasoningEffort: 'medium', configurationSha256: hash('repair-config'),
+    attempts: [{}], sourceChanges: [], receiptPath: `${canonicalMirror}.owner-receipt.json`,
+    repair: {
+      mirrorRoot: canonicalMirror, mirrorDevice: String(mirror.dev), mirrorInode: String(mirror.ino),
+      mirrorBaselineSha256: hash(`baseline:${final}`), mirrorFinalSha256: final,
+      observationPointerSha256: hash(pointer), observationSha256, changedPaths,
+    },
+  })}\n`);
+  authorizeTestProjectRunPayloads(value.root, value.invocation, [{ purpose: 'production-owner-repair', payload: bytes }]);
+  return bytes;
+}
+
 function staged(value: ReturnType<typeof project>, changes: Readonly<Record<string, string>>, paths = Object.keys(changes)) {
   const mirrorRoot = mirror(value, changes);
   const result = stageProductionRepair({
@@ -158,6 +224,7 @@ function staged(value: ReturnType<typeof project>, changes: Readonly<Record<stri
     invocation: value.invocation,
     review: review(value, paths, mirrorRoot),
     mirrorRoot,
+    ownerReceipt: ownerReceipt(value, mirrorRoot, paths),
   });
   return { result, mirrorRoot };
 }
@@ -206,6 +273,75 @@ function arrangeAppliedInterruption(value: ReturnType<typeof project>, journal: 
 `);
 }
 
+function variantAlias(observationSha256: string): string {
+  return `variant-${hash(`rendered-refinement\0${observationSha256}`).slice(0, 16)}`;
+}
+
+function publishRejectedRefinementDecision(
+  value: ReturnType<typeof project>,
+  outcome: Readonly<{ outcomePath: string }>,
+  beforeObservationSha256: string,
+): Readonly<{
+  reviewPath: string;
+  reviewSha256: string;
+  checkpointSha256: string;
+  afterObservationSha256: string;
+}> {
+  const afterObservation = writeObservationV2(value.root, {
+    currentArtifact: value.currentArtifact,
+    buildSha256: value.invocation.current.buildSha256,
+    evidence: {},
+    observedAt: '2026-01-01T00:01:00.000Z',
+  }, value.writer, value.invocation);
+  const afterObservationSha256 = observationV2Sha256(afterObservation);
+  assert.equal(afterObservation.predecessorSha256, beforeObservationSha256);
+  const winnerAlias = variantAlias(beforeObservationSha256);
+  const executionReceipts = [1, 2].map((index) => {
+    const bytes = Buffer.from(`${canonicalJson({
+      schema: 'test-refinement-execution-v1', reviewerId: `eye-${index}`,
+      evidenceSha256: hash('evidence'), winnerAlias,
+    })}\n`);
+    const sha256 = hash(bytes);
+    const path = `.omd/final-review/refinement-executions/sha256-${sha256}.json`;
+    value.writer.writeContentAddressed(path, bytes);
+    return { path, sha256 };
+  });
+  const reviewBytes = Buffer.from(`${canonicalJson({
+    schema: 'adaptive-refinement-review-v1', winnerAlias,
+    evidenceSha256: hash('evidence'), transportSha256: hash('transport'),
+    routeSha256: adaptiveRouteRecordSha256(readPersistedRoute(value.root, value.invocation)),
+    buildSha256: value.invocation.current.buildSha256,
+    briefSha256: value.invocation.current.briefSha256,
+    remainingCriteria: [],
+    votes: [1, 2].map((index) => ({
+      reviewerId: `eye-${index}`, winnerAlias, remainingCriteria: [], findings: ['before is stronger'],
+    })),
+    quorum: { required: 2, passed: 2 },
+    provenance: { reviewerIds: ['eye-1', 'eye-2'], reviewerSessionSha256: hash('sessions') },
+    executionReceipts,
+  })}\n`);
+  const reviewSha256 = hash(reviewBytes);
+  const reviewPath = `.omd/final-review/refinements/sha256-${reviewSha256}.json`;
+  value.writer.writeContentAddressed(reviewPath, reviewBytes);
+  authorizeTestProjectRunPayloads(value.root, value.invocation, [{ purpose: 'final-reviewer-lane', payload: reviewBytes }]);
+  const productionRepairOutcomeSha256 = /sha256-([a-f0-9]{64})\.json$/.exec(outcome.outcomePath)?.[1];
+  assert.ok(productionRepairOutcomeSha256);
+  const checkpointBytes = Buffer.from(`${canonicalJson({
+    schema: 'adaptive-rendered-refinement-checkpoint-v1', status: 'regress', comparison: 'before',
+    action: 'rollback', countsRound: true, beforeObservationSha256, afterObservationSha256,
+    evidenceSha256: hash('evidence'), reviewSha256, productionRepairOutcomeSha256,
+    target: null, remainingCriteria: [], previousCheckpointSha256: null,
+  })}\n`);
+  const checkpointSha256 = hash(checkpointBytes);
+  const checkpointPath = `.omd/refinement/checkpoints/sha256-${checkpointSha256}.json`;
+  value.writer.writeContentAddressed(checkpointPath, checkpointBytes);
+  value.writer.write('.omd/refinement-checkpoint.json', `${canonicalJson({
+    schema: 'adaptive-rendered-refinement-checkpoint-pointer-v1',
+    record: checkpointPath, sha256: checkpointSha256,
+  })}\n`);
+  return { reviewPath, reviewSha256, checkpointSha256, afterObservationSha256 };
+}
+
 test('review intake rejects hostile objects and snapshots accepted descriptor data once', () => {
   const value = project();
   const mirrors: string[] = [];
@@ -216,7 +352,10 @@ test('review intake rejects hostile objects and snapshots accepted descriptor da
       retentionPointerSha256: string | null;
       beforeSha256: string; afterSha256: string; suggestedPaths: string[]; findingIds: string[];
     };
-    const stage = stageProductionRepair({ root: value.root, invocation: value.invocation, review: accepted, mirrorRoot: changed });
+    const stage = stageProductionRepair({
+      root: value.root, invocation: value.invocation, review: accepted, mirrorRoot: changed,
+      ownerReceipt: ownerReceipt(value, changed),
+    });
     accepted.beforeSha256 = hash('forged');
     accepted.suggestedPaths[0] = contextPath;
     accepted.findingIds[0] = 'review:forged';
@@ -234,6 +373,7 @@ test('review intake rejects hostile objects and snapshots accepted descriptor da
       });
       assert.throws(() => stageProductionRepair({
         root: fresh.root, invocation: fresh.invocation, review: hostile, mirrorRoot: freshMirror,
+        ownerReceipt: ownerReceipt(fresh, freshMirror),
       }), (error: unknown) => error instanceof ProductionRepairError && error.code === 'MALFORMED_REPAIR_REVIEW');
       assert.equal(traps, 0);
 
@@ -265,6 +405,7 @@ test('repair scope is route, authenticated slice, and nonempty host-authorized r
     assert.throws(() => stageProductionRepair({
       root: value.root, invocation: value.invocation,
       review: review(value, ['foreign.html'], privateMirror), mirrorRoot: privateMirror,
+      ownerReceipt: ownerReceipt(value, privateMirror, [contextPath]),
     }), (error: unknown) => error instanceof ProductionRepairError && error.code === 'REPAIR_PATH_OUTSIDE_ROUTE');
     const withoutSlice = project(false);
     try {
@@ -275,12 +416,62 @@ test('repair scope is route, authenticated slice, and nonempty host-authorized r
           invocation: withoutSlice.invocation,
           review: review(withoutSlice, [productionPath], otherMirror),
           mirrorRoot: otherMirror,
+          ownerReceipt: ownerReceipt(withoutSlice, otherMirror),
         });
         assert.equal(staged.schema, 'opaque-staged-production-repair-v1');
       } finally { rmSync(otherMirror, { recursive: true, force: true }); }
     } finally { rmSync(withoutSlice.root, { recursive: true, force: true }); }
   } finally {
     if (mirrorRoot) rmSync(mirrorRoot, { recursive: true, force: true });
+    rmSync(value.root, { recursive: true, force: true });
+  }
+});
+
+test('repair staging requires the exact Hand receipt, rejects post-Hand mirror drift, and consumes it once', () => {
+  const value = project();
+  const mirrors: string[] = [];
+  try {
+    const missing = mirror(value, { [productionPath]: 'after' }); mirrors.push(missing);
+    assert.throws(
+      () => stageProductionRepair({
+        root: value.root, invocation: value.invocation,
+        review: review(value, [productionPath], missing), mirrorRoot: missing,
+        ownerReceipt: undefined as unknown as Uint8Array,
+      }),
+      (error: unknown) => error instanceof ProductionRepairError
+        && error.code === 'REPAIR_OWNER_RECEIPT_REQUIRED',
+    );
+
+    const drifted = mirror(value, { [productionPath]: 'Hand-authored' }); mirrors.push(drifted);
+    const receiptBeforeCoordinatorWrite = ownerReceipt(value, drifted);
+    writeFileSync(join(drifted, productionPath), 'coordinator-substitution');
+    assert.throws(
+      () => stageProductionRepair({
+        root: value.root, invocation: value.invocation,
+        review: review(value, [productionPath], drifted), mirrorRoot: drifted,
+        ownerReceipt: receiptBeforeCoordinatorWrite,
+      }),
+      (error: unknown) => error instanceof ProductionRepairError
+        && error.code === 'MALFORMED_STAGED_REPAIR',
+    );
+
+    const exact = mirror(value, { [productionPath]: 'after' }); mirrors.push(exact);
+    const exactReview = review(value, [productionPath], exact);
+    const receipt = ownerReceipt(value, exact);
+    assert.equal(stageProductionRepair({
+      root: value.root, invocation: value.invocation, review: exactReview,
+      mirrorRoot: exact, ownerReceipt: receipt,
+    }).schema, 'opaque-staged-production-repair-v1');
+    assert.throws(
+      () => stageProductionRepair({
+        root: value.root, invocation: value.invocation, review: exactReview,
+        mirrorRoot: exact, ownerReceipt: receipt,
+      }),
+      (error: unknown) => error instanceof ProductionRepairError
+        && error.code === 'REPAIR_OWNER_RECEIPT_REPLAY',
+    );
+  } finally {
+    mirrors.forEach((path) => rmSync(path, { recursive: true, force: true }));
     rmSync(value.root, { recursive: true, force: true });
   }
 });
@@ -320,16 +511,16 @@ test('opaque one-file stage rejects no-op, multi-file, mode, and symlink results
   const mirrors: string[] = [];
   try {
     const noOp = mirror(value); mirrors.push(noOp);
-    assert.throws(() => stageProductionRepair({ root: value.root, invocation: value.invocation, review: review(value, [productionPath], noOp), mirrorRoot: noOp }),
+    assert.throws(() => stageProductionRepair({ root: value.root, invocation: value.invocation, review: review(value, [productionPath], noOp), mirrorRoot: noOp, ownerReceipt: ownerReceipt(value, noOp) }),
       (error: unknown) => error instanceof ProductionRepairError && error.code === 'NO_OP_REPAIR');
     const multi = mirror(value, { [productionPath]: 'after', [contextPath]: 'changed' }); mirrors.push(multi);
-    assert.throws(() => stageProductionRepair({ root: value.root, invocation: value.invocation, review: review(value, [productionPath, contextPath], multi), mirrorRoot: multi }),
+    assert.throws(() => stageProductionRepair({ root: value.root, invocation: value.invocation, review: review(value, [productionPath, contextPath], multi), mirrorRoot: multi, ownerReceipt: ownerReceipt(value, multi) }),
       (error: unknown) => error instanceof ProductionRepairError && error.code === 'MULTI_FILE_REPAIR');
     const mode = mirror(value); mirrors.push(mode); chmodSync(join(mode, productionPath), 0o600);
-    assert.throws(() => stageProductionRepair({ root: value.root, invocation: value.invocation, review: review(value, [productionPath], mode), mirrorRoot: mode }),
+    assert.throws(() => stageProductionRepair({ root: value.root, invocation: value.invocation, review: review(value, [productionPath], mode), mirrorRoot: mode, ownerReceipt: ownerReceipt(value, mode) }),
       (error: unknown) => error instanceof ProductionRepairError && error.code === 'MALFORMED_STAGED_REPAIR');
     const linked = mirror(value); mirrors.push(linked); rmSync(join(linked, productionPath)); symlinkSync(join(value.root, productionPath), join(linked, productionPath));
-    assert.throws(() => stageProductionRepair({ root: value.root, invocation: value.invocation, review: review(value, [productionPath], linked), mirrorRoot: linked }),
+    assert.throws(() => stageProductionRepair({ root: value.root, invocation: value.invocation, review: review(value, [productionPath], linked), mirrorRoot: linked, ownerReceipt: ownerReceipt(value, linked) }),
       (error: unknown) => error instanceof ProductionRepairError && error.code === 'MALFORMED_STAGED_REPAIR');
   } finally {
     mirrors.forEach((path) => rmSync(path, { recursive: true, force: true }));
@@ -351,11 +542,199 @@ test('authorized opaque repair commits one file, invalidates observation, and pr
     assert.equal(existsSync(join(value.root, '.omd', 'observation-v2-retention.json')), false);
     assert.equal(outcome.beforeTreeSha256, hash('before'));
     assert.equal(outcome.afterTreeSha256, hash('after'));
-    assert.match(readFileSync(join(value.root, outcome.outcomePath), 'utf8'), /"outcome":"committed"/);
+    const outcomeRecord = JSON.parse(readFileSync(join(value.root, outcome.outcomePath), 'utf8')) as {
+      schema: string; outcome: string; mode: number;
+    };
+    assert.deepEqual(
+      { schema: outcomeRecord.schema, outcome: outcomeRecord.outcome, mode: outcomeRecord.mode },
+      { schema: 'omd-production-repair-outcome-v3', outcome: 'committed', mode: beforeMode },
+    );
     assert.equal(existsSync(join(value.root, '.omd', '.production-repair.journal')), false);
     assert.deepEqual(recoverProductionRepair({ root: value.root, invocation: value.invocation, writer: value.writer }), { status: 'clean' });
     assert.throws(() => applyProductionRepair({ root: value.root, invocation: value.invocation, writer: value.writer, staged: stage.result }),
       (error: unknown) => error instanceof ProductionRepairError && error.code === 'MALFORMED_STAGED_REPAIR');
+  } finally {
+    if (mirrorRoot) rmSync(mirrorRoot, { recursive: true, force: true });
+    rmSync(value.root, { recursive: true, force: true });
+  }
+});
+
+test('actual committed repair and successor observation roll back only after an authenticated before-win review', () => {
+  const value = project();
+  let mirrorRoot: string | undefined;
+  try {
+    chmodSync(join(value.root, productionPath), 0o640);
+    const beforePointer = readFileSync(join(value.root, '.omd', 'observation-v2.json'));
+    const beforeObservationSha256 = (JSON.parse(beforePointer.toString('utf8')) as { sha256: string }).sha256;
+    const stage = staged(value, { [productionPath]: 'after' }); mirrorRoot = stage.mirrorRoot;
+    const committed = applyProductionRepair({
+      root: value.root, invocation: value.invocation, writer: value.writer, staged: stage.result,
+    });
+    assert.equal(committed.mode, 0o640);
+    const rejected = publishRejectedRefinementDecision(value, committed, beforeObservationSha256);
+    const afterRecord = join(value.root, '.omd', 'observation-v2', `sha256-${rejected.afterObservationSha256}.json`);
+
+    const rolledBack = rollbackRejectedProductionRepair({
+      root: value.root, invocation: value.invocation, writer: value.writer, reviewPath: rejected.reviewPath,
+    });
+
+    assert.equal(rolledBack.status, 'rolled-back');
+    assert.equal(rolledBack.path, productionPath);
+    assert.equal(rolledBack.mode, 0o640);
+    assert.equal(readFileSync(join(value.root, productionPath), 'utf8'), 'before');
+    assert.equal(lstatSync(join(value.root, productionPath)).mode & 0o777, 0o640);
+    assert.equal(readFileSync(join(value.root, '.omd', 'observation-v2.json')).equals(beforePointer), true);
+    assert.equal(existsSync(afterRecord), true);
+    assert.equal(existsSync(join(value.root, committed.outcomePath)), true);
+    assert.equal(existsSync(join(value.root, rejected.reviewPath)), true);
+    assert.equal(existsSync(join(value.root, '.omd', 'refinement', 'checkpoints', `sha256-${rejected.checkpointSha256}.json`)), true);
+    assert.equal(existsSync(join(value.root, '.omd', '.production-repair-rollback.journal')), false);
+    assert.deepEqual(validateRejectedProductionRepairRollback({
+      root: value.root, invocation: value.invocation, reviewPath: rejected.reviewPath,
+    }), rolledBack);
+    assert.deepEqual(rollbackRejectedProductionRepair({
+      root: value.root, invocation: value.invocation, writer: value.writer,
+      reviewPath: rejected.reviewPath,
+    }), rolledBack);
+  } finally {
+    if (mirrorRoot) rmSync(mirrorRoot, { recursive: true, force: true });
+    rmSync(value.root, { recursive: true, force: true });
+  }
+});
+
+test('rollback rejects stale source, forged review selection, and corrupted before blob before mutation', () => {
+  for (const failure of ['source', 'review', 'blob'] as const) {
+    const value = project();
+    let mirrorRoot: string | undefined;
+    try {
+      const beforePointer = readFileSync(join(value.root, '.omd', 'observation-v2.json'));
+      const beforeObservationSha256 = (JSON.parse(beforePointer.toString('utf8')) as { sha256: string }).sha256;
+      const stage = staged(value, { [productionPath]: 'after' }); mirrorRoot = stage.mirrorRoot;
+      const committed = applyProductionRepair({
+        root: value.root, invocation: value.invocation, writer: value.writer, staged: stage.result,
+      });
+      const rejected = publishRejectedRefinementDecision(value, committed, beforeObservationSha256);
+      let reviewPath = rejected.reviewPath;
+      if (failure === 'source') writeFileSync(join(value.root, productionPath), 'third-party');
+      if (failure === 'blob') writeFileSync(
+        join(value.root, '.omd', 'production-repair-blobs', `sha256-${committed.beforeTreeSha256}.bin`),
+        'forged',
+      );
+      if (failure === 'review') {
+        const original = JSON.parse(readFileSync(join(value.root, reviewPath), 'utf8')) as Record<string, unknown>;
+        const forgedBytes = Buffer.from(`${canonicalJson({ ...original, winnerAlias: variantAlias(rejected.afterObservationSha256) })}\n`);
+        reviewPath = `.omd/final-review/refinements/sha256-${hash(forgedBytes)}.json`;
+        value.writer.writeContentAddressed(reviewPath, forgedBytes);
+      }
+      const sourceBefore = readFileSync(join(value.root, productionPath));
+      const pointerBefore = readFileSync(join(value.root, '.omd', 'observation-v2.json'));
+      assert.throws(
+        () => rollbackRejectedProductionRepair({
+          root: value.root, invocation: value.invocation, writer: value.writer, reviewPath,
+        }),
+        (error: unknown) => error instanceof ProductionRepairError
+          && (error.code === 'REPAIR_ROLLBACK_STALE' || error.code === 'REPAIR_ROLLBACK_REVIEW_INVALID'),
+      );
+      assert.equal(readFileSync(join(value.root, productionPath)).equals(sourceBefore), true);
+      assert.equal(readFileSync(join(value.root, '.omd', 'observation-v2.json')).equals(pointerBefore), true);
+      assert.equal(existsSync(join(value.root, '.omd', '.production-repair-rollback.journal')), false);
+    } finally {
+      if (mirrorRoot) rmSync(mirrorRoot, { recursive: true, force: true });
+      rmSync(value.root, { recursive: true, force: true });
+    }
+  }
+});
+
+test('rollback recovery resumes a validated source-first interruption and completion stays unaccepted while journaled', () => {
+  const value = project();
+  let mirrorRoot: string | undefined;
+  try {
+    const beforePointer = readFileSync(join(value.root, '.omd', 'observation-v2.json'));
+    const beforeObservationSha256 = (JSON.parse(beforePointer.toString('utf8')) as { sha256: string }).sha256;
+    const stage = staged(value, { [productionPath]: 'after' }); mirrorRoot = stage.mirrorRoot;
+    const committed = applyProductionRepair({
+      root: value.root, invocation: value.invocation, writer: value.writer, staged: stage.result,
+    });
+    const rejected = publishRejectedRefinementDecision(value, committed, beforeObservationSha256);
+    const journal = {
+      schema: 'omd-production-repair-rollback-journal-v1', state: 'prepared', reviewPath: rejected.reviewPath,
+      checkpointSha256: rejected.checkpointSha256,
+      productionRepairOutcomeSha256: /sha256-([a-f0-9]{64})\.json$/.exec(committed.outcomePath)?.[1],
+      path: productionPath, mode: committed.mode,
+      beforeTreeSha256: committed.beforeTreeSha256, afterTreeSha256: committed.afterTreeSha256,
+      beforeObservationSha256, afterObservationSha256: rejected.afterObservationSha256,
+    };
+    writeFileSync(join(value.root, productionPath), 'before');
+    chmodSync(join(value.root, productionPath), committed.mode);
+    writeFileSync(join(value.root, '.omd', '.production-repair-rollback.journal'), `${canonicalJson(journal)}\n`);
+
+    assert.throws(
+      () => validateRejectedProductionRepairRollback({
+        root: value.root, invocation: value.invocation, reviewPath: rejected.reviewPath,
+      }),
+      (error: unknown) => error instanceof ProductionRepairError
+        && error.code === 'UNRESOLVED_REPAIR_ROLLBACK_JOURNAL',
+    );
+    const sourceBeforeWrongRecovery = readFileSync(join(value.root, productionPath));
+    const pointerBeforeWrongRecovery = readFileSync(join(value.root, '.omd', 'observation-v2.json'));
+    const journalBeforeWrongRecovery = readFileSync(join(value.root, '.omd', '.production-repair-rollback.journal'));
+    assert.throws(
+      () => recoverRejectedProductionRepairRollback({
+        root: value.root, invocation: value.invocation, writer: value.writer,
+        reviewPath: `.omd/final-review/refinements/sha256-${hash('other-review')}.json`,
+      }),
+      (error: unknown) => error instanceof ProductionRepairError
+        && error.code === 'UNRESOLVED_REPAIR_ROLLBACK_JOURNAL',
+    );
+    assert.equal(readFileSync(join(value.root, productionPath)).equals(sourceBeforeWrongRecovery), true);
+    assert.equal(readFileSync(join(value.root, '.omd', 'observation-v2.json')).equals(pointerBeforeWrongRecovery), true);
+    assert.equal(readFileSync(join(value.root, '.omd', '.production-repair-rollback.journal')).equals(journalBeforeWrongRecovery), true);
+    const recovered = recoverRejectedProductionRepairRollback({
+      root: value.root, invocation: value.invocation, writer: value.writer, reviewPath: rejected.reviewPath,
+    });
+    assert.equal(recovered.status, 'rolled-back');
+    assert.equal(readFileSync(join(value.root, productionPath), 'utf8'), 'before');
+    assert.equal(readFileSync(join(value.root, '.omd', 'observation-v2.json')).equals(beforePointer), true);
+    assert.equal(existsSync(join(value.root, '.omd', '.production-repair-rollback.journal')), false);
+  } finally {
+    if (mirrorRoot) rmSync(mirrorRoot, { recursive: true, force: true });
+    rmSync(value.root, { recursive: true, force: true });
+  }
+});
+
+test('rollback recovery rejects an impossible pointer-first partial state and retains its journal', () => {
+  const value = project();
+  let mirrorRoot: string | undefined;
+  try {
+    const beforePointer = readFileSync(join(value.root, '.omd', 'observation-v2.json'));
+    const beforeObservationSha256 = (JSON.parse(beforePointer.toString('utf8')) as { sha256: string }).sha256;
+    const stage = staged(value, { [productionPath]: 'after' }); mirrorRoot = stage.mirrorRoot;
+    const committed = applyProductionRepair({
+      root: value.root, invocation: value.invocation, writer: value.writer, staged: stage.result,
+    });
+    const rejected = publishRejectedRefinementDecision(value, committed, beforeObservationSha256);
+    const journal = {
+      schema: 'omd-production-repair-rollback-journal-v1', state: 'prepared', reviewPath: rejected.reviewPath,
+      checkpointSha256: rejected.checkpointSha256,
+      productionRepairOutcomeSha256: /sha256-([a-f0-9]{64})\.json$/.exec(committed.outcomePath)?.[1],
+      path: productionPath, mode: committed.mode,
+      beforeTreeSha256: committed.beforeTreeSha256, afterTreeSha256: committed.afterTreeSha256,
+      beforeObservationSha256, afterObservationSha256: rejected.afterObservationSha256,
+    };
+    writeFileSync(join(value.root, '.omd', 'observation-v2.json'), beforePointer);
+    const journalBytes = Buffer.from(`${canonicalJson(journal)}\n`);
+    writeFileSync(join(value.root, '.omd', '.production-repair-rollback.journal'), journalBytes);
+
+    assert.throws(
+      () => recoverRejectedProductionRepairRollback({
+        root: value.root, invocation: value.invocation, writer: value.writer, reviewPath: rejected.reviewPath,
+      }),
+      (error: unknown) => error instanceof ProductionRepairError
+        && error.code === 'UNRESOLVED_REPAIR_ROLLBACK_JOURNAL',
+    );
+    assert.equal(readFileSync(join(value.root, productionPath), 'utf8'), 'after');
+    assert.equal(readFileSync(join(value.root, '.omd', 'observation-v2.json')).equals(beforePointer), true);
+    assert.equal(readFileSync(join(value.root, '.omd', '.production-repair-rollback.journal')).equals(journalBytes), true);
   } finally {
     if (mirrorRoot) rmSync(mirrorRoot, { recursive: true, force: true });
     rmSync(value.root, { recursive: true, force: true });
@@ -374,7 +753,10 @@ test('stale target and stale observation reject before transaction mutation', ()
 
     writeFileSync(join(value.root, productionPath), 'before');
     const second = staged(value, { [productionPath]: 'after' }); mirrors.push(second.mirrorRoot);
-    publishObservation(value.root, '2026-01-01T00:01:00.000Z');
+    publishObservation(
+      value.root, value.invocation.current.buildSha256, value.currentArtifact,
+      '2026-01-01T00:01:00.000Z',
+    );
     assert.throws(() => applyProductionRepair({ root: value.root, invocation: value.invocation, writer: value.writer, staged: second.result }),
       (error: unknown) => error instanceof ProductionRepairError && error.code === 'STALE_REPAIR_BASE');
     assert.equal(readFileSync(join(value.root, productionPath), 'utf8'), 'before');

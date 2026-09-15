@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
@@ -22,6 +22,7 @@ import { writeSourceSeal } from '../core/source-seal/index.ts';
 import { publishTaskEvidence } from '../core/evidence/task.ts';
 import { CURRENT_COMPOSITION_SECTIONS } from '../core/composition-contract/index.ts';
 import { validateFinalEvidenceV2Graph } from '../core/evidence/final-v2-graph.ts';
+import { DESIGN_QUALITY_AXES } from '../core/evidence/final-v2-design-quality.ts';
 import { writeObservationV2 } from '../core/runtime/observation.ts';
 import { writeBrowserDecisionFixture } from './helpers/browser-observation-decision-links.ts';
 
@@ -367,7 +368,7 @@ const manifest = async (root: string, motionDecision: 'none' | 'one' = 'none', b
   });
   const copy = receipt(root, 'copy', COPY_DECK_RECEIPT_SCHEMA_VERSION, copyValue);
   let renderedBeats: Record<string, string>;
-  const lane = (name: 'blind' | 'fidelity' | 'protocol', schema: 'blind-review-v1' | 'fidelity-review-v1' | 'protocol-review-v1') => {
+  const lane = (name: 'blind' | 'fidelity' | 'protocol', schema: 'blind-review-v2' | 'fidelity-review-v1' | 'protocol-review-v1') => {
     const contract = {
       blind: { verdicts: { blindVisual: 'GREEN', blindNarrative: 'GREEN' }, criticalFloors: { composition: 3, copy: 3 } },
       fidelity: { verdicts: { referenceFidelity: 'GREEN', renderFidelity: 'GREEN' }, criticalFloors: { desktop: 3, mobile: 3 } },
@@ -376,13 +377,42 @@ const manifest = async (root: string, motionDecision: 'none' | 'one' = 'none', b
     const sessionSha256 = sha(`${name}-isolation`);
     const reviewerIds = [`${name}-reviewer-a`, `${name}-reviewer-b`];
     const observationSha256s = [sha(canonical(firstValue)), sha(canonical(secondValue))];
+    const designQuality = {
+      schema: 'design-quality-contract-v1',
+      axes: DESIGN_QUALITY_AXES.map((axis) => ({
+        axis,
+        verdict: 'GREEN',
+        score: axis === 'beautyDesirability' || axis === 'hierarchyComposition' ? 4 : 3,
+        crossViewport: 'preserved',
+        criticalFailure: null,
+        evidence: [
+          {
+            observationSha256: observationSha256s[0],
+            viewport: 'desktop',
+            state: 'desktop-current',
+            region: 'primary work surface',
+            visibleCondition: 'The intended hierarchy is visible in the bound desktop capture.',
+            userConsequence: 'The primary decision remains legible at desktop width.',
+          },
+          {
+            observationSha256: observationSha256s[1],
+            viewport: 'mobile',
+            state: 'mobile-current',
+            region: 'primary work surface',
+            visibleCondition: 'The intended hierarchy is recomposed in the bound mobile capture.',
+            userConsequence: 'The primary decision remains legible at mobile width.',
+          },
+        ],
+      })),
+    };
     const processBase = { blind: 10_000, fidelity: 20_000, protocol: 30_000 }[name];
-    const executionReceipts = reviewerIds.map((reviewerId, index) => receipt(root, `${name}-execution-${index}`, 'final-reviewer-execution-v1', {
-      schema: 'final-reviewer-execution-v1',
+    const executionReceipts = reviewerIds.map((reviewerId, index) => receipt(root, `${name}-execution-${index}`, name === 'blind' ? 'final-reviewer-execution-v2' : 'final-reviewer-execution-v1', {
+      schema: name === 'blind' ? 'final-reviewer-execution-v2' : 'final-reviewer-execution-v1',
       lane: `${name}Lane`,
       reviewerId,
       verdicts: contract.verdicts,
       criticalFloors: contract.criticalFloors,
+      ...(name === 'blind' ? { designQuality } : {}),
       isolationReceiptSha256: sessionSha256,
       observationSha256s,
       artDirectionSha256: artDirectionSemantic,
@@ -392,13 +422,13 @@ const manifest = async (root: string, motionDecision: 'none' | 'one' = 'none', b
       childPid: processBase + index,
       sessionId: `${name}-session-${index}`,
       nonce: `${name}-nonce-${index}`,
-      evidenceSha256: sha(`${name}-evidence-${index}`),
-      configurationSha256: sha(`${name}-configuration-${index}`),
+      evidenceSha256: sha(`${name}-evidence`),
+      configurationSha256: sha(name === 'blind' ? `${name}-configuration` : `${name}-configuration-${index}`),
     }));
     return receipt(root, name, schema, {
       schema, artDirectionSha256: artDirectionSemantic, buildSha256: activationValue.buildSha256,
       isolationReceipt: { schema: 'reviewer-isolation-v1', sha256: sessionSha256 },
-      ...contract, quorum: { required: 2, passed: 2 },
+      ...contract, ...(name === 'blind' ? { designQuality } : {}), quorum: { required: 2, passed: 2 },
       provenance: { observationSha256s, reviewerIds, reviewerSessionSha256: sessionSha256 },
       executionReceipts: executionReceipts.map(({ path, sha256 }) => ({ path, sha256 })),
     });
@@ -472,7 +502,7 @@ const manifest = async (root: string, motionDecision: 'none' | 'one' = 'none', b
     schema: 'task-evidence-v1',
     sha256: sha(readFileSync(join(root, '.omd', 'task-evidence.json'))),
   };
-  const blindLane = lane('blind', 'blind-review-v1');
+  const blindLane = lane('blind', 'blind-review-v2');
   const fidelityLane = lane('fidelity', 'fidelity-review-v1');
   const protocolLane = lane('protocol', 'protocol-review-v1');
   writeSourceSeal(root, createTestProjectRunInvocation(root));
@@ -778,6 +808,74 @@ test('art direction rejects over-budget Beat sets before settlement and accepts 
   assert.notEqual(record.decision.currentUserBeatExceptionReceiptSha256, NO_CURRENT_USER_BEAT_EXCEPTION_RECEIPT_SHA256);
 });
 
+test('art direction rejects an empty Beat set before publishing an unusable copy contract', async () => {
+  const root = project();
+  try {
+    const result = await manifest(root, 'none', { beats: [], stopAfterArtDirection: true });
+    assert.notEqual(result.directed.status, 0);
+    assert.match(result.directed.stderr, /ART_DIRECTION_BEATS_INVALID.*non-empty/);
+    assert.equal(existsSync(join(root, '.omd/art-direction.json')), false);
+    assert.equal(existsSync(join(root, '.omd/motion-resolutions')), false);
+    assert.equal(existsSync(join(root, '.omd/reference-handoffs/composer.json')), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('art-direction check-input resolves current public lineage without authoring evaluation or intent', async () => {
+  const { createEmptyIntentLedger } = await import('../core/runtime/intent.ts');
+  const root = project();
+  try {
+    const prepared = await manifest(root, 'none', { stopAfterArtDirection: true });
+    assert.equal(prepared.directed.status, 0, prepared.directed.stderr);
+    const fixture = JSON.parse(readFileSync(join(root, 'art-direction-input.json'), 'utf8'));
+    const input = writeManifest(root, 'alternatives-only.json', fixture.alternatives);
+    const read = () => run(root, ['art-direction', 'check-input', '--input', input, '--json']);
+    const actual = read();
+    assert.equal(actual.status, 0, actual.stderr);
+    const payload = JSON.parse(actual.stdout);
+    assert.deepEqual(payload.alternatives, fixture.alternatives);
+    assert.deepEqual(payload.evaluatorAssessment.alternatives, fixture.alternatives);
+    const lineageKeys = ['route', 'taskIds', 'boardSha256', 'preSelectionSha256', 'handoffSha256', 'intentSha256', 'alternativesSha256'];
+    for (const name of ['evaluatorAssessment', 'evaluatorResult']) {
+      for (const key of lineageKeys) assert.deepEqual(payload[name][key], fixture[name][key], `${name}.${key}`);
+    }
+    assert.equal(payload.evaluatorAssessment.assessments[0].score, 0, 'judgment remains an unfilled schema, not the fixture score');
+    assert.equal(payload.evaluatorResult.winner, '<highest-scoring register>');
+    assert.equal(payload.invocation, undefined, 'read-only projection does not issue publication authority');
+    assert.equal(run(root, ['art-direction', 'check-input', '--route', '/wrong', '--json']).status, 1);
+
+    const pointerPath = join(root, '.omd/intent-current.json');
+    const pointerBytes = readFileSync(pointerPath);
+    const pointer = JSON.parse(pointerBytes.toString('utf8'));
+    const recordPath = join(root, '.omd', pointer.record);
+    const ledgerBytes = readFileSync(recordPath);
+    writeFileSync(recordPath, JSON.stringify(createEmptyIntentLedger()));
+    const stale = read();
+    assert.notEqual(stale.status, 0);
+    assert.match(stale.stderr, /INTENT_STALE/);
+    writeFileSync(recordPath, ledgerBytes);
+    unlinkSync(pointerPath);
+    const directionPath = join(root, '.omd/art-direction.json');
+    const directionBytes = readFileSync(directionPath);
+    unlinkSync(directionPath);
+    const noLock = read();
+    assert.equal(noLock.status, 0, noLock.stderr);
+    assert.equal(JSON.parse(noLock.stdout).evaluatorAssessment.intentSha256, intentLedgerSha256(createEmptyIntentLedger()));
+    assert.equal(existsSync(pointerPath), false, 'read-only preparation must not append or persist an intent');
+    assert.equal(existsSync(directionPath), false, 'preparation does not require or author a prior art direction');
+    writeFileSync(pointerPath, pointerBytes);
+    writeFileSync(directionPath, directionBytes);
+
+    const handoffPath = join(root, '.omd/reference-handoffs/art-direction.json');
+    const handoff = JSON.parse(readFileSync(handoffPath, 'utf8'));
+    writeFileSync(handoffPath, JSON.stringify({ ...handoff, captureSha256: '0'.repeat(64) }));
+    assert.notEqual(read().status, 0, 'a stale handoff cannot supply current lineage');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('printed evaluator skeletons publish complete evidence while missing, extra, and stale lineage fail', async () => {
   const { inputSkeleton } = await import('../core/schema/inputs.ts');
   const root = project();
@@ -819,6 +917,26 @@ test('printed evaluator skeletons publish complete evidence while missing, extra
     };
     const valid = await publish(assessment, result);
     assert.equal(valid.status, 0, valid.stderr);
+    const activationPath = writeManifest(root, 'current-host-activation.json', fixture.invocation);
+    const preparedInput = run(root, ['art-direction', 'check-input', '--input', join(root, 'art-direction-input.json'), '--json']);
+    assert.equal(preparedInput.status, 0, preparedInput.stderr);
+    const publicInput = JSON.parse(preparedInput.stdout);
+    for (const field of ['eligibility', 'beats', 'implementationLane', 'fallbackPath', 'performanceAccessibilityBudget']) publicInput[field] = fixture[field];
+    const publicInputPath = writeManifest(root, 'host-path-evaluator-input.json', {
+      ...publicInput, evaluatorAssessment: assessment, evaluatorResult: result,
+    });
+    const intentPointer = JSON.parse(readFileSync(join(root, '.omd/intent-current.json'), 'utf8'));
+    const viaHostPath = await runMutation(root, ['art-direction', 'check', '--input', publicInputPath, '--activation', activationPath], fixture.invocation, [
+      { purpose: 'evaluator-assessment', payload: canonicalBoardJson(assessment) },
+      { purpose: 'evaluator-result', payload: canonicalBoardJson(result) },
+      { purpose: 'current-intent-ledger', payload: readFileSync(join(root, '.omd', intentPointer.record)) },
+    ]);
+    assert.equal(viaHostPath.status, 0, viaHostPath.stderr);
+    const withoutHostReceipt = run(root, ['art-direction', 'check', '--input', publicInputPath, '--activation', activationPath]);
+    assert.notEqual(withoutHostReceipt.status, 0, 'a readable activation file does not issue host authority');
+    const malformedActivation = writeManifest(root, 'malformed-host-activation.json', {});
+    const noFallback = run(root, ['art-direction', 'check', '--input', join(root, 'art-direction-input.json'), '--activation', malformedActivation]);
+    assert.notEqual(noFallback.status, 0, 'an invalid activation path cannot fall back to a valid inline invocation');
     const { boardSha256: _missing, ...missingBoard } = assessment;
     for (const [nextAssessment, nextResult, expected] of [
       [missingBoard, result, /invalid exact shape/],

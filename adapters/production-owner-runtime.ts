@@ -10,6 +10,7 @@ import {
   realpathSync,
   rmSync,
   symlinkSync,
+  unlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { homedir } from 'node:os';
@@ -21,10 +22,16 @@ import { validateActivationContext } from '../core/runtime/activation.ts';
 import type { ProjectRunInvocation } from '../core/runtime/invocation.ts';
 import { parseRouteRecord, pathsOutsideScope } from '../core/route/adaptive-route-record.ts';
 import type { AdaptiveRouteRecord } from '../core/route/adaptive-flow-domain.ts';
+import { readCodexAuthorizedRoute } from './codex-authorized-route.ts';
+import { observationV2Sha256, readCurrentObservationV2 } from '../core/runtime/observation.ts';
 import {
   checkAdaptiveWorkflow,
   checkAdaptiveWorkflowProductionReadiness,
 } from '../core/design-development/workflow-persistence.ts';
+import {
+  fixedDerivedProjectRoot,
+  validateFixedDerivedProjectRoots,
+} from '../core/runtime/derived-project-tree.ts';
 
 const PACKAGE_ROOT = fileURLToPath(new URL('..', import.meta.url));
 const OWNER_REQUEST_SCHEMA = 'omd-codex-owner-launch-request-v1';
@@ -33,6 +40,8 @@ const OWNER_EXEC_RESULT_SCHEMA = 'omd-codex-owner-exec-result-v1';
 const OWNER_GRANT_SCHEMA = 'omd-codex-owner-launch-grant-v2';
 const OWNER_PERSIST_REQUEST_SCHEMA = 'omd-codex-owner-persist-request-v1';
 const OWNER_PERSIST_ACK_SCHEMA = 'omd-codex-owner-persist-ack-v1';
+const OWNER_ABORT_REQUEST_SCHEMA = 'omd-codex-owner-abort-request-v1';
+const OWNER_ABORT_ACK_SCHEMA = 'omd-codex-owner-abort-ack-v1';
 const OWNER_RESULT_SCHEMA = 'omd-production-owner-result-v1';
 const OWNER_ROLE = 'omd-hand';
 const SHA256 = /^[a-f0-9]{64}$/;
@@ -49,6 +58,8 @@ export type ProductionOwnerAttempt = Readonly<{
   exitCode: number | null;
   signal: NodeJS.Signals | null;
   sourceChanges: readonly string[];
+  derivedChanges: readonly string[];
+  mirrorChanges?: readonly string[];
   projectChanges: readonly string[];
   unsafeOutputs: readonly string[];
   prohibitedTools: readonly string[];
@@ -74,6 +85,17 @@ export type ProductionOwnerResult = Readonly<{
   configurationSha256: string;
   attempts: readonly ProductionOwnerAttempt[];
   sourceChanges: readonly string[];
+  mode: 'production' | 'repair';
+  repair?: Readonly<{
+    mirrorRoot: string;
+    mirrorDevice: string;
+    mirrorInode: string;
+    mirrorBaselineSha256: string;
+    mirrorFinalSha256: string;
+    observationPointerSha256: string;
+    observationSha256: string;
+    changedPaths: readonly string[];
+  }>;
   finalEvidence?: Readonly<{ path: '.omd/final-evidence-v2.json'; sha256: string }>;
   result: 'completed' | 'failed';
   failure?: string;
@@ -89,6 +111,7 @@ export type ProductionOwnerDependencies = Readonly<{
   timeoutMs?: number;
   now?: () => number;
   mode?: 'production' | 'repair';
+  mirrorRoot?: string;
 }>;
 
 type SnapshotEntry =
@@ -97,6 +120,14 @@ type SnapshotEntry =
   | Readonly<{ kind: 'symlink'; target: string }>
   | Readonly<{ kind: 'special'; mode: number }>;
 type Snapshot = ReadonlyMap<string, SnapshotEntry>;
+type OwnerRepairBinding = Readonly<{
+  mirrorRoot: string;
+  mirrorDevice: string;
+  mirrorInode: string;
+  mirrorBaselineSha256: string;
+  observationPointerSha256: string;
+  observationSha256: string;
+}>;
 type OwnerGrant = Readonly<{
   schema: typeof OWNER_GRANT_SCHEMA;
   host: 'codex';
@@ -105,6 +136,8 @@ type OwnerGrant = Readonly<{
   requesterPid: number;
   argvSha256: string;
   taskSha256: string;
+  mode: 'production' | 'repair';
+  repair?: OwnerRepairBinding;
   buildSha256: string;
   loadedSkillSha256: string;
   briefSha256: string;
@@ -113,6 +146,7 @@ type OwnerGrant = Readonly<{
   model?: string;
   modelReasoningEffort: string;
   configurationSha256: string;
+  attemptBudget: 1 | 2;
   ownerDirectory: string;
   ownerReceiptPath: string;
   ownerDirectoryDevice: string;
@@ -131,6 +165,10 @@ function ownerExecutionFields(grant: OwnerGrant): Pick<ProductionOwnerResult,
     modelReasoningEffort: grant.modelReasoningEffort,
     configurationSha256: grant.configurationSha256,
   };
+}
+
+function sameRepairBinding(left: OwnerRepairBinding | undefined, right: OwnerRepairBinding | undefined): boolean {
+  return canonicalJson(left ?? null) === canonicalJson(right ?? null);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -184,6 +222,12 @@ function exactOwnerDirectory(path: string, hostRunDirectory: string): Readonly<{
     throw new Error('OWNER_DIRECTORY_INVALID: host owner directory is copied, cross-run, or caller-selected');
   }
   return { path: canonical, device: String(inputStat.dev), inode: String(inputStat.ino) };
+}
+
+function validProductionReceiptPath(path: unknown, ownerDirectory: string): path is string {
+  return typeof path === 'string'
+    && dirname(path) === ownerDirectory
+    && /^result(?:-retry-[a-f0-9]{64})?\.json$/.test(basename(path));
 }
 
 function invocationFromHost(env: NodeJS.ProcessEnv, projectRoot: string): ProjectRunInvocation {
@@ -257,7 +301,17 @@ function roleProfile(codexHome: string): RoleProfile {
 function verifyOwnerGrant(
   response: unknown,
   publicKeyPath: string,
-  expected: Readonly<{ projectRoot: string; taskSha256: string; invocation: ProjectRunInvocation; rolePromptSha256: string; ownerDirectory: string; ownerDirectoryDevice: string; ownerDirectoryInode: string }>,
+  expected: Readonly<{
+    projectRoot: string;
+    taskSha256: string;
+    invocation: ProjectRunInvocation;
+    rolePromptSha256: string;
+    ownerDirectory: string;
+    ownerDirectoryDevice: string;
+    ownerDirectoryInode: string;
+    mode: 'production' | 'repair';
+    repair?: OwnerRepairBinding;
+  }>,
   now: number,
 ): OwnerGrant {
   if (!isRecord(response) || !isRecord(response.receipt) || typeof response.signature !== 'string') {
@@ -270,17 +324,25 @@ function verifyOwnerGrant(
     throw new Error('OWNER_AUTHORITY_REJECTED: signature is invalid');
   }
   const activation = expected.invocation.activation;
+  const validReceiptPath = expected.mode === 'production'
+    ? validProductionReceiptPath(grant.ownerReceiptPath, expected.ownerDirectory)
+    : typeof grant.ownerReceiptPath === 'string'
+      && dirname(grant.ownerReceiptPath) === expected.ownerDirectory
+      && /^repair-[a-f0-9]{64}\.json$/.test(basename(grant.ownerReceiptPath));
+  const expectedAttemptBudget = expected.mode === 'production'
+    && basename(String(grant.ownerReceiptPath)).startsWith('result-retry-') ? 1 : 2;
   if (grant.schema !== OWNER_GRANT_SCHEMA || grant.host !== 'codex' || grant.owner !== OWNER_ROLE
     || grant.projectRoot !== expected.projectRoot || grant.requesterPid !== process.pid
     || grant.argvSha256 !== sha256(canonicalJson(process.argv)) || grant.taskSha256 !== expected.taskSha256
+    || grant.mode !== expected.mode || !sameRepairBinding(grant.repair as OwnerRepairBinding | undefined, expected.repair)
     || grant.buildSha256 !== activation.buildSha256 || grant.loadedSkillSha256 !== activation.loadedSkillSha256
     || grant.briefSha256 !== activation.briefSha256 || grant.rolePromptSha256 !== expected.rolePromptSha256
     || typeof grant.modelArgumentOmitted !== 'boolean'
     || (grant.modelArgumentOmitted ? grant.model !== undefined : typeof grant.model !== 'string' || grant.model.trim() === '')
     || typeof grant.modelReasoningEffort !== 'string' || !/^(?:low|medium|high|xhigh)$/.test(grant.modelReasoningEffort)
     || typeof grant.configurationSha256 !== 'string' || !SHA256.test(grant.configurationSha256)
-    || grant.ownerDirectory !== expected.ownerDirectory
-    || grant.ownerReceiptPath !== join(expected.ownerDirectory, 'result.json')
+    || grant.attemptBudget !== expectedAttemptBudget
+    || grant.ownerDirectory !== expected.ownerDirectory || !validReceiptPath
     || grant.ownerDirectoryDevice !== expected.ownerDirectoryDevice || grant.ownerDirectoryInode !== expected.ownerDirectoryInode
     || !Number.isSafeInteger(grant.expiresAt)
     || Number(grant.expiresAt) <= now || typeof grant.nonce !== 'string' || grant.nonce.length < 32) {
@@ -295,6 +357,8 @@ function hostOwnerGrant(
   taskSha256: string,
   invocation: ProjectRunInvocation,
   now: number,
+  mode: 'production' | 'repair',
+  repair?: OwnerRepairBinding,
 ): OwnerGrant {
   const socketPath = env.OMD_CODEX_AUTHORITY_SOCKET!;
   const publicKeyPath = exactReadonlyFile(env.OMD_CODEX_AUTHORITY_PUBLIC_KEY_PATH!, 'OWNER_PUBLIC_KEY_INVALID');
@@ -310,13 +374,16 @@ function hostOwnerGrant(
     activation: invocation.activation,
     owner: OWNER_ROLE,
     taskSha256,
+    mode,
+    ...(repair === undefined ? {} : { repair }),
   });
   const role = roleProfile(realpathSync(resolve(env.CODEX_HOME ?? join(homedir(), '.codex'))));
   return verifyOwnerGrant(response, publicKeyPath, {
     projectRoot, taskSha256, invocation, rolePromptSha256: sha256(role.developer_instructions),
     ownerDirectory: ownerDirectory.path,
     ownerDirectoryDevice: ownerDirectory.device,
-    ownerDirectoryInode: ownerDirectory.inode,
+    ownerDirectoryInode: ownerDirectory.inode, mode,
+    ...(repair === undefined ? {} : { repair }),
   }, now);
 }
 
@@ -395,18 +462,46 @@ function changedPaths(before: Snapshot, after: Snapshot): string[] {
   }).sort();
 }
 
+function trustedDerivedPath(path: string, before: Snapshot, after: Snapshot): boolean {
+  const root = fixedDerivedProjectRoot(path);
+  return root !== undefined
+    && (before.get(root)?.kind === 'directory' || after.get(root)?.kind === 'directory');
+}
+
+function classifiedProjectChanges(before: Snapshot, after: Snapshot): Readonly<{
+  source: string[];
+  project: string[];
+  derived: string[];
+}> {
+  const raw = changedPaths(before, after);
+  const source = raw.filter((path) => !trustedDerivedPath(path, before, after));
+  const project = [...new Set(raw.map((path) => {
+    if (!trustedDerivedPath(path, before, after)) return path;
+    return fixedDerivedProjectRoot(path)!;
+  }))].sort();
+  const derived = project.filter((path) => trustedDerivedPath(path, before, after));
+  return Object.freeze({ source, project, derived });
+}
+
 function assertRestorableBaseline(snapshot: Snapshot): void {
   const special = [...snapshot.entries()].find(([, entry]) => entry.kind === 'special');
   if (special !== undefined) throw new Error(`OWNER_BASELINE_UNRESTORABLE_SPECIAL:${special[0]}`);
+}
+
+function removeSnapshotEntryPath(path: string, entry: SnapshotEntry): void {
+  if (entry.kind === 'directory') rmSync(path, { recursive: true, force: true });
+  else unlinkSync(path);
 }
 
 function restoreProjectSnapshot(root: string, baseline: Snapshot): void {
   const current = projectSnapshot(root, true);
   const removable = [...current.entries()]
     .filter(([path, entry]) => path !== '.' && (baseline.get(path) === undefined || baseline.get(path)?.kind !== entry.kind))
-    .map(([path]) => path)
-    .sort((left, right) => right.split('/').length - left.split('/').length || right.localeCompare(left));
-  for (const path of removable) rmSync(join(root, path), { recursive: true, force: true });
+    .map(([path, entry]) => [path, entry] as const)
+    .sort(([left], [right]) => right.split('/').length - left.split('/').length || right.localeCompare(left));
+  for (const [path, entry] of removable) {
+    removeSnapshotEntryPath(join(root, path), entry);
+  }
 
   const directories = [...baseline.entries()]
     .filter(([, entry]) => entry.kind === 'directory')
@@ -414,7 +509,11 @@ function restoreProjectSnapshot(root: string, baseline: Snapshot): void {
   for (const [path, entry] of directories) {
     if (entry.kind !== 'directory') continue;
     const absolute = path === '.' ? root : join(root, path);
-    if (!existsSync(absolute)) mkdirSync(absolute, { mode: entry.mode });
+    const observed = (() => { try { return snapshotEntry(absolute); } catch { return undefined; } })();
+    if (observed !== undefined && observed.kind !== 'directory') {
+      removeSnapshotEntryPath(absolute, observed);
+    }
+    if (observed?.kind !== 'directory') mkdirSync(absolute, { mode: entry.mode });
   }
 
   for (const [path, entry] of baseline) {
@@ -422,11 +521,13 @@ function restoreProjectSnapshot(root: string, baseline: Snapshot): void {
     const absolute = join(root, path);
     const observed = (() => { try { return snapshotEntry(absolute); } catch { return undefined; } })();
     if (entry.kind === 'file') {
-      if (observed !== undefined && observed.kind !== 'file') rmSync(absolute, { recursive: true, force: true });
+      if (observed !== undefined && observed.kind !== 'file') {
+        removeSnapshotEntryPath(absolute, observed);
+      }
       if (observed?.kind !== 'file' || observed.sha256 !== entry.sha256) writeFileSync(absolute, entry.bytes);
       chmodSync(absolute, entry.mode);
     } else if (entry.kind === 'symlink' && (observed?.kind !== 'symlink' || observed.target !== entry.target)) {
-      if (observed !== undefined) rmSync(absolute, { recursive: true, force: true });
+      if (observed !== undefined) removeSnapshotEntryPath(absolute, observed);
       symlinkSync(entry.target, absolute);
     }
   }
@@ -446,7 +547,7 @@ function unsafeChangedOutputs(snapshot: Snapshot, paths: readonly string[]): str
   });
 }
 
-function currentRoute(projectRoot: string): AdaptiveRouteRecord {
+function currentRoute(projectRoot: string, env: NodeJS.ProcessEnv): AdaptiveRouteRecord {
   try {
     const pointer = JSON.parse(readFileSync(join(projectRoot, '.omd', 'route.json'), 'utf8')) as unknown;
     if (!isRecord(pointer) || pointer.schema !== 'adaptive-route-pointer-v1'
@@ -454,10 +555,73 @@ function currentRoute(projectRoot: string): AdaptiveRouteRecord {
       || typeof pointer.sha256 !== 'string' || !SHA256.test(pointer.sha256)) throw new Error('invalid pointer');
     const bytes = readFileSync(join(projectRoot, '.omd', pointer.record));
     if (sha256(bytes) !== pointer.sha256) throw new Error('stale record');
-    return parseRouteRecord(JSON.parse(bytes.toString('utf8')));
+    const value = JSON.parse(bytes.toString('utf8')) as unknown;
+    if (env.OMD_CODEX_AUTHORITY_SOCKET !== undefined && isRecord(value) && isRecord(value.strategy)
+      && Array.isArray(value.strategy.aiAssets) && value.strategy.aiAssets.length > 0) {
+      return readCodexAuthorizedRoute(projectRoot, env);
+    }
+    return parseRouteRecord(value);
   } catch {
     throw new Error('OWNER_ROUTE_INVALID: production owner requires the current immutable adaptive route');
   }
+}
+
+function snapshotSha256(snapshot: Snapshot): string {
+  return sha256(canonicalJson([...snapshot.entries()].map(([path, entry]) => {
+    if (entry.kind === 'file') return { path, kind: entry.kind, mode: entry.mode, sha256: entry.sha256 };
+    if (entry.kind === 'directory') return { path, kind: entry.kind, mode: entry.mode };
+    if (entry.kind === 'symlink') return { path, kind: entry.kind, target: entry.target };
+    return { path, kind: entry.kind, mode: entry.mode };
+  })));
+}
+
+function currentRepairBinding(
+  projectRoot: string,
+  mirrorInput: string,
+  route: AdaptiveRouteRecord,
+): Readonly<{ binding: OwnerRepairBinding; snapshot: Snapshot }> {
+  if (!isAbsolute(mirrorInput) || mirrorInput.includes('\0')) throw new Error('OWNER_REPAIR_MIRROR_INVALID');
+  let mirrorRoot: string;
+  let mirrorMetadata;
+  try {
+    mirrorMetadata = lstatSync(mirrorInput);
+    mirrorRoot = realpathSync(mirrorInput);
+  } catch { throw new Error('OWNER_REPAIR_MIRROR_INVALID'); }
+  const fromProject = relative(projectRoot, mirrorRoot);
+  if (!mirrorMetadata.isDirectory() || mirrorMetadata.isSymbolicLink() || (mirrorMetadata.mode & 0o777) !== 0o700
+    || fromProject === '' || (!fromProject.startsWith('..') && !isAbsolute(fromProject))) {
+    throw new Error('OWNER_REPAIR_MIRROR_INVALID');
+  }
+  let observation;
+  try { observation = readCurrentObservationV2(projectRoot); }
+  catch (error) { throw new Error(`OWNER_REPAIR_OBSERVATION_INVALID:${error instanceof Error ? error.message : String(error)}`); }
+  if (observation === undefined) throw new Error('OWNER_REPAIR_NOT_REQUIRED: no current trusted observation exists');
+  const observationPointer = readFileSync(join(projectRoot, '.omd', 'observation-v2.json'));
+
+  const snapshot = projectSnapshot(mirrorRoot, true);
+  const unsafe = [...snapshot.entries()].find(([, entry]) => entry.kind === 'symlink' || entry.kind === 'special');
+  const files = [...snapshot.entries()].filter(([, entry]) => entry.kind === 'file');
+  if (unsafe !== undefined || files.length === 0) throw new Error('OWNER_REPAIR_MIRROR_INVALID');
+  const outsideScope = pathsOutsideScope(route, files.map(([path]) => path));
+  if (outsideScope.length > 0) throw new Error(`OWNER_REPAIR_MIRROR_SCOPE_EXCEEDED:${outsideScope.join(',')}`);
+  for (const [path, entry] of files) {
+    const source = (() => { try { return snapshotEntry(join(projectRoot, path)); } catch { return undefined; } })();
+    if (entry.kind !== 'file' || source?.kind !== 'file'
+      || entry.mode !== source.mode || entry.sha256 !== source.sha256) {
+      throw new Error(`OWNER_REPAIR_MIRROR_STALE:${path}`);
+    }
+  }
+  return Object.freeze({
+    snapshot,
+    binding: Object.freeze({
+      mirrorRoot,
+      mirrorDevice: String(mirrorMetadata.dev),
+      mirrorInode: String(mirrorMetadata.ino),
+      mirrorBaselineSha256: snapshotSha256(snapshot),
+      observationPointerSha256: sha256(observationPointer),
+      observationSha256: observationV2Sha256(observation),
+    }),
+  });
 }
 
 function shellQuote(value: string): string { return `'${value.replace(/'/g, `'"'"'`)}'`; }
@@ -475,6 +639,7 @@ function runAttempt(input: Readonly<{
   timeoutMs: number;
   beforeSource: Snapshot;
   beforeProject: Snapshot;
+  beforeMirror?: Snapshot;
 }>): ProductionOwnerAttempt {
   const response = requestCodexHostAuthority(input.env.OMD_CODEX_AUTHORITY_SOCKET!, {
     schema: OWNER_EXEC_REQUEST_SCHEMA,
@@ -490,6 +655,8 @@ function runAttempt(input: Readonly<{
     attempt: input.attempt,
     timeoutMs: input.timeoutMs,
     task: input.task,
+    mode: input.grant.mode,
+    ...(input.grant.repair === undefined ? {} : { repair: input.grant.repair }),
   });
   if (!isRecord(response) || !isRecord(response.receipt) || typeof response.signature !== 'string') {
     const reason = isRecord(response) && typeof response.error === 'string' ? `: ${response.error}` : '';
@@ -500,6 +667,7 @@ function runAttempt(input: Readonly<{
   if (!verify(null, Buffer.from(canonicalJson(value)), createPublicKey(readFileSync(publicKeyPath)), Buffer.from(response.signature, 'base64'))
     || value.schema !== OWNER_EXEC_RESULT_SCHEMA || value.owner !== OWNER_ROLE || value.projectRoot !== input.projectRoot
     || value.taskSha256 !== input.grant.taskSha256 || value.grantNonce !== input.grant.nonce || value.attempt !== input.attempt
+    || value.mode !== input.grant.mode || !sameRepairBinding(value.repair as OwnerRepairBinding | undefined, input.grant.repair)
     || (value.status !== 'completed' && value.status !== 'timed-out' && value.status !== 'failed')
     || (value.exitCode !== null && !Number.isSafeInteger(value.exitCode))
     || (value.signal !== null && typeof value.signal !== 'string')
@@ -518,8 +686,14 @@ function runAttempt(input: Readonly<{
   }
   const afterSource = projectSnapshot(input.projectRoot, false);
   const afterProject = projectSnapshot(input.projectRoot, true);
-  const sourceChanges = changedPaths(input.beforeSource, afterSource);
-  const projectChanges = changedPaths(input.beforeProject, afterProject);
+  validateFixedDerivedProjectRoots(input.projectRoot);
+  const sourceChanges = classifiedProjectChanges(input.beforeSource, afterSource).source;
+  const classifiedProject = classifiedProjectChanges(input.beforeProject, afterProject);
+  const projectChanges = classifiedProject.project;
+  const derivedChanges = classifiedProject.derived;
+  const mirrorChanges = input.grant.repair === undefined || input.beforeMirror === undefined
+    ? undefined
+    : changedPaths(input.beforeMirror, projectSnapshot(input.grant.repair.mirrorRoot, true));
   return {
     attempt: input.attempt,
     ...(value.processPid === undefined ? {} : { processPid: Number(value.processPid) }),
@@ -530,8 +704,13 @@ function runAttempt(input: Readonly<{
     exitCode: value.exitCode as number | null,
     signal: value.signal as NodeJS.Signals | null,
     sourceChanges,
+    derivedChanges,
+    ...(mirrorChanges === undefined ? {} : { mirrorChanges }),
     projectChanges,
-    unsafeOutputs: unsafeChangedOutputs(afterProject, projectChanges),
+    unsafeOutputs: unsafeChangedOutputs(
+      afterProject,
+      projectChanges.filter((path) => !derivedChanges.includes(path)),
+    ),
     prohibitedTools: Object.freeze(value.prohibitedTools as string[]),
     modelArgumentOmitted: input.grant.modelArgumentOmitted,
     ...(input.grant.model === undefined ? {} : { model: input.grant.model }),
@@ -550,8 +729,12 @@ function persistResult(
 ): ProductionOwnerResult {
   const hostRunDirectory = dirname(realpathSync(env.OMD_ACTIVATION_PATH!));
   const ownerDirectory = exactOwnerDirectory(env.OMD_CODEX_OWNER_DIRECTORY!, hostRunDirectory);
+  const validReceiptPath = grant.mode === 'production'
+    ? validProductionReceiptPath(grant.ownerReceiptPath, ownerDirectory.path)
+    : dirname(grant.ownerReceiptPath) === ownerDirectory.path
+      && /^repair-[a-f0-9]{64}\.json$/.test(basename(grant.ownerReceiptPath));
   if (ownerDirectory.path !== grant.ownerDirectory || ownerDirectory.device !== grant.ownerDirectoryDevice
-    || ownerDirectory.inode !== grant.ownerDirectoryInode || grant.ownerReceiptPath !== join(ownerDirectory.path, 'result.json')) {
+    || ownerDirectory.inode !== grant.ownerDirectoryInode || !validReceiptPath) {
     throw new Error('OWNER_DIRECTORY_INVALID: owner storage changed after the host grant');
   }
   const complete = Object.freeze({ ...result, receiptPath: grant.ownerReceiptPath });
@@ -570,6 +753,8 @@ function persistResult(
     grantNonce: grant.nonce,
     resultSha256,
     result: resultRecord,
+    mode: grant.mode,
+    ...(grant.repair === undefined ? {} : { repair: grant.repair }),
   });
   if (!isRecord(response) || !isRecord(response.receipt) || typeof response.signature !== 'string') {
     const reason = isRecord(response) && typeof response.error === 'string' ? `: ${response.error}` : '';
@@ -591,6 +776,42 @@ function persistResult(
   return complete;
 }
 
+function abortOwnerGrant(
+  env: NodeJS.ProcessEnv,
+  invocation: ProjectRunInvocation,
+  grant: OwnerGrant,
+  failure: string,
+): void {
+  const response = requestCodexHostAuthority(env.OMD_CODEX_AUTHORITY_SOCKET!, {
+    schema: OWNER_ABORT_REQUEST_SCHEMA,
+    requesterPid: process.pid,
+    cliPath: realpathSync(fileURLToPath(new URL('../bin/omd-codex.ts', import.meta.url))),
+    activationPath: realpathSync(env.OMD_ACTIVATION_PATH!),
+    projectRoot: grant.projectRoot,
+    argv: process.argv,
+    activation: invocation.activation,
+    owner: OWNER_ROLE,
+    taskSha256: grant.taskSha256,
+    grantNonce: grant.nonce,
+    mode: grant.mode,
+    ...(grant.repair === undefined ? {} : { repair: grant.repair }),
+    failure,
+  });
+  if (!isRecord(response) || !isRecord(response.receipt) || typeof response.signature !== 'string') {
+    const reason = isRecord(response) && typeof response.error === 'string' ? `: ${response.error}` : '';
+    throw new Error(`OWNER_ABORT_REJECTED${reason}`);
+  }
+  const ack = response.receipt;
+  const publicKeyPath = exactReadonlyFile(env.OMD_CODEX_AUTHORITY_PUBLIC_KEY_PATH!, 'OWNER_PUBLIC_KEY_INVALID');
+  if (!verify(null, Buffer.from(canonicalJson(ack)), createPublicKey(readFileSync(publicKeyPath)), Buffer.from(response.signature, 'base64'))
+    || ack.schema !== OWNER_ABORT_ACK_SCHEMA || ack.host !== 'codex' || ack.owner !== OWNER_ROLE
+    || ack.projectRoot !== grant.projectRoot || ack.taskSha256 !== grant.taskSha256
+    || ack.grantNonce !== grant.nonce || ack.mode !== grant.mode
+    || ack.failureSha256 !== sha256(failure)) {
+    throw new Error('OWNER_ABORT_REJECTED: acknowledgment is forged, stale, or mismatched');
+  }
+}
+
 export async function runProductionOwner(
   projectPath: string,
   agent: string,
@@ -605,17 +826,18 @@ export async function runProductionOwner(
     || existsSync(join(projectRoot, '.omd', 'observation-v2-retention.json'))
     || hasHistoricalObservation(projectRoot);
   const repairMode = dependencies.mode === 'repair';
+  if (!repairMode && dependencies.mirrorRoot !== undefined) throw new Error('OWNER_REPAIR_MODE_INVALID');
   if (repairJournal || (observed && !repairMode)) {
     throw new Error(
       'OWNER_REPAIR_BYPASS: observed production may change only through the staged repair transaction',
     );
   }
-  if (!observed && repairMode) throw new Error('OWNER_REPAIR_NOT_REQUIRED: no trusted observation exists');
+  if (repairMode && dependencies.mirrorRoot === undefined) throw new Error('OWNER_REPAIR_MIRROR_REQUIRED');
   const env = dependencies.env ?? process.env;
   const invocation = invocationFromHost(env, projectRoot);
   const codexHome = realpathSync(resolve(dependencies.codexHome ?? env.CODEX_HOME ?? join(homedir(), '.codex')));
   const role = roleProfile(codexHome);
-  const route = currentRoute(projectRoot);
+  const route = currentRoute(projectRoot, env);
   if (!route.strategy.roles.includes(OWNER_ROLE) || !route.strategy.stages.includes('production')) {
     throw new Error('OWNER_ROUTE_MISMATCH: the current route did not select omd-hand production');
   }
@@ -625,37 +847,89 @@ export async function runProductionOwner(
       checkAdaptiveWorkflowProductionReadiness(projectRoot, invocation);
     }
   }
+  validateFixedDerivedProjectRoots(projectRoot);
   const timeoutMs = validateProductionOwnerTimeout(dependencies.timeoutMs ?? DEFAULT_TIMEOUT_MS);
   const taskSha256 = sha256(task);
-  const grant = hostOwnerGrant(env, projectRoot, taskSha256, invocation, (dependencies.now ?? Date.now)());
+  const repair = repairMode
+    ? currentRepairBinding(projectRoot, dependencies.mirrorRoot!, route)
+    : undefined;
+  const grant = hostOwnerGrant(
+    env,
+    projectRoot,
+    taskSha256,
+    invocation,
+    (dependencies.now ?? Date.now)(),
+    repairMode ? 'repair' : 'production',
+    repair?.binding,
+  );
 
   const baselineSource = projectSnapshot(projectRoot, false);
   const baselineProject = projectSnapshot(projectRoot, true);
+  const baselineMirror = repair?.snapshot;
   assertRestorableBaseline(baselineProject);
+  if (baselineMirror !== undefined) assertRestorableBaseline(baselineMirror);
   const attempts: ProductionOwnerAttempt[] = [];
-  for (const attemptNumber of [1, 2] as const) {
-      const attempt = runAttempt({
-        attempt: attemptNumber,
-        projectRoot,
-        task,
-        env,
-        invocation,
-        grant,
-        timeoutMs,
-        beforeSource: baselineSource,
-        beforeProject: baselineProject,
-      });
+  const attemptNumbers: readonly (1 | 2)[] = grant.attemptBudget === 1 ? [1] : [1, 2];
+  for (const attemptNumber of attemptNumbers) {
+      let attempt: ProductionOwnerAttempt;
+      try {
+        attempt = runAttempt({
+          attempt: attemptNumber,
+          projectRoot,
+          task,
+          env,
+          invocation,
+          grant,
+          timeoutMs,
+          beforeSource: baselineSource,
+          beforeProject: baselineProject,
+          ...(baselineMirror === undefined ? {} : { beforeMirror: baselineMirror }),
+        });
+      } catch (error) {
+        const failure = error instanceof Error ? error.message : String(error);
+        let restorationFailure: string | undefined;
+        try {
+          restoreProjectSnapshot(projectRoot, baselineProject);
+          if (repair !== undefined && baselineMirror !== undefined) {
+            restoreProjectSnapshot(repair.binding.mirrorRoot, baselineMirror);
+          }
+        } catch (restoreError) {
+          restorationFailure = restoreError instanceof Error ? restoreError.message : String(restoreError);
+        }
+        let abortFailure: string | undefined;
+        try { abortOwnerGrant(env, invocation, grant, failure); }
+        catch (abortError) { abortFailure = abortError instanceof Error ? abortError.message : String(abortError); }
+        throw new Error([
+          `OWNER_EXECUTION_ABORTED:${failure}`,
+          ...(restorationFailure === undefined ? [] : [`OWNER_ABORT_RESTORE_FAILED:${restorationFailure}`]),
+          ...(abortFailure === undefined ? [] : [abortFailure]),
+        ].join(':'));
+      }
       attempts.push(attempt);
       if (attemptNumber === 2 && attempt.sessionId !== undefined && attempt.sessionId === attempts[0]?.sessionId) {
         throw new Error('OWNER_RETRY_SESSION_REUSED');
       }
       const failAndRollback = (failure: string): ProductionOwnerResult => {
         restoreProjectSnapshot(projectRoot, baselineProject);
+        if (repair !== undefined && baselineMirror !== undefined) {
+          restoreProjectSnapshot(repair.binding.mirrorRoot, baselineMirror);
+        }
         return persistResult(env, invocation, grant, {
           schema: OWNER_RESULT_SCHEMA, owner: OWNER_ROLE, projectRoot, taskSha256,
           rolePromptSha256: sha256(role.developer_instructions), host: 'codex',
           transport: 'codex-exec-stdio-jsonl', ...ownerExecutionFields(grant),
-          attempts, sourceChanges: attempt.sourceChanges, result: 'failed', failure,
+          attempts, sourceChanges: attempt.sourceChanges, mode: grant.mode,
+          ...(repair === undefined ? {} : { repair: {
+            mirrorRoot: repair.binding.mirrorRoot,
+            mirrorDevice: repair.binding.mirrorDevice,
+            mirrorInode: repair.binding.mirrorInode,
+            mirrorBaselineSha256: repair.binding.mirrorBaselineSha256,
+            mirrorFinalSha256: repair.binding.mirrorBaselineSha256,
+            observationPointerSha256: repair.binding.observationPointerSha256,
+            observationSha256: repair.binding.observationSha256,
+            changedPaths: [],
+          } }),
+          result: 'failed', failure,
           ...(attempt.sessionId === undefined ? {} : { resumeCommand: resumeCommand(projectRoot, attempt.sessionId) }),
         });
       };
@@ -670,15 +944,38 @@ export async function runProductionOwner(
           if (attempt.projectChanges.length > 0) {
             return failAndRollback('OWNER_REPAIR_PROJECT_MUTATION: repair Hand may change only the external private mirror');
           }
+          const mirrorChanges = attempt.mirrorChanges ?? [];
+          const afterMirror = projectSnapshot(repair!.binding.mirrorRoot, true);
+          const unsafeMirror = unsafeChangedOutputs(afterMirror, mirrorChanges);
+          if (unsafeMirror.length > 0) return failAndRollback(`OWNER_REPAIR_UNSAFE_OUTPUT:${unsafeMirror.join(',')}`);
+          if (mirrorChanges.length === 0) return failAndRollback('OWNER_REPAIR_WITHOUT_MIRROR_WRITE');
+          if (mirrorChanges.length !== 1) return failAndRollback(`OWNER_REPAIR_MULTI_FILE:${mirrorChanges.join(',')}`);
+          const changed = mirrorChanges[0]!;
+          const beforeEntry = baselineMirror!.get(changed);
+          const afterEntry = afterMirror.get(changed);
+          if (beforeEntry?.kind !== 'file' || afterEntry?.kind !== 'file' || beforeEntry.mode !== afterEntry.mode) {
+            return failAndRollback(`OWNER_REPAIR_STRUCTURAL_CHANGE:${changed}`);
+          }
+          const outsideScope = pathsOutsideScope(route, mirrorChanges);
+          if (outsideScope.length > 0) return failAndRollback(`OWNER_REPAIR_ROUTE_SCOPE_EXCEEDED:${outsideScope.join(',')}`);
           return persistResult(env, invocation, grant, {
             schema: OWNER_RESULT_SCHEMA, owner: OWNER_ROLE, projectRoot, taskSha256,
             rolePromptSha256: sha256(role.developer_instructions), host: 'codex', transport: 'codex-exec-stdio-jsonl',
-            ...ownerExecutionFields(grant), attempts, sourceChanges: [], result: 'completed',
+            ...ownerExecutionFields(grant), attempts, sourceChanges: [], mode: 'repair', repair: {
+              mirrorRoot: repair!.binding.mirrorRoot,
+              mirrorDevice: repair!.binding.mirrorDevice,
+              mirrorInode: repair!.binding.mirrorInode,
+              mirrorBaselineSha256: repair!.binding.mirrorBaselineSha256,
+              mirrorFinalSha256: snapshotSha256(afterMirror),
+              observationPointerSha256: repair!.binding.observationPointerSha256,
+              observationSha256: repair!.binding.observationSha256,
+              changedPaths: mirrorChanges,
+            }, result: 'completed',
             ...(attempt.sessionId === undefined ? {} : { resumeCommand: resumeCommand(projectRoot, attempt.sessionId) }),
           });
         }
         const nonSourceChanges = attempt.projectChanges.filter(
-          (path) => !attempt.sourceChanges.includes(path),
+          (path) => !attempt.sourceChanges.includes(path) && !attempt.derivedChanges.includes(path),
         );
         if (nonSourceChanges.length > 0) {
           return failAndRollback(`OWNER_NON_SOURCE_MUTATION:${nonSourceChanges.join(',')}`);
@@ -702,12 +999,15 @@ export async function runProductionOwner(
           schema: OWNER_RESULT_SCHEMA, owner: OWNER_ROLE, projectRoot, taskSha256,
           rolePromptSha256: sha256(role.developer_instructions), host: 'codex', transport: 'codex-exec-stdio-jsonl',
           ...ownerExecutionFields(grant), attempts, sourceChanges: attempt.sourceChanges,
-          result: 'completed',
+          mode: 'production', result: 'completed',
           ...(attempt.sessionId === undefined ? {} : { resumeCommand: resumeCommand(projectRoot, attempt.sessionId) }),
         });
       }
       if (attempt.projectChanges.length > 0) {
         return failAndRollback('OWNER_RETRY_UNSAFE_PROJECT_MUTATION');
+      }
+      if ((attempt.mirrorChanges?.length ?? 0) > 0) {
+        return failAndRollback('OWNER_RETRY_UNSAFE_MIRROR_MUTATION');
       }
       if (attemptNumber === 2) break;
     }
@@ -718,12 +1018,24 @@ export async function runProductionOwner(
     schema: OWNER_RESULT_SCHEMA, owner: OWNER_ROLE, projectRoot, taskSha256,
     rolePromptSha256: sha256(role.developer_instructions), host: 'codex', transport: 'codex-exec-stdio-jsonl',
     ...ownerExecutionFields(grant), attempts, sourceChanges: [], result: 'failed', failure: 'OWNER_ATTEMPTS_EXHAUSTED',
+    mode: grant.mode,
+    ...(repair === undefined ? {} : { repair: {
+      mirrorRoot: repair.binding.mirrorRoot,
+      mirrorDevice: repair.binding.mirrorDevice,
+      mirrorInode: repair.binding.mirrorInode,
+      mirrorBaselineSha256: repair.binding.mirrorBaselineSha256,
+      mirrorFinalSha256: repair.binding.mirrorBaselineSha256,
+      observationPointerSha256: repair.binding.observationPointerSha256,
+      observationSha256: repair.binding.observationSha256,
+      changedPaths: [],
+    } }),
     ...(last?.sessionId === undefined ? {} : { resumeCommand: resumeCommand(projectRoot, last.sessionId) }),
   });
 }
 
 export function productionOwnerUsage(): string {
-  return 'usage: omd-codex owner run|repair --agent omd-hand --input <task.md> [--timeout-ms <ms>] [--json]';
+  return 'usage: omd-codex owner run --agent omd-hand --input <task.md> [--timeout-ms <ms>] [--json]\n'
+    + '       omd-codex owner repair --agent omd-hand --input <task.md> --mirror <external-private-mirror> [--timeout-ms <ms>] [--json]';
 }
 
 export async function runProductionOwnerCli(args: readonly string[]): Promise<number> {
@@ -732,6 +1044,7 @@ export async function runProductionOwnerCli(args: readonly string[]): Promise<nu
   let agent: string | undefined;
   let input: string | undefined;
   let timeoutMs: number | undefined;
+  let mirrorRoot: string | undefined;
   let json = false;
   for (let index = 1; index < args.length; index += 1) {
     const arg = args[index]!;
@@ -739,15 +1052,18 @@ export async function runProductionOwnerCli(args: readonly string[]): Promise<nu
     else if (arg === '--agent') agent = args[++index];
     else if (arg === '--input') input = args[++index];
     else if (arg === '--timeout-ms') timeoutMs = Number(args[++index]);
+    else if (arg === '--mirror') mirrorRoot = args[++index];
     else throw new Error(productionOwnerUsage());
   }
-  if (agent === undefined || input === undefined) throw new Error(productionOwnerUsage());
+  if (agent === undefined || input === undefined || (mode === 'repair') !== (mirrorRoot !== undefined)) {
+    throw new Error(productionOwnerUsage());
+  }
   const taskPath = realpathSync(resolve(input));
   const result = await runProductionOwner(
     process.cwd(),
     agent,
     readFileSync(taskPath, 'utf8'),
-    { mode, ...(timeoutMs === undefined ? {} : { timeoutMs }) },
+    { mode, ...(mirrorRoot === undefined ? {} : { mirrorRoot: resolve(mirrorRoot) }), ...(timeoutMs === undefined ? {} : { timeoutMs }) },
   );
   if (json) process.stdout.write(`${JSON.stringify(result)}\n`);
   else {

@@ -59,6 +59,25 @@ test('market-grounded reference pieces are explicitly joined to current local ev
   assert.match(hand, /never (?:the\s+)?binding's private evidence/i);
 });
 
+test('a Scout-selected native source can change without weakening the locale evidence boundary', () => {
+  for (const source of [compact(instructions('scout')), compact(read('core/protocol/locale-contract.md'))]) {
+    assert.match(source, /bounded search for another native first-party source/i);
+    assert.match(source, /Preserve user-required references/i);
+    assert.match(source, /English-looking URL.*same untranslated page is not an equivalent/i);
+    assert.match(source, /leads only.*reacquire both pages/i);
+    assert.match(source, /missing counterpart does not establish universal absence/i);
+    assert.match(source, /(?:Do not promote unknown|without the required captured evidence)/i);
+  }
+});
+
+test('explicit acquisition dimensions take precedence over the default desktop capture size', () => {
+  const scout = compact(instructions('scout'));
+  assert.match(scout, /default is not authority over an acquisition plan's explicit viewports/i);
+  assert.match(scout, /requested desktop dimensions in the capture manifest before capture/i);
+  assert.match(scout, /preserve actual sourceViewport in every binding/i);
+  assert.match(scout, /Never relabel a capture to repair a size mismatch/i);
+});
+
 test('copy and type target explicit locale context rather than conversation language', () => {
   assert.match(compact(instructions('writer')), /surface locale, explicit market, and audience, not the conversation language/i);
   assert.match(compact(instructions('writer')), /instead of translating sentences one by one/i);

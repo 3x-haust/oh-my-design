@@ -35,8 +35,12 @@ export function createSelectedReferenceDistanceReceipt(
       referenceId: slot.referenceId,
       sourceSelector: slot.sourceSelector,
       targetSelector: slot.targetSelector,
-      similarity: measured.similarity,
-      drivers: measured.drivers,
+      similarity: slot.features !== undefined ? Math.min(...slot.features.map(feature => feature.similarity))
+        : slot.geometry === undefined ? measured.similarity
+        : Math.min(...(slot.geometryAxes ?? []).map(axis => slot.geometry!.scores[axis] ?? 0)),
+      drivers: slot.geometry === undefined ? measured.drivers : [...(slot.geometryAxes ?? [])],
+      ...(slot.geometry === undefined ? {} : { geometry: slot.geometry, geometryAxes: slot.geometryAxes, styleSimilarity: measured.similarity }),
+      ...(slot.features === undefined ? {} : { features: slot.features }),
       ...(measured.unmeasuredComponents ? { unmeasuredComponents: measured.unmeasuredComponents } : {}),
     };
   });

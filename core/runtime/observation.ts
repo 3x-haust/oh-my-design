@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { lstatSync } from 'node:fs';
 import { relative, resolve } from 'node:path';
 import { canonicalJson } from '../ref/board-artifacts.ts';
+import { isEntrySurfaceTaskId } from '../frame/entry-surface-contract.ts';
 import type { ProjectRunInvocation } from './invocation.ts';
 import { BROWSER_OBSERVATION_SCHEMA, BROWSER_OBSERVATION_SET_SCHEMA, validateBrowserObservationArtifacts, validateBrowserObservationDecisionLinks } from './browser-observation.ts';
 import {
@@ -18,7 +19,6 @@ export const OBSERVATION_V2_POINTER_SCHEMA = 'observation-v2-pointer' as const;
 const SHA256 = /^[a-f0-9]{64}$/;
 const REPAIR_PREDECESSOR_SCHEMA = 'observation-v2-repair-predecessor-v1';
 const TRUSTED_REFERENCE = /^(?:claim:[a-f0-9]{64}:[a-z0-9][a-z0-9:-]*:[a-f0-9]{64}|decision:[a-f0-9]{64}:(?:\d+|[a-z0-9][a-z0-9:-]*:[a-f0-9]{64})|outcome:[a-f0-9]{64}:(?:mustHave|mustNotHave|completionEvidence):\d+:[a-f0-9]{64})$/;
-const TRUSTED_TASK_ID = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 const SENSITIVE_KEY = /(?:authorization|cookie|email|password|secret|session|token)/i;
 const SENSITIVE_TEXT = /(?:\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b|\b(?:bearer\s+)?[a-z0-9_=-]{24,}\b)/gi;
 const OBSERVATION_STABLE_FILE_SYSTEM = nodeStableProjectFileSystem();
@@ -108,7 +108,7 @@ function redactEvidence(value: unknown): unknown {
     result[key] = SENSITIVE_KEY.test(key)
       ? '[REDACTED]'
       : (key === 'prerequisiteTaskId' || key === 'dependentTaskId')
-          && typeof data === 'string' && TRUSTED_TASK_ID.test(data)
+          && isEntrySurfaceTaskId(data)
         ? data
         : redactEvidence(data);
   }

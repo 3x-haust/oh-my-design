@@ -1,0 +1,20 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Independent occupied-area fixtures</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 16px/1.25 sans-serif; }
+  section { position: relative; width: 400px; height: 200px; margin: 20px; }
+  h2, p { position: absolute; margin: 0; font: inherit; background: #ddd; overflow: hidden; }
+  .source h2 { left: 20px; top: 20px; width: 160px; height: 80px; }
+  .source p { left: 220px; top: 20px; width: 160px; height: 80px; }
+  .equivalent p { top: 20px; width: 80px; height: 80px; }
+  .equivalent p:nth-child(1) { left: 20px; }
+  .equivalent p:nth-child(2) { left: 100px; }
+  .equivalent p:nth-child(3) { left: 220px; }
+  .equivalent p:nth-child(4) { left: 300px; }
+  .sparse p { left: 20px; top: 20px; width: 80px; height: 80px; }
+</style>
+<section class="source"><h2>Reference title</h2><p>Reference description</p></section>
+<section class="equivalent"><p>One item</p><p>Two items</p><p>Three items</p><p>Four items</p></section>
+<section class="sparse"><p>Only a quarter of the occupied area remains</p></section>

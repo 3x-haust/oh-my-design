@@ -49,7 +49,7 @@ export const ADAPTIVE_STAGE_IDS = Object.freeze([
 ] as const);
 export const ADAPTIVE_ROLE_IDS = Object.freeze([
   'omd-framer', 'omd-scout', 'omd-writer', 'omd-typesetter', 'omd-composer',
-  'omd-sketch', 'omd-hand', 'omd-eye', 'omd-glance',
+  'omd-sketch', 'omd-hand', 'omd-eye', 'omd-glance', 'omd-study',
 ] as const);
 
 export type AdaptiveRouteErrorCode =
@@ -87,7 +87,10 @@ export type AdaptiveRouteErrorCode =
 export class AdaptiveRouteError extends Error {
   override readonly name = 'AdaptiveRouteError';
   readonly code: AdaptiveRouteErrorCode;
-  constructor(code: AdaptiveRouteErrorCode) { super(code); this.code = code; }
+  constructor(code: AdaptiveRouteErrorCode, detail?: string) {
+    super(detail === undefined ? code : `${code}: ${detail}`);
+    this.code = code;
+  }
 }
 
 export type AdaptiveSkip = Readonly<{ id: string; reason: string }>;
@@ -198,6 +201,6 @@ export const FORBIDDEN_WITHOUT_REQUEST = Object.freeze([
   'redesigning a surface the request did not name',
 ] as const);
 
-export function failAdaptiveRoute(code: AdaptiveRouteErrorCode): never {
-  throw new AdaptiveRouteError(code);
+export function failAdaptiveRoute(code: AdaptiveRouteErrorCode, detail?: string): never {
+  throw new AdaptiveRouteError(code, detail);
 }

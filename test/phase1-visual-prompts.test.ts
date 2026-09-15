@@ -41,9 +41,9 @@ test('register, colour, scale, and carrier decisions are executable conditional 
   assert.equal(visual.marketingRequiresBuiltCarrier, true);
   assert.equal(visual.textOnlyMarketingPasses, false);
   assert.equal(visual.colourDistribution, 'surface-conditional');
-  assert.equal(visual.marketingColourDistribution, '60-30-10');
+  assert.equal(visual.marketingColourDistribution, 'evidence-grounded-visible-hierarchy');
   assert.equal(visual.productColourStrategy, 'semantic-action-state');
-  assert.equal(visual.colourlessMarketing, 'RED');
+  assert.equal(visual.colourlessMarketing, 'contextual-visible-hierarchy');
   assert.deepEqual(visual.carrierOptions, [
     'gradient-mesh', 'noise-grain-texture', 'svg-geometric-pattern',
     'css-illustration-primitives', 'expressive-theory', 'motion-recipe',

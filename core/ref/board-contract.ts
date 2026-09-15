@@ -1,5 +1,6 @@
 import type { BlueprintNode, Invariants, Reference } from '../types.ts';
 import type { ReferenceInfluenceAxis } from '../deliberation/contracts.ts';
+import type { ReferenceFeatureMeasurement } from './feature-measurement.ts';
 
 export const REFERENCE_BOARD_SCHEMA_VERSION = 'reference-board-v1' as const;
 export const REFERENCE_BOARD_V2_SCHEMA_VERSION = 'reference-board-v2' as const;
@@ -41,7 +42,16 @@ export type ReferenceInfluenceBinding = {
   readonly conflictGroup: string | null;
   readonly conflictResolution: string | null;
   readonly falsifier: string;
+  /** Optional exact correspondence when the promised feature is narrower than the full DOM. */
+  readonly measurements?: readonly ReferenceFeatureMeasurement[];
 };
+
+export const copyReferenceInfluenceBinding = (binding: ReferenceInfluenceBinding): ReferenceInfluenceBinding => ({
+  ...binding, sourceViewport: { ...binding.sourceViewport }, targetViewports: binding.targetViewports.map(viewport => ({ ...viewport })),
+  ...(binding.measurements === undefined ? {} : { measurements: binding.measurements.map(measurement => ({
+    ...measurement, sourceNodes: [...measurement.sourceNodes], targetAnchors: [...measurement.targetAnchors],
+  })) }),
+});
 
 type ReferenceBoardPieceBase = {
   readonly slotId: string;
@@ -115,6 +125,7 @@ export type SanitizedBlueprintNode = {
   readonly role: BlueprintNode['role'];
   readonly children: readonly number[];
   readonly box: { readonly w: number; readonly h: number };
+  readonly position?: { readonly x: number; readonly y: number };
   readonly padding?: readonly number[];
   readonly gap?: number;
   readonly direction?: BlueprintNode['direction'];

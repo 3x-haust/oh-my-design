@@ -1,3 +1,5 @@
+import { parseExecutionRequirements, type ExecutionRequirement } from './execution-requirements.ts';
+
 export const TASK_OUTCOME_CONTRACT_SCHEMA = 'task-outcome-contract-v1' as const;
 
 export type TaskOutcomeContractErrorCode =
@@ -24,6 +26,7 @@ export type TaskOutcomeContract = Readonly<{
   mustNotHave: readonly string[];
   completionEvidence: readonly string[];
   strategyFreedom: readonly string[];
+  executionRequirements?: readonly ExecutionRequirement[];
 }>;
 
 const CONTRACT_KEYS = [
@@ -34,7 +37,7 @@ const CONTRACT_KEYS = [
   'completionEvidence',
   'strategyFreedom',
 ] as const;
-const CONTRACT_KEY_SET = new Set<string>(CONTRACT_KEYS);
+const CONTRACT_KEY_SET = new Set<string>([...CONTRACT_KEYS, 'executionRequirements']);
 
 function fail(code: TaskOutcomeContractErrorCode): never {
   throw new TaskOutcomeContractError(code);
@@ -55,7 +58,8 @@ function requireExactContractKeys(value: object): void {
   if (ownKeys.some((key) => typeof key !== 'string' || !CONTRACT_KEY_SET.has(key))) {
     return fail('UNEXPECTED_TASK_OUTCOME_FIELD');
   }
-  if (ownKeys.length !== CONTRACT_KEYS.length || CONTRACT_KEYS.some((key) => !Object.hasOwn(value, key))) {
+  const expectedLength = CONTRACT_KEYS.length + (Object.hasOwn(value, 'executionRequirements') ? 1 : 0);
+  if (ownKeys.length !== expectedLength || CONTRACT_KEYS.some((key) => !Object.hasOwn(value, key))) {
     return fail('MALFORMED_TASK_OUTCOME_CONTRACT');
   }
 }
@@ -103,6 +107,8 @@ function parse(input: unknown): TaskOutcomeContract {
   const mustNotHave = textList(dataValue(input, 'mustNotHave'));
   const completionEvidence = textList(dataValue(input, 'completionEvidence'));
   const strategyFreedom = textList(dataValue(input, 'strategyFreedom'));
+  const executionRequirements = Object.hasOwn(input, 'executionRequirements')
+    ? parseExecutionRequirements(dataValue(input, 'executionRequirements')) : undefined;
   const exclusions = new Set(mustNotHave);
   if (mustHave.some((item) => exclusions.has(item))) return fail('CONFLICTING_TASK_OUTCOME_ITEM');
 
@@ -113,6 +119,7 @@ function parse(input: unknown): TaskOutcomeContract {
     mustNotHave,
     completionEvidence,
     strategyFreedom,
+    ...(executionRequirements === undefined ? {} : { executionRequirements }),
   });
 }
 
@@ -124,4 +131,10 @@ export function parseTaskOutcomeContract(input: unknown): TaskOutcomeContract {
     if (error instanceof TaskOutcomeContractError) throw error;
     return fail('MALFORMED_TASK_OUTCOME_CONTRACT');
   }
+}
+
+/** A visual/browser review gets every surface outcome, never host execution instructions. */
+export function browserTaskOutcomeContract(contract: TaskOutcomeContract): Omit<TaskOutcomeContract, 'executionRequirements'> {
+  const { executionRequirements: _executionRequirements, ...surface } = contract;
+  return Object.freeze(surface);
 }

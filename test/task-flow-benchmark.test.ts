@@ -80,6 +80,22 @@ test('task-flow benchmark binds multiple observed services to task order', () =>
   assert.match(taskFlowBenchmarkSha256(parsed), /^[a-f0-9]{64}$/);
 });
 
+test('an editorial task-flow preserves its grammar through projection with unchanged evidence obligations', () => {
+  const input = { ...benchmark(), surface: 'editorial', domain: 'editorial-reading-and-saving' };
+  const parsed = parseTaskFlowBenchmark(input, { expectedSourceContractSha256: SHA });
+  const projection = projectTaskFlowBenchmark(parsed);
+  assert.equal(parsed.surface, 'editorial');
+  assert.equal(projection.surface, 'editorial');
+  assert.equal(projection.domain, input.domain);
+  assert.deepEqual(parseTaskFlowBenchmarkProjection(projection, { expectedSourceContractSha256: SHA }), projection);
+  assert.throws(() => parseTaskFlowBenchmark({ ...input, sources: input.sources.slice(0, 1) }), /TASK_FLOW_BENCHMARK_SOURCE_COVERAGE/);
+  assert.throws(() => parseTaskFlowBenchmarkProjection(projection, { expectedSourceContractSha256: 'b'.repeat(64) }), /TASK_FLOW_BENCHMARK_SOURCE_STALE/);
+  for (const surface of ['marketing', 'reading-app', '', null]) {
+    assert.throws(() => parseTaskFlowBenchmark({ ...input, surface }), /TASK_FLOW_BENCHMARK_SURFACE/);
+    assert.throws(() => parseTaskFlowBenchmarkProjection({ ...projection, surface }), /TASK_FLOW_BENCHMARK_SURFACE/);
+  }
+});
+
 test('task-flow benchmark rejects component-only or unbound evidence', () => {
   const oneSource = benchmark();
   oneSource.sources = oneSource.sources.slice(0, 1);
@@ -138,4 +154,3 @@ test('task-flow projection preserves and validates direct dependency edges', () 
     /TASK_FLOW_BENCHMARK_EVIDENCE_REF/,
   );
 });
-

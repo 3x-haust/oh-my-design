@@ -8,6 +8,8 @@ import { loadRefs } from './store.ts';
 import { parseReferenceClassification, referenceClassificationSha256 } from './reference-classification.ts';
 import { ACQUISITION_PLAN_V2_SCHEMA, validateAcquisitionPlan, type AcquisitionPlan, type AcquisitionPlanV2 } from '../deliberation/contracts.ts';
 import { localeDesignContextJsonSha256 } from '../locale/design-context.ts';
+import { sourceFeatureWitness } from './feature-measurement.ts';
+import { readImageFragment } from './image-fragment.ts';
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 const fail = (message: string): never => { throw new Error(`reference board input is invalid: ${message}`); };
@@ -45,12 +47,16 @@ export function authorReferenceBoard(root: string, value: unknown): ReferenceBoa
     const pieces = list(candidate.pieces, `candidates[${candidateIndex}].pieces`).map((pieceValue, pieceIndex) => {
       const path = `candidates[${candidateIndex}].pieces[${pieceIndex}]`;
       const piece = record(pieceValue, path);
-      exactKeys(piece, acquisitionV2 === undefined
-        ? ['slotId', 'source', 'component', 'targetComponent', 'targetSelector', 'taskIds', 'reason', 'take', 'avoid', 'adaptation', 'grid', 'rights', 'signal', 'motionAxis']
-        : ['slotId', 'source', 'component', 'targetComponent', 'targetSelector', 'taskIds', 'reason', 'take', 'avoid', 'adaptation', 'grid', 'rights', 'signal', 'motionAxis', 'binding'], path);
-      const source = text(piece.source, `${path}.source`);
-      const component = text(piece.component, `${path}.component`);
-      const referenceId = refIdentity(source, component);
+      const imageFragment = piece.sourceKind === 'image-fragment';
+      const sourceKeys = imageFragment ? ['sourceKind', 'referenceId'] : ['source', 'component'];
+      exactKeys(piece, [
+        'slotId', ...sourceKeys, 'targetComponent', 'targetSelector', 'taskIds', 'reason', 'take',
+        'avoid', 'adaptation', 'grid', 'rights', 'signal', 'motionAxis',
+        ...(acquisitionV2 === undefined ? [] : ['binding']),
+      ], path);
+      const referenceId = imageFragment
+        ? readImageFragment(root, text(piece.referenceId, `${path}.referenceId`)).id
+        : refIdentity(text(piece.source, `${path}.source`), text(piece.component, `${path}.component`));
       const signal = text(piece.signal, `${path}.signal`);
       const nonvisual = signal === 'supporting-content' || signal === 'anti-reference';
       const common = {
@@ -67,6 +73,10 @@ export function authorReferenceBoard(root: string, value: unknown): ReferenceBoa
         },
         ...(acquisitionV2 === undefined ? {} : { binding: piece.binding }),
       };
+      if (imageFragment) {
+        if (nonvisual) fail(`${path} nonvisual evidence requires a classified reference`);
+        return { ...common, sourceKind: 'image-fragment' as const };
+      }
       if (!nonvisual) return { ...common, sourceKind: 'component-capture' as const };
       const reference = references.get(referenceId) ?? fail(`${path} classified reference does not exist`);
       const classification = parseReferenceClassification(reference);
@@ -118,11 +128,18 @@ export function authorReferenceBoard(root: string, value: unknown): ReferenceBoa
     ? REFERENCE_BOARD_V3_SCHEMA_VERSION
     : authoredCandidates.some((candidate) => candidate.pieces.some((piece) => piece.sourceKind === 'classified-reference'))
       ? REFERENCE_BOARD_V2_SCHEMA_VERSION : REFERENCE_BOARD_SCHEMA_VERSION;
-  return parseReferenceBoard({
+  const parsed = parseReferenceBoard({
     schemaVersion: version,
     ...(version !== REFERENCE_BOARD_SCHEMA_VERSION ? { projectSha256: referenceBoardProjectSha256(root) } : {}),
     ...(version === REFERENCE_BOARD_V3_SCHEMA_VERSION ? { acquisitionSha256: sha256(acquisitionBytes), localeContextSha256: acquisitionV2!.localeContextSha256 } : {}),
     frameSha256: sha256(readFileSync(join(root, '.omd', 'frame.md'))),
     candidates: authoredCandidates,
   });
+  for (const candidate of parsed.candidates) for (const piece of candidate.pieces) {
+    if (piece.binding?.measurements) {
+      const reference = references.get(piece.referenceId) ?? fail(`declared feature source ${piece.referenceId} does not exist`);
+      for (const measurement of piece.binding.measurements) sourceFeatureWitness(reference.blueprint, measurement);
+    }
+  }
+  return parsed;
 }

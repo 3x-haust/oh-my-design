@@ -1,12 +1,19 @@
-import { createPublicKey, verify } from 'node:crypto';
+import { createHash, createPublicKey, verify } from 'node:crypto';
 import { lstatSync, readFileSync, realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 import { parse as parseToml } from 'smol-toml';
 import { parseRouteRecord } from '../core/route/adaptive-route-record.ts';
+import { readCodexAuthorizedRoute } from './codex-authorized-route.ts';
 import { requestCodexHostAuthority } from '../core/runtime/codex-host-client.ts';
 import { validateActivationContext } from '../core/runtime/activation.ts';
 import { fileURLToPath } from 'node:url';
+import { RENDERED_REFINEMENT_REVIEWER_TASK } from '../core/runtime/rendered-refinement.ts';
+import { CODEX_STUDY_ROLE, isCodexStudyDirectory } from './codex-study-runtime.ts';
+import {
+  FINAL_RENDER_REVIEWER_TASK,
+  FINAL_RENDER_REVIEWER_TRANSPORT_SCHEMA,
+} from '../core/runtime/final-render-review.ts';
 
 const NON_PRODUCTION_ROLES = new Set([
   'omd-framer',
@@ -17,6 +24,7 @@ const NON_PRODUCTION_ROLES = new Set([
   'omd-sketch',
   'omd-eye',
   'omd-glance',
+  CODEX_STUDY_ROLE,
 ]);
 const DEFAULT_TIMEOUT_MS = 20 * 60 * 1000;
 const MAX_TIMEOUT_MS = 60 * 60 * 1000;
@@ -41,6 +49,8 @@ export type CodexRoleResult = Readonly<{
   finalMessage: string;
   result: 'completed' | 'failed';
   failure?: string;
+  /** Host-selected provisional source directory, never a production or quality approval. */
+  studyDirectory?: string;
   authority: Readonly<{
     receipt: CodexRoleAuthorityReceipt;
     signature: string;
@@ -58,6 +68,17 @@ export type CodexRoleAuthorityReceipt = Readonly<{
   finalMessage: string;
   processPid: number;
   roleNonce: string;
+  taskSha256?: string;
+  studyDirectory?: string;
+  reviewerEvidence?: Readonly<{
+    schema: 'omd-reviewer-evidence-consumption-v1';
+    evidenceSha256: string;
+    packetSha256: string;
+    taskSha256: string;
+    childPid: number;
+    sessionId: string;
+    nonce: string;
+  }>;
   modelArgumentOmitted?: boolean;
   model?: string;
   modelReasoningEffort?: string;
@@ -107,14 +128,19 @@ function roleProfile(codexHome: string, agent: string): RoleProfile {
   return parsed as unknown as RoleProfile;
 }
 
-function selectedRoles(projectRoot: string): readonly string[] {
+function selectedRoles(projectRoot: string, env: NodeJS.ProcessEnv): readonly string[] {
   const pointer = JSON.parse(readFileSync(join(projectRoot, '.omd', 'route.json'), 'utf8')) as unknown;
   if (!isRecord(pointer) || pointer.schema !== 'adaptive-route-pointer-v1'
     || typeof pointer.record !== 'string'
     || !/^route-records\/sha256-[a-f0-9]{64}\.json$/.test(pointer.record)) {
     throw new Error('ROLE_ROUTE_INVALID: a current adaptive route is required');
   }
-  return parseRouteRecord(JSON.parse(readFileSync(join(projectRoot, '.omd', pointer.record), 'utf8'))).strategy.roles;
+  const value = JSON.parse(readFileSync(join(projectRoot, '.omd', pointer.record), 'utf8')) as unknown;
+  if (env.OMD_CODEX_AUTHORITY_SOCKET !== undefined && isRecord(value) && isRecord(value.strategy)
+    && Array.isArray(value.strategy.aiAssets) && value.strategy.aiAssets.length > 0) {
+    return readCodexAuthorizedRoute(projectRoot, env).strategy.roles;
+  }
+  return parseRouteRecord(value).strategy.roles;
 }
 
 function parseEvents(stdout: string): Pick<CodexRoleResult, 'sessionId' | 'eventCount' | 'finalMessage'> & { completed: boolean; failed: boolean } {
@@ -144,17 +170,22 @@ export function runCodexRole(
   projectPath: string,
   agent: string,
   task: string,
-  options: Readonly<{ env?: NodeJS.ProcessEnv; timeoutMs?: number; codexHome?: string }> = {},
+  options: Readonly<{
+    env?: NodeJS.ProcessEnv;
+    timeoutMs?: number;
+    codexHome?: string;
+    reviewerPacket?: Readonly<{ path: string; sha256: string; evidenceSha256: string; task: string }>;
+  }> = {},
 ): CodexRoleResult {
   if (!NON_PRODUCTION_ROLES.has(agent)) {
     throw new Error(`ROLE_MISMATCH: ${agent} is not a non-production OMD role`);
   }
   if (task.trim() === '') throw new Error('ROLE_TASK_EMPTY');
   const projectRoot = canonicalProjectRoot(projectPath);
-  if (!selectedRoles(projectRoot).includes(agent)) {
+  const env = options.env ?? process.env;
+  if (!selectedRoles(projectRoot, env).includes(agent)) {
     throw new Error(`ROLE_ROUTE_MISMATCH: the current route did not select ${agent}`);
   }
-  const env = options.env ?? process.env;
   for (const name of [
     'OMD_ACTIVATION_PATH',
     'OMD_CODEX_AUTHORITY_SOCKET',
@@ -182,6 +213,9 @@ export function runCodexRole(
     role: agent,
     timeoutMs,
     task,
+    ...(options.reviewerPacket === undefined ? {} : {
+      reviewerPacket: { path: options.reviewerPacket.path, sha256: options.reviewerPacket.sha256 },
+    }),
   });
   if (!isRecord(response) || !isRecord(response.receipt) || typeof response.signature !== 'string') {
     const reason = isRecord(response) && typeof response.error === 'string' ? `:${response.error}` : '';
@@ -189,6 +223,10 @@ export function runCodexRole(
   }
   const receipt = response.receipt;
   const publicKey = createPublicKey(readFileSync(realpathSync(env.OMD_CODEX_AUTHORITY_PUBLIC_KEY_PATH!)));
+  const expectedTaskSha256 = createHash('sha256').update(
+    options.reviewerPacket === undefined ? task : options.reviewerPacket.task,
+  ).digest('hex');
+  const reviewerEvidence = isRecord(receipt.reviewerEvidence) ? receipt.reviewerEvidence : undefined;
   if (!verify(null, Buffer.from(canonicalJson(receipt)), publicKey, Buffer.from(response.signature, 'base64'))
     || receipt.schema !== 'omd-codex-role-exec-result-v1' || receipt.role !== agent
     || receipt.projectRoot !== projectRoot || (receipt.status !== 'completed' && receipt.status !== 'failed')
@@ -203,6 +241,20 @@ export function runCodexRole(
     || typeof receipt.configurationSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(receipt.configurationSha256)
     || typeof receipt.buildSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(receipt.buildSha256)
     || typeof receipt.briefSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(receipt.briefSha256)
+    || receipt.taskSha256 !== expectedTaskSha256
+    || (agent === CODEX_STUDY_ROLE
+      ? !isCodexStudyDirectory(projectRoot, receipt.studyDirectory)
+      : receipt.studyDirectory !== undefined)
+    || (options.reviewerPacket === undefined
+      ? receipt.reviewerEvidence !== undefined
+      : reviewerEvidence === undefined
+        || reviewerEvidence.schema !== 'omd-reviewer-evidence-consumption-v1'
+        || reviewerEvidence.packetSha256 !== options.reviewerPacket.sha256
+        || reviewerEvidence.evidenceSha256 !== options.reviewerPacket.evidenceSha256
+        || reviewerEvidence.taskSha256 !== expectedTaskSha256
+        || !Number.isSafeInteger(reviewerEvidence.childPid) || Number(reviewerEvidence.childPid) <= 0
+        || typeof reviewerEvidence.sessionId !== 'string' || reviewerEvidence.sessionId === ''
+        || typeof reviewerEvidence.nonce !== 'string' || reviewerEvidence.nonce === '')
     || (receipt.sessionId !== undefined && typeof receipt.sessionId !== 'string')
     || (receipt.failure !== undefined && typeof receipt.failure !== 'string')) {
     throw new Error('ROLE_AUTHORITY_REJECTED: result is forged, stale, or mismatched');
@@ -219,6 +271,19 @@ export function runCodexRole(
     finalMessage: receipt.finalMessage,
     processPid: Number(receipt.processPid),
     roleNonce: receipt.roleNonce,
+    taskSha256: receipt.taskSha256 as string,
+    ...(agent === CODEX_STUDY_ROLE ? { studyDirectory: receipt.studyDirectory as string } : {}),
+    ...(reviewerEvidence === undefined ? {} : {
+      reviewerEvidence: {
+        schema: 'omd-reviewer-evidence-consumption-v1',
+        evidenceSha256: reviewerEvidence.evidenceSha256 as string,
+        packetSha256: reviewerEvidence.packetSha256 as string,
+        taskSha256: reviewerEvidence.taskSha256 as string,
+        childPid: Number(reviewerEvidence.childPid),
+        sessionId: reviewerEvidence.sessionId as string,
+        nonce: reviewerEvidence.nonce as string,
+      },
+    }),
     modelArgumentOmitted: receipt.modelArgumentOmitted,
     ...(receiptModel === undefined ? {} : { model: receiptModel }),
     modelReasoningEffort: receipt.modelReasoningEffort,
@@ -240,6 +305,7 @@ export function runCodexRole(
     eventCount: Number(receipt.eventCount),
     finalMessage: receipt.finalMessage,
     result: receipt.status,
+    ...(agent === CODEX_STUDY_ROLE ? { studyDirectory: receipt.studyDirectory as string } : {}),
     ...(receipt.failure === undefined ? {} : { failure: receipt.failure }),
     authority: {
       receipt: authorityReceipt,
@@ -249,7 +315,7 @@ export function runCodexRole(
 }
 
 export function codexRoleUsage(): string {
-  return 'usage: omd-codex role run --agent <non-production-role> --input <task.md> [--timeout-ms <ms>] [--json]';
+  return 'usage: omd-codex role run --agent <non-production-role> [--input <task.md> | --reviewer-packet <content-addressed-packet.json>] [--timeout-ms <ms>] [--json]';
 }
 
 export function runCodexRoleCli(args: readonly string[]): number {
@@ -257,6 +323,7 @@ export function runCodexRoleCli(args: readonly string[]): number {
   let agent: string | undefined;
   let input: string | undefined;
   let timeoutMs: number | undefined;
+  let reviewerPacketInput: string | undefined;
   let json = false;
   for (let index = 1; index < args.length; index += 1) {
     const arg = args[index]!;
@@ -264,14 +331,44 @@ export function runCodexRoleCli(args: readonly string[]): number {
     else if (arg === '--agent') agent = args[++index];
     else if (arg === '--input') input = args[++index];
     else if (arg === '--timeout-ms') timeoutMs = Number(args[++index]);
+    else if (arg === '--reviewer-packet') reviewerPacketInput = args[++index];
     else throw new Error(codexRoleUsage());
   }
-  if (agent === undefined || input === undefined) throw new Error(codexRoleUsage());
+  if (agent === undefined || (input === undefined && reviewerPacketInput === undefined)
+    || (input !== undefined && reviewerPacketInput !== undefined)) throw new Error(codexRoleUsage());
+  const reviewerPacket = reviewerPacketInput === undefined ? undefined : (() => {
+    if (agent !== 'omd-eye') throw new Error('ROLE_REVIEWER_PACKET_FORBIDDEN: only omd-eye may consume reviewer evidence');
+    const projectRoot = canonicalProjectRoot(process.cwd());
+    const absolute = realpathSync(resolve(reviewerPacketInput));
+    const path = relative(projectRoot, absolute).split('\\').join('/');
+    const bytes = readFileSync(absolute);
+    let value: unknown;
+    try { value = JSON.parse(bytes.toString('utf8')) as unknown; } catch { throw new Error('ROLE_REVIEWER_PACKET_INVALID'); }
+    if (!isRecord(value)) throw new Error('ROLE_REVIEWER_PACKET_INVALID');
+    const task = value.schema === 'adaptive-rendered-refinement-reviewer-transport-v1'
+      ? RENDERED_REFINEMENT_REVIEWER_TASK
+      : value.schema === FINAL_RENDER_REVIEWER_TRANSPORT_SCHEMA
+        ? FINAL_RENDER_REVIEWER_TASK : undefined;
+    if (task === undefined
+      || typeof value.evidenceSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(value.evidenceSha256)
+      || !/^\.omd\/(?:refinement|final-review)\/reviewer-packets\/sha256-[a-f0-9]{64}\.json$/.test(path)
+      || (value.schema === 'adaptive-rendered-refinement-reviewer-transport-v1') !== path.startsWith('.omd/refinement/')) {
+      throw new Error('ROLE_REVIEWER_PACKET_INVALID');
+    }
+    const sha256 = createHash('sha256').update(bytes).digest('hex');
+    if (!path.endsWith(`sha256-${sha256}.json`)) throw new Error('ROLE_REVIEWER_PACKET_INVALID');
+    return { path, sha256, evidenceSha256: value.evidenceSha256, task };
+  })();
   const result = runCodexRole(
     process.cwd(),
     agent,
-    readFileSync(realpathSync(resolve(input)), 'utf8'),
-    timeoutMs === undefined ? {} : { timeoutMs },
+    input === undefined
+      ? RENDERED_REFINEMENT_REVIEWER_TASK
+      : readFileSync(realpathSync(resolve(input)), 'utf8'),
+    {
+      ...(timeoutMs === undefined ? {} : { timeoutMs }),
+      ...(reviewerPacket === undefined ? {} : { reviewerPacket }),
+    },
   );
   if (json) process.stdout.write(`${JSON.stringify(result)}\n`);
   else {

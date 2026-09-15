@@ -1,0 +1,33 @@
+<!doctype html>
+<meta charset="utf-8">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 16px/24px sans-serif; }
+  .surface { width: 360px; padding: 16px; margin-bottom: 24px; display: flex; flex-direction: column; gap: 12px; color: #111111; background: #ffffff; }
+  .contents { display: contents; }
+  h2 { margin: 0; font: 600 24px/32px sans-serif; }
+  input, button { height: 44px; font: inherit; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+</style>
+<section id="direct" class="surface">
+  <h2>점검 기록</h2>
+  <label for="direct-search">상태 검색</label>
+  <input id="direct-search" value="이상" aria-label="상태 검색">
+  <div class="row"><span>급수 펌프</span><button type="button">기록 열기</button></div>
+</section>
+<section id="wrapped" class="surface">
+  <section class="contents">
+    <h2>점검 기록</h2>
+    <div class="contents">
+      <label for="wrapped-search">상태 검색</label>
+      <input id="wrapped-search" value="이상" aria-label="상태 검색">
+    </div>
+    <div class="row"><span>급수 펌프</span><button type="button">기록 열기</button></div>
+  </section>
+</section>
+<section id="negative" class="surface">
+  <div class="contents"><span>표시된 항목</span></div>
+  <div style="display:none"><div class="contents"><button type="button">숨긴 항목</button></div></div>
+  <div class="contents" style="visibility:hidden"><span>가린 항목</span></div>
+  <div style="width:0;height:0;overflow:hidden"><button type="button">잘린 항목</button></div>
+</section>

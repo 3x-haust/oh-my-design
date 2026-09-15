@@ -7,6 +7,7 @@ import { requireProjectWriteInvocation } from './invocation.ts';
 import {
   hasHostBoundLocalProjectWriteAuthority,
   hostBoundLocalProjectRoot,
+  hostProjectWriteAuthorityFailure,
 } from './activation.ts';
 
 export type ProjectWriteRequest = {
@@ -215,7 +216,9 @@ function requireGuardedProjectWrite(
   try {
     requireProjectWriteInvocation(invocation);
     if (!hasHostBoundLocalProjectWriteAuthority(invocation, projectRoot)) {
-      throw new ProjectWriteError('project-write authority must be issued by the host and bound to this project root');
+      const detail = hostProjectWriteAuthorityFailure(invocation);
+      throw new ProjectWriteError('project-write authority must be issued by the host and bound to this project root'
+        + (detail === undefined ? '' : `; host rejected the request: ${detail}`));
     }
   } catch (error) {
     if (error instanceof ProjectWriteError) throw error;

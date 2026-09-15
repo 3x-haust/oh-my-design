@@ -8,8 +8,8 @@ export const TRUSTED_PROJECT_CONTRACT_SCHEMA = 'trusted-project-contract-v1' as 
 export class TrustedProjectContractError extends Error {
   readonly code: 'MALFORMED_TRUSTED_PROJECT_CONTRACT' | 'INCOMPLETE_TRUSTED_EVALUATION_COVERAGE';
 
-  constructor(code: TrustedProjectContractError['code']) {
-    super(code);
+  constructor(code: TrustedProjectContractError['code'], detail?: string) {
+    super(detail === undefined ? code : `${code}: ${detail}`);
     this.name = 'TrustedProjectContractError';
     this.code = code;
   }
@@ -25,8 +25,8 @@ export type TrustedProjectContract = Readonly<{
 
 const KEYS = new Set(['schema', 'taskOutcome', 'evidenceClaims', 'allowedPaths', 'decisionRefs']);
 
-const fail = (code: TrustedProjectContractError['code']): never => {
-  throw new TrustedProjectContractError(code);
+const fail = (code: TrustedProjectContractError['code'], detail?: string): never => {
+  throw new TrustedProjectContractError(code, detail);
 };
 
 function strings(value: unknown): readonly string[] {
@@ -75,7 +75,12 @@ export function requireExactEvaluationCoverage(
       ref: `${kind}:${index}`,
       assertionKind: kind === 'mustNotHave' ? 'absent-text' : 'visible-text',
     })));
-  if (scripts.length !== expected.length) return fail('INCOMPLETE_TRUSTED_EVALUATION_COVERAGE');
+  const incomplete = (): never => fail('INCOMPLETE_TRUSTED_EVALUATION_COVERAGE',
+    `expected ${expected.length} scripts in canonical order [${expected.map(({ ref }) => ref).join(', ')}]; `
+    + `received ${scripts.length}. Use these short outcomeRef values, not requirement prose or hashed refs. `
+    + 'Each script requires assertions: absent-text for mustNotHave, visible-text otherwise. '
+    + 'Do not substitute unrelated page text for a non-browser requirement.');
+  if (scripts.length !== expected.length) return incomplete();
   const actual = scripts.map((script) => script.outcomeRef);
   if (new Set(actual).size !== actual.length
     || actual.some((value, index) => value !== expected[index]?.ref)
@@ -83,6 +88,6 @@ export function requireExactEvaluationCoverage(
       || script.assertions.some((assertion) =>
         typeof assertion !== 'object' || assertion === null
         || Reflect.get(assertion, 'kind') !== expected[index]?.assertionKind))) {
-    return fail('INCOMPLETE_TRUSTED_EVALUATION_COVERAGE');
+    return incomplete();
   }
 }

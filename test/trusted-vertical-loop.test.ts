@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { validateTrustedOutcomeEvidence } from '../core/evidence/final-v2-outcome-gate.ts';
+import { canonicalJson } from '../core/ref/board-artifacts.ts';
 import { validateFinalBrowserObservations } from '../core/evidence/final-v2-browser-observations.ts';
 import { nodeStableProjectFileSystem } from '../core/runtime/stable-project-file.ts';
 import { runTrustedLifecycle } from '../adapters/trusted-lifecycle-runtime.ts';
@@ -43,6 +44,24 @@ const sha = (value: string | Uint8Array): string => createHash('sha256').update(
 const routeFixture = (): unknown => JSON.parse(
   readFileSync(new URL('./fixtures/adaptive-flow/copy-only.json', import.meta.url), 'utf8'),
 );
+
+function repairMirrorTreeSha256(root: string): string {
+  const tree: Array<Record<string, unknown>> = [{ path: '.', kind: 'directory', mode: lstatSync(root).mode & 0o7777 }];
+  const visit = (directory: string): void => {
+    for (const name of readdirSync(directory).sort()) {
+      const absolute = join(directory, name);
+      const path = relative(root, absolute).split(sep).join('/');
+      const metadata = lstatSync(absolute);
+      const mode = metadata.mode & 0o7777;
+      if (metadata.isDirectory()) {
+        tree.push({ path, kind: 'directory', mode });
+        visit(absolute);
+      } else tree.push({ path, kind: 'file', mode, sha256: sha(readFileSync(absolute)) });
+    }
+  };
+  visit(root);
+  return sha(canonicalJson(tree));
+}
 
 function publishRepairSlice(root: string, invocation: ReturnType<typeof publishTestAdaptiveRoute>): void {
   const writer = createTestProjectWriteAdapter(root, invocation);
@@ -195,7 +214,26 @@ test('broken production is repaired, re-observed, and accepted by the trusted fi
       join(mirrorRoot, 'src', 'copy', path), lstatSync(join(root, 'src', 'copy', path)).mode & 0o777,
     );
     try {
-      const staged = stageProductionRepair({ root, invocation, review, mirrorRoot });
+      const canonicalMirror = realpathSync(mirrorRoot);
+      const mirrorMetadata = lstatSync(canonicalMirror);
+      const observationPointer = readFileSync(join(root, '.omd', 'observation-v2.json'));
+      const mirrorFinalSha256 = repairMirrorTreeSha256(canonicalMirror);
+      const ownerReceipt = Buffer.from(`${canonicalJson({
+        schema: 'omd-production-owner-result-v1', owner: 'omd-hand', projectRoot: realpathSync(root),
+        host: 'codex', transport: 'codex-exec-stdio-jsonl', mode: 'repair', result: 'completed',
+        taskSha256: sha('vertical-repair'), rolePromptSha256: sha('repair-role'),
+        modelArgumentOmitted: true, modelReasoningEffort: 'medium', configurationSha256: sha('repair-config'),
+        attempts: [{}], sourceChanges: [], receiptPath: `${canonicalMirror}.owner-receipt.json`,
+        repair: {
+          mirrorRoot: canonicalMirror, mirrorDevice: String(mirrorMetadata.dev), mirrorInode: String(mirrorMetadata.ino),
+          mirrorBaselineSha256: sha(`baseline:${mirrorFinalSha256}`), mirrorFinalSha256,
+          observationPointerSha256: sha(observationPointer),
+          observationSha256: (JSON.parse(observationPointer.toString('utf8')) as { sha256: string }).sha256,
+          changedPaths: ['src/copy/index.html'],
+        },
+      })}\n`);
+      authorizeTestProjectRunPayloads(root, invocation, [{ purpose: 'production-owner-repair', payload: ownerReceipt }]);
+      const staged = stageProductionRepair({ root, invocation, review, mirrorRoot, ownerReceipt });
       const repair = applyProductionRepair({ root, invocation, writer: createTestProjectWriteAdapter(root, invocation), staged });
       assert.equal(repair.status, 'committed');
     } finally { rmSync(mirrorRoot, { recursive: true, force: true }); }

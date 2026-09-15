@@ -27,6 +27,9 @@ import {
   type SelectedReferenceDistanceSlotInput,
 } from './selected-reference-distance-contract.ts';
 import { createSelectedReferenceDistanceReceipt } from './selected-reference-distance-scoring.ts';
+import { captureBlueprint } from './blueprint.ts';
+import { compareReferenceGeometry, referenceGeometry, GEOMETRY_AXES, type GeometryAxis } from './geometry-comparison.ts';
+import { compareReferenceFeatures, sourceFeatureWitness } from './feature-measurement.ts';
 export {
   SELECTED_REFERENCE_DISTANCE_PATH,
   SELECTED_REFERENCE_DISTANCE_SCHEMA_VERSION,
@@ -63,6 +66,7 @@ const selectedUsedPieces = (bindings: CurrentBindings) => {
   return bindings.validatedUsage.pieces.filter((piece) => (
     piece.usage.status === 'used'
     && selected.get(piece.usage.slotId)?.obligationDisposition === 'used'
+    && !['content', 'voice', 'rejection'].includes(piece.raw.binding?.axis ?? '')
   ));
 };
 
@@ -111,11 +115,11 @@ export async function measureSelectedReferenceDistance(
 ): Promise<SelectedReferenceDistanceReceipt> {
   const bindings = requireCurrentBindings(root);
   const references = referenceMap(root);
-  const targets = new Map<string, Promise<Invariants>>();
-  const measuredTarget = (selector: string): Promise<Invariants> => {
+  const targets = new Map<string, Promise<RawIr>>();
+  const measuredTarget = (selector: string): Promise<RawIr> => {
     const current = targets.get(selector);
     if (current !== undefined) return current;
-    const pending = input.extract(selector).then((raw) => extractInvariants(normalize(raw)));
+    const pending = input.extract(selector);
     targets.set(selector, pending);
     return pending;
   };
@@ -135,13 +139,25 @@ export async function measureSelectedReferenceDistance(
     if (!sameViewport(reference.viewport, input.viewport)) {
       return fail(`selected used slot ${piece.usage.slotId} reference viewport does not match target viewport`);
     }
+    const raw = await measuredTarget(piece.raw.targetSelector);
+    const geometryAxes = piece.raw.binding && GEOMETRY_AXES.includes(piece.raw.binding.axis as GeometryAxis)
+      ? [piece.raw.binding.axis as GeometryAxis] : [];
+    const sourceGeometry = referenceGeometry(reference.blueprint);
+    const targetGeometry = referenceGeometry(captureBlueprint(raw.nodes, piece.raw.targetSelector));
+    if (geometryAxes.length && (!sourceGeometry || !targetGeometry)) {
+      fail(`selected used slot ${piece.usage.slotId} lacks measured geometry; recapture the source or repair the visible target, never infer positions`);
+    }
     return {
       slotId: piece.usage.slotId,
       referenceId: piece.raw.referenceId,
       sourceSelector: reference.selector,
       targetSelector: piece.raw.targetSelector,
       referenceInvariants: reference.invariants,
-      targetInvariants: await measuredTarget(piece.raw.targetSelector),
+      targetInvariants: extractInvariants(normalize(raw)),
+      ...(geometryAxes.length ? { geometryAxes, geometry: compareReferenceGeometry(sourceGeometry!, targetGeometry!) } : {}),
+      ...(piece.raw.binding?.measurements === undefined ? {} : {
+        features: compareReferenceFeatures(reference.blueprint, raw, piece.raw.binding.measurements),
+      }),
     };
   }));
   const receipt = createSelectedReferenceDistanceReceipt({
@@ -220,6 +236,21 @@ export function validateSelectedReferenceDistanceReceipt(
       || comparison.sourceSelector !== currentReference.selector
       || comparison.targetSelector !== piece.raw.targetSelector) {
       fail(`selected reference distance slot ${piece.usage.slotId} binding is stale`);
+    }
+    if (piece.raw.binding && GEOMETRY_AXES.includes(piece.raw.binding.axis as GeometryAxis)) {
+      if (!comparison?.geometry || canonicalJson(comparison.geometry.source) !== canonicalJson(referenceGeometry(currentReference.blueprint))
+        || canonicalJson(comparison.geometryAxes) !== canonicalJson([piece.raw.binding.axis])) {
+        fail(`selected reference distance slot ${piece.usage.slotId} measured geometry is missing or stale`);
+      }
+    }
+    const definitions = piece.raw.binding?.measurements;
+    if (definitions === undefined) {
+      if (comparison?.features !== undefined) fail(`selected reference distance slot ${piece.usage.slotId} has undeclared feature measurements`);
+    } else {
+      if (!comparison?.features || canonicalJson(comparison.features.map(feature => feature.definition)) !== canonicalJson(definitions)
+        || comparison.features.some(feature => canonicalJson(feature.source) !== canonicalJson(sourceFeatureWitness(currentReference.blueprint, feature.definition)))) {
+        fail(`selected reference distance slot ${piece.usage.slotId} declared features are missing or stale`);
+      }
     }
   }
   return receipt;

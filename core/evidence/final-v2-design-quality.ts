@@ -52,6 +52,20 @@ export type DesignQualityContract = Readonly<{
 
 export type DesignQualityParseOptions = Readonly<{
   expectedObservationSha256s?: readonly string[];
+  expectedObservationBindings?: readonly DesignQualityObservationBinding[];
+}>;
+
+/**
+ * Trusted projection of one screenshot inside an immutable observation-v2 record.
+ * `observationSha256` remains the aggregate record digest used by final-v2 lanes;
+ * the remaining fields come from the validated browser observation nested inside it.
+ */
+export type DesignQualityObservationBinding = Readonly<{
+  observationSha256: string;
+  browserObservationSha256: string;
+  captureSha256: string;
+  viewport: DesignQualityViewport;
+  state: string;
 }>;
 
 const SHA256 = /^[a-f0-9]{64}$/;
@@ -109,6 +123,7 @@ function text(value: unknown, code = 'DESIGN_QUALITY_MALFORMED'): string {
 function parseEvidence(
   value: unknown,
   expected: ReadonlySet<string> | undefined,
+  bindings: readonly DesignQualityObservationBinding[] | undefined,
   axis: DesignQualityAxis,
 ): DesignQualityEvidence {
   const item = record(value, [
@@ -128,10 +143,21 @@ function parseEvidence(
   ) {
     return fail(`DESIGN_QUALITY_EVIDENCE_INVALID:${axis}`);
   }
+  const state = text(item.get('state'));
+  if (bindings !== undefined) {
+    const matching = bindings.filter((binding) =>
+      binding.observationSha256 === observationSha256
+      && binding.viewport === viewport
+      && binding.state === state);
+    const captureSha256s = new Set(matching.map(({ captureSha256 }) => captureSha256));
+    if (captureSha256s.size !== 1) {
+      return fail(`DESIGN_QUALITY_EVIDENCE_INVALID:${axis}`);
+    }
+  }
   return Object.freeze({
     observationSha256,
     viewport,
-    state: text(item.get('state')),
+    state,
     region: text(item.get('region')),
     visibleCondition: text(item.get('visibleCondition')),
     userConsequence: text(item.get('userConsequence')),
@@ -141,6 +167,7 @@ function parseEvidence(
 function parseAssessment(
   value: unknown,
   expected: ReadonlySet<string> | undefined,
+  bindings: readonly DesignQualityObservationBinding[] | undefined,
 ): DesignQualityAssessment {
   const item = record(value, [
     'axis',
@@ -189,8 +216,15 @@ function parseAssessment(
     return fail(`DESIGN_QUALITY_EVIDENCE_INVALID:${typedAxis}`);
   }
   const evidence = Object.freeze(
-    evidenceInput.map((entry) => parseEvidence(entry, expected, typedAxis)),
+    evidenceInput.map((entry) =>
+      parseEvidence(entry, expected, bindings, typedAxis)),
   );
+  if (
+    new Set(evidence.map(({ observationSha256, viewport, state }) =>
+      `${observationSha256}:${viewport}:${state}`)).size !== evidence.length
+  ) {
+    return fail(`DESIGN_QUALITY_EVIDENCE_INVALID:${typedAxis}`);
+  }
   const viewports = new Set(evidence.map(({ viewport }) => viewport));
   if (!viewports.has('desktop') || !viewports.has('mobile')) {
     return fail(`DESIGN_QUALITY_EVIDENCE_INVALID:${typedAxis}`);
@@ -233,8 +267,23 @@ export function parseDesignQualityContract(
     options.expectedObservationSha256s === undefined
       ? undefined
       : new Set(options.expectedObservationSha256s);
+  const bindings = options.expectedObservationBindings;
+  if (bindings !== undefined) {
+    for (const binding of bindings) {
+      if (
+        !SHA256.test(binding.observationSha256)
+        || !SHA256.test(binding.browserObservationSha256)
+        || !SHA256.test(binding.captureSha256)
+        || (binding.viewport !== 'desktop' && binding.viewport !== 'mobile')
+        || binding.state.trim() === ''
+        || (expected !== undefined && !expected.has(binding.observationSha256))
+      ) {
+        fail('DESIGN_QUALITY_EVIDENCE_INVALID:observation-binding');
+      }
+    }
+  }
   const axes = Object.freeze(
-    axesInput.map((entry) => parseAssessment(entry, expected)),
+    axesInput.map((entry) => parseAssessment(entry, expected, bindings)),
   );
   if (
     axes.some(({ axis }, index) => axis !== DESIGN_QUALITY_AXES[index])
@@ -257,4 +306,60 @@ export function assertDesignQualityGreen(
     fail(`DESIGN_QUALITY_AXIS_RED:${failed.axis}`);
   }
   return contract;
+}
+
+const CROSS_VIEWPORT_SEVERITY: Readonly<Record<DesignQualityCrossViewport, number>> =
+  Object.freeze({ preserved: 0, weakened: 1, contradicted: 2 });
+
+/**
+ * Produces the conservative public projection of independently validated Eye assessments.
+ * Scores never average upward: each axis keeps the minimum score, the worst viewport result,
+ * and evidence from one minimum-scoring reviewer selected by a stable lexical tie-break.
+ */
+export function aggregateDesignQualityContracts(
+  contracts: readonly DesignQualityContract[],
+): DesignQualityContract {
+  if (contracts.length === 0) fail('DESIGN_QUALITY_MISSING');
+  const axes = DESIGN_QUALITY_AXES.map((axis, axisIndex): DesignQualityAssessment => {
+    const assessments = contracts.map((contract) => {
+      const assessment = contract.axes[axisIndex];
+      if (assessment === undefined || assessment.axis !== axis) {
+        return fail('DESIGN_QUALITY_MALFORMED');
+      }
+      if (assessment.verdict !== 'GREEN') {
+        return fail(`DESIGN_QUALITY_AXIS_RED:${axis}`);
+      }
+      return assessment;
+    });
+    const minimumScore = Math.min(...assessments.map(({ score }) => score)) as
+      DesignQualityAssessment['score'];
+    const worstCrossViewport = assessments.reduce<DesignQualityCrossViewport>(
+      (worst, assessment) =>
+        CROSS_VIEWPORT_SEVERITY[assessment.crossViewport]
+          > CROSS_VIEWPORT_SEVERITY[worst]
+          ? assessment.crossViewport
+          : worst,
+      'preserved',
+    );
+    const evidenceSource = assessments
+      .filter(({ score }) => score === minimumScore)
+      .map((assessment) => ({
+        assessment,
+        tieBreak: JSON.stringify(assessment.evidence),
+      }))
+      .sort((left, right) => left.tieBreak.localeCompare(right.tieBreak))[0]
+      ?.assessment ?? fail('DESIGN_QUALITY_MALFORMED');
+    return Object.freeze({
+      axis,
+      verdict: 'GREEN',
+      score: minimumScore,
+      crossViewport: worstCrossViewport,
+      criticalFailure: null,
+      evidence: evidenceSource.evidence,
+    });
+  });
+  return Object.freeze({
+    schema: DESIGN_QUALITY_CONTRACT_SCHEMA,
+    axes: Object.freeze(axes),
+  });
 }

@@ -40,6 +40,9 @@ the broker. A coordinator, role task, or installed agent profile must not invent
 - Sparse reference pages are not automatically blocked pages. A successful HTTP response with a
   measured, visible, nonempty scoped component may resolve the short-body heuristic; document-root
   selectors, empty/hidden content, HTTP 403/server errors, and challenge titles do not gain an exemption.
+- Reference viewport families and state-preserving capture follow `core/protocol/reference-assembly.md`.
+  Retain complementary observations without inflating independent evidence; a probe metric never
+  substitutes for the state visible in the saved capture.
 - The outcome, risk, uncertainty, and available evidence select the route. Optional stages and
   methods require either selection or a written skip; the full capability catalog is not a
   universal sequence.
@@ -49,6 +52,9 @@ the broker. A coordinator, role task, or installed agent profile must not invent
   useful decision material; asset shipping restrictions do not by themselves justify skipping it.
   Select feasible concepts for rendered task fit and craft; use cost only for an explicit budget
   constraint or a tie between equivalent candidates. `core/theory/imagegen.md` owns the procedure.
+- Native Codex provisional HTML studies use the optional `omd-study` helper, not a replacement
+  production owner or approval stage. `core/theory/imagegen.md#provisional-source-studies` owns
+  its input, directory grant, pre-generation decision, render, and downstream-use contract.
 - `new-product` and `new-marketing` are distinct reference-discovery needs. Greenfield product work
   can require a task-flow benchmark; a marketing launch does not impersonate a product workflow.
 - A prompt-only greenfield marketing brief that demands a product difference but supplies no

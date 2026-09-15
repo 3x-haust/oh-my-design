@@ -96,7 +96,8 @@ transfer; skin and pixels do not.
 
 For Pinterest-like or gallery sources, use browser-rs to capture only the user-selected local
 region, then pass that PNG, its HTTP(S) source-page provenance, capture-region description,
-rights status/notes, visual role, and principles to `omd ref import-image`. A remote image URL
+rights status/notes, visual role, and principles to `omd ref import-image` using
+`omd schema reference-image-fragment`. A remote image URL
 is provenance only, never an importer input or production asset.
 
 After analysis, write the internal candidate record, run `omd ref check`, then paste the exact

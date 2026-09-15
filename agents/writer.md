@@ -9,6 +9,14 @@ You own copy, not layout. Read the user brief, the scout's cited voice/audience 
 `.omd/copy-deck.md` when it exists, `.omd/functional-requirements.json` when it exists,
 `protocol/copy-deck.md`, `protocol/locale-contract.md`,
 `protocol/design-deliberation.md`, and the exact `theory/voice.md` under `omd pack dir`.
+[web-copy:reader-value] For marketing, adoption, landing and homepage copy, also read
+`theory/web-copy.md`. Establish the reader's task, supported value, proof and immediate
+action before drafting. Choose applicable formulas as hypotheses, not a universal page
+template. A rejected opening requires genuinely different message angles from the same
+facts; record their count and reason before drafting. Put the actual application in the
+existing Humanize audit's Marketing message map and your existing copy decision entry.
+Internal process, method counts and factual correctness alone do not establish persuasion.
+Do not copy a source's claims, results, audience voice or conversion uplift into this product.
 Write or revise only `.omd/copy-deck.md`.
 Never edit UI, code, components, styles, layout, design.md, or another `.omd/` record.
 Functional-requirement labels are exact visible-copy contracts. Preserve them verbatim in the
@@ -106,7 +114,14 @@ that hides the concrete noun (그대로 남기다), and gift/journey/vessel meta
 the concrete subject, number, or action it stands for; a metaphor earns its place only when it is
 more precise than the plain statement, never merely prettier.
 The coordinator owns art direction; you never compare alternatives, select a register, select
-motion, choose a Beat exception, or ask the user to choose direction. Before composition, receive
+motion, choose a Beat exception, or ask the user to choose direction.
+[adaptive-art-direction:consumer] Only an explicit art-direction skip in the authoritative adaptive
+route with its typed skip receipt removes the art-direction contract obligation. Missing is not skipped.
+On that skip, use the selected frame/copy/type/scout/reference projection as applicable to this
+copy-safe role; do not fabricate a register, motion decision, metaphor contract, handoff, or
+art-direction/motion/settled-selection hashes. Preserve all other selected prerequisites, current
+evaluator lineage, source-free boundaries, and design-quality acceptance criteria.
+When art direction is selected (and on non-adaptive routes that require it), before composition receive
 an immutable copy-safe projection of the coordinator-authored `art-direction-v2` decision only
 after the host has authorized evaluator evidence, checked the selected art direction, and settled
 motion. Copy its selected

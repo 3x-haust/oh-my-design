@@ -10,7 +10,12 @@ import { validateSourceSeal, validateSourceSealArtifact } from '../source-seal/i
 import { validateFinalBrowserObservations } from './final-v2-browser-observations.ts';
 import { validateTrustedOutcomeEvidence } from './final-v2-outcome-gate.ts';
 import { validateFinalV2ContentFitCurrentness } from './final-v2-content-fit.ts';
-import { assertDesignQualityGreen } from './final-v2-design-quality.ts';
+import {
+  aggregateDesignQualityContracts,
+  assertDesignQualityGreen,
+  type DesignQualityContract,
+  type DesignQualityObservationBinding,
+} from './final-v2-design-quality.ts';
 import { readStableProjectFile, StableProjectFileReadError, type StableProjectFileSystem } from '../runtime/stable-project-file.ts';
 import {
   AdaptiveFinalEvidenceGraphError,
@@ -145,40 +150,58 @@ function execution(
   projectMode: 'greenfield' | 'existing',
   benchmarkRequired: boolean,
   descriptor: unknown,
-  expected: Readonly<{ routeSha256: string; buildSha256: string; briefSha256: string; isolation: string; observations: readonly string[]; reviewers: readonly string[]; verdicts: unknown; floors: unknown; designQuality?: unknown; browserSha256: string }>,
+  expected: Readonly<{ routeSha256: string; buildSha256: string; briefSha256: string; isolation: string; observations: readonly string[]; observationBindings: readonly DesignQualityObservationBinding[]; reviewers: readonly string[]; browserSha256: string }>,
   completed: Set<string>,
-): string {
+): Readonly<{ reviewer: string; floors: Readonly<Record<string, number>>; verdictClaim: string; floorClaim: string; designQuality?: DesignQualityContract; configurationSha256: string; evidenceSha256: string }> {
   const receipt = fields(descriptor, ['path', 'sha256'], `${lane} execution descriptor`);
   const path = text(receipt.get('path'), `${lane} execution path`); const bytes = read(root, fs, path, `${lane} execution`);
   if (hash(bytes) !== digest(receipt.get('sha256'), `${lane} execution sha256`)) fail(`${lane} execution bytes changed`);
   requireFinalReviewerLaneAuthorization(invocation, root, bytes);
   let parsed: unknown; try { parsed = JSON.parse(bytes.toString('utf8')); } catch { return fail(`${lane} execution is not JSON`); }
-  const item = fields(parsed, ['schema', 'lane', 'reviewerId', 'verdicts', 'criticalFloors', ...(lane === 'blindLane' ? ['designQuality'] : []), 'isolationReceiptSha256', 'observationSha256s', 'routeSha256', 'buildSha256', 'briefSha256', 'browserSha256', 'childPid', 'sessionId', 'nonce', 'evidenceSha256', 'configurationSha256'], `${lane} execution`);
+  const hasFindings = typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
+    && Reflect.has(parsed, 'findings');
+  const item = fields(parsed, ['schema', 'lane', 'reviewerId', 'verdicts', 'criticalFloors', ...(lane === 'blindLane' ? ['designQuality'] : []), ...(hasFindings ? ['findings'] : []), 'isolationReceiptSha256', 'observationSha256s', 'routeSha256', 'buildSha256', 'briefSha256', 'browserSha256', 'childPid', 'sessionId', 'nonce', 'evidenceSha256', 'configurationSha256'], `${lane} execution`);
   const reviewer = text(item.get('reviewerId'), `${lane} reviewerId`);
   const executionSchema = lane === 'blindLane'
     ? 'adaptive-final-reviewer-execution-v2'
     : 'adaptive-final-reviewer-execution-v1';
   if (item.get('schema') !== executionSchema || item.get('lane') !== lane || !expected.reviewers.includes(reviewer)) fail(`${lane} execution identity is invalid`);
-  if (canonicalRouteJson(item.get('verdicts')) !== canonicalRouteJson(expected.verdicts) || canonicalRouteJson(item.get('criticalFloors')) !== canonicalRouteJson(expected.floors)
-    || item.get('routeSha256') !== expected.routeSha256 || item.get('buildSha256') !== expected.buildSha256
+  const contract = laneContract(lane, projectMode, benchmarkRequired);
+  greenValues(item.get('verdicts'), contract.verdicts, `${lane} execution verdicts`, false);
+  greenValues(item.get('criticalFloors'), contract.floors, `${lane} execution floors`, true);
+  const floorFields = fields(item.get('criticalFloors'), contract.floors, `${lane} execution floors`);
+  const floors = Object.freeze(Object.fromEntries(contract.floors.map((dimension) => [
+    dimension,
+    Number(floorFields.get(dimension)),
+  ])));
+  if (item.get('routeSha256') !== expected.routeSha256 || item.get('buildSha256') !== expected.buildSha256
     || item.get('briefSha256') !== expected.briefSha256 || item.get('browserSha256') !== expected.browserSha256
     || item.get('isolationReceiptSha256') !== expected.isolation || canonicalRouteJson(item.get('observationSha256s')) !== canonicalRouteJson(expected.observations)) fail(`${lane} execution provenance is stale`);
-  if (lane === 'blindLane') {
-    assertDesignQualityGreen(item.get('designQuality'), {
+  const designQuality = lane === 'blindLane'
+    ? assertDesignQualityGreen(item.get('designQuality'), {
       expectedObservationSha256s: expected.observations,
-    });
-    if (canonicalRouteJson(item.get('designQuality')) !== canonicalRouteJson(expected.designQuality)) {
-      fail(`${lane} execution design quality is stale`);
-    }
-  }
+      expectedObservationBindings: expected.observationBindings,
+    })
+    : undefined;
   if (lane === 'blindLane' && projectMode === 'greenfield') {
     validateAdaptiveBlindExecutionVerdicts(item.get('verdicts'), projectMode, benchmarkRequired);
   }
-  const identities = [String(integer(item.get('childPid'), `${lane} childPid`)), text(item.get('sessionId'), `${lane} sessionId`), text(item.get('nonce'), `${lane} nonce`), digest(item.get('configurationSha256'), `${lane} configurationSha256`)];
-  digest(item.get('evidenceSha256'), `${lane} evidenceSha256`);
+  if (item.get('findings') !== undefined) {
+    array(item.get('findings'), `${lane} findings`).forEach((finding, index) =>
+      text(finding, `${lane} findings[${index}]`));
+  }
+  const identities = [String(integer(item.get('childPid'), `${lane} childPid`)), text(item.get('sessionId'), `${lane} sessionId`), text(item.get('nonce'), `${lane} nonce`)];
   if (identities.some((identity) => completed.has(identity))) fail('reviewer execution identities are reused');
   identities.forEach((identity) => completed.add(identity));
-  return reviewer;
+  return Object.freeze({
+    reviewer,
+    floors,
+    verdictClaim: canonicalRouteJson(item.get('verdicts')),
+    floorClaim: canonicalRouteJson(item.get('criticalFloors')),
+    ...(designQuality === undefined ? {} : { designQuality }),
+    configurationSha256: digest(item.get('configurationSha256'), `${lane} configurationSha256`),
+    evidenceSha256: digest(item.get('evidenceSha256'), `${lane} evidenceSha256`),
+  });
 }
 function validateLane(
   root: string,
@@ -192,6 +215,7 @@ function validateLane(
   buildSha256: string,
   briefSha256: string,
   observations: readonly string[],
+  observationBindings: readonly DesignQualityObservationBinding[],
   browserSha256: string,
   completed: Set<string>,
 ): void {
@@ -211,12 +235,50 @@ function validateLane(
   const designQuality = name === 'blindLane'
     ? assertDesignQualityGreen(item.get('designQuality'), {
       expectedObservationSha256s: observations,
+      expectedObservationBindings: observationBindings,
     })
     : undefined;
   const executions = array(item.get('executionReceipts'), `${name} executions`);
   if (executions.length !== reviewers.length) fail(`${name} execution quorum is incomplete`);
-  const observed = executions.map((value) => execution(root, fs, invocation, name, projectMode, benchmarkRequired, value, { routeSha256, buildSha256, briefSha256, isolation: isolationSha256, observations, reviewers, verdicts: item.get('verdicts'), floors: item.get('criticalFloors'), ...(designQuality === undefined ? {} : { designQuality }), browserSha256 }, completed));
-  if (new Set(observed).size !== reviewers.length) fail(`${name} reviewers are not covered exactly once`);
+  const observed = executions.map((value) => execution(root, fs, invocation, name, projectMode, benchmarkRequired, value, { routeSha256, buildSha256, briefSha256, isolation: isolationSha256, observations, observationBindings, reviewers, browserSha256 }, completed));
+  if (new Set(observed.map(({ reviewer }) => reviewer)).size !== reviewers.length) fail(`${name} reviewers are not covered exactly once`);
+  const configurations = new Set(observed.map(({ configurationSha256 }) => configurationSha256));
+  const evidenceSha256s = new Set(observed.map(({ evidenceSha256 }) => evidenceSha256));
+  const sharedNativeBlind = designQuality !== undefined
+    && configurations.size === 1 && evidenceSha256s.size === 1;
+  const exactLegacyBlind = designQuality !== undefined
+    && configurations.size === observed.length
+    && new Set(observed.map(({ verdictClaim }) => verdictClaim)).size === 1
+    && new Set(observed.map(({ floorClaim }) => floorClaim)).size === 1
+    && new Set(observed.map(({ designQuality: quality }) =>
+      canonicalRouteJson(quality))).size === 1;
+  const originalNonVisual = designQuality === undefined
+    && configurations.size === observed.length;
+  if (!sharedNativeBlind && !exactLegacyBlind && !originalNonVisual) {
+    fail(`${name} executions do not satisfy native or exact legacy quorum isolation`);
+  }
+  if (exactLegacyBlind || originalNonVisual) {
+    for (const configuration of configurations) {
+      const identity = `configuration:${configuration}`;
+      if (completed.has(identity)) fail('legacy reviewer configurations are reused');
+      completed.add(identity);
+    }
+  }
+  const aggregateFloors = Object.fromEntries(contract.floors.map((dimension) => [
+    dimension,
+    Math.min(...observed.map(({ floors }) => floors[dimension]!)),
+  ]));
+  if (canonicalRouteJson(aggregateFloors) !== canonicalRouteJson(item.get('criticalFloors'))) {
+    fail(`${name} critical floor aggregate is forged`);
+  }
+  if (designQuality !== undefined) {
+    const assessments = observed.map(({ designQuality: assessment }) =>
+      assessment ?? fail(`${name} execution design quality is missing`));
+    if (canonicalRouteJson(aggregateDesignQualityContracts(assessments))
+      !== canonicalRouteJson(designQuality)) {
+      fail(`${name} design quality aggregate is forged`);
+    }
+  }
 }
 
 export function adaptiveFinalEvidenceV2RootHash(graph: AdaptiveFinalEvidenceV2Graph): string {
@@ -273,7 +335,13 @@ export function validateAdaptiveFinalEvidenceV2GraphFiles(
   });
   let predecessor: string | null = null;
   for (const observation of observations) { if (observation.value.predecessorSha256 !== predecessor) fail('observations fork or break predecessor chain'); predecessor = observation.storageSha256; }
-  validateFinalBrowserObservations(root, fs, observations.map((item) => item.value.evidence));
+  const observationHashes = observations.map((item) => item.storageSha256);
+  const observationBindings = validateFinalBrowserObservations(
+    root,
+    fs,
+    observations.map((item) => item.value.evidence),
+    observationHashes,
+  );
   if (graph.contentFit !== undefined) load(root, fs, graph.contentFit, 'contentFit');
   validateFinalV2ContentFitCurrentness({
     root,
@@ -296,10 +364,10 @@ export function validateAdaptiveFinalEvidenceV2GraphFiles(
     },
     observations: observations.map((item) => item.value),
   });
-  const observationHashes = observations.map((item) => item.storageSha256); const browserSha256 = hash(read(root, fs, '.omd/decision-graph.json', 'decision graph'));
+  const browserSha256 = hash(read(root, fs, '.omd/decision-graph.json', 'decision graph'));
   const completed = new Set<string>();
-  validateLane(root, fs, invocation, 'blindLane', record.projectMode, benchmarkRequired, graph.blindLane, graph.route.record.sha256, activation.buildSha256, activation.briefSha256, observationHashes, browserSha256, completed);
-  validateLane(root, fs, invocation, 'fidelityLane', record.projectMode, benchmarkRequired, graph.fidelityLane, graph.route.record.sha256, activation.buildSha256, activation.briefSha256, observationHashes, browserSha256, completed);
-  validateLane(root, fs, invocation, 'protocolLane', record.projectMode, benchmarkRequired, graph.protocolLane, graph.route.record.sha256, activation.buildSha256, activation.briefSha256, observationHashes, browserSha256, completed);
+  validateLane(root, fs, invocation, 'blindLane', record.projectMode, benchmarkRequired, graph.blindLane, graph.route.record.sha256, activation.buildSha256, activation.briefSha256, observationHashes, observationBindings, browserSha256, completed);
+  validateLane(root, fs, invocation, 'fidelityLane', record.projectMode, benchmarkRequired, graph.fidelityLane, graph.route.record.sha256, activation.buildSha256, activation.briefSha256, observationHashes, observationBindings, browserSha256, completed);
+  validateLane(root, fs, invocation, 'protocolLane', record.projectMode, benchmarkRequired, graph.protocolLane, graph.route.record.sha256, activation.buildSha256, activation.briefSha256, observationHashes, observationBindings, browserSha256, completed);
   return Object.freeze({ graph, rootHash: adaptiveFinalEvidenceV2RootHash(graph), bindings: Object.freeze({ branch: 'adaptive-omission', activation, buildSha256: activation.buildSha256, routeSha256: graph.route.record.sha256, claimPublication: record.sourceContract.evidenceClaims }) });
 }

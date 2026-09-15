@@ -59,7 +59,7 @@ const reviewerAdapters = new Set<ReturnType<typeof createReviewerMcpAdapter>>();
 after(() => {
   for (const adapter of reviewerAdapters) adapter.dispose();
 });
-const reviewerReceipt = (host: ReviewerHost, adapter = createReviewerMcpAdapter()) => {
+const reviewerReceipt = (host: ReviewerHost, adapter = createReviewerMcpAdapter(), evidence: unknown = 'review evidence') => {
   reviewerAdapters.add(adapter);
   return {
     adapter,
@@ -69,7 +69,7 @@ const reviewerReceipt = (host: ReviewerHost, adapter = createReviewerMcpAdapter(
       loadedSkillSha256: V2_BUILD.sourceSkillSha256,
       briefSha256: BRIEF_SHA256,
       browserSha256: 'c'.repeat(64),
-      evidence: 'review evidence',
+      evidence,
     }),
   };
 };
@@ -565,6 +565,73 @@ test('the reviewer MCP proxy rejects expired bindings and never persists recover
   assert.match(((expiredResponse[1]!.error as { message: string }).message), /private host launch capability|unknown, reused/);
   assert.equal(existsSync(reviewerSocketPath(expired.launchId)), false);
   expiredAdapter.dispose();
+});
+test('rendered refinement evidence reaches the reviewer as associated MCP image blocks', async () => {
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNgYGAAAAAEAAH2FzhVAAAAAElFTkSuQmCC', 'base64');
+  const pngBase64 = png.toString('base64');
+  const evidence = {
+    schema: 'adaptive-rendered-refinement-reviewer-transport-v1',
+    evidenceSha256: createHash('sha256').update('inner').digest('hex'),
+    evidence: {
+      variants: ['variant-1111111111111111', 'variant-2222222222222222'].map((alias) => ({
+        alias,
+        renders: [{ viewport: 'desktop', width: 1280, height: 900, outcomeRef: 'must-have:0', sha256: createHash('sha256').update(png).digest('hex'), pngBase64 }],
+      })),
+    },
+    outputContract: { allowedWinnerAliases: ['tie', 'variant-1111111111111111', 'variant-2222222222222222'] },
+  };
+  const adapter = createReviewerMcpAdapter();
+  reviewerAdapters.add(adapter);
+  const { receipt } = reviewerReceipt('codex', adapter, Buffer.from(JSON.stringify(evidence)));
+  const loadedSkillReceipt = observeCodexLoadedSkill(V2_BUILD, V2_LOADED_SKILL_BYTES);
+  adapter.launchBundle({
+    loadedSkillReceipt: adapter.observeLoadedSkill('codex', loadedSkillReceipt, V2_BUILD.sourceSkillSha256),
+    reviewerLaunchReceipt: receipt,
+  });
+  const transcript = await reviewerMcpTranscript(receipt, [MCP_INITIALIZE, MCP_INITIALIZED, evidenceToolCall(3)]);
+  assert.ok('result' in transcript[1]!, JSON.stringify(transcript[1]));
+  const result = transcript[1]!.result as { content: Array<Record<string, unknown>>; structuredContent: Record<string, unknown> };
+  const images = result.content.filter(({ type }) => type === 'image');
+  assert.equal(images.length, 2);
+  assert.ok(images.every(({ data, mimeType }) => data === pngBase64 && mimeType === 'image/png'));
+  assert.equal(JSON.stringify(result.structuredContent).includes(pngBase64), false);
+  assert.equal(result.content.filter(({ type }) => type === 'text').some(({ text }) => String(text).includes('variant-1111111111111111')), true);
+  assert.equal(result.content.filter(({ type }) => type === 'text').some(({ text }) => String(text).includes('variant-2222222222222222')), true);
+});
+test('final render evidence reaches the reviewer as source-free associated MCP image blocks', async () => {
+  const pngBase64 = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNgYGAAAAAEAAH2FzhVAAAAAElFTkSuQmCC', 'base64').toString('base64');
+  const candidateAlias = 'candidate-1111111111111111';
+  const evidence = {
+    schema: 'adaptive-final-render-reviewer-transport-v1',
+    evidenceSha256: createHash('sha256').update('final-inner').digest('hex'),
+    evidence: {
+      candidateAlias,
+      context: { taskOutcome: 'complete the task' },
+      observationProjection: { schema: 'design-quality-observation-projection-v1', observationSha256s: ['a'.repeat(64)], observations: [] },
+      renders: [{
+        observationSha256: 'a'.repeat(64), browserObservationSha256: 'b'.repeat(64),
+        captureSha256: 'c'.repeat(64), viewport: 'desktop', state: 'ready', width: 1280,
+        height: 900, pngBase64,
+      }],
+    },
+    outputContract: { schema: 'adaptive-final-render-reviewer-handback-v1' },
+  };
+  const adapter = createReviewerMcpAdapter();
+  reviewerAdapters.add(adapter);
+  const { receipt } = reviewerReceipt('codex', adapter, Buffer.from(JSON.stringify(evidence)));
+  const loadedSkillReceipt = observeCodexLoadedSkill(V2_BUILD, V2_LOADED_SKILL_BYTES);
+  adapter.launchBundle({
+    loadedSkillReceipt: adapter.observeLoadedSkill('codex', loadedSkillReceipt, V2_BUILD.sourceSkillSha256),
+    reviewerLaunchReceipt: receipt,
+  });
+  const transcript = await reviewerMcpTranscript(receipt, [MCP_INITIALIZE, MCP_INITIALIZED, evidenceToolCall(3)]);
+  assert.ok('result' in transcript[1]!, JSON.stringify(transcript[1]));
+  const result = transcript[1]!.result as { content: Array<Record<string, unknown>>; structuredContent: Record<string, unknown> };
+  const images = result.content.filter(({ type }) => type === 'image');
+  assert.deepEqual(images, [{ type: 'image', data: pngBase64, mimeType: 'image/png' }]);
+  assert.equal(JSON.stringify(result.structuredContent).includes(pngBase64), false);
+  assert.equal(JSON.stringify(result.structuredContent).includes(candidateAlias), true);
+  assert.equal(JSON.stringify(result.structuredContent).includes('path'), false);
 });
 test('the reviewer proxy rejects a mismatched emitted configuration identity', async () => {
   const { adapter, receipt } = reviewerReceipt('codex');

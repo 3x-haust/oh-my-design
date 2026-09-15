@@ -101,6 +101,32 @@ test('an adaptive route preserves the selected model stage order instead of the 
   assert.equal(state.current, 'frame');
 });
 
+test('adaptive stage require follows producer dependencies, not route order, for parallel reference acquisition', () => {
+  const parallel = project();
+  const medical = JSON.parse(readFileSync(fileURLToPath(
+    new URL('fixtures/adaptive-flow/medical-new-product.json', import.meta.url),
+  ), 'utf8'));
+  const parallelInvocation = publishTestAdaptiveRoute(parallel, medical);
+  write(parallel, '.omd/frame.md', '# frame');
+  const copy = requireStage(parallel, PACK, 'copy', parallelInvocation);
+  assert.deepEqual(copy.missingArtifacts, [], 'same-wave Writer must not wait for Scout merely because Scout is listed first');
+
+  const missingFrame = project();
+  const missingFrameInvocation = publishTestAdaptiveRoute(missingFrame, medical);
+  const blockedCopy = requireStage(missingFrame, PACK, 'copy', missingFrameInvocation);
+  assert.deepEqual(blockedCopy.missingArtifacts, ['.omd/frame.md'], 'greenfield Copy must wait for the frame-owned reality ledger');
+  assert.equal(blockedCopy.missingArtifacts.includes('.omd/scout.md'), false, 'the same-wave Scout remains independent');
+
+  const dependent = project();
+  const synth = JSON.parse(readFileSync(fileURLToPath(
+    new URL('fixtures/adaptive-flow/synth-marketing.json', import.meta.url),
+  ), 'utf8'));
+  const dependentInvocation = publishTestAdaptiveRoute(dependent, synth);
+  const typeProof = requireStage(dependent, PACK, 'type-proof', dependentInvocation);
+  assert.ok(typeProof.missingArtifacts.includes('.omd/copy-deck.md'), 'Type proof still waits for its Copy producer');
+  assert.ok(typeProof.missingArtifacts.includes('.omd/scout.md'), 'transitive reference producers remain blocking for Copy');
+});
+
 test('run state names the current stage and its blocking contracts after a partial run', () => {
   const dir = project();
   for (const [relative, body] of [

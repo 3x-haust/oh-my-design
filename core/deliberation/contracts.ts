@@ -4,6 +4,8 @@
 // facts another role can verify: the question, real alternatives, selected answer, evidence,
 // constraints, rejected alternatives, downstream effects, and observable trade-offs.
 
+import { hasAssemblyPayload, hasFalsifierAssemblyPayload } from '../ref/board-sanitization.ts';
+
 export const DECISION_GRAPH_SCHEMA = 'decision-graph-v1' as const;
 export const DELIBERATION_SCHEMA = 'design-deliberation-v1' as const;
 export const OBSERVATION_SCHEMA = 'visual-observation-v1' as const;
@@ -99,6 +101,11 @@ export type AcquisitionZoneV2 = AcquisitionZone & {
   readonly requiredState: string;
   readonly viewports: readonly { readonly width: number; readonly height: number }[];
   readonly falsifier: string;
+  /** Omission retains measured anatomy. Framer may explicitly select a static appearance obligation. */
+  readonly evidenceRequirement?: {
+    readonly kind: 'measured-component' | 'visible-appearance';
+    readonly reason: string;
+  };
 };
 export type AcquisitionPlanV2 = {
   readonly schema: typeof ACQUISITION_PLAN_V2_SCHEMA;
@@ -254,6 +261,7 @@ export function validateAcquisitionPlan(value: unknown): { readonly value?: Acqu
     const zoneKeys = isV2
       ? ['axes', 'decisionId', 'falsifier', 'id', 'job', 'kind', 'question', 'required', 'requiredState', 'viewports']
       : ['id', 'job', 'kind', 'required'];
+    if (isV2 && record(z) && 'evidenceRequirement' in z) zoneKeys.push('evidenceRequirement');
     if (!record(z) || !exact(z, zoneKeys) || !slug(z.id) || !['section', 'region', 'state'].includes(z.kind as string) || !text(z.job) || typeof z.required !== 'boolean') {
       finding(out, 'ACQUISITION-ZONE-INVALID', path, `zone does not match the closed ${value.schema} shape`);
       continue;
@@ -261,6 +269,17 @@ export function validateAcquisitionPlan(value: unknown): { readonly value?: Acqu
     if (ids.has(z.id)) finding(out, 'ACQUISITION-ZONE-DUPLICATE', `${path}.id`, `duplicate zone ${z.id}`);
     ids.add(z.id);
     if (!isV2) continue;
+    if ('evidenceRequirement' in z) {
+      const evidence = z.evidenceRequirement;
+      if (!record(evidence) || !exact(evidence, ['kind', 'reason'])
+        || !['measured-component', 'visible-appearance'].includes(evidence.kind as string)
+        || !text(evidence.reason) || hasAssemblyPayload(evidence.reason)) {
+        finding(out, 'ACQUISITION-EVIDENCE-REQUIREMENT', `${path}.evidenceRequirement`, 'expected a closed evidence kind and non-empty source-free reason');
+      } else if (evidence.kind === 'visible-appearance' && (!Array.isArray(z.axes)
+        || z.axes.some(axis => !['structure', 'proportion', 'density', 'rhythm'].includes(axis as string)))) {
+        finding(out, 'ACQUISITION-APPEARANCE-AXIS', `${path}.axes`, 'visible appearance supports static visual axes only; motion and nonvisual claims need separate obligations');
+      }
+    }
     if (!slug(z.decisionId)) finding(out, 'ACQUISITION-DECISION-ID', `${path}.decisionId`, 'decisionId must be a lowercase kebab slug');
     else if (decisionIds.has(z.decisionId)) finding(out, 'ACQUISITION-DECISION-DUPLICATE', `${path}.decisionId`, `duplicate decisionId ${z.decisionId}`);
     else decisionIds.add(z.decisionId);
@@ -269,12 +288,14 @@ export function validateAcquisitionPlan(value: unknown): { readonly value?: Acqu
       finding(out, 'ACQUISITION-AXES', `${path}.axes`, `axes must be unique values from ${REFERENCE_INFLUENCE_AXIS_VALUES.join('|')}`);
     }
     if (!text(z.requiredState)) finding(out, 'ACQUISITION-STATE', `${path}.requiredState`, 'requiredState must name the captured component state');
+    else if (hasAssemblyPayload(z.requiredState)) finding(out, 'ACQUISITION-STATE-PAYLOAD', `${path}.requiredState`, 'requiredState must be source-free for the downstream binding; keep exact source identifiers in the Scout evidence, not this condition');
     if (!Array.isArray(z.viewports) || z.viewports.length === 0 || z.viewports.some((viewport) => !record(viewport) || !exact(viewport, ['height', 'width']) || !Number.isSafeInteger(viewport.width) || !Number.isSafeInteger(viewport.height) || (viewport.width as number) < 1 || (viewport.height as number) < 1)) {
       finding(out, 'ACQUISITION-VIEWPORTS', `${path}.viewports`, 'viewports must contain unique positive integer width/height pairs');
     } else if (new Set(z.viewports.map((viewport) => `${(viewport as { width: number }).width}x${(viewport as { height: number }).height}`)).size !== z.viewports.length) {
       finding(out, 'ACQUISITION-VIEWPORT-DUPLICATE', `${path}.viewports`, 'viewports must not contain duplicates');
     }
     if (!text(z.falsifier)) finding(out, 'ACQUISITION-FALSIFIER', `${path}.falsifier`, 'falsifier must name an observable failure');
+    else if (hasFalsifierAssemblyPayload(z.falsifier)) finding(out, 'ACQUISITION-FALSIFIER-PAYLOAD', `${path}.falsifier`, 'falsifier must be source-free for the downstream binding; keep exact product values in the facts and functional requirements, and express their visible failure here');
   }
   if (!value.zones.some((z) => record(z) && z.required === true)) finding(out, 'ACQUISITION-NO-REQUIRED-ZONES', 'zones', 'at least one zone must require reference evidence');
   return out.length === 0 ? { value: value as AcquisitionPlan, findings: out } : { findings: out };

@@ -90,6 +90,7 @@ export type AdaptiveWorkflowPlan = Readonly<{
 export type AdaptiveWorkflowPlanRouteContext = Readonly<{
   routeRecord: AdaptiveRouteRecord;
   routeAuthorityBytes: Uint8Array;
+  authority?: Readonly<{ root: string; invocation: import('../runtime/invocation.ts').ProjectRunInvocation }>;
 }>;
 
 export type AdaptiveWorkflowInvestigationCitation = Readonly<{
@@ -370,7 +371,7 @@ function authorityValue(bytes: Uint8Array, record: AdaptiveRouteRecord, routeSha
 function routeBinding(context: AdaptiveWorkflowPlanRouteContext): AdaptiveWorkflowRouteBinding {
   let record: AdaptiveRouteRecord;
   try {
-    record = parseRouteRecord(context.routeRecord);
+    record = parseRouteRecord(context.routeRecord, context.authority);
   } catch (error) {
     if (error instanceof Error && error.name === 'AdaptiveRouteError') return fail('WORKFLOW_PLAN_ROUTE_MISMATCH');
     throw error;

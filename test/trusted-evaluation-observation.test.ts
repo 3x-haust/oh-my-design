@@ -10,6 +10,7 @@ import { writeTrustedEvaluationObservation } from '../core/runtime/trusted-evalu
 import { parseTrustedLifecycleManifest } from '../core/runtime/trusted-evaluation-contract.ts';
 import { observationV2Sha256, readCurrentObservationV2 } from '../core/runtime/observation.ts';
 import { createTestProjectRunInvocation, createTestProjectWriteAdapter } from './helpers/project-write.ts';
+import { writeBrowserDecisionFixture } from './helpers/browser-observation-decision-links.ts';
 
 const hash = (value: Buffer | string): string => createHash('sha256').update(value).digest('hex');
 
@@ -17,6 +18,8 @@ async function fixture() {
   const root = mkdtempSync(join(tmpdir(), 'omd-trusted-observation-'));
   const app = join(root, 'index.html');
   mkdirSync(join(root, '.omd'));
+  writeBrowserDecisionFixture(root);
+  const decisionGraphSha256 = hash(readFileSync(join(root, '.omd', 'decision-graph.json')));
   writeFileSync(app, [
     '<button id="submit">Submit</button>',
     '<p role="status" hidden>Order submitted</p>',
@@ -49,7 +52,7 @@ async function fixture() {
       activationBuildSha256: invocation.current.buildSha256,
       productionRevisionSha256: servedProjectTreeSha256(root, 'index.html'),
       productionPath: 'index.html',
-      decisionGraphSha256: 'e'.repeat(64),
+      decisionGraphSha256,
       requiredOutcomeRefs: ['outcome:a'],
       confirmedClaimRefs: ['claim:a'],
       decisionRefs: ['decision:a'],
@@ -162,6 +165,26 @@ test('forged swapped capture and stale production fail before observation pointe
       productionArtifactPath: 'index.html',
     }), /STALE_TRUSTED_PRODUCTION_REVISION|STALE_TRUSTED_BROWSER_CAPTURE/);
     assert.equal(existsSync(pointer), false);
+  } finally {
+    rmSync(value.root, { recursive: true, force: true });
+  }
+});
+
+test('decision graph mutation cannot poison the retained graph address or publish an observation', async () => {
+  const value = await fixture();
+  try {
+    const expectedSnapshot = join(
+      value.root, '.omd', 'decision-graphs', `sha256-${value.evaluation.receipt.decisionGraphSha256}.json`,
+    );
+    writeFileSync(join(value.root, '.omd', 'decision-graph.json'), '{"schema":"decision-graph-v1","decisions":[]}\n');
+    assert.throws(() => writeTrustedEvaluationObservation({
+      ...value,
+      currentArtifactPath: '.omd/build.json',
+      productionArtifactPath: 'index.html',
+      requireDecisionGraph: true,
+    }), /STALE_TRUSTED_BROWSER_DECISION_GRAPH/);
+    assert.equal(existsSync(expectedSnapshot), false);
+    assert.equal(readCurrentObservationV2(value.root), undefined);
   } finally {
     rmSync(value.root, { recursive: true, force: true });
   }

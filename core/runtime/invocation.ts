@@ -259,6 +259,24 @@ export function requireWorkflowProductionSliceAuthorization(
   return requirePurposeBoundPayload(invocation, projectRoot, 'workflow-production-slice', sliceBytes);
 }
 
+const consumedProductionOwnerRepairPayloads = new WeakMap<object, Set<string>>();
+export function requireProductionOwnerRepairAuthorization(
+  invocation: ProjectRunInvocation,
+  projectRoot: string,
+  receiptBytes: Uint8Array,
+  consume = false,
+): ActivationContext {
+  const activation = requirePurposeBoundPayload(invocation, projectRoot, 'production-owner-repair', receiptBytes);
+  if (consume) {
+    const key = `${projectRoot}:${Buffer.from(receiptBytes).toString('base64')}`;
+    const consumed = consumedProductionOwnerRepairPayloads.get(invocation) ?? new Set<string>();
+    if (consumed.has(key)) throw new InvocationValidationError('production owner repair receipt has already been consumed');
+    consumed.add(key);
+    consumedProductionOwnerRepairPayloads.set(invocation, consumed);
+  }
+  return activation;
+}
+
 export function requireFinalEvidenceManifestAuthorization(
   invocation: ProjectRunInvocation,
   projectRoot: string,

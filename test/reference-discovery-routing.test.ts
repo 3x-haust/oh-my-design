@@ -23,7 +23,7 @@ function assertRoutingError(run: () => unknown, code: ReferenceDiscoveryRoutingE
     assert.ok(error instanceof ReferenceDiscoveryRoutingError);
     assert.equal(error.name, 'ReferenceDiscoveryRoutingError');
     assert.equal(error.code, code);
-    assert.equal(error.message, code);
+    assert.equal(error.message.split(':')[0], code);
     return true;
   });
 }
@@ -84,6 +84,23 @@ test('a new marketing surface discovers references without impersonating a produ
     routed.recommendation.reason,
     'A new marketing surface needs reference discovery before its direction is established.',
   );
+});
+
+test('selected discovery diagnostics explain explicit nulls without relaxing the contract', () => {
+  const selected = fixtureWith('new-product', 'taskNeed', 'new-marketing');
+  for (const key of ['existingEvidenceUse', 'skipReason']) {
+    const narrated = { ...selected, [key]: 'Discovery is selected; no skip is requested.' };
+    assert.throws(() => routeReferenceDiscovery(narrated), (error: unknown) => {
+      assert.ok(error instanceof ReferenceDiscoveryRoutingError);
+      assert.equal(error.code, 'CONTRADICTORY_REFERENCE_DISCOVERY_STATE');
+      assert.match(error.message, /both be explicit null/);
+      return true;
+    });
+    const missing = { ...selected };
+    Reflect.deleteProperty(missing, key);
+    assert.throws(() => routeReferenceDiscovery(missing), /required key|Required keys/);
+  }
+  assert.equal(routeReferenceDiscovery(selected).decision, 'discover');
 });
 
 test('routing returns a detached immutable snapshot of mutable input', () => {

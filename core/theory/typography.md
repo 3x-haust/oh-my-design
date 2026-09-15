@@ -33,6 +33,10 @@ One family can cover both roles. Two families can be justified when their visibl
 creates a useful distinction. Start with one or two families and add another only when a
 specimen proves the existing set cannot express a required role.
 
+**[type-composition-boundary]** Keep a tested treatment distinct from its composed role assignment. A neutral specimen proves the supplied string at its recorded family, weight, size, measure, and viewport; it does not prove that this treatment should dominate the finished page. A semantic heading level does not select the largest rung. When the intended focal anchor is another content object, prove any needed alternative for the competing heading from real copy and record its scope, rather than prescribing two dominant treatments. This is not permission to shrink every heading: a heading may itself be the intended anchor, and an explicit user size or emphasis lock remains binding. If no competing assignment is unresolved, one proved treatment is enough.
+
+The proof handoff distinguishes exact selected assignments, tested treatment options, and unresolved assignments. An option is usable only for the exact text and conditions actually proved; a size somewhere in the token ladder is not proof for a different string or measure. Composer selects only within that evidence, then records the content-to-treatment mapping and attention relationship in its existing Focal hierarchy section. A missing option returns to typography proof before dependent candidates are made. No new type value or approval is inferred from a passing specimen, token check, or composition fingerprint. Final dominance is judged on the composed fixed-viewport renders, not the specimen alone.
+
 ## Hierarchy is a content decision, not a filled template
 
 A role map defines available treatments; it does not require every screen or section to fill

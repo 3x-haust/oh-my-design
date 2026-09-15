@@ -4,6 +4,10 @@ export const TASK_FLOW_BENCHMARK_SCHEMA =
   'task-flow-benchmark-v1' as const;
 export const TASK_FLOW_BENCHMARK_PROJECTION_SCHEMA =
   'task-flow-benchmark-projection-v1' as const;
+// Editorial reading, section navigation and saved-reading flows retain their
+// reading grammar while satisfying a route-selected task-flow benchmark.
+export const TASK_FLOW_BENCHMARK_SURFACES = ['product', 'mixed', 'editorial'] as const;
+type BenchmarkSurface = typeof TASK_FLOW_BENCHMARK_SURFACES[number];
 export const TASK_FLOW_BENCHMARK_KEYS = [
   'schema',
   'surface',
@@ -66,7 +70,7 @@ type BenchmarkCounterexample = Readonly<{
 
 export type TaskFlowBenchmark = Readonly<{
   schema: typeof TASK_FLOW_BENCHMARK_SCHEMA;
-  surface: 'product' | 'mixed';
+  surface: BenchmarkSurface;
   domain: string;
   sourceContractSha256: string;
   sources: readonly BenchmarkSource[];
@@ -78,7 +82,7 @@ export type TaskFlowBenchmarkProjection = Readonly<{
   schema: typeof TASK_FLOW_BENCHMARK_PROJECTION_SCHEMA;
   benchmarkSha256: string;
   sourceContractSha256: string;
-  surface: 'product' | 'mixed';
+  surface: BenchmarkSurface;
   domain: string;
   taskSteps: readonly Omit<BenchmarkTaskStep, 'evidenceSourceIds'>[];
   counterexamples: readonly Omit<
@@ -218,7 +222,7 @@ export function parseTaskFlowBenchmark(
   if (input.schema !== TASK_FLOW_BENCHMARK_SCHEMA) {
     fail('TASK_FLOW_BENCHMARK_SCHEMA');
   }
-  if (input.surface !== 'product' && input.surface !== 'mixed') {
+  if (!TASK_FLOW_BENCHMARK_SURFACES.includes(input.surface as BenchmarkSurface)) {
     fail('TASK_FLOW_BENCHMARK_SURFACE');
   }
   const sourceContractSha256 = text(
@@ -278,7 +282,7 @@ export function parseTaskFlowBenchmark(
 
   return {
     schema: TASK_FLOW_BENCHMARK_SCHEMA,
-    surface: input.surface,
+    surface: input.surface as BenchmarkSurface,
     domain: text(input.domain, 'TASK_FLOW_BENCHMARK_DOMAIN'),
     sourceContractSha256,
     sources,
@@ -337,7 +341,7 @@ export function parseTaskFlowBenchmarkProjection(
     && sourceContractSha256 !== options.expectedSourceContractSha256) {
     fail('TASK_FLOW_BENCHMARK_SOURCE_STALE');
   }
-  if (input.surface !== 'product' && input.surface !== 'mixed') {
+  if (!TASK_FLOW_BENCHMARK_SURFACES.includes(input.surface as BenchmarkSurface)) {
     fail('TASK_FLOW_BENCHMARK_SURFACE');
   }
   if (!Array.isArray(input.taskSteps) || input.taskSteps.length < 2) {
@@ -389,7 +393,7 @@ export function parseTaskFlowBenchmarkProjection(
     schema: TASK_FLOW_BENCHMARK_PROJECTION_SCHEMA,
     benchmarkSha256,
     sourceContractSha256,
-    surface: input.surface,
+    surface: input.surface as BenchmarkSurface,
     domain: text(input.domain, 'TASK_FLOW_BENCHMARK_DOMAIN'),
     taskSteps: Object.freeze(taskSteps),
     counterexamples: Object.freeze(counterexamples),
@@ -416,4 +420,3 @@ export function projectTaskFlowBenchmark(
     })),
   };
 }
-

@@ -166,7 +166,6 @@ export function exceedsCanonicalBeatBudget(
   return beatIds.length > beatBudgetForRegister(register)
     && currentUserBeatExceptionReceiptSha256 === NO_CURRENT_USER_BEAT_EXCEPTION_RECEIPT_SHA256;
 }
-const FORBIDDEN_NONE_RATIONALE = /\b(category|anti-reference|restraint|capability|fear of slop)\b|\bgeneric performance\b/i;
 const DECISION_KEYS = [
   'schemaVersion', 'activationSha256', 'intentSha256', 'boardSha256', 'preSelectionSha256', 'route', 'source',
   'consideredAlternatives', 'alternativesSha256', 'selectedRegister', 'motionDecision', 'conceptRole',
@@ -410,7 +409,6 @@ function validateRecipeReceipt(receipt: ApprovedMotionRecipeReceipt | boolean, d
 
 
 function validateEligibility(decision: ArtDirectionDecision, references: readonly ArtDirectionReference[], eligibility: ArtDirectionEligibility, resolution: MotionResolutionProjection): void {
-  const selected = byRegister(decision.consideredAlternatives, decision.selectedRegister);
   if (new Set(decision.selectedStaticReferenceSlotIds).size !== decision.selectedStaticReferenceSlotIds.length
     || new Set(decision.selectedMotionReferenceSlotIds).size !== decision.selectedMotionReferenceSlotIds.length
     || new Set([...decision.selectedStaticReferenceSlotIds, ...decision.selectedMotionReferenceSlotIds]).size
@@ -452,15 +450,17 @@ function validateEligibility(decision: ArtDirectionDecision, references: readonl
     throw new ArtDirectionValidationError(`none ${decision.selectedRegister} requires ${staticMinimum[decision.selectedRegister]} distinct lawful used static references`);
   }
   if (!eligibility.fallbackAttempted || !/\b(css|svg|static|reduced.motion)\b/i.test(decision.fallbackPath)) throw new ArtDirectionValidationError('none requires a tried lawful CSS/SVG/static or reduced-motion fallback');
-  if (!/\b(template|departure|break)\b/i.test(selected.macroCompositionHypothesis)) throw new ArtDirectionValidationError('none requires a declared template-breaking macro departure');
-  for (const rejected of decision.rejectedAlternatives) {
-    if (FORBIDDEN_NONE_RATIONALE.test(rejected.reason)) throw new ArtDirectionValidationError('none rejection reason uses a forbidden generic rationale');
-  }
+  // The exact alternative schema already requires a nonempty macro hypothesis. English words
+  // such as "template" or "break" establish neither a departure nor its visible quality, and
+  // rejecting their absence invalidates an otherwise unchanged Korean/English review packet.
+  // The independent rendered reviews own that judgment; their evidence and floors still apply.
+  // A nonwinning static candidate's rejection is not a rationale for omitting motion. Nor can
+  // an English substring decide whether an evidence-specific motion rationale is generic.
+  // Keep that contextual policy in the review contract, not an error-producing word blacklist.
   if (decision.selectedMotionReferenceSlotIds.length !== 0) throw new ArtDirectionValidationError('none cannot retain a selected motion slot');
   for (const rejection of resolution.slots) {
-    if (rejection.obligationDisposition !== 'rejected' || FORBIDDEN_NONE_RATIONALE.test(rejection.obligationReason)) {
-      throw new ArtDirectionValidationError('none motion rejection must come from the authorized resolution with a specific rationale');
-    }
+    if (rejection.obligationDisposition !== 'rejected') throw new ArtDirectionValidationError('none motion slots must be rejected by the authorized resolution');
+    requireText(rejection.obligationReason, 'none motion rejection reason');
   }
 }
 function validateMotionResolution(resolution: MotionResolutionProjection, input: NonAuthoritativeResolveMarketingArtDirectionInput, motionDecision: MotionDecision): { readonly digest: string; readonly settledSelectionSha256: string; readonly projection: MotionResolutionProjection } {

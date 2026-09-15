@@ -24,6 +24,46 @@ function writeFile(dir: string, rel: string, content: string): string {
 
 // ── text-slop ──────────────────────────────────────────────────────────────
 
+test('public token skeletons fill and validate without internal key discovery', async () => {
+  const { TOKEN_COMMIT_KEYS, RESPONSIVE_TOKEN_COMMIT_KEYS } = await import('../core/tokens/contract.ts');
+  for (const [name, keys] of [['token-commit', TOKEN_COMMIT_KEYS], ['responsive-token-commit', RESPONSIVE_TOKEN_COMMIT_KEYS]] as const) {
+    const dir = project();
+    const printed = run(['schema', name, '--json'], dir);
+    assert.equal(printed.status, 0, printed.stderr);
+    const publicInput = JSON.parse(printed.stdout);
+    assert.deepEqual(Object.keys(publicInput.skeleton).sort(), [...keys].sort());
+    assert.equal(publicInput.path, '.omd/tokens.json');
+    assert.match(publicInput.constraints.join(' '), /never publishes or copies/);
+    const filled = { ...publicInput.skeleton, register: 'marketing', typeScale: [14, 18, 24, 32, 48, 72],
+      spacingScale: [4, 8, 16, 32], colorRoles: { accent: '#f00' }, fontRoles: { text: 'sans-serif' },
+      ...(name === 'responsive-token-commit' ? { responsiveTypeScales: [{ maxWidth: 640, typeScale: [14, 18, 24, 36, 42] }] } : {}),
+    };
+    writeFile(dir, publicInput.path, JSON.stringify(filled));
+    const checked = run(['tokens', 'check', '--json'], dir);
+    assert.equal(checked.status, 0, checked.stderr + checked.stdout);
+    assert.equal(JSON.parse(checked.stdout).ok, true);
+  }
+});
+
+test('tokens CLI binds responsive drift to the real browser viewport', () => {
+  const dir = project();
+  writeFile(dir, '.omd/tokens.json', JSON.stringify({ schema: 'token-commit-v2', register: 'marketing',
+    typeScale: [14, 18, 24, 32, 48, 72], spacingScale: [4, 8, 16, 32],
+    colorRoles: { accent: '#f00' }, fontRoles: { text: 'sans-serif' },
+    responsiveTypeScales: [{ maxWidth: 640, typeScale: [14, 18, 24, 36, 42] }],
+  }));
+  const page = writeFile(dir, 'responsive.html', '<!doctype html><style>*{margin:0;padding:0}p{font-size:72px}@media(max-width:640px){p{font-size:42px}}</style><p>Actual responsive type</p>');
+  for (const viewport of ['640x844', '641x900', '1280x900']) {
+    const checked = run(['tokens', 'check', '--page', page, '--viewport', viewport, '--json'], dir);
+    assert.equal(checked.status, 0, checked.stderr + checked.stdout);
+    assert.equal(JSON.parse(checked.stdout).ok, true);
+  }
+  const wrongPage = writeFile(dir, 'wrong.html', '<!doctype html><style>*{margin:0;padding:0}p{font-size:72px}</style><p>Desktop size on mobile</p>');
+  const failed = run(['tokens', 'check', '--page', wrongPage, '--viewport', '390x844', '--json'], dir);
+  assert.equal(failed.status, 1, failed.stderr + failed.stdout);
+  assert.match(JSON.parse(failed.stdout).findings[0].message, /type sizes 72 are not on/);
+});
+
 test('text-slop flags AI-cliche phrases and stays advisory (exit 0)', () => {
   const dir = project();
   const file = writeFile(dir, 'copy.md', 'We unlock the power of a fast-paced world to revolutionize your day.');
@@ -144,12 +184,27 @@ test('printed input skeletons carry exactly the keys their validators accept', a
   assert.match(directionHelp, /both approvedMotionRecipe and approvedMotionRecipeReceipt/);
   assert.match(directionHelp, /exact receipt-bound evaluatorAssessment and evaluatorResult payload serialization/);
   assert.match(directionHelp, /not permission to reconstruct unseen judgments/);
-  assert.equal(INPUT_SKELETONS.length, 18);
+  assert.equal(INPUT_SKELETONS.length, 25);
+  const featureMeasurements = inputSkeleton('reference-feature-measurements');
+  assert.deepEqual(featureMeasurements.keys, ['id', 'quantity', 'sourceNodes', 'targetAnchors']);
+  assert.ok(Array.isArray(featureMeasurements.skeleton));
+  const { parseReferenceFeatureMeasurements } = await import('../core/ref/feature-measurement.ts');
+  const featureExample = { ...(featureMeasurements.skeleton as Record<string, unknown>[])[0], sourceNodes: [1, 2] };
+  assert.deepEqual(parseReferenceFeatureMeasurements([featureExample], 'proportion'), [featureExample]);
+  assert.match(featureMeasurements.constraints!.join(' '), /missing, duplicate, hidden, out-of-scope or unmeasurable/);
+  assert.match(featureMeasurements.constraints!.join(' '), /no score is a perceptual percentage or semantic-transfer proof/);
   const lifecycle = inputSkeleton('trusted-lifecycle-manifest');
   assert.deepEqual(
     Object.keys(lifecycle.skeleton as object).sort(),
     ['entryPath', 'entrySurface', 'schema', 'scripts'],
   );
+  const lifecycleHelp = lifecycle.constraints?.join(' ') ?? '';
+  assert.match(lifecycleHelp, /lifecycle plan` is benchmark-only/);
+  assert.match(lifecycleHelp, /omit entrySurface entirely/);
+  assert.match(lifecycleHelp, /canonical short outcomeRef/);
+  assert.match(lifecycleHelp, /mustHave, mustNotHave, completionEvidence order/);
+  assert.match(lifecycleHelp, /do not substitute page text/);
+  assert.match(lifecycleHelp, /silently remove them from the task contract/);
 
   const locale = inputSkeleton('locale-contract');
   const { LOCALE_CONTRACT_KEYS } = await import('../core/locale/contract.ts');
@@ -190,6 +245,9 @@ test('printed input skeletons carry exactly the keys their validators accept', a
     'workObjectAnchorText', 'nextActionName', 'beforeText', 'afterText', 'outcomeWitnesses',
   ]);
   assert.doesNotMatch(JSON.stringify(entrySurface.skeleton), /selector/i);
+  const finalRenderPacket = inputSkeleton('final-render-reviewer-packet');
+  assert.deepEqual(Object.keys(finalRenderPacket.skeleton as object), ['schema', 'observationSha256s']);
+  assert.match(finalRenderPacket.constraints?.join(' ') ?? '', /anonymous production pixels only/i);
 
   const dir = project();
   const printed = run(['schema', 'depth-input', '--json'], dir);
@@ -200,7 +258,7 @@ test('printed input skeletons carry exactly the keys their validators accept', a
   assert.match(printedBoard.stdout, /every piece grid contains exactly column, span, order/);
   assert.match(printedBoard.stdout, /"grid": \{\s+"column": 1,\s+"span": 12,\s+"order": 0/s);
   const listed = run(['schema', 'list', '--json'], dir);
-  assert.deepEqual(JSON.parse(listed.stdout).map((entry: { name: string }) => entry.name), ['route-input', 'reality-ledger', 'domain-brief', 'depth-input', 'content-grain', 'acquisition-plan', 'reference-board', 'reference-capture-preparation', 'reference-locale-binding', 'task-flow-benchmark', 'art-direction-check', 'locale-contract', 'locale-design-context', 'cultural-design-profile', 'functional-requirements', 'decision-graph', 'entry-surface-contract', 'trusted-lifecycle-manifest']);
+  assert.deepEqual(JSON.parse(listed.stdout).map((entry: { name: string }) => entry.name), ['route-input', 'route-ai-asset', 'reality-ledger', 'domain-brief', 'depth-input', 'content-grain', 'acquisition-plan', 'reference-board', 'reference-image-fragment', 'reference-feature-measurements', 'reference-capture-preparation', 'reference-locale-binding', 'task-flow-benchmark', 'art-direction-check', 'token-commit', 'responsive-token-commit', 'locale-contract', 'locale-design-context', 'cultural-design-profile', 'functional-requirements', 'decision-graph', 'entry-surface-contract', 'final-render-reviewer-packet', 'trusted-lifecycle-manifest', 'design-quality-observation-projection']);
 });
 
 test('reality-ledger schema exposes its closed category vocabulary', async () => {
@@ -219,6 +277,21 @@ test('reality-ledger schema exposes its closed category vocabulary', async () =>
     printed.stdout,
     /subject, brand, operation, person, metric, media, capability/,
   );
+});
+
+test('benchmark help separates its closed flow surface from the category', async () => {
+  const { parseTaskFlowBenchmark } = await import('../core/ref/task-flow-benchmark.ts');
+  const printed = run(['schema', 'task-flow-benchmark', '--json']);
+  assert.equal(printed.status, 0, printed.stderr);
+  const input = JSON.parse(printed.stdout);
+  assert.match(input.constraints.join('\n'), /surface accepts only product, mixed, editorial/);
+  assert.match(input.constraints.join('\n'), /report the contract gap instead of relabeling/);
+  for (const surface of ['product', 'mixed', 'editorial']) {
+    const parsed = parseTaskFlowBenchmark({ ...input.skeleton, surface, domain: 'editorial-reading-and-article-saving' });
+    assert.equal(parsed.surface, surface);
+    assert.equal(parsed.domain, 'editorial-reading-and-article-saving');
+  }
+  assert.throws(() => parseTaskFlowBenchmark({ ...input.skeleton, surface: 'marketing' }), /TASK_FLOW_BENCHMARK_SURFACE/);
 });
 
 test('schema prints a source-bound Content Grain skeleton', () => {

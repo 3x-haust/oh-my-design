@@ -17,6 +17,7 @@ import { readPersistedRoute, type RouteRecord } from '../route/index.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import { checkContentGrain, CONTENT_GRAIN_PATH } from '../content-grain/files.ts';
 import { readFrame, type RealityLedger } from '../frame/index.ts';
+import { buildReferenceDiscoveryPlan, type ReferenceDiscoveryPlan } from '../ref/discovery-plan.ts';
 import {
   CANDIDATE_SELECTION_POINTER_PATH,
   resolveCandidateSelection,
@@ -31,6 +32,8 @@ import {
   referenceLocaleBindingSha256,
   validateReferenceLocaleBindingCurrentness,
 } from '../ref/reference-locale-binding.ts';
+import { readSelectedReferenceHandoff } from '../ref/selected-handoff.ts';
+import type { ReferenceHandoffRole } from '../ref/reference-handoff.ts';
 
 export {
   EVIDENCE_CLAIM_PUBLICATION_SCHEMA,
@@ -97,6 +100,8 @@ export type Brief = {
     readonly status: 'active' | 'no-stable-grain';
     readonly sha256: string;
   } | null;
+  /** Existing route policy only; never infer a candidate mode from absent authority or prose. */
+  readonly designQuality: RouteRecord['behavior']['active']['designQuality'] | null;
   readonly localeDesign: {
     readonly decision: 'mechanics-only' | 'research';
     readonly contextPath: '.omd/locale-design-context.json';
@@ -114,7 +119,20 @@ export type Brief = {
     }>;
   } | null;
   readonly reality: RealityLedger | null;
+  readonly discovery: Readonly<{
+    command: 'omd ref discover-plan --json';
+    lanes: readonly string[];
+    userUrlsRequired: false;
+    motionEvidenceRequired: boolean;
+  }> | null;
   readonly references: readonly BriefReference[];
+  /** Coordinator export command; the raw inventory above is not the role-facing payload. */
+  readonly referenceHandoff: Readonly<{
+    command: string;
+    role: ReferenceHandoffRole;
+    sha256: string;
+    pieces: number;
+  }> | null;
   /** Captures gathered but not printed. `omd ref list` shows them all. */
   readonly referencesOmitted: number;
   readonly contracts: readonly { readonly path: string; readonly delivered: boolean }[];
@@ -335,6 +353,15 @@ export function buildBrief(
   }
 
   const route = readRoute(root, invocation);
+  const qualityStage = stage === 'review' ? 'independent-review' : stage;
+  const designQualityConsumer = (
+    ['art-direction', 'composition', 'candidate-generation', 'production', 'independent-review'] as readonly string[]
+  ).includes(qualityStage);
+  const designQuality = route !== null
+    && designQualityConsumer
+    && (route.strategy.stages as readonly string[]).includes(qualityStage)
+    ? route.behavior.active.designQuality
+    : null;
   const shell: AppShell = detectAppShell(root);
   const routeReferenceLimit = MAX_BRIEF_REFERENCES;
   const gathered = briefReferences(root);
@@ -353,6 +380,29 @@ export function buildBrief(
     })();
 
   const blockers: string[] = [];
+  let referenceHandoff: Brief['referenceHandoff'] = null;
+  const handoffRole: ReferenceHandoffRole | undefined = stage === 'art-direction' ? 'art-direction'
+    : stage === 'composition' || stage === 'candidate-generation' ? 'composer'
+      : stage === 'production' ? 'hand' : undefined;
+  const selectedArtDirection = route === null ? existsSync(join(root, '.omd/art-direction.json'))
+    : route.strategy.stages.includes('art-direction');
+  if (handoffRole !== undefined && (handoffRole === 'art-direction' || selectedArtDirection)
+    && existsSync(join(root, '.omd/reference-pre-selection-v2.json'))) {
+    try {
+      const payload = readSelectedReferenceHandoff(root, handoffRole);
+      referenceHandoff = {
+        command: `omd ref handoff ${handoffRole} --json`, role: handoffRole,
+        sha256: payload.sha256, pieces: payload.pieces.length,
+      };
+    } catch {
+      blockers.push(`selected reference handoff unavailable: omd ref handoff ${handoffRole} --json`);
+    }
+  }
+  let discoveryPlan: ReferenceDiscoveryPlan | null = null;
+  if (route?.references.decision === 'discover' && ['frame', 'acquisition', 'scout', 'reference-board'].includes(stage)) {
+    try { discoveryPlan = buildReferenceDiscoveryPlan(root, route); }
+    catch (error) { blockers.push(error instanceof Error ? error.message : String(error)); }
+  }
   if (route === null) blockers.push('no route: run `omd route classify --input <route-input.json> --activation <host-issued-invocation.json>`');
   if (definition !== undefined) {
     for (const contract of contracts) {
@@ -477,9 +527,17 @@ export function buildBrief(
         : `skip — ${route.references.actual.description}`,
     },
     contentGrain,
+    designQuality,
     localeDesign,
     reality: projectedReality.reality,
+    discovery: discoveryPlan === null ? null : {
+      command: 'omd ref discover-plan --json',
+      lanes: discoveryPlan.lanes.map(lane => lane.id),
+      userUrlsRequired: false,
+      motionEvidenceRequired: discoveryPlan.motionEvidenceRequired,
+    },
     references,
+    referenceHandoff,
     referencesOmitted: gathered.length - references.length,
     contracts,
     schemas: (SCHEMAS[stage] ?? []).map((name) => ({ name, command: `omd schema ${name}` })),

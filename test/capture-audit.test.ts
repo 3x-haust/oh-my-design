@@ -1,6 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { auditCaptureRecords, auditCaptureTimes } from '../core/ref/capture-audit.ts';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { auditCaptureParallelism, auditCaptureRecords, auditCaptureTimes } from '../core/ref/capture-audit.ts';
 
 const NOW = Date.parse('2026-07-21T12:00:00.000Z');
 const iso = (msAgo: number): string => new Date(NOW - msAgo).toISOString();
@@ -67,4 +70,30 @@ test('a small batch does not launder a mostly sequential pass', () => {
     { capturedAt: iso(60_000) },
   ];
   assert.equal(auditCaptureRecords(records, NOW).ok, false);
+});
+
+test('image metadata cannot create a serial-capture finding or conceal real serial captures', context => {
+  const root = mkdtempSync(join(tmpdir(), 'omd-capture-audit-image-'));
+  context.after(() => rmSync(root, { recursive: true, force: true }));
+  const refs = join(root, '.omd', 'refs');
+  mkdirSync(refs, { recursive: true });
+  const save = (id: string, kind: 'component' | 'image', msAgo: number, batch?: string) => writeFileSync(join(refs, `${id}.json`), JSON.stringify({
+    source: `https://fixture.example/${id}`, component: id, kind, capturedAt: iso(msAgo),
+    invariants: null, principles: [], ...(batch === undefined ? {} : { captureBatchId: batch }),
+  }));
+  for (let i = 0; i < 4; i++) save(`batch-${i}`, 'component', 360_000 - i * 60_000, 'batch-real');
+  save('direct', 'component', 120_000);
+  save('image', 'image', 60_000);
+  const batched = auditCaptureParallelism(root, NOW);
+  assert.equal(batched.ok, true);
+  assert.equal(batched.refs, 5, 'metadata is not a browser capture');
+  assert.match(batched.reason, /explicit shared-batch provenance/);
+
+  rmSync(refs, { recursive: true });
+  mkdirSync(refs);
+  for (let i = 0; i < 4; i++) save(`serial-${i}`, 'component', 360_000 - i * 60_000);
+  for (let i = 0; i < 8; i++) save(`image-${i}`, 'image', 10_000 - i * 100);
+  const serial = auditCaptureParallelism(root, NOW);
+  assert.equal(serial.ok, false);
+  assert.equal(serial.refs, 4, 'tight metadata timestamps cannot masquerade as a capture batch');
 });

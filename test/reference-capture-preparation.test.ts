@@ -6,10 +6,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { addRefsBatch, type RefSpec } from '../core/ref/batch.ts';
-import { parseCapturePreparation, type CapturePreparation } from '../core/ref/capture-preparation.ts';
+import { observeCapturePreparation, parseCapturePreparation, type CapturePreparation } from '../core/ref/capture-preparation.ts';
 import { loadRefs, refImagePath } from '../core/ref/store.ts';
 import { capturePageForRef, onPage, withBrowser } from '../core/render/index.ts';
 import { inputSkeleton } from '../core/schema/inputs.ts';
+import { decodePng } from '../core/motion/energy.ts';
 import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
 
 const RULES = new URL('../core/rules/builtin', import.meta.url).pathname;
@@ -19,6 +20,14 @@ const preparation = (): CapturePreparation => ({
   assertions: [{ selector: '#menu', state: 'visible' }],
 });
 const project = () => mkdtempSync(join(tmpdir(), 'omd-capture-preparation-'));
+function bluePixels(path: string): number {
+  const { pixels, channels } = decodePng(readFileSync(path));
+  let count = 0;
+  for (let i = 0; i < pixels.length; i += channels) {
+    if (pixels[i] === 0 && pixels[i + 1] === 0 && pixels[i + 2] === 255) count++;
+  }
+  return count;
+}
 async function fixture(run: (url: string, requests: string[]) => Promise<void>): Promise<void> {
   const requests: string[] = [];
   const server = createServer((request, response) => {
@@ -51,12 +60,68 @@ function runCli(root: string, args: string[]): Promise<{ code: number | null; st
 test('capture preparation schema permits only explicit disclosure clicks and visibility assertions', () => {
   assert.deepEqual(parseCapturePreparation(inputSkeleton('reference-capture-preparation').skeleton), preparation());
   for (const value of [
-    { ...preparation(), script: 'menu.open()' }, { ...preparation(), actions: [] },
+    { ...preparation(), script: 'menu.open()' },
     { ...preparation(), assertions: [] }, { ...preparation(), actions: Array(9).fill(preparation().actions[0]) },
     { ...preparation(), actions: [{ kind: 'press', selector: '#menu-toggle', key: 'Enter' }] },
     { ...preparation(), actions: [{ kind: 'click', selector: '#menu-toggle', script: 'submit()' }] },
     { ...preparation(), assertions: [{ selector: '#menu', state: 'selected' }] },
   ]) assert.throws(() => parseCapturePreparation(value), /reference capture preparation/);
+});
+
+test('visible preparation waits for hydrated content while missing and ambiguous observations fail', async () => {
+  await withBrowser(async browser => {
+    const page = await browser.newPage();
+    try {
+      await page.setContent(`<section id="schedule"><p>Loading schedule</p></section>
+        <script>setTimeout(() => { document.querySelector('#schedule').innerHTML = '<h2 id="class-title">Yoga Flow</h2>'; }, 150)</script>`);
+      const prep: CapturePreparation = { schema: 'reference-capture-preparation-v1', actions: [], assertions: [{ selector: '#class-title', state: 'visible' }] };
+      assert.equal(await page.locator('#class-title').count(), 0, 'the element is initially absent');
+      assert.deepEqual(await observeCapturePreparation(page, prep), [{ selector: '#class-title', state: 'visible', passed: true }]);
+      for (const state of ['visible', 'hidden'] as const) {
+        await assert.rejects(observeCapturePreparation(page, { ...prep, assertions: [{ selector: '#missing', state }] }), /exactly one existing element/);
+      }
+      await page.setContent('<h2>First class</h2><h2>Second class</h2>');
+      await assert.rejects(observeCapturePreparation(page, { ...prep, assertions: [{ selector: 'h2', state: 'visible' }] }), /exactly one existing element/);
+    } finally { await page.close(); }
+  });
+});
+
+test('observe-only preparation preserves actual initial focus without granting a focus action', async () => {
+  const server = createServer((_request, response) => {
+    response.setHeader('content-type', 'text/html');
+    response.end(`<!doctype html><title>Initial focus capture fixture</title>
+      <style>section{padding:40px}input{border:8px solid gray}input:focus{border-color:blue}output{display:block}</style>
+      <section id="fixture"><label>Search <input id="query" autofocus></label><button>Other control</button><output id="state">focused</output></section>
+      <script>document.querySelector('#query').focus();document.querySelector('#query').addEventListener('blur',()=>document.querySelector('#state').textContent='blurred');</script>`);
+  });
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address(); assert.ok(address && typeof address !== 'string');
+  const url = `http://127.0.0.1:${address.port}`;
+  const prep: CapturePreparation = { schema: 'reference-capture-preparation-v1', actions: [], assertions: [{ selector: '#query:focus', state: 'visible' }] };
+  try {
+    assert.deepEqual(parseCapturePreparation(prep), prep);
+    for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 }]) {
+      await withBrowser(browser => onPage(browser, url, viewport, async page => {
+        assert.equal(await page.evaluate(() => document.activeElement?.id), 'query');
+        assert.equal(await page.locator('#state').textContent(), 'focused');
+      }));
+      const root = project(); const adapter = createTestProjectWriteAdapter(root);
+      const shotOut = join(root, 'focused.png');
+      const captured = await withBrowser(browser => capturePageForRef(browser, url, viewport, { selector: '#fixture', preparation: prep, shotOut, adapter }));
+      assert.equal(captured.shotSaved, true);
+      assert.deepEqual(captured.capturePreparation?.executedActions, []);
+      assert.deepEqual(captured.capturePreparation?.observations, [{ selector: '#query:focus', state: 'visible', passed: true }]);
+      assert.equal(captured.raw.meta?.interaction, null); assert.equal(captured.raw.meta?.motion, null);
+      assert.ok(bluePixels(shotOut) > 100, 'saved PNG itself must show the focused blue border');
+      console.log(`INITIAL FOCUS TEST FIXTURE ONLY: ${shotOut}`);
+      const probedShot = join(root, 'probed.png');
+      await withBrowser(browser => capturePageForRef(browser, url, viewport, { selector: '#fixture', shotOut: probedShot, adapter }));
+      assert.equal(bluePixels(probedShot), 0, 'ordinary probes reproduce loss of the initial focus border');
+      await assert.rejects(withBrowser(browser => capturePageForRef(browser, url, viewport, {
+        selector: '#fixture', preparation: { ...prep, assertions: [{ selector: 'button:focus', state: 'visible' }] },
+      })), /must identify exactly one existing element/);
+    }
+  } finally { await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())); }
 });
 
 test('real disclosure preparation captures the opened menu on the same page and records unmeasured probes', async () => {

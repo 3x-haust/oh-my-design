@@ -521,9 +521,15 @@ test('anti-reference and rejected motion slots stay canonical but cannot become 
   assert.equal(handoff.positiveMotion.slots[0]?.disposition, 'not-applicable');
 });
 
-test('none rejects generic restraint, capability, category, and performance rationales', () => {
-  for (const reason of ['category convention', 'anti-reference avoids motion', 'restraint', 'capability unavailable', 'generic performance concern']) {
-    assert.throws(() => resolveMarketingArtDirection(input({
+test('none preserves contextual rejection prose instead of classifying it by English substrings', () => {
+  for (const reason of [
+    'Reject the quiet annotation if restraint leaves decision-to-reason adjacency visibly disconnected.',
+    'The category label obscures the primary action in the supplied mobile capture.',
+    'The anti-reference documents clipping at the return endpoint; this alternative repeats that defect.',
+    'The supplied capability explanation is absent from the rendered comparison.',
+    '절제 여부와 관계없이 구현 설명이 비어 있고 검토 후 돌아갈 지점이 보이지 않는다.',
+  ]) {
+    const resolved = input({
       intent: { register: 'quiet', motionDecision: 'none' },
       alternatives: [
         alternative('quiet', 'none'),
@@ -531,13 +537,32 @@ test('none rejects generic restraint, capability, category, and performance rati
         { ...alternative('showpiece', 'one'), motionReferenceSlotIds: [] },
       ],
       eligibility: { sceneRoles: [], fallbackAttempted: true, qualityGates: { blindSignatureGreen: true, narrativeGreen: true, motionFitGreen: true, fidelityDecisionFitGreen: true, macroLandingScore: 3, staticReferenceInfluenceScore: 3, templateBreakingLandingScore: 3 } },
-    })), /forbidden generic rationale/);
+    });
+    const decision = resolveMarketingArtDirection(resolved);
+    assert.equal(decision.rejectedAlternatives.find(item => item.register === 'confident')!.reason, reason);
+    assert.throws(() => resolveMarketingArtDirection(input({ ...resolved, alternatives: resolved.alternatives.map(item => item.register === 'confident' ? { ...item, rejectionCondition: ' ' } : item) })), /rejectionCondition/);
   }
 });
 
 test('one requires exactly one scene and none requires a lawful fallback', () => {
   assert.throws(() => resolveMarketingArtDirection(input({ eligibility: { sceneRoles: ['a', 'b'], fallbackAttempted: true, qualityGates: { blindSignatureGreen: true, narrativeGreen: true, motionFitGreen: true, fidelityDecisionFitGreen: true, macroLandingScore: 3, motionInfluenceScore: 3 } } })), /exactly one/);
   assert.throws(() => resolveMarketingArtDirection(input({ intent: { register: 'quiet', motionDecision: 'none' }, eligibility: { sceneRoles: [], fallbackAttempted: false, qualityGates: { blindSignatureGreen: true, narrativeGreen: true, motionFitGreen: true, fidelityDecisionFitGreen: true, macroLandingScore: 3, staticReferenceInfluenceScore: 3, templateBreakingLandingScore: 3 } } })), /fallback/);
+});
+
+test('static macro hypotheses are language-neutral without waiving required text, references or fallback', () => {
+  for (const hypothesis of [
+    '좁은 제목 옆에 같은 크기의 대안을 놓고, 선택한 안의 검토 결과가 판단 근거로 돌아가도록 연결한다.',
+    'A narrow proposition faces equal-sized alternatives, with a selected arrangement and an explicit review return to its decision basis.',
+  ]) {
+    const alternatives = defaultAlternatives(true).map(item => item.register === 'quiet' ? { ...item, macroCompositionHypothesis: hypothesis } : item);
+    const resolved = input({ alternatives, intent: { register: 'quiet', motionDecision: 'none' }, eligibility: { sceneRoles: [], fallbackAttempted: true } });
+    const decision = resolveMarketingArtDirection(resolved);
+    assert.equal(decision.consideredAlternatives.find(item => item.register === 'quiet')!.macroCompositionHypothesis, hypothesis);
+    assert.deepEqual(validateArtDirectionDecision(decision, resolved.references, resolved.eligibility, resolved.referenceBindings, resolved.motionResolution, resolved.intent), decision);
+    assert.throws(() => resolveMarketingArtDirection(input({ ...resolved, alternatives: alternatives.map(item => item.register === 'quiet' ? { ...item, macroCompositionHypothesis: ' ' } : item) })), /macroCompositionHypothesis|nonempty|non-empty/);
+    assert.throws(() => resolveMarketingArtDirection({ ...resolved, eligibility: { sceneRoles: [], fallbackAttempted: false } }), /fallback/);
+    assert.throws(() => resolveMarketingArtDirection(input({ ...resolved, alternatives: alternatives.map(item => item.register === 'quiet' ? { ...item, staticReferenceSlotIds: [] } : item) })), /static\/layout reference/);
+  }
 });
 test('art direction rejects substituted reference attributes and stale canonical selection or handoff hashes', () => {
   assert.throws(() => resolveMarketingArtDirection(input({

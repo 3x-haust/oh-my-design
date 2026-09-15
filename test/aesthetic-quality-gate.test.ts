@@ -4,6 +4,7 @@ import {
   assertBenchmarkAwareFinalReview,
   type BenchmarkAwareFinalReviewInput,
 } from '../core/evidence/final-v2-benchmark-fit.ts';
+import { assertDesignQualityGreen } from '../core/evidence/final-v2-design-quality.ts';
 
 const SHA_A = 'a'.repeat(64);
 const SHA_B = 'b'.repeat(64);
@@ -167,6 +168,74 @@ test('axis evidence must bind both current viewports', () => {
   };
   assert.throws(
     () => review(value),
+    /DESIGN_QUALITY_EVIDENCE_INVALID:beautyDesirability/,
+  );
+});
+
+test('axis viewport and state labels must match trusted browser observation metadata', () => {
+  const bindings = [
+    {
+      observationSha256: SHA_A,
+      browserObservationSha256: 'c'.repeat(64),
+      captureSha256: 'd'.repeat(64),
+      viewport: 'desktop' as const,
+      state: 'initial',
+    },
+    {
+      observationSha256: SHA_B,
+      browserObservationSha256: 'e'.repeat(64),
+      captureSha256: 'f'.repeat(64),
+      viewport: 'mobile' as const,
+      state: 'initial',
+    },
+  ];
+  assert.doesNotThrow(() => assertDesignQualityGreen(designQuality(), {
+    expectedObservationSha256s: [SHA_A, SHA_B],
+    expectedObservationBindings: [
+      ...bindings,
+      {
+        ...bindings[0]!,
+        browserObservationSha256: '0'.repeat(64),
+      },
+    ],
+  }));
+
+  assert.throws(
+    () => assertDesignQualityGreen(designQuality(), {
+      expectedObservationSha256s: [SHA_A, SHA_B],
+      expectedObservationBindings: [
+        ...bindings,
+        {
+          ...bindings[0]!,
+          browserObservationSha256: '1'.repeat(64),
+          captureSha256: '2'.repeat(64),
+        },
+      ],
+    }),
+    /DESIGN_QUALITY_EVIDENCE_INVALID:beautyDesirability/,
+  );
+
+  const relabeled = designQuality();
+  const relabeledAxes = relabeled.axes as Record<string, unknown>[];
+  const relabeledEvidence = relabeledAxes[0]?.evidence as Record<string, unknown>[];
+  if (relabeledEvidence[1] !== undefined) relabeledEvidence[1].observationSha256 = SHA_A;
+  assert.throws(
+    () => assertDesignQualityGreen(relabeled, {
+      expectedObservationSha256s: [SHA_A, SHA_B],
+      expectedObservationBindings: bindings,
+    }),
+    /DESIGN_QUALITY_EVIDENCE_INVALID:beautyDesirability/,
+  );
+
+  const nonexistentState = designQuality();
+  const stateAxes = nonexistentState.axes as Record<string, unknown>[];
+  const stateEvidence = stateAxes[0]?.evidence as Record<string, unknown>[];
+  if (stateEvidence[1] !== undefined) stateEvidence[1].state = 'unobserved-state';
+  assert.throws(
+    () => assertDesignQualityGreen(nonexistentState, {
+      expectedObservationSha256s: [SHA_A, SHA_B],
+      expectedObservationBindings: bindings,
+    }),
     /DESIGN_QUALITY_EVIDENCE_INVALID:beautyDesirability/,
   );
 });

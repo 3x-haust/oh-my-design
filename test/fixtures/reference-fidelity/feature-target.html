@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="ko"><meta charset="utf-8"><title>Different content, preserved relationships</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif}h1,h2,p{margin:0}
+.hero{display:flex;gap:86px;width:1160px;height:533px;margin:40px 60px;align-items:flex-start}
+.lead{width:418px;flex:none}.support{width:656px;height:533px;flex:none;background:#e5e0d9}
+h1{font-size:52px;line-height:1.1;font-weight:700}h1 span{display:block}.lead p{font-size:16px;line-height:24px;margin-top:24px}
+.detail{width:400px;margin:40px 60px}.detail h2{font-size:24px;line-height:28px}.detail p{font-size:16px;line-height:24px;margin-top:12px}.detail a{display:block;margin-top:16px;line-height:24px;color:#753d22}
+</style>
+<section class="hero">
+  <div class="lead" data-omd-reference-anchor="lead">
+    <h1 data-omd-reference-anchor="display"><span>내용이 바뀌어도</span><span>비율은 같습니다</span></h1>
+    <p data-omd-reference-anchor="body">실제 본문입니다.</p>
+    <p>추가 안내는 삭제하지 않습니다.</p>
+  </div>
+  <div class="support" data-omd-reference-anchor="support"><h2>다른 설명 구조</h2><p>선택한 관계를 검증합니다.</p><p>내용과 내부 태그는 다릅니다.</p></div>
+</section>
+<section class="detail">
+  <h2 data-omd-reference-anchor="detail-title">새 설명</h2>
+  <p data-omd-reference-anchor="detail-body">이번 본문은 짧습니다.</p>
+  <a data-omd-reference-anchor="detail-action" href="#top">안내 보기</a>
+</section>
+</html>

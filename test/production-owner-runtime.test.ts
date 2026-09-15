@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash, createPublicKey, verify } from 'node:crypto';
-import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, watch, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, watch, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -49,11 +49,18 @@ function project(prefix: string): string {
 function ownerCodexStub(path: string): string {
   return executable(path, `
 import { spawn, spawnSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, readFileSync, symlinkSync, watch, writeFileSync } from 'node:fs';
+import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, watch, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 const args = process.argv.slice(2);
 const root = process.cwd();
+const repairRoot = process.env.OMD_PRODUCTION_REPAIR_MIRROR;
+const writeRoot = repairRoot || root;
 const mode = process.env.OMD_TEST_OWNER_MODE;
+const sequence = process.env.OMD_TEST_OWNER_SEQUENCE;
+const sequencedReentry = mode === 'no-op-reentry' || mode === 'no-op-reentry-failed';
+const noOpThisLaunch = mode === 'no-op' || (sequencedReentry && !existsSync(sequence));
+if (sequencedReentry && noOpThisLaunch) writeFileSync(sequence, 'initial no-op completed');
+appendFileSync(sequence + '.launches', process.pid + '\\n');
 const attempt = Number(process.env.OMD_PRODUCTION_OWNER_ATTEMPT);
 const report = process.env.OMD_TEST_OWNER_ARGS;
 const delegatedActivation = process.env.OMD_ACTIVATION_PATH;
@@ -63,6 +70,7 @@ if (mode === 'receipt-race') {
     "import { watch, writeFileSync } from 'node:fs';",
     "import { join } from 'node:path';",
     "const [root, ownerDirectory] = process.argv.slice(1);",
+    "process.on('SIGTERM', () => {});",
     "const observer = watch(ownerDirectory, (_event, filename) => {",
     "  if (filename !== 'result.json') return;",
     "  observer.close();",
@@ -88,8 +96,8 @@ if (mode === 'copied-child-activation') {
   copyFileSync(delegatedActivation, routeEnv.OMD_ACTIVATION_PATH);
 }
 const route = (mode) => spawnSync(process.execPath, [process.env.OMD_TEST_CLI, 'route', mode, '--json'], { cwd: root, encoding: 'utf8', env: routeEnv });
-const shown = route('show');
-const checked = route('check');
+const shown = repairRoot ? { status: 0, stderr: '' } : route('show');
+const checked = repairRoot ? { status: 0, stderr: '' } : route('check');
 let releasePromise;
 if (mode === 'live-sibling-substitution') {
   const release = process.env.OMD_TEST_OWNER_RELEASE;
@@ -118,6 +126,23 @@ if (args.includes('--listen') || args.includes('app-server')) process.exit(88);
 if (process.env.OMD_TEST_ALTERNATE_HOST_MARKER && existsSync(process.env.OMD_TEST_ALTERNATE_HOST_MARKER)) process.exit(91);
 const session = mode === 'reuse-session' ? 'session-reused' : 'session-' + attempt + '-' + process.pid;
 process.stdout.write(JSON.stringify({ type: 'thread.started', thread_id: session }) + '\\n');
+if (mode === 'failed-fast' || (mode === 'no-op-reentry-failed' && !noOpThisLaunch)) process.exit(7);
+const writeDerivedTree = () => {
+  mkdirSync(join(root, 'node_modules', '.bin'), { recursive: true });
+  mkdirSync(join(root, 'node_modules', 'vite', 'bin'), { recursive: true });
+  writeFileSync(join(root, 'node_modules', 'vite', 'bin', 'vite.js'), 'process.exit(0);\\n');
+  symlinkSync('../vite/bin/vite.js', join(root, 'node_modules', '.bin', 'vite'));
+  mkdirSync(join(root, 'dist', 'assets'), { recursive: true });
+  writeFileSync(join(root, 'dist', 'index.html'), '<script src="./assets/app.js"></script>\\n');
+  writeFileSync(join(root, 'dist', 'assets', 'app.js'), 'console.log("built");\\n');
+};
+if (mode === 'derived-root-symlink') symlinkSync('.omd', join(root, 'node_modules'), 'dir');
+if (mode === 'derived-dangling-replacement') {
+  rmSync(join(root, 'node_modules'), { recursive: true, force: true });
+  symlinkSync('missing-dependency-tree', join(root, 'node_modules'), 'dir');
+}
+if (mode === 'derived-success' || mode === 'derived-failed') writeDerivedTree();
+if (mode === 'derived-failed') process.exit(7);
 if (mode === 'prohibited-render') {
   process.stdout.write(JSON.stringify({
     type: 'item.completed',
@@ -151,27 +176,37 @@ if (mode === 'unsafe-stall') {
   stall();
 }
 if (mode === 'retry' && attempt === 1) stall();
-if (mode === 'out-of-scope') writeFileSync(join(root, 'coordinator-or-owner-foreign.html'), 'foreign write');
-else if (mode !== 'no-op') {
-  mkdirSync(join(root, 'src', 'copy'), { recursive: true });
-  if (mode === 'symlink-output') symlinkSync('../../.omd/owner-task.md', join(root, 'src', 'copy', 'index.html'));
+if (mode === 'out-of-scope') writeFileSync(join(writeRoot, 'coordinator-or-owner-foreign.html'), 'foreign write');
+else if (!noOpThisLaunch) {
+  mkdirSync(join(writeRoot, 'src', 'copy'), { recursive: true });
+  if (mode === 'symlink-output') symlinkSync('../../.omd/owner-task.md', join(writeRoot, 'src', 'copy', 'index.html'));
   else if (mode === 'special-output') {
-    const fifo = spawnSync('/usr/bin/mkfifo', [join(root, 'src', 'copy', 'index.html')]);
+    const fifo = spawnSync('/usr/bin/mkfifo', [join(writeRoot, 'src', 'copy', 'index.html')]);
     if (fifo.status !== 0) process.exit(94);
-  } else writeFileSync(join(root, 'src', 'copy', 'index.html'), '<!doctype html><title>Owned by omd-hand</title>');
+  } else writeFileSync(join(writeRoot, 'src', 'copy', 'index.html'), repairRoot
+    ? '<!doctype html><title>Repaired by omd-hand</title>'
+    : '<!doctype html><title>Owned by omd-hand</title>');
   if (mode === 'omd-mutation') writeFileSync(join(root, '.omd', 'owner-forged-finalization.json'), 'forged');
 }
 if (mode !== 'task-complete-no-message') {
   process.stdout.write(JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: 'Production source and evidence written.' } }) + '\\n');
 }
 process.stdout.write(JSON.stringify({ type: mode === 'task-complete' || mode === 'task-complete-no-message' ? 'task_complete' : 'turn.completed', usage: {} }) + '\\n');
+if (mode === 'malformed-exec-response') {
+  const resistant = spawn(process.execPath, ['-e', "process.on('SIGTERM',()=>{});setInterval(()=>{},1000)"], {
+    stdio: 'ignore',
+  });
+  resistant.unref();
+  writeFileSync(process.env.OMD_TEST_MALFORMED_READY, String(process.pid));
+}
 `);
 }
 
 function coordinatorStub(path: string, reportPath: string, operation = 'run'): string {
   return executable(path, `
 import { spawn, spawnSync } from 'node:child_process';
-import { chmodSync, copyFileSync, cpSync, mkdirSync, readFileSync, rmSync, symlinkSync, watch, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, watch, writeFileSync } from 'node:fs';
 import { basename, dirname } from 'node:path';
 const env = { ...process.env };
 const route = (mode, extra = []) => spawnSync(process.execPath, [process.env.OMD_TEST_CLI, 'route', mode, ...extra, '--json'], {
@@ -212,6 +247,9 @@ if (${JSON.stringify(operation)} === 'owner-symlinked') {
   env.OMD_CODEX_OWNER_DIRECTORY = selected;
 }
 if (${JSON.stringify(operation)} === 'owner-wrong-mode') chmodSync(env.OMD_CODEX_OWNER_DIRECTORY, 0o755);
+if (${JSON.stringify(operation)} === 'owner-preexisting-dangling') {
+  symlinkSync('missing-dependency-tree', process.cwd() + '/node_modules', 'dir');
+}
 const timeout = ['stall', 'unsafe-stall', 'retry'].includes(process.env.OMD_TEST_OWNER_MODE) ? '10000' : '20000';
 const args = ${JSON.stringify(operation)} === 'mismatch'
   ? ['owner', 'run', '--agent', 'omd-eye', '--input', '.omd/owner-task.md', '--timeout-ms', timeout, '--json']
@@ -219,9 +257,66 @@ const args = ${JSON.stringify(operation)} === 'mismatch'
 const launch = () => spawnSync(process.execPath, [process.env.OMD_TEST_OWNER_CLI, ...args], {
   cwd: process.env.OMD_TEST_OWNER_CWD || process.cwd(), encoding: 'utf8', env,
 });
+const launchRepair = (mirror) => spawnSync(process.execPath, [process.env.OMD_TEST_OWNER_CLI,
+  'owner', 'repair', '--agent', 'omd-hand', '--input', '.omd/owner-task.md', '--mirror', mirror,
+  '--timeout-ms', timeout, '--json'], {
+  cwd: process.env.OMD_TEST_OWNER_CWD || process.cwd(), encoding: 'utf8', env,
+});
+const canonicalJson = (value) => {
+  if (value === null || typeof value === 'boolean' || typeof value === 'string' || typeof value === 'number') return JSON.stringify(value);
+  if (Array.isArray(value)) return '[' + value.map(canonicalJson).join(',') + ']';
+  return '{' + Object.keys(value).sort().map(key => JSON.stringify(key) + ':' + canonicalJson(value[key])).join(',') + '}';
+};
+const digest = (value) => createHash('sha256').update(value).digest('hex');
+const observe = (sequence) => {
+  const source = readFileSync(process.cwd() + '/src/copy/index.html');
+  const observation = {
+    schema: 'observation-v2',
+    buildSha256: digest(source),
+    currentArtifact: { path: 'src/copy/index.html', sha256: digest(source) },
+    predecessorSha256: null,
+    observedAt: new Date(Date.now() + sequence * 1000).toISOString(),
+    evidence: { sequence },
+  };
+  const bytes = canonicalJson(observation) + '\\n\\n';
+  const sha256 = digest(bytes);
+  mkdirSync(process.cwd() + '/.omd/observation-v2', { recursive: true });
+  writeFileSync(process.cwd() + '/.omd/observation-v2/sha256-' + sha256 + '.json', bytes);
+  writeFileSync(process.cwd() + '/.omd/observation-v2.json', canonicalJson({
+    schema: 'observation-v2-pointer', record: '.omd/observation-v2/sha256-' + sha256 + '.json', sha256,
+  }) + '\\n\\n');
+};
+const createMirror = () => {
+  const made = spawnSync(process.execPath, [process.env.OMD_TEST_CLI, 'owner', 'mirror',
+    '--out', process.env.OMD_TEST_REPAIR_PARENT, '--activation', env.OMD_ACTIVATION_PATH, '--json'], {
+    cwd: process.cwd(), encoding: 'utf8', env,
+  });
+  if (made.status !== 0) throw new Error('mirror creation failed: ' + made.stderr + made.stdout);
+  return JSON.parse(made.stdout).mirrorRoot;
+};
+const startMalformedResponse = () => {
+  const source = [
+    "import { existsSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';",
+    "const [directory, ready] = process.argv.slice(1);",
+    "const wait = () => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 2);",
+    "while (!existsSync(ready)) wait();",
+    "let response; while (!response) { response = readdirSync(directory).find(name => name.startsWith('response-')); if (!response) wait(); }",
+    "const pid = Number(readFileSync(ready, 'utf8'));",
+    "for (;;) { try { process.kill(pid, 0); wait(); } catch { break; } }",
+    "const path = directory + '/' + response;",
+    "writeFileSync(path, JSON.stringify({ error: 'OMD_TEST_MALFORMED_EXEC_RESPONSE' }));",
+    "try { unlinkSync(path); } catch {}",
+  ].join('\\n');
+  return spawn(process.execPath, ['--input-type=module', '-e', source,
+    process.env.OMD_CODEX_AUTHORITY_RESPONSE_DIR, process.env.OMD_TEST_MALFORMED_READY], {
+    stdio: 'ignore',
+  });
+};
 let coordinatorChildStatus;
 let coordinatorChildStderr;
 let first;
+let responseSabotage;
+if (${JSON.stringify(operation)} === 'malformed-exec-response') responseSabotage = startMalformedResponse();
 if (${JSON.stringify(operation)} === 'live-sibling-substitution') {
   const argsPath = process.env.OMD_TEST_OWNER_ARGS;
   const ready = new Promise((resolve, reject) => {
@@ -255,7 +350,34 @@ if (${JSON.stringify(operation)} === 'live-sibling-substitution') {
 } else {
   first = launch();
 }
-const child = ${JSON.stringify(operation)} === 'duplicate' ? launch() : first;
+let repairFirst; let repairSecond; let replay; let secondInitial; let thirdInitial; let repairMirrors = [];
+let sourceAfterMalformed; let malformedSecond;
+if (${JSON.stringify(operation)} === 'repair-transaction' && first.status === 0) {
+  observe(1);
+  const firstMirror = createMirror();
+  repairMirrors.push(firstMirror);
+  repairFirst = launchRepair(firstMirror);
+  const repairedBytes = readFileSync(firstMirror + '/src/copy/index.html');
+  copyFileSync(process.cwd() + '/src/copy/index.html', firstMirror + '/src/copy/index.html');
+  replay = launchRepair(firstMirror);
+  writeFileSync(firstMirror + '/src/copy/index.html', repairedBytes);
+  observe(2);
+  const secondMirror = createMirror();
+  repairMirrors.push(secondMirror);
+  repairSecond = launchRepair(secondMirror);
+  secondInitial = launch();
+}
+if (${JSON.stringify(operation)} === 'malformed-exec-response') {
+  sourceAfterMalformed = existsSync(process.cwd() + '/src/copy/index.html');
+  malformedSecond = launch();
+}
+if (${JSON.stringify(operation)} === 'failed-initial-reentry' && first.status !== 0) {
+  writeFileSync(process.cwd() + '/.omd/composition.md', 'Fresh lawful upstream owner rebind.\\n');
+  secondInitial = launch();
+  thirdInitial = launch();
+}
+const child = ${JSON.stringify(operation)} === 'duplicate' ? launch()
+  : ${JSON.stringify(operation)} === 'repair-transaction' ? (repairSecond || first) : first;
 if (${JSON.stringify(operation)} === 'coordinator-child-substitution') {
   const ownerObserved = JSON.parse(readFileSync(process.env.OMD_TEST_OWNER_ARGS, 'utf8'));
   const substituted = spawnSync(process.execPath, [process.env.OMD_TEST_CLI, 'route', 'show', '--json'], {
@@ -265,13 +387,18 @@ if (${JSON.stringify(operation)} === 'coordinator-child-substitution') {
   coordinatorChildStderr = substituted.stderr;
 }
 if (${JSON.stringify(operation)} === 'workspace-denied') chmodSync(hostRunDirectory, 0o700);
+const ownerChildLaunchCount = existsSync(process.env.OMD_TEST_OWNER_SEQUENCE + '.launches')
+  ? readFileSync(process.env.OMD_TEST_OWNER_SEQUENCE + '.launches', 'utf8').trim().split('\\n').filter(Boolean).length
+  : 0;
 writeFileSync(${JSON.stringify(reportPath)}, JSON.stringify({ status: child.status, stdout: child.stdout, stderr: child.stderr,
   coordinatorChildStatus, coordinatorChildStderr, ownerLaunchCount: ${JSON.stringify(operation)} === 'duplicate' ? 2 : 1,
   firstStatus: first.status, firstStdout: first.stdout, firstStderr: first.stderr,
   outerArgs: process.argv.slice(2), ownerDirectory: process.env.OMD_CODEX_OWNER_DIRECTORY,
   activation: process.env.OMD_ACTIVATION_PATH, loaded: process.env.OMD_CODEX_LOADED_SKILL_RECEIPT_PATH,
   socket: process.env.OMD_CODEX_AUTHORITY_SOCKET, response: process.env.OMD_CODEX_AUTHORITY_RESPONSE_DIR,
-  publicKey: process.env.OMD_CODEX_AUTHORITY_PUBLIC_KEY_PATH }));
+  publicKey: process.env.OMD_CODEX_AUTHORITY_PUBLIC_KEY_PATH,
+  repairFirst, repairSecond, replay, secondInitial, thirdInitial, repairMirrors,
+  sourceAfterMalformed, malformedSecond, ownerChildLaunchCount }));
 process.exit(0);
 `);
 }
@@ -293,6 +420,15 @@ type CoordinatorReport = Readonly<{
   coordinatorChildStatus?: number;
   coordinatorChildStderr?: string;
   ownerLaunchCount?: number;
+  repairFirst?: Readonly<{ status: number; stdout: string; stderr: string }>;
+  repairSecond?: Readonly<{ status: number; stdout: string; stderr: string }>;
+  replay?: Readonly<{ status: number; stdout: string; stderr: string }>;
+  secondInitial?: Readonly<{ status: number; stdout: string; stderr: string }>;
+  thirdInitial?: Readonly<{ status: number; stdout: string; stderr: string }>;
+  ownerChildLaunchCount?: number;
+  repairMirrors?: string[];
+  sourceAfterMalformed?: boolean;
+  malformedSecond?: Readonly<{ status: number; stdout: string; stderr: string }>;
 }>;
 
 async function launchOwner(input: Readonly<{
@@ -315,6 +451,10 @@ async function launchOwner(input: Readonly<{
   copyFileSync(join(ROOT, 'dist', 'codex', 'agents', 'omd-hand.toml'), join(codexHome, 'agents', 'omd-hand.toml'));
   const alternateHostMarker = join(parent, `alternate-host-must-not-run-${id}`);
   const ownerRelease = join(parent, `owner-release-${id}`);
+  const malformedReady = join(parent, `owner-malformed-ready-${id}`);
+  const ownerSequence = join(parent, `owner-sequence-${id}`);
+  const repairParent = join(parent, `owner-repair-parent-${id}`);
+  mkdirSync(repairParent);
   const alternateHostBinDirectory = join(parent, `alternate-host-eperm-${id}`);
   mkdirSync(alternateHostBinDirectory);
   executable(join(alternateHostBinDirectory, 'pi'), `
@@ -332,6 +472,9 @@ process.exit(1);
     OMD_TEST_OWNER_ARGS: argsReport,
     OMD_TEST_ALTERNATE_HOST_MARKER: alternateHostMarker,
     OMD_TEST_OWNER_RELEASE: ownerRelease,
+    OMD_TEST_MALFORMED_READY: malformedReady,
+    OMD_TEST_OWNER_SEQUENCE: ownerSequence,
+    OMD_TEST_REPAIR_PARENT: repairParent,
     ...(input.roleModel === undefined ? {} : { OMD_TEST_EXPECTED_ROLE_MODEL: input.roleModel }),
     ...(input.roleEffort === undefined ? {} : { OMD_TEST_EXPECTED_ROLE_EFFORT: input.roleEffort }),
     PATH: `${alternateHostBinDirectory}:${process.env.PATH ?? ''}`,
@@ -383,7 +526,7 @@ process.exit(1);
   return {
     report, argsReport, alternateHostMarker, hostResult,
     cleanup: () => {
-      for (const path of [reportPath, argsReport, topCodex, nestedCodex, codexHome, alternateHostMarker, ownerRelease, alternateHostBinDirectory]) rmSync(path, { recursive: true, force: true });
+      for (const path of [reportPath, argsReport, topCodex, nestedCodex, codexHome, alternateHostMarker, ownerRelease, malformedReady, ownerSequence, `${ownerSequence}.launches`, alternateHostBinDirectory, repairParent]) rmSync(path, { recursive: true, force: true });
     },
   };
 }
@@ -565,31 +708,43 @@ test('production owner cannot bypass repair after trusted observation exists', a
   }
 });
 
-test('repair mode launches Hand for an external-mirror no-op after observation', async () => {
-  const root = project('omd-owner-repair-mirror-');
-  mkdirSync(join(root, '.omd', 'observation-v2'));
-  writeFileSync(join(root, '.omd', 'observation-v2', `sha256-${'a'.repeat(64)}.json`), '{}');
-  const run = await launchOwner({ root, mode: 'no-op', operation: 'repair-mode' });
+test('one host keeps initial ownership closed while allowing fresh observation-bound mirror repairs', async () => {
+  const root = project('omd-owner-repair-transaction-');
+  const run = await launchOwner({ root, mode: 'success', operation: 'repair-transaction' });
   try {
-    assert.equal(run.report.status, 0, `${run.report.stderr}\n${run.report.stdout}`);
-    const result = JSON.parse(run.report.stdout) as { result: string; attempts: unknown[] };
-    assert.equal(result.result, 'completed');
-    assert.equal(result.attempts.length, 1);
-  } finally {
-    run.cleanup();
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-test('repair mode rolls back any Hand project mutation', async () => {
-  const root = project('omd-owner-repair-project-write-');
-  mkdirSync(join(root, '.omd', 'observation-v2'));
-  writeFileSync(join(root, '.omd', 'observation-v2', `sha256-${'a'.repeat(64)}.json`), '{}');
-  const run = await launchOwner({ root, mode: 'success', operation: 'repair-mode' });
-  try {
-    assert.notEqual(run.report.status, 0);
-    assert.match(`${run.report.stderr}\n${run.report.stdout}`, /OWNER_REPAIR_PROJECT_MUTATION/);
-    assert.equal(existsSync(join(root, 'src', 'copy', 'index.html')), false);
+    assert.equal(run.report.firstStatus, 0, run.report.firstStderr ?? 'initial owner failed');
+    assert.equal(run.report.repairFirst?.status, 0, run.report.repairFirst?.stderr ?? 'first repair failed');
+    assert.equal(run.report.repairSecond?.status, 0, run.report.repairSecond?.stderr ?? 'second repair failed');
+    assert.notEqual(run.report.replay?.status, 0);
+    assert.match(run.report.replay?.stderr ?? '', /OWNER_REPAIR_REPLAY/);
+    assert.notEqual(run.report.secondInitial?.status, 0);
+    assert.match(run.report.secondInitial?.stderr ?? '', /OWNER_(?:DUPLICATE_COMPLETION|REPAIR_BYPASS)/);
+    assert.equal(
+      readFileSync(join(root, 'src', 'copy', 'index.html'), 'utf8'),
+      '<!doctype html><title>Owned by omd-hand</title>',
+      'repair Hand must leave production source unchanged pending lifecycle commit',
+    );
+    assert.equal(run.report.repairMirrors?.length, 2);
+    for (const mirror of run.report.repairMirrors ?? []) {
+      assert.equal(
+        readFileSync(join(mirror, 'src', 'copy', 'index.html'), 'utf8'),
+        '<!doctype html><title>Repaired by omd-hand</title>',
+      );
+    }
+    const first = JSON.parse(run.report.repairFirst!.stdout) as { mode: string; repair: { changedPaths: string[]; observationPointerSha256: string }; receiptPath: string };
+    const second = JSON.parse(run.report.repairSecond!.stdout) as { mode: string; repair: { changedPaths: string[]; observationPointerSha256: string }; receiptPath: string };
+    assert.equal(first.mode, 'repair');
+    assert.deepEqual(first.repair.changedPaths, ['src/copy/index.html']);
+    assert.deepEqual(second.repair.changedPaths, ['src/copy/index.html']);
+    assert.notEqual(first.receiptPath, second.receiptPath);
+    assert.notEqual(first.repair.observationPointerSha256, second.repair.observationPointerSha256);
+    const repairChild = JSON.parse(readFileSync(run.argsReport, 'utf8')) as { args: string[]; activation: string };
+    const delegated = JSON.parse(readFileSync(repairChild.activation, 'utf8')) as {
+      delegation: { payload: { operations: unknown[]; payloadAuthorizations: unknown[] } };
+    };
+    assert.equal(repairChild.args[repairChild.args.indexOf('-C') + 1], run.report.repairMirrors?.[1]);
+    assert.deepEqual(delegated.delegation.payload.operations, []);
+    assert.deepEqual(delegated.delegation.payload.payloadAuthorizations, []);
   } finally {
     run.cleanup();
     rmSync(root, { recursive: true, force: true });
@@ -654,6 +809,92 @@ test('a completed turn cannot attribute an out-of-route source write to omd-hand
   }
 });
 
+test('completed production preserves validated npm dependencies and Vite output without attributing them as source', async () => {
+  const root = project('omd-owner-derived-success-');
+  const run = await launchOwner({ root, mode: 'derived-success' });
+  try {
+    const result = parsedResult(run.report) as {
+      sourceChanges: string[];
+      attempts: Array<{ projectChanges: string[]; derivedChanges: string[]; unsafeOutputs: string[] }>;
+    };
+    assert.deepEqual(result.sourceChanges, ['src/copy/index.html']);
+    assert.deepEqual(result.attempts[0]?.derivedChanges, ['dist', 'node_modules']);
+    assert.deepEqual(result.attempts[0]?.projectChanges, ['dist', 'node_modules', 'src/copy/index.html']);
+    assert.deepEqual(result.attempts[0]?.unsafeOutputs, []);
+    assert.equal(readFileSync(join(root, 'dist', 'index.html'), 'utf8'), '<script src="./assets/app.js"></script>\n');
+    assert.equal(lstatSync(join(root, 'node_modules', '.bin', 'vite')).isSymbolicLink(), true);
+  } finally {
+    run.cleanup();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a failed install/build mutation is terminal and rolls back the derived trees before any retry', async () => {
+  const root = project('omd-owner-derived-failed-');
+  const run = await launchOwner({ root, mode: 'derived-failed' });
+  try {
+    assert.equal(run.report.status, 1);
+    const result = JSON.parse(run.report.stdout) as {
+      failure: string;
+      attempts: Array<{ projectChanges: string[]; derivedChanges: string[] }>;
+    };
+    assert.equal(result.failure, 'OWNER_RETRY_UNSAFE_PROJECT_MUTATION');
+    assert.equal(result.attempts.length, 1);
+    assert.deepEqual(result.attempts[0]?.projectChanges, ['dist', 'node_modules']);
+    assert.deepEqual(result.attempts[0]?.derivedChanges, ['dist', 'node_modules']);
+    assert.equal(run.report.ownerChildLaunchCount, 1);
+    assert.equal(existsSync(join(root, 'node_modules')), false);
+    assert.equal(existsSync(join(root, 'dist')), false);
+    assert.equal(existsSync(join(root, 'src')), false);
+  } finally {
+    run.cleanup();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a symlinked derived root fails closed and is rolled back', async () => {
+  const root = project('omd-owner-derived-root-link-');
+  const run = await launchOwner({ root, mode: 'derived-root-symlink' });
+  try {
+    assert.notEqual(run.report.status, 0);
+    assert.match(run.report.stderr, /OWNER_EXECUTION_ABORTED:derived project root must be a real directory: node_modules/);
+    assert.equal(existsSync(join(root, 'node_modules')), false);
+    assert.equal(existsSync(join(root, 'src')), false);
+  } finally {
+    run.cleanup();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('dangling derived roots fail before ownership and after replacement without bypassing rollback', async () => {
+  const preexisting = project('omd-owner-derived-preexisting-dangling-');
+  const rejected = await launchOwner({ root: preexisting, mode: 'success', operation: 'owner-preexisting-dangling' });
+  try {
+    assert.notEqual(rejected.report.status, 0);
+    assert.match(rejected.report.stderr, /derived project root must be a real directory: node_modules/);
+    assert.equal(rejected.report.ownerChildLaunchCount, 0);
+  } finally {
+    rejected.cleanup();
+    rmSync(preexisting, { recursive: true, force: true });
+  }
+
+  const replaced = project('omd-owner-derived-replaced-dangling-');
+  mkdirSync(join(replaced, 'node_modules', 'vite'), { recursive: true });
+  writeFileSync(join(replaced, 'node_modules', 'vite', 'index.js'), 'export {};\n');
+  const run = await launchOwner({ root: replaced, mode: 'derived-dangling-replacement' });
+  try {
+    assert.notEqual(run.report.status, 0);
+    assert.match(run.report.stderr, /OWNER_EXECUTION_ABORTED:derived project root must be a real directory: node_modules/);
+    assert.equal(run.report.ownerChildLaunchCount, 1);
+    assert.equal(lstatSync(join(replaced, 'node_modules')).isDirectory(), true, run.report.stderr);
+    assert.equal(readFileSync(join(replaced, 'node_modules', 'vite', 'index.js'), 'utf8'), 'export {};\n');
+    assert.equal(existsSync(join(replaced, 'src')), false);
+  } finally {
+    run.cleanup();
+    rmSync(replaced, { recursive: true, force: true });
+  }
+});
+
 test('successful owner turns cannot retain .omd mutations', async () => {
   const root = project('omd-owner-omd-mutation-');
   const taskBefore = readFileSync(join(root, '.omd', 'owner-task.md'));
@@ -696,6 +937,118 @@ test('completed no-op ownership may bind existing in-scope source but not an emp
   } finally {
     rejected.cleanup();
     rmSync(empty, { recursive: true, force: true });
+  }
+});
+
+test('a failed zero-mutation initial owner may re-enter once without weakening successful completion', async () => {
+  const root = project('omd-owner-failed-initial-reentry-');
+  const run = await launchOwner({ root, mode: 'no-op-reentry', operation: 'failed-initial-reentry' });
+  try {
+    assert.equal(run.report.firstStatus, 1);
+    const first = JSON.parse(run.report.firstStdout!) as { result: string; failure: string; receiptPath: string };
+    assert.equal(first.result, 'failed');
+    assert.equal(first.failure, 'OWNER_COMPLETED_WITHOUT_PRODUCTION_WRITE');
+    assert.notEqual(first.receiptPath, run.hostResult.ownerReceiptPath);
+
+    assert.equal(run.report.secondInitial?.status, 0, run.report.secondInitial?.stderr ?? 'retry result missing');
+    const second = JSON.parse(run.report.secondInitial!.stdout) as { result: string; sourceChanges: string[]; receiptPath: string };
+    assert.equal(second.result, 'completed');
+    assert.deepEqual(second.sourceChanges, ['src/copy/index.html']);
+    assert.match(second.receiptPath, /\/result-retry-[a-f0-9]{64}\.json$/);
+    assert.equal(second.receiptPath, run.hostResult.ownerReceiptPath, 'host result resolves the successful owner receipt');
+    assert.notEqual(second.receiptPath, first.receiptPath);
+    assert.equal(existsSync(first.receiptPath), true, 'the failed receipt remains immutable evidence');
+    assert.equal(statSync(first.receiptPath).mode & 0o777, 0o400);
+    assert.equal(statSync(second.receiptPath).mode & 0o777, 0o400);
+    assert.equal(run.report.ownerChildLaunchCount, 2, 'the rejected third owner did not launch a child');
+
+    assert.notEqual(run.report.thirdInitial?.status, 0);
+    assert.match(run.report.thirdInitial?.stderr ?? '', /OWNER_DUPLICATE_COMPLETION/);
+    assert.equal(readFileSync(join(root, 'src', 'copy', 'index.html'), 'utf8'), '<!doctype html><title>Owned by omd-hand</title>');
+  } finally {
+    run.cleanup();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('the one failed zero-mutation initial-owner re-entry cannot become an unbounded owner loop', async () => {
+  const root = project('omd-owner-failed-initial-exhausted-');
+  const run = await launchOwner({ root, mode: 'no-op', operation: 'failed-initial-reentry' });
+  try {
+    assert.equal(run.report.firstStatus, 1);
+    const first = JSON.parse(run.report.firstStdout!) as { result: string; failure: string; receiptPath: string };
+    assert.equal(first.result, 'failed');
+    assert.equal(first.failure, 'OWNER_COMPLETED_WITHOUT_PRODUCTION_WRITE');
+
+    assert.equal(run.report.secondInitial?.status, 1);
+    const second = JSON.parse(run.report.secondInitial!.stdout) as { result: string; failure: string; receiptPath: string };
+    assert.equal(second.result, 'failed');
+    assert.equal(second.failure, 'OWNER_COMPLETED_WITHOUT_PRODUCTION_WRITE');
+    assert.match(second.receiptPath, /\/result-retry-[a-f0-9]{64}\.json$/);
+    assert.notEqual(second.receiptPath, first.receiptPath);
+    assert.equal(existsSync(first.receiptPath), true);
+    assert.equal(existsSync(second.receiptPath), true);
+    assert.equal(run.report.ownerChildLaunchCount, 2);
+
+    assert.notEqual(run.report.thirdInitial?.status, 0);
+    assert.match(run.report.thirdInitial?.stderr ?? '', /OWNER_RETRY_EXHAUSTED/);
+    assert.equal(existsSync(join(root, 'src')), false);
+  } finally {
+    run.cleanup();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a failed initial transaction that consumed both delegated attempts cannot open another owner grant', async () => {
+  const root = project('omd-owner-failed-initial-budget-');
+  const run = await launchOwner({ root, mode: 'failed-fast', operation: 'failed-initial-reentry' });
+  try {
+    assert.equal(run.report.firstStatus, 1);
+    const first = JSON.parse(run.report.firstStdout!) as { result: string; failure: string; attempts: unknown[] };
+    assert.equal(first.result, 'failed');
+    assert.equal(first.failure, 'OWNER_ATTEMPTS_EXHAUSTED');
+    assert.equal(first.attempts.length, 2);
+    assert.notEqual(run.report.secondInitial?.status, 0);
+    assert.match(run.report.secondInitial?.stderr ?? '', /OWNER_RETRY_EXHAUSTED/);
+    assert.equal(run.report.ownerChildLaunchCount, 2);
+    assert.equal(readdirSync(run.hostResult.ownerDirectory).filter((path) => path.endsWith('.json')).length, 1);
+    assert.equal(existsSync(join(root, 'src')), false);
+  } finally {
+    run.cleanup();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a re-entry failure uses its one signed remaining attempt and persists a structured readonly receipt', async () => {
+  const root = project('omd-owner-reentry-failure-receipt-');
+  const run = await launchOwner({ root, mode: 'no-op-reentry-failed', operation: 'failed-initial-reentry' });
+  try {
+    const first = JSON.parse(run.report.firstStdout!) as { result: string; attempts: unknown[]; receiptPath: string };
+    assert.equal(first.result, 'failed');
+    assert.equal(first.attempts.length, 1);
+
+    assert.equal(run.report.secondInitial?.status, 1);
+    const second = JSON.parse(run.report.secondInitial!.stdout) as {
+      result: string;
+      failure: string;
+      attempts: Array<{ status: string; exitCode: number | null; projectChanges: string[] }>;
+      receiptPath: string;
+    };
+    assert.equal(second.result, 'failed');
+    assert.equal(second.failure, 'OWNER_ATTEMPTS_EXHAUSTED');
+    assert.deepEqual(second.attempts.map((attempt) => attempt.status), ['failed']);
+    assert.deepEqual(second.attempts.map((attempt) => attempt.exitCode), [7]);
+    assert.deepEqual(second.attempts[0]?.projectChanges, []);
+    assert.match(second.receiptPath, /\/result-retry-[a-f0-9]{64}\.json$/);
+    assert.equal(statSync(second.receiptPath).mode & 0o777, 0o400);
+    assert.equal(run.report.ownerChildLaunchCount, 2, 'the broker launched exactly two initial owner children total');
+
+    assert.notEqual(run.report.thirdInitial?.status, 0);
+    assert.match(run.report.thirdInitial?.stderr ?? '', /OWNER_RETRY_EXHAUSTED/);
+    assert.equal(existsSync(join(root, 'src')), false);
+  } finally {
+    run.cleanup();
+    rmSync(root, { recursive: true, force: true });
   }
 });
 
@@ -763,6 +1116,22 @@ test('production owner accepts task_complete only with a final agent message and
   }
 });
 
+test('a malformed post-launch broker response restores writes and terminally aborts its grant', async () => {
+  const root = project('omd-owner-malformed-exec-response-');
+  const run = await launchOwner({ root, mode: 'malformed-exec-response', operation: 'malformed-exec-response' });
+  try {
+    assert.notEqual(run.report.status, 0);
+    assert.match(run.report.stderr, /OWNER_EXECUTION_ABORTED:OWNER_EXECUTION_REJECTED: OMD_TEST_MALFORMED_EXEC_RESPONSE/);
+    assert.equal(run.report.sourceAfterMalformed, false, 'post-launch source mutation was not restored');
+    assert.notEqual(run.report.malformedSecond?.status, 0);
+    assert.match(run.report.malformedSecond?.stderr ?? '', /OWNER_DUPLICATE_COMPLETION/);
+    assert.equal(existsSync(join(root, 'src', 'copy', 'index.html')), false);
+  } finally {
+    run.cleanup();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('production owner rejects task_complete without a final agent message', async () => {
   const root = project('omd-owner-task-complete-no-message-');
   const run = await launchOwner({ root, mode: 'task-complete-no-message' });
@@ -777,7 +1146,7 @@ test('production owner rejects task_complete without a final agent message', asy
   }
 });
 
-test('signed owner completion cannot race a surviving descendant project mutation', async () => {
+test('signed owner completion waits for signal-resistant descendant quiescence', async () => {
   const root = project('omd-owner-receipt-race-');
   const lateMutation = join(root, '.omd', 'late-owner-mutation.json');
   const run = await launchOwner({ root, mode: 'receipt-race' });
@@ -787,7 +1156,7 @@ test('signed owner completion cannot race a surviving descendant project mutatio
     assert.equal(
       await pathAppears(lateMutation),
       false,
-      'a descendant survived the signed execution receipt and mutated the project afterward',
+      'a signal-resistant descendant survived the signed execution receipt and mutated the project afterward',
     );
   } finally {
     run.cleanup();

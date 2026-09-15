@@ -136,8 +136,30 @@ lane. The three perspectives plus moderator bind the complete supplied register 
 two or three distinct supported registers, or one matching a current explicit user register lock.
 This is separate from upstream concept-study count; same-register concepts are compared visibly before
 choosing their canonical representative. A motion-only lock does not authorize a singleton.
-`omd art-direction check` consumes that moderator-owned receipt through the current host-issued
-invocation and persists the immutable direction and downstream handoffs. The command does not issue
+Before a fresh evaluator judges, run `omd art-direction check-input --input <alternatives.json> --json`.
+This read-only preparation validates the selected board and handoff, then fills the current route,
+sorted unique task IDs, board/pre-selection/handoff/intent hashes and canonical alternatives digest
+in both evaluator skeletons. The derived metadata contains no source identity; supplied alternatives
+must already be sanitized and are copied unchanged, not certified as a valid comparison. Without an intent pointer it previews
+the publisher's canonical empty no-lock ledger; it neither records a user instruction nor writes
+an intent. A stale existing ledger or handoff fails instead of falling back. Pass this exact lineage,
+the complete alternatives and source-free rendered comparison to the evaluator. Scores, rationales,
+winner and motion dispositions remain unfilled evaluator-owned judgments, not a prepared verdict.
+Preserve the evaluator's returned assessment and result without semantic changes. The current
+host-issued invocation authorizes their canonical JSON payload bytes during `omd art-direction check`;
+`check-input` does not issue a receipt, and the evaluator does not need to invent a separate receipt
+or append a user-intent event before it can judge. A generic role result is not publication authority.
+The moderator-authored deliberation record and evaluator payloads are separate from host authority.
+Use the explicit `--activation` or inherited host activation path for publication; that path is
+authoritative when present and does not fall back to an inline invocation on failure. Legacy inline
+invocation input applies only when no activation path is provided.
+Before publication, the coordinator assigns a non-empty set of stable `B-<number>` IDs to the
+actual evidenced content regions. These IDs identify content, not a prescribed layout or invented
+facts; use the smallest set that covers the selected design. An empty set cannot support the
+downstream copy and rendered-Beat contracts. Deliver the selected IDs and exception receipt using
+the exact copy-safe field syntax in `protocol/copy-deck.md`; Writer never authors missing direction IDs.
+`omd art-direction check` publishes through the current host-issued invocation and persists the
+immutable direction and downstream handoffs. The command does not issue
 its own authority. Missing host publication authority blocks this publication path; a session without
 the launcher receipt must not substitute a handwritten direction or claim a local authority fallback.
 

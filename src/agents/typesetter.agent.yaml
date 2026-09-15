@@ -44,6 +44,11 @@ instructions: |
   and specimen container widths.
   Also record which representative screens deliberately omit kicker, support, or display roles
   and compare the desktop/mobile sequence for repeated typographic silhouettes.
+  Apply `theory/typography.md` **[type-composition-boundary]**: distinguish exact selected
+  assignments, tested treatment options, and unresolved role assignments in the existing role
+  map and source-free handoff. A neutral specimen does not approve page-wide focal dominance.
+  Prove a competing heading alternative only when the supplied focal job leaves that assignment
+  unresolved; do not invent a page layout or require alternatives for every role.
 
   Wait for the OMD render/IR path to report fonts ready before judging. Computed styles and
   FontFace load status are evidence, not proof of the physical font that painted each glyph.

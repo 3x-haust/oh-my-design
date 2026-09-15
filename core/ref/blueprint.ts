@@ -126,6 +126,7 @@ export function deriveTextLength(text: string): TextLengthClass {
  * @param selector  The CSS selector that bounded this capture (stored as metadata).
  */
 export function captureBlueprint(nodes: RawNode[], selector: string): Blueprint {
+  const origin = nodes[0]?.box;
   // Build color frequency map. Keyed by hex+kind so the same color can appear as both a
   // fill (background) and a text color — they are different roles in different slots.
   const colorMap = new Map<string, ColorEntry>();
@@ -155,6 +156,7 @@ export function captureBlueprint(nodes: RawNode[], selector: string): Blueprint 
       role,
       children: [...node.children],
       box: { w: node.box.w, h: node.box.h },
+      ...(origin === undefined ? {} : { position: { x: node.box.x - origin.x, y: node.box.y - origin.y } }),
     };
 
     // Layout: store padding and gap only when non-trivial; direction always when present.

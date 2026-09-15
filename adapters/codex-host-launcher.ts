@@ -1,12 +1,14 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash, generateKeyPairSync, randomBytes, sign, type KeyObject } from 'node:crypto';
-import { appendFileSync, chmodSync, closeSync, existsSync, fstatSync, fsyncSync, ftruncateSync, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, readdirSync, realpathSync, rmSync, unlinkSync, watch, writeFileSync, writeSync } from 'node:fs';
+import { appendFileSync, chmodSync, closeSync, constants as fsConstants, existsSync, fstatSync, fsyncSync, ftruncateSync, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, readdirSync, realpathSync, rmSync, unlinkSync, watch, writeFileSync, writeSync, type Stats } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { type Writable } from 'node:stream';
 import { parse as parseToml } from 'smol-toml';
 import { codexCliContext } from './codex-cli-context.ts';
+import { codexDiscoverySearchArguments, codexDiscoverySearchPolicy, type CodexDiscoverySearchPolicy } from './codex-search-policy.ts';
+import { CODEX_STUDY_ROLE, codexStudyEntryError, codexStudyRestrictions } from './codex-study-runtime.ts';
 import { canonicalSkillSourceBytes, createBuildIdentityFromSource, type BuildIdentity } from './build.ts';
 import {
   CODEX_HOST_LOADED_SKILL_RECEIPT_SCHEMA_VERSION,
@@ -14,8 +16,9 @@ import {
   observeCodexLoadedSkill,
   type CodexHostLoadedSkillReceipt,
 } from './codex.ts';
-import { HOST_PAYLOAD_AUTHORIZATION_PURPOSES, type HostPayloadAuthorizationPurpose } from '../core/runtime/activation.ts';
+import { HOST_PAYLOAD_AUTHORIZATION_PURPOSES, hasCodexHostAiDecision, recordCodexHostAiDecision, type HostPayloadAuthorizationPurpose } from '../core/runtime/activation.ts';
 import type { ProjectRunInvocation } from '../core/runtime/invocation.ts';
+import { observationV2Sha256, readCurrentObservationV2 } from '../core/runtime/observation.ts';
 import { adaptiveRouteAuthorityBytes, adaptiveRouteAuthorityPath } from '../core/route/adaptive-route-authority.ts';
 import { parseRouteRecord } from '../core/route/adaptive-route-record.ts';
 import {
@@ -23,6 +26,14 @@ import {
   isBrokeredBrowserCliOperation,
   type CodexBrowserRole,
 } from '../core/runtime/codex-browser-operation.ts';
+import { createReviewerMcpAdapter, type ReviewerLaunchBundle } from './reviewer-mcp.ts';
+import { RENDERED_REFINEMENT_REVIEWER_TASK } from '../core/runtime/rendered-refinement.ts';
+import {
+  FINAL_RENDER_REVIEWER_PACKET_INPUT_SCHEMA,
+  FINAL_RENDER_REVIEWER_TASK,
+  FINAL_RENDER_REVIEWER_TRANSPORT_SCHEMA,
+  finalRenderReviewerPacket,
+} from '../core/runtime/final-render-review.ts';
 
 const PACKAGE_ROOT = fileURLToPath(new URL('..', import.meta.url));
 const AUTHORITY_REQUEST_SCHEMA = 'omd-codex-authority-request-v1';
@@ -32,6 +43,8 @@ const OWNER_EXEC_REQUEST_SCHEMA = 'omd-codex-owner-exec-request-v1';
 const OWNER_EXEC_RESULT_SCHEMA = 'omd-codex-owner-exec-result-v1';
 const OWNER_PERSIST_REQUEST_SCHEMA = 'omd-codex-owner-persist-request-v1';
 const OWNER_PERSIST_ACK_SCHEMA = 'omd-codex-owner-persist-ack-v1';
+const OWNER_ABORT_REQUEST_SCHEMA = 'omd-codex-owner-abort-request-v1';
+const OWNER_ABORT_ACK_SCHEMA = 'omd-codex-owner-abort-ack-v1';
 const OWNER_RESULT_SCHEMA = 'omd-production-owner-result-v1';
 const ROLE_EXEC_REQUEST_SCHEMA = 'omd-codex-role-exec-request-v1';
 const ROLE_EXEC_RESULT_SCHEMA = 'omd-codex-role-exec-result-v1';
@@ -47,6 +60,106 @@ const MAX_OWNER_TIMEOUT_MS = 2 * 60 * 60 * 1000;
 const DEFAULT_RECEIPT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 const RECEIPT_TTL_MS = 60_000;
 const OWNER_GRANT_TTL_MS = (2 * MAX_OWNER_TIMEOUT_MS) + RECEIPT_TTL_MS;
+const AUTHORITY_RESPONSE_DELIVERY_TIMEOUT_MS = 5_000;
+const AUTHORITY_RESPONSE_RETRY_MS = 10;
+
+export type CodexAuthorityResponseChannel = Readonly<{
+  path: string;
+  device: string;
+  inode: string;
+  mode: number;
+}>;
+
+function authorityResponseChannelStat(path: string): Stats {
+  const metadata = lstatSync(path);
+  if (!metadata.isFIFO() || metadata.isSymbolicLink() || (metadata.mode & 0o7777) !== 0o600) {
+    throw new Error('authority response channel is not an exact private FIFO');
+  }
+  return metadata;
+}
+
+export function bindCodexAuthorityResponseChannel(path: string): CodexAuthorityResponseChannel {
+  const metadata = authorityResponseChannelStat(path);
+  return Object.freeze({
+    path,
+    device: String(metadata.dev),
+    inode: String(metadata.ino),
+    mode: metadata.mode & 0o7777,
+  });
+}
+
+function requireUnchangedAuthorityResponseChannel(
+  channel: CodexAuthorityResponseChannel,
+  metadata = authorityResponseChannelStat(channel.path),
+): void {
+  if (String(metadata.dev) !== channel.device || String(metadata.ino) !== channel.inode
+    || (metadata.mode & 0o7777) !== channel.mode) {
+    throw new Error('authority response channel was replaced or changed');
+  }
+}
+
+function removeUnchangedAuthorityResponseChannel(channel: CodexAuthorityResponseChannel): void {
+  try {
+    requireUnchangedAuthorityResponseChannel(channel);
+    unlinkSync(channel.path);
+  } catch {
+    // The client may already have consumed and removed its FIFO. Never unlink a replacement.
+  }
+}
+
+function retryableFifoError(error: unknown): boolean {
+  const code = (error as NodeJS.ErrnoException).code;
+  return code === 'EAGAIN' || code === 'EWOULDBLOCK' || code === 'EINTR' || code === 'ENXIO';
+}
+
+function deliveryWait(): Promise<void> {
+  return new Promise((resolveWait) => setTimeout(resolveWait, AUTHORITY_RESPONSE_RETRY_MS));
+}
+
+/** Delivers to one pre-bound FIFO without ever blocking the host event loop on a missing reader. */
+export async function deliverCodexAuthorityResponse(
+  channel: CodexAuthorityResponseChannel,
+  response: Uint8Array,
+  timeoutMs = AUTHORITY_RESPONSE_DELIVERY_TIMEOUT_MS,
+): Promise<void> {
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1) throw new Error('authority response timeout is invalid');
+  const bytes = Buffer.from(response);
+  const deadline = Date.now() + timeoutMs;
+  let descriptor: number | undefined;
+  try {
+    while (descriptor === undefined) {
+      requireUnchangedAuthorityResponseChannel(channel);
+      try {
+        descriptor = openSync(
+          channel.path,
+          fsConstants.O_WRONLY | fsConstants.O_NONBLOCK | fsConstants.O_NOFOLLOW,
+        );
+      } catch (error) {
+        if (!retryableFifoError(error)) throw error;
+        if (Date.now() >= deadline) throw new Error('authority response reader did not open before the delivery deadline');
+        await deliveryWait();
+      }
+    }
+    requireUnchangedAuthorityResponseChannel(channel, fstatSync(descriptor));
+    let offset = 0;
+    while (offset < bytes.byteLength) {
+      try {
+        const written = writeSync(descriptor, bytes, offset, bytes.byteLength - offset);
+        if (written > 0) {
+          offset += written;
+          continue;
+        }
+      } catch (error) {
+        if (!retryableFifoError(error)) throw error;
+      }
+      if (Date.now() >= deadline) throw new Error('authority response write did not complete before the delivery deadline');
+      await deliveryWait();
+    }
+  } finally {
+    if (descriptor !== undefined) closeSync(descriptor);
+    removeUnchangedAuthorityResponseChannel(channel);
+  }
+}
 
 function splitShellLine(line: string): readonly string[] {
   const segments: string[] = [];
@@ -139,7 +252,7 @@ const DELEGATED_PAYLOAD_PURPOSES = [
 ] as const satisfies readonly HostPayloadAuthorizationPurpose[];
 const NON_PRODUCTION_ROLES = [
   'omd-framer', 'omd-scout', 'omd-writer', 'omd-typesetter',
-  'omd-composer', 'omd-sketch', 'omd-eye', 'omd-glance',
+  'omd-composer', 'omd-sketch', 'omd-eye', 'omd-glance', CODEX_STUDY_ROLE,
 ] as const;
 type NonProductionRole = (typeof NON_PRODUCTION_ROLES)[number];
 const OFFICIAL_ROLES = ['omd-hand', ...NON_PRODUCTION_ROLES] as const;
@@ -228,10 +341,20 @@ type AuthorityRequest = RequestIdentity & Readonly<{
   schema: typeof AUTHORITY_REQUEST_SCHEMA;
   requestedAuthorization?: RequestedPayloadAuthorization;
 }>;
+type OwnerRepairBinding = Readonly<{
+  mirrorRoot: string;
+  mirrorDevice: string;
+  mirrorInode: string;
+  mirrorBaselineSha256: string;
+  observationPointerSha256: string;
+  observationSha256: string;
+}>;
 type OwnerLaunchRequest = RequestIdentity & Readonly<{
   schema: typeof OWNER_REQUEST_SCHEMA;
   owner: 'omd-hand';
   taskSha256: string;
+  mode: 'production' | 'repair';
+  repair?: OwnerRepairBinding;
 }>;
 type OwnerExecRequest = RequestIdentity & Readonly<{
   schema: typeof OWNER_EXEC_REQUEST_SCHEMA;
@@ -241,6 +364,8 @@ type OwnerExecRequest = RequestIdentity & Readonly<{
   attempt: 1 | 2;
   timeoutMs: number;
   task: string;
+  mode: 'production' | 'repair';
+  repair?: OwnerRepairBinding;
 }>;
 type OwnerPersistRequest = RequestIdentity & Readonly<{
   schema: typeof OWNER_PERSIST_REQUEST_SCHEMA;
@@ -249,12 +374,24 @@ type OwnerPersistRequest = RequestIdentity & Readonly<{
   grantNonce: string;
   resultSha256: string;
   result: Record<string, unknown>;
+  mode: 'production' | 'repair';
+  repair?: OwnerRepairBinding;
+}>;
+type OwnerAbortRequest = RequestIdentity & Readonly<{
+  schema: typeof OWNER_ABORT_REQUEST_SCHEMA;
+  owner: 'omd-hand';
+  taskSha256: string;
+  grantNonce: string;
+  mode: 'production' | 'repair';
+  repair?: OwnerRepairBinding;
+  failure: string;
 }>;
 type RoleExecRequest = RequestIdentity & Readonly<{
   schema: typeof ROLE_EXEC_REQUEST_SCHEMA;
   role: NonProductionRole;
   timeoutMs: number;
   task: string;
+  reviewerPacket?: Readonly<{ path: string; sha256: string }>;
 }>;
 type BrowserExecRequest = RequestIdentity & Readonly<{
   schema: typeof BROWSER_EXEC_REQUEST_SCHEMA;
@@ -284,6 +421,7 @@ type OwnerChildBinding = Readonly<{
   taskSha256: string;
   route: RouteBinding;
   expiresAt: number;
+  transactionMode?: 'production' | 'repair';
   role?: CodexBrowserRole | NonProductionRole;
 }>;
 type OwnerBrokerState = {
@@ -294,14 +432,28 @@ type OwnerBrokerState = {
     nonce: string;
     expiresAt: number;
     route: RouteBinding;
+    mode: 'production' | 'repair';
+    receiptPath: string;
+    repair?: OwnerRepairBinding;
+    repairBaseline?: ReadonlyMap<string, string>;
+    repairTransactionKey?: string;
+    initialRetry: boolean;
+    attemptBudget: 1 | 2;
   }>;
   children: Map<number, OwnerChildBinding>;
   roleChildren: Map<string, OwnerChildBinding>;
   nextAttempt: 1 | 2 | 3;
   sessionIds: Set<string>;
   completed: boolean;
+  initialCompletedSuccessfully: boolean;
+  initialAttemptCount: 0 | 1 | 2;
+  initialSuccessfulReceiptPath?: string;
+  retryableInitialFailure?: Readonly<{ resultSha256: string; receiptPath: string }>;
+  initialRetryExhausted: boolean;
+  consumedRepairTransactions: Set<string>;
   trustedBrowserResults: Set<string>;
   trustedFinalReviewerResults: Set<string>;
+  trustedProductionOwnerRepairResults: Set<string>;
 };
 type OwnerRoleProfile = Readonly<{ name: 'omd-hand'; model_reasoning_effort: string; developer_instructions: string }>;
 type NonProductionRoleProfile = Readonly<{ name: NonProductionRole; model_reasoning_effort: string; developer_instructions: string }>;
@@ -478,44 +630,95 @@ export function isCodexOwnerAuthorityRequest(
     && (value.argv[3] === 'run' || value.argv[3] === 'repair');
 }
 
+function parseOwnerRepairBinding(value: unknown): OwnerRepairBinding | undefined {
+  if (!isRecord(value) || !exactKeys(value, [
+    'mirrorRoot', 'mirrorDevice', 'mirrorInode', 'mirrorBaselineSha256',
+    'observationPointerSha256', 'observationSha256',
+  ]) || typeof value.mirrorRoot !== 'string' || !isAbsolute(value.mirrorRoot)
+    || typeof value.mirrorDevice !== 'string' || !/^\d+$/.test(value.mirrorDevice)
+    || typeof value.mirrorInode !== 'string' || !/^\d+$/.test(value.mirrorInode)
+    || typeof value.mirrorBaselineSha256 !== 'string' || !SHA256.test(value.mirrorBaselineSha256)
+    || typeof value.observationPointerSha256 !== 'string' || !SHA256.test(value.observationPointerSha256)
+    || typeof value.observationSha256 !== 'string' || !SHA256.test(value.observationSha256)) return undefined;
+  return value as OwnerRepairBinding;
+}
+
+function ownerMode(value: Record<string, unknown>): 'production' | 'repair' | undefined {
+  const mode = value.mode;
+  if ((mode !== 'production' && mode !== 'repair')
+    || !Array.isArray(value.argv) || value.argv[2] !== 'owner'
+    || value.argv[3] !== (mode === 'production' ? 'run' : 'repair')) return undefined;
+  return mode;
+}
+
 function parseOwnerRequest(value: unknown): OwnerLaunchRequest | undefined {
-  if (!isRecord(value) || !exactKeys(value, ['schema', 'requestId', 'clientPid', 'requesterPid', 'cliPath', 'activationPath', 'projectRoot', 'argv', 'activation', 'owner', 'taskSha256'])) return undefined;
+  if (!isRecord(value) || !exactKeys(value, ['schema', 'requestId', 'clientPid', 'requesterPid', 'cliPath', 'activationPath', 'projectRoot', 'argv', 'activation', 'owner', 'taskSha256', 'mode', ...(value.repair === undefined ? [] : ['repair'])])) return undefined;
   if (value.schema !== OWNER_REQUEST_SCHEMA || !validRequestIdentity(value) || value.owner !== 'omd-hand'
-    || typeof value.taskSha256 !== 'string' || !SHA256.test(value.taskSha256)) return undefined;
+    || typeof value.taskSha256 !== 'string' || !SHA256.test(value.taskSha256)
+    || ownerMode(value) === undefined
+    || (value.mode === 'repair') !== (parseOwnerRepairBinding(value.repair) !== undefined)) return undefined;
   return value as OwnerLaunchRequest;
 }
 
 function parseOwnerExecRequest(value: unknown): OwnerExecRequest | undefined {
-  if (!isRecord(value) || !exactKeys(value, ['schema', 'requestId', 'clientPid', 'requesterPid', 'cliPath', 'activationPath', 'projectRoot', 'argv', 'activation', 'owner', 'taskSha256', 'grantNonce', 'attempt', 'timeoutMs', 'task'])) return undefined;
+  if (!isRecord(value) || !exactKeys(value, ['schema', 'requestId', 'clientPid', 'requesterPid', 'cliPath', 'activationPath', 'projectRoot', 'argv', 'activation', 'owner', 'taskSha256', 'grantNonce', 'attempt', 'timeoutMs', 'task', 'mode', ...(value.repair === undefined ? [] : ['repair'])])) return undefined;
   if (value.schema !== OWNER_EXEC_REQUEST_SCHEMA || !validRequestIdentity(value) || value.owner !== 'omd-hand'
     || typeof value.taskSha256 !== 'string' || !SHA256.test(value.taskSha256)
     || typeof value.grantNonce !== 'string' || !/^[A-Za-z0-9_-]{32,}$/.test(value.grantNonce)
     || (value.attempt !== 1 && value.attempt !== 2) || !Number.isSafeInteger(value.timeoutMs)
     || Number(value.timeoutMs) < 25 || Number(value.timeoutMs) > MAX_OWNER_TIMEOUT_MS
-    || typeof value.task !== 'string' || value.task.trim() === '' || sha256(value.task) !== value.taskSha256) return undefined;
+    || typeof value.task !== 'string' || value.task.trim() === '' || sha256(value.task) !== value.taskSha256
+    || ownerMode(value) === undefined
+    || (value.mode === 'repair') !== (parseOwnerRepairBinding(value.repair) !== undefined)) return undefined;
   return value as OwnerExecRequest;
 }
 
 function parseOwnerPersistRequest(value: unknown): OwnerPersistRequest | undefined {
-  if (!isRecord(value) || !exactKeys(value, ['schema', 'requestId', 'clientPid', 'requesterPid', 'cliPath', 'activationPath', 'projectRoot', 'argv', 'activation', 'owner', 'taskSha256', 'grantNonce', 'resultSha256', 'result'])) return undefined;
+  if (!isRecord(value) || !exactKeys(value, ['schema', 'requestId', 'clientPid', 'requesterPid', 'cliPath', 'activationPath', 'projectRoot', 'argv', 'activation', 'owner', 'taskSha256', 'grantNonce', 'resultSha256', 'result', 'mode', ...(value.repair === undefined ? [] : ['repair'])])) return undefined;
   if (value.schema !== OWNER_PERSIST_REQUEST_SCHEMA || !validRequestIdentity(value) || value.owner !== 'omd-hand'
     || typeof value.taskSha256 !== 'string' || !SHA256.test(value.taskSha256)
     || typeof value.grantNonce !== 'string' || !/^[A-Za-z0-9_-]{32,}$/.test(value.grantNonce)
     || typeof value.resultSha256 !== 'string' || !SHA256.test(value.resultSha256) || !isRecord(value.result)
-    || sha256(`${canonicalJson(value.result)}\n`) !== value.resultSha256) return undefined;
+    || sha256(`${canonicalJson(value.result)}\n`) !== value.resultSha256
+    || ownerMode(value) === undefined
+    || (value.mode === 'repair') !== (parseOwnerRepairBinding(value.repair) !== undefined)) return undefined;
   return value as OwnerPersistRequest;
+}
+
+function parseOwnerAbortRequest(value: unknown): OwnerAbortRequest | undefined {
+  if (!isRecord(value) || !exactKeys(value, [
+    'schema', 'requestId', 'clientPid', 'requesterPid', 'cliPath', 'activationPath',
+    'projectRoot', 'argv', 'activation', 'owner', 'taskSha256', 'grantNonce', 'mode',
+    ...(value.repair === undefined ? [] : ['repair']), 'failure',
+  ])) return undefined;
+  if (value.schema !== OWNER_ABORT_REQUEST_SCHEMA || !validRequestIdentity(value) || value.owner !== 'omd-hand'
+    || typeof value.taskSha256 !== 'string' || !SHA256.test(value.taskSha256)
+    || typeof value.grantNonce !== 'string' || !/^[A-Za-z0-9_-]{32,}$/.test(value.grantNonce)
+    || ownerMode(value) === undefined
+    || (value.mode === 'repair') !== (parseOwnerRepairBinding(value.repair) !== undefined)
+    || typeof value.failure !== 'string' || value.failure.trim() === '' || value.failure.length > 4_000) return undefined;
+  return value as OwnerAbortRequest;
 }
 
 function parseRoleExecRequest(value: unknown): RoleExecRequest | undefined {
   if (!isRecord(value) || !exactKeys(value, [
     'schema', 'requestId', 'clientPid', 'requesterPid', 'cliPath', 'activationPath',
     'projectRoot', 'argv', 'activation', 'role', 'timeoutMs', 'task',
+    ...(value.reviewerPacket === undefined ? [] : ['reviewerPacket']),
   ])) return undefined;
   if (value.schema !== ROLE_EXEC_REQUEST_SCHEMA || !validRequestIdentity(value)
     || !NON_PRODUCTION_ROLES.includes(value.role as NonProductionRole)
     || !Number.isSafeInteger(value.timeoutMs) || Number(value.timeoutMs) < 25
     || Number(value.timeoutMs) > MAX_OWNER_TIMEOUT_MS
     || typeof value.task !== 'string' || value.task.trim() === '') return undefined;
+  if (value.reviewerPacket !== undefined) {
+    if (value.role !== 'omd-eye' || !isRecord(value.reviewerPacket)
+      || !exactKeys(value.reviewerPacket, ['path', 'sha256'])
+      || typeof value.reviewerPacket.path !== 'string'
+      || !/^\.omd\/(?:refinement|final-review)\/reviewer-packets\/sha256-[a-f0-9]{64}\.json$/.test(value.reviewerPacket.path)
+      || typeof value.reviewerPacket.sha256 !== 'string' || !SHA256.test(value.reviewerPacket.sha256)
+      || !value.reviewerPacket.path.endsWith(`sha256-${value.reviewerPacket.sha256}.json`)) return undefined;
+  }
   return value as RoleExecRequest;
 }
 
@@ -578,6 +781,8 @@ const PAYLOAD_OPERATION_PHASES: Readonly<Partial<Record<HostPayloadAuthorization
     Object.freeze(['route', 'classify']),
     Object.freeze(['route', 'show']),
     Object.freeze(['route', 'check']),
+    Object.freeze(['ref', 'discover-plan']),
+    Object.freeze(['ref', 'granularity']),
     Object.freeze(['stage', 'status']),
     Object.freeze(['stage', 'resume']),
     Object.freeze(['stage', 'require']),
@@ -622,6 +827,10 @@ const PAYLOAD_OPERATION_PHASES: Readonly<Partial<Record<HostPayloadAuthorization
   'final-reviewer-lane': Object.freeze([
     Object.freeze(['review', 'publish']),
     Object.freeze(['review', 'repair-publish']),
+    Object.freeze(['review', 'refinement-publish']),
+    Object.freeze(['lifecycle', 'refinement-evidence']),
+    Object.freeze(['lifecycle', 'refine']),
+    Object.freeze(['lifecycle', 'refinement-rollback']),
     Object.freeze(['evidence', 'v2', 'finalize']),
     Object.freeze(['evidence', 'v2', 'check']),
     Object.freeze(['completion', 'preflight']),
@@ -636,7 +845,13 @@ const PAYLOAD_OPERATION_PHASES: Readonly<Partial<Record<HostPayloadAuthorization
 
 export function codexPayloadAuthorizationPhaseError(argv: readonly string[], purpose: HostPayloadAuthorizationPurpose): string | undefined {
   const operation = argv.slice(2);
-  const phases = PAYLOAD_OPERATION_PHASES[purpose];
+  // AI decisions are authored only by the coordinator's canonical decision command. Every
+  // route consumer also revalidates the persisted decision's exact bytes and current pointer.
+  // Reuse that phase set so a valid AI-bearing route can still be read at later gates. Delegated
+  // readers may revalidate only a host-observed digest; they cannot publish decisions.
+  const phases = purpose === 'ai-asset-decision'
+    ? [['decision'], ...PAYLOAD_OPERATION_PHASES['adaptive-route-authority']!]
+    : PAYLOAD_OPERATION_PHASES[purpose];
   return phases?.some((phase) => phase.every((part, index) => operation[index] === part)) === true
     ? undefined
     : `the ${purpose} payload requires an exact trusted host-observed CLI phase (received: ${operation.join(' ')})`;
@@ -666,16 +881,38 @@ export function isCodexFinalEvidenceContinuationPayload(
     && isRecord(payload) && payload.schema === 'trusted-browser-receipt-v1';
 }
 
+export function productionOwnerRepairPayloadAuthorizationError(
+  argv: readonly string[],
+  payloadSha256: string,
+  trustedResults: Set<string>,
+): string | undefined {
+  const operation = argv.slice(2);
+  if (operation[0] !== 'lifecycle' || operation[1] !== 'repair'
+    || !trustedResults.has(payloadSha256)) {
+    return 'production-owner-repair payload requires the exact persisted repair-owner result and lifecycle repair phase';
+  }
+  trustedResults.delete(payloadSha256);
+  return undefined;
+}
+
 function brokerPayloadAuthorizationError(
   request: AuthorityRequest,
   state: OwnerBrokerState,
 ): string | undefined {
   const authorization = request.requestedAuthorization;
   if (authorization === undefined) return undefined;
+  if (authorization.purpose === 'production-owner-repair') {
+    return productionOwnerRepairPayloadAuthorizationError(
+      request.argv,
+      authorization.payloadSha256,
+      state.trustedProductionOwnerRepairResults,
+    );
+  }
   if (authorization.purpose === 'final-reviewer-lane') {
     const operation = request.argv.slice(2);
     if (operation[0] === 'review'
-      && (operation[1] === 'publish' || operation[1] === 'repair-publish')) {
+      && (operation[1] === 'publish' || operation[1] === 'repair-publish'
+        || operation[1] === 'refinement-publish')) {
       state.trustedFinalReviewerResults.add(authorization.payloadSha256);
       return undefined;
     }
@@ -683,6 +920,12 @@ function brokerPayloadAuthorizationError(
       || (operation[0] === 'evidence' && operation[1] === 'v2' && operation[2] === 'finalize');
     if (finalization && state.trustedFinalReviewerResults.has(authorization.payloadSha256)) return undefined;
     if (operation[0] === 'lifecycle' && operation[1] === 'repair'
+      && state.trustedFinalReviewerResults.has(authorization.payloadSha256)) return undefined;
+    if (operation[0] === 'lifecycle' && operation[1] === 'refine'
+      && state.trustedFinalReviewerResults.has(authorization.payloadSha256)) return undefined;
+    if (operation[0] === 'lifecycle' && operation[1] === 'refinement-rollback'
+      && state.trustedFinalReviewerResults.has(authorization.payloadSha256)) return undefined;
+    if (operation[0] === 'lifecycle' && operation[1] === 'refinement-evidence'
       && state.trustedFinalReviewerResults.has(authorization.payloadSha256)) return undefined;
     return codexPayloadAuthorizationPhaseError(request.argv, authorization.purpose);
   }
@@ -711,6 +954,9 @@ function brokerPayloadAuthorizationError(
     return undefined;
   }
   if (schema === 'trusted-browser-receipt-v1' && finalization
+    && state.trustedBrowserResults.has(authorization.payloadSha256)) return undefined;
+  if (schema === 'trusted-browser-receipt-v1'
+    && operation[0] === 'review' && operation[1] === 'final-packet'
     && state.trustedBrowserResults.has(authorization.payloadSha256)) return undefined;
   if (operation[0] === 'completion' && operation[1] === 'typography-applicability'
     && isRecord(value)
@@ -791,10 +1037,113 @@ function sameRouteBinding(left: RouteBinding, right: RouteBinding): boolean {
   return canonicalJson(left) === canonicalJson(right);
 }
 
+type RepairMirrorFile = Readonly<{ mode: number; sha256: string }>;
+type RepairInspection = Readonly<{
+  binding: OwnerRepairBinding;
+  files: ReadonlyMap<string, RepairMirrorFile>;
+  entries: ReadonlyMap<string, string>;
+}>;
+
+function routeGlob(pattern: string): RegExp {
+  const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*\*\//g, '\u0000')
+    .replace(/\*\*/g, '\u0001').replace(/\*/g, '[^/]*').replace(/\u0000/g, '(?:.*/)?')
+    .replace(/\u0001/g, '.*').replace(/\?/g, '[^/]');
+  return new RegExp(`^${escaped}$`);
+}
+
+function ownerRepairPathAllowed(path: string, route: RouteBinding): boolean {
+  return route.allowedPaths.some((pattern) => routeGlob(pattern).test(path));
+}
+
+function inspectOwnerRepairMirror(
+  projectRoot: string,
+  mirrorInput: string,
+  route: RouteBinding,
+  requireProjectMatch: boolean,
+): RepairInspection {
+  if (!isAbsolute(mirrorInput) || mirrorInput.includes('\0')) throw new Error('OWNER_REPAIR_MIRROR_INVALID');
+  let mirrorRoot: string;
+  let mirrorMetadata;
+  try {
+    mirrorMetadata = lstatSync(mirrorInput);
+    mirrorRoot = realpathSync(mirrorInput);
+  } catch { throw new Error('OWNER_REPAIR_MIRROR_INVALID'); }
+  const fromProject = relative(projectRoot, mirrorRoot);
+  if (!mirrorMetadata.isDirectory() || mirrorMetadata.isSymbolicLink() || (mirrorMetadata.mode & 0o777) !== 0o700
+    || fromProject === '' || (!fromProject.startsWith('..') && !isAbsolute(fromProject))) {
+    throw new Error('OWNER_REPAIR_MIRROR_INVALID');
+  }
+  let observation;
+  try { observation = readCurrentObservationV2(projectRoot); }
+  catch (error) { throw new Error(`OWNER_REPAIR_OBSERVATION_INVALID:${error instanceof Error ? error.message : String(error)}`); }
+  if (observation === undefined) throw new Error('OWNER_REPAIR_NOT_REQUIRED: no current trusted observation exists');
+  const observationPointer = readFileSync(join(projectRoot, '.omd', 'observation-v2.json'));
+
+  const tree: Array<Record<string, unknown>> = [{ path: '.', kind: 'directory', mode: mirrorMetadata.mode & 0o7777 }];
+  const files = new Map<string, RepairMirrorFile>();
+  const walk = (directory: string): void => {
+    for (const name of readdirSync(directory).sort()) {
+      const absolute = join(directory, name);
+      const path = relative(mirrorRoot, absolute).split(sep).join('/');
+      const metadata = lstatSync(absolute);
+      const mode = metadata.mode & 0o7777;
+      if (metadata.isSymbolicLink() || (!metadata.isDirectory() && !metadata.isFile())) {
+        throw new Error(`OWNER_REPAIR_MIRROR_INVALID:${path}`);
+      }
+      if (metadata.isDirectory()) {
+        tree.push({ path, kind: 'directory', mode });
+        walk(absolute);
+        continue;
+      }
+      const digest = sha256(readFileSync(absolute));
+      tree.push({ path, kind: 'file', mode, sha256: digest });
+      files.set(path, Object.freeze({ mode, sha256: digest }));
+    }
+  };
+  walk(mirrorRoot);
+  if (files.size === 0) throw new Error('OWNER_REPAIR_MIRROR_INVALID');
+  for (const [path, file] of files) {
+    if (!ownerRepairPathAllowed(path, route)) throw new Error(`OWNER_REPAIR_MIRROR_SCOPE_EXCEEDED:${path}`);
+    if (!requireProjectMatch) continue;
+    let sourceMetadata;
+    try { sourceMetadata = lstatSync(join(projectRoot, path)); }
+    catch { throw new Error(`OWNER_REPAIR_MIRROR_STALE:${path}`); }
+    if (!sourceMetadata.isFile() || sourceMetadata.isSymbolicLink()
+      || (sourceMetadata.mode & 0o7777) !== file.mode
+      || sha256(readFileSync(join(projectRoot, path))) !== file.sha256) {
+      throw new Error(`OWNER_REPAIR_MIRROR_STALE:${path}`);
+    }
+  }
+  return Object.freeze({
+    files,
+    entries: new Map(tree.map((entry) => [String(entry.path), canonicalJson(entry)])),
+    binding: Object.freeze({
+      mirrorRoot,
+      mirrorDevice: String(mirrorMetadata.dev),
+      mirrorInode: String(mirrorMetadata.ino),
+      mirrorBaselineSha256: sha256(canonicalJson(tree)),
+      observationPointerSha256: sha256(observationPointer),
+      observationSha256: observationV2Sha256(observation),
+    }),
+  });
+}
+
+function sameRepairBinding(left: OwnerRepairBinding | undefined, right: OwnerRepairBinding | undefined): boolean {
+  return canonicalJson(left ?? null) === canonicalJson(right ?? null);
+}
+
+function sameRepairContext(left: OwnerRepairBinding, right: OwnerRepairBinding): boolean {
+  return left.mirrorRoot === right.mirrorRoot && left.mirrorDevice === right.mirrorDevice
+    && left.mirrorInode === right.mirrorInode
+    && left.observationPointerSha256 === right.observationPointerSha256
+    && left.observationSha256 === right.observationSha256;
+}
+
 type HostBinding = Readonly<{
   projectRoot: string;
   invocation: ProjectRunInvocation;
   roleOverrides: HostRoleOverrides;
+  discoverySearch: CodexDiscoverySearchPolicy;
   invocationPath: string;
   invocationSha256: string;
   canonicalCliPath: string;
@@ -820,6 +1169,8 @@ function delegatedRequestError(
   binding: HostBinding,
   child: OwnerChildBinding,
 ): string | undefined {
+  if (child.role === CODEX_STUDY_ROLE) return 'source-only study activation cannot authorize delegated project operations';
+  if (child.transactionMode === 'repair') return 'repair-only owner activation cannot authorize production project operations';
   const childRecord = processRecord(child.pid);
   if (childRecord === undefined || processStartIdentity(child.pid, childRecord) !== child.processStartIdentity) return 'delegated owner activation names a dead or replaced child PID';
   const activationStat = lstatSync(child.activationPath);
@@ -835,7 +1186,10 @@ function delegatedRequestError(
   let route: RouteBinding;
   try { route = currentRouteBinding(binding.projectRoot, binding.invocation); } catch { return 'delegated owner route/source/authority binding is stale'; }
   if (!sameRouteBinding(route, child.route)) return 'delegated owner route/source/authority binding changed';
-  if (request.requestedAuthorization !== undefined && !DELEGATED_PAYLOAD_PURPOSES.includes(request.requestedAuthorization.purpose as (typeof DELEGATED_PAYLOAD_PURPOSES)[number])) {
+  const knownAiRead = request.requestedAuthorization?.purpose === 'ai-asset-decision'
+    && request.argv[2] !== 'decision'
+    && hasCodexHostAiDecision(binding.invocation, binding.projectRoot, request.requestedAuthorization.payloadSha256);
+  if (request.requestedAuthorization !== undefined && !knownAiRead && !DELEGATED_PAYLOAD_PURPOSES.includes(request.requestedAuthorization.purpose as (typeof DELEGATED_PAYLOAD_PURPOSES)[number])) {
     return 'delegated owner activation does not authorize this operation';
   }
   return undefined;
@@ -855,8 +1209,20 @@ function authorityReceipt(requestValue: unknown, binding: HostBinding, state: Ow
     : undefined;
   const identityError = child === undefined ? commonRequestError(request, binding) : delegatedRequestError(request, binding, child);
   const phaseError = identityError === undefined ? brokerPayloadAuthorizationError(request, state) : undefined;
-  const rejected = ownerOnly ?? identityError ?? phaseError;
+  const activeRoles = [...new Set([
+    ...(state.grant === undefined ? [] : ['omd-hand']),
+    ...[...state.roleChildren.values()].map((active) => active.role ?? 'omd-hand'),
+  ])].sort();
+  const routeChangeError = request.argv[2] === 'route' && request.argv[3] === 'classify'
+    && activeRoles.length !== 0
+    ? `ROUTE_CHANGE_WHILE_OWNER_ACTIVE: wait for ${activeRoles.join(', ')} to return before reclassifying. `
+      + 'Changing route/source authority now would invalidate the active work; preserve it and wait on the existing handles.'
+    : undefined;
+  const rejected = ownerOnly ?? identityError ?? phaseError ?? routeChangeError;
   if (rejected !== undefined) return { error: rejected };
+  if (child === undefined && request.requestedAuthorization?.purpose === 'ai-asset-decision') {
+    recordCodexHostAiDecision(binding.invocation, binding.projectRoot, request.requestedAuthorization.payload);
+  }
   return {
     schema: HOST_RECEIPT_SCHEMA,
     host: 'codex',
@@ -962,24 +1328,85 @@ function validOwnerResult(
   result: Record<string, unknown>,
   request: OwnerPersistRequest,
   binding: HostBinding,
-  storage: OwnerStorage,
+  grant: NonNullable<OwnerBrokerState['grant']>,
   role: OwnerRoleProfile,
+  repairInspection?: RepairInspection,
 ): boolean {
-  const allowed = ['schema', 'owner', 'projectRoot', 'taskSha256', 'rolePromptSha256', 'host', 'transport', 'modelArgumentOmitted', 'model', 'modelReasoningEffort', 'configurationSha256', 'attempts', 'sourceChanges', 'finalEvidence', 'result', 'failure', 'resumeCommand', 'receiptPath'];
+  const allowed = ['schema', 'owner', 'projectRoot', 'taskSha256', 'rolePromptSha256', 'host', 'transport', 'modelArgumentOmitted', 'model', 'modelReasoningEffort', 'configurationSha256', 'attempts', 'sourceChanges', 'mode', 'repair', 'finalEvidence', 'result', 'failure', 'resumeCommand', 'receiptPath'];
   if (Object.keys(result).some((key) => !allowed.includes(key))) return false;
   const expectedExecution = roleExecutionConfiguration('omd-hand', role, binding.roleOverrides, request.taskSha256);
-  return result.schema === OWNER_RESULT_SCHEMA && result.owner === 'omd-hand'
+  const base = result.schema === OWNER_RESULT_SCHEMA && result.owner === 'omd-hand'
     && result.projectRoot === binding.projectRoot && result.taskSha256 === request.taskSha256
+    && result.mode === request.mode && request.mode === grant.mode
+    && sameRepairBinding(request.repair, grant.repair)
     && typeof result.rolePromptSha256 === 'string' && SHA256.test(result.rolePromptSha256)
     && result.host === 'codex' && result.transport === 'codex-exec-stdio-jsonl'
     && hasExecutionConfiguration(result, expectedExecution)
-    && Array.isArray(result.attempts) && result.attempts.length >= 1 && result.attempts.length <= 2
-    && result.attempts.every((attempt) => isRecord(attempt) && hasExecutionConfiguration(attempt, expectedExecution))
+    && Array.isArray(result.attempts) && result.attempts.length >= 1
+    && result.attempts.length <= grant.attemptBudget
+    && result.attempts.every((attempt) => isRecord(attempt)
+      && hasExecutionConfiguration(attempt, expectedExecution)
+      && Array.isArray(attempt.sourceChanges) && attempt.sourceChanges.every((path) => typeof path === 'string')
+      && Array.isArray(attempt.derivedChanges) && attempt.derivedChanges.every((path) => typeof path === 'string')
+      && Array.isArray(attempt.projectChanges) && attempt.projectChanges.every((path) => typeof path === 'string')
+      && Array.isArray(attempt.unsafeOutputs) && attempt.unsafeOutputs.every((path) => typeof path === 'string')
+      && Array.isArray(attempt.prohibitedTools) && attempt.prohibitedTools.every((tool) => typeof tool === 'string'))
     && Array.isArray(result.sourceChanges) && result.sourceChanges.every((path) => typeof path === 'string')
-    && (result.result === 'completed' || result.result === 'failed')
-    && (result.failure === undefined || typeof result.failure === 'string')
+    && ((result.result === 'completed' && result.failure === undefined)
+      || (result.result === 'failed' && typeof result.failure === 'string' && result.failure.trim() !== ''))
     && (result.resumeCommand === undefined || typeof result.resumeCommand === 'string')
-    && result.receiptPath === storage.receiptPath;
+    && result.receiptPath === grant.receiptPath;
+  if (!base) return false;
+  if (grant.mode === 'production') return result.repair === undefined;
+  if (grant.repair === undefined || repairInspection === undefined || !isRecord(result.repair)
+    || !exactKeys(result.repair, [
+      'mirrorRoot', 'mirrorDevice', 'mirrorInode', 'mirrorBaselineSha256', 'mirrorFinalSha256', 'observationPointerSha256',
+      'observationSha256', 'changedPaths',
+    ]) || result.repair.mirrorRoot !== grant.repair.mirrorRoot
+    || result.repair.mirrorDevice !== grant.repair.mirrorDevice
+    || result.repair.mirrorInode !== grant.repair.mirrorInode
+    || result.repair.mirrorBaselineSha256 !== grant.repair.mirrorBaselineSha256
+    || result.repair.mirrorFinalSha256 !== repairInspection.binding.mirrorBaselineSha256
+    || result.repair.observationPointerSha256 !== grant.repair.observationPointerSha256
+    || result.repair.observationSha256 !== grant.repair.observationSha256
+    || !Array.isArray(result.repair.changedPaths)
+    || result.repair.changedPaths.some((path) => typeof path !== 'string')) return false;
+  const changedPaths = result.repair.changedPaths as string[];
+  if (result.result === 'completed' && changedPaths.length !== 1) return false;
+  if (result.result === 'failed' && changedPaths.length !== 0) return false;
+  const observedChanges = [...new Set([
+    ...grant.repairBaseline!.keys(),
+    ...repairInspection.entries.keys(),
+  ])].filter((path) => {
+    const before = grant.repairBaseline!.get(path);
+    const after = repairInspection.entries.get(path);
+    return before !== after;
+  }).sort();
+  if (canonicalJson(observedChanges) !== canonicalJson(changedPaths)) return false;
+  if (result.result === 'completed') {
+    const path = observedChanges[0]!;
+    const before = grant.repairBaseline!.get(path);
+    const after = repairInspection.entries.get(path);
+    const beforeFile = grant.repairBaseline!.has(path) && before?.includes('"kind":"file"');
+    const afterFile = repairInspection.files.get(path);
+    if (!beforeFile || after === undefined || afterFile === undefined || !ownerRepairPathAllowed(path, grant.route)) return false;
+    const beforeMode = /"mode":(\d+)/.exec(before!)?.[1];
+    if (beforeMode === undefined || Number(beforeMode) !== afterFile.mode) return false;
+  }
+  return true;
+}
+
+function isProvenNoMutationOwnerFailure(result: Record<string, unknown>): boolean {
+  return result.result === 'failed'
+    && Array.isArray(result.sourceChanges) && result.sourceChanges.length === 0
+    && Array.isArray(result.attempts) && result.attempts.every((attempt) => isRecord(attempt)
+      && Array.isArray(attempt.sourceChanges) && attempt.sourceChanges.length === 0
+      && Array.isArray(attempt.derivedChanges) && attempt.derivedChanges.length === 0
+      && Array.isArray(attempt.projectChanges) && attempt.projectChanges.length === 0
+      && Array.isArray(attempt.unsafeOutputs) && attempt.unsafeOutputs.length === 0
+      && Array.isArray(attempt.prohibitedTools) && attempt.prohibitedTools.length === 0
+      && (attempt.mirrorChanges === undefined
+        || (Array.isArray(attempt.mirrorChanges) && attempt.mirrorChanges.length === 0)));
 }
 
 function ownerGrant(requestValue: unknown, binding: HostBinding, storage: OwnerStorage, state: OwnerBrokerState, role: OwnerRoleProfile): unknown {
@@ -987,13 +1414,49 @@ function ownerGrant(requestValue: unknown, binding: HostBinding, storage: OwnerS
   if (request === undefined) return { error: 'malformed production-owner launch request' };
   const rejected = commonRequestError(request, binding) ?? exactOwnerStorage(storage, dirname(storage.directory));
   if (rejected !== undefined) return { error: rejected };
-  if (state.completed) return { error: 'OWNER_DUPLICATE_COMPLETION: production-owner already completed for this invocation' };
   if (state.grant !== undefined) return { error: 'OWNER_DUPLICATE_ACTIVE: production-owner is already active for this invocation' };
+  if (request.mode === 'production' && state.initialRetryExhausted) {
+    return { error: 'OWNER_RETRY_EXHAUSTED: the one no-mutation initial-owner retry was already consumed' };
+  }
+  if (request.mode === 'production' && state.completed) {
+    return { error: 'OWNER_DUPLICATE_COMPLETION: production-owner already completed for this invocation' };
+  }
+  if (request.mode === 'repair' && !state.initialCompletedSuccessfully) {
+    return { error: 'OWNER_REPAIR_INITIAL_REQUIRED: repair requires a successfully completed initial production owner' };
+  }
   let route: RouteBinding;
   try { route = currentRouteBinding(binding.projectRoot, binding.invocation); }
   catch (error) { return { error: error instanceof Error ? error.message : 'production-owner route binding failed' }; }
+  let repairInspection: RepairInspection | undefined;
+  let repairTransactionKey: string | undefined;
+  if (request.mode === 'repair') {
+    try { repairInspection = inspectOwnerRepairMirror(binding.projectRoot, request.repair!.mirrorRoot, route, true); }
+    catch (error) { return { error: error instanceof Error ? error.message : 'production-owner repair binding failed' }; }
+    if (!sameRepairBinding(repairInspection.binding, request.repair)) {
+      return { error: 'OWNER_REPAIR_BINDING_MISMATCH: repair mirror or observation binding is stale' };
+    }
+    repairTransactionKey = sha256(canonicalJson({
+      routeSha256: route.routeSha256,
+      sourceSha256: route.sourceSha256,
+      authoritySha256: route.authoritySha256,
+      mirrorBaselineSha256: request.repair!.mirrorBaselineSha256,
+      observationPointerSha256: request.repair!.observationPointerSha256,
+      observationSha256: request.repair!.observationSha256,
+    }));
+    if (state.consumedRepairTransactions.has(repairTransactionKey)) {
+      return { error: 'OWNER_REPAIR_REPLAY: this observation and mirror baseline were already consumed' };
+    }
+  }
   const nonce = randomBytes(24).toString('base64url');
   const expiresAt = Date.now() + OWNER_GRANT_TTL_MS;
+  const initialRetry = request.mode === 'production' && state.retryableInitialFailure !== undefined;
+  const attemptBudget = initialRetry ? 1 : 2;
+  const receiptPath = request.mode === 'production'
+    ? initialRetry
+      ? join(storage.directory, `result-retry-${state.retryableInitialFailure!.resultSha256}.json`)
+      : storage.receiptPath
+    : join(storage.directory, `repair-${repairTransactionKey}.json`);
+  state.nextAttempt = 1;
   state.grant = {
     requesterPid: request.requesterPid,
     argvSha256: sha256(canonicalJson(request.argv)),
@@ -1001,6 +1464,13 @@ function ownerGrant(requestValue: unknown, binding: HostBinding, storage: OwnerS
     nonce,
     expiresAt,
     route,
+    mode: request.mode,
+    receiptPath,
+    initialRetry,
+    attemptBudget,
+    ...(request.repair === undefined ? {} : { repair: request.repair }),
+    ...(repairInspection === undefined ? {} : { repairBaseline: repairInspection.entries }),
+    ...(repairTransactionKey === undefined ? {} : { repairTransactionKey }),
   };
   const execution = roleExecutionConfiguration('omd-hand', role, binding.roleOverrides, request.taskSha256);
   return {
@@ -1008,12 +1478,15 @@ function ownerGrant(requestValue: unknown, binding: HostBinding, storage: OwnerS
     host: 'codex', owner: 'omd-hand', projectRoot: binding.projectRoot,
     requesterPid: request.requesterPid,
     argvSha256: state.grant.argvSha256, taskSha256: request.taskSha256,
+    mode: request.mode,
+    ...(request.repair === undefined ? {} : { repair: request.repair }),
     buildSha256: binding.invocation.activation.buildSha256,
     loadedSkillSha256: binding.invocation.activation.loadedSkillSha256,
     briefSha256: binding.invocation.activation.briefSha256,
     rolePromptSha256: sha256(role.developer_instructions),
     ...execution,
-    ownerDirectory: storage.directory, ownerReceiptPath: storage.receiptPath,
+    attemptBudget,
+    ownerDirectory: storage.directory, ownerReceiptPath: receiptPath,
     ownerDirectoryDevice: storage.device, ownerDirectoryInode: storage.inode,
     expiresAt,
     nonce,
@@ -1073,8 +1546,8 @@ function issueDelegatedOwnerActivation(input: Readonly<{
       authorityDirectoryInode: input.binding.authorityDirectoryInode,
     }),
     activationFile: Object.freeze({ path: input.path, device: String(input.stat.dev), inode: String(input.stat.ino) }),
-    operations: DELEGATED_OPERATIONS,
-    payloadAuthorizations: DELEGATED_PAYLOAD_PURPOSES,
+    operations: input.grant.mode === 'repair' ? [] : DELEGATED_OPERATIONS,
+    payloadAuthorizations: input.grant.mode === 'repair' ? [] : DELEGATED_PAYLOAD_PURPOSES,
     nonce,
     issuedAt: Date.now(),
     expiresAt,
@@ -1105,6 +1578,7 @@ function issueDelegatedOwnerActivation(input: Readonly<{
     taskSha256: input.request.taskSha256,
     route: input.grant.route,
     expiresAt,
+    transactionMode: input.grant.mode,
     role: 'omd-hand',
   });
   input.state.children.set(input.request.attempt, child);
@@ -1116,6 +1590,36 @@ function killProcessTree(pid: number): void {
     if ((error as NodeJS.ErrnoException).code !== 'ESRCH') {
       try { process.kill(pid, 'SIGTERM'); } catch { /* process already exited */ }
     }
+  }
+}
+
+function processGroupExists(pid: number): boolean {
+  try {
+    process.kill(-pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code !== 'ESRCH';
+  }
+}
+
+async function waitForProcessGroupExit(pid: number, timeoutMs: number): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (processGroupExists(pid)) {
+    if (Date.now() >= deadline) return false;
+    await new Promise<void>((resolveWait) => setTimeout(resolveWait, 10));
+  }
+  return true;
+}
+
+/** A source owner result is not attestable while any descendant can still mutate its sandbox. */
+async function quiesceOwnerProcessTree(pid: number): Promise<void> {
+  killProcessTree(pid);
+  if (await waitForProcessGroupExit(pid, 250)) return;
+  try { process.kill(-pid, 'SIGKILL'); } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
+  }
+  if (!await waitForProcessGroupExit(pid, 2_000)) {
+    throw new Error('production-owner process group did not terminate');
   }
 }
 
@@ -1135,15 +1639,30 @@ async function executeOwnerAttempt(
   const rejected = commonRequestError(request, binding);
   if (rejected !== undefined) return { error: rejected };
   const grant = state.grant;
-  if (grant === undefined || state.completed || grant.requesterPid !== request.requesterPid
+  if (grant === undefined || grant.requesterPid !== request.requesterPid
     || grant.argvSha256 !== sha256(canonicalJson(request.argv)) || grant.taskSha256 !== request.taskSha256
-    || grant.nonce !== request.grantNonce || grant.expiresAt <= Date.now() || request.attempt !== state.nextAttempt) {
+    || grant.nonce !== request.grantNonce || grant.expiresAt <= Date.now() || request.attempt !== state.nextAttempt
+    || request.mode !== grant.mode || !sameRepairBinding(request.repair, grant.repair)) {
     return { error: 'production-owner execution grant is absent, copied, stale, retried, or mismatched' };
   }
+  if (grant.mode === 'production' && state.initialAttemptCount >= 2) {
+    return { error: 'OWNER_RETRY_EXHAUSTED: production-owner is limited to two total initial attempts per invocation' };
+  }
+  let repairInspection: RepairInspection | undefined;
+  if (grant.repair !== undefined) {
+    try { repairInspection = inspectOwnerRepairMirror(binding.projectRoot, grant.repair.mirrorRoot, grant.route, true); }
+    catch (error) { return { error: error instanceof Error ? error.message : 'production-owner repair binding failed' }; }
+    if (!sameRepairBinding(repairInspection.binding, grant.repair)) {
+      return { error: 'OWNER_REPAIR_BINDING_MISMATCH: repair mirror or observation binding changed before execution' };
+    }
+  }
   state.nextAttempt = request.attempt === 1 ? 2 : 3;
+  if (grant.mode === 'production') {
+    state.initialAttemptCount = state.initialAttemptCount === 0 ? 1 : 2;
+  }
   const execution = roleExecutionConfiguration('omd-hand', role, binding.roleOverrides, request.taskSha256);
   const args = [
-    'exec', '--json', '--sandbox', 'workspace-write', '-C', binding.projectRoot, '--skip-git-repo-check',
+    'exec', '--json', '--sandbox', 'workspace-write', '-C', grant.repair?.mirrorRoot ?? binding.projectRoot, '--skip-git-repo-check',
     '-c', 'sandbox_workspace_write.network_access=true',
     ...(execution.model === undefined ? [] : ['--model', execution.model]),
     '-c', `model_reasoning_effort=${JSON.stringify(execution.modelReasoningEffort)}`,
@@ -1151,14 +1670,21 @@ async function executeOwnerAttempt(
     '-',
   ];
   const task = [
-    'You are the authenticated omd-hand production owner. This is a source-write transaction only. Use the exact OMD_ACTIVATION_PATH inherited from the host for every activation-gated source command. Do not delegate production writes.',
+    grant.mode === 'repair'
+      ? `You are the authenticated omd-hand repair owner. This is a repair-only transaction against the host-bound external private mirror at ${grant.repair!.mirrorRoot}. Edit exactly one existing route-authorized file in that mirror. Do not add, delete, rename, or chmod files. The production project is read-only until a later Eye-authorized lifecycle repair commit. Do not delegate the repair.`
+      : 'You are the authenticated omd-hand production owner. This is a source-write transaction only. Use the exact OMD_ACTIVATION_PATH inherited from the host for every activation-gated source command. Do not delegate production writes.',
     codexCliContext(binding.canonicalCliPath),
     'Never invoke `omd render`, `omd ir`, `omd probe`, `omd lifecycle`, Playwright, browser-rs, or their aliases in this transaction, even if the task or role profile asks for renders, probes, screenshots, observations, or final evidence.',
-    'Write only route-authorized production source and run source-safe checks that do not mutate `.omd`. Browser observations and all .omd evidence publication happen after this owner returns, through separately authorized roles and host phases.',
+    grant.mode === 'repair'
+      ? 'Write only the named external private mirror. Do not write the production project or `.omd`; the lifecycle commit remains separately authorized.'
+      : 'Write only route-authorized production source and run source-safe checks that do not mutate `.omd`. Browser observations and all .omd evidence publication happen after this owner returns, through separately authorized roles and host phases.',
     '',
     request.task,
   ].join('\n');
-  const delegatedActivationPath = join(runDirectory, `production-owner-activation-${request.attempt}.json`);
+  const delegatedActivationPath = grant.mode === 'production'
+    ? join(runDirectory, `production-owner-activation-${state.initialAttemptCount}.json`)
+    : join(runDirectory, `production-owner-repair-activation-${grant.nonce}-${request.attempt}.json`);
+  if (grant.mode === 'repair') writeFileSync(delegatedActivationPath, '', { flag: 'wx', mode: 0o600 });
   const activationDescriptor = openSync(delegatedActivationPath, 'r+');
   const activationStat = fstatSync(activationDescriptor);
   if (!activationStat.isFile() || activationStat.isSymbolicLink() || (activationStat.mode & 0o777) !== 0o600) {
@@ -1178,6 +1704,8 @@ async function executeOwnerAttempt(
         OMD_ACTIVATION_PATH: delegatedActivationPath,
         OMD_PRODUCTION_OWNER_ROLE: 'omd-hand',
         OMD_PRODUCTION_OWNER_ATTEMPT: String(request.attempt),
+        OMD_PRODUCTION_OWNER_MODE: grant.mode,
+        ...(grant.repair === undefined ? {} : { OMD_PRODUCTION_REPAIR_MIRROR: grant.repair.mirrorRoot }),
       },
       stdio: ['pipe', 'pipe', 'pipe', 'pipe'],
     });
@@ -1224,22 +1752,33 @@ async function executeOwnerAttempt(
       settled = true;
       clearTimeout(timer);
       if (killTimer !== undefined) clearTimeout(killTimer);
-      if (child.pid !== undefined) killProcessTree(child.pid);
-      if (stdoutBuffer.trim() !== '') consumeLine(stdoutBuffer);
-      const status = timedOut
-        ? 'timed-out'
-        : code === 0 && completedEvent && !failedEvent && finalMessage.trim() !== '' ? 'completed' : 'failed';
-      resolveAttempt({
-        schema: OWNER_EXEC_RESULT_SCHEMA, owner: 'omd-hand', projectRoot: binding.projectRoot,
-        taskSha256: request.taskSha256, grantNonce: request.grantNonce, attempt: request.attempt,
-        processPid: child.pid,
-        processStartIdentity: delegated.processStartIdentity,
-        delegatedActivationSha256: sha256(readFileSync(delegated.activationPath)),
-        ...execution,
-        ...(sessionId === undefined ? {} : { sessionId }),
-        status, exitCode: code, signal, eventCount, finalMessage,
-        prohibitedTools: Object.freeze(prohibitedTools),
-      });
+      void (async () => {
+        try {
+          if (child.pid !== undefined) await quiesceOwnerProcessTree(child.pid);
+        } catch (error) {
+          resolveAttempt({
+            error: `OWNER_PROCESS_GROUP_NOT_QUIESCENT:${error instanceof Error ? error.message : String(error)}`,
+          });
+          return;
+        }
+        if (stdoutBuffer.trim() !== '') consumeLine(stdoutBuffer);
+        const status = timedOut
+          ? 'timed-out'
+          : code === 0 && completedEvent && !failedEvent && finalMessage.trim() !== '' ? 'completed' : 'failed';
+        resolveAttempt({
+          schema: OWNER_EXEC_RESULT_SCHEMA, owner: 'omd-hand', projectRoot: binding.projectRoot,
+          taskSha256: request.taskSha256, grantNonce: request.grantNonce, attempt: request.attempt,
+          mode: grant.mode,
+          ...(grant.repair === undefined ? {} : { repair: grant.repair }),
+          processPid: child.pid,
+          processStartIdentity: delegated.processStartIdentity,
+          delegatedActivationSha256: sha256(readFileSync(delegated.activationPath)),
+          ...execution,
+          ...(sessionId === undefined ? {} : { sessionId }),
+          status, exitCode: code, signal, eventCount, finalMessage,
+          prohibitedTools: Object.freeze(prohibitedTools),
+        });
+      })();
     };
     const consumeLine = (line: string): void => {
       const trimmed = line.trim();
@@ -1294,6 +1833,25 @@ async function executeOwnerAttempt(
   });
 }
 
+/** Host-only allocation, called after authenticated route selection; never a CLI-side writer. */
+export function createCodexStudyDirectory(projectRoot: string): string {
+  const root = canonicalProjectRoot(projectRoot);
+  let path = root;
+  for (const part of ['.omd', '.cache', 'studies']) {
+    path = join(path, part);
+    try { mkdirSync(path, { mode: 0o700 }); } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+    }
+    const stat = lstatSync(path);
+    if (!stat.isDirectory() || stat.isSymbolicLink() || realpathSync(path) !== path) {
+      throw new Error('STUDY_DIRECTORY_REJECTED: study ancestors must be real project directories');
+    }
+  }
+  const directory = mkdtempSync(join(path, 'study-'));
+  chmodSync(directory, 0o700);
+  return relative(root, directory).split('\\').join('/');
+}
+
 async function executeNonProductionRole(
   requestValue: unknown,
   binding: HostBinding,
@@ -1310,37 +1868,123 @@ async function executeNonProductionRole(
   const route = currentRouteBinding(binding.projectRoot, binding.invocation);
   if (!route.roles.includes(request.role)) return { error: `the current route did not select ${request.role}` };
   const role = nonProductionRoleProfile(codexHome, request.role);
-  const execution = roleExecutionConfiguration(request.role, role, binding.roleOverrides, sha256(request.task));
+  let reviewerPacket: Buffer | undefined;
+  let reviewerInnerEvidenceSha256: string | undefined;
+  let reviewerTask: string | undefined;
+  if (request.reviewerPacket !== undefined) {
+    try {
+      const packetPath = resolve(binding.projectRoot, request.reviewerPacket.path);
+      const packetStat = lstatSync(packetPath);
+      if (!packetStat.isFile() || packetStat.isSymbolicLink()) throw new Error('packet is not a regular file');
+      reviewerPacket = readFileSync(realpathSync(packetPath));
+      if (sha256(reviewerPacket) !== request.reviewerPacket.sha256) throw new Error('packet digest changed');
+      const wrapper = JSON.parse(reviewerPacket.toString('utf8')) as unknown;
+      if (!isRecord(wrapper) || typeof wrapper.evidenceSha256 !== 'string' || !SHA256.test(wrapper.evidenceSha256)) {
+        throw new Error('packet transport wrapper is malformed');
+      }
+      reviewerInnerEvidenceSha256 = wrapper.evidenceSha256;
+      let current: Buffer;
+      if (wrapper.schema === 'adaptive-rendered-refinement-reviewer-transport-v1'
+        && request.reviewerPacket.path.startsWith('.omd/refinement/reviewer-packets/')) {
+        const { renderedRefinementReviewerPacket } = await import('../core/runtime/rendered-refinement.ts');
+        current = renderedRefinementReviewerPacket({ root: binding.projectRoot, invocation: binding.invocation });
+        reviewerTask = RENDERED_REFINEMENT_REVIEWER_TASK;
+      } else if (wrapper.schema === FINAL_RENDER_REVIEWER_TRANSPORT_SCHEMA
+        && request.reviewerPacket.path.startsWith('.omd/final-review/reviewer-packets/')
+        && isRecord(wrapper.evidence) && isRecord(wrapper.evidence.observationProjection)
+        && Array.isArray(wrapper.evidence.observationProjection.observationSha256s)) {
+        current = finalRenderReviewerPacket({
+          root: binding.projectRoot,
+          invocation: binding.invocation,
+          packetInput: {
+            schema: FINAL_RENDER_REVIEWER_PACKET_INPUT_SCHEMA,
+            observationSha256s: wrapper.evidence.observationProjection.observationSha256s,
+          },
+        });
+        reviewerTask = FINAL_RENDER_REVIEWER_TASK;
+      } else {
+        throw new Error('packet transport schema and path disagree');
+      }
+      if (!reviewerPacket.equals(current)) throw new Error('packet is not the current trusted refinement pair');
+    } catch (error) {
+      return { error: `REFINEMENT_REVIEWER_PACKET_REJECTED:${error instanceof Error ? error.message : String(error)}` };
+    }
+  }
+  const effectiveTask = reviewerPacket === undefined ? request.task : reviewerTask!;
+  const execution = roleExecutionConfiguration(request.role, role, binding.roleOverrides, sha256(effectiveTask));
+  const reviewerRestrictions = [
+    '--disable', 'shell_tool', '--disable', 'unified_exec', '--disable', 'view_image',
+    '--disable', 'image_generation', '--disable', 'skill_search',
+    '--disable', 'apps', '--disable', 'plugins',
+    '--disable', 'standalone_web_search', '--disable', 'multi_agent',
+    '-c', 'web_search="disabled"',
+  ];
   const roleNonce = randomBytes(18).toString('base64url');
+  const studyDirectory = request.role === CODEX_STUDY_ROLE
+    ? createCodexStudyDirectory(binding.projectRoot) : undefined;
+  let studyRestrictions: readonly string[] = [];
+  if (studyDirectory !== undefined) {
+    const configPath = join(codexHome, 'config.toml');
+    const configured = existsSync(configPath) ? parseToml(readFileSync(configPath, 'utf8')) as unknown : {};
+    const inheritedNames = isRecord(configured) && isRecord(configured.mcp_servers)
+      ? Object.keys(configured.mcp_servers) : [];
+    studyRestrictions = codexStudyRestrictions(inheritedNames);
+  }
   const workdir = mkdtempSync(join(runDirectory, `role-${request.role}-`));
   const activationPath = join(runDirectory, `role-activation-${roleNonce}.json`);
   writeFileSync(activationPath, `${canonicalJson(binding.invocation)}\n`, { flag: 'wx', mode: 0o400 });
   chmodSync(activationPath, 0o400);
   const args = [
     'exec', '--json', '--sandbox', 'workspace-write',
-    '-C', workdir, '--add-dir', join(binding.projectRoot, '.omd'), '--skip-git-repo-check',
-    ...(request.role === 'omd-scout' || request.role === 'omd-eye' || request.role === 'omd-glance'
+    '-C', workdir,
+    ...(reviewerPacket === undefined
+      ? ['--add-dir', join(binding.projectRoot, studyDirectory ?? '.omd')] : []),
+    '--skip-git-repo-check',
+    ...(reviewerPacket === undefined && (request.role === 'omd-scout' || request.role === 'omd-eye' || request.role === 'omd-glance')
       ? ['-c', 'sandbox_workspace_write.network_access=true']
       : []),
+    ...(reviewerPacket === undefined && request.role === 'omd-scout'
+      ? codexDiscoverySearchArguments(binding.discoverySearch) : []),
+    ...(reviewerPacket === undefined ? [] : reviewerRestrictions),
+    ...studyRestrictions,
     ...(execution.model === undefined ? [] : ['--model', execution.model]),
     '-c', `model_reasoning_effort=${JSON.stringify(execution.modelReasoningEffort)}`,
     '-c', `developer_instructions=${JSON.stringify(role.developer_instructions)}`,
-    '-',
+    ...(reviewerPacket === undefined ? ['-'] : []),
   ];
-  const task = [
+  const task = reviewerPacket === undefined ? [
     `You are the host-delegated ${request.role} role owner for ${binding.projectRoot}.`,
     'OMD_ACTIVATION_PATH already names a JSON activation record consumed by OMD. Never source, execute, copy, or rewrite that file; let the CLI read the inherited environment variable.',
-    codexCliContext(binding.canonicalCliPath),
+    codexCliContext(binding.canonicalCliPath, process.execPath, request.role),
+    ...(request.role === 'omd-scout' ? [
+      `Native reference search policy: ${binding.discoverySearch.mode} (${binding.discoverySearch.source}). Use the native web-search tool for queries. If it is unavailable or disabled, report that exact capability gap; do not treat rendering a search engine's blocked HTML as an equivalent search service. Known source URLs may still be inspected.`,
+    ] : []),
     `Run project commands from ${binding.projectRoot}. Persist only artifacts owned by your role, using the publication method declared in your role instructions.`,
+    `For role-owned PROJECT ARTIFACT direct edits and CLI artifact input/output paths, use absolute paths under ${binding.projectRoot} only within your owned editable scope. This path rule does not apply to remote URLs, protocol pack names, or host-issued activation, evidence, and receipt paths; preserve those values exactly as supplied by the host. An absolute path does not authorize a direct write or replace a required native publisher, and you must not write arbitrary files.`,
+    'Keep schema-defined path identities inside JSON records in their required form. For example, ref import-image accepts an absolute JSON filename, while that JSON record\'s inputPath must remain a project-relative .omd/refs PNG identity. This distinction grants no new path access and does not replace the required publisher.',
     'Use named OMD CLI commands where your role requires them. Direct file writes are permitted only to paths your role explicitly owns and explicitly allows you to edit; they are not a fallback for a CLI-required record. Do not invent publication commands or write another role\'s artifacts.',
     'Do not write production source and do not delegate your owned work.',
+    ...(studyDirectory === undefined ? [] : [
+      `The host-selected study directory is ${join(binding.projectRoot, studyDirectory)}. OMD_STUDY_OUTPUT_DIR names this same directory.`,
+      'Write index.html and its local study assets only there. This provisional source is not approved copy, typography, composition, candidate selection, or production. You have no delegated publication or browser authority. Return the source path; the coordinator captures it after you finish.',
+    ]),
     '',
-    request.task,
+    effectiveTask,
+  ].join('\n') : [
+    'You are an isolated visual comparison reviewer.',
+    'Call the `read_reviewer_evidence` MCP tool exactly once before judging. Its response includes anonymous metadata and image content blocks. Inspect every image block. If the tool is unavailable, unreadable, or contains no images, stop without a verdict.',
+    effectiveTask,
   ].join('\n');
-  const childArgv = [codexBin, ...args];
+  const reviewerCommand = reviewerPacket !== undefined && readFileSync(codexBin).subarray(0, 2).toString() === '#!'
+    ? [process.execPath, codexBin]
+    : [codexBin];
+  let childArgv = [...reviewerCommand, ...args];
+  const reviewerArgsPath = reviewerPacket === undefined ? undefined : join(workdir, 'reviewer-argv');
   return await new Promise<unknown>((resolveRole) => {
-    const gate = 'IFS= read -r omd_gate <&3 || exit 125; exec 3<&-; test -n "$omd_gate" || exit 126; unset omd_gate; exec "$@"';
-    const child = spawn('/bin/sh', ['-c', gate, 'omd-role-gate', codexBin, ...args], {
+    const gate = reviewerArgsPath === undefined
+      ? 'IFS= read -r omd_gate <&3 || exit 125; exec 3<&-; test -n "$omd_gate" || exit 126; unset omd_gate; exec "$@"'
+      : 'IFS= read -r omd_gate <&3 || exit 125; exec 3<&-; test -n "$omd_gate" || exit 126; unset omd_gate; while IFS= read -r omd_arg; do set -- "$@" "$omd_arg"; done < "$OMD_REVIEWER_ARGS_PATH"; unset omd_arg OMD_REVIEWER_ARGS_PATH; exec "$@" -';
+    const child = spawn('/bin/sh', ['-c', gate, 'omd-role-gate', ...reviewerCommand, ...args], {
       cwd: workdir,
       detached: true,
       env: {
@@ -1348,6 +1992,8 @@ async function executeNonProductionRole(
         CODEX_HOME: codexHome,
         OMD_ACTIVATION_PATH: activationPath,
         OMD_NON_PRODUCTION_ROLE: request.role,
+        ...(studyDirectory === undefined ? {} : { OMD_STUDY_OUTPUT_DIR: join(binding.projectRoot, studyDirectory) }),
+        ...(reviewerArgsPath === undefined ? {} : { OMD_REVIEWER_ARGS_PATH: reviewerArgsPath }),
       },
       stdio: ['pipe', 'pipe', 'pipe', 'pipe'],
     });
@@ -1364,6 +2010,68 @@ async function executeNonProductionRole(
       return;
     }
     const activationStat = lstatSync(activationPath);
+    let reviewerAdapter: ReturnType<typeof createReviewerMcpAdapter> | undefined;
+    let reviewerBundle: ReviewerLaunchBundle | undefined;
+    let reviewerBrowserSha256: string | undefined;
+    if (reviewerPacket !== undefined) {
+      try {
+        reviewerAdapter = createReviewerMcpAdapter();
+        reviewerBrowserSha256 = sha256(reviewerPacket);
+        const reviewerExecutableSha256 = sha256(readFileSync(reviewerCommand[0]!));
+        const reviewerLaunchReceipt = reviewerAdapter.launchDelegated({
+          host: 'codex',
+          buildSha256: binding.invocation.current.buildSha256,
+          loadedSkillSha256: binding.invocation.current.loadedSkillSha256,
+          briefSha256: binding.invocation.current.briefSha256,
+          browserSha256: reviewerBrowserSha256,
+          evidence: reviewerPacket,
+          processBinding: Object.freeze({
+            parentPid: process.pid,
+            parentExecutableSha256: sha256(readFileSync(process.execPath)),
+            reviewerPid: child.pid,
+            reviewerExecutableSha256,
+            laneId: `refinement-eye-${roleNonce}`,
+            runnerId: `refinement-runner-${roleNonce}`,
+            sessionId: `refinement-session-${roleNonce}`,
+            nonce: randomBytes(24).toString('base64url'),
+            expiresAt: new Date(Date.now() + 60_000).toISOString(),
+          }),
+        });
+        const loadedSkillReceipt = reviewerAdapter.observeDelegatedReviewer(
+          'codex',
+          Object.freeze({ loadedSkillSha256: binding.invocation.current.loadedSkillSha256 }),
+          binding.invocation.current.loadedSkillSha256,
+          child.pid,
+          reviewerExecutableSha256,
+        );
+        reviewerBundle = reviewerAdapter.launchBundle({ loadedSkillReceipt, reviewerLaunchReceipt });
+        const server = reviewerBundle.configuration.mcpServers['omd-reviewer-evidence'];
+        const configured = parseToml(readFileSync(join(codexHome, 'config.toml'), 'utf8')) as unknown;
+        const inherited = isRecord(configured) && isRecord(configured.mcp_servers)
+          ? configured.mcp_servers : {};
+        const inheritedNames = Object.keys(inherited);
+        if (inheritedNames.some((name) => typeof name !== 'string' || !/^[A-Za-z0-9_-]+$/.test(name))) {
+          throw new Error('inherited MCP server name is unsafe');
+        }
+        const reviewerArgs = [
+          ...inheritedNames.flatMap((name) => name === 'omd-reviewer-evidence'
+            ? [] : ['-c', `mcp_servers.${name as string}.enabled=false`]),
+          '-c', `mcp_servers.omd-reviewer-evidence.command=${JSON.stringify(server.command)}`,
+          '-c', `mcp_servers.omd-reviewer-evidence.args=${JSON.stringify(server.args)}`,
+          '-c', 'mcp_servers.omd-reviewer-evidence.tools.read_reviewer_evidence.approval_mode="approve"',
+        ];
+        if (reviewerArgsPath === undefined) throw new Error('reviewer argv path is unavailable');
+        writeFileSync(reviewerArgsPath, `${reviewerArgs.join('\n')}\n`, { flag: 'wx', mode: 0o400 });
+        childArgv = [...reviewerCommand, ...args, ...reviewerArgs, '-'];
+      } catch (error) {
+        reviewerAdapter?.dispose();
+        killProcessTree(child.pid);
+        rmSync(workdir, { recursive: true, force: true });
+        rmSync(activationPath, { force: true });
+        resolveRole({ error: `REFINEMENT_REVIEWER_LAUNCH_REJECTED:${error instanceof Error ? error.message : String(error)}` });
+        return;
+      }
+    }
     const childBinding: OwnerChildBinding = Object.freeze({
       pid: child.pid,
       processStartIdentity: processStartIdentity(child.pid, record),
@@ -1372,7 +2080,7 @@ async function executeNonProductionRole(
       activationInode: String(activationStat.ino),
       argvSha256: sha256(canonicalJson(childArgv)),
       sessionNonce: roleNonce,
-      taskSha256: sha256(request.task),
+      taskSha256: sha256(effectiveTask),
       route,
       expiresAt: Date.now() + request.timeoutMs + RECEIPT_TTL_MS,
       role: request.role,
@@ -1400,15 +2108,55 @@ async function executeNonProductionRole(
       if (event.type === 'item.completed' && isRecord(event.item)
         && event.item.type === 'agent_message' && typeof event.item.text === 'string') finalMessage = event.item.text;
     };
-    const finish = (code: number | null, signal: NodeJS.Signals | null): void => {
+    const finish = async (code: number | null, signal: NodeJS.Signals | null): Promise<void> => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
       if (stdoutBuffer.trim() !== '') consumeLine(stdoutBuffer);
+      let status = code === 0 && completed && !failed ? 'completed' as const : 'failed' as const;
+      let studyFailure: string | undefined;
+      if (studyDirectory !== undefined) {
+        try { await quiesceOwnerProcessTree(child.pid!); } catch (error) {
+          status = 'failed';
+          studyFailure = `STUDY_PROCESS_NOT_QUIESCENT:${error instanceof Error ? error.message : String(error)}`;
+        }
+        if (status === 'completed') {
+          studyFailure = codexStudyEntryError(binding.projectRoot, studyDirectory);
+          if (studyFailure !== undefined) status = 'failed';
+        }
+      }
+      let reviewerEvidence: Readonly<{
+        schema: 'omd-reviewer-evidence-consumption-v1'; evidenceSha256: string; packetSha256: string;
+        taskSha256: string; childPid: number; sessionId: string; nonce: string;
+      }> | undefined;
+      let reviewerFailure: string | undefined;
+      if (reviewerBundle !== undefined && reviewerAdapter !== undefined
+        && reviewerBrowserSha256 !== undefined && reviewerInnerEvidenceSha256 !== undefined) {
+        try {
+          const consumed = reviewerAdapter.consumeCompletedLaunchBundle(reviewerBundle, 'codex', {
+            buildSha256: binding.invocation.current.buildSha256,
+            briefSha256: binding.invocation.current.briefSha256,
+            browserSha256: reviewerBrowserSha256,
+          });
+          reviewerEvidence = Object.freeze({
+            schema: 'omd-reviewer-evidence-consumption-v1',
+            evidenceSha256: reviewerInnerEvidenceSha256,
+            packetSha256: reviewerBrowserSha256,
+            taskSha256: sha256(effectiveTask),
+            childPid: consumed.childPid,
+            sessionId: consumed.sessionId,
+            nonce: consumed.nonce,
+          });
+        } catch (error) {
+          status = 'failed';
+          reviewerFailure = `REFINEMENT_REVIEWER_EVIDENCE_NOT_CONSUMED:${error instanceof Error ? error.message : String(error)}`;
+        } finally {
+          reviewerAdapter.dispose();
+        }
+      }
       state.roleChildren.delete(roleNonce);
       rmSync(workdir, { recursive: true, force: true });
       rmSync(activationPath, { force: true });
-      const status = code === 0 && completed && !failed ? 'completed' : 'failed';
       resolveRole({
         schema: ROLE_EXEC_RESULT_SCHEMA,
         role: request.role,
@@ -1420,11 +2168,14 @@ async function executeNonProductionRole(
         finalMessage,
         processPid: child.pid,
         roleNonce,
+        ...(studyDirectory === undefined ? {} : { studyDirectory }),
+        taskSha256: sha256(effectiveTask),
+        ...(reviewerEvidence === undefined ? {} : { reviewerEvidence }),
         ...execution,
         buildSha256: binding.invocation.activation.buildSha256,
         briefSha256: binding.invocation.activation.briefSha256,
         ...(sessionId === undefined ? {} : { sessionId }),
-        ...(status === 'completed' ? {} : { failure: stderrBuffer.trim().slice(-4_000) || `ROLE_EXECUTION_FAILED:${code ?? 'unknown'}` }),
+        ...(status === 'completed' ? {} : { failure: studyFailure ?? reviewerFailure ?? (stderrBuffer.trim().slice(-4_000) || `ROLE_EXECUTION_FAILED:${code ?? 'unknown'}`) }),
       });
     };
     const timer = setTimeout(() => {
@@ -1476,11 +2227,29 @@ async function executeBrokeredBrowserCommand(
     return { error: `browser execution operation is not allowed for ${request.role}` };
   }
 
+  // The caller and brokered browser have distinct host-issued activation files. Validate an
+  // explicit caller option before rebinding it; forwarding it unchanged rejects a valid owner,
+  // while replacing an arbitrary path would silently authorize a copied/coordinator activation.
+  const activationOptions = operation.flatMap((arg, index) => /^--?activation$/.test(arg) ? [index] : []);
+  if (activationOptions.length > 1) return { error: 'browser activation option is duplicated' };
+  const activationOption = activationOptions[0];
+  if (activationOption !== undefined) {
+    const supplied = operation[activationOption + 1];
+    let matchesOwner = false;
+    try {
+      matchesOwner = supplied !== undefined
+        && realpathSync(resolve(binding.projectRoot, supplied)) === owner.activationPath;
+    } catch { /* a missing or unreadable option is not the delegated owner's authority */ }
+    if (!matchesOwner) return { error: 'browser activation option is not the current delegated role activation' };
+  }
+
   const nonce = randomBytes(18).toString('base64url');
   const activationPath = join(runDirectory, `browser-activation-${nonce}.json`);
   writeFileSync(activationPath, `${canonicalJson(binding.invocation)}\n`, { flag: 'wx', mode: 0o400 });
   chmodSync(activationPath, 0o400);
-  const childArgv = [process.execPath, binding.canonicalCliPath, ...operation];
+  const browserOperation = [...operation];
+  if (activationOption !== undefined) browserOperation[activationOption + 1] = activationPath;
+  const childArgv = [process.execPath, binding.canonicalCliPath, ...browserOperation];
   return await new Promise<unknown>((resolveBrowser) => {
     const gate = 'IFS= read -r omd_gate <&3 || exit 125; exec 3<&-; test -n "$omd_gate" || exit 126; unset omd_gate; exec "$@"';
     const child = spawn('/bin/sh', ['-c', gate, 'omd-browser-gate', ...childArgv], {
@@ -1575,28 +2344,121 @@ async function executeBrokeredBrowserCommand(
   });
 }
 
+function abortOwnerGrant(
+  requestValue: unknown,
+  binding: HostBinding,
+  storage: OwnerStorage,
+  state: OwnerBrokerState,
+): unknown {
+  const request = parseOwnerAbortRequest(requestValue);
+  if (request === undefined) return { error: 'malformed production-owner abort request' };
+  const rejected = commonRequestError(request, binding) ?? exactOwnerStorage(storage, dirname(storage.directory));
+  if (rejected !== undefined) return { error: rejected };
+  const grant = state.grant;
+  if (grant === undefined || grant.requesterPid !== request.requesterPid
+    || grant.argvSha256 !== sha256(canonicalJson(request.argv)) || grant.taskSha256 !== request.taskSha256
+    || grant.nonce !== request.grantNonce || grant.mode !== request.mode
+    || !sameRepairBinding(grant.repair, request.repair)) {
+    return { error: 'production-owner abort grant is absent, copied, stale, or mismatched' };
+  }
+  const liveChild = [...state.children.values()].find((child) =>
+    child.taskSha256 === grant.taskSha256 && processRecord(child.pid) !== undefined);
+  if (liveChild !== undefined) return { error: 'OWNER_ABORT_ACTIVE: delegated owner process is not quiescent' };
+  let currentRoute: RouteBinding;
+  try { currentRoute = currentRouteBinding(binding.projectRoot, binding.invocation); }
+  catch { return { error: 'production-owner abort route binding is stale' }; }
+  if (!sameRouteBinding(currentRoute, grant.route)) return { error: 'production-owner abort route binding changed' };
+  if (grant.repair !== undefined) {
+    let repairInspection: RepairInspection;
+    try { repairInspection = inspectOwnerRepairMirror(binding.projectRoot, grant.repair.mirrorRoot, grant.route, true); }
+    catch (error) { return { error: error instanceof Error ? error.message : 'production-owner repair abort binding failed' }; }
+    if (!sameRepairBinding(repairInspection.binding, grant.repair)) {
+      return { error: 'OWNER_REPAIR_BINDING_MISMATCH: repair mirror was not restored before abort' };
+    }
+    if (grant.repairTransactionKey !== undefined) state.consumedRepairTransactions.add(grant.repairTransactionKey);
+  } else {
+    state.completed = true;
+    state.initialCompletedSuccessfully = false;
+    state.initialRetryExhausted = state.initialAttemptCount >= 2;
+  }
+  delete state.grant;
+  return Object.freeze({
+    schema: OWNER_ABORT_ACK_SCHEMA,
+    host: 'codex',
+    owner: 'omd-hand',
+    projectRoot: binding.projectRoot,
+    taskSha256: request.taskSha256,
+    grantNonce: request.grantNonce,
+    mode: request.mode,
+    failureSha256: sha256(request.failure),
+  });
+}
+
 function persistOwnerResult(requestValue: unknown, binding: HostBinding, storage: OwnerStorage, state: OwnerBrokerState, role: OwnerRoleProfile): unknown {
   const request = parseOwnerPersistRequest(requestValue);
   if (request === undefined) return { error: 'malformed production-owner persistence request' };
   const rejected = commonRequestError(request, binding) ?? exactOwnerStorage(storage, dirname(storage.directory));
   if (rejected !== undefined) return { error: rejected };
   const grant = state.grant;
-  if (grant === undefined || state.completed || grant.requesterPid !== request.requesterPid
+  if (grant === undefined || grant.requesterPid !== request.requesterPid
     || grant.argvSha256 !== sha256(canonicalJson(request.argv)) || grant.taskSha256 !== request.taskSha256
-    || grant.nonce !== request.grantNonce) return { error: 'production-owner persistence grant is absent, copied, stale, or mismatched' };
-  if (!validOwnerResult(request.result, request, binding, storage, role)) return { error: 'production-owner result is malformed or mismatched' };
+    || grant.nonce !== request.grantNonce || grant.expiresAt <= Date.now()
+    || grant.mode !== request.mode || !sameRepairBinding(grant.repair, request.repair)) {
+    return { error: 'production-owner persistence grant is absent, copied, stale, or mismatched' };
+  }
+  let currentRoute: RouteBinding;
+  try { currentRoute = currentRouteBinding(binding.projectRoot, binding.invocation); }
+  catch { return { error: 'production-owner persistence route binding is stale' }; }
+  if (!sameRouteBinding(currentRoute, grant.route)) return { error: 'production-owner persistence route binding changed' };
+  let repairInspection: RepairInspection | undefined;
+  if (grant.repair !== undefined) {
+    try { repairInspection = inspectOwnerRepairMirror(binding.projectRoot, grant.repair.mirrorRoot, grant.route, false); }
+    catch (error) { return { error: error instanceof Error ? error.message : 'production-owner repair binding failed' }; }
+    if (!sameRepairContext(repairInspection.binding, grant.repair)) {
+      return { error: 'OWNER_REPAIR_BINDING_MISMATCH: repair mirror or observation binding changed after execution' };
+    }
+  }
+  if (!validOwnerResult(request.result, request, binding, grant, role, repairInspection)) {
+    return { error: 'production-owner result is malformed or mismatched' };
+  }
   try {
-    writeFileSync(storage.receiptPath, `${canonicalJson(request.result)}\n`, { flag: 'wx', mode: 0o400 });
-    chmodSync(storage.receiptPath, 0o400);
+    writeFileSync(grant.receiptPath, `${canonicalJson(request.result)}\n`, { flag: 'wx', mode: 0o400 });
+    chmodSync(grant.receiptPath, 0o400);
   } catch (error) {
     return { error: `production-owner receipt persistence failed: ${error instanceof Error ? error.message : String(error)}` };
   }
-  state.completed = true;
+  if (grant.mode === 'production') {
+    if (request.result.result === 'completed') {
+      state.completed = true;
+      state.initialCompletedSuccessfully = true;
+      state.initialSuccessfulReceiptPath = grant.receiptPath;
+      delete state.retryableInitialFailure;
+    } else if (!grant.initialRetry && state.initialAttemptCount < 2
+      && isProvenNoMutationOwnerFailure(request.result)) {
+      state.completed = false;
+      state.initialCompletedSuccessfully = false;
+      state.retryableInitialFailure = Object.freeze({
+        resultSha256: request.resultSha256,
+        receiptPath: grant.receiptPath,
+      });
+    } else {
+      state.completed = true;
+      state.initialCompletedSuccessfully = false;
+      state.initialRetryExhausted = state.initialAttemptCount >= 2;
+      delete state.retryableInitialFailure;
+    }
+  } else if (grant.repairTransactionKey !== undefined) {
+    state.consumedRepairTransactions.add(grant.repairTransactionKey);
+    if (request.result.result === 'completed') {
+      state.trustedProductionOwnerRepairResults.add(request.resultSha256);
+    }
+  }
+  delete state.grant;
   return {
     schema: OWNER_PERSIST_ACK_SCHEMA,
     host: 'codex', owner: 'omd-hand', projectRoot: binding.projectRoot,
     taskSha256: request.taskSha256, grantNonce: request.grantNonce,
-    resultSha256: request.resultSha256, receiptPath: storage.receiptPath,
+    resultSha256: request.resultSha256, receiptPath: grant.receiptPath,
   };
 }
 
@@ -1635,8 +2497,7 @@ function createRunFiles(
   chmodSync(ownerDirectory, 0o700);
   const ownerReceiptPath = join(ownerDirectory, 'result.json');
   for (const attempt of [1, 2]) {
-    const delegatedPath = join(runDirectory, `production-owner-activation-${attempt}.json`);
-    writeFileSync(delegatedPath, '', { flag: 'wx', mode: 0o600 });
+    writeFileSync(join(runDirectory, `production-owner-activation-${attempt}.json`), '', { flag: 'wx', mode: 0o600 });
   }
   writeFileSync(activationPath, `${JSON.stringify(invocation)}\n`, { mode: 0o400 });
   writeFileSync(activationEvidencePath, `${JSON.stringify(invocation.activation)}\n`, { mode: 0o400 });
@@ -1658,6 +2519,9 @@ export async function runCodexHostExec(
   const codexHomeInput = resolve(dependencies.codexHome ?? env.CODEX_HOME ?? join(homedir(), '.codex'));
   mkdirSync(codexHomeInput, { recursive: true, mode: 0o700 });
   const codexHome = realpathSync(codexHomeInput);
+  const configPath = join(codexHome, 'config.toml');
+  const hostConfig = existsSync(configPath) ? parseToml(readFileSync(configPath, 'utf8')) as Record<string, unknown> : {};
+  const discoverySearch = codexDiscoverySearchPolicy(coordinatorArgs, hostConfig, existsSync(join(projectRoot, '.codex', 'config.toml')));
   const installedSkillRoot = resolve(dependencies.installedSkillRoot ?? join(codexHome, 'skills'));
   const buildIdentity: BuildIdentity = createBuildIdentityFromSource(packageRoot);
   const loadedSkillBytes = installedSkillBytes(packageRoot, installedSkillRoot);
@@ -1691,8 +2555,13 @@ export async function runCodexHostExec(
     nextAttempt: 1,
     sessionIds: new Set<string>(),
     completed: false,
+    initialCompletedSuccessfully: false,
+    initialAttemptCount: 0,
+    initialRetryExhausted: false,
+    consumedRepairTransactions: new Set<string>(),
     trustedBrowserResults: new Set<string>(),
     trustedFinalReviewerResults: new Set<string>(),
+    trustedProductionOwnerRepairResults: new Set<string>(),
   };
   let ownerRole: OwnerRoleProfile | undefined;
   const ownerCodexBin = resolveCodexHostExecutable(
@@ -1718,11 +2587,16 @@ export async function runCodexHostExec(
     const match = /^request-([A-Za-z0-9_-]{24})\.json$/.exec(filename);
     if (match === null || handled.has(filename)) return;
     const requestPath = join(files.authoritySocketPath, filename);
+    const responsePath = join(responseDirectory, `response-${match[1]}`);
     let body: string;
+    let responseChannel: CodexAuthorityResponseChannel | undefined;
+    let responseChannelError: unknown;
     try {
       body = readFileSync(requestPath, 'utf8');
       if (Buffer.byteLength(body) > MAX_REQUEST_BYTES) throw new Error('authority request is too large');
     } catch { return; }
+    try { responseChannel = bindCodexAuthorityResponseChannel(responsePath); }
+    catch (error) { responseChannelError = error; }
     handled.add(filename);
     try { unlinkSync(requestPath); } catch { /* the bytes were already captured */ }
     void (async () => {
@@ -1730,7 +2604,8 @@ export async function runCodexHostExec(
       try { value = JSON.parse(body) as unknown; } catch { value = undefined; }
       const requestSchema = isRecord(value) ? value.schema : undefined;
       const ownerRequest = requestSchema === OWNER_REQUEST_SCHEMA || requestSchema === OWNER_EXEC_REQUEST_SCHEMA
-        || requestSchema === OWNER_PERSIST_REQUEST_SCHEMA || requestSchema === ROLE_EXEC_REQUEST_SCHEMA;
+        || requestSchema === OWNER_PERSIST_REQUEST_SCHEMA || requestSchema === OWNER_ABORT_REQUEST_SCHEMA
+        || requestSchema === ROLE_EXEC_REQUEST_SCHEMA;
       const selectedCliPath = ownerRequest || isCodexOwnerAuthorityRequest(value, canonicalOwnerCliPath)
         ? canonicalOwnerCliPath
         : canonicalCliPath;
@@ -1738,6 +2613,7 @@ export async function runCodexHostExec(
         projectRoot,
         invocation,
         roleOverrides,
+        discoverySearch,
         invocationPath,
         invocationSha256,
         canonicalCliPath: selectedCliPath,
@@ -1764,6 +2640,8 @@ export async function runCodexHostExec(
             ? ownerRole === undefined
               ? { error: 'production-owner persistence has no prior role-bound grant' }
               : persistOwnerResult(value, binding, ownerStorage, ownerBrokerState, ownerRole)
+            : requestSchema === OWNER_ABORT_REQUEST_SCHEMA
+              ? abortOwnerGrant(value, binding, ownerStorage, ownerBrokerState)
             : authorityReceipt(value, binding, ownerBrokerState);
       const rejected = isRecord(authority) && typeof authority.error === 'string' ? authority.error : undefined;
       const response = rejected === undefined
@@ -1773,12 +2651,9 @@ export async function runCodexHostExec(
         schema: 'omd-codex-authority-audit-v1', at: new Date().toISOString(), accepted: rejected === undefined,
         ...(rejected === undefined ? {} : { reason: rejected }),
       })}\n`, { mode: 0o600 });
-      const responsePath = join(responseDirectory, `response-${match[1]}`);
       try {
-        const responseStat = lstatSync(responsePath);
-        if (!responseStat.isFIFO() || responseStat.isSymbolicLink()) throw new Error('authority response channel is not a FIFO');
-        writeFileSync(responsePath, JSON.stringify(response));
-        unlinkSync(responsePath);
+        if (responseChannel === undefined) throw responseChannelError;
+        await deliverCodexAuthorityResponse(responseChannel, Buffer.from(JSON.stringify(response)));
       } catch (error) {
         appendFileSync(join(files.runDirectory, 'authority-audit.jsonl'), `${JSON.stringify({
           schema: 'omd-codex-authority-delivery-v1', at: new Date().toISOString(), delivered: false,
@@ -1792,6 +2667,9 @@ export async function runCodexHostExec(
     ...env,
     NODE_OPTIONS: undefined,
     CODEX_HOME: codexHome,
+    OMD_NODE_EXECUTABLE: process.execPath,
+    OMD_CLI_PATH: canonicalCliPath,
+    OMD_CODEX_CLI_PATH: canonicalOwnerCliPath,
     OMD_ACTIVATION_PATH: files.activationPath,
     OMD_ACTIVATION_EVIDENCE_PATH: files.activationEvidencePath,
     OMD_CODEX_LOADED_SKILL_RECEIPT_PATH: files.loadedSkillReceiptPath,
@@ -1838,7 +2716,14 @@ export async function runCodexHostExec(
     writeFileSync(resultPath, `${JSON.stringify({ schema: 'omd-codex-launch-result-v1', status, signal, completedAt: new Date().toISOString() })}\n`, { mode: 0o400 });
     chmodSync(resultPath, 0o400);
   }
-  return { status, signal, stdout, stderr, ...files };
+  return {
+    status,
+    signal,
+    stdout,
+    stderr,
+    ...files,
+    ownerReceiptPath: ownerBrokerState.initialSuccessfulReceiptPath ?? files.ownerReceiptPath,
+  };
 }
 
 export function codexHostUsage(): string {

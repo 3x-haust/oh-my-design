@@ -1,5 +1,6 @@
 export const CODEX_BROWSER_ROLES = [
   'omd-scout',
+  'omd-typesetter',
   'omd-eye',
   'omd-glance',
   'omd-hand',
@@ -8,9 +9,18 @@ export const CODEX_BROWSER_ROLES = [
 export type CodexBrowserRole = (typeof CODEX_BROWSER_ROLES)[number];
 
 const SCOUT_OPERATIONS = [
+  ['ir'],
+  ['render'],
   ['ref', 'add'],
   ['ref', 'add-batch'],
   ['craft-capture'],
+] as const;
+
+// Typesetter needs the same brokered Chromium path as Scout for isolated typography specimens,
+// but must not inherit Scout's reference-capture operations or the broader review surface.
+const TYPESETTER_OPERATIONS = [
+  ['ir'],
+  ['render'],
 ] as const;
 
 const REVIEW_OPERATIONS = [
@@ -35,13 +45,23 @@ function beginsWith(operation: readonly string[], prefix: readonly string[]): bo
   return prefix.every((part, index) => operation[index] === part);
 }
 
+function operationPrefixes(role: string): readonly (readonly string[])[] {
+  if (!CODEX_BROWSER_ROLES.includes(role as CodexBrowserRole)) return [];
+  return role === 'omd-scout' ? SCOUT_OPERATIONS
+    : role === 'omd-typesetter' ? TYPESETTER_OPERATIONS : REVIEW_OPERATIONS;
+}
+
+/** Public capability prose is derived from the same allowlist as the broker, not a second grant. */
+export function brokeredBrowserOperationNames(role: string): readonly string[] {
+  return Object.freeze(operationPrefixes(role).map((prefix) => prefix.join(' ')));
+}
+
 export function isBrokeredBrowserCliOperation(
   role: string,
   operation: readonly string[],
 ): role is CodexBrowserRole {
   if (!CODEX_BROWSER_ROLES.includes(role as CodexBrowserRole)) return false;
-  const prefixes = role === 'omd-scout' ? SCOUT_OPERATIONS : REVIEW_OPERATIONS;
-  return prefixes.some((prefix) => beginsWith(operation, prefix));
+  return operationPrefixes(role).some((prefix) => beginsWith(operation, prefix));
 }
 
 export function codexBrowserRoleFromEnvironment(

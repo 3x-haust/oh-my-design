@@ -7,6 +7,7 @@ import { trustedProjectRoot } from './board-security.ts';
 import { resolveReferenceBoard } from './board.ts';
 import type { ReferenceAssembly, ReferenceEvidenceProjection } from './board-projection.ts';
 import type { ReferenceBoardManifest, ResolvedReferenceBoard, ResolvedReferenceBoardPiece } from './board-contract.ts';
+import { copyReferenceInfluenceBinding } from './board-contract.ts';
 import { localeDesignContextJsonSha256 } from '../locale/design-context.ts';
 
 export const REFERENCE_BOARD_EVIDENCE_SCHEMA_VERSION = 'reference-board-evidence-v1';
@@ -71,7 +72,7 @@ const common = (piece: ResolvedReferenceBoardPiece): Omit<RawBoardPiece, 'eviden
   targetComponent: piece.targetComponent, targetSelector: piece.targetSelector, taskIds: [...piece.taskIds],
   reason: piece.reason, take: [...piece.take], avoid: piece.avoid, adaptation: piece.adaptation,
   grid: { column: piece.grid.column, span: piece.grid.span, order: piece.grid.order },
-  ...(piece.binding === undefined ? {} : { binding: { ...piece.binding, sourceViewport: { ...piece.binding.sourceViewport }, targetViewports: piece.binding.targetViewports.map((viewport) => ({ ...viewport })) } }),
+  ...(piece.binding === undefined ? {} : { binding: copyReferenceInfluenceBinding(piece.binding) }),
 });
 const rawPiece = (root: string, piece: ResolvedReferenceBoardPiece): RawBoardPiece => {
   switch (piece.sourceKind) {

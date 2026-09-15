@@ -55,7 +55,8 @@ test('omd ref add --selector records the selector and marks it a component', () 
 
 test('omd ref add without a selector captures the whole page', () => {
   const dir = project();
-  run(['ref', 'add', SLOP, '--as', 'landing'], dir);
+  const capture = run(['ref', 'add', SLOP, '--as', 'landing'], dir);
+  assert.equal(capture.status, 0, capture.stderr || capture.stdout);
   const ref = must(loadRefs(dir)[0]);
   assert.equal(ref.kind, 'page');
   assert.equal(ref.selector, undefined);

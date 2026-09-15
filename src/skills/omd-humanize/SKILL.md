@@ -128,6 +128,12 @@ prerequisites, and scan paths over conversational warmth.
 
 ## Rewrite procedure
 
+For marketing, adoption, landing and homepage copy, read `theory/web-copy.md` under
+`omd pack dir` before rewriting. Use its reader-value, evidence, message-angle and formula-fit
+tests. Record actual application in the existing Humanize audit's Marketing message map;
+do not import an article's claimed performance or force every formula onto one page.
+An accurate internal process description is not automatically a useful marketing message.
+
 1. Write the six input-contract fields. Mark unknowns; do not fill them creatively.
 2. Extract a factual ledger before editing. Include exact numbers, proper nouns, claim
    status, uncertainty, and quotes.

@@ -1,5 +1,7 @@
 import type { Invariants } from '../types.ts';
 import { canonicalJson, sha256 } from './board-artifacts.ts';
+import { GEOMETRY_AXES, parseGeometryComparison, type GeometryAxis, type GeometryComparison } from './geometry-comparison.ts';
+import { parseReferenceFeatureComparisons, type ReferenceFeatureComparison } from './feature-measurement.ts';
 
 export const SELECTED_REFERENCE_DISTANCE_SCHEMA_VERSION = 'selected-reference-distance-v1' as const;
 export const SELECTED_REFERENCE_DISTANCE_THRESHOLD = 0.6 as const;
@@ -13,6 +15,10 @@ export type SelectedReferenceDistanceComparison = Readonly<{
   similarity: number;
   drivers: readonly string[];
   unmeasuredComponents?: readonly string[];
+  geometry?: GeometryComparison;
+  geometryAxes?: readonly GeometryAxis[];
+  styleSimilarity?: number;
+  features?: readonly ReferenceFeatureComparison[];
 }>;
 
 export type SelectedReferenceDistanceReceipt = Readonly<{
@@ -36,6 +42,9 @@ export type SelectedReferenceDistanceSlotInput = Readonly<{
   targetSelector: string;
   referenceInvariants: Invariants;
   targetInvariants: Invariants;
+  geometry?: GeometryComparison;
+  geometryAxes?: readonly GeometryAxis[];
+  features?: readonly ReferenceFeatureComparison[];
 }>;
 
 export type CreateSelectedReferenceDistanceReceiptInput = Readonly<{
@@ -85,6 +94,7 @@ const DRIVER_NAMES = new Set([
   'tokenCoverage',
   'typeScale',
   'weightLadder',
+  ...GEOMETRY_AXES,
 ]);
 
 export class SelectedReferenceDistanceError extends Error {
@@ -150,7 +160,24 @@ const comparison = (
   index: number,
 ): SelectedReferenceDistanceComparison => {
   const parsed = record(value, `comparisons[${index}]`);
-  exactKeys(parsed, parsed['unmeasuredComponents'] === undefined ? COMPARISON_KEYS : [...COMPARISON_KEYS, 'unmeasuredComponents'], `comparisons[${index}]`);
+  exactKeys(parsed, [...COMPARISON_KEYS,
+    ...(parsed['unmeasuredComponents'] === undefined ? [] : ['unmeasuredComponents']),
+    ...(parsed['geometry'] === undefined ? [] : ['geometry', 'geometryAxes', 'styleSimilarity']),
+    ...(parsed['features'] === undefined ? [] : ['features'])], `comparisons[${index}]`);
+  const geometry = parsed['geometry'] === undefined ? undefined : parseGeometryComparison(parsed['geometry']);
+  const axes = parsed['geometryAxes'];
+  if (geometry && (!Array.isArray(axes) || axes.length === 0 || new Set(axes).size !== axes.length
+    || axes.some(axis => !GEOMETRY_AXES.includes(axis)))) failSelectedReferenceDistance('geometryAxes must name the measured promises');
+  if (parsed['features'] !== undefined && (!geometry || !Array.isArray(axes) || axes.length !== 1)) {
+    failSelectedReferenceDistance('declared features require the whole-component diagnostic and one bound primary axis');
+  }
+  const features = parsed['features'] === undefined ? undefined : parseReferenceFeatureComparisons(parsed['features'], (axes as GeometryAxis[])[0]!);
+  if (features && parsed['similarity'] !== Math.min(...features.map(feature => feature.similarity))) {
+    failSelectedReferenceDistance('similarity must equal the weakest declared feature measurement');
+  }
+  if (geometry && !features && parsed['similarity'] !== Math.min(...(axes as GeometryAxis[]).map(axis => geometry.scores[axis] ?? 0))) {
+    failSelectedReferenceDistance('similarity must equal the weakest promised geometry axis; unmeasured is not agreement');
+  }
   const rawDrivers = parsed['drivers'];
   if (!Array.isArray(rawDrivers)
     || rawDrivers.some((driver) => typeof driver !== 'string' || !DRIVER_NAMES.has(driver))) {
@@ -170,6 +197,8 @@ const comparison = (
     targetSelector: text(parsed['targetSelector'], `comparisons[${index}].targetSelector`),
     similarity: finiteScore(parsed['similarity'], `comparisons[${index}].similarity`),
     drivers: Object.freeze([...drivers]),
+    ...(geometry === undefined ? {} : { geometry, geometryAxes: axes as GeometryAxis[], styleSimilarity: finiteScore(parsed['styleSimilarity'], 'styleSimilarity') }),
+    ...(features === undefined ? {} : { features }),
     ...(unmeasured === undefined ? {} : { unmeasuredComponents: Object.freeze([...(unmeasured as string[])]) }),
   };
 };

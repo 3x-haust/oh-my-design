@@ -74,7 +74,7 @@ test('product visual policy is semantic rather than marketing decoration policy'
   const visual = ADAPTIVE_BEHAVIOR_POLICY.visual;
   assert.match(read('core/theory/color.md'), /It is not a universal product-UI ratio/);
   assert.equal(visual.colourDistribution, 'surface-conditional');
-  assert.equal(visual.marketingColourDistribution, '60-30-10');
+  assert.equal(visual.marketingColourDistribution, 'evidence-grounded-visible-hierarchy');
   assert.equal(visual.productColourStrategy, 'semantic-action-state');
   assert.equal(visual.productCarrierRequired, false);
   assert.equal(visual.motionNoneRequiresStaticBreak, false);

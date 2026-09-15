@@ -626,7 +626,7 @@ const manifest = (directory: string, decision: 'none' | 'one' = 'none', motionRe
           {
             observationSha256: firstSha256,
             viewport: 'desktop',
-            state: 'initial',
+            state: 'desktop-loaded',
             region: 'primary work surface',
             visibleCondition: 'The intended priority is visible.',
             userConsequence: 'The next decision is legible.',
@@ -634,7 +634,7 @@ const manifest = (directory: string, decision: 'none' | 'one' = 'none', motionRe
           {
             observationSha256: secondSha256,
             viewport: 'mobile',
-            state: 'initial',
+            state: 'mobile-loaded',
             region: 'primary work surface',
             visibleCondition: 'The priority is recomposed.',
             userConsequence: 'Decision context remains available.',

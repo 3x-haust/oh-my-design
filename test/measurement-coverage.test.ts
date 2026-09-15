@@ -73,5 +73,9 @@ test('unknown probes do not let identical static captures escape kinship or make
   assert.deepEqual(same[0]!.unmeasuredComponents, ['hoverCoverage', 'focusCoverage']);
   const different = { ...prepared(), spacingLadder: [7, 21], radiusLadder: [2, 30], typeScale: [17, 50], fontFamilies: ['serif'], paddingWeight: 2, elevationLevels: 0 };
   assert.equal(topKinshipPairs([reference(prepared(), 'https://one.example'), reference(different, 'https://two.example')]).length, 0);
-  assert.deepEqual(topKinshipPairs([reference(measured, 'https://one.example'), reference(measured, 'https://two.example')])[0]?.unmeasuredComponents, undefined);
+  assert.deepEqual(topKinshipPairs([reference(measured, 'https://one.example'), reference(measured, 'https://two.example')])[0]?.unmeasuredComponents,
+    ['hoverCoverage', 'focusCoverage'], 'legacy zero-valued probes are omitted by the score and must be disclosed');
+  const confirmedZero = { ...measured, measurementCoverage: { interactionProbe: 'measured' as const, motionProbe: 'measured' as const, energyCurve: 'not-measured' as const } };
+  assert.deepEqual(topKinshipPairs([reference(confirmedZero, 'https://one.example'), reference(confirmedZero, 'https://two.example')])[0]?.unmeasuredComponents, undefined,
+    'explicitly measured zero coverage remains comparable');
 });

@@ -56,7 +56,12 @@ const CONTRACT_KEYS = [
   'outcomeWitnesses',
 ] as const;
 const WITNESS_KEYS = ['kind', 'index', 'phase', 'assertion', 'target'] as const;
-const TASK_ID = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
+const TASK_ID = /^(?:T[1-9]\d*|[a-z][a-z0-9]*(?:-[a-z0-9]+)*)$/;
+
+/** Preserve canonical frame task IDs and existing semantic IDs without admitting selectors. */
+export function isEntrySurfaceTaskId(value: unknown): value is string {
+  return typeof value === 'string' && value.length <= 64 && TASK_ID.test(value);
+}
 const OUTCOME_KINDS = new Set<EntrySurfaceOutcomeKind>(['mustHave', 'mustNotHave', 'completionEvidence']);
 const TARGETS = new Set<EntrySurfaceWitnessTarget>([
   'purpose', 'workObjectAnchor', 'nextAction', 'consequence', 'body',
@@ -91,7 +96,7 @@ function text(value: unknown): string {
 
 function taskId(value: unknown): string {
   const parsed = text(value);
-  if (!TASK_ID.test(parsed) || parsed.length > 64) return fail('MALFORMED_ENTRY_SURFACE_CONTRACT');
+  if (!isEntrySurfaceTaskId(parsed)) return fail('MALFORMED_ENTRY_SURFACE_CONTRACT');
   return parsed;
 }
 

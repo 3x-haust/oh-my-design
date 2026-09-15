@@ -87,9 +87,11 @@ export function auditCaptureTimes(capturedAt: readonly string[], now: number = D
   };
 }
 
-/** Read the saved reference records for `cwd` and audit explicit batch provenance before legacy timing. */
+/** Read browser captures only, then audit explicit batch provenance before legacy timing. */
 export function auditCaptureParallelism(cwd: string, now: number = Date.now()): CaptureAudit {
-  return auditCaptureRecords(loadRefs(cwd).map((reference) => ({
+  // `ref add --image` publishes metadata without launching a capture browser. Its timestamp
+  // cannot establish either a serial browser launch or a parallel capture, even near a real batch.
+  return auditCaptureRecords(loadRefs(cwd).filter((reference) => reference.kind !== 'image').map((reference) => ({
     capturedAt: reference.capturedAt,
     ...(reference.captureBatchId === undefined ? {} : { captureBatchId: reference.captureBatchId }),
   })), now);

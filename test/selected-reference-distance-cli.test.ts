@@ -9,8 +9,12 @@ import { extractIr } from '../core/render/index.ts';
 import {
   SELECTED_REFERENCE_DISTANCE_PATH,
   parseSelectedReferenceDistanceReceipt,
+  validateSelectedReferenceDistanceReceipt,
+  writeSelectedReferenceDistanceReceipt,
 } from '../core/ref/selected-reference-distance.ts';
 import { createSelectedReferenceFixture } from './helpers/selected-reference-fixture.ts';
+import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
+import { captureBlueprint } from '../core/ref/blueprint.ts';
 
 const CLI = fileURLToPath(new URL('../bin/omd.ts', import.meta.url));
 const PASS_PAGE = fileURLToPath(new URL('./fixtures/reference-fidelity/pass.html', import.meta.url));
@@ -76,4 +80,55 @@ test('selected reference CLI gates assigned selectors and preserves stale diagno
   assert.equal(stale.status, 1);
   assert.match(stale.stderr, /selection|settlement|canonical|stale/i);
   assert.deepEqual(readFileSync(receiptPath), currentReceipt);
+});
+
+test('selected CLI measures bound feature correspondence, keeps whole geometry, and rejects definition drift', async context => {
+  const sourcePage = fileURLToPath(new URL('./fixtures/reference-fidelity/feature-source.html', import.meta.url));
+  const targetPage = fileURLToPath(new URL('./fixtures/reference-fidelity/feature-target.html', import.meta.url));
+  const wrongPage = fileURLToPath(new URL('./fixtures/reference-fidelity/feature-wrong.html', import.meta.url));
+  const source = await extractIr(sourcePage, { viewport: VIEWPORT, selector: '.hero' });
+  const index = (anchor: string) => {
+    const found = source.nodes.findIndex(node => node.referenceMeasurement?.anchor === anchor);
+    assert.ok(found >= 0); return found;
+  };
+  const fixture = createSelectedReferenceFixture(context, {
+    invariants: extractInvariants(normalize(source)), viewport: VIEWPORT,
+    blueprint: captureBlueprint(source.nodes, '.hero'), targetSelector: '.hero',
+    binding: { zoneId: 'hero', decisionId: 'hero-proportions', axis: 'proportion', sourceState: 'visible',
+      sourceViewport: VIEWPORT, targetViewports: [VIEWPORT], responsiveConsequence: 'Preserve the named desktop proportions.',
+      conflictGroup: null, conflictResolution: null, falsifier: 'The lead and support proportion or display hierarchy changes.',
+      measurements: [
+        { id: 'lead-support', quantity: 'width-ratio', sourceNodes: [index('lead'), index('support')], targetAnchors: ['lead', 'support'] },
+        { id: 'display-body', quantity: 'font-size-ratio', sourceNodes: [index('display'), index('body')], targetAnchors: ['display', 'body'] },
+      ],
+    },
+  });
+  const verification = spawnSync(process.execPath, [CLI, 'ref', 'verify', targetPage, '--candidate', 'selected', '--json'], { cwd: fixture.root, encoding: 'utf8', env: process.env });
+  assert.equal(verification.status, 0, verification.stderr);
+  const report = JSON.parse(verification.stdout);
+  assert.equal(report.rows[0].comparisonBasis, 'declared-features');
+  assert.equal(report.rows[0].semanticState, 'requires-visible-inspection');
+  assert.deepEqual(report.rows[0].missingAxes, []);
+  assert.deepEqual(report.rows[0].featureComparisons.map((feature: { similarity: number }) => feature.similarity), [1, 1]);
+  const passing = run(fixture.root, targetPage);
+  assert.equal(passing.status, 0, passing.stderr);
+  const receipt = parseSelectedReferenceDistanceReceipt(JSON.parse(passing.stdout));
+  const row = receipt.comparisons[0]!;
+  assert.equal(row.similarity, 1);
+  assert.deepEqual(row.features!.map(feature => feature.similarity), [1, 1]);
+  assert.ok(row.geometry!.scores.proportion! < 1, 'the whole-DOM diagnostic remains separate');
+  assert.deepEqual(validateSelectedReferenceDistanceReceipt(fixture.root), receipt);
+  const failing = run(fixture.root, wrongPage);
+  assert.equal(failing.status, 1, failing.stderr);
+  assert.equal(parseSelectedReferenceDistanceReceipt(JSON.parse(failing.stdout)).verdict, 'fail');
+
+  const changed = structuredClone(receipt) as any;
+  changed.comparisons[0].features[0].definition.id = 'unbound-replacement';
+  const writer = createTestProjectWriteAdapter(fixture.root);
+  writeSelectedReferenceDistanceReceipt(writer.projectRoot, changed, writer);
+  assert.throws(() => validateSelectedReferenceDistanceReceipt(fixture.root), /declared features are missing or stale/);
+  const changedSource = structuredClone(receipt) as any;
+  changedSource.comparisons[0].features[1].source.nodes[0].width += 1;
+  writeSelectedReferenceDistanceReceipt(writer.projectRoot, changedSource, writer);
+  assert.throws(() => validateSelectedReferenceDistanceReceipt(fixture.root), /declared features are missing or stale/);
 });

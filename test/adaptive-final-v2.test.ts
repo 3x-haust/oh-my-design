@@ -5,11 +5,19 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { checkFinalEvidenceV2, publishFinalEvidenceV2 } from '../core/evidence/final-v2.ts';
+import { checkTerminalCompletion } from '../core/completion/preflight.ts';
 import { canonicalFinalEvidenceV2Graph, validateFinalEvidenceV2GraphFiles } from '../core/evidence/final-v2-graph.ts';
 import { servedProjectTreeSha256 } from '../core/render/serve.ts';
 import { createAdaptiveSourceSealRoute } from '../core/source-seal/adaptive-inputs.ts';
 import { writeSourceSeal } from '../core/source-seal/index.ts';
 import { observationV2Sha256, writeObservationV2 } from '../core/runtime/observation.ts';
+import { RenderedRefinementError } from '../core/runtime/rendered-refinement.ts';
+import {
+  FINAL_RENDER_REVIEWER_PACKET_INPUT_SCHEMA,
+  FINAL_RENDER_REVIEWER_TRANSPORT_SCHEMA,
+  finalRenderReviewerPacket,
+  publishFinalRenderReviewerPacket,
+} from '../core/runtime/final-render-review.ts';
 import {
   TRUSTED_BROWSER_RECEIPT_SCHEMA,
   trustedBrowserReceiptSha256,
@@ -147,7 +155,7 @@ function lane(
         {
           observationSha256,
           viewport: 'desktop',
-          state: 'initial',
+          state: 'approved-copy-visible',
           region: 'primary work surface',
           visibleCondition: 'The intended priority is visible.',
           userConsequence: 'The next decision is legible.',
@@ -155,7 +163,7 @@ function lane(
         {
           observationSha256,
           viewport: 'mobile',
-          state: 'initial',
+          state: 'approved-copy-visible',
           region: 'primary work surface',
           visibleCondition: 'The priority is recomposed.',
           userConsequence: 'Decision context remains available.',
@@ -182,7 +190,8 @@ function lane(
         : {}),
       isolationReceiptSha256, observationSha256s: [observationSha256], routeSha256, buildSha256, briefSha256, browserSha256,
       childPid: ({ blindLane: 100, fidelityLane: 200, protocolLane: 300 })[name] + index, sessionId: `${name}-session-${index}`, nonce: `${name}-nonce-${index}`,
-      evidenceSha256: sha(`${name}:evidence:${index}`), configurationSha256: sha(`${name}:configuration:${index}`),
+      evidenceSha256: sha(name === 'blindLane' ? `${name}:evidence` : `${name}:evidence:${index}`),
+      configurationSha256: sha(name === 'blindLane' ? `${name}:configuration` : `${name}:configuration:${index}`),
     };
     const path = `.omd/receipts/${name}-execution-${index}.json`;
     writeJson(root, path, value);
@@ -225,6 +234,9 @@ function prepared(
   const capturePath = '.omd/copy-final.png';
   const capture = browserFixturePng(1280, 900);
   writeFileSync(join(root, capturePath), capture);
+  const mobileCapturePath = '.omd/copy-final-mobile.png';
+  const mobileCapture = browserFixturePng(390, 844);
+  writeFileSync(join(root, mobileCapturePath), mobileCapture);
   mkdirSync(join(root, 'src', 'copy'), { recursive: true });
   const productionPath = 'src/copy/final.html';
   const productionBytes = Buffer.from('<main>approved copy</main>');
@@ -265,7 +277,10 @@ function prepared(
       decisionGraph.value.decisions,
     ),
     hardFloors: { behavior: 'pass', access: 'pass', safety: 'pass' },
-    captures: [{ path: capturePath, sha256: sha(capture), width: 1280, height: 900 }],
+    captures: [
+      { path: capturePath, sha256: sha(capture), width: 1280, height: 900 },
+      { path: mobileCapturePath, sha256: sha(mobileCapture), width: 390, height: 844 },
+    ],
     transcript: [`assertion-pass:${'a'.repeat(64)}`],
   };
   const browserReceiptSha256 = trustedBrowserReceiptSha256(browserReceipt);
@@ -274,7 +289,10 @@ function prepared(
     `.omd/trusted-browser-receipt-sha256-${browserReceiptSha256}.json`,
     browserReceipt,
   );
-  const browserEvidence = browser.evidence([{ path: capturePath, sha256: sha(capture), viewport: { width: 1280, height: 900 }, testedState: 'approved-copy-visible' }]);
+  const browserEvidence = browser.evidence([
+    { path: capturePath, sha256: sha(capture), viewport: { width: 1280, height: 900 }, testedState: 'approved-copy-visible' },
+    { path: mobileCapturePath, sha256: sha(mobileCapture), viewport: { width: 390, height: 844 }, testedState: 'approved-copy-visible' },
+  ]);
   const observation = writeObservationV2(root, {
     currentArtifact: { path: buildReceipt.path, sha256: buildReceipt.sha256 }, buildSha256: invocation.current.buildSha256,
     observedAt: '2026-08-11T21:00:00.000Z', evidence: {
@@ -307,7 +325,7 @@ function prepared(
     }],
     evidence: {
       states: ['approved-copy-visible'],
-      viewports: [{ width: 1280, height: 900 }],
+      viewports: [{ width: 1280, height: 900 }, { width: 390, height: 844 }],
     },
   };
   writeJson(root, '.omd/functional-requirements.json', requirements);
@@ -343,7 +361,7 @@ function prepared(
     typographyApplicability,
     testedUrl: 'file://fixture/',
     testedState: 'approved-copy-visible',
-    viewports: [{ width: 1280, height: 900 }],
+    viewports: [{ width: 1280, height: 900 }, { width: 390, height: 844 }],
     observations: [observationReceipt],
     findings: [],
   }, invocation);
@@ -418,6 +436,127 @@ test('authorized copy-only adaptive omission publication reaches immutable final
     ]);
     assert.equal(field(checkFinalEvidenceV2(value.root, value.invocation).graph, 'schema'), 'final-evidence-v2-adaptive-omission-graph');
   } finally { rmSync(value.root, { recursive: true, force: true }); }
+});
+
+test('execution requirements are reported only after real final publication and terminal checks', () => {
+  const routeInput = structuredClone(fixture());
+  const requirements = [
+    { requirement: 'Use the authorized production writer.', enforcedBy: ['project-write-boundary'] },
+    { requirement: 'Pass independent review and final preflight.', enforcedBy: ['independent-review', 'completion-preflight'] },
+  ];
+  Reflect.set(mutable(field(routeInput, 'taskOutcome')), 'executionRequirements', requirements);
+  const value = prepared(false, routeInput);
+  try {
+    assert.throws(() => checkTerminalCompletion(value.root, value.invocation));
+    authorizeGraph(value.root, value.invocation, value.graph);
+    const packet = JSON.parse(finalRenderReviewerPacket({
+      root: value.root,
+      invocation: value.invocation,
+      packetInput: {
+        schema: FINAL_RENDER_REVIEWER_PACKET_INPUT_SCHEMA,
+        observationSha256s: list(value.graph, 'observations').map((entry) => text(entry, 'sha256')),
+      },
+    }).toString('utf8'));
+    assert.equal(Object.hasOwn(packet.evidence.context.taskOutcome, 'executionRequirements'), false);
+    assert.deepEqual(packet.evidence.context.taskOutcome.mustHave, field(field(routeInput, 'taskOutcome'), 'mustHave'));
+    assert.deepEqual(readPersistedRoute(value.root, value.invocation).sourceContract.taskOutcome.executionRequirements, requirements);
+    publishPrepared(value);
+    const pointer = readFileSync(join(value.root, '.omd/final-evidence-v2.json'));
+    const record = text(JSON.parse(pointer.toString('utf8')), 'record');
+    authorizeTestProjectRunPayloads(value.root, value.invocation, [
+      { purpose: 'final-reviewer-lane', payload: pointer },
+      { purpose: 'final-evidence-manifest', payload: readFileSync(join(value.root, '.omd/final-evidence-v2-runs', record)) },
+    ]);
+    const result = checkTerminalCompletion(value.root, value.invocation);
+    assert.deepEqual(result.executionRequirements, {
+      schema: 'execution-requirement-check-v1',
+      sourceContractSha256: readPersistedRoute(value.root, value.invocation).sourceContractSha256,
+      checkedAt: 'terminal-preflight',
+      requirements,
+    });
+    const lanePath = text(field(value.graph, 'blindLane'), 'path');
+    writeFileSync(join(value.root, lanePath), '{"schema":"caller-claims-review-passed"}\n');
+    assert.throws(() => checkTerminalCompletion(value.root, value.invocation));
+  } finally { rmSync(value.root, { recursive: true, force: true }); }
+});
+
+test('initial final-review packet carries only current anonymous production images and fixed bindings', () => {
+  const value = prepared();
+  try {
+    authorizeGraph(value.root, value.invocation, value.graph);
+    const observationSha256s = list(value.graph, 'observations').map((entry) => text(entry, 'sha256'));
+    const packetInput = {
+      schema: FINAL_RENDER_REVIEWER_PACKET_INPUT_SCHEMA,
+      observationSha256s,
+    };
+    const bytes = finalRenderReviewerPacket({
+      root: value.root,
+      invocation: value.invocation,
+      packetInput,
+    });
+    const packet = JSON.parse(bytes.toString('utf8')) as {
+      schema: string;
+      evidenceSha256: string;
+      evidence: { renders: Array<{ captureSha256: string; viewport: string; pngBase64: string }> };
+      outputContract: { fixedBindings: { evidenceSha256: string; observationSha256s: string[] } };
+    };
+    assert.equal(packet.schema, FINAL_RENDER_REVIEWER_TRANSPORT_SCHEMA);
+    assert.deepEqual(packet.evidence.renders.map(({ viewport }) => viewport).sort(), ['desktop', 'mobile']);
+    for (const render of packet.evidence.renders) {
+      assert.equal(sha(Buffer.from(render.pngBase64, 'base64')), render.captureSha256);
+    }
+    assert.equal(packet.outputContract.fixedBindings.evidenceSha256, packet.evidenceSha256);
+    assert.deepEqual(packet.outputContract.fixedBindings.observationSha256s, observationSha256s);
+    assert.doesNotMatch(bytes.toString('utf8'), /testedUrl|\.omd\/refs|capturePath|"path"/);
+    const receipt = publishFinalRenderReviewerPacket({
+      root: value.root,
+      invocation: value.invocation,
+      writer: createTestProjectWriteAdapter(value.root, value.invocation),
+      packetInput,
+    });
+    assert.equal(receipt.sha256, sha(readFileSync(join(value.root, receipt.path))));
+    writeFileSync(join(value.root, '.omd', 'copy-final.png'), Buffer.from('stale'));
+    assert.throws(() => finalRenderReviewerPacket({
+      root: value.root,
+      invocation: value.invocation,
+      packetInput,
+    }));
+  } finally { rmSync(value.root, { recursive: true, force: true }); }
+});
+
+test('final-v2 publication and currentness fail closed on a dangling refinement checkpoint', () => {
+  const beforePublication = prepared();
+  try {
+    writeFileSync(join(beforePublication.root, '.omd', 'refinement-checkpoint.json'), '{}\n');
+    assert.throws(
+      () => publishPrepared(beforePublication),
+      (error: unknown) => error instanceof RenderedRefinementError,
+    );
+  } finally { rmSync(beforePublication.root, { recursive: true, force: true }); }
+
+  const afterPublication = prepared();
+  try {
+    publishPrepared(afterPublication);
+    const pointer = readFileSync(join(afterPublication.root, '.omd', 'final-evidence-v2.json'));
+    const record = text(JSON.parse(pointer.toString('utf8')), 'record');
+    authorizeGraph(afterPublication.root, afterPublication.invocation, afterPublication.graph);
+    authorizeTestProjectRunPayloads(afterPublication.root, afterPublication.invocation, [
+      { purpose: 'final-reviewer-lane', payload: pointer },
+      {
+        purpose: 'final-evidence-manifest',
+        payload: readFileSync(join(afterPublication.root, '.omd', 'final-evidence-v2-runs', record)),
+      },
+    ]);
+    writeFileSync(join(afterPublication.root, '.omd', 'refinement-checkpoint.json'), '{}\n');
+    assert.throws(
+      () => checkFinalEvidenceV2(afterPublication.root, afterPublication.invocation),
+      (error: unknown) => error instanceof RenderedRefinementError,
+    );
+    assert.throws(
+      () => checkTerminalCompletion(afterPublication.root, afterPublication.invocation),
+      (error: unknown) => error instanceof RenderedRefinementError,
+    );
+  } finally { rmSync(afterPublication.root, { recursive: true, force: true }); }
 });
 
 test('selected adaptive stages require no contradictory skip receipts', () => {
