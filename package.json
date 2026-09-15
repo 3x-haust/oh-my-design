@@ -1,6 +1,6 @@
 {
   "name": "@3xhaust/oh-my-design",
-  "version": "0.19.0",
+  "version": "0.20.0",
   "description": "Design cognition loop for Codex, Claude Code, and Pi-compatible agents — frame, diverge, see, reframe",
   "keywords": [
     "pi-package",

@@ -110,7 +110,7 @@ function run(args: string[]): void {
 
   // Test
   process.stdout.write('\nrunning tests...\n');
-  const test = spawnSync(process.execPath, ['--test', 'test'], {
+  const test = spawnSync(process.execPath, ['--test', '--test-concurrency=4', 'test/*.test.ts'], {
     cwd: root,
     stdio: 'inherit',
     encoding: 'utf8',
