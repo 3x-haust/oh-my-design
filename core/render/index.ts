@@ -170,7 +170,8 @@ async function assertNotBlocked(
   // No caller-controlled bypass: only a live, explicitly scoped component can
   // resolve the weak short-body signal. HTTP and challenge signals still win.
   if (reason?.startsWith('near-empty body') && selector !== null) {
-    const measured = await page.$eval(selector, (element) => {
+    const measured = await page.locator(selector).evaluateAll((elements) => {
+      const element = elements[0];
       if (!(element instanceof HTMLElement) || element === document.body
         || element === document.documentElement) return false;
       const box = element.getBoundingClientRect();

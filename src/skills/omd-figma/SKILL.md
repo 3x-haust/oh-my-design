@@ -47,11 +47,11 @@ observed initialization/capability failure permits headless, reduced-motion `omd
 or `omd probe` as the deterministic Playwright fallback. Never open a reference board UI,
 HTML, PNG, showcase, or `omd-board` for this route.
 
-`omd figma pull` requires a Figma personal access token. This is the **one allowed
-user interaction** in the skill. Check for it before pulling:
+`omd figma pull` requires a Figma personal access token. Check only whether it is
+configured before pulling; this command returns an exit status and no token value:
 
 ```bash
-echo $FIGMA_TOKEN
+node -e 'process.exit(process.env.FIGMA_TOKEN?.trim() ? 0 : 1)'
 ```
 
 If `FIGMA_TOKEN` is absent, tell the user exactly how to create one and where to set
@@ -62,14 +62,15 @@ it, then stop:
 > 1. Open Figma → **Account settings** (your avatar, top-left) → **Security** tab.
 > 2. Under **Personal access tokens**, click **Generate new token**.
 >    Scopes: **File content** (read) is sufficient.
-> 3. Copy the token and set it in your shell:
->    ```bash
->    export FIGMA_TOKEN=figd_...
->    ```
->    To persist it, add that line to `~/.zshrc` or `~/.bashrc`.
+> 3. Configure `FIGMA_TOKEN` privately in your local environment or secret manager.
+>    Do not paste the value into this chat, a command shared with the agent, shell
+>    history, or a tracked file.
 > 4. Then re-run the skill.
 
-Do not attempt to proceed without the token. Do not invent a workaround.
+Do not attempt to proceed without the token. Do not invent a workaround. Never
+print the token, dump the environment, or read a secret file into tool output.
+Pass the existing environment to the Figma API client; report only missing/present
+or a redacted authentication failure. Other necessary clarification remains allowed.
 
 ---
 
@@ -125,11 +126,11 @@ omd decision "Button component: 3 variants (Size=sm/md, State=default/hover)" \
 For each frame in the inventory (name-matched responsive pairs count as one build
 target with multiple viewports):
 
-**① Build the frame** — using the design system tokens from step 2, not hardcoded
+**1. Build the frame** — using the design system tokens from step 2, not hardcoded
 values. Every color is a `var(--color-*)`, every spacing is a `var(--spacing-*)`,
 every radius is a `var(--radius-*)`.
 
-**② Diff**
+**2. Diff**
 
 ```bash
 omd figma diff <frame-id> <rendered-page> --json
@@ -139,11 +140,11 @@ Read the `cells` array. Find the worst cells (highest `mismatch`). The cell
 coordinates are in the reference image's pixel space — they tell you *where* the
 divergence is, not just how much.
 
-**③ Fix** — address the worst cells. Typical causes: wrong component size, wrong
+**3. Fix** — address the worst cells. Typical causes: wrong component size, wrong
 spacing token, missing border, wrong font weight. Fix the specific region the diff
 named; do not guess.
 
-**④ Re-diff** — repeat until `score ≥ 0.97` or the iteration ceiling is reached.
+**4. Re-diff** — repeat until `score ≥ 0.97` or the iteration ceiling is reached.
 
 **Ceiling: 4 iterations per frame.** After 4, record the final score and move on.
 A frame that reaches the ceiling with score < 0.97 is not a failure of the loop —
