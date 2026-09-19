@@ -2,6 +2,13 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { critiqueFirstRender, FIRST_RENDER_CRITIC_SCHEMA, parseFirstRenderSurface } from '../core/design/first-render-critic.ts';
 import type { DesignHypothesis } from '../core/design/judgment.ts';
+import { inputSkeleton } from '../core/schema/inputs.ts';
+
+test('the documented first-render schema exists and is accepted by the actual parser', () => {
+  const input = inputSkeleton('first-render-surface');
+  assert.doesNotThrow(() => parseFirstRenderSurface(input.skeleton));
+  assert.match(input.constraints!.join('\n'), /actual rendered viewport/);
+});
 
 const hypothesis: DesignHypothesis = {
   schema: 'design-judgment-v1',

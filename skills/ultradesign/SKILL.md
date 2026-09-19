@@ -55,6 +55,33 @@ dependency groups; do not simulate child handles or concurrent processes. This h
 attest independence. Record same-session review as such in the design handoff, and do not run broker
 commands or ask the user for a missing broker to perform ordinary research and design work.
 
+Pi enforces three boundaries: selected-role instructions, authenticated CLI input validation, and
+host tool/final-message hooks. Before application writes run `omd guard production --json`.
+Resolve every blocker using the named stage's brief, delivered contracts, real artifact and checker.
+When selected, Writer publishes the copy deck and completes its current copy-edit review; Typesetter
+proves the actual language/copy before Composer fingerprints those inputs. Same-session passes must
+be recorded honestly and cannot stand in for independent final review. A PRD is a source, not a copy
+deck; a post-hoc composition note is not the pre-production contract. Never lower risk or relabel
+product UX as editorial to escape a validation error: repair the task matrix/input instead.
+
+The Pi extension serializes OMD commands per project. Use `omd_cli`, not shell-wrapped OMD calls;
+prepare directly owned documents and publisher inputs under `.omd/.cache/`, then use the specified
+publisher. Never hand-write route authorities, reference receipts, check history or final evidence.
+During blocked pre-production work use `read`, simple inventory commands, and native browsing tools;
+arbitrary shell commands are held because scripts can write application source. A hook-less host
+has explicit CLI checks only and must not claim host enforcement. Hooks are not an OS sandbox.
+
+Before a final implementation report run `omd guard completion --json`. It rechecks selected inputs
+and the existing final-evidence/reviewer/slop gates; design-only routes use design-check instead.
+Blocked tool calls return repair instructions to the model. A failed terminal gate holds the completion
+claim; it does not create a fake review or auto-retry missing authority. Report the strongest verified
+result, missing evidence and exact limitation. A build plus one check is not a completed repair loop.
+On hosts with custom follow-up messages, repairable terminal failures trigger at most two repair
+passes per real user input. Each pass may repair multiple blockers and rerun the existing checks.
+Pause/abort and missing user facts/authority never authorize an automatic retry or a scope change.
+Selected structural candidates need the current hash-bound `.omd/.cache/sketches/current.json`
+pointer and its complete evidence set; an arbitrary `*-selected` directory is not a selection.
+
 Before selecting methods, read `omd pack protocol/human-design-loop.md --section "Visual reference gallery and concept exploration"`. A simple task is not settled visual evidence; a current supplied direction can be. Experiments stay conditional.
 
 Check native image generation first. For unsettled marketing, use it when available.
@@ -114,11 +141,11 @@ or independent review.
 
 ## Non-negotiable before source
 
-For any new or redesigned UI, do not write application source, copy, or generated-project docs until the
-current route is present and the route-selected reference work has produced real evidence. A missing
-`.omd/route.json`, missing `.omd/refs/` evidence, or missing `.omd/reference-board.json` is a hard stop:
-run the route and Scout/reference stages first. Render captures of the generated app are not design
-references and cannot satisfy this requirement.
+For any new or redesigned UI, do not write application source until the current route and all selected
+pre-production inputs pass `omd guard production`. Selected discovery needs actual reference evidence;
+an explicitly skipped discovery stage is not forced onto a copy-only edit. Research documents and
+copy authoring follow the route's dependencies (Writer may run alongside Scout), not a universal
+reference-first sequence. Render captures of the generated app are not design references.
 
 Do not let a model-written intake recap become the first screen. Reject headings or subtitles equivalent
 to `다시 오셨네요`, `지금 할 일을 먼저 볼게요`, or `최근 퇴사 상황을 바탕으로 이어서 할 수 있는 일을 정리했어요`.
@@ -130,13 +157,19 @@ that action but cannot replace it.
 For a normal product request, keep moving without approval pauses:
 
 ```text
-route classify → domain check → reference discovery → reference judgment → composition → render/critic → production
+route classify → selected research/copy/type passes → selected composition/candidates → guard production → implementation → rendered review/repair/recheck → guard completion
 ```
 
 After `omd domain check`, print the domain summary for the run record and advance automatically. Do not ask the user to choose references or a visual direction; the coordinator selects and records the strongest evidence. Ask one blocking question only when a missing product fact
 would change the route or result materially: market/target audience, the product's real capability, or
 whether the primary task is discovery versus continuing an existing application. Otherwise make the
 reversible design decision, record why, and continue.
+
+This sketch is not a substitute for `route.strategy.stages` and execution waves. Every selected stage
+needs its real output and validation; optional stages need the existing evidence-backed skip, not a
+silent omission. Inspect actual checkpoint images, judge each warning, repair confirmed findings and
+rerun the same scope. A justified dismissal is allowed; neither an arbitrary repair count nor zero raw
+warnings proves quality. Never stop after a CSS edit and reuse the pre-edit check as final evidence.
 
 ## Reference roles
 

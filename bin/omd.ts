@@ -68,7 +68,8 @@ import { parseReferenceSelectionV2, projectRunInvocationSha256, readContainedReg
 import { referenceUsageV2Sha256, validateReferenceUsage } from '../core/ref/reference-usage.ts';
 import { canonicalJson, sha256 } from '../core/ref/board-artifacts.ts';
 import { commitAiAssetDecision } from '../core/asset-sourcing/ai-decision.ts';
-import { requireProductionReferenceInputs } from '../core/runtime/production-reference-gate.ts';
+import { checkProductionReadiness } from '../core/runtime/production-reference-gate.ts';
+import { readPersistedRoute } from '../core/route/index.ts';
 import { parseDesignJudgmentRecord, checkDesignHypothesis } from '../core/design/judgment.ts';
 import { critiqueFirstRender, parseFirstRenderSurface, firstRenderCriticSha256 } from '../core/design/first-render-critic.ts';
 import { publishDesignJudgment, readDesignJudgment, DESIGN_JUDGMENT_PATH } from '../core/design/judgment-files.ts';
@@ -404,7 +405,6 @@ function validateProjectRunInvocation(value: unknown): ProjectRunInvocation {
 }
 function projectWriter(invocation: ProjectRunInvocation, projectRoot = process.cwd()): ProjectWriteAdapter {
   validateCurrentProjectRun(invocation);
-  requireProductionReferenceInputs(projectRoot);
   return createProjectWriteAdapter(projectRoot, invocation);
 }
 
@@ -3089,7 +3089,9 @@ async function cmdStage(mode: string | undefined, opts: Opts): Promise<never> {
     const invocation = invocationFromActivation(opts, `omd stage ${mode}`);
     const state = resolveRunState(projectRoot, packRoot, invocation);
     const blocked = state.current === null ? undefined : requireStage(projectRoot, packRoot, state.current, invocation);
-    const result = { ...state, blocked: blocked?.ok === false ? blocked : null };
+    const result = { ...state, completedMeaning: 'artifact-presence-only',
+      nextValidation: 'omd guard production --json (before source); omd guard completion --json (before completion)',
+      blocked: blocked?.ok === false ? blocked : null };
     if (opts.json) process.stdout.write(JSON.stringify(result));
     else {
       for (const stage of state.stages) {
@@ -3871,10 +3873,11 @@ async function cmdCompletion(mode: string | undefined, opts: Opts): Promise<neve
     if (opts.json) process.stdout.write(JSON.stringify(receipt)); else console.log(receipt.path);
     process.exit(0);
   }
-  const activationPath = activationInputPath(opts);
-  if (mode !== 'preflight' || activationPath === undefined || opts._.length > 0) throw new Error('usage: omd completion preflight --activation <host-issued-invocation.json> [--json]');
-  const invocation = validateProjectRunInvocation(inputJson(activationPath, 'omd completion preflight activation'));
+  if (mode !== 'preflight' || opts._.length > 0) throw new Error('usage: omd completion preflight [--activation <host-issued-invocation.json>] [--json]');
+  // Local transport may read the gate; it still cannot mint reviewer/manifest authorization.
+  const invocation = invocationFromActivation(opts, 'omd completion preflight');
   const pointerPath = join(process.cwd(), '.omd', 'final-evidence-v2.json');
+  if (!existsSync(pointerPath)) throw new Error('FINAL_EVIDENCE_REQUIRED: .omd/final-evidence-v2.json is missing; build/captures are not terminal completion evidence');
   const pointerBytes = readFileSync(pointerPath);
   requireFinalReviewerLaneAuthorization(invocation, process.cwd(), pointerBytes);
   const pointer = JSON.parse(pointerBytes.toString('utf8')) as unknown;
@@ -3900,6 +3903,27 @@ async function cmdCompletion(mode: string | undefined, opts: Opts): Promise<neve
   const result = checkTerminalCompletion(process.cwd(), invocation);
   if (opts.json) process.stdout.write(JSON.stringify(result)); else console.log('ok — terminal completion evidence is current');
   process.exit(0);
+}
+
+async function cmdGuard(mode: string | undefined, opts: Opts): Promise<never> {
+  if (!['production', 'completion'].includes(mode ?? '') || opts._.length > 0) {
+    throw new Error('usage: omd guard production [--path <project-relative-file>] [--json] | omd guard completion [--json]');
+  }
+  const invocation = invocationFromActivation(opts, `omd guard ${mode}`);
+  if (mode === 'completion' && readPersistedRoute(process.cwd(), invocation).deliveryMode === 'design-only') {
+    return cmdCompletion('design-check', { ...opts, input: '.omd/design-handoff.json' });
+  }
+  const result = checkProductionReadiness(process.cwd(), invocation, join(root, 'core'), opts.path);
+  if (!result.ok || mode === 'production') {
+    if (opts.json) process.stdout.write(JSON.stringify(result));
+    else console.log(result.ok ? 'ok — selected pre-production inputs are current; this is not completion' : result.blockers.join('\n'));
+    process.exit(result.ok ? 0 : 1);
+  }
+  // Give the portable owner its actionable repair loop before the stronger final reviewer
+  // authority check. This preliminary check is NOT final scope/independence authorization.
+  const { checkSlopReview } = await import('../core/slop/review.ts');
+  checkSlopReview(process.cwd());
+  return cmdCompletion('preflight', opts);
 }
 
 async function cmdPreflight(opts: Opts): Promise<never> {
@@ -4960,7 +4984,9 @@ function usage(): never {
     + '  complete check <page> [--input .omd/functional-requirements.json] [--json]  every declared requirement is present, operable, reachable\n'
     + '  complete publish --input <completeness-run.json>  publish a current immutable zero-finding completeness receipt\n'
     + '  completion typography-applicability --ir <rendered-ir.json> --activation <host-issued-invocation.json>  publish immutable Korean display applicability\n'
-    + '  completion preflight --activation <host-issued-invocation.json> [--json]  read-only terminal final/completeness gate\n'
+    + '  guard production [--path <file>] [--json]  validate selected inputs before application writes\n'
+    + '  guard completion [--json]  selected inputs plus delivery-mode-specific terminal gate\n'
+    + '  completion preflight [--activation <host-issued-invocation.json>] [--json]  terminal evidence gate; retains reviewer authorization\n'
     + '  intent append --input trusted-intent.json [--json]  append trusted intent and update its guarded current pointer\n'
     + '  domain check [--input domain-brief.json] [--json]  validate the domain-analysis brief\n'
     + '  craft-fidelity check --input pair.json [--json]  verify a generated part reproduced the reference craft\n'
@@ -5235,6 +5261,7 @@ async function main(): Promise<never> {
   if (cmd === 'complete') return cmdComplete(sub, parseArgs(args.slice(2)));
   if (cmd === 'benchmark') return cmdBenchmark(sub, parseArgs(args.slice(2)));
   if (cmd === 'completion') return cmdCompletion(sub, parseArgs(args.slice(2)));
+  if (cmd === 'guard') return cmdGuard(sub, parseArgs(args.slice(2)));
   if (cmd === 'art-direction') return cmdArtDirection(sub, parseArgs(args.slice(2)));
   if (cmd === 'schema') return cmdSchema(sub, parseArgs(args.slice(2)));
   if (cmd === 'grain') return cmdGrain(args.slice(1));

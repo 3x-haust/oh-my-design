@@ -128,7 +128,7 @@ test('/omd runs doctor only and rejects host-specific arguments', async () => {
 
   assert.deepEqual(calls[0]?.slice(1), ['doctor']);
   assert.deepEqual(notifications, [
-    { message: 'OMD doctor: ready', level: 'info' },
+    { message: 'OMD doctor: ready\nOMD_HOST_GUARD_UNAVAILABLE: this host exposes no event hooks; only explicit CLI checks are available.', level: 'warning' },
     { message: 'Usage: /omd', level: 'warning' },
   ]);
 });

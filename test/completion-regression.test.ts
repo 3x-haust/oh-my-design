@@ -112,7 +112,8 @@ test('CLI persists v2 under its distinct schema and exposes the terminal preflig
     assert.equal(JSON.parse(readFileSync(join(root, '.omd', 'functional-requirements.json'), 'utf8')).schema, FUNCTIONAL_REQUIREMENTS_V2_SCHEMA);
     const preflight = spawnSync(process.execPath, [CLI.pathname, 'completion', 'preflight'], { cwd: root, encoding: 'utf8' });
     assert.equal(preflight.status, 1);
-    assert.match(preflight.stderr, /usage: omd completion preflight/);
+    assert.match(preflight.stderr, /FINAL_EVIDENCE_REQUIRED: \.omd\/final-evidence-v2\.json/);
+    assert.doesNotMatch(preflight.stderr, /host-issued-invocation/);
     const applicability = spawnSync(process.execPath, [CLI.pathname, 'completion', 'typography-applicability'], { cwd: root, encoding: 'utf8' });
     assert.equal(applicability.status, 1);
     assert.match(applicability.stderr, /usage: omd completion typography-applicability/);

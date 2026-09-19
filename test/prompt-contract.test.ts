@@ -750,17 +750,21 @@ test('writer rejects intake-recap headlines that hide the next action', () => {
   assert.match(writer, /최근 퇴사 상황을 바탕으로/);
   assert.match(writer, /concrete next action/);
 });
-test('coordinator stops source work until route and visual reference evidence exist', () => {
+test('coordinator gates application source while allowing selected parallel research/copy authoring', () => {
   const skill = read('src/skills/omd-ultradesign/SKILL.md').replace(/\s+/g, ' ');
-  assert.match(skill, /do not write application source, copy, or generated-project docs until the current route is present/i);
-  assert.match(skill, /missing `\.omd\/route\.json`/);
-  assert.match(skill, /missing `\.omd\/refs\/` evidence/);
-  assert.match(skill, /missing `.omd\/reference-board\.json`/);
+  assert.match(skill, /do not write application source until the current route and all selected pre-production inputs pass `omd guard production`/i);
+  assert.match(skill, /Selected discovery needs actual reference evidence/);
+  assert.match(skill, /explicitly skipped discovery stage is not forced onto a copy-only edit/);
+  assert.match(skill, /Writer may run alongside Scout/);
+  assert.match(skill, /Writer publishes the copy deck and completes its current copy-edit review/);
+  assert.match(skill, /Typesetter proves the actual language\/copy before Composer/);
   assert.match(skill, /Render captures of the generated app are not design references/i);
 });test('the coordinator auto-continues after domain analysis and asks only for material unknowns', () => {
   const skill = read('src/skills/omd-ultradesign/SKILL.md').replace(/\s+/g, ' ');
   const oneShot = skill.slice(skill.indexOf('## One-shot execution'), skill.indexOf('## Reference roles'));
-  assert.match(oneShot, /route classify → domain check → reference discovery → reference judgment → composition → render\/critic → production/);
+  assert.match(oneShot, /selected research\/copy\/type passes → selected composition\/candidates → guard production/);
+  assert.match(oneShot, /rendered review\/repair\/recheck → guard completion/);
+  assert.match(oneShot, /not a substitute for `route.strategy.stages`/);
   assert.match(oneShot, /advance automatically/i);
   assert.doesNotMatch(oneShot, /wait for confirmation/);
   assert.match(skill, /Do not ask the user to choose references or a visual direction/i);

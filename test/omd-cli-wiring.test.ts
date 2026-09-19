@@ -184,7 +184,7 @@ test('printed input skeletons carry exactly the keys their validators accept', a
   assert.match(directionHelp, /both approvedMotionRecipe and approvedMotionRecipeReceipt/);
   assert.match(directionHelp, /exact receipt-bound evaluatorAssessment and evaluatorResult payload serialization/);
   assert.match(directionHelp, /not permission to reconstruct unseen judgments/);
-  assert.equal(INPUT_SKELETONS.length, 29);
+  assert.equal(INPUT_SKELETONS.length, 30);
   const featureMeasurements = inputSkeleton('reference-feature-measurements');
   assert.deepEqual(featureMeasurements.keys, ['id', 'quantity', 'sourceNodes', 'targetAnchors']);
   assert.ok(Array.isArray(featureMeasurements.skeleton));
@@ -264,7 +264,7 @@ test('printed input skeletons carry exactly the keys their validators accept', a
   assert.match(printedBoard.stdout, /every piece grid contains exactly column, span, order/);
   assert.match(printedBoard.stdout, /"grid": \{\s+"column": 1,\s+"span": 12,\s+"order": 0/s);
   const listed = run(['schema', 'list', '--json'], dir);
-  assert.deepEqual(JSON.parse(listed.stdout).map((entry: { name: string }) => entry.name), ['slop-scope', 'route-input', 'design-route-input', 'design-handoff', 'route-ai-asset', 'reality-ledger', 'domain-brief', 'depth-input', 'content-grain', 'acquisition-plan', 'reference-board', 'reference-image-fragment', 'reference-feature-measurements', 'reference-capture-preparation', 'reference-locale-binding', 'task-flow-benchmark', 'reference-research', 'art-direction-check', 'token-commit', 'responsive-token-commit', 'locale-contract', 'locale-design-context', 'cultural-design-profile', 'functional-requirements', 'decision-graph', 'entry-surface-contract', 'final-render-reviewer-packet', 'trusted-lifecycle-manifest', 'design-quality-observation-projection']);
+  assert.deepEqual(JSON.parse(listed.stdout).map((entry: { name: string }) => entry.name), ['first-render-surface', 'slop-scope', 'route-input', 'design-route-input', 'design-handoff', 'route-ai-asset', 'reality-ledger', 'domain-brief', 'depth-input', 'content-grain', 'acquisition-plan', 'reference-board', 'reference-image-fragment', 'reference-feature-measurements', 'reference-capture-preparation', 'reference-locale-binding', 'task-flow-benchmark', 'reference-research', 'art-direction-check', 'token-commit', 'responsive-token-commit', 'locale-contract', 'locale-design-context', 'cultural-design-profile', 'functional-requirements', 'decision-graph', 'entry-surface-contract', 'final-render-reviewer-packet', 'trusted-lifecycle-manifest', 'design-quality-observation-projection']);
 });
 
 test('reality-ledger schema exposes its closed category vocabulary', async () => {

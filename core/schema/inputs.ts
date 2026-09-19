@@ -1136,6 +1136,19 @@ const DESIGN_HANDOFF: InputSkeleton = {
 
 export const INPUT_SKELETONS: readonly InputSkeleton[] = [
   {
+    name: 'first-render-surface', path: '.omd/.cache/first-render-surface.json',
+    command: 'omd first-render check --input .omd/.cache/first-render-surface.json --json',
+    keys: ['heading', 'landmarks', 'repeatedObjects', 'trustSignals', 'visibleText', 'dominantAreaShare'],
+    constraints: [
+      'Publish the reference-bound design judgment before checking a render. A composition note is not a design judgment.',
+      'Replace every example with the actual rendered viewport observations. Arrays may be empty when a feature is absent; do not invent evidence to obtain retain.',
+      'dominantAreaShare is the measured dominant-object fraction from 0 to 1. All six keys are required.',
+      'This diagnostic projection does not replace browser action evidence, saved captures or independent review.',
+    ],
+    skeleton: { heading: '<visible heading>', landmarks: ['<visible landmark in reading order>'],
+      repeatedObjects: [], trustSignals: [], visibleText: ['<visible text>'], dominantAreaShare: 0 },
+  },
+  {
     name: 'slop-scope', path: '.omd/.cache/slop-scope.json', command: 'omd slop checkpoint --input .omd/.cache/slop-scope.json --json',
     keys: ['schema', 'views'],
     constraints: ['Use actual local HTML production/build entries, not reference URLs or arbitrary localhost ports. Build a bundled SPA before capture.',

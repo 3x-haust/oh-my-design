@@ -81,6 +81,21 @@ Pi's `omd_cli` does not need an external activation file. First run
 `omd route validate --input .omd/.cache/route-input.json --json`, repair the named input errors,
 then publish with `route classify`. An input validation error is not missing host authentication.
 
+Pi enforcement has three layers: selected-stage instructions, `omd guard production|completion`
+validators, and public `tool_call` / `message_end` hooks. Native `write`/`edit` application mutations
+and arbitrary `bash` wait for current pre-production inputs; research inputs and directly owned
+design documents remain writable. The completion hook withholds an unverified final success claim.
+OMD commands are queued per project to prevent sibling calls from competing for the mutation lock.
+Repairable terminal failures can trigger up to two custom repair/recheck follow-ups per user input;
+authority failures and user aborts do not. Message replacement semantics are verified against Pi
+0.85.1; forks must support that public event behavior, not merely expose an `on` function.
+Run `/omd` after `/reload`; hook-less compatible hosts explicitly report that only CLI checks exist.
+Hooks are workflow gates, not an OS sandbox or proof of design quality. External processes/custom
+mutation tools are outside this hook boundary, and streamed draft text may precede final validation.
+Independent reviewer authorization is still required by implementation final evidence; Pi does not
+manufacture it. After upgrading, revalidate/reclassify the original approved route with the current
+build if old build/skill authority is stale. `stage status.completed` means artifact presence only.
+
 Reference research is saved separately: `.omd/refs/domain/research.json` for similar-service screens,
 features and flows, and `.omd/refs/design/research.json` for composition, type, density and component
 craft. `omd ref discover-plan --json` suggests screen galleries such as UI Bowl/Pinterest for product

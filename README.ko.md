@@ -80,6 +80,19 @@ Pi에서 `omd_cli`를 사용할 때 외부 activation 파일은 필요하지 않
 `omd route validate --input .omd/.cache/route-input.json --json`으로 검사하고, 오류에 표시된
 필드를 고친 다음 `route classify`로 저장합니다. 입력 오류를 인증 누락으로 처리하지 않습니다.
 
+Pi의 실행 강제성은 선택 단계 지침 → `omd guard production|completion` 검증 → 공개
+`tool_call`/`message_end` 훅의 세 층입니다. 앱 파일 `write`/`edit`와 임의 `bash`는 현재 설계 입력을
+통과해야 실행되고, 리서치 입력·직접 소유한 설계 문서 작성은 계속 가능합니다. 최종 검증에 실패하면
+검증되지 않은 완료 응답을 보류합니다. OMD 명령은 프로젝트별로 직렬화해 mutation lock 충돌을 줄입니다.
+수정 가능한 최종 실패는 사용자 입력당 최대 두 번의 수정·재검사 후속 작업으로 이어집니다.
+권한 부족이나 사용자 중단은 자동 재시도하지 않습니다. 최종 메시지 교체 API는 Pi 0.85.1 기준이며,
+fork도 단순한 `on` 함수뿐 아니라 같은 이벤트 반환 동작을 지원해야 합니다.
+`/reload` 후 `/omd`로 확인하세요. 이벤트 훅이 없는 호스트는 CLI 검사만 가능하다고 표시합니다.
+이는 OS 샌드박스나 미적 품질 보증이 아닙니다. 외부 프로세스·별도 쓰기 도구는 훅의 경계 밖이며,
+스트리밍 초안은 최종 검증 전에 보일 수 있습니다. 독립 리뷰 권한을 임의로 만들지도 않습니다.
+업데이트로 기존 build/skill 권한이 오래됐다면 원래 승인된 범위로 route validate/classify를 다시 실행해야
+합니다. `stage status.completed`는 파일 존재 목록이지 검증 완료 목록이 아닙니다.
+
 레퍼런스 조사는 **도메인**(`.omd/refs/domain/research.json`: 유사 서비스의 화면·기능·플로우)과
 **디자인**(`.omd/refs/design/research.json`: 구성·타이포·밀도·컴포넌트)으로 따로 저장합니다.
 `omd ref add <url> --as <name> --lane domain|design`으로 캡처 PNG와 메타데이터부터 각 폴더에
