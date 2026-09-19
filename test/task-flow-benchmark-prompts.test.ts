@@ -7,7 +7,7 @@ const read = (name: string) =>
 
 test('selected roles carry the task-flow benchmark ABI', () => {
   for (const role of ['scout', 'composer', 'sketch', 'hand', 'eye']) {
-    assert.match(read(role), /TASK_FLOW_BENCHMARK_ABI_V1/, role);
+    assert.match(read(role), /TASK_FLOW_BENCHMARK_ABI_V2/, role);
   }
 });
 

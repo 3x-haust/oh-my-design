@@ -30,6 +30,35 @@ candidates exits successfully; unreadable or invalid roots are operational failu
 
 ## Triage loop
 
+### Executable closure
+
+The read-only scan below remains useful for early attention. Completion now requires a native loop:
+
+1. `omd schema slop-scope` supplies the local production/build entries and viewport inventory.
+   Use a built SPA HTML entry, not an unrelated localhost port. Cover the final entry/viewports;
+   task-state entries can be added. This is a static-entry review, not proof of all app interactions.
+2. `omd slop checkpoint --input .omd/.cache/slop-scope.json --json` captures those entries, runs the
+   source scanner and existing rendered slop linter, and returns `reviewInput` and the checkpoint path.
+   Open the checkpoint's `views[].image` files. Source candidates and render warnings remain distinct.
+3. Fill the returned reviewInput: summary and every finding's `confirmed|dismissed`, individual
+   rendered reason and actual viewIds. `omd slop review-set --input <review.json>` preserves it.
+   The initial template is deliberately incomplete, never an approval to bulk-confirm or dismiss.
+4. Confirmed findings require owner repair, rebuild, another same-scope checkpoint, then explicit
+   after-render resolutions for the previous confirmed IDs. Judge every new finding as well.
+   A disappeared pattern is not automatically a successful repair; the reviewer checks the new image.
+5. `omd slop review-check --json` must pass. CLI final-v2 finalization (including lifecycle finalize)
+   and terminal completion preflight require this loop against the trusted final entry/viewports.
+   Source/build/scanner changes, unreviewed findings, missing captures, no-change repairs or unresolved
+   confirmed issues fail closure. An initial clean render needs no fabricated repair round.
+   Current adaptive graphs bind the trusted final entry/viewports. Legacy graphs without that identity
+   still require the closed loop, whole-source fingerprint and desktop/mobile views, but report only
+   `whole-source-and-declared-views`; they cannot claim exact-final-entry scope binding.
+
+The immutable loop is stored in `.omd/slop/`, not inferred from `history.jsonl`. Dismissed candidates
+remain visible with reasons; warnings never become universal errors. Review authorship is not
+attested and structural closure is not proof of beauty. Design-only handoff does not require an app
+loop and must not claim application/slop validation. Do not run production checkpoint for that route.
+
 Once production source exists, the coordinator runs:
 
 ```bash

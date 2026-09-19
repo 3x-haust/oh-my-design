@@ -61,6 +61,9 @@ export const ARTIFACT_FAMILIES: readonly ArtifactFamily[] = [
   family('attribution', 'attribution.md', 'file', 'human', 'reference attribution'),
   family('reference-report', 'reference-report.md', 'file', 'human', 'final provenance report'),
   family('motion-spec', 'motion-spec.md', 'file', 'human', 'declared motion specification'),
+  family('design-judgment', 'design-judgment.json', 'file', 'human', 'reference interpretations and composition hypothesis'),
+  family('first-render-critic', 'first-render-critic.json', 'file', 'human', 'first viewport gestalt verdict against the design hypothesis'),
+  family('briefs', 'briefs', 'directory', 'human', 'per-stage briefs the owners received'),
 
   // ── captured research ───────────────────────────────────────────────────
   family('refs', 'refs', 'directory', 'refs', 'captured reference records, blueprints, and images'),

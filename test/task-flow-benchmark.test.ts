@@ -1,32 +1,73 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { test } from 'node:test';
 import {
   parseTaskFlowBenchmark,
   parseTaskFlowBenchmarkProjection,
   projectTaskFlowBenchmark,
   taskFlowBenchmarkSha256,
+  validateTaskFlowBenchmarkEvidence,
 } from '../core/ref/task-flow-benchmark.ts';
 
 const SHA = 'a'.repeat(64);
+const evidence = (path: string, digest = 'b'.repeat(64)) => ({ path: `.omd/refs/${path}`, sha256: digest });
 
-function benchmark() {
+function exploredSource(id: string, origin: string, suffix: string) {
+  const entry = `${id}-entry`;
+  const review = `${id}-review`;
   return {
-    schema: 'task-flow-benchmark-v1',
+    id,
+    url: origin,
+    kind: 'same-domain-service',
+    observedAt: '2026-08-25',
+    coverage: {
+      scope: 'public pre-auth task flow',
+      status: 'complete',
+      discoveredTargetCount: 2,
+      entryScreenIds: [entry],
+      inspectedScreenIds: [entry, review],
+      excludedTargets: [],
+    },
+    screens: [
+      {
+        id: entry, name: 'Entry', url: origin, state: 'initial controls visible',
+        reachedBy: { fromScreenId: null, action: 'open the entry URL', result: 'entry controls appear' },
+        evidence: evidence(`${suffix}-screen-entry.png`),
+      },
+      {
+        id: review, name: 'Review', url: `${origin}/review`, state: 'review visible',
+        reachedBy: { fromScreenId: entry, action: 'continue with safe test data', result: 'review appears' },
+        evidence: evidence(`${suffix}-screen-review.png`),
+      },
+    ],
+    features: [{ id: `${id}-feature`, name: 'Review', behavior: 'preserves input before commitment', screenIds: [entry, review] }],
+    flows: [{
+      id: `${id}-flow`, intent: 'review before commitment', status: 'completed', limitation: null,
+      steps: [
+        { order: 1, screenId: entry, action: 'open entry', result: 'initial controls appear', evidence: evidence(`${suffix}-flow-1.png`) },
+        { order: 2, screenId: review, action: 'continue safely', result: 'review appears', evidence: evidence(`${suffix}-flow-2.png`) },
+      ],
+    }],
+  };
+}
+
+function benchmark(): any {
+  return {
+    schema: 'task-flow-benchmark-v2',
     surface: 'product',
     domain: 'residential-field-service',
     sourceContractSha256: SHA,
     sources: [
       {
-        id: 'source-a',
-        url: 'https://example.com/field-service-a',
-        observedAt: '2026-08-25',
+        ...exploredSource('source-a', 'https://example.com/field-service-a', 'a'),
         observedPatterns: ['issue capture precedes scheduling'],
         forbiddenTransfers: ['pricing', 'response-time promises'],
       },
       {
-        id: 'source-b',
-        url: 'https://example.org/field-service-b',
-        observedAt: '2026-08-25',
+        ...exploredSource('source-b', 'https://example.org/field-service-b', 'b'),
         observedPatterns: ['unknown remains a valid answer'],
         forbiddenTransfers: ['provider identity', 'availability'],
       },
@@ -118,6 +159,66 @@ test('task-flow benchmark rejects component-only or unbound evidence', () => {
       }),
     /TASK_FLOW_BENCHMARK_SOURCE_STALE/,
   );
+});
+
+test('task-flow benchmark requires every discovered screen to be inspected, reachable, and organized by feature or flow', () => {
+  const missingTarget = benchmark();
+  missingTarget.sources[0]!.coverage.discoveredTargetCount = 3;
+  assert.throws(() => parseTaskFlowBenchmark(missingTarget), /TASK_FLOW_BENCHMARK_DISCOVERED_TARGET_COUNT/);
+
+  const missingInspection = benchmark();
+  missingInspection.sources[0]!.coverage.inspectedScreenIds = ['source-a-entry'];
+  assert.throws(() => parseTaskFlowBenchmark(missingInspection), /TASK_FLOW_BENCHMARK_INSPECTED_SCREEN_COVERAGE/);
+
+  const unreachable = benchmark();
+  unreachable.sources[0]!.screens[1]!.reachedBy.fromScreenId = 'missing';
+  assert.throws(() => parseTaskFlowBenchmark(unreachable), /TASK_FLOW_BENCHMARK_REACHED_BY_SOURCE/);
+
+  const unorganized = benchmark();
+  unorganized.sources[0]!.features[0]!.screenIds = ['source-a-entry'];
+  unorganized.sources[0]!.flows[0]!.steps = [unorganized.sources[0]!.flows[0]!.steps[0]!];
+  assert.throws(() => parseTaskFlowBenchmark(unorganized), /TASK_FLOW_BENCHMARK_SCREEN_USE_COVERAGE/);
+});
+
+test('bounded gaps are explicit and complete coverage cannot hide unreachable targets', () => {
+  const hiddenGap = benchmark();
+  hiddenGap.sources[0]!.coverage.excludedTargets = [{
+    id: 'account', url: 'https://example.com/account', category: 'authentication', reason: 'requires a customer account',
+  }];
+  hiddenGap.sources[0]!.coverage.discoveredTargetCount = 3;
+  assert.throws(() => parseTaskFlowBenchmark(hiddenGap), /TASK_FLOW_BENCHMARK_COVERAGE_STATUS/);
+
+  hiddenGap.sources[0]!.coverage.status = 'bounded-gap';
+  assert.doesNotThrow(() => parseTaskFlowBenchmark(hiddenGap));
+});
+
+test('same-domain services remain the basis instead of adjacent products or guidance', () => {
+  const adjacent = benchmark();
+  adjacent.sources[1]!.kind = 'adjacent-domain-service';
+  assert.throws(() => parseTaskFlowBenchmark(adjacent), /TASK_FLOW_BENCHMARK_SAME_DOMAIN_COVERAGE/);
+});
+
+test('current local browser evidence is required for every screen and flow step', t => {
+  const root = mkdtempSync(join(tmpdir(), 'omd-task-flow-evidence-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const input = benchmark();
+  const bytes = Buffer.from('current browser evidence');
+  const digest = createHash('sha256').update(bytes).digest('hex');
+  for (const source of input.sources) {
+    for (const item of [
+      ...source.screens.map((screen: any) => screen.evidence),
+      ...source.flows.flatMap((flow: any) => flow.steps.map((step: any) => step.evidence)),
+    ]) {
+      item.sha256 = digest;
+      const target = join(root, item.path);
+      mkdirSync(join(target, '..'), { recursive: true });
+      writeFileSync(target, bytes);
+    }
+  }
+  const parsed = parseTaskFlowBenchmark(input);
+  assert.doesNotThrow(() => validateTaskFlowBenchmarkEvidence(root, parsed));
+  writeFileSync(join(root, input.sources[0]!.screens[0]!.evidence.path), 'stale');
+  assert.throws(() => validateTaskFlowBenchmarkEvidence(root, parsed), /TASK_FLOW_BENCHMARK_EVIDENCE_STALE/);
 });
 
 test('task-flow benchmark rejects invented alias fields at every boundary', () => {

@@ -31,6 +31,7 @@ import {
   createTestProjectRunInvocation,
   createTestProjectWriteAdapter,
 } from './helpers/project-write.ts';
+import { selfSignedReceiptEnv } from './helpers/self-signed-receipt.ts';
 
 const CLI = fileURLToPath(new URL('../bin/omd.ts', import.meta.url));
 const fixturePath = (name: string): string => fileURLToPath(new URL(`fixtures/adaptive-flow/${name}.json`, import.meta.url));
@@ -68,26 +69,18 @@ function executeHostRouteCli(
   nonce: string,
 ): Promise<Readonly<{ status: number | null; stdout: string; stderr: string }>> {
   const args = [CLI, ...argv, '--activation', 'activation.json'];
-  const receipt = {
-    schema: 'omd-host-project-write-receipt-v3', host: 'claude',
-    hostAuthentication: {
-      host: 'claude', mechanism: 'inherited-ipc', parentPid: process.pid,
-      parentExecutableSha256: sha256(readFileSync(process.execPath)),
-    },
-    projectRoot: realpathSync(root),
-    argvSha256: sha256(canonicalJson([process.execPath, ...args])),
-    buildSha256: activation.buildSha256,
-    loadedSkillSha256: activation.loadedSkillSha256,
-    briefSha256: activation.briefSha256,
-    expiresAt: Date.now() + 60_000,
-    payloadAuthorizations: [{ purpose: 'adaptive-route-authority', payloadSha256: sha256(authority) }],
-    nonce,
-  };
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, args, {
       cwd: root,
-      env: { ...process.env, OMD_HOST_PROJECT_WRITE_FD: '3' },
-      stdio: ['ignore', 'pipe', 'pipe', 'pipe'],
+      env: {
+        ...process.env,
+        ...selfSignedReceiptEnv(root, [process.execPath, ...args], {
+          buildSha256: activation.buildSha256,
+          loadedSkillSha256: activation.loadedSkillSha256,
+          briefSha256: activation.briefSha256,
+        }, [{ purpose: 'adaptive-route-authority', payloadSha256: sha256(authority) }]),
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
     });
     let stdout = '';
     let stderr = '';
@@ -102,13 +95,6 @@ function executeHostRouteCli(
     stderrChannel.on('data', (chunk: Buffer) => { stderr += chunk; });
     child.once('error', reject);
     child.once('close', (status) => resolve({ status, stdout, stderr }));
-    const channel = child.stdio[3];
-    if (channel === undefined || channel === null || !('end' in channel)) {
-      child.kill();
-      reject(new Error('host receipt pipe is unavailable'));
-      return;
-    }
-    channel.end(JSON.stringify(receipt));
   });
 }
 
@@ -518,14 +504,18 @@ test('persisted read revalidation rejects a forged sequential execution wave', (
   routeError(() => readPersistedRoute(root, invocation), 'ADAPTIVE_EXECUTION_WAVE_INVALID');
 });
 
-test('persisted reads reject missing authority and cross-project or cross-invocation replay', () => {
+test('persisted reads reject missing authority and cross-project replay', () => {
   const first = mkdtempSync(join(tmpdir(), 'omd-route-first-'));
   const second = mkdtempSync(join(tmpdir(), 'omd-route-second-'));
   const firstInvocation = publishAuthorized(first, 'copy-only', 'first-route-run');
 
   assert.throws(() => Reflect.apply(readPersistedRoute, undefined, [first]), AdaptiveRouteError);
+  // A DIFFERENT invocation of the same project may read the route. That is the normal case: every CLI
+  // command is its own invocation, so requiring the publisher's identity meant `omd route show`,
+  // `route check`, and `stage resume` all refused a perfectly valid record — and only the launcher
+  // hid it by handing every child the same brief. What must NOT read the route is another project.
   const replayInvocation = createTestProjectRunInvocation(first, 'replayed-route-run');
-  assert.throws(() => Reflect.apply(readPersistedRoute, undefined, [first, replayInvocation]), AdaptiveRouteError);
+  assert.doesNotThrow(() => readPersistedRoute(first, replayInvocation));
   const otherProjectInvocation = createTestProjectRunInvocation(second, 'first-route-run');
   assert.throws(() => Reflect.apply(readPersistedRoute, undefined, [first, otherProjectInvocation]), AdaptiveRouteError);
   assert.notEqual(firstInvocation.current.briefSha256, replayInvocation.current.briefSha256);

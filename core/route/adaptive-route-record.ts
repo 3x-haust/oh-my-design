@@ -88,11 +88,13 @@ function actualReference(value: unknown): ReferenceDiscoveryActualUse {
 function sourceRouteInput(value: unknown): Readonly<{ input: unknown; localeDesign?: LocaleDesignRoute }> {
   const legacyKeys = SOURCE_KEYS.filter((key) => key !== 'projectMode');
   const baseKeys = hasOwn(value, 'projectMode') ? SOURCE_KEYS : legacyKeys;
-  const expectedKeys = hasOwn(value, 'localeDesign') ? [...baseKeys, 'localeDesign'] : baseKeys;
+  const modeKeys = hasOwn(value, 'deliveryMode') ? [...baseKeys, 'deliveryMode'] : baseKeys;
+  const expectedKeys = hasOwn(value, 'localeDesign') ? [...modeKeys, 'localeDesign'] : modeKeys;
   const source = fields(value, expectedKeys);
   if (source.get('schema') !== ADAPTIVE_SOURCE_CONTRACT_SCHEMA) return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE');
   const input = {
     schema: ADAPTIVE_ROUTE_INPUT_SCHEMA,
+    ...(source.has('deliveryMode') ? { deliveryMode: source.get('deliveryMode') } : {}),
     request: source.get('request'),
     projectMode: source.get('projectMode') ?? 'existing',
     namedDependencies: source.get('namedDependencies'),
@@ -119,7 +121,9 @@ function parse(
   authority?: Readonly<{ root: string; invocation: ProjectRunInvocation }>,
 ): AdaptiveRouteRecord {
   const legacyKeys = RECORD_KEYS.filter((key) => key !== 'projectMode');
-  const item = fields(value, hasOwn(value, 'projectMode') ? RECORD_KEYS : legacyKeys);
+  const baseKeys = hasOwn(value, 'projectMode') ? RECORD_KEYS : legacyKeys;
+  const item = fields(value, hasOwn(value, 'deliveryMode') ? [...baseKeys, 'deliveryMode'] : baseKeys);
+  if (item.has('deliveryMode') && item.get('deliveryMode') !== 'design-only') return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE');
   if (item.get('schema') !== ADAPTIVE_ROUTE_RECORD_SCHEMA || item.get('route') !== 'adaptive') {
     return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE');
   }
@@ -147,6 +151,7 @@ function parse(
   const forbidden = strings(item.get('forbiddenWithoutRequest'));
   const candidate: AdaptiveRouteRecord = Object.freeze({
     schema: ADAPTIVE_ROUTE_RECORD_SCHEMA,
+    ...(item.has('deliveryMode') ? { deliveryMode: 'design-only' as const } : {}),
     route: 'adaptive',
     request: text(item.get('request')),
     projectMode: item.get('projectMode') === 'greenfield' ? 'greenfield' : 'existing',
@@ -167,7 +172,7 @@ function parse(
     allowedPaths: strings(item.get('allowedPaths')),
     forbiddenWithoutRequest: forbidden,
   });
-  validateAdaptiveStrategyRails(candidate.strategy);
+  validateAdaptiveStrategyRails(candidate.strategy, candidate.deliveryMode);
   if (canonicalRouteJson(candidate) !== canonicalRouteJson(expected)) return failAdaptiveRoute('SOURCE_CONTRACT_MISMATCH');
   return expected;
 }

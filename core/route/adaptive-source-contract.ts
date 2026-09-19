@@ -70,6 +70,7 @@ export function adaptiveSourceContract(
   const parsedLocaleDesign = localeDesign === undefined ? undefined : parseLocaleDesignRoute(localeDesign);
   return Object.freeze({
     schema: ADAPTIVE_SOURCE_CONTRACT_SCHEMA,
+    ...(input.deliveryMode === undefined ? {} : { deliveryMode: input.deliveryMode }),
     request: input.request,
     projectMode: input.projectMode,
     namedDependencies: input.namedDependencies,
@@ -90,6 +91,7 @@ export function adaptiveSourceContract(
 export function sourceContractRouteInput(source: AdaptiveSourceContract): AdaptiveRouteInput {
   return Object.freeze({
     schema: ADAPTIVE_ROUTE_INPUT_SCHEMA,
+    ...(source.deliveryMode === undefined ? {} : { deliveryMode: source.deliveryMode }),
     request: source.request,
     projectMode: source.projectMode,
     namedDependencies: source.namedDependencies,

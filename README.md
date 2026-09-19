@@ -77,6 +77,55 @@ extension registers `/omd` for a project doctor check and the structured `omd_cl
 existing OMD CLI. Compatibility requires the public Pi extension/package API; fork-only APIs are
 not used.
 
+Pi's `omd_cli` does not need an external activation file. First run
+`omd route validate --input .omd/.cache/route-input.json --json`, repair the named input errors,
+then publish with `route classify`. An input validation error is not missing host authentication.
+
+Reference research is saved separately: `.omd/refs/domain/research.json` for similar-service screens,
+features and flows, and `.omd/refs/design/research.json` for composition, type, density and component
+craft. `omd ref discover-plan --json` suggests screen galleries such as UI Bowl/Pinterest for product
+UI and website galleries such as Siteinspire/Pinterest for marketing. Verify free access per entry;
+on blocked/login/paid access, use another public source without purchases, trials or MCP installation.
+Free viewing does not grant reuse rights. Record the inspected screen, discovery entry and concrete
+quality reason, not just a prestigious gallery name. Use `omd schema reference-research --json`,
+`omd ref research-set --input <input.json>` and `omd ref research-check --json` to publish/check both
+files and their aggregate consistency receipt. Capture PNGs and metadata directly into their own
+folders with `ref add --lane domain|design` or `lane` on each add-batch entry. Inspect them with
+`ref list --lane domain|design --json`; domain captures do not silently enter the visual board.
+v3 binds source and gallery-entry PNGs to their native capture JSON. A homepage is not an inspected
+entry, and a different original source must appear in the gallery's observed outbound links. Old
+Older records need v4 visual-role review and republication, retaining valid native captures.
+Domain/design hosts, final redirects and PNG evidence must be independent. Non-user discovery must
+be a supported public gallery item, not a service page labelled as a gallery. Public Pinterest,
+Dribbble and Behance items do not require UI Bowl's paid MCP. Free viewing is checked per item.
+Design sources declare visual-direction or component-support with observed composition, type,
+density, imagery, transfer and exclusions. Every board candidate uses visual-direction evidence;
+support-only documentation cannot complete the lane. Inspect previews in `.omd/refs/design/README.md`.
+These are provenance/role checks, not a machine certification of beauty.
+
+For an existing service, `omd init --json` inventories static CSS variables/declarations and `$value`
+token JSON into `.omd/existing-design-system.json` and `.md`. Scopes, aliases and source locations/hashes
+remain intact. It never changes app files or approved `.omd/tokens.json`. Future briefs reuse the
+inventory; `omd init --check` detects stale inputs and `omd init --refresh` refreshes observations.
+Keep authored decisions in `.omd/design-system-decisions.md`, preserved across refreshes. Runtime styles,
+Tailwind configuration and component variants are explicit inspection gaps, not silently inferred tokens.
+
+Implementation completion uses `omd schema slop-scope` → `omd slop checkpoint --input <scope.json>` →
+inspect the native captures → `omd slop review-set --input <review.json>`. Confirmed issues require
+owner repair, rebuild, same-scope recapture/rescan, and an explicit after-render resolution.
+`omd slop review-check`, CLI finalization and terminal preflight reject missing, stale or unresolved
+loops. Candidates/warnings remain advisory; reasoned dismissals are valid and a clean first review
+needs no invented repair. Capture currently supports local HTML build entries, not arbitrary localhost
+ports. This does not replace functional coverage, independent quality review, or user approval.
+Legacy files are preserved; renamed identical images still cannot satisfy both lanes.
+
+For design before implementation, use `omd schema design-route-input` with `deliveryMode: design-only`.
+Output stays under `.omd/**`; research, design, review, and handoff proceed without application source.
+Bind the documents using `omd schema design-handoff`, then run
+`omd completion design-check --input .omd/design-handoff.json --json`.
+This checks document integrity, reference evidence, and write scope. It does not attest application
+behavior or independent review authorship.
+
 ### Claude Code — plugin marketplace
 
 ```text

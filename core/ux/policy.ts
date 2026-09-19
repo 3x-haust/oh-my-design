@@ -10,8 +10,8 @@ export type UxPolicyErrorCode =
 export class UxPolicyError extends Error {
   readonly code: UxPolicyErrorCode;
 
-  constructor(code: UxPolicyErrorCode) {
-    super(code);
+  constructor(code: UxPolicyErrorCode, detail?: string) {
+    super(detail === undefined ? code : `${code}: ${detail}`);
     this.name = 'UxPolicyError';
     this.code = code;
   }
@@ -61,8 +61,8 @@ export type UxPolicyCheck = Readonly<{
   freeChoices: readonly Readonly<Pick<FreeChoiceDecision, 'id' | 'status'>>[];
 }>;
 
-function fail(code: UxPolicyErrorCode): never {
-  throw new UxPolicyError(code);
+function fail(code: UxPolicyErrorCode, detail?: string): never {
+  throw new UxPolicyError(code, detail);
 }
 
 function isObject(value: unknown): value is object {
@@ -74,7 +74,7 @@ function hasExactKeys(value: object, expected: readonly string[]): boolean {
   return keys.length === expected.length && expected.every((key) => Object.hasOwn(value, key));
 }
 
-function parseDecision(input: unknown): UxPolicyDecision {
+function parseDecision(input: unknown, index: number): UxPolicyDecision {
   if (!isObject(input) || !('id' in input) || !('kind' in input) || !('status' in input)) {
     return fail('MALFORMED_POLICY');
   }
@@ -107,7 +107,7 @@ function parseDecision(input: unknown): UxPolicyDecision {
       return Object.freeze({ id: input.id, kind: input.kind, status: input.status });
 
     default:
-      return fail('MALFORMED_POLICY');
+      return fail('MALFORMED_POLICY', `uxPolicy.decisions[${index}].kind must be hard_safety_rail (status=enforced), required_outcome (status=required), recommended_method (status=selected|skipped, reason required), or free_choice (status=selected|skipped). Use safety/recovery/accessibility as an id, not a kind.`);
   }
 }
 
@@ -115,13 +115,20 @@ export function parseUxPolicy(input: unknown): UxPolicy {
   if (!isObject(input) || !hasExactKeys(input, ['schema', 'decisions'])
     || !('schema' in input) || input.schema !== UX_POLICY_SCHEMA
     || !('decisions' in input) || !Array.isArray(input.decisions)) {
-    return fail('MALFORMED_POLICY');
+    return fail('MALFORMED_POLICY', 'uxPolicy must contain exactly schema="ux-policy-v1" and decisions=[]; run omd schema route-input');
   }
 
   const ids = new Set<string>();
   const decisions: UxPolicyDecision[] = [];
-  for (const inputDecision of input.decisions) {
-    const decision = parseDecision(inputDecision);
+  for (const [index, inputDecision] of input.decisions.entries()) {
+    let decision: UxPolicyDecision;
+    try { decision = parseDecision(inputDecision, index); }
+    catch (error) {
+      if (error instanceof UxPolicyError && error.message === error.code) {
+        throw new UxPolicyError(error.code, `uxPolicy.decisions[${index}] has invalid fields or status; run omd schema route-input for the exact shape`);
+      }
+      throw error;
+    }
     if (ids.has(decision.id)) return fail('DUPLICATE_POLICY_ID');
     ids.add(decision.id);
     decisions.push(decision);

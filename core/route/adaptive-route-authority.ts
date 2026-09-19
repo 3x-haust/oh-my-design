@@ -16,7 +16,6 @@ export type AdaptiveRouteAuthority = Readonly<{
   invocation: Readonly<{
     buildSha256: string;
     loadedSkillSha256: string;
-    briefSha256: string;
   }>;
   sourceSha256: string;
   routeSha256: string;
@@ -40,7 +39,16 @@ export function adaptiveRouteAuthority(
     invocation: Object.freeze({
       buildSha256: activation.buildSha256,
       loadedSkillSha256: activation.loadedSkillSha256,
-      briefSha256: activation.briefSha256,
+      // Deliberately NOT the invocation's briefSha256.
+      //
+      // The brief is the issuing command's own label, so binding it here made the persisted route
+      // readable only by the command that wrote it: `omd route classify` could re-derive these bytes
+      // and every other command — `route show`, `route check`, `stage resume` — could not, and
+      // reported ROUTE_AUTHORITY_REQUIRED against a perfectly valid record. The launcher hid this by
+      // handing the same brief to every child it spawned.
+      //
+      // What authority must bind is the BUILD and the SKILL BYTES: those identify which OMD produced
+      // the route. The command that reads it is not part of the route's identity.
     }),
     sourceSha256: record.sourceContractSha256,
     routeSha256,

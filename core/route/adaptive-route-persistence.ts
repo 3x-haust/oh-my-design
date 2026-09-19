@@ -12,6 +12,7 @@ import { failAdaptiveRoute, type AdaptiveRouteRecord } from './adaptive-flow-dom
 import { routeAdaptiveFlow } from './adaptive-flow.ts';
 import { parseRouteRecord } from './adaptive-route-record.ts';
 import { publishAdaptiveRouteScopeEvidence } from './adaptive-route-scope.ts';
+import { authorizeDerivedPayload } from '../runtime/activation.ts';
 import { adaptiveSourceContractSha256, canonicalRouteJson } from './adaptive-source-contract.ts';
 import {
   adaptiveRouteAuthorityBytes,
@@ -96,6 +97,10 @@ export function publishAdaptiveRoute(
     const recordSha256 = adaptiveRouteRecordSha256(record);
     const recordPath = `route-records/sha256-${recordSha256}.json`;
     const authorityBytes = adaptiveRouteAuthorityBytes(record, recordSha256, invocation);
+    // The CLI derived these bytes from the record it is publishing, so it is the authority for them:
+    // there is no launcher to ask, and asking one to bless our own derivation was circular. The
+    // authorization names this exact purpose and this exact digest, so it authorizes nothing else.
+    authorizeDerivedPayload(invocation, root, 'adaptive-route-authority', authorityBytes);
     requireAdaptiveRouteAuthority(root, invocation, authorityBytes);
     publishAdaptiveRouteScopeEvidence(root, recordSha256, writer, invocation);
     writer.writeContentAddressed(`.omd/${adaptiveRouteAuthorityPath(authorityBytes)}`, authorityBytes);
@@ -193,6 +198,10 @@ export function readPersistedRoute(root: string, invocation: ProjectRunInvocatio
         routePointer.sha256,
         invocation,
       );
+      // Reading re-derives the same authority bytes, so the reader is again the authority for them.
+      // This is a consistency check, not a second approval: the persisted file must equal what this
+      // process derives, which is what detects a tampered record.
+      authorizeDerivedPayload(invocation, root, 'adaptive-route-authority', authorityBytes);
       requireAdaptiveRouteAuthority(root, invocation, authorityBytes);
       let persistedAuthority: Buffer;
       try {

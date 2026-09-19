@@ -16,7 +16,7 @@ service, provider, or runtime.
 | Stage | Sole owner | Validated input | Durable/cache output | Machine check, function, or command | Explicit fallback or stop |
 |---|---|---|---|---|---|
 | brief blocks | `omd-framer` | Current user brief, cited user/evidence records, explicit-user taste profile, and applicable task constraints | Durable `.omd/frame.md`, including the task coverage matrix only where the surface requires it | `omd frame set …`; `omd frame show` must read the completed record | Missing cited evidence or required frame fields stops reference work at the brief; do not invent taste, task, or a reference target. |
-| fragment inventory | `omd-scout` | Valid brief blocks, user URLs first, component inventory, and user-directed capture permission | Durable measured component records and local captures under `.omd/refs/`; provenance-bound image fragments under `.omd/refs/fragments/`; raw captures remain scout-local | `omd ref add … --selector … --blueprint --shot` for a measured component; `omd ref import-image <input.json>` for a local user-directed image-region capture | Capability-check `browser-rs` first through the supported browser doctor. For ordinary component inspection, use the headless, reduced-motion `omd render`, `omd ir`, or `omd probe` fallback when that provider is not callable on the current host/connection, has no platform build, or the user declines it. Record the actual limitation; a transient failure is not permission to switch. User-directed image-region capture still requires the actual supporting browser tool. If no lawful local capture can be made, omit the fragment and report the coverage gap. Never scrape, hotlink, or ship source pixels. |
+| fragment inventory | `omd-scout` | Valid brief blocks, user URLs first, component inventory, and user-directed capture permission | Durable measured component records and local captures under `.omd/refs/`; provenance-bound image fragments under `.omd/refs/design/fragments/`; raw captures remain scout-local | `omd ref add … --selector … --blueprint --shot` for a measured component; `omd ref import-image <input.json>` for a local user-directed image-region capture | Capability-check `browser-rs` first through the supported browser doctor. For ordinary component inspection, use the headless, reduced-motion `omd render`, `omd ir`, or `omd probe` fallback when that provider is not callable on the current host/connection, has no platform build, or the user declines it. Record the actual limitation; a transient failure is not permission to switch. User-directed image-region capture still requires the actual supporting browser tool. If no lawful local capture can be made, omit the fragment and report the coverage gap. Never scrape, hotlink, or ship source pixels. |
 | brick analysis | `omd-scout` | The validated fragment inventory, measured invariants/blueprints, rights/provenance, task blocks, and coverage gaps | Durable sanitized brick principles in the retained `.omd/refs/*.json` records plus `.omd/scout.md`; source identities and raw pixels remain only in the fragment inventory | `omd ref principles …` refuses an unmeasured source; candidate `omd ref check` rejects an empty or contaminated transferable brick | A contaminated, duplicate, rights-unclear-for-use, or unmeasurable fragment is a rejected or anti-reference brick. If no lawful sanitized brick can answer a required decision, stop candidate assembly for that decision and report the gap. |
 | candidate assemblies | `omd-scout` | Validated fragment inventory, sanitized brick analysis, and frame/task targets | Durable `.omd/reference-board.json` as internal raw evidence; canonical capture, sanitized assembly, and typed projection remain behind the reference commands | Run `omd schema reference-board`, copy its exact skeleton and grid constraints, then `omd ref board --input <candidate-assemblies.json>` derives identities/frame binding and persists the validated board; then `omd ref check`; then `omd ref candidates` | A failed check, missing required zone in either candidate, stale PNG/provenance, contaminated selector/text, or no viable candidate stops before chat presentation. Do not infer or extend the printed schema, open/emit/ask the user to inspect an HTML, PNG, or board UI, or run `omd-board`. |
 | locale-reference binding (market-grounded reference work only) | `omd-scout` | Current market-grounded board plus its current cultural profile, projection, and captured-source receipts | Source-free `.omd/reference-locale-binding.json` and private `.omd/reference-locale-binding-evidence.json` | Run `omd schema reference-locale-binding`, then `omd ref locale-bind --input <bindings.json>`, then `omd ref locale-bind-check`; `omd ref check` also requires it for a market-bound v3 board | A source URL not present in the profile, an unavailable source, a positive use outside `native-category`/same-task `global-equivalent`, transfer from `contested`/`unknown`, a silent unbound matching source, or a candidate with no native first-party component stops selection. |
@@ -27,7 +27,7 @@ service, provider, or runtime.
 
 ## Reference roles
 
-Every reference serves one of two roles, and the domain brief's `referenceQueries` seed both:
+Every reference serves one of three roles, and the domain brief's `referenceQueries` seed all three:
 
 - **① component design** — a detailed section, component, or button whose *structure* is the value.
   It is captured as a scoped measured record (`omd ref add … --selector … --blueprint --shot`): the
@@ -42,6 +42,35 @@ Every reference serves one of two roles, and the domain brief's `referenceQuerie
   ratio), preserve a scroll-linked reference's scroll response, and be reduced-motion safe. A static,
   faint, or scroll-dropping reproduction fails — the craft reference does not pass just because a
   generation was attempted. This is how the "seeing is not building" gap is closed with evidence.
+- **③ mood** — the whole-page, visual-only lane (`omd ref mood …`, `protocol/moodboard.md`). It fixes
+  a felt direction before anything is assembled and transfers declared qualities only. It is study
+  material by construction: `MOOD_BYTES_IN_PRODUCTION` is a hard failure if a mood capture's bytes,
+  path, or digest reach production source.
+
+### The two axes
+
+Roles are names; the machine-consumed contract is two axes (`core/ref/reference-scope.ts`). Scope is
+whole-or-part; evidence is measured-or-visual-only. There are four combinations and no more — a new
+need selects a combination rather than adding a role.
+
+| scope | evidence | role | what it is | may transfer | structural claims |
+| --- | --- | --- | --- | --- | --- |
+| whole | visual-only | mood | a whole artifact, looked at | declared felt qualities | no |
+| whole | measured | component | a whole page as the unit of study | measured invariants, page composition | yes |
+| part | measured | component, craft | component anatomy | measured invariants, geometry | yes |
+| part | visual-only | craft, mood | a crop or supplied image, looked at | declared geometry, principles | no |
+
+**A visual-only capture may never support a structural claim.** A screenshot does not measure that a
+padding is 16px; a design built from "the spacing looks 8-ish" is the derivative failure this
+boundary exists to prevent. `requireStructuralClaim` refuses the claim by name, and
+`omd ref granularity` reports such captures as `REF-VISUAL-ONLY` — appearance without anatomy, usable
+for direction and detail but not as parts, zone coverage, or kinship.
+
+Distances between a candidate and a slop centroid, a category mean, or an adopted direction are all
+read in ONE shared space (`core/visual-vector.ts`), so the three gates are comparable readings rather
+than three unrelated heuristics. `omd ref gates` reports them; `DISTINCTIVENESS_FLOOR`,
+`CATEGORY_MEAN_FLOOR`, `COHERENCE_CEILING`, and `NEAR_DUPLICATE` start advisory, following the
+precedent in `core/composition-contract/visual-richness.ts`.
 
 `omd craft-capture … --json` returns its measured `reference-craft-v1` on stdout; it does not
 automatically publish a file. When retention is required, the owning role preserves the actual output
@@ -64,9 +93,57 @@ visual craft beyond the product category, and the plan's motion investigation. N
 investigate a motion candidate without selecting it for production; selected `motion-one` additionally
 requires positive measured evidence. Explicit preferences
 for a reference region or gallery belong in those searches; a language alone does not imply a
-country's style or a target market. Directories such as Awwwards, FWA and GDWEB are lead sources,
-not fixed winners or a visual preset. Search results lead to the actual site and relevant case study;
-live desktop/mobile inspection, scoped captures and motion measurements establish the evidence.
+country's style or a target market. Prefer freely inspectable screen/pattern galleries (for example
+UI Bowl and relevant Pinterest entries) for apps/product UI, and website galleries (for example
+Siteinspire and Pinterest) for website/marketing direction. The discovery plan supplies surface-aware
+leads, not fixed winners or guarantees of free catalogue/API access. Verify each entry's current free
+access, open it beyond the thumbnail, and follow its original where available. If access is blocked,
+record the limit and try another public source; never purchase, start trials, install an MCP, or
+bypass access controls. A screenshot-only reference can establish visual anatomy through the native
+image import path, not live behavior or measured app DOM. Free viewing is not an asset reuse license.
+
+Discovery always saves two separate ledgers:
+
+- **domain reference** (`.omd/refs/domain/research.json`) asks how comparable services organize real screens, features, states, and
+  task flows. When `greenfield-task-flow-benchmark` applies, its private v2 benchmark records every
+  safe reachable screen in the declared scope, the actual click path, feature and flow groupings,
+  current local evidence, and every explicit coverage gap. `omd benchmark check` re-hashes that
+  evidence; a landing-page visit or prose summary cannot satisfy it.
+- **design reference** (`.omd/refs/design/research.json`) asks how the destination should feel and be composed. It uses the measured
+  board, mood, typography, component, and craft evidence already defined by this protocol. Domain
+  research is not visual direction merely because the comparable product looks polished.
+
+Capture into the correct lane from the beginning: `omd ref add --lane domain|design`, or `lane` on
+each add-batch entry. PNGs and native JSON metadata stay together in `.omd/refs/domain/` and
+`.omd/refs/design/`; app/pin imports use `.omd/refs/design/fragments/`. Unlabelled legacy records
+remain readable for old boards but cannot satisfy new research. Domain captures are excluded from
+the default visual board inventory.
+
+`omd ref research-set` is the sole publisher of both files and writes `.omd/reference-research.json`
+last as their consistency receipt. `research-check` and downstream gates require all three current
+records. Each v4 source binds PNG evidence and native capture-JSON hashes. Design `discovery` binds
+another inspected entry/capture, not just a homepage or free-access assertion. For a different
+original source, the gallery capture must contain its exact URL in observed outbound links. When
+the original is unavailable, retain the gallery image as image-only; never use unrelated component
+docs as its evidence. No rewriting of native metadata is authorized to repair a failed check.
+The quality reason explains task/viewport fit, hierarchy, typography or density;
+provider prestige is insufficient. This is inspectable provenance, not authenticated proof of taste
+or browsing. Missing native provenance must be collected, never backfilled from memory. Older
+records require v4 role/visual review and republication; valid captures need not be reacquired.
+The same evidence path OR identical bytes under another filename cannot satisfy both lanes.
+
+The two lanes use independent service hosts, including after redirects. A second path or crop of a
+domain service is not a visual direction. Non-user discovery must match a supported public gallery
+item (Pinterest, Dribbble, Behance, Siteinspire, Land-book, Godly, or UI Bowl); never label domain
+documentation as a gallery. Add new providers deliberately to design-discovery-sources.ts.
+Each design source declares visualRole=visual-direction|component-support and visualAssessment
+(composition, typography, density, imagery, transfer, avoid). Each board candidate must actually
+use visual-direction evidence; usability/component documentation alone is insufficient. The generated
+refs/design/README.md displays retained previews and judgments for the user; rejected candidates
+and coverage gaps stay in scout.md. These checks enforce evidence roles, not aesthetic quality.
+New marketing still does not
+impersonate a product workflow: it gathers a domain adoption/page journey and design direction,
+while the task-flow benchmark remains selected only for applicable product work.
 
 ### User-shared posts and component directories
 

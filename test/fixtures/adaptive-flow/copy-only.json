@@ -3,19 +3,33 @@
   "projectMode": "existing",
   "request": "Fix the approved confirmation sentence on one existing screen.",
   "namedDependencies": [],
-  "allowedPaths": ["src/copy/**"],
+  "allowedPaths": [
+    "src/copy/**"
+  ],
   "taskOutcome": {
     "schema": "task-outcome-contract-v1",
     "goal": "Ship the approved confirmation sentence without changing behavior or layout.",
-    "mustHave": ["The approved sentence is visible in the existing confirmation state."],
-    "mustNotHave": ["Do not change the confirmation flow or visual system."],
-    "completionEvidence": ["A linked browser observation shows the sentence in the confirmation state."],
-    "strategyFreedom": ["Choose the edit and verification order."]
+    "mustHave": [
+      "The approved sentence is visible in the existing confirmation state."
+    ],
+    "mustNotHave": [
+      "Do not change the confirmation flow or visual system."
+    ],
+    "completionEvidence": [
+      "A linked browser observation shows the sentence in the confirmation state."
+    ],
+    "strategyFreedom": [
+      "Choose the edit and verification order."
+    ]
   },
   "uxPolicy": {
     "schema": "ux-policy-v1",
     "decisions": [
-      { "id": "approved-copy-visible", "kind": "required_outcome", "status": "required" }
+      {
+        "id": "approved-copy-visible",
+        "kind": "required_outcome",
+        "status": "required"
+      }
     ]
   },
   "evidenceClaims": {
@@ -35,7 +49,9 @@
         ]
       }
     ],
-    "userFacts": ["approved-sentence"],
+    "userFacts": [
+      "approved-sentence"
+    ],
     "workingContext": []
   },
   "referenceDiscovery": {
@@ -82,12 +98,40 @@
   "strategyDecision": {
     "schema": "adaptive-strategy-decision-v1",
     "owner": "user-selected-model",
-    "roles": ["omd-writer", "omd-hand", "omd-eye"],
-    "stages": ["copy", "production", "browser-evidence", "independent-review"],
+    "roles": [
+      "omd-writer",
+      "omd-hand",
+      "omd-eye"
+    ],
+    "stages": [
+      "domain",
+      "copy",
+      "production",
+      "browser-evidence",
+      "independent-review"
+    ],
     "executionWaves": [
-      { "id": "copy", "mode": "concurrent", "roles": ["omd-writer"] },
-      { "id": "production", "mode": "concurrent", "roles": ["omd-hand"] },
-      { "id": "review", "mode": "concurrent", "roles": ["omd-eye"] }
+      {
+        "id": "copy",
+        "mode": "concurrent",
+        "roles": [
+          "omd-writer"
+        ]
+      },
+      {
+        "id": "production",
+        "mode": "concurrent",
+        "roles": [
+          "omd-hand"
+        ]
+      },
+      {
+        "id": "review",
+        "mode": "concurrent",
+        "roles": [
+          "omd-eye"
+        ]
+      }
     ],
     "methods": [
       "design-strategy-balanced-delivery",
@@ -97,28 +141,90 @@
       "copy-repair-workflow"
     ],
     "aiAssets": [],
-    "attributionCategories": ["tokens"],
+    "attributionCategories": [
+      "tokens"
+    ],
     "skips": [
-      { "id": "reference-discovery", "reason": "Existing approved evidence fully constrains the copy-only edit." },
-      { "id": "domain", "reason": "The existing named screen and terminology are already established." },
-      { "id": "depth", "reason": "A one-line correction has no unresolved design-deliberation decision." },
-      { "id": "frame", "reason": "The task changes no IA, flow, requirement, or screen boundary." },
-      { "id": "content-grain", "reason": "The copy-only request does not need content-morphology-driven composition." },
-      { "id": "acquisition", "reason": "No reference acquisition is needed for unchanged structure and visuals." },
-      { "id": "scout", "reason": "Reference discovery is explicitly skipped from sufficient existing evidence." },
-      { "id": "reference-board", "reason": "No newly discovered reference evidence needs assembly." },
-      { "id": "reference-selection", "reason": "There is no reference board from which to select." },
-      { "id": "art-direction", "reason": "The approved visual direction is unchanged." },
-      { "id": "type-proof", "reason": "Typography is outside the requested copy correction." },
-      { "id": "composition", "reason": "The existing layout and visual system are unchanged." },
-      { "id": "candidate-generation", "reason": "No structural alternative is needed for a copy-only correction." },
-      { "id": "safety-validation", "reason": "The copy correction has no high-risk safety outcome." },
-      { "id": "reflection-in-action", "reason": "The unchanged layout needs direct browser confirmation, not an extra craft cycle." },
-      { "id": "reference-distance", "reason": "No reference work is selected for the copy-only correction." },
-      { "id": "image-first-draft", "reason": "The approved existing visual surface needs no generated design draft." },
-      { "id": "evidence-driven-refinement", "reason": "One clean copy verification pass is sufficient when every required gate is green." },
-      { "id": "motion-one", "reason": "The existing static copy-only surface has no selected motion scene." },
-      { "id": "ai-shipped-asset", "reason": "The copy repair does not add or replace a shipped visual asset." }
+      {
+        "id": "reference-discovery",
+        "reason": "Existing approved evidence fully constrains the copy-only edit."
+      },
+      {
+        "id": "depth",
+        "reason": "A one-line correction has no unresolved design-deliberation decision."
+      },
+      {
+        "id": "frame",
+        "reason": "The task changes no IA, flow, requirement, or screen boundary."
+      },
+      {
+        "id": "content-grain",
+        "reason": "The copy-only request does not need content-morphology-driven composition."
+      },
+      {
+        "id": "acquisition",
+        "reason": "No reference acquisition is needed for unchanged structure and visuals."
+      },
+      {
+        "id": "scout",
+        "reason": "Reference discovery is explicitly skipped from sufficient existing evidence."
+      },
+      {
+        "id": "reference-board",
+        "reason": "No newly discovered reference evidence needs assembly."
+      },
+      {
+        "id": "moodboard",
+        "reason": "<direction is already fixed by a supplied reference or brand>"
+      },
+      {
+        "id": "reference-selection",
+        "reason": "There is no reference board from which to select."
+      },
+      {
+        "id": "art-direction",
+        "reason": "The approved visual direction is unchanged."
+      },
+      {
+        "id": "type-proof",
+        "reason": "Typography is outside the requested copy correction."
+      },
+      {
+        "id": "composition",
+        "reason": "The existing layout and visual system are unchanged."
+      },
+      {
+        "id": "candidate-generation",
+        "reason": "No structural alternative is needed for a copy-only correction."
+      },
+      {
+        "id": "safety-validation",
+        "reason": "The copy correction has no high-risk safety outcome."
+      },
+      {
+        "id": "reflection-in-action",
+        "reason": "The unchanged layout needs direct browser confirmation, not an extra craft cycle."
+      },
+      {
+        "id": "reference-distance",
+        "reason": "No reference work is selected for the copy-only correction."
+      },
+      {
+        "id": "image-first-draft",
+        "reason": "The approved existing visual surface needs no generated design draft."
+      },
+      {
+        "id": "evidence-driven-refinement",
+        "reason": "One clean copy verification pass is sufficient when every required gate is green."
+      },
+      {
+        "id": "motion-one",
+        "reason": "The existing static copy-only surface has no selected motion scene."
+      },
+      {
+        "id": "ai-shipped-asset",
+        "reason": "The copy repair does not add or replace a shipped visual asset."
+      }
     ],
     "rationale": "Edit the owned copy, implement it in place, collect linked browser evidence, and obtain independent review."
   }

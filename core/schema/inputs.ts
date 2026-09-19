@@ -30,7 +30,7 @@ import {
   REFERENCE_RIGHTS_VALUES,
   REFERENCE_SIGNAL_VALUES,
 } from '../ref/board-contract.ts';
-import { ROUTE_INPUT_KEYS, ROUTE_INPUT_SCHEMA, OPTIONAL_STAGE_IDS, OPTIONAL_METHOD_IDS } from '../route/index.ts';
+import { ROUTE_INPUT_KEYS, ROUTE_INPUT_SCHEMA, MANDATORY_STAGE_IDS, OPTIONAL_STAGE_IDS, OPTIONAL_METHOD_IDS } from '../route/index.ts';
 import { ADAPTIVE_ATTRIBUTION_CATEGORIES } from '../route/adaptive-attribution.ts';
 import { REFERENCE_DISCOVERY_TASK_NEEDS } from '../ref/reference-discovery-routing.ts';
 import {
@@ -38,6 +38,10 @@ import {
   TASK_FLOW_BENCHMARK_SCHEMA,
   TASK_FLOW_BENCHMARK_SURFACES,
 } from '../ref/task-flow-benchmark.ts';
+import {
+  REFERENCE_RESEARCH_KEYS,
+  REFERENCE_RESEARCH_SCHEMA,
+} from '../ref/reference-research.ts';
 import { ENTRY_SURFACE_CONTRACT_SCHEMA } from '../frame/entry-surface-contract.ts';
 import { DESIGN_QUALITY_OBSERVATION_PROJECTION_INPUT_SCHEMA } from '../evidence/final-v2-browser-observations.ts';
 import { FINAL_RENDER_REVIEWER_PACKET_INPUT_SCHEMA } from '../runtime/final-render-review.ts';
@@ -240,20 +244,39 @@ const DOMAIN_BRIEF: InputSkeleton = {
   name: 'domain-brief',
   path: '.omd/domain-brief.json',
   command: 'omd domain check --input .omd/domain-brief.json --json',
-  keys: ['schema', 'request', 'domain', 'summary', 'surfaces', 'coreObjects', 'audience', 'referenceQueries', 'researched'],
+  keys: ['schema', 'request', 'domain', 'summary', 'surfaces', 'coreObjects', 'audience', 'referenceQueries', 'planning'],
   skeleton: {
     schema: DOMAIN_BRIEF_SCHEMA,
     request: '<the raw request, normalized>',
     domain: '<the domain in a few words>',
     summary: '<one line: what this domain is and does>',
-    surfaces: [{ name: '<canonical page or screen>', purpose: '<the task it serves, one clause>' }],
-    coreObjects: ['<the real nouns the domain manipulates>'],
-    audience: '<who the work is for>',
+    surfaces: [{
+      name: '<canonical page or screen>',
+      purpose: '<the task it serves, one clause>',
+      evidence: [{ status: '<observed|user-provided|inferred>', reference: '<URL or project-relative capture path>' }],
+    }],
+    coreObjects: [
+      { name: '<a real noun the domain manipulates>', evidence: [{ status: 'observed', reference: '<URL or project-relative capture path>' }] },
+    ],
+    audience: {
+      description: '<who the work is for>',
+      evidence: [{ status: 'user-provided', reference: '<user-message or artifact path>' }],
+    },
     referenceQueries: {
       component: ['<detailed component or section design query>'],
       craft: ['<motion, scroll, or sculptural craft query>'],
+      mood: ['<felt direction: material, temperature, era, register — never a measurement>'],
     },
-    researched: false,
+    planning: {
+      businessGoal: {
+        text: '<why this work exists, in the user\'s terms>',
+        userEvidence: [{ kind: 'explicit-user-evidence', source: 'user-message', reference: '<message or artifact>', excerpt: '<what the user actually said>' }],
+      },
+      successSignal: {
+        text: '<the observable change that means it worked; omit userEvidence to leave it an open hypothesis>',
+      },
+      nonGoals: [{ text: '<what this release deliberately does not do>' }],
+    },
   },
 };
 
@@ -389,7 +412,7 @@ const REALITY_LEDGER: InputSkeleton = {
 const ROUTE_INPUT: InputSkeleton = {
   name: 'route-input',
   path: '.omd/.cache/route-input.json',
-  command: 'omd route classify --input .omd/.cache/route-input.json --json --activation <host-issued-invocation.json>',
+  command: 'omd route validate --input .omd/.cache/route-input.json --json',
   keys: ROUTE_INPUT_KEYS,
   constraints: [
     'task outcome, policy, claims, discovery, design axes, capability, browser, and learning contexts are all required',
@@ -403,9 +426,12 @@ const ROUTE_INPUT: InputSkeleton = {
     'For new-product, new-marketing, or unresolved discovery: uncertainty="unresolved", existingEvidence="none" or "insufficient", existingEvidenceUse=null, skipReason=null. Both null keys are required; do not omit them or replace null with explanatory prose.',
     'For skipped discovery on existing work: uncertainty="resolved", existingEvidence="sufficient", existingEvidenceUse and skipReason are non-empty descriptions of actual evidence use and the skip reason.',
     'the user-selected model owns role, stage, and method order',
+    'For design and handoff before implementation, use omd schema design-route-input. Its deliveryMode=design-only forbids production and application paths. Do not add production merely to pass an implementation-route validator.',
+    'uxPolicy kinds are hard_safety_rail (enforced), required_outcome (required), recommended_method (selected|skipped with reason), free_choice (selected|skipped). Safety, recovery and accessibility are topics/ids, not kinds. designAxes.schema must be design-axis-input-v1.',
+    'First run route validate, repair each named error and retry; validation is read-only and does not need activation. Then route classify publishes the valid input. Pi uses omd_cli without --activation; a genuine supplied Codex activation remains host-owned.',
     'executionWaves schedules every selected role exactly once; prerequisite owners precede consumer owners, and parallel-reference-acquisition puts Scout and Writer in the same wave',
     'every omitted optional stage or method carries a non-empty skip reason',
-    `Optional stages: ${OPTIONAL_STAGE_IDS.join(', ')}. Optional methods: ${OPTIONAL_METHOD_IDS.join(', ')}. Account for each in its selected list or skips, including copy-repair-workflow when writing fresh copy without that repair method.`,
+    `Optional stages: ${OPTIONAL_STAGE_IDS.join(', ')}. Mandatory stages: ${MANDATORY_STAGE_IDS.join(', ')} — always selected, never skipped. Optional methods: ${OPTIONAL_METHOD_IDS.join(', ')}. Account for each optional stage and method in its selected list or skips, including copy-repair-workflow when writing fresh copy without that repair method.`,
     `attributionCategories is the applicable subset in this exact order: ${ADAPTIVE_ATTRIBUTION_CATEGORIES.join(', ')}. Include tokens always, motion only with motion-one, composition only with the composition stage, and graphics only with nonempty aiAssets. Typography is not a category.`,
     'strategyDecision.aiAssets contains closed objects, never asset ID strings; print omd schema route-ai-asset for the item shape and native decision publication. ai-shipped-asset is selected exactly when aiAssets is nonempty. Image-first draft exploration does not itself select a shipped asset.',
     'production, decision-linked browser evidence, independent review, hard safety rails, required outcomes, activation, project-write, source seal, and final-v2 evidence cannot be skipped',
@@ -444,7 +470,7 @@ const ROUTE_INPUT: InputSkeleton = {
     validatedLearningContext: { schema: 'adaptive-learning-context-v1', status: 'none', learningIds: [], reason: '<no validated scoped learning applies>' },
     strategyDecision: {
       schema: 'adaptive-strategy-decision-v1', owner: 'user-selected-model', roles: ['omd-writer', 'omd-hand', 'omd-eye'],
-      stages: ['copy', 'production', 'browser-evidence', 'independent-review'],
+      stages: ['domain', 'copy', 'production', 'browser-evidence', 'independent-review'],
       executionWaves: [
         { id: 'copy', mode: 'concurrent', roles: ['omd-writer'] },
         { id: 'production', mode: 'concurrent', roles: ['omd-hand'] },
@@ -458,8 +484,11 @@ const ROUTE_INPUT: InputSkeleton = {
       attributionCategories: ['tokens'],
       skips: [
         { id: 'reference-discovery', reason: '<existing evidence is sufficient>' },
-        { id: 'domain', reason: '<domain is established>' }, { id: 'depth', reason: '<no deep deliberation needed>' },
+        { id: 'visual-craft', reason: '<gathering a visual direction is the default; omit only when the route declares restrained expression or a supplied brand fixed the direction>' },
+        { id: 'depth', reason: '<no deep deliberation needed>' },
         { id: 'frame', reason: '<no framing change>' }, { id: 'acquisition', reason: '<no acquisition needed>' },
+        { id: 'content-grain', reason: '<existing content morphology is unchanged>' },
+        { id: 'moodboard', reason: '<existing visual direction is unchanged>' },
         { id: 'scout', reason: '<discovery skipped>' }, { id: 'reference-board', reason: '<no board needed>' },
         { id: 'reference-selection', reason: '<no selection needed>' }, { id: 'art-direction', reason: '<direction unchanged>' },
         { id: 'type-proof', reason: '<typography unchanged>' }, { id: 'composition', reason: '<composition unchanged>' },
@@ -625,7 +654,12 @@ const TASK_FLOW_BENCHMARK: InputSkeleton = {
   constraints: [
     'copy the exact root and nested key sets; do not rename, duplicate, nest, or extend fields',
     `surface accepts only ${TASK_FLOW_BENCHMARK_SURFACES.join(', ')}. Preserve the frame\'s applicable surface grammar (theory/ux.md, Surface types); domain names the actual category. Editorial reading, section-navigation and saved-reading flows can satisfy a route-selected task-flow benchmark without becoming a product work surface. This does not require a benchmark for every editorial page or change the route. If no allowed value truthfully fits, report the contract gap instead of relabeling it to pass.`,
-    'sources contains 2..6 independent real-service flows or applicable authoritative guidance',
+    'sources contains 2..6 independently inspected sources and at least two same-domain-service sources; same-domain services must outnumber adjacent-domain services',
+    'each source records every safe reachable screen in its declared scope, every discovered target as either inspected or explicitly excluded, and a connected reachedBy path from an entry screen',
+    'coverage.status is complete only with zero exclusions; bounded-gap requires explicit authentication, payment, destructive-action, rate-limit, blocked, out-of-scope, or unavailable exclusions with reasons',
+    'screens bind current local browser evidence under .omd/refs/; every flow step has distinct current evidence, a concrete action, and its observed result',
+    'features group observed behavior by real screen ids; flows organize the clicked sequence by user intent. Every inspected screen must appear in at least one feature or flow',
+    'a service source needs at least one completed flow. Record blocked attempts with a limitation instead of claiming completion',
     'observedPatterns records bounded task-flow observations, never component styling or destination product facts',
     'every task step and counterexample cites current source ids',
     'forbiddenTransfers names source brands, copy, policies, prices, availability, guarantees, and operational claims that cannot become destination facts',
@@ -639,14 +673,72 @@ const TASK_FLOW_BENCHMARK: InputSkeleton = {
       {
         id: 'service-a',
         url: 'https://example.com/repair-booking-a',
+        kind: 'same-domain-service',
         observedAt: '2026-08-25',
+        coverage: {
+          scope: 'public pre-auth repair request journey reachable from the supplied entry page',
+          status: 'complete',
+          discoveredTargetCount: 2,
+          entryScreenIds: ['a-intake'],
+          inspectedScreenIds: ['a-intake', 'a-review'],
+          excludedTargets: [],
+        },
+        screens: [
+          {
+            id: 'a-intake', name: 'Issue intake', url: 'https://example.com/repair-booking-a', state: 'initial form visible',
+            reachedBy: { fromScreenId: null, action: 'open the public entry URL', result: 'issue intake is visible' },
+            evidence: { path: '.omd/refs/task-flows/service-a-intake.png', sha256: '1'.repeat(64) },
+          },
+          {
+            id: 'a-review', name: 'Request review', url: 'https://example.com/repair-booking-a/review', state: 'entered issue retained for review',
+            reachedBy: { fromScreenId: 'a-intake', action: 'enter a safe test issue and continue', result: 'review screen preserves the entered issue' },
+            evidence: { path: '.omd/refs/task-flows/service-a-review.png', sha256: '2'.repeat(64) },
+          },
+        ],
+        features: [{ id: 'a-issue-capture', name: 'Issue capture', behavior: 'retains the issue through review', screenIds: ['a-intake', 'a-review'] }],
+        flows: [{
+          id: 'a-request-review', intent: 'describe an issue and review it before commitment', status: 'completed', limitation: null,
+          steps: [
+            { order: 1, screenId: 'a-intake', action: 'open issue intake', result: 'empty issue controls are available', evidence: { path: '.omd/refs/task-flows/service-a-flow-1.png', sha256: '3'.repeat(64) } },
+            { order: 2, screenId: 'a-review', action: 'continue with a safe test issue', result: 'review appears without committing a request', evidence: { path: '.omd/refs/task-flows/service-a-flow-2.png', sha256: '4'.repeat(64) } },
+          ],
+        }],
         observedPatterns: ['observable issue capture precedes scheduling'],
         forbiddenTransfers: ['brand, pricing, availability, and service promises'],
       },
       {
         id: 'service-b',
         url: 'https://example.org/repair-booking-b',
+        kind: 'same-domain-service',
         observedAt: '2026-08-25',
+        coverage: {
+          scope: 'public pre-auth triage and review journey',
+          status: 'complete',
+          discoveredTargetCount: 2,
+          entryScreenIds: ['b-triage'],
+          inspectedScreenIds: ['b-triage', 'b-review'],
+          excludedTargets: [],
+        },
+        screens: [
+          {
+            id: 'b-triage', name: 'Triage', url: 'https://example.org/repair-booking-b', state: 'triage choices visible',
+            reachedBy: { fromScreenId: null, action: 'open the public entry URL', result: 'triage choices are visible' },
+            evidence: { path: '.omd/refs/task-flows/service-b-triage.png', sha256: '5'.repeat(64) },
+          },
+          {
+            id: 'b-review', name: 'Review', url: 'https://example.org/repair-booking-b/review', state: 'selected triage choice visible',
+            reachedBy: { fromScreenId: 'b-triage', action: 'choose a non-destructive test option and continue', result: 'review shows the selected option' },
+            evidence: { path: '.omd/refs/task-flows/service-b-review.png', sha256: '6'.repeat(64) },
+          },
+        ],
+        features: [{ id: 'b-triage-review', name: 'Triage review', behavior: 'keeps triage and commitment distinct', screenIds: ['b-triage', 'b-review'] }],
+        flows: [{
+          id: 'b-review-before-commitment', intent: 'review triage before commitment', status: 'completed', limitation: null,
+          steps: [
+            { order: 1, screenId: 'b-triage', action: 'open triage', result: 'choices are available', evidence: { path: '.omd/refs/task-flows/service-b-flow-1.png', sha256: '7'.repeat(64) } },
+            { order: 2, screenId: 'b-review', action: 'continue with a safe test choice', result: 'review appears before any commitment', evidence: { path: '.omd/refs/task-flows/service-b-flow-2.png', sha256: '8'.repeat(64) } },
+          ],
+        }],
         observedPatterns: ['review and commitment remain distinct'],
         forbiddenTransfers: ['brand, copy, policies, and operational claims'],
       },
@@ -677,6 +769,74 @@ const TASK_FLOW_BENCHMARK: InputSkeleton = {
         evidenceSourceIds: ['service-b'],
       },
     ],
+  },
+};
+
+const REFERENCE_RESEARCH: InputSkeleton = {
+  name: 'reference-research',
+  path: '.omd/.cache/reference-research.json',
+  command: 'omd ref research-set --input .omd/.cache/reference-research.json',
+  keys: REFERENCE_RESEARCH_KEYS,
+  constraints: [
+    'domainReference and designReference are both required and cannot substitute for one another',
+    'each lane records actual queries, inspected sources and current PNG evidence plus a hashed native capture JSON; domain paths stay in .omd/refs/domain/, design and gallery-entry paths in .omd/refs/design/',
+    'research-set publishes .omd/refs/domain/research.json and .omd/refs/design/research.json separately, then .omd/reference-research.json as a consistency receipt; research-check requires all three current records',
+    'neither the same evidence path nor identical bytes under a renamed path can satisfy both lanes',
+    'domain and design sources/discovery entries must use independent service hosts (also checked after redirects). A new crop, path, query or filename of the same service is not a separate lane.',
+    'design sources declare visualRole=visual-direction|component-support and visualAssessment={composition,typography,density,imagery,transfer,avoid}. Inspect actual pixels; none of these fields is an automatic beauty score. Each board candidate must use a visual-direction source; support-only documentation is insufficient.',
+    'non-user discovery must be a concrete supported gallery item: Pinterest pin, Dribbble shot, Behance gallery, Siteinspire/Land-book website, Godly website, or UI Bowl public item. These are free-access leads, not guaranteed free catalogues. Paid MCP is not needed. If every available source is blocked, report incomplete research; do not relabel domain pages.',
+    'every design source needs discovery: a non-homepage gallery/pin entry URL, kind (app-gallery, web-gallery, visual-bookmark, or explicitly user-provided), access free, qualityReason, evidence and capture receipts. If the retained source differs from the gallery URL, the captured gallery acquisition.links must contain that exact source URL; otherwise retain the gallery image as visual-only, not an unrelated component',
+    'capture points to the JSON returned by ref add --lane domain|design or ref import-image; never create or repair acquisition metadata by hand. Native captures bind source, imagePath, actual HTTP status, final URL and outbound links. Native image imports bind sourcePage and PNG digest; they prove no live flow',
+    'use app/screen galleries for apps and product UI, website galleries for marketing/web direction, and Pinterest as visual discovery; inspect the retained entry and original source when available; screenshots cannot prove live behavior',
+    'never pay, start trials, install an MCP, or bypass login to gather references; on restricted access record the gap in scout.md and try another public source. Free viewing is not a reuse license',
+    'designReference.boardSha256 is the current storage-byte SHA-256 of .omd/reference-board.json',
+    'each board candidate actually uses at least one retained design source PNG (matching path and hash); merely collecting a gallery on the side does not prove transfer',
+    'when the route carries greenfield-task-flow-benchmark, domainReference.benchmarkSha256 is the canonical taskFlowBenchmarkSha256 of the current v2 benchmark and every benchmark source URL appears in the domain lane',
+    'when no benchmark applies, benchmarkSha256 is null unless an optional current benchmark was actually published',
+    'run omd ref research-check after ref check and benchmark check; any missing, stale, or one-lane evidence blocks downstream work',
+  ],
+  skeleton: {
+    schema: REFERENCE_RESEARCH_SCHEMA,
+    sourceContractSha256: '0'.repeat(64),
+    domainReference: {
+      queries: ['<actual similar-service or domain task query>'],
+      sources: [{
+        id: 'domain-service-a',
+        url: 'https://example.com/domain-service',
+        observedAt: '2026-08-25',
+        decision: '<screen, feature, state, vocabulary, or flow decision answered>',
+        finding: '<bounded observation from the live service>',
+        evidence: { path: '.omd/refs/domain/domain-service-a.png', sha256: '1'.repeat(64) },
+        capture: { path: '.omd/refs/domain/domain-service-a.json', sha256: '4'.repeat(64) },
+      }],
+      benchmarkSha256: null,
+    },
+    designReference: {
+      queries: ['<actual visual-direction or component-craft query>'],
+      sources: [{
+        id: 'design-direction-a',
+        url: 'https://example.org/design-reference',
+        observedAt: '2026-08-25',
+        decision: '<composition, typography, colour, material, component, or motion decision answered>',
+        visualRole: 'visual-direction',
+        visualAssessment: {
+          composition: '<observed macro layout and hierarchy>', typography: '<observed type relationships>',
+          density: '<observed spacing and information load>', imagery: '<observed image/material role, or explicit absence>',
+          transfer: '<what to adapt to this project and why>', avoid: '<what not to copy and why>',
+        },
+        finding: '<bounded visual observation>',
+        evidence: { path: '.omd/refs/design/design-direction-a.png', sha256: '2'.repeat(64) },
+        capture: { path: '.omd/refs/design/design-direction-a.json', sha256: '5'.repeat(64) },
+        discovery: {
+          url: 'https://www.pinterest.com/pin/123456789/',
+          kind: 'app-gallery', access: 'free',
+          qualityReason: '<why this inspected screen fits the task, viewport, hierarchy, type, and density; not just the gallery name>',
+          evidence: { path: '.omd/refs/design/gallery-entry.png', sha256: '6'.repeat(64) },
+          capture: { path: '.omd/refs/design/gallery-entry.json', sha256: '7'.repeat(64) },
+        },
+      }],
+      boardSha256: '3'.repeat(64),
+    },
   },
 };
 
@@ -923,8 +1083,73 @@ const RESPONSIVE_TOKEN_COMMIT: InputSkeleton = {
   },
 };
 
+const DESIGN_ROUTE_INPUT: InputSkeleton = {
+  name: 'design-route-input',
+  path: ROUTE_INPUT.path,
+  command: ROUTE_INPUT.command,
+  keys: [...ROUTE_INPUT_KEYS, 'deliveryMode'],
+  constraints: [...(ROUTE_INPUT.constraints ?? []),
+    'Design-only ends after independent document/design review. Production, browser-evidence, source-seal, and final-evidence-v2 belong to implementation and are not selected. Finish with omd schema design-handoff and omd completion design-check.',
+    'All output stays under .omd/**. Reference-site browsing and authorized disposable design studies are evidence, not application implementation. Do not scaffold React or add dependencies.',
+    'Keep the user-selected model and real request facts. Adjust axes, safety rails and selected methods to the actual task; the example is not authority for a low-risk classification.',
+  ],
+  skeleton: {
+    ...ROUTE_INPUT.skeleton as object,
+    deliveryMode: 'design-only', projectMode: 'greenfield', allowedPaths: ['.omd/**'],
+    referenceDiscovery: { schema: 'reference-discovery-input-v1', taskNeed: 'new-product', uncertainty: 'unresolved', existingEvidence: 'none', intendedUse: '<domain flows and separate visual references>', existingEvidenceUse: null, skipReason: null },
+    strategyDecision: {
+      schema: 'adaptive-strategy-decision-v1', owner: 'user-selected-model',
+      roles: ['omd-framer', 'omd-scout', 'omd-writer', 'omd-typesetter', 'omd-composer', 'omd-sketch', 'omd-eye'],
+      stages: ['domain', 'frame', 'scout', 'reference-board', 'copy', 'type-proof', 'composition', 'candidate-generation', 'independent-review'],
+      executionWaves: [
+        { id: 'frame', mode: 'concurrent', roles: ['omd-framer'] },
+        { id: 'research-copy', mode: 'concurrent', roles: ['omd-scout', 'omd-writer'] },
+        { id: 'type', mode: 'concurrent', roles: ['omd-typesetter'] },
+        { id: 'composition', mode: 'concurrent', roles: ['omd-composer'] },
+        { id: 'candidates', mode: 'concurrent', roles: ['omd-sketch'] },
+        { id: 'review', mode: 'concurrent', roles: ['omd-eye'] },
+      ],
+      methods: ['design-strategy-balanced-delivery', 'model-capability-probe', 'evidence-claim-accounting', 'hypothesis-validation', 'design-handoff-review', 'reference-discovery', 'parallel-reference-acquisition', 'copy-repair-workflow'],
+      aiAssets: [], attributionCategories: ['tokens', 'composition'],
+      skips: [
+        ...['depth', 'content-grain', 'acquisition', 'moodboard', 'reference-selection', 'art-direction', 'safety-validation', 'reflection-in-action', 'reference-distance', 'image-first-draft', 'evidence-driven-refinement', 'motion-one', 'ai-shipped-asset'].map((id) => ({ id, reason: '<record the task-specific reason; select this stage/method instead when required>' })),
+      ],
+      rationale: '<why this design strategy reaches the requested handoff without application implementation>',
+    },
+  },
+};
+
+const DESIGN_HANDOFF: InputSkeleton = {
+  name: 'design-handoff', path: '.omd/design-handoff.json',
+  command: 'omd completion design-check --input .omd/design-handoff.json --json',
+  keys: ['schema', 'sourceContractSha256', 'artifacts', 'review'],
+  constraints: [
+    'Bind the current route source SHA and the exact bytes of each nonempty document. Every selected design stage and both reference lanes must have current evidence.',
+    'The review document records who reviewed which artifacts, findings, repairs and remaining limits. The checker verifies integrity, not independent authorship, visual quality, or implemented application behavior. Do not call this a final-v2 application approval.',
+  ],
+  skeleton: {
+    schema: 'design-handoff-v1', sourceContractSha256: '0'.repeat(64),
+    artifacts: ['screen-map', 'state-model', 'ux-ui-direction', 'content', 'accessibility-trust', 'implementation-handoff', 'open-questions'].map((id) => ({ id, path: `.omd/design/${id}.md`, sha256: '0'.repeat(64) })),
+    review: { path: '.omd/design/review.md', sha256: '0'.repeat(64) },
+  },
+};
+
 export const INPUT_SKELETONS: readonly InputSkeleton[] = [
+  {
+    name: 'slop-scope', path: '.omd/.cache/slop-scope.json', command: 'omd slop checkpoint --input .omd/.cache/slop-scope.json --json',
+    keys: ['schema', 'views'],
+    constraints: ['Use actual local HTML production/build entries, not reference URLs or arbitrary localhost ports. Build a bundled SPA before capture.',
+      'Cover the final production entry and every final viewport. Keep identical scope while confirmed issues remain; name additional task/state entries where applicable.',
+      'Checkpoint runs the source scanner and rendered slop linter, saves native PNGs, and returns an unfilled reviewInput. Inspect its images; never auto-approve the template.',
+      'After a confirmed issue: owner repair, rebuild, checkpoint again, then resolve the previous issue using the new screenshots. Zero raw warnings is not required; all findings need individual judgments.'],
+    skeleton: { schema: 'slop-scope-v1', views: [
+      { id: 'entry-desktop', page: 'dist/index.html', viewport: { width: 1280, height: 900 } },
+      { id: 'entry-mobile', page: 'dist/index.html', viewport: { width: 390, height: 844 } },
+    ] },
+  },
   ROUTE_INPUT,
+  DESIGN_ROUTE_INPUT,
+  DESIGN_HANDOFF,
   ROUTE_AI_ASSET,
   REALITY_LEDGER,
   DOMAIN_BRIEF,
@@ -937,6 +1162,7 @@ export const INPUT_SKELETONS: readonly InputSkeleton[] = [
   REFERENCE_CAPTURE_PREPARATION,
   REFERENCE_LOCALE_BINDING,
   TASK_FLOW_BENCHMARK,
+  REFERENCE_RESEARCH,
   ART_DIRECTION_CHECK,
   TOKEN_COMMIT,
   RESPONSIVE_TOKEN_COMMIT,

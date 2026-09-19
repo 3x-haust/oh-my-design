@@ -10,8 +10,10 @@
 // from reality, and a new model needs no new prose to use them.
 
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import { STAGES, resolveRunState, type StageId } from '../stage/contract.ts';
+import { formatBrief } from './format.ts';
+import type { ProjectWriteAdapter } from '../runtime/project-write.ts';
 import { detectAppShell, renderTargetHint, type AppShell } from '../stack/shell.ts';
 import { readPersistedRoute, type RouteRecord } from '../route/index.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
@@ -34,6 +36,9 @@ import {
 } from '../ref/reference-locale-binding.ts';
 import { readSelectedReferenceHandoff } from '../ref/selected-handoff.ts';
 import type { ReferenceHandoffRole } from '../ref/reference-handoff.ts';
+import { readPublishedReferenceResearch, validateReferenceResearch } from '../ref/reference-research.ts';
+import { designInventoryStatus, DESIGN_INVENTORY_DOC_PATH } from '../tokens/inventory.ts';
+import { loadRefs, refRecordPath } from '../ref/store.ts';
 
 export {
   EVIDENCE_CLAIM_PUBLICATION_SCHEMA,
@@ -64,6 +69,23 @@ export const EXTRA_BRIEF_STAGES = ['candidate-generation', 'production', 'indepe
 export type BriefStage = StageId | (typeof EXTRA_BRIEF_STAGES)[number];
 
 /**
+ * Where a stage brief is kept.
+ *
+ * A brief is what one owner was actually handed: its permitted inputs, the contracts it must obey,
+ * and the checks that will judge it. It used to exist only for the length of one command, so a run
+ * left no record of what any stage received — a gap when the question later is "what did Composer
+ * have when it made that choice?".
+ *
+ * It lives under `.omd/briefs/` rather than at the record root because it is a derived view of a
+ * stage, not a design artifact in its own right. One file per stage, overwritten as the stage is
+ * re-entered, because the brief describes the CURRENT inputs and a stale copy would be worse than
+ * none.
+ */
+export const BRIEF_DIRECTORY = '.omd/briefs';
+export const briefPath = (stage: BriefStage): string => `${BRIEF_DIRECTORY}/${stage}.json`;
+export const briefMarkdownPath = (stage: BriefStage): string => `${BRIEF_DIRECTORY}/${stage}.md`;
+
+/**
  * A brief is evidence, not a reading list. A mature run holds a hundred captures; printing all of
  * them recreates the wall of text this command exists to replace, so the brief carries the ones
  * that actually carry a measured principle and reports the rest as a count.
@@ -85,10 +107,12 @@ export type BriefCheck = {
 };
 
 export type Brief = {
+  readonly existingDesignSystem?: ReturnType<typeof designInventoryStatus> | null;
   readonly stage: BriefStage;
   readonly owner: string;
   readonly owns: readonly string[];
   readonly route: {
+    readonly deliveryMode?: 'design-only';
     readonly name: string;
     readonly projectMode: 'greenfield' | 'existing';
     readonly roles: readonly string[];
@@ -166,7 +190,7 @@ const OWNER: Readonly<Record<string, string>> = {
   review: 'omd-eye',
 };
 const OWNS: Readonly<Record<string, readonly string[]>> = {
-  scout: ['.omd/scout.md', '.omd/task-flow-benchmark.json'],
+  scout: ['.omd/scout.md', '.omd/refs/domain/research.json', '.omd/refs/design/research.json', '.omd/reference-research.json', '.omd/task-flow-benchmark.json'],
   'candidate-generation': ['structurally distinct UX candidates and selected model metadata'],
   production: ['production source (every file the surface ships)'],
   'independent-review': ['the independent review verdict returned to the coordinator'],
@@ -181,6 +205,7 @@ const JUDGED_BY: Readonly<Record<string, readonly BriefCheck[]>> = {
   frame: [{ command: 'omd frame show', fails: 'the frame is missing a required field or its evidence' }],
   acquisition: [{ command: 'omd ref granularity --json', fails: 'a declared zone has no capture bound to it' }],
   scout: [
+    { command: 'omd ref research-check --json', fails: 'either domain or design research is missing, reused across lanes, stale, or unbound to its current output' },
     { command: 'omd ref check', fails: 'the board is one-source, kinship-unresolved, low-signal, or zone-uncovered' },
     { command: 'omd ref audit', fails: 'captures were taken sequentially instead of in one batch' },
     { command: 'omd benchmark check', fails: 'applicable product research lacks multiple bounded real-service task flows or its source contract is stale' },
@@ -240,36 +265,10 @@ function readRoute(root: string, invocation?: ProjectRunInvocation): RouteRecord
  * A reference with its measured principle is the instruction. "Make it distinctive" is not.
  */
 export function briefReferences(root: string): readonly BriefReference[] {
-  const dir = join(root, '.omd', 'refs');
-  let names: string[];
-  try {
-    names = readdirSync(dir).filter((name) => name.endsWith('.json'));
-  } catch {
-    return [];
-  }
-  const out: BriefReference[] = [];
-  for (const name of names.sort()) {
-    try {
-      const parsed: unknown = JSON.parse(readFileSync(join(dir, name), 'utf8'));
-      if (!isRecord(parsed) || typeof parsed.component !== 'string') continue;
-      const principles = Array.isArray(parsed.principles)
-        ? parsed.principles.filter((entry): entry is string => typeof entry === 'string')
-        : [];
-      out.push({
-        path: `.omd/refs/${name}`,
-        component: parsed.component,
-        slot: typeof parsed.slot === 'string' ? parsed.slot : null,
-        take: principles,
-      });
-    } catch (error) {
-      const code = error instanceof Error && 'code' in error ? error.code : undefined;
-      if (error instanceof SyntaxError || code === 'ENOENT' || code === 'ENOTDIR' || code === 'EISDIR') {
-        continue; // The reference gate reports malformed or concurrently removed records.
-      }
-      throw error;
-    }
-  }
-  return out;
+  return loadRefs(root).map(ref => ({
+    path: relative(root, refRecordPath(root, ref)), component: ref.component,
+    slot: ref.slot ?? null, take: ref.principles.filter((entry): entry is string => typeof entry === 'string'),
+  })).sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
 }
 
 function selectedCandidateEvidence(root: string): readonly string[] {
@@ -380,6 +379,12 @@ export function buildBrief(
     })();
 
   const blockers: string[] = [];
+  const inventoryStatus = designInventoryStatus(root);
+  const existingDesignSystem = inventoryStatus.status === 'missing' ? null : inventoryStatus;
+  const inventoryConsumer = ['art-direction', 'composition', 'candidate-generation', 'production'].includes(stage);
+  if (inventoryConsumer && existingDesignSystem && existingDesignSystem.status !== 'current') {
+    blockers.push(`existing design inventory ${existingDesignSystem.status}: inspect source changes and run omd init --refresh`);
+  }
   let referenceHandoff: Brief['referenceHandoff'] = null;
   const handoffRole: ReferenceHandoffRole | undefined = stage === 'art-direction' ? 'art-direction'
     : stage === 'composition' || stage === 'candidate-generation' ? 'composer'
@@ -403,7 +408,10 @@ export function buildBrief(
     try { discoveryPlan = buildReferenceDiscoveryPlan(root, route); }
     catch (error) { blockers.push(error instanceof Error ? error.message : String(error)); }
   }
-  if (route === null) blockers.push('no route: run `omd route classify --input <route-input.json> --activation <host-issued-invocation.json>`');
+  if (route === null) blockers.push('no route: run `omd route validate --input <route-input.json>`, repair named input errors, then `omd route classify --input <route-input.json>`; Pi/local CLI does not require an external activation file');
+  if (route?.deliveryMode === 'design-only' && ['production', 'browser-evidence'].includes(stage)) {
+    blockers.push('design-only route forbids application implementation; finish the design handoff instead');
+  }
   if (definition !== undefined) {
     for (const contract of contracts) {
       if (!contract.delivered) blockers.push(`contract not delivered: omd stage deliver --stage ${definition.id} --contract ${contract.path}`);
@@ -417,6 +425,34 @@ export function buildBrief(
     : Object.freeze({ present: Object.freeze([]), missing: Object.freeze([]) });
   for (const path of selectedInputs.missing) {
     blockers.push(`selected ${stage} input missing: ${path}`);
+  }
+  const judgmentPath = '.omd/design-judgment.json';
+  const judgmentConsumer = stage === 'composition' || stage === 'candidate-generation' || stage === 'production';
+  if (judgmentConsumer && route && (route.gates.includes('dual-reference-research')
+    || (route.projectMode === 'greenfield' && existsSync(join(root, '.omd/reference-research.json'))))) {
+    const researchPath = join(root, '.omd/reference-research.json');
+    try {
+      if (!existsSync(researchPath)) throw new Error('missing');
+      const research = readPublishedReferenceResearch(root);
+      validateReferenceResearch(root, research, {
+        expectedSourceContractSha256: route.sourceContractSha256,
+        benchmarkRequired: route.gates.includes('greenfield-task-flow-benchmark'),
+      });
+    } catch (error) {
+      blockers.push(`selected ${stage} input missing or stale: .omd/reference-research.json — complete and verify both domain-reference and design-reference lanes (${error instanceof Error ? error.message : String(error)})`);
+    }
+  }
+  const hasReferenceBoard = existsSync(join(root, '.omd/reference-board.json'));
+  const referenceDirectory = join(root, '.omd/refs');
+  const hasReferenceEvidence = hasReferenceBoard && existsSync(referenceDirectory)
+    && readdirSync(referenceDirectory).some((entry) => !entry.startsWith('.'));
+  const greenfieldReferenceConsumer = route?.projectMode === 'greenfield' && judgmentConsumer;
+  if (greenfieldReferenceConsumer && !hasReferenceEvidence) {
+    blockers.push(`selected ${stage} input missing: visual reference evidence under .omd/refs/ and .omd/reference-board.json — discover and interpret references before composition`);
+  }
+  const judgmentPresent = judgmentConsumer && hasReferenceBoard && existsSync(join(root, judgmentPath));
+  if (judgmentConsumer && hasReferenceBoard && !judgmentPresent) {
+    blockers.push(`selected ${stage} input missing: ${judgmentPath} — interpret the observations before applying them`);
   }
   const copyReviewPath = '.omd/.cache/copy-eye.md';
   const copyReviewRequired = stage === 'production'
@@ -488,7 +524,10 @@ export function buildBrief(
   }
   const projectedReality = projectRealityForBrief(root, stage, route?.projectMode ?? 'existing');
   if (projectedReality.blocker !== null) blockers.push(projectedReality.blocker);
-  const judgedBy = (JUDGED_BY[stage] ?? []).filter((check) =>
+  const designReview = route?.deliveryMode === 'design-only' && ['independent-review', 'review'].includes(stage);
+  const judgedBy = (designReview
+    ? [{ command: 'omd completion design-check --input .omd/design-handoff.json --json', fails: 'design artifacts, reference evidence or write scope are missing or stale; this check does not attest review independence or application behavior' }]
+    : JUDGED_BY[stage] ?? []).filter((check) =>
     (
       check.command !== 'omd grain check --json'
       || route === null
@@ -516,10 +555,12 @@ export function buildBrief(
 
   return {
     stage,
+    existingDesignSystem,
     owner: definition?.owner ?? OWNER[stage] ?? 'coordinator',
-    owns: definition === undefined ? OWNS[stage] ?? [] : [definition.artifact],
+    owns: designReview ? ['.omd/design/review.md'] : definition === undefined ? OWNS[stage] ?? [] : [definition.artifact],
     route: route === null ? null : {
       name: route.route,
+      ...(route.deliveryMode === undefined ? {} : { deliveryMode: route.deliveryMode }),
       projectMode: route.projectMode,
       roles: route.strategy.roles,
       references: route.references.decision === 'discover'
@@ -540,15 +581,46 @@ export function buildBrief(
     referenceHandoff,
     referencesOmitted: gathered.length - references.length,
     contracts,
-    schemas: (SCHEMAS[stage] ?? []).map((name) => ({ name, command: `omd schema ${name}` })),
+    schemas: (designReview ? ['design-handoff'] : SCHEMAS[stage] ?? []).map((name) => ({ name, command: `omd schema ${name}` })),
     shell: shell.kind === 'browser' ? null : { kind: shell.kind, target: renderTargetHint(shell) },
     judgedBy: [...judgedBy, ...localeJudgedBy, ...localeReferenceJudgedBy],
     prior: priorEvidence(root, [
+      ...(existingDesignSystem?.status === 'current' && inventoryConsumer ? [existingDesignSystem.path, DESIGN_INVENTORY_DOC_PATH,
+        ...(existsSync(join(root, '.omd/design-system-decisions.md')) ? ['.omd/design-system-decisions.md'] : [])] : []),
       ...selectedInputs.present,
+      ...(judgmentPresent ? [judgmentPath] : []),
       ...(localeDesign?.projection === null || localeDesign === null ? [] : [localeDesign.projection.path]),
       ...(localeDesign?.referenceBinding === null || localeDesign === null ? [] : [localeDesign.referenceBinding.path]),
       ...(copyReviewPresent ? [copyReviewPath] : []),
     ]),
     blockers,
   };
+}
+
+/**
+ * Persists the brief a stage was handed, so the run keeps a record of what each owner received.
+ * Written through the project-write adapter like every other project mutation.
+ *
+ * Both forms are written: the JSON is what a later command reads, and the markdown is what a human
+ * reads when asking why a stage made the choice it did.
+ */
+export function writeBrief(
+  root: string,
+  brief: Brief,
+  adapter: ProjectWriteAdapter,
+): Readonly<{ json: string; markdown: string }> {
+  const json = adapter.write(briefPath(brief.stage), `${JSON.stringify(brief, null, 2)}\n`);
+  const markdown = adapter.write(briefMarkdownPath(brief.stage), formatBrief(brief));
+  return Object.freeze({ json, markdown });
+}
+
+/** Reads a persisted brief back. Returns null when the stage has never run in this project. */
+export function readBrief(root: string, stage: BriefStage): Brief | null {
+  const path = join(root, briefPath(stage));
+  if (!existsSync(path)) return null;
+  try {
+    return JSON.parse(readFileSync(path, 'utf8')) as Brief;
+  } catch {
+    return null;
+  }
 }

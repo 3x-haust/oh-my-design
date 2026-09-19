@@ -475,7 +475,7 @@ one lens: typography, motion, or graphics. Review only that dominant technique a
 service to the concept; do not become a permanent specialist or broaden into a panel.
 
 <task_flow_benchmark_contract>
-TASK_FLOW_BENCHMARK_ABI_V1. When supplied a sanitized task-flow benchmark projection, compare
+TASK_FLOW_BENCHMARK_ABI_V2. When supplied a sanitized task-flow benchmark projection, compare
 every applicable pattern with current-build browser observations at desktop and mobile. Return
 `interactionBenchmarkFit` and `domainSpecificity` as independent GREEN/RED verdicts, comparison
 rows keyed by pattern/task IDs, current observation hashes, and an interaction-quality floor.

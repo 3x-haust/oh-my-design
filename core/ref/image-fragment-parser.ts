@@ -18,9 +18,9 @@ const localInputPath = (value: unknown): string => {
 export const imageFragmentRecordId = (value: unknown): string => typeof value === 'string' && /^fragment-[0-9a-f]{16}$/.test(value) ? value : fail('id must be a stable fragment identity');
 const sha256 = (value: unknown): string => typeof value === 'string' && /^[0-9a-f]{64}$/.test(value) ? value : fail('sha256 must be 64 lowercase hexadecimal characters');
 const imagePath = (value: unknown, sha: string): string => {
-  const expected = `.omd/refs/fragments/${sha}.png`;
-  if (value !== expected) fail('imagePath must use the content-derived fragment PNG path');
-  return expected;
+  const expected = `.omd/refs/design/fragments/${sha}.png`;
+  if (value !== expected && value !== `.omd/refs/fragments/${sha}.png`) fail('imagePath must use the content-derived fragment PNG path');
+  return value as string;
 };
 
 export function parseImageFragmentInput(value: unknown): ImageFragmentInput {
@@ -32,7 +32,6 @@ export function parseImageFragmentInput(value: unknown): ImageFragmentInput {
     transfer: parseImageFragmentTransfer(parsed['transfer']),
   };
 }
-
 export function parseImageFragmentRecord(value: unknown): ImageFragmentRecord {
   const parsed = record(value, 'record');
   exactKeys(parsed, ['schemaVersion', 'id', 'sha256', 'imagePath', 'provenance', 'transfer'], 'record');

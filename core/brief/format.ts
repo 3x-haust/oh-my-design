@@ -11,6 +11,10 @@ export function formatBrief(brief: Brief): string {
 
   lines.push(`stage         ${brief.stage}  (owner: ${brief.owner})`);
   section('owns', brief.owns);
+  if (brief.existingDesignSystem) section('existing UI', [
+    `${brief.existingDesignSystem.path} — ${brief.existingDesignSystem.status}; ${brief.existingDesignSystem.observations} observations, ${brief.existingDesignSystem.gaps} gaps`,
+    'Observed, not approved. Preserve existing tokens/components by default; read .omd/design-system-decisions.md if present and record intentional departures. Inspect coverage gaps before reuse.',
+  ]);
   if (brief.route !== null) {
     section('route', [
       `${brief.route.name}/${brief.route.projectMode} — ${brief.route.roles.join(', ')}`,

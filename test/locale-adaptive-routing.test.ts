@@ -33,9 +33,16 @@ test('no-context routes retain canonical bytes without injecting locale context'
   // Intentional craft-policy revision: the semantic/visual checkpoint labels now end in
   // render-decision. Replacing those two labels with render-change reproduces both prior hashes.
   // These remain fixed snapshots; historical route files are never rewritten.
+  //
+  // Re-snapshotted when `domain` became a mandatory stage: the strategy now selects it on every
+  // route, so each canonical record gained that stage and its skip entry was removed. The bytes and
+  // hashes below are the post-change values, still fixed rather than computed.
+  // Re-snapshotted when `moodboard` joined the optional stages: every route now selects it or
+  // records a skip reason, so each canonical record gained one skip entry.
+  // Re-snapshotted when discovery routes gained the explicit dual-reference-research gate.
   for (const [name, expectedHash, expectedBytes] of [
-    ['copy-only', 'cfd33345cb504a838d1339ea888f4f7d2d2a91603e33b064f0daf85295d390ba', 16332],
-    ['synth-marketing', 'cfa0abeb3e5b211264a87f3790aa53691992d5d37ac9e4617589c9961e5d7d85', 16940],
+    ['copy-only', 'd42ebf8debddf7528f9b0561473bea976ac12e60c8d8883cb9430e01ae303329', 16346],
+    ['synth-marketing', 'a3b8b62308c25b377a7e3512a20eda1f250192af3c2f8bbc5b5517c7608ce813', 16974],
   ] as const) {
     const bytes = `${canonicalRouteJson(routeAdaptiveFlow(fixture(name)))}\n`;
     assert.equal(Buffer.byteLength(bytes), expectedBytes);

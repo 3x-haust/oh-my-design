@@ -84,7 +84,7 @@ export default function omdExtension(pi: PortablePiApi): void {
     name: OMD_TOOL_NAME,
     label: 'OMD CLI',
     description: 'Run the packaged Oh My Design CLI in the current project with structured arguments.',
-    promptSnippet: 'Use omd_cli for OMD validation, rendering, evidence, reference, and project-state commands.',
+    promptSnippet: 'Use omd_cli for OMD commands without external --activation. For design before implementation use schema design-route-input, route validate, then route classify. Repair schema errors and retry; do not request a host activation file. Finish design-only work with completion design-check, not application finalization.',
     parameters: Type.Object({
       args: Type.Array(Type.String(), { minItems: 1 }),
     }, { additionalProperties: false }),

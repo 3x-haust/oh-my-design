@@ -9,6 +9,7 @@ import {
 } from './board-contract.ts';
 import { trustedReferenceImage } from './board-security.ts';
 import { hasAssemblyPayload } from './board-sanitization.ts';
+import { parseReferenceGrade, requireStructuralClaim } from './reference-scope.ts';
 
 const fail = (reason: string): never => { throw new ReferenceBoardResolutionError(`image fragment ${reason}`); };
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -74,9 +75,24 @@ const geometry = (value: unknown): ImageFragmentGeometry => {
 };
 export const parseImageFragmentTransfer = (value: unknown): ImageFragmentTransfer => {
   const parsed = record(value, 'transfer');
-  const keys = ['visualRole', 'principles']; if ('geometry' in parsed) keys.push('geometry');
+  const keys = ['visualRole', 'principles'];
+  if ('geometry' in parsed) keys.push('geometry');
+  if ('scope' in parsed) keys.push('scope');
+  if ('evidence' in parsed) keys.push('evidence');
   exactKeys(parsed, keys, 'transfer');
-  return { visualRole: sanitizedText(parsed['visualRole'], 'transfer.visualRole'), principles: principles(parsed['principles'], 'transfer.principles'), ...('geometry' in parsed ? { geometry: geometry(parsed['geometry']) } : {}) };
+  const grade = 'scope' in parsed || 'evidence' in parsed
+    ? parseReferenceGrade({ scope: parsed['scope'], evidence: parsed['evidence'] })
+    : undefined;
+  const transfer: ImageFragmentTransfer = {
+    visualRole: sanitizedText(parsed['visualRole'], 'transfer.visualRole'),
+    principles: principles(parsed['principles'], 'transfer.principles'),
+    ...('geometry' in parsed ? { geometry: geometry(parsed['geometry']) } : {}),
+    ...(grade === undefined ? {} : { scope: grade.scope, evidence: grade.evidence }),
+  };
+  if ('geometry' in parsed && grade !== undefined) {
+    requireStructuralClaim(grade, 'transfer.geometry');
+  }
+  return transfer;
 };
 
 export function validatedImageFragmentPiece(root: string, expected: ReferenceBoardImageFragmentPiece, value: ResolvedImageFragmentPiece): ResolvedImageFragmentPiece {
@@ -85,5 +101,10 @@ export function validatedImageFragmentPiece(root: string, expected: ReferenceBoa
 }
 
 export function copyImageFragmentTransfer(value: ImageFragmentTransfer): ImageFragmentTransfer {
-  return { visualRole: value.visualRole, principles: [...value.principles], ...(value.geometry === undefined ? {} : { geometry: { width: value.geometry.width, height: value.geometry.height, aspectRatio: value.geometry.aspectRatio } }) };
+  return {
+    visualRole: value.visualRole,
+    principles: [...value.principles],
+    ...(value.geometry === undefined ? {} : { geometry: { width: value.geometry.width, height: value.geometry.height, aspectRatio: value.geometry.aspectRatio } }),
+    ...(value.scope === undefined || value.evidence === undefined ? {} : { scope: value.scope, evidence: value.evidence }),
+  };
 }

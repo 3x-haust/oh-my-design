@@ -33,8 +33,8 @@ export class DesignAxisRoutingError extends Error {
   override readonly name = 'DesignAxisRoutingError';
   readonly code: DesignAxisRoutingErrorCode;
 
-  constructor(code: DesignAxisRoutingErrorCode) {
-    super(code);
+  constructor(code: DesignAxisRoutingErrorCode, detail?: string) {
+    super(detail === undefined ? code : `${code}: ${detail}`);
     this.code = code;
   }
 }
@@ -105,7 +105,7 @@ function requireExactKeys(input: object): void {
     return fail('UNEXPECTED_DESIGN_AXIS_FIELD');
   }
   if (keys.length !== INPUT_KEYS.length || INPUT_KEYS.some((key) => !Object.hasOwn(input, key))) {
-    return fail('MALFORMED_DESIGN_AXIS_INPUT');
+    throw new DesignAxisRoutingError('MALFORMED_DESIGN_AXIS_INPUT', `designAxes requires ${INPUT_KEYS.join(', ')}; schema must be "design-axis-input-v1"`);
   }
 }
 

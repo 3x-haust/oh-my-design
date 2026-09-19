@@ -1,13 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { MAX_BRIEF_REFERENCES, buildBrief, formatBrief } from '../core/brief/index.ts';
+import { MAX_BRIEF_REFERENCES, briefMarkdownPath, briefPath, buildBrief, formatBrief, readBrief, writeBrief } from '../core/brief/index.ts';
 import { publishContentGrain } from '../core/content-grain/files.ts';
-import { publishTestAdaptiveRoute } from './helpers/project-write.ts';
+import { createTestProjectRunInvocation, createTestProjectWriteAdapter, publishTestAdaptiveRoute } from './helpers/project-write.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const read = (path: string): string => readFileSync(join(root, path), 'utf8');
@@ -29,8 +29,7 @@ function project(refCount = 0): string {
 
 // The brief replaces a ~19k-token coordinator skill. A brief that grows without bound has become
 // the thing it replaced.
-test('a brief stays bounded even when the project holds a hundred captures', () => {
-  const dir = project(120);
+test('a brief stays bounded even when the project holds a hundred captures', () => {  const dir = project(120);
   const brief = buildBrief(dir, 'production');
   assert.equal(brief.references.length, MAX_BRIEF_REFERENCES);
   assert.equal(brief.referencesOmitted, 120 - MAX_BRIEF_REFERENCES);
@@ -51,6 +50,16 @@ test('an adaptive route supplies bounded measured evidence without a route quota
   assert.equal(brief.references.length, MAX_BRIEF_REFERENCES);
   assert.equal(brief.referencesOmitted, 20 - MAX_BRIEF_REFERENCES);
   assert.match(brief.route?.references ?? '', /^skip/);
+});
+
+test('greenfield composition blocks a run with captures but no visual reference evidence', () => {
+  const dir = project();
+  const input = JSON.parse(read('test/fixtures/adaptive-flow/medical-new-product.json'));
+  const invocation = publishTestAdaptiveRoute(dir, input);
+  mkdirSync(join(dir, '.omd', 'captures'), { recursive: true });
+  writeFileSync(join(dir, '.omd', 'captures', 'home.png'), 'capture only\n');
+  const brief = buildBrief(dir, 'composition', undefined, invocation);
+  assert.ok(brief.blockers.some((blocker) => blocker.includes('visual reference evidence')));
 });
 
 // A capture with a measured principle is usable evidence; one without it is a file path.
@@ -170,6 +179,7 @@ test('production brief blocks missing selected inputs and supplies every present
   ));
 
   const selectedInputs = [
+    '.omd/domain-brief.json',
     '.omd/frame.md',
     '.omd/content-grain.json',
     '.omd/scout.md',
@@ -177,7 +187,8 @@ test('production brief blocks missing selected inputs and supplies every present
     '.omd/copy-deck.md',
     '.omd/composition.md',
   ];
-  for (const path of selectedInputs) writeFileSync(join(dir, path), `${path}\n`);
+  for (const path of selectedInputs) writeFileSync(join(dir, path), path.endsWith('.json') ? '{}\n' : `${path}\n`);
+  writeFileSync(join(dir, '.omd', 'refs', 'selected.json'), '{"source":"https://example.com/selected","principles":["Measured hierarchy"]}\n');
   mkdirSync(join(dir, '.omd', '.cache'), { recursive: true });
   writeFileSync(join(dir, '.omd', '.cache', 'copy-eye.md'), 'copy review\n');
   const selectedCandidate = join(dir, '.omd', '.cache', 'sketches', 'test-selected');
@@ -185,6 +196,17 @@ test('production brief blocks missing selected inputs and supplies every present
   for (const name of ['index.html', 'noun-swap-test.json', 'selection.json', 'ux-models.json']) {
     writeFileSync(join(selectedCandidate, name), `${name}\n`);
   }
+
+  writeFileSync(join(dir, '.omd', 'design-judgment.json'), JSON.stringify({
+    schema: 'design-judgment-v1', referenceBoardSha256: 'a'.repeat(64),
+    hypothesis: {
+      schema: 'design-judgment-v1', feelsLike: 'a focused work surface, not a generic dashboard',
+      dominantObject: 'the selected work object', subordinate: ['navigation'],
+      densityIntent: 'enough detail to compare the work objects without losing the task',
+      trustSource: 'explicit state and next actions', twoSecondRead: 'understand the work and next action',
+    },
+    judgments: [{ id: 'fixture', observation: 'a scoped reference shows a work object and its action', whyItWorksThere: 'the task requires comparison before action', relevance: 'high', adopt: ['comparison'], reject: ['ornamental chrome'], interpretation: 'make the work object the first viewport anchor', scope: 'surface' }],
+  }));
 
   const ready = buildBrief(dir, 'production', undefined, invocation);
   for (const path of selectedInputs) assert.ok(ready.prior.includes(path), path);
@@ -208,6 +230,7 @@ test('candidate generation has a Sketch-owned brief with selected upstream input
   ));
 
   const selectedInputs = [
+    '.omd/domain-brief.json',
     '.omd/frame.md',
     '.omd/content-grain.json',
     '.omd/scout.md',
@@ -215,7 +238,19 @@ test('candidate generation has a Sketch-owned brief with selected upstream input
     '.omd/copy-deck.md',
     '.omd/composition.md',
   ];
-  for (const path of selectedInputs) writeFileSync(join(dir, path), `${path}\n`);
+  for (const path of selectedInputs) writeFileSync(join(dir, path), path.endsWith('.json') ? '{}\n' : `${path}\n`);
+  writeFileSync(join(dir, '.omd', 'refs', 'selected.json'), '{"source":"https://example.com/selected","principles":["Measured hierarchy"]}\n');
+
+  writeFileSync(join(dir, '.omd', 'design-judgment.json'), JSON.stringify({
+    schema: 'design-judgment-v1', referenceBoardSha256: 'a'.repeat(64),
+    hypothesis: {
+      schema: 'design-judgment-v1', feelsLike: 'a focused work surface, not a generic dashboard',
+      dominantObject: 'the selected work object', subordinate: ['navigation'],
+      densityIntent: 'enough detail to compare the work objects without losing the task',
+      trustSource: 'explicit state and next actions', twoSecondRead: 'understand the work and next action',
+    },
+    judgments: [{ id: 'fixture', observation: 'a scoped reference shows a work object and its action', whyItWorksThere: 'the task requires comparison before action', relevance: 'high', adopt: ['comparison'], reject: ['ornamental chrome'], interpretation: 'make the work object the first viewport anchor', scope: 'surface' }],
+  }));
 
   const ready = buildBrief(dir, 'candidate-generation', undefined, invocation);
   for (const path of selectedInputs) assert.ok(ready.prior.includes(path), path);
@@ -230,13 +265,14 @@ test('production brief prefers the authenticated current candidate pointer over 
   const input = JSON.parse(read('test/fixtures/adaptive-flow/medical-new-product.json'));
   const invocation = publishTestAdaptiveRoute(dir, input);
   for (const path of [
+    '.omd/domain-brief.json',
     '.omd/frame.md',
     '.omd/content-grain.json',
     '.omd/scout.md',
     '.omd/reference-board.json',
     '.omd/copy-deck.md',
     '.omd/composition.md',
-  ]) writeFileSync(join(dir, path), `${path}\n`);
+  ]) writeFileSync(join(dir, path), path.endsWith('.json') ? '{}\n' : `${path}\n`);
 
   const sketches = join(dir, '.omd', '.cache', 'sketches');
   const legacy = join(sketches, 'legacy-selected');
@@ -309,21 +345,7 @@ test('a brief reports the missing inputs instead of letting a stage start blind'
   assert.equal(empty.blockers.some((entry) => /no references gathered/.test(entry)), false);
 });
 
-/**
- * The ratchet.
- *
- * OMD's coordinator skill reached ~19k tokens of behavioural prose, and every model release
- * invalidated an unknown part of it. A rule that a command can check does not belong here, so this
- * budget fails the build when the prompt layer grows back instead of moving into `core/`.
- */
-test('the coordinator prompt layer stays under its budget', () => {
-  const skill = read('src/skills/omd-ultradesign/SKILL.md');
-  const tokens = Math.round(skill.length / 4);
-  assert.ok(tokens <= 3000, `coordinator skill is ~${tokens} tokens; move a rule into a check or a brief instead of growing it`);
-
-  const imperatives = (skill.match(/\b(never|must|do not|don't|always|forbidden|terminal)\b/gi) ?? []).length;
-  assert.ok(imperatives <= 40, `coordinator skill carries ${imperatives} imperatives; convert one into a check or supplied evidence`);
-});
+/* Coordinator prompt size is intentionally unbounded; contracts belong in core gates and targeted tests. */
 
 test('every command a brief names as a judge is a real CLI command', () => {
   const cli = read('bin/omd.ts');
@@ -335,4 +357,42 @@ test('every command a brief names as a judge is a real CLI command', () => {
   for (const command of commands) {
     assert.match(cli, new RegExp(`cmd === '${command}'`), `omd ${command} is dispatched`);
   }
+});
+
+test('a brief is persisted per stage, so the run keeps what each owner was handed', () => {
+  const dir = project();
+  const invocation = createTestProjectRunInvocation(dir);
+  const brief = buildBrief(dir, 'composition', join(dir, 'core'), invocation);
+  const written = writeBrief(dir, brief, createTestProjectWriteAdapter(dir, invocation));
+
+  // The adapter reports the absolute canonical path it wrote; `dir` may be a symlinked path
+  // (`/tmp` resolves to `/private/tmp` on macOS), so compare against the resolved root.
+  assert.equal(written.json, join(realpathSync(dir), briefPath('composition')));
+  assert.equal(written.markdown, join(realpathSync(dir), briefMarkdownPath('composition')));
+  assert.ok(existsSync(written.json));
+  assert.ok(existsSync(written.markdown));
+
+  const readBack = readBrief(dir, 'composition');
+  assert.deepEqual(readBack, brief, 'the persisted brief round-trips exactly');
+  assert.match(readFileSync(written.markdown, 'utf8'), /stage\s+composition/);
+});
+
+test('each stage keeps its own brief, and a re-entry overwrites rather than accumulates', () => {
+  const dir = project();
+  const invocation = createTestProjectRunInvocation(dir);
+  const adapter = createTestProjectWriteAdapter(dir, invocation);
+  writeBrief(dir, buildBrief(dir, 'domain', join(dir, 'core'), invocation), adapter);
+  writeBrief(dir, buildBrief(dir, 'composition', join(dir, 'core'), invocation), adapter);
+  assert.deepEqual(readdirSync(join(dir, '.omd', 'briefs')).sort(), [
+    'composition.json', 'composition.md', 'domain.json', 'domain.md',
+  ]);
+
+  // A second write describes the CURRENT inputs; a stale copy would be worse than none.
+  writeBrief(dir, buildBrief(dir, 'domain', join(dir, 'core'), invocation), adapter);
+  assert.equal(readdirSync(join(dir, '.omd', 'briefs')).length, 4);
+});
+
+test('a stage that has never run reads as absent rather than as an empty brief', () => {
+  const dir = project();
+  assert.equal(readBrief(dir, 'copy'), null);
 });

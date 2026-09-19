@@ -3,7 +3,9 @@
   "request": "Create a launch page for a compact patchable synthesizer with one accessible signature interaction and a truthful preorder-details path.",
   "projectMode": "greenfield",
   "namedDependencies": [],
-  "allowedPaths": ["index.html"],
+  "allowedPaths": [
+    "index.html"
+  ],
   "taskOutcome": {
     "schema": "task-outcome-contract-v1",
     "goal": "Explain the patchable instrument through an expressive launch surface and let visitors inspect preorder details without inventing commercial terms.",
@@ -27,7 +29,11 @@
   "uxPolicy": {
     "schema": "ux-policy-v1",
     "decisions": [
-      { "id": "preorder-details-reachable", "kind": "required_outcome", "status": "required" }
+      {
+        "id": "preorder-details-reachable",
+        "kind": "required_outcome",
+        "status": "required"
+      }
     ]
   },
   "evidenceClaims": {
@@ -60,7 +66,10 @@
         ]
       }
     ],
-    "userFacts": ["patchable-instrument", "commercial-terms-unknown"],
+    "userFacts": [
+      "patchable-instrument",
+      "commercial-terms-unknown"
+    ],
     "workingContext": []
   },
   "referenceDiscovery": {
@@ -118,6 +127,7 @@
       "omd-eye"
     ],
     "stages": [
+      "domain",
       "frame",
       "scout",
       "reference-board",
@@ -132,13 +142,56 @@
       "independent-review"
     ],
     "executionWaves": [
-      { "id": "frame", "mode": "concurrent", "roles": ["omd-framer"] },
-      { "id": "research-copy", "mode": "concurrent", "roles": ["omd-scout", "omd-writer"] },
-      { "id": "type", "mode": "concurrent", "roles": ["omd-typesetter"] },
-      { "id": "composition", "mode": "concurrent", "roles": ["omd-composer"] },
-      { "id": "candidates", "mode": "concurrent", "roles": ["omd-sketch"] },
-      { "id": "production", "mode": "concurrent", "roles": ["omd-hand"] },
-      { "id": "review", "mode": "concurrent", "roles": ["omd-eye"] }
+      {
+        "id": "frame",
+        "mode": "concurrent",
+        "roles": [
+          "omd-framer"
+        ]
+      },
+      {
+        "id": "research-copy",
+        "mode": "concurrent",
+        "roles": [
+          "omd-scout",
+          "omd-writer"
+        ]
+      },
+      {
+        "id": "type",
+        "mode": "concurrent",
+        "roles": [
+          "omd-typesetter"
+        ]
+      },
+      {
+        "id": "composition",
+        "mode": "concurrent",
+        "roles": [
+          "omd-composer"
+        ]
+      },
+      {
+        "id": "candidates",
+        "mode": "concurrent",
+        "roles": [
+          "omd-sketch"
+        ]
+      },
+      {
+        "id": "production",
+        "mode": "concurrent",
+        "roles": [
+          "omd-hand"
+        ]
+      },
+      {
+        "id": "review",
+        "mode": "concurrent",
+        "roles": [
+          "omd-eye"
+        ]
+      }
     ],
     "methods": [
       "design-strategy-expressive-campaign",
@@ -154,16 +207,44 @@
       "motion-ambition:award-level"
     ],
     "aiAssets": [],
-    "attributionCategories": ["tokens", "motion", "composition"],
+    "attributionCategories": [
+      "tokens",
+      "motion",
+      "composition"
+    ],
     "skips": [
-      { "id": "domain", "reason": "The brief bounds the domain to a compact patchable instrument launch." },
-      { "id": "depth", "reason": "The selected reference, art-direction, and integrated candidate stages externalize the needed depth." },
-      { "id": "content-grain", "reason": "The page has a compact supplied message set rather than a content-morphology problem." },
-      { "id": "acquisition", "reason": "Official manuals and guidance can be acquired directly during parallel reference discovery." },
-      { "id": "safety-validation", "reason": "The low-risk marketing surface has no high-risk safety rail." },
-      { "id": "image-first-draft", "reason": "An original CSS and SVG patch carrier is more truthful than generated product imagery." },
-      { "id": "copy-repair-workflow", "reason": "This route authors a fresh evidence-bounded copy deck rather than repairing failed copy." },
-      { "id": "ai-shipped-asset", "reason": "The page requires no generated shipped asset." }
+      {
+        "id": "depth",
+        "reason": "The selected reference, art-direction, and integrated candidate stages externalize the needed depth."
+      },
+      {
+        "id": "content-grain",
+        "reason": "The page has a compact supplied message set rather than a content-morphology problem."
+      },
+      {
+        "id": "acquisition",
+        "reason": "Official manuals and guidance can be acquired directly during parallel reference discovery."
+      },
+      {
+        "id": "safety-validation",
+        "reason": "The low-risk marketing surface has no high-risk safety rail."
+      },
+      {
+        "id": "image-first-draft",
+        "reason": "An original CSS and SVG patch carrier is more truthful than generated product imagery."
+      },
+      {
+        "id": "copy-repair-workflow",
+        "reason": "This route authors a fresh evidence-bounded copy deck rather than repairing failed copy."
+      },
+      {
+        "id": "ai-shipped-asset",
+        "reason": "The page requires no generated shipped asset."
+      },
+      {
+        "id": "moodboard",
+        "reason": "<direction is already fixed by a supplied reference or brand>"
+      }
     ],
     "rationale": "Use evidence-backed mechanism and language to make one distinctive accessible patch interaction, then validate its meaning and preorder-details path on real browser surfaces."
   }

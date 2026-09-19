@@ -354,8 +354,11 @@ function authorityValue(bytes: Uint8Array, record: AdaptiveRouteRecord, routeSha
   const authority = fields(value, [
     'schema', 'invocation', 'sourceSha256', 'routeSha256', 'selectedModel', 'allowedPaths', 'namedDependencies',
   ]);
-  const invocation = fields(authority.get('invocation'), ['buildSha256', 'loadedSkillSha256', 'briefSha256']);
-  for (const key of ['buildSha256', 'loadedSkillSha256', 'briefSha256']) sha256(invocation.get(key));
+  // The invocation binds the build and skill bytes that identify which OMD produced the route. It
+  // deliberately does NOT bind the brief: that is the issuing command's own label, so binding it made
+  // the record readable only by the command that wrote it.
+  const invocation = fields(authority.get('invocation'), ['buildSha256', 'loadedSkillSha256']);
+  for (const key of ['buildSha256', 'loadedSkillSha256']) sha256(invocation.get(key));
   if (authority.get('schema') !== 'adaptive-route-authority-v1'
     || authority.get('sourceSha256') !== record.sourceContractSha256
     || authority.get('routeSha256') !== routeSha256

@@ -79,8 +79,21 @@ contract and the existing decision graph, never a new graph. Each affected decis
 `content-grain:<grain-sha256>:<trait-id>` exactly, and its acceptance criteria retain the fixture
 and browser-testable falsifier. Do not inspect raw source content or infer style or taste from Grain.
 
-Read the frame's `uxSurface` classification first; it selects the composition grammar
-(`theory/ux.md` §Surface types). For a `product` surface, write the experience spine as
+Read the persisted `DesignHypothesis` before writing composition. It is the judgment layer between
+reference observation and implementation: do not turn `radiusLadder`, `typeScale`, or `animatedShare`
+into global rules. Ask why an observation worked there, decide its relevance and scope, then compose
+from the hypothesis. Run `omd judgment check` before `omd composition --check`.
+
+After the first render, extract the initial viewport projection and run:
+
+```text
+omd first-render check --input .omd/.cache/first-render-surface.json
+```
+
+A `revise` result is not a final polish request. It means the first gestalt missed the hypothesis:
+the dominant object is absent, utility chrome overrides the task, comparison is too thin, purpose
+is unclear, or trust metadata is missing. Fix composition and rerun the real render; do not silence
+the critic by changing its thresholds.  (`theory/ux.md` §Surface types). For a `product` surface, write the experience spine as
 the task loop (orient → locate → act → feedback → next/recover) over screen regions and
 reachable states, never as a persuasion ladder; make the dominant first-viewport anchor
 the work object itself (table, queue, canvas, form, or data view at representative
@@ -342,7 +355,7 @@ alternatives L4 perspectives will judge. Do not manufacture failure evidence bef
 risk can remain medium until a real constraint is tested.
 
 <task_flow_benchmark_contract>
-TASK_FLOW_BENCHMARK_ABI_V1. When `.omd/task-flow-benchmark-projection.json` is supplied,
+TASK_FLOW_BENCHMARK_ABI_V2. When `.omd/task-flow-benchmark-projection.json` is supplied,
 `Candidate axes` contains 2–3 structurally distinct UX models bound to benchmark pattern IDs and
 frame task IDs. Each closes macro-layout family, flow topology, dominant work object,
 decision-support sequence, domain bindings, observable consequences, costliest-error recovery,

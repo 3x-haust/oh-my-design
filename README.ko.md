@@ -76,6 +76,52 @@ pi install npm:@3xhaust/oh-my-design
 프로젝트 doctor 검사용 `/omd`와 기존 OMD CLI를 구조화된 인자로 실행하는 `omd_cli` 도구를
 등록합니다. 공개 Pi extension/package API만 사용하며 fork 전용 API에는 의존하지 않습니다.
 
+Pi에서 `omd_cli`를 사용할 때 외부 activation 파일은 필요하지 않습니다. 라우트 입력은 먼저
+`omd route validate --input .omd/.cache/route-input.json --json`으로 검사하고, 오류에 표시된
+필드를 고친 다음 `route classify`로 저장합니다. 입력 오류를 인증 누락으로 처리하지 않습니다.
+
+레퍼런스 조사는 **도메인**(`.omd/refs/domain/research.json`: 유사 서비스의 화면·기능·플로우)과
+**디자인**(`.omd/refs/design/research.json`: 구성·타이포·밀도·컴포넌트)으로 따로 저장합니다.
+`omd ref add <url> --as <name> --lane domain|design`으로 캡처 PNG와 메타데이터부터 각 폴더에
+저장합니다. `ref add-batch`의 각 항목도 `lane`을 지정합니다. `ref list --lane domain|design --json`으로
+따로 조회할 수 있으며, 도메인 캡처는 시각 디자인 보드에 자동으로 섞이지 않습니다.
+`omd ref discover-plan --json`은 앱/제품 UI에 Pinterest·Dribbble·Behance(선택적으로 UI Bowl 공개 화면), 웹/마케팅에 Siteinspire·Pinterest
+같은 탐색 후보를 제시합니다. 실제 무료 열람 가능한 항목만 사용하며, 막힌 출처는 다른 공개
+출처로 대체합니다. 유료 결제·체험 시작·MCP 자동 설치는 하지 않습니다. 무료 열람과 재사용
+권한은 별개입니다. 갤러리 이름만으로 품질을 인정하지 않고 원본 화면과 선택 이유를 기록합니다.
+`omd schema reference-research --json` → `omd ref research-set --input <input.json>` →
+`omd ref research-check --json`으로 두 파일과 통합 일치 기록을 검증합니다. 갤러리 홈 주소만으로는
+통과하지 않습니다. 개별 항목의 PNG·캡처 JSON과 원본 출처를 대조하고, 원본이 다른 페이지라면
+갤러리에서 실제 관찰한 링크가 그 출처를 가리켜야 합니다. v4에서는 두 조사의 출처 호스트·최종
+리다이렉트·이미지 중복도 거부합니다. 업무 페이지를 갤러리라고 이름 붙이거나 다른 영역을
+캡처해 디자인 조사를 대신할 수 없습니다. 유료 UI Bowl MCP 없이 공개 항목으로 진행합니다.
+디자인 자료는 `visual-direction`과 `component-support`를 구분하고 구성·타이포·밀도·이미지·
+적용할 것·제외할 것을 기록합니다. 모든 보드 후보가 시각 방향 자료를 실제 사용해야 합니다.
+미리보기와 선정 이유는 `.omd/refs/design/README.md`에서 확인합니다. 예전 기록은 삭제하지 않으며,
+유효한 캡처를 보존한 채 역할을 재검토해 v4로 재발행합니다. 자동 검증은 미적 품질의 인증이 아닙니다.
+
+기존 서비스는 프로젝트 폴더에서 `omd init --json`을 실행하면 현재 CSS 변수·선언과 `$value`
+토큰 JSON을 `.omd/existing-design-system.json` 및 `.md`로 정리합니다. 테마·미디어쿼리 범위와
+별칭, 출처 위치·해시를 보존하며 앱 코드·승인된 `.omd/tokens.json`은 변경하지 않습니다.
+다음 작업의 brief가 이 자료를 전달합니다. `omd init --check`로 변경 여부를 확인하고,
+변경 내용을 검토한 뒤 `omd init --refresh`로 갱신합니다. 의도적인 변경 결정은 별도
+`.omd/design-system-decisions.md`에 남기며 재실행해도 보존합니다. Tailwind 설정·CSS-in-JS·
+컴포넌트 변형은 자동 추출하지 않고 추가 확인 대상으로 명시합니다. 추출은 승인이나 화면 검증이 아닙니다.
+
+구현 완료 전에는 `omd schema slop-scope`의 실제 로컬 빌드 HTML·뷰포트 목록으로
+`omd slop checkpoint --input <scope.json>`을 실행합니다. 저장된 화면을 보고 반환된 `reviewInput`에
+각 후보·경고의 확인/제외 판단과 근거를 작성해 `omd slop review-set --input <review.json>`으로 저장합니다.
+확인된 문제는 수정·재빌드 후 같은 범위를 재검사하고, 새 화면을 근거로 이전 문제의 해결을 기록합니다.
+`omd slop review-check` 및 CLI finalize·완료 preflight는 누락·미처리·오래된 증거를 거부합니다.
+경고 개수 자체를 오류로 승격하지 않으며, 최초 검사에서 문제가 없다면 가짜 수정 라운드는 필요 없습니다.
+현재 캡처 범위는 로컬 HTML 빌드 진입점입니다. 앱의 모든 상호작용 검증은 별도 기능 검증이 담당합니다.
+
+“실제 개발 전까지만” 요청은 `omd schema design-route-input`의 `deliveryMode: design-only`를
+사용합니다. 출력은 `.omd/**`로 제한하고 레퍼런스 조사·설계·검토·핸드오프까지 진행합니다.
+마지막에 `omd schema design-handoff`에 따라 문서 해시를 기록하고
+`omd completion design-check --input .omd/design-handoff.json --json`으로 확인합니다.
+이 검사는 문서 무결성·레퍼런스 증거·쓰기 범위를 검증하며, 앱 동작이나 리뷰어 독립성을 인증하지 않습니다.
+
 ### Claude Code — 플러그인 마켓플레이스
 
 ```text

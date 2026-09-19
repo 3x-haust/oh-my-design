@@ -21,6 +21,9 @@ const ref = (source: string, component: string, selector?: string, extra: Partia
   ...(selector === undefined ? {} : { selector }),
   invariants: null,
   principles: [],
+  // `omd ref add` captures an image by default, so a fixture reference carries one unless a case is
+  // specifically about its absence.
+  imagePath: `.omd/refs/${component}.png`,
   ...extra,
 } as Reference);
 
@@ -530,4 +533,20 @@ test('the checker consumes board classifications and candidate zone bindings ins
   const legacyIds = auditBoardGranularity([...visual, ...nonvisual], { board: legacy }).map((finding) => finding.id);
   assert.ok(legacyIds.includes('REF-LOW-SIGNAL-BOARD'), 'legacy signal strings cannot forge a capture waiver');
   assert.ok(legacyIds.includes('REF-KINSHIP-UNRESOLVED'), 'legacy anti-reference signals cannot waive kinship without a classification binding');
+});
+
+test('a reference that kept no image is named, so the omission stays visible after it was recorded', () => {
+  const withImage = ref('https://a.com', 'pricing-card', '.pricing');
+  const withoutImage = ref('https://b.com', 'hero', '.hero', { imagePath: undefined, imageOmittedReason: 'page refused to render' } as unknown as Partial<Reference>);
+  const findings = auditBoardGranularity([withImage, withoutImage]);
+  const finding = findings.find((entry) => entry.id === 'REF-NO-IMAGE');
+  assert.ok(finding, 'an imageless reference must be reported');
+  assert.deepEqual(finding.refs, ['https://b.com (hero)']);
+  assert.match(finding.message, /--no-shot-reason/);
+  assert.ok(!finding.refs.some((entry) => entry.includes('pricing-card')), 'a reference with its image is not reported');
+});
+
+test('a captured reference is not reported for a missing image', () => {
+  const findings = auditBoardGranularity([ref('https://a.com', 'card', '.card'), ref('https://b.com', 'nav', '.nav')]);
+  assert.ok(!findings.some((entry) => entry.id === 'REF-NO-IMAGE'));
 });

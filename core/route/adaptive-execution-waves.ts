@@ -20,7 +20,7 @@ function selectedDependencies(stage: AdaptiveStageId, selected: ReadonlySet<stri
 }
 
 /** Validates explicit concurrency groups against selected roles and the artifact DAG. */
-export function validateAdaptiveExecutionWaves(strategy: AdaptiveStrategyDecision): void {
+export function validateAdaptiveExecutionWaves(strategy: AdaptiveStrategyDecision, deliveryMode?: 'design-only'): void {
   const waveByRole = new Map<string, number>();
   for (const [waveIndex, wave] of strategy.executionWaves.entries()) {
     if (wave.roles.length === 0) return failAdaptiveRoute('ADAPTIVE_EXECUTION_WAVE_INVALID', `strategyDecision.executionWaves[${waveIndex}].roles must contain a selected role`);
@@ -37,7 +37,7 @@ export function validateAdaptiveExecutionWaves(strategy: AdaptiveStrategyDecisio
   }
   const studyWave = waveByRole.get('omd-study');
   if (studyWave !== undefined) {
-    for (const consumer of ['omd-composer', 'omd-hand']) {
+    for (const consumer of deliveryMode === 'design-only' ? ['omd-composer'] : ['omd-composer', 'omd-hand']) {
       const consumerWave = waveByRole.get(consumer);
       if (consumerWave === undefined || consumerWave <= studyWave) {
         return failAdaptiveRoute('ADAPTIVE_EXECUTION_WAVE_INVALID', `provisional omd-study needs an earlier execution wave than ${consumer}`);

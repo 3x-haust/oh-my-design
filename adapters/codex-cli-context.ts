@@ -14,7 +14,7 @@ export function codexCliContext(ownerCliPath: string, nodePath = process.execPat
   return [
     'CLI binding: every `omd` command in the role profile or task means the following exact command prefix:',
     command,
-    'Append the requested subcommand and arguments to this prefix. Do not use bare `omd`, npx, a PATH shim, another installation, or recursively launch omd-codex exec.',
+    'Append the requested subcommand and arguments to this prefix. Do not use bare `omd`, npx, a PATH shim, another installation, or launch a second OMD host process.',
     'Keep the inherited OMD_ACTIVATION_PATH and role environment unchanged; the issuing CLI reads them directly. Changing the command prefix does not authorize additional operations.',
     'Each delegated role has its own activation path. Omit --activation or expand "$OMD_ACTIVATION_PATH" inside this role process; never substitute a coordinator or earlier role path from task prose.',
     ...(role === 'omd-scout' || role === 'omd-typesetter' ? [

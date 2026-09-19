@@ -268,7 +268,6 @@ export function linkCli(binDir: string, changes: string[]): void {
   const links: ReadonlyArray<readonly [string, string]> = [
     ['omd', join(pkgRoot, 'bin', 'omd.mjs')],
     ['oh-my-design', join(pkgRoot, 'bin', 'omd-install.mjs')],
-    ['omd-codex', join(pkgRoot, 'bin', 'omd-codex.mjs')],
   ];
   for (const [name, target] of links) {
     try {

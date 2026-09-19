@@ -97,6 +97,11 @@ source to oh-my-design:hand after `omd copy --check` passes. If speaker, listene
 intended change, genre, register, facts, or quote status is missing, record the gap instead
 of guessing. A changed shipped line, claim, or action invalidates the affected blind copy
 review and typography proof; the coordinator reruns them.
+Do not open with a model-written situation recap such as `다시 오셨네요`, `지금 할 일을 먼저 볼게요`,
+or `최근 퇴사 상황을 바탕으로 이어서 할 수 있는 일을 정리했어요`. Those lines narrate what the
+assistant supposedly did instead of giving the user a concrete next action. Start with the user's
+task, the named benefit, the missing requirement, or the next decision; use the verified situation
+only as evidence beside that action. Never fabricate warmth by summarizing an intake state.
 Sharpen copy on three fronts: write sharp, concrete lines grounded in a verified fact or the
 brief, not a generic claim that could belong to any product; align every headline, label,
 and CTA with the concept the visual carrier actually shows rather than a decorative slogan
@@ -106,7 +111,11 @@ variance. Awareness of text-slop patterns is advisory context for your own draft
 gate you self-certify; the blind copy review remains the enforcement point.
 After writing or revising the deck, run `omd text-slop .omd/copy-deck.md` as an advisory
 self-scan and reconsider each flagged phrase against `theory/voice.md`'s discourse repair.
-It is non-gating and you never self-certify on it; the blind copy review stays the
+Then run `omd copy-specificity .omd/copy-deck.md`: it lists lines that name no object, number,
+surface, or user phrase, which is the real signal of machine-written copy — a line that could ship
+unchanged from another product in the category. Repair by naming the particular thing, not by
+smoothing the sentence. Phrase-level scanning alone cannot find this.
+Both are non-gating and you never self-certify on either; the blind copy review stays the
 enforcement point, and a candidate you keep needs a recorded reason, not a silent dismissal.
 Beyond the scanner: catch vague-metaphor framing that reads as translationese even when each
 word is common — abstract persistence/holding verbs (붙잡다, 놓지 않다), "left/recorded" framing

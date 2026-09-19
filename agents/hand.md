@@ -330,7 +330,13 @@ receipt blocks final-v2 publication. A typed reference-work skip creates no rece
 loop when the target manifest exists; `omd check --site` for multi-page output; a Lighthouse performance gate — run Lighthouse against the built page (for example `npx lighthouse <url> --output=json --output-path=.omd/.cache/lighthouse.json`) and gate its report with `omd lighthouse .omd/.cache/lighthouse.json` (performance ≥ 90 and Core Web Vitals within budget); and final
 sharp desktop/mobile plus applicable filmstrip, check, humanize, and probe evidence. Once
 production source exists, follow `protocol/slop-review.md`: run the read-only source scan,
-repair only confirmed visual/source candidates assigned to you, then rerender, run
+and the native slop checkpoint/review-set/review-check loop before implementation completion.
+The loop captures the actual local build entry at the final viewports and keeps source candidates
+separate from rendered warnings. Inspect images and record individual judgments. For confirmed
+issues, repair and rebuild, then repeat the same scope and resolve the prior IDs against the new
+captures. Never erase a warning with a newer unreviewed scan or a no-change rescan. The checkpoint's
+reviewInput is an incomplete template, not an instruction to auto-confirm or auto-dismiss.
+Repair only confirmed visual/source candidates assigned to you, then rerender, run
 `omd check`, and rescan. Do not treat candidate presence as a violation or authorship
 judgment; final triage has zero untriaged items and evidence-backed dismissals.
 For `stateful`, write explicit `.omd/probes/primary.json` and `recovery.json` and run both
@@ -455,7 +461,7 @@ composer decision → production selector → final fidelity evidence. Return pr
 goal → constraint → attempted failure evidence → compromise → result evidence trade-off.
 
 <task_flow_benchmark_contract>
-TASK_FLOW_BENCHMARK_ABI_V1. When the route supplies a task-flow benchmark projection, production
+TASK_FLOW_BENCHMARK_ABI_V2. When the route supplies a task-flow benchmark projection, production
 is bound to the selected structural UX model and its rejected-model constraints. Build the
 domain work object, prerequisite order, decision support, recovery, and desktop/mobile priority;
 do not fall back to a generic wizard, dashboard shell, or label-swapped form. Benchmark patterns

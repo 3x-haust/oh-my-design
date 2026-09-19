@@ -18,7 +18,7 @@ Only the broker applies the user's outer-invocation `--omd-role-model` / `--omd-
 A broker-validated receipt may therefore report `modelArgumentOmitted: false`; this alone is not model
 drift. Never invent an override or replace host settings to match a preferred model.
 
-Give each owner its brief, contracts, path and task; retain its real child/process handle, wait and gate completion.
+When the host supports delegation, give each owner its brief, contracts, path and task; retain its real child/process handle, wait and gate completion.
 A missing selected owner is a visible blocker; ownership never transfers. Freeze route/source/locale
 until owners return (State boundary). Run non-production Codex roles:
 
@@ -43,7 +43,17 @@ On Codex, `omd ...` means `"$OMD_NODE_EXECUTABLE" "$OMD_CLI_PATH" ...` and `omd-
 ## Adaptive route
 
 On Codex use `omd-codex exec -C <project> ...` (or `oh-my-design codex exec ...`) with opaque read-only
-`OMD_ACTIVATION_PATH`. Pi uses `omd_cli`. Missing authority stops; never manufacture or reuse Codex activation.
+`OMD_ACTIVATION_PATH` when the current host actually supplies that launcher. Never manufacture or reuse Codex activation.
+Pi and the local CLI use `omd_cli`/`omd` without `--activation`; local command authority is created by the CLI.
+An absent external activation file is not a Pi setup error. Do not ask the user to supply one.
+The Codex role/owner commands above apply only when that broker is available, never to Pi.
+Pi uses available native delegation with the user's model; if independent review is unavailable,
+record that limitation rather than claiming an isolated review or blocking reference collection.
+On Pi without a delegation tool, execute the selected design roles as explicit, sequential role passes
+in the current session, respecting each role's inputs and owned paths. Execution waves still express
+dependency groups; do not simulate child handles or concurrent processes. This host fallback does not
+attest independence. Record same-session review as such in the design handoff, and do not run broker
+commands or ask the user for a missing broker to perform ordinary research and design work.
 
 Before selecting methods, read `omd pack protocol/human-design-loop.md --section "Visual reference gallery and concept exploration"`. A simple task is not settled visual evidence; a current supplied direction can be. Experiments stay conditional.
 
@@ -53,25 +63,95 @@ On visual rejection, reread `omd pack theory/imagegen.md --section "Reopen a rej
 
 In-project:
 
+For an existing service, run `omd init --json` before changing its visual system. It inventories
+static CSS declarations and token JSON without modifying the app or approving tokens. Read
+`.omd/existing-design-system.md` and its coverage gaps; inspect unsupported runtime/utility styles
+and component variants directly. If stale, inspect changes then use `omd init --refresh`.
+Subsequent briefs include this inventory. Preserve existing tokens/components by default and
+record intentional departures in `.omd/design-system-decisions.md`; init never overwrites that
+authored file or `.omd/tokens.json`. A code-only inventory is not rendered visual verification.
+
+For implementation completion, read `omd pack protocol/slop-review.md`. Use `omd schema slop-scope`
+and `omd slop checkpoint --input <scope.json>` on the actual local built entry and final viewports.
+Inspect saved images, publish individual judgments with `slop review-set`, then let Hand repair
+confirmed issues and rerun the same scope. Resolve previous findings using the new renders.
+`slop review-check` must pass before finalization; a single check log or raw warning count is not
+a repair loop. Do not require an application loop for design-only delivery or invent a repair when
+the first actual review is clean. Declared dismissals are not independent/user approval.
+
 ```text
 omd doctor
 omd stack --json
 omd schema route-input
-omd route classify --input .omd/.cache/route-input.json --json --activation "$OMD_ACTIVATION_PATH"
+omd route validate --input .omd/.cache/route-input.json --json
+omd route classify --input .omd/.cache/route-input.json --json
 omd stage resume
-omd route show --activation "$OMD_ACTIVATION_PATH"
+omd route show
 ```
+
+On a brokered Codex invocation append the supplied `--activation` to publishing/reading commands.
+If validation fails, read the exact schema and repair the named field, then validate again.
+Do not invent enum values, change the user's scope, or report missing activation for an input error.
+
+For "before development", "design only", or "구현 전까지만", start with `omd schema design-route-input`.
+Set `deliveryMode: design-only`, keep allowedPaths exactly `[".omd/**"]`, and omit Hand, production,
+browser-evidence, application sources and dependencies. Browse references and finish the selected
+design stages. Perform a fresh design/document review using available reviewers and record any
+independence limitation. Write the seven documents and review listed in `omd schema design-handoff`;
+bind their actual hashes, then run `omd completion design-check --input .omd/design-handoff.json --json`.
+Stop at that handoff. Do not run production source sealing, application final-v2 or implementation
+completion preflight. Report reference coverage, documents, unresolved questions and review limitations;
+do not claim application behavior or independent authorship was verified by the integrity checker.
 
 The closed route carries outcomes, evidence, rails, facts, axes, browser context, roles/stages,
 contracts, attribution, methods and skips. Malformed context fails closed. High-risk work retains
 rigorous UX/safety checks; scope, authority, sealing, final-v2, review and model ownership cannot be skipped.
 
-`omd route check --activation "$OMD_ACTIVATION_PATH"` enforces write scope. A UI request does not authorize repository publication, licensing, unrelated dependencies, or unrequested surfaces. Use the
+`omd route check` (with supplied host activation only when applicable) enforces write scope. A UI request does not authorize repository publication, licensing, unrelated dependencies, or unrequested surfaces. Use the
 `omd stack` renderer. A supplied Figma frame is structure evidence; the adaptive route decides whether
 framing or alternatives are useful without removing UX outcomes, production evidence, accessibility,
 or independent review.
 
-## Evidence supply
+## Non-negotiable before source
+
+For any new or redesigned UI, do not write application source, copy, or generated-project docs until the
+current route is present and the route-selected reference work has produced real evidence. A missing
+`.omd/route.json`, missing `.omd/refs/` evidence, or missing `.omd/reference-board.json` is a hard stop:
+run the route and Scout/reference stages first. Render captures of the generated app are not design
+references and cannot satisfy this requirement.
+
+Do not let a model-written intake recap become the first screen. Reject headings or subtitles equivalent
+to `다시 오셨네요`, `지금 할 일을 먼저 볼게요`, or `최근 퇴사 상황을 바탕으로 이어서 할 수 있는 일을 정리했어요`.
+Start with the user's concrete task, decision, object, or next action; a verified situation may support
+that action but cannot replace it.
+
+## One-shot execution
+
+For a normal product request, keep moving without approval pauses:
+
+```text
+route classify → domain check → reference discovery → reference judgment → composition → render/critic → production
+```
+
+After `omd domain check`, print the domain summary for the run record and advance automatically. Do not ask the user to choose references or a visual direction; the coordinator selects and records the strongest evidence. Ask one blocking question only when a missing product fact
+would change the route or result materially: market/target audience, the product's real capability, or
+whether the primary task is discovery versus continuing an existing application. Otherwise make the
+reversible design decision, record why, and continue.
+
+## Reference roles
+
+Read `protocol/reference-assembly.md`: three roles (component, craft, mood) over two axes. `omd ref mood`, `omd ref gates`, and `omd ref granularity` carry the checks.
+
+## First-render gestalt check
+
+After first render, run `omd first-render check --input .omd/.cache/first-render-surface.json`. It checks purpose, dominant object, utility subordination, comparison, and trust. `revise` requires composition/rerender, never threshold changes; benefit cards leading with subordinate sidebar/search/AI is `retain`.
+
+## Generated project documents
+
+All planning, design, wireframe, content/state, decision-log, and implementation-handoff documents created
+inside a generated project belong under `.omd/docs/<project>/`. Never create a project-root `docs/`
+directory for these artifacts. The `.omd/` directory is the project record; source files, assets, and
+runtime output may remain at their normal project paths.
 
 At each selected boundary, read `omd brief <stage>` as coordinator intake, not a role packet.
 Follow `protocol/human-design-loop.md` §Evidence handoff before supplying the owner's permitted inputs.
@@ -161,10 +241,8 @@ For ordinary non-transport review, **[review-pair-configuration-contract]** give
 evidence payload with pair-distinct reviewer configuration. The closed initial-final and refinement
 transports instead use one identical host-owned neutral configuration and prove independence with
 distinct process, session, and nonce receipts.
-
 The independent reviewer receives opaque renders, deterministic findings, bounded facts, outcomes,
 and safety rails only. Only the production owner repairs production.
-
 When refinement is selected or a required gate remains RED, read and apply the complete RED/GREEN
   repair-pair and rendered-refinement checkpoint contract in `protocol/human-design-loop.md` under
   `## Production quality gates`. It owns evidence, reviewer isolation, rollback, plateau, and

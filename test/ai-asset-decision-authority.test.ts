@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test, { after } from 'node:test';
 import * as aiDecisionModule from '../core/asset-sourcing/ai-decision.ts';
+import { selfSignedReceiptEnv } from './helpers/self-signed-receipt.ts';
 import {
   AiAssetDecisionError,
   aiAssetDecisionAuthorityBytes,
@@ -95,32 +96,24 @@ async function executeHostCli(
   nonce: string,
 ) {
   const args = [cli, ...argv, '--activation', 'activation.json'];
-  const receipt = {
-    schema: 'omd-host-project-write-receipt-v3', host: 'claude',
-    hostAuthentication: {
-      host: 'claude', mechanism: 'inherited-ipc', parentPid: process.pid,
-      parentExecutableSha256: sha(readFileSync(process.execPath)),
-    },
-    projectRoot: realpathSync(root),
-    argvSha256: sha(canonical([process.execPath, ...args])),
-    ...invocation.current,
-    expiresAt: Date.now() + 60_000,
-    payloadAuthorizations: authorizations.map(({ purpose, payload }) => ({
-      purpose, payloadSha256: sha(payload),
-    })),
-    nonce,
-  };
   return await new Promise<{ status: number | null; stdout: string; stderr: string }>((resolve, reject) => {
     const child = spawn(process.execPath, args, {
-      cwd: root, env: { ...process.env, OMD_HOST_PROJECT_WRITE_FD: '3' },
-      stdio: ['ignore', 'pipe', 'pipe', 'pipe'],
+      cwd: root,
+      env: {
+        ...process.env,
+        ...selfSignedReceiptEnv(root, [process.execPath, ...args], {
+          buildSha256: invocation.current.buildSha256,
+          loadedSkillSha256: invocation.current.loadedSkillSha256,
+          briefSha256: invocation.current.briefSha256,
+        }, authorizations.map(({ purpose, payload }) => ({ purpose, payloadSha256: sha(payload) }))),
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
     });
     let stdout = '', stderr = '';
     child.stdout!.on('data', (chunk) => { stdout += chunk; });
     child.stderr!.on('data', (chunk) => { stderr += chunk; });
     child.once('error', reject);
     child.once('close', (status) => resolve({ status, stdout, stderr }));
-    (child.stdio[3] as NodeJS.WritableStream).end(JSON.stringify(receipt));
   });
 }
 

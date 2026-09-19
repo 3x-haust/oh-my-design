@@ -14,7 +14,7 @@ const PACKAGE = join('node_modules', '@3xhaust', 'oh-my-design');
 const VERSION = (JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')) as { readonly version: string }).version;
 
 type Command = {
-  readonly name: 'omd' | 'oh-my-design' | 'omd-codex';
+  readonly name: 'omd' | 'oh-my-design';
   readonly args: readonly string[];
   readonly status: number;
   readonly output: RegExp;
@@ -23,7 +23,8 @@ type Command = {
 const COMMANDS: readonly Command[] = [
   { name: 'omd', args: ['--version'], status: 0, output: new RegExp(`^${VERSION.replaceAll('.', '\\.')}\\s*$`) },
   { name: 'oh-my-design', args: ['--version'], status: 0, output: new RegExp(`^${VERSION.replaceAll('.', '\\.')}\\s*$`) },
-  { name: 'omd-codex', args: ['--help'], status: 0, output: /usage: omd-codex exec/ },
+  // `omd-codex` is intentionally absent: it was removed with the host launcher, so the packed
+  // package must not declare a bin entry for a file it does not ship.
 ];
 
 function run(command: string, args: readonly string[], cwd: string, env?: NodeJS.ProcessEnv) {
