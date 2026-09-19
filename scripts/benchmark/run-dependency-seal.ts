@@ -24,7 +24,60 @@ function workerInput(path:string):DependencySealInput { return JSON.parse(readFi
 async function workerHandshake(input:DependencySealInput):Promise<'exit-build'|'abort-build'> { let channel:Socket; try { channel=new Socket({fd:3,readable:true,writable:true}); } catch { fail('FD3 is required'); } channel.unref(); const decoder=new FrameDecoder(); const events:string[]=[]; channel.write(encodeFrame({schemaVersion:'seal-protocol-v1',sealRunId:input.sealRunId,channelNonce:input.channelNonce,sequence:0,type:'candidate-complete'})); return await new Promise((done,reject)=> { const timer=setTimeout(()=>reject(new Error('FD3 launcher timeout')),PHASE_TIMEOUT_MS); channel.on('data',(bytes:Buffer)=> { try { for(const message of decoder.push(bytes)) { events.push(message.type); if((message.type==='exit-build'||message.type==='abort-build')&&message.sequence===0) { channel.write(encodeFrame({schemaVersion:'seal-protocol-v1',sealRunId:input.sealRunId,channelNonce:input.channelNonce,sequence:1,type:'exit-ack',ack:message.type})); } else if(message.type==='shutdown'&&message.sequence===1) { decoder.eof(); clearTimeout(timer); channel.end(); channel.destroy(); done(events[0] as 'exit-build'|'abort-build'); } else fail('unexpected launcher FD3 message'); } } catch(error) { clearTimeout(timer); channel.destroy(); reject(error); } }); channel.on('end',()=>{ clearTimeout(timer); reject(new Error('launcher closed FD3 before shutdown')); }); channel.on('error',(error: Error)=>{clearTimeout(timer);reject(error);}); }); }
 async function buildWorker(inputPath:string,claimPath:string):Promise<void> { const input=workerInput(inputPath); const claim=canonical(claimPath) as unknown as SealClaim; const output=createDependencySnapshot(input); const receipt={schemaVersion:'dependency-snapshot-v1.receipt-v1',state:'PENDING_LAUNCHER',snapshotId:input.snapshotId,sealRunId:input.sealRunId,claimantNonce:claim.claimantNonce,claimPath:'claim.json',claimSha256:sha256(canonicalJson(claim as unknown as JsonValue)),snapshotSha256:sha256(canonicalJson(output.manifest as unknown as JsonValue))}; writeCandidateReceipt(output.snapshot,receipt as unknown as JsonValue); sealSnapshotCandidate(output.snapshot); const decision=await workerHandshake(input); if(decision!=='exit-build') process.exitCode=70; console.log(canonicalJson({candidate:output.snapshot,receivedLauncherFrame:decision})); }
 async function commitWorker(inputPath:string,candidate:string,permit:string):Promise<void> { const input=workerInput(inputPath); if(!lstatSync(permit).isFile()) fail('permit missing'); const receipt=canonical(join(candidate,RECEIPT)) as unknown as Record<string,unknown>; if(receipt.state!=='PENDING_LAUNCHER'||receipt.snapshotId!==input.snapshotId||receipt.sealRunId!==input.sealRunId) fail('candidate receipt is not pending and bound'); const identity=readNativePublisherIdentity(input.nativePublisherIdentity); publishDirectoryExclusive(basename(candidate),input.snapshotId,identity,resolve(candidate,'..')); const decision=await workerHandshake(input); if(decision!=='exit-build') process.exitCode=70; console.log(canonicalJson({committed:true,receivedLauncherFrame:decision})); }
-function phase(args:string[],input:DependencySealInput):Promise<Evidence> { return new Promise((done,reject)=> { const child=spawn(process.execPath,[process.argv[1]!,...args],{shell:false,detached:true,stdio:['ignore','pipe','pipe','pipe']}); const channel=child.stdio[3]! as Duplex; const decoder=new FrameDecoder(), machine=new SealStateMachine(input.sealRunId,input.channelNonce); const events:string[]=[]; let stdout='',stderr='',answered=false,closed=false; const finish=(error?:Error)=>{if(closed)return;closed=true;clearTimeout(timer);error?reject(error):done({code:code??-1,stdout,stderr,pid:child.pid!,pgid:child.pid!,events});}; let code:number|undefined; const timer=setTimeout(()=>{child.kill('SIGKILL');finish(new Error('child phase timeout'));},PHASE_TIMEOUT_MS); child.stdout!.on('data',b=>stdout+=b); child.stderr!.on('data',b=>stderr+=b); channel.on('data',(bytes:Buffer)=>{try { for(const message of decoder.push(bytes)) { events.push(`child:${message.type}`); if(!answered) { machine.receive(message,'candidate'); const exit={schemaVersion:'seal-protocol-v1' as const,sealRunId:input.sealRunId,channelNonce:input.channelNonce,sequence:0,type:'exit-build' as const}; machine.receive(exit,'launcher'); channel.write(encodeFrame(exit)); answered=true; } else if(message.type==='exit-ack') { machine.receive(message,'candidate'); const shutdown={schemaVersion:'seal-protocol-v1' as const,sealRunId:input.sealRunId,channelNonce:input.channelNonce,sequence:1,type:'shutdown' as const}; machine.receive(shutdown,'launcher'); channel.end(encodeFrame(shutdown)); } else fail('unexpected child FD3 message'); } } catch(error) { child.kill('SIGKILL'); finish(error as Error); }}); channel.on('end',()=>{try{decoder.eof();machine.eof();}catch(error){finish(error as Error);}}); child.on('error',(error: Error)=>finish(error)); child.on('close',status=>{code=status??-1; if(!answered) finish(new Error('child exited before candidate-complete')); else finish();}); }); }
+function phase(args: string[], input: DependencySealInput): Promise<Evidence> {
+  return new Promise((done, reject) => {
+    const child = spawn(process.execPath, [process.argv[1]!, ...args], {
+      shell: false, detached: true, stdio: ['ignore', 'pipe', 'pipe', 'pipe'],
+    });
+    const channel = child.stdio[3]! as Duplex;
+    const decoder = new FrameDecoder();
+    const machine = new SealStateMachine(input.sealRunId, input.channelNonce);
+    const events: string[] = [];
+    let stdout = '', stderr = '', answered = false, closed = false;
+    let code: number | undefined;
+    let protocolError: Error | undefined;
+    const finish = (error?: Error) => {
+      if (closed) return;
+      closed = true; clearTimeout(timer);
+      if (error) {
+        reject(new Error(`${error.message}; child exit=${code ?? 'unknown'}; events=${events.join(',') || 'none'}; stderr=${stderr.trim().slice(-3000) || 'none'}`));
+      } else done({ code: code ?? -1, stdout, stderr, pid: child.pid!, pgid: child.pid!, events });
+    };
+    const timer = setTimeout(() => { child.kill('SIGKILL'); finish(new Error('child phase timeout')); }, PHASE_TIMEOUT_MS);
+    child.stdout!.on('data', bytes => { stdout += bytes; });
+    child.stderr!.on('data', bytes => { stderr += bytes; });
+    channel.on('data', (bytes: Buffer) => {
+      try {
+        for (const message of decoder.push(bytes)) {
+          events.push(`child:${message.type}`);
+          if (!answered) {
+            machine.receive(message, 'candidate');
+            const exit = { schemaVersion: 'seal-protocol-v1' as const, sealRunId: input.sealRunId,
+              channelNonce: input.channelNonce, sequence: 0, type: 'exit-build' as const };
+            machine.receive(exit, 'launcher'); channel.write(encodeFrame(exit)); answered = true;
+          } else if (message.type === 'exit-ack') {
+            machine.receive(message, 'candidate');
+            const shutdown = { schemaVersion: 'seal-protocol-v1' as const, sealRunId: input.sealRunId,
+              channelNonce: input.channelNonce, sequence: 1, type: 'shutdown' as const };
+            machine.receive(shutdown, 'launcher'); channel.end(encodeFrame(shutdown));
+          } else fail('unexpected child FD3 message');
+        }
+      } catch (error) { protocolError = error as Error; child.kill('SIGKILL'); }
+    });
+    // FD3 EOF may arrive before stderr/close. Keep the rejection, but collect the actual worker
+    // failure before returning it; otherwise all early failures look like an unexplained EOF.
+    channel.on('end', () => {
+      try { decoder.eof(); machine.eof(); } catch (error) { protocolError ??= error as Error; }
+    });
+    channel.on('error', (error: Error) => { protocolError ??= error; child.kill('SIGKILL'); });
+    child.on('error', (error: Error) => finish(error));
+    child.on('close', status => {
+      code = status ?? -1;
+      try { decoder.eof(); machine.eof(); } catch (error) { protocolError ??= error as Error; }
+      finish(protocolError ?? (!answered ? new Error('child exited before candidate-complete') : undefined));
+    });
+  });
+}
 function readback(final:string):{tree:string;dev:number;ino:number;report:string} { const stat=lstatSync(final); const tree=deterministicTreeRoot(final); const report=canonicalJson({device:stat.dev,inode:stat.ino,treeSha256:tree}); return {tree,dev:stat.dev,ino:stat.ino,report}; }
 /** Two-phase, FD3-handshaken launcher. Dry runs validate only. */
 export async function runDependencySeal(run:DependencySealRun):Promise<{dryRun:boolean;inputSha256:string;eligible:boolean}> { const input=run.input; exactInput(input); sourceFinalization(input); readNativePublisherIdentity(input.nativePublisherIdentity); const inputSha256=sha256(canonicalJson(input as unknown as JsonValue)); if(run.dryRun!==false)return {dryRun:true,inputSha256,eligible:false}; const layout=archiveLayout(input.archiveRoot,input.snapshotId),nonce=sha256(`${input.sealRunId}\0${inputSha256}`); const claim:SealClaim={schemaVersion:'dependency-seal-claim-v1',snapshotId:input.snapshotId,path:'claim.json',finalizationPath:input.sourceFinalizationPath,finalizationSha256:input.sourceFinalizationSha256,finalizationDomain:input.sourceFinalizationDomain,sealRunId:input.sealRunId,launcherInputSha256:inputSha256,claimantRecord:input as unknown as JsonValue,claimantRecordSha256:inputSha256,claimantNonce:nonce}; if(!createSealClaim(input.archiveRoot,claim).created)return {dryRun:false,inputSha256,eligible:false}; const inputPath=join(input.archiveRoot,`.${input.snapshotId}.launcher-input.json`); durable(inputPath,input as unknown as JsonValue); let build:Evidence={code:-1,stdout:'',stderr:'',pid:0,pgid:0,events:[]},commit:Evidence={code:-1,stdout:'',stderr:'',pid:0,pgid:0,events:[]},reason=''; let accepted=false, pendingSha='0'.repeat(64), final={tree:'0'.repeat(64),dev:0,ino:0,report:''}; try { build=await phase(['--build-worker','--input',inputPath,'--claim',layout.claim],input); if(build.code!==0) fail('build worker rejected launcher decision'); const candidate=(JSON.parse(build.stdout) as {candidate:string}).candidate; const permit=join(input.archiveRoot,`.${input.snapshotId}.commit.permit`); durable(permit,{schemaVersion:'dependency-seal-permit-v1',snapshotId:input.snapshotId,claimSha256:sha256(canonicalJson(claim as unknown as JsonValue))}); commit=await phase(['--commit-worker','--input',inputPath,'--candidate',candidate,'--permit',permit],input); if(commit.code!==0) fail('commit worker rejected launcher decision'); const receipt=canonical(join(resolve(input.snapshotRoot,input.snapshotId),RECEIPT)); pendingSha=sha256(canonicalJson(receipt)); durable(layout.snapshot,receipt); final=readback(resolve(input.snapshotRoot,input.snapshotId)); accepted=true; reason='published after live FD3 closure'; } catch(error) { reason=(error as Error).message; }

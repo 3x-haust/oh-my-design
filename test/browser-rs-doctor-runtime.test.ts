@@ -252,6 +252,41 @@ test('browser-rs doctor bounds and reaps a descendant that inherits its help pip
   }
 });
 
+test('a successful help response also terminates descendants that close inherited output pipes', { timeout: 8_000 }, async (context) => {
+  const root = mkdtempSync(join(tmpdir(), 'omd-browser-rs-closed-pipe-tree-'));
+  const binary = join(root, 'closed-pipe-browser-rs');
+  const childPidPath = join(root, 'child.pid');
+  let childPid: number | undefined;
+  try {
+    writeFileSync(binary, [
+      '#!/bin/sh',
+      `child_pid_file=${shellQuote(childPidPath)}`,
+      'if [ "$1" = child ]; then',
+      "  trap '' TERM",
+      '  printf "%s\\n" "$$" > "$child_pid_file"',
+      '  while :; do /bin/sleep 1; done',
+      'fi',
+      '"$0" child >/dev/null 2>&1 &',
+      'while [ ! -s "$child_pid_file" ]; do /bin/sleep 0.01; done',
+      "printf '%s\\n' 'browser-rs — stealth MCP browser (stdio or HTTP)' '--headless' '--user-data-dir'",
+      '',
+    ].join('\n'));
+    chmodSync(binary, 0o755);
+    const ready = pidFiles([childPidPath], context.signal);
+    const doctor = doctorBrowserRs({
+      ...browserRsTestDependencies({ home: join(root, 'home'), platform: 'darwin', arch: 'arm64', releases: RELEASES,
+        env: { PATH: '', OMD_BROWSER_RS_BIN: binary } }), timeoutMs: 1_200,
+    });
+    [childPid] = await ready;
+    const result = await doctor;
+    assert.equal(result.kind, 'healthy', JSON.stringify(result));
+    assert.equal(running(childPid!), false, 'help probe left a background process after returning success');
+  } finally {
+    if (childPid !== undefined && running(childPid)) process.kill(childPid, 'SIGKILL');
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('browser-rs doctor reports a bounded output overflow as a process failure rather than a timeout', async () => {
   const root = mkdtempSync(join(tmpdir(), 'omd-browser-rs-max-buffer-'));
   const binary = join(root, 'bounded-output-browser-rs');
