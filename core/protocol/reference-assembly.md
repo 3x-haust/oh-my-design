@@ -97,6 +97,22 @@ country's style or a target market. Directories such as Awwwards, FWA and GDWEB 
 not fixed winners or a visual preset. Search results lead to the actual site and relevant case study;
 live desktop/mobile inspection, scoped captures and motion measurements establish the evidence.
 
+Discovery always keeps two ledgers conceptually separate:
+
+- **domain reference** asks how comparable services organize real screens, features, states, and
+  task flows. When `greenfield-task-flow-benchmark` applies, its private v2 benchmark records every
+  safe reachable screen in the declared scope, the actual click path, feature and flow groupings,
+  current local evidence, and every explicit coverage gap. `omd benchmark check` re-hashes that
+  evidence; a landing-page visit or prose summary cannot satisfy it.
+- **design reference** asks how the destination should feel and be composed. It uses the measured
+  board, mood, typography, component, and craft evidence already defined by this protocol. Domain
+  research is not visual direction merely because the comparable product looks polished.
+
+The two lanes may inspect the same site, but they never share a conclusion implicitly. Each lane
+must produce its own bounded observations and downstream use. New marketing still does not
+impersonate a product workflow: it gathers a domain adoption/page journey and design direction,
+while the task-flow benchmark remains selected only for applicable product work.
+
 ### User-shared posts and component directories
 
 Inspect the supplied link first and distinguish an actual interface from a post recommending

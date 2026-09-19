@@ -645,7 +645,12 @@ const TASK_FLOW_BENCHMARK: InputSkeleton = {
   constraints: [
     'copy the exact root and nested key sets; do not rename, duplicate, nest, or extend fields',
     `surface accepts only ${TASK_FLOW_BENCHMARK_SURFACES.join(', ')}. Preserve the frame\'s applicable surface grammar (theory/ux.md, Surface types); domain names the actual category. Editorial reading, section-navigation and saved-reading flows can satisfy a route-selected task-flow benchmark without becoming a product work surface. This does not require a benchmark for every editorial page or change the route. If no allowed value truthfully fits, report the contract gap instead of relabeling it to pass.`,
-    'sources contains 2..6 independent real-service flows or applicable authoritative guidance',
+    'sources contains 2..6 independently inspected sources and at least two same-domain-service sources; same-domain services must outnumber adjacent-domain services',
+    'each source records every safe reachable screen in its declared scope, every discovered target as either inspected or explicitly excluded, and a connected reachedBy path from an entry screen',
+    'coverage.status is complete only with zero exclusions; bounded-gap requires explicit authentication, payment, destructive-action, rate-limit, blocked, out-of-scope, or unavailable exclusions with reasons',
+    'screens bind current local browser evidence under .omd/refs/; every flow step has distinct current evidence, a concrete action, and its observed result',
+    'features group observed behavior by real screen ids; flows organize the clicked sequence by user intent. Every inspected screen must appear in at least one feature or flow',
+    'a service source needs at least one completed flow. Record blocked attempts with a limitation instead of claiming completion',
     'observedPatterns records bounded task-flow observations, never component styling or destination product facts',
     'every task step and counterexample cites current source ids',
     'forbiddenTransfers names source brands, copy, policies, prices, availability, guarantees, and operational claims that cannot become destination facts',
@@ -659,14 +664,72 @@ const TASK_FLOW_BENCHMARK: InputSkeleton = {
       {
         id: 'service-a',
         url: 'https://example.com/repair-booking-a',
+        kind: 'same-domain-service',
         observedAt: '2026-08-25',
+        coverage: {
+          scope: 'public pre-auth repair request journey reachable from the supplied entry page',
+          status: 'complete',
+          discoveredTargetCount: 2,
+          entryScreenIds: ['a-intake'],
+          inspectedScreenIds: ['a-intake', 'a-review'],
+          excludedTargets: [],
+        },
+        screens: [
+          {
+            id: 'a-intake', name: 'Issue intake', url: 'https://example.com/repair-booking-a', state: 'initial form visible',
+            reachedBy: { fromScreenId: null, action: 'open the public entry URL', result: 'issue intake is visible' },
+            evidence: { path: '.omd/refs/task-flows/service-a-intake.png', sha256: '1'.repeat(64) },
+          },
+          {
+            id: 'a-review', name: 'Request review', url: 'https://example.com/repair-booking-a/review', state: 'entered issue retained for review',
+            reachedBy: { fromScreenId: 'a-intake', action: 'enter a safe test issue and continue', result: 'review screen preserves the entered issue' },
+            evidence: { path: '.omd/refs/task-flows/service-a-review.png', sha256: '2'.repeat(64) },
+          },
+        ],
+        features: [{ id: 'a-issue-capture', name: 'Issue capture', behavior: 'retains the issue through review', screenIds: ['a-intake', 'a-review'] }],
+        flows: [{
+          id: 'a-request-review', intent: 'describe an issue and review it before commitment', status: 'completed', limitation: null,
+          steps: [
+            { order: 1, screenId: 'a-intake', action: 'open issue intake', result: 'empty issue controls are available', evidence: { path: '.omd/refs/task-flows/service-a-flow-1.png', sha256: '3'.repeat(64) } },
+            { order: 2, screenId: 'a-review', action: 'continue with a safe test issue', result: 'review appears without committing a request', evidence: { path: '.omd/refs/task-flows/service-a-flow-2.png', sha256: '4'.repeat(64) } },
+          ],
+        }],
         observedPatterns: ['observable issue capture precedes scheduling'],
         forbiddenTransfers: ['brand, pricing, availability, and service promises'],
       },
       {
         id: 'service-b',
         url: 'https://example.org/repair-booking-b',
+        kind: 'same-domain-service',
         observedAt: '2026-08-25',
+        coverage: {
+          scope: 'public pre-auth triage and review journey',
+          status: 'complete',
+          discoveredTargetCount: 2,
+          entryScreenIds: ['b-triage'],
+          inspectedScreenIds: ['b-triage', 'b-review'],
+          excludedTargets: [],
+        },
+        screens: [
+          {
+            id: 'b-triage', name: 'Triage', url: 'https://example.org/repair-booking-b', state: 'triage choices visible',
+            reachedBy: { fromScreenId: null, action: 'open the public entry URL', result: 'triage choices are visible' },
+            evidence: { path: '.omd/refs/task-flows/service-b-triage.png', sha256: '5'.repeat(64) },
+          },
+          {
+            id: 'b-review', name: 'Review', url: 'https://example.org/repair-booking-b/review', state: 'selected triage choice visible',
+            reachedBy: { fromScreenId: 'b-triage', action: 'choose a non-destructive test option and continue', result: 'review shows the selected option' },
+            evidence: { path: '.omd/refs/task-flows/service-b-review.png', sha256: '6'.repeat(64) },
+          },
+        ],
+        features: [{ id: 'b-triage-review', name: 'Triage review', behavior: 'keeps triage and commitment distinct', screenIds: ['b-triage', 'b-review'] }],
+        flows: [{
+          id: 'b-review-before-commitment', intent: 'review triage before commitment', status: 'completed', limitation: null,
+          steps: [
+            { order: 1, screenId: 'b-triage', action: 'open triage', result: 'choices are available', evidence: { path: '.omd/refs/task-flows/service-b-flow-1.png', sha256: '7'.repeat(64) } },
+            { order: 2, screenId: 'b-review', action: 'continue with a safe test choice', result: 'review appears before any commitment', evidence: { path: '.omd/refs/task-flows/service-b-flow-2.png', sha256: '8'.repeat(64) } },
+          ],
+        }],
         observedPatterns: ['review and commitment remain distinct'],
         forbiddenTransfers: ['brand, copy, policies, and operational claims'],
       },

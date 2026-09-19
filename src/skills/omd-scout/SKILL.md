@@ -75,6 +75,28 @@ Search the PART, in English, across many sites — the way a designer builds a b
 Existing products are for how a task is solved, not for how a page feels; a run that gathers only
 those produces a product survey instead of a direction.
 
+### Exploring a domain reference
+
+The domain-reference lane and the design-reference lane are independent deliverables. A polished
+competitor may contribute to both only through separate observations: its product flow never counts
+as visual-direction evidence automatically, and its appearance never proves how its task works.
+
+For an applicable product task-flow benchmark, do not stop at the landing page or first useful
+screen. Declare the safe inspection scope, open each same-domain service at its real entry point, and
+traverse every reachable screen in that scope. Click the actual non-destructive controls needed to
+observe the sequence. Organize the result three ways:
+
+- screen inventory — every inspected screen/state, how it was reached, and current local evidence;
+- feature inventory — observed behavior bound to the screens where it exists;
+- flow inventory — ordered action → result steps grouped by user intent.
+
+Every discovered target is either inspected or explicitly excluded with a bounded reason such as
+authentication, payment, destructive action, rate limit, blocking, unavailability, or being outside
+the declared task scope. A nav label, sitemap entry, article, or screenshot is a lead, not proof of a
+screen or flow. Run `omd schema task-flow-benchmark --json`, publish with `omd benchmark set`, and
+require `omd benchmark check --json` to re-hash every screen and flow-step evidence file. A missing,
+stale, reused, unreachable, or unorganized observation blocks completion.
+
 ### What is not a reference
 
 The captures `omd brief domain` produced live under `.omd/captures/` and exist to prove that a screen

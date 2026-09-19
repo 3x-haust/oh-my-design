@@ -3318,6 +3318,7 @@ async function cmdBenchmark(mode: string | undefined, opts: Opts): Promise<never
   const {
     parseTaskFlowBenchmark,
     projectTaskFlowBenchmark,
+    validateTaskFlowBenchmarkEvidence,
   } = await import('../core/ref/task-flow-benchmark.ts');
   const benchmarkPath = opts.input ?? join(process.cwd(), '.omd', 'task-flow-benchmark.json');
   if (mode === 'set') {
@@ -3327,6 +3328,7 @@ async function cmdBenchmark(mode: string | undefined, opts: Opts): Promise<never
     const benchmark = parseTaskFlowBenchmark(inputJson(opts.input, 'omd benchmark set'), {
       ...(opts.sourceSha ? { expectedSourceContractSha256: opts.sourceSha } : {}),
     });
+    validateTaskFlowBenchmarkEvidence(process.cwd(), benchmark);
     const projection = projectTaskFlowBenchmark(benchmark);
     const writer = projectWriterFromActivation(opts, 'omd benchmark set');
     const path = writer.write('.omd/task-flow-benchmark.json', `${JSON.stringify(benchmark, null, 2)}\n`);
@@ -3340,9 +3342,10 @@ async function cmdBenchmark(mode: string | undefined, opts: Opts): Promise<never
     const benchmark = parseTaskFlowBenchmark(inputJson(benchmarkPath, 'omd benchmark check'), {
       ...(opts.sourceSha ? { expectedSourceContractSha256: opts.sourceSha } : {}),
     });
+    validateTaskFlowBenchmarkEvidence(process.cwd(), benchmark);
     const projection = projectTaskFlowBenchmark(benchmark);
     if (opts.json) process.stdout.write(JSON.stringify({ benchmark, projection }));
-    else console.log(`ok — ${benchmark.sources.length} sources, ${benchmark.taskSteps.length} task steps, ${benchmark.counterexamples.length} counterexamples`);
+    else console.log(`ok — ${benchmark.sources.length} deeply explored sources, ${benchmark.sources.reduce((count, source) => count + source.screens.length, 0)} screens, ${benchmark.sources.reduce((count, source) => count + source.features.length, 0)} features, ${benchmark.sources.reduce((count, source) => count + source.flows.length, 0)} flows, ${benchmark.taskSteps.length} task steps, ${benchmark.counterexamples.length} counterexamples`);
     process.exit(0);
   }
   throw new Error('usage: omd benchmark set --input <task-flow-benchmark.json> | check [--input <task-flow-benchmark.json>] [--json]');

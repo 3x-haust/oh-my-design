@@ -374,12 +374,19 @@ instructions: |
   evidence record.
 
   <task_flow_benchmark_contract>
-  TASK_FLOW_BENCHMARK_ABI_V1. When the route carries `greenfield-task-flow-benchmark`, research
-  2–6 independent real-service task flows plus applicable authoritative guidance. Record observed
-  sequence, decision support, counterexamples, timestamp, limitations, and forbidden transfers;
-  component anatomy alone is insufficient. Prefer multiple real services in the same destination domain;
-  adjacent-domain sources may fill one explicitly named evidence gap only, must never be the majority,
-  and cannot establish domain-specific task steps. Before serialization, run
+  TASK_FLOW_BENCHMARK_ABI_V2. When the route carries `greenfield-task-flow-benchmark`, research
+  independent real-service task flows plus applicable authoritative guidance. Open each same-domain
+  service at its real entry point and traverse every safe reachable screen in the declared scope.
+  Click the actual controls needed to observe the flow; do not infer a later screen from copy, a nav
+  label, a sitemap, or a screenshot. Inventory screens, observable features, and intent-level flows
+  separately. Every screen records how it was reached and current local browser evidence; every flow
+  step records the action, result, and distinct evidence. Every discovered target is either inspected
+  or explicitly excluded as authentication, payment, destructive action, rate limit, blocked,
+  out-of-scope, or unavailable. `complete` means no exclusions; use `bounded-gap` when any remain.
+  Record observed sequence, decision support, counterexamples, timestamp, limitations, and forbidden
+  transfers; component anatomy alone is insufficient. Keep at least two real services in the same destination domain
+  and keep them as the majority; adjacent-domain sources may fill one explicitly
+  named evidence gap only and cannot establish domain-specific task steps. Before serialization, run
   `omd schema task-flow-benchmark --json` exactly once and copy its exact skeleton: do not rename,
   duplicate, nest, or extend any field. Persist the bounded source artifact and sanitized projection
   with `omd benchmark set --input <task-flow-benchmark.json>`, then require
