@@ -14,7 +14,17 @@ concurrency:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # The complete suite includes native Darwin benchmark publication. Keep those tests
+    # on their real platform, and exercise the portable Pi boundary independently on Linux.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            suite: full
+          - os: ubuntu-latest
+            suite: portable-pi
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -22,7 +32,9 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: '22'
+          # Test fixture authorization relies on Node 24's test-isolation child argv.
+          # Match the verified Pi development runtime without weakening production authority.
+          node-version: '24.11.0'
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
@@ -30,4 +42,13 @@ jobs:
       - run: npm run build
       - name: Generated prompts must match source
         run: git diff --exit-code -- agents skills dist
-      - run: npm test
+      - name: Complete harness suite (including native Darwin publication)
+        if: matrix.suite == 'full'
+        run: npm test
+      - name: Portable Pi gates, copy, and review loops
+        if: matrix.suite == 'portable-pi'
+        run: >-
+          node --test --test-concurrency=4
+          test/pi-extension.test.ts test/pi-host-guard.test.ts
+          test/production-reference-gate.test.ts test/first-render-critic.test.ts
+          test/copy.test.ts test/slop-review.test.ts
