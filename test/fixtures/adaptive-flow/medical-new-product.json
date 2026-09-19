@@ -158,16 +158,10 @@
         ]
       },
       {
-        "id": "scout",
+        "id": "parallel-research-copy",
         "mode": "concurrent",
         "roles": [
-          "omd-scout"
-        ]
-      },
-      {
-        "id": "copy",
-        "mode": "concurrent",
-        "roles": [
+          "omd-scout",
           "omd-writer"
         ]
       },

@@ -24,8 +24,9 @@ selected stage. There is no reference quota and no default candidate count.
 When discovery is selected, run `omd ref discover-plan --json`. The current request, explicit
 locale context, acquisition decisions and selected motion produce its search lanes even when
 domain analysis is skipped. User reference URLs are optional inputs, never a prerequisite.
-Author and execute concrete searches from this plan: task/component queries and separate visual-
-craft queries, plus any motion discovery lane. A candidate motion lane informs art direction; it
+Author and execute concrete searches from this plan as two non-substitutable lanes: domain-reference
+for comparable-service screens/features/flows and design-reference for visual direction and craft,
+plus any motion discovery lane. A candidate motion lane informs art direction; it
 does not activate a production scene or create a user motion lock. Preserve explicit style, language and reference-
 region requests in those queries; a surface locale alone does not infer a country aesthetic.
 Use the user's explicitly selected available search transport, such as Aside CLI when requested;
@@ -42,7 +43,10 @@ state. A remembered URL, search snippet, gallery thumbnail or a query you only w
 observation. If a source is unavailable, search for a suitable alternative; do not make the user
 supply references to continue. A missing search/browser capability is a precise host blocker.
 Keep the actual queries, chosen/rejected leads, and resulting native capture identities in your
-owned Scout synthesis. They disclose acquisition provenance, not tamper-proof search receipts.
+owned Scout synthesis. After both lanes have current outputs, print `omd schema reference-research
+--json`, fill its exact skeleton, publish it with `omd ref research-set`, and require `omd ref
+research-check --json` to pass. The same capture cannot satisfy both lanes. These records disclose
+acquisition provenance, not tamper-proof search receipts.
 For a user-shared resource post, apply `protocol/reference-assembly.md` §User-shared posts and
 component directories. Read the visible caption, classify its purpose, and retain the chain from
 post to directory entry to original component. A readable capture may resolve a sparse text
@@ -88,7 +92,7 @@ hand-author an unavailable receipt. Use only the canonical command's
 returned status, timestamp, receipt hash, final URL, and exact unavailability reason in the
 profile. Then publish only through `omd locale profile --publish`; a citation string, locale
 label, likely script, or country stereotype is never evidence and never a design instruction.
-You have write access only because `.omd/scout.md` is your owned durable synthesis; use the
+You have write access only because `.omd/scout.md` and `.omd/reference-research.json` are your owned durable synthesis; use the
 `omd ref:*` and `omd craft-capture:*` commands for the board, captures, and reference records.
 Outside those command-owned records, write or edit only `.omd/scout.md`. Never touch production
 source, another `.omd/` artifact, or ask another agent to write the scout artifact for you.
@@ -360,12 +364,19 @@ Hand downstream only the resulting hash-bound sanitized selected assembly, never
 evidence record.
 
 <task_flow_benchmark_contract>
-TASK_FLOW_BENCHMARK_ABI_V1. When the route carries `greenfield-task-flow-benchmark`, research
-2–6 independent real-service task flows plus applicable authoritative guidance. Record observed
-sequence, decision support, counterexamples, timestamp, limitations, and forbidden transfers;
-component anatomy alone is insufficient. Prefer multiple real services in the same destination domain;
-adjacent-domain sources may fill one explicitly named evidence gap only, must never be the majority,
-and cannot establish domain-specific task steps. Before serialization, run
+TASK_FLOW_BENCHMARK_ABI_V2. When the route carries `greenfield-task-flow-benchmark`, research
+independent real-service task flows plus applicable authoritative guidance. Open each same-domain
+service at its real entry point and traverse every safe reachable screen in the declared scope.
+Click the actual controls needed to observe the flow; do not infer a later screen from copy, a nav
+label, a sitemap, or a screenshot. Inventory screens, observable features, and intent-level flows
+separately. Every screen records how it was reached and current local browser evidence; every flow
+step records the action, result, and distinct evidence. Every discovered target is either inspected
+or explicitly excluded as authentication, payment, destructive action, rate limit, blocked,
+out-of-scope, or unavailable. `complete` means no exclusions; use `bounded-gap` when any remain.
+Record observed sequence, decision support, counterexamples, timestamp, limitations, and forbidden
+transfers; component anatomy alone is insufficient. Keep at least two real services in the same destination domain
+and keep them as the majority; adjacent-domain sources may fill one explicitly
+named evidence gap only and cannot establish domain-specific task steps. Before serialization, run
 `omd schema task-flow-benchmark --json` exactly once and copy its exact skeleton: do not rename,
 duplicate, nest, or extend any field. Persist the bounded source artifact and sanitized projection
 with `omd benchmark set --input <task-flow-benchmark.json>`, then require

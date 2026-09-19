@@ -441,7 +441,7 @@ export function buildBrief(
   }
   const judgmentPath = '.omd/design-judgment.json';
   const judgmentConsumer = stage === 'composition' || stage === 'candidate-generation' || stage === 'production';
-  if (judgmentConsumer && route?.references.decision === 'discover') {
+  if (judgmentConsumer && route?.gates.includes('dual-reference-research')) {
     const researchPath = join(root, '.omd/reference-research.json');
     try {
       if (!existsSync(researchPath)) throw new Error('missing');

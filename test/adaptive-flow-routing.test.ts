@@ -113,6 +113,7 @@ test('copy-only work skips unnecessary discovery and design stages with written 
   ]);
   assert.equal(routed.strategy.skips.every((item) => item.reason.length > 0), true);
   assert.equal(routed.references.decision, 'skip');
+  assert.equal(routed.gates.includes('dual-reference-research'), false);
   assert.equal(Object.hasOwn(routed.references, 'min'), false);
   assert.equal(Object.hasOwn(routed.references, 'max'), false);
   assert.equal(Object.hasOwn(routed.references, 'candidates'), false);
@@ -152,6 +153,7 @@ test('greenfield new-product routes task-flow benchmark and UX candidates', () =
     assert.ok(routed.strategy.roles.includes(role as never), role);
   }
   assert.ok(routed.gates.includes('greenfield-task-flow-benchmark'));
+  assert.ok(routed.gates.includes('dual-reference-research'));
   assert.equal(routed.strategy.stages.includes('art-direction'), false);
 });
 
@@ -162,6 +164,7 @@ test('greenfield new-marketing keeps discovery and expressive craft without impe
   assert.equal(routed.sourceContract.referenceDiscovery.taskNeed, 'new-marketing');
   assert.equal(routed.references.decision, 'discover');
   assert.equal(routed.gates.includes('greenfield-task-flow-benchmark'), false);
+  assert.ok(routed.gates.includes('dual-reference-research'));
   for (const stage of ['art-direction', 'composition', 'candidate-generation']) {
     assert.ok(routed.strategy.stages.includes(stage as never), stage);
   }

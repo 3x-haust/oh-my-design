@@ -228,24 +228,13 @@ function validateLocaleDesignRoute(input: ValidatedAdaptiveRouteInput): void {
   }
 }
 
-function serializeReferenceWriters(strategy: AdaptiveStrategyDecision): AdaptiveStrategyDecision {
-  if (!strategy.methods.includes('parallel-reference-acquisition')) return strategy;
-  const index = strategy.executionWaves.findIndex((wave) => wave.roles.includes('omd-scout') && wave.roles.includes('omd-writer'));
-  if (index < 0) return strategy;
-  const wave = strategy.executionWaves[index];
-  const scoutWave = Object.freeze({ ...wave, roles: Object.freeze(wave.roles.filter((role) => role !== 'omd-writer')) });
-  const writerWave = Object.freeze({ id: `${wave.id}-writer`, mode: 'concurrent' as const, roles: Object.freeze(['omd-writer']) });
-  const executionWaves = Object.freeze(strategy.executionWaves.flatMap((entry, waveIndex) => waveIndex === index ? [scoutWave, writerWave] : [entry]));
-  return Object.freeze({ ...strategy, executionWaves });
-}
-
 export function routeAdaptiveFlow(
   value: unknown,
   authority?: Readonly<{ root: string; invocation: ProjectRunInvocation }>,
   localeDesign?: LocaleDesignRoute,
 ): AdaptiveRouteRecord {
   const input = validated(value, localeDesign);
-  const strategy = serializeReferenceWriters(input.strategyDecision);
+  const strategy = input.strategyDecision;
   if (input.projectMode === 'greenfield' && !strategy.stages.includes('frame')) {
     failAdaptiveRoute('GREENFIELD_FRAME_REQUIRED');
   }
@@ -267,6 +256,9 @@ export function routeAdaptiveFlow(
   validateLocaleDesignRoute(input);
 
   const policyGates = [
+    ...(input.referenceDiscovery.decision === 'discover'
+      ? ['dual-reference-research']
+      : []),
     ...(requiresTaskFlowBenchmark(input)
       ? ['greenfield-task-flow-benchmark']
       : []),

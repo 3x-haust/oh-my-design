@@ -455,7 +455,7 @@ composer decision → production selector → final fidelity evidence. Return pr
 goal → constraint → attempted failure evidence → compromise → result evidence trade-off.
 
 <task_flow_benchmark_contract>
-TASK_FLOW_BENCHMARK_ABI_V1. When the route supplies a task-flow benchmark projection, production
+TASK_FLOW_BENCHMARK_ABI_V2. When the route supplies a task-flow benchmark projection, production
 is bound to the selected structural UX model and its rejected-model constraints. Build the
 domain work object, prerequisite order, decision support, recovery, and desktop/mobile priority;
 do not fall back to a generic wizard, dashboard shell, or label-swapped form. Benchmark patterns

@@ -355,7 +355,7 @@ alternatives L4 perspectives will judge. Do not manufacture failure evidence bef
 risk can remain medium until a real constraint is tested.
 
 <task_flow_benchmark_contract>
-TASK_FLOW_BENCHMARK_ABI_V1. When `.omd/task-flow-benchmark-projection.json` is supplied,
+TASK_FLOW_BENCHMARK_ABI_V2. When `.omd/task-flow-benchmark-projection.json` is supplied,
 `Candidate axes` contains 2–3 structurally distinct UX models bound to benchmark pattern IDs and
 frame task IDs. Each closes macro-layout family, flow topology, dominant work object,
 decision-support sequence, domain bindings, observable consequences, costliest-error recovery,
