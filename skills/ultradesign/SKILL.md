@@ -179,6 +179,14 @@ Use `.omd/route.json` as the machine-consumed strategy. Do not substitute a reme
 - Candidate generation, framing, copy isolation, typography proof, composition, art direction, and
   refinement are conditional methods. Their own contracts apply when selected; absence requires the
   route reason, not an invented artifact.
+- Dual research finishes with Scout's screen application: `omd ref apply-plan --json` → fill the
+  input from actual images → `omd ref apply-set --input <application.json>` → `omd ref apply-check`.
+  Show the user the retained previews and `.omd/reference-application.md`. Every domain-brief surface
+  needs separate domain/design coverage, decisions, exclusions, gaps and future rendered checks.
+  Pass only referenceApplication/screenApplication from the validated brief/handoff to Composer and
+  Hand; never pass the source-bearing plan output or raw research. This is intended use, not proof
+  of use or approval. Actual renders, usage evidence and review remain necessary. Keep the route's
+  own candidate count and selection authority; this adaptation does not impose a new approval gate.
 - Selected `content-grain`, art direction, concept formation, colour, and refinement methods follow
   their native protocols and stage briefs; skips retain their typed reasons. For art direction, apply
   `[metaphor-contract:typed-router]` and pass the immutable visual contract unchanged to visual owners;

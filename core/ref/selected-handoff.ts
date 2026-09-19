@@ -12,6 +12,10 @@ import {
   validateReferenceSelectionV2,
 } from './reference-selection.ts';
 import { validateReferenceLocaleBindingCurrentness } from './reference-locale-binding.ts';
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { checkReferenceApplication, type ReferenceApplicationProjection } from './reference-application.ts';
+import { readPublishedReferenceResearch } from './reference-research.ts';
 
 export type SelectedReferenceHandoff = Readonly<{
   schemaVersion: 'selected-reference-handoff-v1';
@@ -22,6 +26,7 @@ export type SelectedReferenceHandoff = Readonly<{
   projectionSha256: string;
   selectionSha256: string;
   artDirectionSha256?: string;
+  screenApplication?: ReferenceApplicationProjection;
   candidateId: string;
   route: string;
   pieces: readonly (ReferenceAssemblyPiece & Readonly<{
@@ -65,6 +70,10 @@ export function readSelectedReferenceHandoff(root: string, role: ReferenceHandof
     if (slot.obligationDisposition !== 'used' && !pending) return [];
     return [{ ...piece, evidence, availability: pending ? 'pending-motion-review' as const : 'selected' as const }];
   });
+  const research = existsSync(resolve(root, '.omd/reference-research.json')) ? readPublishedReferenceResearch(root) : null;
+  const screenApplication = research === null ? undefined : checkReferenceApplication(root, {
+    expectedSourceContractSha256: research.sourceContractSha256, benchmarkRequired: research.domainReference.benchmarkSha256 !== null,
+  });
   const content = {
     schemaVersion: 'selected-reference-handoff-v1' as const,
     role,
@@ -74,6 +83,7 @@ export function readSelectedReferenceHandoff(root: string, role: ReferenceHandof
     projectionSha256: receipt.projectionSha256,
     selectionSha256,
     ...(receipt.artDirectionSha256 === undefined ? {} : { artDirectionSha256: receipt.artDirectionSha256 }),
+    ...(screenApplication === undefined ? {} : { screenApplication }),
     candidateId: candidate.id,
     route: candidate.route,
     pieces,

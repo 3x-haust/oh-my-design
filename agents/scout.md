@@ -80,6 +80,17 @@ writes `.omd/reference-research.json` last as their consistency receipt. Never h
 All three records must agree. Renaming identical capture bytes does not permit reuse across lanes.
 These records disclose
 acquisition provenance, not tamper-proof search receipts.
+After research-check, run `omd ref apply-plan --json` and fill its input from actual image
+inspection for every current domain-brief surface. Publish using `omd ref apply-set --input
+<application.json>`, then require `omd ref apply-check --json`. This is a CLI-published synthesis,
+not permission to hand-write its outputs. Separate domain/design referenceIds, direct/partial/
+brief-derived coverage, precise gaps, application, doNotTransfer, reason, and rendered checks.
+Brief-derived has no referenceIds; static images never prove live flows. Both research lanes must
+inform the project, but an individual screen may need an explicit brief-derived decision.
+Show `.omd/reference-application.md` with the retained design previews. Downstream owners receive
+only the source-free projection; omit source identities/URLs/paths from destination decision prose.
+Existing current v4 captures can be reused without relabelling; research/domain changes invalidate
+the application and require fresh judgment. These are plans, not user approval or rendered proof.
 For a user-shared resource post, apply `protocol/reference-assembly.md` §User-shared posts and
 component directories. Read the visible caption, classify its purpose, and retain the chain from
 post to directory entry to original component. A readable capture may resolve a sparse text

@@ -74,6 +74,16 @@ export function formatBrief(brief: Brief): string {
     ...(brief.referencesOmitted > 0 ? [`+${brief.referencesOmitted} more — omd ref list`] : []),
   ]);
   section('contracts', brief.contracts.map((entry) => `${entry.path}${entry.delivered ? '' : '  (undelivered)'}`));
+  if (brief.referenceApplication) section('screen use', [
+    `Plan @ ${brief.referenceApplication.applicationSha256}; verify in renders, not an approval or proof of use.`,
+    ...brief.referenceApplication.screens.flatMap(row => [row.surface,
+      ...(['domain', 'design'] as const).flatMap(key => [
+        `${key} (${row[key].coverage}): ${row[key].application}`,
+        `do not transfer: ${row[key].doNotTransfer}; reason: ${row[key].reason}`,
+        ...(row[key].gap === null ? [] : [`gap: ${row[key].gap}`]),
+      ]), ...row.checks.map(check => `verify: ${check}`),
+    ]),
+  ]);
   if (brief.referenceHandoff != null) {
     section('reference data', [
       brief.referenceHandoff.command,

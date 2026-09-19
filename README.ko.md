@@ -100,6 +100,15 @@ Pi에서 `omd_cli`를 사용할 때 외부 activation 파일은 필요하지 않
 미리보기와 선정 이유는 `.omd/refs/design/README.md`에서 확인합니다. 예전 기록은 삭제하지 않으며,
 유효한 캡처를 보존한 채 역할을 재검토해 v4로 재발행합니다. 자동 검증은 미적 품질의 인증이 아닙니다.
 
+조사 후 `omd ref apply-plan --json`으로 현재 도메인 브리프의 모든 화면에 대한 미완성 입력을
+받습니다. 실제 이미지를 보고 `input`을 채운 뒤 `omd ref apply-set --input <application.json>`과
+`omd ref apply-check --json`을 실행합니다. 화면마다 도메인/디자인 참조 ID, 직접/부분/브리프 기반
+근거, 공백, 적용할 내용·옮기지 않을 내용·이유·실제 렌더에서 확인할 기준을 나눠 기록합니다.
+사용자는 `.omd/reference-application.md`를 보고, 제작자는 brief/선택 핸드오프의 출처가 제거된
+설계 결정만 받습니다. 조사나 화면 범위가 바뀌면 재검토해야 합니다. 유효한 v4 캡처는 재수집 없이
+활용할 수 있지만 판단을 자동으로 채워주지는 않습니다. Design Flow Harness의 화면별 활용 방식을
+적용한 것이며, 고정 Figma 순서나 새 승인 단계를 강제하지 않습니다. 계획은 구현·미감·승인 증명이 아닙니다.
+
 기존 서비스는 프로젝트 폴더에서 `omd init --json`을 실행하면 현재 CSS 변수·선언과 `$value`
 토큰 JSON을 `.omd/existing-design-system.json` 및 `.md`로 정리합니다. 테마·미디어쿼리 범위와
 별칭, 출처 위치·해시를 보존하며 앱 코드·승인된 `.omd/tokens.json`은 변경하지 않습니다.

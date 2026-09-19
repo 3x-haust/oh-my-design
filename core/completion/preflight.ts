@@ -12,6 +12,7 @@ import {
   type CompletionTypographyBinding,
 } from './publication.ts';
 import { readPublishedReferenceResearch, validateReferenceResearch } from '../ref/reference-research.ts';
+import { checkReferenceApplication } from '../ref/reference-application.ts';
 import { checkSlopFinalGraph } from '../slop/review.ts';
 
 export { checkCompletionPublicationPrerequisites, CompletionPreflightError } from './publication.ts';
@@ -54,6 +55,8 @@ export function checkTerminalCompletion(root: string, invocation: ProjectRunInvo
         expectedSourceContractSha256: route.sourceContractSha256,
         benchmarkRequired: route.gates.includes('greenfield-task-flow-benchmark'),
       });
+      checkReferenceApplication(root, { expectedSourceContractSha256: route.sourceContractSha256,
+        benchmarkRequired: route.gates.includes('greenfield-task-flow-benchmark'), expectedRequest: route.request });
     } catch (error) {
       throw new CompletionPreflightError(`reference research is incomplete or stale: ${error instanceof Error ? error.message : String(error)}`);
     }

@@ -20,6 +20,14 @@ import { refImagePath, saveRef } from '../core/ref/store.ts';
 import type { Blueprint, Invariants, Reference } from '../core/types.ts';
 import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
 import omdExtension, { type PortablePiTool } from '../extensions/omd.ts';
+import { checkReferenceApplication, parseReferenceApplication, publishReferenceApplication, referenceApplicationPlan,
+  REFERENCE_APPLICATION_DOC_PATH, REFERENCE_APPLICATION_PATH, REFERENCE_APPLICATION_PROJECTION_PATH } from '../core/ref/reference-application.ts';
+import { buildBrief, formatBrief } from '../core/brief/index.ts';
+import { createTestProjectRunInvocation, publishTestAdaptiveRoute } from './helpers/project-write.ts';
+import { readPersistedRoute } from '../core/route/adaptive-route-persistence.ts';
+import { selectReferenceCandidateV2 } from '../core/ref/reference-selection.ts';
+import { writeReferenceHandoffReceipt } from '../core/ref/reference-handoff.ts';
+import { readSelectedReferenceHandoff } from '../core/ref/selected-handoff.ts';
 
 const SOURCE_SHA = 'a'.repeat(64);
 const digest = (bytes: string | Buffer): string => createHash('sha256').update(bytes).digest('hex');
@@ -34,6 +42,37 @@ const domainPng = () => {
   const header = Buffer.alloc(13); header.writeUInt32BE(1, 0); header.writeUInt32BE(1, 4); header[8] = 8; header[9] = 2;
   return Buffer.concat([PNG.subarray(0, 8), chunk('IHDR', header), chunk('IDAT', deflateSync(Buffer.from([0, 1, 2, 3]))), chunk('IEND', Buffer.alloc(0))]);
 };
+
+function domainBrief(request = 'Study the service') {
+  const evidence = [{ status: 'user-provided', reference: 'test-request' }];
+  return { schema: 'domain-brief-v1', request, domain: 'service', summary: 'Service preparation workspace',
+    surfaces: ['home', 'detail'].map(name => ({ name, purpose: `Complete the ${name} task`, evidence })),
+    coreObjects: [{ name: 'request', evidence }], audience: { description: 'service applicants', evidence },
+    referenceQueries: { component: ['task list'], craft: ['feedback transition'], mood: ['focused workspace'] },
+    planning: { businessGoal: { text: 'Reduce preparation effort' }, successSignal: { text: 'Complete a request' }, nonGoals: [{ text: 'No official submissions' }] } };
+}
+
+function filledApplication(root: string, options: { expectedSourceContractSha256: string; benchmarkRequired: boolean }) {
+  const draft = referenceApplicationPlan(root, options).input;
+  return { ...draft, screens: draft.screens.map((row, index) => ({ ...row,
+    domain: { referenceIds: ['domain-a'], coverage: 'direct', gap: null,
+      application: index === 0 ? 'Show unfinished preparation before starting another request.' : 'Separate saved preparation from official submission.',
+      doNotTransfer: 'Do not imply official receipt from local saving.', reason: 'The task requires preparation without institutional integration.' },
+    design: { referenceIds: ['design-a'], coverage: 'partial', gap: 'Only static hierarchy is observed; mobile errors need local testing.',
+      application: index === 0 ? 'Make the unfinished request the dominant object.' : 'Keep the title and supporting requirements in one visual group.',
+      doNotTransfer: 'Do not copy source branding or artwork.', reason: 'A clear work-object hierarchy supports the destination task.' },
+    checks: [`${row.surface}: primary task remains visible with a long Korean title.`],
+  })) };
+}
+
+function applicationFixture(t: { after(fn: () => void): void }) {
+  const value = fixture(t);
+  const options = { expectedSourceContractSha256: SOURCE_SHA, benchmarkRequired: false };
+  const writer = createTestProjectWriteAdapter(value.root);
+  publishReferenceResearch(value.root, value.research, options, writer);
+  writeFileSync(join(value.root, '.omd/domain-brief.json'), JSON.stringify(domainBrief()));
+  return { ...value, options, writer, application: filledApplication(value.root, options) };
+}
 
 function fixture(t: { after(fn: () => void): void }) {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-reference-research-')));
@@ -389,8 +428,147 @@ test('Pi CLI publishes and checks split research without an external activation'
   assert.equal(designInventory.length, 2);
   assert.ok(domainInventory.every((item: Reference) => item.researchLane === 'domain'));
   assert.ok(designInventory.every((item: Reference) => item.researchLane === 'design'));
+  writeFileSync(join(root, '.omd/domain-brief.json'), JSON.stringify(domainBrief(route.request)));
+  const plan = JSON.parse((await run(['ref', 'apply-plan', '--json'])).content[0]!.text);
+  assert.deepEqual(plan.input.screens.map((row: { surface: string }) => row.surface), ['home', 'detail']);
+  writeFileSync(join(root, '.omd/application-input.json'), JSON.stringify(filledApplication(root, {
+    expectedSourceContractSha256: route.sourceContractSha256, benchmarkRequired: false,
+  })));
+  const application = JSON.parse((await run(['ref', 'apply-set', '--input', '.omd/application-input.json', '--json'])).content[0]!.text);
+  assert.equal(application.screens, 2);
+  const projection = JSON.parse((await run(['ref', 'apply-check', '--json'])).content[0]!.text);
+  assert.equal(projection.screens[0].domain.coverage, 'direct');
+  assert.equal(projection.screens[0].design.coverage, 'partial');
+  assert.equal('referenceIds' in projection.screens[0].design, false);
   rmSync(join(root, DESIGN_REFERENCES_PATH));
   await assert.rejects(() => run(['ref', 'research-check', '--json']), /LANE_MISSING/);
+});
+
+test('application draft uses current surfaces and real inputs but cannot invent passing judgments', t => {
+  const { root, options } = applicationFixture(t);
+  const plan = referenceApplicationPlan(root, options);
+  assert.deepEqual(plan.input.screens.map(row => row.surface), ['home', 'detail']);
+  assert.equal(plan.evidence.design[0]!.id, 'design-a');
+  assert.throws(() => parseReferenceApplication(plan.input), /referenceIds|gap/);
+});
+
+test('application validates separate screen decisions and publishes an inspectable source-free projection', t => {
+  const { root, options, writer, application } = applicationFixture(t);
+  publishReferenceApplication(root, application, options, writer);
+  const projection = checkReferenceApplication(root, options);
+  assert.equal(projection.screens[0]!.domain.application, application.screens[0]!.domain.application);
+  assert.notEqual(projection.screens[0]!.design.application, projection.screens[1]!.design.application);
+  assert.doesNotMatch(JSON.stringify(projection), /referenceIds|domain-a|design-a|https:|\.omd\/refs/);
+  assert.match(readFileSync(join(root, REFERENCE_APPLICATION_DOC_PATH), 'utf8'), /home[\s\S]*detail/);
+  assert.match(readFileSync(join(root, REFERENCE_APPLICATION_DOC_PATH), 'utf8'), /not proof/);
+});
+
+test('missing surfaces, wrong-lane references, empty reasons and unsupported direct coverage fail closed', t => {
+  const f = applicationFixture(t);
+  const publish = (value: unknown) => publishReferenceApplication(f.root, value, f.options, f.writer);
+  const missing = structuredClone(f.application); missing.screens.pop();
+  assert.throws(() => publish(missing), /every current domain surface/);
+  const wrong = structuredClone(f.application); wrong.screens[0]!.design.referenceIds = ['domain-a'];
+  assert.throws(() => publish(wrong), /wrong-lane/);
+  const empty = structuredClone(f.application); empty.screens[0]!.domain.reason = '';
+  assert.throws(() => publish(empty), /reason/);
+  const noGap = structuredClone(f.application); noGap.screens[0]!.design.gap = '';
+  assert.throws(() => publish(noGap), /gap/);
+  const noChecks = structuredClone(f.application); noChecks.screens[0]!.checks = [];
+  assert.throws(() => publish(noChecks), /checks/);
+  const duplicate = structuredClone(f.application); duplicate.screens[1]!.surface = 'home';
+  assert.throws(() => publish(duplicate), /duplicate surface/);
+  f.research.designReference.sources.push({ ...f.research.designReference.sources[0]!, id: 'design-support', visualRole: 'component-support' });
+  publishReferenceResearch(f.root, f.research, f.options, f.writer);
+  const support = filledApplication(f.root, f.options);
+  support.screens[0]!.design.referenceIds = ['design-support'];
+  support.screens[0]!.design.coverage = 'direct';
+  assert.throws(() => publish({ ...support, screens: support.screens.map((row, index) => index === 0 ? { ...row, design: { ...row.design, gap: null } } : row) }), /support-only/);
+});
+
+test('a brief-derived gap is allowed per screen but cannot replace both collected research lanes', t => {
+  const f = applicationFixture(t);
+  const derived = { referenceIds: [], coverage: 'brief-derived', gap: 'No comparable detail view was accessible.',
+    application: 'Keep the brief-required review action next to its summary.', doNotTransfer: 'No unobserved service behavior.',
+    reason: 'The brief explicitly requires a review summary.' };
+  const value = structuredClone(f.application);
+  const input = { ...value, screens: value.screens.map((row, index) => index === 1 ? { ...row, domain: derived, design: derived } : row) };
+  assert.doesNotThrow(() => publishReferenceApplication(f.root, input, f.options, f.writer));
+  assert.throws(() => publishReferenceApplication(f.root, { ...input, screens: input.screens.map(row => ({ ...row, design: derived })) }, f.options, f.writer), /collected research must inform/);
+});
+
+test('changed research, domain scope, source images and derived documents invalidate application', t => {
+  const f = applicationFixture(t);
+  publishReferenceApplication(f.root, f.application, f.options, f.writer);
+  for (const path of [REFERENCE_APPLICATION_DOC_PATH, REFERENCE_APPLICATION_PROJECTION_PATH, '.omd/domain-brief.json', f.research.designReference.sources[0]!.evidence.path]) {
+    const original = readFileSync(join(f.root, path));
+    writeFileSync(join(f.root, path), Buffer.concat([original, Buffer.from('\n')]));
+    assert.throws(() => checkReferenceApplication(f.root, f.options), /stale|changed|EVIDENCE/);
+    writeFileSync(join(f.root, path), original);
+  }
+  f.research.designReference.sources[0]!.visualAssessment.transfer = 'A revised visual interpretation';
+  publishReferenceResearch(f.root, f.research, f.options, f.writer);
+  assert.throws(() => checkReferenceApplication(f.root, f.options), /binding is stale/);
+});
+
+test('source identities cannot be smuggled through downstream decision prose', t => {
+  const f = applicationFixture(t);
+  for (const leak of ['https://design.example/reference', 'design.example', '.omd/refs/design/private.png']) {
+    const value = structuredClone(f.application); value.screens[0]!.design.application = `Copy ${leak}`;
+    assert.throws(() => publishReferenceApplication(f.root, value, f.options, f.writer), /source.*(?:prose|hostnames)|capture paths/);
+  }
+});
+
+test('interrupted application publication and mismatched requests cannot pass', t => {
+  const f = applicationFixture(t);
+  publishReferenceApplication(f.root, f.application, f.options, f.writer);
+  const changed = structuredClone(f.application); changed.screens[0]!.design.application = 'Group the request summary above secondary tools.';
+  const interrupted = { ...f.writer, write(path: string, content: string | Buffer) {
+    if (path === REFERENCE_APPLICATION_PATH) throw new Error('simulated application interruption');
+    return f.writer.write(path, content);
+  } };
+  assert.throws(() => publishReferenceApplication(f.root, changed, f.options, interrupted), /simulated/);
+  assert.throws(() => checkReferenceApplication(f.root, f.options), /publication/);
+  publishReferenceApplication(f.root, changed, f.options, f.writer);
+  assert.doesNotThrow(() => checkReferenceApplication(f.root, f.options));
+  assert.throws(() => checkReferenceApplication(f.root, { ...f.options, expectedRequest: 'Another request' }), /another request/);
+});
+
+test('production briefs require the current application and deliver decisions without capture identities', t => {
+  const f = fixture(t);
+  const input = JSON.parse(readFileSync(new URL('fixtures/adaptive-flow/synth-marketing.json', import.meta.url), 'utf8'));
+  const invocation = publishTestAdaptiveRoute(f.root, input);
+  const route = readPersistedRoute(f.root, invocation);
+  const options = { expectedSourceContractSha256: route.sourceContractSha256, benchmarkRequired: false };
+  const writer = createTestProjectWriteAdapter(f.root, invocation);
+  f.research.sourceContractSha256 = route.sourceContractSha256;
+  publishReferenceResearch(f.root, f.research, options, writer);
+  writeFileSync(join(f.root, '.omd/domain-brief.json'), JSON.stringify(domainBrief(route.request)));
+  assert.ok(buildBrief(f.root, 'composition', undefined, invocation).blockers.some(blocker => blocker.includes('apply-check')));
+  publishReferenceApplication(f.root, filledApplication(f.root, options), options, writer);
+  for (const stage of ['composition', 'candidate-generation', 'production'] as const) {
+    const brief = buildBrief(f.root, stage, undefined, invocation);
+    assert.equal(brief.referenceApplication?.screens.length, 2);
+    assert.ok(!brief.blockers.some(blocker => blocker.includes('apply-check')));
+    assert.match(formatBrief(brief), /unfinished request the dominant object/);
+  }
+  rmSync(join(f.root, REFERENCE_APPLICATION_PROJECTION_PATH));
+  assert.equal(buildBrief(f.root, 'production', undefined, invocation).referenceApplication, null);
+});
+
+test('selected role handoff includes source-free screen application and refuses a removed plan', t => {
+  const f = applicationFixture(t);
+  const invocation = createTestProjectRunInvocation(f.root);
+  selectReferenceCandidateV2(f.root, 'candidate', [{ slotId: 'hero', obligationDisposition: 'used', obligationReason: 'Selected hierarchy for this screen.' }], invocation);
+  writeReferenceHandoffReceipt(f.root, 'art-direction', invocation);
+  assert.throws(() => readSelectedReferenceHandoff(f.root, 'art-direction'));
+  publishReferenceApplication(f.root, f.application, f.options, f.writer);
+  const handoff = readSelectedReferenceHandoff(f.root, 'art-direction');
+  assert.equal(handoff.screenApplication?.screens.length, 2);
+  assert.equal(handoff.screenApplication?.screens[0]!.design.application, f.application.screens[0]!.design.application);
+  assert.doesNotMatch(JSON.stringify(handoff), /domain\.example|design\.example|referenceIds|\.omd\/refs/);
+  rmSync(join(f.root, REFERENCE_APPLICATION_PATH));
+  assert.throws(() => readSelectedReferenceHandoff(f.root, 'art-direction'));
 });
 
 test('a benchmark-selected product route cannot complete with a prose-only domain lane', t => {

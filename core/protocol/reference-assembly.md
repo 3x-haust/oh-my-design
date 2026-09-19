@@ -27,6 +27,31 @@ service, provider, or runtime.
 
 ## Reference roles
 
+### Screen-by-screen application of the two research lanes
+
+For routes requiring dual reference research, Scout follows validated `research-check` with
+`omd ref apply-plan --json`. The draft derives exact destination surface names and input hashes
+from the current domain brief and research; it deliberately contains no invented judgments.
+Scout inspects the images, fills the draft's input, and publishes through `omd ref apply-set`.
+`apply-check` verifies complete surface coverage, correct-lane reference IDs, explicit partial/
+brief-derived gaps, current inputs and consistent publication. Both lanes must inform at least one
+surface; a particular screen may lack direct evidence and must say why. Support-only references
+cannot claim direct visual coverage. Requirements states/flows still belong to their existing
+contracts; screenshots do not prove behavior. This adds no fixed reference or candidate quota.
+
+`.omd/reference-application.md` is the human-facing application table. The source-bearing JSON
+stays with Scout/coordinator; Composer and Hand receive only the derived decision projection in
+briefs and selected handoffs. No source URLs, hosts or capture paths belong in decision prose.
+The projection does not replace selected assembly, approved tokens, actual reference-usage evidence,
+or blind final review. It records what should be applied and checked, not what has already passed.
+Existing current v4 research remains usable; inspection and application must be added before
+downstream composition/production and design-only/terminal completion. Changed research, domain
+brief or missing/edited derived outputs fails closed. Do not repair hashes to invent a review.
+
+The workflow adapts Design Flow Harness's actual-image analysis → screen reference linkage →
+representative concept → expansion approach, while retaining OMD's independent research lanes,
+adaptive concept/selection policy and source-free production boundary.
+
 Every reference serves one of three roles, and the domain brief's `referenceQueries` seed all three:
 
 - **① component design** — a detailed section, component, or button whose *structure* is the value.

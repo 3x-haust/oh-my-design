@@ -37,6 +37,7 @@ import {
 import { readSelectedReferenceHandoff } from '../ref/selected-handoff.ts';
 import type { ReferenceHandoffRole } from '../ref/reference-handoff.ts';
 import { readPublishedReferenceResearch, validateReferenceResearch } from '../ref/reference-research.ts';
+import { checkReferenceApplication, type ReferenceApplicationProjection } from '../ref/reference-application.ts';
 import { designInventoryStatus, DESIGN_INVENTORY_DOC_PATH } from '../tokens/inventory.ts';
 import { loadRefs, refRecordPath } from '../ref/store.ts';
 
@@ -107,6 +108,7 @@ export type BriefCheck = {
 };
 
 export type Brief = {
+  readonly referenceApplication?: ReferenceApplicationProjection | null;
   readonly existingDesignSystem?: ReturnType<typeof designInventoryStatus> | null;
   readonly stage: BriefStage;
   readonly owner: string;
@@ -205,6 +207,7 @@ const JUDGED_BY: Readonly<Record<string, readonly BriefCheck[]>> = {
   frame: [{ command: 'omd frame show', fails: 'the frame is missing a required field or its evidence' }],
   acquisition: [{ command: 'omd ref granularity --json', fails: 'a declared zone has no capture bound to it' }],
   scout: [
+    { command: 'omd ref apply-check --json', fails: 'screen-by-screen reference application is missing, incomplete, or stale; this is a plan, not rendered proof' },
     { command: 'omd ref research-check --json', fails: 'either domain or design research is missing, reused across lanes, stale, or unbound to its current output' },
     { command: 'omd ref check', fails: 'the board is one-source, kinship-unresolved, low-signal, or zone-uncovered' },
     { command: 'omd ref audit', fails: 'captures were taken sequentially instead of in one batch' },
@@ -428,7 +431,8 @@ export function buildBrief(
   }
   const judgmentPath = '.omd/design-judgment.json';
   const judgmentConsumer = stage === 'composition' || stage === 'candidate-generation' || stage === 'production';
-  if (judgmentConsumer && route && (route.gates.includes('dual-reference-research')
+  let referenceApplication: ReferenceApplicationProjection | null = null;
+  if ((judgmentConsumer || stage === 'art-direction') && route && (route.gates.includes('dual-reference-research')
     || (route.projectMode === 'greenfield' && existsSync(join(root, '.omd/reference-research.json'))))) {
     const researchPath = join(root, '.omd/reference-research.json');
     try {
@@ -438,8 +442,12 @@ export function buildBrief(
         expectedSourceContractSha256: route.sourceContractSha256,
         benchmarkRequired: route.gates.includes('greenfield-task-flow-benchmark'),
       });
+      referenceApplication = checkReferenceApplication(root, {
+        expectedSourceContractSha256: route.sourceContractSha256,
+        benchmarkRequired: route.gates.includes('greenfield-task-flow-benchmark'), expectedRequest: route.request,
+      });
     } catch (error) {
-      blockers.push(`selected ${stage} input missing or stale: .omd/reference-research.json — complete and verify both domain-reference and design-reference lanes (${error instanceof Error ? error.message : String(error)})`);
+      blockers.push(`selected ${stage} input missing or stale: reference research/application — run omd ref research-check and omd ref apply-check; both lanes and every destination surface need current decisions (${error instanceof Error ? error.message : String(error)})`);
     }
   }
   const hasReferenceBoard = existsSync(join(root, '.omd/reference-board.json'));
@@ -555,6 +563,7 @@ export function buildBrief(
 
   return {
     stage,
+    referenceApplication,
     existingDesignSystem,
     owner: definition?.owner ?? OWNER[stage] ?? 'coordinator',
     owns: designReview ? ['.omd/design/review.md'] : definition === undefined ? OWNS[stage] ?? [] : [definition.artifact],

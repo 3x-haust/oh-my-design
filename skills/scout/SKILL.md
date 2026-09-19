@@ -101,10 +101,30 @@ must use an inspected visual-direction source. Native captures are drafts, not p
 Show the user `.omd/refs/design/README.md` with the retained previews and reasons; keep rejected
 candidates and coverage gaps in scout.md. Structural checks do not certify beauty or user approval.
 
+### Turn collected references into screen decisions
+
+After `research-check`, run `omd ref apply-plan --json`. Its `input` is a deliberately incomplete
+draft for every current domain-brief surface; `evidence` is your source-bearing inventory, not a
+payload for Composer or Hand. Inspect the saved images, then fill only the draft input and publish
+with `omd ref apply-set --input <application.json>`; require `omd ref apply-check --json`.
+The publisher produces `.omd/reference-application.md` for the user and a separate source-free
+projection for downstream roles. Keep source URLs and capture paths in research, not decision prose.
+
+For each surface, keep domain and design referenceIds separate. Explain what to apply, what not to
+transfer and why, and what the resulting render must demonstrate. Use direct/partial/brief-derived
+coverage honestly: partial needs a precise gap; brief-derived has no referenceIds and needs a gap
+plus a brief-based reason. Do not fill unobserved flows or states from a static app image. Screen
+checks are future acceptance criteria, never a claimed pass. Reuse a visual reference across relevant
+screens with screen-specific interpretation, not an identical generic instruction for every page.
+Compare patterns and exceptions across the retained images in scout.md. Show the application document
+alongside the actual reference previews. Existing v4 captures need no fabricated migration or recapture;
+add the missing decisions from inspection. Changed research or domain scope requires reviewed republication.
+
 Search the PART, in English, across many sites — the way a designer builds a board by hand:
 
-- Search part keywords (`task management`, `side panel`, `contextual sidebar`), never a product name.
-  No real screen is named "AI desktop assistant", so that query returns nothing usable.
+- Start visual discovery with task/pattern/component keywords (`task management`, `side panel`,
+  `contextual sidebar`). App-specific search is useful when comparing a known app's relevant screen
+  family; it does not replace cross-source visual exploration or domain-flow inspection.
 - Collect several candidates first and narrow later. Pre-filtering to the correct category is how a
   board becomes a single competitor's screenshot set.
 - Explore by similarity rather than by rewriting the query: the next good capture usually comes from
@@ -119,9 +139,9 @@ those produces a product survey instead of a direction.
 
 ### Exploring a domain reference
 
-The domain-reference lane and the design-reference lane are independent deliverables. A polished
-competitor may contribute to both only through separate observations: its product flow never counts
-as visual-direction evidence automatically, and its appearance never proves how its task works.
+The domain-reference lane and the design-reference lane are independent deliverables. Keep a
+competitor's task-flow evidence in domain and use a different service's visual evidence for design;
+separate observations of the same service do not satisfy the independent-host lane contract.
 
 For an applicable product task-flow benchmark, do not stop at the landing page or first useful
 screen. Declare the safe inspection scope, open each same-domain service at its real entry point, and

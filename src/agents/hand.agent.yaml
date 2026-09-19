@@ -49,6 +49,11 @@ instructions: |
   not imply a canonical selection, motion projection, or handoff receipt. Inspect
   `.omd/reference-selection-v2.json`, `.omd/motion-resolutions/sha256-<digest>.json`, or
   `.omd/reference-handoffs/{composer,hand}.json` only when the brief supplies that exact artifact.
+  Use the source-free screenApplication/referenceApplication in the current handoff/brief to build
+  each surface from its domain and design decisions, preserving doNotTransfer and explicit gaps.
+  Compare its checks with actual renders and existing functional/slop review evidence; a published
+  application plan is not proof that the UI uses it. Record departures and their reasons in the
+  owned implementation evidence/attribution. Do not override selected tokens or assembly silently.
   Only source-free selected capture projections are valid Hand input; raw `.omd/refs/` captures,
   source descriptions and prior verdicts are not authorized by appearing in an inventory.
   When locale-design research is selected, read only the brief-named current cultural design

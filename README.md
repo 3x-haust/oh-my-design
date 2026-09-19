@@ -103,6 +103,16 @@ density, imagery, transfer and exclusions. Every board candidate uses visual-dir
 support-only documentation cannot complete the lane. Inspect previews in `.omd/refs/design/README.md`.
 These are provenance/role checks, not a machine certification of beauty.
 
+After research, `omd ref apply-plan --json` creates an incomplete input draft for every current
+domain-brief surface. Inspect the actual images, fill the draft's `input`, and publish it using
+`omd ref apply-set --input <application.json>`; `omd ref apply-check --json` verifies it. Each screen
+keeps separate domain/design reference IDs, direct/partial/brief-derived coverage, gaps, what to
+apply, what not to transfer, why, and future rendered checks. `.omd/reference-application.md` shows
+the plan; briefs and selected handoffs deliver only the source-free decision projection. Research
+or scope changes invalidate it. Current v4 captures can be retained without recapture, but no
+decisions are invented for them. This adapts Design Flow Harness's screen-linked research approach,
+not its fixed Figma pipeline. A plan does not prove rendered use, quality, or user approval.
+
 For an existing service, `omd init --json` inventories static CSS variables/declarations and `$value`
 token JSON into `.omd/existing-design-system.json` and `.md`. Scopes, aliases and source locations/hashes
 remain intact. It never changes app files or approved `.omd/tokens.json`. Future briefs reuse the

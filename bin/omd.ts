@@ -2402,6 +2402,22 @@ async function cmdRefResearch(mode: 'set' | 'check', opts: Opts): Promise<never>
   process.exit(0);
 }
 
+async function cmdRefApplication(mode: 'plan' | 'set' | 'check', opts: Opts): Promise<never> {
+  const command = `omd ref apply-${mode}`;
+  if (opts._.length || (mode === 'set' ? !opts.input : opts.input)) throw new Error(`usage: ${command}${mode === 'set' ? ' --input <application.json>' : ''} [--json]`);
+  const { readPersistedRoute } = await import('../core/route/index.ts');
+  const { referenceApplicationPlan, publishReferenceApplication, checkReferenceApplication, REFERENCE_APPLICATION_PATH } = await import('../core/ref/reference-application.ts');
+  const route = readPersistedRoute(process.cwd(), invocationFromActivation(opts, command));
+  if (route.references.decision !== 'discover') throw new Error('REFERENCE_APPLICATION_NOT_SELECTED');
+  const options = { expectedSourceContractSha256: route.sourceContractSha256,
+    benchmarkRequired: route.gates.includes('greenfield-task-flow-benchmark'), expectedRequest: route.request };
+  const result = mode === 'plan' ? referenceApplicationPlan(process.cwd(), options)
+    : mode === 'set' ? { path: REFERENCE_APPLICATION_PATH, screens: publishReferenceApplication(process.cwd(), inputJson(opts.input!, command), options, projectWriterFromActivation(opts, command)).screens.length }
+      : checkReferenceApplication(process.cwd(), options);
+  process.stdout.write(`${JSON.stringify(result, null, opts.json ? undefined : 2)}\n`);
+  process.exit(0);
+}
+
 /** Fails when the captured board holds no parts to compose section by section. */
 /**
  * `omd ref mood <add|show|check>` — the whole-page, visual-only lane.
@@ -4859,6 +4875,9 @@ function usage(): never {
     + '  ref discover-plan [--json]                  derive automatic search lanes from the current task; no user URLs required\n'
     + '  ref research-set --input research.json     bind separate domain/design lane evidence to current outputs\n'
     + '  ref research-check                         require both lanes and re-hash their evidence and outputs\n'
+    + '  ref apply-plan --json                      draft screen-by-screen use from current research/domain brief\n'
+    + '  ref apply-set --input application.json      publish interpreted domain/design decisions for every screen\n'
+    + '  ref apply-check --json                     verify current decisions and export source-free screen guidance\n'
     + '  ref board --input candidate-assemblies.json   author and persist a validated board from captured source/component pieces\n'
     + '  ref locale-bind --input bindings.json         bind local reference pieces to current cultural evidence decisions\n'
     + '  ref locale-bind-check                         revalidate board/profile/source locale bindings\n'
@@ -5175,6 +5194,9 @@ async function main(): Promise<never> {
     if (sub === 'discover-plan') return cmdRefDiscoveryPlan(opts);
     if (sub === 'research-set') return cmdRefResearch('set', opts);
     if (sub === 'research-check') return cmdRefResearch('check', opts);
+    if (sub === 'apply-plan') return cmdRefApplication('plan', opts);
+    if (sub === 'apply-set') return cmdRefApplication('set', opts);
+    if (sub === 'apply-check') return cmdRefApplication('check', opts);
     if (sub === 'add') return cmdRefAdd(opts);
     if (sub === 'add-batch') return cmdRefAddBatch(opts);
     if (sub === 'board') return cmdRefBoard(opts);
