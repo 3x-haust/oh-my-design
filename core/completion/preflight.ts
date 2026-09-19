@@ -11,7 +11,7 @@ import {
   type CompletionPublicationResult,
   type CompletionTypographyBinding,
 } from './publication.ts';
-import { parseReferenceResearch, validateReferenceResearch } from '../ref/reference-research.ts';
+import { readPublishedReferenceResearch, validateReferenceResearch } from '../ref/reference-research.ts';
 
 export { checkCompletionPublicationPrerequisites, CompletionPreflightError } from './publication.ts';
 export type { CompletionPublicationResult, CompletionTypographyBinding } from './publication.ts';
@@ -46,7 +46,7 @@ export function checkTerminalCompletion(root: string, invocation: ProjectRunInvo
   const route = existsSync(resolve(root, '.omd/route.json')) ? readPersistedRoute(root, invocation) : undefined;
   if (route?.gates.includes('dual-reference-research')) {
     try {
-      const research = parseReferenceResearch(JSON.parse(readFileSync(resolve(root, '.omd/reference-research.json'), 'utf8')));
+      const research = readPublishedReferenceResearch(root);
       validateReferenceResearch(root, research, {
         expectedSourceContractSha256: route.sourceContractSha256,
         benchmarkRequired: route.gates.includes('greenfield-task-flow-benchmark'),

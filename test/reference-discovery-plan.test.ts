@@ -30,7 +30,8 @@ test('URL-free showpiece requests receive automatic craft and motion lanes on a 
   assert.equal(plan.userUrlsRequired, false);
   assert.equal(plan.request, input.request);
   assert.deepEqual(plan.lanes.map(lane => lane.id), ['domain-reference', 'design-reference', 'motion']);
-  assert.deepEqual(plan.galleryDirectories, ['Awwwards', 'FWA', 'GDWEB']);
+  assert.deepEqual(plan.galleryDirectories, ['Siteinspire', 'Pinterest']);
+  assert.equal(plan.designSourcePolicy.access, 'free-only-verify-at-inspection');
   assert.equal(plan.motionEvidenceRequired, true);
   assert.deepEqual(plan.decisions, [], 'no section template is invented before Framer');
   assert.deepEqual(plan.locale, { surfaceLocale: null, explicitMarket: null, culturalDecision: null });
@@ -110,16 +111,21 @@ test('restrained discovery and sufficient existing evidence do not manufacture a
   const balancedProduct = buildReferenceDiscoveryPlan(root, routeAdaptiveFlow(operational));
   // Gathering a visual direction is the DEFAULT. A real run that gathered only similar services
   // produced a product survey instead of a direction, so ordinary product work now opens this lane;
-  // only a route declaring restrained expression closes it.
+  // restrained work also needs evidence for its visual direction.
   assert.equal(balancedProduct.lanes.some(lane => lane.id === 'design-reference'), true, 'ordinary product work gathers a visual direction');
   const restrainedRoute = fixture('medical-new-product');
   restrainedRoute.designAxes.expressiveDesignNeed = 'restrained';
   const restrainedPlan = buildReferenceDiscoveryPlan(root, routeAdaptiveFlow(restrainedRoute));
   assert.equal(restrainedPlan.lanes.some(lane => lane.id === 'design-reference'), true, 'design reference is the second required lane');
+  assert.deepEqual(restrainedPlan.galleryDirectories, ['UI Bowl', 'Pinterest', 'Siteinspire']);
+  assert.equal(restrainedPlan.designSourcePolicy.domainOutput, '.omd/domain-references.json');
+  assert.equal(restrainedPlan.designSourcePolicy.designOutput, '.omd/design-references.json');
+  assert.match(restrainedPlan.designSourcePolicy.fallback, /Do not purchase/);
   const skipped = buildReferenceDiscoveryPlan(root, routeAdaptiveFlow(fixture('copy-only')));
   assert.equal(skipped.decision, 'skip');
   assert.deepEqual(skipped.lanes, []);
   assert.deepEqual(skipped.galleryDirectories, []);
+  assert.deepEqual(skipped.designSourcePolicy.candidates, []);
   assert.ok(skipped.skipReason);
 });
 

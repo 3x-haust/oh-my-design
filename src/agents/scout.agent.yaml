@@ -52,6 +52,16 @@ instructions: |
   returned output with its execution provenance. You still own inspection, synthesis and publication;
   a coordinator transport result is not a completed search by this role or an approved reference.
   Gallery directories are discovery channels, not preset winners. Use current results to find the
+  relevant free entry: apps/product UI use screen/pattern galleries such as UI Bowl and Pinterest;
+  websites/marketing use website galleries such as Siteinspire and Pinterest. Follow discover-plan's
+  designSourcePolicy, verify current free access per entry, and record a task-specific quality reason
+  (viewport, hierarchy, typography, density) rather than trusting the gallery's reputation. On login,
+  payment, or blocking, record the limit and try another public source. Never purchase, start a trial,
+  install an MCP, or bypass restrictions. Free viewing does not grant asset reuse rights.
+  For app screenshot/pin entries, open the entry and trace its original source when available. Use
+  ref import-image for lawful image-only observations; gallery chrome is not the app's DOM and a
+  screenshot proves no interaction. Label concept versus released screen and preserve those limits.
+  For live-renderable references use the
   actual site and relevant case study, then inspect its live desktop/mobile composition and changing
   state. A remembered URL, search snippet, gallery thumbnail or a query you only wrote is not that
   observation. If a source is unavailable, search for a suitable alternative; do not make the user
@@ -59,7 +69,11 @@ instructions: |
   Keep the actual queries, chosen/rejected leads, and resulting native capture identities in your
   owned Scout synthesis. After both lanes have current outputs, print `omd schema reference-research
   --json`, fill its exact skeleton, publish it with `omd ref research-set`, and require `omd ref
-  research-check --json` to pass. The same capture cannot satisfy both lanes. These records disclose
+  research-check --json` to pass. Each design source requires discovery URL/kind/free access/qualityReason.
+  The publisher saves `.omd/domain-references.json` and `.omd/design-references.json` separately and
+  writes `.omd/reference-research.json` last as their consistency receipt. Never hand-write these outputs.
+  All three records must agree. Renaming identical capture bytes does not permit reuse across lanes.
+  These records disclose
   acquisition provenance, not tamper-proof search receipts.
   For a user-shared resource post, apply `protocol/reference-assembly.md` §User-shared posts and
   component directories. Read the visible caption, classify its purpose, and retain the chain from
@@ -106,7 +120,7 @@ instructions: |
   returned status, timestamp, receipt hash, final URL, and exact unavailability reason in the
   profile. Then publish only through `omd locale profile --publish`; a citation string, locale
   label, likely script, or country stereotype is never evidence and never a design instruction.
-  You have write access only because `.omd/scout.md` and `.omd/reference-research.json` are your owned durable synthesis; use the
+  You have write access only because `.omd/scout.md` is your directly owned durable synthesis; publish both research files and their receipt through `omd ref research-set`. Use the
   `omd ref:*` and `omd craft-capture:*` commands for the board, captures, and reference records.
   Outside those command-owned records, write or edit only `.omd/scout.md`. Never touch production
   source, another `.omd/` artifact, or ask another agent to write the scout artifact for you.

@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
 import { readPersistedRoute, adaptiveRouteRecordSha256 } from '../route/adaptive-route-persistence.ts';
 import { changedPathsForAdaptiveRoute } from '../route/adaptive-route-scope.ts';
-import { parseReferenceResearch, validateReferenceResearch } from '../ref/reference-research.ts';
+import { readPublishedReferenceResearch, validateReferenceResearch } from '../ref/reference-research.ts';
 import { nodeStableProjectFileSystem, readStableProjectFile } from '../runtime/stable-project-file.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import type { AdaptiveRouteRecord } from '../route/adaptive-flow-domain.ts';
@@ -60,7 +60,7 @@ export function validateDesignHandoffArtifacts(root: string, route: AdaptiveRout
     if (!read(stage.artifact).toString('utf8').trim()) return fail(`selected stage has no output: ${stage.artifact}`);
   }
   if (route.gates.includes('dual-reference-research')) {
-    validateReferenceResearch(root, parseReferenceResearch(JSON.parse(read('.omd/reference-research.json').toString('utf8'))), {
+    validateReferenceResearch(root, readPublishedReferenceResearch(root), {
       expectedSourceContractSha256: route.sourceContractSha256,
       benchmarkRequired: route.gates.includes('greenfield-task-flow-benchmark'),
     });

@@ -36,7 +36,7 @@ import {
 } from '../ref/reference-locale-binding.ts';
 import { readSelectedReferenceHandoff } from '../ref/selected-handoff.ts';
 import type { ReferenceHandoffRole } from '../ref/reference-handoff.ts';
-import { parseReferenceResearch, validateReferenceResearch } from '../ref/reference-research.ts';
+import { readPublishedReferenceResearch, validateReferenceResearch } from '../ref/reference-research.ts';
 
 export {
   EVIDENCE_CLAIM_PUBLICATION_SCHEMA,
@@ -187,7 +187,7 @@ const OWNER: Readonly<Record<string, string>> = {
   review: 'omd-eye',
 };
 const OWNS: Readonly<Record<string, readonly string[]>> = {
-  scout: ['.omd/scout.md', '.omd/reference-research.json', '.omd/task-flow-benchmark.json'],
+  scout: ['.omd/scout.md', '.omd/domain-references.json', '.omd/design-references.json', '.omd/reference-research.json', '.omd/task-flow-benchmark.json'],
   'candidate-generation': ['structurally distinct UX candidates and selected model metadata'],
   production: ['production source (every file the surface ships)'],
   'independent-review': ['the independent review verdict returned to the coordinator'],
@@ -449,7 +449,7 @@ export function buildBrief(
     const researchPath = join(root, '.omd/reference-research.json');
     try {
       if (!existsSync(researchPath)) throw new Error('missing');
-      const research = parseReferenceResearch(JSON.parse(readFileSync(researchPath, 'utf8')));
+      const research = readPublishedReferenceResearch(root);
       validateReferenceResearch(root, research, {
         expectedSourceContractSha256: route.sourceContractSha256,
         benchmarkRequired: route.gates.includes('greenfield-task-flow-benchmark'),

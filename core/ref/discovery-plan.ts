@@ -32,6 +32,13 @@ export type ReferenceDiscoveryPlan = Readonly<{
     evidence: readonly string[];
   }>[];
   galleryDirectories: readonly string[];
+  designSourcePolicy: Readonly<{
+    access: 'free-only-verify-at-inspection';
+    domainOutput: '.omd/domain-references.json';
+    designOutput: '.omd/design-references.json';
+    candidates: readonly Readonly<{ name: string; url: string; purpose: string }>[];
+    fallback: string;
+  }>;
   decisions: readonly Readonly<{
     zoneId: string;
     question: string;
@@ -79,13 +86,16 @@ export function buildReferenceDiscoveryPlan(root: string, route: RouteRecord): R
   const surface = readFrame(root)?.uxSurface ?? null;
   const marketing = surface === 'marketing' || route.sourceContract.referenceDiscovery.taskNeed === 'new-marketing';
   const motionEvidenceRequired = discovering && route.strategy.methods.includes('motion-one');
-  // Visual reference gathering is the DEFAULT discovery path, not a showpiece-only reward.
-  //
-  // A real run gathered only similar services (a welfare portal, gov.uk, two benefit screeners) and
-  // never opened a visual board at all, because this lane required `expressiveDesignNeed ===
-  // 'showpiece'`. The design that came out could only be a product survey. Every design has a visual
-  // direction to find; only `restrained` work declares that it has none to explore.
-  const visualCraft = discovering && expressiveNeed !== 'restrained';
+  // Restrained work still needs a visual reference. Gallery names are leads, never quality proof
+  // or a promise that a provider's entire catalogue/API is free.
+  const galleryCandidates = !discovering ? [] : marketing ? [
+    { name: 'Siteinspire', url: 'https://www.siteinspire.com/', purpose: 'Website composition, typography, rhythm; follow the entry to the live site.' },
+    { name: 'Pinterest', url: 'https://www.pinterest.com/', purpose: 'Visual-direction discovery; open the pin and trace its original, not just a thumbnail.' },
+  ] : [
+    { name: 'UI Bowl', url: 'https://uibowl.io/', purpose: 'Released app/product screens by pattern; retain only relevant, freely inspectable entries.' },
+    { name: 'Pinterest', url: 'https://www.pinterest.com/', purpose: 'App UI/component discovery; verify screen provenance and target viewport before retaining.' },
+    { name: 'Siteinspire', url: 'https://www.siteinspire.com/', purpose: 'Complementary web typography/layout; not a substitute for product-screen anatomy.' },
+  ];
   const motionDiscovery = motionEvidenceRequired;
   const decisions = (plan?.zones ?? []).filter(zone => zone.required).map(zone => {
     const bound = plan?.schema === 'reference-acquisition-plan-v2' ? zone as AcquisitionZoneV2 : null;
@@ -137,7 +147,14 @@ export function buildReferenceDiscoveryPlan(root: string, route: RouteRecord): R
     }),
     expressiveNeed,
     lanes: Object.freeze(lanes.map(lane => Object.freeze(lane))),
-    galleryDirectories: Object.freeze(visualCraft ? ['Awwwards', 'FWA', 'GDWEB'] : []),
+    galleryDirectories: Object.freeze(galleryCandidates.map(source => source.name)),
+    designSourcePolicy: Object.freeze({
+      access: 'free-only-verify-at-inspection',
+      domainOutput: '.omd/domain-references.json',
+      designOutput: '.omd/design-references.json',
+      candidates: Object.freeze(galleryCandidates),
+      fallback: 'Check current free access. If a gallery requires unavailable login/payment or is blocked, record the limitation and search another public gallery or original linked source. Do not purchase, start a trial, install an MCP, bypass access controls, or claim a blocked source was inspected. Free viewing does not grant reuse rights.',
+    }),
     decisions: Object.freeze(decisions),
     motionEvidenceRequired,
     sourcePolicy: 'current-search-then-live-inspection',

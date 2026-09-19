@@ -93,20 +93,33 @@ visual craft beyond the product category, and the plan's motion investigation. N
 investigate a motion candidate without selecting it for production; selected `motion-one` additionally
 requires positive measured evidence. Explicit preferences
 for a reference region or gallery belong in those searches; a language alone does not imply a
-country's style or a target market. Directories such as Awwwards, FWA and GDWEB are lead sources,
-not fixed winners or a visual preset. Search results lead to the actual site and relevant case study;
-live desktop/mobile inspection, scoped captures and motion measurements establish the evidence.
+country's style or a target market. Prefer freely inspectable screen/pattern galleries (for example
+UI Bowl and relevant Pinterest entries) for apps/product UI, and website galleries (for example
+Siteinspire and Pinterest) for website/marketing direction. The discovery plan supplies surface-aware
+leads, not fixed winners or guarantees of free catalogue/API access. Verify each entry's current free
+access, open it beyond the thumbnail, and follow its original where available. If access is blocked,
+record the limit and try another public source; never purchase, start trials, install an MCP, or
+bypass access controls. A screenshot-only reference can establish visual anatomy through the native
+image import path, not live behavior or measured app DOM. Free viewing is not an asset reuse license.
 
-Discovery always keeps two ledgers conceptually separate:
+Discovery always saves two separate ledgers:
 
-- **domain reference** asks how comparable services organize real screens, features, states, and
+- **domain reference** (`.omd/domain-references.json`) asks how comparable services organize real screens, features, states, and
   task flows. When `greenfield-task-flow-benchmark` applies, its private v2 benchmark records every
   safe reachable screen in the declared scope, the actual click path, feature and flow groupings,
   current local evidence, and every explicit coverage gap. `omd benchmark check` re-hashes that
   evidence; a landing-page visit or prose summary cannot satisfy it.
-- **design reference** asks how the destination should feel and be composed. It uses the measured
+- **design reference** (`.omd/design-references.json`) asks how the destination should feel and be composed. It uses the measured
   board, mood, typography, component, and craft evidence already defined by this protocol. Domain
   research is not visual direction merely because the comparable product looks polished.
+
+`omd ref research-set` is the sole publisher of both files and writes `.omd/reference-research.json`
+last as their consistency receipt. `research-check` and downstream gates require all three current
+records. Each v2 design source includes `discovery` (entry URL, kind, observed free access, concrete
+qualityReason). Its quality reason explains task/viewport fit, hierarchy, typography or density;
+provider prestige is insufficient. This is inspectable provenance, not authenticated proof of taste
+or browsing. Missing v1 provenance must be collected before republication, never backfilled from
+memory. The same evidence path OR identical bytes under another filename cannot satisfy both lanes.
 
 The two lanes may inspect the same site, but they never share a conclusion implicitly. Each lane
 must produce its own bounded observations and downstream use. New marketing still does not

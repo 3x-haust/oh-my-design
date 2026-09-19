@@ -81,6 +81,17 @@ Pi's `omd_cli` does not need an external activation file. First run
 `omd route validate --input .omd/.cache/route-input.json --json`, repair the named input errors,
 then publish with `route classify`. An input validation error is not missing host authentication.
 
+Reference research is saved separately: `.omd/domain-references.json` for similar-service screens,
+features and flows, and `.omd/design-references.json` for composition, type, density and component
+craft. `omd ref discover-plan --json` suggests screen galleries such as UI Bowl/Pinterest for product
+UI and website galleries such as Siteinspire/Pinterest for marketing. Verify free access per entry;
+on blocked/login/paid access, use another public source without purchases, trials or MCP installation.
+Free viewing does not grant reuse rights. Record the inspected screen, discovery entry and concrete
+quality reason, not just a prestigious gallery name. Use `omd schema reference-research --json`,
+`omd ref research-set --input <input.json>` and `omd ref research-check --json` to publish/check both
+files and their aggregate consistency receipt. Old v1 records require actual provenance collection
+before v2 republication; renamed identical images cannot satisfy both lanes.
+
 For design before implementation, use `omd schema design-route-input` with `deliveryMode: design-only`.
 Output stays under `.omd/**`; research, design, review, and handoff proceed without application source.
 Bind the documents using `omd schema design-handoff`, then run

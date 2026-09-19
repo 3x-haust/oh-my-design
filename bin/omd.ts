@@ -2357,33 +2357,35 @@ async function cmdRefDiscoveryPlan(opts: Opts): Promise<never> {
 
 async function cmdRefResearch(mode: 'set' | 'check', opts: Opts): Promise<never> {
   const usage = mode === 'set'
-    ? 'usage: omd ref research-set --input <reference-research.json> --activation <host-issued-invocation.json> [--json]'
-    : 'usage: omd ref research-check --activation <host-issued-invocation.json> [--json]';
+    ? 'usage: omd ref research-set --input <reference-research.json> [--activation <host-issued-invocation.json>] [--json]'
+    : 'usage: omd ref research-check [--activation <host-issued-invocation.json>] [--json]';
   if (opts._.length !== 0 || (mode === 'set' && !opts.input) || (mode === 'check' && opts.input)) {
     throw new Error(usage);
   }
   const { readPersistedRoute } = await import('../core/route/index.ts');
-  const { parseReferenceResearch, validateReferenceResearch } = await import('../core/ref/reference-research.ts');
+  const { parseReferenceResearch, validateReferenceResearch, publishReferenceResearch, readPublishedReferenceResearch, DOMAIN_REFERENCES_PATH, DESIGN_REFERENCES_PATH } = await import('../core/ref/reference-research.ts');
   const command = `omd ref research-${mode}`;
   const invocation = invocationFromActivation(opts, command);
   const route = readPersistedRoute(process.cwd(), invocation);
   if (route.references.decision !== 'discover') {
     throw new Error('REFERENCE_RESEARCH_NOT_SELECTED');
   }
-  const inputPath = mode === 'set'
-    ? opts.input!
-    : join(process.cwd(), '.omd', 'reference-research.json');
-  const research = parseReferenceResearch(inputJson(inputPath, command));
-  validateReferenceResearch(process.cwd(), research, {
+  const research = mode === 'set'
+    ? parseReferenceResearch(inputJson(opts.input!, command))
+    : readPublishedReferenceResearch(process.cwd());
+  const validation = {
     expectedSourceContractSha256: route.sourceContractSha256,
     benchmarkRequired: route.gates.includes('greenfield-task-flow-benchmark'),
-  });
-  let path = '.omd/reference-research.json';
+  };
+  validateReferenceResearch(process.cwd(), research, validation);
+  const path = '.omd/reference-research.json';
   if (mode === 'set') {
-    path = projectWriterFromActivation(opts, command).write(path, `${JSON.stringify(research, null, 2)}\n`);
+    publishReferenceResearch(process.cwd(), research, validation, projectWriterFromActivation(opts, command));
   }
   const result = {
     path,
+    domainPath: DOMAIN_REFERENCES_PATH,
+    designPath: DESIGN_REFERENCES_PATH,
     domainSources: research.domainReference.sources.length,
     designSources: research.designReference.sources.length,
     benchmarkBound: research.domainReference.benchmarkSha256 !== null,

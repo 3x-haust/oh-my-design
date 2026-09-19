@@ -9,6 +9,13 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { detectBlockReason } from '../core/render/index.ts';
 
+test('404 and other failed responses never count as reference screens even with a measured component', () => {
+  for (const status of [400, 401, 404, 410, 429]) {
+    assert.equal(detectBlockReason('Service patterns', 5000, status, true), `HTTP ${status}`);
+  }
+  assert.equal(detectBlockReason('Error summary example', 5000, 200, true), null);
+});
+
 // ── HTTP status signals ──────────────────────────────────────────────────────
 
 test('HTTP 403 is a block signal', () => {
@@ -128,7 +135,7 @@ test('a measured nonempty component can resolve only the short-body heuristic', 
   assert.match(detectBlockReason('Example', 93, 200)!, /near-empty body/);
   assert.match(detectBlockReason('Example', 0, 200, true)!, /near-empty body/);
   assert.match(detectBlockReason('Example', 93, null, true)!, /near-empty body/);
-  assert.match(detectBlockReason('Example', 93, 404, true)!, /near-empty body/);
+  assert.match(detectBlockReason('Example', 93, 404, true)!, /HTTP 404/);
 });
 
 test('scoped component evidence cannot override HTTP errors or challenge titles', () => {

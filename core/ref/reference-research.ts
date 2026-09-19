@@ -1,14 +1,19 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { isAbsolute, resolve, sep } from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 import { readReferenceBoardArtifacts } from './board-artifacts.ts';
+import type { ProjectWriteAdapter } from '../runtime/project-write.ts';
 import {
   parseTaskFlowBenchmark,
   taskFlowBenchmarkSha256,
   validateTaskFlowBenchmarkEvidence,
 } from './task-flow-benchmark.ts';
 
-export const REFERENCE_RESEARCH_SCHEMA = 'reference-research-v1' as const;
+export const REFERENCE_RESEARCH_SCHEMA = 'reference-research-v2' as const;
+export const DOMAIN_REFERENCES_PATH = '.omd/domain-references.json';
+export const DESIGN_REFERENCES_PATH = '.omd/design-references.json';
+export const REFERENCE_RESEARCH_PATH = '.omd/reference-research.json';
 export const REFERENCE_RESEARCH_KEYS = [
   'schema',
   'sourceContractSha256',
@@ -48,6 +53,12 @@ type ResearchSource = Readonly<{
   decision: string;
   finding: string;
   evidence: ResearchEvidence;
+  discovery?: Readonly<{
+    url: string;
+    kind: 'app-gallery' | 'web-gallery' | 'visual-bookmark' | 'user-provided';
+    access: 'free';
+    qualityReason: string;
+  }>;
 }>;
 type ResearchLane = Readonly<{
   queries: readonly string[];
@@ -118,11 +129,22 @@ function evidence(value: unknown): ResearchEvidence {
   return Object.freeze({ path, sha256: digest(input.sha256, 'REFERENCE_RESEARCH_EVIDENCE_SHA') });
 }
 
-function source(value: unknown): ResearchSource {
+function source(value: unknown, design: boolean): ResearchSource {
   const input = record(value, 'REFERENCE_RESEARCH_SOURCE_INVALID');
-  exactKeys(input, REFERENCE_RESEARCH_SOURCE_KEYS, 'REFERENCE_RESEARCH_SOURCE_KEYS');
+  exactKeys(input, design ? [...REFERENCE_RESEARCH_SOURCE_KEYS, 'discovery'] : REFERENCE_RESEARCH_SOURCE_KEYS, 'REFERENCE_RESEARCH_SOURCE_KEYS');
   const observedAt = text(input.observedAt, 'REFERENCE_RESEARCH_OBSERVED_AT');
   if (!DATE.test(observedAt)) fail('REFERENCE_RESEARCH_OBSERVED_AT');
+  let discovery: ResearchSource['discovery'];
+  if (design) {
+    const entry = record(input.discovery, 'REFERENCE_RESEARCH_DESIGN_DISCOVERY_REQUIRED');
+    exactKeys(entry, ['url', 'kind', 'access', 'qualityReason'], 'REFERENCE_RESEARCH_DESIGN_DISCOVERY_KEYS');
+    if (!['app-gallery', 'web-gallery', 'visual-bookmark', 'user-provided'].includes(entry.kind as string)) fail('REFERENCE_RESEARCH_DESIGN_DISCOVERY_KIND');
+    if (entry.access !== 'free') fail('REFERENCE_RESEARCH_DESIGN_FREE_ACCESS_REQUIRED');
+    discovery = Object.freeze({
+      url: httpsUrl(entry.url), kind: entry.kind as NonNullable<ResearchSource['discovery']>['kind'],
+      access: 'free', qualityReason: text(entry.qualityReason, 'REFERENCE_RESEARCH_DESIGN_QUALITY_REASON'),
+    });
+  }
   return Object.freeze({
     id: text(input.id, 'REFERENCE_RESEARCH_SOURCE_ID'),
     url: httpsUrl(input.url),
@@ -130,31 +152,34 @@ function source(value: unknown): ResearchSource {
     decision: text(input.decision, 'REFERENCE_RESEARCH_DECISION'),
     finding: text(input.finding, 'REFERENCE_RESEARCH_FINDING'),
     evidence: evidence(input.evidence),
+    ...(discovery ? { discovery } : {}),
   });
 }
 
-function lane(value: unknown, keys: readonly string[], code: string): ResearchLane & Record<string, unknown> {
+function lane(value: unknown, keys: readonly string[], code: string, design = false): ResearchLane & Record<string, unknown> {
   const input = record(value, code);
   exactKeys(input, keys, `${code}_KEYS`);
   if (!Array.isArray(input.sources) || input.sources.length === 0) fail(`${code}_SOURCE_COVERAGE`);
-  const sources = input.sources.map(source);
+  const sources = input.sources.map(value => source(value, design));
   if (new Set(sources.map((entry) => entry.id)).size !== sources.length) fail(`${code}_SOURCE_DUPLICATE`);
   return { ...input, queries: texts(input.queries, `${code}_QUERY`), sources };
 }
 
 export function parseReferenceResearch(value: unknown): ReferenceResearch {
   const input = record(value, 'REFERENCE_RESEARCH_INVALID');
+  if (input.schema === 'reference-research-v1') fail('REFERENCE_RESEARCH_UPGRADE_REQUIRED: use omd schema reference-research; inspect free design-gallery sources and republish with omd ref research-set');
   exactKeys(input, REFERENCE_RESEARCH_KEYS, 'REFERENCE_RESEARCH_KEYS');
   if (input.schema !== REFERENCE_RESEARCH_SCHEMA) fail('REFERENCE_RESEARCH_SCHEMA');
   const sourceContractSha256 = digest(input.sourceContractSha256, 'REFERENCE_RESEARCH_SOURCE_CONTRACT_SHA');
   const domain = lane(input.domainReference, REFERENCE_RESEARCH_DOMAIN_KEYS, 'REFERENCE_RESEARCH_DOMAIN');
-  const design = lane(input.designReference, REFERENCE_RESEARCH_DESIGN_KEYS, 'REFERENCE_RESEARCH_DESIGN');
+  const design = lane(input.designReference, REFERENCE_RESEARCH_DESIGN_KEYS, 'REFERENCE_RESEARCH_DESIGN', true);
   const benchmarkSha256 = domain.benchmarkSha256 === null
     ? null
     : digest(domain.benchmarkSha256, 'REFERENCE_RESEARCH_BENCHMARK_SHA');
   const boardSha256 = digest(design.boardSha256, 'REFERENCE_RESEARCH_BOARD_SHA');
-  const domainEvidence = new Set(domain.sources.map((entry) => `${entry.evidence.path}:${entry.evidence.sha256}`));
-  if (design.sources.some((entry) => domainEvidence.has(`${entry.evidence.path}:${entry.evidence.sha256}`))) {
+  const domainPaths = new Set(domain.sources.map(entry => entry.evidence.path));
+  const domainHashes = new Set(domain.sources.map(entry => entry.evidence.sha256));
+  if (design.sources.some(entry => domainPaths.has(entry.evidence.path) || domainHashes.has(entry.evidence.sha256))) {
     fail('REFERENCE_RESEARCH_LANE_EVIDENCE_REUSED');
   }
   return Object.freeze({
@@ -163,6 +188,36 @@ export function parseReferenceResearch(value: unknown): ReferenceResearch {
     domainReference: Object.freeze({ queries: domain.queries, sources: domain.sources, benchmarkSha256 }),
     designReference: Object.freeze({ queries: design.queries, sources: design.sources, boardSha256 }),
   });
+}
+
+/** Separate, inspectable deliverables; the aggregate is a consistency receipt written last. */
+export function referenceResearchArtifacts(research: ReferenceResearch) {
+  const envelope = { sourceContractSha256: research.sourceContractSha256 };
+  return {
+    [DOMAIN_REFERENCES_PATH]: { schema: 'domain-references-v1', ...envelope, ...research.domainReference },
+    [DESIGN_REFERENCES_PATH]: { schema: 'design-references-v1', ...envelope, ...research.designReference },
+    [REFERENCE_RESEARCH_PATH]: research,
+  };
+}
+
+export function publishReferenceResearch(root: string, input: unknown, options: ValidationOptions, writer: ProjectWriteAdapter): void {
+  const research = parseReferenceResearch(input);
+  validateReferenceResearch(root, research, options);
+  for (const [path, value] of Object.entries(referenceResearchArtifacts(research))) {
+    writer.write(path, `${JSON.stringify(value, null, 2)}\n`);
+  }
+}
+
+/** Fail closed on missing lanes or an interrupted/stale publication; never infer a second lane. */
+export function readPublishedReferenceResearch(root: string): ReferenceResearch {
+  const research = parseReferenceResearch(JSON.parse(fileBytes(root, REFERENCE_RESEARCH_PATH, 'REFERENCE_RESEARCH_MISSING').toString('utf8')));
+  for (const [path, expected] of Object.entries(referenceResearchArtifacts(research))) {
+    if (path === REFERENCE_RESEARCH_PATH) continue;
+    const actual = JSON.parse(fileBytes(root, path, `REFERENCE_RESEARCH_LANE_MISSING: ${path}`).toString('utf8'));
+    // Object key order is not evidence; compare the decoded record recursively.
+    if (!isDeepStrictEqual(actual, expected)) fail(`REFERENCE_RESEARCH_LANE_STALE: ${path}`);
+  }
+  return research;
 }
 
 function fileBytes(root: string, path: string, code: string): Buffer {

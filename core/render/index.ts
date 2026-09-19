@@ -115,7 +115,7 @@ const CHALLENGE_TITLE_PATTERNS: RegExp[] = [
  * hollow page; returns null when the page looks valid.
  *
  * Rules, in order:
- *   1. HTTP 403 or any 5xx → explicitly blocked or server error
+ *   1. HTTP 4xx/5xx → unavailable, blocked, or server error (never reference content)
  *   2. Challenge-page title → Cloudflare / WAF interstitial
  *   3. Near-empty body (< 200 visible chars) → hollow unless a visible, nonempty
  *      component has been measured in a successful response. Length alone does
@@ -127,7 +127,7 @@ export function detectBlockReason(
   httpStatus: number | null,
   hasMeasuredComponent = false,
 ): string | null {
-  if (httpStatus !== null && (httpStatus === 403 || httpStatus >= 500)) {
+  if (httpStatus !== null && httpStatus >= 400) {
     return `HTTP ${httpStatus}`;
   }
   for (const pattern of CHALLENGE_TITLE_PATTERNS) {

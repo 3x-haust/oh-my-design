@@ -80,6 +80,16 @@ Pi에서 `omd_cli`를 사용할 때 외부 activation 파일은 필요하지 않
 `omd route validate --input .omd/.cache/route-input.json --json`으로 검사하고, 오류에 표시된
 필드를 고친 다음 `route classify`로 저장합니다. 입력 오류를 인증 누락으로 처리하지 않습니다.
 
+레퍼런스 조사는 **도메인**(`.omd/domain-references.json`: 유사 서비스의 화면·기능·플로우)과
+**디자인**(`.omd/design-references.json`: 구성·타이포·밀도·컴포넌트)으로 따로 저장합니다.
+`omd ref discover-plan --json`은 앱/제품 UI에 UI Bowl·Pinterest, 웹/마케팅에 Siteinspire·Pinterest
+같은 탐색 후보를 제시합니다. 실제 무료 열람 가능한 항목만 사용하며, 막힌 출처는 다른 공개
+출처로 대체합니다. 유료 결제·체험 시작·MCP 자동 설치는 하지 않습니다. 무료 열람과 재사용
+권한은 별개입니다. 갤러리 이름만으로 품질을 인정하지 않고 원본 화면과 선택 이유를 기록합니다.
+`omd schema reference-research --json` → `omd ref research-set --input <input.json>` →
+`omd ref research-check --json`으로 두 파일과 통합 일치 기록을 검증합니다. v1 기록은 실제
+디자인 출처 확인 후 v2로 다시 발행해야 하며, 같은 이미지의 이름만 바꾼 중복도 거부합니다.
+
 “실제 개발 전까지만” 요청은 `omd schema design-route-input`의 `deliveryMode: design-only`를
 사용합니다. 출력은 `.omd/**`로 제한하고 레퍼런스 조사·설계·검토·핸드오프까지 진행합니다.
 마지막에 `omd schema design-handoff`에 따라 문서 해시를 기록하고

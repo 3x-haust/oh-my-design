@@ -59,6 +59,23 @@ it contains useful, non-duplicate evidence for every applicable category:
 
 ### Collecting a visual direction
 
+Run `omd ref discover-plan --json` and follow its free-access design-source policy. For apps and
+product interfaces start with screen/pattern galleries such as UI Bowl and relevant Pinterest
+entries; for website/marketing direction start with website galleries such as Siteinspire and
+Pinterest. These are replaceable discovery channels, not mandatory winners or guarantees of free
+API/catalogue access. Verify the specific entry is freely viewable now. If login, a paywall, or
+blocking prevents inspection, record it in scout.md and try another public gallery/original source;
+never purchase, start trials, install an MCP, or bypass access controls just for research.
+
+Open each retained entry beyond its search thumbnail. Follow the original source when available.
+Released-app screenshots may establish visual anatomy, not working interactions. For screenshot-only
+app/pin references use `omd ref import-image` with the actual source-page provenance and image-only
+limitations; never measure the gallery chrome as the pictured app or invent live DOM/motion proof.
+Keep the discovery entry URL, free access observation, and a concrete quality reason for the task's
+viewport, hierarchy, typography, and density in each design source's `discovery` field. A polished
+gallery name or a popular pin does not establish quality. Label concepts versus shipped screens.
+Free viewing is not a reuse license: reference pixels remain study material, never shipped assets.
+
 Search the PART, in English, across many sites — the way a designer builds a board by hand:
 
 - Search part keywords (`task management`, `side panel`, `contextual sidebar`), never a product name.
@@ -100,8 +117,12 @@ stale, reused, unreachable, or unorganized observation blocks completion.
 After the domain and design lanes both have current evidence, print `omd schema reference-research
 --json`, publish the exact record with `omd ref research-set`, and run `omd ref research-check
 --json`. The record binds the domain lane to the current benchmark when applicable and the design
-lane to the current reference board. It also refuses one capture/hash pair reused across the two
-lanes. Do not hand-write a completion claim when this gate is missing or stale.
+lane to the current reference board. The publisher saves `.omd/domain-references.json` and
+`.omd/design-references.json` as separate deliverables, with `.omd/reference-research.json` as the
+consistency receipt. All three must agree; a v1 receipt needs explicit v2 republication after actual
+design discovery, not synthesized provenance. Neither the same path nor identical capture bytes
+renamed into another file can satisfy both lanes. Do not hand-write a completion claim when this
+gate is missing or stale.
 
 ### What is not a reference
 
