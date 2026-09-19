@@ -123,14 +123,21 @@ candidate-generation, safety-validation, production, browser-evidence, independe
 회귀 테스트는 실패 사례만이 아니라 정상 카피 전용 경로, 실제 로컬 CLI 호출, design-only 분기,
 write/edit/bash 차단, 리서치 복구 가능성, 현재 리뷰 hash, 후보 stub 거부, 프로젝트별 큐,
 실패 뒤 큐 복구, 취소, 후속 작업 횟수 제한과 권한 실패 시 중단을 포함한다.
-소스 작성 경계 보강 후 로컬 최종 검증: `npm test` 총 2,709개 중 2,707 통과·0 실패·기존 조건부 2개 skip
+소스 작성 경계 및 네이티브 오류 진단 보강 후 로컬 검증: `npm test` 총 2,712개 중 2,710 통과·0 실패·기존 조건부 2개 skip
 (비-Darwin 전용 검사 1개와 외부 관찰자 서명 권한 필요 검사 1개),
 `npx tsc --noEmit` 통과, `npm run build` 통과, 스킬 quick validation 통과.
 `pi install .`로 개발본을 적용했다. 이미 열려 있는 Pi 세션은 `/reload`가 필요하다.
 새 CI의 최초 Linux/Node 22 전체 실행에서는 기존 테스트의 Node 24 테스트 프로세스 판별과
-Darwin 전용 발행 검사가 실패했다. 프로덕션 권한 검사는 변경하지 않았다. 전체 suite는 macOS 15 /
+Darwin 전용 발행 검사가 실패했다. 프로덕션 권한 검사는 변경하지 않았다. 전체 suite는 macOS 26 /
 Node 24.11.0에서, Pi 게이트·카피·slop loop의 이식 가능한 suite는 Linux / Node 24.11.0에서도
-실행하도록 CI를 분리했다. macos-15는 GitHub의 [표준 runner 라벨](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)이다.
+실행하도록 CI를 분리했다. macos-26는 GitHub의 [표준 runner 라벨](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)이다.
+macOS 15 CI에서는 봉인된 0555 디렉터리의 exclusive rename이 `EACCES`로 거부됐다.
+읽기 전용 디렉터리 rename 제한은 [Apple의 rename 문서](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/rename.2.html)에도 명시돼 있다.
+이를 통과시키려고 후보의 쓰기 권한을 다시 열거나 exclusive rename을 일반 rename으로 바꾸지 않는다.
+macOS 15의 이 환경은 dependency-seal 전체 발행 경로를 지원하는 것으로 보고하지 않는다.
+현재 stable runner에서 전체 검사를 유지하며, 0555/0444 권한·inode·내용을 보존하는 실제 발행 검사를 추가했다.
+CI에서 발견한 별도 프로세스 정리 경합도 수정했다. help provider의 부모 종료뿐 아니라 소유한
+프로세스 그룹의 소멸을 bounded polling으로 확인하고, FD3 실패는 worker stderr/exit를 보존한다.
 로컬 Pi 0.85.1의 실제 extension loader에서도 로드 오류 0, 다섯 이벤트 훅 등록,
 미승인 write 차단과 최종 미완료 응답 교체를 확인했다. 유료 모델 호출 없이 호스트 로더와 실제 CLI를
 통과시킨 smoke test이며, 사용자의 다음 전체 설계 실행을 대신하는 검증은 아니다.

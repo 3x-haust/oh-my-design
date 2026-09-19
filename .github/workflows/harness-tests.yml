@@ -20,7 +20,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-15
+          # macOS 15 rejects exclusive renames of sealed (0555) directories with EACCES.
+          # Use the current stable Darwin runner; never unseal a snapshot to publish it.
+          - os: macos-26
             suite: full
           - os: ubuntu-latest
             suite: portable-pi

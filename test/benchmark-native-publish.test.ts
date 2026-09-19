@@ -56,6 +56,29 @@ test('native Darwin publisher publishes exclusive files and directories', { skip
   });
 });
 
+test('native Darwin publisher preserves a sealed directory without reopening write access', { skip: !darwin, concurrency: false }, () => {
+  const identity = nativeIdentity();
+  inTemporaryDirectory(() => {
+    mkdirSync('sealed-source');
+    writeFileSync('sealed-source/payload', 'sealed bytes', { mode: 0o444 });
+    chmodSync('sealed-source', 0o555);
+    const inode = lstatSync('sealed-source').ino;
+    let published = false;
+    try {
+      publishDirectoryExclusive('sealed-source', 'sealed-destination', identity);
+      published = true;
+      assert.equal(lstatSync('sealed-destination').ino, inode);
+      assert.equal(lstatSync('sealed-destination').mode & 0o777, 0o555);
+      assert.equal(lstatSync('sealed-destination/payload').mode & 0o777, 0o444);
+      assert.equal(readFileSync('sealed-destination/payload', 'utf8'), 'sealed bytes');
+      expectCode(() => publishDirectoryExclusive('sealed-destination', 'sealed-destination', identity), 'DESTINATION_EXISTS');
+    } finally {
+      // Test-owned fixture cleanup only; publication itself must never chmod the candidate.
+      chmodSync(published ? 'sealed-destination' : 'sealed-source', 0o700);
+    }
+  });
+});
+
 test('native Darwin publisher rejects existing destinations and invalid sources', { skip: !darwin, concurrency: false }, () => {
   const identity = nativeIdentity();
   inTemporaryDirectory(() => {
