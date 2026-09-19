@@ -122,7 +122,8 @@ candidate-generation, safety-validation, production, browser-evidence, independe
 회귀 테스트는 실패 사례만이 아니라 정상 카피 전용 경로, 실제 로컬 CLI 호출, design-only 분기,
 write/edit/bash 차단, 리서치 복구 가능성, 현재 리뷰 hash, 후보 stub 거부, 프로젝트별 큐,
 실패 뒤 큐 복구, 취소, 후속 작업 횟수 제한과 권한 실패 시 중단을 포함한다.
-로컬 최종 검증: `npm test` 총 2,708개 중 2,706 통과·0 실패·기존 외부 권한 필요 2개 skip,
+로컬 최종 검증: `npm test` 총 2,708개 중 2,706 통과·0 실패·기존 조건부 2개 skip
+(비-Darwin 전용 검사 1개와 외부 관찰자 서명 권한 필요 검사 1개),
 `npx tsc --noEmit` 통과, `npm run build` 통과, 스킬 quick validation 통과.
 `pi install .`로 개발본을 적용했다. 이미 열려 있는 Pi 세션은 `/reload`가 필요하다.
 로컬 Pi 0.85.1의 실제 extension loader에서도 로드 오류 0, 다섯 이벤트 훅 등록,
