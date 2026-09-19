@@ -113,7 +113,8 @@ candidate-generation, safety-validation, production, browser-evidence, independe
 - `.omd/.cache/` 입력과 직접 소유한 문서는 작성 가능. route/권한/체크 기록/최종 근거 등의
   CLI 소유 파일은 기본 쓰기로 위조 불가. 경로 이탈·심볼릭 링크 쓰기도 차단.
 - `message_end`: 실제 OMD 실행의 최종 완료 초안을 gate로 검사하고, 실패 시 미완료 상태로 교체.
-- 수정 가능한 실패는 실제 사용자 입력당 최대 두 번의 custom follow-up으로 수정·재검사.
+- 소스 작성 시도가 있었던 턴의 수정 가능한 실패는 실제 사용자 입력당 최대 두 번의 custom follow-up으로 수정·재검사.
+  리서치/문서만 다룬 턴은 남은 구현 범위를 자동 실행할 권한이 아니다.
   사용자 입력을 위조하지 않으며, 사용자 중단·사실 부족·권한 문제는 자동 재시도하지 않음.
 - 프로젝트별 CLI 큐로 같은 프로젝트의 병렬 발행 lock 충돌 방지. 다른 프로젝트는 독립 실행.
 
@@ -122,7 +123,7 @@ candidate-generation, safety-validation, production, browser-evidence, independe
 회귀 테스트는 실패 사례만이 아니라 정상 카피 전용 경로, 실제 로컬 CLI 호출, design-only 분기,
 write/edit/bash 차단, 리서치 복구 가능성, 현재 리뷰 hash, 후보 stub 거부, 프로젝트별 큐,
 실패 뒤 큐 복구, 취소, 후속 작업 횟수 제한과 권한 실패 시 중단을 포함한다.
-로컬 최종 검증: `npm test` 총 2,708개 중 2,706 통과·0 실패·기존 조건부 2개 skip
+소스 작성 경계 보강 전 로컬 검증: `npm test` 총 2,708개 중 2,706 통과·0 실패·기존 조건부 2개 skip
 (비-Darwin 전용 검사 1개와 외부 관찰자 서명 권한 필요 검사 1개),
 `npx tsc --noEmit` 통과, `npm run build` 통과, 스킬 quick validation 통과.
 `pi install .`로 개발본을 적용했다. 이미 열려 있는 Pi 세션은 `/reload`가 필요하다.

@@ -76,8 +76,9 @@ and the existing final-evidence/reviewer/slop gates; design-only routes use desi
 Blocked tool calls return repair instructions to the model. A failed terminal gate holds the completion
 claim; it does not create a fake review or auto-retry missing authority. Report the strongest verified
 result, missing evidence and exact limitation. A build plus one check is not a completed repair loop.
-On hosts with custom follow-up messages, repairable terminal failures trigger at most two repair
-passes per real user input. Each pass may repair multiple blockers and rerun the existing checks.
+On hosts with custom follow-up messages, repairable terminal failures in a source-writing turn trigger
+at most two repair passes per real user input. Research/document-only turns never authorize automatic
+implementation of the remaining route. Each pass may repair multiple blockers and rerun existing checks.
 Pause/abort and missing user facts/authority never authorize an automatic retry or a scope change.
 Selected structural candidates need the current hash-bound `.omd/.cache/sketches/current.json`
 pointer and its complete evidence set; an arbitrary `*-selected` directory is not a selection.

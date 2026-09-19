@@ -86,7 +86,7 @@ validators, and public `tool_call` / `message_end` hooks. Native `write`/`edit` 
 and arbitrary `bash` wait for current pre-production inputs; research inputs and directly owned
 design documents remain writable. The completion hook withholds an unverified final success claim.
 OMD commands are queued per project to prevent sibling calls from competing for the mutation lock.
-Repairable terminal failures can trigger up to two custom repair/recheck follow-ups per user input;
+During a source-writing turn, repairable terminal failures can trigger up to two custom repair/recheck follow-ups per user input;
 authority failures and user aborts do not. Message replacement semantics are verified against Pi
 0.85.1; forks must support that public event behavior, not merely expose an `on` function.
 Run `/omd` after `/reload`; hook-less compatible hosts explicitly report that only CLI checks exist.

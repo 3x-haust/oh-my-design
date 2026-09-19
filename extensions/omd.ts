@@ -107,6 +107,7 @@ export default function omdExtension(pi: PortablePiApi): void {
   const queues = new Map<string, Promise<unknown>>();
   const managed = new Set<string>();
   const touched = new Set<string>();
+  const productionAttempted = new Set<string>();
   const repairs = new Map<string, number>();
   // Pi may execute sibling tools concurrently. Serialize OMD commands per project so two
   // legitimate publishers cannot collide with OMD's project mutation lock.
@@ -123,11 +124,12 @@ export default function omdExtension(pi: PortablePiApi): void {
   const guarded = (cwd: string) => managed.has(cwd) || hasPiRoute(cwd);
   const hooksAvailable = 'on' in pi && typeof pi.on === 'function';
   if (hooksAvailable) {
-    pi.on!('session_start', async () => { managed.clear(); touched.clear(); repairs.clear(); });
+    pi.on!('session_start', async () => { managed.clear(); touched.clear(); productionAttempted.clear(); repairs.clear(); });
     pi.on!('input', async (event, context) => {
       if (event.source === 'interactive' || event.source === 'rpc') {
         repairs.delete(context.cwd);
         touched.delete(context.cwd);
+        productionAttempted.delete(context.cwd);
       }
     });
     pi.on!('before_agent_start', async (event, context) => {
@@ -140,7 +142,7 @@ export default function omdExtension(pi: PortablePiApi): void {
         const args = event.input?.args;
         if (Array.isArray(args) && args[0] === 'route' && args[1] === 'classify') managed.add(context.cwd);
         if (guarded(context.cwd) && Array.isArray(args) && /^(?:frame|domain|route|ref|copy|type|composition|slop|lifecycle|finalize)$/.test(String(args[0]))
-          && !/^(?:show|check|validate|list|research-check|apply-check|review-check)$/.test(String(args[1]))) touched.add(context.cwd);
+          && !/^(?:show|check|validate|list|handoff|discover-plan|research-check|apply-check|review-check)$/.test(String(args[1]))) touched.add(context.cwd);
         return;
       }
       if (!guarded(context.cwd)) return;
@@ -153,6 +155,7 @@ export default function omdExtension(pi: PortablePiApi): void {
         const classification = classifyPiWrite(context.cwd, event.input?.path);
         if (classification.kind === 'blocked') return { block: true, reason: `OMD_WRITE_BLOCKED: ${classification.reason} (${classification.path})` };
         if (classification.kind === 'authoring') return;
+        productionAttempted.add(context.cwd);
         target = classification.path;
       }
       try {
@@ -173,7 +176,9 @@ export default function omdExtension(pi: PortablePiApi): void {
         // Authority failures are not auto-retried or manufactured.
         if (context.signal?.aborted) return;
         const failure = guardFailure(error);
-        const retry = failure.repairable && (repairs.get(context.cwd) ?? 0) < 2
+        // A research/document-only or diagnostic turn does not authorize implementing the
+        // remainder of a persisted route. Automatic repair belongs to this turn's source work.
+        const retry = productionAttempted.has(context.cwd) && failure.repairable && (repairs.get(context.cwd) ?? 0) < 2
           && 'sendMessage' in pi && typeof pi.sendMessage === 'function';
         if (retry) {
           repairs.set(context.cwd, (repairs.get(context.cwd) ?? 0) + 1);
@@ -207,6 +212,7 @@ export default function omdExtension(pi: PortablePiApi): void {
       if (params.args[0] === 'route' && params.args[1] === 'classify') managed.add(context.cwd);
       if (guarded(context.cwd) && params.args[0] === 'recipe' && params.args[1] === 'add') {
         touched.add(context.cwd);
+        productionAttempted.add(context.cwd);
         await run(['guard', 'production', '--json'], context.cwd, signal);
       }
       const result = await run(params.args, context.cwd, signal);

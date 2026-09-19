@@ -119,6 +119,18 @@ test('authority failures, user aborts and tool-use messages do not trigger autom
   assert.equal(sent.length, 0);
 });
 
+test('research-only work and read-only reference handoffs never authorize automatic implementation repairs', async () => {
+  const sent: unknown[] = [];
+  const h = harness(undefined, m => { sent.push(m); });
+  await h.emit('before_agent_start', { prompt: 'omd-ultradesign' });
+  await h.emit('tool_call', { toolName: 'omd_cli', input: { args: ['ref', 'handoff', 'hand'] } });
+  assert.equal(await h.emit('message_end', { message: final }), undefined);
+  assert.equal(h.calls.length, 0);
+  await h.emit('tool_call', { toolName: 'write', input: { path: '.omd/scout.md' } });
+  await h.emit('message_end', { message: final });
+  assert.equal(sent.length, 0);
+});
+
 test('write classification rejects traversal and symlink escapes; shell allowance cannot execute arbitrary payloads', () => {
   const root = mkdtempSync(join(tmpdir(), 'omd-pi-path-'));
   const external = mkdtempSync(join(tmpdir(), 'omd-pi-outside-'));
