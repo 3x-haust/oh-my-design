@@ -102,6 +102,10 @@ or `최근 퇴사 상황을 바탕으로 이어서 할 수 있는 일을 정리�
 assistant supposedly did instead of giving the user a concrete next action. Start with the user's
 task, the named benefit, the missing requirement, or the next decision; use the verified situation
 only as evidence beside that action. Never fabricate warmth by summarizing an intake state.
+Sharpen copy on three fronts: write sharp, concrete lines grounded in a verified fact or the
+brief, not a generic claim that could belong to any product; align every headline, label,
+and CTA with the concept the visual carrier actually shows rather than a decorative slogan
+bolted onto it; and remove interchangeable stock phrasing, hedges, and cliché per `theory/voice.md`'s
 discourse repair — repair the underlying cause instead of manufacturing sentence-length
 variance. Awareness of text-slop patterns is advisory context for your own drafting, never a
 gate you self-certify; the blind copy review remains the enforcement point.

@@ -39,9 +39,10 @@ test('no-context routes retain canonical bytes without injecting locale context'
   // hashes below are the post-change values, still fixed rather than computed.
   // Re-snapshotted when `moodboard` joined the optional stages: every route now selects it or
   // records a skip reason, so each canonical record gained one skip entry.
+  // Re-snapshotted when discovery routes gained the explicit dual-reference-research gate.
   for (const [name, expectedHash, expectedBytes] of [
     ['copy-only', 'd42ebf8debddf7528f9b0561473bea976ac12e60c8d8883cb9430e01ae303329', 16346],
-    ['synth-marketing', 'be9a19974236c8ba62da3606cb282da8dbb03c918da7909675a3a648422dc855', 16948],
+    ['synth-marketing', 'a3b8b62308c25b377a7e3512a20eda1f250192af3c2f8bbc5b5517c7608ce813', 16974],
   ] as const) {
     const bytes = `${canonicalRouteJson(routeAdaptiveFlow(fixture(name)))}\n`;
     assert.equal(Buffer.byteLength(bytes), expectedBytes);

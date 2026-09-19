@@ -426,7 +426,7 @@ const ROUTE_INPUT: InputSkeleton = {
     'For new-product, new-marketing, or unresolved discovery: uncertainty="unresolved", existingEvidence="none" or "insufficient", existingEvidenceUse=null, skipReason=null. Both null keys are required; do not omit them or replace null with explanatory prose.',
     'For skipped discovery on existing work: uncertainty="resolved", existingEvidence="sufficient", existingEvidenceUse and skipReason are non-empty descriptions of actual evidence use and the skip reason.',
     'the user-selected model owns role, stage, and method order',
-    'executionWaves schedules every selected role exactly once; prerequisite owners precede consumer owners; parallel-reference-acquisition parallelizes Scout\'s browser collection, while Scout publication completes before Writer mutates the shared project record',
+    'executionWaves schedules every selected role exactly once; prerequisite owners precede consumer owners, and parallel-reference-acquisition puts Scout and Writer in the same wave',
     'every omitted optional stage or method carries a non-empty skip reason',
     `Optional stages: ${OPTIONAL_STAGE_IDS.join(', ')}. Mandatory stages: ${MANDATORY_STAGE_IDS.join(', ')} — always selected, never skipped. Optional methods: ${OPTIONAL_METHOD_IDS.join(', ')}. Account for each optional stage and method in its selected list or skips, including copy-repair-workflow when writing fresh copy without that repair method.`,
     `attributionCategories is the applicable subset in this exact order: ${ADAPTIVE_ATTRIBUTION_CATEGORIES.join(', ')}. Include tokens always, motion only with motion-one, composition only with the composition stage, and graphics only with nonempty aiAssets. Typography is not a category.`,
