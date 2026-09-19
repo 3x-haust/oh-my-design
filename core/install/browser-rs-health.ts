@@ -62,7 +62,12 @@ async function processGroupReaped(pid: number | undefined): Promise<boolean> {
   const deadline = performance.now() + BROWSER_RS_GROUP_REAP_MS;
   for (;;) {
     try { process.kill(-pid, 0); }
-    catch (error) { return missingProcess(error); }
+    catch (error) {
+      if (missingProcess(error)) return true;
+      // Darwin can report EPERM while a killed/orphaned group is being reaped. This is
+      // not proof of disappearance: keep observing within the same finite deadline.
+      if (!(error instanceof Error && 'code' in error && error.code === 'EPERM')) return false;
+    }
     if (performance.now() >= deadline) return false;
     await new Promise(resolve => setTimeout(resolve, 10));
   }

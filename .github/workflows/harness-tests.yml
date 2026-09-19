@@ -44,7 +44,7 @@ jobs:
         run: git diff --exit-code -- agents skills dist
       - name: Native lifecycle regressions
         if: matrix.suite == 'full'
-        run: node --test --test-concurrency=1 test/benchmark-dependency-snapshot.test.ts test/browser-rs-doctor-runtime.test.ts
+        run: node --test --test-concurrency=1 test/benchmark-native-publish.test.ts test/benchmark-dependency-snapshot.test.ts test/browser-rs-doctor-runtime.test.ts
       - name: Complete harness suite (including native Darwin publication)
         if: matrix.suite == 'full'
         run: npm test

@@ -136,7 +136,7 @@ function publish(source: string, destination: string, kind: PublicationKind, ide
     const commandName: Command = kind === 'file' ? 'publish-file-exclusive' : 'publish-directory-exclusive';
     const result = spawnSync(identity.binaryPath, [commandName, source, destination], { encoding: 'utf8', shell: false, stdio: ['ignore', 'pipe', 'pipe', parentFd, sourceFd] });
     if (result.error) fail('HELPER_FAILED', result.error.message);
-    if (result.status !== 0) { const code = (result.stderr || '').trim() || 'HELPER_FAILED'; fail(code, `native publication failed: ${code}`); }
+    if (result.status !== 0) { const code = (result.stderr || '').trim() || 'HELPER_FAILED'; const diagnostic = (result.stdout || '').trim().slice(0, 512); fail(code, `native publication failed: ${code}${diagnostic ? `; ${diagnostic}` : ''}`); }
     fsyncSync(parentFd);
     const published = kind === 'file' ? regularNoFollow(destinationAbsolute) : directoryNoFollow(destinationAbsolute);
     if (!sameInode(sourceStat, published)) fail('POSTCHECK_FAILED', 'destination inode differs from source');

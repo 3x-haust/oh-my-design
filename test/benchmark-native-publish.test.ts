@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { closeSync, constants, linkSync, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, closeSync, constants, linkSync, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -98,4 +98,22 @@ test('native source contains no nonexclusive publication fallback', () => {
   assert.doesNotMatch(source, /\b(?:rename|renameat|link|symlink|copyfile)\s*\(/);
   assert.match(source, /publish-file-exclusive/);
   assert.match(source, /publish-directory-exclusive/);
+});
+
+test('native rename diagnostics preserve the stable refusal code and do not publish on permission failure', { skip: !darwin || process.getuid?.() === 0, concurrency: false }, () => {
+  const identity = nativeIdentity();
+  inTemporaryDirectory(directory => {
+    writeFileSync('source', 'cannot publish through a read-only parent');
+    chmodSync(directory, 0o500);
+    try {
+      assert.throws(() => publishFileExclusive('source', 'destination', identity), (error: unknown) => {
+        assert.ok(error instanceof ExclusivePublicationError);
+        assert.equal(error.code, 'RENAME_FAILED');
+        assert.match(error.message, /errno=\d+/);
+        return true;
+      });
+      assert.equal(readFileSync('source', 'utf8'), 'cannot publish through a read-only parent');
+      assert.throws(() => lstatSync('destination'), /ENOENT/);
+    } finally { chmodSync(directory, 0o700); }
+  });
 });
