@@ -55,6 +55,12 @@ test('test-007 malformed values explain the precise repair without relaxing the 
   waves.strategyDecision.executionWaves.splice(3, 1);
   assert.throws(() => routeAdaptiveFlow(waves), /composition.*later execution wave than type-proof/);
   assert.doesNotThrow(() => routeAdaptiveFlow(inputSkeleton('design-route-input').skeleton));
+  const study = fixture();
+  study.strategyDecision.roles.push('omd-study');
+  study.strategyDecision.stages.splice(study.strategyDecision.stages.indexOf('copy'), 0, 'art-direction');
+  study.strategyDecision.skips = study.strategyDecision.skips.filter((skip: { id: string }) => skip.id !== 'art-direction');
+  study.strategyDecision.executionWaves.splice(3, 0, { id: 'study', mode: 'concurrent', roles: ['omd-study'] });
+  assert.doesNotThrow(() => routeAdaptiveFlow(study));
 });
 
 test('real Pi extension validates, publishes, resumes and reads a design route without external activation', async t => {

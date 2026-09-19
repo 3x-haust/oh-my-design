@@ -86,7 +86,7 @@ export function validateAdaptiveStrategyRails(strategy: AdaptiveStrategyDecision
     const owner = ADAPTIVE_STAGE_OWNERS[known];
     if (owner.startsWith('omd-') && !strategy.roles.includes(owner)) return failAdaptiveRoute('MODEL_OWNER_REQUIRED');
   }
-  validateAdaptiveExecutionWaves(strategy);
+  validateAdaptiveExecutionWaves(strategy, deliveryMode);
 }
 
 export function validateOptionalStageAccounting(strategy: AdaptiveStrategyDecision): void {
