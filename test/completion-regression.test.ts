@@ -56,7 +56,9 @@ const routeFixture = (selectedTypography = false): unknown => {
   if (!selectedTypography) return value;
   const strategy = value.strategyDecision as { roles: string[]; stages: string[]; executionWaves: object[]; skips: Array<{ id: string }> };
   strategy.roles.splice(1, 0, 'omd-typesetter');
-  strategy.stages.splice(1, 0, 'type-proof');
+  // Type proof depends on copy, so it must land after it rather than at a fixed index: the
+  // stage list begins with the mandatory domain stage, which shifts every later position.
+  strategy.stages.splice(strategy.stages.indexOf('copy') + 1, 0, 'type-proof');
   strategy.executionWaves.splice(1, 0, { id: 'type', mode: 'concurrent', roles: ['omd-typesetter'] });
   strategy.skips = strategy.skips.filter((item) => item.id !== 'type-proof');
   return value;
@@ -250,7 +252,7 @@ test('computed completeness rejects rendered IR without exact host authorization
           text: 'Approved copy',
         }],
       }, value.invocation),
-      /does not authorize the exact product-probe-result payload/,
+      /does not authorize the exact product-probe-result payload|no self-signed receipt authorizes the exact product-probe-result payload/,
     );
   } finally { rmSync(value.root, { recursive: true, force: true }); }
 });

@@ -13,6 +13,7 @@ import { requireReviewerIsolationInvocation, type ProjectRunInvocation } from '.
 import { assertProjectRunMutationInventory, inventoryProjectRunMutations } from '../core/runtime/project-write-inventory.ts';
 import { acquireProjectLock, acquireProjectMutationLock, ProjectWriteError, writeContentAddressedProjectFile, writeImmutableProjectFile, writeProjectFile } from '../core/runtime/project-write.ts';
 import { createTestProjectRunInvocation } from './helpers/project-write.ts';
+import { selfSignedReceiptEnv, SELF_SIGNED_RECEIPT_ENV, SELF_SIGNED_SIGNATURE_ENV } from './helpers/self-signed-receipt.ts';
 
 const hash = (value: string): string => value.repeat(64);
 
@@ -220,18 +221,16 @@ type HostCliResult = {
   readonly stderr: string;
 };
 
-function executePipeHostReceipt(projectRoot: string, args: readonly string[], receipt: object): Promise<HostCliResult> {
+function executePipeHostReceipt(projectRoot: string, args: readonly string[], receiptEnv: Readonly<Record<string, string>>): Promise<HostCliResult> {
   return new Promise((resolveResult, reject) => {
     const child = spawn(process.execPath, args, {
       cwd: projectRoot,
-      env: { ...process.env, OMD_HOST_PROJECT_WRITE_FD: '3' },
-      stdio: ['ignore', 'pipe', 'pipe', 'pipe'],
+      env: { ...process.env, ...receiptEnv },
+      stdio: ['ignore', 'pipe', 'pipe'],
       shell: false,
     });
-    assert.equal(child.stdio.length, 4, 'host child must expose four stdio channels');
     const stdoutChannel = child.stdout;
     const stderrChannel = child.stderr;
-    const receiptChannel = child.stdio[3];
     assert.ok(stdoutChannel, 'host stdout pipe is unavailable');
     assert.ok(stderrChannel, 'host stderr pipe is unavailable');
 
@@ -241,12 +240,6 @@ function executePipeHostReceipt(projectRoot: string, args: readonly string[], re
     stderrChannel.on('data', (chunk: Buffer) => { stderr += chunk; });
     child.once('error', reject);
     child.once('close', (status) => resolveResult({ status, stdout, stderr }));
-    if (receiptChannel === undefined || receiptChannel === null || !('end' in receiptChannel)) {
-      child.kill();
-      reject(new Error('host receipt pipe is unavailable'));
-      return;
-    }
-    receiptChannel.end(JSON.stringify(receipt));
   });
 }
 
@@ -268,26 +261,25 @@ function executeHostIssuedCli(
   const args = [binPath, ...argv, '--activation', 'activation.json'];
   const receiptArgs = [binPath, ...receiptArgv, '--activation', 'activation.json'];
   writeFileSync(join(projectRoot, 'activation.json'), JSON.stringify({ activation, current: activation }));
-  const receipt = {
-    schema: 'omd-host-project-write-receipt-v3',
-    host: 'claude',
-    hostAuthentication: {
-      host: 'claude',
-      mechanism: 'inherited-ipc',
-      parentPid: process.pid,
-      parentExecutableSha256: createHash('sha256').update(readFileSync(process.execPath)).digest('hex'),
-    },
-    projectRoot: realpathSync(projectRoot),
-    argvSha256: createHash('sha256').update(canonicalJson([process.execPath, ...receiptArgs])).digest('hex'),
-    buildSha256: activation.buildSha256,
-    loadedSkillSha256: activation.loadedSkillSha256,
-    briefSha256: activation.briefSha256,
-    expiresAt: Date.now() + 60_000,
-    payloadAuthorizations: [],
-    nonce,
-    ...receiptOverrides,
+  // A real self-signed receipt for this exact command. Overrides are applied at MINT time, not by
+  // rewriting the signed bytes: a receipt is a signature over its own content, so editing the file
+  // afterwards would make every case fail for the same reason and prove nothing.
+  const overrides = receiptOverrides as {
+    payloadAuthorizations?: readonly { purpose: string; payloadSha256: string }[];
+    projectRoot?: string;
+    expiresAt?: number;
   };
-  return executePipeHostReceipt(projectRoot, args, receipt);
+  const minted = selfSignedReceiptEnv(
+    projectRoot,
+    [process.execPath, ...receiptArgs],
+    { buildSha256: activation.buildSha256, loadedSkillSha256: activation.loadedSkillSha256, briefSha256: activation.briefSha256 },
+    overrides.payloadAuthorizations ?? [],
+    {
+      ...(overrides.projectRoot === undefined ? {} : { projectRoot: overrides.projectRoot }),
+      ...(overrides.expiresAt === undefined ? {} : { expiresAt: overrides.expiresAt }),
+    },
+  );
+  return executePipeHostReceipt(projectRoot, args, minted);
 }
 function executeCallerJsonCli(projectRoot: string) {
   const binPath = fileURLToPath(new URL('../bin/omd.ts', import.meta.url));
@@ -316,24 +308,14 @@ function executeHostIssuedCliTwice(projectRoot: string, nonce: string) {
   };
   const argv = ['config', 'set', 'checkpoint', 'both'];
   const args = [binPath, ...argv, '--activation', 'activation.json'];
-  const receipt = {
-    schema: 'omd-host-project-write-receipt-v3',
-    host: 'claude',
-    hostAuthentication: {
-      host: 'claude',
-      mechanism: 'inherited-ipc',
-      parentPid: process.pid,
-      parentExecutableSha256: createHash('sha256').update(readFileSync(process.execPath)).digest('hex'),
-    },
-    projectRoot: realpathSync(projectRoot),
-    argvSha256: createHash('sha256').update(canonicalJson([process.execPath, ...args])).digest('hex'),
-    buildSha256: activation.buildSha256,
-    loadedSkillSha256: activation.loadedSkillSha256,
-    briefSha256: activation.briefSha256,
-    expiresAt: Date.now() + 60_000,
-    payloadAuthorizations: [],
-    nonce,
-  };
+  // One receipt, deliberately reused by both launches below: the assertion is that the second
+  // launch is refused, so the nonce must be spent by the first. The receipt is bound to this command.
+  const receiptEnv = selfSignedReceiptEnv(
+    projectRoot,
+    [process.execPath, ...args],
+    { buildSha256: activation.buildSha256, loadedSkillSha256: activation.loadedSkillSha256, briefSha256: activation.briefSha256 },
+    [],
+  );
   const helperPath = join(projectRoot, 'consume-host-receipt-twice.ts');
   writeFileSync(join(projectRoot, 'activation.json'), JSON.stringify({ activation, current: activation }));
   writeFileSync(helperPath, `
@@ -343,9 +325,8 @@ const [binPath, projectRoot] = process.argv.slice(2);
 const launch = () => spawnSync(process.execPath, [binPath, 'config', 'set', 'checkpoint', 'both', '--activation', 'activation.json'], {
   cwd: projectRoot,
   encoding: 'utf8',
-    shell: false,
-  env: { ...process.env, OMD_HOST_PROJECT_WRITE_FD: '3' },
-  stdio: ['ignore', 'pipe', 'pipe', 3],
+  env: process.env,
+  stdio: ['ignore', 'pipe', 'pipe'],
   shell: false,
 });
 const first = launch();
@@ -355,7 +336,7 @@ process.stdout.write(JSON.stringify({
   second: { status: second.status, stderr: second.stderr },
 }));
 `);
-  return executePipeHostReceipt(projectRoot, [helperPath, binPath, projectRoot], receipt);
+  return executePipeHostReceipt(projectRoot, [helperPath, binPath, projectRoot], receiptEnv);
 }
 
 test('guarded writes reject missing and stale activation before mutating', () => {

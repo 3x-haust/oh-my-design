@@ -31,7 +31,6 @@ function routeContext() {
     invocation: {
       buildSha256: hash('build'),
       loadedSkillSha256: hash('skill'),
-      briefSha256: hash('brief'),
     },
     sourceSha256: routeRecord.sourceContractSha256,
     routeSha256,

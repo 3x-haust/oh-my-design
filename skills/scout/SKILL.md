@@ -47,12 +47,49 @@ Build for decision coverage, not capture counts. Before searching, list the deci
 later design must make and the components it must support. The inventory is complete only when
 it contains useful, non-duplicate evidence for every applicable category:
 
-- domain conventions and user expectations;
-- direct competitors and meaningful alternatives;
+- **visual direction** — several captures whose feel is right, kept before narrowing. This is the
+  first category, not a showpiece reward: a design with no gathered direction can only reproduce the
+  category average;
 - first-party or user/community language;
 - typography and voice;
 - motion when the concept or interaction actually needs it;
-- every required component or state whose anatomy is uncertain.
+- every required component or state whose anatomy is uncertain;
+- how similar services actually solve the task — the STRUCTURAL lane, opened only when the work needs
+  structural transfer. It answers "how does this task work", never "how should this look".
+
+### Collecting a visual direction
+
+Search the PART, in English, across many sites — the way a designer builds a board by hand:
+
+- Search part keywords (`task management`, `side panel`, `contextual sidebar`), never a product name.
+  No real screen is named "AI desktop assistant", so that query returns nothing usable.
+- Collect several candidates first and narrow later. Pre-filtering to the correct category is how a
+  board becomes a single competitor's screenshot set.
+- Explore by similarity rather than by rewriting the query: the next good capture usually comes from
+  looking at one you kept, not from a better phrase.
+- Keep the whole page when the felt direction is the point, and a scoped part when anatomy is. A
+  moodboard is whole-page and visual-only by construction (`protocol/moodboard.md`).
+- A capture carries its own evidence: palette, type, spacing, and the page it came from. A pin that is
+  only a crop loses all of it, which is why this step captures the live page rather than a thumbnail.
+
+Existing products are for how a task is solved, not for how a page feels; a run that gathers only
+those produces a product survey instead of a direction.
+
+### What is not a reference
+
+The captures `omd brief domain` produced live under `.omd/captures/` and exist to prove that a screen
+or object is real. **They are not design references.** Citing one as a section's visual basis is the
+specific failure this rule guards: a run did exactly that and delivered a survey of existing welfare
+portals, whose own primary subject the user had already called badly designed. Observing a screen is
+not endorsing it — if anything, the opposite.
+
+When an observation makes the direction clear by being wrong, record it:
+
+```bash
+omd ref principles <url> --as <name> --add "anti-reference: <what not to do, and why>"
+```
+
+A named anti-reference is inherited as a constraint. A dislike that stays in prose is lost.
 
 There is no minimum query count, capture quota, famous-site quota, or mandatory award
 gallery. A small inventory with complete, independent evidence is better than a large gallery of

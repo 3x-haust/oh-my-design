@@ -478,11 +478,11 @@ test('install links the omd CLI to this build so omd pack dir serves the current
     const changes = await install([detected], { browser: UNSUPPORTED_BROWSER.browser, cliBinDir: binDir });
     assert.ok(lstatSync(join(binDir, 'omd')).isSymbolicLink(), 'omd is a symlink');
     assert.ok(lstatSync(join(binDir, 'oh-my-design')).isSymbolicLink(), 'oh-my-design is a symlink');
-    assert.ok(lstatSync(join(binDir, 'omd-codex')).isSymbolicLink(), 'omd-codex is a symlink');
     assert.equal(readlinkSync(join(binDir, 'omd')), OMD_SHIM);
     assert.equal(readlinkSync(join(binDir, 'oh-my-design')), INSTALL_SHIM);
-    assert.equal(readlinkSync(join(binDir, 'omd-codex')), join(PACKAGE_ROOT, 'bin', 'omd-codex.mjs'));
-    assert.ok(changes.some((c) => c.startsWith('cli: linked omd-codex -> ') && c.endsWith('omd-codex.mjs')));
+    // `omd-codex` was removed with the host launcher; OMD attaches to the host session instead, so
+    // the installer must not link a binary that no longer exists.
+    assert.equal(existsSync(join(binDir, 'omd-codex')), false, 'the removed launcher must not be linked');
     assert.ok(changes.some((c) => c.startsWith('cli: linked omd -> ') && c.endsWith('omd.mjs')));
 
     const result = (await doctor([detected], { ...UNSUPPORTED_BROWSER_DOCTOR, cliBinDir: binDir }))[0]!;

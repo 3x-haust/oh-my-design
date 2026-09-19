@@ -206,7 +206,7 @@ test('reused screenshots, caller GREEN, self-authored proof, stale lineage, and 
   receiptValue.processIdentity = 'caller';
   writeFileSync(receiptPath, JSON.stringify(receiptValue));
   selfAuthored.reviewReceipts.signature.sha256 = hash(readFileSync(receiptPath));
-  assert.throws(() => validateStaticDirectionEvidenceV1(selfAuthored, current), /host receipt does not authorize the exact static-review-receipt payload/);
+  assert.throws(() => validateStaticDirectionEvidenceV1(selfAuthored, current), /(?:host receipt does not authorize|no self-signed receipt authorizes) the exact static-review-receipt payload/);
 
   assert.throws(() => validateStaticDirectionEvidenceV1(evidence, { ...current, buildHash: hash('stale') }), /build/);
 

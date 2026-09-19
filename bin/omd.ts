@@ -1,12 +1,11 @@
 #!/usr/bin/env node
 import { createHash } from 'node:crypto';
-import { accessSync, closeSync, constants, existsSync, fstatSync, lstatSync, openSync, readFileSync, readdirSync, realpathSync, unlinkSync } from 'node:fs';
+import { accessSync, closeSync, constants, existsSync, fstatSync, lstatSync, openSync, readFileSync, readdirSync, realpathSync, statSync, unlinkSync } from 'node:fs';
 import { join, dirname, isAbsolute, resolve, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { stringify } from 'yaml';
 import { extractPackSections, PackSectionError } from '../core/pack-sections.ts';
-import { runTrustedLifecycle } from '../adapters/trusted-lifecycle-runtime.ts';
 import { parseRealityLedger, readFrame } from '../core/frame/index.ts';
 import { writeFrameRecord, reframe, setGenerator, logDecision, logChoice, logTaste, tasteProfile } from '../core/frame/write.ts';
 import { logRun, readHistory } from '../core/history/index.ts';
@@ -60,7 +59,6 @@ import {
 } from '../core/art-direction/schema.ts';
 import { beatBudgetForRegister, canonicalArtDirectionReferences, exceedsCanonicalBeatBudget, NO_CURRENT_USER_BEAT_EXCEPTION_RECEIPT_SHA256, recipeDecisionProjectionSha256, resolveMarketingArtDirection, type ApprovedMotionRecipeReceipt, type ArtDirectionEligibility } from '../core/art-direction/decision.ts';
 import { validateActivationContext } from '../core/runtime/activation.ts';
-import { requestCodexBrokeredBrowserCommand } from '../core/runtime/activation.ts';
 import { codexBrowserRoleFromEnvironment, isBrokeredBrowserCliOperation } from '../core/runtime/codex-browser-operation.ts';
 import { createLocalCliInvocation, requireCurrentIntentLedgerAuthorization, requireCurrentUserIntentEventAuthorization, requireFinalEvidenceManifestAuthorization, requireFinalReviewerLaneAuthorization, requireStaticEvidenceResultAuthorization, requireStaticReviewReceiptAuthorization, validateCurrentProjectRun, type ProjectRunInvocation } from '../core/runtime/invocation.ts';
 import { acquireProjectLock, acquireProjectMutationLock, createExternalObservationDirectory, createProjectWriteAdapter, replaceProjectFileAtomically, writeContentAddressedProjectFile, writeExternalObservationFile, writeImmutableProjectFile, type ExternalObservationKind, type ProjectWriteAdapter } from '../core/runtime/project-write.ts';
@@ -70,6 +68,10 @@ import { parseReferenceSelectionV2, projectRunInvocationSha256, readContainedReg
 import { referenceUsageV2Sha256, validateReferenceUsage } from '../core/ref/reference-usage.ts';
 import { canonicalJson, sha256 } from '../core/ref/board-artifacts.ts';
 import { commitAiAssetDecision } from '../core/asset-sourcing/ai-decision.ts';
+import { requireProductionReferenceInputs } from '../core/runtime/production-reference-gate.ts';
+import { parseDesignJudgmentRecord, checkDesignHypothesis } from '../core/design/judgment.ts';
+import { critiqueFirstRender, parseFirstRenderSurface, firstRenderCriticSha256 } from '../core/design/first-render-critic.ts';
+import { publishDesignJudgment, readDesignJudgment, DESIGN_JUDGMENT_PATH } from '../core/design/judgment-files.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -99,6 +101,18 @@ interface Opts {
   noLog?: boolean;
   /** Skip the energy (motion) capture on `omd ref add` — one fewer browser launch for non-motion refs. */
   noEnergy?: boolean;
+  /** Record a reference without its image. Requires `--no-shot-reason`. */
+  noShot?: boolean;
+  /** Why the image was omitted; a bare omission would be unverifiable later. */
+  noShotReason?: string;
+  /** Corpus of measured pages a composite score compares against. */
+  corpus?: string;
+  /** Moodboard direction line (`omd ref mood add --direction`). */
+  direction?: string;
+  /** Felt-quality phrase for a mood item; repeat for each. */
+  quality?: string | string[];
+  /** Source page URL for a mood capture. */
+  source?: string;
   selector?: string;
   image?: boolean;
   filmstrip?: boolean;
@@ -213,11 +227,13 @@ interface Opts {
   publish?: boolean;
 }
 
-const FLAGS = new Set(['json', 'no-log', 'no-energy', 'image', 'filmstrip', 'squint', 'full-page', 'from-user', 'all', 'blueprint', 'shot', 'proofs', 'fresh', 'check', 'review-check', 'apply', 'dry-run', 'cache', 'stale-records', 'files', 'selected', 'gate', 'publish']);
+const FLAGS = new Set(['json', 'no-log', 'no-energy', 'no-shot', 'image', 'filmstrip', 'squint', 'full-page', 'from-user', 'all', 'blueprint', 'shot', 'proofs', 'fresh', 'check', 'review-check', 'apply', 'dry-run', 'cache', 'stale-records', 'files', 'selected', 'gate', 'publish']);
 const ALIASES: Record<string, keyof Opts> = {
   o: 'out',
   'no-log': 'noLog',
   'no-energy': 'noEnergy',
+  'no-shot': 'noShot',
+  'no-shot-reason': 'noShotReason',
   'from-user': 'fromUser',
   'full-page': 'fullPage',
   'frequent-action': 'frequentAction',
@@ -251,7 +267,14 @@ function parseArgs(args: string[]): Opts {
     const key = ALIASES[name] ?? (name as keyof Opts);
     const bag = opts as unknown as Record<string, unknown>;
     if (FLAGS.has(name)) bag[key] = true;
-    else bag[key] = args[++i];
+    else {
+      const value = args[++i];
+      // Repeatable flags accumulate instead of overwriting: `--quality warm --quality quiet` must
+      // keep both, or a caller silently loses every entry but the last.
+      const previous = bag[key];
+      bag[key] = previous === undefined ? value
+        : Array.isArray(previous) ? [...previous, value] : [previous, value];
+    }
   }
   return opts;
 }
@@ -379,6 +402,7 @@ function validateProjectRunInvocation(value: unknown): ProjectRunInvocation {
 }
 function projectWriter(invocation: ProjectRunInvocation, projectRoot = process.cwd()): ProjectWriteAdapter {
   validateCurrentProjectRun(invocation);
+  requireProductionReferenceInputs(projectRoot);
   return createProjectWriteAdapter(projectRoot, invocation);
 }
 
@@ -967,7 +991,11 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
     process.exit(1);
   }
   if (opts.shot && !opts.selector) {
-    console.error('--shot requires --selector: a scoped screenshot captures one component, not a whole page.');
+    console.error('--shot requires --selector: a scoped screenshot captures one component, not a whole page. Omit --shot to capture the page, or pass --selector.');
+    process.exit(1);
+  }
+  if (opts.noShot && opts.noShotReason === undefined) {
+    console.error('--no-shot requires --no-shot-reason: a reference without its image cannot be re-examined later, so the omission is recorded rather than silent.');
     process.exit(1);
   }
   if (opts.preparation && (opts.image || !opts.noEnergy)) throw new Error('--preparation requires a rendered reference and --no-energy');
@@ -1000,7 +1028,13 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
   const preparation = opts.preparation ? parseCapturePreparation(JSON.parse(readFileSync(resolve(opts.preparation), 'utf8'))) : undefined;
   const captureViewport = parseViewport(opts.viewport ?? REFERENCE_VIEWPORT);
   const { refImagePath } = await import('../core/ref/store.ts');
-  const absShot = opts.shot && opts.selector ? refImagePath(adapter.projectRoot, { source: target, component: opts.as }) : undefined;
+  // A reference always keeps its image. `--shot` used to be the only way to get one, so a reference
+  // gathered without it could never be re-examined: the measured ladders survive, the screen that
+  // produced them does not. Scope the capture to the selector when one was given, and capture the
+  // page otherwise, which is still the evidence behind the numbers.
+  const absShot = opts.noShot
+    ? undefined
+    : refImagePath(adapter.projectRoot, { source: target, component: opts.as });
   if (absShot) adapter.mkdir(relative(adapter.projectRoot, dirname(absShot)));
   const { raw, shotSaved, shotError, capturePreparation } = await withBrowser(browser => capturePageForRef(browser, target, captureViewport, {
     selector: opts.selector ?? null,
@@ -1033,6 +1067,11 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
 
   const imagePath = shotSaved && absShot ? relative(adapter.projectRoot, absShot) : undefined;
   if (imagePath) console.error(`shot: ${imagePath}`);
+  // A capture that failed is as unverifiable as one that was skipped, so both are recorded rather
+  // than reported once to stderr and forgotten.
+  const imageOmittedReason = imagePath !== undefined
+    ? undefined
+    : opts.noShotReason ?? (shotError === undefined ? 'the capture produced no image' : `capture failed: ${shotError}`);
   if (shotError) console.error(`shot skipped: ${shotError}`);
 
   const path = saveRef(process.cwd(), {
@@ -1046,6 +1085,7 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
     principles: [],
     slopCount,
     ...(opts.fromUser ? { origin: 'user' as const } : {}),
+    ...(imageOmittedReason === undefined ? {} : { imageOmittedReason }),
     ...(energyCurve !== null ? { energyCurve } : {}),
     ...(blueprint !== undefined ? { blueprint } : {}),
     ...(imagePath !== undefined ? { imagePath } : {}),
@@ -2316,8 +2356,165 @@ async function cmdRefDiscoveryPlan(opts: Opts): Promise<never> {
 }
 
 /** Fails when the captured board holds no parts to compose section by section. */
-async function cmdRefGranularity(opts: Opts): Promise<never> {
+/**
+ * `omd ref mood <add|show|check>` — the whole-page, visual-only lane.
+ *
+ * `add` records a local capture as study material; `check` validates the board and proves no mood
+ * byte has reached production source. The rights rule is hard here, not advisory.
+ */
+async function cmdRefMood(mode: string | undefined, opts: Opts): Promise<never> {
+  const {
+    MOODBOARD_MARKDOWN_PATH, MOODBOARD_PATH, MOOD_STORE_DIRECTORY, formatMoodboardMarkdown,
+    moodBytesInProduction, moodImagePath, parseMoodboard, readMoodboard, requireMoodQualities,
+  } = await import('../core/ref/mood.ts');
+  const root = process.cwd();
+
+  if (mode === 'show') {
+    const board = readMoodboard(root);
+    if (board === null) throw new Error(`no moodboard at ${MOODBOARD_PATH}; add one with \`omd ref mood add <local.png> --source <url> --direction <line> --quality <phrase> --as <id>\``);
+    if (opts.json) process.stdout.write(JSON.stringify(board));
+    else process.stdout.write(formatMoodboardMarkdown(board));
+    process.exit(0);
+  }
+
+  if (mode === 'check') {
+    const board = readMoodboard(root);
+    if (board === null) {
+      if (opts.json) process.stdout.write(JSON.stringify({ ok: false, reason: 'no moodboard' }));
+      else console.error(`no moodboard at ${MOODBOARD_PATH}`);
+      process.exit(1);
+    }
+    for (const item of board.items) requireMoodQualities(item);
+    const offenders = opts.production === undefined
+      ? []
+      : moodBytesInProduction(board, readTrackedSources(root, opts.production));
+    if (opts.json) process.stdout.write(JSON.stringify({ ok: offenders.length === 0, items: board.items.length, offenders }));
+    else {
+      console.log(`moodboard: ${board.items.length} study capture${board.items.length === 1 ? '' : 's'} — ${board.direction}`);
+      if (offenders.length > 0) console.error(`MOOD_BYTES_IN_PRODUCTION: ${offenders.join(', ')}`);
+    }
+    process.exit(offenders.length === 0 ? 0 : 1);
+  }
+
+  if (mode !== 'add') {
+    throw new Error('usage: omd ref mood add <local.png> --source <url> --direction <line> --quality <phrase> --as <id> | show | check [--production <dir>] [--json]');
+  }
+  if (opts._.length !== 1 || opts.source === undefined || opts.direction === undefined || opts.as === undefined || opts.quality === undefined) {
+    throw new Error('usage: omd ref mood add <local.png> --source <url> --direction <line> --quality <phrase> --as <id>  (repeat --quality for each)');
+  }
+  const { createHash } = await import('node:crypto');
+  const { copyFileSync, existsSync, mkdirSync, readFileSync } = await import('node:fs');
+  const { join } = await import('node:path');
+  const inputPath = opts._[0]!;
+  if (!existsSync(inputPath)) throw new Error(`mood capture ${inputPath} does not exist`);
+  const bytes = readFileSync(inputPath);
+  const sha256 = createHash('sha256').update(bytes).digest('hex');
+  const imagePath = moodImagePath(root, sha256);
+  mkdirSync(join(root, MOOD_STORE_DIRECTORY), { recursive: true });
+  if (!existsSync(join(root, imagePath))) copyFileSync(inputPath, join(root, imagePath));
+
+  const qualities = Array.isArray(opts.quality) ? opts.quality : [opts.quality];
+  const existing = readMoodboard(root);
+  const item = {
+    id: opts.as, source: opts.source, qualities, imagePath, sha256,
+    capturedAt: new Date().toISOString(), scope: 'whole' as const, evidence: 'visual-only' as const,
+  };
+  const board = parseMoodboard({
+    schema: 'moodboard-v1',
+    direction: opts.direction,
+    items: [...(existing?.items ?? []).filter((entry) => entry.id !== item.id), item],
+  });
+  // Project mutations go through the guarded writer so an activation-less caller is downgraded to
+  // the local CLI invocation rather than writing the project directly.
+  const writer = projectWriterFromActivation(opts, 'omd ref mood add', root);
+  writer.write(MOODBOARD_PATH, `${JSON.stringify(board, null, 2)}\n`);
+  writer.write(MOODBOARD_MARKDOWN_PATH, formatMoodboardMarkdown(board));
+  if (opts.json) process.stdout.write(JSON.stringify({ path: MOODBOARD_PATH, item: item.id }));
+  else console.log(`${MOODBOARD_PATH} (${board.items.length} item${board.items.length === 1 ? '' : 's'})`);
+  process.exit(0);
+}
+
+/** Reads the production source files a rights check compares against. */
+function readTrackedSources(root: string, directory: string): readonly { path: string; bytes: Buffer }[] {
+  const target = join(root, directory);
+  if (!existsSync(target)) throw new Error(`--production ${directory} does not exist under ${root}`);
+  const out: { path: string; bytes: Buffer }[] = [];
+  const walk = (dir: string): void => {
+    for (const entry of readdirSync(dir)) {
+      if (entry === 'node_modules' || entry.startsWith('.')) continue;
+      const full = join(dir, entry);
+      if (statSync(full).isDirectory()) { walk(full); continue; }
+      if (!/\.(?:html|css|js|jsx|ts|tsx)$/.test(entry)) continue;
+      out.push({ path: relative(root, full), bytes: readFileSync(full) });
+    }
+  };
+  walk(join(root, directory));
+  return out;
+}
+
+/**
+ * `omd ref mood target|round|converge|gates` — derivation, the two-lane loop, and the readings.
+ */
+async function cmdRefGates(opts: Opts): Promise<never> {
+  const { readMoodboard } = await import('../core/ref/mood.ts');
+  const { moodLaneFindings, moodQueries, moodConvergence, moodVectorsFor } = await import('../core/ref/mood-query.ts');
+  const { deriveMoodTarget, checkMoodTarget, readTasteStatements, userRequestedReferences, moodTargetInteraction } = await import('../core/ref/mood-target.ts');
+  const { readReferenceGates, readMoodRightsGate, referenceGateReport } = await import('../core/ref/reference-gates.ts');
+  const { validateDomainBrief } = await import('../core/domain/domain-brief.ts');
   const { loadRefs } = await import('../core/ref/store.ts');
+  const root = process.cwd();
+
+  const briefPath = join(root, '.omd', 'domain-brief.json');
+  const taste = readTasteStatements(root);
+  const board = readMoodboard(root);
+
+  if (opts.input === undefined && !existsSync(briefPath)) {
+    throw new Error('omd ref gates needs .omd/domain-brief.json (run `omd brief domain`) or --input <invariants.json>');
+  }
+  const brief = existsSync(briefPath) ? validateDomainBrief(JSON.parse(readFileSync(briefPath, 'utf8'))) : null;
+
+  const target = brief === null ? null : deriveMoodTarget({ brief, tasteRecords: taste });
+  const interaction = target === null ? null : moodTargetInteraction(target, brief!.request);
+  const targetCheck = target === null ? null : checkMoodTarget(target);
+  const laneFindings = board === null ? [] : moodLaneFindings(board, []);
+
+  const readings = opts.input === undefined ? [] : readReferenceGates({
+    candidate: inputJson(opts.input, 'omd ref gates') as never,
+    categoryMean: [],
+    slop: [],
+    target: [],
+  });
+  const rights = board === null || opts.production === undefined
+    ? []
+    : readMoodRightsGate(board, readTrackedSources(root, opts.production));
+  const report = referenceGateReport([...readings, ...rights]);
+
+  const payload = {
+    direction: target?.direction ?? null,
+    basis: target?.basis ?? null,
+    interaction: interaction?.mode ?? null,
+    targetFindings: targetCheck?.findings ?? [],
+    inCategoryQueries: brief === null ? [] : moodQueries(brief, 'in-category'),
+    outOfCategoryQueries: brief === null ? [] : moodQueries(brief, 'out-of-category'),
+    laneFindings,
+    referencesRequestedByUser: brief === null ? false : userRequestedReferences(brief.request),
+    measuredVectors: board === null ? 0 : moodVectorsFor(loadRefs(root)).length,
+    convergence: board === null ? null : moodConvergence(moodVectorsFor(loadRefs(root)), board),
+    gates: report.findings,
+    blocked: report.blocked,
+  };
+  if (opts.json) process.stdout.write(JSON.stringify(payload));
+  else {
+    if (target !== null) console.log(`direction: ${target.direction}  (${target.basis}${interaction === null ? '' : `, ${interaction.mode}`})`);
+    for (const query of payload.inCategoryQueries) console.log(`  in-category   ${query.query}`);
+    for (const query of payload.outOfCategoryQueries) console.log(`  out-of-category ${query.query}`);
+    for (const finding of [...payload.targetFindings, ...laneFindings]) console.log(`  ${finding}`);
+    for (const finding of report.findings) console.log(`  [${finding.severity}] ${finding.id}: ${finding.message}`);
+  }
+  process.exit(report.blocked ? 1 : 0);
+}
+
+async function cmdRefGranularity(opts: Opts): Promise<never> {  const { loadRefs } = await import('../core/ref/store.ts');
   const { auditBoardGranularity } = await import('../core/ref/board-granularity.ts');
   // Domain-brief surfaces are pages/screens. Reference coverage instead follows the framer's
   // section/region/state acquisition plan — otherwise one landing-page surface falsely looks covered
@@ -4028,21 +4225,41 @@ function cmdPack(sub: string | undefined, ...rest: string[]): never {
   process.exit(1);
 }
 
-function cmdSlop(sub: string | undefined, opts: Opts): never {
-  if (sub !== 'scan') throw new Error('usage: omd slop scan [root] [--json]');
-  const result = scanSlopSource(opts._[0] ?? process.cwd());
-  if (opts.json) process.stdout.write(JSON.stringify(result));
-  else {
-    console.log(`source candidates: ${result.candidates.length} (${result.filesScanned} files scanned)`);
-    for (const item of result.candidates) {
-      console.log(`${item.path}:${item.line}  ${item.candidateId}  ${item.reviewQuestion}`);
+async function cmdSlop(sub: string | undefined, opts: Opts): Promise<never> {
+  if (sub !== 'scan' && sub !== 'score') throw new Error('usage: omd slop scan [root] [--json] | omd slop score --input <invariants.json> --corpus <corpus.json> [--json]');
+  if (sub === 'scan') {
+    const result = scanSlopSource(opts._[0] ?? process.cwd());
+    if (opts.json) process.stdout.write(JSON.stringify(result));
+    else {
+      console.log(`source candidates: ${result.candidates.length} (${result.filesScanned} files scanned)`);
+      for (const item of result.candidates) {
+        console.log(`${item.path}:${item.line}  ${item.candidateId}  ${item.reviewQuestion}`);
+      }
     }
+    process.exit(0);
   }
+  if (!opts.input || !opts.corpus) {
+    throw new Error('usage: omd slop score --input <invariants.json> --corpus <corpus.json> [--json]');
+  }
+  const { scoreSlop } = await import('../core/slop/score.ts');
+  const corpusInput = inputJson(opts.corpus, 'omd slop score corpus');
+  if (!Array.isArray(corpusInput)) throw new Error('omd slop score corpus must be an array of { invariants } entries');
+  const score = scoreSlop({
+    invariants: inputJson(opts.input, 'omd slop score') as never,
+    corpus: corpusInput as never,
+  });
+  if (opts.json) process.stdout.write(JSON.stringify(score));
+  else {
+    console.log(`slop distance: ${Number.isFinite(score.distance) ? score.distance.toFixed(4) : 'unmeasured'} over ${score.compared.length} axes`);
+    console.log(`near slop: ${score.nearSlop ? 'yes (advisory)' : 'no'}`);
+    for (const finding of score.findings) console.log(`  [${finding.severity}] ${finding.message}`);
+  }
+  // Advisory only: a composite over a drifting aesthetic does not gate.
   process.exit(0);
 }
 
 async function cmdWorkflow(mode: string | undefined, opts: Opts): Promise<never> {
-  if (activationInputPath(opts) === undefined || opts._.length > 0) throw new Error('usage: omd workflow plan|readiness|slice|artifacts --input <workflow.json> --activation <host-issued-invocation.json> | check-readiness|check --activation <host-issued-invocation.json> [--json]');
+  if (opts._.length > 0) throw new Error('usage: omd workflow plan|readiness|slice|artifacts --input <workflow.json> [--activation <host-issued-invocation.json>] | check-readiness|check [--activation <host-issued-invocation.json>] [--json]');
   const invocation = invocationFromActivation(opts, `omd workflow ${mode ?? 'check'}`);
   const {
     checkAdaptiveWorkflow, checkAdaptiveWorkflowProductionReadiness, checkAdaptiveWorkflowProductionSlice,
@@ -4106,7 +4323,7 @@ async function cmdRoute(mode: string | undefined, opts: Opts): Promise<never> {
   const recordPath = join(process.cwd(), '.omd', 'route.json');
 
   if (mode === 'classify') {
-    if (!opts.input || activationInputPath(opts) === undefined) throw new Error('usage: omd route classify --input <route-input.json> --activation <host-issued-invocation.json> [--json]');
+    if (!opts.input) throw new Error('usage: omd route classify --input <route-input.json> [--activation <host-issued-invocation.json>] [--json]');
     const input = validateRouteInput(inputJson(opts.input, 'omd route classify'));
     let localeDesign: import('../core/locale/design-context.ts').LocaleDesignRoute | undefined;
     if (opts.localeContext !== undefined) {
@@ -4146,7 +4363,7 @@ async function cmdRoute(mode: string | undefined, opts: Opts): Promise<never> {
   }
 
   if (mode === 'show' || mode === undefined) {
-    if (activationInputPath(opts) === undefined) throw new Error('usage: omd route show --activation <host-issued-invocation.json> [--json]');
+    if (opts._.length > 0) throw new Error('usage: omd route show [--activation <host-issued-invocation.json>] [--json]');
     if (!existsSync(recordPath)) throw new Error('ROUTE_UNCLASSIFIED: run `omd route classify --input <route-input.json>` first');
     const record = readPersistedRoute(process.cwd(), invocationFromActivation(opts, 'omd route show'));
     if (opts.json) process.stdout.write(JSON.stringify(record));
@@ -4163,7 +4380,7 @@ async function cmdRoute(mode: string | undefined, opts: Opts): Promise<never> {
   }
 
   if (mode === 'check') {
-    if (activationInputPath(opts) === undefined) throw new Error('usage: omd route check --activation <host-issued-invocation.json> [--json]');
+    if (opts._.length > 0) throw new Error('usage: omd route check [--activation <host-issued-invocation.json>] [--json]');
     if (!existsSync(recordPath)) throw new Error('ROUTE_UNCLASSIFIED: run `omd route classify --input <route-input.json>` first');
     const invocation = invocationFromActivation(opts, 'omd route check');
     const record = readPersistedRoute(process.cwd(), invocation);
@@ -4205,17 +4422,21 @@ async function cmdRoute(mode: string | undefined, opts: Opts): Promise<never> {
  * the commands that will judge it. None of that changes when the model changes.
  */
 async function cmdBrief(stage: string | undefined, opts: Opts): Promise<never> {
-  const { buildBrief, formatBrief, EXTRA_BRIEF_STAGES } = await import('../core/brief/index.ts');
+  const { buildBrief, formatBrief, writeBrief, EXTRA_BRIEF_STAGES } = await import('../core/brief/index.ts');
   const { STAGES } = await import('../core/stage/contract.ts');
   if (stage === undefined) {
     throw new Error(`usage: omd brief <stage> [--json]  (stages: ${[...STAGES.map((s) => s.id), ...EXTRA_BRIEF_STAGES].join(', ')})`);
   }
+  const invocation = invocationFromActivation(opts, 'omd brief');
   const brief = buildBrief(
     process.cwd(),
     stage as Parameters<typeof buildBrief>[1],
     join(root, 'core'),
-    invocationFromActivation(opts, 'omd brief'),
+    invocation,
   );
+  // Persist what the stage was handed. A brief that exists only for the length of one command
+  // leaves no record of what an owner actually received, which is the question asked later.
+  writeBrief(process.cwd(), brief, projectWriter(invocation));
   if (opts.json) process.stdout.write(JSON.stringify(brief));
   else process.stdout.write(formatBrief(brief));
   process.exit(0);
@@ -4317,6 +4538,84 @@ function cmdTextSlop(opts: Opts): never {
     console.log(`text-slop candidates: ${candidates.length} (${file})`);
     for (const c of candidates) console.log(`${file}:${c.line}  ${c.candidateId}  ${c.reviewQuestion}`);
     if (candidates.length === 0) console.log('ok — no AI-cliche phrase candidates (advisory only; not proof of good prose)');
+  }
+  process.exit(0);
+}
+
+/** `omd judgment publish|check` — interpret reference observations before composition. */
+async function cmdJudgment(mode: string | undefined, opts: Opts): Promise<never> {
+  const projectRoot = process.cwd();
+  if (mode === 'publish') {
+    if (opts.input === undefined) throw new Error('usage: omd judgment publish --input <design-judgment.json> [--json]');
+    const invocation = invocationFromActivation(opts, 'omd judgment publish');
+    const pointer = publishDesignJudgment(projectRoot, inputJson(opts.input, 'omd judgment publish'), projectWriter(invocation));
+    if (opts.json) process.stdout.write(JSON.stringify(pointer));
+    else console.log(`${DESIGN_JUDGMENT_PATH} -> ${pointer.sha256}`);
+    process.exit(0);
+  }
+  if (mode === 'check') {
+    const record = readDesignJudgment(projectRoot);
+    if (record === null) {
+      if (opts.json) process.stdout.write(JSON.stringify({ ok: false, error: 'DESIGN_JUDGMENT_REQUIRED' }));
+      else console.error('DESIGN_JUDGMENT_REQUIRED: publish an interpretation before composition');
+      process.exit(1);
+    }
+    const findings = checkDesignHypothesis(record.hypothesis);
+    const result = { ok: findings.length === 0, referenceBoardSha256: record.referenceBoardSha256, findings };
+    if (opts.json) process.stdout.write(JSON.stringify(result));
+    else {
+      console.log(result.ok ? `ok — design hypothesis is specific (${record.referenceBoardSha256})` : 'design hypothesis needs revision');
+      for (const finding of findings) console.log(`  - ${finding}`);
+    }
+    process.exit(result.ok ? 0 : 1);
+  }
+  throw new Error('usage: omd judgment publish|check [--input <design-judgment.json>] [--json]');
+}
+
+/** `omd first-render check --input <first-render-surface.json>` — gestalt against the stored hypothesis. */
+async function cmdFirstRender(mode: string | undefined, opts: Opts): Promise<never> {
+  if (mode !== 'check' || opts.input === undefined) {
+    throw new Error('usage: omd first-render check --input <first-render-surface.json> [--json]');
+  }
+  const hypothesis = readDesignJudgment(process.cwd());
+  if (hypothesis === null) {
+    throw new Error('DESIGN_JUDGMENT_REQUIRED: publish the composition hypothesis before checking a render');
+  }
+  const surface = parseFirstRenderSurface(inputJson(opts.input, 'omd first-render check'));
+  const report = critiqueFirstRender(hypothesis.hypothesis, surface);
+  const writer = projectWriterFromActivation(opts, 'omd first-render check');
+  writer.write('.omd/first-render-critic.json', `${JSON.stringify({ ...report, reportSha256: firstRenderCriticSha256(report) }, null, 2)}\n`);
+  if (opts.json) process.stdout.write(JSON.stringify(report));
+  else {
+    console.log(`first render: ${report.verdict} (${report.findings.length} finding${report.findings.length === 1 ? '' : 's'})`);
+    for (const finding of report.findings) console.log(`  [${finding.severity}] ${finding.id}: ${finding.message}`);
+  }
+  process.exit(report.verdict === 'retain' ? 0 : 1);
+}
+
+/** Advisory interchangeability read of the copy deck. Non-gating; always exit 0. */
+async function cmdCopySpecificity(opts: Opts): Promise<never> {
+  const { readCopySpecificity } = await import('../core/copy/specificity.ts');
+  const { validateDomainBrief } = await import('../core/domain/domain-brief.ts');
+  const file = opts._[0] ?? join(process.cwd(), '.omd', 'copy-deck.md');
+  if (!existsSync(file)) throw new Error(`no copy deck at ${file}; write one with \`omd brief copy\``);
+  const markdown = readFileSync(file, 'utf8');
+
+  const briefPath = join(process.cwd(), '.omd', 'domain-brief.json');
+  let coreObjects: readonly string[] = [];
+  let surfaces: readonly string[] = [];
+  if (existsSync(briefPath)) {
+    const brief = validateDomainBrief(JSON.parse(readFileSync(briefPath, 'utf8')));
+    coreObjects = brief.coreObjects.map((object) => object.name);
+    surfaces = brief.surfaces.map((surface) => surface.name);
+  }
+
+  const findings = readCopySpecificity({ markdown, coreObjects, surfaces });
+  if (opts.json) process.stdout.write(JSON.stringify({ file, findings }));
+  else {
+    console.log(`interchangeable lines: ${findings.length} (${file})`);
+    for (const finding of findings) console.log(`${file}:${finding.line}  ${finding.reviewQuestion}\n    ${finding.text}`);
+    if (findings.length === 0) console.log('ok — every line names something particular (advisory only; not proof of good prose)');
   }
   process.exit(0);
 }
@@ -4429,6 +4728,7 @@ function usage(): never {
     + '  check --site <dir>                          cross-page consistency (SITE-*)\n'
     + '  check <page1> <page2> ...                   same, multi-page positional\n'
     + '  slop scan [root] [--json]                   read-only source candidate scan\n'
+    + '  slop score --input f --corpus f [--json]    advisory composite slop proximity over the shared visual space\n'
     + '  stack [--json]                              deterministic stack routing (blank greenfield -> plain HTML/CSS/JS)\n'
     + '  coach                                        trends across `omd check` history\n'
     + '  usage [--json]                              this run\'s elapsed time + token total (host session log)\n'
@@ -4557,6 +4857,7 @@ function usage(): never {
     + '  recipe add <name> [--stack react|vanilla] [--out dir]  install a recipe as real source\n'
     + '  preflight --input activation-context.json [--json]  read-only activation validation\n'
     + '  text-slop [file] [--json]                   advisory AI-cliche scan of copy (default .omd/copy-deck.md)\n'
+    + '  copy-specificity [file] [--json]            advisory: lines that could ship from any product in the category\n'
     + '  visual-richness [file] [--register R] [--json]  advisory carrier read of composition (default .omd/composition.md)\n'
     + '\n'
     + '  pack dir                                    print the knowledge-pack root path\n'
@@ -4580,16 +4881,6 @@ function usage(): never {
 async function main(): Promise<never> {
   const args = process.argv.slice(2);
   const [cmd, sub] = args;
-  const browserRole = codexBrowserRoleFromEnvironment(process.env);
-  if (browserRole !== undefined
-    && process.env.OMD_CODEX_BROWSER_BROKER_CHILD !== '1'
-    && isBrokeredBrowserCliOperation(browserRole, args)) {
-    const result = requestCodexBrokeredBrowserCommand(browserRole, process.cwd());
-    if (result === undefined) throw new Error('CODEX_BROWSER_BROKER_REQUIRED: authenticated browser execution is unavailable');
-    process.stdout.write(result.stdout);
-    process.stderr.write(result.stderr);
-    process.exit(result.status);
-  }
 
   if (cmd === '--version') {
     const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { version: string };
@@ -4612,8 +4903,8 @@ async function main(): Promise<never> {
   }
   if (cmd === 'lifecycle' && sub === 'plan') {
     const opts = parseArgs(args.slice(2));
-    if (!opts.project || activationInputPath(opts) === undefined) {
-      throw new Error('usage: omd lifecycle plan --project <dir> [--output .omd/.cache/trusted-lifecycle-manifest.json] --activation <host-issued-invocation.json>');
+    if (!opts.project) {
+      throw new Error('usage: omd lifecycle plan --project <dir> [--output .omd/.cache/trusted-lifecycle-manifest.json] [--activation <host-issued-invocation.json>]');
     }
     const project = realpathSync(resolve(opts.project));
     const canonicalOutput = '.omd/.cache/trusted-lifecycle-manifest.json';
@@ -4631,24 +4922,7 @@ async function main(): Promise<never> {
   }
   if (cmd === 'ir') return cmdIr(parseArgs(args.slice(1)));
   if (cmd === 'lifecycle' && (sub === 'run' || sub === 'evaluate')) {
-    const opts = parseArgs(args.slice(2));
-    if (!opts.project || !opts.manifest) return usage();
-    const value = await runTrustedLifecycle({
-      project: opts.project,
-      manifestPath: resolve(opts.manifest),
-      cliPath: fileURLToPath(import.meta.url),
-      argv: args,
-      ...(opts.activation === undefined ? {} : {
-        invocation: validateProjectRunInvocation(
-          inputJson(opts.activation, 'omd lifecycle evaluation activation'),
-        ),
-      }),
-    });
-    console.log(`EVALUATION: ${value.status}`);
-    if (value.status === 'PASS' && value.readyForFinalization) console.log('READY_FOR_FINALIZATION');
-    console.log(`receipt: ${value.receiptPath}`);
-    console.log(`observation: ${value.observationPath}`);
-    process.exit(value.status === 'PASS' ? 0 : 1);
+    throw new Error('omd lifecycle run/evaluate was removed with the host launcher. Run the evaluation from the host session (see `omd lifecycle --help`).');
   }
   if (cmd === 'lifecycle' && sub === 'repair') {
     const opts = parseArgs(args.slice(2));
@@ -4825,6 +5099,8 @@ async function main(): Promise<never> {
     if (sub === 'handoff') return cmdRefHandoff(opts);
     if (sub === 'audit') return cmdRefAudit(opts);
     if (sub === 'granularity') return cmdRefGranularity(opts);
+    if (sub === 'mood') return cmdRefMood(args[2], parseArgs(args.slice(3)));
+    if (sub === 'gates') return cmdRefGates(opts);
     return usage();
   }
 
@@ -4882,6 +5158,9 @@ async function main(): Promise<never> {
   if (cmd === 'clean') return cmdClean(parseArgs(args.slice(1)));
   if (cmd === 'stack') return cmdStack(parseArgs(args.slice(1)));
   if (cmd === 'text-slop') return cmdTextSlop(parseArgs(args.slice(1)));
+  if (cmd === 'copy-specificity') return cmdCopySpecificity(parseArgs(args.slice(1)));
+  if (cmd === 'judgment') return cmdJudgment(sub, parseArgs(args.slice(2)));
+  if (cmd === 'first-render') return cmdFirstRender(sub, parseArgs(args.slice(2)));
   if (cmd === 'visual-richness') return cmdVisualRichness(parseArgs(args.slice(1)));
   if (cmd === 'pack') return cmdPack(sub, ...args.slice(2));
   if (cmd === 'doctor') return cmdDoctor();

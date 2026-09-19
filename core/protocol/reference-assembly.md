@@ -27,7 +27,7 @@ service, provider, or runtime.
 
 ## Reference roles
 
-Every reference serves one of two roles, and the domain brief's `referenceQueries` seed both:
+Every reference serves one of three roles, and the domain brief's `referenceQueries` seed all three:
 
 - **① component design** — a detailed section, component, or button whose *structure* is the value.
   It is captured as a scoped measured record (`omd ref add … --selector … --blueprint --shot`): the
@@ -42,6 +42,35 @@ Every reference serves one of two roles, and the domain brief's `referenceQuerie
   ratio), preserve a scroll-linked reference's scroll response, and be reduced-motion safe. A static,
   faint, or scroll-dropping reproduction fails — the craft reference does not pass just because a
   generation was attempted. This is how the "seeing is not building" gap is closed with evidence.
+- **③ mood** — the whole-page, visual-only lane (`omd ref mood …`, `protocol/moodboard.md`). It fixes
+  a felt direction before anything is assembled and transfers declared qualities only. It is study
+  material by construction: `MOOD_BYTES_IN_PRODUCTION` is a hard failure if a mood capture's bytes,
+  path, or digest reach production source.
+
+### The two axes
+
+Roles are names; the machine-consumed contract is two axes (`core/ref/reference-scope.ts`). Scope is
+whole-or-part; evidence is measured-or-visual-only. There are four combinations and no more — a new
+need selects a combination rather than adding a role.
+
+| scope | evidence | role | what it is | may transfer | structural claims |
+| --- | --- | --- | --- | --- | --- |
+| whole | visual-only | mood | a whole artifact, looked at | declared felt qualities | no |
+| whole | measured | component | a whole page as the unit of study | measured invariants, page composition | yes |
+| part | measured | component, craft | component anatomy | measured invariants, geometry | yes |
+| part | visual-only | craft, mood | a crop or supplied image, looked at | declared geometry, principles | no |
+
+**A visual-only capture may never support a structural claim.** A screenshot does not measure that a
+padding is 16px; a design built from "the spacing looks 8-ish" is the derivative failure this
+boundary exists to prevent. `requireStructuralClaim` refuses the claim by name, and
+`omd ref granularity` reports such captures as `REF-VISUAL-ONLY` — appearance without anatomy, usable
+for direction and detail but not as parts, zone coverage, or kinship.
+
+Distances between a candidate and a slop centroid, a category mean, or an adopted direction are all
+read in ONE shared space (`core/visual-vector.ts`), so the three gates are comparable readings rather
+than three unrelated heuristics. `omd ref gates` reports them; `DISTINCTIVENESS_FLOOR`,
+`CATEGORY_MEAN_FLOOR`, `COHERENCE_CEILING`, and `NEAR_DUPLICATE` start advisory, following the
+precedent in `core/composition-contract/visual-richness.ts`.
 
 `omd craft-capture … --json` returns its measured `reference-craft-v1` on stdout; it does not
 automatically publish a file. When retention is required, the owning role preserves the actual output

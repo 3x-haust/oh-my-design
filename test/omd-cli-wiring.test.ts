@@ -377,8 +377,10 @@ test('declared craft queries with no measured craft record fail the board audit'
   const dir = project();
   writeFile(dir, '.omd/domain-brief.json', JSON.stringify({
     schema: 'domain-brief-v1', request: 'r', domain: 'd', summary: 's',
-    surfaces: [{ name: 'landing', purpose: 'p' }], coreObjects: ['o'], audience: 'a',
-    referenceQueries: { component: ['nav'], craft: ['awwwards editorial motion'] }, researched: false,
+    surfaces: [{ name: 'landing', purpose: 'p', evidence: [{ status: 'observed', reference: 'https://example.com' }] }],
+    coreObjects: [{ name: 'o', evidence: [{ status: 'observed', reference: 'https://example.com' }] }],
+    audience: { description: 'a', evidence: [{ status: 'user-provided', reference: 'user-message' }] },
+    referenceQueries: { component: ['nav'], craft: ['awwwards editorial motion'], mood: ['editorial, restrained, ink-on-paper'] },
   }));
   writeFile(dir, '.omd/refs/still.json', JSON.stringify({
     source: 'https://a.example', component: 'nav', kind: 'component', selector: '.nav',

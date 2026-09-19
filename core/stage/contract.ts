@@ -13,6 +13,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { readPersistedRoute } from '../route/index.ts';
+import { unconfirmedPlanningStatements, validateDomainBrief } from '../domain/domain-brief.ts';
 import { ADAPTIVE_STAGE_GRAPH, type AdaptiveStageId } from '../route/adaptive-stage-graph.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 
@@ -20,7 +21,8 @@ export const DELIVERY_RECEIPT_SCHEMA = 'stage-delivery-v1' as const;
 export const DELIVERY_LOG = '.omd/delivery.jsonl';
 
 export type StageId =
-  | 'domain' | 'depth' | 'frame' | 'content-grain' | 'acquisition' | 'scout' | 'reference-board'
+  | 'domain' | 'depth' | 'frame' | 'content-grain' | 'acquisition' | 'scout' | 'moodboard'
+  | 'reference-board'
   | 'reference-selection' | 'art-direction' | 'copy' | 'type-proof' | 'composition';
 
 export type StageDefinition = {
@@ -41,6 +43,7 @@ export const STAGES: readonly StageDefinition[] = Object.freeze([
   { id: 'acquisition', owner: 'omd-framer', artifact: '.omd/acquisition-plan.json', requiredContracts: ['protocol/reference-assembly.md'] },
   { id: 'scout', owner: 'omd-scout', artifact: '.omd/scout.md', requiredContracts: ['protocol/reference-assembly.md'] },
   { id: 'reference-board', owner: 'omd-scout', artifact: '.omd/reference-board.json', requiredContracts: ['protocol/reference-assembly.md'] },
+  { id: 'moodboard', owner: 'omd-scout', artifact: '.omd/moodboard.json', requiredContracts: ['protocol/reference-assembly.md', 'protocol/moodboard.md'] },
   { id: 'reference-selection', owner: 'coordinator', artifact: '.omd/reference-pre-selection-v2.json', requiredContracts: ['protocol/reference-assembly.md'] },
   { id: 'art-direction', owner: 'coordinator', artifact: '.omd/art-direction.json', requiredContracts: ['protocol/design-deliberation.md'] },
   { id: 'copy', owner: 'omd-writer', artifact: '.omd/copy-deck.md', requiredContracts: ['protocol/copy-deck.md', 'theory/voice.md'] },
@@ -222,6 +225,16 @@ function adaptivePrerequisiteStages(
  * cannot detect for itself: an earlier owner never produced its artifact, and a contract this
  * stage must obey was never delivered with its current bytes.
  */
+/**
+ * Planning intent is the one input search cannot supply, so a run that reaches production with an
+ * unresolved hypothesis would ship a business goal nobody stated. This is the check production runs.
+ */
+export function requireConfirmedPlanningForProduction(projectRoot: string): readonly string[] {
+  const path = join(projectRoot, '.omd', 'domain-brief.json');
+  if (!existsSync(path)) return [];
+  return unconfirmedPlanningStatements(validateDomainBrief(JSON.parse(readFileSync(path, 'utf8'))).planning);
+}
+
 export function requireStage(
   projectRoot: string,
   packRoot: string,

@@ -646,6 +646,12 @@ export interface Reference {
    * The kinship gate (`ref distance <= 0.6`) still gates the shipped build.
    */
   imagePath?: string;
+  /**
+   * Why this reference has no image. Present only when the capture was explicitly skipped or failed,
+   * because a reference without its screen cannot be re-examined later: the measured ladders survive
+   * and the evidence behind them does not.
+   */
+  imageOmittedReason?: string;
   /** Viewport the capture was measured at. Evidence must say how wide it was seen. */
   viewport?: { width: number; height: number };
   /** Executed disclosure preparation and observed visibility; not a semantic state proof. */

@@ -52,12 +52,14 @@ classification in a fresh authorized route, then reissue all affected contracts 
 
 ## Domain analysis
 
-When the adaptive route selects domain analysis, it records `.omd/domain-brief.json`
-(`domain-brief-v1`, validated by `omd domain check`). This method identifies the
-domain, its canonical surfaces, its core objects, and its audience, and emits the scout's two-role
-reference queries (component design and top-tier craft). An unfamiliar domain or named product is
-researched, not guessed. It feeds the frame and the scout; it never designs or writes code. The full
-contract is `protocol/domain-analysis.md`.
+Domain analysis is a mandatory stage: every route selects it, and no skip reason removes it. It
+records `.omd/domain-brief.json` (`domain-brief-v1`, validated by `omd domain check`). This step
+identifies the domain, its canonical surfaces, its core objects, and its audience, and emits the
+scout's two-role reference queries (component design and top-tier craft). Every surface, object, and
+audience claim carries its source as `observed`, `user-provided`, or `inferred`, and a claim resting
+on inference alone fails with `UNSOURCED_DOMAIN_CLAIM`; an unfamiliar domain or named product is
+observed in the browser, not guessed. It feeds the frame and the scout; it never designs or writes
+code. The full contract is `protocol/domain-analysis.md`.
 
 ## Stack routing
 

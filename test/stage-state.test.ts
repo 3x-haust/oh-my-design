@@ -5,7 +5,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { STAGES, readDeliveryReceipts, requireStage, resolveRunState } from '../core/stage/contract.ts';
+import { STAGES, readDeliveryReceipts, requireConfirmedPlanningForProduction, requireStage, resolveRunState } from '../core/stage/contract.ts';
 import { publishTestAdaptiveRoute } from './helpers/project-write.ts';
 import { evaluateStageBudget, readStageUsage, serializeStageUsage, STAGE_USAGE_LOG, STAGE_USAGE_SCHEMA, stageCosts } from '../core/stage/usage.ts';
 
@@ -96,9 +96,9 @@ test('an adaptive route preserves the selected model stage order instead of the 
   const state = resolveRunState(dir, PACK, invocation);
   assert.deepEqual(
     state.stages.map((stage) => stage.stage),
-    ['frame', 'content-grain', 'scout', 'reference-board', 'copy', 'composition'],
+    ['domain', 'frame', 'content-grain', 'scout', 'reference-board', 'copy', 'composition'],
   );
-  assert.equal(state.current, 'frame');
+  assert.equal(state.current, 'domain');
 });
 
 test('adaptive stage require follows producer dependencies, not route order, for parallel reference acquisition', () => {
@@ -107,12 +107,14 @@ test('adaptive stage require follows producer dependencies, not route order, for
     new URL('fixtures/adaptive-flow/medical-new-product.json', import.meta.url),
   ), 'utf8'));
   const parallelInvocation = publishTestAdaptiveRoute(parallel, medical);
+  write(parallel, '.omd/domain-brief.json', '{}');
   write(parallel, '.omd/frame.md', '# frame');
   const copy = requireStage(parallel, PACK, 'copy', parallelInvocation);
   assert.deepEqual(copy.missingArtifacts, [], 'same-wave Writer must not wait for Scout merely because Scout is listed first');
 
   const missingFrame = project();
   const missingFrameInvocation = publishTestAdaptiveRoute(missingFrame, medical);
+  write(missingFrame, '.omd/domain-brief.json', '{}');
   const blockedCopy = requireStage(missingFrame, PACK, 'copy', missingFrameInvocation);
   assert.deepEqual(blockedCopy.missingArtifacts, ['.omd/frame.md'], 'greenfield Copy must wait for the frame-owned reality ledger');
   assert.equal(blockedCopy.missingArtifacts.includes('.omd/scout.md'), false, 'the same-wave Scout remains independent');
@@ -122,9 +124,43 @@ test('adaptive stage require follows producer dependencies, not route order, for
     new URL('fixtures/adaptive-flow/synth-marketing.json', import.meta.url),
   ), 'utf8'));
   const dependentInvocation = publishTestAdaptiveRoute(dependent, synth);
+  write(dependent, '.omd/domain-brief.json', '{}');
   const typeProof = requireStage(dependent, PACK, 'type-proof', dependentInvocation);
   assert.ok(typeProof.missingArtifacts.includes('.omd/copy-deck.md'), 'Type proof still waits for its Copy producer');
   assert.ok(typeProof.missingArtifacts.includes('.omd/scout.md'), 'transitive reference producers remain blocking for Copy');
+});
+
+test('production refuses to start while planning is still a hypothesis', () => {
+  const dir = project();
+  const confirmed = {
+    schema: 'domain-brief-v1', request: 'r', domain: 'd', summary: 's',
+    surfaces: [{ name: 'landing', purpose: 'p', evidence: [{ status: 'observed', reference: 'https://example.com' }] }],
+    coreObjects: [{ name: 'o', evidence: [{ status: 'observed', reference: 'https://example.com' }] }],
+    audience: { description: 'a', evidence: [{ status: 'user-provided', reference: 'user-message' }] },
+    referenceQueries: { component: ['nav'], craft: ['awwwards editorial motion'], mood: ['printed, quiet, low-contrast'] },
+    planning: {
+      businessGoal: {
+        text: 'stop the spreadsheet',
+        userEvidence: [{ kind: 'explicit-user-evidence', source: 'user-message', reference: 'request', excerpt: 'as asked' }],
+      },
+      successSignal: {
+        text: 'no parallel sheet',
+        userEvidence: [{ kind: 'explicit-user-evidence', source: 'user-message', reference: 'request', excerpt: 'as asked' }],
+      },
+      nonGoals: [{ text: 'no accounting exports' }],
+    },
+  };
+  write(dir, '.omd/domain-brief.json', JSON.stringify(confirmed));
+  assert.deepEqual(requireConfirmedPlanningForProduction(dir), ['nonGoals[0]'], 'an unconfirmed non-goal still blocks production');
+
+  write(dir, '.omd/domain-brief.json', JSON.stringify({
+    ...confirmed,
+    planning: { ...confirmed.planning, nonGoals: [{ text: 'no accounting exports', userEvidence: confirmed.planning.businessGoal.userEvidence }] },
+  }));
+  assert.deepEqual(requireConfirmedPlanningForProduction(dir), []);
+
+  const bare = project();
+  assert.deepEqual(requireConfirmedPlanningForProduction(bare), [], 'a project with no domain brief is not blocked by this check');
 });
 
 test('run state names the current stage and its blocking contracts after a partial run', () => {

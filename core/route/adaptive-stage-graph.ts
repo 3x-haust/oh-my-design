@@ -14,7 +14,7 @@ export type AdaptiveStageGraph = Readonly<Record<AdaptiveStageId, AdaptiveStageN
 export const ADAPTIVE_STAGE_OWNERS = Object.freeze({
   domain: 'coordinator', depth: 'coordinator', frame: 'omd-framer',
   'content-grain': 'omd-framer', acquisition: 'omd-framer',
-  scout: 'omd-scout', 'reference-board': 'omd-scout', 'reference-selection': 'coordinator',
+  scout: 'omd-scout', moodboard: 'omd-scout', 'reference-board': 'omd-scout', 'reference-selection': 'coordinator',
   'art-direction': 'coordinator', copy: 'omd-writer', 'type-proof': 'omd-typesetter',
   composition: 'omd-composer', 'candidate-generation': 'omd-sketch',
   'safety-validation': 'omd-writer', production: 'omd-hand',
@@ -28,6 +28,7 @@ export const ADAPTIVE_STAGE_GRAPH = Object.freeze({
   'content-grain': { prerequisites: ['frame'], afterIfSelected: [] },
   acquisition: { prerequisites: ['frame'], afterIfSelected: [] },
   scout: { prerequisites: [], afterIfSelected: ['acquisition'] },
+  moodboard: { prerequisites: ['domain'], afterIfSelected: [] },
   'reference-board': { prerequisites: ['scout'], afterIfSelected: [] },
   'reference-selection': { prerequisites: ['reference-board'], afterIfSelected: [] },
   'art-direction': { prerequisites: [], afterIfSelected: ['depth', 'reference-selection'] },
@@ -42,7 +43,7 @@ export const ADAPTIVE_STAGE_GRAPH = Object.freeze({
   'candidate-generation': { prerequisites: ['composition'], afterIfSelected: [] },
   'safety-validation': { prerequisites: [], afterIfSelected: [] },
   production: { prerequisites: [], afterIfSelected: [
-    'domain', 'depth', 'frame', 'content-grain', 'acquisition', 'scout', 'reference-board',
+    'domain', 'depth', 'frame', 'content-grain', 'acquisition', 'scout', 'moodboard', 'reference-board',
     'reference-selection', 'art-direction', 'copy', 'type-proof', 'composition',
     'candidate-generation', 'safety-validation',
   ] },

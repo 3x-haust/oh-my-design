@@ -5,9 +5,10 @@ import { validateDomainBrief, type DomainReferenceQueries } from '../domain/doma
 import { validateAcquisitionPlan, type AcquisitionPlan, type AcquisitionZoneV2 } from '../deliberation/contracts.ts';
 import type { RouteRecord } from '../route/index.ts';
 import type { CraftRefSignal } from './craft-usage.ts';
+import { querySeeds } from './reference-query.ts';
 
 export const REFERENCE_DISCOVERY_PLAN_SCHEMA = 'reference-discovery-plan-v1' as const;
-export type DiscoveryLane = 'subject-identity' | 'task-components' | 'visual-craft' | 'motion';
+export type DiscoveryLane = 'domain-reference' | 'design-reference' | 'motion';
 
 /** Read-only acquisition input, not a search receipt or a design prescription. */
 export type ReferenceDiscoveryPlan = Readonly<{
@@ -57,7 +58,7 @@ function acquisition(root: string): AcquisitionPlan | null {
 
 function currentDomainQueries(root: string, request: string): DomainReferenceQueries {
   const path = join(root, '.omd/domain-brief.json');
-  if (!existsSync(path)) return { component: [], craft: [] };
+  if (!existsSync(path)) return { component: [], craft: [], mood: [] };
   const brief = validateDomainBrief(JSON.parse(readFileSync(path, 'utf8')));
   if (brief.request !== request.trim()) {
     throw new Error('reference discovery domain queries describe an earlier request; refresh the selected domain record');
@@ -65,19 +66,27 @@ function currentDomainQueries(root: string, request: string): DomainReferenceQue
   return brief.referenceQueries;
 }
 
-/** Domain analysis is optional. Reference discovery and selected motion must survive its absence. */
+/**
+ * Domain analysis is a mandatory stage, so a missing brief is a contract gap rather than a lawful
+ * absence; the empty-query fallback stays only for records published before the stage became required.
+ */
 export function buildReferenceDiscoveryPlan(root: string, route: RouteRecord): ReferenceDiscoveryPlan {
   const discovering = route.references.decision === 'discover';
   const locale = route.sourceContract.localeDesign;
   const plan = discovering ? acquisition(root) : null;
-  const queries = discovering ? currentDomainQueries(root, route.request) : { component: [], craft: [] };
+  const queries = discovering ? currentDomainQueries(root, route.request) : { component: [], craft: [], mood: [] };
   const expressiveNeed = route.sourceContract.designAxes.expressiveDesignNeed;
   const surface = readFrame(root)?.uxSurface ?? null;
   const marketing = surface === 'marketing' || route.sourceContract.referenceDiscovery.taskNeed === 'new-marketing';
   const motionEvidenceRequired = discovering && route.strategy.methods.includes('motion-one');
-  const visualCraft = discovering && (expressiveNeed === 'showpiece' || motionEvidenceRequired
-    || marketing && expressiveNeed !== 'restrained');
-  const motionDiscovery = motionEvidenceRequired || visualCraft && marketing;
+  // Visual reference gathering is the DEFAULT discovery path, not a showpiece-only reward.
+  //
+  // A real run gathered only similar services (a welfare portal, gov.uk, two benefit screeners) and
+  // never opened a visual board at all, because this lane required `expressiveDesignNeed ===
+  // 'showpiece'`. The design that came out could only be a product survey. Every design has a visual
+  // direction to find; only `restrained` work declares that it has none to explore.
+  const visualCraft = discovering && expressiveNeed !== 'restrained';
+  const motionDiscovery = motionEvidenceRequired;
   const decisions = (plan?.zones ?? []).filter(zone => zone.required).map(zone => {
     const bound = plan?.schema === 'reference-acquisition-plan-v2' ? zone as AcquisitionZoneV2 : null;
     return Object.freeze({
@@ -89,31 +98,28 @@ export function buildReferenceDiscoveryPlan(root: string, route: RouteRecord): R
     });
   });
   const lanes: ReferenceDiscoveryPlan['lanes'][number][] = [];
+  // Every discovery route answers two independent questions: how the domain task is solved, and how
+  // the product should feel. Similar services cannot satisfy the second; visual references cannot satisfy the first.
   if (discovering) {
     lanes.push({
-      id: 'subject-identity',
-      purpose: 'Establish the actual subject and its first-party invariants without borrowing category branding.',
-      querySeeds: [],
-      evidence: ['current first-party source', 'verified fact versus visual choice'],
-    }, {
-      id: 'task-components',
-      purpose: 'Find strong products that solve the named adoption or work decisions.',
-      querySeeds: [...queries.component, ...decisions.map(decision => decision.question)],
-      evidence: ['live component state', 'paired-viewport anatomy', 'zone-bound native capture'],
+      id: 'domain-reference',
+      purpose: 'Find similar services and task flows: information architecture, domain vocabulary, states, and actionable sequence.',
+      querySeeds: [...querySeeds('component', queries.component), ...decisions.map(decision => decision.question)],
+      evidence: ['live similar-service task flow', 'domain objects and states', 'paired-viewport anatomy', 'zone-bound native capture'],
+    });
+    lanes.push({
+      id: 'design-reference',
+      purpose: 'Find visual direction across many sites: layout rhythm, density, type, colour, material, and component craft.',
+      querySeeds: querySeeds('mood', [...queries.mood, ...queries.component]),
+      evidence: ['whole-page visual captures', 'several candidates before narrowing', 'measured layout and type parts'],
     });
   }
-  if (visualCraft) lanes.push({
-    id: 'visual-craft',
-    purpose: 'Find high-craft composition and typography for the requested expression, beyond the product category alone.',
-    querySeeds: queries.craft,
-    evidence: ['live whole-page rhythm', 'relevant case study', 'measured section parts'],
-  });
-  if (motionDiscovery) lanes.push({
+  if (discovering && motionDiscovery) lanes.push({
     id: 'motion',
     purpose: motionEvidenceRequired
       ? 'Observe the selected interaction or scroll mechanism in motion, then measure how it is built.'
       : 'Investigate a relevant motion candidate before art direction settles; observation does not select a production scene.',
-    querySeeds: queries.craft,
+    querySeeds: querySeeds('craft', queries.craft),
     evidence: ['actual trigger and changing state', 'timing or scroll progress', 'native craft capture', 'reduced-motion consequence'],
   });
   return Object.freeze({

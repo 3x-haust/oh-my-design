@@ -96,7 +96,7 @@ test('copy-only work skips unnecessary discovery and design stages with written 
   assert.equal(routed.schema, ADAPTIVE_ROUTE_RECORD_SCHEMA);
   assert.equal(routed.strategy.owner, 'user-selected-model');
   assert.deepEqual(routed.strategy.roles, ['omd-writer', 'omd-hand', 'omd-eye']);
-  assert.deepEqual(routed.strategy.stages, ['copy', 'production', 'browser-evidence', 'independent-review']);
+  assert.deepEqual(routed.strategy.stages, ['domain', 'copy', 'production', 'browser-evidence', 'independent-review']);
   assert.deepEqual(routed.strategy.methods, [
     'design-strategy-balanced-delivery',
     'model-capability-probe',
@@ -105,8 +105,8 @@ test('copy-only work skips unnecessary discovery and design stages with written 
     'copy-repair-workflow',
   ]);
   assert.deepEqual(routed.strategy.skips.map((item) => item.id), [
-    'reference-discovery', 'domain', 'depth', 'frame', 'content-grain', 'acquisition', 'scout',
-    'reference-board', 'reference-selection', 'art-direction', 'type-proof',
+    'reference-discovery', 'depth', 'frame', 'content-grain', 'acquisition', 'scout',
+    'reference-board', 'moodboard', 'reference-selection', 'art-direction', 'type-proof',
     'composition', 'candidate-generation', 'safety-validation', 'reflection-in-action',
     'reference-distance', 'image-first-draft', 'evidence-driven-refinement',
     'motion-one', 'ai-shipped-asset',
@@ -129,7 +129,7 @@ test('medical new-product work keeps safety, UX, evidence, and review while pres
     'omd-framer', 'omd-scout', 'omd-composer', 'omd-sketch', 'omd-writer', 'omd-hand', 'omd-eye',
   ]);
   assert.deepEqual(routed.strategy.stages, [
-    'frame', 'content-grain', 'scout', 'reference-board', 'safety-validation', 'copy',
+    'domain', 'frame', 'content-grain', 'scout', 'reference-board', 'safety-validation', 'copy',
     'composition', 'candidate-generation', 'production', 'browser-evidence', 'independent-review',
   ]);
   assert.ok(routed.strategy.methods.includes('design-strategy-safety-recovery'));
@@ -217,7 +217,7 @@ test('high-risk safety and outcome gates fail closed instead of becoming optiona
   routeError(() => routeAdaptiveFlow(changed('medical-new-product', (value) => {
     const strategy = Reflect.get(value, 'strategyDecision');
     assert.ok(typeof strategy === 'object' && strategy !== null && !Array.isArray(strategy));
-    Reflect.set(strategy, 'stages', ['frame', 'scout', 'copy', 'composition', 'production', 'browser-evidence', 'independent-review']);
+    Reflect.set(strategy, 'stages', ['domain', 'frame', 'scout', 'copy', 'composition', 'production', 'browser-evidence', 'independent-review']);
   })), 'SAFETY_WORK_REQUIRED');
 
   routeError(() => routeAdaptiveFlow(changed('medical-new-product', (value) => {
@@ -233,8 +233,8 @@ test('every omitted optional stage or method is accounted for and selected stage
     assert.ok(typeof strategy === 'object' && strategy !== null && !Array.isArray(strategy));
     const skips = Reflect.get(strategy, 'skips');
     assert.ok(Array.isArray(skips));
-    Reflect.set(strategy, 'skips', skips.filter((item) => typeof item === 'object' && item !== null && Reflect.get(item, 'id') !== 'domain'));
-  })), 'OPTIONAL_SKIP_REASON_REQUIRED');
+    Reflect.set(strategy, 'skips', [...skips, { id: 'domain', reason: '<domain is established>' }]);
+  })), 'DOMAIN_ANALYSIS_REQUIRED');
 
   routeError(() => routeAdaptiveFlow(changed('copy-only', (value) => {
     const strategy = Reflect.get(value, 'strategyDecision');
@@ -254,7 +254,7 @@ test('every omitted optional stage or method is accounted for and selected stage
 test('production, linked evidence, independent review, scope, and model ownership remain mandatory', () => {
   const cases: readonly (readonly [string, unknown, AdaptiveRouteErrorCode])[] = [
     ['roles', ['omd-writer', 'omd-hand'], 'INDEPENDENT_REVIEW_REQUIRED'],
-    ['stages', ['copy', 'production', 'independent-review'], 'FINAL_EVIDENCE_REQUIRED'],
+    ['stages', ['domain', 'copy', 'production', 'independent-review'], 'FINAL_EVIDENCE_REQUIRED'],
     ['owner', 'coordinator-selected-model', 'MODEL_OWNER_REQUIRED'],
   ];
   for (const [field, replacement, code] of cases) {
@@ -339,17 +339,18 @@ test('strategy roles and stages are closed, duplicate-free, and dependency order
   routeError(() => routeAdaptiveFlow(changed('copy-only', (value) => {
     const strategy = Reflect.get(value, 'strategyDecision');
     assert.ok(typeof strategy === 'object' && strategy !== null);
-    Reflect.set(strategy, 'stages', ['copy', 'invented-stage', 'production', 'browser-evidence', 'independent-review']);
+    Reflect.set(strategy, 'stages', ['domain', 'copy', 'invented-stage', 'production', 'browser-evidence', 'independent-review']);
   })), 'UNKNOWN_ADAPTIVE_STAGE');
   routeError(() => routeAdaptiveFlow(changed('copy-only', (value) => {
     const strategy = Reflect.get(value, 'strategyDecision');
     assert.ok(typeof strategy === 'object' && strategy !== null);
-    Reflect.set(strategy, 'stages', ['copy', 'copy', 'production', 'browser-evidence', 'independent-review']);
+    Reflect.set(strategy, 'stages', ['domain', 'copy', 'copy', 'production', 'browser-evidence', 'independent-review']);
   })), 'ADAPTIVE_STRATEGY_DUPLICATE');
   routeError(() => routeAdaptiveFlow(changed('medical-new-product', (value) => {
     const strategy = Reflect.get(value, 'strategyDecision');
     assert.ok(typeof strategy === 'object' && strategy !== null);
     Reflect.set(strategy, 'stages', [
+      'domain',
       'frame', 'scout', 'reference-board', 'safety-validation', 'composition',
       'candidate-generation', 'copy',
       'production', 'browser-evidence', 'independent-review',
@@ -371,7 +372,7 @@ test('every topological permutation passes and every dependency inversion fails'
       const expanded = [...order];
       expanded.splice(expanded.indexOf('scout') + 1, 0, 'reference-board');
       expanded.splice(expanded.indexOf('composition') + 1, 0, 'candidate-generation');
-      Reflect.set(strategy, 'stages', [...expanded, 'production', 'browser-evidence', 'independent-review']);
+      Reflect.set(strategy, 'stages', ['domain', ...expanded, 'production', 'browser-evidence', 'independent-review']);
     });
     const topological = order.indexOf('content-grain') > order.indexOf('frame')
       && order.indexOf('composition') > order.indexOf('content-grain')
@@ -450,7 +451,7 @@ test('every artifact-producing stage rejects a missing required prerequisite', (
   for (const [stage, owner] of cases) {
     const strategy = structuredClone(base);
     if (owner !== '') Reflect.set(strategy, 'roles', [...strategy.roles, owner]);
-    Reflect.set(strategy, 'stages', [stage, 'production', 'browser-evidence', 'independent-review']);
+    Reflect.set(strategy, 'stages', ['domain', stage, 'production', 'browser-evidence', 'independent-review']);
     routeError(() => validateAdaptiveStrategyRails(strategy), 'ADAPTIVE_STAGE_ORDER_INVALID');
   }
 });

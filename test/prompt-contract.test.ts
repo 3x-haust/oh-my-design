@@ -698,21 +698,25 @@ test('craft names smooth in-page navigation with a reduced-motion fallback', () 
   assert.match(craft, /scroll-behavior: smooth[\s\S]*scrollIntoView\(\{ behavior: 'smooth'/i);
   assert.match(craft, /Under `prefers-reduced-motion: reduce` it reverts to an instant jump/i);
 });
-test('selected domain analysis records its typed artifact without becoming a universal predecessor', () => {
+test('domain analysis is a mandatory stage that records its typed artifact', () => {
   const loop = read('core/protocol/human-design-loop.md').replace(/\s+/g, ' ');
-  assert.match(loop, /When the adaptive route selects domain analysis/);
+  assert.match(loop, /Domain analysis is a mandatory stage/);
   assert.match(loop, /## Domain analysis/);
   assert.match(loop, /records `\.omd\/domain-brief\.json`[\s\S]*`domain-brief-v1`[\s\S]*`omd domain check`/i);
   assert.match(loop, /two-role reference queries \(component design and top-tier craft\)/i);
+  assert.match(loop, /UNSOURCED_DOMAIN_CLAIM/);
   assert.match(loop, /Durable, reviewable state lives under `\.omd\/`: `domain-brief\.json`/);
 });
-test('the domain-analysis contract names both reference roles and the feeds', () => {
+test('the domain-analysis contract names both reference roles, the source rule, and the planning rule', () => {
   const doc = read('core/protocol/domain-analysis.md').replace(/\s+/g, ' ');
   assert.match(doc, /\*\*component\*\* — role ①/i);
   assert.match(doc, /\*\*craft\*\* — role ②/i);
   assert.match(doc, /top-tier galleries/i);
   assert.match(doc, /It feeds the frame and the scout|feeds[\s\S]*frame[\s\S]*scout/i);
   assert.match(doc, /never designs.*writes? (?:production )?code|never designs, scaffolds, or writes production code/i);
+  assert.match(doc, /UNSOURCED_DOMAIN_CLAIM/);
+  assert.match(doc, /UNSOURCED_PLANNING_CLAIM/);
+  assert.match(doc, /Planning is asked, not researched/i);
 });
 test('reference-assembly names the two roles and gates role-② craft by measured reproduction', () => {
   const ra = read('core/protocol/reference-assembly.md').replace(/\s+/g, ' ');
@@ -738,6 +742,77 @@ test('adaptive routing supplies selected contracts instead of duplicating them i
   assert.match(skill, /For each selected contract:/);
   const stage = read('core/stage/contract.ts');
   assert.match(stage, /id: 'domain'[\s\S]*artifact: '\.omd\/domain-brief\.json'/);
+});
+test('writer rejects intake-recap headlines that hide the next action', () => {
+  const writer = read('src/agents/writer.agent.yaml');
+  assert.match(writer, /다시 오셨네요/);
+  assert.match(writer, /지금 할 일을 먼저 볼게요/);
+  assert.match(writer, /최근 퇴사 상황을 바탕으로/);
+  assert.match(writer, /concrete next action/);
+});
+test('coordinator stops source work until route and visual reference evidence exist', () => {
+  const skill = read('src/skills/omd-ultradesign/SKILL.md').replace(/\s+/g, ' ');
+  assert.match(skill, /do not write application source, copy, or generated-project docs until the current route is present/i);
+  assert.match(skill, /missing `\.omd\/route\.json`/);
+  assert.match(skill, /missing `\.omd\/refs\/` evidence/);
+  assert.match(skill, /missing `.omd\/reference-board\.json`/);
+  assert.match(skill, /Render captures of the generated app are not design references/i);
+});test('the coordinator auto-continues after domain analysis and asks only for material unknowns', () => {
+  const skill = read('src/skills/omd-ultradesign/SKILL.md').replace(/\s+/g, ' ');
+  const oneShot = skill.slice(skill.indexOf('## One-shot execution'), skill.indexOf('## Reference roles'));
+  assert.match(oneShot, /route classify → domain check → reference discovery → reference judgment → composition → render\/critic → production/);
+  assert.match(oneShot, /advance automatically/i);
+  assert.doesNotMatch(oneShot, /wait for confirmation/);
+  assert.match(skill, /Do not ask the user to choose references or a visual direction/i);
+  assert.match(skill, /market\/target audience/i);
+  assert.match(skill, /product's real capability/i);
+  assert.match(skill, /discovery versus continuing an existing application/i);
+});
+
+test('reference-assembly names three roles over two axes, and the visual-only restriction', () => {
+  const ra = read('core/protocol/reference-assembly.md').replace(/\s+/g, ' ');
+  assert.match(ra, /Every reference serves one of three roles/i);
+  assert.match(ra, /\*\*③ mood\*\*/);
+  assert.match(ra, /### The two axes/);
+  assert.match(ra, /A visual-only capture may never support a structural claim/i);
+  assert.match(ra, /core\/visual-vector\.ts/);
+  assert.match(ra, /MOOD_BYTES_IN_PRODUCTION/);
+  assert.match(ra, /advisory/i);
+});
+test('the moodboard protocol states the lane grade and the hard rights rule', () => {
+  const mood = read('core/protocol/moodboard.md').replace(/\s+/g, ' ');
+  assert.match(mood, /scope: whole/);
+  assert.match(mood, /evidence: visual-only/);
+  assert.match(mood, /MOOD_BYTES_IN_PRODUCTION/);
+  assert.match(mood, /a moodboard is study material for direction/i);
+  assert.match(mood, /not a licence to ship its pixels/i);
+  assert.match(mood, /MOOD_OFF_STORE_PATH/);
+  assert.match(mood, /MOOD_STRUCTURAL_QUALITY/);
+});
+test('the coordinator skill names the reference roles and their commands', () => {
+  const skill = read('src/skills/omd-ultradesign/SKILL.md').replace(/\s+/g, ' ');
+  assert.match(skill, /## Reference roles/);
+  assert.match(skill, /omd ref mood/);
+  assert.match(skill, /omd ref gates/);
+  assert.match(skill, /omd ref granularity/);
+});
+test('generated project documents stay inside the omd record', () => {
+  const skill = read('src/skills/omd-ultradesign/SKILL.md').replace(/\s+/g, ' ');
+  assert.match(skill, /under `\.omd\/docs\/\<project\>\/`/);
+  assert.match(skill, /Never create a project-root `docs\/` directory/i);
+});
+test('composition consumes judgment and first-render gestalt before final polish', () => {
+  const composer = read('src/agents/composer.agent.yaml').replace(/\s+/g, ' ');
+  assert.match(composer, /Read the persisted `DesignHypothesis`/);
+  assert.match(composer, /omd judgment check/);
+  assert.match(composer, /omd first-render check/);
+  assert.match(composer, /dominant object/);
+  assert.match(composer, /utility chrome overrides the task/);
+  const critic = read('core/design/first-render-critic.ts');
+  assert.match(critic, /PURPOSE_UNCLEAR/);
+  assert.match(critic, /DOMINANT_OBJECT_MISSING/);
+  assert.match(critic, /COMPARISON_TOO_THIN/);
+  assert.match(critic, /TRUST_SIGNAL_MISSING/);
 });
 test('captured role-② craft cannot override the selected exact motion decision', () => {
   const loop = read('core/protocol/human-design-loop.md').replace(/\s+/g, ' ');

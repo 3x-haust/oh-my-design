@@ -42,13 +42,30 @@ test('--shot without --selector is a usage error (a scoped shot needs a subtree)
   assert.match(result.stderr, /--shot requires --selector/);
 });
 
-test('--blueprint alone still captures no screenshot (shot is opt-in)', async () => {
+test('a reference captures its image by default, without --shot', async () => {
   const dir = project();
   const result = run(['ref', 'add', SLOP, '--as', 'cards', '--selector', '.cards', '--blueprint'], dir);
   assert.equal(result.status, 0, result.stderr);
   const ref = loadRefs(dir)[0]!;
   assert.ok(ref.blueprint !== undefined);
-  assert.equal(ref.imagePath, undefined, 'no screenshot without --shot');
+  // The image is the evidence behind the measured ladders; without it a later reader can see the
+  // numbers but not the screen they came from.
+  assert.ok(ref.imagePath !== undefined, 'a scoped reference keeps its component screenshot');
+  assert.ok(existsSync(refImagePath(dir, { source: SLOP, component: 'cards' })));
+  assert.equal(ref.imageOmittedReason, undefined);
+});
+
+test('--no-shot records why the image was omitted, and refuses a bare omission', () => {
+  const dir = project();
+  const bare = run(['ref', 'add', SLOP, '--as', 'cards', '--selector', '.cards', '--no-shot'], dir);
+  assert.notEqual(bare.status, 0, 'a bare omission is refused');
+  assert.match(bare.stderr, /--no-shot requires --no-shot-reason/);
+
+  const reasoned = run(['ref', 'add', SLOP, '--as', 'cards', '--selector', '.cards', '--no-shot', '--no-shot-reason', 'rights do not permit a local copy'], dir);
+  assert.equal(reasoned.status, 0, reasoned.stderr);
+  const ref = loadRefs(dir)[0]!;
+  assert.equal(ref.imagePath, undefined);
+  assert.equal(ref.imageOmittedReason, 'rights do not permit a local copy');
   assert.ok(!existsSync(refImagePath(dir, { source: SLOP, component: 'cards' })));
 });
 

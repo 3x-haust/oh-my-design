@@ -30,7 +30,7 @@ import {
   REFERENCE_RIGHTS_VALUES,
   REFERENCE_SIGNAL_VALUES,
 } from '../ref/board-contract.ts';
-import { ROUTE_INPUT_KEYS, ROUTE_INPUT_SCHEMA, OPTIONAL_STAGE_IDS, OPTIONAL_METHOD_IDS } from '../route/index.ts';
+import { ROUTE_INPUT_KEYS, ROUTE_INPUT_SCHEMA, MANDATORY_STAGE_IDS, OPTIONAL_STAGE_IDS, OPTIONAL_METHOD_IDS } from '../route/index.ts';
 import { ADAPTIVE_ATTRIBUTION_CATEGORIES } from '../route/adaptive-attribution.ts';
 import { REFERENCE_DISCOVERY_TASK_NEEDS } from '../ref/reference-discovery-routing.ts';
 import {
@@ -240,20 +240,39 @@ const DOMAIN_BRIEF: InputSkeleton = {
   name: 'domain-brief',
   path: '.omd/domain-brief.json',
   command: 'omd domain check --input .omd/domain-brief.json --json',
-  keys: ['schema', 'request', 'domain', 'summary', 'surfaces', 'coreObjects', 'audience', 'referenceQueries', 'researched'],
+  keys: ['schema', 'request', 'domain', 'summary', 'surfaces', 'coreObjects', 'audience', 'referenceQueries', 'planning'],
   skeleton: {
     schema: DOMAIN_BRIEF_SCHEMA,
     request: '<the raw request, normalized>',
     domain: '<the domain in a few words>',
     summary: '<one line: what this domain is and does>',
-    surfaces: [{ name: '<canonical page or screen>', purpose: '<the task it serves, one clause>' }],
-    coreObjects: ['<the real nouns the domain manipulates>'],
-    audience: '<who the work is for>',
+    surfaces: [{
+      name: '<canonical page or screen>',
+      purpose: '<the task it serves, one clause>',
+      evidence: [{ status: '<observed|user-provided|inferred>', reference: '<URL or project-relative capture path>' }],
+    }],
+    coreObjects: [
+      { name: '<a real noun the domain manipulates>', evidence: [{ status: 'observed', reference: '<URL or project-relative capture path>' }] },
+    ],
+    audience: {
+      description: '<who the work is for>',
+      evidence: [{ status: 'user-provided', reference: '<user-message or artifact path>' }],
+    },
     referenceQueries: {
       component: ['<detailed component or section design query>'],
       craft: ['<motion, scroll, or sculptural craft query>'],
+      mood: ['<felt direction: material, temperature, era, register — never a measurement>'],
     },
-    researched: false,
+    planning: {
+      businessGoal: {
+        text: '<why this work exists, in the user\'s terms>',
+        userEvidence: [{ kind: 'explicit-user-evidence', source: 'user-message', reference: '<message or artifact>', excerpt: '<what the user actually said>' }],
+      },
+      successSignal: {
+        text: '<the observable change that means it worked; omit userEvidence to leave it an open hypothesis>',
+      },
+      nonGoals: [{ text: '<what this release deliberately does not do>' }],
+    },
   },
 };
 
@@ -403,9 +422,9 @@ const ROUTE_INPUT: InputSkeleton = {
     'For new-product, new-marketing, or unresolved discovery: uncertainty="unresolved", existingEvidence="none" or "insufficient", existingEvidenceUse=null, skipReason=null. Both null keys are required; do not omit them or replace null with explanatory prose.',
     'For skipped discovery on existing work: uncertainty="resolved", existingEvidence="sufficient", existingEvidenceUse and skipReason are non-empty descriptions of actual evidence use and the skip reason.',
     'the user-selected model owns role, stage, and method order',
-    'executionWaves schedules every selected role exactly once; prerequisite owners precede consumer owners, and parallel-reference-acquisition puts Scout and Writer in the same wave',
+    'executionWaves schedules every selected role exactly once; prerequisite owners precede consumer owners; parallel-reference-acquisition parallelizes Scout\'s browser collection, while Scout publication completes before Writer mutates the shared project record',
     'every omitted optional stage or method carries a non-empty skip reason',
-    `Optional stages: ${OPTIONAL_STAGE_IDS.join(', ')}. Optional methods: ${OPTIONAL_METHOD_IDS.join(', ')}. Account for each in its selected list or skips, including copy-repair-workflow when writing fresh copy without that repair method.`,
+    `Optional stages: ${OPTIONAL_STAGE_IDS.join(', ')}. Mandatory stages: ${MANDATORY_STAGE_IDS.join(', ')} — always selected, never skipped. Optional methods: ${OPTIONAL_METHOD_IDS.join(', ')}. Account for each optional stage and method in its selected list or skips, including copy-repair-workflow when writing fresh copy without that repair method.`,
     `attributionCategories is the applicable subset in this exact order: ${ADAPTIVE_ATTRIBUTION_CATEGORIES.join(', ')}. Include tokens always, motion only with motion-one, composition only with the composition stage, and graphics only with nonempty aiAssets. Typography is not a category.`,
     'strategyDecision.aiAssets contains closed objects, never asset ID strings; print omd schema route-ai-asset for the item shape and native decision publication. ai-shipped-asset is selected exactly when aiAssets is nonempty. Image-first draft exploration does not itself select a shipped asset.',
     'production, decision-linked browser evidence, independent review, hard safety rails, required outcomes, activation, project-write, source seal, and final-v2 evidence cannot be skipped',
@@ -458,7 +477,8 @@ const ROUTE_INPUT: InputSkeleton = {
       attributionCategories: ['tokens'],
       skips: [
         { id: 'reference-discovery', reason: '<existing evidence is sufficient>' },
-        { id: 'domain', reason: '<domain is established>' }, { id: 'depth', reason: '<no deep deliberation needed>' },
+        { id: 'visual-craft', reason: '<gathering a visual direction is the default; omit only when the route declares restrained expression or a supplied brand fixed the direction>' },
+        { id: 'depth', reason: '<no deep deliberation needed>' },
         { id: 'frame', reason: '<no framing change>' }, { id: 'acquisition', reason: '<no acquisition needed>' },
         { id: 'scout', reason: '<discovery skipped>' }, { id: 'reference-board', reason: '<no board needed>' },
         { id: 'reference-selection', reason: '<no selection needed>' }, { id: 'art-direction', reason: '<direction unchanged>' },

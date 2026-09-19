@@ -112,7 +112,7 @@ function fixtureWithSelectedUpstreamStages(): unknown {
     'omd-framer', 'omd-scout',
   ]);
   Reflect.set(strategy, 'stages', [
-    'frame', 'scout', 'reference-board', 'copy', 'production',
+    'domain', 'frame', 'scout', 'reference-board', 'copy', 'production',
     'browser-evidence', 'independent-review',
   ]);
   Reflect.set(strategy, 'executionWaves', [

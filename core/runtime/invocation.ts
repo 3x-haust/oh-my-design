@@ -75,8 +75,8 @@ export function requireProjectWriteInvocation(invocation: ProjectRunInvocation):
   } else if (host !== 'claude' && host !== 'codex') {
     throw new InvocationValidationError('benchmark hosts cannot receive project-write authority');
   }
-  // Cross-process authority is deliberately checked with the project-root-bound
-  // inherited descriptor at the mutation boundary, never from invocation JSON.
+  // Every host (`local`, `claude`, `codex`) reaches a project through the same path now that the
+  // brokered launcher is gone, so the mutation boundary below is the only place authority is decided.
   return activation;
 }
 function requirePurposeBoundPayload(
@@ -86,9 +86,10 @@ function requirePurposeBoundPayload(
   payload: Uint8Array,
 ): ActivationContext {
   const activation = validateCurrentProjectRun(invocation);
-  if (activation.hostCapability.host !== 'claude' && activation.hostCapability.host !== 'codex') {
-    throw new InvocationValidationError(`${purpose} authority must be issued by a host launcher`);
-  }
+  // A local invocation authorizes through its own project key: the CLI that issued the invocation
+  // also minted the receipt (see `issueLocalProjectWriteInvocation`), so there is no launcher to ask.
+  // Host-attached runs go through the same check, which verifies the receipt rather than trusting the
+  // host label — the label is what a caller can forge.
   try {
     requireHostPayloadAuthorization(invocation, projectRoot, purpose, payload);
   } catch (error) {

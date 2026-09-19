@@ -12,6 +12,8 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { STAGES, resolveRunState, type StageId } from '../stage/contract.ts';
+import { formatBrief } from './format.ts';
+import type { ProjectWriteAdapter } from '../runtime/project-write.ts';
 import { detectAppShell, renderTargetHint, type AppShell } from '../stack/shell.ts';
 import { readPersistedRoute, type RouteRecord } from '../route/index.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
@@ -62,6 +64,23 @@ export {
 /** Stages the route can name that are not artifact stages in `STAGES`. */
 export const EXTRA_BRIEF_STAGES = ['candidate-generation', 'production', 'independent-review', 'review'] as const;
 export type BriefStage = StageId | (typeof EXTRA_BRIEF_STAGES)[number];
+
+/**
+ * Where a stage brief is kept.
+ *
+ * A brief is what one owner was actually handed: its permitted inputs, the contracts it must obey,
+ * and the checks that will judge it. It used to exist only for the length of one command, so a run
+ * left no record of what any stage received — a gap when the question later is "what did Composer
+ * have when it made that choice?".
+ *
+ * It lives under `.omd/briefs/` rather than at the record root because it is a derived view of a
+ * stage, not a design artifact in its own right. One file per stage, overwritten as the stage is
+ * re-entered, because the brief describes the CURRENT inputs and a stale copy would be worse than
+ * none.
+ */
+export const BRIEF_DIRECTORY = '.omd/briefs';
+export const briefPath = (stage: BriefStage): string => `${BRIEF_DIRECTORY}/${stage}.json`;
+export const briefMarkdownPath = (stage: BriefStage): string => `${BRIEF_DIRECTORY}/${stage}.md`;
 
 /**
  * A brief is evidence, not a reading list. A mature run holds a hundred captures; printing all of
@@ -418,6 +437,20 @@ export function buildBrief(
   for (const path of selectedInputs.missing) {
     blockers.push(`selected ${stage} input missing: ${path}`);
   }
+  const judgmentPath = '.omd/design-judgment.json';
+  const judgmentConsumer = stage === 'composition' || stage === 'candidate-generation' || stage === 'production';
+  const hasReferenceBoard = existsSync(join(root, '.omd/reference-board.json'));
+  const referenceDirectory = join(root, '.omd/refs');
+  const hasReferenceEvidence = hasReferenceBoard && existsSync(referenceDirectory)
+    && readdirSync(referenceDirectory).some((entry) => !entry.startsWith('.'));
+  const greenfieldReferenceConsumer = route?.projectMode === 'greenfield' && judgmentConsumer;
+  if (greenfieldReferenceConsumer && !hasReferenceEvidence) {
+    blockers.push(`selected ${stage} input missing: visual reference evidence under .omd/refs/ and .omd/reference-board.json — discover and interpret references before composition`);
+  }
+  const judgmentPresent = judgmentConsumer && hasReferenceBoard && existsSync(join(root, judgmentPath));
+  if (judgmentConsumer && hasReferenceBoard && !judgmentPresent) {
+    blockers.push(`selected ${stage} input missing: ${judgmentPath} — interpret the observations before applying them`);
+  }
   const copyReviewPath = '.omd/.cache/copy-eye.md';
   const copyReviewRequired = stage === 'production'
     && route?.behavior.active.copyRepairWorkflow.status === 'selected';
@@ -545,10 +578,39 @@ export function buildBrief(
     judgedBy: [...judgedBy, ...localeJudgedBy, ...localeReferenceJudgedBy],
     prior: priorEvidence(root, [
       ...selectedInputs.present,
+      ...(judgmentPresent ? [judgmentPath] : []),
       ...(localeDesign?.projection === null || localeDesign === null ? [] : [localeDesign.projection.path]),
       ...(localeDesign?.referenceBinding === null || localeDesign === null ? [] : [localeDesign.referenceBinding.path]),
       ...(copyReviewPresent ? [copyReviewPath] : []),
     ]),
     blockers,
   };
+}
+
+/**
+ * Persists the brief a stage was handed, so the run keeps a record of what each owner received.
+ * Written through the project-write adapter like every other project mutation.
+ *
+ * Both forms are written: the JSON is what a later command reads, and the markdown is what a human
+ * reads when asking why a stage made the choice it did.
+ */
+export function writeBrief(
+  root: string,
+  brief: Brief,
+  adapter: ProjectWriteAdapter,
+): Readonly<{ json: string; markdown: string }> {
+  const json = adapter.write(briefPath(brief.stage), `${JSON.stringify(brief, null, 2)}\n`);
+  const markdown = adapter.write(briefMarkdownPath(brief.stage), formatBrief(brief));
+  return Object.freeze({ json, markdown });
+}
+
+/** Reads a persisted brief back. Returns null when the stage has never run in this project. */
+export function readBrief(root: string, stage: BriefStage): Brief | null {
+  const path = join(root, briefPath(stage));
+  if (!existsSync(path)) return null;
+  try {
+    return JSON.parse(readFileSync(path, 'utf8')) as Brief;
+  } catch {
+    return null;
+  }
 }

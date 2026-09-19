@@ -64,7 +64,7 @@ test('captures a real file URL load scene with path-backed ROI receipts', async 
   const authorizeMotion = (value: unknown): void => authorizeTestProjectRunPayloads(dir, invocation, [{ purpose: 'motion-result', payload: Buffer.from(canonicalJson(value)) }]);
   const forgedResult = structuredClone(evidence);
   (forgedResult as { observed: { taskId: string } }).observed.taskId = 'forged-task';
-  assert.throws(() => validateMotionEvidenceV2(forgedResult, currentMotion), /host receipt does not authorize the exact motion-result payload/);
+  assert.throws(() => validateMotionEvidenceV2(forgedResult, currentMotion), /(?:host receipt does not authorize|no self-signed receipt authorizes) the exact motion-result payload/);
   assert.equal(evidence.scenes[0]!.boundary, 'selector');
   assert.equal(evidence.scenes[0]!.activeAnimationCount, 1);
   const capturePaths = [

@@ -8,8 +8,7 @@ import { install, uninstall, doctor } from '../core/install/install.ts';
 import { installBrowserRs, resolveBrowserRs, uninstallBrowserRs } from '../core/install/browser-rs.ts';
 import { doctorBrowserProvider } from '../core/install/browser-provider.ts';
 import { runBrowserRsSmoke } from '../core/install/browser-rs-smoke.ts';
-import { codexHostUsage, runCodexHostCli } from '../adapters/codex-host-launcher.ts';
-import { productionOwnerUsage, runProductionOwnerCli } from '../adapters/production-owner-runtime.ts';
+import { productionOwnerUsage } from '../adapters/production-owner-usage.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const cliBinDir = join(homedir(), '.local', 'bin');
@@ -151,13 +150,11 @@ async function main(): Promise<void> {
 
   if (cmd === 'codex') {
     if (args.length === 0 || args[0] === '--help' || args[0] === '-h') {
-      console.log(`${codexHostUsage()}\n\n${productionOwnerUsage()}`);
+      console.log('`omd-codex` was removed. OMD attaches to Codex, Claude Code, and Pi as a plugin: '
+        + 'install it there and drive the loop through `omd`.');
       return;
     }
-    process.exitCode = args[0] === 'owner'
-      ? await runProductionOwnerCli(args.slice(1))
-      : await runCodexHostCli(args);
-    return;
+    throw new Error('omd-codex was removed; drive the loop through `omd` from the host session.');
   }
 
   if (cmd !== 'install' && cmd !== 'uninstall' && cmd !== 'doctor') usage();

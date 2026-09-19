@@ -32,7 +32,6 @@ export function parseImageFragmentInput(value: unknown): ImageFragmentInput {
     transfer: parseImageFragmentTransfer(parsed['transfer']),
   };
 }
-
 export function parseImageFragmentRecord(value: unknown): ImageFragmentRecord {
   const parsed = record(value, 'record');
   exactKeys(parsed, ['schemaVersion', 'id', 'sha256', 'imagePath', 'provenance', 'transfer'], 'record');

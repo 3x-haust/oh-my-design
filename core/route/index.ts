@@ -77,6 +77,7 @@ export {
   MANDATORY_ADAPTIVE_GATES,
   OPTIONAL_METHOD_IDS,
   OPTIONAL_STAGE_IDS,
+  MANDATORY_STAGE_IDS,
   AdaptiveRouteError,
   type AdaptiveBrowserDecisionContext,
   type AdaptiveExecutionWave,

@@ -14,7 +14,6 @@
   "bin": {
     "omd": "./bin/omd.mjs",
     "oh-my-design": "./bin/omd-install.mjs",
-    "omd-codex": "./bin/omd-codex.mjs",
     "omd-reviewer-evidence-proxy": "./bin/omd-reviewer-evidence-proxy.mjs",
     "omd-harness-v2": "./bin/omd-harness-v2.mjs"
   },

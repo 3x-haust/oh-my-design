@@ -25,7 +25,7 @@ type ScopeEvidence = Readonly<{
   schema: typeof ADAPTIVE_ROUTE_SCOPE_EVIDENCE_SCHEMA;
   verification: 'git' | 'filesystem';
   projectRoot: string;
-  invocation: Readonly<{ buildSha256: string; loadedSkillSha256: string; briefSha256: string }>;
+  invocation: Readonly<{ buildSha256: string; loadedSkillSha256: string }>;
   routeSha256: string;
   baseline: readonly ScopeEntry[];
 }>;
@@ -166,7 +166,6 @@ function identity(invocation: ProjectRunInvocation): ScopeEvidence['invocation']
   return Object.freeze({
     buildSha256: invocation.current.buildSha256,
     loadedSkillSha256: invocation.current.loadedSkillSha256,
-    briefSha256: invocation.current.briefSha256,
   });
 }
 function evidenceBytes(evidence: ScopeEvidence): Buffer { return Buffer.from(`${canonicalRouteJson(evidence)}\n`); }
@@ -212,8 +211,8 @@ function parseEvidence(bytes: Buffer): ScopeEvidence {
     || value.schema !== ADAPTIVE_ROUTE_SCOPE_EVIDENCE_SCHEMA
     || (value.verification !== 'git' && value.verification !== 'filesystem')
     || typeof value.projectRoot !== 'string' || typeof value.routeSha256 !== 'string' || !SHA256.test(value.routeSha256)
-    || !exact(value.invocation, ['buildSha256', 'loadedSkillSha256', 'briefSha256'])
-    || ![value.invocation.buildSha256, value.invocation.loadedSkillSha256, value.invocation.briefSha256].every((item) => typeof item === 'string' && SHA256.test(item))
+    || !exact(value.invocation, ['buildSha256', 'loadedSkillSha256'])
+    || ![value.invocation.buildSha256, value.invocation.loadedSkillSha256].every((item) => typeof item === 'string' && SHA256.test(item))
     || !Array.isArray(value.baseline)) return fail('route scope evidence is malformed');
   const baseline = value.baseline.map((entry): ScopeEntry => {
     if (!exact(entry, ['path', 'sha256', 'mode']) || typeof entry.sha256 !== 'string' || !SHA256.test(entry.sha256)
@@ -229,7 +228,6 @@ function parseEvidence(bytes: Buffer): ScopeEvidence {
     invocation: Object.freeze({
       buildSha256: value.invocation.buildSha256 as string,
       loadedSkillSha256: value.invocation.loadedSkillSha256 as string,
-      briefSha256: value.invocation.briefSha256 as string,
     }),
     routeSha256: value.routeSha256,
     baseline: Object.freeze(baseline),
@@ -245,9 +243,13 @@ function readEvidence(root: string): ScopeEvidence {
   return evidence;
 }
 function sameInvocation(evidence: ScopeEvidence, invocation: ProjectRunInvocation): boolean {
+  // Build and skill bytes identify WHICH OMD produced the scope baseline. The brief is the issuing
+  // command's own label, so binding it here made the baseline readable only by the command that wrote
+  // it: every other command reported the evidence as "stale or belonging to another invocation",
+  // which is what `omd route check` did against a valid record once the launcher stopped handing
+  // every child the same brief.
   return evidence.invocation.buildSha256 === invocation.current.buildSha256
-    && evidence.invocation.loadedSkillSha256 === invocation.current.loadedSkillSha256
-    && evidence.invocation.briefSha256 === invocation.current.briefSha256;
+    && evidence.invocation.loadedSkillSha256 === invocation.current.loadedSkillSha256;
 }
 function gitChangedPaths(root: string, baselineEntries: readonly ScopeEntry[]): readonly string[] {
   const baseline = new Map(baselineEntries.map((entry) => [entry.path, entry]));

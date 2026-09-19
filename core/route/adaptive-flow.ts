@@ -8,6 +8,7 @@ import {
   ADAPTIVE_STAGE_IDS,
   FORBIDDEN_WITHOUT_REQUEST,
   MANDATORY_ADAPTIVE_GATES,
+  MANDATORY_STAGE_IDS,
   OPTIONAL_METHOD_IDS,
   OPTIONAL_STAGE_IDS,
   failAdaptiveRoute,
@@ -55,6 +56,13 @@ export function validateAdaptiveStrategyRails(strategy: AdaptiveStrategyDecision
   }
   const skipped = new Set(strategy.skips.map((entry) => entry.id));
   if (MANDATORY_ADAPTIVE_GATES.some((gate) => skipped.has(gate))) return failAdaptiveRoute('HARD_GATE_CANNOT_SKIP');
+  // Domain analysis is the first loop step: a design built without knowing the domain's real
+  // surfaces and objects is designed from the request's words alone, which is where the generic
+  // average shape comes from. It cannot be skipped with a one-line reason.
+  for (const stage of MANDATORY_STAGE_IDS) {
+    if (skipped.has(stage)) return failAdaptiveRoute('DOMAIN_ANALYSIS_REQUIRED', `mandatory stage ${stage} must not appear in strategyDecision.skips`);
+    if (!strategy.stages.includes(stage)) return failAdaptiveRoute('DOMAIN_ANALYSIS_REQUIRED', `mandatory stage ${stage} must be selected in strategyDecision.stages`);
+  }
   if (!strategy.roles.includes('omd-hand') || !strategy.stages.includes('production')) {
     return failAdaptiveRoute('PRODUCTION_REQUIRED');
   }
@@ -220,13 +228,24 @@ function validateLocaleDesignRoute(input: ValidatedAdaptiveRouteInput): void {
   }
 }
 
+function serializeReferenceWriters(strategy: AdaptiveStrategyDecision): AdaptiveStrategyDecision {
+  if (!strategy.methods.includes('parallel-reference-acquisition')) return strategy;
+  const index = strategy.executionWaves.findIndex((wave) => wave.roles.includes('omd-scout') && wave.roles.includes('omd-writer'));
+  if (index < 0) return strategy;
+  const wave = strategy.executionWaves[index];
+  const scoutWave = Object.freeze({ ...wave, roles: Object.freeze(wave.roles.filter((role) => role !== 'omd-writer')) });
+  const writerWave = Object.freeze({ id: `${wave.id}-writer`, mode: 'concurrent' as const, roles: Object.freeze(['omd-writer']) });
+  const executionWaves = Object.freeze(strategy.executionWaves.flatMap((entry, waveIndex) => waveIndex === index ? [scoutWave, writerWave] : [entry]));
+  return Object.freeze({ ...strategy, executionWaves });
+}
+
 export function routeAdaptiveFlow(
   value: unknown,
   authority?: Readonly<{ root: string; invocation: ProjectRunInvocation }>,
   localeDesign?: LocaleDesignRoute,
 ): AdaptiveRouteRecord {
   const input = validated(value, localeDesign);
-  const strategy = input.strategyDecision;
+  const strategy = serializeReferenceWriters(input.strategyDecision);
   if (input.projectMode === 'greenfield' && !strategy.stages.includes('frame')) {
     failAdaptiveRoute('GREENFIELD_FRAME_REQUIRED');
   }

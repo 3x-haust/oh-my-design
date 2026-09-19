@@ -25,6 +25,7 @@ import { validateFinalEvidenceV2Graph } from '../core/evidence/final-v2-graph.ts
 import { DESIGN_QUALITY_AXES } from '../core/evidence/final-v2-design-quality.ts';
 import { writeObservationV2 } from '../core/runtime/observation.ts';
 import { writeBrowserDecisionFixture } from './helpers/browser-observation-decision-links.ts';
+import { selfSignedReceiptEnv } from './helpers/self-signed-receipt.ts';
 
 import { captureRenderedBeatReceipt, renderFilmstrip } from '../core/render/index.ts';
 const CLI = fileURLToPath(new URL('../bin/omd.ts', import.meta.url));
@@ -101,43 +102,28 @@ const copyDeckV2 = (selectedRegister: 'quiet' | 'confident' | 'showpiece', motio
 };
 const runMutation = (cwd: string, args: string[], invocation: { activation: { hostCapability: { host: 'claude' | 'codex' }; buildSha256: string; loadedSkillSha256: string; briefSha256: string } }, payloadAuthorizations: readonly { purpose: string; payload: string | Buffer }[] = []): Promise<{ status: number | null; stdout: string; stderr: string }> => {
   const childArgv = [CLI, ...args];
-  const receipt = {
-    schema: 'omd-host-project-write-receipt-v3',
-    host: invocation.activation.hostCapability.host,
-    hostAuthentication: {
-      host: invocation.activation.hostCapability.host,
-      mechanism: 'inherited-ipc',
-      parentPid: process.pid,
-      parentExecutableSha256: sha(readFileSync(process.execPath)),
+  const receiptEnv = selfSignedReceiptEnv(
+    cwd,
+    [process.execPath, ...childArgv],
+    {
+      buildSha256: invocation.activation.buildSha256,
+      loadedSkillSha256: invocation.activation.loadedSkillSha256,
+      briefSha256: invocation.activation.briefSha256,
     },
-    projectRoot: realpathSync(cwd),
-    argvSha256: sha(canonical([process.execPath, ...childArgv])),
-    buildSha256: invocation.activation.buildSha256,
-    loadedSkillSha256: invocation.activation.loadedSkillSha256,
-    briefSha256: invocation.activation.briefSha256,
-    expiresAt: Date.now() + 60_000,
-    payloadAuthorizations: payloadAuthorizations.map(({ purpose, payload }) => ({ purpose, payloadSha256: sha(payload) })),
-    nonce: sha(`${cwd}:${hostReceiptSequence += 1}`),
-  };
+    payloadAuthorizations.map(({ purpose, payload }) => ({ purpose, payloadSha256: sha(payload) })),
+  );
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, childArgv, {
       cwd,
-      env: { ...process.env, OMD_HOST_PROJECT_WRITE_FD: '3' },
-      stdio: ['ignore', 'pipe', 'pipe', 'pipe'],
+      env: { ...process.env, ...receiptEnv },
+      stdio: ['ignore', 'pipe', 'pipe'],
     });
-    const receiptPipe = child.stdio[3];
-    if (receiptPipe === undefined || receiptPipe === null || !('end' in receiptPipe)) {
-      child.kill();
-      reject(new Error('host receipt pipe is unavailable'));
-      return;
-    }
     let stdout = '';
     let stderr = '';
     child.stdout?.on('data', (chunk: Buffer) => { stdout += chunk; });
     child.stderr?.on('data', (chunk: Buffer) => { stderr += chunk; });
     child.once('error', reject);
     child.once('close', (status) => resolve({ status, stdout, stderr }));
-    receiptPipe.end(canonical(receipt));
   });
 };
 const receipt = (root: string, name: string, schema: string, value: object): { readonly path: string; readonly schema: string; readonly sha256: string } => {

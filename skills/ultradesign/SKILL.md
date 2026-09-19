@@ -71,7 +71,46 @@ rigorous UX/safety checks; scope, authority, sealing, final-v2, review and model
 framing or alternatives are useful without removing UX outcomes, production evidence, accessibility,
 or independent review.
 
-## Evidence supply
+## Non-negotiable before source
+
+For any new or redesigned UI, do not write application source, copy, or generated-project docs until the
+current route is present and the route-selected reference work has produced real evidence. A missing
+`.omd/route.json`, missing `.omd/refs/` evidence, or missing `.omd/reference-board.json` is a hard stop:
+run the route and Scout/reference stages first. Render captures of the generated app are not design
+references and cannot satisfy this requirement.
+
+Do not let a model-written intake recap become the first screen. Reject headings or subtitles equivalent
+to `다시 오셨네요`, `지금 할 일을 먼저 볼게요`, or `최근 퇴사 상황을 바탕으로 이어서 할 수 있는 일을 정리했어요`.
+Start with the user's concrete task, decision, object, or next action; a verified situation may support
+that action but cannot replace it.
+
+## One-shot execution
+
+For a normal product request, keep moving without approval pauses:
+
+```text
+route classify → domain check → reference discovery → reference judgment → composition → render/critic → production
+```
+
+After `omd domain check`, print the domain summary for the run record and advance automatically. Do not ask the user to choose references or a visual direction; the coordinator selects and records the strongest evidence. Ask one blocking question only when a missing product fact
+would change the route or result materially: market/target audience, the product's real capability, or
+whether the primary task is discovery versus continuing an existing application. Otherwise make the
+reversible design decision, record why, and continue.
+
+## Reference roles
+
+Read `protocol/reference-assembly.md`: three roles (component, craft, mood) over two axes. `omd ref mood`, `omd ref gates`, and `omd ref granularity` carry the checks.
+
+## First-render gestalt check
+
+After first render, run `omd first-render check --input .omd/.cache/first-render-surface.json`. It checks purpose, dominant object, utility subordination, comparison, and trust. `revise` requires composition/rerender, never threshold changes; benefit cards leading with subordinate sidebar/search/AI is `retain`.
+
+## Generated project documents
+
+All planning, design, wireframe, content/state, decision-log, and implementation-handoff documents created
+inside a generated project belong under `.omd/docs/<project>/`. Never create a project-root `docs/`
+directory for these artifacts. The `.omd/` directory is the project record; source files, assets, and
+runtime output may remain at their normal project paths.
 
 At each selected boundary, read `omd brief <stage>` as coordinator intake, not a role packet.
 Follow `protocol/human-design-loop.md` §Evidence handoff before supplying the owner's permitted inputs.
@@ -161,10 +200,8 @@ For ordinary non-transport review, **[review-pair-configuration-contract]** give
 evidence payload with pair-distinct reviewer configuration. The closed initial-final and refinement
 transports instead use one identical host-owned neutral configuration and prove independence with
 distinct process, session, and nonce receipts.
-
 The independent reviewer receives opaque renders, deterministic findings, bounded facts, outcomes,
 and safety rails only. Only the production owner repairs production.
-
 When refinement is selected or a required gate remains RED, read and apply the complete RED/GREEN
   repair-pair and rendered-refinement checkpoint contract in `protocol/human-design-loop.md` under
   `## Production quality gates`. It owns evidence, reviewer isolation, rollback, plateau, and
