@@ -63,6 +63,22 @@ On visual rejection, reread `omd pack theory/imagegen.md --section "Reopen a rej
 
 In-project:
 
+For an existing service, run `omd init --json` before changing its visual system. It inventories
+static CSS declarations and token JSON without modifying the app or approving tokens. Read
+`.omd/existing-design-system.md` and its coverage gaps; inspect unsupported runtime/utility styles
+and component variants directly. If stale, inspect changes then use `omd init --refresh`.
+Subsequent briefs include this inventory. Preserve existing tokens/components by default and
+record intentional departures in `.omd/design-system-decisions.md`; init never overwrites that
+authored file or `.omd/tokens.json`. A code-only inventory is not rendered visual verification.
+
+For implementation completion, read `omd pack protocol/slop-review.md`. Use `omd schema slop-scope`
+and `omd slop checkpoint --input <scope.json>` on the actual local built entry and final viewports.
+Inspect saved images, publish individual judgments with `slop review-set`, then let Hand repair
+confirmed issues and rerun the same scope. Resolve previous findings using the new renders.
+`slop review-check` must pass before finalization; a single check log or raw warning count is not
+a repair loop. Do not require an application loop for design-only delivery or invent a repair when
+the first actual review is clean. Declared dismissals are not independent/user approval.
+
 ```text
 omd doctor
 omd stack --json

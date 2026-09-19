@@ -60,7 +60,7 @@ it contains useful, non-duplicate evidence for every applicable category:
 ### Collecting a visual direction
 
 Run `omd ref discover-plan --json` and follow its free-access design-source policy. For apps and
-product interfaces start with screen/pattern galleries such as UI Bowl and relevant Pinterest
+product interfaces start with free public Pinterest pins, Dribbble shots, Behance case studies or UI Bowl
 entries; for website/marketing direction start with website galleries such as Siteinspire and
 Pinterest. These are replaceable discovery channels, not mandatory winners or guarantees of free
 API/catalogue access. Verify the specific entry is freely viewable now. If login, a paywall, or
@@ -83,6 +83,23 @@ Keep the discovery entry URL, free access observation, and a concrete quality re
 viewport, hierarchy, typography, and density in each design source's `discovery` field. A polished
 gallery name or a popular pin does not establish quality. Label concepts versus shipped screens.
 Free viewing is not a reuse license: reference pixels remain study material, never shipped assets.
+
+### Keep visual direction independent of domain research
+
+Classify by the decision answered, before capturing. Comparable-service tasks, eligibility,
+terminology and flows belong to domain. A service's documentation or accessibility is not a reason
+to promote it into visual direction. Use independently sourced visual screens from free public
+Pinterest pins, Dribbble shots, Behance case studies or website galleries. UI Bowl's paid MCP is
+optional, never a prerequisite. If a gallery blocks access, try another; if none can be inspected,
+return incomplete research rather than substituting government/service documentation.
+
+Read each actual saved image. In `reference-research-v4`, distinguish `visual-direction` from
+`component-support` and record `visualAssessment`: composition, typography, density, imagery,
+what to transfer and what to avoid. Component-support alone cannot complete design research.
+Domain/design source hosts, redirects and image evidence must not overlap. Each board candidate
+must use an inspected visual-direction source. Native captures are drafts, not proof of selection.
+Show the user `.omd/refs/design/README.md` with the retained previews and reasons; keep rejected
+candidates and coverage gaps in scout.md. Structural checks do not certify beauty or user approval.
 
 Search the PART, in English, across many sites — the way a designer builds a board by hand:
 
@@ -127,7 +144,7 @@ After the domain and design lanes both have current evidence, print `omd schema 
 --json`. The record binds the domain lane to the current benchmark when applicable and the design
 lane to the current reference board. The publisher saves `.omd/refs/domain/research.json` and
 `.omd/refs/design/research.json` alongside their own captures, with `.omd/reference-research.json` as the
-consistency receipt. All three must agree. v1/v2 receipts need v3 recollection/republication, not a
+consistency receipt. All three must agree. Older receipts need v4 role/visual review and republication, not a
 filename move or synthesized provenance. Both source and discovery observations bind PNG and native
 capture-JSON hashes. A gallery homepage alone is rejected. If the original source differs from the
 gallery entry, its exact URL must occur in that entry's captured outbound links; otherwise retain

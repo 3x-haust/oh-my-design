@@ -163,7 +163,8 @@ test('omd ref add on an undesigned page warns on stderr and still exits 0', () =
   const add = run(['ref', 'add', plain, '--as', 'plain'], dir);
   assert.equal(add.status, 0);
   assert.match(add.stderr, /low design signal/);
-  assert.match(add.stderr, /teaches nothing/);
+  assert.match(add.stderr, /not a visual-quality judgment/);
+  assert.match(add.stderr, /ref import-image/);
 
   const list = run(['ref', 'list'], dir);
   assert.match(list.stdout, /\[low-signal/);

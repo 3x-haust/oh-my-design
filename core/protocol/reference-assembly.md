@@ -121,18 +121,27 @@ the default visual board inventory.
 
 `omd ref research-set` is the sole publisher of both files and writes `.omd/reference-research.json`
 last as their consistency receipt. `research-check` and downstream gates require all three current
-records. Each v3 source binds PNG evidence and native capture-JSON hashes. Design `discovery` binds
+records. Each v4 source binds PNG evidence and native capture-JSON hashes. Design `discovery` binds
 another inspected entry/capture, not just a homepage or free-access assertion. For a different
 original source, the gallery capture must contain its exact URL in observed outbound links. When
 the original is unavailable, retain the gallery image as image-only; never use unrelated component
 docs as its evidence. No rewriting of native metadata is authorized to repair a failed check.
 The quality reason explains task/viewport fit, hierarchy, typography or density;
 provider prestige is insufficient. This is inspectable provenance, not authenticated proof of taste
-or browsing. Missing v1/v2 provenance must be collected before v3 republication, never backfilled from
-memory. The same evidence path OR identical bytes under another filename cannot satisfy both lanes.
+or browsing. Missing native provenance must be collected, never backfilled from memory. Older
+records require v4 role/visual review and republication; valid captures need not be reacquired.
+The same evidence path OR identical bytes under another filename cannot satisfy both lanes.
 
-The two lanes may inspect the same site, but they never share a conclusion implicitly. Each lane
-must produce its own bounded observations and downstream use. New marketing still does not
+The two lanes use independent service hosts, including after redirects. A second path or crop of a
+domain service is not a visual direction. Non-user discovery must match a supported public gallery
+item (Pinterest, Dribbble, Behance, Siteinspire, Land-book, Godly, or UI Bowl); never label domain
+documentation as a gallery. Add new providers deliberately to design-discovery-sources.ts.
+Each design source declares visualRole=visual-direction|component-support and visualAssessment
+(composition, typography, density, imagery, transfer, avoid). Each board candidate must actually
+use visual-direction evidence; usability/component documentation alone is insufficient. The generated
+refs/design/README.md displays retained previews and judgments for the user; rejected candidates
+and coverage gaps stay in scout.md. These checks enforce evidence roles, not aesthetic quality.
+New marketing still does not
 impersonate a product workflow: it gathers a domain adoption/page journey and design direction,
 while the task-flow benchmark remains selected only for applicable product work.
 

@@ -12,6 +12,7 @@ import {
   type CompletionTypographyBinding,
 } from './publication.ts';
 import { readPublishedReferenceResearch, validateReferenceResearch } from '../ref/reference-research.ts';
+import { checkSlopFinalGraph } from '../slop/review.ts';
 
 export { checkCompletionPublicationPrerequisites, CompletionPreflightError } from './publication.ts';
 export type { CompletionPublicationResult, CompletionTypographyBinding } from './publication.ts';
@@ -35,6 +36,7 @@ export function checkTerminalCompletion(root: string, invocation: ProjectRunInvo
   }
   const final = checkFinalEvidenceV2(root, invocation) as FinalEvidenceV2ManifestVariant;
   const prerequisites = checkCompletionPublicationPrerequisites(root, final, invocation);
+  checkSlopFinalGraph(root, final.graph);
   // Planning the user never confirmed is not a design decision to be repaired later; refuse here,
   // before any completion artifact publishes an invented business goal as delivered.
   const unconfirmedPlanning = requireConfirmedPlanningForProduction(root);

@@ -118,7 +118,7 @@ test('restrained discovery and sufficient existing evidence do not manufacture a
   restrainedRoute.designAxes.expressiveDesignNeed = 'restrained';
   const restrainedPlan = buildReferenceDiscoveryPlan(root, routeAdaptiveFlow(restrainedRoute));
   assert.equal(restrainedPlan.lanes.some(lane => lane.id === 'design-reference'), true, 'design reference is the second required lane');
-  assert.deepEqual(restrainedPlan.galleryDirectories, ['UI Bowl', 'Pinterest', 'Siteinspire']);
+  assert.deepEqual(restrainedPlan.galleryDirectories, ['Pinterest', 'Dribbble', 'Behance', 'UI Bowl', 'Siteinspire']);
   assert.equal(restrainedPlan.designSourcePolicy.domainOutput, '.omd/refs/domain/research.json');
   assert.equal(restrainedPlan.designSourcePolicy.designOutput, '.omd/refs/design/research.json');
   assert.match(restrainedPlan.designSourcePolicy.fallback, /Do not purchase/);

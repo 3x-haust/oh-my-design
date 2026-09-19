@@ -566,7 +566,18 @@ const finalizationAuthorizations = (root: string, input: string): { purpose: str
     ...Object.values(staticValue.reviewReceipts).map(({ path }) => ({ purpose: 'static-review-receipt', payload: readFileSync(join(root, path)) })),
   ];
 };
-const finalize = (root: string, input: string, authorizations = finalizationAuthorizations(root, input)): Promise<{ status: number | null; stdout: string; stderr: string }> => {
+const finalize = async (root: string, input: string, authorizations = finalizationAuthorizations(root, input)): Promise<{ status: number | null; stdout: string; stderr: string }> => {
+  if (!existsSync(join(root, '.omd/slop/latest.json'))) {
+    const { captureSlopCheckpoint, publishSlopReview } = await import('../core/slop/review.ts');
+    const writer = createTestProjectWriteAdapter(root);
+    const captured = await captureSlopCheckpoint(root, { schema: 'slop-scope-v1', views: [
+      { id: 'desktop', page: 'static-evidence.html', viewport: { width: 1280, height: 900 } },
+      { id: 'mobile', page: 'static-evidence.html', viewport: { width: 390, height: 844 } },
+    ] }, writer);
+    publishSlopReview(root, { ...captured.reviewInput, summary: 'Synthetic static-direction fixture inspected at both viewport sizes.',
+      decisions: captured.reviewInput.decisions.map(d => ({ ...d, status: 'dismissed', reason: 'The synthetic static fixture deliberately retains its bounded type and colour treatment.', viewIds: ['desktop', 'mobile'] })),
+    }, writer);
+  }
   const invocation = JSON.parse(readFileSync(join(root, 'invocation.json'), 'utf8')) as Parameters<typeof runMutation>[2];
   return runMutation(root, ['evidence', 'v2', 'finalize', '--input', input, '--activation', join(root, 'invocation.json')], invocation, authorizations);
 };

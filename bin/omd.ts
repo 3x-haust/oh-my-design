@@ -77,6 +77,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 interface Opts {
   _: string[];
+  refresh?: boolean;
   json?: boolean;
   ir?: string;
   layer?: string;
@@ -228,7 +229,7 @@ interface Opts {
   publish?: boolean;
 }
 
-const FLAGS = new Set(['json', 'no-log', 'no-energy', 'no-shot', 'image', 'filmstrip', 'squint', 'full-page', 'from-user', 'all', 'blueprint', 'shot', 'proofs', 'fresh', 'check', 'review-check', 'apply', 'dry-run', 'cache', 'stale-records', 'files', 'selected', 'gate', 'publish']);
+const FLAGS = new Set(['json', 'no-log', 'no-energy', 'no-shot', 'image', 'filmstrip', 'squint', 'full-page', 'from-user', 'all', 'blueprint', 'shot', 'proofs', 'fresh', 'check', 'refresh', 'review-check', 'apply', 'dry-run', 'cache', 'stale-records', 'files', 'selected', 'gate', 'publish']);
 const ALIASES: Record<string, keyof Opts> = {
   o: 'out',
   'no-log': 'noLog',
@@ -1104,20 +1105,20 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
   if (signal.score < LOW_SIGNAL) {
     console.error(
       `warning: low design signal (${signal.score} — missing: ${signal.missing.join(', ')}).\n`
-      + 'This page makes almost no visual decisions; as a visual reference it teaches nothing.\n'
-      + 'Keep it only as a content or anti-reference, and say so in its principles.',
+      + 'Measured DOM evidence is insufficient; this is not a visual-quality judgment.\n'
+      + 'If the design is inside an image, inspect the saved PNG and use ref import-image for visual-only evidence. Do not measure gallery chrome as the pictured app or replace image references with domain documentation.',
     );
   }
   if (slopCount >= 2) {
     if (opts.fromUser) {
       console.error(
-        `note: the reference you provided shows ${slopCount} slop signals (${slopIds.join(', ')}) — using it as a stated anti-reference.\n`
-        + 'It is saved; mark its principles to document what to avoid.',
+        `note: the reference you provided shows ${slopCount} slop signals (${slopIds.join(', ')}).\n`
+        + 'It is saved. Inspect the actual image and record what to transfer or avoid; warnings do not overrule the user target.',
       );
     } else {
       console.error(
-        `warning: ${slopCount} slop findings (${slopIds.join(', ')}) — this page reproduces patterns the tool exists to avoid.\n`
-        + 'Board it only as an explicitly-stated anti-reference.',
+        `warning: ${slopCount} slop findings (${slopIds.join(', ')}).\n`
+        + 'Review the visible context before retaining or excluding this source; the warning count is not an aesthetic verdict.',
       );
     }
   }
@@ -2753,6 +2754,20 @@ async function cmdTokens(mode: string | undefined, opts: Opts): Promise<never> {
   process.exit(drift ? 1 : 0);
 }
 
+async function cmdInit(opts: Opts): Promise<never> {
+  const { designInventoryStatus, initializeDesignInventory, DESIGN_INVENTORY_DOC_PATH } = await import('../core/tokens/inventory.ts');
+  if (opts._.length || (opts.check && opts.refresh)) throw new Error('usage: omd init [--refresh | --check] [--json]');
+  if (opts.check) {
+    const status = designInventoryStatus(process.cwd());
+    console.log(opts.json ? JSON.stringify(status) : `${status.status} — ${status.path} (${status.observations} observed declarations; ${status.gaps} coverage gaps)`);
+    process.exit(status.status === 'current' ? 0 : 1);
+  }
+  const inventory = initializeDesignInventory(process.cwd(), projectWriterFromActivation(opts, 'omd init'), opts.refresh);
+  const result = { ...designInventoryStatus(process.cwd()), document: DESIGN_INVENTORY_DOC_PATH, authority: inventory.authority };
+  console.log(opts.json ? JSON.stringify(result) : `Saved observed design system: ${DESIGN_INVENTORY_DOC_PATH}\n${result.observations} declarations; ${result.gaps} coverage gaps. Not approved tokens. Application files and .omd/tokens.json unchanged.`);
+  process.exit(result.status === 'current' ? 0 : 1);
+}
+
 /** Persists a moderator handback verbatim or validates the joined run before/final. */
 async function cmdDeliberate(mode: string | undefined, opts: Opts): Promise<never> {
   // Every role returns its decision entry in its handback; the coordinator's job is to append it,
@@ -3910,6 +3925,8 @@ async function cmdEvidence(mode: string | undefined, opts: Opts): Promise<never>
     requireFinalEvidenceManifestAuthorization(invocation, process.cwd(), manifestBytes);
     const manifest = JSON.parse(manifestBytes.toString('utf8')) as unknown;
     if (!isRecord(manifest) || !isRecord(manifest.graph)) throw new Error('FINAL_REVIEWER_LANE_AUTHORIZATION_REQUIRED: final graph is required');
+    const { checkSlopFinalGraph } = await import('../core/slop/review.ts');
+    checkSlopFinalGraph(process.cwd(), manifest.graph);
     for (const lane of ['blindLane', 'fidelityLane', 'protocolLane']) {
       const descriptor = manifest.graph[lane];
       if (!isRecord(descriptor) || typeof descriptor.path !== 'string') throw new Error(`FINAL_REVIEWER_LANE_AUTHORIZATION_REQUIRED: ${lane} receipt is required`);
@@ -4283,6 +4300,15 @@ function cmdPack(sub: string | undefined, ...rest: string[]): never {
 }
 
 async function cmdSlop(sub: string | undefined, opts: Opts): Promise<never> {
+  if (sub === 'checkpoint' || sub === 'review-set' || sub === 'review-check') {
+    const { captureSlopCheckpoint, publishSlopReview, checkSlopReview } = await import('../core/slop/review.ts');
+    if (sub !== 'review-check' && !opts.input) throw new Error('slop checkpoint/review-set requires --input <json>');
+    const result = sub === 'review-check' ? checkSlopReview(process.cwd())
+      : sub === 'checkpoint' ? await captureSlopCheckpoint(process.cwd(), inputJson(opts.input!, 'omd slop checkpoint'), projectWriterFromActivation(opts, 'omd slop checkpoint'))
+      : publishSlopReview(process.cwd(), inputJson(opts.input!, 'omd slop review-set'), projectWriterFromActivation(opts, 'omd slop review-set'));
+    console.log(JSON.stringify(result, null, opts.json ? 0 : 2));
+    process.exit(0);
+  }
   if (sub !== 'scan' && sub !== 'score') throw new Error('usage: omd slop scan [root] [--json] | omd slop score --input <invariants.json> --corpus <corpus.json> [--json]');
   if (sub === 'scan') {
     const result = scanSlopSource(opts._[0] ?? process.cwd());
@@ -4794,6 +4820,9 @@ function usage(): never {
     + '  check --site <dir>                          cross-page consistency (SITE-*)\n'
     + '  check <page1> <page2> ...                   same, multi-page positional\n'
     + '  slop scan [root] [--json]                   read-only source candidate scan\n'
+    + '  slop checkpoint --input <scope.json>       capture local build views and scan source/render slop\n'
+    + '  slop review-set --input <review.json>       record each rendered judgment and repair resolution\n'
+    + '  slop review-check [--json]                  require current closed review/repair history\n'
     + '  slop score --input f --corpus f [--json]    advisory composite slop proximity over the shared visual space\n'
     + '  stack [--json]                              deterministic stack routing (blank greenfield -> plain HTML/CSS/JS)\n'
     + '  coach                                        trends across `omd check` history\n'
@@ -4852,6 +4881,7 @@ function usage(): never {
     + '\n'
     + '  design                                       discover evidence and create/refresh .omd/design.md\n'
     + '  design --check                              validate design.md section coverage\n'
+    + '  init [--refresh | --check] [--json]          inventory existing CSS/tokens; preserve app and approved tokens\n'
     + '  copy --check [--json]                       validate required copy deck structure and fact refs\n'
     + '  copy --review-check [--json]                validate copy-eye structure and current deck hash\n'
     + '  copy review-publish --input <report>         preserve a validated blind copy-eye report\n'
@@ -5217,6 +5247,7 @@ async function main(): Promise<never> {
   if (cmd === 'no-js') return cmdNoJs(parseArgs(args.slice(1)));
   if (cmd === 'award') return cmdAward(sub, parseArgs(args.slice(2)));
   if (cmd === 'tokens') return cmdTokens(sub, parseArgs(args.slice(2)));
+  if (cmd === 'init') return cmdInit(parseArgs(args.slice(1)));
   if (cmd === 'depth') return cmdDepth(sub, parseArgs(args.slice(2)));
   if (cmd === 'deliberate') return cmdDeliberate(sub, parseArgs(args.slice(2)));
   if (cmd === 'compare') return cmdCompare(sub, parseArgs(args.slice(2)));

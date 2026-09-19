@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { checkFinalEvidenceV2, publishFinalEvidenceV2 } from '../core/evidence/final-v2.ts';
 import { checkTerminalCompletion } from '../core/completion/preflight.ts';
+import { captureSlopCheckpoint, publishSlopReview } from '../core/slop/review.ts';
 import { canonicalFinalEvidenceV2Graph, validateFinalEvidenceV2GraphFiles } from '../core/evidence/final-v2-graph.ts';
 import { servedProjectTreeSha256 } from '../core/render/serve.ts';
 import { createAdaptiveSourceSealRoute } from '../core/source-seal/adaptive-inputs.ts';
@@ -438,7 +439,7 @@ test('authorized copy-only adaptive omission publication reaches immutable final
   } finally { rmSync(value.root, { recursive: true, force: true }); }
 });
 
-test('execution requirements are reported only after real final publication and terminal checks', () => {
+test('execution requirements are reported only after real final publication and terminal checks', async () => {
   const routeInput = structuredClone(fixture());
   const requirements = [
     { requirement: 'Use the authorized production writer.', enforcedBy: ['project-write-boundary'] },
@@ -467,6 +468,14 @@ test('execution requirements are reported only after real final publication and 
       { purpose: 'final-reviewer-lane', payload: pointer },
       { purpose: 'final-evidence-manifest', payload: readFileSync(join(value.root, '.omd/final-evidence-v2-runs', record)) },
     ]);
+    assert.throws(() => checkTerminalCompletion(value.root, value.invocation), /SLOP_REVIEW_REQUIRED/);
+    const slop = await captureSlopCheckpoint(value.root, { schema: 'slop-scope-v1', views: [
+      { id: 'desktop', page: 'src/copy/final.html', viewport: { width: 1280, height: 900 } },
+      { id: 'mobile', page: 'src/copy/final.html', viewport: { width: 390, height: 844 } },
+    ] }, createTestProjectWriteAdapter(value.root, value.invocation));
+    publishSlopReview(value.root, { ...slop.reviewInput, summary: 'Synthetic final copy fixture: the approved sentence is visible in both native viewport captures.',
+      decisions: slop.reviewInput.decisions.map(d => ({ ...d, status: 'dismissed', reason: 'The synthetic text-only fixture deliberately has no additional visual treatment.', viewIds: ['desktop', 'mobile'] })),
+    }, createTestProjectWriteAdapter(value.root, value.invocation));
     const result = checkTerminalCompletion(value.root, value.invocation);
     assert.deepEqual(result.executionRequirements, {
       schema: 'execution-requirement-check-v1',

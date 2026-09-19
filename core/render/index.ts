@@ -7,6 +7,7 @@ import { resolveRenderTarget as resolveTarget } from './serve.ts';
 import { computeEnergy } from '../motion/energy.ts';
 import type { EnergyCurve, MotionMeasurement, RawIr } from '../types.ts';
 import { PREPARED_MEASUREMENT_COVERAGE } from '../ref/measurement-coverage.ts';
+import { designDiscoveryProvider } from '../ref/design-discovery-sources.ts';
 import { parseCapturePreparation, prepareReferenceCapture, observeCapturePreparation, type CapturePreparation, type CapturePreparationReceipt } from '../ref/capture-preparation.ts';
 import { type ProjectWriteAdapter, requireProjectWriteAdapter } from '../runtime/project-write.ts';
 import type { RenderedBeat, RenderedBeatProof } from '../copy/index.ts';
@@ -160,6 +161,7 @@ async function assertNotBlocked(
   selector: string | null = null,
 ): Promise<void> {
   if (resolvedUrl.startsWith('file:')) return; // local files are never bot-challenged
+  if (await galleryLoginOccludes(page, resolvedUrl)) throw new BlockedPageError('gallery login form obscures the reference; inspect another public source');
   const title = await page.title().catch(() => '');
   const bodyTextLength = await page
     .evaluate(() => (document.body?.innerText?.trim() ?? '').length)
@@ -183,6 +185,20 @@ async function assertNotBlocked(
     reason = detectBlockReason(title, bodyTextLength, httpStatus, measured);
   }
   if (reason !== null) throw new BlockedPageError(reason);
+}
+
+/** Do not save a gallery's login overlay as an app design. A navbar login link or a sidebar form
+ * does not hide the primary capture, and an actual product login screen is not a gallery block. */
+export async function galleryLoginOccludes(page: import('playwright').Page, url: string): Promise<boolean> {
+  if (designDiscoveryProvider(url) === null) return false;
+  return page.evaluate(() => Array.from(document.querySelectorAll('input[type="password"]')).some(input => {
+    const box = input.getBoundingClientRect();
+    if (box.width <= 0 || box.height <= 0 || getComputedStyle(input).visibility === 'hidden') return false;
+    const form = input.closest('form, [role="dialog"], [aria-modal="true"]');
+    if (!form) return false;
+    const centre = document.elementFromPoint(innerWidth / 2, innerHeight / 2);
+    return centre !== null && form.contains(centre);
+  }));
 }
 
 /**
@@ -722,6 +738,7 @@ export async function capturePageForRef(
     // Hover/tab probes can close disclosures or move initial focus; null means not measured.
     const raw = await extractIrCore(page, httpStatus, resolvedUrl, opts.selector ?? null, preparation === undefined);
     if (preparation) await observeCapturePreparation(page, preparation);
+    await assertNotBlocked(page, httpStatus, resolvedUrl, opts.selector ?? null);
     let shotSaved = false;
     let shotBytes: Buffer | undefined;
     let shotError: string | undefined;

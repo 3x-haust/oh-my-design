@@ -5,7 +5,7 @@ import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import test from 'node:test';
-import { capturePageForRef, withBrowser } from '../core/render/index.ts';
+import { capturePageForRef, withBrowser, galleryLoginOccludes } from '../core/render/index.ts';
 import { loadRefs, refImagePath, researchLane, saveRef, addPrinciples } from '../core/ref/store.ts';
 import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
 
@@ -43,4 +43,34 @@ test('actual full-page captures retain HTTP/link provenance and stay in separate
   addPrinciples(root, design.source, design.component, ['Keep the primary action near its work object.'], writer);
   assert.equal(loadRefs(root)[0]!.principles.length, 1);
   assert.throws(() => researchLane('../escape'), /LANE_REQUIRED/);
+});
+
+test('same-page domain recapture is rejected before a new design image path is issued', t => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-lane-overlap-')));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const writer = createTestProjectWriteAdapter(root);
+  const domain = { source: 'https://www.gov.uk/check-benefits', component: 'flow', researchLane: 'domain' as const,
+    kind: 'page' as const, capturedAt: new Date().toISOString(), invariants: null, principles: [] };
+  saveRef(root, domain, writer);
+  const relabelled = { ...domain, source: 'https://gov.uk/check-benefits/?crop=calm#top', component: 'calm-layout', researchLane: 'design' as const };
+  assert.throws(() => refImagePath(root, relabelled), /LANE_SOURCE_OVERLAP/);
+  assert.throws(() => saveRef(root, relabelled, writer), /LANE_SOURCE_OVERLAP/);
+  assert.doesNotThrow(() => refImagePath(root, { ...relabelled, source: 'https://dribbble.com/shots/123-app' }));
+  assert.equal(loadRefs(root).length, 0);
+});
+
+test('gallery login overlay is blocked, but a login link, sidebar or product login is not', async () => {
+  await withBrowser(async browser => {
+    const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    const pin = 'https://www.pinterest.com/pin/123456789/';
+    try {
+      await page.setContent('<main>Public app image</main><form style="position:fixed;inset:10%;background:white"><input type="password"></form>');
+      assert.equal(await galleryLoginOccludes(page, pin), true);
+      assert.equal(await galleryLoginOccludes(page, 'https://product.example/login'), false);
+      await page.setContent('<main>Public app image</main><a href="/login">Log in</a>');
+      assert.equal(await galleryLoginOccludes(page, pin), false);
+      await page.setContent('<main>Public app image</main><form style="position:fixed;left:1000px;top:0;width:200px"><input type="password"></form>');
+      assert.equal(await galleryLoginOccludes(page, pin), false);
+    } finally { await page.close(); }
+  });
 });

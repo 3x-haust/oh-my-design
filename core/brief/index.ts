@@ -10,7 +10,7 @@
 // from reality, and a new model needs no new prose to use them.
 
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import { STAGES, resolveRunState, type StageId } from '../stage/contract.ts';
 import { formatBrief } from './format.ts';
 import type { ProjectWriteAdapter } from '../runtime/project-write.ts';
@@ -37,6 +37,8 @@ import {
 import { readSelectedReferenceHandoff } from '../ref/selected-handoff.ts';
 import type { ReferenceHandoffRole } from '../ref/reference-handoff.ts';
 import { readPublishedReferenceResearch, validateReferenceResearch } from '../ref/reference-research.ts';
+import { designInventoryStatus, DESIGN_INVENTORY_DOC_PATH } from '../tokens/inventory.ts';
+import { loadRefs, refRecordPath } from '../ref/store.ts';
 
 export {
   EVIDENCE_CLAIM_PUBLICATION_SCHEMA,
@@ -105,6 +107,7 @@ export type BriefCheck = {
 };
 
 export type Brief = {
+  readonly existingDesignSystem?: ReturnType<typeof designInventoryStatus> | null;
   readonly stage: BriefStage;
   readonly owner: string;
   readonly owns: readonly string[];
@@ -262,36 +265,10 @@ function readRoute(root: string, invocation?: ProjectRunInvocation): RouteRecord
  * A reference with its measured principle is the instruction. "Make it distinctive" is not.
  */
 export function briefReferences(root: string): readonly BriefReference[] {
-  const dir = join(root, '.omd', 'refs');
-  let names: string[];
-  try {
-    names = readdirSync(dir).filter((name) => name.endsWith('.json'));
-  } catch {
-    return [];
-  }
-  const out: BriefReference[] = [];
-  for (const name of names.sort()) {
-    try {
-      const parsed: unknown = JSON.parse(readFileSync(join(dir, name), 'utf8'));
-      if (!isRecord(parsed) || typeof parsed.component !== 'string') continue;
-      const principles = Array.isArray(parsed.principles)
-        ? parsed.principles.filter((entry): entry is string => typeof entry === 'string')
-        : [];
-      out.push({
-        path: `.omd/refs/${name}`,
-        component: parsed.component,
-        slot: typeof parsed.slot === 'string' ? parsed.slot : null,
-        take: principles,
-      });
-    } catch (error) {
-      const code = error instanceof Error && 'code' in error ? error.code : undefined;
-      if (error instanceof SyntaxError || code === 'ENOENT' || code === 'ENOTDIR' || code === 'EISDIR') {
-        continue; // The reference gate reports malformed or concurrently removed records.
-      }
-      throw error;
-    }
-  }
-  return out;
+  return loadRefs(root).map(ref => ({
+    path: relative(root, refRecordPath(root, ref)), component: ref.component,
+    slot: ref.slot ?? null, take: ref.principles.filter((entry): entry is string => typeof entry === 'string'),
+  })).sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
 }
 
 function selectedCandidateEvidence(root: string): readonly string[] {
@@ -402,6 +379,12 @@ export function buildBrief(
     })();
 
   const blockers: string[] = [];
+  const inventoryStatus = designInventoryStatus(root);
+  const existingDesignSystem = inventoryStatus.status === 'missing' ? null : inventoryStatus;
+  const inventoryConsumer = ['art-direction', 'composition', 'candidate-generation', 'production'].includes(stage);
+  if (inventoryConsumer && existingDesignSystem && existingDesignSystem.status !== 'current') {
+    blockers.push(`existing design inventory ${existingDesignSystem.status}: inspect source changes and run omd init --refresh`);
+  }
   let referenceHandoff: Brief['referenceHandoff'] = null;
   const handoffRole: ReferenceHandoffRole | undefined = stage === 'art-direction' ? 'art-direction'
     : stage === 'composition' || stage === 'candidate-generation' ? 'composer'
@@ -572,6 +555,7 @@ export function buildBrief(
 
   return {
     stage,
+    existingDesignSystem,
     owner: definition?.owner ?? OWNER[stage] ?? 'coordinator',
     owns: designReview ? ['.omd/design/review.md'] : definition === undefined ? OWNS[stage] ?? [] : [definition.artifact],
     route: route === null ? null : {
@@ -601,6 +585,8 @@ export function buildBrief(
     shell: shell.kind === 'browser' ? null : { kind: shell.kind, target: renderTargetHint(shell) },
     judgedBy: [...judgedBy, ...localeJudgedBy, ...localeReferenceJudgedBy],
     prior: priorEvidence(root, [
+      ...(existingDesignSystem?.status === 'current' && inventoryConsumer ? [existingDesignSystem.path, DESIGN_INVENTORY_DOC_PATH,
+        ...(existsSync(join(root, '.omd/design-system-decisions.md')) ? ['.omd/design-system-decisions.md'] : [])] : []),
       ...selectedInputs.present,
       ...(judgmentPresent ? [judgmentPath] : []),
       ...(localeDesign?.projection === null || localeDesign === null ? [] : [localeDesign.projection.path]),

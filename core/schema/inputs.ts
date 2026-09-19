@@ -782,6 +782,9 @@ const REFERENCE_RESEARCH: InputSkeleton = {
     'each lane records actual queries, inspected sources and current PNG evidence plus a hashed native capture JSON; domain paths stay in .omd/refs/domain/, design and gallery-entry paths in .omd/refs/design/',
     'research-set publishes .omd/refs/domain/research.json and .omd/refs/design/research.json separately, then .omd/reference-research.json as a consistency receipt; research-check requires all three current records',
     'neither the same evidence path nor identical bytes under a renamed path can satisfy both lanes',
+    'domain and design sources/discovery entries must use independent service hosts (also checked after redirects). A new crop, path, query or filename of the same service is not a separate lane.',
+    'design sources declare visualRole=visual-direction|component-support and visualAssessment={composition,typography,density,imagery,transfer,avoid}. Inspect actual pixels; none of these fields is an automatic beauty score. Each board candidate must use a visual-direction source; support-only documentation is insufficient.',
+    'non-user discovery must be a concrete supported gallery item: Pinterest pin, Dribbble shot, Behance gallery, Siteinspire/Land-book website, Godly website, or UI Bowl public item. These are free-access leads, not guaranteed free catalogues. Paid MCP is not needed. If every available source is blocked, report incomplete research; do not relabel domain pages.',
     'every design source needs discovery: a non-homepage gallery/pin entry URL, kind (app-gallery, web-gallery, visual-bookmark, or explicitly user-provided), access free, qualityReason, evidence and capture receipts. If the retained source differs from the gallery URL, the captured gallery acquisition.links must contain that exact source URL; otherwise retain the gallery image as visual-only, not an unrelated component',
     'capture points to the JSON returned by ref add --lane domain|design or ref import-image; never create or repair acquisition metadata by hand. Native captures bind source, imagePath, actual HTTP status, final URL and outbound links. Native image imports bind sourcePage and PNG digest; they prove no live flow',
     'use app/screen galleries for apps and product UI, website galleries for marketing/web direction, and Pinterest as visual discovery; inspect the retained entry and original source when available; screenshots cannot prove live behavior',
@@ -815,11 +818,17 @@ const REFERENCE_RESEARCH: InputSkeleton = {
         url: 'https://example.org/design-reference',
         observedAt: '2026-08-25',
         decision: '<composition, typography, colour, material, component, or motion decision answered>',
+        visualRole: 'visual-direction',
+        visualAssessment: {
+          composition: '<observed macro layout and hierarchy>', typography: '<observed type relationships>',
+          density: '<observed spacing and information load>', imagery: '<observed image/material role, or explicit absence>',
+          transfer: '<what to adapt to this project and why>', avoid: '<what not to copy and why>',
+        },
         finding: '<bounded visual observation>',
         evidence: { path: '.omd/refs/design/design-direction-a.png', sha256: '2'.repeat(64) },
         capture: { path: '.omd/refs/design/design-direction-a.json', sha256: '5'.repeat(64) },
         discovery: {
-          url: 'https://example.org/gallery/entry',
+          url: 'https://www.pinterest.com/pin/123456789/',
           kind: 'app-gallery', access: 'free',
           qualityReason: '<why this inspected screen fits the task, viewport, hierarchy, type, and density; not just the gallery name>',
           evidence: { path: '.omd/refs/design/gallery-entry.png', sha256: '6'.repeat(64) },
@@ -1126,6 +1135,18 @@ const DESIGN_HANDOFF: InputSkeleton = {
 };
 
 export const INPUT_SKELETONS: readonly InputSkeleton[] = [
+  {
+    name: 'slop-scope', path: '.omd/.cache/slop-scope.json', command: 'omd slop checkpoint --input .omd/.cache/slop-scope.json --json',
+    keys: ['schema', 'views'],
+    constraints: ['Use actual local HTML production/build entries, not reference URLs or arbitrary localhost ports. Build a bundled SPA before capture.',
+      'Cover the final production entry and every final viewport. Keep identical scope while confirmed issues remain; name additional task/state entries where applicable.',
+      'Checkpoint runs the source scanner and rendered slop linter, saves native PNGs, and returns an unfilled reviewInput. Inspect its images; never auto-approve the template.',
+      'After a confirmed issue: owner repair, rebuild, checkpoint again, then resolve the previous issue using the new screenshots. Zero raw warnings is not required; all findings need individual judgments.'],
+    skeleton: { schema: 'slop-scope-v1', views: [
+      { id: 'entry-desktop', page: 'dist/index.html', viewport: { width: 1280, height: 900 } },
+      { id: 'entry-mobile', page: 'dist/index.html', viewport: { width: 390, height: 844 } },
+    ] },
+  },
   ROUTE_INPUT,
   DESIGN_ROUTE_INPUT,
   DESIGN_HANDOFF,

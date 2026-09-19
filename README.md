@@ -94,7 +94,29 @@ folders with `ref add --lane domain|design` or `lane` on each add-batch entry. I
 `ref list --lane domain|design --json`; domain captures do not silently enter the visual board.
 v3 binds source and gallery-entry PNGs to their native capture JSON. A homepage is not an inspected
 entry, and a different original source must appear in the gallery's observed outbound links. Old
-v1/v2 records need actual recollection before v3 publication, not just moving or relabelling files.
+Older records need v4 visual-role review and republication, retaining valid native captures.
+Domain/design hosts, final redirects and PNG evidence must be independent. Non-user discovery must
+be a supported public gallery item, not a service page labelled as a gallery. Public Pinterest,
+Dribbble and Behance items do not require UI Bowl's paid MCP. Free viewing is checked per item.
+Design sources declare visual-direction or component-support with observed composition, type,
+density, imagery, transfer and exclusions. Every board candidate uses visual-direction evidence;
+support-only documentation cannot complete the lane. Inspect previews in `.omd/refs/design/README.md`.
+These are provenance/role checks, not a machine certification of beauty.
+
+For an existing service, `omd init --json` inventories static CSS variables/declarations and `$value`
+token JSON into `.omd/existing-design-system.json` and `.md`. Scopes, aliases and source locations/hashes
+remain intact. It never changes app files or approved `.omd/tokens.json`. Future briefs reuse the
+inventory; `omd init --check` detects stale inputs and `omd init --refresh` refreshes observations.
+Keep authored decisions in `.omd/design-system-decisions.md`, preserved across refreshes. Runtime styles,
+Tailwind configuration and component variants are explicit inspection gaps, not silently inferred tokens.
+
+Implementation completion uses `omd schema slop-scope` → `omd slop checkpoint --input <scope.json>` →
+inspect the native captures → `omd slop review-set --input <review.json>`. Confirmed issues require
+owner repair, rebuild, same-scope recapture/rescan, and an explicit after-render resolution.
+`omd slop review-check`, CLI finalization and terminal preflight reject missing, stale or unresolved
+loops. Candidates/warnings remain advisory; reasoned dismissals are valid and a clean first review
+needs no invented repair. Capture currently supports local HTML build entries, not arbitrary localhost
+ports. This does not replace functional coverage, independent quality review, or user approval.
 Legacy files are preserved; renamed identical images still cannot satisfy both lanes.
 
 For design before implementation, use `omd schema design-route-input` with `deliveryMode: design-only`.

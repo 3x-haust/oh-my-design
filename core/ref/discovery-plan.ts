@@ -93,8 +93,10 @@ export function buildReferenceDiscoveryPlan(root: string, route: RouteRecord): R
     { name: 'Siteinspire', url: 'https://www.siteinspire.com/', purpose: 'Website composition, typography, rhythm; follow the entry to the live site.' },
     { name: 'Pinterest', url: 'https://www.pinterest.com/', purpose: 'Visual-direction discovery; open the pin and trace its original, not just a thumbnail.' },
   ] : [
-    { name: 'UI Bowl', url: 'https://uibowl.io/', purpose: 'Released app/product screens by pattern; retain only relevant, freely inspectable entries.' },
     { name: 'Pinterest', url: 'https://www.pinterest.com/', purpose: 'App UI/component discovery; verify screen provenance and target viewport before retaining.' },
+    { name: 'Dribbble', url: 'https://dribbble.com/', purpose: 'Public app UI shots by pattern; distinguish concepts from released screens, no paid download needed.' },
+    { name: 'Behance', url: 'https://www.behance.net/', purpose: 'Public product case-study screen sequences; inspect actual screen images, not only presentation covers.' },
+    { name: 'UI Bowl', url: 'https://uibowl.io/', purpose: 'Optional public app screens only; do not require or purchase the paid MCP.' },
     { name: 'Siteinspire', url: 'https://www.siteinspire.com/', purpose: 'Complementary web typography/layout; not a substitute for product-screen anatomy.' },
   ];
   const motionDiscovery = motionEvidenceRequired;
@@ -156,7 +158,8 @@ export function buildReferenceDiscoveryPlan(root: string, route: RouteRecord): R
       candidates: Object.freeze(galleryCandidates),
       searchQueries: Object.freeze(!discovering ? [] : [
         `site:pinterest.com/pin/ ${[...queries.mood, ...queries.component][0] ?? route.sourceContract.taskOutcome.goal}`,
-        `${marketing ? 'site:siteinspire.com' : 'site:uibowl.io'} ${queries.component[0] ?? route.sourceContract.taskOutcome.goal}`,
+        `${marketing ? 'site:siteinspire.com/websites/' : 'site:dribbble.com/shots/'} ${queries.component[0] ?? route.sourceContract.taskOutcome.goal}`,
+        ...(!marketing ? [`site:behance.net/gallery/ ${queries.component[0] ?? route.sourceContract.taskOutcome.goal}`] : []),
       ]),
       fallback: 'Actually search and open a specific gallery/pin entry, not a homepage. Capture it with --lane design (or import-image for native app screenshots) and retain its source link. Check free access per entry. If login/payment/blocking prevents inspection, record the failed URL and try another public gallery. Component documentation alone is not a visual-direction substitute. Do not purchase, start a trial, install an MCP, bypass access controls, or claim a blocked source was inspected. Free viewing does not grant reuse rights.',
     }),

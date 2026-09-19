@@ -51,6 +51,7 @@ function slugFor(ref: Pick<Reference, 'source' | 'component'>): string {
 }
 
 export function saveRef(cwd: string, ref: Reference, adapter: ProjectWriteAdapter): string {
+  assertReferenceLaneSeparation(cwd, ref);
   return requireProjectWriteAdapter(cwd, adapter)
     .write(`${lanePrefix(ref)}/${slugFor(ref)}.json`, `${JSON.stringify(ref, null, 2)}\n`);
 }
@@ -61,7 +62,21 @@ export function refRecordPath(cwd: string, ref: Pick<Reference, 'source' | 'comp
 
 /** Path of the scoped component screenshot for a reference (`omd ref add … --shot`). */
 export function refImagePath(cwd: string, ref: Pick<Reference, 'source' | 'component' | 'researchLane'>): string {
+  assertReferenceLaneSeparation(cwd, ref);
   return join(cwd, lanePrefix(ref), `${slugFor(ref)}.png`);
+}
+
+/** Stop the reported same-page relabeling before another PNG is written. Legacy unlabelled records
+ * remain readable; publication performs the stricter service-host and redirect checks. */
+export function assertReferenceLaneSeparation(cwd: string, ref: Pick<Reference, 'source' | 'researchLane'>): void {
+  if (!ref.researchLane) return;
+  const page = (source: string): string => {
+    try { const url = new URL(source); url.search = ''; url.hash = ''; url.hostname = url.hostname.replace(/^www\./, ''); url.pathname = url.pathname.replace(/\/+$/, '') || '/'; return url.href; }
+    catch { return source; }
+  };
+  if (loadRefs(cwd, { includeDomain: true }).some(item => item.researchLane && item.researchLane !== ref.researchLane && page(item.source) === page(ref.source))) {
+    throw new Error('REFERENCE_LANE_SOURCE_OVERLAP: this page already belongs to the other research lane; a renamed crop is not independent research');
+  }
 }
 
 function isReference(value: unknown): value is Partial<Reference> & Pick<Reference, 'source' | 'component'> {

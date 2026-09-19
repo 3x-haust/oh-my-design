@@ -48,7 +48,8 @@ function beginsWith(operation: readonly string[], prefix: readonly string[]): bo
 function operationPrefixes(role: string): readonly (readonly string[])[] {
   if (!CODEX_BROWSER_ROLES.includes(role as CodexBrowserRole)) return [];
   return role === 'omd-scout' ? SCOUT_OPERATIONS
-    : role === 'omd-typesetter' ? TYPESETTER_OPERATIONS : REVIEW_OPERATIONS;
+    : role === 'omd-typesetter' ? TYPESETTER_OPERATIONS
+      : role === 'omd-hand' ? [...REVIEW_OPERATIONS, ['slop', 'checkpoint']] : REVIEW_OPERATIONS;
 }
 
 /** Public capability prose is derived from the same allowlist as the broker, not a second grant. */

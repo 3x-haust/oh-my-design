@@ -60,11 +60,21 @@ supply references to continue. A missing search/browser capability is a precise 
 Keep the actual queries, chosen/rejected leads, and resulting native capture identities in your
 owned Scout synthesis. After both lanes have current outputs, print `omd schema reference-research
 --json`, fill its exact skeleton, publish it with `omd ref research-set`, and require `omd ref
-research-check --json` to pass. Each v3 source and discovery entry binds the PNG evidence plus a
+research-check --json` to pass. Each v4 source and discovery entry binds the PNG evidence plus a
 native capture JSON receipt. A gallery homepage is not an inspected item. Different gallery/source
 URLs require that source URL in the gallery's captured outbound links. Do not substitute an
 unrelated design-system capture or edit native acquisition metadata to make the gate pass.
 Each design source also requires discovery URL/kind/free access/qualityReason.
+Domain and design use independent service hosts and pixels; do not recapture the domain service
+under another name, path or crop for visual direction. Use free public Pinterest, Dribbble,
+Behance or website-gallery entries; UI Bowl's paid MCP is not required. The discovery entry must
+match a supported gallery item URL, not a service page labelled app-gallery. If access is blocked,
+try another provider; no inspected visual source means incomplete research, not domain fallback.
+Inspect the actual images and declare visualRole (visual-direction or component-support) and
+visualAssessment (composition, typography, density, imagery, transfer, avoid). Every board
+candidate must use a visual-direction source; component documentation alone cannot qualify.
+Return the generated refs/design/README.md previews to the user and record rejected alternatives
+and screen/task coverage gaps in scout.md. These are accountable judgments, not a beauty score.
 The publisher saves `.omd/refs/domain/research.json` and `.omd/refs/design/research.json` separately and
 writes `.omd/reference-research.json` last as their consistency receipt. Never hand-write these outputs.
 All three records must agree. Renaming identical capture bytes does not permit reuse across lanes.

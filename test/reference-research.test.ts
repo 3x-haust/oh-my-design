@@ -60,7 +60,7 @@ function fixture(t: { after(fn: () => void): void }) {
   };
   const capturePath = saveRef(root, reference, writer);
   writeFileSync(imagePath, PNG);
-  const gallerySource = 'https://gallery.example/screens/hero';
+  const gallerySource = 'https://www.pinterest.com/pin/123456789/';
   const galleryImage = refImagePath(root, { source: gallerySource, component: 'entry', researchLane: 'design' });
   const galleryCapture = saveRef(root, { ...reference, source: gallerySource, component: 'entry', imagePath: relative(root, galleryImage), acquisition: { requestedUrl: gallerySource, finalUrl: gallerySource, httpStatus: 200, links: [source], imageSha256: digest(PNG) } }, writer);
   writeFileSync(galleryImage, PNG);
@@ -84,7 +84,7 @@ function fixture(t: { after(fn: () => void): void }) {
   const domainCapture = saveRef(root, { ...reference, source: 'https://domain.example/service', component: 'entry', researchLane: 'domain', imagePath: relative(root, domainPath), acquisition: { requestedUrl: 'https://domain.example/service', finalUrl: 'https://domain.example/service', httpStatus: 200, links: [], imageSha256: digest(domainPng()) } }, writer);
   writeFileSync(domainPath, domainPng());
   const research = {
-    schema: 'reference-research-v3',
+    schema: 'reference-research-v4',
     sourceContractSha256: SOURCE_SHA,
     domainReference: {
       queries: ['field service request flow'],
@@ -100,6 +100,8 @@ function fixture(t: { after(fn: () => void): void }) {
       sources: [{
         id: 'design-a', url: source, observedAt: '2026-09-19',
         decision: 'hero hierarchy', finding: 'display and proof stay in one measured group',
+        visualRole: 'visual-direction',
+        visualAssessment: { composition: 'Single anchored work object', typography: 'Clear heading/body contrast', density: 'Compact controls with section space', imagery: 'No decorative image', transfer: 'Adapt the work-object hierarchy', avoid: 'Do not copy brand colours or service claims' },
         evidence: { path: relative(root, imagePath), sha256: digest(PNG) },
         capture: receipt(capturePath),
         discovery: { url: gallerySource, kind: 'app-gallery', access: 'free', qualityReason: 'The compact task heading and readable type suit the target viewport.', evidence: receipt(galleryImage), capture: receipt(galleryCapture) },
@@ -162,6 +164,66 @@ test('v1 requires honest recollection and republication, never fabricated galler
   const { research } = fixture(t);
   research.schema = 'reference-research-v1';
   assert.throws(() => parseReferenceResearch(research), /UPGRADE_REQUIRED.*republish/);
+});
+
+test('v3 needs explicit visual role review, not automatic approval of existing captures', t => {
+  const { research } = fixture(t);
+  research.schema = 'reference-research-v3';
+  assert.throws(() => parseReferenceResearch(research), /UPGRADE_REQUIRED/);
+});
+
+test('a service page cannot label itself a free gallery entry', t => {
+  const { research } = fixture(t);
+  research.designReference.sources[0]!.discovery.url = 'https://www.gov.uk/check-benefits-financial-support';
+  assert.throws(() => parseReferenceResearch(research), /DISCOVERY_PROVIDER/);
+  research.designReference.sources[0]!.discovery.url = 'https://pinterest.com.evil.example/pin/123/';
+  assert.throws(() => parseReferenceResearch(research), /DISCOVERY_PROVIDER/);
+  research.designReference.sources[0]!.discovery.url = 'https://dribbble.com/shots/2425231-Mobile-app-dashboard';
+  assert.doesNotThrow(() => parseReferenceResearch(research));
+});
+
+test('test-010 regression: different crops/pages of the domain service do not become design research', t => {
+  const { research } = fixture(t);
+  for (const url of ['https://domain.example/service', 'https://www.domain.example/other-page?crop=calm#design']) {
+    research.designReference.sources[0]!.url = url;
+    assert.throws(() => parseReferenceResearch(research), /DOMAIN_AS_VISUAL_DIRECTION/);
+  }
+});
+
+test('support-only design research and absent visual observations fail; recorded absence of imagery is valid', t => {
+  const { research } = fixture(t);
+  const source = research.designReference.sources[0]!;
+  source.visualRole = 'component-support';
+  assert.throws(() => parseReferenceResearch(research), /VISUAL_DIRECTION_REQUIRED/);
+  source.visualRole = 'visual-direction';
+  source.visualAssessment.typography = '';
+  assert.throws(() => parseReferenceResearch(research), /VISUAL_TYPOGRAPHY/);
+  source.visualAssessment.typography = 'Large title contrasts with compact labels';
+  assert.doesNotThrow(() => parseReferenceResearch(research));
+});
+
+test('board candidates cannot use only support evidence while visual direction sits unused', t => {
+  const { root, research } = fixture(t);
+  const source = research.designReference.sources[0]!;
+  source.visualRole = 'component-support';
+  research.designReference.sources.push({ ...source, id: 'direction-b', visualRole: 'visual-direction',
+    url: source.discovery.url, evidence: source.discovery.evidence, capture: source.discovery.capture });
+  assert.throws(() => validateReferenceResearch(root, parseReferenceResearch(research), {
+    expectedSourceContractSha256: SOURCE_SHA, benchmarkRequired: false,
+  }), /BOARD_DESIGN_COVERAGE/);
+});
+
+test('redirecting a gallery capture back to the domain cannot defeat lane isolation', t => {
+  const { root, research } = fixture(t);
+  const receipt = research.designReference.sources[0]!.discovery.capture;
+  const path = join(root, receipt.path);
+  const capture = JSON.parse(readFileSync(path, 'utf8'));
+  capture.acquisition.finalUrl = research.domainReference.sources[0]!.url;
+  writeFileSync(path, JSON.stringify(capture));
+  receipt.sha256 = sha256(readFileSync(path));
+  assert.throws(() => validateReferenceResearch(root, parseReferenceResearch(research), {
+    expectedSourceContractSha256: SOURCE_SHA, benchmarkRequired: false,
+  }), /LANE_REDIRECT_OVERLAP/);
 });
 
 test('test-009 regression: a gallery homepage cannot masquerade as an inspected design item', t => {
