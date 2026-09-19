@@ -42,7 +42,7 @@ function validateRecommendation(strategy: AdaptiveStrategyDecision, value: Recom
   if (!skipped) return failAdaptiveRoute('OPTIONAL_SKIP_REASON_REQUIRED', `skipped recommendation ${value.id} needs a non-empty strategyDecision.skips reason`);
 }
 
-export function validateAdaptiveStrategyRails(strategy: AdaptiveStrategyDecision): void {
+export function validateAdaptiveStrategyRails(strategy: AdaptiveStrategyDecision, deliveryMode?: 'design-only'): void {
   for (const role of strategy.roles) {
     if (!ADAPTIVE_ROLE_IDS.includes(role as never)) return failAdaptiveRoute('UNKNOWN_ADAPTIVE_ROLE');
   }
@@ -63,7 +63,11 @@ export function validateAdaptiveStrategyRails(strategy: AdaptiveStrategyDecision
     if (skipped.has(stage)) return failAdaptiveRoute('DOMAIN_ANALYSIS_REQUIRED', `mandatory stage ${stage} must not appear in strategyDecision.skips`);
     if (!strategy.stages.includes(stage)) return failAdaptiveRoute('DOMAIN_ANALYSIS_REQUIRED', `mandatory stage ${stage} must be selected in strategyDecision.stages`);
   }
-  if (!strategy.roles.includes('omd-hand') || !strategy.stages.includes('production')) {
+  const designOnly = deliveryMode === 'design-only';
+  if (designOnly && (strategy.roles.includes('omd-hand') || strategy.stages.some((stage) => ['production', 'browser-evidence'].includes(stage)))) {
+    return failAdaptiveRoute('DESIGN_ONLY_SCOPE_REQUIRED', 'design-only must omit omd-hand, production, and browser-evidence; finish with a design handoff review');
+  }
+  if (!designOnly && (!strategy.roles.includes('omd-hand') || !strategy.stages.includes('production'))) {
     return failAdaptiveRoute('PRODUCTION_REQUIRED');
   }
   if (!strategy.roles.includes('omd-eye') || !strategy.stages.includes('independent-review')) {
@@ -72,10 +76,10 @@ export function validateAdaptiveStrategyRails(strategy: AdaptiveStrategyDecision
   const evidence = strategy.stages.indexOf('browser-evidence');
   const review = strategy.stages.indexOf('independent-review');
   const production = strategy.stages.indexOf('production');
-  if (evidence < 0 || evidence !== strategy.stages.length - 2 || review !== strategy.stages.length - 1 || production >= evidence) {
+  if (review !== strategy.stages.length - 1 || (!designOnly && (evidence < 0 || evidence !== strategy.stages.length - 2 || production >= evidence))) {
     return failAdaptiveRoute('FINAL_EVIDENCE_REQUIRED');
   }
-  validateAdaptiveStageOrder(strategy);
+  validateAdaptiveStageOrder(strategy, deliveryMode);
   for (const stage of strategy.stages) {
     const known = ADAPTIVE_STAGE_IDS.find((candidate) => candidate === stage);
     if (known === undefined) return failAdaptiveRoute('UNKNOWN_ADAPTIVE_STAGE');
@@ -138,7 +142,7 @@ function validateContextMethods(input: ValidatedAdaptiveRouteInput): void {
   if (input.evidenceClaims.claims.some((claim) => claim.status === 'hypothesis')) {
     requiredMethod(strategy, 'hypothesis-validation');
   }
-  requiredMethod(strategy, input.browserDecisionContext.status === 'pending'
+  requiredMethod(strategy, input.deliveryMode === 'design-only' ? 'design-handoff-review' : input.browserDecisionContext.status === 'pending'
     ? 'decision-linked-browser-observation'
     : 'reuse-linked-browser-evidence');
   if (input.validatedLearningContext.status === 'promoted') {
@@ -238,7 +242,16 @@ export function routeAdaptiveFlow(
   if (input.projectMode === 'greenfield' && !strategy.stages.includes('frame')) {
     failAdaptiveRoute('GREENFIELD_FRAME_REQUIRED');
   }
-  validateAdaptiveStrategyRails(strategy);
+  validateAdaptiveStrategyRails(strategy, input.deliveryMode);
+  if (input.deliveryMode === 'design-only') {
+    if (input.allowedPaths.length !== 1 || input.allowedPaths[0] !== '.omd/**' || input.namedDependencies.length > 0 || strategy.aiAssets.length > 0) {
+      failAdaptiveRoute('DESIGN_ONLY_SCOPE_REQUIRED', 'design-only allows only .omd/** and no application dependencies or shipped assets');
+    }
+    const reviewWave = strategy.executionWaves.findIndex((wave) => wave.roles.includes('omd-eye'));
+    if (reviewWave !== strategy.executionWaves.length - 1 || strategy.executionWaves[reviewWave]?.roles.length !== 1) {
+      failAdaptiveRoute('ADAPTIVE_EXECUTION_WAVE_INVALID', 'design handoff review must run after all design owners in its own final wave');
+    }
+  }
   validateSafety(input);
   validateOptionalStageAccounting(strategy);
   validateAdaptiveAiAssetSelection(strategy, authority);
@@ -270,6 +283,7 @@ export function routeAdaptiveFlow(
   ];
   return Object.freeze({
     schema: ADAPTIVE_ROUTE_RECORD_SCHEMA,
+    ...(input.deliveryMode === undefined ? {} : { deliveryMode: input.deliveryMode }),
     route: 'adaptive',
     request: input.request,
     projectMode: input.projectMode,
@@ -285,7 +299,9 @@ export function routeAdaptiveFlow(
     claims: Object.freeze({ userFacts: input.evidenceClaims.userFacts, workingContext: input.evidenceClaims.workingContext }),
     browserDecisions: input.browserDecisionContext,
     validatedLearning: input.validatedLearningContext,
-    gates: Object.freeze([...MANDATORY_ADAPTIVE_GATES, ...policyGates]),
+    gates: Object.freeze([...(input.deliveryMode === 'design-only'
+      ? [...MANDATORY_ADAPTIVE_GATES.filter((gate) => gate !== 'source-seal' && gate !== 'final-evidence-v2'), 'design-handoff']
+      : MANDATORY_ADAPTIVE_GATES), ...policyGates]),
     namedDependencies: input.namedDependencies,
     allowedPaths: input.allowedPaths,
     forbiddenWithoutRequest: FORBIDDEN_WITHOUT_REQUEST,

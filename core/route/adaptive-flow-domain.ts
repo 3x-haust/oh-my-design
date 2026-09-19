@@ -62,6 +62,7 @@ export const ADAPTIVE_ROLE_IDS = Object.freeze([
 
 export type AdaptiveRouteErrorCode =
   | 'MALFORMED_ADAPTIVE_ROUTE'
+  | 'DESIGN_ONLY_SCOPE_REQUIRED'
   | 'UNEXPECTED_ADAPTIVE_ROUTE_FIELD'
   | 'ADAPTIVE_SKIP_REASON_REQUIRED'
   | 'OPTIONAL_SKIP_REASON_REQUIRED'
@@ -134,6 +135,7 @@ export type AdaptiveLearningContext = Readonly<{
 }>;
 export type ModelCapabilityRouteInput = Readonly<{ now: number; routingInput: unknown }>;
 export type AdaptiveRouteInput = Readonly<{
+  deliveryMode?: 'design-only';
   schema: typeof ADAPTIVE_ROUTE_INPUT_SCHEMA;
   request: string;
   projectMode: 'greenfield' | 'existing';
@@ -150,6 +152,7 @@ export type AdaptiveRouteInput = Readonly<{
   strategyDecision: AdaptiveStrategyDecision;
 }>;
 export type AdaptiveSourceContract = Readonly<{
+  deliveryMode?: 'design-only';
   schema: typeof ADAPTIVE_SOURCE_CONTRACT_SCHEMA;
   request: string;
   projectMode: 'greenfield' | 'existing';
@@ -179,6 +182,7 @@ export type ValidatedAdaptiveRouteInput = Omit<AdaptiveRouteInput,
   localeDesign?: LocaleDesignRoute;
 }>;
 export type AdaptiveRouteRecord = Readonly<{
+  deliveryMode?: 'design-only';
   schema: typeof ADAPTIVE_ROUTE_RECORD_SCHEMA;
   route: 'adaptive';
   request: string;

@@ -412,7 +412,7 @@ const REALITY_LEDGER: InputSkeleton = {
 const ROUTE_INPUT: InputSkeleton = {
   name: 'route-input',
   path: '.omd/.cache/route-input.json',
-  command: 'omd route classify --input .omd/.cache/route-input.json --json --activation <host-issued-invocation.json>',
+  command: 'omd route validate --input .omd/.cache/route-input.json --json',
   keys: ROUTE_INPUT_KEYS,
   constraints: [
     'task outcome, policy, claims, discovery, design axes, capability, browser, and learning contexts are all required',
@@ -426,6 +426,9 @@ const ROUTE_INPUT: InputSkeleton = {
     'For new-product, new-marketing, or unresolved discovery: uncertainty="unresolved", existingEvidence="none" or "insufficient", existingEvidenceUse=null, skipReason=null. Both null keys are required; do not omit them or replace null with explanatory prose.',
     'For skipped discovery on existing work: uncertainty="resolved", existingEvidence="sufficient", existingEvidenceUse and skipReason are non-empty descriptions of actual evidence use and the skip reason.',
     'the user-selected model owns role, stage, and method order',
+    'For design and handoff before implementation, use omd schema design-route-input. Its deliveryMode=design-only forbids production and application paths. Do not add production merely to pass an implementation-route validator.',
+    'uxPolicy kinds are hard_safety_rail (enforced), required_outcome (required), recommended_method (selected|skipped with reason), free_choice (selected|skipped). Safety, recovery and accessibility are topics/ids, not kinds. designAxes.schema must be design-axis-input-v1.',
+    'First run route validate, repair each named error and retry; validation is read-only and does not need activation. Then route classify publishes the valid input. Pi uses omd_cli without --activation; a genuine supplied Codex activation remains host-owned.',
     'executionWaves schedules every selected role exactly once; prerequisite owners precede consumer owners, and parallel-reference-acquisition puts Scout and Writer in the same wave',
     'every omitted optional stage or method carries a non-empty skip reason',
     `Optional stages: ${OPTIONAL_STAGE_IDS.join(', ')}. Mandatory stages: ${MANDATORY_STAGE_IDS.join(', ')} — always selected, never skipped. Optional methods: ${OPTIONAL_METHOD_IDS.join(', ')}. Account for each optional stage and method in its selected list or skips, including copy-repair-workflow when writing fresh copy without that repair method.`,
@@ -467,7 +470,7 @@ const ROUTE_INPUT: InputSkeleton = {
     validatedLearningContext: { schema: 'adaptive-learning-context-v1', status: 'none', learningIds: [], reason: '<no validated scoped learning applies>' },
     strategyDecision: {
       schema: 'adaptive-strategy-decision-v1', owner: 'user-selected-model', roles: ['omd-writer', 'omd-hand', 'omd-eye'],
-      stages: ['copy', 'production', 'browser-evidence', 'independent-review'],
+      stages: ['domain', 'copy', 'production', 'browser-evidence', 'independent-review'],
       executionWaves: [
         { id: 'copy', mode: 'concurrent', roles: ['omd-writer'] },
         { id: 'production', mode: 'concurrent', roles: ['omd-hand'] },
@@ -484,6 +487,8 @@ const ROUTE_INPUT: InputSkeleton = {
         { id: 'visual-craft', reason: '<gathering a visual direction is the default; omit only when the route declares restrained expression or a supplied brand fixed the direction>' },
         { id: 'depth', reason: '<no deep deliberation needed>' },
         { id: 'frame', reason: '<no framing change>' }, { id: 'acquisition', reason: '<no acquisition needed>' },
+        { id: 'content-grain', reason: '<existing content morphology is unchanged>' },
+        { id: 'moodboard', reason: '<existing visual direction is unchanged>' },
         { id: 'scout', reason: '<discovery skipped>' }, { id: 'reference-board', reason: '<no board needed>' },
         { id: 'reference-selection', reason: '<no selection needed>' }, { id: 'art-direction', reason: '<direction unchanged>' },
         { id: 'type-proof', reason: '<typography unchanged>' }, { id: 'composition', reason: '<composition unchanged>' },
@@ -1054,8 +1059,61 @@ const RESPONSIVE_TOKEN_COMMIT: InputSkeleton = {
   },
 };
 
+const DESIGN_ROUTE_INPUT: InputSkeleton = {
+  name: 'design-route-input',
+  path: ROUTE_INPUT.path,
+  command: ROUTE_INPUT.command,
+  keys: [...ROUTE_INPUT_KEYS, 'deliveryMode'],
+  constraints: [...(ROUTE_INPUT.constraints ?? []),
+    'Design-only ends after independent document/design review. Production, browser-evidence, source-seal, and final-evidence-v2 belong to implementation and are not selected. Finish with omd schema design-handoff and omd completion design-check.',
+    'All output stays under .omd/**. Reference-site browsing and authorized disposable design studies are evidence, not application implementation. Do not scaffold React or add dependencies.',
+    'Keep the user-selected model and real request facts. Adjust axes, safety rails and selected methods to the actual task; the example is not authority for a low-risk classification.',
+  ],
+  skeleton: {
+    ...ROUTE_INPUT.skeleton as object,
+    deliveryMode: 'design-only', projectMode: 'greenfield', allowedPaths: ['.omd/**'],
+    referenceDiscovery: { schema: 'reference-discovery-input-v1', taskNeed: 'new-product', uncertainty: 'unresolved', existingEvidence: 'none', intendedUse: '<domain flows and separate visual references>', existingEvidenceUse: null, skipReason: null },
+    strategyDecision: {
+      schema: 'adaptive-strategy-decision-v1', owner: 'user-selected-model',
+      roles: ['omd-framer', 'omd-scout', 'omd-writer', 'omd-typesetter', 'omd-composer', 'omd-sketch', 'omd-eye'],
+      stages: ['domain', 'frame', 'scout', 'reference-board', 'copy', 'type-proof', 'composition', 'candidate-generation', 'independent-review'],
+      executionWaves: [
+        { id: 'frame', mode: 'concurrent', roles: ['omd-framer'] },
+        { id: 'research-copy', mode: 'concurrent', roles: ['omd-scout', 'omd-writer'] },
+        { id: 'type', mode: 'concurrent', roles: ['omd-typesetter'] },
+        { id: 'composition', mode: 'concurrent', roles: ['omd-composer'] },
+        { id: 'candidates', mode: 'concurrent', roles: ['omd-sketch'] },
+        { id: 'review', mode: 'concurrent', roles: ['omd-eye'] },
+      ],
+      methods: ['design-strategy-balanced-delivery', 'model-capability-probe', 'evidence-claim-accounting', 'hypothesis-validation', 'design-handoff-review', 'reference-discovery', 'parallel-reference-acquisition', 'copy-repair-workflow'],
+      aiAssets: [], attributionCategories: ['tokens', 'composition'],
+      skips: [
+        ...['depth', 'content-grain', 'acquisition', 'moodboard', 'reference-selection', 'art-direction', 'safety-validation', 'reflection-in-action', 'reference-distance', 'image-first-draft', 'evidence-driven-refinement', 'motion-one', 'ai-shipped-asset'].map((id) => ({ id, reason: '<record the task-specific reason; select this stage/method instead when required>' })),
+      ],
+      rationale: '<why this design strategy reaches the requested handoff without application implementation>',
+    },
+  },
+};
+
+const DESIGN_HANDOFF: InputSkeleton = {
+  name: 'design-handoff', path: '.omd/design-handoff.json',
+  command: 'omd completion design-check --input .omd/design-handoff.json --json',
+  keys: ['schema', 'sourceContractSha256', 'artifacts', 'review'],
+  constraints: [
+    'Bind the current route source SHA and the exact bytes of each nonempty document. Every selected design stage and both reference lanes must have current evidence.',
+    'The review document records who reviewed which artifacts, findings, repairs and remaining limits. The checker verifies integrity, not independent authorship, visual quality, or implemented application behavior. Do not call this a final-v2 application approval.',
+  ],
+  skeleton: {
+    schema: 'design-handoff-v1', sourceContractSha256: '0'.repeat(64),
+    artifacts: ['screen-map', 'state-model', 'ux-ui-direction', 'content', 'accessibility-trust', 'implementation-handoff', 'open-questions'].map((id) => ({ id, path: `.omd/design/${id}.md`, sha256: '0'.repeat(64) })),
+    review: { path: '.omd/design/review.md', sha256: '0'.repeat(64) },
+  },
+};
+
 export const INPUT_SKELETONS: readonly InputSkeleton[] = [
   ROUTE_INPUT,
+  DESIGN_ROUTE_INPUT,
+  DESIGN_HANDOFF,
   ROUTE_AI_ASSET,
   REALITY_LEDGER,
   DOMAIN_BRIEF,

@@ -73,7 +73,7 @@ test('the adaptive route decides which stages and reference work exist without q
   assert.match(scout, /no reference quota and no default candidate count/i);
   assert.match(hand, /Write only\s*inside its `allowedPaths`/);
   assert.ok(INPUT_SKELETONS.some((input) => input.command
-    === 'omd route classify --input .omd/.cache/route-input.json --json --activation <host-issued-invocation.json>'));
+    === 'omd route validate --input .omd/.cache/route-input.json --json'));
 });
 
 test('the loop pulls a derived stage brief instead of carrying the rules in prose', () => {

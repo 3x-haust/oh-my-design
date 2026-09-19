@@ -30,6 +30,9 @@ export type CompletionPreflightResult = Readonly<{
 
 /** Read-only terminal gate above final-v2; it never publishes, repairs, or mutates evidence. */
 export function checkTerminalCompletion(root: string, invocation: ProjectRunInvocation): CompletionPreflightResult {
+  if (existsSync(resolve(root, '.omd/route.json')) && readPersistedRoute(root, invocation).deliveryMode === 'design-only') {
+    throw new CompletionPreflightError('design-only route has no implemented application; use omd completion design-check --input .omd/design-handoff.json');
+  }
   const final = checkFinalEvidenceV2(root, invocation) as FinalEvidenceV2ManifestVariant;
   const prerequisites = checkCompletionPublicationPrerequisites(root, final, invocation);
   // Planning the user never confirmed is not a design decision to be repaired later; refuse here,

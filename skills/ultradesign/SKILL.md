@@ -43,7 +43,12 @@ On Codex, `omd ...` means `"$OMD_NODE_EXECUTABLE" "$OMD_CLI_PATH" ...` and `omd-
 ## Adaptive route
 
 On Codex use `omd-codex exec -C <project> ...` (or `oh-my-design codex exec ...`) with opaque read-only
-`OMD_ACTIVATION_PATH`. Pi uses `omd_cli`. Missing authority stops; never manufacture or reuse Codex activation.
+`OMD_ACTIVATION_PATH` when the current host actually supplies that launcher. Never manufacture or reuse Codex activation.
+Pi and the local CLI use `omd_cli`/`omd` without `--activation`; local command authority is created by the CLI.
+An absent external activation file is not a Pi setup error. Do not ask the user to supply one.
+The Codex role/owner commands above apply only when that broker is available, never to Pi.
+Pi uses available native delegation with the user's model; if independent review is unavailable,
+record that limitation rather than claiming an isolated review or blocking reference collection.
 
 Before selecting methods, read `omd pack protocol/human-design-loop.md --section "Visual reference gallery and concept exploration"`. A simple task is not settled visual evidence; a current supplied direction can be. Experiments stay conditional.
 
@@ -57,16 +62,31 @@ In-project:
 omd doctor
 omd stack --json
 omd schema route-input
-omd route classify --input .omd/.cache/route-input.json --json --activation "$OMD_ACTIVATION_PATH"
+omd route validate --input .omd/.cache/route-input.json --json
+omd route classify --input .omd/.cache/route-input.json --json
 omd stage resume
-omd route show --activation "$OMD_ACTIVATION_PATH"
+omd route show
 ```
+
+On a brokered Codex invocation append the supplied `--activation` to publishing/reading commands.
+If validation fails, read the exact schema and repair the named field, then validate again.
+Do not invent enum values, change the user's scope, or report missing activation for an input error.
+
+For "before development", "design only", or "구현 전까지만", start with `omd schema design-route-input`.
+Set `deliveryMode: design-only`, keep allowedPaths exactly `[".omd/**"]`, and omit Hand, production,
+browser-evidence, application sources and dependencies. Browse references and finish the selected
+design stages. Perform a fresh design/document review using available reviewers and record any
+independence limitation. Write the seven documents and review listed in `omd schema design-handoff`;
+bind their actual hashes, then run `omd completion design-check --input .omd/design-handoff.json --json`.
+Stop at that handoff. Do not run production source sealing, application final-v2 or implementation
+completion preflight. Report reference coverage, documents, unresolved questions and review limitations;
+do not claim application behavior or independent authorship was verified by the integrity checker.
 
 The closed route carries outcomes, evidence, rails, facts, axes, browser context, roles/stages,
 contracts, attribution, methods and skips. Malformed context fails closed. High-risk work retains
 rigorous UX/safety checks; scope, authority, sealing, final-v2, review and model ownership cannot be skipped.
 
-`omd route check --activation "$OMD_ACTIVATION_PATH"` enforces write scope. A UI request does not authorize repository publication, licensing, unrelated dependencies, or unrequested surfaces. Use the
+`omd route check` (with supplied host activation only when applicable) enforces write scope. A UI request does not authorize repository publication, licensing, unrelated dependencies, or unrequested surfaces. Use the
 `omd stack` renderer. A supplied Figma frame is structure evidence; the adaptive route decides whether
 framing or alternatives are useful without removing UX outcomes, production evidence, accessibility,
 or independent review.

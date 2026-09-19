@@ -3815,6 +3815,14 @@ async function cmdDirectionEvidenceCheck(mode: 'static-check' | 'motion-check', 
 }
 
 async function cmdCompletion(mode: string | undefined, opts: Opts): Promise<never> {
+  if (mode === 'design-check') {
+    if (!opts.input || opts._.length > 0) throw new Error('usage: omd completion design-check --input .omd/design-handoff.json [--json]');
+    const { checkDesignHandoff } = await import('../core/completion/design-handoff.ts');
+    const result = checkDesignHandoff(process.cwd(), inputJson(opts.input, 'omd completion design-check'), invocationFromActivation(opts, 'omd completion design-check'));
+    if (opts.json) process.stdout.write(JSON.stringify(result));
+    else console.log('ok — design documents and reference evidence are current; review authorship is not attested and application implementation has not been validated');
+    process.exit(0);
+  }
   if (mode === 'typography-applicability') {
     const activationPath = activationInputPath(opts);
     if (!opts.ir || activationPath === undefined || opts._.length > 0) throw new Error('usage: omd completion typography-applicability --ir <rendered-ir.json> --activation <host-issued-invocation.json> [--json]');
@@ -4362,6 +4370,15 @@ async function cmdWorkflow(mode: string | undefined, opts: Opts): Promise<never>
 async function cmdRoute(mode: string | undefined, opts: Opts): Promise<never> {
   const { adaptiveRouteRecordSha256, changedPathsForAdaptiveRoute, classifyRoute, pathsOutsideScope, publishAdaptiveRoute, readPersistedRoute, validateRouteInput } = await import('../core/route/index.ts');
   const recordPath = join(process.cwd(), '.omd', 'route.json');
+
+  if (mode === 'validate') {
+    if (!opts.input || opts._.length > 0) throw new Error('usage: omd route validate --input <route-input.json> [--json]');
+    const { routeAdaptiveFlow } = await import('../core/route/adaptive-flow.ts');
+    const record = routeAdaptiveFlow(inputJson(opts.input, 'omd route validate'));
+    if (opts.json) process.stdout.write(JSON.stringify({ ok: true, deliveryMode: record.deliveryMode ?? 'implementation', stages: record.strategy.stages, published: false }));
+    else console.log('ok — route input is valid; no project state was written');
+    process.exit(0);
+  }
 
   if (mode === 'classify') {
     if (!opts.input) throw new Error('usage: omd route classify --input <route-input.json> [--activation <host-issued-invocation.json>] [--json]');

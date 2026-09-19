@@ -76,6 +76,16 @@ pi install npm:@3xhaust/oh-my-design
 프로젝트 doctor 검사용 `/omd`와 기존 OMD CLI를 구조화된 인자로 실행하는 `omd_cli` 도구를
 등록합니다. 공개 Pi extension/package API만 사용하며 fork 전용 API에는 의존하지 않습니다.
 
+Pi에서 `omd_cli`를 사용할 때 외부 activation 파일은 필요하지 않습니다. 라우트 입력은 먼저
+`omd route validate --input .omd/.cache/route-input.json --json`으로 검사하고, 오류에 표시된
+필드를 고친 다음 `route classify`로 저장합니다. 입력 오류를 인증 누락으로 처리하지 않습니다.
+
+“실제 개발 전까지만” 요청은 `omd schema design-route-input`의 `deliveryMode: design-only`를
+사용합니다. 출력은 `.omd/**`로 제한하고 레퍼런스 조사·설계·검토·핸드오프까지 진행합니다.
+마지막에 `omd schema design-handoff`에 따라 문서 해시를 기록하고
+`omd completion design-check --input .omd/design-handoff.json --json`으로 확인합니다.
+이 검사는 문서 무결성·레퍼런스 증거·쓰기 범위를 검증하며, 앱 동작이나 리뷰어 독립성을 인증하지 않습니다.
+
 ### Claude Code — 플러그인 마켓플레이스
 
 ```text

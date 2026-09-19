@@ -86,7 +86,7 @@ export function validateAdaptiveStageGraph(graph: Readonly<Record<string, Adapti
   for (const stage of ADAPTIVE_STAGE_IDS) visit(stage);
 }
 
-export function validateAdaptiveStageOrder(strategy: AdaptiveStrategyDecision): void {
+export function validateAdaptiveStageOrder(strategy: AdaptiveStrategyDecision, deliveryMode?: 'design-only'): void {
   validateAdaptiveStageGraph(ADAPTIVE_STAGE_GRAPH);
   const selected = new Map(strategy.stages.map((stage, index) => [stage, index]));
   for (const stage of strategy.stages) {
@@ -95,6 +95,7 @@ export function validateAdaptiveStageOrder(strategy: AdaptiveStrategyDecision): 
     const current = selected.get(stage);
     if (current === undefined) return failAdaptiveRoute('ADAPTIVE_STAGE_ORDER_INVALID');
     for (const prerequisite of node.prerequisites) {
+      if (deliveryMode === 'design-only' && stage === 'independent-review' && prerequisite === 'browser-evidence') continue;
       const index = selected.get(prerequisite);
       if (index === undefined || index >= current) return failAdaptiveRoute('ADAPTIVE_STAGE_ORDER_INVALID', `strategyDecision.stages must include ${prerequisite} before ${stage}`);
     }

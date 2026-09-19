@@ -109,6 +109,7 @@ export type Brief = {
   readonly owner: string;
   readonly owns: readonly string[];
   readonly route: {
+    readonly deliveryMode?: 'design-only';
     readonly name: string;
     readonly projectMode: 'greenfield' | 'existing';
     readonly roles: readonly string[];
@@ -424,7 +425,10 @@ export function buildBrief(
     try { discoveryPlan = buildReferenceDiscoveryPlan(root, route); }
     catch (error) { blockers.push(error instanceof Error ? error.message : String(error)); }
   }
-  if (route === null) blockers.push('no route: run `omd route classify --input <route-input.json> --activation <host-issued-invocation.json>`');
+  if (route === null) blockers.push('no route: run `omd route validate --input <route-input.json>`, repair named input errors, then `omd route classify --input <route-input.json>`; Pi/local CLI does not require an external activation file');
+  if (route?.deliveryMode === 'design-only' && ['production', 'browser-evidence'].includes(stage)) {
+    blockers.push('design-only route forbids application implementation; finish the design handoff instead');
+  }
   if (definition !== undefined) {
     for (const contract of contracts) {
       if (!contract.delivered) blockers.push(`contract not delivered: omd stage deliver --stage ${definition.id} --contract ${contract.path}`);
@@ -536,7 +540,10 @@ export function buildBrief(
   }
   const projectedReality = projectRealityForBrief(root, stage, route?.projectMode ?? 'existing');
   if (projectedReality.blocker !== null) blockers.push(projectedReality.blocker);
-  const judgedBy = (JUDGED_BY[stage] ?? []).filter((check) =>
+  const designReview = route?.deliveryMode === 'design-only' && ['independent-review', 'review'].includes(stage);
+  const judgedBy = (designReview
+    ? [{ command: 'omd completion design-check --input .omd/design-handoff.json --json', fails: 'design artifacts, reference evidence or write scope are missing or stale; this check does not attest review independence or application behavior' }]
+    : JUDGED_BY[stage] ?? []).filter((check) =>
     (
       check.command !== 'omd grain check --json'
       || route === null
@@ -565,9 +572,10 @@ export function buildBrief(
   return {
     stage,
     owner: definition?.owner ?? OWNER[stage] ?? 'coordinator',
-    owns: definition === undefined ? OWNS[stage] ?? [] : [definition.artifact],
+    owns: designReview ? ['.omd/design/review.md'] : definition === undefined ? OWNS[stage] ?? [] : [definition.artifact],
     route: route === null ? null : {
       name: route.route,
+      ...(route.deliveryMode === undefined ? {} : { deliveryMode: route.deliveryMode }),
       projectMode: route.projectMode,
       roles: route.strategy.roles,
       references: route.references.decision === 'discover'
@@ -588,7 +596,7 @@ export function buildBrief(
     referenceHandoff,
     referencesOmitted: gathered.length - references.length,
     contracts,
-    schemas: (SCHEMAS[stage] ?? []).map((name) => ({ name, command: `omd schema ${name}` })),
+    schemas: (designReview ? ['design-handoff'] : SCHEMAS[stage] ?? []).map((name) => ({ name, command: `omd schema ${name}` })),
     shell: shell.kind === 'browser' ? null : { kind: shell.kind, target: renderTargetHint(shell) },
     judgedBy: [...judgedBy, ...localeJudgedBy, ...localeReferenceJudgedBy],
     prior: priorEvidence(root, [

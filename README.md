@@ -77,6 +77,17 @@ extension registers `/omd` for a project doctor check and the structured `omd_cl
 existing OMD CLI. Compatibility requires the public Pi extension/package API; fork-only APIs are
 not used.
 
+Pi's `omd_cli` does not need an external activation file. First run
+`omd route validate --input .omd/.cache/route-input.json --json`, repair the named input errors,
+then publish with `route classify`. An input validation error is not missing host authentication.
+
+For design before implementation, use `omd schema design-route-input` with `deliveryMode: design-only`.
+Output stays under `.omd/**`; research, design, review, and handoff proceed without application source.
+Bind the documents using `omd schema design-handoff`, then run
+`omd completion design-check --input .omd/design-handoff.json --json`.
+This checks document integrity, reference evidence, and write scope. It does not attest application
+behavior or independent review authorship.
+
 ### Claude Code — plugin marketplace
 
 ```text
