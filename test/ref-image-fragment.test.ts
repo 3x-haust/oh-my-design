@@ -12,6 +12,7 @@ import { createTestProjectRunInvocation } from './helpers/project-write.ts';
 const root = (context: TestContext): string => {
   const directory = mkdtempSync(join(tmpdir(), 'omd-image-fragment-'));
   mkdirSync(join(directory, '.omd', 'refs'), { recursive: true });
+  mkdirSync(join(directory, '.omd', 'refs', 'design'), { recursive: true });
   context.after(() => rmSync(directory, { recursive: true, force: true }));
   return directory;
 };
@@ -82,7 +83,7 @@ const board = (referenceId: string): Record<string, unknown> => ({
 });
 const isMissingPathError = (error: unknown): boolean => error instanceof Error && 'code' in error && error.code === 'ENOENT';
 const fragmentFiles = (directory: string): readonly string[] => {
-  const path = join(directory, '.omd', 'refs', 'fragments');
+  const path = join(directory, '.omd', 'refs', 'design', 'fragments');
   try {
     return readdirSync(path).sort();
   } catch (error) {
@@ -94,7 +95,7 @@ const fragmentFiles = (directory: string): readonly string[] => {
 test('fragment file listing rethrows a nonmissing directory-read error', (context) => {
   // Given: a corrupt fragment-store path that is a regular file rather than a directory.
   const directory = root(context);
-  writeFileSync(join(directory, '.omd', 'refs', 'fragments'), 'not a directory');
+  writeFileSync(join(directory, '.omd', 'refs', 'design', 'fragments'), 'not a directory');
 
   // When / Then: an IO error is visible instead of being treated as an empty store.
   assert.throws(() => fragmentFiles(directory), /ENOTDIR/);
@@ -115,7 +116,7 @@ test('image fragments persist content-addressed PNG bytes and provenance-address
   // Then: one content-derived PNG backs two stable, separately retained provenance records.
   const sha256 = createHash('sha256').update(png()).digest('hex');
   assert.equal(first.sha256, sha256);
-  assert.equal(first.imagePath, `.omd/refs/fragments/${sha256}.png`);
+  assert.equal(first.imagePath, `.omd/refs/design/fragments/${sha256}.png`);
   assert.notEqual(first.id, second.id);
   assert.equal(first.sha256, second.sha256);
   assert.equal(first.imagePath, second.imagePath);
@@ -180,8 +181,8 @@ test('image fragments reject preexisting foreign image targets before writing pr
     const directory = root(context);
     const invocation = createTestProjectRunInvocation(directory);
     const sourcePath = writePng(directory, 'capture.png', sourceBytes);
-    const target = join(directory, '.omd', 'refs', 'fragments', `${sha256}.png`);
-    mkdirSync(join(directory, '.omd', 'refs', 'fragments'));
+    const target = join(directory, '.omd', 'refs', 'design', 'fragments', `${sha256}.png`);
+    mkdirSync(join(directory, '.omd', 'refs', 'design', 'fragments'));
     const foreignBytes = occupy(directory, target);
     assert.throws(() => persistImageFragment(directory, input(sourcePath), invocation));
     assert.equal(readFileSync(target).equals(foreignBytes), true);
@@ -196,9 +197,9 @@ test('image fragments preserve a preexisting foreign target and publish no recor
   const sourceBytes = png();
   const sourcePath = writePng(directory, 'capture.png', sourceBytes);
   const sha256 = createHash('sha256').update(sourceBytes).digest('hex');
-  const target = join(directory, '.omd', 'refs', 'fragments', `${sha256}.png`);
+  const target = join(directory, '.omd', 'refs', 'design', 'fragments', `${sha256}.png`);
   const foreignBytes = png(Buffer.from([0, 7, 8, 9]));
-  mkdirSync(join(directory, '.omd', 'refs', 'fragments'));
+  mkdirSync(join(directory, '.omd', 'refs', 'design', 'fragments'));
   writeFileSync(target, foreignBytes);
 
   // When / Then: guarded publication rejects without overwriting or recording the foreign target.
@@ -212,7 +213,7 @@ test('image fragment reads reject a project .omd symlink before record lookup', 
   const directory = root(context);
   const external = join(directory, 'external-omd');
   rmSync(join(directory, '.omd'), { recursive: true });
-  mkdirSync(join(external, 'refs', 'fragments'), { recursive: true });
+  mkdirSync(join(external, 'refs', 'design', 'fragments'), { recursive: true });
   symlinkSync(external, join(directory, '.omd'));
 
   // When / Then: a valid-looking record ID cannot cause a board fragment read through it.

@@ -16,7 +16,7 @@ service, provider, or runtime.
 | Stage | Sole owner | Validated input | Durable/cache output | Machine check, function, or command | Explicit fallback or stop |
 |---|---|---|---|---|---|
 | brief blocks | `omd-framer` | Current user brief, cited user/evidence records, explicit-user taste profile, and applicable task constraints | Durable `.omd/frame.md`, including the task coverage matrix only where the surface requires it | `omd frame set …`; `omd frame show` must read the completed record | Missing cited evidence or required frame fields stops reference work at the brief; do not invent taste, task, or a reference target. |
-| fragment inventory | `omd-scout` | Valid brief blocks, user URLs first, component inventory, and user-directed capture permission | Durable measured component records and local captures under `.omd/refs/`; provenance-bound image fragments under `.omd/refs/fragments/`; raw captures remain scout-local | `omd ref add … --selector … --blueprint --shot` for a measured component; `omd ref import-image <input.json>` for a local user-directed image-region capture | Capability-check `browser-rs` first through the supported browser doctor. For ordinary component inspection, use the headless, reduced-motion `omd render`, `omd ir`, or `omd probe` fallback when that provider is not callable on the current host/connection, has no platform build, or the user declines it. Record the actual limitation; a transient failure is not permission to switch. User-directed image-region capture still requires the actual supporting browser tool. If no lawful local capture can be made, omit the fragment and report the coverage gap. Never scrape, hotlink, or ship source pixels. |
+| fragment inventory | `omd-scout` | Valid brief blocks, user URLs first, component inventory, and user-directed capture permission | Durable measured component records and local captures under `.omd/refs/`; provenance-bound image fragments under `.omd/refs/design/fragments/`; raw captures remain scout-local | `omd ref add … --selector … --blueprint --shot` for a measured component; `omd ref import-image <input.json>` for a local user-directed image-region capture | Capability-check `browser-rs` first through the supported browser doctor. For ordinary component inspection, use the headless, reduced-motion `omd render`, `omd ir`, or `omd probe` fallback when that provider is not callable on the current host/connection, has no platform build, or the user declines it. Record the actual limitation; a transient failure is not permission to switch. User-directed image-region capture still requires the actual supporting browser tool. If no lawful local capture can be made, omit the fragment and report the coverage gap. Never scrape, hotlink, or ship source pixels. |
 | brick analysis | `omd-scout` | The validated fragment inventory, measured invariants/blueprints, rights/provenance, task blocks, and coverage gaps | Durable sanitized brick principles in the retained `.omd/refs/*.json` records plus `.omd/scout.md`; source identities and raw pixels remain only in the fragment inventory | `omd ref principles …` refuses an unmeasured source; candidate `omd ref check` rejects an empty or contaminated transferable brick | A contaminated, duplicate, rights-unclear-for-use, or unmeasurable fragment is a rejected or anti-reference brick. If no lawful sanitized brick can answer a required decision, stop candidate assembly for that decision and report the gap. |
 | candidate assemblies | `omd-scout` | Validated fragment inventory, sanitized brick analysis, and frame/task targets | Durable `.omd/reference-board.json` as internal raw evidence; canonical capture, sanitized assembly, and typed projection remain behind the reference commands | Run `omd schema reference-board`, copy its exact skeleton and grid constraints, then `omd ref board --input <candidate-assemblies.json>` derives identities/frame binding and persists the validated board; then `omd ref check`; then `omd ref candidates` | A failed check, missing required zone in either candidate, stale PNG/provenance, contaminated selector/text, or no viable candidate stops before chat presentation. Do not infer or extend the printed schema, open/emit/ask the user to inspect an HTML, PNG, or board UI, or run `omd-board`. |
 | locale-reference binding (market-grounded reference work only) | `omd-scout` | Current market-grounded board plus its current cultural profile, projection, and captured-source receipts | Source-free `.omd/reference-locale-binding.json` and private `.omd/reference-locale-binding-evidence.json` | Run `omd schema reference-locale-binding`, then `omd ref locale-bind --input <bindings.json>`, then `omd ref locale-bind-check`; `omd ref check` also requires it for a market-bound v3 board | A source URL not present in the profile, an unavailable source, a positive use outside `native-category`/same-task `global-equivalent`, transfer from `contested`/`unknown`, a silent unbound matching source, or a candidate with no native first-party component stops selection. |
@@ -104,21 +104,31 @@ image import path, not live behavior or measured app DOM. Free viewing is not an
 
 Discovery always saves two separate ledgers:
 
-- **domain reference** (`.omd/domain-references.json`) asks how comparable services organize real screens, features, states, and
+- **domain reference** (`.omd/refs/domain/research.json`) asks how comparable services organize real screens, features, states, and
   task flows. When `greenfield-task-flow-benchmark` applies, its private v2 benchmark records every
   safe reachable screen in the declared scope, the actual click path, feature and flow groupings,
   current local evidence, and every explicit coverage gap. `omd benchmark check` re-hashes that
   evidence; a landing-page visit or prose summary cannot satisfy it.
-- **design reference** (`.omd/design-references.json`) asks how the destination should feel and be composed. It uses the measured
+- **design reference** (`.omd/refs/design/research.json`) asks how the destination should feel and be composed. It uses the measured
   board, mood, typography, component, and craft evidence already defined by this protocol. Domain
   research is not visual direction merely because the comparable product looks polished.
 
+Capture into the correct lane from the beginning: `omd ref add --lane domain|design`, or `lane` on
+each add-batch entry. PNGs and native JSON metadata stay together in `.omd/refs/domain/` and
+`.omd/refs/design/`; app/pin imports use `.omd/refs/design/fragments/`. Unlabelled legacy records
+remain readable for old boards but cannot satisfy new research. Domain captures are excluded from
+the default visual board inventory.
+
 `omd ref research-set` is the sole publisher of both files and writes `.omd/reference-research.json`
 last as their consistency receipt. `research-check` and downstream gates require all three current
-records. Each v2 design source includes `discovery` (entry URL, kind, observed free access, concrete
-qualityReason). Its quality reason explains task/viewport fit, hierarchy, typography or density;
+records. Each v3 source binds PNG evidence and native capture-JSON hashes. Design `discovery` binds
+another inspected entry/capture, not just a homepage or free-access assertion. For a different
+original source, the gallery capture must contain its exact URL in observed outbound links. When
+the original is unavailable, retain the gallery image as image-only; never use unrelated component
+docs as its evidence. No rewriting of native metadata is authorized to repair a failed check.
+The quality reason explains task/viewport fit, hierarchy, typography or density;
 provider prestige is insufficient. This is inspectable provenance, not authenticated proof of taste
-or browsing. Missing v1 provenance must be collected before republication, never backfilled from
+or browsing. Missing v1/v2 provenance must be collected before v3 republication, never backfilled from
 memory. The same evidence path OR identical bytes under another filename cannot satisfy both lanes.
 
 The two lanes may inspect the same site, but they never share a conclusion implicitly. Each lane

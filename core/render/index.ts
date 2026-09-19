@@ -715,7 +715,7 @@ export async function capturePageForRef(
   target: string,
   viewport: Viewport,
   opts: { selector?: string | null; shotOut?: string; adapter?: ProjectWriteAdapter; preparation?: CapturePreparation; bestEffortShot?: boolean },
-): Promise<{ raw: RawIr; shotSaved: boolean; shotError?: string; capturePreparation?: CapturePreparationReceipt }> {
+): Promise<{ raw: RawIr; shotSaved: boolean; shotError?: string; capturePreparation?: CapturePreparationReceipt; acquisition: { requestedUrl: string; finalUrl: string; httpStatus: number | null; links: string[]; imageSha256: string | null } }> {
   const preparation = opts.preparation === undefined ? undefined : parseCapturePreparation(opts.preparation);
   return onPage(browser, target, viewport, async (page, httpStatus, resolvedUrl) => {
     const executedActions = preparation ? await prepareReferenceCapture(page, preparation) : undefined;
@@ -736,6 +736,9 @@ export async function capturePageForRef(
           shotError = error instanceof Error ? error.message : String(error);
         }
       }
+    } else if (opts.shotOut) {
+      if (!opts.adapter) throw new Error('reference screenshot requires a project-write adapter');
+      shotBytes = await page.screenshot({ fullPage: true });
     }
     let capturePreparation: CapturePreparationReceipt | undefined;
     if (preparation) {
@@ -758,7 +761,10 @@ export async function capturePageForRef(
         shotError = error instanceof Error ? error.message : String(error);
       }
     }
-    return { raw, shotSaved, ...(shotError ? { shotError } : {}), ...(capturePreparation ? { capturePreparation } : {}) };
+    const links = await page.locator('a[href]').evaluateAll(elements => [...new Set(elements.map(el => (el as HTMLAnchorElement).href).filter(url => /^https?:\/\//.test(url)))]);
+    return { raw, shotSaved, acquisition: { requestedUrl: target, finalUrl: page.url(), httpStatus, links,
+      imageSha256: shotSaved && shotBytes ? createHash('sha256').update(shotBytes).digest('hex') : null,
+    }, ...(shotError ? { shotError } : {}), ...(capturePreparation ? { capturePreparation } : {}) };
   });
 }
 /**

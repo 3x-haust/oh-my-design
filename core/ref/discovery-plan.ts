@@ -34,9 +34,10 @@ export type ReferenceDiscoveryPlan = Readonly<{
   galleryDirectories: readonly string[];
   designSourcePolicy: Readonly<{
     access: 'free-only-verify-at-inspection';
-    domainOutput: '.omd/domain-references.json';
-    designOutput: '.omd/design-references.json';
+    domainOutput: '.omd/refs/domain/research.json';
+    designOutput: '.omd/refs/design/research.json';
     candidates: readonly Readonly<{ name: string; url: string; purpose: string }>[];
+    searchQueries: readonly string[];
     fallback: string;
   }>;
   decisions: readonly Readonly<{
@@ -150,10 +151,14 @@ export function buildReferenceDiscoveryPlan(root: string, route: RouteRecord): R
     galleryDirectories: Object.freeze(galleryCandidates.map(source => source.name)),
     designSourcePolicy: Object.freeze({
       access: 'free-only-verify-at-inspection',
-      domainOutput: '.omd/domain-references.json',
-      designOutput: '.omd/design-references.json',
+      domainOutput: '.omd/refs/domain/research.json',
+      designOutput: '.omd/refs/design/research.json',
       candidates: Object.freeze(galleryCandidates),
-      fallback: 'Check current free access. If a gallery requires unavailable login/payment or is blocked, record the limitation and search another public gallery or original linked source. Do not purchase, start a trial, install an MCP, bypass access controls, or claim a blocked source was inspected. Free viewing does not grant reuse rights.',
+      searchQueries: Object.freeze(!discovering ? [] : [
+        `site:pinterest.com/pin/ ${[...queries.mood, ...queries.component][0] ?? route.sourceContract.taskOutcome.goal}`,
+        `${marketing ? 'site:siteinspire.com' : 'site:uibowl.io'} ${queries.component[0] ?? route.sourceContract.taskOutcome.goal}`,
+      ]),
+      fallback: 'Actually search and open a specific gallery/pin entry, not a homepage. Capture it with --lane design (or import-image for native app screenshots) and retain its source link. Check free access per entry. If login/payment/blocking prevents inspection, record the failed URL and try another public gallery. Component documentation alone is not a visual-direction substitute. Do not purchase, start a trial, install an MCP, bypass access controls, or claim a blocked source was inspected. Free viewing does not grant reuse rights.',
     }),
     decisions: Object.freeze(decisions),
     motionEvidenceRequired,

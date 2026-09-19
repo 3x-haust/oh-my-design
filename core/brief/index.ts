@@ -187,7 +187,7 @@ const OWNER: Readonly<Record<string, string>> = {
   review: 'omd-eye',
 };
 const OWNS: Readonly<Record<string, readonly string[]>> = {
-  scout: ['.omd/scout.md', '.omd/domain-references.json', '.omd/design-references.json', '.omd/reference-research.json', '.omd/task-flow-benchmark.json'],
+  scout: ['.omd/scout.md', '.omd/refs/domain/research.json', '.omd/refs/design/research.json', '.omd/reference-research.json', '.omd/task-flow-benchmark.json'],
   'candidate-generation': ['structurally distinct UX candidates and selected model metadata'],
   production: ['production source (every file the surface ships)'],
   'independent-review': ['the independent review verdict returned to the coordinator'],
@@ -445,7 +445,8 @@ export function buildBrief(
   }
   const judgmentPath = '.omd/design-judgment.json';
   const judgmentConsumer = stage === 'composition' || stage === 'candidate-generation' || stage === 'production';
-  if (judgmentConsumer && route?.gates.includes('dual-reference-research')) {
+  if (judgmentConsumer && route && (route.gates.includes('dual-reference-research')
+    || (route.projectMode === 'greenfield' && existsSync(join(root, '.omd/reference-research.json'))))) {
     const researchPath = join(root, '.omd/reference-research.json');
     try {
       if (!existsSync(researchPath)) throw new Error('missing');

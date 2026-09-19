@@ -67,6 +67,14 @@ API/catalogue access. Verify the specific entry is freely viewable now. If login
 blocking prevents inspection, record it in scout.md and try another public gallery/original source;
 never purchase, start trials, install an MCP, or bypass access controls just for research.
 
+Execute the plan's `designSourcePolicy.searchQueries` using the available search transport; they
+include Pinterest pins and a surface-appropriate gallery. Record actual search results or the precise
+blocked capability in scout.md. Do not replace an unperformed search with an invented query list.
+Native reference captures use `omd ref add <url> --as <unique-name> --lane domain|design`;
+each add-batch entry has `lane: domain|design`. Captures and metadata go to `.omd/refs/domain/`
+or `.omd/refs/design/`. New CLI captures default to design, never infer domain from a hostname.
+Use distinct component names across lanes. Imported app/pin images go to `refs/design/fragments/`.
+
 Open each retained entry beyond its search thumbnail. Follow the original source when available.
 Released-app screenshots may establish visual anatomy, not working interactions. For screenshot-only
 app/pin references use `omd ref import-image` with the actual source-page provenance and image-only
@@ -117,12 +125,20 @@ stale, reused, unreachable, or unorganized observation blocks completion.
 After the domain and design lanes both have current evidence, print `omd schema reference-research
 --json`, publish the exact record with `omd ref research-set`, and run `omd ref research-check
 --json`. The record binds the domain lane to the current benchmark when applicable and the design
-lane to the current reference board. The publisher saves `.omd/domain-references.json` and
-`.omd/design-references.json` as separate deliverables, with `.omd/reference-research.json` as the
-consistency receipt. All three must agree; a v1 receipt needs explicit v2 republication after actual
-design discovery, not synthesized provenance. Neither the same path nor identical capture bytes
+lane to the current reference board. The publisher saves `.omd/refs/domain/research.json` and
+`.omd/refs/design/research.json` alongside their own captures, with `.omd/reference-research.json` as the
+consistency receipt. All three must agree. v1/v2 receipts need v3 recollection/republication, not a
+filename move or synthesized provenance. Both source and discovery observations bind PNG and native
+capture-JSON hashes. A gallery homepage alone is rejected. If the original source differs from the
+gallery entry, its exact URL must occur in that entry's captured outbound links; otherwise retain
+the gallery screenshot itself as visual-only, not a substitute design-system component. Never edit
+native acquisition metadata or relabel a source to satisfy the validator. Neither the same path nor identical capture bytes
 renamed into another file can satisfy both lanes. Do not hand-write a completion claim when this
 gate is missing or stale.
+
+Every board candidate must actually use retained design-lane image evidence, matched by path and
+hash. A separate folder of unused gallery screenshots does not demonstrate visual transfer. Every
+research batch entry needs `shot: true`; a metadata-only capture cannot satisfy the research gate.
 
 ### What is not a reference
 

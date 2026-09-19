@@ -579,6 +579,9 @@ export interface Blueprint {
 }
 
 export interface Reference {
+  /** Separate task/domain evidence from visual design evidence. Absent only on legacy records. */
+  researchLane?: 'domain' | 'design';
+  acquisition?: { requestedUrl: string; finalUrl: string; httpStatus: number | null; links: string[]; imageSha256: string | null };
   source: string;
   component: string;
   kind: RefKind;

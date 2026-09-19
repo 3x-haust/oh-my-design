@@ -81,16 +81,21 @@ Pi's `omd_cli` does not need an external activation file. First run
 `omd route validate --input .omd/.cache/route-input.json --json`, repair the named input errors,
 then publish with `route classify`. An input validation error is not missing host authentication.
 
-Reference research is saved separately: `.omd/domain-references.json` for similar-service screens,
-features and flows, and `.omd/design-references.json` for composition, type, density and component
+Reference research is saved separately: `.omd/refs/domain/research.json` for similar-service screens,
+features and flows, and `.omd/refs/design/research.json` for composition, type, density and component
 craft. `omd ref discover-plan --json` suggests screen galleries such as UI Bowl/Pinterest for product
 UI and website galleries such as Siteinspire/Pinterest for marketing. Verify free access per entry;
 on blocked/login/paid access, use another public source without purchases, trials or MCP installation.
 Free viewing does not grant reuse rights. Record the inspected screen, discovery entry and concrete
 quality reason, not just a prestigious gallery name. Use `omd schema reference-research --json`,
 `omd ref research-set --input <input.json>` and `omd ref research-check --json` to publish/check both
-files and their aggregate consistency receipt. Old v1 records require actual provenance collection
-before v2 republication; renamed identical images cannot satisfy both lanes.
+files and their aggregate consistency receipt. Capture PNGs and metadata directly into their own
+folders with `ref add --lane domain|design` or `lane` on each add-batch entry. Inspect them with
+`ref list --lane domain|design --json`; domain captures do not silently enter the visual board.
+v3 binds source and gallery-entry PNGs to their native capture JSON. A homepage is not an inspected
+entry, and a different original source must appear in the gallery's observed outbound links. Old
+v1/v2 records need actual recollection before v3 publication, not just moving or relabelling files.
+Legacy files are preserved; renamed identical images still cannot satisfy both lanes.
 
 For design before implementation, use `omd schema design-route-input` with `deliveryMode: design-only`.
 Output stays under `.omd/**`; research, design, review, and handoff proceed without application source.

@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { readPersistedRoute, adaptiveRouteRecordSha256 } from '../route/adaptive-route-persistence.ts';
 import { changedPathsForAdaptiveRoute } from '../route/adaptive-route-scope.ts';
@@ -59,7 +60,8 @@ export function validateDesignHandoffArtifacts(root: string, route: AdaptiveRout
   for (const stage of STAGES.filter((stage) => route.strategy.stages.includes(stage.id))) {
     if (!read(stage.artifact).toString('utf8').trim()) return fail(`selected stage has no output: ${stage.artifact}`);
   }
-  if (route.gates.includes('dual-reference-research')) {
+  if (route.gates.includes('dual-reference-research')
+    || (route.projectMode === 'greenfield' && existsSync(resolve(root, '.omd/reference-research.json')))) {
     validateReferenceResearch(root, readPublishedReferenceResearch(root), {
       expectedSourceContractSha256: route.sourceContractSha256,
       benchmarkRequired: route.gates.includes('greenfield-task-flow-benchmark'),

@@ -44,6 +44,11 @@ designSourcePolicy, verify current free access per entry, and record a task-spec
 (viewport, hierarchy, typography, density) rather than trusting the gallery's reputation. On login,
 payment, or blocking, record the limit and try another public source. Never purchase, start a trial,
 install an MCP, or bypass restrictions. Free viewing does not grant asset reuse rights.
+Execute designSourcePolicy.searchQueries (including Pinterest pins) through the real search
+transport; record actual results or exact capability gaps, never just a proposed query list.
+Separate acquisition immediately: ref add uses --lane domain or --lane design; each add-batch spec
+has lane. PNGs and native metadata stay in refs/domain/ or refs/design/ respectively. Use distinct
+component names across lanes. Imported app/pin images stay in refs/design/fragments/.
 For app screenshot/pin entries, open the entry and trace its original source when available. Use
 ref import-image for lawful image-only observations; gallery chrome is not the app's DOM and a
 screenshot proves no interaction. Label concept versus released screen and preserve those limits.
@@ -55,8 +60,12 @@ supply references to continue. A missing search/browser capability is a precise 
 Keep the actual queries, chosen/rejected leads, and resulting native capture identities in your
 owned Scout synthesis. After both lanes have current outputs, print `omd schema reference-research
 --json`, fill its exact skeleton, publish it with `omd ref research-set`, and require `omd ref
-research-check --json` to pass. Each design source requires discovery URL/kind/free access/qualityReason.
-The publisher saves `.omd/domain-references.json` and `.omd/design-references.json` separately and
+research-check --json` to pass. Each v3 source and discovery entry binds the PNG evidence plus a
+native capture JSON receipt. A gallery homepage is not an inspected item. Different gallery/source
+URLs require that source URL in the gallery's captured outbound links. Do not substitute an
+unrelated design-system capture or edit native acquisition metadata to make the gate pass.
+Each design source also requires discovery URL/kind/free access/qualityReason.
+The publisher saves `.omd/refs/domain/research.json` and `.omd/refs/design/research.json` separately and
 writes `.omd/reference-research.json` last as their consistency receipt. Never hand-write these outputs.
 All three records must agree. Renaming identical capture bytes does not permit reuse across lanes.
 These records disclose

@@ -32,6 +32,7 @@ test('URL-free showpiece requests receive automatic craft and motion lanes on a 
   assert.deepEqual(plan.lanes.map(lane => lane.id), ['domain-reference', 'design-reference', 'motion']);
   assert.deepEqual(plan.galleryDirectories, ['Siteinspire', 'Pinterest']);
   assert.equal(plan.designSourcePolicy.access, 'free-only-verify-at-inspection');
+  assert.ok(plan.designSourcePolicy.searchQueries.some(query => query.startsWith('site:pinterest.com/pin/')));
   assert.equal(plan.motionEvidenceRequired, true);
   assert.deepEqual(plan.decisions, [], 'no section template is invented before Framer');
   assert.deepEqual(plan.locale, { surfaceLocale: null, explicitMarket: null, culturalDecision: null });
@@ -118,14 +119,15 @@ test('restrained discovery and sufficient existing evidence do not manufacture a
   const restrainedPlan = buildReferenceDiscoveryPlan(root, routeAdaptiveFlow(restrainedRoute));
   assert.equal(restrainedPlan.lanes.some(lane => lane.id === 'design-reference'), true, 'design reference is the second required lane');
   assert.deepEqual(restrainedPlan.galleryDirectories, ['UI Bowl', 'Pinterest', 'Siteinspire']);
-  assert.equal(restrainedPlan.designSourcePolicy.domainOutput, '.omd/domain-references.json');
-  assert.equal(restrainedPlan.designSourcePolicy.designOutput, '.omd/design-references.json');
+  assert.equal(restrainedPlan.designSourcePolicy.domainOutput, '.omd/refs/domain/research.json');
+  assert.equal(restrainedPlan.designSourcePolicy.designOutput, '.omd/refs/design/research.json');
   assert.match(restrainedPlan.designSourcePolicy.fallback, /Do not purchase/);
   const skipped = buildReferenceDiscoveryPlan(root, routeAdaptiveFlow(fixture('copy-only')));
   assert.equal(skipped.decision, 'skip');
   assert.deepEqual(skipped.lanes, []);
   assert.deepEqual(skipped.galleryDirectories, []);
   assert.deepEqual(skipped.designSourcePolicy.candidates, []);
+  assert.deepEqual(skipped.designSourcePolicy.searchQueries, []);
   assert.ok(skipped.skipReason);
 });
 

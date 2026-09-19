@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { lstatSync, readFileSync } from 'node:fs';
+import { existsSync, lstatSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ImageFragmentProvenance, ImageFragmentResolver, ImageFragmentTransfer, ReferenceBoardImageFragmentPiece, ResolvedImageFragmentPiece } from './board-contract.ts';
 import { ReferenceBoardResolutionError } from './board-contract.ts';
@@ -9,7 +9,7 @@ import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import { ProjectWriteError, createProjectDirectory, writeImmutableProjectFile } from '../runtime/project-write.ts';
 
 export const IMAGE_FRAGMENT_SCHEMA_VERSION = 'image-fragment-v1' as const;
-const FRAGMENT_DIRECTORY = '.omd/refs/fragments';
+const FRAGMENT_DIRECTORY = '.omd/refs/design/fragments';
 
 export type ImageFragmentInput = {
   readonly inputPath: string;
@@ -45,7 +45,10 @@ const ensureFragmentDirectory = (root: string, invocation: ProjectRunInvocation)
 };
 
 const readRecord = (root: string, id: string): ImageFragmentRecord => {
-  const path = recordPath(trustedReferenceDirectory(root, FRAGMENT_DIRECTORY), id);
+  trustedReferenceDirectory(root, '.omd/refs');
+  const directory = existsSync(join(root, FRAGMENT_DIRECTORY, `${id}.json`)) ? FRAGMENT_DIRECTORY : '.omd/refs/fragments';
+  if (!existsSync(join(root, directory, `${id}.json`))) return fail(`record ${id} is missing or invalid`);
+  const path = recordPath(trustedReferenceDirectory(root, directory), id);
   try {
     if (lstatSync(path).isSymbolicLink() || !lstatSync(path).isFile()) fail(`record ${id} is not a regular file`);
     const record = parseImageFragmentRecord(JSON.parse(readFileSync(path, 'utf8')));

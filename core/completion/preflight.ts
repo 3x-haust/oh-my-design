@@ -44,7 +44,8 @@ export function checkTerminalCompletion(root: string, invocation: ProjectRunInvo
   // This projection is returned only AFTER current final evidence and terminal prerequisites pass.
   // It cannot be supplied by a caller or used to make the earlier browser evaluation pass.
   const route = existsSync(resolve(root, '.omd/route.json')) ? readPersistedRoute(root, invocation) : undefined;
-  if (route?.gates.includes('dual-reference-research')) {
+  if (route && (route.gates.includes('dual-reference-research')
+    || (route.projectMode === 'greenfield' && existsSync(resolve(root, '.omd/reference-research.json'))))) {
     try {
       const research = readPublishedReferenceResearch(root);
       validateReferenceResearch(root, research, {

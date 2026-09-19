@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { createHash } from 'node:crypto';
 import { accessSync, closeSync, constants, existsSync, fstatSync, lstatSync, openSync, readFileSync, readdirSync, realpathSync, statSync, unlinkSync } from 'node:fs';
-import { join, dirname, isAbsolute, resolve, relative, sep } from 'node:path';
+import { join, dirname, basename, isAbsolute, resolve, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { stringify } from 'yaml';
@@ -87,6 +87,7 @@ interface Opts {
   stack?: string;
   viewport?: string;
   preparation?: string;
+  lane?: string;
   problem?: string;
   reframe?: string;
   why?: string;
@@ -766,10 +767,8 @@ async function cmdCheck(opts: Opts): Promise<never> {
   const attrPath = join(process.cwd(), '.omd', 'attribution.md');
   if (existsSync(attrPath)) {
     const attrMd = readFileSync(attrPath, 'utf8');
-    const refsDir = join(process.cwd(), '.omd', 'refs');
-    const captureNames = existsSync(refsDir)
-      ? readdirSync(refsDir).filter((f) => f.endsWith('.json')).map((f) => f.slice(0, -5))
-      : [];
+    const { loadRefs, refRecordPath } = await import('../core/ref/store.ts');
+    const captureNames = loadRefs(process.cwd()).map(ref => basename(refRecordPath(process.cwd(), ref), '.json'));
     const theoryDir = join(root, 'core', 'theory');
     const theoryNames = existsSync(theoryDir)
       ? readdirSync(theoryDir).filter((f) => f.endsWith('.md')).map((f) => f.slice(0, -3))
@@ -946,6 +945,7 @@ async function cmdRefAddBatch(opts: Opts): Promise<never> {
     if (!s || typeof s.source !== 'string' || typeof s.as !== 'string') {
       throw new Error('each manifest entry needs a string `source` and `as`');
     }
+    s.lane ??= 'design';
   }
   const result = await addRefsBatch(process.cwd(), specs, { rulesRoot: join(root, 'core', 'rules', 'builtin') }, projectWriterFromActivation(opts, 'omd ref add-batch'));
   if (opts.json) process.stdout.write(JSON.stringify(result));
@@ -999,11 +999,13 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
     process.exit(1);
   }
   if (opts.preparation && (opts.image || !opts.noEnergy)) throw new Error('--preparation requires a rendered reference and --no-energy');
-  const { saveRef } = await import('../core/ref/store.ts');
+  const { saveRef, researchLane } = await import('../core/ref/store.ts');
+  const lane = researchLane(opts.lane ?? 'design');
   const adapter = projectWriterFromActivation(opts, 'omd ref add');
 
   if (opts.image) {
     const path = saveRef(process.cwd(), {
+      researchLane: lane,
       source: target,
       component: opts.as,
       kind: 'image',
@@ -1034,9 +1036,9 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
   // page otherwise, which is still the evidence behind the numbers.
   const absShot = opts.noShot
     ? undefined
-    : refImagePath(adapter.projectRoot, { source: target, component: opts.as });
+    : refImagePath(adapter.projectRoot, { source: target, component: opts.as, researchLane: lane });
   if (absShot) adapter.mkdir(relative(adapter.projectRoot, dirname(absShot)));
-  const { raw, shotSaved, shotError, capturePreparation } = await withBrowser(browser => capturePageForRef(browser, target, captureViewport, {
+  const { raw, shotSaved, shotError, capturePreparation, acquisition } = await withBrowser(browser => capturePageForRef(browser, target, captureViewport, {
     selector: opts.selector ?? null,
     ...(absShot ? { shotOut: absShot, adapter } : {}),
     ...(preparation ? { preparation } : {}),
@@ -1075,6 +1077,8 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
   if (shotError) console.error(`shot skipped: ${shotError}`);
 
   const path = saveRef(process.cwd(), {
+    researchLane: lane,
+    acquisition,
     source: target,
     component: opts.as,
     kind: opts.selector ? 'component' : 'page',
@@ -1144,7 +1148,7 @@ async function cmdRefShow(opts: Opts): Promise<never> {
     process.exit(1);
   }
   const { loadRefs } = await import('../core/ref/store.ts');
-  const ref = loadRefs(process.cwd()).find((r) => r.source === source && r.component === opts.as);
+  const ref = loadRefs(process.cwd(), { includeDomain: true }).find((r) => r.source === source && r.component === opts.as);
   if (!ref) {
     console.error(`no reference for ${source} (${opts.as})`);
     process.exit(1);
@@ -1202,18 +1206,20 @@ function printBlueprint(bp: import('../core/types.ts').Blueprint): void {
   for (const root of roots) printNode(root.id, 0);
 }
 
-async function cmdRefList(): Promise<never> {
-  const { loadRefs } = await import('../core/ref/store.ts');
+async function cmdRefList(opts: Opts): Promise<never> {
+  const { loadRefs, researchLane } = await import('../core/ref/store.ts');
   const { designSignal, LOW_SIGNAL } = await import('../core/ref/signal.ts');
   const { topKinshipPairs } = await import('../core/ref/distance.ts');
-  const refs = loadRefs(process.cwd());
+  const lane = opts.lane === undefined ? undefined : researchLane(opts.lane);
+  const refs = loadRefs(process.cwd(), { includeDomain: true }).filter(ref => lane === undefined || (ref.researchLane ?? 'design') === lane);
+  if (opts.json) { process.stdout.write(JSON.stringify(refs)); process.exit(0); }
   if (refs.length === 0) {
     console.log('No references yet.');
     process.exit(0);
   }
   for (const ref of refs) {
     const granularity = ref.selector ? `[${ref.kind} ${ref.selector}]` : `[${ref.kind}]`;
-    const userNote = ref.origin === 'user' ? '  [user]' : '';
+    const userNote = `  [${ref.researchLane ?? 'legacy-design'}]${ref.origin === 'user' ? '  [user]' : ''}`;
     if (ref.kind === 'image' || ref.invariants === null) {
       console.log(`${ref.source}  ${ref.component}  ${granularity}${userNote}`);
       continue;
@@ -1228,7 +1234,7 @@ async function cmdRefList(): Promise<never> {
     );
   }
 
-  const pairs = topKinshipPairs(refs);
+  const pairs = topKinshipPairs(refs.filter(ref => ref.researchLane !== 'domain'));
   if (pairs.length > 0) {
     console.log('');
     for (const p of pairs) {
@@ -4815,7 +4821,7 @@ function usage(): never {
     + '  craft checkpoint semantic|visual --render P --observed "..." --decision revise|retain|reframe --criterion "..." --reason "..." [--changed "..."]\n'
     + '  craft status [--json]\n'
     + '\n'
-    + '  ref add <url|file> --as <component> [--selector "css"] [--image] [--blueprint]\n'
+    + '  ref add <url|file> --as <component> [--lane domain|design] [--selector "css"] [--image] [--blueprint]\n'
     + '                                                render, extract invariants, save\n'
     + '  ref add ... --selector ".nav" --blueprint     also capture a component blueprint\n'
     + '  ref add ... --selector ".nav" --blueprint --shot  also save the component screenshot beside its blueprint\n'
@@ -4827,7 +4833,7 @@ function usage(): never {
     + '  ref board --input candidate-assemblies.json   author and persist a validated board from captured source/component pieces\n'
     + '  ref locale-bind --input bindings.json         bind local reference pieces to current cultural evidence decisions\n'
     + '  ref locale-bind-check                         revalidate board/profile/source locale bindings\n'
-    + '  ref list                                    one line per saved reference\n'
+    + '  ref list [--lane domain|design] [--json]     inspect separate capture inventories\n'
     + '  ref distance <page> [--selected [--gate]] [--json]  compare all refs, or selected destination selectors\n'
     + '  ref principles <source> --as C --add "..."   record why a reference works\n'
     + '  ref show <source> --as C                    invariants + principles\n'
@@ -5144,7 +5150,7 @@ async function main(): Promise<never> {
     if (sub === 'board') return cmdRefBoard(opts);
     if (sub === 'locale-bind') return cmdRefLocaleBind(opts);
     if (sub === 'locale-bind-check') return cmdRefLocaleBindCheck(opts);
-    if (sub === 'list') return cmdRefList();
+    if (sub === 'list') return cmdRefList(opts);
     if (sub === 'distance') return cmdRefDistance(opts);
     if (sub === 'principles') return cmdRefPrinciples(opts);
     if (sub === 'show') return cmdRefShow(opts);
