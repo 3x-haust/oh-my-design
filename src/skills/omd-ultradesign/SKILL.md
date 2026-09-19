@@ -18,7 +18,7 @@ Only the broker applies the user's outer-invocation `--omd-role-model` / `--omd-
 A broker-validated receipt may therefore report `modelArgumentOmitted: false`; this alone is not model
 drift. Never invent an override or replace host settings to match a preferred model.
 
-Give each owner its brief, contracts, path and task; retain its real child/process handle, wait and gate completion.
+When the host supports delegation, give each owner its brief, contracts, path and task; retain its real child/process handle, wait and gate completion.
 A missing selected owner is a visible blocker; ownership never transfers. Freeze route/source/locale
 until owners return (State boundary). Run non-production Codex roles:
 
@@ -49,6 +49,11 @@ An absent external activation file is not a Pi setup error. Do not ask the user 
 The Codex role/owner commands above apply only when that broker is available, never to Pi.
 Pi uses available native delegation with the user's model; if independent review is unavailable,
 record that limitation rather than claiming an isolated review or blocking reference collection.
+On Pi without a delegation tool, execute the selected design roles as explicit, sequential role passes
+in the current session, respecting each role's inputs and owned paths. Execution waves still express
+dependency groups; do not simulate child handles or concurrent processes. This host fallback does not
+attest independence. Record same-session review as such in the design handoff, and do not run broker
+commands or ask the user for a missing broker to perform ordinary research and design work.
 
 Before selecting methods, read `omd pack protocol/human-design-loop.md --section "Visual reference gallery and concept exploration"`. A simple task is not settled visual evidence; a current supplied direction can be. Experiments stay conditional.
 
