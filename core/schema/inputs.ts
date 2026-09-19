@@ -38,6 +38,10 @@ import {
   TASK_FLOW_BENCHMARK_SCHEMA,
   TASK_FLOW_BENCHMARK_SURFACES,
 } from '../ref/task-flow-benchmark.ts';
+import {
+  REFERENCE_RESEARCH_KEYS,
+  REFERENCE_RESEARCH_SCHEMA,
+} from '../ref/reference-research.ts';
 import { ENTRY_SURFACE_CONTRACT_SCHEMA } from '../frame/entry-surface-contract.ts';
 import { DESIGN_QUALITY_OBSERVATION_PROJECTION_INPUT_SCHEMA } from '../evidence/final-v2-browser-observations.ts';
 import { FINAL_RENDER_REVIEWER_PACKET_INPUT_SCHEMA } from '../runtime/final-render-review.ts';
@@ -763,6 +767,50 @@ const TASK_FLOW_BENCHMARK: InputSkeleton = {
   },
 };
 
+const REFERENCE_RESEARCH: InputSkeleton = {
+  name: 'reference-research',
+  path: '.omd/.cache/reference-research.json',
+  command: 'omd ref research-set --input .omd/.cache/reference-research.json --activation <host-issued-invocation.json>',
+  keys: REFERENCE_RESEARCH_KEYS,
+  constraints: [
+    'domainReference and designReference are both required and cannot substitute for one another',
+    'each lane records its actual queries and at least one inspected live source with the decision it answered, the observed finding, and current local evidence under .omd/refs/',
+    'the same evidence file/hash pair cannot satisfy both lanes; the same site may appear only through separate observations',
+    'designReference.boardSha256 is the current storage-byte SHA-256 of .omd/reference-board.json',
+    'when the route carries greenfield-task-flow-benchmark, domainReference.benchmarkSha256 is the canonical taskFlowBenchmarkSha256 of the current v2 benchmark and every benchmark source URL appears in the domain lane',
+    'when no benchmark applies, benchmarkSha256 is null unless an optional current benchmark was actually published',
+    'run omd ref research-check after ref check and benchmark check; any missing, stale, or one-lane evidence blocks downstream work',
+  ],
+  skeleton: {
+    schema: REFERENCE_RESEARCH_SCHEMA,
+    sourceContractSha256: '0'.repeat(64),
+    domainReference: {
+      queries: ['<actual similar-service or domain task query>'],
+      sources: [{
+        id: 'domain-service-a',
+        url: 'https://example.com/domain-service',
+        observedAt: '2026-08-25',
+        decision: '<screen, feature, state, vocabulary, or flow decision answered>',
+        finding: '<bounded observation from the live service>',
+        evidence: { path: '.omd/refs/domain-service-a.png', sha256: '1'.repeat(64) },
+      }],
+      benchmarkSha256: null,
+    },
+    designReference: {
+      queries: ['<actual visual-direction or component-craft query>'],
+      sources: [{
+        id: 'design-direction-a',
+        url: 'https://example.org/design-reference',
+        observedAt: '2026-08-25',
+        decision: '<composition, typography, colour, material, component, or motion decision answered>',
+        finding: '<bounded visual observation>',
+        evidence: { path: '.omd/refs/design-direction-a.png', sha256: '2'.repeat(64) },
+      }],
+      boardSha256: '3'.repeat(64),
+    },
+  },
+};
+
 const CONTENT_GRAIN: InputSkeleton = {
   name: 'content-grain',
   path: '.omd/content-grain.json',
@@ -1020,6 +1068,7 @@ export const INPUT_SKELETONS: readonly InputSkeleton[] = [
   REFERENCE_CAPTURE_PREPARATION,
   REFERENCE_LOCALE_BINDING,
   TASK_FLOW_BENCHMARK,
+  REFERENCE_RESEARCH,
   ART_DIRECTION_CHECK,
   TOKEN_COMMIT,
   RESPONSIVE_TOKEN_COMMIT,

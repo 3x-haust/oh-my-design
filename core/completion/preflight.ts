@@ -11,6 +11,7 @@ import {
   type CompletionPublicationResult,
   type CompletionTypographyBinding,
 } from './publication.ts';
+import { parseReferenceResearch, validateReferenceResearch } from '../ref/reference-research.ts';
 
 export { checkCompletionPublicationPrerequisites, CompletionPreflightError } from './publication.ts';
 export type { CompletionPublicationResult, CompletionTypographyBinding } from './publication.ts';
@@ -40,6 +41,17 @@ export function checkTerminalCompletion(root: string, invocation: ProjectRunInvo
   // This projection is returned only AFTER current final evidence and terminal prerequisites pass.
   // It cannot be supplied by a caller or used to make the earlier browser evaluation pass.
   const route = existsSync(resolve(root, '.omd/route.json')) ? readPersistedRoute(root, invocation) : undefined;
+  if (route?.references.decision === 'discover') {
+    try {
+      const research = parseReferenceResearch(JSON.parse(readFileSync(resolve(root, '.omd/reference-research.json'), 'utf8')));
+      validateReferenceResearch(root, research, {
+        expectedSourceContractSha256: route.sourceContractSha256,
+        benchmarkRequired: route.gates.includes('greenfield-task-flow-benchmark'),
+      });
+    } catch (error) {
+      throw new CompletionPreflightError(`reference research is incomplete or stale: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
   // A completed render must have survived the earlier gestalt read. The final Eye is intentionally
   // not the first reader: if the benefit/card composition never communicated the task, polishing its
   // pixels into a final review packet is late and expensive.

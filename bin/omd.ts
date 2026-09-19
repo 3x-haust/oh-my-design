@@ -2355,6 +2355,44 @@ async function cmdRefDiscoveryPlan(opts: Opts): Promise<never> {
   process.exit(0);
 }
 
+async function cmdRefResearch(mode: 'set' | 'check', opts: Opts): Promise<never> {
+  const usage = mode === 'set'
+    ? 'usage: omd ref research-set --input <reference-research.json> --activation <host-issued-invocation.json> [--json]'
+    : 'usage: omd ref research-check --activation <host-issued-invocation.json> [--json]';
+  if (opts._.length !== 0 || (mode === 'set' && !opts.input) || (mode === 'check' && opts.input)) {
+    throw new Error(usage);
+  }
+  const { readPersistedRoute } = await import('../core/route/index.ts');
+  const { parseReferenceResearch, validateReferenceResearch } = await import('../core/ref/reference-research.ts');
+  const command = `omd ref research-${mode}`;
+  const invocation = invocationFromActivation(opts, command);
+  const route = readPersistedRoute(process.cwd(), invocation);
+  if (route.references.decision !== 'discover') {
+    throw new Error('REFERENCE_RESEARCH_NOT_SELECTED');
+  }
+  const inputPath = mode === 'set'
+    ? opts.input!
+    : join(process.cwd(), '.omd', 'reference-research.json');
+  const research = parseReferenceResearch(inputJson(inputPath, command));
+  validateReferenceResearch(process.cwd(), research, {
+    expectedSourceContractSha256: route.sourceContractSha256,
+    benchmarkRequired: route.gates.includes('greenfield-task-flow-benchmark'),
+  });
+  let path = '.omd/reference-research.json';
+  if (mode === 'set') {
+    path = projectWriterFromActivation(opts, command).write(path, `${JSON.stringify(research, null, 2)}\n`);
+  }
+  const result = {
+    path,
+    domainSources: research.domainReference.sources.length,
+    designSources: research.designReference.sources.length,
+    benchmarkBound: research.domainReference.benchmarkSha256 !== null,
+  };
+  if (opts.json) process.stdout.write(JSON.stringify(result));
+  else console.log(`ok — separate domain and design reference lanes are current (${result.domainSources} domain sources, ${result.designSources} design sources${result.benchmarkBound ? ', deep task-flow benchmark bound' : ''})`);
+  process.exit(0);
+}
+
 /** Fails when the captured board holds no parts to compose section by section. */
 /**
  * `omd ref mood <add|show|check>` — the whole-page, visual-only lane.
@@ -4765,6 +4803,8 @@ function usage(): never {
     + '  ref add ... --no-energy --preparation <json>  prepare explicit disclosure clicks and verify visibility before capture\n'
     + '  ref add-batch <manifest.json>               capture zone-bound references in parallel over one browser\n'
     + '  ref discover-plan [--json]                  derive automatic search lanes from the current task; no user URLs required\n'
+    + '  ref research-set --input research.json     bind separate domain/design lane evidence to current outputs\n'
+    + '  ref research-check                         require both lanes and re-hash their evidence and outputs\n'
     + '  ref board --input candidate-assemblies.json   author and persist a validated board from captured source/component pieces\n'
     + '  ref locale-bind --input bindings.json         bind local reference pieces to current cultural evidence decisions\n'
     + '  ref locale-bind-check                         revalidate board/profile/source locale bindings\n'
@@ -5078,6 +5118,8 @@ async function main(): Promise<never> {
   if (cmd === 'ref') {
     const opts = parseArgs(args.slice(2));
     if (sub === 'discover-plan') return cmdRefDiscoveryPlan(opts);
+    if (sub === 'research-set') return cmdRefResearch('set', opts);
+    if (sub === 'research-check') return cmdRefResearch('check', opts);
     if (sub === 'add') return cmdRefAdd(opts);
     if (sub === 'add-batch') return cmdRefAddBatch(opts);
     if (sub === 'board') return cmdRefBoard(opts);

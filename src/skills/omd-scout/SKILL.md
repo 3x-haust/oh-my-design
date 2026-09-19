@@ -97,6 +97,12 @@ screen or flow. Run `omd schema task-flow-benchmark --json`, publish with `omd b
 require `omd benchmark check --json` to re-hash every screen and flow-step evidence file. A missing,
 stale, reused, unreachable, or unorganized observation blocks completion.
 
+After the domain and design lanes both have current evidence, print `omd schema reference-research
+--json`, publish the exact record with `omd ref research-set`, and run `omd ref research-check
+--json`. The record binds the domain lane to the current benchmark when applicable and the design
+lane to the current reference board. It also refuses one capture/hash pair reused across the two
+lanes. Do not hand-write a completion claim when this gate is missing or stale.
+
 ### What is not a reference
 
 The captures `omd brief domain` produced live under `.omd/captures/` and exist to prove that a screen

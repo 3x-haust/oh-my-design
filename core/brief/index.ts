@@ -36,6 +36,7 @@ import {
 } from '../ref/reference-locale-binding.ts';
 import { readSelectedReferenceHandoff } from '../ref/selected-handoff.ts';
 import type { ReferenceHandoffRole } from '../ref/reference-handoff.ts';
+import { parseReferenceResearch, validateReferenceResearch } from '../ref/reference-research.ts';
 
 export {
   EVIDENCE_CLAIM_PUBLICATION_SCHEMA,
@@ -185,7 +186,7 @@ const OWNER: Readonly<Record<string, string>> = {
   review: 'omd-eye',
 };
 const OWNS: Readonly<Record<string, readonly string[]>> = {
-  scout: ['.omd/scout.md', '.omd/task-flow-benchmark.json'],
+  scout: ['.omd/scout.md', '.omd/reference-research.json', '.omd/task-flow-benchmark.json'],
   'candidate-generation': ['structurally distinct UX candidates and selected model metadata'],
   production: ['production source (every file the surface ships)'],
   'independent-review': ['the independent review verdict returned to the coordinator'],
@@ -200,6 +201,7 @@ const JUDGED_BY: Readonly<Record<string, readonly BriefCheck[]>> = {
   frame: [{ command: 'omd frame show', fails: 'the frame is missing a required field or its evidence' }],
   acquisition: [{ command: 'omd ref granularity --json', fails: 'a declared zone has no capture bound to it' }],
   scout: [
+    { command: 'omd ref research-check --json', fails: 'either domain or design research is missing, reused across lanes, stale, or unbound to its current output' },
     { command: 'omd ref check', fails: 'the board is one-source, kinship-unresolved, low-signal, or zone-uncovered' },
     { command: 'omd ref audit', fails: 'captures were taken sequentially instead of in one batch' },
     { command: 'omd benchmark check', fails: 'applicable product research lacks multiple bounded real-service task flows or its source contract is stale' },
@@ -439,6 +441,19 @@ export function buildBrief(
   }
   const judgmentPath = '.omd/design-judgment.json';
   const judgmentConsumer = stage === 'composition' || stage === 'candidate-generation' || stage === 'production';
+  if (judgmentConsumer && route?.references.decision === 'discover') {
+    const researchPath = join(root, '.omd/reference-research.json');
+    try {
+      if (!existsSync(researchPath)) throw new Error('missing');
+      const research = parseReferenceResearch(JSON.parse(readFileSync(researchPath, 'utf8')));
+      validateReferenceResearch(root, research, {
+        expectedSourceContractSha256: route.sourceContractSha256,
+        benchmarkRequired: route.gates.includes('greenfield-task-flow-benchmark'),
+      });
+    } catch (error) {
+      blockers.push(`selected ${stage} input missing or stale: .omd/reference-research.json — complete and verify both domain-reference and design-reference lanes (${error instanceof Error ? error.message : String(error)})`);
+    }
+  }
   const hasReferenceBoard = existsSync(join(root, '.omd/reference-board.json'));
   const referenceDirectory = join(root, '.omd/refs');
   const hasReferenceEvidence = hasReferenceBoard && existsSync(referenceDirectory)
