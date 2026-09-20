@@ -57,10 +57,14 @@ owner's artifact. Return proposed evidence and decision records in the final own
 authenticated evidence transaction happens after source ownership completes.
 Every source-owner `omd check` uses `--no-log`; a logged check mutates `.omd/history.jsonl`.
 Start with the coordinator's role-safe production handoff. The coordinator reads
-`omd brief production` and supplies permitted selected evidence, delivered contracts,
+`omd brief production`, passes `omd brief production --check --json`, and supplies the
+current entry outcome with permitted selected evidence, delivered contracts,
 renderer target, checks, blockers and complete required evaluator lineage. Do not reopen
 the source-aware raw brief or treat inventory paths as read permission. Missing permitted
 evidence returns to the coordinator; it does not authorize source-identity recovery.
+A missing/blocked entry outcome stops source work, including recipe installation. Entry success
+is not completion. After your owned source checks, return the result for the coordinator's
+current `omd guard completion --json`; never self-certify future renders or independent reviews.
 Run `omd route show --json --activation <host-issued-invocation.json>` before your first write and build only what it authorizes. A workflow plan is applicable only when the brief names its current path; absence means direct production, not a missing prerequisite. When a selected greenfield component proof defers rendered evidence, `omd workflow check-readiness --activation <host-issued-invocation.json>` is the only lawful first-write checkpoint: write only the named component and representative page-context source, then publish their exact hashes with `omd workflow slice --input <workflow-production-slice.json> --activation <host-issued-invocation.json>`. Do not continue production until the coordinator has published the post-slice proofs and `omd workflow check` passes. Write only
 inside its `allowedPaths`, add only the dependencies in `namedDependencies`, and treat everything
 in `forbiddenWithoutRequest` as out of scope — you never create or publish a repository, create or

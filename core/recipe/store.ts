@@ -87,7 +87,11 @@ function canonicalOutputDirectory(input: string): string {
 export function installRecipe(
   packRoot: string,
   name: string,
-  opts: { readonly stack: Stack; readonly outDir: string; readonly writer: ProjectWriteAdapter },
+  opts: {
+    readonly stack: Stack; readonly outDir: string; readonly writer: ProjectWriteAdapter;
+    /** All actual destinations, checked once before any source write. A thrown error aborts. */
+    readonly beforeWrite?: (targets: readonly string[]) => void;
+  },
 ): InstallResult {
   const ref = findRecipe(packRoot, name);
   const source = recipeBytes(packRoot, ref);
@@ -99,6 +103,7 @@ export function installRecipe(
   if (fromProject === '..' || fromProject.startsWith('../') || isAbsolute(fromProject)) {
     throw new Error(`recipe output must stay under the guarded project root: ${writer.projectRoot}`);
   }
+  opts.beforeWrite?.(Object.freeze(result.files.map(file => resolve(dir, file.path))));
   const written = result.files.map((file) => writer.write(join(fromProject, file.path), file.contents));
   for (const [index, materialized] of result.files.entries()) {
     const target = resolve(dir, materialized.path);

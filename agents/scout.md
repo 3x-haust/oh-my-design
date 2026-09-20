@@ -78,6 +78,10 @@ and screen/task coverage gaps in scout.md. These are accountable judgments, not 
 The publisher saves `.omd/refs/domain/research.json` and `.omd/refs/design/research.json` separately and
 writes `.omd/reference-research.json` last as their consistency receipt. Never hand-write these outputs.
 All three records must agree. Renaming identical capture bytes does not permit reuse across lanes.
+Require the coordinator's selected-stage entry outcome from `omd brief scout --check --json`
+before collection. Before handoff run the applicable research/application checks again after
+the last publication. Screenshots or a successful entry check do not mean research is complete;
+return any blocked provider, missing lane or stale application instead of declaring completion.
 These records disclose
 acquisition provenance, not tamper-proof search receipts.
 After research-check, run `omd ref apply-plan --json` and fill its input from actual image

@@ -108,6 +108,13 @@ export type BriefCheck = {
 };
 
 export type Brief = {
+  /** Coordinator-owned entry procedure, not a cached grant or a blind-review input packet. */
+  readonly entryGate: Readonly<{
+    command: string;
+    selected: boolean | null;
+    runBy: 'coordinator';
+    passMeans: 'current-entry-inputs-only';
+  }>;
   readonly referenceApplication?: ReferenceApplicationProjection | null;
   readonly existingDesignSystem?: ReturnType<typeof designInventoryStatus> | null;
   readonly stage: BriefStage;
@@ -216,6 +223,7 @@ const JUDGED_BY: Readonly<Record<string, readonly BriefCheck[]>> = {
   'reference-board': [{ command: 'omd ref check', fails: 'board evidence or the saved selection is stale' }],
   copy: [
     { command: 'omd copy --check', fails: 'the deck is missing required structure or fact refs' },
+    { command: 'omd copy --review-check', fails: 'the selected copy review is not CLEAN for the current deck bytes' },
     { command: 'omd locale check', fails: 'a declared locale has no Beat copy' },
   ],
   'type-proof': [{ command: 'omd check <specimen>', fails: 'type scale, leading, or contrast violates the committed ladders' }],
@@ -545,6 +553,10 @@ export function buildBrief(
       check.command !== 'omd locale check'
       || existsSync(join(root, '.omd', 'locale.json'))
     )
+    && (
+      check.command !== 'omd copy --review-check'
+      || route?.behavior.active.copyRepairWorkflow.status === 'selected'
+    )
   );
   const localeJudgedBy = localeRoute?.decision === 'research' && localeProjectionConsumer
     ? [{
@@ -563,6 +575,12 @@ export function buildBrief(
 
   return {
     stage,
+    entryGate: {
+      command: `omd brief ${stage} --check --json`,
+      selected: route === null ? null : (route.strategy.stages as readonly string[]).includes(qualityStage),
+      runBy: 'coordinator',
+      passMeans: 'current-entry-inputs-only',
+    },
     referenceApplication,
     existingDesignSystem,
     owner: definition?.owner ?? OWNER[stage] ?? 'coordinator',

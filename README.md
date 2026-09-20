@@ -81,8 +81,11 @@ Pi's `omd_cli` does not need an external activation file. First run
 `omd route validate --input .omd/.cache/route-input.json --json`, repair the named input errors,
 then publish with `route classify`. An input validation error is not missing host authentication.
 
-Pi enforcement has three layers: selected-stage instructions, `omd guard production|completion`
-validators, and public `tool_call` / `message_end` hooks. Native `write`/`edit` application mutations
+[Three-layer enforcement](core/protocol/three-layer-enforcement.md) connects **declaration → stage/owner procedure → automatic refusal**.
+The coordinator inspects each brief, delivers its contracts, then runs `omd brief <stage> --check --json`.
+Plain brief inspection is not entry permission. Production entry uses the full production readiness
+validator; routed `recipe add` checks all targets before writing, even outside Pi.
+Pi's public `tool_call` / `message_end` hooks ensure native `write`/`edit` application mutations
 and arbitrary `bash` wait for current pre-production inputs; research inputs and directly owned
 design documents remain writable. The completion hook withholds an unverified final success claim.
 OMD commands are queued per project to prevent sibling calls from competing for the mutation lock.

@@ -84,6 +84,7 @@ test('production and final review briefs receive the persisted reality boundary'
   }
   const formatted = formatBrief({
     stage: 'independent-review',
+    entryGate: { command: 'omd brief independent-review --check --json', selected: true, runBy: 'coordinator', passMeans: 'current-entry-inputs-only' },
     owner: 'omd-eye',
     owns: [],
     route: {

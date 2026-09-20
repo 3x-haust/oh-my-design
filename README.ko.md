@@ -80,9 +80,12 @@ Pi에서 `omd_cli`를 사용할 때 외부 activation 파일은 필요하지 않
 `omd route validate --input .omd/.cache/route-input.json --json`으로 검사하고, 오류에 표시된
 필드를 고친 다음 `route classify`로 저장합니다. 입력 오류를 인증 누락으로 처리하지 않습니다.
 
-Pi의 실행 강제성은 선택 단계 지침 → `omd guard production|completion` 검증 → 공개
-`tool_call`/`message_end` 훅의 세 층입니다. 앱 파일 `write`/`edit`와 임의 `bash`는 현재 설계 입력을
-통과해야 실행되고, 리서치 입력·직접 소유한 설계 문서 작성은 계속 가능합니다. 최종 검증에 실패하면
+[3-Layer 실행 계약](core/protocol/three-layer-enforcement.md)은 **규칙 선언 → 단계·에이전트 절차 → 자동 차단**을 연결합니다.
+코디네이터는 단계별 brief를 읽고 계약을 전달한 뒤 `omd brief <stage> --check --json`으로 진입을 검증합니다.
+일반 `brief` 조회 성공은 진입 허가가 아닙니다. production 진입은 `guard production`과 같은 실검증을 사용하고,
+라우트가 있는 프로젝트의 `recipe add`도 Pi 없이 CLI에서 모든 출력 경로를 쓰기 전에 검사합니다.
+Pi의 공개 `tool_call`/`message_end` 훅은 앱 파일 `write`/`edit`와 임의 `bash`가 현재 설계 입력 검증을
+통과해야 실행되도록 합니다. 리서치 입력·직접 소유한 설계 문서 작성은 계속 가능합니다. 최종 검증에 실패하면
 검증되지 않은 완료 응답을 보류합니다. OMD 명령은 프로젝트별로 직렬화해 mutation lock 충돌을 줄입니다.
 소스 작성을 시도한 턴의 수정 가능한 최종 실패는 사용자 입력당 최대 두 번의 수정·재검사 후속 작업으로 이어집니다.
 권한 부족이나 사용자 중단은 자동 재시도하지 않습니다. 최종 메시지 교체 API는 Pi 0.85.1 기준이며,

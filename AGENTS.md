@@ -85,6 +85,15 @@ the broker. A coordinator, role task, or installed agent profile must not invent
   `unknown` adds no design rule. Profile compliance is evidence-grounded adaptation, not native
   cultural correctness; only blind ratings from the named target audience may support that claim.
 
+## Three-layer enforcement
+
+Mandatory design workflow rules use `core/protocol/three-layer-enforcement.md`: declaration,
+stage/owner procedure, and an executable refusal boundary. Keep all three connected when changing
+a rule. `brief` is inspection; `brief --check` is stage entry, and `guard completion` is terminal
+acceptance. Regression tests must cover both a refused violation (with no source mutation) and
+an authorized success. Do not turn advisory visual warnings or explicitly skipped stages into
+universal hard errors. `CLAUDE.md` links to this same contributor contract.
+
 ## Repository conventions
 
 - **Source of truth is `src/`.** `src/agents/*.agent.yaml` and `src/skills/omd-*/SKILL.md`

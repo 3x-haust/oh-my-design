@@ -10,6 +10,10 @@ export function formatBrief(brief: Brief): string {
   };
 
   lines.push(`stage         ${brief.stage}  (owner: ${brief.owner})`);
+  if (brief.entryGate) section('entry gate', [
+    `${brief.entryGate.command} — ${brief.entryGate.runBy}; selected: ${brief.entryGate.selected ?? 'unknown'}`,
+    'Nonzero stops entry. Passing proves current prerequisites only, not completion.',
+  ]);
   section('owns', brief.owns);
   if (brief.existingDesignSystem) section('existing UI', [
     `${brief.existingDesignSystem.path} — ${brief.existingDesignSystem.status}; ${brief.existingDesignSystem.observations} observations, ${brief.existingDesignSystem.gaps} gaps`,

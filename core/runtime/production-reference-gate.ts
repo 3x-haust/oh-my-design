@@ -1,4 +1,5 @@
 import { join } from 'node:path';
+import { lstatSync } from 'node:fs';
 import { buildBrief } from '../brief/index.ts';
 import { CANDIDATE_SELECTION_POINTER_PATH, resolveCandidateSelection, validateCandidateSelectionPointer } from '../brief/candidate-selection.ts';
 import { readFrame } from '../frame/index.ts';
@@ -21,7 +22,7 @@ export type ProductionReadiness = Readonly<{
  * Contract delivery and file presence are prerequisites, not proof of valid content.
  */
 export function checkProductionReadiness(
-  root: string, invocation: ProjectRunInvocation, packRoot: string, target?: string,
+  root: string, invocation: ProjectRunInvocation, packRoot: string, target?: string | readonly string[],
 ): ProductionReadiness {
   const blockers: string[] = [];
   const attempt = (label: string, check: () => void): void => {
@@ -35,8 +36,23 @@ export function checkProductionReadiness(
     if (route.deliveryMode === 'design-only' || !route.strategy.stages.includes('production')) {
       blockers.push('production is not selected; finish the design handoff without application writes');
     }
-    if (target !== undefined && pathsOutsideScope(route, [target]).length > 0) {
-      blockers.push(`target is outside the current route: ${target}`);
+    const targets = target === undefined ? [] : typeof target === 'string' ? [target] : target;
+    const outside = pathsOutsideScope(route, targets);
+    for (const path of outside) {
+      blockers.push(`target is outside the current route: ${path}`);
+    }
+    for (const path of targets.filter(path => !outside.includes(path))) {
+      attempt('source target', () => {
+        let current = root;
+        for (const part of path.split('/')) {
+          current = join(current, part);
+          try {
+            if (lstatSync(current).isSymbolicLink()) throw new Error(`symlink target/ancestor is not permitted: ${path}`);
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+          }
+        }
+      });
     }
     attempt('production brief', () => { blockers.push(...buildBrief(root, 'production', packRoot, invocation).blockers); });
     attempt('planning', () => {

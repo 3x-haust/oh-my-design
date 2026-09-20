@@ -135,7 +135,7 @@ export default function omdExtension(pi: PortablePiApi): void {
     pi.on!('before_agent_start', async (event, context) => {
       if (/omd-ultradesign|skill:omd-/i.test(event.prompt ?? '')) managed.add(context.cwd);
       if (!guarded(context.cwd)) return;
-      return { systemPrompt: `${event.systemPrompt ?? ''}\nOMD host gates are active. Use omd_cli for OMD commands. Before application writes run guard production; repair each selected-stage blocker, never replace CLI-owned records or relabel product UX to skip checks. Use read and simple inventory commands during research. Before a completion report run guard completion. Build/captures alone are not completion; report blocked/partial work accurately. Research/document authoring remains available.` };
+      return { systemPrompt: `${event.systemPrompt ?? ''}\nOMD host gates are active: declaration → procedure → automatic refusal (protocol/three-layer-enforcement.md). Use omd_cli for OMD commands. The coordinator inspects each selected stage brief, delivers contracts, then runs brief <stage> --check --json before its owner starts. Plain brief inspection is not permission. Before application writes run guard production; repair each selected-stage blocker, never replace CLI-owned records or relabel product UX to skip checks. Use read and simple inventory commands during research. Before a completion report run guard completion. Build/captures alone are not completion; report blocked/partial work accurately. Research/document authoring remains available.` };
     });
     pi.on!('tool_call', async (event, context) => {
       if (event.toolName === OMD_TOOL_NAME) {

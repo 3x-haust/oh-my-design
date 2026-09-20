@@ -55,8 +55,11 @@ dependency groups; do not simulate child handles or concurrent processes. This h
 attest independence. Record same-session review as such in the design handoff, and do not run broker
 commands or ask the user for a missing broker to perform ordinary research and design work.
 
-Pi enforces three boundaries: selected-role instructions, authenticated CLI input validation, and
-host tool/final-message hooks. Before application writes run `omd guard production --json`.
+Read `omd pack protocol/three-layer-enforcement.md` at intake. The three layers are declaration,
+stage/owner procedure, and automatic refusal, not three repetitions of a promise. At each selected
+boundary, the coordinator inspects the brief, delivers contracts, then runs its `entryGate.command`.
+Pi adds host tool/final-message refusal to the CLI boundaries. Before application writes run
+`omd guard production --json`.
 Resolve every blocker using the named stage's brief, delivered contracts, real artifact and checker.
 When selected, Writer publishes the copy deck and completes its current copy-edit review; Typesetter
 proves the actual language/copy before Composer fingerprints those inputs. Same-session passes must
@@ -195,7 +198,13 @@ For each selected contract:
 ```text
 omd stage deliver --stage <stage> --contract <pack-relative-path>
 omd stage require <stage>
+omd brief <stage> --check --json
 ```
+
+The plain brief is inspection even when it lists blockers. `--check` must exit zero before entry;
+production entry revalidates the full production inputs. Send only the role-safe entry outcome and
+applicable checks to the owner, never a raw brief to a blind reviewer. After owned work, run the
+applicable `judgedBy` checks; do not mistake entry success for output acceptance or completion.
 
 `[deliver-then-retry]` asks for the missing delivery. `[owner-blocked]` means a selected earlier owner
 did not produce its artifact. File/symbol cues come from `omd cue`; schemas come from `omd schema`;

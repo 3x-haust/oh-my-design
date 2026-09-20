@@ -2337,10 +2337,19 @@ async function cmdRecipe(mode: string | undefined, opts: Opts): Promise<never> {
   }
 
   const outDir = opts.out ?? join(process.cwd(), 'src', 'omd');
+  const invocation = invocationFromActivation(opts, 'omd recipe add');
   const result = installRecipe(packRoot, name, {
     stack,
     outDir,
-    writer: projectWriterFromActivation(opts, 'omd recipe add'),
+    writer: projectWriter(invocation),
+    beforeWrite: targets => {
+      // Validate the actual canonical destinations, including /var vs /private/var aliases,
+      // before the first write. This CLI boundary does not depend on Pi's tool_call hook.
+      if (!existsSync(join(process.cwd(), '.omd/route.json'))) return;
+      const readiness = checkProductionReadiness(process.cwd(), invocation, packRoot,
+        targets.map(path => relative(process.cwd(), path)));
+      if (!readiness.ok) throw new Error(`OMD_PRODUCTION_BLOCKED: ${readiness.blockers.join('\n')}`);
+    },
   });
   if (opts.json) process.stdout.write(JSON.stringify(result));
   else {
@@ -4556,11 +4565,12 @@ async function cmdRoute(mode: string | undefined, opts: Opts): Promise<never> {
 async function cmdBrief(stage: string | undefined, opts: Opts): Promise<never> {
   const { buildBrief, formatBrief, writeBrief, EXTRA_BRIEF_STAGES } = await import('../core/brief/index.ts');
   const { STAGES } = await import('../core/stage/contract.ts');
-  if (stage === undefined) {
-    throw new Error(`usage: omd brief <stage> [--json]  (stages: ${[...STAGES.map((s) => s.id), ...EXTRA_BRIEF_STAGES].join(', ')})`);
+  if (stage === undefined || opts._.length > 0) {
+    throw new Error(`usage: omd brief <stage> [--check] [--json]  (stages: ${[...STAGES.map((s) => s.id), ...EXTRA_BRIEF_STAGES].join(', ')})`);
   }
   const invocation = invocationFromActivation(opts, 'omd brief');
-  const brief = buildBrief(
+  const { checkBriefEntry } = await import('../core/brief/entry.ts');
+  const brief = (opts.check ? checkBriefEntry : buildBrief)(
     process.cwd(),
     stage as Parameters<typeof buildBrief>[1],
     join(root, 'core'),
@@ -4571,7 +4581,7 @@ async function cmdBrief(stage: string | undefined, opts: Opts): Promise<never> {
   writeBrief(process.cwd(), brief, projectWriter(invocation));
   if (opts.json) process.stdout.write(JSON.stringify(brief));
   else process.stdout.write(formatBrief(brief));
-  process.exit(0);
+  process.exit(opts.check && brief.blockers.length > 0 ? 1 : 0);
 }
 
 /** `omd status --files` — what this project actually holds, by what it is for. */
@@ -4941,7 +4951,7 @@ function usage(): never {
     + '  proof revision --input <entry> [--json]     hash the current production revision\n'
     + '  proof --check [--json]                      validate type/composition production revision bindings\n'
     + '  acquisition set --input <json-file|->        persist framer-owned v2 reference targets; - reads stdin\n'
-    + '  brief <stage> [--json]                      what this stage owns, its evidence, and what will judge it\n'
+    + '  brief <stage> [--check] [--json]            inspect a stage; --check refuses blocked/unselected entry\n'
     + '  route classify --input route-input.json [--locale-context .omd/locale-design-context.json]  validate an adaptive contract-derived strategy and lock scope\n'
     + '  route show | route check [--json]           the chosen route, and writes outside its scope\n'
     + '  workflow plan|readiness|slice|artifacts|check-readiness|check-slice|check --activation <host-issued-invocation.json>  persist/check immutable design-development checkpoints\n'
