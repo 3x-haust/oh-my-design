@@ -63,7 +63,7 @@ function readyCopyProject(input = fixture('copy-only')) {
   const evidence = [{ status: 'user-provided', reference: 'message-1' }];
   const statement = (text: string) => ({ text, userEvidence: [{ kind: 'explicit-user-evidence', source: 'user-message', reference: 'message-1', excerpt: 'Fix the approved confirmation sentence only.' }] });
   write(root, '.omd/domain-brief.json', JSON.stringify({
-    schema: 'domain-brief-v1', request: 'Fix the approved confirmation sentence only.', domain: 'Confirmation',
+    schema: 'domain-brief-v1', request: input.request, domain: 'Confirmation',
     summary: 'One approved sentence in an existing product.',
     surfaces: [{ name: 'Confirmation', purpose: 'Read the approved sentence', evidence }],
     coreObjects: [{ name: 'Confirmation', evidence }], audience: { description: 'Existing users', evidence },

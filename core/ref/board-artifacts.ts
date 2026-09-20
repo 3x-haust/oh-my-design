@@ -111,6 +111,7 @@ export const projectRawReferenceBoard = (root: string, board: ResolvedReferenceB
 });
 
 export function readReferenceBoardArtifacts(root: string, manifestPath = join(root, '.omd', 'reference-board.json')): ReferenceBoardArtifacts {
+  trustedProjectRoot(root);
   const parsed: unknown = JSON.parse(readFileSync(manifestPath, 'utf8'));
   return resolveReferenceBoardArtifacts(root, parsed);
 }
