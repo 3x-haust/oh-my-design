@@ -43,6 +43,7 @@ import {
   REFERENCE_RESEARCH_SCHEMA,
 } from '../ref/reference-research.ts';
 import { ENTRY_SURFACE_CONTRACT_SCHEMA } from '../frame/entry-surface-contract.ts';
+import { FRAME_INPUT_KEYS } from '../frame/input.ts';
 import { DESIGN_QUALITY_OBSERVATION_PROJECTION_INPUT_SCHEMA } from '../evidence/final-v2-browser-observations.ts';
 import { FINAL_RENDER_REVIEWER_PACKET_INPUT_SCHEMA } from '../runtime/final-render-review.ts';
 import { FEATURE_QUANTITIES } from '../ref/feature-measurement.ts';
@@ -226,8 +227,9 @@ const CULTURAL_DESIGN_PROFILE: InputSkeleton = {
 
 const FUNCTIONAL_REQUIREMENTS: InputSkeleton = {
   name: 'functional-requirements',
-  path: '.omd/functional-requirements.json',
-  command: 'omd complete check <page> --json',
+  path: '.omd/.cache/functional-requirements.json',
+  command: 'omd complete set --input .omd/.cache/functional-requirements.json --json',
+  constraints: ['Publish with complete set; do not directly write the CLI-owned .omd/functional-requirements.json. This is not the frame task coverage matrix. Rendered completeness is checked later with complete check <page>.'],
   keys: ['schema', 'requirements'],
   skeleton: {
     schema: FUNCTIONAL_REQUIREMENTS_SCHEMA,
@@ -240,11 +242,30 @@ const FUNCTIONAL_REQUIREMENTS: InputSkeleton = {
   },
 };
 
+const FRAME_INPUT: InputSkeleton = {
+  name: 'frame', path: '.omd/.cache/frame-input.json',
+  command: 'omd frame set --input .omd/.cache/frame-input.json', keys: FRAME_INPUT_KEYS,
+  constraints: [
+    'Use the current user brief and actual observations, never the example as evidence. Publish the complete frame atomically; frame show is inspection, frame check validates UX anchors.',
+    'uxSurface is marketing, product, editorial, or mixed. Product/mixed requires the seven-field taskCoverageMatrix string; marketing/editorial must omit it. Each task uses a unique T1, T2, ... ID.',
+    'viewports is desktop,mobile or one of them; requirements is none or invalid-submit,transient. Only recovery may use N/A: <reason>.',
+    'Greenfield Copy consumes this frame\'s reality ledger; unknown facts do not ship and demo facts stay labelled. For a selected benchmark, add entrySurface from omd schema entry-surface-contract after the actual benchmark exists.',
+  ],
+  skeleton: {
+    schema: 'frame-input-v1', problem: '<user task and current difficulty>', reframe: '<evidence-grounded framing>',
+    why: '<cite the exact user sentence or observed evidence>', uxTask: '<task>', uxFrequentAction: '<action>',
+    uxCostliestError: '<error and recovery>', uxSurface: 'product',
+    taskCoverageMatrix: 'T1 | goal: <goal> | start: <entry state> | actions: <actions> | success: <observable result> | recovery: <recovery path> | viewports: desktop,mobile | requirements: none',
+    reality: { schema: 'reality-ledger-v1', mode: 'greenfield', facts: [{ category: 'subject', status: 'supplied', statement: '<actual user-supplied fact>' }] },
+  },
+};
+
 const DOMAIN_BRIEF: InputSkeleton = {
   name: 'domain-brief',
   path: '.omd/domain-brief.json',
   command: 'omd domain check --input .omd/domain-brief.json --json',
   keys: ['schema', 'request', 'domain', 'summary', 'surfaces', 'coreObjects', 'audience', 'referenceQueries', 'planning'],
+  constraints: ['domain check validates structure, not planning confirmation. Each planning statement needs its own genuine userEvidence before production. Check the original request first; ask only for facts it does not supply. Do not silently invent prototype-only non-goals or copy the placeholders as evidence.'],
   skeleton: {
     schema: DOMAIN_BRIEF_SCHEMA,
     request: '<the raw request, normalized>',
@@ -274,8 +295,10 @@ const DOMAIN_BRIEF: InputSkeleton = {
       },
       successSignal: {
         text: '<the observable change that means it worked; omit userEvidence to leave it an open hypothesis>',
+        userEvidence: [{ kind: 'explicit-user-evidence', source: 'user-message', reference: '<message or artifact>', excerpt: '<the actual success criterion the user supplied>' }],
       },
-      nonGoals: [{ text: '<what this release deliberately does not do>' }],
+      nonGoals: [{ text: '<what this release deliberately does not do>',
+        userEvidence: [{ kind: 'explicit-user-evidence', source: 'user-message', reference: '<message or artifact>', excerpt: '<the actual exclusion the user supplied>' }] }],
     },
   },
 };
@@ -1233,6 +1256,7 @@ export const INPUT_SKELETONS: readonly InputSkeleton[] = [
   LOCALE_DESIGN_CONTEXT,
   CULTURAL_DESIGN_PROFILE,
   FUNCTIONAL_REQUIREMENTS,
+  FRAME_INPUT,
   DECISION_GRAPH,
   ENTRY_SURFACE_CONTRACT,
   FINAL_RENDER_REVIEWER_PACKET_INPUT,
@@ -1260,6 +1284,8 @@ export const INPUT_SKELETONS: readonly InputSkeleton[] = [
 export function inputSkeleton(name: string): InputSkeleton {
   const found = INPUT_SKELETONS.find((entry) => entry.name === name);
   if (found === undefined) {
+    const protocol = ({ 'copy-deck': 'protocol/copy-deck.md', 'type-proof': 'theory/typography.md', composition: 'protocol/composition-contract.md' } as Record<string, string>)[name];
+    if (protocol) throw new Error(`${name} is an authored Markdown document, not JSON. Run omd pack ${protocol} and omd brief ${name === 'copy-deck' ? 'copy' : name} --json for its format, owner, and checks.`);
     throw new Error(`unknown schema ${name}; known: ${INPUT_SKELETONS.map((entry) => entry.name).join(', ')}`);
   }
   return found;

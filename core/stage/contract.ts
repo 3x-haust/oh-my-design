@@ -196,11 +196,11 @@ export type StageRequirement = {
  * route listing order, is the producer contract for that mode; return its selected transitive
  * prerequisites so a consumer cannot outrun a real dependency while same-wave peers stay runnable.
  */
-function adaptivePrerequisiteStages(
+export function adaptivePrerequisiteStages(
   projectRoot: string,
   invocation: ProjectRunInvocation,
-  stage: StageId,
-): readonly StageId[] | undefined {
+  stage: AdaptiveStageId,
+): readonly AdaptiveStageId[] | undefined {
   if (!existsSync(join(projectRoot, '.omd', 'route.json'))) return undefined;
   const route = readPersistedRoute(projectRoot, invocation);
   const selected = new Set(route.strategy.stages);
@@ -217,7 +217,7 @@ function adaptivePrerequisiteStages(
     }
   };
   visit(stage as AdaptiveStageId);
-  return [...dependencies] as StageId[];
+  return [...dependencies];
 }
 
 /**

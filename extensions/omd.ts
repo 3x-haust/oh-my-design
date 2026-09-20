@@ -112,6 +112,8 @@ export default function omdExtension(pi: PortablePiApi): void {
   const repairs = new Map<string, number>();
   const authoredInputs = new Map<string, Set<string>>();
   const bootstraps = new Map<string, RouteBootstrap>();
+  const freshRoutes = new Set<string>();
+  const workflowStarted = new Set<string>();
   // Pi may execute sibling tools concurrently. Serialize OMD commands per project so two
   // legitimate publishers cannot collide with OMD's project mutation lock.
   const run = (args: readonly string[], cwd: string, signal?: AbortSignal) => {
@@ -127,7 +129,7 @@ export default function omdExtension(pi: PortablePiApi): void {
   const guarded = (cwd: string) => managed.has(cwd) || hasPiRoute(cwd);
   const hooksAvailable = 'on' in pi && typeof pi.on === 'function';
   if (hooksAvailable) {
-    pi.on!('session_start', async () => { managed.clear(); touched.clear(); productionAttempted.clear(); repairs.clear(); authoredInputs.clear(); bootstraps.clear(); });
+    pi.on!('session_start', async () => { managed.clear(); touched.clear(); productionAttempted.clear(); repairs.clear(); authoredInputs.clear(); bootstraps.clear(); freshRoutes.clear(); workflowStarted.clear(); });
     pi.on!('input', async (event, context) => {
       if (event.source === 'interactive' || event.source === 'rpc') {
         repairs.delete(context.cwd);
@@ -135,18 +137,21 @@ export default function omdExtension(pi: PortablePiApi): void {
         productionAttempted.delete(context.cwd);
         authoredInputs.delete(context.cwd);
         bootstraps.delete(context.cwd);
+        freshRoutes.delete(context.cwd);
+        workflowStarted.delete(context.cwd);
       }
     });
     pi.on!('before_agent_start', async (event, context) => {
       if (/omd-ultradesign|skill:omd-/i.test(event.prompt ?? '')) managed.add(context.cwd);
       if (!guarded(context.cwd)) return;
-      return { systemPrompt: `${event.systemPrompt ?? ''}\nOMD host gates are active: declaration → procedure → automatic refusal (protocol/three-layer-enforcement.md). Use omd_cli for OMD commands. Before initial publication use the task-appropriate route starter and route validate --json; repair the grouped input diagnostics, then classify and stage resume. Do not use guard completion to diagnose an unclassified route. The coordinator inspects each selected stage brief, delivers contracts, then runs brief <stage> --check --json before its owner starts. Plain brief inspection is not permission. Before application writes run guard production; repair each selected-stage blocker, never replace CLI-owned records or relabel product UX to skip checks. Use read and standalone inventory commands during research. After classification, run guard completion before a completion report. Build/captures alone are not completion; report blocked/partial work accurately. Research/document authoring remains available.` };
+      return { systemPrompt: `${event.systemPrompt ?? ''}\nOMD host gates are active: declaration → procedure → automatic refusal (protocol/three-layer-enforcement.md). Use omd_cli for OMD commands. Before initial publication use the task-appropriate route starter and route validate --json; repair the grouped input diagnostics, then classify and stage next --json. The current work pointer names real missing/malformed inputs; it never certifies completion. For framing use schema frame, frame set --input, then frame check. Inspect domain check unconfirmedPlanning early; cite actual user excerpts or ask about missing facts. Do not use guard completion to diagnose an unclassified route. The coordinator inspects each selected stage brief, delivers contracts, then runs brief <stage> --check --json before its owner starts. Plain brief inspection is not permission. Before application writes run guard production; repair each selected-stage blocker, never replace CLI-owned records or relabel product UX to skip checks. Use read and standalone inventory commands during research. After completing the selected owned work and its checks, run guard completion before a completion report; do not use a terminal missing-output list as the next-stage procedure. Build/captures alone are not completion; report blocked/partial work accurately. Research/document authoring remains available.` };
     });
     pi.on!('tool_call', async (event, context) => {
       if (event.toolName === OMD_TOOL_NAME) {
         const args = event.input?.args;
         if (Array.isArray(args) && args[0] === 'route' && args[1] === 'classify') managed.add(context.cwd);
-        if (guarded(context.cwd) && Array.isArray(args) && /^(?:frame|domain|route|ref|copy|type|composition|slop|lifecycle|finalize)$/.test(String(args[0]))
+        const frameHelp = Array.isArray(args) && args[0] === 'frame' && (args[1] === 'help' || args.includes('--help') || args.includes('-h'));
+        if (guarded(context.cwd) && Array.isArray(args) && !frameHelp && /^(?:frame|domain|route|ref|copy|type|composition|slop|lifecycle|finalize|complete)$/.test(String(args[0]))
           && !/^(?:show|check|validate|list|handoff|discover-plan|research-check|apply-plan|apply-check|apply-review-plan|apply-review-check|review-check)$/.test(String(args[1]))) touched.add(context.cwd);
         return;
       }
@@ -223,6 +228,39 @@ export default function omdExtension(pi: PortablePiApi): void {
           { type: 'text', text: `${status}\n\n${summary}` },
         ] } };
       }
+      if (workflowStarted.has(context.cwd) && hasPiRoute(context.cwd)) {
+        // A freshly authored/classified task that actually entered a selected stage is different
+        // from inspecting an old route or authoring a research note. Resume the former's owned
+        // pre-production work before asking a terminal gate about outputs not yet produced.
+        try {
+          const result = await run(['stage', 'next', '--json'], context.cwd, context.signal);
+          const work = JSON.parse(result.text) as { schema?: string; stage?: unknown; owner?: unknown; action?: unknown; planning?: Array<{ field: string; text: string }>; instruction?: string };
+          if (work.schema === 'stage-next-v1' && typeof work.stage === 'string') {
+            if (context.signal?.aborted) return;
+            const askingForPlanning = (work.planning?.length ?? 0) > 0 && message.content?.some(part => part.type === 'text'
+              && /[?？]|확인.*(?:필요|부탁)|알려.*(?:주세요|주실)|(?:please|could|can).*(?:confirm|clarify)/i.test(part.text ?? ''));
+            const retry = !askingForPlanning && (repairs.get(context.cwd) ?? 0) < 2 && typeof pi.sendMessage === 'function';
+            if (retry) {
+              repairs.set(context.cwd, (repairs.get(context.cwd) ?? 0) + 1);
+              pi.sendMessage!({ customType: 'omd-stage-repair', display: true,
+                content: `OMD selected-stage repair ${repairs.get(context.cwd)}/2. Continue only the freshly started user-authorized workflow from this current work pointer, not from guard completion. Do the selected owner's real work and checks. On Pi without delegation use explicit sequential role passes; do not claim independent review. For planning evidence first reread the original request; attach only genuinely supported excerpts or ask one concrete missing-fact question and stop. Never fabricate research, weaken scope/gates, or start production before readiness.\n${result.text}` },
+              { triggerTurn: true, deliverAs: 'followUp' });
+            }
+            const korean = message.content?.some(part => part.type === 'text' && /[가-힣]/.test(part.text ?? ''));
+            const questions = (work.planning ?? []).map(p => `- ${p.field}: ${p.text}`).join('\n');
+            const status = korean
+              ? `OMD는 ${work.stage} 단계가 아직 미완료입니다. ${retry ? '해당 단계의 입력·근거를 확인하고 작업을 계속합니다.' : questions ? '아래 기획 내용의 사용자 근거가 확인되지 않았습니다. 이 내용이 요청 범위와 맞는지 확인이 필요합니다.' : '자동 수정 한도에 도달했습니다. 아래 단계의 실제 입력 오류를 해결해야 합니다.'}`
+              : `OMD is incomplete at ${work.stage}. ${retry ? 'Continuing the selected-stage work.' : questions ? 'User evidence is still missing for the planning statements below; confirmation is required.' : 'Bounded repair exhausted; resolve the current stage inputs below.'}`;
+            return { message: { ...message, content: [...(message.content ?? []).filter(part => part.type !== 'text'),
+              { type: 'text', text: `${status}\n\n${questions || result.text}` }] } };
+          }
+        } catch (error) {
+          // Unknown/authority errors are not an invitation to auto-repair the route.
+          if (context.signal?.aborted) return;
+          return { message: { ...message, content: [...(message.content ?? []).filter(part => part.type !== 'text'),
+            { type: 'text', text: `OMD stage diagnosis failed; completion is unverified.\n${error instanceof Error ? error.message : String(error)}` }] } };
+        }
+      }
       try {
         await run(['guard', 'completion', '--json'], context.cwd, context.signal);
       } catch (error) {
@@ -290,6 +328,9 @@ export default function omdExtension(pi: PortablePiApi): void {
       let result: Awaited<ReturnType<typeof run>>;
       try {
         result = await run(params.args, context.cwd, signal);
+        if (params.args[0] === 'route' && params.args[1] === 'classify' && commandBootstrap
+          && authoredInputs.get(context.cwd)?.has(classifyPiWrite(context.cwd, commandBootstrap.inputPath).path)) freshRoutes.add(context.cwd);
+        if (freshRoutes.has(context.cwd) && params.args[0] === 'brief' && params.args.includes('--check')) workflowStarted.add(context.cwd);
         if (params.args[0] === 'route' && params.args[1] === 'classify' && bootstraps.get(context.cwd) === commandBootstrap) bootstraps.delete(context.cwd);
       } catch (error) {
         const bootstrap = bootstraps.get(context.cwd);

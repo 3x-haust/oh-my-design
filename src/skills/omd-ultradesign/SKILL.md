@@ -86,6 +86,10 @@ Before a route exists, Pi may also retry an already-authored route input using c
 diagnostics. This repairs setup only, not missing deliverables. A failed classification retains its real
 cause; authority errors do not retry. Input-only work does not authorize publishing or implementation.
 Pause/abort and missing user facts/authority never authorize an automatic retry or a scope change.
+After a fresh authored route enters a checked stage, Pi can also use the same two-pass budget to
+continue unfinished selected-stage authoring before source exists. It recomputes `stage next`, not
+terminal completion. A concrete planning question stops for the user's answer; existing-route
+inspection and route-only classification do not opt into this continuation.
 Selected structural candidates need the current hash-bound `.omd/.cache/sketches/current.json`
 pointer and its complete evidence set; an arbitrary `*-selected` directory is not a selection.
 
@@ -120,6 +124,7 @@ omd schema product-route-input
 omd route validate --input .omd/.cache/route-input.json --json
 omd route classify --input .omd/.cache/route-input.json --json
 omd stage resume
+omd stage next --json
 omd route show
 ```
 
@@ -179,6 +184,20 @@ After `omd domain check`, print the domain summary for the run record and advanc
 would change the route or result materially: market/target audience, the product's real capability, or
 whether the primary task is discovery versus continuing an existing application. Otherwise make the
 reversible design decision, record why, and continue.
+
+Use `omd stage next --json` from the first classified run, not only after interruption. It identifies
+the earliest missing/malformed authored output and names its schemas, contracts and checks; it does
+not certify output quality or completion. `domain check` is structural: inspect `unconfirmedPlanning`,
+reread the original request, and attach exact excerpts to supported statements. Only genuinely missing
+facts require a question. Never invent a prototype-only exclusion for a request to build a full product.
+
+For Framer, use `omd schema frame` → author `.omd/.cache/frame-input.json` →
+`omd frame set --input .omd/.cache/frame-input.json` → `omd frame check --json`.
+Publish UX anchors, the product task matrix and the greenfield reality ledger together.
+`functional-requirements` is a separate JSON contract published by `omd complete set --input <json>`;
+it is not `--task-matrix`. `frame show` only displays a record. For Markdown copy/type/composition,
+use the brief's named protocol, not guessed JSON schemas. Recompute stage work after publishing;
+do not inspect all downstream entry gates before their inputs exist or jump from domain to source.
 
 This sketch is not a substitute for `route.strategy.stages` and execution waves. Every selected stage
 needs its real output and validation; optional stages need the existing evidence-backed skip, not a

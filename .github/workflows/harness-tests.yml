@@ -71,6 +71,7 @@ jobs:
           node --test --test-concurrency=4
           test/pi-extension.test.ts test/pi-host-guard.test.ts
           test/route-bootstrap.test.ts test/adaptive-route-diagnostics.test.ts
+          test/cold-start-workflow.test.ts
           test/production-reference-gate.test.ts test/first-render-critic.test.ts
           test/copy.test.ts test/slop-review.test.ts
           test/stateful-design-inspection.test.ts test/live-reference-flow.test.ts

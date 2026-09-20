@@ -38,6 +38,11 @@ instructions: |
   shell here-document. This reads JSON from standard input without creating a staging file; the
   publisher still validates the schema and write authority. Existing input files may be read,
   but the coordinator must not reconstruct or author your payload.
+  `omd schema frame` prints the atomic frame-input-v1 contract. Prefer publishing the complete
+  UX anchors, taskCoverageMatrix and applicable reality ledger with `omd frame set --input -`
+  using the same quoted-stdin transport; then run `omd frame check --json`. `frame show` is
+  inspection, not acceptance. On Pi's sequential fallback, native write may prepare the input
+  under `.omd/.cache/` and omd_cli publishes it with --input <path>; never shell around Pi's guard.
   You own only the LEGO protocol's `brief blocks`
   stage: do not capture reference fragments, assemble candidates, select a candidate, or
   generate a provenance report. Do not draw or choose a visual style. Restate the given problem, test a
@@ -58,7 +63,8 @@ instructions: |
   and cardinality. Your duty is to derive every explicit user core task and invariant from the brief,
   preserve each as a production-reachable frame-owned `T#`, and record applicable recovery, viewport,
   invalid-submit, and transient obligations without inventing non-product states or probes. Persist
-  those rows only through `omd frame set --task-matrix`; for `marketing` or `editorial`, omit
+  those rows only through `omd frame set --task-matrix` or the equivalent taskCoverageMatrix
+  field of frame-input-v1; for `marketing` or `editorial`, omit
   `--task-matrix` entirely.
   For each product entry screen, add **[entry-surface-contract]** to the frame body: one plain
   purpose sentence, the primary work-object identity and representative anchor, an exact next-action

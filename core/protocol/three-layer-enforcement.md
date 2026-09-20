@@ -27,6 +27,12 @@ order sequences dependency groups. A sequential host fallback does not change th
 Run `route validate --input <json> --json`, repair its grouped diagnostics together, then classify the
 same input with the same locale context and run `stage resume`. Do not use completion to diagnose
 unclassified input. Classification never substitutes for the selected research, copy or design outputs.
+Run `stage next --json` immediately and after owned output changes. It identifies missing/malformed
+authored work and early planning provenance gaps; it never marks the route complete. A structural
+domain check can pass with unconfirmed planning. Check the original user brief before asking for
+missing facts; do not invent confirmation or silently reduce implementation scope to a prototype.
+Use `schema frame` and `frame set --input` for atomic framing, then `frame check`. Functional
+requirements use their own `complete set` publisher and cannot substitute for the task matrix.
 
 At each selected stage:
 
@@ -56,6 +62,9 @@ inspection and research repair remain available while production is blocked.
 ## Layer 3 — automatic refusal
 
 - `brief --check` exits nonzero for a missing route, an unselected stage or entry blockers.
+  It invokes the selected dependency graph and validates upstream domain/frame/copy structure;
+  same-wave independent Scout/Writer work remains available. It never checks for the output that
+  the entering owner is about to create. Plain brief and frame show remain inspection only.
   Its production mode uses the same readiness validator as `guard production`.
 - Research v5 refuses missing/mismatched search receipts or retained links unreachable from observed
   search pages and separately validated native navigation captures. Each optional lane `navigation`
@@ -78,6 +87,11 @@ inspection and research repair remain available while production is blocked.
   final messages after OMD mutations. CLI-owned evidence cannot be directly authored. Failed
   completion may trigger at most two repair turns for an actual source-writing task; aborts,
   missing authority and research-only turns do not authorize automatic implementation.
+- For a route authored and successfully classified in this user turn, after a checked stage entry,
+  Pi diagnoses unfinished authored stages with `stage next` before terminal completion. It can queue
+  at most two selected-stage correction turns (sharing the repair budget). Existing-route inspection,
+  route-only classification, new user input and aborts do not authorize this continuation. Unknown
+  authority errors stop; unresolved planning reports the actual statements needing user evidence.
 - Before initial route publication, Pi revalidates the current authored input at termination and
   reports its actual diagnostic groups rather than replacing them with `ROUTE_UNCLASSIFIED`.
   Known input errors share the two-pass repair budget. Read-only inspection, aborts, unknown errors,

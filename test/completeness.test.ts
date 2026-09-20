@@ -134,7 +134,7 @@ test('the frame owner persists functional requirements through the canonical sta
   assert.match(stages, /requiredContracts: \['protocol\/human-design-loop\.md', 'theory\/ux\.md'\]/);
 
   const brief = readFileSync(fileURLToPath(new URL('../core/brief/index.ts', import.meta.url)), 'utf8');
-  assert.match(brief, /frame: \['functional-requirements', 'reality-ledger'\]/);
+  assert.match(brief, /frame: \['frame', 'functional-requirements', 'reality-ledger'\]/);
   assert.match(brief, /'\.omd\/functional-requirements\.json'/);
   assert.match(brief, /omd complete check <page>/);
 

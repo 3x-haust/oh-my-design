@@ -42,7 +42,7 @@ import { checkTaskEvidence, publishTaskEvidence } from '../core/evidence/task.ts
 import { computeStack } from '../core/stack/index.ts';
 import { bridgeGlobals, renderTargetHint } from '../core/stack/shell.ts';
 import { scanTextSlop } from '../core/slop/text-slop.ts';
-import { validateDomainBrief } from '../core/domain/domain-brief.ts';
+import { validateDomainBrief, unconfirmedPlanningStatements } from '../core/domain/domain-brief.ts';
 import { validateReferenceCraft, verifyCraftReproduction } from '../core/ref/reference-craft.ts';
 import { evaluateLighthouse, type LighthouseBudget } from '../core/perf/lighthouse.ts';
 import { evaluateVisualRichness } from '../core/composition-contract/visual-richness.ts';
@@ -2211,16 +2211,18 @@ function cmdProof(mode: string | undefined, opts: Opts): never {
 function cmdDomain(mode: string | undefined, opts: Opts): never {
   if (mode !== 'check') throw new Error('usage: omd domain check [--input <domain-brief.json>] [--json]');
   const file = opts.input ?? join(process.cwd(), '.omd', 'domain-brief.json');
+  let planning: readonly string[] = [];
   try {
-    validateDomainBrief(inputJson(file, 'omd domain check'));
+    planning = unconfirmedPlanningStatements(validateDomainBrief(inputJson(file, 'omd domain check')).planning);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (opts.json) process.stdout.write(JSON.stringify({ ok: false, error: message }));
     else console.error(`[error] ${message}`);
     process.exit(1);
   }
-  if (opts.json) process.stdout.write(JSON.stringify({ ok: true }));
-  else console.log('ok — domain-brief names the domain, its surfaces, core objects, audience, and per-role reference queries');
+  if (opts.json) process.stdout.write(JSON.stringify({ ok: true, meaning: 'structure-only', unconfirmedPlanning: planning,
+    next: planning.length ? 'omd stage next --json' : 'omd brief frame --json' }));
+  else console.log(`ok — domain-brief structure is valid${planning.length ? `; planning still needs user evidence: ${planning.join(', ')} (omd stage next --json)` : ''}`);
   process.exit(0);
 }
 
@@ -3137,6 +3139,14 @@ async function cmdStage(mode: string | undefined, opts: Opts): Promise<never> {
   const packRoot = join(root, 'core');
   const projectRoot = process.cwd();
 
+  if (mode === 'next') {
+    if (opts._.length) throw new Error('usage: omd stage next --json');
+    const { nextStageWork } = await import('../core/stage/next.ts');
+    const work = nextStageWork(projectRoot, packRoot, invocationFromActivation(opts, 'omd stage next'));
+    console.log(JSON.stringify(work));
+    process.exit(0);
+  }
+
   if (mode === 'status' || mode === 'resume') {
     if (opts._.length > 0) throw new Error(`usage: omd stage ${mode} [--json]`);
     const invocation = invocationFromActivation(opts, `omd stage ${mode}`);
@@ -3235,7 +3245,7 @@ async function cmdStage(mode: string | undefined, opts: Opts): Promise<never> {
     process.exit(0);
   }
 
-  throw new Error('usage: omd stage status|resume|list [--json] | deliver --stage <s> --contract <c> | require <stage> | record --stage <s> | cost [--max-stage-tokens N] [--max-run-tokens N] [--max-run-minutes N]');
+  throw new Error('usage: omd stage next|status|resume|list [--json] | deliver --stage <s> --contract <c> | require <stage> | record --stage <s> | cost [--max-stage-tokens N] [--max-run-tokens N] [--max-run-minutes N]');
 }
 /**
  * Resolves the contracts a piece of work binds, from inputs a machine evaluates identically twice:
@@ -5261,25 +5271,47 @@ async function main(): Promise<never> {
   if (cmd === 'craft') return cmdCraft(sub, parseArgs(args.slice(2)));
 
   if (cmd === 'frame') {
+    if (args.slice(1).some(arg => arg === '--help' || arg === '-h') || sub === 'help') {
+      console.log('omd frame set --input <frame-input.json>\n  Print the complete input: omd schema frame\n  Or: frame set --problem P --reframe R --why EVIDENCE --task TASK --frequent-action ACTION --costliest-error ERROR --surface product|mixed|marketing|editorial [--task-matrix ROWS] [--reality <json-file>] [--entry-surface <json-file>]\n  Product/mixed needs --task-matrix (seven-field T1 rows), not functional-requirements JSON.\nomd frame check --json  validates current UX framing\nomd frame show  inspection only');
+      process.exit(0);
+    }
     const opts = parseArgs(args.slice(2));
     if (sub === 'show') return cmdFrameShow();
 
+    if (sub === 'check') {
+      const blockers = readFrame(process.cwd()) === null ? ['frame missing: run omd schema frame, then frame set --input <json>'] : checkFrameUx(process.cwd()).map(f => f.message);
+      console.log(opts.json ? JSON.stringify({ ok: blockers.length === 0, blockers }) : blockers.join('\n') || 'ok — frame UX anchors and task coverage are valid');
+      process.exit(blockers.length ? 1 : 0);
+    }
+
     if (sub === 'set') {
-      const path = writeFrameRecord(process.cwd(), {
-        problem: opts.problem ?? '',
-        reframe: opts.reframe ?? '',
+      const allowed = new Set(['_', 'input', 'problem', 'reframe', 'why', 'task', 'frequentAction', 'costliestError', 'surface', 'taskMatrix', 'reality', 'entrySurface', 'activation', 'json']);
+      const unknown = Object.keys(opts).filter(key => !allowed.has(key));
+      if (unknown.length || opts._.length) throw new Error(`FRAME_OPTIONS_INVALID: unknown options/arguments: ${[...unknown, ...opts._].join(', ')}; run omd frame set --help or omd schema frame`);
+      const malformed = Object.entries(opts).filter(([key, value]) => key !== '_' && key !== 'json' && (typeof value !== 'string' || !value.trim()));
+      if (malformed.length) throw new Error(`FRAME_OPTIONS_INVALID: options need exactly one nonempty value: ${malformed.map(([key]) => key).join(', ')}; run omd frame set --help`);
+      if (opts.input && Object.keys(opts).some(key => !['_', 'input', 'activation', 'json'].includes(key))) throw new Error('FRAME_OPTIONS_INVALID: --input cannot be mixed with inline frame fields');
+      const { parseFrameInput } = await import('../core/frame/input.ts');
+      const current = opts.input ? null : readFrame(process.cwd());
+      const section = (heading: string) => current?.body.split(`## ${heading}\n`)[1]?.split(/^## /m)[0]?.trim();
+      // Preserve separately published reality/entry contracts on a legacy inline UX update.
+      // The complete --input form intentionally supplies a replacement record atomically.
+      const fields = opts.input ? parseFrameInput(inputJson(opts.input, 'omd frame set')) : {
+        problem: opts.problem ?? section('The given problem') ?? '',
+        reframe: opts.reframe ?? section('The reframing') ?? '',
         ...(opts.why ? { why: opts.why } : {}),
-        ...(opts.task ? { uxTask: opts.task } : {}),
-        ...(opts.frequentAction ? { uxFrequentAction: opts.frequentAction } : {}),
-        ...(opts.costliestError ? { uxCostliestError: opts.costliestError } : {}),
-        ...(opts.surface ? { uxSurface: opts.surface } : {}),
-        ...(opts.taskMatrix ? { taskCoverageMatrix: opts.taskMatrix } : {}),
-        ...(opts.reality ? { reality: parseRealityLedger(inputJsonValue(opts.reality, 'omd frame set reality ledger')) } : {}),
+        ...((opts.task ?? current?.uxTask) ? { uxTask: opts.task ?? current!.uxTask } : {}),
+        ...((opts.frequentAction ?? current?.uxFrequentAction) ? { uxFrequentAction: opts.frequentAction ?? current!.uxFrequentAction } : {}),
+        ...((opts.costliestError ?? current?.uxCostliestError) ? { uxCostliestError: opts.costliestError ?? current!.uxCostliestError } : {}),
+        ...((opts.surface ?? current?.uxSurface) ? { uxSurface: opts.surface ?? current!.uxSurface } : {}),
+        ...((opts.taskMatrix ?? section('Task coverage matrix')) ? { taskCoverageMatrix: opts.taskMatrix ?? section('Task coverage matrix') } : {}),
+        ...(opts.reality ? { reality: parseRealityLedger(inputJsonValue(opts.reality, 'omd frame set reality ledger')) } : current?.reality ? { reality: current.reality } : {}),
         ...(opts.entrySurface ? {
           entrySurface: (await import('../core/frame/entry-surface-contract.ts'))
             .parseEntrySurfaceContract(inputJsonValue(opts.entrySurface, 'omd frame set entry surface')),
-        } : {}),
-      }, projectWriterFromActivation(opts, 'omd frame set'));
+        } : current?.entrySurface ? { entrySurface: current.entrySurface } : {}),
+      };
+      const path = writeFrameRecord(process.cwd(), fields, projectWriterFromActivation(opts, 'omd frame set'));
       console.log(path);
       process.exit(0);
     }

@@ -222,7 +222,8 @@ const JUDGED_BY: Readonly<Record<string, readonly BriefCheck[]>> = {
     { command: 'omd copy --review-check', fails: 'current safety/recovery copy has not been reviewed CLEAN' },
   ],
   'browser-evidence': [{ command: 'omd completion preflight --json', fails: 'terminal evidence is missing, unauthorized or stale; run only after the independent review, not as browser stage entry' }],
-  frame: [{ command: 'omd frame show', fails: 'the frame is missing a required field or its evidence' }],
+  domain: [{ command: 'omd domain check --json', fails: 'the domain structure is invalid; inspect reported planning gaps before production' }],
+  frame: [{ command: 'omd frame check --json', fails: 'the frame is absent or its UX anchors/task coverage are invalid' }],
   acquisition: [{ command: 'omd ref granularity --json', fails: 'a declared zone has no capture bound to it' }],
   scout: [
     { command: 'omd ref apply-check --json', fails: 'screen-by-screen reference application is missing, incomplete, or stale; this is a plan, not rendered proof' },
@@ -264,7 +265,7 @@ const SCHEMAS: Readonly<Record<string, readonly string[]>> = {
   'browser-evidence': ['design-quality-observation-projection'],
   domain: ['domain-brief'],
   depth: ['depth-input'],
-  frame: ['functional-requirements', 'reality-ledger'],
+  frame: ['frame', 'functional-requirements', 'reality-ledger'],
   'content-grain': ['content-grain'],
   acquisition: ['functional-requirements'],
   'reference-board': ['reference-board', 'reference-locale-binding'],

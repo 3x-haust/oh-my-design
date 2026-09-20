@@ -6,7 +6,11 @@ import { isAbsolute, join, relative, resolve, sep } from 'node:path';
  */
 export function isPreproductionReadCommand(command: unknown): boolean {
   if (typeof command !== 'string') return false;
-  return /^(?:pwd|ls(?: -[alh]+)?|rg --files(?: --hidden)?|git (?:status(?: --short)?|diff(?: --stat)?|log -[1-9][0-9]* --oneline))$/.test(command.trim());
+  const text = command.trim();
+  if (/^(?:pwd|ls(?: -[alh]+)?|rg --files(?: --hidden)?|git (?:status(?: --short)?|diff(?: --stat)?|log -[1-9][0-9]* --oneline))$/.test(text)) return true;
+  // A closed inventory grammar, NOT arbitrary shell pipelines/options. In particular no rg
+  // --pre, substitutions, redirections, paths, newline commands or unquoted metacharacters.
+  return /^(?:pwd && )?rg --files(?: --hidden)?(?: -g '(?:!?[a-zA-Z0-9_.*/-]+)')*(?: \| head (?:-n )?[1-9][0-9]{0,3}| \| head -[1-9][0-9]{0,3})?$/.test(text);
 }
 
 export type WriteClassification = { kind: 'authoring' | 'production' | 'blocked'; path: string; reason?: string };
