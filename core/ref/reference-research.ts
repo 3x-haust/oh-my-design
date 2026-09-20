@@ -1,239 +1,26 @@
 import { createHash } from 'node:crypto';
-import { isAbsolute, resolve, sep } from 'node:path';
+import { resolve, sep } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { readReferenceBoardArtifacts } from './board-artifacts.ts';
 import type { ProjectWriteAdapter } from '../runtime/project-write.ts';
 import { nodeStableProjectFileSystem, readStableProjectFile } from '../runtime/stable-project-file.ts';
 import { parseImageFragmentRecord } from './image-fragment-parser.ts';
-import { trustedReferenceImage } from './board-security.ts';
+import { trustedDiscoveryImage, trustedReferenceImage } from './board-security.ts';
 import { designDiscoveryProvider, referenceServiceHost } from './design-discovery-sources.ts';
 import { validateSearchCoverage, type ObservedNavigation } from './search-execution.ts';
+import { isRetainedReferencePath, requireDesignReferenceAdmission } from './design-admission.ts';
+import { loadRefs } from './store.ts';
+import { requireDesignImageAdmission } from './design-image-admission.ts';
+import { refIdentity } from './identity.ts';
 import {
   parseTaskFlowBenchmark,
   taskFlowBenchmarkSha256,
   validateTaskFlowBenchmarkEvidence,
 } from './task-flow-benchmark.ts';
 
-export const REFERENCE_RESEARCH_SCHEMA = 'reference-research-v5' as const;
-export const DOMAIN_REFERENCES_PATH = '.omd/refs/domain/research.json';
-export const DESIGN_REFERENCES_PATH = '.omd/refs/design/research.json';
-export const REFERENCE_RESEARCH_PATH = '.omd/reference-research.json';
-export const REFERENCE_RESEARCH_KEYS = [
-  'schema',
-  'sourceContractSha256',
-  'domainReference',
-  'designReference',
-] as const;
-export const REFERENCE_RESEARCH_LANE_KEYS = [
-  'queries',
-  'searches',
-  'sources',
-] as const;
-export const REFERENCE_RESEARCH_DOMAIN_KEYS = [
-  ...REFERENCE_RESEARCH_LANE_KEYS,
-  'benchmarkSha256',
-] as const;
-export const REFERENCE_RESEARCH_DESIGN_KEYS = [
-  ...REFERENCE_RESEARCH_LANE_KEYS,
-  'boardSha256',
-] as const;
-export const REFERENCE_RESEARCH_SOURCE_KEYS = [
-  'id',
-  'url',
-  'observedAt',
-  'decision',
-  'finding',
-  'evidence',
-  'capture',
-] as const;
-export const REFERENCE_RESEARCH_EVIDENCE_KEYS = ['path', 'sha256'] as const;
-
-const SHA256 = /^[a-f0-9]{64}$/;
-const DATE = /^\d{4}-\d{2}-\d{2}$/;
-
-type ResearchEvidence = Readonly<{ path: string; sha256: string }>;
-type ResearchSource = Readonly<{
-  id: string;
-  url: string;
-  observedAt: string;
-  decision: string;
-  finding: string;
-  evidence: ResearchEvidence;
-  capture: ResearchEvidence;
-  visualRole?: 'visual-direction' | 'component-support';
-  visualAssessment?: Readonly<Record<'composition' | 'typography' | 'density' | 'imagery' | 'transfer' | 'avoid', string>>;
-  discovery?: Readonly<{
-    url: string;
-    kind: 'app-gallery' | 'web-gallery' | 'visual-bookmark' | 'user-provided';
-    access: 'free';
-    qualityReason: string;
-    evidence: ResearchEvidence;
-    capture: ResearchEvidence;
-  }>;
-}>;
-type ResearchLane = Readonly<{
-  queries: readonly string[];
-  searches: readonly ResearchEvidence[];
-  sources: readonly ResearchSource[];
-  navigation?: readonly Readonly<{ url: string; evidence: ResearchEvidence; capture: ResearchEvidence }>[];
-}>;
-export type ReferenceResearch = Readonly<{
-  schema: typeof REFERENCE_RESEARCH_SCHEMA;
-  sourceContractSha256: string;
-  domainReference: ResearchLane & Readonly<{ benchmarkSha256: string | null }>;
-  designReference: ResearchLane & Readonly<{ boardSha256: string }>;
-}>;
-
-type ValidationOptions = Readonly<{
-  expectedSourceContractSha256: string;
-  benchmarkRequired: boolean;
-}>;
-
-function fail(code: string): never {
-  throw new Error(code);
-}
-
-function record(value: unknown, code: string): Record<string, unknown> {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) fail(code);
-  return value as Record<string, unknown>;
-}
-
-function exactKeys(value: Record<string, unknown>, keys: readonly string[], code: string): void {
-  const actual = Object.keys(value).sort();
-  const expected = [...keys].sort();
-  if (actual.length !== expected.length || actual.some((key, index) => key !== expected[index])) fail(code);
-}
-
-function text(value: unknown, code: string): string {
-  if (typeof value !== 'string' || value.trim() === '') fail(code);
-  return value.trim();
-}
-
-function digest(value: unknown, code: string): string {
-  const parsed = text(value, code);
-  if (!SHA256.test(parsed)) fail(code);
-  return parsed;
-}
-
-function texts(value: unknown, code: string): readonly string[] {
-  if (!Array.isArray(value) || value.length === 0) fail(code);
-  const parsed = value.map((entry) => text(entry, code));
-  if (new Set(parsed).size !== parsed.length) fail(`${code}_DUPLICATE`);
-  return parsed;
-}
-
-function httpsUrl(value: unknown): string {
-  const parsed = text(value, 'REFERENCE_RESEARCH_SOURCE_URL');
-  try {
-    if (new URL(parsed).protocol !== 'https:') fail('REFERENCE_RESEARCH_SOURCE_URL');
-  } catch {
-    fail('REFERENCE_RESEARCH_SOURCE_URL');
-  }
-  return parsed;
-}
-
-function evidence(value: unknown): ResearchEvidence {
-  const input = record(value, 'REFERENCE_RESEARCH_EVIDENCE_INVALID');
-  exactKeys(input, REFERENCE_RESEARCH_EVIDENCE_KEYS, 'REFERENCE_RESEARCH_EVIDENCE_KEYS');
-  const path = text(input.path, 'REFERENCE_RESEARCH_EVIDENCE_PATH');
-  if (isAbsolute(path) || path.includes('\\') || path.split('/').includes('..') || !path.startsWith('.omd/refs/')) {
-    fail('REFERENCE_RESEARCH_EVIDENCE_PATH');
-  }
-  return Object.freeze({ path, sha256: digest(input.sha256, 'REFERENCE_RESEARCH_EVIDENCE_SHA') });
-}
-
-function source(value: unknown, design: boolean): ResearchSource {
-  const input = record(value, 'REFERENCE_RESEARCH_SOURCE_INVALID');
-  exactKeys(input, design ? [...REFERENCE_RESEARCH_SOURCE_KEYS, 'discovery', 'visualRole', 'visualAssessment'] : REFERENCE_RESEARCH_SOURCE_KEYS, 'REFERENCE_RESEARCH_SOURCE_KEYS');
-  const observedAt = text(input.observedAt, 'REFERENCE_RESEARCH_OBSERVED_AT');
-  if (!DATE.test(observedAt)) fail('REFERENCE_RESEARCH_OBSERVED_AT');
-  let discovery: ResearchSource['discovery'];
-  let visualAssessment: ResearchSource['visualAssessment'];
-  if (design) {
-    if (!['visual-direction', 'component-support'].includes(input.visualRole as string)) fail('REFERENCE_RESEARCH_VISUAL_ROLE');
-    const assessment = record(input.visualAssessment, 'REFERENCE_RESEARCH_VISUAL_ASSESSMENT');
-    const axes = ['composition', 'typography', 'density', 'imagery', 'transfer', 'avoid'] as const;
-    exactKeys(assessment, axes, 'REFERENCE_RESEARCH_VISUAL_ASSESSMENT_KEYS');
-    visualAssessment = Object.freeze(Object.fromEntries(axes.map(axis => [axis, text(assessment[axis], `REFERENCE_RESEARCH_VISUAL_${axis.toUpperCase()}`)]))) as ResearchSource['visualAssessment'];
-    const entry = record(input.discovery, 'REFERENCE_RESEARCH_DESIGN_DISCOVERY_REQUIRED');
-    exactKeys(entry, ['url', 'kind', 'access', 'qualityReason', 'evidence', 'capture'], 'REFERENCE_RESEARCH_DESIGN_DISCOVERY_KEYS');
-    if (!['app-gallery', 'web-gallery', 'visual-bookmark', 'user-provided'].includes(entry.kind as string)) fail('REFERENCE_RESEARCH_DESIGN_DISCOVERY_KIND');
-    if (entry.access !== 'free') fail('REFERENCE_RESEARCH_DESIGN_FREE_ACCESS_REQUIRED');
-    const entryUrl = httpsUrl(entry.url);
-    const entryPath = new URL(entryUrl).pathname.replace(/\/+$/, '') || '/';
-    if (entry.kind !== 'user-provided' && ['/', '/landing', '/home', '/explore', '/search', '/search/pins'].includes(entryPath)) {
-      fail('REFERENCE_RESEARCH_DISCOVERY_ENTRY_REQUIRED: capture the inspected gallery item, not its homepage');
-    }
-    if (entry.kind !== 'user-provided' && designDiscoveryProvider(entryUrl) === null) {
-      fail('REFERENCE_RESEARCH_DISCOVERY_PROVIDER: use an inspected Pinterest/Dribbble/Behance/Siteinspire/Land-book/Godly/UI Bowl item; a service or documentation page is not a gallery');
-    }
-    discovery = Object.freeze({
-      url: entryUrl, kind: entry.kind as NonNullable<ResearchSource['discovery']>['kind'],
-      access: 'free', qualityReason: text(entry.qualityReason, 'REFERENCE_RESEARCH_DESIGN_QUALITY_REASON'),
-      evidence: evidence(entry.evidence), capture: evidence(entry.capture),
-    });
-  }
-  return Object.freeze({
-    id: text(input.id, 'REFERENCE_RESEARCH_SOURCE_ID'),
-    url: httpsUrl(input.url),
-    observedAt,
-    decision: text(input.decision, 'REFERENCE_RESEARCH_DECISION'),
-    finding: text(input.finding, 'REFERENCE_RESEARCH_FINDING'),
-    evidence: evidence(input.evidence),
-    capture: evidence(input.capture),
-    ...(discovery ? { discovery } : {}),
-    ...(design ? { visualRole: input.visualRole as NonNullable<ResearchSource['visualRole']>, visualAssessment: visualAssessment! } : {}),
-  });
-}
-
-function lane(value: unknown, keys: readonly string[], code: string, design = false): ResearchLane & Record<string, unknown> {
-  const input = record(value, code);
-  exactKeys(input, Object.hasOwn(input, 'navigation') ? [...keys, 'navigation'] : keys, `${code}_KEYS`);
-  if (!Array.isArray(input.sources) || input.sources.length === 0) fail(`${code}_SOURCE_COVERAGE`);
-  const sources = input.sources.map(value => source(value, design));
-  if (new Set(sources.map((entry) => entry.id)).size !== sources.length) fail(`${code}_SOURCE_DUPLICATE`);
-  if (!Array.isArray(input.searches) || !input.searches.length || Object.keys(input.searches).length !== input.searches.length) fail('REFERENCE_RESEARCH_SEARCH_EXECUTION_REQUIRED');
-  const navigation = input.navigation;
-  if (navigation !== undefined && (!Array.isArray(navigation) || navigation.length > 100 || Object.keys(navigation).length !== navigation.length)) fail('REFERENCE_RESEARCH_NAVIGATION_INVALID');
-  return { ...input, queries: texts(input.queries, `${code}_QUERY`), searches: input.searches.map(evidence), sources,
-    ...(navigation === undefined ? {} : { navigation: (navigation as unknown[]).map(value => {
-      const hop = record(value, 'REFERENCE_RESEARCH_NAVIGATION_INVALID');
-      exactKeys(hop, ['url', 'evidence', 'capture'], 'REFERENCE_RESEARCH_NAVIGATION_KEYS');
-      return { url: httpsUrl(hop.url), evidence: evidence(hop.evidence), capture: evidence(hop.capture) };
-    }) }) };
-}
-
-export function parseReferenceResearch(value: unknown): ReferenceResearch {
-  const input = record(value, 'REFERENCE_RESEARCH_INVALID');
-  if (['reference-research-v1', 'reference-research-v2', 'reference-research-v3', 'reference-research-v4'].includes(input.schema as string)) fail('REFERENCE_RESEARCH_UPGRADE_REQUIRED: use omd schema reference-research; retain valid captures, run omd ref search for executed-query evidence, and republish with omd ref research-set');
-  exactKeys(input, REFERENCE_RESEARCH_KEYS, 'REFERENCE_RESEARCH_KEYS');
-  if (input.schema !== REFERENCE_RESEARCH_SCHEMA) fail('REFERENCE_RESEARCH_SCHEMA');
-  const sourceContractSha256 = digest(input.sourceContractSha256, 'REFERENCE_RESEARCH_SOURCE_CONTRACT_SHA');
-  const domain = lane(input.domainReference, REFERENCE_RESEARCH_DOMAIN_KEYS, 'REFERENCE_RESEARCH_DOMAIN');
-  const design = lane(input.designReference, REFERENCE_RESEARCH_DESIGN_KEYS, 'REFERENCE_RESEARCH_DESIGN', true);
-  const directions = design.sources.filter(entry => entry.visualRole === 'visual-direction');
-  if (directions.length === 0) fail('REFERENCE_RESEARCH_VISUAL_DIRECTION_REQUIRED: component/usability documentation alone cannot establish visual direction');
-  // Independent services, not two crops/pages of one service. This is a lane policy, not a beauty score.
-  const domainHosts = new Set(domain.sources.map(entry => referenceServiceHost(entry.url)));
-  if (design.sources.some(entry => [entry.url, entry.discovery!.url].some(url => domainHosts.has(referenceServiceHost(url))))) {
-    fail('REFERENCE_RESEARCH_DOMAIN_AS_VISUAL_DIRECTION: domain and design must use independent service hosts; keep the domain capture and discover a separate visual source');
-  }
-  const benchmarkSha256 = domain.benchmarkSha256 === null
-    ? null
-    : digest(domain.benchmarkSha256, 'REFERENCE_RESEARCH_BENCHMARK_SHA');
-  const boardSha256 = digest(design.boardSha256, 'REFERENCE_RESEARCH_BOARD_SHA');
-  const domainPaths = new Set(domain.sources.map(entry => entry.evidence.path));
-  const domainHashes = new Set(domain.sources.map(entry => entry.evidence.sha256));
-  if (design.sources.some(entry => [entry.evidence, entry.discovery!.evidence].some(item => domainPaths.has(item.path) || domainHashes.has(item.sha256)))) {
-    fail('REFERENCE_RESEARCH_LANE_EVIDENCE_REUSED');
-  }
-  return Object.freeze({
-    schema: REFERENCE_RESEARCH_SCHEMA,
-    sourceContractSha256,
-    domainReference: Object.freeze({ queries: domain.queries, searches: domain.searches, sources: domain.sources, ...(domain.navigation === undefined ? {} : { navigation: domain.navigation }), benchmarkSha256 }),
-    designReference: Object.freeze({ queries: design.queries, searches: design.searches, sources: design.sources, ...(design.navigation === undefined ? {} : { navigation: design.navigation }), boardSha256 }),
-  });
-}
+import { DOMAIN_REFERENCES_PATH, DESIGN_REFERENCES_PATH, REFERENCE_RESEARCH_PATH, parseReferenceResearch, fail, record, httpsUrl, type ReferenceResearch, type ResearchEvidence, type ValidationOptions } from './reference-research-contract.ts';
+export { REFERENCE_RESEARCH_SCHEMA, DOMAIN_REFERENCES_PATH, DESIGN_REFERENCES_PATH, REFERENCE_RESEARCH_PATH, REFERENCE_RESEARCH_KEYS, REFERENCE_RESEARCH_LANE_KEYS, REFERENCE_RESEARCH_DOMAIN_KEYS, REFERENCE_RESEARCH_DESIGN_KEYS, REFERENCE_RESEARCH_SOURCE_KEYS, REFERENCE_RESEARCH_EVIDENCE_KEYS, parseReferenceResearch } from './reference-research-contract.ts';
+export type { ReferenceResearch } from './reference-research-contract.ts';
 
 /** Separate, inspectable deliverables; the aggregate is a consistency receipt written last. */
 export function referenceResearchArtifacts(research: ReferenceResearch) {
@@ -296,17 +83,21 @@ function verifyEvidence(root: string, item: ResearchEvidence): void {
 }
 
 /** Bind the claim to the capture's actual source and image, not a filename or a declared gallery. */
-function verifyCapture(root: string, item: { url: string; evidence: ResearchEvidence; capture: ResearchEvidence }, lane: 'domain' | 'design'): Record<string, unknown> {
+function verifyCapture(root: string, item: { url: string; evidence: ResearchEvidence; capture: ResearchEvidence }, lane: 'domain' | 'design', purpose: 'retained' | 'navigation' = 'retained'): Record<string, unknown> {
   for (const receipt of [item.evidence, item.capture]) {
-    if (!receipt.path.startsWith(`.omd/refs/${lane}/`)) fail('REFERENCE_RESEARCH_LANE_PATH_REQUIRED');
+    if (!(receipt.path.startsWith(`.omd/refs/${lane}/`) || (purpose === 'navigation' && receipt.path.startsWith(`.omd/discovery/${lane}/`)))) fail('REFERENCE_RESEARCH_LANE_PATH_REQUIRED');
+    if (purpose === 'retained' && !isRetainedReferencePath(receipt.path, lane)) fail('REFERENCE_RESEARCH_CAPTURE_PURPOSE');
     verifyEvidence(root, receipt);
   }
   if (!item.evidence.path.endsWith('.png') || !item.capture.path.endsWith('.json')) fail('REFERENCE_RESEARCH_CAPTURE_FORMAT');
-  trustedReferenceImage(root, item.evidence.path);
+  if (purpose === 'navigation' && item.evidence.path.startsWith('.omd/discovery/')) trustedDiscoveryImage(root, item.evidence.path);
+  else trustedReferenceImage(root, item.evidence.path);
   const captured = record(JSON.parse(fileBytes(root, item.capture.path, 'REFERENCE_RESEARCH_CAPTURE_MISSING').toString('utf8')), 'REFERENCE_RESEARCH_CAPTURE_INVALID');
+  if (purpose === 'retained' && (captured.schema === 'reference-navigation-capture-v1' || captured.schema === 'reference-search-execution-v1')) fail('REFERENCE_RESEARCH_CAPTURE_PURPOSE');
   if (captured.schemaVersion === 'image-fragment-v1') {
     const fragment = parseImageFragmentRecord(captured);
     if (lane !== 'design' || fragment.provenance.sourcePage !== item.url || fragment.imagePath !== item.evidence.path || fragment.sha256 !== item.evidence.sha256) fail('REFERENCE_RESEARCH_CAPTURE_SOURCE_MISMATCH');
+    requireDesignImageAdmission(root, fragment);
   } else if (captured.source !== item.url || captured.imagePath !== item.evidence.path || captured.researchLane !== lane
     || typeof captured.capturedAt !== 'string' || !Number.isFinite(Date.parse(captured.capturedAt))
     || !['page', 'component'].includes(captured.kind as string)) {
@@ -332,6 +123,8 @@ export function validateReferenceResearch(
     fail('REFERENCE_RESEARCH_SOURCE_CONTRACT_STALE');
   }
   const domainFinalHosts = new Set<string>();
+  const retainedIdentities = new Map<string, string>();
+  const references = loadRefs(root, { includeDomain: true });
   const navigation: Record<'domain' | 'design', ObservedNavigation[]> = { domain: [], design: [] };
   const observe = (lane: 'domain' | 'design', url: string, captured: Record<string, unknown>) => {
     if (captured.schemaVersion === 'image-fragment-v1') return;
@@ -341,7 +134,7 @@ export function validateReferenceResearch(
     }) });
   };
   for (const lane of ['domain', 'design'] as const) for (const hop of research[lane === 'domain' ? 'domainReference' : 'designReference'].navigation ?? []) {
-    const captured = verifyCapture(root, hop, lane);
+    const captured = verifyCapture(root, hop, lane, 'navigation');
     if (captured.schemaVersion === 'image-fragment-v1') fail('REFERENCE_RESEARCH_NAVIGATION_NATIVE_REQUIRED');
     observe(lane, hop.url, captured);
   }
@@ -353,6 +146,9 @@ export function validateReferenceResearch(
   }
   for (const item of research.designReference.sources) {
     const source = verifyCapture(root, item, 'design');
+    if (source.schemaVersion === 'image-fragment-v1' && typeof source.id === 'string') retainedIdentities.set(item.id, source.id);
+    else if (typeof source.component === 'string') retainedIdentities.set(item.id, refIdentity(item.url, source.component));
+    else fail('REFERENCE_RESEARCH_CAPTURE_SOURCE_MISMATCH');
     const entry = verifyCapture(root, item.discovery!, 'design');
     observe('design', item.url, source);
     observe('design', item.discovery!.url, entry);
@@ -369,6 +165,12 @@ export function validateReferenceResearch(
       const acquisition = record(entry.acquisition, 'REFERENCE_RESEARCH_DISCOVERY_LINK_REQUIRED');
       if (!Array.isArray(acquisition.links) || !acquisition.links.includes(item.url)) fail('REFERENCE_RESEARCH_DISCOVERY_LINK_MISMATCH');
     }
+    for (const [captured, url] of [[source, item.url], [entry, item.discovery!.url]] as const) {
+      if (captured.schemaVersion === 'image-fragment-v1') continue;
+      const reference = references.find(ref => ref.researchLane === 'design' && ref.source === url && ref.component === captured.component);
+      if (!reference) fail('REFERENCE_RESEARCH_CAPTURE_SOURCE_MISMATCH');
+      requireDesignReferenceAdmission(root, reference, { references });
+    }
   }
   validateSearchCoverage(root, 'domain', research.domainReference.queries, research.domainReference.searches,
     research.domainReference.sources.map(item => item.url), navigation.domain);
@@ -384,6 +186,18 @@ export function validateReferenceResearch(
     'imagePath' in piece.evidence && 'imageSha256' in piece.evidence
     && retained.has(`${piece.evidence.imagePath}:${piece.evidence.imageSha256}`)))) {
     fail('REFERENCE_RESEARCH_BOARD_DESIGN_COVERAGE: every candidate must actually use visual-direction evidence, not component-support alone');
+  }
+  for (const candidate of board.resolved.candidates) for (const piece of candidate.pieces) {
+    if (piece.sourceKind === 'classified-reference') continue;
+    if (piece.sourceKind === 'component-capture') requireDesignReferenceAdmission(root, piece.reference, { references });
+    const raw = board.raw.candidates.find(row => row.id === candidate.id)?.pieces.find(row => row.slotId === piece.slotId);
+    const sourceUrl = piece.sourceKind === 'component-capture' ? piece.reference.source : piece.provenance.sourcePage;
+    if (!raw || !('imagePath' in raw.evidence) || !('imageSha256' in raw.evidence)) fail('REFERENCE_RESEARCH_BOARD_SOURCE_COVERAGE');
+    const image = raw.evidence;
+    if (!research.designReference.sources.some(item => item.url === sourceUrl && retainedIdentities.get(item.id) === piece.referenceId
+        && item.evidence.path === image.imagePath && item.evidence.sha256 === image.imageSha256)) {
+      fail('REFERENCE_RESEARCH_BOARD_SOURCE_COVERAGE: every visual board piece must bind a qualified retained source and its image');
+    }
   }
 
   if (!options.benchmarkRequired) {

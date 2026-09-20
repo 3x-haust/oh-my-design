@@ -70,10 +70,20 @@ never purchase, start trials, install an MCP, or bypass access controls just for
 Execute the plan's `designSourcePolicy.searchQueries` using the available search transport; they
 include Pinterest pins and a surface-appropriate gallery. Record actual search results or the precise
 blocked capability in scout.md. Do not replace an unperformed search with an invented query list.
+If general search fails, execute the plan's `designSourcePolicy.nativeSearchInputs` with `ref search`.
+They bind real free-gallery queries for Pinterest, Dribbble and Siteinspire. Refine the short
+task/pattern query and URL together, then open an item actually returned in observed links; never
+guess pin/shot IDs. Login walls, challenges and empty results remain failures, not design references.
+The next public gallery is the fallback, not domain-service documentation or a paid MCP.
 Native reference captures use `omd ref add <url> --as <unique-name> --lane domain|design`;
 each add-batch entry has `lane: domain|design`. Captures and metadata go to `.omd/refs/domain/`
 or `.omd/refs/design/`. New CLI captures default to design, never infer domain from a hostname.
 Use distinct component names across lanes. Imported app/pin images go to `refs/design/fragments/`.
+Search receipts/screenshots and intermediate `ref navigate` captures go to `.omd/discovery/<lane>/`,
+outside retained references. Before reusing an existing inventory, inspect `ref tidy --json`; with
+no other active research owner, `ref tidy --apply --json` archives recognized legacy diagnostics and
+ineligible design records with exact-byte recovery manifests. Reacquire missing sources and rebuild
+dependent judgments; no domain relabeling, deletion without an archive, or rewriting review hashes.
 
 Open each retained entry beyond its search thumbnail. Follow the original source when available.
 Released-app screenshots may establish visual anatomy, not working interactions. For screenshot-only
@@ -93,11 +103,14 @@ Pinterest pins, Dribbble shots, Behance case studies or website galleries. UI Bo
 optional, never a prerequisite. If a gallery blocks access, try another; if none can be inspected,
 return incomplete research rather than substituting government/service documentation.
 
-Read each actual saved image. In `reference-research-v4`, distinguish `visual-direction` from
+Read each actual saved image. In `reference-research-v5`, distinguish `visual-direction` from
 `component-support` and record `visualAssessment`: composition, typography, density, imagery,
 what to transfer and what to avoid. Component-support alone cannot complete design research.
 Domain/design source hosts, redirects and image evidence must not overlap. Each board candidate
 must use an inspected visual-direction source. Native captures are drafts, not proof of selection.
+Every visual piece, including reused legacy material, must bind a qualified design source and
+its exact image; `ref list` exposes admission status. Import only the actual native gallery/original
+capture or a declared exact pixel crop, never search or domain imagery with a new source label.
 Show the user `.omd/refs/design/README.md` with the retained previews and reasons; keep rejected
 candidates and coverage gaps in scout.md. Structural checks do not certify beauty or user approval.
 

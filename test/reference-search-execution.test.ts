@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -46,6 +46,9 @@ test('real isolated browser execution records actual DOM links and pixels, and p
     } });
     const receipt = await executeReferenceSearch(proxy, input, writer);
     const execution = readSearchExecution(root, receipt, 'design');
+    assert.equal(existsSync(join(root, '.omd/refs')), false, 'search execution must not create retained reference files');
+    assert.match(receipt.path, /^\.omd\/discovery\/design\/search-[a-f0-9]{64}\.json$/);
+    assert.match(execution.capture?.path ?? '', /^\.omd\/discovery\/design\/search-[a-f0-9]{64}\.png$/);
     assert.equal(execution.status, 'page-observed');
     assert.deepEqual(execution.links, ['https://www.pinterest.com/pin/123/']);
     assert.deepEqual(observed, [input.url]);
@@ -61,7 +64,63 @@ test('real isolated browser execution records actual DOM links and pixels, and p
     status = 200; body = '<h1>Unfortunately, bots use DuckDuckGo too.</h1><p>Complete the following challenge to confirm this search was made by a human.</p>';
     const blocked = await executeReferenceSearch(proxy, input, writer);
     assert.equal(readSearchExecution(root, blocked, 'design').status, 'blocked');
+    assert.equal(existsSync(join(root, '.omd/refs')), false, 'failed search evidence also stays outside retained references');
   });
+});
+
+test('late search inspection failure records the diagnostic without an orphan screenshot', async t => {
+  const root = fixture(t);
+  const writer = createTestProjectWriteAdapter(root);
+  let screenshotObserved = false;
+  await withBrowser(async browser => {
+    const proxy = new Proxy(browser, { get(target, prop) {
+      if (prop !== 'newContext') return Reflect.get(target, prop, target);
+      return async (...args: Parameters<typeof browser.newContext>) => {
+        const context = await browser.newContext(...args);
+        const newPage = context.newPage.bind(context);
+        context.newPage = async () => {
+          const page = await newPage();
+          await page.route('https://www.google.com/**', route => route.fulfill({
+            status: 200, contentType: 'text/html', body: '<h1>Search fixture before inspection fails</h1>',
+          }));
+          const screenshot = page.screenshot.bind(page);
+          page.screenshot = async options => { const bytes = await screenshot(options); screenshotObserved = true; return bytes; };
+          const locate = page.locator.bind(page);
+          page.locator = (...locatorArgs: Parameters<typeof page.locator>) => {
+            if (locatorArgs[0] === 'a[href]') throw new Error('test-owned link inspection failure');
+            return locate(...locatorArgs);
+          };
+          return page;
+        };
+        return context;
+      };
+    } });
+    const receipt = await executeReferenceSearch(proxy, input, writer);
+    const execution = readSearchExecution(root, receipt, 'design');
+    assert.equal(screenshotObserved, true);
+    assert.equal(execution.status, 'navigation-error');
+    assert.equal(execution.error, 'test-owned link inspection failure');
+    assert.equal(execution.capture, null);
+    assert.deepEqual(readdirSync(join(root, '.omd/discovery/design')), [receipt.path.split('/').at(-1)]);
+    assert.equal(existsSync(join(root, '.omd/refs')), false);
+  });
+});
+
+test('historical and current exact receipt identities read the same unmodified execution', t => {
+  const root = fixture(t);
+  const historical = testSearchReceipt(root, 'design', input.query, []);
+  const bytes = readFileSync(join(root, historical.path));
+  const current = { ...historical, path: historical.path.replace('.omd/refs/', '.omd/discovery/') };
+  mkdirSync(join(root, '.omd/discovery/design'), { recursive: true });
+  writeFileSync(join(root, current.path), bytes);
+  assert.deepEqual(readSearchExecution(root, current, 'design'), readSearchExecution(root, historical, 'design'));
+  assert.deepEqual(readFileSync(join(root, historical.path)), bytes);
+  for (const path of [current.path.replace('/design/', '/domain/'), current.path.replace('/design/', '/design/../design/'), current.path.replace('/design/', '/design/nested/')]) {
+    assert.throws(() => readSearchExecution(root, { ...current, path }, 'design'), /lane path/);
+  }
+  assert.throws(() => readSearchExecution(root, { ...current, sha256: '0'.repeat(64) }, 'design'), /lane path/);
+  writeFileSync(join(root, current.path), Buffer.concat([bytes, Buffer.from(' ')]));
+  assert.throws(() => readSearchExecution(root, current, 'design'), /changed/);
 });
 
 test('challenge detection rejects strong challenge text without treating ordinary bot-related search content as blocked', () => {

@@ -18,7 +18,7 @@ export async function captureReferenceNavigation(browser: Browser, source: strin
   if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.hash || url.href !== source) {
     throw new ReferenceNavigationError('REFERENCE_NAVIGATION_URL: use a canonical HTTP(S) URL without credentials or fragment');
   }
-  const directory = `.omd/refs/${lane}/navigation`;
+  const directory = `.omd/discovery/${lane}/navigation`;
   const imagePath = `${directory}/${randomUUID()}.png`;
   writer.mkdir(directory);
   try {

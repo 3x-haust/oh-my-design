@@ -21,6 +21,8 @@ import { componentCaptureTransfer } from './board-transfer.ts';
 import type { Reference } from '../types.ts';
 import { parseReferenceClassification, referenceClassificationSha256 } from './reference-classification.ts';
 import { sourceFeatureWitness } from './feature-measurement.ts';
+import { requireDesignReferenceAdmission, requiresDesignReferenceAdmission } from './design-admission.ts';
+import { requireDesignImageAdmission } from './design-image-admission.ts';
 
 export * from './board-contract.ts';
 export { projectReferenceAssembly } from './board-projection.ts';
@@ -34,6 +36,7 @@ const referenceFor = (references: ReadonlyMap<string, Reference>, referenceId: s
 };
 const componentPiece = (root: string, piece: Extract<ReferenceBoardPiece, { readonly sourceKind: 'component-capture' }>, references: ReadonlyMap<string, Reference>): ResolvedComponentCapturePiece => {
   const reference = referenceFor(references, piece.referenceId);
+  if (requiresDesignReferenceAdmission(root)) requireDesignReferenceAdmission(root, reference);
   if (reference.kind !== 'component') fail(`reference ${piece.referenceId} must be a component capture`);
   if (reference.selector === undefined || reference.selector.trim() === '') fail(`reference ${piece.referenceId} is missing its selector`);
   if (reference.blueprint === undefined || reference.blueprint.selector !== reference.selector) fail(`reference ${piece.referenceId} is missing a matching blueprint`);
@@ -78,7 +81,12 @@ const referencesByIdentity = (root: string): ReadonlyMap<string, Reference> => {
 const resolvePiece = (root: string, piece: ReferenceBoardPiece, references: ReadonlyMap<string, Reference>, imageFragments: ImageFragmentResolver): ResolvedReferenceBoardPiece => {
   switch (piece.sourceKind) {
     case 'component-capture': return componentPiece(root, piece, references);
-    case 'image-fragment': return validatedImageFragmentPiece(root, piece, imageFragments.resolve(root, piece));
+    case 'image-fragment': {
+      const observed = imageFragments.resolve(root, piece);
+      const resolved = validatedImageFragmentPiece(root, piece, observed);
+      if (requiresDesignReferenceAdmission(root)) requireDesignImageAdmission(root, { imagePath: observed.imagePath, provenance: resolved.provenance });
+      return resolved;
+    }
     case 'classified-reference': return classifiedPiece(piece, references);
   }
 };

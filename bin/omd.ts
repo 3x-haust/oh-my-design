@@ -1216,10 +1216,14 @@ function printBlueprint(bp: import('../core/types.ts').Blueprint): void {
 
 async function cmdRefList(opts: Opts): Promise<never> {
   const { loadRefs, researchLane } = await import('../core/ref/store.ts');
+  const { inspectDesignReferenceAdmission } = await import('../core/ref/design-admission.ts');
   const { designSignal, LOW_SIGNAL } = await import('../core/ref/signal.ts');
   const { topKinshipPairs } = await import('../core/ref/distance.ts');
   const lane = opts.lane === undefined ? undefined : researchLane(opts.lane);
-  const refs = loadRefs(process.cwd(), { includeDomain: true }).filter(ref => lane === undefined || (ref.researchLane ?? 'design') === lane);
+  const references = loadRefs(process.cwd(), { includeDomain: true });
+  const refs = references.filter(ref => lane === undefined || (ref.researchLane ?? 'design') === lane).map(ref => ({
+    ...ref, admission: ref.researchLane === 'domain' ? null : inspectDesignReferenceAdmission(process.cwd(), ref, { references }),
+  }));
   if (opts.json) { process.stdout.write(JSON.stringify(refs)); process.exit(0); }
   if (refs.length === 0) {
     console.log('No references yet.');
@@ -1227,7 +1231,8 @@ async function cmdRefList(opts: Opts): Promise<never> {
   }
   for (const ref of refs) {
     const granularity = ref.selector ? `[${ref.kind} ${ref.selector}]` : `[${ref.kind}]`;
-    const userNote = `  [${ref.researchLane ?? 'legacy-design'}]${ref.origin === 'user' ? '  [user]' : ''}`;
+    const userNote = `  [${ref.researchLane ?? 'legacy-design'}]${ref.origin === 'user' ? '  [user]' : ''}`
+      + (ref.admission && !ref.admission.eligible ? `  [ineligible: ${ref.admission.code}; inspect ref tidy --json]` : '');
     if (ref.kind === 'image' || ref.invariants === null) {
       console.log(`${ref.source}  ${ref.component}  ${granularity}${userNote}`);
       continue;
@@ -2493,7 +2498,7 @@ async function cmdRefTidy(opts: Opts): Promise<never> {
 async function cmdRefSearch(opts: Opts): Promise<never> {
   const command = 'omd ref search';
   if (opts._.length || !opts.input) throw new Error('usage: omd ref search --input <lane-query-url-queryParam.json> [--json]; get the exact input with omd schema reference-search');
-  const { parseSearchInput, executeReferenceSearch, readSearchExecution } = await import('../core/ref/search-execution.ts');
+  const { parseSearchInput, executeReferenceSearch, readSearchExecution, searchObserved } = await import('../core/ref/search-execution.ts');
   const { withBrowser } = await import('../core/render/index.ts');
   const input = parseSearchInput(inputJson(opts.input, command));
   const writer = projectWriterFromActivation(opts, command);
@@ -2501,7 +2506,7 @@ async function cmdRefSearch(opts: Opts): Promise<never> {
   const execution = readSearchExecution(process.cwd(), receipt, input.lane);
   process.stdout.write(`${JSON.stringify({ receipt, execution }, null, opts.json ? undefined : 2)}\n`);
   // A failed attempt is durable evidence of a gap, never an automatically successful search.
-  process.exit(execution.status === 'page-observed' ? 0 : 1);
+  process.exit(searchObserved(execution) ? 0 : 1);
 }
 
 async function cmdRefNavigate(opts: Opts): Promise<never> {

@@ -55,6 +55,17 @@ payment, or blocking, record the limit and try another public source. Never purc
 install an MCP, or bypass restrictions. Free viewing does not grant asset reuse rights.
 Execute designSourcePolicy.searchQueries (including Pinterest pins) through the real search
 transport; record actual results or exact capability gaps, never just a proposed query list.
+Execute nativeSearchInputs with ref search when general search is blocked: these are exact free
+gallery query transports for Pinterest, Dribbble and Siteinspire, not preset reference winners.
+Open an item actually returned in observed links; never guess numeric shot/pin IDs. If a provider
+returns a login wall, challenge, empty search or HTTP error, preserve the failure and try the next
+public gallery. No credential/payment/CAPTCHA workaround. Query terms may be refined to the actual
+task, but update the URL with them. Search and intermediate navigation records live in
+.omd/discovery/<lane>/, never refs. Only inspected retained items and their captures belong in refs.
+Before reusing an existing inventory, run ref tidy --json. When no other research owner is active,
+inspect its reasons and use ref tidy --apply --json to archive recognized legacy search/navigation
+clutter and ineligible design captures. Preserve the returned recovery manifest. Reacquire missing
+evidence and rebuild/recheck dependent outputs; never rewrite old judgment hashes.
 Separate acquisition immediately: ref add uses --lane domain or --lane design; each add-batch spec
 has lane. PNGs and native metadata stay in refs/domain/ or refs/design/ respectively. Use distinct
 component names across lanes. Imported app/pin images stay in refs/design/fragments/.
@@ -82,6 +93,8 @@ try another provider; no inspected visual source means incomplete research, not 
 Inspect the actual images and declare visualRole (visual-direction or component-support) and
 visualAssessment (composition, typography, density, imagery, transfer, avoid). Every board
 candidate must use a visual-direction source; component documentation alone cannot qualify.
+Every visual piece must bind a current qualified source identity and PNG; one gallery piece cannot
+legitimize additional domain/legacy pieces. Inspect ref list admission results before reuse.
 Return the generated refs/design/README.md previews to the user and record rejected alternatives
 and screen/task coverage gaps in scout.md. These are accountable judgments, not a beauty score.
 The publisher saves `.omd/refs/domain/research.json` and `.omd/refs/design/research.json` separately and

@@ -809,7 +809,7 @@ const REFERENCE_RESEARCH: InputSkeleton = {
   constraints: [
     'domainReference and designReference are both required and cannot substitute for one another',
     'queries are not execution proof. Run omd ref search --input <json> with {lane: domain|design, query, url, queryParam}; the HTTPS URL must carry that exact query. Put returned receipt(s) in searches. Every query needs an execution; every non-user source/entry must occur in actual observed links and have a separate native visit capture. Blocked attempts may remain alongside a successful public alternative. Never author search receipts by hand.',
-    'search execution accepts public Google/Bing /search or DuckDuckGo root/HTML/lite endpoints with queryParam=q, not arbitrary service pages with invented query fields. Use task/pattern and site: gallery queries; known observed search-redirect targets still require separate native visits.',
+    'search execution accepts Google/Bing/DuckDuckGo q endpoints and design-only Pinterest /search/pins/?q=, Dribbble /search/<query-slug> with queryParam=path, and Siteinspire /search?query=. Use the executable designSourcePolicy.nativeSearchInputs from ref discover-plan and adapt the query and URL together. Arbitrary service query fields are not search evidence.',
     'each lane records actual queries, inspected sources and current PNG evidence plus a hashed native capture JSON; domain paths stay in .omd/refs/domain/, design and gallery-entry paths in .omd/refs/design/',
     'research-set publishes .omd/refs/domain/research.json and .omd/refs/design/research.json separately, then .omd/reference-research.json as a consistency receipt; research-check requires all three current records',
     'neither the same evidence path nor identical bytes under a renamed path can satisfy both lanes',
@@ -821,7 +821,7 @@ const REFERENCE_RESEARCH: InputSkeleton = {
     'use app/screen galleries for apps and product UI, website galleries for marketing/web direction, and Pinterest as visual discovery; inspect the retained entry and original source when available; screenshots cannot prove live behavior',
     'never pay, start trials, install an MCP, or bypass login to gather references; on restricted access record the gap in scout.md and try another public source. Free viewing is not a reuse license',
     'designReference.boardSha256 is the current storage-byte SHA-256 of .omd/reference-board.json',
-    'each board candidate actually uses at least one retained design source PNG (matching path and hash); merely collecting a gallery on the side does not prove transfer',
+    'every visual board piece binds a validated retained design source identity and PNG (path and hash); each candidate needs visual-direction evidence. An extra legacy/domain piece cannot ride alongside a qualified gallery piece.',
     'Each lane may include navigation: [{url, evidence: {path, sha256}, capture: {path, sha256}}] for intermediate native page captures. Retained entries must be reachable from successful search results through those captures actual outbound links. Do not invent edges or relabel image-only evidence as navigation.',
     'when the route carries greenfield-task-flow-benchmark, domainReference.benchmarkSha256 is the canonical taskFlowBenchmarkSha256 of the current v2 benchmark and every benchmark source URL appears in the domain lane',
     'when no benchmark applies, benchmarkSha256 is null unless an optional current benchmark was actually published',
@@ -832,7 +832,7 @@ const REFERENCE_RESEARCH: InputSkeleton = {
     sourceContractSha256: '0'.repeat(64),
     domainReference: {
       queries: ['<actual similar-service or domain task query>'],
-      searches: [{ path: `.omd/refs/domain/search-${'7'.repeat(64)}.json`, sha256: '7'.repeat(64) }],
+      searches: [{ path: `.omd/discovery/domain/search-${'7'.repeat(64)}.json`, sha256: '7'.repeat(64) }],
       sources: [{
         id: 'domain-service-a',
         url: 'https://example.com/domain-service',
@@ -846,7 +846,7 @@ const REFERENCE_RESEARCH: InputSkeleton = {
     },
     designReference: {
       queries: ['<actual visual-direction or component-craft query>'],
-      searches: [{ path: `.omd/refs/design/search-${'8'.repeat(64)}.json`, sha256: '8'.repeat(64) }],
+      searches: [{ path: `.omd/discovery/design/search-${'8'.repeat(64)}.json`, sha256: '8'.repeat(64) }],
       sources: [{
         id: 'design-direction-a',
         url: 'https://example.org/design-reference',
@@ -1206,8 +1206,9 @@ export const INPUT_SKELETONS: readonly InputSkeleton[] = [
   {
     name: 'reference-search', path: '.omd/.cache/reference-search.json', command: 'omd ref search --input .omd/.cache/reference-search.json --json',
     keys: ['lane', 'query', 'url', 'queryParam'],
-    constraints: ['Choose domain or design explicitly. Replace the example query and URL together; q must contain that exact query once.',
-      'Use an observed public Google/Bing/DuckDuckGo search surface, not a paid API. Failed searches are gaps, not evidence of discovery.',
+    constraints: ['Choose domain or design explicitly. Replace the example query and URL together; the supported query field must contain that exact query once.',
+      'Use Google/Bing/DuckDuckGo, or design-only nativeSearchInputs from ref discover-plan for Pinterest, Dribbble and Siteinspire. Dribbble uses queryParam=path and a lowercase hyphenated query path; Siteinspire uses queryParam=query. No paid API or invented item URLs.',
+      'Search and intermediate navigation evidence lives in .omd/discovery/<lane>/, never the retained reference inventory. Failed searches are gaps, not references. Gallery success requires HTTP 200 and observed same-provider item links, not a login wall.',
       'Use ref navigate <url> --lane domain|design for observed intermediate pages. Add its returned object to navigation; it is not a board reference. Capture retained design gallery items/originals separately with ref add.'],
     skeleton: { lane: 'design', query: 'dashboard interface design', url: 'https://www.google.com/search?q=dashboard%20interface%20design', queryParam: 'q' },
   },

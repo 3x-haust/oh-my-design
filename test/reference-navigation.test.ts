@@ -33,8 +33,9 @@ test('navigation-only capture preserves observed gallery hops without entering t
   const { stdout } = await promisify(execFile)(process.execPath, [cli, 'ref', 'navigate', url, '--lane', 'design', '--json'], { cwd, env, timeout: 30000 });
   const result = JSON.parse(stdout);
   assert.equal(result.url, url);
+  assert.equal(existsSync(join(cwd, '.omd/refs')), false, 'navigation execution must not create retained reference files');
   for (const receipt of [result.evidence, result.capture]) {
-    assert.ok(receipt.path.startsWith('.omd/refs/design/navigation/'));
+    assert.ok(receipt.path.startsWith('.omd/discovery/design/navigation/'));
     const bytes = readFileSync(join(cwd, receipt.path));
     assert.equal(createHash('sha256').update(bytes).digest('hex'), receipt.sha256);
   }

@@ -161,7 +161,7 @@ Capture gallery entries before batching their originals, since the observed link
 exist. A service task flow belongs in domain, not design merely because its layout is calm.
 For an intermediate category/directory hop, use `omd ref navigate <url> --lane domain|design --json`.
 It returns the `url`, `evidence`, and `capture` object for the lane's `navigation` array, stored
-under `.omd/refs/<lane>/navigation/`. These receipts have no board component identity and never
+under `.omd/discovery/<lane>/navigation/`. These receipts have no board component identity and never
 substitute for retained design evidence. Research validation still requires a search-rooted chain.
 A batch is checked against its own pending sources as well as already saved references before
 acquisition. A rejected board is resolved before publication and cannot replace an earlier board.
@@ -172,8 +172,18 @@ A board remains a draft until `ref research-check` and `ref apply-check` pass; `
 keeps this work with Scout rather than treating a board file as finished research.
 PNGs and native JSON metadata stay together in `.omd/refs/domain/` and
 `.omd/refs/design/`; app/pin imports use `.omd/refs/design/fragments/`. Unlabelled legacy records
-remain readable for old boards but cannot satisfy new research. Domain captures are excluded from
+remain inspectable but cannot satisfy selected discovery without current qualification. `ref list`
+marks ineligible records; selected boards and actionable briefs reject/exclude them. Domain captures are excluded from
 the default visual board inventory.
+
+Search PNGs/receipts and intermediate navigation are diagnostics, stored only in
+`.omd/discovery/<lane>/`; `.omd/refs/<lane>/` holds retained evidence. At the start of research in an
+existing project run `omd ref tidy --json`. If it identifies old diagnostic clutter or ineligible
+design captures, inspect the reasons and run `omd ref tidy --apply --json` before reacquisition.
+The guarded operation archives exact bytes and a recovery manifest under `.omd/archive/references/`
+before removing the old paths. It never relabels domain evidence or rewrites judgment hashes;
+dependent research/boards must be rebuilt and rechecked. Do not run cleanup concurrently with another
+active research owner. Unknown files and valid references remain untouched.
 
 `omd ref research-set` is the sole publisher of both files and writes `.omd/reference-research.json`
 last as their consistency receipt. `research-check` and downstream gates require all three current
@@ -184,9 +194,15 @@ Inspect the page: HTTP 200 alone does not prove useful results or free access. A
 execution receipts; every non-user retained domain source/design entry must occur in observed links
 and have its own native visit capture. Failed attempts may accompany a usable free alternative;
 they cannot satisfy retained-source coverage. Arbitrary imported logs are not native execution proof.
-The initial executor accepts public Google/Bing `/search` and DuckDuckGo root/HTML/lite `q` endpoints,
-not an arbitrary service URL with a fake query parameter. Search gallery names with task/pattern
-terms (for example `site:pinterest.com/pin/ ...`), then inspect the actual entry. Known search
+The executor accepts Google/Bing `/search` and DuckDuckGo root/HTML/lite `q` endpoints,
+plus design-only Pinterest `/search/pins/?q=`, Dribbble `/search/<query-slug>` (`queryParam: path`),
+and Siteinspire `/search?query=` (`queryParam: query`). `ref discover-plan` supplies ready-to-run
+`designSourcePolicy.nativeSearchInputs`; adapt its short task/pattern terms and matching URL together.
+Use native gallery search when general search is blocked. HTTP 200 and actual same-provider item links
+are required; login walls, empty results and challenge responses remain failed attempts. Retain only
+an item actually observed in those results, never guessed shot IDs. Siteinspire now uses numeric
+`/website/<id-slug>` item URLs; category/selected directories are navigation, not gallery items.
+Search gallery names with task/pattern terms (for example `site:pinterest.com/pin/ ...`), then inspect the actual entry. Known search
 redirect links may be decoded as discovery targets; decoding never counts as visiting them.
 The catalogue uses public browser pages, not Google's paid/custom XML API. Query parameter references:
 [Google](https://developers.google.com/custom-search/docs/xml_results) and
@@ -208,7 +224,10 @@ item (Pinterest, Dribbble, Behance, Siteinspire, Land-book, Godly, or UI Bowl); 
 documentation as a gallery. Add new providers deliberately to design-discovery-sources.ts.
 Each design source declares visualRole=visual-direction|component-support and visualAssessment
 (composition, typography, density, imagery, transfer, avoid). Each board candidate must actually
-use visual-direction evidence; usability/component documentation alone is insufficient. The generated
+use visual-direction evidence, and every visual piece must bind a validated source identity and
+capture, not just alias a qualified PNG. Imported visual fragments must bind their actual native
+design parent (or exact declared crop); search/domain images cannot be laundered by a source label.
+Usability/component documentation alone is insufficient. The generated
 refs/design/README.md displays retained previews and judgments for the user; rejected candidates
 and coverage gaps stay in scout.md. These checks enforce evidence roles, not aesthetic quality.
 New marketing still does not

@@ -6,6 +6,7 @@ import { validateAcquisitionPlan, type AcquisitionPlan, type AcquisitionZoneV2 }
 import type { RouteRecord } from '../route/index.ts';
 import type { CraftRefSignal } from './craft-usage.ts';
 import { querySeeds } from './reference-query.ts';
+import { gallerySearchInputs, type GallerySearchInput } from './gallery-search.ts';
 
 export const REFERENCE_DISCOVERY_PLAN_SCHEMA = 'reference-discovery-plan-v1' as const;
 export type DiscoveryLane = 'domain-reference' | 'design-reference' | 'motion';
@@ -38,6 +39,7 @@ export type ReferenceDiscoveryPlan = Readonly<{
     designOutput: '.omd/refs/design/research.json';
     candidates: readonly Readonly<{ name: string; url: string; purpose: string }>[];
     searchQueries: readonly string[];
+    nativeSearchInputs: readonly GallerySearchInput[];
     fallback: string;
   }>;
   decisions: readonly Readonly<{
@@ -161,6 +163,9 @@ export function buildReferenceDiscoveryPlan(root: string, route: RouteRecord): R
         `${marketing ? 'site:siteinspire.com/websites/' : 'site:dribbble.com/shots/'} ${queries.component[0] ?? route.sourceContract.taskOutcome.goal}`,
         ...(!marketing ? [`site:behance.net/gallery/ ${queries.component[0] ?? route.sourceContract.taskOutcome.goal}`] : []),
       ]),
+      nativeSearchInputs: Object.freeze(!discovering ? [] : gallerySearchInputs(
+        [...queries.mood, ...queries.component][0] ?? (marketing ? 'typography' : 'app interface'),
+      )),
       fallback: 'Actually search and open a specific gallery/pin entry, not a homepage. Capture it with --lane design (or import-image for native app screenshots) and retain its source link. Check free access per entry. If login/payment/blocking prevents inspection, record the failed URL and try another public gallery. Component documentation alone is not a visual-direction substitute. Do not purchase, start a trial, install an MCP, bypass access controls, or claim a blocked source was inspected. Free viewing does not grant reuse rights.',
     }),
     decisions: Object.freeze(decisions),

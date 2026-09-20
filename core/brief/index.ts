@@ -41,6 +41,7 @@ import { checkReferenceApplication, type ReferenceApplicationProjection } from '
 import { designInventoryStatus, DESIGN_INVENTORY_DOC_PATH } from '../tokens/inventory.ts';
 import { runtimeInventoryStatus, RUNTIME_INVENTORY_DOC } from '../tokens/runtime-inventory.ts';
 import { loadRefs, refRecordPath } from '../ref/store.ts';
+import { inspectDesignReferenceAdmission, requiresDesignReferenceAdmission } from '../ref/design-admission.ts';
 
 export {
   EVIDENCE_CLAIM_PUBLICATION_SCHEMA,
@@ -291,7 +292,10 @@ function readRoute(root: string, invocation?: ProjectRunInvocation): RouteRecord
  * A reference with its measured principle is the instruction. "Make it distinctive" is not.
  */
 export function briefReferences(root: string): readonly BriefReference[] {
-  return loadRefs(root).map(ref => ({
+  const references = loadRefs(root, { includeDomain: true });
+  const required = requiresDesignReferenceAdmission(root);
+  return references.filter(ref => ref.researchLane !== 'domain'
+    && (!required || inspectDesignReferenceAdmission(root, ref, { references }).eligible)).map(ref => ({
     path: relative(root, refRecordPath(root, ref)), component: ref.component,
     slot: ref.slot ?? null, take: ref.principles.filter((entry): entry is string => typeof entry === 'string'),
   })).sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);

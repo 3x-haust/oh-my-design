@@ -90,6 +90,12 @@ inspection and research repair remain available while production is blocked.
   item binds its URL, PNG evidence and JSON capture; only observed outbound links extend reachability.
   A blocked provider can be replaced with another free public source, never a paid
   MCP or invented receipt. Native GET capture is not an automatic search-quality judgment.
+  Search/navigation outputs live under `.omd/discovery/`, outside retained `.omd/refs/`.
+  Native free-gallery query inputs support discovery without guessed item URLs. Search and navigation
+  receipts cannot be promoted into retained design evidence. Selected board resolution and briefs
+  re-admit old captures; research publication binds every visual piece to its qualified source.
+  `ref tidy` previews legacy diagnostics/ineligible captures and `--apply` archives exact bytes
+  before guarded removal; it never rewrites evidence hashes or silently approves old judgments.
 - Application review refuses missing criteria/viewports, changed application/build/seal, unrelated
   observations/captures/states, and unresolved revisions. It consumes the existing authenticated
   final graph, not a caller-selected substitute graph. Review history remains content-addressed.

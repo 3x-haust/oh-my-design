@@ -7,6 +7,8 @@ import { trustedReferenceDirectory, trustedReferenceImage } from './board-securi
 import { imageFragmentRecordId, parseImageFragmentInput, parseImageFragmentRecord } from './image-fragment-parser.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import { ProjectWriteError, createProjectDirectory, writeImmutableProjectFile } from '../runtime/project-write.ts';
+import { isRetainedReferencePath, requiresDesignReferenceAdmission } from './design-admission.ts';
+import { requireDesignImageAdmission } from './design-image-admission.ts';
 
 export const IMAGE_FRAGMENT_SCHEMA_VERSION = 'image-fragment-v1' as const;
 const FRAGMENT_DIRECTORY = '.omd/refs/design/fragments';
@@ -84,7 +86,12 @@ const writeImageIfMissing = (root: string, record: ImageFragmentRecord, bytes: B
 
 export function persistImageFragment(root: string, value: unknown, invocation: ProjectRunInvocation): ImageFragmentRecord {
   const input = parseImageFragmentInput(value);
+  if (input.inputPath.startsWith('.omd/discovery/') || input.inputPath.startsWith('.omd/refs/domain/')
+    || (input.inputPath.startsWith('.omd/refs/design/') && !isRetainedReferencePath(input.inputPath, 'design'))) {
+    fail('FRAGMENT_SOURCE: discovery diagnostics and domain images are not retained design evidence');
+  }
   const sourcePath = trustedReferenceImage(root, input.inputPath);
+  if (requiresDesignReferenceAdmission(root)) requireDesignImageAdmission(root, { imagePath: input.inputPath, provenance: input.provenance });
   const bytes = readFileSync(sourcePath);
   const sha256 = digest(bytes);
   const record: ImageFragmentRecord = {
