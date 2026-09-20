@@ -44,15 +44,27 @@ jobs:
       - run: npm run build
       - name: Generated prompts must match source
         run: git diff --exit-code -- agents skills dist
-      - name: Native lifecycle regressions
+      - name: Native lifecycle and isolated browser regressions
         if: matrix.suite == 'full'
-        run: node --test --test-concurrency=1 test/benchmark-native-publish.test.ts test/benchmark-dependency-snapshot.test.ts test/browser-rs-doctor-runtime.test.ts
+        # The CLI integration fixture performs repeated native browser lifecycles. On shared
+        # runners its strict 2s close deadline can be starved by a second browser test file.
+        # Keep the deadline and every assertion; run this entire file without competing files.
+        run: node --test --test-concurrency=1 test/benchmark-native-publish.test.ts test/benchmark-dependency-snapshot.test.ts test/browser-rs-doctor-runtime.test.ts test/harness-v2-cli.test.ts
       - name: Complete harness suite (including native Darwin publication)
         if: matrix.suite == 'full'
         # Shared Darwin runners showed compositor failures and 100ms VM deadline misses
         # in different tests under four concurrent files. Keep every test and its original
         # deadline/assertions; reduce scheduling pressure instead of retrying or weakening gates.
-        run: node --test --test-concurrency=2 test/*.test.ts
+        shell: bash
+        run: |
+          suite_files=()
+          for suite_file in test/*.test.ts; do
+            # Already executed in full in the isolated step, not skipped or retried.
+            if [[ "$suite_file" != "test/harness-v2-cli.test.ts" ]]; then
+              suite_files+=("$suite_file")
+            fi
+          done
+          node --test --test-concurrency=2 "${suite_files[@]}"
       - name: Portable Pi gates, copy, and review loops
         if: matrix.suite == 'portable-pi'
         run: >-
