@@ -33,6 +33,12 @@ domain check can pass with unconfirmed planning. Check the original user brief b
 missing facts; do not invent confirmation or silently reduce implementation scope to a prototype.
 Use `schema frame` and `frame set --input` for atomic framing, then `frame check`. Functional
 requirements use their own `complete set` publisher and cannot substitute for the task matrix.
+Use `copy review-input --json` to send exact copy content and digest together to the reviewer.
+Preserve its returned report in a separate input file and use `copy review-publish`; never guess
+the hash or repair only the hash on an old verdict. Every writer edit requires a fresh review.
+For other evidence and composition fingerprints, `omd hash <.omd/artifact-path> --json` supplies
+the exact current file digest without invoking a shell. It neither creates nor approves evidence;
+use the digest only for the actual bytes inspected. Authority files and escaping paths are refused.
 
 At each selected stage:
 
@@ -67,6 +73,11 @@ inspection and research repair remain available while production is blocked.
   the entering owner is about to create. Plain brief and frame show remain inspection only.
   Its production mode uses the same readiness validator as `guard production`.
 - Research v5 refuses missing/mismatched search receipts or retained links unreachable from observed
+  search pages. Selected discovery also refuses missing capture lanes and design intake without
+  free gallery/original-link or actual user-supplied provenance before capture. The current
+  reference-board work pointer requires published research and per-surface application, not just
+  a board file. Publication still performs visual-role, source independence and currentness checks.
+  Research reachability extends from
   search pages and separately validated native navigation captures. Each optional lane `navigation`
   item binds its URL, PNG evidence and JSON capture; only observed outbound links extend reachability.
   A blocked provider can be replaced with another free public source, never a paid
@@ -89,7 +100,9 @@ inspection and research repair remain available while production is blocked.
   missing authority and research-only turns do not authorize automatic implementation.
 - For a route authored and successfully classified in this user turn, after a checked stage entry,
   Pi diagnoses unfinished authored stages with `stage next` before terminal completion. It can queue
-  at most two selected-stage correction turns (sharing the repair budget). Existing-route inspection,
+  at most two correction turns without new validated progress. Route-bound domain/frame/board/copy/
+  composition checks can each renew that allowance once; error wording, hashes, timestamps,
+  regressions and route replacement cannot refill it. Existing-route inspection,
   route-only classification, new user input and aborts do not authorize this continuation. Unknown
   authority errors stop; unresolved planning reports the actual statements needing user evidence.
   Production planning confirmation is not imposed on design-only handoffs, which may retain

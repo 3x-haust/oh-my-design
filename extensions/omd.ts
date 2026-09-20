@@ -2,6 +2,7 @@ import { fileURLToPath } from 'node:url';
 import { Type } from 'typebox';
 import { classifyPiWrite, hasPiRoute, isPreproductionReadCommand } from './omd-guard.ts';
 import { classificationAllowsInputRepair, isRouteValidationSuccess, routeInputFailure, routeValidationArgs, type RouteBootstrap } from './omd-route-bootstrap.ts';
+import { RepairProgress } from './omd-repair-progress.ts';
 
 export const OMD_TOOL_NAME = 'omd_cli';
 export const OMD_COMMAND_NAME = 'omd';
@@ -110,6 +111,13 @@ export default function omdExtension(pi: PortablePiApi): void {
   const touched = new Set<string>();
   const productionAttempted = new Set<string>();
   const repairs = new Map<string, number>();
+  const progress = new RepairProgress();
+  const epochs = new Map<string, symbol>();
+  const epoch = (cwd: string): symbol => {
+    let token = epochs.get(cwd);
+    if (token === undefined) { token = Symbol(); epochs.set(cwd, token); }
+    return token;
+  };
   const authoredInputs = new Map<string, Set<string>>();
   const bootstraps = new Map<string, RouteBootstrap>();
   const freshRoutes = new Set<string>();
@@ -129,9 +137,11 @@ export default function omdExtension(pi: PortablePiApi): void {
   const guarded = (cwd: string) => managed.has(cwd) || hasPiRoute(cwd);
   const hooksAvailable = 'on' in pi && typeof pi.on === 'function';
   if (hooksAvailable) {
-    pi.on!('session_start', async () => { managed.clear(); touched.clear(); productionAttempted.clear(); repairs.clear(); authoredInputs.clear(); bootstraps.clear(); freshRoutes.clear(); workflowStarted.clear(); });
+    pi.on!('session_start', async () => { epochs.clear(); progress.clear(); managed.clear(); touched.clear(); productionAttempted.clear(); repairs.clear(); authoredInputs.clear(); bootstraps.clear(); freshRoutes.clear(); workflowStarted.clear(); });
     pi.on!('input', async (event, context) => {
       if (event.source === 'interactive' || event.source === 'rpc') {
+        epochs.delete(context.cwd);
+        progress.delete(context.cwd);
         repairs.delete(context.cwd);
         touched.delete(context.cwd);
         productionAttempted.delete(context.cwd);
@@ -152,7 +162,7 @@ export default function omdExtension(pi: PortablePiApi): void {
         if (Array.isArray(args) && args[0] === 'route' && args[1] === 'classify') managed.add(context.cwd);
         const frameHelp = Array.isArray(args) && args[0] === 'frame' && (args[1] === 'help' || args.includes('--help') || args.includes('-h'));
         if (guarded(context.cwd) && Array.isArray(args) && !frameHelp && /^(?:frame|domain|route|ref|copy|type|composition|slop|lifecycle|finalize|complete)$/.test(String(args[0]))
-          && !/^(?:show|check|validate|list|handoff|discover-plan|research-check|apply-plan|apply-check|apply-review-plan|apply-review-check|review-check)$/.test(String(args[1]))) touched.add(context.cwd);
+          && !/^(?:show|check|validate|list|handoff|discover-plan|research-check|apply-plan|apply-check|apply-review-plan|apply-review-check|review-check|review-input)$/.test(String(args[1]))) touched.add(context.cwd);
         return;
       }
       if (!guarded(context.cwd)) return;
@@ -186,6 +196,8 @@ export default function omdExtension(pi: PortablePiApi): void {
       if (!touched.has(context.cwd) || message?.role !== 'assistant' || message.stopReason !== 'stop'
         || message.content?.some(part => part.type === 'toolCall')) return;
       if (context.signal?.aborted) return;
+      const taskEpoch = epoch(context.cwd);
+      const interrupted = () => context.signal?.aborted || epochs.get(context.cwd) !== taskEpoch;
       const bootstrap = bootstraps.get(context.cwd);
       if (bootstrap !== undefined && !hasPiRoute(context.cwd)) {
         // Diagnose the current bytes, never a cached failure or the misleading completion symptom.
@@ -207,7 +219,7 @@ export default function omdExtension(pi: PortablePiApi): void {
           repairable = failure.repairable && classificationAllowsInputRepair(bootstrap.classificationFailure);
           if (!classificationAllowsInputRepair(bootstrap.classificationFailure)) summary += `\nClassification also failed: ${bootstrap.classificationFailure}`;
         }
-        if (context.signal?.aborted) return;
+        if (interrupted()) return;
         const retry = repairable && (repairs.get(context.cwd) ?? 0) < 2 && 'sendMessage' in pi && typeof pi.sendMessage === 'function';
         if (retry) {
           repairs.set(context.cwd, (repairs.get(context.cwd) ?? 0) + 1);
@@ -234,9 +246,11 @@ export default function omdExtension(pi: PortablePiApi): void {
         // pre-production work before asking a terminal gate about outputs not yet produced.
         try {
           const result = await run(['stage', 'next', '--json'], context.cwd, context.signal);
-          const work = JSON.parse(result.text) as { schema?: string; stage?: unknown; owner?: unknown; action?: unknown; planning?: Array<{ field: string; text: string }>; instruction?: string };
+          if (interrupted()) return;
+          const work = JSON.parse(result.text) as { schema?: string; stage?: unknown; owner?: unknown; action?: unknown; planning?: Array<{ field: string; text: string }>; instruction?: string; progress?: unknown };
+          if (work.schema === 'stage-next-v1' && progress.observe(context.cwd, work.progress)) repairs.set(context.cwd, 0);
           if (work.schema === 'stage-next-v1' && typeof work.stage === 'string') {
-            if (context.signal?.aborted) return;
+            if (interrupted()) return;
             const askingForPlanning = work.action === 'resolve-planning-evidence' && (work.planning?.length ?? 0) > 0 && message.content?.some(part => part.type === 'text'
               && /[?？]|확인.*(?:필요|부탁)|알려.*(?:주세요|주실)|(?:please|could|can).*(?:confirm|clarify)/i.test(part.text ?? ''));
             const retry = !askingForPlanning && (repairs.get(context.cwd) ?? 0) < 2 && typeof pi.sendMessage === 'function';
@@ -256,7 +270,7 @@ export default function omdExtension(pi: PortablePiApi): void {
           }
         } catch (error) {
           // Unknown/authority errors are not an invitation to auto-repair the route.
-          if (context.signal?.aborted) return;
+          if (interrupted()) return;
           return { message: { ...message, content: [...(message.content ?? []).filter(part => part.type !== 'text'),
             { type: 'text', text: `OMD stage diagnosis failed; completion is unverified.\n${error instanceof Error ? error.message : String(error)}` }] } };
         }
@@ -267,7 +281,7 @@ export default function omdExtension(pi: PortablePiApi): void {
         // Keep non-text provider fields intact, but do not publish a draft's unverified success
         // claim. Repairable evidence gaps get a bounded custom follow-up, never a fake user.
         // Authority failures are not auto-retried or manufactured.
-        if (context.signal?.aborted) return;
+        if (interrupted()) return;
         const failure = guardFailure(error);
         // A research/document-only or diagnostic turn does not authorize implementing the
         // remainder of a persisted route. Automatic repair belongs to this turn's source work.

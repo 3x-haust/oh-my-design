@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { readFileSync } from 'node:fs';
-import { readPersistedRoute } from '../route/index.ts';
+import { adaptiveRouteRecordSha256, readPersistedRoute } from '../route/index.ts';
 import { buildBrief } from '../brief/index.ts';
 import { checkBriefEntry } from '../brief/entry.ts';
 import { unconfirmedPlanningStatements, validateDomainBrief } from '../domain/domain-brief.ts';
@@ -22,7 +22,8 @@ export function nextStageWork(root: string, packRoot: string, invocation: Projec
       planning.push({ field, text: statement.text });
     }
   }
-  const incomplete = state.stages.find(s => stageArtifactProblems(root, s.stage, invocation).length > 0);
+  const outputs = state.stages.map(s => ({ ...s, problems: stageArtifactProblems(root, s.stage, invocation) }));
+  const incomplete = outputs.find(s => s.problems.length > 0);
   // Resolve planning provenance early, not only at the eventual source boundary. The agent must
   // check the original brief first; absent evidence requires a question, never automatic confirmation.
   // Design-only handoffs may deliberately retain open planning questions. Do not turn a
@@ -34,6 +35,11 @@ export function nextStageWork(root: string, packRoot: string, invocation: Projec
   return {
     schema: 'stage-next-v1', meaning: 'next-work-not-completion', deliveryMode: route.deliveryMode ?? 'implementation',
     stage, owner: brief?.owner ?? null,
+    progress: { routeSha256: adaptiveRouteRecordSha256(route), validatedStages: outputs
+      .filter(s => ['domain', 'frame', 'reference-board', 'copy', 'composition'].includes(s.stage)
+        && s.problems.length === 0 && !(s.stage === 'domain' && planningBlocksProduction)
+        && checkBriefEntry(root, s.stage, packRoot, invocation).blockers.length === 0)
+      .map(s => s.stage) },
     action: planningBlocksProduction ? 'resolve-planning-evidence' : stage === null ? 'validate-selected-gates' : incomplete?.present ? 'repair-output' : 'author-output',
     problems: stage === null ? [] : stageArtifactProblems(root, stage, invocation),
     entryBlockers: entry?.blockers ?? [], planning,
