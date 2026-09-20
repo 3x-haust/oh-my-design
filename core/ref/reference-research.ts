@@ -79,7 +79,9 @@ function fileBytes(root: string, path: string, code: string): Buffer {
 
 function verifyEvidence(root: string, item: ResearchEvidence): void {
   const bytes = fileBytes(root, item.path, 'REFERENCE_RESEARCH_EVIDENCE_MISSING');
-  if (createHash('sha256').update(bytes).digest('hex') !== item.sha256) fail('REFERENCE_RESEARCH_EVIDENCE_STALE');
+  if (createHash('sha256').update(bytes).digest('hex') !== item.sha256) {
+    fail(`REFERENCE_RESEARCH_EVIDENCE_STALE: ${item.path}; read this artifact again and reassess its evidence, then run omd hash <artifact-path> --json before authoring an updated research receipt`);
+  }
 }
 
 /** Bind the claim to the capture's actual source and image, not a filename or a declared gallery. */

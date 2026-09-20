@@ -40,7 +40,11 @@ export function authorReferenceBoard(root: string, value: unknown): ReferenceBoa
     .map((zone, index) => text(zone.id, `acquisition.zones[${index}].id`)));
   if (requiredZones.size === 0) fail('acquisition plan must declare at least one required zone');
 
-  const references = new Map(loadRefs(root).map((reference) => [refIdentity(reference.source, reference.component), reference]));
+  const captured = loadRefs(root, { includeDomain: true });
+  const references = new Map(captured.filter(reference => reference.researchLane !== 'domain')
+    .map(reference => [refIdentity(reference.source, reference.component), reference]));
+  const domainIds = new Set(captured.filter(reference => reference.researchLane === 'domain')
+    .map(reference => refIdentity(reference.source, reference.component)));
   const authoredCandidates = candidates.map((candidateValue, candidateIndex) => {
     const candidate = record(candidateValue, `candidates[${candidateIndex}]`);
     exactKeys(candidate, ['id', 'label', 'route', 'rationale', 'pieces'], `candidates[${candidateIndex}]`);
@@ -57,6 +61,12 @@ export function authorReferenceBoard(root: string, value: unknown): ReferenceBoa
       const referenceId = imageFragment
         ? readImageFragment(root, text(piece.referenceId, `${path}.referenceId`)).id
         : refIdentity(text(piece.source, `${path}.source`), text(piece.component, `${path}.component`));
+      if (!imageFragment && domainIds.has(referenceId)) {
+        fail(`${path}.source is a domain reference; keep task/flow findings in domain research and application decisions. Choose a retained design capture with omd ref list --lane design --json; never relabel or recapture the domain service as design.`);
+      }
+      if (!imageFragment && !references.has(referenceId)) {
+        fail(`${path}.source/component does not match a retained design capture (${referenceId}); use omd ref list --lane design --json and preserve its exact source and component.`);
+      }
       const signal = text(piece.signal, `${path}.signal`);
       const nonvisual = signal === 'supporting-content' || signal === 'anti-reference';
       const common = {

@@ -600,6 +600,11 @@ export function buildBrief(
     }]
     : [];
 
+  const schemaNames = designReview ? ['design-handoff'] : stage === 'candidate-generation' ? ['candidate-selection'] : [...SCHEMAS[stage] ?? []];
+  if (stage === 'reference-board' && route?.references.decision === 'discover') {
+    schemaNames.push('reference-search', 'reference-research');
+    if (route.gates.includes('greenfield-task-flow-benchmark')) schemaNames.push('reference-flow-input', 'task-flow-benchmark');
+  }
   return {
     stage,
     entryGate: {
@@ -636,7 +641,7 @@ export function buildBrief(
     referenceHandoff,
     referencesOmitted: gathered.length - references.length,
     contracts,
-    schemas: (designReview ? ['design-handoff'] : stage === 'candidate-generation' ? ['candidate-selection'] : SCHEMAS[stage] ?? []).map((name) => ({ name, command: `omd schema ${name}` })),
+    schemas: schemaNames.map((name) => ({ name, command: `omd schema ${name}` })),
     shell: shell.kind === 'browser' ? null : { kind: shell.kind, target: renderTargetHint(shell) },
     judgedBy: [...judgedBy, ...localeJudgedBy, ...localeReferenceJudgedBy,
       ...(stage === 'reference-board' && route?.references.decision === 'discover' ? [

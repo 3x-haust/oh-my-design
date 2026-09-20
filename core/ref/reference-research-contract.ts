@@ -119,18 +119,21 @@ export function httpsUrl(value: unknown): string {
   return parsed;
 }
 
-function evidence(value: unknown, diagnostic = false): ResearchEvidence {
+function evidence(value: unknown, diagnostic = false, fieldPath?: string): ResearchEvidence {
   const input = record(value, 'REFERENCE_RESEARCH_EVIDENCE_INVALID');
   exactKeys(input, REFERENCE_RESEARCH_EVIDENCE_KEYS, 'REFERENCE_RESEARCH_EVIDENCE_KEYS');
-  const path = text(input.path, 'REFERENCE_RESEARCH_EVIDENCE_PATH');
+  const pathError = fieldPath === undefined ? 'REFERENCE_RESEARCH_EVIDENCE_PATH'
+    : `REFERENCE_RESEARCH_EVIDENCE_PATH: ${fieldPath}.path must be a project-relative retained reference path under .omd/refs/; use native ref add or ref import-image receipts and keep navigation captures in the lane's navigation array`;
+  const path = text(input.path, pathError);
   if (isAbsolute(path) || path.includes('\\') || path.split('/').includes('..')
     || !(path.startsWith('.omd/refs/') || (diagnostic && path.startsWith('.omd/discovery/')))) {
-    fail('REFERENCE_RESEARCH_EVIDENCE_PATH');
+    fail(pathError);
   }
   return Object.freeze({ path, sha256: digest(input.sha256, 'REFERENCE_RESEARCH_EVIDENCE_SHA') });
 }
 
-function source(value: unknown, design: boolean): ResearchSource {
+function source(value: unknown, design: boolean, index: number): ResearchSource {
+  const fieldPath = `${design ? 'designReference' : 'domainReference'}.sources[${index}]`;
   const input = record(value, 'REFERENCE_RESEARCH_SOURCE_INVALID');
   exactKeys(input, design ? [...REFERENCE_RESEARCH_SOURCE_KEYS, 'discovery', 'visualRole', 'visualAssessment'] : REFERENCE_RESEARCH_SOURCE_KEYS, 'REFERENCE_RESEARCH_SOURCE_KEYS');
   const observedAt = text(input.observedAt, 'REFERENCE_RESEARCH_OBSERVED_AT');
@@ -158,7 +161,8 @@ function source(value: unknown, design: boolean): ResearchSource {
     discovery = Object.freeze({
       url: entryUrl, kind: entry.kind as NonNullable<ResearchSource['discovery']>['kind'],
       access: 'free', qualityReason: text(entry.qualityReason, 'REFERENCE_RESEARCH_DESIGN_QUALITY_REASON'),
-      evidence: evidence(entry.evidence), capture: evidence(entry.capture),
+      evidence: evidence(entry.evidence, false, `${fieldPath}.discovery.evidence`),
+      capture: evidence(entry.capture, false, `${fieldPath}.discovery.capture`),
     });
   }
   return Object.freeze({
@@ -167,8 +171,8 @@ function source(value: unknown, design: boolean): ResearchSource {
     observedAt,
     decision: text(input.decision, 'REFERENCE_RESEARCH_DECISION'),
     finding: text(input.finding, 'REFERENCE_RESEARCH_FINDING'),
-    evidence: evidence(input.evidence),
-    capture: evidence(input.capture),
+    evidence: evidence(input.evidence, false, `${fieldPath}.evidence`),
+    capture: evidence(input.capture, false, `${fieldPath}.capture`),
     ...(discovery ? { discovery } : {}),
     ...(design ? { visualRole: input.visualRole as NonNullable<ResearchSource['visualRole']>, visualAssessment: visualAssessment! } : {}),
   });
@@ -178,7 +182,7 @@ function lane(value: unknown, keys: readonly string[], code: string, design = fa
   const input = record(value, code);
   exactKeys(input, Object.hasOwn(input, 'navigation') ? [...keys, 'navigation'] : keys, `${code}_KEYS`);
   if (!Array.isArray(input.sources) || input.sources.length === 0) fail(`${code}_SOURCE_COVERAGE`);
-  const sources = input.sources.map(value => source(value, design));
+  const sources = input.sources.map((value, index) => source(value, design, index));
   if (new Set(sources.map((entry) => entry.id)).size !== sources.length) fail(`${code}_SOURCE_DUPLICATE`);
   if (!Array.isArray(input.searches) || !input.searches.length || Object.keys(input.searches).length !== input.searches.length) fail('REFERENCE_RESEARCH_SEARCH_EXECUTION_REQUIRED');
   const navigation = input.navigation;
