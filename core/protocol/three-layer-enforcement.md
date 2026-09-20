@@ -90,3 +90,5 @@ inventory uses the same isolated local-state executor and records computed style
 by component, with exact input-to-component and build coverage. Source/build/capture changes invalidate reuse.
 All local views, including the default entry, refuse external
 networking and non-read-only requests; use bundled fixtures, not live APIs.
+Local inspection has a 30-second per-view deadline; public reference flows have a 120-second
+whole-flow deadline. A stalled page closes its context and cannot publish a completed observation.

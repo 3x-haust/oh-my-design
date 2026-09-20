@@ -62,3 +62,4 @@ jobs:
           test/copy.test.ts test/slop-review.test.ts
           test/stateful-design-inspection.test.ts test/live-reference-flow.test.ts
           test/first-render-evidence.test.ts
+          test/native-inspection-boundaries.test.ts

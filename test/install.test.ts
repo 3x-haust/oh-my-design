@@ -1,5 +1,5 @@
 import { test } from 'node:test';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import { syncBuiltinESMExports } from 'node:module';
 import assert from 'node:assert/strict';
@@ -651,4 +651,45 @@ test('failed cache publication rolls back regular payloads and dangling links', 
     assert.equal(readFileSync(join(cache, 'skills/old.md'), 'utf8'), 'previous');
     assert.equal(readFileSync(join(cache, '.mcp.json'), 'utf8'), '{"previous":true}');
   } finally { mocked.mock.restore(); syncBuiltinESMExports(); }
+});
+
+test('cache refresh recovers a killed process after every publication rename and preserves unrelated edits', async t => {
+  for (let boundary = 1; boundary <= 8; boundary++) {
+    const home = realpathSync(mkdtempSync(join(tmpdir(), 'omd-cache-interrupt-')));
+    t.after(() => rmSync(home, { recursive: true, force: true }));
+    const cache = join(home, 'plugins/cache/omd/oh-my-design/current');
+    mkdirSync(join(cache, 'skills'), { recursive: true });
+    mkdirSync(join(cache, '.claude-plugin'));
+    writeFileSync(join(cache, 'skills/old.md'), 'previous skill');
+    symlinkSync('missing-agents', join(cache, 'agents'));
+    writeFileSync(join(cache, '.mcp.json'), '{"previous":true}');
+    writeFileSync(join(cache, '.claude-plugin/plugin.json'), '{"previous":true}');
+    writeFileSync(join(cache, 'unrelated-note.md'), 'user uncommitted work');
+    writeFileSync(join(home, 'settings.json'), JSON.stringify({ theme: 'user-theme', permissions: { allow: ['user-tool'] } }));
+    writeFileSync(join(home, 'plugins/installed_plugins.json'), JSON.stringify({ plugins: { 'oh-my-design@omd': [{ installPath: cache }] } }));
+    const script = `import fs from 'node:fs'; import {syncBuiltinESMExports} from 'node:module';
+      import {install} from ${JSON.stringify(new URL('../core/install/install.ts', import.meta.url).href)};
+      import {browserRsTestInstallDependencies,unavailableBrowserRsDownload} from ${JSON.stringify(new URL('./browser-rs-test-support.ts', import.meta.url).href)};
+      const original=fs.renameSync; let count=0;
+      fs.renameSync=(from,to)=>{original(from,to); if(String(from).startsWith(${JSON.stringify(cache + '/')}) && ++count===${boundary}) process.exit(42);}; syncBuiltinESMExports();
+      await install([{host:'claude',home:${JSON.stringify(home)}}],{browser:browserRsTestInstallDependencies({home:'/omd-test-browser-rs-home',platform:'unsupported',arch:'unsupported',releases:[],downloader:unavailableBrowserRsDownload})});`;
+    const killed = spawnSync(process.execPath, ['--input-type=module', '-e', script], { encoding: 'utf8', timeout: 15000 });
+    assert.equal(killed.status, 42, killed.stderr);
+    if (boundary === 8) {
+      const changed = join(cache, 'skills/user-change.md');
+      writeFileSync(changed, 'new user work after interruption');
+      await assert.rejects(() => install([{ host: 'claude', home }], UNSUPPORTED_BROWSER), /changed outside the interrupted install/);
+      assert.equal(readFileSync(changed, 'utf8'), 'new user work after interruption');
+      // Owner explicitly removes only this test-created edit, then recovery may resume.
+      rmSync(changed);
+    }
+    const changes = await install([{ host: 'claude', home }], UNSUPPORTED_BROWSER);
+    assert.ok(changes.some(change => change.includes('recovered interrupted')));
+    assert.equal(existsSync(join(cache, 'skills/old.md')), false);
+    assert.ok(existsSync(join(cache, 'agents/eye.md')));
+    assert.equal(readFileSync(join(cache, 'unrelated-note.md'), 'utf8'), 'user uncommitted work');
+    const settings = JSON.parse(readFileSync(join(home, 'settings.json'), 'utf8'));
+    assert.equal(settings.theme, 'user-theme');
+    assert.ok(settings.permissions.allow.includes('user-tool'));
+  }
 });

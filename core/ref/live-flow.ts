@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
 import type { Browser, Page } from 'playwright';
-import { stateObject, stateText, parseViewAssertions, assertViewState, type ViewAssertion } from '../render/stateful.ts';
+import { stateObject, stateText, parseViewAssertions, assertViewState, browserDeadline, type ViewAssertion } from '../render/stateful.ts';
 import { waitForDocumentFonts, detectBlockReason } from '../render/index.ts';
 import { canonicalJson } from './board-artifacts.ts';
 import { signNativeObservation, verifyNativeObservation } from '../runtime/self-signed-activation.ts';
@@ -63,6 +63,7 @@ export async function recordLiveReferenceFlow(browser: Browser, rootInput: strin
   const blocked: string[] = [];
   let limitation: string | null = null;
   try {
+    await browserDeadline(context, async () => {
     await context.route('**/*', route => {
       const request = route.request(), url = new URL(request.url());
       if (!['GET', 'HEAD'].includes(request.method()) || (request.isNavigationRequest() && url.origin !== origin)
@@ -94,6 +95,7 @@ export async function recordLiveReferenceFlow(browser: Browser, rootInput: strin
       const evidence = save('steps', `${canonicalJson(observed)}\n`, 'json');
       steps.push({ order: index + 1, screenId: step.screenId, state: step.state, url: page.url(), action: observed.action, result: observed.result, evidence, capture });
     }
+    }, 120000);
   } catch (error) { limitation = (error instanceof Error ? error.message : String(error)).slice(0, 2000); }
   finally { await context.close(); }
   const record = { schema: 'reference-flow-execution-v1', input, startedAt, completedAt: new Date().toISOString(), status: limitation === null ? 'completed' : 'blocked', limitation, steps };

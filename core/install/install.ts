@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync, cpSync, rmSync, readdirSync, symlinkSync, lstatSync, readlinkSync, unlinkSync, chmodSync, mkdtempSync, renameSync, realpathSync } from 'node:fs';
 import { join, dirname, basename, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
 import { parse as parseToml } from 'smol-toml';
 import type { Detected } from './detect.ts';
 import { unpatchSettings, patchSettings, unpatchHooks } from './patch-claude.ts';
@@ -120,6 +121,44 @@ function installClaude(d: Detected, distributionRoot: string, changes: string[])
  * is already installed; the first install still comes from the marketplace. After this, `/reload-plugins`
  * in Claude applies the change without a version bump.
  */
+const CACHE_ITEMS = ['skills', 'agents', '.mcp.json', '.claude-plugin'] as const;
+function cacheTreeHash(path: string): string | null {
+  if (!existsNoFollow(path)) return null;
+  const stat = lstatSync(path);
+  const value = stat.isSymbolicLink() ? `link:${readlinkSync(path)}` : stat.isDirectory()
+    ? JSON.stringify(readdirSync(path).sort().map(name => [name, cacheTreeHash(join(path, name))]))
+    : readFileSync(path);
+  return createHash('sha256').update(value).digest('hex');
+}
+type CacheTransaction = { schema: 'omd-cache-transaction-v1'; items: { name: string; previous: string | null; next: string }[] };
+/** Idempotent after interruption at any rename, including an interrupted rollback. Foreign edits
+ * fail closed; retained backups are never overwritten to make a recovery appear successful. */
+function rollbackCache(cacheDir: string, staging: string, transaction: CacheTransaction): void {
+  for (const item of [...transaction.items].reverse()) {
+    const dest = join(cacheDir, item.name), backup = join(staging, 'previous', item.name);
+    const current = cacheTreeHash(dest);
+    if (current === item.previous) continue;
+    if (current !== null && current !== item.next) throw new Error(`CLAUDE_CACHE_RECOVERY_REQUIRED: ${dest} changed outside the interrupted install; preserve it and inspect ${staging}`);
+    if (item.previous !== null && cacheTreeHash(backup) !== item.previous) throw new Error(`CLAUDE_CACHE_RECOVERY_REQUIRED: original payload unavailable at ${backup}`);
+    if (current !== null) rmSync(dest, { recursive: true, force: true });
+    if (item.previous !== null) renameSync(backup, dest);
+  }
+  writeFileSync(join(staging, 'rolled-back'), 'complete\n');
+}
+function recoverCache(cacheDir: string, changes: string[]): void {
+  for (const name of readdirSync(cacheDir).filter(name => name.startsWith('.omd-refresh-')).sort()) {
+    const staging = join(cacheDir, name);
+    if (lstatSync(staging).isSymbolicLink() || !lstatSync(staging).isDirectory()) throw new Error('CLAUDE_CACHE_UNSAFE: transaction directory is not a regular directory');
+    if (existsSync(join(staging, 'completed')) || existsSync(join(staging, 'rolled-back')) || !existsSync(join(staging, 'ready'))) continue;
+    if (lstatSync(join(staging, 'transaction.json')).isSymbolicLink() || lstatSync(join(staging, 'previous')).isSymbolicLink()) throw new Error('CLAUDE_CACHE_UNSAFE: recovery paths must not be symlinks');
+    const transaction = JSON.parse(readFileSync(join(staging, 'transaction.json'), 'utf8')) as CacheTransaction;
+    if (transaction.schema !== 'omd-cache-transaction-v1' || !Array.isArray(transaction.items)
+      || transaction.items.length !== CACHE_ITEMS.length || transaction.items.some((item, index) => item.name !== CACHE_ITEMS[index]
+        || (item.previous !== null && !/^[a-f0-9]{64}$/.test(item.previous)) || !/^[a-f0-9]{64}$/.test(item.next))) throw new Error('CLAUDE_CACHE_UNSAFE: invalid recovery manifest');
+    rollbackCache(cacheDir, staging, transaction);
+    changes.push(`claude: recovered interrupted plugin cache transaction -> ${staging}`);
+  }
+}
 function refreshClaudePluginCache(d: Detected, distributionRoot: string, changes: string[]): void {
   const installedPath = join(d.home, 'plugins', 'installed_plugins.json');
   if (!existsSync(installedPath)) return;
@@ -138,7 +177,8 @@ function refreshClaudePluginCache(d: Detected, distributionRoot: string, changes
     throw new Error('CLAUDE_CACHE_UNSAFE: installed plugin path must be inside the host plugin cache');
   }
   cacheDir = realpathSync(cacheDir);
-  const items = ['skills', 'agents', '.mcp.json', '.claude-plugin'];
+  recoverCache(cacheDir, changes);
+  const items = CACHE_ITEMS;
   for (const item of items) if (!existsSync(join(distributionRoot, item)) || lstatSync(join(distributionRoot, item)).isSymbolicLink()) {
     throw new Error(`CLAUDE_PLUGIN_PAYLOAD_MISSING: ${item}; run npm run build or reinstall a complete package; cache was not refreshed`);
   }
@@ -147,20 +187,21 @@ function refreshClaudePluginCache(d: Detected, distributionRoot: string, changes
   const staging = mkdtempSync(join(cacheDir, '.omd-refresh-'));
   const backups = join(staging, 'previous');
   mkdirSync(backups);
-  const replaced: string[] = [];
+  let transaction: CacheTransaction | undefined;
   try {
     for (const item of items) cpSync(join(distributionRoot, item), join(staging, item), { recursive: true });
+    transaction = { schema: 'omd-cache-transaction-v1', items: items.map(name => ({ name, previous: cacheTreeHash(join(cacheDir, name)), next: cacheTreeHash(join(staging, name))! })) };
+    // Written completely before any publication rename. No target has changed if this write fails.
+    writeFileSync(join(staging, 'transaction.json'), JSON.stringify(transaction));
+    writeFileSync(join(staging, 'ready'), 'ready\n');
     for (const item of items) {
       const dest = join(cacheDir, item);
       if (existsNoFollow(dest)) renameSync(dest, join(backups, item));
-      replaced.push(item);
       renameSync(join(staging, item), dest);
     }
+    writeFileSync(join(staging, 'completed'), 'complete\n');
   } catch (error) {
-    for (const item of replaced.reverse()) {
-      rmSync(join(cacheDir, item), { recursive: true, force: true });
-      if (existsNoFollow(join(backups, item))) renameSync(join(backups, item), join(cacheDir, item));
-    }
+    if (transaction) rollbackCache(cacheDir, staging, transaction);
     throw error;
   }
   changes.push(`claude: refreshed plugin cache in place -> ${cacheDir} (run /reload-plugins)`);

@@ -1,4 +1,4 @@
-import type { Browser, Page } from 'playwright';
+import type { Browser, BrowserContext, Page } from 'playwright';
 import { serveProjectEntry } from './serve.ts';
 import { waitForDocumentFonts, browserEvaluationExpression } from './index.ts';
 import { extractInPage } from '../ir/dom.ts';
@@ -70,6 +70,26 @@ export async function assertViewState(page: Page, assertions: readonly ViewAsser
 }
 export function pageRoute(page: Page): string { const url = new URL(page.url()); return `${url.pathname}${url.search}${url.hash}`; }
 
+/** Closes a stalled renderer as well as rejecting the caller; individual DOM/font calls cannot
+ * turn the finite per-operation limits into an unbounded stage. Shorter budgets aid bounded probes. */
+export async function browserDeadline<T>(context: BrowserContext, operation: () => Promise<T>, timeoutMs: number): Promise<T> {
+  if (!Number.isInteger(timeoutMs) || timeoutMs <= 0 || timeoutMs > 120000) return fail('invalid browser deadline');
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let shutdown: Promise<void> | undefined;
+  try {
+    return await Promise.race([Promise.resolve().then(operation), new Promise<never>((_, reject) => {
+      timer = setTimeout(() => { reject(new Error(`BROWSER_DEADLINE: exceeded ${timeoutMs}ms; no completed observation published`)); shutdown = context.close().catch(() => {}); }, timeoutMs);
+    })]);
+  } finally {
+    clearTimeout(timer);
+    if (shutdown) {
+      let cleanupTimer: ReturnType<typeof setTimeout> | undefined;
+      try { await Promise.race([shutdown, new Promise<void>(resolve => { cleanupTimer = setTimeout(resolve, 2000); })]); }
+      finally { clearTimeout(cleanupTimer); }
+    }
+  }
+}
+
 /** Exact local build bytes; fresh context; no account cookies, remote API writes or navigation. */
 export async function withLocalView<T>(browser: Browser, root: string, view: { page: string; viewport: { width: number; height: number }; state?: ViewState }, inspect: (page: Page) => Promise<T>): Promise<T> {
   const served = await serveProjectEntry(root, view.page, { spa: view.state !== undefined });
@@ -77,6 +97,7 @@ export async function withLocalView<T>(browser: Browser, root: string, view: { p
   const context = await browser.newContext({ viewport: view.viewport, serviceWorkers: 'block', acceptDownloads: false });
   const blocked: string[] = [];
   try {
+    return await browserDeadline(context, async () => {
     await context.route('**/*', route => {
       const request = route.request();
       if (!['GET', 'HEAD'].includes(request.method()) || new URL(request.url()).origin !== origin) {
@@ -103,6 +124,7 @@ export async function withLocalView<T>(browser: Browser, root: string, view: { p
     if (blocked.length) return fail('blocked network request during capture');
     served.assertSourceCurrent();
     return result;
+    }, 30000);
   } finally { await context.close(); await served.close(); }
 }
 
