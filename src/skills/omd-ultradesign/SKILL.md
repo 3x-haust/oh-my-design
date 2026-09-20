@@ -98,6 +98,10 @@ inspection and route-only classification do not opt into this continuation.
 An explicitly invoked full workflow on an existing route also enrolls after a selected entry check
 and successful owner publication/write. A failed write, help call or read-only visit is insufficient.
 Recompute `stage next --json` after each owned publication or repair, not only at final reporting.
+For `reference-board`, follow the returned action instead of repeating a passing entry check:
+`author-research` supplies the research schema and requires current dual-lane publication;
+`apply-references` starts with `ref apply-plan --json` only after research passes. These are Scout
+subtasks inside the selected board stage, not new route stages. A board file alone is not research.
 If it returns `reference-interpretation`, perform that coordinator prerequisite: inspect `judgment input
 --json`, read `schema design-judgment`, author the actual hypothesis/interpretations, publish with
 `judgment publish --input .omd/.cache/design-judgment-input.json --json`, then run `judgment check`.

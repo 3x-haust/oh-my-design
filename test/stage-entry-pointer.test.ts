@@ -7,10 +7,13 @@ import test from 'node:test';
 import { copyDeckSha256 } from '../core/copy/index.ts';
 import { contractSha256, deliveryReceipt, stageDefinition } from '../core/stage/contract.ts';
 import { nextStageWork } from '../core/stage/next.ts';
-import { publishTestAdaptiveRoute } from './helpers/project-write.ts';
+import { createTestProjectWriteAdapter, publishTestAdaptiveRoute } from './helpers/project-write.ts';
 import { designAdmissionFixture } from './helpers/design-admission.ts';
 import { publishDesignJudgment } from '../core/design/judgment-files.ts';
 import { designJudgmentInput } from '../core/design/current-judgment.ts';
+import { readPersistedRoute } from '../core/route/index.ts';
+import { publishReferenceResearch } from '../core/ref/reference-research.ts';
+import { publishReferenceApplication, referenceApplicationPlan } from '../core/ref/reference-application.ts';
 
 const pack = fileURLToPath(new URL('../core', import.meta.url));
 const deck = `# Copy deck
@@ -116,5 +119,52 @@ test('current reference outputs lead to coordinator interpretation, not an owner
   assert.equal(nextStageWork(f.root, pack, invocation).stage, null);
   f.board.candidates[0]!.rationale = 'Revised reference decision.';
   f.refreshBoard();
+  assert.equal(nextStageWork(f.root, pack, invocation).action, 'interpret-references');
+});
+
+test('board work repairs research before application and returns to research when a retained receipt changes', t => {
+  const f = designAdmissionFixture(t), input = routeInput();
+  input.referenceDiscovery = { ...input.referenceDiscovery, uncertainty: 'unresolved', existingEvidence: 'none', existingEvidenceUse: null, skipReason: null };
+  input.strategyDecision.stages.splice(1, 0, 'scout', 'reference-board');
+  input.strategyDecision.roles.unshift('omd-scout');
+  input.strategyDecision.executionWaves[0].roles.unshift('omd-scout');
+  input.strategyDecision.methods.push('reference-discovery', 'parallel-reference-acquisition');
+  input.strategyDecision.skips = input.strategyDecision.skips.filter((skip: { id: string }) => !['scout', 'reference-board', 'reference-discovery'].includes(skip.id));
+  const invocation = copyProject(f.root, input), route = readPersistedRoute(f.root, invocation);
+  const options = { expectedSourceContractSha256: route.sourceContractSha256, benchmarkRequired: false, expectedRequest: route.request };
+  const writer = createTestProjectWriteAdapter(f.root, invocation);
+  writeFileSync(join(f.root, '.omd/scout.md'), '# Scoped reference observations\n');
+  const receipts = (['domain', 'scout', 'reference-board', 'copy'] as const).flatMap(stage => stageDefinition(stage).requiredContracts.map(contract =>
+    deliveryReceipt(stage, contract, contractSha256(pack, contract), '2026-09-21T00:00:00Z')));
+  writeFileSync(join(f.root, '.omd/delivery.jsonl'), receipts.map(receipt => JSON.stringify(receipt)).join('\n') + '\n');
+  const boardBefore = readFileSync(f.boardPath);
+  const researchWork = nextStageWork(f.root, pack, invocation);
+  assert.equal(researchWork.stage, 'reference-board');
+  assert.equal(researchWork.action, 'author-research');
+  assert.equal(researchWork.next, 'omd schema reference-research');
+  assert.match(researchWork.problems.join('\n'), /REFERENCE_RESEARCH_MISSING/);
+  assert.deepEqual(researchWork.entryBlockers, []);
+  assert.deepEqual(readFileSync(f.boardPath), boardBefore);
+
+  f.research.sourceContractSha256 = route.sourceContractSha256;
+  publishReferenceResearch(f.root, f.research, options, writer);
+  const applicationWork = nextStageWork(f.root, pack, invocation);
+  assert.equal(applicationWork.action, 'apply-references');
+  assert.equal(applicationWork.next, 'omd ref apply-plan --json');
+  const plan = referenceApplicationPlan(f.root, options).input;
+  const lane = (id: string) => ({ referenceIds: [id], coverage: 'direct', gap: null,
+    application: 'Anchor the confirmation record.', doNotTransfer: 'Source branding and claims.', reason: 'Readers need their current record first.' });
+  publishReferenceApplication(f.root, { ...plan, screens: plan.screens.map(row => ({ ...row,
+    target: { route: '/confirmation', state: 'initial' }, domain: lane('domain'), design: lane('visual'), checks: ['Record heading is visible.'] })) }, options, writer);
+  assert.equal(nextStageWork(f.root, pack, invocation).action, 'interpret-references');
+  const applicationBefore = readFileSync(join(f.root, '.omd/reference-application.json'));
+  const captureBefore = readFileSync(f.source.path);
+  writeFileSync(f.source.path, Buffer.concat([captureBefore, Buffer.from('\n')]));
+  const stale = nextStageWork(f.root, pack, invocation);
+  assert.equal(stale.action, 'author-research');
+  assert.match(stale.problems.join('\n'), /REFERENCE_RESEARCH_EVIDENCE_STALE/);
+  assert.ok(!stale.progress.validatedStages.includes('reference-board'));
+  assert.deepEqual(readFileSync(join(f.root, '.omd/reference-application.json')), applicationBefore);
+  writeFileSync(f.source.path, captureBefore);
   assert.equal(nextStageWork(f.root, pack, invocation).action, 'interpret-references');
 });

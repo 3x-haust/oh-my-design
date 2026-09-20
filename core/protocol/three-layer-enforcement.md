@@ -42,6 +42,13 @@ For other evidence and composition fingerprints, `omd hash <.omd/artifact-path> 
 the exact current file digest without invoking a shell. It neither creates nor approves evidence;
 use the digest only for the actual bytes inspected. Authority files and escaping paths are refused.
 
+Within `reference-board`, `stage next` first preserves structural/entry repairs, then directs Scout
+to `author-research` while either published lane is missing or stale. After research passes, it
+directs `apply-references` to `ref apply-plan --json` for current per-surface decisions. Recompute
+the pointer after native publication. Do not repeatedly run a passing board entry check or author
+application decisions before their research exists. These actions do not add route stages or
+validated-progress credits; stale research takes precedence over a missing application file.
+
 When `stage next` returns `reference-interpretation`, the coordinator owns that prerequisite work;
 it is not a new adaptive stage and must not be added to route input. Read `judgment input --json`
 and `schema design-judgment`, interpret the inspected observations, then publish with `judgment publish`.

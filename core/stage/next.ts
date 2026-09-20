@@ -6,7 +6,7 @@ import { checkBriefEntry } from '../brief/entry.ts';
 import { unconfirmedPlanningStatements, validateDomainBrief } from '../domain/domain-brief.ts';
 import { resolveRunState } from './contract.ts';
 import { stageArtifactProblems } from './output.ts';
-import { referenceInterpretationWork } from './reference-work.ts';
+import { referenceInterpretationWork, referenceResearchWork } from './reference-work.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 
 /** Fresh and interrupted runs use the same current-disk work pointer. No artifacts are fabricated. */
@@ -37,6 +37,9 @@ export function nextStageWork(root: string, packRoot: string, invocation: Projec
   const interpretation = route.strategy.stages.includes('reference-board')
     && (stage === null || ['art-direction', 'composition', 'candidate-generation'].includes(stage))
     ? referenceInterpretationWork(root) : null;
+  const research = stage === 'reference-board' && entry?.blockers.length === 0 && route.references.decision === 'discover'
+    ? referenceResearchWork(root, { expectedSourceContractSha256: route.sourceContractSha256,
+      benchmarkRequired: route.gates.includes('greenfield-task-flow-benchmark'), expectedRequest: route.request }) : null;
   return {
     schema: 'stage-next-v1', meaning: 'next-work-not-completion', deliveryMode: route.deliveryMode ?? 'implementation',
     stage, owner: brief?.owner ?? null,
@@ -55,6 +58,6 @@ export function nextStageWork(root: string, packRoot: string, invocation: Projec
     instruction: planningBlocksProduction
       ? 'Check each statement against the original user request/artifacts. Attach exact userEvidence only where genuinely supported. If not supplied, ask the user one concrete question quoting these statements. Do not infer confirmation, silently narrow scope, or replace the question with completion diagnostics.'
       : 'Read and deliver this stage\'s contracts, satisfy entry, execute the owned work, then its applicable output checks. Recompute stage next after changes. Remaining output quality, reference currentness, candidates, rendered evidence and independent review still require their own gates; this pointer never certifies completion.',
-    ...(interpretation ?? {}),
+    ...(research ?? interpretation ?? {}),
   };
 }

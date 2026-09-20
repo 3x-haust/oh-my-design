@@ -1,4 +1,30 @@
 import { checkCurrentDesignJudgment } from '../design/current-judgment.ts';
+import { readReferenceBoardArtifacts } from '../ref/board-artifacts.ts';
+import { readPublishedReferenceResearch, validateReferenceResearch } from '../ref/reference-research.ts';
+import { checkReferenceApplication } from '../ref/reference-application.ts';
+
+export function referenceResearchWork(root: string, options: Readonly<{
+  expectedSourceContractSha256: string; benchmarkRequired: boolean; expectedRequest: string;
+}>) {
+  try { readReferenceBoardArtifacts(root); } catch { return null; }
+  try { validateReferenceResearch(root, readPublishedReferenceResearch(root), options); }
+  catch (error) {
+    return {
+      action: 'author-research', problems: [error instanceof Error ? error.message : String(error)],
+      next: 'omd schema reference-research',
+      instruction: 'The board exists but current research is not published. This is Scout work inside reference-board, not a new route stage. Read schema reference-research and ref research-check --json; inspect both lanes and actual captures, repair the named input/evidence, then publish with ref research-set --input <research-input.json> --json. For a selected product benchmark use schema reference-flow-input and task-flow-benchmark, execute benchmark record and its publisher before binding its digest. Failed or irrelevant search pages are gaps: use a usable public alternative and inspect its actual links, never invent provenance. Recompute stage next after research-check succeeds; do not author the application before its research inputs pass.',
+    };
+  }
+  try { checkReferenceApplication(root, options); }
+  catch (error) {
+    return {
+      action: 'apply-references', problems: [error instanceof Error ? error.message : String(error)],
+      next: 'omd ref apply-plan --json',
+      instruction: 'Current research passes. This is Scout application work inside reference-board, not a new route stage. Read ref apply-plan --json; inspect the actual lane evidence and fill each destination surface with distinct domain/design decisions, exclusions, gaps and checks. Publish with ref apply-set --input <application-input.json> --json, run ref apply-check --json, then recompute stage next. The plan supplies current bindings, never judgments or approval; never fill it by copying source claims.',
+    };
+  }
+  return null;
+}
 
 export function referenceInterpretationWork(root: string) {
   let problems: readonly string[];
