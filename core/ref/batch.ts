@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { existsSync } from 'node:fs';
-import { dirname, join, relative } from 'node:path';
+import { dirname, relative } from 'node:path';
 import { capturePageForRef, captureEnergy, withBrowser, parseViewport, REFERENCE_VIEWPORT } from '../render/index.ts';
 import { normalize } from '../ir/normalize.ts';
 import { extractInvariants } from './invariants.ts';
@@ -9,7 +8,7 @@ import { saveRef, refImagePath, researchLane } from './store.ts';
 import { loadRules, check } from '../rules/engine.ts';
 import type { ProjectWriteAdapter } from '../runtime/project-write.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
-import { captureLane } from './capture-intake.ts';
+import { validateCaptureBatch } from './capture-intake.ts';
 import { parseCapturePreparation, type CapturePreparation } from './capture-preparation.ts';
 
 /**
@@ -58,9 +57,7 @@ export async function addRefsBatch(
   opts: { rulesRoot: string; concurrency?: number; invocation?: ProjectRunInvocation },
   adapter: ProjectWriteAdapter,
 ): Promise<BatchResult> {
-  if (existsSync(join(cwd, '.omd/route.json'))) {
-    for (const spec of specs) captureLane(cwd, spec, opts.invocation);
-  }
+  validateCaptureBatch(cwd, specs, opts.invocation);
   const concurrency = Math.max(1, opts.concurrency ?? 4);
   const rules = loadRules(opts.rulesRoot);
   const outcomes: BatchOutcome[] = new Array<BatchOutcome>(specs.length);

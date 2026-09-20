@@ -72,3 +72,29 @@ test('direct batch API cannot bypass selected-route intake by omitting every lan
     { rulesRoot: fileURLToPath(new URL('../core/rules/builtin', import.meta.url)) }, createTestProjectWriteAdapter(cwd)), /REFERENCE_INTAKE_AUTHORITY_REQUIRED|REFERENCE_LANE_REQUIRED/);
   assert.equal(existsSync(join(cwd, '.omd/refs')), false);
 });
+
+test('same-manifest service overlap is refused before any batch acquisition', t => {
+  const cwd = project(t);
+  const path = join(cwd, '.omd/.cache/batch.json');
+  writeFileSync(path, JSON.stringify([
+    { source: 'http://127.0.0.1:1/domain', as: 'task', lane: 'domain', energy: false, shot: true },
+    { source: 'http://127.0.0.1:1/design', as: 'visual', lane: 'design', fromUser: true, energy: false, shot: true },
+  ]));
+  const result = run(cwd, ['ref', 'add-batch', path, '--json']);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /REFERENCE_LANE_SERVICE_OVERLAP/);
+  assert.equal(existsSync(join(cwd, '.omd/refs')), false);
+});
+
+test('independent local user-reference batch still captures into both selected lanes', t => {
+  const cwd = project(t);
+  const path = join(cwd, '.omd/.cache/batch.json');
+  writeFileSync(path, JSON.stringify([
+    { source: fileURLToPath(new URL('fixtures/slop.html', import.meta.url)), as: 'task', lane: 'domain', energy: false, shot: true },
+    { source: fileURLToPath(new URL('fixtures/considered.html', import.meta.url)), as: 'visual', lane: 'design', fromUser: true, energy: false, shot: true },
+  ]));
+  const result = run(cwd, ['ref', 'add-batch', path, '--json']);
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(loadRefs(cwd, { includeDomain: true }).length, 2);
+  assert.equal(loadRefs(cwd).length, 1);
+});

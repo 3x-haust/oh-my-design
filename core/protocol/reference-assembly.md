@@ -159,6 +159,12 @@ start with an inspected free gallery/bookmark item, then may capture its recorde
 `--from-user` is only for a source the user actually supplied, never an escape from discovery.
 Capture gallery entries before batching their originals, since the observed link must already
 exist. A service task flow belongs in domain, not design merely because its layout is calm.
+For an intermediate category/directory hop, use `omd ref navigate <url> --lane domain|design --json`.
+It returns the `url`, `evidence`, and `capture` object for the lane's `navigation` array, stored
+under `.omd/refs/<lane>/navigation/`. These receipts have no board component identity and never
+substitute for retained design evidence. Research validation still requires a search-rooted chain.
+A batch is checked against its own pending sources as well as already saved references before
+acquisition. A rejected board is resolved before publication and cannot replace an earlier board.
 A board remains a draft until `ref research-check` and `ref apply-check` pass; `stage next`
 keeps this work with Scout rather than treating a board file as finished research.
 PNGs and native JSON metadata stay together in `.omd/refs/domain/` and

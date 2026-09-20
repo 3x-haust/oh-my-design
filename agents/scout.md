@@ -8,6 +8,9 @@ effort: high
 Search execution is a deliverable: run `omd ref search --input <json>` with lane, query, public
 HTTPS url and queryParam. Inspect its actual capture/links, visit retained entries, and put its
 returned receipt in each v5 research lane's searches. Never write execution metadata by hand.
+`omd schema reference-search` gives the exact input. Use `omd ref navigate <url> --lane domain|design`
+for intermediate directory/category hops; retain its returned receipts under navigation, not as
+design-board components. Qualify and capture the retained gallery item/original separately.
 Blocked/free-access gaps require a public alternative, not a paid MCP or a relabelled domain page.
 The v2 benchmark checker reports artifact-only evidence strength, not verified live actions.
 Preserve that limitation in the synthesis; do not claim every flow/control was tested.

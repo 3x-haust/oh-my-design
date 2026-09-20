@@ -1204,6 +1204,14 @@ const DESIGN_HANDOFF: InputSkeleton = {
 
 export const INPUT_SKELETONS: readonly InputSkeleton[] = [
   {
+    name: 'reference-search', path: '.omd/.cache/reference-search.json', command: 'omd ref search --input .omd/.cache/reference-search.json --json',
+    keys: ['lane', 'query', 'url', 'queryParam'],
+    constraints: ['Choose domain or design explicitly. Replace the example query and URL together; q must contain that exact query once.',
+      'Use an observed public Google/Bing/DuckDuckGo search surface, not a paid API. Failed searches are gaps, not evidence of discovery.',
+      'Use ref navigate <url> --lane domain|design for observed intermediate pages. Add its returned object to navigation; it is not a board reference. Capture retained design gallery items/originals separately with ref add.'],
+    skeleton: { lane: 'design', query: 'dashboard interface design', url: 'https://www.google.com/search?q=dashboard%20interface%20design', queryParam: 'q' },
+  },
+  {
     name: 'first-render-surface', path: '.omd/.cache/first-render-surface.json',
     command: 'omd first-render check --page <local-build.html> --input .omd/.cache/first-render-surface.json --json',
     keys: ['heading', 'landmarks', 'repeatedObjects', 'trustSignals', 'visibleText', 'dominantAreaShare'],

@@ -267,7 +267,8 @@ const SCHEMAS: Readonly<Record<string, readonly string[]>> = {
   depth: ['depth-input'],
   frame: ['frame', 'functional-requirements', 'reality-ledger'],
   'content-grain': ['content-grain'],
-  acquisition: ['functional-requirements'],
+  acquisition: ['acquisition-plan', 'reference-capture-preparation'],
+  scout: ['reference-search', 'reference-research', 'reference-flow-input'],
   'reference-board': ['reference-board', 'reference-locale-binding'],
   'art-direction': ['art-direction-check'],
   copy: ['locale-contract'],
@@ -628,7 +629,11 @@ export function buildBrief(
     contracts,
     schemas: (designReview ? ['design-handoff'] : SCHEMAS[stage] ?? []).map((name) => ({ name, command: `omd schema ${name}` })),
     shell: shell.kind === 'browser' ? null : { kind: shell.kind, target: renderTargetHint(shell) },
-    judgedBy: [...judgedBy, ...localeJudgedBy, ...localeReferenceJudgedBy],
+    judgedBy: [...judgedBy, ...localeJudgedBy, ...localeReferenceJudgedBy,
+      ...(stage === 'reference-board' && route?.references.decision === 'discover' ? [
+        { command: 'omd ref research-check --json', fails: 'either research lane, discovery provenance or its current output is missing or stale' },
+        { command: 'omd ref apply-check --json', fails: 'screen-by-screen use of both research lanes is missing or stale' },
+      ] : [])],
     prior: priorEvidence(root, [
       ...(runtimeDesignSystem?.status === 'current' && inventoryConsumer ? [runtimeDesignSystem.path, RUNTIME_INVENTORY_DOC] : []),
       ...(existingDesignSystem?.status === 'current' && inventoryConsumer ? [existingDesignSystem.path, DESIGN_INVENTORY_DOC_PATH,

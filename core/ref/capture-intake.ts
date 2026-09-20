@@ -17,6 +17,18 @@ function gallery(url: string): boolean {
 function host(url: string): string | null {
   try { return referenceServiceHost(url); } catch { return null; }
 }
+export function validateCaptureBatch(root: string, specs: readonly CaptureIntent[], invocation?: ProjectRunInvocation): void {
+  if (!existsSync(join(root, '.omd/route.json'))) return;
+  const lanes = specs.map(spec => captureLane(root, spec, invocation));
+  if (!invocation || readPersistedRoute(root, invocation).references.decision !== 'discover') return;
+  for (const [index, spec] of specs.entries()) {
+    const service = host(spec.source);
+    if (specs.slice(0, index).some((prior, priorIndex) => lanes[priorIndex] !== lanes[index]
+      && (prior.source === spec.source || (service !== null && host(prior.source) === service)))) {
+      throw new ReferenceIntakeError('REFERENCE_LANE_SERVICE_OVERLAP: pending batch entries must use independent domain and design sources');
+    }
+  }
+}
 export function captureLane(root: string, spec: CaptureIntent, invocation?: ProjectRunInvocation): 'domain' | 'design' {
   const selected = existsSync(join(root, '.omd/route.json'))
     ? invocation && readPersistedRoute(root, invocation).references.decision === 'discover'

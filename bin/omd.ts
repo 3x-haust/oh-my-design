@@ -969,10 +969,10 @@ async function cmdRefBoard(opts: Opts): Promise<never> {
   }
   const { authorReferenceBoard } = await import('../core/ref/board-author.ts');
   const board = authorReferenceBoard(process.cwd(), inputJson(opts.input, 'omd ref board'));
+  const { resolveReferenceBoardArtifacts } = await import('../core/ref/board-artifacts.ts');
+  const artifacts = resolveReferenceBoardArtifacts(process.cwd(), board);
   const adapter = projectWriterFromActivation(opts, 'omd ref board');
   const path = adapter.write('.omd/reference-board.json', canonicalJson(board));
-  const { readReferenceBoardArtifacts } = await import('../core/ref/board-artifacts.ts');
-  const artifacts = readReferenceBoardArtifacts(process.cwd());
   const result = { path, candidates: artifacts.manifest.candidates.length, pieces: artifacts.manifest.candidates.reduce((count, candidate) => count + candidate.pieces.length, 0) };
   if (opts.json) process.stdout.write(JSON.stringify(result));
   else console.log(`reference board: ${result.candidates} candidates, ${result.pieces} zone-bound pieces`);
@@ -2464,7 +2464,7 @@ async function cmdRefApplicationReview(mode: 'plan' | 'set' | 'check', opts: Opt
 
 async function cmdRefSearch(opts: Opts): Promise<never> {
   const command = 'omd ref search';
-  if (opts._.length || !opts.input) throw new Error('usage: omd ref search --input <lane-query-url-queryParam.json> [--json]');
+  if (opts._.length || !opts.input) throw new Error('usage: omd ref search --input <lane-query-url-queryParam.json> [--json]; get the exact input with omd schema reference-search');
   const { parseSearchInput, executeReferenceSearch, readSearchExecution } = await import('../core/ref/search-execution.ts');
   const { withBrowser } = await import('../core/render/index.ts');
   const input = parseSearchInput(inputJson(opts.input, command));
@@ -2474,6 +2474,17 @@ async function cmdRefSearch(opts: Opts): Promise<never> {
   process.stdout.write(`${JSON.stringify({ receipt, execution }, null, opts.json ? undefined : 2)}\n`);
   // A failed attempt is durable evidence of a gap, never an automatically successful search.
   process.exit(execution.status === 'page-observed' ? 0 : 1);
+}
+
+async function cmdRefNavigate(opts: Opts): Promise<never> {
+  const source = opts._[0];
+  if (!source || opts._.length !== 1 || !opts.lane) throw new Error('usage: omd ref navigate <url> --lane domain|design [--json]; navigation receipts are not board references');
+  const { captureReferenceNavigation } = await import('../core/ref/navigation-capture.ts');
+  const { withBrowser } = await import('../core/render/index.ts');
+  const writer = projectWriterFromActivation(opts, 'omd ref navigate');
+  const receipt = await withBrowser(browser => captureReferenceNavigation(browser, source, opts.lane, writer));
+  console.log(JSON.stringify(receipt));
+  process.exit(0);
 }
 
 /** Fails when the captured board holds no parts to compose section by section. */
@@ -5012,6 +5023,7 @@ function usage(): never {
     + '  ref board --input candidate-assemblies.json   author and persist a validated board from captured source/component pieces\n'
     + '  ref locale-bind --input bindings.json         bind local reference pieces to current cultural evidence decisions\n'
     + '  ref locale-bind-check                         revalidate board/profile/source locale bindings\n'
+    + '  ref navigate <url> --lane domain|design     capture discovery hops separately; never a board reference\n'
     + '  ref list [--lane domain|design] [--json]     inspect separate capture inventories\n'
     + '  ref distance <page> [--selected [--gate]] [--json]  compare all refs, or selected destination selectors\n'
     + '  ref principles <source> --as C --add "..."   record why a reference works\n'
@@ -5347,6 +5359,7 @@ async function main(): Promise<never> {
 
   if (cmd === 'ref') {
     const opts = parseArgs(args.slice(2));
+    if (sub === 'navigate') return cmdRefNavigate(opts);
     if (sub === 'discover-plan') return cmdRefDiscoveryPlan(opts);
     if (sub === 'research-set') return cmdRefResearch('set', opts);
     if (sub === 'research-check') return cmdRefResearch('check', opts);

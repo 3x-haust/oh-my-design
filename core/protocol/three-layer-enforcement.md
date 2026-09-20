@@ -33,6 +33,8 @@ domain check can pass with unconfirmed planning. Check the original user brief b
 missing facts; do not invent confirmation or silently reduce implementation scope to a prototype.
 Use `schema frame` and `frame set --input` for atomic framing, then `frame check`. Functional
 requirements use their own `complete set` publisher and cannot substitute for the task matrix.
+The domain brief's request must preserve the current route request verbatim. A shortened or
+different request stays with the domain owner and earns no validated-stage progress.
 Use `copy review-input --json` to send exact copy content and digest together to the reviewer.
 Preserve its returned report in a separate input file and use `copy review-publish`; never guess
 the hash or repair only the hash on an old verdict. Every writer edit requires a fresh review.
@@ -77,6 +79,9 @@ inspection and research repair remain available while production is blocked.
   free gallery/original-link or actual user-supplied provenance before capture. The current
   reference-board work pointer requires published research and per-surface application, not just
   a board file. Publication still performs visual-role, source independence and currentness checks.
+  Batch intake also compares pending entries before any browser work. `ref navigate` keeps
+  discovery-only category pages outside the board inventory; its observed links still need
+  search-rooted native evidence. `ref board` resolves all evidence before replacing its record.
   Research reachability extends from
   search pages and separately validated native navigation captures. Each optional lane `navigation`
   item binds its URL, PNG evidence and JSON capture; only observed outbound links extend reachability.

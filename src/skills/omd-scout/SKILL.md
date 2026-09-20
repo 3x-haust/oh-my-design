@@ -133,7 +133,9 @@ Search the PART, in English, across many sites — the way a designer builds a b
   board becomes a single competitor's screenshot set.
 - Explore by similarity rather than by rewriting the query: the next good capture usually comes from
   looking at one you kept, not from a better phrase.
-  Keep native captures of intermediate pages in that lane's optional `navigation` array, each with
+  Use `omd ref navigate <url> --lane domain|design --json` for intermediate directory/category pages;
+  these captures live in the lane's `navigation/` folder and have no board component identity.
+  Keep its returned native receipts in that lane's optional `navigation` array, each with
   `url`, PNG `evidence`, and JSON `capture` receipts. The checker follows observed outbound links from
   successful search results through those captures; a disconnected chain, prose link, stale image,
   blocked visit or user-supplied screenshot cannot manufacture a browser navigation edge.
