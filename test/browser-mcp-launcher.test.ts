@@ -4,8 +4,10 @@ import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync,
 import { hostname, tmpdir } from 'node:os';
 import { basename, delimiter, dirname, join } from 'node:path';
 import { execFileSync, spawn, spawnSync, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { runInNewContext } from 'node:vm';
 import { BROWSER_RS_RELEASES } from '../core/install/browser-rs.ts';
 import { browserRsMcpConfig, type BrowserRsMcpServer } from '../adapters/browser-mcp.ts';
+import { BROWSER_RS_MCP_CONTROL_SEND, browserRsMcpLauncher } from '../core/install/browser-rs-mcp-main.ts';
 
 type Fixture = {
   readonly root: string;
@@ -492,6 +494,9 @@ test('signal and reaper-disconnect race still releases one browser group and lea
   const signalLog = join(fixture.root, 'race-signal.log');
   writeLifecycleBinary(binary);
   const launcher = asyncLaunch(fixture, binary, { OMD_LIFECYCLE_MODE: 'ignore-eof', OMD_SIGNAL_LOG: signalLog });
+  let stderr = '';
+  launcher.stderr.setEncoding('utf8');
+  launcher.stderr.on('data', (chunk: string) => { stderr += chunk; });
   await readyEvent(launcher);
   const profileArgument = readFileSync(fixture.log, 'utf8').split('\n').find((line) => line.startsWith('--user-data-dir='));
   if (profileArgument === undefined) throw new Error('launcher did not record its profile');
@@ -505,10 +510,40 @@ test('signal and reaper-disconnect race still releases one browser group and lea
   launcher.kill('SIGTERM');
   process.kill(reaperPid, 'SIGKILL');
   await exited;
-  await removed;
+  try { await removed; } catch (error) {
+    throw new Error(`${String(error)}; profileExists=${existsSync(profilePath)}; launcherCode=${launcher.exitCode}; stderr=${stderr}`);
+  }
 
   assert.equal(existsSync(profilePath), false);
   assertProcessGone(browserPid);
+  assert.doesNotMatch(stderr, /Unhandled 'error' event|ERR_IPC_CHANNEL_CLOSED|EPIPE/);
+});
+
+test('control sends survive synchronous and asynchronous IPC closure without losing cleanup ownership', async () => {
+  const send = runInNewContext(`${BROWSER_RS_MCP_CONTROL_SEND}; sendControl`) as (child: object, message: object, onError: (error: Error) => void) => void;
+  for (const code of ['ERR_IPC_CHANNEL_CLOSED', 'EPIPE', 'EACCES']) {
+    for (const synchronous of [false, true]) {
+      const errors: Error[] = []; let disconnects = 0;
+      const failure = Object.assign(new Error(code), { code });
+      const child = {
+        connected: true,
+        send(_message: object, callback: (error: Error) => void) {
+          assert.equal(typeof callback, 'function', 'a closing IPC channel must not emit an unhandled error');
+          if (synchronous) throw failure;
+          queueMicrotask(() => callback(failure));
+        },
+        disconnect() { disconnects++; this.connected = false; },
+      };
+      assert.doesNotThrow(() => send(child, { type: 'signal' }, error => { errors.push(error); }));
+      await new Promise<void>(resolve => queueMicrotask(resolve));
+      assert.equal(disconnects, 1);
+      send(child, { type: 'signal' }, error => { errors.push(error); });
+      assert.equal(disconnects, 1);
+      assert.deepEqual(errors, code === 'EACCES' ? [failure] : []);
+    }
+  }
+  const source = browserRsMcpLauncher([], 'test', 'test');
+  assert.ok(source.indexOf('process.off(item.signal') > source.indexOf('server.close(() => resolve())'), 'signal handlers protect the complete fallback lease cleanup');
 });
 
 test('capability reaper cleans profile and process group after an untrappable launcher exit', async (context) => {
