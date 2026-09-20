@@ -17,7 +17,12 @@ export function stageArtifactProblems(root: string, stage: StageId, invocation?:
     const path = stageDefinition(stage).artifact;
     const bytes = readContainedRegularFile(root, join(root, path), path);
     if (!bytes.toString('utf8').trim()) return [`${path} is empty`];
-    if (stage === 'domain') validateDomainBrief(JSON.parse(bytes.toString('utf8')));
+    if (stage === 'domain') {
+      const domain = validateDomainBrief(JSON.parse(bytes.toString('utf8')));
+      if (invocation && domain.request !== readPersistedRoute(root, invocation).request) {
+        return ['Domain brief request differs from the current route request. Read omd route show --json and preserve its request verbatim in domain-brief.json; do not rewrite the route to match a shortened brief.'];
+      }
+    }
     if (stage === 'frame') {
       const problems = validateFrameUxBytes(bytes).map(f => f.message);
       if (invocation) {

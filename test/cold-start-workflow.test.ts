@@ -205,6 +205,19 @@ test('only closed read-only inventory syntax is exempt from the source gate', ()
   for (const s of ["rg --files --pre evil | head -80", "rg --files -g '$(touch x)'", "rg --files | head -80 > x", "pwd && rg --files\nnode x", "rg --files | head -80; touch x"]) assert.equal(isPreproductionReadCommand(s), false, s);
 });
 
+test('a domain brief for a different request stays with its owner and earns no stage progress', async t => {
+  const cwd = project(t), h = harness(cwd); await h.start();
+  const brief = domain(); brief.request = 'A different or shortened request.';
+  await h.author('.omd/domain-brief.json', brief);
+  const blocked = JSON.parse(await h.command(['stage', 'next', '--json']));
+  assert.equal(blocked.stage, 'domain');
+  assert.equal(blocked.progress.validatedStages.includes('domain'), false);
+  await h.author('.omd/domain-brief.json', domain());
+  const repaired = JSON.parse(await h.command(['stage', 'next', '--json']));
+  assert.equal(repaired.stage, 'frame');
+  assert.ok(repaired.progress.validatedStages.includes('domain'));
+});
+
 test('fresh-stage correction stops for a concrete user question and abort; help is not a mutation', async t => {
   const cwd = project(t), h = harness(cwd);
   await h.emit('before_agent_start', { prompt: 'omd-ultradesign' });
