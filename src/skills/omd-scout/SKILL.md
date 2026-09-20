@@ -139,6 +139,17 @@ those produces a product survey instead of a direction.
 
 ### Exploring a domain reference
 
+Execute discovery, do not merely write query strings. Use `omd ref search --input <json>` with
+`{lane: "domain"|"design", query, url, queryParam}`: the public HTTPS search URL must submit that
+exact query in the named parameter. Inspect the saved screenshot and actual links, then visit and
+capture retained sources/entries with the existing native reference commands. Use public Google/Bing
+`/search` or DuckDuckGo root/HTML/lite URLs with `queryParam: "q"`; combine task/pattern terms with
+`site:pinterest.com/pin/` or another relevant public gallery, not a made-up service query parameter.
+Put each returned
+search receipt in the lane's `searches` array. A 200 page may still be a login wall or poor results:
+inspect it, record the limitation, and use another free public source. A failure receipt is not
+success and query prose cannot replace one. Do not hand-author or edit execution metadata.
+
 The domain-reference lane and the design-reference lane are independent deliverables. Keep a
 competitor's task-flow evidence in domain and use a different service's visual evidence for design;
 separate observations of the same service do not satisfy the independent-host lane contract.
@@ -157,14 +168,16 @@ authentication, payment, destructive action, rate limit, blocking, unavailabilit
 the declared task scope. A nav label, sitemap entry, article, or screenshot is a lead, not proof of a
 screen or flow. Run `omd schema task-flow-benchmark --json`, publish with `omd benchmark set`, and
 require `omd benchmark check --json` to re-hash every screen and flow-step evidence file. A missing,
-stale, reused, unreachable, or unorganized observation blocks completion.
+stale, reused, unreachable, or unorganized observation blocks completion. The v2 checker verifies
+file currentness only: read its `evidenceStrength`, which explicitly marks live flow as unverified.
+Never call artifact-only action/result prose a completed live interaction test.
 
 After the domain and design lanes both have current evidence, print `omd schema reference-research
 --json`, publish the exact record with `omd ref research-set`, and run `omd ref research-check
 --json`. The record binds the domain lane to the current benchmark when applicable and the design
 lane to the current reference board. The publisher saves `.omd/refs/domain/research.json` and
 `.omd/refs/design/research.json` alongside their own captures, with `.omd/reference-research.json` as the
-consistency receipt. All three must agree. Older receipts need v4 role/visual review and republication, not a
+consistency receipt. All three must agree. Older receipts need v5 executed-search binding and republication, not a
 filename move or synthesized provenance. Both source and discovery observations bind PNG and native
 capture-JSON hashes. A gallery homepage alone is rejected. If the original source differs from the
 gallery entry, its exact URL must occur in that entry's captured outbound links; otherwise retain

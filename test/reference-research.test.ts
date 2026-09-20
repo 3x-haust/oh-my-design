@@ -28,6 +28,9 @@ import { readPersistedRoute } from '../core/route/adaptive-route-persistence.ts'
 import { selectReferenceCandidateV2 } from '../core/ref/reference-selection.ts';
 import { writeReferenceHandoffReceipt } from '../core/ref/reference-handoff.ts';
 import { readSelectedReferenceHandoff } from '../core/ref/selected-handoff.ts';
+import { testSearchReceipt } from './helpers/search-execution.ts';
+import { validateSourceSeal, writeSourceSeal } from '../core/source-seal/index.ts';
+import { servedProjectTreeSha256 } from '../core/render/serve.ts';
 
 const SOURCE_SHA = 'a'.repeat(64);
 const digest = (bytes: string | Buffer): string => createHash('sha256').update(bytes).digest('hex');
@@ -123,10 +126,11 @@ function fixture(t: { after(fn: () => void): void }) {
   const domainCapture = saveRef(root, { ...reference, source: 'https://domain.example/service', component: 'entry', researchLane: 'domain', imagePath: relative(root, domainPath), acquisition: { requestedUrl: 'https://domain.example/service', finalUrl: 'https://domain.example/service', httpStatus: 200, links: [], imageSha256: digest(domainPng()) } }, writer);
   writeFileSync(domainPath, domainPng());
   const research = {
-    schema: 'reference-research-v4',
+    schema: 'reference-research-v5',
     sourceContractSha256: SOURCE_SHA,
     domainReference: {
       queries: ['field service request flow'],
+      searches: [testSearchReceipt(root, 'domain', 'field service request flow', ['https://domain.example/service'])],
       sources: [{
         id: 'domain-a', url: 'https://domain.example/service', observedAt: '2026-09-19',
         decision: 'request review sequence', finding: 'review precedes commitment',
@@ -136,6 +140,7 @@ function fixture(t: { after(fn: () => void): void }) {
     },
     designReference: {
       queries: ['editorial hierarchy service landing'],
+      searches: [testSearchReceipt(root, 'design', 'editorial hierarchy service landing', [gallerySource])],
       sources: [{
         id: 'design-a', url: source, observedAt: '2026-09-19',
         decision: 'hero hierarchy', finding: 'display and proof stay in one measured group',
@@ -390,6 +395,7 @@ test('interrupted split publication cannot be read as a completed new research s
   const options = { expectedSourceContractSha256: SOURCE_SHA, benchmarkRequired: false };
   publishReferenceResearch(root, research, options, writer);
   research.domainReference.queries.push('another observed task query');
+  research.domainReference.searches.push(testSearchReceipt(root, 'domain', 'another observed task query', ['https://domain.example/service']));
   const interrupted = { ...writer, write(path: string, content: string | Uint8Array) {
     if (path === DESIGN_REFERENCES_PATH) throw new Error('simulated interruption');
     return writer.write(path, content);
@@ -578,4 +584,40 @@ test('a benchmark-selected product route cannot complete with a prose-only domai
     expectedSourceContractSha256: SOURCE_SHA,
     benchmarkRequired: true,
   }), /REFERENCE_RESEARCH_BENCHMARK_REQUIRED/);
+});
+
+test('publishing or changing application decisions invalidates preliminary and final source seals', t => {
+  const f = fixture(t);
+  const input = JSON.parse(readFileSync(new URL('fixtures/adaptive-flow/synth-marketing.json', import.meta.url), 'utf8'));
+  input.designAxes.expressiveDesignNeed = 'restrained';
+  input.strategyDecision.methods = input.strategyDecision.methods.map((method: string) => method === 'design-strategy-expressive-campaign' ? 'design-strategy-operational-ux' : method);
+  input.strategyDecision.stages = input.strategyDecision.stages.filter((stage: string) => stage !== 'art-direction');
+  input.strategyDecision.skips.push({ id: 'art-direction', reason: 'This seal test uses a restrained existing visual direction.' });
+  const invocation = publishTestAdaptiveRoute(f.root, input);
+  const route = readPersistedRoute(f.root, invocation);
+  const writer = createTestProjectWriteAdapter(f.root, invocation);
+  const options = { expectedSourceContractSha256: route.sourceContractSha256, benchmarkRequired: false };
+  writeFileSync(join(f.root, 'index.html'), '<main>Test surface</main>');
+  const proof = `## Production revision binding\n- Production entry: \`index.html\`\n- Production revision SHA-256: \`${servedProjectTreeSha256(f.root, 'index.html')}\`\n`;
+  for (const name of ['copy-deck.md', 'type-proof.md', 'composition.md']) writeFileSync(join(f.root, '.omd', name), proof);
+  // A preparatory snapshot is not permission to skip the application at terminal completion.
+  writeSourceSeal(f.root, invocation);
+  assert.deepEqual(validateSourceSeal(f.root, invocation), []);
+  f.research.sourceContractSha256 = route.sourceContractSha256;
+  publishReferenceResearch(f.root, f.research, options, writer);
+  writeFileSync(join(f.root, '.omd/domain-brief.json'), JSON.stringify(domainBrief(route.request)));
+  const application = filledApplication(f.root, options);
+  publishReferenceApplication(f.root, application, options, writer);
+  assert.ok(validateSourceSeal(f.root, invocation).length > 0, 'publishing the missing plan invalidates the preliminary seal');
+  writeSourceSeal(f.root, invocation);
+  assert.deepEqual(validateSourceSeal(f.root, invocation), []);
+  const seal = JSON.parse(readFileSync(join(f.root, '.omd/source-seal.json'), 'utf8'));
+  assert.equal(seal.inputs.referenceApplicationSha256, digest(readFileSync(join(f.root, REFERENCE_APPLICATION_PATH))));
+  application.screens[0]!.checks.push('Keep the progress state next to its object.');
+  publishReferenceApplication(f.root, application, options, writer);
+  assert.ok(validateSourceSeal(f.root, invocation).length > 0, 'changed criteria invalidate the sealed production inputs');
+  writeSourceSeal(f.root, invocation);
+  assert.deepEqual(validateSourceSeal(f.root, invocation), []);
+  rmSync(join(f.root, REFERENCE_APPLICATION_PATH));
+  assert.ok(validateSourceSeal(f.root, invocation).length > 0, 'removing the plan cannot downgrade the sealed route');
 });

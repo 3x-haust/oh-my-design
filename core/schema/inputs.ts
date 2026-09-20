@@ -779,6 +779,8 @@ const REFERENCE_RESEARCH: InputSkeleton = {
   keys: REFERENCE_RESEARCH_KEYS,
   constraints: [
     'domainReference and designReference are both required and cannot substitute for one another',
+    'queries are not execution proof. Run omd ref search --input <json> with {lane: domain|design, query, url, queryParam}; the HTTPS URL must carry that exact query. Put returned receipt(s) in searches. Every query needs an execution; every non-user source/entry must occur in actual observed links and have a separate native visit capture. Blocked attempts may remain alongside a successful public alternative. Never author search receipts by hand.',
+    'search execution accepts public Google/Bing /search or DuckDuckGo root/HTML/lite endpoints with queryParam=q, not arbitrary service pages with invented query fields. Use task/pattern and site: gallery queries; known observed search-redirect targets still require separate native visits.',
     'each lane records actual queries, inspected sources and current PNG evidence plus a hashed native capture JSON; domain paths stay in .omd/refs/domain/, design and gallery-entry paths in .omd/refs/design/',
     'research-set publishes .omd/refs/domain/research.json and .omd/refs/design/research.json separately, then .omd/reference-research.json as a consistency receipt; research-check requires all three current records',
     'neither the same evidence path nor identical bytes under a renamed path can satisfy both lanes',
@@ -800,6 +802,7 @@ const REFERENCE_RESEARCH: InputSkeleton = {
     sourceContractSha256: '0'.repeat(64),
     domainReference: {
       queries: ['<actual similar-service or domain task query>'],
+      searches: [{ path: `.omd/refs/domain/search-${'7'.repeat(64)}.json`, sha256: '7'.repeat(64) }],
       sources: [{
         id: 'domain-service-a',
         url: 'https://example.com/domain-service',
@@ -813,6 +816,7 @@ const REFERENCE_RESEARCH: InputSkeleton = {
     },
     designReference: {
       queries: ['<actual visual-direction or component-craft query>'],
+      searches: [{ path: `.omd/refs/design/search-${'8'.repeat(64)}.json`, sha256: '8'.repeat(64) }],
       sources: [{
         id: 'design-direction-a',
         url: 'https://example.org/design-reference',

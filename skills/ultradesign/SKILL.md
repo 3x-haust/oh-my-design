@@ -224,6 +224,9 @@ Use `.omd/route.json` as the machine-consumed strategy. Do not substitute a reme
   route reason, not an invented artifact.
 - Dual research finishes with Scout's screen application: `omd ref apply-plan --json` → fill the
   input from actual images → `omd ref apply-set --input <application.json>` → `omd ref apply-check`.
+  Query strings alone are not research: Scout uses `omd ref search --input <json>` and v5 lane
+  `searches` receipts; retained entries trace to actual observed links and separate native visits.
+  Inspect free-access failures and try a public alternative; never require a paid reference MCP.
   Show the user the retained previews and `.omd/reference-application.md`. Every domain-brief surface
   needs separate domain/design coverage, decisions, exclusions, gaps and future rendered checks.
   Pass only referenceApplication/screenApplication from the validated brief/handoff to Composer and
@@ -304,7 +307,14 @@ When refinement is selected or a required gate remains RED, read and apply the c
 Benchmark products run `omd lifecycle plan`. Run selected checks, build/typecheck,
 `omd route check --activation "$OMD_ACTIVATION_PATH"`, and renderer inspection. After inputs/source
 settle, use trusted project-write, seal/recheck, collect applicable checks/probes/renders, and finalize
-final-v2 through the host. Re-read its pointer and run `omd completion preflight --activation "$OMD_ACTIVATION_PATH"`.
+final-v2 through the host. When dual research applies, run `omd ref apply-review-plan --json` next.
+Inspect its actual current final captures for every screen criterion at desktop and mobile; publish
+`omd ref apply-review-set --input <review.json>` and require `omd ref apply-review-check --json`.
+Record concrete reasons for met/revise/justified-departure. Revise means repair → reseal → recapture
+→ current final evidence → re-review; a changed plan also invalidates the source seal. This is
+criterion traceability, not a new claim of independent review or human approval. The coordinator
+owns this publication after the source owner returns; do not expand the Hand's browser authority.
+Re-read the final pointer and run `omd completion preflight --activation "$OMD_ACTIVATION_PATH"`.
 Independent review and final evidence apply at every task size.
 
 If preflight fails or `.omd/final-evidence-v2.json` lacks the current immutable record, you MUST NOT say the work is complete. Report the exact host-authority blocker and strongest checks, keeping completion

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
 import { isAbsolute, resolve, sep } from 'node:path';
+import { nodeStableProjectFileSystem, readStableProjectFile } from '../runtime/stable-project-file.ts';
 
 export const TASK_FLOW_BENCHMARK_SCHEMA =
   'task-flow-benchmark-v2' as const;
@@ -659,14 +659,16 @@ function evidenceRecords(benchmark: TaskFlowBenchmark): readonly BenchmarkEviden
 }
 
 /**
- * Proves that every claimed screen visit and flow action points to current local browser evidence.
+ * Proves artifact currentness, NOT that the prose action actually occurred. In particular, a PNG
+ * hash or a sequence of independent navigations cannot authenticate a live multi-screen flow.
  * The private evidence remains under `.omd/refs/`; the source-free projection carries none of it.
  */
 export function validateTaskFlowBenchmarkEvidence(
   root: string,
   benchmark: TaskFlowBenchmark,
-): void {
+) {
   const projectRoot = resolve(root);
+  const observations: { path: string; sha256: string; grade: 'artifact-only'; actionVerified: false }[] = [];
   for (const evidence of evidenceRecords(benchmark)) {
     const path = resolve(projectRoot, evidence.path);
     if (path === projectRoot || !path.startsWith(`${projectRoot}${sep}`)) {
@@ -674,13 +676,17 @@ export function validateTaskFlowBenchmarkEvidence(
     }
     let bytes: Buffer;
     try {
-      bytes = readFileSync(path);
+      bytes = readStableProjectFile({ root: projectRoot, path, label: evidence.path, fs: nodeStableProjectFileSystem() });
     } catch {
       fail('TASK_FLOW_BENCHMARK_EVIDENCE_MISSING');
     }
     const digest = createHash('sha256').update(bytes).digest('hex');
     if (digest !== evidence.sha256) fail('TASK_FLOW_BENCHMARK_EVIDENCE_STALE');
+    observations.push({ ...evidence, grade: 'artifact-only', actionVerified: false });
   }
+  return { schema: 'task-flow-evidence-strength-v1' as const, benchmarkSha256: taskFlowBenchmarkSha256(benchmark),
+    observations, liveFlowVerified: false as const,
+    limitation: 'Current files and author-declared action/result sequences are not executed browser-transition receipts. Do not claim that every control or flow was tested.' };
 }
 
 export function taskFlowBenchmarkSha256(

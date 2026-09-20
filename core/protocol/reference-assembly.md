@@ -44,9 +44,17 @@ stays with Scout/coordinator; Composer and Hand receive only the derived decisio
 briefs and selected handoffs. No source URLs, hosts or capture paths belong in decision prose.
 The projection does not replace selected assembly, approved tokens, actual reference-usage evidence,
 or blind final review. It records what should be applied and checked, not what has already passed.
-Existing current v4 research remains usable; inspection and application must be added before
+Existing valid native captures remain usable; v5 execution binding, inspection and application are required before
 downstream composition/production and design-only/terminal completion. Changed research, domain
 brief or missing/edited derived outputs fails closed. Do not repair hashes to invent a review.
+
+The application is now an approved source-seal input. After authenticated final-v2 evidence,
+`omd ref apply-review-plan --json` derives deterministic surface/criterion IDs and the exact allowed
+final observation/capture/viewport/state set. Inspect every criterion at desktop and mobile, then
+publish `apply-review-set --input <json>` with met/revise/justified-departure and concrete reasons.
+`apply-review-check` and terminal preflight reject missing, duplicate, stale, unrelated or unresolved
+rows. Changed source/build/plan means new current evidence and re-review, not reusing old judgments.
+This agent-authored review is not human approval, independent reviewer attestation or a beauty score.
 
 The workflow adapts Design Flow Harness's actual-image analysis → screen reference linkage →
 representative concept → expansion approach, while retaining OMD's independent research lanes,
@@ -133,7 +141,8 @@ Discovery always saves two separate ledgers:
   task flows. When `greenfield-task-flow-benchmark` applies, its private v2 benchmark records every
   safe reachable screen in the declared scope, the actual click path, feature and flow groupings,
   current local evidence, and every explicit coverage gap. `omd benchmark check` re-hashes that
-  evidence; a landing-page visit or prose summary cannot satisfy it.
+  evidence, but returns `liveFlowVerified: false`: action/result prose and hashed artifacts do not
+  prove executed browser transitions. Never present that currentness result as all-controls-tested.
 - **design reference** (`.omd/refs/design/research.json`) asks how the destination should feel and be composed. It uses the measured
   board, mood, typography, component, and craft evidence already defined by this protocol. Domain
   research is not visual direction merely because the comparable product looks polished.
@@ -146,7 +155,21 @@ the default visual board inventory.
 
 `omd ref research-set` is the sole publisher of both files and writes `.omd/reference-research.json`
 last as their consistency receipt. `research-check` and downstream gates require all three current
-records. Each v4 source binds PNG evidence and native capture-JSON hashes. Design `discovery` binds
+records. Each v5 lane additionally carries `searches` from `omd ref search --input <json>` with
+`{lane, query, url, queryParam}`. The URL submits the exact query; a fresh browser records observed
+links, a 1280×900 screenshot and HTTP/error outcome, without reusing login state or clicking controls.
+Inspect the page: HTTP 200 alone does not prove useful results or free access. All queries require
+execution receipts; every non-user retained domain source/design entry must occur in observed links
+and have its own native visit capture. Failed attempts may accompany a usable free alternative;
+they cannot satisfy retained-source coverage. Arbitrary imported logs are not native execution proof.
+The initial executor accepts public Google/Bing `/search` and DuckDuckGo root/HTML/lite `q` endpoints,
+not an arbitrary service URL with a fake query parameter. Search gallery names with task/pattern
+terms (for example `site:pinterest.com/pin/ ...`), then inspect the actual entry. Known search
+redirect links may be decoded as discovery targets; decoding never counts as visiting them.
+The catalogue uses public browser pages, not Google's paid/custom XML API. Query parameter references:
+[Google](https://developers.google.com/custom-search/docs/xml_results) and
+[DuckDuckGo](https://duckduckgo.com/duckduckgo-help-pages/settings/params).
+Each source binds PNG evidence and native capture-JSON hashes. Design `discovery` binds
 another inspected entry/capture, not just a homepage or free-access assertion. For a different
 original source, the gallery capture must contain its exact URL in observed outbound links. When
 the original is unavailable, retain the gallery image as image-only; never use unrelated component
@@ -154,7 +177,7 @@ docs as its evidence. No rewriting of native metadata is authorized to repair a 
 The quality reason explains task/viewport fit, hierarchy, typography or density;
 provider prestige is insufficient. This is inspectable provenance, not authenticated proof of taste
 or browsing. Missing native provenance must be collected, never backfilled from memory. Older
-records require v4 role/visual review and republication; valid captures need not be reacquired.
+records require v5 executed-search binding and republication; valid captures need not be reacquired.
 The same evidence path OR identical bytes under another filename cannot satisfy both lanes.
 
 The two lanes use independent service hosts, including after redirects. A second path or crop of a

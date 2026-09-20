@@ -2427,6 +2427,44 @@ async function cmdRefApplication(mode: 'plan' | 'set' | 'check', opts: Opts): Pr
   process.exit(0);
 }
 
+async function cmdRefApplicationReview(mode: 'plan' | 'set' | 'check', opts: Opts): Promise<never> {
+  const command = `omd ref apply-review-${mode}`;
+  if (opts._.length || (mode === 'set' ? !opts.input : opts.input)) throw new Error(`usage: ${command}${mode === 'set' ? ' --input <review.json>' : ''} [--json]`);
+  const { readPersistedRoute } = await import('../core/route/index.ts');
+  const { checkReferenceApplication } = await import('../core/ref/reference-application.ts');
+  const { checkFinalEvidenceV2 } = await import('../core/evidence/final-v2.ts');
+  const { referenceApplicationReviewContext, referenceApplicationReviewPlan, publishReferenceApplicationReview, checkReferenceApplicationReview } = await import('../core/ref/reference-application-review.ts');
+  const root = process.cwd();
+  const invocation = invocationFromActivation(opts, command);
+  const route = readPersistedRoute(root, invocation);
+  if (route.references.decision !== 'discover') throw new Error('REFERENCE_APPLICATION_NOT_SELECTED');
+  const application = checkReferenceApplication(root, { expectedSourceContractSha256: route.sourceContractSha256,
+    benchmarkRequired: route.gates.includes('greenfield-task-flow-benchmark'), expectedRequest: route.request });
+  // The final evidence gate owns authentication and exact current capture selection. A caller cannot
+  // supply an easier graph or arbitrary screenshot to this supplemental criterion review.
+  const final = checkFinalEvidenceV2(root, invocation);
+  const context = referenceApplicationReviewContext(root, application, final.graph);
+  const result = mode === 'plan' ? referenceApplicationReviewPlan(context)
+    : mode === 'set' ? publishReferenceApplicationReview(root, inputJson(opts.input!, command), context, projectWriterFromActivation(opts, command))
+      : checkReferenceApplicationReview(root, context);
+  process.stdout.write(`${JSON.stringify(result, null, opts.json ? undefined : 2)}\n`);
+  process.exit(0);
+}
+
+async function cmdRefSearch(opts: Opts): Promise<never> {
+  const command = 'omd ref search';
+  if (opts._.length || !opts.input) throw new Error('usage: omd ref search --input <lane-query-url-queryParam.json> [--json]');
+  const { parseSearchInput, executeReferenceSearch, readSearchExecution } = await import('../core/ref/search-execution.ts');
+  const { withBrowser } = await import('../core/render/index.ts');
+  const input = parseSearchInput(inputJson(opts.input, command));
+  const writer = projectWriterFromActivation(opts, command);
+  const receipt = await withBrowser(browser => executeReferenceSearch(browser, input, writer));
+  const execution = readSearchExecution(process.cwd(), receipt, input.lane);
+  process.stdout.write(`${JSON.stringify({ receipt, execution }, null, opts.json ? undefined : 2)}\n`);
+  // A failed attempt is durable evidence of a gap, never an automatically successful search.
+  process.exit(execution.status === 'page-observed' ? 0 : 1);
+}
+
 /** Fails when the captured board holds no parts to compose section by section. */
 /**
  * `omd ref mood <add|show|check>` — the whole-page, visual-only lane.
@@ -3416,12 +3454,12 @@ async function cmdBenchmark(mode: string | undefined, opts: Opts): Promise<never
     const benchmark = parseTaskFlowBenchmark(inputJson(opts.input, 'omd benchmark set'), {
       ...(opts.sourceSha ? { expectedSourceContractSha256: opts.sourceSha } : {}),
     });
-    validateTaskFlowBenchmarkEvidence(process.cwd(), benchmark);
+    const evidenceStrength = validateTaskFlowBenchmarkEvidence(process.cwd(), benchmark);
     const projection = projectTaskFlowBenchmark(benchmark);
     const writer = projectWriterFromActivation(opts, 'omd benchmark set');
     const path = writer.write('.omd/task-flow-benchmark.json', `${JSON.stringify(benchmark, null, 2)}\n`);
     const projectionPath = writer.write('.omd/task-flow-benchmark-projection.json', `${JSON.stringify(projection, null, 2)}\n`);
-    if (opts.json) process.stdout.write(JSON.stringify({ path, projectionPath, projection }));
+    if (opts.json) process.stdout.write(JSON.stringify({ path, projectionPath, projection, evidenceStrength }));
     else console.log(`${path}\n${projectionPath}`);
     process.exit(0);
   }
@@ -3430,10 +3468,10 @@ async function cmdBenchmark(mode: string | undefined, opts: Opts): Promise<never
     const benchmark = parseTaskFlowBenchmark(inputJson(benchmarkPath, 'omd benchmark check'), {
       ...(opts.sourceSha ? { expectedSourceContractSha256: opts.sourceSha } : {}),
     });
-    validateTaskFlowBenchmarkEvidence(process.cwd(), benchmark);
+    const evidenceStrength = validateTaskFlowBenchmarkEvidence(process.cwd(), benchmark);
     const projection = projectTaskFlowBenchmark(benchmark);
-    if (opts.json) process.stdout.write(JSON.stringify({ benchmark, projection }));
-    else console.log(`ok — ${benchmark.sources.length} deeply explored sources, ${benchmark.sources.reduce((count, source) => count + source.screens.length, 0)} screens, ${benchmark.sources.reduce((count, source) => count + source.features.length, 0)} features, ${benchmark.sources.reduce((count, source) => count + source.flows.length, 0)} flows, ${benchmark.taskSteps.length} task steps, ${benchmark.counterexamples.length} counterexamples`);
+    if (opts.json) process.stdout.write(JSON.stringify({ benchmark, projection, evidenceStrength }));
+    else console.log(`ok — current evidence files for ${benchmark.sources.length} declared sources, ${benchmark.sources.reduce((count, source) => count + source.screens.length, 0)} screens and ${benchmark.sources.reduce((count, source) => count + source.flows.length, 0)} flows; live interactions are not verified`);
     process.exit(0);
   }
   throw new Error('usage: omd benchmark set --input <task-flow-benchmark.json> | check [--input <task-flow-benchmark.json>] [--json]');
@@ -4909,9 +4947,13 @@ function usage(): never {
     + '  ref discover-plan [--json]                  derive automatic search lanes from the current task; no user URLs required\n'
     + '  ref research-set --input research.json     bind separate domain/design lane evidence to current outputs\n'
     + '  ref research-check                         require both lanes and re-hash their evidence and outputs\n'
+    + '  ref search --input <json>                  execute a public query GET and record actual links/capture or failure\n'
     + '  ref apply-plan --json                      draft screen-by-screen use from current research/domain brief\n'
     + '  ref apply-set --input application.json      publish interpreted domain/design decisions for every screen\n'
     + '  ref apply-check --json                     verify current decisions and export source-free screen guidance\n'
+    + '  ref apply-review-plan --json               enumerate every screen criterion against authenticated final captures\n'
+    + '  ref apply-review-set --input <json>         record met/revise/justified-departure judgments on current captures\n'
+    + '  ref apply-review-check --json              reject missing, unresolved, or stale rendered application reviews\n'
     + '  ref board --input candidate-assemblies.json   author and persist a validated board from captured source/component pieces\n'
     + '  ref locale-bind --input bindings.json         bind local reference pieces to current cultural evidence decisions\n'
     + '  ref locale-bind-check                         revalidate board/profile/source locale bindings\n'
@@ -5230,9 +5272,13 @@ async function main(): Promise<never> {
     if (sub === 'discover-plan') return cmdRefDiscoveryPlan(opts);
     if (sub === 'research-set') return cmdRefResearch('set', opts);
     if (sub === 'research-check') return cmdRefResearch('check', opts);
+    if (sub === 'search') return cmdRefSearch(opts);
     if (sub === 'apply-plan') return cmdRefApplication('plan', opts);
     if (sub === 'apply-set') return cmdRefApplication('set', opts);
     if (sub === 'apply-check') return cmdRefApplication('check', opts);
+    if (sub === 'apply-review-plan') return cmdRefApplicationReview('plan', opts);
+    if (sub === 'apply-review-set') return cmdRefApplicationReview('set', opts);
+    if (sub === 'apply-review-check') return cmdRefApplicationReview('check', opts);
     if (sub === 'add') return cmdRefAdd(opts);
     if (sub === 'add-batch') return cmdRefAddBatch(opts);
     if (sub === 'board') return cmdRefBoard(opts);

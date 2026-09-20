@@ -83,7 +83,7 @@ function guardFailure(error: unknown): { summary: string; repairable: boolean } 
       repairable: !blockers.some(b => /^(?:route:|unconfirmed planning:)|authority|outside the current route|production is not selected|forbids application/i.test(b)) };
     }
   } catch { /* A terminal authority/validation error is ordinary text, not a readiness report. */ }
-  return { summary: raw.slice(0, 12000), repairable: /SLOP_REVIEW_REQUIRED:/.test(raw) };
+  return { summary: raw.slice(0, 12000), repairable: /SLOP_REVIEW_REQUIRED:|REFERENCE_APPLICATION_REVIEW:/.test(raw) };
 }
 
 async function runOmd(
@@ -142,7 +142,7 @@ export default function omdExtension(pi: PortablePiApi): void {
         const args = event.input?.args;
         if (Array.isArray(args) && args[0] === 'route' && args[1] === 'classify') managed.add(context.cwd);
         if (guarded(context.cwd) && Array.isArray(args) && /^(?:frame|domain|route|ref|copy|type|composition|slop|lifecycle|finalize)$/.test(String(args[0]))
-          && !/^(?:show|check|validate|list|handoff|discover-plan|research-check|apply-check|review-check)$/.test(String(args[1]))) touched.add(context.cwd);
+          && !/^(?:show|check|validate|list|handoff|discover-plan|research-check|apply-plan|apply-check|apply-review-plan|apply-review-check|review-check)$/.test(String(args[1]))) touched.add(context.cwd);
         return;
       }
       if (!guarded(context.cwd)) return;

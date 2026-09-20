@@ -7,13 +7,14 @@ import { nodeStableProjectFileSystem, readStableProjectFile } from '../runtime/s
 import { parseImageFragmentRecord } from './image-fragment-parser.ts';
 import { trustedReferenceImage } from './board-security.ts';
 import { designDiscoveryProvider, referenceServiceHost } from './design-discovery-sources.ts';
+import { validateSearchCoverage } from './search-execution.ts';
 import {
   parseTaskFlowBenchmark,
   taskFlowBenchmarkSha256,
   validateTaskFlowBenchmarkEvidence,
 } from './task-flow-benchmark.ts';
 
-export const REFERENCE_RESEARCH_SCHEMA = 'reference-research-v4' as const;
+export const REFERENCE_RESEARCH_SCHEMA = 'reference-research-v5' as const;
 export const DOMAIN_REFERENCES_PATH = '.omd/refs/domain/research.json';
 export const DESIGN_REFERENCES_PATH = '.omd/refs/design/research.json';
 export const REFERENCE_RESEARCH_PATH = '.omd/reference-research.json';
@@ -25,6 +26,7 @@ export const REFERENCE_RESEARCH_KEYS = [
 ] as const;
 export const REFERENCE_RESEARCH_LANE_KEYS = [
   'queries',
+  'searches',
   'sources',
 ] as const;
 export const REFERENCE_RESEARCH_DOMAIN_KEYS = [
@@ -71,6 +73,7 @@ type ResearchSource = Readonly<{
 }>;
 type ResearchLane = Readonly<{
   queries: readonly string[];
+  searches: readonly ResearchEvidence[];
   sources: readonly ResearchSource[];
 }>;
 export type ReferenceResearch = Readonly<{
@@ -188,12 +191,13 @@ function lane(value: unknown, keys: readonly string[], code: string, design = fa
   if (!Array.isArray(input.sources) || input.sources.length === 0) fail(`${code}_SOURCE_COVERAGE`);
   const sources = input.sources.map(value => source(value, design));
   if (new Set(sources.map((entry) => entry.id)).size !== sources.length) fail(`${code}_SOURCE_DUPLICATE`);
-  return { ...input, queries: texts(input.queries, `${code}_QUERY`), sources };
+  if (!Array.isArray(input.searches) || !input.searches.length || Object.keys(input.searches).length !== input.searches.length) fail('REFERENCE_RESEARCH_SEARCH_EXECUTION_REQUIRED');
+  return { ...input, queries: texts(input.queries, `${code}_QUERY`), searches: input.searches.map(evidence), sources };
 }
 
 export function parseReferenceResearch(value: unknown): ReferenceResearch {
   const input = record(value, 'REFERENCE_RESEARCH_INVALID');
-  if (['reference-research-v1', 'reference-research-v2', 'reference-research-v3'].includes(input.schema as string)) fail('REFERENCE_RESEARCH_UPGRADE_REQUIRED: use omd schema reference-research; review visual-direction versus component-support roles, retain valid native captures, and republish with omd ref research-set');
+  if (['reference-research-v1', 'reference-research-v2', 'reference-research-v3', 'reference-research-v4'].includes(input.schema as string)) fail('REFERENCE_RESEARCH_UPGRADE_REQUIRED: use omd schema reference-research; retain valid captures, run omd ref search for executed-query evidence, and republish with omd ref research-set');
   exactKeys(input, REFERENCE_RESEARCH_KEYS, 'REFERENCE_RESEARCH_KEYS');
   if (input.schema !== REFERENCE_RESEARCH_SCHEMA) fail('REFERENCE_RESEARCH_SCHEMA');
   const sourceContractSha256 = digest(input.sourceContractSha256, 'REFERENCE_RESEARCH_SOURCE_CONTRACT_SHA');
@@ -218,8 +222,8 @@ export function parseReferenceResearch(value: unknown): ReferenceResearch {
   return Object.freeze({
     schema: REFERENCE_RESEARCH_SCHEMA,
     sourceContractSha256,
-    domainReference: Object.freeze({ queries: domain.queries, sources: domain.sources, benchmarkSha256 }),
-    designReference: Object.freeze({ queries: design.queries, sources: design.sources, boardSha256 }),
+    domainReference: Object.freeze({ queries: domain.queries, searches: domain.searches, sources: domain.sources, benchmarkSha256 }),
+    designReference: Object.freeze({ queries: design.queries, searches: design.searches, sources: design.sources, boardSha256 }),
   });
 }
 
@@ -342,6 +346,10 @@ export function validateReferenceResearch(
       if (!Array.isArray(acquisition.links) || !acquisition.links.includes(item.url)) fail('REFERENCE_RESEARCH_DISCOVERY_LINK_MISMATCH');
     }
   }
+  validateSearchCoverage(root, 'domain', research.domainReference.queries, research.domainReference.searches,
+    research.domainReference.sources.map(item => item.url));
+  validateSearchCoverage(root, 'design', research.designReference.queries, research.designReference.searches,
+    research.designReference.sources.filter(item => item.discovery!.kind !== 'user-provided').map(item => item.discovery!.url));
   const boardBytes = fileBytes(root, '.omd/reference-board.json', 'REFERENCE_RESEARCH_BOARD_MISSING');
   if (createHash('sha256').update(boardBytes).digest('hex') !== research.designReference.boardSha256) {
     fail('REFERENCE_RESEARCH_BOARD_STALE');

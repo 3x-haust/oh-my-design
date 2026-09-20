@@ -109,8 +109,8 @@ files and their aggregate consistency receipt. Capture PNGs and metadata directl
 folders with `ref add --lane domain|design` or `lane` on each add-batch entry. Inspect them with
 `ref list --lane domain|design --json`; domain captures do not silently enter the visual board.
 v3 binds source and gallery-entry PNGs to their native capture JSON. A homepage is not an inspected
-entry, and a different original source must appear in the gallery's observed outbound links. Old
-Older records need v4 visual-role review and republication, retaining valid native captures.
+entry, and a different original source must appear in the gallery's observed outbound links.
+Older records need v5 execution binding and republication, retaining valid native captures.
 Domain/design hosts, final redirects and PNG evidence must be independent. Non-user discovery must
 be a supported public gallery item, not a service page labelled as a gallery. Public Pinterest,
 Dribbble and Behance items do not require UI Bowl's paid MCP. Free viewing is checked per item.
@@ -118,6 +118,14 @@ Design sources declare visual-direction or component-support with observed compo
 density, imagery, transfer and exclusions. Every board candidate uses visual-direction evidence;
 support-only documentation cannot complete the lane. Inspect previews in `.omd/refs/design/README.md`.
 These are provenance/role checks, not a machine certification of beauty.
+
+v5 requires actual search receipts, not query prose: `omd ref search --input <json>` accepts
+`{lane, query, url, queryParam}` and records a fresh-browser GET, actual links/capture or failure.
+Put its returned receipt in the lane's `searches`. Every query must match an execution and retained
+non-user sources/entries must occur in observed links and have separate native visit captures.
+Failed attempts can accompany a usable free alternative. HTTP 200 alone is not search quality.
+The executor accepts public Google/Bing/DuckDuckGo search pages with `queryParam: "q"`; use task/pattern
+and gallery `site:` queries. Arbitrary service pages with invented query parameters are rejected.
 
 After research, `omd ref apply-plan --json` creates an incomplete input draft for every current
 domain-brief surface. Inspect the actual images, fill the draft's `input`, and publish it using
@@ -128,6 +136,13 @@ the plan; briefs and selected handoffs deliver only the source-free decision pro
 or scope changes invalidate it. Current v4 captures can be retained without recapture, but no
 decisions are invented for them. This adapts Design Flow Harness's screen-linked research approach,
 not its fixed Figma pipeline. A plan does not prove rendered use, quality, or user approval.
+
+Source sealing now binds the application plan. After authenticated final evidence, run
+`omd ref apply-review-plan --json`, inspect each criterion on current desktop/mobile captures,
+then `apply-review-set --input <json>` and `apply-review-check --json`. Missing, unresolved or stale
+judgments block terminal completion; changes require resealing, recapture and re-review.
+Review reasons are agent-authored, not human approval. The v2 task-flow checker explicitly reports
+`liveFlowVerified: false`: hashed screenshots/action prose still do not prove a live multi-screen flow.
 
 For an existing service, `omd init --json` inventories static CSS variables/declarations and `$value`
 token JSON into `.omd/existing-design-system.json` and `.md`. Scopes, aliases and source locations/hashes

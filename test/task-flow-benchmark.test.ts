@@ -216,7 +216,9 @@ test('current local browser evidence is required for every screen and flow step'
     }
   }
   const parsed = parseTaskFlowBenchmark(input);
-  assert.doesNotThrow(() => validateTaskFlowBenchmarkEvidence(root, parsed));
+  const strength = validateTaskFlowBenchmarkEvidence(root, parsed);
+  assert.equal(strength.liveFlowVerified, false, 'matching file hashes cannot attest a browser action');
+  assert.ok(strength.observations.every(row => row.grade === 'artifact-only' && row.actionVerified === false));
   writeFileSync(join(root, input.sources[0]!.screens[0]!.evidence.path), 'stale');
   assert.throws(() => validateTaskFlowBenchmarkEvidence(root, parsed), /TASK_FLOW_BENCHMARK_EVIDENCE_STALE/);
 });

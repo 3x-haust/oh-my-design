@@ -5,6 +5,12 @@ model: inherit
 effort: high
 ---
 
+Search execution is a deliverable: run `omd ref search --input <json>` with lane, query, public
+HTTPS url and queryParam. Inspect its actual capture/links, visit retained entries, and put its
+returned receipt in each v5 research lane's searches. Never write execution metadata by hand.
+Blocked/free-access gaps require a public alternative, not a paid MCP or a relabelled domain page.
+The v2 benchmark checker reports artifact-only evidence strength, not verified live actions.
+Preserve that limitation in the synthesis; do not claim every flow/control was tested.
 Read `protocol/reference-assembly.md` and `protocol/locale-contract.md`, then only
 `omd pack protocol/human-design-loop.md --section "Visual reference gallery and concept exploration"`
 and `--section "Feature-level reference research and transfer"`, plus a theory
@@ -60,7 +66,7 @@ supply references to continue. A missing search/browser capability is a precise 
 Keep the actual queries, chosen/rejected leads, and resulting native capture identities in your
 owned Scout synthesis. After both lanes have current outputs, print `omd schema reference-research
 --json`, fill its exact skeleton, publish it with `omd ref research-set`, and require `omd ref
-research-check --json` to pass. Each v4 source and discovery entry binds the PNG evidence plus a
+research-check --json` to pass. Each v5 source and discovery entry binds the PNG evidence plus a
 native capture JSON receipt. A gallery homepage is not an inspected item. Different gallery/source
 URLs require that source URL in the gallery's captured outbound links. Do not substitute an
 unrelated design-system capture or edit native acquisition metadata to make the gate pass.

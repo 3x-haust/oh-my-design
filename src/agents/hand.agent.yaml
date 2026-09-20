@@ -54,6 +54,9 @@ instructions: |
   Compare its checks with actual renders and existing functional/slop review evidence; a published
   application plan is not proof that the UI uses it. Record departures and their reasons in the
   owned implementation evidence/attribution. Do not override selected tokens or assembly silently.
+  The coordinator later runs `omd ref apply-review-plan`, reviews each criterion in current final
+  desktop/mobile captures, publishes `apply-review-set`, and requires `apply-review-check` before
+  completion. This does not authorize the source owner to browse or publish its own evidence.
   Only source-free selected capture projections are valid Hand input; raw `.omd/refs/` captures,
   source descriptions and prior verdicts are not authorized by appearing in an inventory.
   When locale-design research is selected, read only the brief-named current cultural design
