@@ -39,6 +39,8 @@ import {
   publishTestAdaptiveRoute,
 } from './helpers/project-write.ts';
 import { browserFixturePng, writeBrowserDecisionFixture } from './helpers/browser-observation-decision-links.ts';
+import { withBrowser } from '../core/render/index.ts';
+import { withLocalView } from '../core/render/stateful.ts';
 import {
   publishCompletenessRun,
   publishTypographyApplicability,
@@ -213,6 +215,7 @@ function lane(
 function prepared(
   workflow = false,
   routeInput: unknown = fixture(),
+  renderedCaptures?: readonly Buffer[],
 ): Readonly<{ root: string; invocation: ReturnType<typeof publishTestAdaptiveRoute>; manifest: unknown; graph: unknown }> {
   const root = project();
   const selectedStages = list(field(routeInput, 'strategyDecision'), 'stages');
@@ -233,10 +236,10 @@ function prepared(
   writeJson(root, buildPath, { schemaVersion: 'omd-build-identity-v1', packageVersion: '1.0.0', buildSha256: invocation.current.buildSha256, sourceSkillSha256: invocation.current.loadedSkillSha256 });
   const browser = writeBrowserDecisionFixture(root);
   const capturePath = '.omd/copy-final.png';
-  const capture = browserFixturePng(1280, 900);
+  const capture = renderedCaptures?.[0] ?? browserFixturePng(1280, 900);
   writeFileSync(join(root, capturePath), capture);
   const mobileCapturePath = '.omd/copy-final-mobile.png';
-  const mobileCapture = browserFixturePng(390, 844);
+  const mobileCapture = renderedCaptures?.[1] ?? browserFixturePng(390, 844);
   writeFileSync(join(root, mobileCapturePath), mobileCapture);
   mkdirSync(join(root, 'src', 'copy'), { recursive: true });
   const productionPath = 'src/copy/final.html';
@@ -446,7 +449,18 @@ test('execution requirements are reported only after real final publication and 
     { requirement: 'Pass independent review and final preflight.', enforcedBy: ['independent-review', 'completion-preflight'] },
   ];
   Reflect.set(mutable(field(routeInput, 'taskOutcome')), 'executionRequirements', requirements);
-  const value = prepared(false, routeInput);
+  const renderRoot = project();
+  const state = { name: 'approved-copy-visible', startRoute: '/', route: '/', actions: [], assertions: [{ selector: 'main', state: 'visible' as const, text: 'approved copy' }] };
+  let captures: Buffer[];
+  try {
+    writeFileSync(join(renderRoot, 'src/copy/final.html'), '<main>approved copy</main>');
+    captures = await withBrowser(async browser => {
+      const images = [];
+      for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 }]) images.push(await withLocalView(browser, renderRoot, { page: 'src/copy/final.html', viewport, state }, page => page.screenshot()));
+      return images;
+    });
+  } finally { rmSync(renderRoot, { recursive: true, force: true }); }
+  const value = prepared(false, routeInput, captures);
   try {
     assert.throws(() => checkTerminalCompletion(value.root, value.invocation));
     authorizeGraph(value.root, value.invocation, value.graph);
@@ -470,8 +484,8 @@ test('execution requirements are reported only after real final publication and 
     ]);
     assert.throws(() => checkTerminalCompletion(value.root, value.invocation), /SLOP_REVIEW_REQUIRED/);
     const slop = await captureSlopCheckpoint(value.root, { schema: 'slop-scope-v1', views: [
-      { id: 'desktop', page: 'src/copy/final.html', viewport: { width: 1280, height: 900 } },
-      { id: 'mobile', page: 'src/copy/final.html', viewport: { width: 390, height: 844 } },
+      { id: 'desktop', page: 'src/copy/final.html', viewport: { width: 1280, height: 900 }, state },
+      { id: 'mobile', page: 'src/copy/final.html', viewport: { width: 390, height: 844 }, state },
     ] }, createTestProjectWriteAdapter(value.root, value.invocation));
     publishSlopReview(value.root, { ...slop.reviewInput, summary: 'Synthetic final copy fixture: the approved sentence is visible in both native viewport captures.',
       decisions: slop.reviewInput.decisions.map(d => ({ ...d, status: 'dismissed', reason: 'The synthetic text-only fixture deliberately has no additional visual treatment.', viewIds: ['desktop', 'mobile'] })),

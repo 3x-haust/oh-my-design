@@ -62,7 +62,7 @@ function parse(value: unknown): Review {
 /** Deterministic IDs change when either the destination surface or its actual criterion changes. */
 export function referenceApplicationCriteria(application: ReferenceApplicationProjection) {
   return application.screens.flatMap(screen => screen.checks.map(check => ({
-    criterionId: hash(JSON.stringify([screen.surface, check])), surface: screen.surface, check,
+    criterionId: hash(JSON.stringify([screen.surface, screen.target, check])), surface: screen.surface, target: screen.target, check,
   })));
 }
 function read(root: string, path: string): Buffer {
@@ -105,10 +105,17 @@ export function validateReferenceApplicationReview(value: unknown, context: Cont
     || review.build.path !== context.build.path || review.build.sha256 !== context.build.sha256
     || review.sourceSeal.path !== context.sourceSeal.path || review.sourceSeal.sha256 !== context.sourceSeal.sha256) return fail('application/build/source seal changed; inspect new captures and re-review');
   const required = new Set(referenceApplicationCriteria(context.application).flatMap(item => ['desktop', 'mobile'].map(viewport => `${item.criterionId}:${viewport}`)));
+  const criteria = referenceApplicationCriteria(context.application);
   for (const item of review.results) {
     if (!required.delete(`${item.criterionId}:${item.viewport}`)) return fail('duplicate or unknown criterion/viewport');
-    if (!context.observations.some(observation => observation.observationSha256 === item.observationSha256
-      && observation.captureSha256 === item.captureSha256 && observation.viewport === item.viewport && observation.state === item.state)) return fail('result is not bound to an exact current final capture/state/viewport');
+    const criterion = criteria.find(row => row.criterionId === item.criterionId)!;
+    if (!criterion.target || criterion.target.state !== item.state || !context.observations.some(observation => observation.observationSha256 === item.observationSha256
+      && observation.captureSha256 === item.captureSha256 && observation.viewport === item.viewport && observation.state === item.state
+      && context.captureIndex?.some(capture => {
+        if (capture.browserObservationSha256 !== observation.browserObservationSha256) return false;
+        const url = new URL(capture.testedUrl);
+        return `${url.pathname}${url.search}${url.hash}` === criterion.target.route;
+      }))) return fail(`result is not bound to the destination surface ${criterion.surface} and its exact current final route/state/viewport capture`);
     if (requireClosed && item.verdict === 'revise') return fail('unresolved criterion; repair, recapture, and re-review');
   }
   if (required.size) return fail('missing screen criteria or desktop/mobile review');

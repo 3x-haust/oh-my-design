@@ -7,24 +7,27 @@ import { readStableProjectFile, nodeStableProjectFileSystem } from '../runtime/s
 import type { ProjectWriteAdapter } from '../runtime/project-write.ts';
 import { listProductionSourceFiles } from '../source-seal/index.ts';
 import { servedProjectTreeSha256 } from '../render/serve.ts';
-import { capturePageForRef, withBrowser } from '../render/index.ts';
+import { withBrowser } from '../render/index.ts';
 import { normalize } from '../ir/normalize.ts';
 import { check, loadRules } from '../rules/engine.ts';
 import { decodePng } from '../motion/energy.ts';
 import { scanSlopSource } from './index.ts';
 import type { RawIr } from '../types.ts';
+import { parseViewState, withLocalView, statefulIr, type ViewState } from '../render/stateful.ts';
+import { signNativeObservation, verifyNativeObservation } from '../runtime/self-signed-activation.ts';
 
 export const SLOP_REVIEW_POINTER = '.omd/slop/latest.json';
 type Receipt = { path: string; sha256: string };
-type View = { id: string; page: string; viewport: { width: number; height: number } };
+type View = { id: string; page: string; viewport: { width: number; height: number }; state?: ViewState };
 type Finding = { id: string; kind: 'source-candidate' | 'render-warning'; rule: string; path: string; viewId: string | null; question: string };
 type Decision = { id: string; status: 'confirmed' | 'dismissed'; reason: string; viewIds: string[] };
 type Resolution = { id: string; reason: string; viewIds: string[] };
 type Checkpoint = {
   schema: 'slop-checkpoint-v1'; sourceSha256: string; rulesSha256: string;
   scope: View[]; builds: { page: string; sha256: string }[];
-  views: { id: string; image: Receipt; ir: Receipt }[]; findings: Finding[]; filesScanned: number;
+  views: { id: string; image: Receipt; viewportImage: Receipt; ir: Receipt }[]; findings: Finding[]; filesScanned: number;
   parent: { checkpoint: Receipt; review: Receipt } | null;
+  signature: string;
 };
 type Review = { schema: 'slop-review-v1'; checkpointSha256: string; summary: string; decisions: Decision[]; resolved: Resolution[] };
 type Pointer = { schema: 'slop-review-pointer-v1'; checkpoint: Receipt; review: Receipt | null };
@@ -77,18 +80,20 @@ export function parseSlopScope(value: unknown): View[] {
   const input = obj(value, ['schema', 'views'], 'scope');
   if (input.schema !== 'slop-scope-v1' || !Array.isArray(input.views) || !input.views.length || input.views.length > 24) return fail('scope needs 1–24 views');
   const views = input.views.map(raw => {
-    const view = obj(raw, ['id', 'page', 'viewport'], 'view');
+    const view = obj(raw, ['id', 'page', 'viewport', ...(raw && Object.hasOwn(raw, 'state') ? ['state'] : [])], 'view');
     const page = text(view.page, 'page');
     // Serve exact local build bytes, never an unrelated localhost server or a reference URL.
     if (!/^[\w./-]+\.html$/.test(page) || page.startsWith('/') || page.startsWith('.omd/') || page.split('/').some(part => !part || part === '.' || part === '..')) fail('view.page must be a contained local HTML build entry (e.g. dist/index.html), not a URL');
     const viewport = obj(view.viewport, ['width', 'height'], 'viewport');
     if (![viewport.width, viewport.height].every(n => typeof n === 'number' && Number.isInteger(n) && n >= 240 && n <= 2560)) fail('invalid viewport');
-    return { id: text(view.id, 'view id'), page, viewport: viewport as View['viewport'] };
+    return { id: text(view.id, 'view id'), page, viewport: viewport as View['viewport'], ...(view.state === undefined ? {} : { state: parseViewState(view.state) }) };
   });
   if (new Set(views.map(view => view.id)).size !== views.length) fail('duplicate view IDs');
   return views;
 }
 function current(root: string, checkpoint: Checkpoint): void {
+  const { signature, ...native } = checkpoint;
+  if (typeof signature !== 'string' || !verifyNativeObservation(root, 'slop-checkpoint-v1', sha(canonicalJson(native)), signature)) fail('native checkpoint signature invalid; rerun slop checkpoint');
   if (checkpoint.schema !== 'slop-checkpoint-v1' || checkpoint.sourceSha256 !== sourceSha(root) || checkpoint.rulesSha256 !== rulesSha()) fail('checkpoint source or scanner/rules changed; rerender and rescan');
   for (const build of checkpoint.builds) if (servedProjectTreeSha256(root, build.page) !== build.sha256) fail('rendered build changed; rerender and rescan');
   const scan = scanSlopSource(root);
@@ -161,16 +166,23 @@ export async function captureSlopCheckpoint(root: string, scopeInput: unknown, w
   await withBrowser(async browser => {
     for (const [index, view] of scope.entries()) {
       const imagePath = `${staging}/${index}.png`;
-      const captured = await capturePageForRef(browser, resolve(root, view.page), view.viewport, { shotOut: resolve(root, imagePath), adapter: writer });
-      if (!captured.shotSaved) fail('render screenshot missing; no checkpoint published');
+      const captured = await withLocalView(browser, root, view, async page => {
+        const raw = await statefulIr(page);
+        const viewportPng = await page.screenshot({ timeout: 5000 });
+        writer.write(imagePath, await page.screenshot({ fullPage: true, timeout: 5000 }));
+        return { raw, viewportPng };
+      });
       const bytes = read(root, imagePath), digest = sha(bytes), path = `.omd/slop/captures/${digest}.png`;
       writer.writeContentAddressed(path, bytes);
-      views.push({ id: view.id, image: { path, sha256: digest }, ir: save(writer, 'ir', captured.raw) });
+      const viewportSha = sha(captured.viewportPng), viewportPath = `.omd/slop/captures/${viewportSha}.png`;
+      writer.writeContentAddressed(viewportPath, captured.viewportPng);
+      views.push({ id: view.id, image: { path, sha256: digest }, viewportImage: { path: viewportPath, sha256: viewportSha }, ir: save(writer, 'ir', captured.raw) });
       findings.push(...renderFindings(view.id, captured.raw));
     }
   });
-  const checkpoint: Checkpoint = { schema: 'slop-checkpoint-v1', sourceSha256, rulesSha256, scope, builds, views,
+  const unsigned = { schema: 'slop-checkpoint-v1' as const, sourceSha256, rulesSha256, scope, builds, views,
     findings: [...new Map(findings.map(f => [f.id, f])).values()], filesScanned: scan.filesScanned, parent };
+  const checkpoint: Checkpoint = { ...unsigned, signature: signNativeObservation(root, 'slop-checkpoint-v1', sha(canonicalJson(unsigned))) };
   current(root, checkpoint); // Refuse a source/build mutation during capture.
   const saved = save(writer, 'checkpoints', checkpoint);
   writer.write(SLOP_REVIEW_POINTER, `${canonicalJson({ schema: 'slop-review-pointer-v1', checkpoint: saved, review: null })}\n`);
@@ -191,12 +203,30 @@ export function publishSlopReview(root: string, input: unknown, writer: ProjectW
 }
 
 /** Terminal completion calls this; a log entry or a source scan alone is never sufficient. */
-export function checkSlopReview(root: string, expectedViews: readonly { page: string; width: number; height: number }[] = []) {
+type ExpectedView = { page: string; width: number; height: number; route?: string; state?: string; capture?: Receipt };
+function sameViewportPixels(root: string, native: Receipt, final: Receipt): boolean {
+  const finalBytes = read(root, final.path);
+  if (sha(finalBytes) !== final.sha256) fail('final state capture changed');
+  const left = decodePng(bytesAt(root, native)), right = decodePng(finalBytes);
+  if (left.width !== right.width || left.height !== right.height) return false;
+  for (let pixel = 0; pixel < left.width * left.height; pixel++) for (let c = 0; c < 4; c++) {
+    if ((c < left.channels ? left.pixels[pixel * left.channels + c] : 255)
+      !== (c < right.channels ? right.pixels[pixel * right.channels + c] : 255)) return false;
+  }
+  return true;
+}
+export function checkSlopReview(root: string, expectedViews: readonly ExpectedView[] = []) {
   const latest = pointer(root) ?? fail('missing loop: run slop checkpoint, inspect renders, then slop review-set');
   if (!latest.review) fail('current checkpoint has no rendered review');
   const checkpoint = artifact<Checkpoint>(root, latest.checkpoint);
   current(root, checkpoint);
-  for (const expected of expectedViews) if (!checkpoint.scope.some(view => view.page === expected.page && view.viewport.width === expected.width && view.viewport.height === expected.height)) fail('checkpoint does not cover the final production entry/viewport');
+  for (const expected of expectedViews) {
+    const matched = checkpoint.scope.filter(view => view.page === expected.page && view.viewport.width === expected.width && view.viewport.height === expected.height
+      && (expected.route === undefined || view.state?.route === expected.route) && (expected.state === undefined || view.state?.name === expected.state));
+    if (!matched.length) fail('checkpoint does not cover the final production entry/viewport/route/state');
+    if (expected.state !== undefined && !expected.capture) fail('final state coverage requires its authenticated capture, not a state label alone');
+    if (expected.capture && !matched.some(view => sameViewportPixels(root, checkpoint.views.find(v => v.id === view.id)!.viewportImage, expected.capture!))) fail('final state pixels differ from the reviewed native viewport; replay the same deterministic state and recapture both evaluations');
+  }
   let cursor: Pointer | null = latest, rounds = 0;
   const seen = new Set<string>();
   while (cursor) {
@@ -205,7 +235,9 @@ export function checkSlopReview(root: string, expectedViews: readonly { page: st
     const entry: Checkpoint = artifact<Checkpoint>(root, cursor.checkpoint);
     const reviewReceipt = cursor.review ?? fail('unreviewed history');
     const review = validateReview(root, artifact(root, reviewReceipt), cursor.checkpoint, entry);
-    for (const view of entry.views) decodePng(bytesAt(root, view.image));
+    const { signature, ...native } = entry;
+    if (typeof signature !== 'string' || !verifyNativeObservation(root, 'slop-checkpoint-v1', sha(canonicalJson(native)), signature)) fail('native checkpoint signature invalid');
+    for (const view of entry.views) { decodePng(bytesAt(root, view.image)); decodePng(bytesAt(root, view.viewportImage)); }
     if (rounds === 1 && review.decisions.some(d => d.status === 'confirmed')) fail('confirmed issues remain; repair, rerender, rescan and review');
     if (entry.parent) {
       const previous = artifact<Checkpoint>(root, entry.parent.checkpoint);
@@ -222,17 +254,27 @@ export function checkSlopReview(root: string, expectedViews: readonly { page: st
 /** The already validated final graph supplies the production target, not a caller's narrower scope. */
 export function checkSlopFinalGraph(root: string, graph: unknown) {
   const value = graph as { schema?: string; productionSchema?: string; observations?: Receipt[] };
-  const expected: { page: string; width: number; height: number }[] = [];
+  const expected: ExpectedView[] = [];
+  type FinalView = { testedUrl: string; testedState: string; viewport: { width: number; height: number }; observableResult: { capture: Receipt } };
+  const stateViews: FinalView[] = [];
+  const productionEntries = new Set<string>();
   for (const item of value.observations ?? []) {
     const bytes = read(root, item.path);
     if (sha(bytes) !== item.sha256) fail('final observation changed');
-    const observation = JSON.parse(bytes.toString('utf8')) as { evidence?: { trustedOutcome?: { receiptSha256?: string } } };
+    const observation = JSON.parse(bytes.toString('utf8')) as { evidence?: { trustedOutcome?: { receiptSha256?: string }; browserObservations?: { observations?: FinalView[] } } };
+    stateViews.push(...observation.evidence?.browserObservations?.observations ?? []);
     const digest = observation.evidence?.trustedOutcome?.receiptSha256;
     if (!digest) continue;
     if (!/^[a-f0-9]{64}$/.test(digest)) fail('invalid trusted browser receipt digest');
     const browser = JSON.parse(read(root, `.omd/trusted-browser-receipt-sha256-${digest}.json`).toString('utf8')) as { productionPath: string; captures: { width: number; height: number }[] };
+    productionEntries.add(browser.productionPath);
     // Trusted final validation owns browser receipt authentication; this only joins its exact scope.
     for (const capture of browser.captures) expected.push({ page: browser.productionPath, width: capture.width, height: capture.height });
+  }
+  if (stateViews.length && productionEntries.size > 1) fail('multiple production entries need unambiguous state-to-entry binding; review one final production target at a time');
+  if (productionEntries.size === 1) for (const view of stateViews) {
+    const url = new URL(view.testedUrl);
+    expected.push({ page: [...productionEntries][0]!, ...view.viewport, route: `${url.pathname}${url.search}${url.hash}`, state: view.testedState, capture: view.observableResult.capture });
   }
   if (!expected.length) {
     const legacy = value.schema === 'final-evidence-v2-graph'

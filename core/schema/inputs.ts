@@ -426,6 +426,8 @@ const ROUTE_INPUT: InputSkeleton = {
     'For new-product, new-marketing, or unresolved discovery: uncertainty="unresolved", existingEvidence="none" or "insufficient", existingEvidenceUse=null, skipReason=null. Both null keys are required; do not omit them or replace null with explanatory prose.',
     'For skipped discovery on existing work: uncertainty="resolved", existingEvidence="sufficient", existingEvidenceUse and skipReason are non-empty descriptions of actual evidence use and the skip reason.',
     'the user-selected model owns role, stage, and method order',
+    'Implementation stages must end with browser-evidence, independent-review, after production. final-evidence-v2 is a gate, not a stage. High failureRisk requires stage safety-validation (omd-writer), an enforced hard_safety_rail, and methods design-strategy-safety-recovery and rigorous-task-accessibility-validation. Inspect brief safety-validation for its existing contracts, not an invented safety role or schema.',
+    'A selected stage/method must not also be in skips. Greenfield always selects frame; remove the example frame skip when using this skeleton for a new product.',
     'For design and handoff before implementation, use omd schema design-route-input. Its deliveryMode=design-only forbids production and application paths. Do not add production merely to pass an implementation-route validator.',
     'uxPolicy kinds are hard_safety_rail (enforced), required_outcome (required), recommended_method (selected|skipped with reason), free_choice (selected|skipped). Safety, recovery and accessibility are topics/ids, not kinds. designAxes.schema must be design-axis-input-v1.',
     'First run route validate, repair each named error and retry; validation is read-only and does not need activation. Then route classify publishes the valid input. Pi uses omd_cli without --activation; a genuine supplied Codex activation remains host-owned.',
@@ -652,7 +654,7 @@ const TASK_FLOW_BENCHMARK: InputSkeleton = {
   command: 'omd benchmark set --input .omd/.cache/task-flow-benchmark.json',
   keys: TASK_FLOW_BENCHMARK_KEYS,
   constraints: [
-    'copy the exact root and nested key sets; do not rename, duplicate, nest, or extend fields',
+    'copy the exact root and nested key sets; do not rename, duplicate, nest, or extend fields. Each flow may carry execution:{path,sha256}; selected product benchmarks require the signed receipt returned by benchmark record for each completed flow. Omit execution only for explicitly unverified historical/optional evidence.',
     `surface accepts only ${TASK_FLOW_BENCHMARK_SURFACES.join(', ')}. Preserve the frame\'s applicable surface grammar (theory/ux.md, Surface types); domain names the actual category. Editorial reading, section-navigation and saved-reading flows can satisfy a route-selected task-flow benchmark without becoming a product work surface. This does not require a benchmark for every editorial page or change the route. If no allowed value truthfully fits, report the contract gap instead of relabeling it to pass.`,
     'sources contains 2..6 independently inspected sources and at least two same-domain-service sources; same-domain services must outnumber adjacent-domain services',
     'each source records every safe reachable screen in its declared scope, every discovered target as either inspected or explicitly excluded, and a connected reachedBy path from an entry screen',
@@ -676,7 +678,7 @@ const TASK_FLOW_BENCHMARK: InputSkeleton = {
         kind: 'same-domain-service',
         observedAt: '2026-08-25',
         coverage: {
-          scope: 'public pre-auth repair request journey reachable from the supplied entry page',
+          scope: 'public repair service overview and detail pages reachable from the supplied entry page',
           status: 'complete',
           discoveredTargetCount: 2,
           entryScreenIds: ['a-intake'],
@@ -685,25 +687,26 @@ const TASK_FLOW_BENCHMARK: InputSkeleton = {
         },
         screens: [
           {
-            id: 'a-intake', name: 'Issue intake', url: 'https://example.com/repair-booking-a', state: 'initial form visible',
-            reachedBy: { fromScreenId: null, action: 'open the public entry URL', result: 'issue intake is visible' },
+            id: 'a-intake', name: 'Service overview', url: 'https://example.com/repair-booking-a', state: 'overview-visible',
+            reachedBy: { fromScreenId: null, action: 'observe current screen', result: 'visible: main h1' },
             evidence: { path: '.omd/refs/task-flows/service-a-intake.png', sha256: '1'.repeat(64) },
           },
           {
-            id: 'a-review', name: 'Request review', url: 'https://example.com/repair-booking-a/review', state: 'entered issue retained for review',
-            reachedBy: { fromScreenId: 'a-intake', action: 'enter a safe test issue and continue', result: 'review screen preserves the entered issue' },
+            id: 'a-review', name: 'Service details', url: 'https://example.com/repair-booking-a/details', state: 'details-visible',
+            reachedBy: { fromScreenId: 'a-intake', action: 'click: a[data-details]', result: 'visible: #details' },
             evidence: { path: '.omd/refs/task-flows/service-a-review.png', sha256: '2'.repeat(64) },
           },
         ],
-        features: [{ id: 'a-issue-capture', name: 'Issue capture', behavior: 'retains the issue through review', screenIds: ['a-intake', 'a-review'] }],
+        features: [{ id: 'a-issue-capture', name: 'Inspect service details', behavior: 'links the service overview to public requirements', screenIds: ['a-intake', 'a-review'] }],
         flows: [{
-          id: 'a-request-review', intent: 'describe an issue and review it before commitment', status: 'completed', limitation: null,
+          id: 'a-request-review', intent: 'inspect service information before any request', status: 'completed', limitation: null,
+          execution: { path: `.omd/refs/domain/flows/executions/${'a'.repeat(64)}.json`, sha256: 'a'.repeat(64) },
           steps: [
-            { order: 1, screenId: 'a-intake', action: 'open issue intake', result: 'empty issue controls are available', evidence: { path: '.omd/refs/task-flows/service-a-flow-1.png', sha256: '3'.repeat(64) } },
-            { order: 2, screenId: 'a-review', action: 'continue with a safe test issue', result: 'review appears without committing a request', evidence: { path: '.omd/refs/task-flows/service-a-flow-2.png', sha256: '4'.repeat(64) } },
+            { order: 1, screenId: 'a-intake', action: 'observe current screen', result: 'visible: main h1', evidence: { path: '.omd/refs/task-flows/service-a-flow-1.json', sha256: '3'.repeat(64) } },
+            { order: 2, screenId: 'a-review', action: 'click: a[data-details]', result: 'visible: #details', evidence: { path: '.omd/refs/task-flows/service-a-flow-2.json', sha256: '4'.repeat(64) } },
           ],
         }],
-        observedPatterns: ['observable issue capture precedes scheduling'],
+        observedPatterns: ['public requirements are reachable from the overview'],
         forbiddenTransfers: ['brand, pricing, availability, and service promises'],
       },
       {
@@ -712,7 +715,7 @@ const TASK_FLOW_BENCHMARK: InputSkeleton = {
         kind: 'same-domain-service',
         observedAt: '2026-08-25',
         coverage: {
-          scope: 'public pre-auth triage and review journey',
+          scope: 'public service categories and preparation guidance',
           status: 'complete',
           discoveredTargetCount: 2,
           entryScreenIds: ['b-triage'],
@@ -721,39 +724,40 @@ const TASK_FLOW_BENCHMARK: InputSkeleton = {
         },
         screens: [
           {
-            id: 'b-triage', name: 'Triage', url: 'https://example.org/repair-booking-b', state: 'triage choices visible',
-            reachedBy: { fromScreenId: null, action: 'open the public entry URL', result: 'triage choices are visible' },
+            id: 'b-triage', name: 'Service categories', url: 'https://example.org/repair-booking-b', state: 'categories-visible',
+            reachedBy: { fromScreenId: null, action: 'observe current screen', result: 'visible: #categories' },
             evidence: { path: '.omd/refs/task-flows/service-b-triage.png', sha256: '5'.repeat(64) },
           },
           {
-            id: 'b-review', name: 'Review', url: 'https://example.org/repair-booking-b/review', state: 'selected triage choice visible',
-            reachedBy: { fromScreenId: 'b-triage', action: 'choose a non-destructive test option and continue', result: 'review shows the selected option' },
+            id: 'b-review', name: 'Preparation guidance', url: 'https://example.org/repair-booking-b/guide', state: 'guidance-visible',
+            reachedBy: { fromScreenId: 'b-triage', action: 'click: a[data-guide]', result: 'visible: #guide' },
             evidence: { path: '.omd/refs/task-flows/service-b-review.png', sha256: '6'.repeat(64) },
           },
         ],
-        features: [{ id: 'b-triage-review', name: 'Triage review', behavior: 'keeps triage and commitment distinct', screenIds: ['b-triage', 'b-review'] }],
+        features: [{ id: 'b-triage-review', name: 'Preparation guidance', behavior: 'links service categories to preparation guidance', screenIds: ['b-triage', 'b-review'] }],
         flows: [{
-          id: 'b-review-before-commitment', intent: 'review triage before commitment', status: 'completed', limitation: null,
+          id: 'b-review-before-commitment', intent: 'inspect preparation guidance before any request', status: 'completed', limitation: null,
+          execution: { path: `.omd/refs/domain/flows/executions/${'b'.repeat(64)}.json`, sha256: 'b'.repeat(64) },
           steps: [
-            { order: 1, screenId: 'b-triage', action: 'open triage', result: 'choices are available', evidence: { path: '.omd/refs/task-flows/service-b-flow-1.png', sha256: '7'.repeat(64) } },
-            { order: 2, screenId: 'b-review', action: 'continue with a safe test choice', result: 'review appears before any commitment', evidence: { path: '.omd/refs/task-flows/service-b-flow-2.png', sha256: '8'.repeat(64) } },
+            { order: 1, screenId: 'b-triage', action: 'observe current screen', result: 'visible: #categories', evidence: { path: '.omd/refs/task-flows/service-b-flow-1.json', sha256: '7'.repeat(64) } },
+            { order: 2, screenId: 'b-review', action: 'click: a[data-guide]', result: 'visible: #guide', evidence: { path: '.omd/refs/task-flows/service-b-flow-2.json', sha256: '8'.repeat(64) } },
           ],
         }],
-        observedPatterns: ['review and commitment remain distinct'],
+        observedPatterns: ['preparation guidance is available before any commitment'],
         forbiddenTransfers: ['brand, copy, policies, and operational claims'],
       },
     ],
     taskSteps: [
       {
-        id: 'capture-symptoms',
-        intent: 'capture observable symptoms without requiring diagnosis',
+        id: 'understand-service',
+        intent: 'understand the relevant service and its requirements',
         dependsOn: [],
         evidenceSourceIds: ['service-a', 'service-b'],
       },
       {
-        id: 'request-availability',
-        intent: 'collect preferred availability after minimum issue scope',
-        dependsOn: ['capture-symptoms'],
+        id: 'prepare-request',
+        intent: 'inspect preparation guidance before starting a request',
+        dependsOn: ['understand-service'],
         evidenceSourceIds: ['service-a'],
       },
     ],
@@ -793,6 +797,7 @@ const REFERENCE_RESEARCH: InputSkeleton = {
     'never pay, start trials, install an MCP, or bypass login to gather references; on restricted access record the gap in scout.md and try another public source. Free viewing is not a reuse license',
     'designReference.boardSha256 is the current storage-byte SHA-256 of .omd/reference-board.json',
     'each board candidate actually uses at least one retained design source PNG (matching path and hash); merely collecting a gallery on the side does not prove transfer',
+    'Each lane may include navigation: [{url, evidence: {path, sha256}, capture: {path, sha256}}] for intermediate native page captures. Retained entries must be reachable from successful search results through those captures actual outbound links. Do not invent edges or relabel image-only evidence as navigation.',
     'when the route carries greenfield-task-flow-benchmark, domainReference.benchmarkSha256 is the canonical taskFlowBenchmarkSha256 of the current v2 benchmark and every benchmark source URL appears in the domain lane',
     'when no benchmark applies, benchmarkSha256 is null unless an optional current benchmark was actually published',
     'run omd ref research-check after ref check and benchmark check; any missing, stale, or one-lane evidence blocks downstream work',
@@ -1141,13 +1146,14 @@ const DESIGN_HANDOFF: InputSkeleton = {
 export const INPUT_SKELETONS: readonly InputSkeleton[] = [
   {
     name: 'first-render-surface', path: '.omd/.cache/first-render-surface.json',
-    command: 'omd first-render check --input .omd/.cache/first-render-surface.json --json',
+    command: 'omd first-render check --page <local-build.html> --input .omd/.cache/first-render-surface.json --json',
     keys: ['heading', 'landmarks', 'repeatedObjects', 'trustSignals', 'visibleText', 'dominantAreaShare'],
     constraints: [
       'Publish the reference-bound design judgment before checking a render. A composition note is not a design judgment.',
       'Replace every example with the actual rendered viewport observations. Arrays may be empty when a feature is absent; do not invent evidence to obtain retain.',
       'dominantAreaShare is the measured dominant-object fraction from 0 to 1. All six keys are required.',
       'This diagnostic projection does not replace browser action evidence, saved captures or independent review.',
+      'The CLI captures --page natively and binds the report to the current hypothesis/source/build. Set optional hypothesis.comparisonRequired=true only for an actual comparison task. Advisory findings do not require revise; critical findings do. Changed inputs require a fresh check.',
     ],
     skeleton: { heading: '<visible heading>', landmarks: ['<visible landmark in reading order>'],
       repeatedObjects: [], trustSignals: [], visibleText: ['<visible text>'], dominantAreaShare: 0 },
@@ -1157,7 +1163,10 @@ export const INPUT_SKELETONS: readonly InputSkeleton[] = [
     keys: ['schema', 'views'],
     constraints: ['Use actual local HTML production/build entries, not reference URLs or arbitrary localhost ports. Build a bundled SPA before capture.',
       'Cover the final production entry and every final viewport. Keep identical scope while confirmed issues remain; name additional task/state entries where applicable.',
+      'For SPA routes/modals/errors add state: {name, startRoute, route, actions, assertions}. Routes are app-relative including query/hash. Actions are {kind:click,selector}, {kind:fill|select,selector,value}; assertions are {selector,state:visible|hidden,text?:expected substring}. Hidden assertions require an existing element. Local state inspection blocks external networking and writes; use bundled local fixtures, not production APIs. Final linked browser states need matching scope route/state/viewport.',
       'Checkpoint runs the source scanner and rendered slop linter, saves native PNGs, and returns an unfilled reviewInput. Inspect its images; never auto-approve the template.',
+      'Final state coverage requires the actual viewport pixels to match its authenticated final capture. Replay the same deterministic fixture and settled state; a matching label is insufficient. Default entry views also block external networking and non-read-only requests.',
+      'Keyboard preparation uses {kind:press,selector,value:Tab|Shift+Tab|Enter|Space|Escape|ArrowUp|ArrowDown|ArrowLeft|ArrowRight|Home|End}. Reproduce the native evaluator initial body Tab when it affects focus-visible state; never hide focus styling to match pixels.',
       'After a confirmed issue: owner repair, rebuild, checkpoint again, then resolve the previous issue using the new screenshots. Zero raw warnings is not required; all findings need individual judgments.'],
     skeleton: { schema: 'slop-scope-v1', views: [
       { id: 'entry-desktop', page: 'dist/index.html', viewport: { width: 1280, height: 900 } },
@@ -1192,6 +1201,23 @@ export const INPUT_SKELETONS: readonly InputSkeleton[] = [
   FINAL_RENDER_REVIEWER_PACKET_INPUT,
   TRUSTED_LIFECYCLE_MANIFEST,
   DESIGN_QUALITY_OBSERVATION_PROJECTION_INPUT,
+  {
+    name: 'reference-flow-input', path: '.omd/.cache/reference-flow-input.json', command: 'omd benchmark record --input .omd/.cache/reference-flow-input.json --json',
+    keys: ['schema', 'sourceId', 'flowId', 'url', 'viewport', 'steps'],
+    constraints: ['Record one public service in one fresh context. Each step has screenId, state, clicks and assertions; only read-only links/disclosures/tabs are supported. Never enter credentials, submit, purchase, delete or bypass access controls.',
+      'Copy returned execution into the benchmark flow, step evidence into each flow step and its capture into the matching screen. Preserve actual url/state and derived action/result labels. Blocked controls become bounded gaps/exclusions. Signed native receipts are project-bound; artifact-only history remains readable but cannot satisfy a selected product benchmark.'],
+    skeleton: { schema: 'reference-flow-input-v1', sourceId: 'service-a', flowId: 'inspect-details', url: 'https://example.com/', viewport: { width: 1280, height: 900 }, steps: [
+      { screenId: 'entry', state: 'entry', clicks: [], assertions: [{ selector: 'main h1', state: 'visible' }] },
+      { screenId: 'details', state: 'details-open', clicks: ['a[data-details]'], assertions: [{ selector: '#details', state: 'visible' }] },
+    ] },
+  },
+  {
+    name: 'runtime-design-inventory-input', path: '.omd/.cache/runtime-design-inventory-input.json', command: 'omd init --input .omd/.cache/runtime-design-inventory-input.json --json',
+    keys: ['schema', 'views'],
+    constraints: ['Build the service locally first. Each view has id/page/viewport, named selectors and optional state with the same shape as slop-scope. Include intended component variants and responsive widths; unvisited states remain gaps.',
+      'Each selector identifies one visible element. Computed utility/CSS-in-JS values and inherited custom properties are observed, not approved semantic tokens. Approved tokens and decisions remain untouched. init --check verifies source/build/capture currentness; init --refresh reuses stored scope unless a new --input is supplied.'],
+    skeleton: { schema: 'runtime-design-inventory-input-v1', views: [{ id: 'desktop-primary-action', page: 'dist/index.html', viewport: { width: 1280, height: 900 }, selectors: [{ id: 'primary-action', selector: '#primary-action' }] }] },
+  },
 ];
 
 export function inputSkeleton(name: string): InputSkeleton {

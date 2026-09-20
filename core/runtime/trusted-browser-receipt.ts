@@ -22,6 +22,7 @@ export type TrustedBrowserCapture = Readonly<{
   width: number;
   height: number;
   outcomeRef?: string;
+  testedUrl?: string;
 }>;
 
 export type TrustedBrowserReceipt = Readonly<{
@@ -167,7 +168,9 @@ export function parseTrustedBrowserReceipt(input: unknown): TrustedBrowserReceip
   const captures = receipt.captures.map((candidate) => {
     const scoped = typeof candidate === 'object' && candidate !== null
       && Object.hasOwn(candidate, 'outcomeRef');
-    const capture = record(candidate, scoped ? OUTCOME_CAPTURE_KEYS : CAPTURE_KEYS);
+    const keys = new Set(scoped ? OUTCOME_CAPTURE_KEYS : CAPTURE_KEYS);
+    if (typeof candidate === 'object' && candidate !== null && Object.hasOwn(candidate, 'testedUrl')) keys.add('testedUrl');
+    const capture = record(candidate, keys);
     if (typeof capture.path !== 'string' || capture.path === '' || capture.path.startsWith('/')
       || capture.path.includes('\\') || capture.path.split('/').some((part) => part === '' || part === '.' || part === '..')
       || !Number.isInteger(capture.width) || !Number.isInteger(capture.height)
@@ -177,6 +180,13 @@ export function parseTrustedBrowserReceipt(input: unknown): TrustedBrowserReceip
       sha256: digest(capture.sha256),
       width: capture.width as number,
       height: capture.height as number,
+      ...(capture.testedUrl === undefined ? {} : { testedUrl: (() => {
+        if (typeof capture.testedUrl !== 'string') return malformed();
+        let url: URL;
+        try { url = new URL(capture.testedUrl); } catch { return malformed(); }
+        if (url.origin !== 'http://127.0.0.1' || url.username || url.password || url.href !== capture.testedUrl) return malformed();
+        return url.href;
+      })() }),
       ...(capture.outcomeRef === undefined
         ? {}
         : {

@@ -62,6 +62,8 @@ export type DesignHypothesis = Readonly<{
   dominantObject: string;
   subordinate: readonly string[];
   densityIntent: string;
+  /** Explicit task applicability; absent/false does not demand a comparison layout. */
+  comparisonRequired?: boolean;
   trustSource: string;
   /** The impression a stranger should report after two seconds. */
   twoSecondRead: string;
@@ -153,7 +155,8 @@ export function parseReferenceJudgment(value: unknown, index: number): Reference
 
 export function parseDesignHypothesis(value: unknown): DesignHypothesis {
   const record = isRecord(value) ? value : fail('MALFORMED_DESIGN_JUDGMENT', 'hypothesis must be an object');
-  exact(record, ['schema', 'feelsLike', 'dominantObject', 'subordinate', 'densityIntent', 'trustSource', 'twoSecondRead'], 'hypothesis');
+  exact(record, ['schema', 'feelsLike', 'dominantObject', 'subordinate', 'densityIntent', 'trustSource', 'twoSecondRead', ...(Object.hasOwn(record, 'comparisonRequired') ? ['comparisonRequired'] : [])], 'hypothesis');
+  if (Object.hasOwn(record, 'comparisonRequired') && typeof record.comparisonRequired !== 'boolean') fail('MALFORMED_DESIGN_JUDGMENT', 'hypothesis.comparisonRequired must be boolean');
   if (record.schema !== DESIGN_JUDGMENT_SCHEMA) fail('MALFORMED_DESIGN_JUDGMENT', `hypothesis.schema must be ${DESIGN_JUDGMENT_SCHEMA}`);
   const subordinate = strings(record.subordinate, 'hypothesis.subordinate');
   if (subordinate.length === 0) fail('MALFORMED_DESIGN_JUDGMENT', 'hypothesis.subordinate must name at least one thing that stays subordinate');
@@ -163,6 +166,7 @@ export function parseDesignHypothesis(value: unknown): DesignHypothesis {
     dominantObject: text(record.dominantObject, 'hypothesis.dominantObject'),
     subordinate,
     densityIntent: text(record.densityIntent, 'hypothesis.densityIntent'),
+    ...(record.comparisonRequired === undefined ? {} : { comparisonRequired: record.comparisonRequired as boolean }),
     trustSource: text(record.trustSource, 'hypothesis.trustSource'),
     twoSecondRead: text(record.twoSecondRead, 'hypothesis.twoSecondRead'),
   });

@@ -275,7 +275,7 @@ export async function serveDirectory(directory: string): Promise<LocalOrigin> {
   };
 }
 
-async function serveProjectSnapshot(snapshot: ProjectTreeSnapshot): Promise<LocalOrigin> {
+async function serveProjectSnapshot(snapshot: ProjectTreeSnapshot, navigationFallback?: string): Promise<LocalOrigin> {
   const server: Server = createServer((request, response) => {
     if (request.method !== 'GET' && request.method !== 'HEAD') {
       response.writeHead(405, { allow: 'GET, HEAD' }).end();
@@ -284,7 +284,7 @@ async function serveProjectSnapshot(snapshot: ProjectTreeSnapshot): Promise<Loca
     let path: string;
     try {
       const requested = decodeURIComponent(new URL(request.url ?? '/', 'http://127.0.0.1').pathname);
-      path = safeRelativePath(requested.replace(/^\//, ''), 'served path');
+      path = requested === '/' && navigationFallback ? navigationFallback : safeRelativePath(requested.replace(/^\//, ''), 'served path');
     } catch {
       response.writeHead(404).end();
       return;
@@ -294,13 +294,15 @@ async function serveProjectSnapshot(snapshot: ProjectTreeSnapshot): Promise<Loca
       response.writeHead(404).end();
       return;
     }
-    const bytes = snapshot.files.get(path);
+    const fallback = navigationFallback && request.headers['sec-fetch-dest'] === 'document' && !extname(path) ? navigationFallback : undefined;
+    const selected = snapshot.files.has(path) ? path : fallback ?? path;
+    const bytes = snapshot.files.get(selected);
     if (bytes === undefined) {
       response.writeHead(404).end();
       return;
     }
     response.writeHead(200, {
-      'content-type': MIME[extname(path).toLowerCase()] ?? 'application/octet-stream',
+      'content-type': MIME[extname(selected).toLowerCase()] ?? 'application/octet-stream',
       'content-length': bytes.byteLength,
       'x-content-type-options': 'nosniff',
     });
@@ -342,14 +344,14 @@ export type ServedProjectEntry = ResolvedRenderTarget & Readonly<{
 const NO_CLOSE = async (): Promise<void> => {};
 
 /** Serves an immutable snapshot of the production entry directory and its relative assets. */
-export async function serveProjectEntry(root: string, entryPath: string): Promise<ServedProjectEntry> {
+export async function serveProjectEntry(root: string, entryPath: string, options: { spa?: boolean } = {}): Promise<ServedProjectEntry> {
   const path = safeRelativePath(entryPath, 'production entry');
   const absolute = resolve(root, path);
   const snapshot = materializeProjectTree(root, path);
   const entry = basename(absolute);
   const bytes = snapshot.files.get(entry);
   if (bytes === undefined) throw new Error('production entry is not in the served manifest');
-  const served = await serveProjectSnapshot(snapshot);
+  const served = await serveProjectSnapshot(snapshot, options.spa ? entry : undefined);
   return {
     url: `${served.origin}/${encodeURIComponent(entry)}`,
     bytes: Buffer.from(bytes),

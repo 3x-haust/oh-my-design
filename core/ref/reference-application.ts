@@ -5,7 +5,7 @@ import { nodeStableProjectFileSystem, readStableProjectFile } from '../runtime/s
 import type { ProjectWriteAdapter } from '../runtime/project-write.ts';
 import { readPublishedReferenceResearch, validateReferenceResearch, REFERENCE_RESEARCH_PATH } from './reference-research.ts';
 
-export const REFERENCE_APPLICATION_SCHEMA = 'reference-application-v1' as const;
+export const REFERENCE_APPLICATION_SCHEMA = 'reference-application-v2' as const;
 export const REFERENCE_APPLICATION_PATH = '.omd/reference-application.json';
 export const REFERENCE_APPLICATION_PROJECTION_PATH = '.omd/reference-application-projection.json';
 export const REFERENCE_APPLICATION_DOC_PATH = '.omd/reference-application.md';
@@ -32,6 +32,7 @@ export type ReferenceApplication = Readonly<{
   domainBriefSha256: string;
   screens: readonly Readonly<{
     surface: string;
+    target: Readonly<{ route: string; state: string }>;
     domain: ApplicationLane;
     design: ApplicationLane;
     checks: readonly string[];
@@ -75,15 +76,20 @@ function lane(value: unknown, label: string): ApplicationLane {
 }
 export function parseReferenceApplication(value: unknown): ReferenceApplication {
   const item = object(value, ['schema', 'sourceContractSha256', 'researchSha256', 'domainBriefSha256', 'screens'], 'application');
-  if (item.schema !== REFERENCE_APPLICATION_SCHEMA) return fail('schema is invalid');
+  if (item.schema !== REFERENCE_APPLICATION_SCHEMA) return fail('schema requires v2 destination route/state bindings; inspect apply-plan and republish, do not relabel old evidence');
   if (!Array.isArray(item.screens) || !item.screens.length || item.screens.length > 12
     || Object.keys(item.screens).length !== item.screens.length) return fail('screens must contain 1–12 surface decisions');
   const screens = item.screens.map(value => {
-    const row = object(value, ['surface', 'domain', 'design', 'checks'], 'screen');
-    return Object.freeze({ surface: text(row.surface, 'surface'), domain: lane(row.domain, 'domain'),
+    const row = object(value, ['surface', 'target', 'domain', 'design', 'checks'], 'screen');
+    const target = object(row.target, ['route', 'state'], 'screen.target');
+    const route = text(target.route, 'target.route');
+    const parsed = new URL(route, 'http://omd.invalid');
+    if (!route.startsWith('/') || route.startsWith('//') || parsed.origin !== 'http://omd.invalid' || `${parsed.pathname}${parsed.search}${parsed.hash}` !== route) return fail('target.route must be a canonical destination-relative route, including query/hash when relevant');
+    return Object.freeze({ surface: text(row.surface, 'surface'), target: { route, state: text(target.state, 'target.state') }, domain: lane(row.domain, 'domain'),
       design: lane(row.design, 'design'), checks: texts(row.checks, 'checks') });
   });
   if (new Set(screens.map(screen => screen.surface)).size !== screens.length) return fail('duplicate surface');
+  if (new Set(screens.map(screen => JSON.stringify(screen.target))).size !== screens.length) return fail('distinct surfaces need distinct route/state targets');
   return Object.freeze({ schema: REFERENCE_APPLICATION_SCHEMA, sourceContractSha256: sha(item.sourceContractSha256, 'source contract'),
     researchSha256: sha(item.researchSha256, 'research'), domainBriefSha256: sha(item.domainBriefSha256, 'domain brief'), screens: Object.freeze(screens) });
 }
@@ -106,7 +112,7 @@ export function referenceApplicationPlan(root: string, options: Options) {
   return {
     input: { schema: REFERENCE_APPLICATION_SCHEMA, sourceContractSha256: options.expectedSourceContractSha256,
       researchSha256: current.researchSha256, domainBriefSha256: current.domainBriefSha256,
-      screens: current.domain.surfaces.map(surface => ({ surface: surface.name, domain: draftLane(), design: draftLane(), checks: [] })) },
+      screens: current.domain.surfaces.map(surface => ({ surface: surface.name, target: { route: '', state: '' }, domain: draftLane(), design: draftLane(), checks: [] })) },
     evidence: { domain: current.research.domainReference.sources, design: current.research.designReference.sources },
     limitations: 'Inspect actual images. Fill the input; evidence is for the research owner, not downstream roles. This draft cannot pass apply-check.',
   };
@@ -116,7 +122,7 @@ export function referenceApplicationPlan(root: string, options: Options) {
 export function projectReferenceApplication(application: ReferenceApplication) {
   const decision = ({ referenceIds: _referenceIds, ...rest }: ApplicationLane) => rest;
   return { schema: 'reference-application-projection-v1' as const, applicationSha256: hash(json(application)),
-    screens: application.screens.map(row => ({ surface: row.surface, domain: decision(row.domain), design: decision(row.design), checks: row.checks })) };
+    screens: application.screens.map(row => ({ surface: row.surface, target: row.target, domain: decision(row.domain), design: decision(row.design), checks: row.checks })) };
 }
 export type ReferenceApplicationProjection = ReturnType<typeof projectReferenceApplication>;
 
@@ -147,6 +153,7 @@ function markdown(application: ReferenceApplication): string {
   const line = (value: string): string => value.replace(/[<>]/g, '').replace(/\n/g, ' ');
   return ['# Screen reference application', '', 'A plan, not proof of rendered use, image inspection, or user approval.', '',
     ...application.screens.flatMap(row => [`## ${line(row.surface)}`, '',
+      `Destination: ${line(row.target.route)} — ${line(row.target.state)}`, '',
       ...(['domain', 'design'] as const).flatMap(key => [
         `### ${key} — ${row[key].coverage}`, `References: ${row[key].referenceIds.map(line).join(', ') || 'none: brief-derived'}`,
         `- Apply: ${line(row[key].application)}`, `- Do not transfer: ${line(row[key].doNotTransfer)}`,

@@ -94,12 +94,13 @@ from the hypothesis. Run `omd judgment check` before `omd composition --check`.
 After the first render, extract the initial viewport projection and run:
 
 ```text
-omd first-render check --input .omd/.cache/first-render-surface.json
+omd first-render check --page <local-build.html> --input .omd/.cache/first-render-surface.json
 ```
 
 A `revise` result is not a final polish request. It means the first gestalt missed the hypothesis:
-the dominant object is absent, utility chrome overrides the task, comparison is too thin, purpose
-is unclear, or trust metadata is missing. Fix composition and rerun the real render; do not silence
+the dominant object is absent, utility chrome overrides the task, or purpose is unclear. Comparison
+is checked only when the hypothesis explicitly requires it; comparison/trust advisories do not
+automatically force a redesign. Fix critical composition findings and rerun the real render; do not silence
 the critic by changing its thresholds.  (`theory/ux.md` §Surface types). For a `product` surface, write the experience spine as
 the task loop (orient → locate → act → feedback → next/recover) over screen regions and
 reachable states, never as a persuasion ladder; make the dominant first-viewport anchor

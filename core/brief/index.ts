@@ -39,6 +39,7 @@ import type { ReferenceHandoffRole } from '../ref/reference-handoff.ts';
 import { readPublishedReferenceResearch, validateReferenceResearch } from '../ref/reference-research.ts';
 import { checkReferenceApplication, type ReferenceApplicationProjection } from '../ref/reference-application.ts';
 import { designInventoryStatus, DESIGN_INVENTORY_DOC_PATH } from '../tokens/inventory.ts';
+import { runtimeInventoryStatus, RUNTIME_INVENTORY_DOC } from '../tokens/runtime-inventory.ts';
 import { loadRefs, refRecordPath } from '../ref/store.ts';
 
 export {
@@ -66,7 +67,7 @@ export {
 } from './task-outcome.ts';
 
 /** Stages the route can name that are not artifact stages in `STAGES`. */
-export const EXTRA_BRIEF_STAGES = ['candidate-generation', 'production', 'independent-review', 'review'] as const;
+export const EXTRA_BRIEF_STAGES = ['candidate-generation', 'safety-validation', 'production', 'browser-evidence', 'independent-review', 'review'] as const;
 export type BriefStage = StageId | (typeof EXTRA_BRIEF_STAGES)[number];
 
 /**
@@ -117,6 +118,7 @@ export type Brief = {
   }>;
   readonly referenceApplication?: ReferenceApplicationProjection | null;
   readonly existingDesignSystem?: ReturnType<typeof designInventoryStatus> | null;
+  readonly runtimeDesignSystem?: ReturnType<typeof runtimeInventoryStatus> | null;
   readonly stage: BriefStage;
   readonly owner: string;
   readonly owns: readonly string[];
@@ -193,12 +195,16 @@ export function projectRealityForBrief(
 }
 
 const OWNER: Readonly<Record<string, string>> = {
+  'safety-validation': 'omd-writer',
+  'browser-evidence': 'omd-hand',
   'candidate-generation': 'omd-sketch',
   production: 'omd-hand',
   'independent-review': 'omd-eye',
   review: 'omd-eye',
 };
 const OWNS: Readonly<Record<string, readonly string[]>> = {
+  'safety-validation': ['safety/recovery and accessibility decisions in the current copy deck and UX acceptance contract; not a fabricated safety approval'],
+  'browser-evidence': ['current decision-linked browser observations and capture receipts through the existing native evidence publishers'],
   scout: ['.omd/scout.md', '.omd/refs/domain/research.json', '.omd/refs/design/research.json', '.omd/reference-research.json', '.omd/task-flow-benchmark.json'],
   'candidate-generation': ['structurally distinct UX candidates and selected model metadata'],
   production: ['production source (every file the surface ships)'],
@@ -211,6 +217,11 @@ const OWNS: Readonly<Record<string, readonly string[]>> = {
  * predict its own verdict, and a rule that is checked here never needs to be written as prose.
  */
 const JUDGED_BY: Readonly<Record<string, readonly BriefCheck[]>> = {
+  'safety-validation': [
+    { command: 'omd copy --check', fails: 'safety/recovery copy lacks required structure or evidence' },
+    { command: 'omd copy --review-check', fails: 'current safety/recovery copy has not been reviewed CLEAN' },
+  ],
+  'browser-evidence': [{ command: 'omd completion preflight --json', fails: 'terminal evidence is missing, unauthorized or stale; run only after the independent review, not as browser stage entry' }],
   frame: [{ command: 'omd frame show', fails: 'the frame is missing a required field or its evidence' }],
   acquisition: [{ command: 'omd ref granularity --json', fails: 'a declared zone has no capture bound to it' }],
   scout: [
@@ -249,6 +260,8 @@ const JUDGED_BY: Readonly<Record<string, readonly BriefCheck[]>> = {
 
 /** Hand-authored inputs a stage owner writes, and the command that prints their exact shape. */
 const SCHEMAS: Readonly<Record<string, readonly string[]>> = {
+  'safety-validation': ['route-input', 'functional-requirements'],
+  'browser-evidence': ['design-quality-observation-projection'],
   domain: ['domain-brief'],
   depth: ['depth-input'],
   frame: ['functional-requirements', 'reality-ledger'],
@@ -392,10 +405,13 @@ export function buildBrief(
   const blockers: string[] = [];
   const inventoryStatus = designInventoryStatus(root);
   const existingDesignSystem = inventoryStatus.status === 'missing' ? null : inventoryStatus;
+  const runtimeStatus = runtimeInventoryStatus(root);
+  const runtimeDesignSystem = runtimeStatus.status === 'missing' ? null : runtimeStatus;
   const inventoryConsumer = ['art-direction', 'composition', 'candidate-generation', 'production'].includes(stage);
   if (inventoryConsumer && existingDesignSystem && existingDesignSystem.status !== 'current') {
     blockers.push(`existing design inventory ${existingDesignSystem.status}: inspect source changes and run omd init --refresh`);
   }
+  if (inventoryConsumer && runtimeDesignSystem && runtimeDesignSystem.status !== 'current') blockers.push(`runtime design inventory ${runtimeDesignSystem.status}: rebuild and run omd init --refresh to inspect the declared states again`);
   let referenceHandoff: Brief['referenceHandoff'] = null;
   const handoffRole: ReferenceHandoffRole | undefined = stage === 'art-direction' ? 'art-direction'
     : stage === 'composition' || stage === 'candidate-generation' ? 'composer'
@@ -583,6 +599,7 @@ export function buildBrief(
     },
     referenceApplication,
     existingDesignSystem,
+    ...(runtimeDesignSystem === null ? {} : { runtimeDesignSystem }),
     owner: definition?.owner ?? OWNER[stage] ?? 'coordinator',
     owns: designReview ? ['.omd/design/review.md'] : definition === undefined ? OWNS[stage] ?? [] : [definition.artifact],
     route: route === null ? null : {
@@ -612,6 +629,7 @@ export function buildBrief(
     shell: shell.kind === 'browser' ? null : { kind: shell.kind, target: renderTargetHint(shell) },
     judgedBy: [...judgedBy, ...localeJudgedBy, ...localeReferenceJudgedBy],
     prior: priorEvidence(root, [
+      ...(runtimeDesignSystem?.status === 'current' && inventoryConsumer ? [runtimeDesignSystem.path, RUNTIME_INVENTORY_DOC] : []),
       ...(existingDesignSystem?.status === 'current' && inventoryConsumer ? [existingDesignSystem.path, DESIGN_INVENTORY_DOC_PATH,
         ...(existsSync(join(root, '.omd/design-system-decisions.md')) ? ['.omd/design-system-decisions.md'] : [])] : []),
       ...selectedInputs.present,

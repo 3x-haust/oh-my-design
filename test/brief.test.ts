@@ -12,6 +12,16 @@ import { createTestProjectRunInvocation, createTestProjectWriteAdapter, publishT
 const root = fileURLToPath(new URL('..', import.meta.url));
 const read = (path: string): string => readFileSync(join(root, path), 'utf8');
 
+test('route-only safety and browser stages have inspectable briefs with real schemas', () => {
+  const dir = project();
+  for (const stage of ['safety-validation', 'browser-evidence'] as const) {
+    const brief = buildBrief(dir, stage);
+    assert.equal(brief.owner, stage === 'safety-validation' ? 'omd-writer' : 'omd-hand');
+    assert.ok(brief.owns.length > 0);
+    assert.ok(brief.judgedBy.length > 0);
+  }
+});
+
 function project(refCount = 0): string {
   const dir = mkdtempSync(join(tmpdir(), 'omd-brief-'));
   mkdirSync(join(dir, '.omd', 'refs'), { recursive: true });

@@ -11,10 +11,12 @@ import { parseTrustedLifecycleManifest } from '../core/runtime/trusted-evaluatio
 import { observationV2Sha256, readCurrentObservationV2 } from '../core/runtime/observation.ts';
 import { createTestProjectRunInvocation, createTestProjectWriteAdapter } from './helpers/project-write.ts';
 import { writeBrowserDecisionFixture } from './helpers/browser-observation-decision-links.ts';
+import { captureSlopCheckpoint, publishSlopReview, checkSlopFinalGraph } from '../core/slop/review.ts';
+import type { BrowserObservationSet } from '../core/runtime/browser-observation.ts';
 
 const hash = (value: Buffer | string): string => createHash('sha256').update(value).digest('hex');
 
-async function fixture() {
+async function fixture(destination?: string) {
   const root = mkdtempSync(join(tmpdir(), 'omd-trusted-observation-'));
   const app = join(root, 'index.html');
   mkdirSync(join(root, '.omd'));
@@ -24,7 +26,9 @@ async function fixture() {
     '<button id="submit">Submit</button>',
     '<p role="status" hidden>Order submitted</p>',
     '<script>document.querySelector("#submit").onclick=()=>{',
-    'document.querySelector("[role=status]").hidden=false}</script>',
+    'document.querySelector("[role=status]").hidden=false;',
+    destination ? `history.pushState({},'',${JSON.stringify(destination)});` : '',
+    '}</script>',
   ].join(''));
   const invocation = createTestProjectRunInvocation(root);
   const buildBytes = `${JSON.stringify({ buildSha256: invocation.current.buildSha256 })}\n`;
@@ -123,6 +127,24 @@ test('trusted receipt publishes linked observation and exact predecessor success
   } finally {
     rmSync(value.root, { recursive: true, force: true });
   }
+});
+
+test('native final observation and slop closure preserve actual SPA route, query and fragment', async () => {
+  const destination = '/details?mode=review#confirmation';
+  const value = await fixture(destination);
+  try {
+    assert.ok(value.evaluation.receipt.captures.every(capture => capture.testedUrl === `http://127.0.0.1${destination}`));
+    const observation = writeTrustedEvaluationObservation({ ...value, currentArtifactPath: '.omd/build.json', productionArtifactPath: 'index.html', requireDecisionGraph: true });
+    const evidence = observation.evidence as { browserObservations: BrowserObservationSet };
+    assert.ok(evidence.browserObservations.observations.every(view => view.testedUrl === `http://127.0.0.1${destination}`));
+    const captured = await captureSlopCheckpoint(value.root, { schema: 'slop-scope-v1', views: evidence.browserObservations.observations.map((view, index) => ({
+      id: `state-${index}`, page: 'index.html', viewport: view.viewport,
+      state: { name: view.testedState, startRoute: '/index.html', route: destination, actions: [{ kind: 'press', selector: 'body', value: 'Tab' }, { kind: 'click', selector: '#submit' }], assertions: [{ selector: '[role=status]', state: 'visible', text: 'Order submitted' }] },
+    })) }, value.writer);
+    publishSlopReview(value.root, { ...captured.reviewInput, summary: 'Actual native post-action states inspected at both viewports.', decisions: captured.reviewInput.decisions.map(d => ({ ...d, status: 'dismissed', reason: 'The synthetic confirmation fixture intentionally retains its minimal styling.', viewIds: ['state-0', 'state-1'] })) }, value.writer);
+    const pointer = JSON.parse(readFileSync(join(value.root, '.omd/observation-v2.json'), 'utf8'));
+    assert.equal(checkSlopFinalGraph(value.root, { observations: [{ path: pointer.record, sha256: pointer.sha256 }] }).status, 'reviewed');
+  } finally { rmSync(value.root, { recursive: true, force: true }); }
 });
 
 test('forged swapped capture and stale production fail before observation pointer mutation', async () => {

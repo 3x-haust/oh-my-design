@@ -71,7 +71,7 @@ import { commitAiAssetDecision } from '../core/asset-sourcing/ai-decision.ts';
 import { checkProductionReadiness } from '../core/runtime/production-reference-gate.ts';
 import { readPersistedRoute } from '../core/route/index.ts';
 import { parseDesignJudgmentRecord, checkDesignHypothesis } from '../core/design/judgment.ts';
-import { critiqueFirstRender, parseFirstRenderSurface, firstRenderCriticSha256 } from '../core/design/first-render-critic.ts';
+import { publishFirstRenderCheck } from '../core/design/first-render-evidence.ts';
 import { publishDesignJudgment, readDesignJudgment, DESIGN_JUDGMENT_PATH } from '../core/design/judgment-files.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -2819,16 +2819,22 @@ async function cmdTokens(mode: string | undefined, opts: Opts): Promise<never> {
 
 async function cmdInit(opts: Opts): Promise<never> {
   const { designInventoryStatus, initializeDesignInventory, DESIGN_INVENTORY_DOC_PATH } = await import('../core/tokens/inventory.ts');
-  if (opts._.length || (opts.check && opts.refresh)) throw new Error('usage: omd init [--refresh | --check] [--json]');
+  const { runtimeInventoryStatus, initializeRuntimeInventory, RUNTIME_INVENTORY_PATH } = await import('../core/tokens/runtime-inventory.ts');
+  if (opts._.length || (opts.check && (opts.refresh || opts.input))) throw new Error('usage: omd init [--input <runtime-inventory-input.json>] [--refresh | --check] [--json]');
   if (opts.check) {
     const status = designInventoryStatus(process.cwd());
-    console.log(opts.json ? JSON.stringify(status) : `${status.status} — ${status.path} (${status.observations} observed declarations; ${status.gaps} coverage gaps)`);
-    process.exit(status.status === 'current' ? 0 : 1);
+    const runtime = runtimeInventoryStatus(process.cwd());
+    console.log(opts.json ? JSON.stringify({ ...status, ...(runtime.status === 'missing' ? {} : { runtime }) }) : `${status.status} — ${status.path} (${status.observations} observed declarations; ${status.gaps} coverage gaps); runtime: ${runtime.status}`);
+    process.exit(status.status === 'current' && ['missing', 'current'].includes(runtime.status) ? 0 : 1);
   }
-  const inventory = initializeDesignInventory(process.cwd(), projectWriterFromActivation(opts, 'omd init'), opts.refresh);
-  const result = { ...designInventoryStatus(process.cwd()), document: DESIGN_INVENTORY_DOC_PATH, authority: inventory.authority };
+  const writer = projectWriterFromActivation(opts, 'omd init');
+  const inventory = initializeDesignInventory(process.cwd(), writer, opts.refresh);
+  const runtimeInput = opts.input ? inputJson(opts.input, 'omd init runtime input')
+    : existsSync(resolve(process.cwd(), RUNTIME_INVENTORY_PATH)) ? (inputJson(RUNTIME_INVENTORY_PATH, 'omd init runtime inventory') as { input: unknown }).input : undefined;
+  const runtime = runtimeInput === undefined ? undefined : await initializeRuntimeInventory(process.cwd(), runtimeInput, writer, opts.refresh);
+  const result = { ...designInventoryStatus(process.cwd()), document: DESIGN_INVENTORY_DOC_PATH, authority: inventory.authority, ...(runtime ? { runtime } : {}) };
   console.log(opts.json ? JSON.stringify(result) : `Saved observed design system: ${DESIGN_INVENTORY_DOC_PATH}\n${result.observations} declarations; ${result.gaps} coverage gaps. Not approved tokens. Application files and .omd/tokens.json unchanged.`);
-  process.exit(result.status === 'current' ? 0 : 1);
+  process.exit(result.status === 'current' && (!runtime || runtime.status === 'current') ? 0 : 1);
 }
 
 /** Persists a moderator handback verbatim or validates the joined run before/final. */
@@ -3441,6 +3447,16 @@ async function cmdComplete(mode: string | undefined, opts: Opts): Promise<never>
   process.exit(findings.length > 0 ? 1 : 0);
 }
 async function cmdBenchmark(mode: string | undefined, opts: Opts): Promise<never> {
+  if (mode === 'record') {
+    if (!opts.input) throw new Error('usage: omd benchmark record --input <reference-flow-input.json> [--json]');
+    const { recordLiveReferenceFlow } = await import('../core/ref/live-flow.ts');
+    const { withBrowser } = await import('../core/render/index.ts');
+    const writer = projectWriterFromActivation(opts, 'omd benchmark record');
+    const input = inputJson(opts.input, 'omd benchmark record');
+    const result = await withBrowser(browser => recordLiveReferenceFlow(browser, process.cwd(), input, writer));
+    console.log(JSON.stringify(result));
+    process.exit(result.status === 'completed' ? 0 : 1);
+  }
   const {
     parseTaskFlowBenchmark,
     projectTaskFlowBenchmark,
@@ -3471,10 +3487,10 @@ async function cmdBenchmark(mode: string | undefined, opts: Opts): Promise<never
     const evidenceStrength = validateTaskFlowBenchmarkEvidence(process.cwd(), benchmark);
     const projection = projectTaskFlowBenchmark(benchmark);
     if (opts.json) process.stdout.write(JSON.stringify({ benchmark, projection, evidenceStrength }));
-    else console.log(`ok — current evidence files for ${benchmark.sources.length} declared sources, ${benchmark.sources.reduce((count, source) => count + source.screens.length, 0)} screens and ${benchmark.sources.reduce((count, source) => count + source.flows.length, 0)} flows; live interactions are not verified`);
+    else console.log(`ok — current evidence files for ${benchmark.sources.length} declared sources, ${benchmark.sources.reduce((count, source) => count + source.screens.length, 0)} screens and ${benchmark.sources.reduce((count, source) => count + source.flows.length, 0)} flows; declared completed native flows verified: ${evidenceStrength.liveFlowVerified}; exclusions and artifact-only records remain unverified`);
     process.exit(0);
   }
-  throw new Error('usage: omd benchmark set --input <task-flow-benchmark.json> | check [--input <task-flow-benchmark.json>] [--json]');
+  throw new Error('usage: omd benchmark record --input <reference-flow-input.json> | set --input <task-flow-benchmark.json> | check [--input <task-flow-benchmark.json>] [--json]');
 }
 async function cmdArtDirection(mode: string | undefined, opts: Opts): Promise<never> {
   if (mode === 'alternatives-sha') {
@@ -4752,20 +4768,19 @@ async function cmdJudgment(mode: string | undefined, opts: Opts): Promise<never>
   throw new Error('usage: omd judgment publish|check [--input <design-judgment.json>] [--json]');
 }
 
-/** `omd first-render check --input <first-render-surface.json>` — gestalt against the stored hypothesis. */
+/** `omd first-render check --page <local-build.html> --input <first-render-surface.json>` — current rendered gestalt. */
 async function cmdFirstRender(mode: string | undefined, opts: Opts): Promise<never> {
-  if (mode !== 'check' || opts.input === undefined) {
-    throw new Error('usage: omd first-render check --input <first-render-surface.json> [--json]');
+  if (mode !== 'check' || opts.input === undefined || opts.page === undefined) {
+    throw new Error('usage: omd first-render check --page <local-build.html> --input <first-render-surface.json> [--json]');
   }
   const hypothesis = readDesignJudgment(process.cwd());
   if (hypothesis === null) {
     throw new Error('DESIGN_JUDGMENT_REQUIRED: publish the composition hypothesis before checking a render');
   }
-  const surface = parseFirstRenderSurface(inputJson(opts.input, 'omd first-render check'));
-  const report = critiqueFirstRender(hypothesis.hypothesis, surface);
   const writer = projectWriterFromActivation(opts, 'omd first-render check');
-  writer.write('.omd/first-render-critic.json', `${JSON.stringify({ ...report, reportSha256: firstRenderCriticSha256(report) }, null, 2)}\n`);
-  if (opts.json) process.stdout.write(JSON.stringify(report));
+  const checked = await publishFirstRenderCheck(process.cwd(), opts.page, inputJson(opts.input, 'omd first-render check'), writer);
+  const report = checked.report;
+  if (opts.json) process.stdout.write(JSON.stringify(checked));
   else {
     console.log(`first render: ${report.verdict} (${report.findings.length} finding${report.findings.length === 1 ? '' : 's'})`);
     for (const finding of report.findings) console.log(`  [${finding.severity}] ${finding.id}: ${finding.message}`);
@@ -4976,7 +4991,7 @@ function usage(): never {
     + '\n'
     + '  design                                       discover evidence and create/refresh .omd/design.md\n'
     + '  design --check                              validate design.md section coverage\n'
-    + '  init [--refresh | --check] [--json]          inventory existing CSS/tokens; preserve app and approved tokens\n'
+    + '  init [--input <runtime-input.json>] [--refresh | --check] [--json]  inventory source/runtime styles; preserve approved tokens\n'
     + '  copy --check [--json]                       validate required copy deck structure and fact refs\n'
     + '  copy --review-check [--json]                validate copy-eye structure and current deck hash\n'
     + '  copy review-publish --input <report>         preserve a validated blind copy-eye report\n'

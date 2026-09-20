@@ -32,6 +32,8 @@ service, provider, or runtime.
 For routes requiring dual reference research, Scout follows validated `research-check` with
 `omd ref apply-plan --json`. The draft derives exact destination surface names and input hashes
 from the current domain brief and research; it deliberately contains no invented judgments.
+It requires a v2 `target: {route, state}` for each screen. Bind the real planned destination path
+and observable state before production; final application review rejects a different screen's capture.
 Scout inspects the images, fills the draft's input, and publishes through `omd ref apply-set`.
 `apply-check` verifies complete surface coverage, correct-lane reference IDs, explicit partial/
 brief-derived gaps, current inputs and consistent publication. Both lanes must inform at least one
@@ -140,9 +142,13 @@ Discovery always saves two separate ledgers:
 - **domain reference** (`.omd/refs/domain/research.json`) asks how comparable services organize real screens, features, states, and
   task flows. When `greenfield-task-flow-benchmark` applies, its private v2 benchmark records every
   safe reachable screen in the declared scope, the actual click path, feature and flow groupings,
-  current local evidence, and every explicit coverage gap. `omd benchmark check` re-hashes that
-  evidence, but returns `liveFlowVerified: false`: action/result prose and hashed artifacts do not
-  prove executed browser transitions. Never present that currentness result as all-controls-tested.
+  current local evidence, and every explicit coverage gap. Use `omd benchmark record --input
+  <reference-flow-input.json>` to execute public navigation/disclosure states in one fresh browser
+  context. Attach its signed execution receipt to each completed flow and preserve the returned
+  action/result/evidence bindings. `omd benchmark check` authenticates and re-hashes those transitions;
+  selected product benchmarks require `liveFlowVerified: true`. Legacy artifacts without executions
+  remain readable but unverified. Login, payment, destructive or unsupported actions are explicit
+  exclusions, never inferred successes. Verification covers only the recorded scope, not all controls.
 - **design reference** (`.omd/refs/design/research.json`) asks how the destination should feel and be composed. It uses the measured
   board, mood, typography, component, and craft evidence already defined by this protocol. Domain
   research is not visual direction merely because the comparable product looks polished.

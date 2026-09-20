@@ -87,7 +87,7 @@ test('a no-change rescan cannot erase a confirmed problem by changing its judgme
   const pointer = JSON.parse(readFileSync(pointerPath, 'utf8'));
   pointer.checkpoint = { path, sha256: digest };
   writeFileSync(pointerPath, JSON.stringify(pointer));
-  assert.throws(() => checkSlopReview(root), /finding inventory does not match/, 'rehashing a hand-edited checkpoint cannot erase actual source findings');
+  assert.throws(() => checkSlopReview(root), /native checkpoint signature invalid/, 'rehashing a hand-edited checkpoint cannot erase actual source findings');
 });
 
 test('scope cannot point at external sites, unrelated localhost ports or escaped files', () => {

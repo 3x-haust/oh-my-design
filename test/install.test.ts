@@ -1,6 +1,9 @@
 import { test } from 'node:test';
+import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
 import assert from 'node:assert/strict';
-import { chmodSync, cpSync, existsSync, lstatSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, readlinkSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, lstatSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, readlinkSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -51,6 +54,29 @@ max_threads = 1000
 [agents.explorer]
 config_file = "./agents/explorer.toml"
 `;
+
+test('valid feature table spellings stay valid, reversible and idempotent', () => {
+  for (const original of [
+    '[features]\n  hooks = true\n', '[features] # keep comment\nhooks = true\n',
+    'features = { hooks = true, custom = false } # keep\n', 'features = {}\n',
+    'features.hooks = true\n', '[ "features" ]\n"hooks" = true\n',
+    'model = "user-model"\n[features]\n  hooks = false\n  [agents]\nmax_threads = 3\n',
+    'developer_instructions = """\nConfiguration example:\n[features]\ntext\n"""\n[features]\nhooks = true\n',
+  ]) {
+    const before = parseToml(original);
+    const patched = patchConfigToml(original, { agents: AGENTS });
+    const after = parseToml(patched);
+    assert.deepEqual(after.features, { hooks: true, plugins: true, plugin_hooks: true, multi_agent: true, ...before.features as object });
+    assert.equal(unpatchConfigToml(patched), original);
+    assert.equal(patchConfigToml(patched, { agents: AGENTS }), patched);
+  }
+});
+
+test('npm payload contains namespace-correct marketplace artifacts used by cache refresh', () => {
+  const packages = JSON.parse(execFileSync('npm', ['pack', '--dry-run', '--ignore-scripts', '--json'], { cwd: PACKAGE_ROOT, encoding: 'utf8' }));
+  const files = new Set(packages[0].files.map((file: { path: string }) => file.path));
+  for (const path of ['skills/ultradesign/SKILL.md', 'agents/eye.md', '.mcp.json', '.claude-plugin/plugin.json']) assert.ok(files.has(path), `missing npm artifact: ${path}`);
+});
 
 interface CodexConfig {
   model?: string;
@@ -567,6 +593,11 @@ test('install refreshes an already-installed Claude plugin cache in place', asyn
   try {
     mkdirSync(join(cacheDir, 'skills', 'ultradesign'), { recursive: true });
     writeFileSync(join(cacheDir, 'skills', 'ultradesign', 'SKILL.md'), 'STALE');
+    mkdirSync(join(cacheDir, 'agents'), { recursive: true });
+    writeFileSync(join(cacheDir, 'agents', 'retired-agent.md'), 'retired role');
+    mkdirSync(join(cacheDir, 'skills', 'retired-skill'), { recursive: true });
+    writeFileSync(join(cacheDir, 'skills', 'retired-skill', 'SKILL.md'), 'retired skill');
+    writeFileSync(join(cacheDir, 'user-note.txt'), 'preserve unrelated data');
     writeFileSync(
       join(home, 'plugins', 'installed_plugins.json'),
       JSON.stringify({ plugins: { 'oh-my-design@omd': [{ version: '0.17.0', installPath: cacheDir }] } }),
@@ -577,6 +608,11 @@ test('install refreshes an already-installed Claude plugin cache in place', asyn
     assert.match(skill, /Ultradesign/);
     assert.ok(existsSync(join(cacheDir, '.mcp.json')), 'the built .mcp.json is copied into the cache');
     assert.ok(changes.some((c) => c.includes('refreshed plugin cache in place')));
+    assert.equal(existsSync(join(cacheDir, 'agents', 'retired-agent.md')), false);
+    assert.equal(existsSync(join(cacheDir, 'skills', 'retired-skill')), false);
+    assert.equal(readFileSync(join(cacheDir, 'user-note.txt'), 'utf8'), 'preserve unrelated data');
+    const backup = readdirSync(cacheDir).find(name => name.startsWith('.omd-refresh-'))!;
+    assert.equal(readFileSync(join(cacheDir, backup, 'previous', 'agents', 'retired-agent.md'), 'utf8'), 'retired role');
   } finally {
     rmSync(home, { recursive: true, force: true });
   }
@@ -591,4 +627,28 @@ test('install does not fabricate a Claude plugin cache when none is installed', 
   } finally {
     rmSync(home, { recursive: true, force: true });
   }
+});
+
+test('failed cache publication rolls back regular payloads and dangling links', async t => {
+  const home = realpathSync(mkdtempSync(join(tmpdir(), 'omd-cache-rollback-')));
+  t.after(() => rmSync(home, { recursive: true, force: true }));
+  const cache = join(home, 'plugins/cache/omd/oh-my-design/current');
+  mkdirSync(join(cache, 'skills'), { recursive: true });
+  writeFileSync(join(cache, 'skills/old.md'), 'previous');
+  symlinkSync('missing-agents', join(cache, 'agents'));
+  writeFileSync(join(cache, '.mcp.json'), '{"previous":true}');
+  writeFileSync(join(home, 'plugins/installed_plugins.json'), JSON.stringify({ plugins: { 'oh-my-design@omd': [{ installPath: cache }] } }));
+  const original = fs.renameSync;
+  let injected = false;
+  const mocked = t.mock.method(fs, 'renameSync', (from: fs.PathLike, to: fs.PathLike) => {
+    if (!injected && String(to) === join(cache, '.mcp.json')) { injected = true; throw new Error('injected publish failure'); }
+    return original(from, to);
+  });
+  syncBuiltinESMExports();
+  try {
+    await assert.rejects(() => install([{ host: 'claude', home }], UNSUPPORTED_BROWSER), /injected publish failure/);
+    assert.equal(readlinkSync(join(cache, 'agents')), 'missing-agents');
+    assert.equal(readFileSync(join(cache, 'skills/old.md'), 'utf8'), 'previous');
+    assert.equal(readFileSync(join(cache, '.mcp.json'), 'utf8'), '{"previous":true}');
+  } finally { mocked.mock.restore(); syncBuiltinESMExports(); }
 });

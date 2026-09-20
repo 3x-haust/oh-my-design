@@ -141,15 +141,31 @@ Source sealing now binds the application plan. After authenticated final evidenc
 `omd ref apply-review-plan --json`, inspect each criterion on current desktop/mobile captures,
 then `apply-review-set --input <json>` and `apply-review-check --json`. Missing, unresolved or stale
 judgments block terminal completion; changes require resealing, recapture and re-review.
-Review reasons are agent-authored, not human approval. The v2 task-flow checker explicitly reports
-`liveFlowVerified: false`: hashed screenshots/action prose still do not prove a live multi-screen flow.
+Review reasons are agent-authored, not human approval. `omd schema reference-flow-input` and
+`omd benchmark record --input <flow.json>` execute public navigation/disclosure steps in one fresh
+context and publish signed, project-bound receipts. Only bound completed flows can report
+`liveFlowVerified: true`; artifact-only history remains unverified and cannot clear a selected product
+benchmark. Login, payment, submission and destructive controls remain explicit exclusions.
+
+Similarity discovery may keep intermediate native captures in each lane's optional `navigation`
+array (`url`, PNG `evidence`, JSON `capture`). Only observed links rooted in a successful search
+extend the chain. Screen application v2 binds each destination route/state before production;
+final review cannot substitute a home capture for a different surface. First-render checking uses
+`--page <local-build.html>` plus the observed projection, saves a native capture, and invalidates
+its report when the hypothesis/source/build changes. Comparison is explicitly task-applicable and
+advisories do not block completion by themselves.
 
 For an existing service, `omd init --json` inventories static CSS variables/declarations and `$value`
 token JSON into `.omd/existing-design-system.json` and `.md`. Scopes, aliases and source locations/hashes
 remain intact. It never changes app files or approved `.omd/tokens.json`. Future briefs reuse the
 inventory; `omd init --check` detects stale inputs and `omd init --refresh` refreshes observations.
 Keep authored decisions in `.omd/design-system-decisions.md`, preserved across refreshes. Runtime styles,
-Tailwind configuration and component variants are explicit inspection gaps, not silently inferred tokens.
+Tailwind configuration and component variants are not silently inferred from static files.
+For runtime values use `omd schema runtime-design-inventory-input` then `omd init --input <input.json>`:
+named component selectors and optional SPA states are rendered from a bundled local build. Computed
+CSS-in-JS/utility styles and custom properties are saved in `.omd/runtime-design-system.json` and `.md`.
+`init --check` detects stale source/build/captures; `init --refresh` repeats the recorded scope. Future
+briefs reuse current observations, never treating them as approved semantic tokens or unvisited variants.
 
 Implementation completion uses `omd schema slop-scope` → `omd slop checkpoint --input <scope.json>` →
 inspect the native captures → `omd slop review-set --input <review.json>`. Confirmed issues require
@@ -157,7 +173,12 @@ owner repair, rebuild, same-scope recapture/rescan, and an explicit after-render
 `omd slop review-check`, CLI finalization and terminal preflight reject missing, stale or unresolved
 loops. Candidates/warnings remain advisory; reasoned dismissals are valid and a clean first review
 needs no invented repair. Capture currently supports local HTML build entries, not arbitrary localhost
-ports. This does not replace functional coverage, independent quality review, or user approval.
+ports. Optional per-view `state: {name,startRoute,route,actions,assertions}` covers SPA routes, modals
+and error states; the native executor preserves state and blocks external networking/API writes.
+Final linked browser states require matching route/state/viewport scope and exact viewport pixels
+from the authenticated final capture; replay the same deterministic data and settled state. Native
+checkpoint/inventory signatures reject edited documents masquerading as observations. This does not replace
+functional coverage, independent quality review, or user approval.
 Legacy files are preserved; renamed identical images still cannot satisfy both lanes.
 
 For design before implementation, use `omd schema design-route-input` with `deliveryMode: design-only`.

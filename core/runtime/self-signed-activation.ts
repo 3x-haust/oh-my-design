@@ -24,7 +24,7 @@
 // a receipt may be gone by the time a replay is attempted.
 
 import { createHash, generateKeyPairSync, randomBytes, sign, verify, createPrivateKey, createPublicKey, type KeyObject } from 'node:crypto';
-import { accessSync, chmodSync, closeSync, constants as fsConstants, existsSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, renameSync, writeFileSync, writeSync } from 'node:fs';
+import { accessSync, chmodSync, closeSync, constants as fsConstants, existsSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, writeFileSync, writeSync } from 'node:fs';
 import { join } from 'node:path';
 
 export const SELF_SIGNED_RECEIPT_SCHEMA = 'omd-self-signed-receipt-v1' as const;
@@ -234,3 +234,18 @@ export function claimNonce(projectRoot: string, nonce: string): boolean {
 /** The exact payload digest a receipt must name to authorize these bytes. */
 export const authorizationFor = (purpose: string, payload: Uint8Array): SelfSignedPayloadAuthorization =>
   Object.freeze({ purpose, payloadSha256: sha256Hex(payload) });
+
+/** Durable native observation, NOT an activation or independent judgment. Only native execution
+ * publishers call this after capture. Same-user key access is outside this protocol boundary. */
+export function signNativeObservation(projectRoot: string, kind: string, payloadSha256: string): string {
+  projectRoot = realpathSync(projectRoot); // /var and /private/var name the same macOS project across CLI processes.
+  const { privateKey } = projectKeyPair(projectRoot, true);
+  return sign(null, Buffer.from(JSON.stringify(['omd-native-observation-v1', projectRoot, kind, payloadSha256])), privateKey).toString('base64');
+}
+export function verifyNativeObservation(projectRoot: string, kind: string, payloadSha256: string, signature: string): boolean {
+  try {
+    projectRoot = realpathSync(projectRoot);
+    const { publicKey } = projectKeyPair(projectRoot, false);
+    return verify(null, Buffer.from(JSON.stringify(['omd-native-observation-v1', projectRoot, kind, payloadSha256])), publicKey, Buffer.from(signature, 'base64'));
+  } catch { return false; }
+}

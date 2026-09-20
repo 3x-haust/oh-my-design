@@ -1,5 +1,5 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync, cpSync, rmSync, readdirSync, symlinkSync, lstatSync, readlinkSync, unlinkSync, chmodSync } from 'node:fs';
-import { join, dirname, basename } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, cpSync, rmSync, readdirSync, symlinkSync, lstatSync, readlinkSync, unlinkSync, chmodSync, mkdtempSync, renameSync, realpathSync } from 'node:fs';
+import { join, dirname, basename, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse as parseToml } from 'smol-toml';
 import type { Detected } from './detect.ts';
@@ -39,6 +39,12 @@ function readdirSafe(dir: string): string[] {
     return readdirSync(dir);
   } catch {
     return [];
+  }
+}
+function existsNoFollow(path: string): boolean {
+  try { lstatSync(path); return true; } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    throw error;
   }
 }
 
@@ -127,11 +133,38 @@ function refreshClaudePluginCache(d: Detected, distributionRoot: string, changes
     return;
   }
   if (cacheDir === undefined || !existsSync(cacheDir)) return;
-  for (const item of ['skills', 'agents', '.mcp.json', '.claude-plugin']) {
-    const src = join(distributionRoot, item);
-    if (existsSync(src)) cpSync(src, join(cacheDir, item), { recursive: true });
+  const cacheRoot = join(d.home, 'plugins', 'cache');
+  if (!existsSync(cacheRoot) || !realpathSync(cacheDir).startsWith(`${realpathSync(cacheRoot)}${sep}`)) {
+    throw new Error('CLAUDE_CACHE_UNSAFE: installed plugin path must be inside the host plugin cache');
+  }
+  cacheDir = realpathSync(cacheDir);
+  const items = ['skills', 'agents', '.mcp.json', '.claude-plugin'];
+  for (const item of items) if (!existsSync(join(distributionRoot, item)) || lstatSync(join(distributionRoot, item)).isSymbolicLink()) {
+    throw new Error(`CLAUDE_PLUGIN_PAYLOAD_MISSING: ${item}; run npm run build or reinstall a complete package; cache was not refreshed`);
+  }
+  // These four paths belong to the plugin, not the user's host-wide skills directory.
+  // Keep the old payload recoverable and replace whole trees so retired roles cannot survive.
+  const staging = mkdtempSync(join(cacheDir, '.omd-refresh-'));
+  const backups = join(staging, 'previous');
+  mkdirSync(backups);
+  const replaced: string[] = [];
+  try {
+    for (const item of items) cpSync(join(distributionRoot, item), join(staging, item), { recursive: true });
+    for (const item of items) {
+      const dest = join(cacheDir, item);
+      if (existsNoFollow(dest)) renameSync(dest, join(backups, item));
+      replaced.push(item);
+      renameSync(join(staging, item), dest);
+    }
+  } catch (error) {
+    for (const item of replaced.reverse()) {
+      rmSync(join(cacheDir, item), { recursive: true, force: true });
+      if (existsNoFollow(join(backups, item))) renameSync(join(backups, item), join(cacheDir, item));
+    }
+    throw error;
   }
   changes.push(`claude: refreshed plugin cache in place -> ${cacheDir} (run /reload-plugins)`);
+  changes.push(`claude: previous plugin payload retained -> ${backups}`);
 }
 
 function uninstallClaude(d: Detected, changes: string[]): void {
@@ -195,6 +228,7 @@ function installCodex(d: Detected, version: string, distributionRoot: string, ch
   backupFile(configPath, d.home);
   const currentText = existsSync(configPath) ? readFileSync(configPath, 'utf8') : '';
   const patched = patchConfigToml(currentText, { agents: agentNames });
+  parseToml(patched);
   mkdirSync(d.home, { recursive: true });
   writeFileSync(configPath, patched);
   changes.push(`codex: patched ${configPath}`);

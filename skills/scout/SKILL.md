@@ -107,6 +107,10 @@ After `research-check`, run `omd ref apply-plan --json`. Its `input` is a delibe
 draft for every current domain-brief surface; `evidence` is your source-bearing inventory, not a
 payload for Composer or Hand. Inspect the saved images, then fill only the draft input and publish
 with `omd ref apply-set --input <application.json>`; require `omd ref apply-check --json`.
+The v2 input also binds each destination's `target: {route, state}` before production. Use the
+actual planned app-relative route (including query/hash) and observable state; do not assign every
+surface to the home screen. Distinct surfaces need distinct route/state pairs. These bindings are
+source-sealed and later matched to authenticated final captures; old v1 plans need reviewed republication.
 The publisher produces `.omd/reference-application.md` for the user and a separate source-free
 projection for downstream roles. Keep source URLs and capture paths in research, not decision prose.
 
@@ -129,6 +133,10 @@ Search the PART, in English, across many sites — the way a designer builds a b
   board becomes a single competitor's screenshot set.
 - Explore by similarity rather than by rewriting the query: the next good capture usually comes from
   looking at one you kept, not from a better phrase.
+  Keep native captures of intermediate pages in that lane's optional `navigation` array, each with
+  `url`, PNG `evidence`, and JSON `capture` receipts. The checker follows observed outbound links from
+  successful search results through those captures; a disconnected chain, prose link, stale image,
+  blocked visit or user-supplied screenshot cannot manufacture a browser navigation edge.
 - Keep the whole page when the felt direction is the point, and a scoped part when anatomy is. A
   moodboard is whole-page and visual-only by construction (`protocol/moodboard.md`).
 - A capture carries its own evidence: palette, type, spacing, and the page it came from. A pin that is
@@ -153,6 +161,14 @@ success and query prose cannot replace one. Do not hand-author or edit execution
 The domain-reference lane and the design-reference lane are independent deliverables. Keep a
 competitor's task-flow evidence in domain and use a different service's visual evidence for design;
 separate observations of the same service do not satisfy the independent-host lane contract.
+
+For a selected product task-flow benchmark, use `omd schema reference-flow-input` and
+`omd benchmark record --input <flow.json> --json`. One fresh context executes the declared public
+navigation/disclosure chain. Copy the execution receipt and exact per-step labels, URLs, states and
+evidence into the matching benchmark source/flow/screens. Research rejects completed flows backed
+only by prose or unbound screenshots. Record login/payment/destructive or unsupported controls as
+bounded exclusions, not successful tests. This proves only declared visited states, never every
+control in an entire service. Free public references remain the only requirement.
 
 For an applicable product task-flow benchmark, do not stop at the landing page or first useful
 screen. Declare the safe inspection scope, open each same-domain service at its real entry point, and

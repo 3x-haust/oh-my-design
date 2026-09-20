@@ -47,12 +47,20 @@ inspection and research repair remain available while production is blocked.
 
 - `brief --check` exits nonzero for a missing route, an unselected stage or entry blockers.
   Its production mode uses the same readiness validator as `guard production`.
-- Research v5 refuses missing/mismatched search receipts or retained links absent from observed
-  search pages. A blocked provider can be replaced with another free public source, never a paid
+- Research v5 refuses missing/mismatched search receipts or retained links unreachable from observed
+  search pages and separately validated native navigation captures. Each optional lane `navigation`
+  item binds its URL, PNG evidence and JSON capture; only observed outbound links extend reachability.
+  A blocked provider can be replaced with another free public source, never a paid
   MCP or invented receipt. Native GET capture is not an automatic search-quality judgment.
 - Application review refuses missing criteria/viewports, changed application/build/seal, unrelated
   observations/captures/states, and unresolved revisions. It consumes the existing authenticated
   final graph, not a caller-selected substitute graph. Review history remains content-addressed.
+  Application v2 fixes each screen's destination-relative route and state before production; a home
+  capture cannot satisfy a different screen just because its pixel hash is current.
+- First-render checking captures a local build natively and binds the retained report to the
+  hypothesis, source, build, capture and exact interpreted projection. Terminal validation recomputes
+  the report and input identities. Advisory findings stay advisory; comparison applies only when the
+  hypothesis explicitly requires it. The projection remains agent-authored, not human approval.
 - Routed `recipe add` checks readiness and every materialized target **before the first source
   write**, even when invoked directly without the Pi extension. Standalone recipe use without
   an OMD route remains standalone; `recipe show/list` are inspection, not implementation.
@@ -67,7 +75,18 @@ These checks do not attest taste, observation honesty or operating-system isolat
 without Pi hooks has explicit CLI gates only; arbitrary external file-writing processes remain
 outside that boundary. Final reviewer authorization is retained, never simulated.
 
-The v2 task-flow benchmark's action/result prose and artifact hashes still do **not** attest
-executed multi-screen actions. Its checker explicitly returns `liveFlowVerified: false` and an
-artifact-only evidence-strength report. A native end-to-end remote action recorder remains a gap;
-do not rename this currentness check into a live-flow pass or claim that all buttons were tested.
+The v2 task-flow benchmark's prose and artifact hashes alone still do **not** attest multi-screen
+actions. `benchmark record` executes declared public link/disclosure chains and signs step/capture
+receipts. Selected product benchmarks require those receipts for every declared completed flow;
+blocked/excluded controls remain explicit gaps. `liveFlowVerified` applies only to those completed
+flows, never every control in the service or authenticated transactions.
+
+Stateful slop scope records `name/startRoute/route/actions/assertions` per view. Capture preserves
+the opened state; final linked states need matching route/state/viewport and exact viewport pixels
+from the authenticated final capture. Replay deterministic fixtures and settled states; a label alone
+never proves an open modal. Native signatures reject rehashed checkpoint/inventory substitutions.
+Runtime design
+inventory uses the same isolated local-state executor and records computed styles/custom properties
+by component, with exact input-to-component and build coverage. Source/build/capture changes invalidate reuse.
+All local views, including the default entry, refuse external
+networking and non-read-only requests; use bundled fixtures, not live APIs.

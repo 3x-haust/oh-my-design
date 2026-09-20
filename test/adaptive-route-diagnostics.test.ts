@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import { AdaptiveRouteError, type AdaptiveStrategyDecision } from '../core/route/adaptive-flow-domain.ts';
 import { validateAdaptiveExecutionWaves } from '../core/route/adaptive-execution-waves.ts';
@@ -104,6 +108,28 @@ test('missing required method diagnostics name the method, not only the category
     assert.ok(error instanceof AdaptiveRouteError);
     assert.equal(error.code, 'REQUIRED_METHOD_MISSING');
     assert.match(error.message, /selected method model-capability-probe must appear in strategyDecision.methods/);
+    return true;
+  });
+});
+
+test('test-012 failures identify safety methods, terminal stage order and contradictory skips', () => {
+  const safety = input();
+  safety.strategyDecision.methods = safety.strategyDecision.methods.filter((id: string) => id !== 'design-strategy-safety-recovery');
+  assert.throws(() => routeAdaptiveFlow(safety), /SAFETY_WORK_REQUIRED:.*safety-validation.*omd-writer.*design-strategy-safety-recovery.*rigorous-task-accessibility-validation/);
+  const final = input(); final.strategyDecision.stages = final.strategyDecision.stages.filter((id: string) => id !== 'browser-evidence');
+  assert.throws(() => routeAdaptiveFlow(final), /FINAL_EVIDENCE_REQUIRED:.*browser-evidence, independent-review/);
+  const contradictory = strategy();
+  assert.throws(() => validateOptionalStageAccounting({ ...contradictory, skips: [...contradictory.skips, { id: 'frame', reason: 'incorrect skip' }] }), /stage frame is both selected and skipped/);
+  assert.doesNotThrow(() => routeAdaptiveFlow(input()));
+});
+
+test('test-012 missing route is unclassified, not malformed or a request for external activation', t => {
+  const dir = mkdtempSync(join(tmpdir(), 'omd-unclassified-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  assert.throws(() => execFileSync(process.execPath, [fileURLToPath(new URL('../bin/omd.mjs', import.meta.url)), 'guard', 'completion', '--json'], { cwd: dir, encoding: 'utf8', stdio: 'pipe' }), (error: unknown) => {
+    const stderr = String((error as { stderr: unknown }).stderr);
+    assert.match(stderr, /ROUTE_UNCLASSIFIED:.*route validate.*route classify/);
+    assert.doesNotMatch(stderr, /MALFORMED_ADAPTIVE_ROUTE/);
     return true;
   });
 });

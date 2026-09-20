@@ -16,6 +16,7 @@ const hypothesis: DesignHypothesis = {
   dominantObject: 'benefit cards',
   subordinate: ['sidebar navigation', 'search', 'filters', 'AI assistant'],
   densityIntent: 'show several benefits in one viewport so a person can compare them without feeling like a spreadsheet',
+  comparisonRequired: true,
   trustSource: 'explicit eligibility, match, provider, deadline, and next action metadata',
   twoSecondRead: 'find benefits that fit me',
 };
@@ -77,6 +78,14 @@ test('one visible object is an advisory comparison failure, not a forbidden beau
   const finding = report.findings.find((item) => item.id === 'COMPARISON_TOO_THIN');
   assert.ok(finding);
   assert.equal(finding.severity, 'advisory');
+  assert.equal(report.verdict, 'retain');
+});
+
+test('a deliberate single editor does not inherit the benefits comparison requirement', () => {
+  const report = critiqueFirstRender({ ...hypothesis, dominantObject: 'code editor', twoSecondRead: 'Edit the current project source', densityIntent: 'one focused document', comparisonRequired: false },
+    { heading: 'Edit project source', landmarks: ['code editor'], repeatedObjects: ['code editor'], trustSignals: ['Saved locally'], visibleText: ['Edit project source'], dominantAreaShare: 0.8 });
+  assert.equal(report.verdict, 'retain');
+  assert.deepEqual(report.findings, []);
 });
 
 test('missing trust metadata is named without prescribing a visual style', () => {

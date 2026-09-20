@@ -16,13 +16,16 @@ import type { DesignDecision } from '../core/deliberation/contracts.ts';
 const sha = (n: number) => String(n).repeat(64);
 function fixture() {
   const lane = { referenceIds: [], coverage: 'brief-derived', gap: 'No direct reference for this case.', application: 'Keep the current task dominant.', doNotTransfer: 'Source branding.', reason: 'The user needs a readable work object.' };
-  const application = projectReferenceApplication(parseReferenceApplication({ schema: 'reference-application-v1', sourceContractSha256: sha(1), researchSha256: sha(2), domainBriefSha256: sha(3),
-    screens: ['home', 'detail'].map(surface => ({ surface, domain: lane, design: lane, checks: ['The long title keeps the primary action visible.'] })) }));
+  const application = projectReferenceApplication(parseReferenceApplication({ schema: 'reference-application-v2', sourceContractSha256: sha(1), researchSha256: sha(2), domainBriefSha256: sha(3),
+    screens: ['home', 'detail'].map(surface => ({ surface, target: { route: `/${surface}`, state: 'long-title' }, domain: lane, design: lane, checks: ['The long title keeps the primary action visible.'] })) }));
+  const digest = (value: string) => createHash('sha256').update(value).digest('hex');
   const context = { application, build: { path: '.omd/build.json', sha256: sha(4) }, sourceSeal: { path: '.omd/source-seal.json', sha256: sha(5) },
-    observations: (['desktop', 'mobile'] as const).map((viewport, index) => ({ observationSha256: sha(6), browserObservationSha256: sha(9), captureSha256: sha(7 + index), viewport, state: 'long-title' })) };
+    observations: application.screens.flatMap(screen => (['desktop', 'mobile'] as const).map(viewport => ({ observationSha256: sha(6), browserObservationSha256: digest(`${screen.surface}:${viewport}`), captureSha256: digest(`${screen.surface}:${viewport}:pixels`), viewport, state: 'long-title' }))),
+    captureIndex: application.screens.flatMap(screen => (['desktop', 'mobile'] as const).map(viewport => ({ path: `.omd/${screen.surface}-${viewport}.png`, testedUrl: `http://127.0.0.1${screen.target.route}`, browserObservationSha256: digest(`${screen.surface}:${viewport}`) }))) };
   const plan = referenceApplicationReviewPlan(context);
   const review = { ...plan.input, results: plan.input.results.map(result => {
-    const observation = context.observations.find(row => row.viewport === result.viewport)!;
+    const criterion = plan.criteria.find(row => row.criterionId === result.criterionId)!;
+    const observation = context.observations.find(row => row.viewport === result.viewport && row.browserObservationSha256 === digest(`${criterion.surface}:${result.viewport}`))!;
     return { ...result, observationSha256: observation.observationSha256, captureSha256: observation.captureSha256, state: observation.state,
       verdict: 'met', reason: 'Inspected this surface at the named viewport: title wraps and the action remains visible.' };
   }) };
@@ -39,6 +42,16 @@ test('every surface criterion has stable IDs and requires both current fixed vie
   assert.throws(() => validateReferenceApplicationReview({ ...review, results: [review.results[0], ...review.results.slice(0, 3)] }, context), /duplicate/);
   const changed = structuredClone(context.application); changed.screens[0]!.checks = ['A different criterion.'];
   assert.notEqual(referenceApplicationCriteria(changed)[0]!.criterionId, plan.criteria[0]!.criterionId);
+});
+test('home captures cannot certify detail; exact query/hash and state are destination-bound', () => {
+  const { context, review } = fixture();
+  const homeOnly = { ...context, captureIndex: context.captureIndex.filter(row => row.testedUrl.endsWith('/home')) };
+  assert.throws(() => validateReferenceApplicationReview(review, homeOnly), /destination surface detail/);
+  const wrongUrl = { ...context, captureIndex: context.captureIndex.map(row => ({ ...row, testedUrl: 'http://127.0.0.1/home' })) };
+  assert.throws(() => validateReferenceApplicationReview(review, wrongUrl), /destination surface detail/);
+  const changed = structuredClone(context.application); changed.screens[0]!.target = { route: '/home?tab=saved#details', state: 'long-title' };
+  assert.notEqual(referenceApplicationCriteria(changed)[0]!.criterionId, referenceApplicationCriteria(context.application)[0]!.criterionId);
+  assert.throws(() => validateReferenceApplicationReview(review, { ...context, captureIndex: [] }), /destination surface/);
 });
 test('no stale build, application, seal, capture, observation, state, viewport or unknown field can clear review', () => {
   const { context, review } = fixture();

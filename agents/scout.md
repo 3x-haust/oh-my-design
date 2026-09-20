@@ -432,7 +432,13 @@ transfers; component anatomy alone is insufficient. Keep at least two real servi
 and keep them as the majority; adjacent-domain sources may fill one explicitly
 named evidence gap only and cannot establish domain-specific task steps. Before serialization, run
 `omd schema task-flow-benchmark --json` exactly once and copy its exact skeleton: do not rename,
-duplicate, nest, or extend any field. Persist the bounded source artifact and sanitized projection
+duplicate, nest, or extend any field. For each completed public flow, read `omd schema
+reference-flow-input --json`, then run `omd benchmark record --input <reference-flow-input.json>`.
+Use its native signed `execution` receipt on the flow; copy the returned screen URL/state/capture
+and step action/result/evidence exactly. The recorder carries the browser context across clicks.
+Login, payment, destructive, form-submit and unsupported controls stay explicit exclusions.
+A prose-only or legacy trace cannot satisfy the selected product benchmark's live-flow gate.
+Persist the bounded source artifact and sanitized projection
 with `omd benchmark set --input <task-flow-benchmark.json>`, then require
 `omd benchmark check --json` to pass. The projection omits URLs, brands, source copy, screenshots,
 styling, and operational claims.

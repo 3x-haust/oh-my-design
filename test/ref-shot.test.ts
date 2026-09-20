@@ -32,7 +32,7 @@ test('--shot pairs a scoped component screenshot with its blueprint on one recor
   const shotAbs = refImagePath(dir, { source: SLOP, component: 'cards', researchLane: 'design' });
   assert.ok(existsSync(shotAbs), 'the scoped screenshot PNG exists on disk');
   assert.ok(statSync(shotAbs).size > 0, 'the screenshot is not empty');
-  assert.match(ref.imagePath!, /\.omd[\\/]refs[\\/].*cards\.png$/);
+  assert.match(ref.imagePath!, /\.omd[\\/]refs[\\/].*cards\.ref-[a-f0-9]{16}\.png$/);
 });
 
 test('--shot without --selector is a usage error (a scoped shot needs a subtree)', () => {

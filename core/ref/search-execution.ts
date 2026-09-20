@@ -146,11 +146,24 @@ export function readSearchExecution(root: string, value: unknown, lane: Lane): S
 
 /** Query strings are intent only. Each non-user source must trace to an actually observed link;
  * source/entry native captures (validated by research-check) then prove the separate visit. */
-export function validateSearchCoverage(root: string, lane: Lane, queries: readonly string[], receipts: readonly Receipt[], sourceUrls: readonly string[]) {
+export type ObservedNavigation = Readonly<{ url: string; finalUrl: string; links: readonly string[] }>;
+/** navigation is derived only from separately hash/image/lane-validated native captures. */
+export function validateSearchCoverage(root: string, lane: Lane, queries: readonly string[], receipts: readonly Receipt[], sourceUrls: readonly string[], navigation: readonly ObservedNavigation[] = []) {
   const records = receipts.map(item => readSearchExecution(root, item, lane));
   if (new Set(receipts.map(item => item.sha256)).size !== receipts.length) return fail('duplicate search receipts');
   if (queries.some(query => !records.some(item => item.query === query)) || records.some(item => !queries.includes(item.query))) return fail('declared queries do not match executed queries');
-  for (const source of sourceUrls) if (!records.some(item => item.status === 'page-observed' && observedSearchTargets(item).includes(source))) return fail(`retained source was not an observed search link: ${source}; search and capture a usable public alternative`);
+  const reached = new Set(records.filter(item => item.status === 'page-observed').flatMap(observedSearchTargets));
+  const pending = new Set(navigation);
+  for (let changed = true; changed;) {
+    changed = false;
+    for (const hop of pending) {
+      if (!reached.has(hop.url)) continue;
+      reached.add(hop.finalUrl);
+      for (const link of hop.links) reached.add(link);
+      pending.delete(hop); changed = true;
+    }
+  }
+  for (const source of sourceUrls) if (!reached.has(source)) return fail(`retained source was not an observed search link or captured navigation descendant: ${source}; capture every hop from a usable public search result`);
   return { executed: records.length, failed: records.filter(item => item.status !== 'page-observed').length, searchQuality: 'not-automatically-judged' as const };
 }
 

@@ -211,7 +211,7 @@ const ref: Reference = {
 test('saveRef writes under .omd/refs and loadRefs reads it back', () => {
   const dir = project();
   const path = saveRef(dir, ref, createTestProjectWriteAdapter(dir));
-  assert.match(path, /\.omd\/refs\/linear\.app\.search-bar\.json$/);
+  assert.match(path, /\.omd\/refs\/linear\.app\.search-bar\.ref-[a-f0-9]{16}\.json$/);
   const [loaded] = loadRefs(dir);
   assert.deepEqual(loaded, ref);
 });
@@ -228,6 +228,17 @@ test('saveRef overwrites the same source+component rather than accumulating dupl
 
 test('loadRefs on a project with no references returns empty, not a crash', () => {
   assert.deepEqual(loadRefs(project()), []);
+});
+
+test('same-host pages retain independent records and an exact historical record remains readable', () => {
+  const dir = project(), adapter = createTestProjectWriteAdapter(dir);
+  const first = { ...ref, source: 'https://linear.app/features/search' };
+  const second = { ...ref, source: 'https://linear.app/features/issues' };
+  assert.notEqual(saveRef(dir, first, adapter), saveRef(dir, second, adapter));
+  assert.equal(loadRefs(dir).length, 2);
+  writeFileSync(join(dir, '.omd/refs/linear.app.search-bar.json'), JSON.stringify({ ...first, principles: ['historical'] }));
+  assert.equal(loadRefs(dir).length, 2);
+  assert.deepEqual(loadRefs(dir).find(item => item.source === first.source)?.principles, first.principles);
 });
 
 test('loadRefs skips a corrupt reference file rather than failing the whole run', () => {

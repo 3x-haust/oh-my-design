@@ -35,8 +35,15 @@ candidates exits successfully; unreadable or invalid roots are operational failu
 The read-only scan below remains useful for early attention. Completion now requires a native loop:
 
 1. `omd schema slop-scope` supplies the local production/build entries and viewport inventory.
-   Use a built SPA HTML entry, not an unrelated localhost port. Cover the final entry/viewports;
-   task-state entries can be added. This is a static-entry review, not proof of all app interactions.
+   Use a built SPA HTML entry, not an unrelated localhost port. Cover the final entry/viewports.
+   Replay each final SPA/modal/error state with `state: {name,startRoute,route,actions,assertions}`;
+   the schema command describes bounded click/fill/select/press actions and visible/hidden assertions.
+   Reproduce keyboard modality too: the native final evaluator begins with a Tab focus check;
+   `{kind:press,selector:body,value:Tab}` before its actions reproduces that focus-visible state.
+   Never remove focus styling to make two screenshots match. Native final captures preserve the actual
+   post-action path, query and hash rather than relabeling every state as the entry URL.
+   Every local view uses a fresh read-only context: external networking and non-GET/HEAD requests
+   are refused. Use bundled local fixtures; this is not a transaction test against production APIs.
 2. `omd slop checkpoint --input .omd/.cache/slop-scope.json --json` captures those entries, runs the
    source scanner and existing rendered slop linter, and returns `reviewInput` and the checkpoint path.
    Open the checkpoint's `views[].image` files. Source candidates and render warnings remain distinct.
@@ -48,13 +55,19 @@ The read-only scan below remains useful for early attention. Completion now requ
    A disappeared pattern is not automatically a successful repair; the reviewer checks the new image.
 5. `omd slop review-check --json` must pass. CLI final-v2 finalization (including lifecycle finalize)
    and terminal completion preflight require this loop against the trusted final entry/viewports.
+   Final state coverage also compares the actual viewport pixels with the authenticated final
+   capture, not just an authored state label. Use the same deterministic data/state for both captures;
+   time-dependent or animated differences require a settled recapture, not a label or pixel waiver.
    Source/build/scanner changes, unreviewed findings, missing captures, no-change repairs or unresolved
    confirmed issues fail closure. An initial clean render needs no fabricated repair round.
    Current adaptive graphs bind the trusted final entry/viewports. Legacy graphs without that identity
    still require the closed loop, whole-source fingerprint and desktop/mobile views, but report only
    `whole-source-and-declared-views`; they cannot claim exact-final-entry scope binding.
 
-The immutable loop is stored in `.omd/slop/`, not inferred from `history.jsonl`. Dismissed candidates
+The immutable native-signed loop is stored in `.omd/slop/`, not inferred from `history.jsonl`.
+Rehashing an edited scope or image cannot replace the signed capture. Old unsigned checkpoints
+need recapture; signatures establish native publication, not independent review or an OS sandbox.
+Dismissed candidates
 remain visible with reasons; warnings never become universal errors. Review authorship is not
 attested and structural closure is not proof of beauty. Design-only handoff does not require an app
 loop and must not claim application/slop validation. Do not run production checkpoint for that route.

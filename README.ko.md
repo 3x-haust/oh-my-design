@@ -135,8 +135,13 @@ v5에서는 검색어만 적어서는 통과하지 않습니다. `omd ref search
 모든 화면의 기준을 받아 현재 데스크톱·모바일 캡처와 대조하고, `apply-review-set --input <json>` →
 `apply-review-check --json`으로 기록·검증합니다. 누락·수정 필요·오래된 판정은 완료를 막습니다.
 계획·소스·빌드가 바뀌면 재봉인·재캡처·재검토해야 합니다. 에이전트 판정은 사용자 승인이 아닙니다.
-단, v2 플로우 검사는 `liveFlowVerified: false`를 명시합니다. 파일 해시와 행동 설명만으로
-실제 여러 화면의 버튼을 모두 눌렀다고 증명하는 기능은 아직 제공하지 않습니다.
+적용 계획 v2에는 각 화면의 `target: {route, state}`도 기록합니다. 홈 캡처로 다른 화면을
+검토할 수 없습니다. `omd schema reference-flow-input` → `omd benchmark record --input <flow.json>`은
+같은 브라우저 문맥에서 공개 링크·펼침·탭 이동을 실행하고 단계별 캡처와 서명된 기록을 저장합니다.
+선택된 제품 벤치마크의 완료 플로우는 이 기록이 필요합니다. `liveFlowVerified`는 실행된 범위에만
+적용되며 로그인·결제·제출·삭제와 미방문 화면은 검증 완료로 바꾸지 않습니다.
+검색 결과에서 관련 핀을 따라간 경우 각 조사 레인의 `navigation`에 중간 페이지의 네이티브 캡처를
+넣습니다. 실제 관찰한 링크로 연결된 경로만 인정하며, 같은 사이트의 다른 페이지도 서로 다른 파일로 저장합니다.
 
 기존 서비스는 프로젝트 폴더에서 `omd init --json`을 실행하면 현재 CSS 변수·선언과 `$value`
 토큰 JSON을 `.omd/existing-design-system.json` 및 `.md`로 정리합니다. 테마·미디어쿼리 범위와
@@ -144,7 +149,11 @@ v5에서는 검색어만 적어서는 통과하지 않습니다. `omd ref search
 다음 작업의 brief가 이 자료를 전달합니다. `omd init --check`로 변경 여부를 확인하고,
 변경 내용을 검토한 뒤 `omd init --refresh`로 갱신합니다. 의도적인 변경 결정은 별도
 `.omd/design-system-decisions.md`에 남기며 재실행해도 보존합니다. Tailwind 설정·CSS-in-JS·
-컴포넌트 변형은 자동 추출하지 않고 추가 확인 대상으로 명시합니다. 추출은 승인이나 화면 검증이 아닙니다.
+컴포넌트 변형은 정적 파일에서 추정하지 않습니다. 실제 계산값은 `omd schema runtime-design-inventory-input`의
+로컬 빌드·선택자·화면 상태를 지정한 뒤 `omd init --input <input.json>`으로 수집합니다.
+`.omd/runtime-design-system.json`과 `.md`에 컴포넌트/상태별 계산 스타일과 CSS 변수를 저장하고 다음 brief에서
+재사용합니다. `init --check`는 소스·빌드·캡처 변경을 감지하고 `init --refresh`는 같은 범위를 다시 관찰합니다.
+관찰한 utility/CSS-in-JS 스타일은 승인된 의미 토큰이나 미방문 변형의 증명이 아닙니다.
 
 구현 완료 전에는 `omd schema slop-scope`의 실제 로컬 빌드 HTML·뷰포트 목록으로
 `omd slop checkpoint --input <scope.json>`을 실행합니다. 저장된 화면을 보고 반환된 `reviewInput`에
@@ -152,7 +161,14 @@ v5에서는 검색어만 적어서는 통과하지 않습니다. `omd ref search
 확인된 문제는 수정·재빌드 후 같은 범위를 재검사하고, 새 화면을 근거로 이전 문제의 해결을 기록합니다.
 `omd slop review-check` 및 CLI finalize·완료 preflight는 누락·미처리·오래된 증거를 거부합니다.
 경고 개수 자체를 오류로 승격하지 않으며, 최초 검사에서 문제가 없다면 가짜 수정 라운드는 필요 없습니다.
-현재 캡처 범위는 로컬 HTML 빌드 진입점입니다. 앱의 모든 상호작용 검증은 별도 기능 검증이 담당합니다.
+SPA 화면·모달·오류 상태는 각 뷰에 `state: {name,startRoute,route,actions,assertions}`를 추가합니다.
+실제 동작 후 상태를 유지한 채 캡처·검사하고 최종 증거의 경로·상태·뷰포트와 대조합니다.
+상태명만으로 통과하지 않으며 최종 인증 캡처의 뷰포트 픽셀과도 일치해야 합니다. 같은 테스트 데이터와
+안정된 상태로 재현해야 하며, 검사·런타임 수집 기록은 서명으로 임의 재작성을 감지합니다.
+외부 네트워크·API 쓰기는 차단하므로 로컬 번들/테스트 데이터가 필요합니다.
+첫 렌더 검사는 `first-render check --page <local-build.html> --input <surface.json>`으로 현재
+가설·소스·빌드·네이티브 캡처를 묶습니다. 단순 권고만으로 완료를 막지 않으며 비교 검사는 가설의
+`comparisonRequired`가 참인 작업에만 적용합니다.
 
 “실제 개발 전까지만” 요청은 `omd schema design-route-input`의 `deliveryMode: design-only`를
 사용합니다. 출력은 `.omd/**`로 제한하고 레퍼런스 조사·설계·검토·핸드오프까지 진행합니다.

@@ -25,6 +25,10 @@
     "src",
     "scripts",
     "dist",
+    "skills",
+    "agents",
+    ".mcp.json",
+    ".claude-plugin",
     "README.md",
     "LICENSE"
   ],

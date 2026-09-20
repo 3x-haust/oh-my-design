@@ -58,6 +58,7 @@ function domainBrief(request = 'Study the service') {
 function filledApplication(root: string, options: { expectedSourceContractSha256: string; benchmarkRequired: boolean }) {
   const draft = referenceApplicationPlan(root, options).input;
   return { ...draft, screens: draft.screens.map((row, index) => ({ ...row,
+    target: { route: `/${row.surface}`, state: 'initial' },
     domain: { referenceIds: ['domain-a'], coverage: 'direct', gap: null,
       application: index === 0 ? 'Show unfinished preparation before starting another request.' : 'Separate saved preparation from official submission.',
       doNotTransfer: 'Do not imply official receipt from local saving.', reason: 'The task requires preparation without institutional integration.' },
@@ -168,6 +169,25 @@ test('two-track reference research binds separate live evidence and the current 
     expectedSourceContractSha256: SOURCE_SHA,
     benchmarkRequired: false,
   }), /REFERENCE_RESEARCH_BOARD_STALE/);
+});
+
+test('gallery similarity hops require native current captures rooted in a real search receipt', t => {
+  const { root, research } = fixture(t);
+  const writer = createTestProjectWriteAdapter(root);
+  const retained = research.designReference.sources[0]!.discovery;
+  const start = 'https://www.pinterest.com/pin/111111111/';
+  const metadata = JSON.parse(readFileSync(join(root, retained.capture.path), 'utf8'));
+  const png = refImagePath(root, { source: start, component: 'entry', researchLane: 'design' });
+  writeFileSync(png, PNG);
+  const capture = saveRef(root, { ...metadata, source: start, imagePath: relative(root, png), acquisition: { requestedUrl: start, finalUrl: start, httpStatus: 200, links: [retained.url], imageSha256: digest(PNG) } }, writer);
+  const hop = { url: start, evidence: { path: relative(root, png), sha256: digest(PNG) }, capture: { path: relative(root, capture), sha256: digest(readFileSync(capture)) } };
+  const input = { ...research, designReference: { ...research.designReference, searches: [testSearchReceipt(root, 'design', research.designReference.queries[0]!, [start])], navigation: [hop] } };
+  const options = { expectedSourceContractSha256: SOURCE_SHA, benchmarkRequired: false };
+  assert.doesNotThrow(() => validateReferenceResearch(root, parseReferenceResearch(input), options));
+  assert.throws(() => validateReferenceResearch(root, parseReferenceResearch({ ...input, designReference: { ...input.designReference, navigation: [] } }), options), /not an observed search link/);
+  assert.throws(() => validateReferenceResearch(root, parseReferenceResearch({ ...input, designReference: { ...input.designReference, navigation: [{ ...hop, capture: { ...hop.capture, sha256: '0'.repeat(64) } }] } }), options), /EVIDENCE_STALE/);
+  const wrongLane = { ...input, designReference: { ...input.designReference, navigation: [{ ...hop, evidence: research.domainReference.sources[0]!.evidence }] } };
+  assert.throws(() => validateReferenceResearch(root, parseReferenceResearch(wrongLane), options), /LANE_PATH_REQUIRED/);
 });
 
 test('one capture cannot stand in for both domain and design research', t => {
@@ -455,7 +475,7 @@ test('application draft uses current surfaces and real inputs but cannot invent 
   const plan = referenceApplicationPlan(root, options);
   assert.deepEqual(plan.input.screens.map(row => row.surface), ['home', 'detail']);
   assert.equal(plan.evidence.design[0]!.id, 'design-a');
-  assert.throws(() => parseReferenceApplication(plan.input), /referenceIds|gap/);
+  assert.throws(() => parseReferenceApplication(plan.input), /referenceIds|gap|target.route/);
 });
 
 test('application validates separate screen decisions and publishes an inspectable source-free projection', t => {

@@ -483,7 +483,10 @@ export async function runTrustedBrowserEvaluation(input: Readonly<{
           }
           await collectInteractiveLabelFindings(page, viewport, accessFindings);
           await collectRenderedKoreanCopyFindings(page, viewport, accessFindings);
+          const observedUrl = new URL(page.url());
+          if (observedUrl.origin !== new URL(served.url).origin) throw new Error('TRUSTED_BROWSER_CAPTURE_LEFT_PRODUCTION');
           const captureBytes = await page.screenshot({ fullPage: false });
+          if (page.url() !== observedUrl.href) throw new Error('TRUSTED_BROWSER_CAPTURE_STATE_CHANGED');
           const captureSha256 = sha256(captureBytes);
           const capturePath = join(
             output,
@@ -496,6 +499,8 @@ export async function runTrustedBrowserEvaluation(input: Readonly<{
             width: viewport.width,
             height: viewport.height,
             outcomeRef: script.outcomeRef,
+            // The ephemeral server port is not state; the actual post-action route/query/hash is.
+            testedUrl: new URL(`${observedUrl.pathname}${observedUrl.search}${observedUrl.hash}`, 'http://127.0.0.1').href,
           }));
         }
         const overflow = await page.evaluate(() =>

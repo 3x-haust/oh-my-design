@@ -7,7 +7,7 @@ import { nodeStableProjectFileSystem, readStableProjectFile } from '../runtime/s
 import { parseImageFragmentRecord } from './image-fragment-parser.ts';
 import { trustedReferenceImage } from './board-security.ts';
 import { designDiscoveryProvider, referenceServiceHost } from './design-discovery-sources.ts';
-import { validateSearchCoverage } from './search-execution.ts';
+import { validateSearchCoverage, type ObservedNavigation } from './search-execution.ts';
 import {
   parseTaskFlowBenchmark,
   taskFlowBenchmarkSha256,
@@ -75,6 +75,7 @@ type ResearchLane = Readonly<{
   queries: readonly string[];
   searches: readonly ResearchEvidence[];
   sources: readonly ResearchSource[];
+  navigation?: readonly Readonly<{ url: string; evidence: ResearchEvidence; capture: ResearchEvidence }>[];
 }>;
 export type ReferenceResearch = Readonly<{
   schema: typeof REFERENCE_RESEARCH_SCHEMA;
@@ -187,12 +188,19 @@ function source(value: unknown, design: boolean): ResearchSource {
 
 function lane(value: unknown, keys: readonly string[], code: string, design = false): ResearchLane & Record<string, unknown> {
   const input = record(value, code);
-  exactKeys(input, keys, `${code}_KEYS`);
+  exactKeys(input, Object.hasOwn(input, 'navigation') ? [...keys, 'navigation'] : keys, `${code}_KEYS`);
   if (!Array.isArray(input.sources) || input.sources.length === 0) fail(`${code}_SOURCE_COVERAGE`);
   const sources = input.sources.map(value => source(value, design));
   if (new Set(sources.map((entry) => entry.id)).size !== sources.length) fail(`${code}_SOURCE_DUPLICATE`);
   if (!Array.isArray(input.searches) || !input.searches.length || Object.keys(input.searches).length !== input.searches.length) fail('REFERENCE_RESEARCH_SEARCH_EXECUTION_REQUIRED');
-  return { ...input, queries: texts(input.queries, `${code}_QUERY`), searches: input.searches.map(evidence), sources };
+  const navigation = input.navigation;
+  if (navigation !== undefined && (!Array.isArray(navigation) || navigation.length > 100 || Object.keys(navigation).length !== navigation.length)) fail('REFERENCE_RESEARCH_NAVIGATION_INVALID');
+  return { ...input, queries: texts(input.queries, `${code}_QUERY`), searches: input.searches.map(evidence), sources,
+    ...(navigation === undefined ? {} : { navigation: (navigation as unknown[]).map(value => {
+      const hop = record(value, 'REFERENCE_RESEARCH_NAVIGATION_INVALID');
+      exactKeys(hop, ['url', 'evidence', 'capture'], 'REFERENCE_RESEARCH_NAVIGATION_KEYS');
+      return { url: httpsUrl(hop.url), evidence: evidence(hop.evidence), capture: evidence(hop.capture) };
+    }) }) };
 }
 
 export function parseReferenceResearch(value: unknown): ReferenceResearch {
@@ -222,8 +230,8 @@ export function parseReferenceResearch(value: unknown): ReferenceResearch {
   return Object.freeze({
     schema: REFERENCE_RESEARCH_SCHEMA,
     sourceContractSha256,
-    domainReference: Object.freeze({ queries: domain.queries, searches: domain.searches, sources: domain.sources, benchmarkSha256 }),
-    designReference: Object.freeze({ queries: design.queries, searches: design.searches, sources: design.sources, boardSha256 }),
+    domainReference: Object.freeze({ queries: domain.queries, searches: domain.searches, sources: domain.sources, ...(domain.navigation === undefined ? {} : { navigation: domain.navigation }), benchmarkSha256 }),
+    designReference: Object.freeze({ queries: design.queries, searches: design.searches, sources: design.sources, ...(design.navigation === undefined ? {} : { navigation: design.navigation }), boardSha256 }),
   });
 }
 
@@ -324,14 +332,30 @@ export function validateReferenceResearch(
     fail('REFERENCE_RESEARCH_SOURCE_CONTRACT_STALE');
   }
   const domainFinalHosts = new Set<string>();
+  const navigation: Record<'domain' | 'design', ObservedNavigation[]> = { domain: [], design: [] };
+  const observe = (lane: 'domain' | 'design', url: string, captured: Record<string, unknown>) => {
+    if (captured.schemaVersion === 'image-fragment-v1') return;
+    const acquisition = captured.acquisition as { finalUrl: string; links: unknown[] };
+    navigation[lane].push({ url, finalUrl: httpsUrl(acquisition.finalUrl), links: acquisition.links.filter((link): link is string => {
+      try { return typeof link === 'string' && new URL(link).protocol === 'https:'; } catch { return false; }
+    }) });
+  };
+  for (const lane of ['domain', 'design'] as const) for (const hop of research[lane === 'domain' ? 'domainReference' : 'designReference'].navigation ?? []) {
+    const captured = verifyCapture(root, hop, lane);
+    if (captured.schemaVersion === 'image-fragment-v1') fail('REFERENCE_RESEARCH_NAVIGATION_NATIVE_REQUIRED');
+    observe(lane, hop.url, captured);
+  }
   for (const item of research.domainReference.sources) {
     const captured = verifyCapture(root, item, 'domain');
+    observe('domain', item.url, captured);
     const acquisition = captured.acquisition as Record<string, unknown>;
     domainFinalHosts.add(referenceServiceHost(acquisition.finalUrl as string));
   }
   for (const item of research.designReference.sources) {
     const source = verifyCapture(root, item, 'design');
     const entry = verifyCapture(root, item.discovery!, 'design');
+    observe('design', item.url, source);
+    observe('design', item.discovery!.url, entry);
     for (const captured of [source, entry]) {
       const acquisition = captured.acquisition as Record<string, unknown> | undefined;
       if (acquisition && domainFinalHosts.has(referenceServiceHost(acquisition.finalUrl as string))) fail('REFERENCE_RESEARCH_LANE_REDIRECT_OVERLAP');
@@ -347,9 +371,9 @@ export function validateReferenceResearch(
     }
   }
   validateSearchCoverage(root, 'domain', research.domainReference.queries, research.domainReference.searches,
-    research.domainReference.sources.map(item => item.url));
+    research.domainReference.sources.map(item => item.url), navigation.domain);
   validateSearchCoverage(root, 'design', research.designReference.queries, research.designReference.searches,
-    research.designReference.sources.filter(item => item.discovery!.kind !== 'user-provided').map(item => item.discovery!.url));
+    research.designReference.sources.filter(item => item.discovery!.kind !== 'user-provided').map(item => item.discovery!.url), navigation.design);
   const boardBytes = fileBytes(root, '.omd/reference-board.json', 'REFERENCE_RESEARCH_BOARD_MISSING');
   if (createHash('sha256').update(boardBytes).digest('hex') !== research.designReference.boardSha256) {
     fail('REFERENCE_RESEARCH_BOARD_STALE');
@@ -382,7 +406,8 @@ export function validateReferenceResearch(
     '.omd/task-flow-benchmark.json',
     'REFERENCE_RESEARCH_BENCHMARK_MISSING',
   ).toString('utf8')), { expectedSourceContractSha256: options.expectedSourceContractSha256 });
-  validateTaskFlowBenchmarkEvidence(root, benchmark);
+  const strength = validateTaskFlowBenchmarkEvidence(root, benchmark);
+  if (!strength.liveFlowVerified) fail('REFERENCE_RESEARCH_NATIVE_FLOW_REQUIRED: selected product benchmark needs signed native execution for every declared completed flow; use omd benchmark record, retain honest blocked/excluded targets, and never relabel artifact prose as execution');
   if (taskFlowBenchmarkSha256(benchmark) !== research.domainReference.benchmarkSha256) {
     fail('REFERENCE_RESEARCH_BENCHMARK_STALE');
   }

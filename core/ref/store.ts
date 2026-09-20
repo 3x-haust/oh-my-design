@@ -4,6 +4,7 @@ import type { Invariants, Reference } from '../types.ts';
 import { type ProjectWriteAdapter, requireProjectWriteAdapter } from '../runtime/project-write.ts';
 import { hasAssemblyPayload } from './board-sanitization.ts';
 import { referenceMeasuredInvariants } from './measurement-coverage.ts';
+import { refIdentity } from './identity.ts';
 
 /** Backfills invariants written before typography/motion/interaction measurement existed. */
 function withInvariantDefaults(invariants: Invariants | null | undefined): Invariants | null {
@@ -47,7 +48,7 @@ function hostPart(source: string): string {
 }
 
 function slugFor(ref: Pick<Reference, 'source' | 'component'>): string {
-  return `${hostPart(ref.source)}.${ref.component}`;
+  return `${hostPart(ref.source)}.${ref.component}.${refIdentity(ref.source, ref.component)}`;
 }
 
 export function saveRef(cwd: string, ref: Reference, adapter: ProjectWriteAdapter): string {
@@ -57,7 +58,15 @@ export function saveRef(cwd: string, ref: Reference, adapter: ProjectWriteAdapte
 }
 
 export function refRecordPath(cwd: string, ref: Pick<Reference, 'source' | 'component' | 'researchLane'>): string {
-  return join(cwd, lanePrefix(ref), `${slugFor(ref)}.json`);
+  const current = join(cwd, lanePrefix(ref), `${slugFor(ref)}.json`);
+  if (existsSync(current)) return current;
+  // Read old records without migrating or overwriting their evidence. A same-host different URL
+  // must never resolve to another page's historical file.
+  const legacy = join(cwd, lanePrefix(ref), `${hostPart(ref.source)}.${ref.component}.json`);
+  if (existsSync(legacy) && !lstatSync(legacy).isSymbolicLink()) {
+    try { const saved = JSON.parse(readFileSync(legacy, 'utf8')); if (saved.source === ref.source && saved.component === ref.component) return legacy; } catch { /* current path remains missing */ }
+  }
+  return current;
 }
 
 /** Path of the scoped component screenshot for a reference (`omd ref add … --shot`). */
@@ -104,7 +113,7 @@ export function loadRefs(cwd: string, options: { includeDomain?: boolean } = {})
   }
 
   const refs: Reference[] = [];
-  for (const file of files) {
+  for (const file of files.sort()) {
     try {
       const parsed: unknown = JSON.parse(readFileSync(join(dir, file), 'utf8'));
       if (isReference(parsed)) {
@@ -163,7 +172,7 @@ export function addPrinciples(
 ): void {
   const candidates = loadRefs(cwd, { includeDomain: true }).filter(ref => ref.source === source && ref.component === component);
   if (candidates.length > 1) throw new Error('REFERENCE_ID_AMBIGUOUS: use distinct component names for the two research lanes');
-  const path = join(cwd, lanePrefix(candidates[0] ?? {}), `${slugFor({ source, component })}.json`);
+  const path = refRecordPath(cwd, { source, component, ...(candidates[0]?.researchLane ? { researchLane: candidates[0].researchLane } : {}) });
   if (!existsSync(path)) {
     throw new Error(`no reference found for ${source} (${component})`);
   }

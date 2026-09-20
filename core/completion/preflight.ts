@@ -1,4 +1,5 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
+import { checkFirstRenderEvidence } from '../design/first-render-evidence.ts';
 import { resolve } from 'node:path';
 import type { ExecutionRequirement } from '../brief/execution-requirements.ts';
 import { readPersistedRoute } from '../route/adaptive-route-persistence.ts';
@@ -66,20 +67,8 @@ export function checkTerminalCompletion(root: string, invocation: ProjectRunInvo
   // A completed render must have survived the earlier gestalt read. The final Eye is intentionally
   // not the first reader: if the benefit/card composition never communicated the task, polishing its
   // pixels into a final review packet is late and expensive.
-  const firstRenderCriticPath = resolve(root, '.omd/first-render-critic.json');
-  if (existsSync(firstRenderCriticPath)) {
-    try {
-      const critic = JSON.parse(readFileSync(firstRenderCriticPath, 'utf8')) as { verdict?: unknown; reportSha256?: unknown };
-      if (critic.verdict !== 'retain' || typeof critic.reportSha256 !== 'string' || critic.reportSha256.length !== 64) {
-        throw new CompletionPreflightError('first-render gestalt critic requires a retained, content-addressed report');
-      }
-    } catch (error) {
-      if (error instanceof CompletionPreflightError) throw error;
-      throw new CompletionPreflightError('first-render gestalt critic report is malformed');
-    }
-  } else if (existsSync(resolve(root, '.omd/design-judgment.json'))) {
-    throw new CompletionPreflightError('first-render gestalt critic is required when a design hypothesis exists');
-  }
+  try { checkFirstRenderEvidence(root); }
+  catch (error) { throw new CompletionPreflightError(`first-render gestalt critic: ${error instanceof Error ? error.message : String(error)}`); }
   const requirements = route?.sourceContract.taskOutcome.executionRequirements;
   if (route !== undefined && requirements !== undefined) {
     for (const { enforcedBy } of requirements) {

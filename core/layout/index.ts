@@ -63,6 +63,10 @@ export const ARTIFACT_FAMILIES: readonly ArtifactFamily[] = [
   family('motion-spec', 'motion-spec.md', 'file', 'human', 'declared motion specification'),
   family('design-judgment', 'design-judgment.json', 'file', 'human', 'reference interpretations and composition hypothesis'),
   family('first-render-critic', 'first-render-critic.json', 'file', 'human', 'first viewport gestalt verdict against the design hypothesis'),
+  family('first-render-evidence', 'first-render', 'directory', 'state', 'native first-render captures and immutable current-input-bound reports'),
+  family('runtime-design-system', 'runtime-design-system.json', 'file', 'human', 'observed computed styles and variables by component/state'),
+  family('runtime-design-system-doc', 'runtime-design-system.md', 'file', 'human', 'readable runtime component style inventory'),
+  family('runtime-design-system-evidence', 'runtime-design-system', 'directory', 'state', 'runtime inventory captures and immutable records'),
   family('briefs', 'briefs', 'directory', 'human', 'per-stage briefs the owners received'),
 
   // ── captured research ───────────────────────────────────────────────────

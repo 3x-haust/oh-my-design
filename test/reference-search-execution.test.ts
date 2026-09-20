@@ -76,6 +76,19 @@ test('only observed known-provider redirect links can discover a destination', (
   assert.ok(observedSearchTargets({ links: [`https://www.bing.com/ck/a?u=a1${Buffer.from(target).toString('base64url')}`] }).includes(target));
   assert.ok(!observedSearchTargets({ links: [`https://unrelated.example/l/?uddg=${encodeURIComponent(target)}`] }).includes(target));
 });
+test('similarity navigation remains rooted in a successful search, never an unrooted cycle', t => {
+  const root = fixture(t);
+  const a = 'https://www.pinterest.com/pin/123/';
+  const b = 'https://www.pinterest.com/pin/456/';
+  const c = 'https://www.pinterest.com/pin/789/';
+  const receipt = testSearchReceipt(root, 'design', input.query, [a]);
+  const hops = [{ url: b, finalUrl: b, links: [c] }, { url: a, finalUrl: a, links: [b] }];
+  assert.equal(validateSearchCoverage(root, 'design', [input.query], [receipt], [c], hops).executed, 1);
+  assert.throws(() => validateSearchCoverage(root, 'design', [input.query], [receipt], [c], hops.slice(0, 1)), /not an observed/);
+  assert.throws(() => validateSearchCoverage(root, 'design', [input.query], [receipt], [c], [{ url: b, finalUrl: b, links: [c] }, { url: c, finalUrl: c, links: [b] }]), /not an observed/);
+  const failed = testSearchReceipt(root, 'design', input.query, [a], true);
+  assert.throws(() => validateSearchCoverage(root, 'design', [input.query], [failed], [c], hops), /not an observed/);
+});
 test('written query lists, wrong-lane receipts, unobserved entries, stale bytes and symlinks fail closed', t => {
   const root = fixture(t);
   const links = ['https://www.pinterest.com/pin/123/'];

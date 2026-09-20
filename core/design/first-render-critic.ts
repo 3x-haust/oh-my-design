@@ -135,7 +135,7 @@ export function critiqueFirstRender(hypothesis: DesignHypothesis, surfaceInput: 
     }));
   }
 
-  if (surface.repeatedObjects.length < 2) {
+  if (hypothesis.comparisonRequired === true && surface.repeatedObjects.length < 2) {
     findings.push(Object.freeze({
       id: 'COMPARISON_TOO_THIN', severity: 'advisory', hypothesisField: 'densityIntent',
       message: `only ${surface.repeatedObjects.length} representative object is visible in the first viewport. The hypothesis asks for comparison, but this screen cannot show enough candidates to compare.`,
@@ -149,10 +149,9 @@ export function critiqueFirstRender(hypothesis: DesignHypothesis, surfaceInput: 
     }));
   }
 
-  if (findings.length === 0) {
-    return Object.freeze({ schema: FIRST_RENDER_CRITIC_SCHEMA, verdict: 'retain', findings: Object.freeze([]), hypothesisSha256: hypothesisSha256(hypothesis) });
-  }
-  return Object.freeze({ schema: FIRST_RENDER_CRITIC_SCHEMA, verdict: 'revise', findings: Object.freeze(findings), hypothesisSha256: hypothesisSha256(hypothesis) });
+  return Object.freeze({ schema: FIRST_RENDER_CRITIC_SCHEMA,
+    verdict: findings.some(finding => finding.severity === 'critical') ? 'revise' : 'retain',
+    findings: Object.freeze(findings), hypothesisSha256: hypothesisSha256(hypothesis) });
 }
 
 export function firstRenderCriticSha256(report: FirstRenderCriticReport): string {

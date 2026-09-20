@@ -44,10 +44,10 @@ function validateRecommendation(strategy: AdaptiveStrategyDecision, value: Recom
 
 export function validateAdaptiveStrategyRails(strategy: AdaptiveStrategyDecision, deliveryMode?: 'design-only'): void {
   for (const role of strategy.roles) {
-    if (!ADAPTIVE_ROLE_IDS.includes(role as never)) return failAdaptiveRoute('UNKNOWN_ADAPTIVE_ROLE');
+    if (!ADAPTIVE_ROLE_IDS.includes(role as never)) return failAdaptiveRoute('UNKNOWN_ADAPTIVE_ROLE', `unknown role ${role}; allowed: ${ADAPTIVE_ROLE_IDS.join(', ')}`);
   }
   for (const stage of strategy.stages) {
-    if (!ADAPTIVE_STAGE_IDS.includes(stage as never)) return failAdaptiveRoute('UNKNOWN_ADAPTIVE_STAGE');
+    if (!ADAPTIVE_STAGE_IDS.includes(stage as never)) return failAdaptiveRoute('UNKNOWN_ADAPTIVE_STAGE', `unknown stage ${stage}; allowed: ${ADAPTIVE_STAGE_IDS.join(', ')}`);
   }
   // A study makes provisional material for the selected design owners; it owns no stage publication.
   if (strategy.roles.includes('omd-study')
@@ -77,7 +77,9 @@ export function validateAdaptiveStrategyRails(strategy: AdaptiveStrategyDecision
   const review = strategy.stages.indexOf('independent-review');
   const production = strategy.stages.indexOf('production');
   if (review !== strategy.stages.length - 1 || (!designOnly && (evidence < 0 || evidence !== strategy.stages.length - 2 || production >= evidence))) {
-    return failAdaptiveRoute('FINAL_EVIDENCE_REQUIRED');
+    return failAdaptiveRoute('FINAL_EVIDENCE_REQUIRED', designOnly
+      ? 'independent-review must be the final strategyDecision.stages entry'
+      : 'strategyDecision.stages must end with browser-evidence, independent-review, after production; final-evidence-v2 is a gate, not a stage');
   }
   validateAdaptiveStageOrder(strategy, deliveryMode);
   for (const stage of strategy.stages) {
@@ -94,13 +96,13 @@ export function validateOptionalStageAccounting(strategy: AdaptiveStrategyDecisi
     const included = strategy.stages.includes(stage);
     const skipped = strategy.skips.some((entry) => entry.id === stage);
     if (!included && !skipped) return failAdaptiveRoute('OPTIONAL_SKIP_REASON_REQUIRED', `optional stage ${stage} must be selected or have a non-empty strategyDecision.skips reason`);
-    if (included && skipped) return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE');
+    if (included && skipped) return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE', `stage ${stage} is both selected and skipped; remove its contradictory strategyDecision.skips entry`);
   }
   for (const method of OPTIONAL_METHOD_IDS) {
     const included = strategy.methods.includes(method);
     const skipped = strategy.skips.some((entry) => entry.id === method);
     if (!included && !skipped) return failAdaptiveRoute('OPTIONAL_SKIP_REASON_REQUIRED', `optional method ${method} must be selected or have a non-empty strategyDecision.skips reason`);
-    if (included && skipped) return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE');
+    if (included && skipped) return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE', `method ${method} is both selected and skipped; remove its contradictory strategyDecision.skips entry`);
   }
 }
 
@@ -124,7 +126,7 @@ function validateSafety(input: ValidatedAdaptiveRouteInput): void {
     || !input.strategyDecision.stages.includes('safety-validation')
     || !input.strategyDecision.methods.includes('design-strategy-safety-recovery')
     || !input.strategyDecision.methods.includes('rigorous-task-accessibility-validation')) {
-    return failAdaptiveRoute('SAFETY_WORK_REQUIRED');
+    return failAdaptiveRoute('SAFETY_WORK_REQUIRED', 'high failureRisk requires an enforced uxPolicy hard_safety_rail, stage safety-validation (owner omd-writer), and methods design-strategy-safety-recovery and rigorous-task-accessibility-validation; inspect omd brief safety-validation --json; do not lower risk to bypass safety');
   }
 }
 

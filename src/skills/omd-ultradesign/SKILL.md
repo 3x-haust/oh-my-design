@@ -181,7 +181,27 @@ Read `protocol/reference-assembly.md`: three roles (component, craft, mood) over
 
 ## First-render gestalt check
 
-After first render, run `omd first-render check --input .omd/.cache/first-render-surface.json`. It checks purpose, dominant object, utility subordination, comparison, and trust. `revise` requires composition/rerender, never threshold changes; benefit cards leading with subordinate sidebar/search/AI is `retain`.
+For an existing service whose runtime design system matters, build its local entry and use
+`omd schema runtime-design-inventory-input` → `omd init --input <runtime-input.json> --json`.
+Declare actual component selectors, variants and viewports. Future briefs include observed computed
+styles/custom properties; `init --check` detects stale source/build/captures and `init --refresh`
+repeats the scope without replacing approved tokens or authored decisions.
+
+Slop scopes may name SPA states with `state: {name, startRoute, route, actions, assertions}`.
+Use `slop-scope` for exact shapes. Cover final routes and states, including relevant modals/errors;
+an entry screenshot is not proof of another state. Inspect each capture and keep repair scope
+unchanged until confirmed findings are resolved.
+Final coverage requires the authenticated final capture's exact viewport pixels, not only matching
+state labels. Replay the same deterministic fixture/settled state for both captures; mismatches need
+recapture. Every local view blocks external networking and write requests. Checkpoint/runtime
+inventory signatures prevent edited documents from impersonating native observations.
+
+After first render, run `omd first-render check --page <local-build.html> --input .omd/.cache/first-render-surface.json`.
+It saves a native capture and binds the interpreted projection to the current hypothesis, source and
+build. Inspect the captured image; the authored projection is not independent visual proof. Critical
+findings return `revise`; advisory findings remain visible without blocking. Set the hypothesis's
+`comparisonRequired` only when the task calls for comparison, never because the example used benefit
+cards. A changed hypothesis/source/build invalidates the report; rerun after repairs, before completion.
 
 ## Generated project documents
 

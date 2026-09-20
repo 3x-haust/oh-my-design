@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import {
@@ -155,6 +156,7 @@ function requireCurrentLocaleDesignContext(root: string, expected: LocaleDesignR
 export function readPersistedRoute(root: string, invocation: ProjectRunInvocation): AdaptiveRouteRecord {
   try {
     if (invocation === undefined) return failAdaptiveRoute('ROUTE_AUTHORITY_REQUIRED');
+    if (!existsSync(resolve(root, '.omd/route.json'))) return failAdaptiveRoute('ROUTE_UNCLASSIFIED', 'no published route exists; run omd route validate --input .omd/.cache/route-input.json --json, repair its named errors, then route classify with the same input. Completion is not available before classification.');
     for (let attempt = 0; attempt < 3; attempt += 1) {
       const sourcePointerBytes = stableRead(root, 'route-source.json', 'adaptive route source pointer');
       const routePointerBytes = stableRead(root, 'route.json', 'adaptive route pointer');
