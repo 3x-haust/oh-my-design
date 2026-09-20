@@ -4510,9 +4510,28 @@ async function cmdRoute(mode: string | undefined, opts: Opts): Promise<never> {
 
   if (mode === 'validate') {
     if (!opts.input || opts._.length > 0) throw new Error('usage: omd route validate --input <route-input.json> [--json]');
-    const { routeAdaptiveFlow } = await import('../core/route/adaptive-flow.ts');
-    const record = routeAdaptiveFlow(inputJson(opts.input, 'omd route validate'));
-    if (opts.json) process.stdout.write(JSON.stringify({ ok: true, deliveryMode: record.deliveryMode ?? 'implementation', stages: record.strategy.stages, published: false }));
+    const { diagnoseAdaptiveRouteInput, routeAdaptiveFlow } = await import('../core/route/adaptive-flow.ts');
+    const input = inputJson(opts.input, 'omd route validate');
+    let localeDesign: import('../core/locale/design-context.ts').LocaleDesignRoute | undefined;
+    if (opts.localeContext !== undefined) {
+      if (resolve(opts.localeContext) !== resolve(process.cwd(), '.omd/locale-design-context.json')) {
+        throw new Error('LOCALE_DESIGN_CONTEXT_PATH: --locale-context must name .omd/locale-design-context.json');
+      }
+      const { routeLocaleDesignContext } = await import('../core/locale/design-context.ts');
+      localeDesign = routeLocaleDesignContext(inputJson(opts.localeContext, 'omd route validate --locale-context'));
+    }
+    const diagnostics = diagnoseAdaptiveRouteInput(input, localeDesign);
+    const report = { schema: 'adaptive-route-validation-v1', ok: diagnostics.length === 0, published: false, diagnostics };
+    if (diagnostics.length) {
+      const next = 'Repair the named fields together, preserving user facts, risk, scope and selected work; rerun route validate with the same input and locale context. Do not run completion or guess unrelated stages. Classification is available only after validation passes.';
+      if (opts.json) process.stdout.write(JSON.stringify({ ...report, next }));
+      else console.error(`${diagnostics.map(d => `${d.path}: ${d.message}`).join('\n')}\n${next}`);
+      process.exit(1);
+    }
+    // A clean diagnostic report still goes through the canonical fail-closed validator.
+    const record = routeAdaptiveFlow(input, undefined, localeDesign);
+    if (opts.json) process.stdout.write(JSON.stringify({ ...report, deliveryMode: record.deliveryMode ?? 'implementation', stages: record.strategy.stages,
+      next: 'Run route classify with this input and the same locale context; then stage resume. Validation alone did not publish or complete any stage.' }));
     else console.log('ok — route input is valid; no project state was written');
     process.exit(0);
   }
@@ -4606,7 +4625,7 @@ async function cmdRoute(mode: string | undefined, opts: Opts): Promise<never> {
     process.exit(0);
   }
 
-  throw new Error('usage: omd route classify --input <route-input.json> | show | check | preview --input <route-input.json>');
+  throw new Error('usage: omd route validate|classify --input <route-input.json> | show | check | preview --input <route-input.json>');
 }
 
 /**
@@ -5009,6 +5028,7 @@ function usage(): never {
     + '  proof --check [--json]                      validate type/composition production revision bindings\n'
     + '  acquisition set --input <json-file|->        persist framer-owned v2 reference targets; - reads stdin\n'
     + '  brief <stage> [--check] [--json]            inspect a stage; --check refuses blocked/unselected entry\n'
+    + '  route validate --input route-input.json [--json]  read-only grouped input diagnostics before publication\n'
     + '  route classify --input route-input.json [--locale-context .omd/locale-design-context.json]  validate an adaptive contract-derived strategy and lock scope\n'
     + '  route show | route check [--json]           the chosen route, and writes outside its scope\n'
     + '  workflow plan|readiness|slice|artifacts|check-readiness|check-slice|check --activation <host-issued-invocation.json>  persist/check immutable design-development checkpoints\n'

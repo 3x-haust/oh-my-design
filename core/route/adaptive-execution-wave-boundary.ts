@@ -54,19 +54,19 @@ function identifier(value: unknown): string {
 }
 
 export function parseAdaptiveExecutionWaves(value: unknown): readonly AdaptiveExecutionWave[] {
-  const waves = array(value).map((entry) => {
+  const waves = array(value).map((entry, index) => {
     const item = data(entry, WAVE_KEYS);
     const roles = array(item.get('roles')).map(identifier);
-    if (item.get('mode') !== 'concurrent') return failAdaptiveRoute('ADAPTIVE_EXECUTION_WAVE_INVALID');
+    if (item.get('mode') !== 'concurrent') return failAdaptiveRoute('ADAPTIVE_EXECUTION_WAVE_INVALID', `strategyDecision.executionWaves[${index}].mode must be "concurrent"; waves run in array order, and roles within one wave share a dependency group (sequential host fallback is allowed). "sequential" and "parallel" are not mode values`);
     if (roles.length === 0 || new Set(roles).size !== roles.length) {
-      return failAdaptiveRoute('ADAPTIVE_EXECUTION_WAVE_INVALID');
+      return failAdaptiveRoute('ADAPTIVE_EXECUTION_WAVE_INVALID', `strategyDecision.executionWaves[${index}].roles must be nonempty and unique`);
     }
     return Object.freeze({
       id: identifier(item.get('id')), mode: 'concurrent', roles: Object.freeze(roles),
     });
   });
   if (waves.length === 0 || new Set(waves.map((wave) => wave.id)).size !== waves.length) {
-    return failAdaptiveRoute('ADAPTIVE_EXECUTION_WAVE_INVALID');
+    return failAdaptiveRoute('ADAPTIVE_EXECUTION_WAVE_INVALID', 'strategyDecision.executionWaves must be nonempty with unique wave ids');
   }
   return Object.freeze(waves);
 }

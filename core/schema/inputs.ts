@@ -415,6 +415,7 @@ const ROUTE_INPUT: InputSkeleton = {
   command: 'omd route validate --input .omd/.cache/route-input.json --json',
   keys: ROUTE_INPUT_KEYS,
   constraints: [
+    'Choose the starter by task: product-route-input for a new product implementation, design-route-input for design-only delivery, route-input for existing/bounded work. Starters are examples, not permission to change risk, facts, scope or optional-method decisions.',
     'task outcome, policy, claims, discovery, design axes, capability, browser, and learning contexts are all required',
     'taskOutcome.mustHave, mustNotHave, and completionEvidence contain product/surface outcomes with browser-observable evidence. Preserve execution-only requirements verbatim in taskOutcome.executionRequirements instead of asking page text to prove authorship, scope, independent review, or future finalization. Keep the full original request in request. This partition is made before route publication; do not remove or reclassify a failed product behavior to make a published run pass.',
     `Optional taskOutcome.executionRequirements entries have exactly requirement and enforcedBy; enforcedBy is a nonempty unique subset of: ${EXECUTION_REQUIREMENT_GATES.join(', ')}. These are existing mandatory host gates, not caller verdicts or generic external verification. Unsupported requirements stay blocked; native mobile installation is not a browser or host-gate claim.`,
@@ -431,7 +432,8 @@ const ROUTE_INPUT: InputSkeleton = {
     'For design and handoff before implementation, use omd schema design-route-input. Its deliveryMode=design-only forbids production and application paths. Do not add production merely to pass an implementation-route validator.',
     'uxPolicy kinds are hard_safety_rail (enforced), required_outcome (required), recommended_method (selected|skipped with reason), free_choice (selected|skipped). Safety, recovery and accessibility are topics/ids, not kinds. designAxes.schema must be design-axis-input-v1.',
     'First run route validate, repair each named error and retry; validation is read-only and does not need activation. Then route classify publishes the valid input. Pi uses omd_cli without --activation; a genuine supplied Codex activation remains host-owned.',
-    'executionWaves schedules every selected role exactly once; prerequisite owners precede consumer owners, and parallel-reference-acquisition puts Scout and Writer in the same wave',
+    'executionWaves schedules every selected role exactly once; prerequisite owners precede consumer owners, and parallel-reference-acquisition puts Scout and Writer in the same wave. mode is always concurrent (including one-role waves); waves run in array order. sequential and parallel are not mode values. Pi may execute roles within a wave sequentially when no delegation is available.',
+    'When discovery is selected, methods must include reference-discovery AND parallel-reference-acquisition; the latter is a method, not a stage, and also requires selected Scout and Writer in the same wave. A hypothesis claim requires hypothesis-validation. route validate --json reports independent diagnostic groups together; repair them together without inventing methods or removing needed work.',
     'every omitted optional stage or method carries a non-empty skip reason',
     `Optional stages: ${OPTIONAL_STAGE_IDS.join(', ')}. Mandatory stages: ${MANDATORY_STAGE_IDS.join(', ')} — always selected, never skipped. Optional methods: ${OPTIONAL_METHOD_IDS.join(', ')}. Account for each optional stage and method in its selected list or skips, including copy-repair-workflow when writing fresh copy without that repair method.`,
     `attributionCategories is the applicable subset in this exact order: ${ADAPTIVE_ATTRIBUTION_CATEGORIES.join(', ')}. Include tokens always, motion only with motion-one, composition only with the composition stage, and graphics only with nonempty aiAssets. Typography is not a category.`,
@@ -479,7 +481,7 @@ const ROUTE_INPUT: InputSkeleton = {
         { id: 'review', mode: 'concurrent', roles: ['omd-eye'] },
       ],
       methods: [
-        'design-strategy-balanced-delivery', 'model-capability-probe', 'evidence-claim-accounting',
+        'design-strategy-balanced-delivery', 'model-capability-probe', 'evidence-claim-accounting', 'hypothesis-validation',
         'decision-linked-browser-observation', 'copy-repair-workflow',
       ],
       aiAssets: [],
@@ -1128,6 +1130,40 @@ const DESIGN_ROUTE_INPUT: InputSkeleton = {
   },
 };
 
+const PRODUCT_ROUTE_INPUT: InputSkeleton = {
+  ...ROUTE_INPUT,
+  name: 'product-route-input',
+  constraints: [...ROUTE_INPUT.constraints!,
+    'This is a greenfield product implementation example, not a universal sequence or a design-only handoff. Use new-marketing for a marketing task, not a fictitious product workflow. Keep every real user requirement and choose optional work deliberately.',
+    'Replace allowedPaths with the selected stack\'s actual source, asset, manifest, lockfile and build-config paths before publication. namedDependencies preserves libraries explicitly requested by the user (for example react); examples do not authorize an unrelated dependency or stack change.',
+  ],
+  skeleton: {
+    ...ROUTE_INPUT.skeleton as object,
+    projectMode: 'greenfield',
+    allowedPaths: ['src/**', 'public/**', 'package.json', 'package-lock.json', 'index.html', 'vite.config.*', 'tsconfig*.json'],
+    referenceDiscovery: { schema: 'reference-discovery-input-v1', taskNeed: 'new-product', uncertainty: 'unresolved', existingEvidence: 'none', intendedUse: '<domain flows and separate visual references>', existingEvidenceUse: null, skipReason: null },
+    strategyDecision: {
+      schema: 'adaptive-strategy-decision-v1', owner: 'user-selected-model',
+      roles: ['omd-framer', 'omd-scout', 'omd-writer', 'omd-typesetter', 'omd-composer', 'omd-sketch', 'omd-hand', 'omd-eye'],
+      stages: ['domain', 'frame', 'scout', 'reference-board', 'copy', 'type-proof', 'composition', 'candidate-generation', 'production', 'browser-evidence', 'independent-review'],
+      executionWaves: [
+        { id: 'frame', mode: 'concurrent', roles: ['omd-framer'] },
+        { id: 'research-copy', mode: 'concurrent', roles: ['omd-scout', 'omd-writer'] },
+        { id: 'type', mode: 'concurrent', roles: ['omd-typesetter'] },
+        { id: 'composition', mode: 'concurrent', roles: ['omd-composer'] },
+        { id: 'candidates', mode: 'concurrent', roles: ['omd-sketch'] },
+        { id: 'production', mode: 'concurrent', roles: ['omd-hand'] },
+        { id: 'review', mode: 'concurrent', roles: ['omd-eye'] },
+      ],
+      methods: ['design-strategy-balanced-delivery', 'model-capability-probe', 'evidence-claim-accounting', 'hypothesis-validation', 'decision-linked-browser-observation', 'reference-discovery', 'parallel-reference-acquisition', 'copy-repair-workflow'],
+      aiAssets: [], attributionCategories: ['tokens', 'composition'],
+      skips: ['depth', 'content-grain', 'acquisition', 'moodboard', 'reference-selection', 'art-direction', 'safety-validation', 'reflection-in-action', 'reference-distance', 'image-first-draft', 'evidence-driven-refinement', 'motion-one', 'ai-shipped-asset']
+        .map(id => ({ id, reason: '<record the task-specific reason; select this stage/method instead when required>' })),
+      rationale: '<why this implementation strategy reaches the real outcomes; replace example choices with the task-specific decisions>',
+    },
+  },
+};
+
 const DESIGN_HANDOFF: InputSkeleton = {
   name: 'design-handoff', path: '.omd/design-handoff.json',
   command: 'omd completion design-check --input .omd/design-handoff.json --json',
@@ -1175,6 +1211,7 @@ export const INPUT_SKELETONS: readonly InputSkeleton[] = [
   },
   ROUTE_INPUT,
   DESIGN_ROUTE_INPUT,
+  PRODUCT_ROUTE_INPUT,
   DESIGN_HANDOFF,
   ROUTE_AI_ASSET,
   REALITY_LEDGER,

@@ -132,7 +132,7 @@ export function parseAdaptiveStrategyDecision(value: unknown): AdaptiveStrategyD
   if (item.get('schema') !== ADAPTIVE_STRATEGY_DECISION_SCHEMA) return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE');
   if (item.get('owner') !== 'user-selected-model') return failAdaptiveRoute('MODEL_OWNER_REQUIRED');
   const skips = array(item.get('skips')).map(skip);
-  if (new Set(skips.map((entry) => entry.id)).size !== skips.length) return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE');
+  if (new Set(skips.map((entry) => entry.id)).size !== skips.length) return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE', 'strategyDecision.skips must have unique ids; remove duplicate entries, not the required skip reasons');
   const attributionCategories = ids(item.get('attributionCategories'), false, true);
   if (attributionCategories.some((category) => !ADAPTIVE_ATTRIBUTION_CATEGORIES.includes(category as never)))
     return failAdaptiveRoute('ATTRIBUTION_COVERAGE_INVALID');

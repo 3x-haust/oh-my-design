@@ -7,6 +7,7 @@ stage is mandatory; an explicit route skip remains a skip. Repetition alone is n
 
 | Rule | Required outcome | Executable boundary |
 | --- | --- | --- |
+| Route setup | Use the task-appropriate starter; preserve user facts, risk, scope and selected work while repairing input errors. Input validity is not publication or task completion. | `omd route validate --input <json> --json`; `route classify`; Pi setup recovery |
 | Selected stages | Preserve the approved scope and dependency groups; never relabel product UX to evade an error. | `omd brief <stage> --check --json`; `omd guard production --json` |
 | Separate research | When selected, domain task/feature evidence and design craft evidence remain distinct, with current per-screen application decisions. A failed search is a gap, not a fabricated reference. | `omd ref research-check --json`; `omd ref apply-check --json`; production/completion gates |
 | Executed discovery | Query prose is not a search receipt. Retained non-user entries trace to actual observed links and separately captured visits. | `omd ref search --input <json>`; v5 research publication/currentness checks |
@@ -18,7 +19,16 @@ stage is mandatory; an explicit route skip remains a skip. Repetition alone is n
 
 ## Layer 2 — procedure
 
-The coordinator reads this contract once at OMD intake. At each selected stage:
+The coordinator reads this contract once at OMD intake. Before stage entry, inspect `stack` and use
+`schema product-route-input` for a new product implementation, `schema design-route-input` for a
+pre-implementation handoff, or `schema route-input` for existing/bounded work. Replace example facts,
+axes, scope and optional decisions with the actual request. Wave mode is always `concurrent`; array
+order sequences dependency groups. A sequential host fallback does not change that data contract.
+Run `route validate --input <json> --json`, repair its grouped diagnostics together, then classify the
+same input with the same locale context and run `stage resume`. Do not use completion to diagnose
+unclassified input. Classification never substitutes for the selected research, copy or design outputs.
+
+At each selected stage:
 
 1. Read `omd brief <stage> --json` for inspection. This default command may return blockers
    with exit 0; it is not permission to start.
@@ -68,6 +78,15 @@ inspection and research repair remain available while production is blocked.
   final messages after OMD mutations. CLI-owned evidence cannot be directly authored. Failed
   completion may trigger at most two repair turns for an actual source-writing task; aborts,
   missing authority and research-only turns do not authorize automatic implementation.
+- Before initial route publication, Pi revalidates the current authored input at termination and
+  reports its actual diagnostic groups rather than replacing them with `ROUTE_UNCLASSIFIED`.
+  Known input errors share the two-pass repair budget. Read-only inspection, aborts, unknown errors,
+  missing user facts/authority and pre-existing routes do not authorize bootstrap repair. An input-only
+  repair does not authorize classification; retrying an already-attempted classification preserves
+  the same user-authorized delivery mode. No extension writes or publishes a route on the model's behalf.
+- `route validate` and publication share the canonical checks. Grouped diagnostics do not normalize
+  the input, lower risk, invent evidence, remove gates, create authority or write project state.
+  All provided route starters are regression-checked for their internal prerequisite consistency.
 - CI tests refusal, zero source writes on refusal, stale-input invalidation and legitimate
   success. A prompt-only rule must not be described as a hard gate.
 

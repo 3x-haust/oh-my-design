@@ -70,7 +70,7 @@ product UX as editorial to escape a validation error: repair the task matrix/inp
 The Pi extension serializes OMD commands per project. Use `omd_cli`, not shell-wrapped OMD calls;
 prepare directly owned documents and publisher inputs under `.omd/.cache/`, then use the specified
 publisher. Never hand-write route authorities, reference receipts, check history or final evidence.
-During blocked pre-production work use `read`, simple inventory commands, and native browsing tools;
+During blocked pre-production work use `read`, standalone `pwd` or `rg --files --hidden`, and native browsing tools;
 arbitrary shell commands are held because scripts can write application source. A hook-less host
 has explicit CLI checks only and must not claim host enforcement. Hooks are not an OS sandbox.
 
@@ -82,6 +82,9 @@ result, missing evidence and exact limitation. A build plus one check is not a c
 On hosts with custom follow-up messages, repairable terminal failures in a source-writing turn trigger
 at most two repair passes per real user input. Research/document-only turns never authorize automatic
 implementation of the remaining route. Each pass may repair multiple blockers and rerun existing checks.
+Before a route exists, Pi may also retry an already-authored route input using current structured
+diagnostics. This repairs setup only, not missing deliverables. A failed classification retains its real
+cause; authority errors do not retry. Input-only work does not authorize publishing or implementation.
 Pause/abort and missing user facts/authority never authorize an automatic retry or a scope change.
 Selected structural candidates need the current hash-bound `.omd/.cache/sketches/current.json`
 pointer and its complete evidence set; an arbitrary `*-selected` directory is not a selection.
@@ -113,7 +116,7 @@ the first actual review is clean. Declared dismissals are not independent/user a
 ```text
 omd doctor
 omd stack --json
-omd schema route-input
+omd schema product-route-input
 omd route validate --input .omd/.cache/route-input.json --json
 omd route classify --input .omd/.cache/route-input.json --json
 omd stage resume
@@ -121,7 +124,15 @@ omd route show
 ```
 
 On a brokered Codex invocation append the supplied `--activation` to publishing/reading commands.
-If validation fails, read the exact schema and repair the named field, then validate again.
+The example above is for a new product implementation. For existing/bounded work use `omd schema route-input`;
+for design-only use `omd schema design-route-input`. Choose axes, scope, dependencies, optional methods
+and skip reasons from the actual request; a starter is not authority for its example choices.
+If validation fails, repair all current `diagnostics` together, then validate again with the same input
+and locale context. Wave `mode` is always `concurrent`; array order expresses dependency sequence,
+even on Pi's sequential fallback. Selected discovery requires `parallel-reference-acquisition` and
+selected Scout/Writer in one wave. Hypotheses require `hypothesis-validation`.
+Only a successful classification permits `stage resume`; successful input validation alone does not
+publish a route or complete design work. Do not run terminal completion to diagnose an unclassified route.
 Do not invent enum values, change the user's scope, or report missing activation for an input error.
 
 For "before development", "design only", or "구현 전까지만", start with `omd schema design-route-input`.
