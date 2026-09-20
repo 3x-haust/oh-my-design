@@ -14,6 +14,8 @@ const SCOUT_OPERATIONS = [
   ['ref', 'add'],
   ['ref', 'add-batch'],
   ['craft-capture'],
+  ['ref', 'search'],
+  ['ref', 'navigate'],
 ] as const;
 
 // Typesetter needs the same brokered Chromium path as Scout for isolated typography specimens,
