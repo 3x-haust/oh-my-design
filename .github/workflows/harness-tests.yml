@@ -49,7 +49,10 @@ jobs:
         run: node --test --test-concurrency=1 test/benchmark-native-publish.test.ts test/benchmark-dependency-snapshot.test.ts test/browser-rs-doctor-runtime.test.ts
       - name: Complete harness suite (including native Darwin publication)
         if: matrix.suite == 'full'
-        run: npm test
+        # Shared Darwin runners showed compositor failures and 100ms VM deadline misses
+        # in different tests under four concurrent files. Keep every test and its original
+        # deadline/assertions; reduce scheduling pressure instead of retrying or weakening gates.
+        run: node --test --test-concurrency=2 test/*.test.ts
       - name: Portable Pi gates, copy, and review loops
         if: matrix.suite == 'portable-pi'
         run: >-
