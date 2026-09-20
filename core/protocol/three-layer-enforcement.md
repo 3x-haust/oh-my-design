@@ -82,6 +82,9 @@ inspection and research repair remain available while production is blocked.
   Batch intake also compares pending entries before any browser work. `ref navigate` keeps
   discovery-only category pages outside the board inventory; its observed links still need
   search-rooted native evidence. `ref board` resolves all evidence before replacing its record.
+  Final URL checks run before PNG publication; redirected hosts and simultaneous batch captures
+  cannot enter opposite lanes under different starting URLs. A gallery redirect must still be a
+  qualified item, unless the reference was genuinely supplied by the user.
   Research reachability extends from
   search pages and separately validated native navigation captures. Each optional lane `navigation`
   item binds its URL, PNG evidence and JSON capture; only observed outbound links extend reachability.

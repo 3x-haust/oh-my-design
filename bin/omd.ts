@@ -1003,8 +1003,11 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
   }
   if (opts.preparation && (opts.image || !opts.noEnergy)) throw new Error('--preparation requires a rendered reference and --no-energy');
   const { saveRef } = await import('../core/ref/store.ts');
-  const { captureLane } = await import('../core/ref/capture-intake.ts');
-  const lane = captureLane(process.cwd(), { source: target, ...(opts.lane ? { lane: opts.lane } : {}), ...(opts.fromUser ? { fromUser: true } : {}) }, invocationFromActivation(opts, 'omd ref add'));
+  const { captureLane, captureFinalUrlGuard } = await import('../core/ref/capture-intake.ts');
+  const invocation = invocationFromActivation(opts, 'omd ref add');
+  const intent = { source: target, ...(opts.lane ? { lane: opts.lane } : {}), ...(opts.fromUser ? { fromUser: true } : {}) };
+  const lane = captureLane(process.cwd(), intent, invocation);
+  const validateFinalUrl = captureFinalUrlGuard(process.cwd(), [{ ...intent, lane }], invocation);
   const adapter = projectWriterFromActivation(opts, 'omd ref add');
 
   if (opts.image) {
@@ -1044,6 +1047,7 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
   if (absShot) adapter.mkdir(relative(adapter.projectRoot, dirname(absShot)));
   const { raw, shotSaved, shotError, capturePreparation, acquisition } = await withBrowser(browser => capturePageForRef(browser, target, captureViewport, {
     selector: opts.selector ?? null,
+    validateFinalUrl: url => validateFinalUrl(0, url),
     ...(absShot ? { shotOut: absShot, adapter } : {}),
     ...(preparation ? { preparation } : {}),
     bestEffortShot: preparation === undefined,

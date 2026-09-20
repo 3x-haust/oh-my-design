@@ -15,7 +15,28 @@ function gallery(url: string): boolean {
   try { return designDiscoveryProvider(url) !== null; } catch { return false; }
 }
 function host(url: string): string | null {
-  try { return referenceServiceHost(url); } catch { return null; }
+  try { return referenceServiceHost(url) || null; } catch { return null; }
+}
+export function captureFinalUrlGuard(root: string, specs: readonly CaptureIntent[], invocation?: ProjectRunInvocation) {
+  if (!existsSync(join(root, '.omd/route.json'))) return (_index: number, _finalUrl: string): void => {};
+  if (!invocation) throw new ReferenceIntakeError('REFERENCE_INTAKE_AUTHORITY_REQUIRED');
+  if (readPersistedRoute(root, invocation).references.decision !== 'discover') return (_index: number, _finalUrl: string): void => {};
+  const observed = new Map<number, string>();
+  return (index: number, finalUrl: string): void => {
+    const spec = specs[index]!;
+    const lane = researchLane(spec.lane);
+    const service = host(finalUrl);
+    const overlap = service !== null && (specs.some((other, otherIndex) => otherIndex !== index && other.lane !== lane
+      && [host(other.source), host(observed.get(otherIndex) ?? '')].includes(service))
+      || loadRefs(root, { includeDomain: true }).some(ref => ref.researchLane && ref.researchLane !== lane
+        && [host(ref.source), host(ref.acquisition?.finalUrl ?? '')].includes(service)));
+    if (overlap) throw new ReferenceIntakeError('REFERENCE_LANE_SERVICE_OVERLAP: the final captured service belongs to the other research lane');
+    if (lane === 'design' && spec.fromUser !== true && gallery(spec.source) && !gallery(finalUrl)) {
+      throw new ReferenceIntakeError('DESIGN_DISCOVERY_REDIRECT: the gallery item redirected to an unqualified page; use ref navigate for discovery hops');
+    }
+    // Reserve synchronously before an async PNG write lets a sibling capture publish.
+    observed.set(index, finalUrl);
+  };
 }
 export function validateCaptureBatch(root: string, specs: readonly CaptureIntent[], invocation?: ProjectRunInvocation): void {
   if (!existsSync(join(root, '.omd/route.json'))) return;

@@ -165,6 +165,9 @@ under `.omd/refs/<lane>/navigation/`. These receipts have no board component ide
 substitute for retained design evidence. Research validation still requires a search-rooted chain.
 A batch is checked against its own pending sources as well as already saved references before
 acquisition. A rejected board is resolved before publication and cannot replace an earlier board.
+Final redirected service hosts are checked before screenshot publication, including pending
+captures in the same batch. A gallery item redirected to a directory belongs in navigation,
+not a primary design slot; choose and capture an observed item from that directory instead.
 A board remains a draft until `ref research-check` and `ref apply-check` pass; `stage next`
 keeps this work with Scout rather than treating a board file as finished research.
 PNGs and native JSON metadata stay together in `.omd/refs/domain/` and

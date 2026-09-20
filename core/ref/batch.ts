@@ -8,7 +8,7 @@ import { saveRef, refImagePath, researchLane } from './store.ts';
 import { loadRules, check } from '../rules/engine.ts';
 import type { ProjectWriteAdapter } from '../runtime/project-write.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
-import { validateCaptureBatch } from './capture-intake.ts';
+import { captureFinalUrlGuard, validateCaptureBatch } from './capture-intake.ts';
 import { parseCapturePreparation, type CapturePreparation } from './capture-preparation.ts';
 
 /**
@@ -58,6 +58,7 @@ export async function addRefsBatch(
   adapter: ProjectWriteAdapter,
 ): Promise<BatchResult> {
   validateCaptureBatch(cwd, specs, opts.invocation);
+  const validateFinalUrl = captureFinalUrlGuard(cwd, specs, opts.invocation);
   const concurrency = Math.max(1, opts.concurrency ?? 4);
   const rules = loadRules(opts.rulesRoot);
   const outcomes: BatchOutcome[] = new Array<BatchOutcome>(specs.length);
@@ -81,6 +82,7 @@ export async function addRefsBatch(
           const viewport = parseViewport(spec.viewport ?? REFERENCE_VIEWPORT);
           const { raw, shotSaved, capturePreparation, acquisition } = await capturePageForRef(browser, spec.source, viewport, {
             selector: spec.selector ?? null,
+            validateFinalUrl: url => validateFinalUrl(i, url),
             ...(preparation ? { preparation } : {}),
             ...(shotOut ? { shotOut, adapter } : {}),
           });
