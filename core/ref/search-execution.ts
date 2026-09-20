@@ -5,6 +5,7 @@ import type { ProjectWriteAdapter } from '../runtime/project-write.ts';
 import { nodeStableProjectFileSystem, readStableProjectFile } from '../runtime/stable-project-file.ts';
 import { decodePng } from '../motion/energy.ts';
 import { gallerySearchHasItems, gallerySearchProvider } from './gallery-search.ts';
+import { captureSearchObservation } from './search-observation.ts';
 
 export const SEARCH_EXECUTION_SCHEMA = 'reference-search-execution-v1';
 type Lane = 'domain' | 'design';
@@ -13,7 +14,7 @@ type SearchInput = Readonly<{ lane: Lane; query: string; url: string; queryParam
 type SearchExecution = Readonly<{
   schema: typeof SEARCH_EXECUTION_SCHEMA; lane: Lane; query: string; queryParam: string;
   requestedUrl: string; finalUrl: string | null; provider: string;
-  observedAt: string; status: 'page-observed' | 'gallery-observed' | 'blocked' | 'http-error' | 'navigation-error'; httpStatus: number | null;
+  observedAt: string; status: 'page-observed' | 'gallery-observed' | 'empty-observation' | 'blocked' | 'http-error' | 'navigation-error'; httpStatus: number | null;
   links: readonly string[]; capture: Receipt | null; error: string | null;
   limitations: 'observed-links-not-ranked-results; no-clicks; no-authentication; not-provider-attested';
 }>;
@@ -62,7 +63,7 @@ function parseExecution(value: unknown): SearchExecution {
   const row = object(value, ['schema', 'lane', 'query', 'queryParam', 'requestedUrl', 'finalUrl', 'provider', 'observedAt', 'status', 'httpStatus', 'links', 'capture', 'error', 'limitations']);
   const input = parseSearchInput({ lane: row.lane, query: row.query, queryParam: row.queryParam, url: row.requestedUrl });
   if (row.schema !== SEARCH_EXECUTION_SCHEMA || row.limitations !== LIMITATIONS || row.provider !== new URL(input.url).hostname
-    || !['page-observed', 'gallery-observed', 'blocked', 'http-error', 'navigation-error'].includes(row.status as string)
+    || !['page-observed', 'gallery-observed', 'empty-observation', 'blocked', 'http-error', 'navigation-error'].includes(row.status as string)
     || typeof row.observedAt !== 'string' || !Number.isFinite(Date.parse(row.observedAt))) return fail('invalid execution record');
   if (row.httpStatus !== null && (!Number.isInteger(row.httpStatus) || (row.httpStatus as number) < 100 || (row.httpStatus as number) > 599)) return fail('invalid HTTP status');
   if (!Array.isArray(row.links) || row.links.length > 2000 || Object.keys(row.links).length !== row.links.length) return fail('invalid observed links');
@@ -71,8 +72,10 @@ function parseExecution(value: unknown): SearchExecution {
   if (row.status === 'page-observed' && (row.httpStatus !== 200 || row.capture === null || row.finalUrl === null || row.error !== null)) return fail('observed page needs HTTP 200 and capture');
   if (row.status === 'gallery-observed' && (row.httpStatus !== 200
     || row.capture === null || row.finalUrl === null || row.error !== null || !gallerySearchHasItems(input, links))) return fail('observed gallery needs successful HTTP, capture and actual gallery-item links');
+  if (row.status === 'empty-observation' && (row.httpStatus !== 200 || row.capture === null
+    || row.finalUrl === null || row.error === null || hasSearchDestination(input, links))) return fail('empty observation needs a successful captured page without destination links');
   if (row.status === 'page-observed' && gallerySearchProvider(input) !== null) return fail('gallery searches require observed item evidence');
-  if (row.status === 'page-observed' || row.status === 'gallery-observed') {
+  if (row.status === 'page-observed' || row.status === 'gallery-observed' || row.status === 'empty-observation') {
     const finalInput = parseSearchInput({ ...input, url: row.finalUrl });
     if (gallerySearchProvider(finalInput) !== gallerySearchProvider(input)) return fail('search redirected to another provider');
   }
@@ -102,22 +105,20 @@ export async function executeReferenceSearch(browser: Browser, value: unknown, w
     const response = await page.goto(input.url, { waitUntil: 'domcontentloaded', timeout: 20000 });
     await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => undefined);
     httpStatus = response?.status() ?? null;
-    finalUrl = url(page.url());
-    const bytes = await page.screenshot({ timeout: 10000 });
+    const observation = await captureSearchObservation(page);
+    finalUrl = url(observation.url);
+    const bytes = observation.bytes;
     capture = { path: `.omd/discovery/${input.lane}/search-${hash(bytes)}.png`, sha256: hash(bytes) };
-    links = await page.locator('a[href]').evaluateAll(elements => [...new Set(elements.map(el => (el as HTMLAnchorElement).href))].filter(value => {
-      try { const link = new URL(value); return link.protocol === 'https:' && !link.username && !link.password && !link.hash; } catch { return false; }
-    }).slice(0, 2000));
-    const challenge = searchChallengeReason(await page.locator('body').innerText());
+    links = observation.links;
+    const challenge = searchChallengeReason(observation.body);
     const gallery = gallerySearchProvider(input) !== null;
     const httpOk = httpStatus === 200;
-    status = challenge !== null ? 'blocked' : gallery && httpOk
-      ? gallerySearchHasItems(input, links) ? 'gallery-observed' : 'blocked'
-      : httpStatus === 200 ? 'page-observed' : 'http-error';
+    status = challenge !== null ? 'blocked' : !httpOk ? 'http-error'
+      : !hasSearchDestination(input, links) ? 'empty-observation' : gallery ? 'gallery-observed' : 'page-observed';
     if (challenge !== null) error = challenge;
-    else if (status === 'blocked') error = 'No gallery item links observed; inspect for login, empty results or blocking, then try another public gallery. Do not invent item URLs.';
+    else if (status === 'empty-observation') error = 'No rendered destination links were observed in the captured viewport. Results may be offscreen, absent or unavailable; inspect the capture or use another public source.';
     if (status === 'http-error') error = `HTTP ${httpStatus ?? 'unknown'}; inspect the capture and use a public alternative`;
-    if (status === 'page-observed' || status === 'gallery-observed') {
+    if (status === 'page-observed' || status === 'gallery-observed' || status === 'empty-observation') {
       try {
         const finalInput = parseSearchInput({ ...input, url: finalUrl });
         if (gallerySearchProvider(finalInput) !== gallerySearchProvider(input)) throw new Error('provider changed');
@@ -165,6 +166,14 @@ export function readSearchExecution(root: string, value: unknown, lane: Lane): S
  * source/entry native captures (validated by research-check) then prove the separate visit. */
 export type ObservedNavigation = Readonly<{ url: string; finalUrl: string; links: readonly string[] }>;
 export const searchObserved = (execution: Pick<SearchExecution, 'status'>): boolean => execution.status === 'page-observed' || execution.status === 'gallery-observed';
+function hasSearchDestination(input: SearchInput, links: readonly string[]): boolean {
+  if (gallerySearchProvider(input) !== null) return gallerySearchHasItems(input, links);
+  const service = new URL(input.url).hostname.split('.').slice(-2).join('.');
+  return observedSearchTargets({ links }).some(target => {
+    const host = new URL(target).hostname;
+    return host !== service && !host.endsWith(`.${service}`);
+  });
+}
 /** navigation is derived only from separately hash/image/lane-validated native captures. */
 export function validateSearchCoverage(root: string, lane: Lane, queries: readonly string[], receipts: readonly Receipt[], sourceUrls: readonly string[], navigation: readonly ObservedNavigation[] = []) {
   const records = receipts.map(item => readSearchExecution(root, item, lane));

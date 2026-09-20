@@ -109,6 +109,10 @@ inspection and research repair remain available while production is blocked.
   item binds its URL, PNG evidence and JSON capture; only observed outbound links extend reachability.
   A blocked provider can be replaced with another free public source, never a paid
   MCP or invented receipt. Native GET capture is not an automatic search-quality judgment.
+  New search receipts retain only rendered links in the captured viewport and require stable
+  pre/post-capture observations, with at most one recapture. An empty rendered result is
+  `empty-observation`, not success or an invented challenge; inspect it and use another public
+  source. This does not retroactively give historical receipts a visibility guarantee.
   Search/navigation outputs live under `.omd/discovery/`, outside retained `.omd/refs/`.
   Native free-gallery query inputs support discovery without guessed item URLs. Search and navigation
   receipts cannot be promoted into retained design evidence. Selected board resolution and briefs

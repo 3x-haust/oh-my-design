@@ -87,7 +87,7 @@ test('late search inspection failure records the diagnostic without an orphan sc
           page.screenshot = async options => { const bytes = await screenshot(options); screenshotObserved = true; return bytes; };
           const locate = page.locator.bind(page);
           page.locator = (...locatorArgs: Parameters<typeof page.locator>) => {
-            if (locatorArgs[0] === 'a[href]') throw new Error('test-owned link inspection failure');
+            if (locatorArgs[0] === 'a[href]' && screenshotObserved) throw new Error('test-owned link inspection failure');
             return locate(...locatorArgs);
           };
           return page;
