@@ -8,17 +8,15 @@
 
 ## OMD로 만든 결과 — 원샷 프롬프트
 
-[![OMD가 생성한 랜딩 페이지](docs/omd-landing.png)](https://3x-haust.github.io/oh-my-design/)
-
-위 랜딩 페이지는 OMD가 단일 원샷 프롬프트로 직접 생성한 결과물입니다 — 시각 출력은 손으로 다듬지 않았습니다. **[3x-haust.github.io/oh-my-design](https://3x-haust.github.io/oh-my-design/)** 에 배포되어 있습니다.
+OMD가 단일 원샷 프롬프트로 생성한 랜딩 페이지입니다 — 시각 출력은 손으로 다듬지 않았습니다. **[3x-haust.github.io/oh-my-design](https://3x-haust.github.io/oh-my-design/)** 에서 볼 수 있습니다.
 
 ## OMD란
 
 여기서 ‘사람처럼 디자인한다’는 것은 특정한 결과 스타일이 아니라 근거를 남기는 판단을 뜻합니다. 목표는 반복 가능한 프로세스이며, 결과는 차분할 수도 과감할 수도 익숙하거나 낯설 수도 있습니다. 일관되는 것은 결과의 생김새가 아니라 그 뒤에 남은 결정의 흐름입니다.
 
 [디자인 실행 계약](core/protocol/design-practice.md)이 선택된 작업 안에서 이 기준을 구체화합니다.
-[조사·구현 기록](docs/human-design-research-20260913.md)은 14개 출처와 적용 원칙을 연결하고,
-동작 검증과 사람 수준의 품질 주장을 구분합니다.
+동작 검증과 사람 수준의 품질 주장은 구분합니다.
+루트 `/docs/`의 조사·개발 메모는 로컬에 보관하며 저장소에서 추적하거나 공개하지 않습니다.
 
 콘셉트 탐색은 내용에서 출발합니다. 하나의 강한 아이디어로 화면 전체를 구성할 수 있고,
 서로 다른 안이 같은 브랜드 색을 사용할 수도 있습니다. 최종 페이지를 HTML과 CSS로 만들더라도
@@ -255,7 +253,7 @@ composer는 정제된 선택 조립만 받습니다. 즉 전달 가능한 구조
 
 구현 중에는 선택한 각 출처 부품이 `.omd/reference-usage.json`에서 `used`, `rejected`, `anti-reference` 행을 받습니다. `.omd/reference-report.md`와 최종 채팅 답변은 상태, 출처 사이트/페이지, 정확한 캡처 UI·이미지 영역, 배포 경로/컴포넌트/selector, 차용한 속성, 명시적으로 차용하지 않은 속성, 변환, 프로덕션 근거 경로·selector·검증 메모를 한/영 표로 제공합니다.
 
-코드 근거가 있는 한/영 기능 감사, 공급자 한계, 검증 근거는 [`docs/lego-reference-audit.md`](docs/lego-reference-audit.md)를 참고하세요.
+캡처·근거·출처 격리·적용 계약은 [레퍼런스 조립 프로토콜](core/protocol/reference-assembly.md)을 참고하세요.
 
 ### Codex에서 초기 시안 비교
 
