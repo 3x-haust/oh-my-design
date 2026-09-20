@@ -3,7 +3,7 @@ import test from 'node:test';
 import { parseLiveFlowInput } from '../core/ref/live-flow.ts';
 import { parseRuntimeInventoryInput } from '../core/tokens/runtime-inventory.ts';
 import { parseSlopScope } from '../core/slop/review.ts';
-import { browserDeadline } from '../core/render/stateful.ts';
+import { browserDeadline, inspectionDeadline } from '../core/render/stateful.ts';
 import { withBrowser } from '../core/render/index.ts';
 
 const view = { id: 'entry', page: 'dist/index.html', viewport: { width: 240, height: 2560 } };
@@ -54,4 +54,30 @@ test('overall browser deadline closes real stalled navigation and font waits', a
       assert.ok(Date.now() - start < 5000);
     }
   });
+});
+
+test('absolute deadline bounds stalled acquisition and teardown; late resources close exactly once', async () => {
+  let finishSetup!: (resource: { close(): Promise<void> }) => void;
+  let used = false, closed = 0;
+  const start = Date.now();
+  await assert.rejects(() => inspectionDeadline(async own => {
+    await own(new Promise<{ close(): Promise<void> }>(resolve => { finishSetup = resolve; }));
+    used = true;
+  }, 40), /BROWSER_DEADLINE/);
+  assert.ok(Date.now() - start < 3000);
+  finishSetup({ close: async () => { closed++; } });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(used, false);
+  assert.equal(closed, 1);
+  let closeAttempts = 0;
+  const teardownStart = Date.now();
+  await assert.rejects(() => inspectionDeadline(async own => {
+    await own(Promise.resolve({ close: () => { closeAttempts++; return new Promise<void>(() => {}); } }));
+    return 'cannot publish success before cleanup';
+  }, 40), /BROWSER_DEADLINE/);
+  assert.equal(closeAttempts, 1);
+  assert.ok(Date.now() - teardownStart < 4000);
+  await assert.rejects(() => inspectionDeadline(async own => {
+    await own(Promise.resolve({ close: async () => { throw new Error('cleanup failed'); } }));
+  }, 1000), /cleanup failed/);
 });

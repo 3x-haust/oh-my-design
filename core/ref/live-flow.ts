@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
 import type { Browser, Page } from 'playwright';
-import { stateObject, stateText, parseViewAssertions, assertViewState, browserDeadline, type ViewAssertion } from '../render/stateful.ts';
+import { stateObject, stateText, parseViewAssertions, assertViewState, inspectionDeadline, type ViewAssertion } from '../render/stateful.ts';
 import { waitForDocumentFonts, detectBlockReason } from '../render/index.ts';
 import { canonicalJson } from './board-artifacts.ts';
 import { signNativeObservation, verifyNativeObservation } from '../runtime/self-signed-activation.ts';
@@ -58,12 +58,12 @@ export async function recordLiveReferenceFlow(browser: Browser, rootInput: strin
     writer.writeContentAddressed(path, bytes); return { path, sha256 };
   };
   const startedAt = new Date().toISOString();
-  const context = await browser.newContext({ viewport: input.viewport, serviceWorkers: 'block', acceptDownloads: false });
   const steps: { order: number; screenId: string; state: string; url: string; action: string; result: string; evidence: Receipt; capture: Receipt }[] = [];
   const blocked: string[] = [];
   let limitation: string | null = null;
   try {
-    await browserDeadline(context, async () => {
+    await inspectionDeadline(async own => {
+    const context = await own(browser.newContext({ viewport: input.viewport, serviceWorkers: 'block', acceptDownloads: false }));
     await context.route('**/*', route => {
       const request = route.request(), url = new URL(request.url());
       if (!['GET', 'HEAD'].includes(request.method()) || (request.isNavigationRequest() && url.origin !== origin)
@@ -97,7 +97,6 @@ export async function recordLiveReferenceFlow(browser: Browser, rootInput: strin
     }
     }, 120000);
   } catch (error) { limitation = (error instanceof Error ? error.message : String(error)).slice(0, 2000); }
-  finally { await context.close(); }
   const record = { schema: 'reference-flow-execution-v1', input, startedAt, completedAt: new Date().toISOString(), status: limitation === null ? 'completed' : 'blocked', limitation, steps };
   const digest = hash(canonicalJson(record));
   const execution = save('executions', `${canonicalJson({ ...record, signature: signNativeObservation(root, 'reference-flow-v1', digest) })}\n`, 'json');

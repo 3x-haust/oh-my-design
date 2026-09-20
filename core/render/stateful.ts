@@ -70,34 +70,55 @@ export async function assertViewState(page: Page, assertions: readonly ViewAsser
 }
 export function pageRoute(page: Page): string { const url = new URL(page.url()); return `${url.pathname}${url.search}${url.hash}`; }
 
-/** Closes a stalled renderer as well as rejecting the caller; individual DOM/font calls cannot
- * turn the finite per-operation limits into an unbounded stage. Shorter budgets aid bounded probes. */
-export async function browserDeadline<T>(context: BrowserContext, operation: () => Promise<T>, timeoutMs: number): Promise<T> {
+type InspectionResource = { close(): Promise<void> };
+/** One absolute budget owns acquisition, work and teardown. Late acquisitions are closed, never
+ * used after expiry. A timeout allows at most two additional seconds for best-effort cleanup. */
+export async function inspectionDeadline<T>(operation: (own: <R extends InspectionResource>(resource: Promise<R>) => Promise<R>) => Promise<T>, timeoutMs: number): Promise<T> {
   if (!Number.isInteger(timeoutMs) || timeoutMs <= 0 || timeoutMs > 120000) return fail('invalid browser deadline');
   let timer: ReturnType<typeof setTimeout> | undefined;
-  let shutdown: Promise<void> | undefined;
+  let expired = false;
+  const endsAt = Date.now() + timeoutMs;
+  const resources: InspectionResource[] = [];
+  const closing = new Map<InspectionResource, Promise<void>>();
+  const deadlineError = () => new Error(`BROWSER_DEADLINE: exceeded ${timeoutMs}ms; no completed observation published`);
+  const close = (resource: InspectionResource): Promise<void> => {
+    if (!closing.has(resource)) closing.set(resource, Promise.resolve().then(() => resource.close()));
+    return closing.get(resource)!;
+  };
+  const own = async <R extends InspectionResource>(pending: Promise<R>): Promise<R> => {
+    const resource = await pending;
+    resources.push(resource);
+    if (expired || Date.now() >= endsAt) { void close(resource).catch(() => {}); throw deadlineError(); }
+    return resource;
+  };
+  const cleanup = () => Promise.all(resources.map(close)).then(() => {});
   try {
-    return await Promise.race([Promise.resolve().then(operation), new Promise<never>((_, reject) => {
-      timer = setTimeout(() => { reject(new Error(`BROWSER_DEADLINE: exceeded ${timeoutMs}ms; no completed observation published`)); shutdown = context.close().catch(() => {}); }, timeoutMs);
+    return await Promise.race([Promise.resolve().then(async () => {
+      try { const result = await operation(own); if (Date.now() >= endsAt) throw deadlineError(); return result; }
+      finally { await cleanup(); }
+    }), new Promise<never>((_, reject) => {
+      timer = setTimeout(() => { expired = true; void cleanup().catch(() => {}); reject(deadlineError()); }, timeoutMs);
     })]);
   } finally {
     clearTimeout(timer);
-    if (shutdown) {
+    if (expired) {
       let cleanupTimer: ReturnType<typeof setTimeout> | undefined;
-      try { await Promise.race([shutdown, new Promise<void>(resolve => { cleanupTimer = setTimeout(resolve, 2000); })]); }
+      try { await Promise.race([cleanup().catch(() => {}), new Promise<void>(resolve => { cleanupTimer = setTimeout(resolve, 2000); })]); }
       finally { clearTimeout(cleanupTimer); }
     }
   }
 }
+export async function browserDeadline<T>(context: BrowserContext, operation: () => Promise<T>, timeoutMs: number): Promise<T> {
+  return inspectionDeadline(async own => { await own(Promise.resolve(context)); return operation(); }, timeoutMs);
+}
 
 /** Exact local build bytes; fresh context; no account cookies, remote API writes or navigation. */
 export async function withLocalView<T>(browser: Browser, root: string, view: { page: string; viewport: { width: number; height: number }; state?: ViewState }, inspect: (page: Page) => Promise<T>): Promise<T> {
-  const served = await serveProjectEntry(root, view.page, { spa: view.state !== undefined });
-  const origin = new URL(served.url).origin;
-  const context = await browser.newContext({ viewport: view.viewport, serviceWorkers: 'block', acceptDownloads: false });
-  const blocked: string[] = [];
-  try {
-    return await browserDeadline(context, async () => {
+  return inspectionDeadline(async own => {
+    const served = await own(serveProjectEntry(root, view.page, { spa: view.state !== undefined }));
+    const origin = new URL(served.url).origin;
+    const context = await own(browser.newContext({ viewport: view.viewport, serviceWorkers: 'block', acceptDownloads: false }));
+    const blocked: string[] = [];
     await context.route('**/*', route => {
       const request = route.request();
       if (!['GET', 'HEAD'].includes(request.method()) || new URL(request.url()).origin !== origin) {
@@ -124,8 +145,7 @@ export async function withLocalView<T>(browser: Browser, root: string, view: { p
     if (blocked.length) return fail('blocked network request during capture');
     served.assertSourceCurrent();
     return result;
-    }, 30000);
-  } finally { await context.close(); await served.close(); }
+  }, 30000);
 }
 
 /** No hover/tab probes: they would disturb the exact opened modal/tab state. */

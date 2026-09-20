@@ -272,11 +272,13 @@ type Browser = import('playwright').Browser;
 export async function withBrowser<T>(fn: (browser: Browser) => Promise<T>): Promise<T> {
   const { chromium } = await import('playwright');
   // Always headless — OMD never opens a visible browser window in any situation.
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch({ headless: true, timeout: 30000 });
   try {
     return await fn(browser);
   } finally {
-    await browser.close();
+    let cleanupTimer: ReturnType<typeof setTimeout> | undefined;
+    try { await Promise.race([browser.close(), new Promise<void>((_, reject) => { cleanupTimer = setTimeout(() => reject(new Error('browser cleanup timed out after 2000ms')), 2000); })]); }
+    finally { clearTimeout(cleanupTimer); }
   }
 }
 

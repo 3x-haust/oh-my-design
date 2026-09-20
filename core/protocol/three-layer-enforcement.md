@@ -91,4 +91,8 @@ by component, with exact input-to-component and build coverage. Source/build/cap
 All local views, including the default entry, refuse external
 networking and non-read-only requests; use bundled fixtures, not live APIs.
 Local inspection has a 30-second per-view deadline; public reference flows have a 120-second
-whole-flow deadline. A stalled page closes its context and cannot publish a completed observation.
+whole-flow deadline, covering local serving/context setup, work and context/server teardown.
+A timeout permits at most two additional seconds for best-effort cleanup; late resources are closed,
+not reused. The shared browser provider separately bounds launch at 30 seconds and close at two.
+A stalled page cannot publish a completed observation. These cooperative async bounds are not
+an operating-system watchdog or a guarantee against a blocked filesystem/kernel.
