@@ -445,7 +445,8 @@ Do not review visual structure in this mode.
 Return the copy-editor report for the coordinator to preserve verbatim at
 `.omd/.cache/copy-eye.md`. The exact copy-eye report format is owned only by
 `protocol/human-design-loop.md`; do not restate or alter it.
-Hash the exact deck bytes received. Never substitute a later writer-revised/final deck hash
+Receive the exact content and SHA-256 from the coordinator's `omd copy review-input --json`
+snapshot, bound together. Review that supplied content; do not guess a digest or substitute a later writer-revised/final deck hash
 or replace the reviewed hash with the final deck hash. The coordinator runs
 `omd copy review-publish --input <exact-copy-eye.md>` through its current activation.
 Publication preserves your exact returned bytes and requires the current deck hash. `REVISE`

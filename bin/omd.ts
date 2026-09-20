@@ -1929,11 +1929,17 @@ async function cmdDesign(opts: Opts): Promise<never> {
 }
 
 /** Copy-deck structure and current-byte copy-eye review gates; neither judges prose quality or blindness. */
-function cmdCopy(opts: Opts): never {
+async function cmdCopy(opts: Opts): Promise<never> {
   const v2 = (opts._[0] === 'v2-check' && opts._.length === 1) || (opts._[0] === 'v2' && opts._[1] === 'check' && opts._.length === 2);
   const reviewPublish = opts._[0] === 'review-publish' && opts._.length === 1;
-  if ((opts.check ? 1 : 0) + (opts.reviewCheck ? 1 : 0) + (v2 ? 1 : 0) + (reviewPublish ? 1 : 0) !== 1) {
-    throw new Error('usage: omd copy --check [--json] | omd copy --review-check [--json] | omd copy review-publish --input <copy-eye.md> [--json] | omd copy v2 check [--json]');
+  const reviewInput = opts._[0] === 'review-input' && opts._.length === 1;
+  if ((opts.check ? 1 : 0) + (opts.reviewCheck ? 1 : 0) + (v2 ? 1 : 0) + (reviewPublish ? 1 : 0) + (reviewInput ? 1 : 0) !== 1) {
+    throw new Error('usage: omd copy --check [--json] | omd copy review-input --json | omd copy --review-check [--json] | omd copy review-publish --input <copy-eye.md> [--json] | omd copy v2 check [--json]');
+  }
+  if (reviewInput) {
+    const { copyReviewInput } = await import('../core/copy/review-input.ts');
+    process.stdout.write(JSON.stringify(copyReviewInput(process.cwd())));
+    process.exit(0);
   }
 
   if (reviewPublish) {
@@ -4959,6 +4965,8 @@ function usage(): never {
     + '  stack [--json]                              deterministic stack routing (blank greenfield -> plain HTML/CSS/JS)\n'
     + '  coach                                        trends across `omd check` history\n'
     + '  usage [--json]                              this run\'s elapsed time + token total (host session log)\n'
+    + '  hash <.omd/artifact-path> [--json]          read-only exact evidence digest; no shell or publication\n'
+    + '  copy review-input --json                   exact copy text and byte digest for a fresh review\n'
     + '\n'
     + '  lifecycle plan|run --project <dir> [--manifest <json>]\n'
     + '                                               trusted browser evaluation and observation\n'
@@ -5377,6 +5385,15 @@ async function main(): Promise<never> {
 
   if (cmd === 'design') return cmdDesign(parseArgs(args.slice(1)));
   if (cmd === 'copy') return cmdCopy(parseArgs(args.slice(1)));
+  if (cmd === 'hash') {
+    const opts = parseArgs(args.slice(1));
+    const path = opts._[0];
+    if (!path || opts._.length !== 1) throw new Error('usage: omd hash <.omd/artifact-path> [--json]');
+    const { artifactDigest } = await import('../core/runtime/artifact-digest.ts');
+    const result = artifactDigest(process.cwd(), path);
+    console.log(opts.json ? JSON.stringify(result) : `${result.sha256}  ${result.path}`);
+    process.exit(0);
+  }
   if (cmd === 'review') return cmdReview(sub, parseArgs(args.slice(2)));
   if (cmd === 'owner') return cmdOwner(sub, parseArgs(args.slice(2)));
   if (cmd === 'candidate') return cmdCandidate(sub, parseArgs(args.slice(2)));

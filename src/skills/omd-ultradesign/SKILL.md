@@ -46,6 +46,11 @@ On Codex use `omd-codex exec -C <project> ...` (or `oh-my-design codex exec ...`
 `OMD_ACTIVATION_PATH` when the current host actually supplies that launcher. Never manufacture or reuse Codex activation.
 Pi and the local CLI use `omd_cli`/`omd` without `--activation`; local command authority is created by the CLI.
 An absent external activation file is not a Pi setup error. Do not ask the user to supply one.
+For copy review, send the exact `content` and `sha256` from `omd copy review-input --json`
+together to the reviewer, then preserve and publish its report. Other local evidence fingerprints
+use `omd hash <.omd/artifact-path> --json`. Neither command grants a verdict; never guess hashes
+or replace an old review's hash after a writer revision. The report format belongs to
+`protocol/human-design-loop.md`.
 The Codex role/owner commands above apply only when that broker is available, never to Pi.
 Pi uses available native delegation with the user's model; if independent review is unavailable,
 record that limitation rather than claiming an isolated review or blocking reference collection.
