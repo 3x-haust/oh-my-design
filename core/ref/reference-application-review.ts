@@ -66,7 +66,8 @@ export function referenceApplicationCriteria(application: ReferenceApplicationPr
   })));
 }
 function read(root: string, path: string): Buffer {
-  return readStableProjectFile({ root: resolve(root), path: resolve(root, path), label: path, fs: nodeStableProjectFileSystem() });
+  try { return readStableProjectFile({ root: resolve(root), path: resolve(root, path), label: path, fs: nodeStableProjectFileSystem() }); }
+  catch (error) { return fail(`${path} is unavailable or changed: ${error instanceof Error ? error.message : String(error)}`); }
 }
 /** Call only after the existing final-v2 checker has authenticated the graph. Never accepts caller-selected captures. */
 export function referenceApplicationReviewContext(root: string, application: ReferenceApplicationProjection, graph: Pick<FinalEvidenceV2GraphVariant, 'buildIdentity' | 'sourceSeal' | 'observations'>): Context {

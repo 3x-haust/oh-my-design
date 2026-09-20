@@ -59,6 +59,7 @@ test('revise can be recorded but not completed; justified departure needs an ins
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const writer = createTestProjectWriteAdapter(root);
   const { context, review } = fixture();
+  assert.throws(() => checkReferenceApplicationReview(root, context), /REFERENCE_APPLICATION_REVIEW:.*unavailable/);
   review.results[0]!.verdict = 'revise';
   assert.equal(publishReferenceApplicationReview(root, review, context, writer).closed, false);
   assert.throws(() => checkReferenceApplicationReview(root, context), /unresolved/);

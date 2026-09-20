@@ -47,7 +47,7 @@ test('research repair remains possible but CLI-owned evidence cannot be forged t
   for (const path of ['.omd/.cache/route-input.json', '.omd/copy-deck.md', '.omd/type-proof.md', '.omd/docs/app/repair.md', '.omd/design-handoff.json']) {
     assert.equal(await h.emit('tool_call', { toolName: 'write', input: { path } }), undefined);
   }
-  for (const path of ['.omd/route.json', '.omd/history.jsonl', '.omd/activation/project.key', '.omd/reference-board.json', '.omd/final-evidence-v2.json']) {
+  for (const path of ['.omd/route.json', '.omd/history.jsonl', '.omd/activation/project.key', '.omd/reference-board.json', '.omd/final-evidence-v2.json', '.omd/reference-application-review.json', `.omd/refs/design/search-${'a'.repeat(64)}.json`]) {
     assert.equal(blocked(await h.emit('tool_call', { toolName: 'write', input: { path } })), true);
   }
   assert.equal(await h.emit('tool_call', { toolName: 'read', input: { path: 'src/main.jsx' } }), undefined);
@@ -117,6 +117,19 @@ test('authority failures, user aborts and tool-use messages do not trigger autom
   const controller = new AbortController(); controller.abort();
   assert.equal(await h.hooks.get('message_end')!({ message: final }, { cwd: h.cwd, signal: controller.signal }), undefined);
   assert.equal(sent.length, 0);
+});
+
+test('missing rendered application review enters the bounded repair loop only after source work', async () => {
+  const sent: unknown[] = [];
+  const h = harness(async (_command, args) => args[2] === 'production'
+    ? { stdout: '{"ok":true}', stderr: '', code: 0, killed: false }
+    : { stdout: '', stderr: 'REFERENCE_APPLICATION_REVIEW: .omd/reference-application-review.json is unavailable or changed', code: 1, killed: false }, m => { sent.push(m); });
+  await h.emit('before_agent_start', { prompt: 'omd-ultradesign' });
+  await h.emit('tool_call', { toolName: 'omd_cli', input: { args: ['ref', 'apply-review-plan', '--json'] } });
+  assert.equal(await h.emit('message_end', { message: final }), undefined);
+  await h.emit('tool_call', { toolName: 'write', input: { path: 'src/main.jsx' } });
+  for (let attempt = 0; attempt < 3; attempt++) await h.emit('message_end', { message: final });
+  assert.equal(sent.length, 2);
 });
 
 test('research-only work and read-only reference handoffs never authorize automatic implementation repairs', async () => {
