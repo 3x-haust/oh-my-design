@@ -200,17 +200,36 @@ function assertProcessGone(pid: number): void {
 
 function removalEvent(parent: string, name: string, timeoutMs = 5_000): Promise<void> {
   return new Promise((resolve, reject) => {
-    const watcher = watch(parent);
-    const timer = setTimeout(() => { watcher.close(); reject(new Error('profile removal timed out')); }, timeoutMs);
-    watcher.on('change', (_event, changed) => {
-      if (changed?.toString() !== name || existsSync(join(parent, name))) return;
+    // The invariant is actual removal, not delivery of a particular fs.watch filename.
+    // Keep the same deadline and the later process-gone assertion even if events coalesce.
+    const target = join(parent, name);
+    const poll = setInterval(() => { if (!existsSync(target)) finish(); }, 20);
+    const timer = setTimeout(() => {
+      clearInterval(poll);
+      if (!existsSync(target)) resolve();
+      else reject(new Error('profile removal timed out'));
+    }, timeoutMs);
+    function finish(): void {
       clearTimeout(timer);
-      watcher.close();
+      clearInterval(poll);
       resolve();
-    });
-    watcher.once('error', (error) => { clearTimeout(timer); reject(error); });
+    }
+    if (!existsSync(target)) finish();
   });
 }
+
+test('profile removal waits for actual absence and still rejects a retained profile within the same deadline', async context => {
+  const fixture = makeFixture();
+  context.after(() => removeFixture(fixture));
+  await removalEvent(fixture.profileRoot, 'already-removed', 40);
+  const target = join(fixture.profileRoot, 'owned-test-profile');
+  mkdirSync(target);
+  await assert.rejects(removalEvent(fixture.profileRoot, 'owned-test-profile', 40), /profile removal timed out/);
+  const removed = removalEvent(fixture.profileRoot, 'owned-test-profile');
+  rmSync(target, { recursive: true });
+  await removed;
+  assert.equal(existsSync(target), false);
+});
 
 for (const receipt of [
   { name: 'missing receipt', content: undefined },
