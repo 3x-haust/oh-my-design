@@ -8,7 +8,7 @@ export function designDiscoveryProvider(url: string): string | null {
   if (/^(?:[a-z]{2}\.)?pinterest\.(?:com|co\.uk|ca|de|fr|jp|co\.kr|com\.au)$/.test(host) && /^\/pin\/[^/]+\/?$/.test(path)) return 'Pinterest';
   if (host === 'dribbble.com' && /^\/shots\/\d[^/]*\/?$/.test(path)) return 'Dribbble';
   if (host === 'behance.net' && /^\/gallery\/\d+(?:\/[^/]+)?\/?$/.test(path)) return 'Behance';
-  if (host === 'siteinspire.com' && /^\/websites\/[^/]+\/?$/.test(path)) return 'Siteinspire';
+  if (host === 'siteinspire.com' && /^\/websites?\/\d[^/]*\/?$/.test(path)) return 'Siteinspire';
   if (host === 'land-book.com' && /^\/websites\/[^/]+\/?$/.test(path)) return 'Land-book';
   if (host === 'godly.website' && /^\/website\/[^/]+\/?$/.test(path)) return 'Godly';
   // UI Bowl public access is not its paid MCP. Only a real item path is accepted.

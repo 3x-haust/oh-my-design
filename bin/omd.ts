@@ -2466,6 +2466,30 @@ async function cmdRefApplicationReview(mode: 'plan' | 'set' | 'check', opts: Opt
   process.exit(0);
 }
 
+async function cmdRefTidy(opts: Opts): Promise<never> {
+  const allowed = new Set(['_', 'apply', 'json', 'activation']);
+  if (opts._.length || Object.keys(opts).some(key => !allowed.has(key))
+    || (opts.apply !== undefined && opts.apply !== true) || (opts.json !== undefined && opts.json !== true)) {
+    throw new Error('usage: omd ref tidy [--apply] [--json]; preview by default, --apply archives exact bytes before removing reference clutter');
+  }
+  const { tidyReferences } = await import('../core/ref/tidy.ts');
+  const apply = opts.apply === true;
+  const invocation = apply ? invocationFromActivation(opts, 'omd ref tidy') : undefined;
+  const release = invocation ? acquireProjectMutationLock(process.cwd(), invocation) : undefined;
+  let result: ReturnType<typeof tidyReferences>;
+  try { result = tidyReferences(process.cwd(), invocation ? projectWriter(invocation) : undefined); }
+  finally { release?.(); }
+  if (opts.json) process.stdout.write(`${JSON.stringify(result)}\n`);
+  else {
+    console.log(`${apply ? 'archived' : 'would archive'} ${result.files.length} file(s)`);
+    for (const entry of result.files) console.log(`  ${entry.path} -> ${entry.archivePath}\n    ${entry.reason}`);
+    if (!apply && result.files.length) console.log('Re-run with --apply to archive these exact bytes and remove the originals.');
+    if (result.manifestPath) console.log(`Recovery manifest: ${result.manifestPath}`);
+    console.log(result.guidance);
+  }
+  process.exit(0);
+}
+
 async function cmdRefSearch(opts: Opts): Promise<never> {
   const command = 'omd ref search';
   if (opts._.length || !opts.input) throw new Error('usage: omd ref search --input <lane-query-url-queryParam.json> [--json]; get the exact input with omd schema reference-search');
@@ -5018,6 +5042,7 @@ function usage(): never {
     + '  ref research-set --input research.json     bind separate domain/design lane evidence to current outputs\n'
     + '  ref research-check                         require both lanes and re-hash their evidence and outputs\n'
     + '  ref search --input <json>                  execute a public query GET and record actual links/capture or failure\n'
+    + '  ref tidy [--apply] [--json]                preview clutter; --apply archives exact bytes before guarded removal\n'
     + '  ref apply-plan --json                      draft screen-by-screen use from current research/domain brief\n'
     + '  ref apply-set --input application.json      publish interpreted domain/design decisions for every screen\n'
     + '  ref apply-check --json                     verify current decisions and export source-free screen guidance\n'
@@ -5362,7 +5387,12 @@ async function main(): Promise<never> {
   }
 
   if (cmd === 'ref') {
+    if (sub === 'tidy' && args.slice(2).some(arg => arg === '--help' || arg === '-h')) {
+      console.log('omd ref tidy [--apply] [--json]\n  Preview recognized legacy search/navigation files and unqualified design records.\n  --apply archives exact bytes and a recovery manifest in .omd/archive/references before guarded removal.\n  Eligible design references, domain references and unknown files remain. Revalidate dependent research and boards afterward.');
+      process.exit(0);
+    }
     const opts = parseArgs(args.slice(2));
+    if (sub === 'tidy') return cmdRefTidy(opts);
     if (sub === 'navigate') return cmdRefNavigate(opts);
     if (sub === 'discover-plan') return cmdRefDiscoveryPlan(opts);
     if (sub === 'research-set') return cmdRefResearch('set', opts);
