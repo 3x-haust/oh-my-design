@@ -31,6 +31,25 @@ test('discovery plan supplies executable gallery searches without requiring inve
   }
 });
 
+test('selected discovery offers explicit direct public entry inputs while skipped discovery offers none', t => {
+  const root = mkdtempSync(join(tmpdir(), 'omd-direct-plan-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const makePlan = (fixture: string) => buildReferenceDiscoveryPlan(root,
+    routeAdaptiveFlow(JSON.parse(readFileSync(new URL(`fixtures/adaptive-flow/${fixture}.json`, import.meta.url), 'utf8'))));
+  const plan = makePlan('medical-new-product');
+  const entries: unknown = Reflect.get(plan.designSourcePolicy, 'nativeEntryInputs');
+  assert.ok(Array.isArray(entries) && entries.length > 0);
+  for (const entry of entries) {
+    assert.equal(entry.lane, 'design');
+    assert.equal(entry.entry, 'free-gallery');
+    assert.ok(plan.designSourcePolicy.candidates.some(candidate => candidate.url === entry.url));
+    assert.equal(designDiscoveryProvider(entry.url), null, 'a directory lead is not an already selected gallery item');
+  }
+  assert.equal(plan.sourcePolicy, 'current-search-or-direct-public-then-live-inspection');
+  assert.deepEqual(Reflect.get(makePlan('copy-only').designSourcePolicy, 'nativeEntryInputs'), []);
+  assert.equal(Reflect.get(makePlan('copy-only').designSourcePolicy, 'domainEntryCommand'), null);
+});
+
 test('native free gallery searches bind exact queries and cannot impersonate domain searches', () => {
   for (const input of inputs) {
     assert.deepEqual(parseSearchInput(input), input);

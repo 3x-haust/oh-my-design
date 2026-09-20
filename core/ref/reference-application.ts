@@ -4,6 +4,8 @@ import { validateDomainBrief } from '../domain/domain-brief.ts';
 import { nodeStableProjectFileSystem, readStableProjectFile } from '../runtime/stable-project-file.ts';
 import type { ProjectWriteAdapter } from '../runtime/project-write.ts';
 import { readPublishedReferenceResearch, validateReferenceResearch, REFERENCE_RESEARCH_PATH } from './reference-research.ts';
+import { readResearchDiscoveryRoots } from './discovery-coverage.ts';
+import { referenceServiceHost } from './design-discovery-sources.ts';
 
 export const REFERENCE_APPLICATION_SCHEMA = 'reference-application-v2' as const;
 export const REFERENCE_APPLICATION_PATH = '.omd/reference-application.json';
@@ -142,10 +144,13 @@ function validate(root: string, application: ReferenceApplication, options: Opti
       current.research.designReference.sources.some(source => source.id === id && source.visualRole === 'visual-direction'))) return fail(`${row.surface}: support-only evidence cannot claim direct visual coverage`);
   }
   // Explicit URLs and acquisition paths belong only in the source-bearing record, not decision prose.
-  const projection = JSON.stringify(projectReferenceApplication(application));
-  if (/(?:https?:\/\/|www\.|\.omd\/refs\/)/i.test(projection)) return fail('keep source URLs/capture paths out of destination decision prose');
-  for (const source of [...current.research.domainReference.sources, ...current.research.designReference.sources]) {
-    if (projection.includes(new URL(source.url).hostname)) return fail('keep source hostnames out of destination decision prose');
+  const projection = JSON.stringify(projectReferenceApplication(application)).toLowerCase();
+  if (/(?:https?:\/\/|www\.|\.omd\/(?:refs|discovery)\/)/i.test(projection)) return fail('keep source URLs/capture paths out of destination decision prose');
+  const lanes = [current.research.domainReference, current.research.designReference];
+  const sourceUrls = lanes.flatMap(lane => [...lane.sources.map(source => source.url),
+    ...readResearchDiscoveryRoots(root, lane).flatMap(observation => [observation.url, observation.finalUrl])]);
+  for (const url of sourceUrls) {
+    if (projection.includes(referenceServiceHost(url))) return fail('keep source hostnames out of destination decision prose');
   }
 }
 

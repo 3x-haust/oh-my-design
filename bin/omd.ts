@@ -206,6 +206,7 @@ interface Opts {
   taskMatrix?: string;
   reality?: string;
   entrySurface?: string;
+  entry?: string;
   /** Render desktop+mobile fixed and full-page proofs in one browser (`omd render <page> --proofs -o <prefix>`). */
   proofs?: boolean;
   /** Register override for `omd visual-richness --register quiet|confident|showpiece`. */
@@ -2511,11 +2512,17 @@ async function cmdRefSearch(opts: Opts): Promise<never> {
 
 async function cmdRefNavigate(opts: Opts): Promise<never> {
   const source = opts._[0];
-  if (!source || opts._.length !== 1 || !opts.lane) throw new Error('usage: omd ref navigate <url> --lane domain|design [--json]; navigation receipts are not board references');
+  const allowed = new Set(['_', 'lane', 'entry', 'activation', 'json']);
+  if (!source || opts._.length !== 1 || !opts.lane || Object.keys(opts).some(key => !allowed.has(key))) {
+    throw new Error('usage: omd ref navigate <url> --lane domain|design [--entry public-directory|free-gallery] [--json]; direct entries and navigation receipts are not board references');
+  }
+  if (Object.hasOwn(opts, 'entry') && (typeof opts.entry !== 'string' || !['public-directory', 'free-gallery'].includes(opts.entry))) {
+    throw new Error('REFERENCE_DISCOVERY_ENTRY_KIND: --entry requires public-directory or free-gallery');
+  }
   const { captureReferenceNavigation } = await import('../core/ref/navigation-capture.ts');
   const { withBrowser } = await import('../core/render/index.ts');
   const writer = projectWriterFromActivation(opts, 'omd ref navigate');
-  const receipt = await withBrowser(browser => captureReferenceNavigation(browser, source, opts.lane, writer));
+  const receipt = await withBrowser(browser => captureReferenceNavigation(browser, source, opts.lane, writer, opts.entry));
   console.log(JSON.stringify(receipt));
   process.exit(0);
 }
@@ -5060,7 +5067,7 @@ function usage(): never {
     + '  ref board --input candidate-assemblies.json   author and persist a validated board from captured source/component pieces\n'
     + '  ref locale-bind --input bindings.json         bind local reference pieces to current cultural evidence decisions\n'
     + '  ref locale-bind-check                         revalidate board/profile/source locale bindings\n'
-    + '  ref navigate <url> --lane domain|design     capture discovery hops separately; never a board reference\n'
+    + '  ref navigate <url> --lane domain|design     capture a discovery hop; add --entry public-directory|free-gallery for an explicit direct root\n'
     + '  ref list [--lane domain|design] [--json]     inspect separate capture inventories\n'
     + '  ref distance <page> [--selected [--gate]] [--json]  compare all refs, or selected destination selectors\n'
     + '  ref principles <source> --as C --add "..."   record why a reference works\n'

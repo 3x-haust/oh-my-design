@@ -299,8 +299,10 @@ Use `.omd/route.json` as the machine-consumed strategy. Do not substitute a reme
   route reason, not an invented artifact.
 - Dual research finishes with Scout's screen application: `omd ref apply-plan --json` → fill the
   input from actual images → `omd ref apply-set --input <application.json>` → `omd ref apply-check`.
-  Query strings alone are not research: Scout uses `omd ref search --input <json>` and v5 lane
-  `searches` receipts; retained entries trace to actual observed links and separate native visits.
+  Query strings alone are not research: Scout uses native search receipts or v6 `discoveryRoots`
+  from `ref navigate --entry public-directory` (domain) / `--entry free-gallery` (design).
+  Direct browsing of public lists is allowed without a search engine. Retained entries still trace
+  to actual visible links and separate native visits; lists/search images stay outside refs.
   Inspect free-access failures and try a public alternative; never require a paid reference MCP.
   Show the user the retained previews and `.omd/reference-application.md`. Every domain-brief surface
   needs separate domain/design coverage, decisions, exclusions, gaps and future rendered checks.

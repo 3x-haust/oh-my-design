@@ -123,7 +123,7 @@ the current route, explicit request, locale context and Framer-owned acquisition
 not depend on the optional domain-analysis stage. Existing domain queries supplement it only while
 they describe the current request. The user supplies the task, not a required reference list.
 
-Scout turns each selected lane into current searches: subject identity, task/component anatomy,
+Scout turns each selected lane into current search or direct-public discovery: subject identity, task/component anatomy,
 visual craft beyond the product category, and the plan's motion investigation. New marketing may
 investigate a motion candidate without selecting it for production; selected `motion-one` additionally
 requires positive measured evidence. Explicit preferences
@@ -162,7 +162,8 @@ exist. A service task flow belongs in domain, not design merely because its layo
 For an intermediate category/directory hop, use `omd ref navigate <url> --lane domain|design --json`.
 It returns the `url`, `evidence`, and `capture` object for the lane's `navigation` array, stored
 under `.omd/discovery/<lane>/navigation/`. These receipts have no board component identity and never
-substitute for retained design evidence. Research validation still requires a search-rooted chain.
+substitute for retained design evidence. Research validation requires a native search or direct-entry
+root followed by observed links, not a URL written from memory.
 A batch is checked against its own pending sources as well as already saved references before
 acquisition. A rejected board is resolved before publication and cannot replace an earlier board.
 Final redirected service hosts are checked before screenshot publication, including pending
@@ -176,7 +177,7 @@ remain inspectable but cannot satisfy selected discovery without current qualifi
 marks ineligible records; selected boards and actionable briefs reject/exclude them. Domain captures are excluded from
 the default visual board inventory.
 
-Search PNGs/receipts and intermediate navigation are diagnostics, stored only in
+Search PNGs/receipts, direct-entry lists and intermediate navigation are diagnostics, stored only in
 `.omd/discovery/<lane>/`; `.omd/refs/<lane>/` holds retained evidence. At the start of research in an
 existing project run `omd ref tidy --json`. If it identifies old diagnostic clutter or ineligible
 design captures, inspect the reasons and run `omd ref tidy --apply --json` before reacquisition.
@@ -187,13 +188,35 @@ active research owner. Unknown files and valid references remain untouched.
 
 `omd ref research-set` is the sole publisher of both files and writes `.omd/reference-research.json`
 last as their consistency receipt. `research-check` and downstream gates require all three current
-records. Each v5 lane additionally carries `searches` from `omd ref search --input <json>` with
+records. New research uses v6; historical v5 remains readable unchanged with its search requirements
+and cannot contain direct roots. Each lane can use `searches` from `omd ref search --input <json>` with
 `{lane, query, url, queryParam}`. The URL submits the exact query; a fresh browser records observed
 links, a 1280×900 screenshot and HTTP/error outcome, without reusing login state or clicking controls.
 Inspect the page: HTTP 200 alone does not prove useful results or free access. All queries require
 execution receipts; every non-user retained domain source/design entry must occur in observed links
 and have its own native visit capture. Failed attempts may accompany a usable free alternative;
 they cannot satisfy retained-source coverage. Arbitrary imported logs are not native execution proof.
+
+Alternatively, v6 accepts direct browsing of free public lists without a search engine. Use
+`omd ref navigate <public-list-url> --lane domain --entry public-directory --json` for comparable
+services, or `--lane design --entry free-gallery` for a supported gallery's visible item list.
+`ref discover-plan` exposes design `nativeEntryInputs` and a domain entry command; these are leads,
+not approved references. Put the native returned `method: direct-public`, `entry`, `url`, PNG
+`evidence`, JSON `capture`, and your authored `reason` in the lane's optional `discoveryRoots`.
+Queries/searches remain required arrays and may both be empty only with valid nonempty roots.
+Every declared query still needs an exact execution, including failed attempts alongside direct roots.
+The native entry publisher uses a fresh GET/HEAD-only context, blocks service workers/downloads,
+performs no click/hover probes, and captures stable visible links with the matching viewport PNG.
+Only actual outbound links seed reachability: the root URL itself is not retained-source evidence.
+Intermediate edges in direct v6 chains require strict navigation-v2 captures. Hidden all-DOM links
+from retained captures and historical navigation-v1 cannot shortcut a missing observed transition.
+Design roots must remain supported public lists after redirects, exposing visible same-gallery item
+links; login walls, blocked pages, selected items and arbitrary service pages are refused.
+Root records stay under `.omd/discovery/<lane>/entries/`, never retained `.omd/refs/`.
+Do not hand-author roots, promote old captures, infer official authority from a directory, or present
+this provenance check as a quality judgment. Follow observed items and qualify/capture each retained
+reference separately. Source/redirect hosts and image bytes must remain independent across lanes.
+
 The executor accepts Google/Bing `/search` and DuckDuckGo root/HTML/lite `q` endpoints,
 plus design-only Pinterest `/search/pins/?q=`, Dribbble `/search/<query-slug>` (`queryParam: path`),
 and Siteinspire `/search?query=` (`queryParam: query`). `ref discover-plan` supplies ready-to-run
@@ -215,7 +238,8 @@ docs as its evidence. No rewriting of native metadata is authorized to repair a 
 The quality reason explains task/viewport fit, hierarchy, typography or density;
 provider prestige is insufficient. This is inspectable provenance, not authenticated proof of taste
 or browsing. Missing native provenance must be collected, never backfilled from memory. Older
-records require v5 executed-search binding and republication; valid captures need not be reacquired.
+records retain their original version's requirements; new direct provenance must be acquired through
+the native entry publisher before v6 republication. Valid retained captures need not be reacquired.
 The same evidence path OR identical bytes under another filename cannot satisfy both lanes.
 
 The two lanes use independent service hosts, including after redirects. A second path or crop of a

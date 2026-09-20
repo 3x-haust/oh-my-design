@@ -93,14 +93,19 @@ inspection and research repair remain available while production is blocked.
   same-wave independent Scout/Writer work remains available. It never checks for the output that
   the entering owner is about to create. Plain brief and frame show remain inspection only.
   Its production mode uses the same readiness validator as `guard production`.
-- Research v5 refuses missing/mismatched search receipts or retained links unreachable from observed
-  search pages. Selected discovery also refuses missing capture lanes and design intake without
+- Research v6 permits actual search or explicit native direct-public roots; v5 keeps its original
+  search requirements unchanged. Both refuse missing/mismatched declared search receipts or retained
+  links unreachable from observed discovery. Direct roots require native entry-v1 capture-time purpose,
+  correct lane, public-list admission, current PNG/JSON and actual visible links. Empty query/search
+  arrays require valid nonempty roots. Old navigation cannot become a root; direct chains require
+  strict navigation-v2, never hidden all-DOM retained-capture edges or the root URL itself.
+  Selected discovery also refuses missing capture lanes and design intake without
   free gallery/original-link or actual user-supplied provenance before capture. The current
   reference-board work pointer requires published research and per-surface application, not just
   a board file. Publication still performs visual-role, source independence and currentness checks.
   Batch intake also compares pending entries before any browser work. `ref navigate` keeps
   discovery-only category pages outside the board inventory; its observed links still need
-  search-rooted native evidence. `ref board` resolves all evidence before replacing its record.
+  search-rooted or explicit direct-entry native evidence. `ref board` resolves all evidence before replacing its record.
   Final URL checks run before PNG publication; redirected hosts and simultaneous batch captures
   cannot enter opposite lanes under different starting URLs. A gallery redirect must still be a
   qualified item, unless the reference was genuinely supplied by the user.
@@ -113,7 +118,12 @@ inspection and research repair remain available while production is blocked.
   pre/post-capture observations, with at most one recapture. An empty rendered result is
   `empty-observation`, not success or an invented challenge; inspect it and use another public
   source. This does not retroactively give historical receipts a visibility guarantee.
-  Search/navigation outputs live under `.omd/discovery/`, outside retained `.omd/refs/`.
+  Direct entry and new navigation captures use isolated GET/HEAD-only contexts with no interactive
+  probes, service workers or downloads. Design roots must expose actual same-gallery items and stay
+  public lists after redirects, never login walls or domain documentation. Roots do not assert taste,
+  official authority or asset rights. Their hosts/images remain subject to lane separation, and raw
+  discovery paths/declared or redirected hosts cannot enter source-free application projections.
+  Search/entry/navigation outputs live under `.omd/discovery/`, outside retained `.omd/refs/`.
   Native free-gallery query inputs support discovery without guessed item URLs. Search and navigation
   receipts cannot be promoted into retained design evidence. Selected board resolution and briefs
   re-admit old captures; research publication binds every visual piece to its qualified source.

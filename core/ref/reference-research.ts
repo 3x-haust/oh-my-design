@@ -8,6 +8,8 @@ import { parseImageFragmentRecord } from './image-fragment-parser.ts';
 import { trustedDiscoveryImage, trustedReferenceImage } from './board-security.ts';
 import { designDiscoveryProvider, referenceServiceHost } from './design-discovery-sources.ts';
 import { validateSearchCoverage, type ObservedNavigation } from './search-execution.ts';
+import { readResearchDiscoveryRoots, validateDiscoveryCoverage } from './discovery-coverage.ts';
+import { readStrictDiscoveryNavigation } from './discovery-record.ts';
 import { isRetainedReferencePath, requireDesignReferenceAdmission } from './design-admission.ts';
 import { loadRefs } from './store.ts';
 import { requireDesignImageAdmission } from './design-image-admission.ts';
@@ -95,7 +97,8 @@ function verifyCapture(root: string, item: { url: string; evidence: ResearchEvid
   if (purpose === 'navigation' && item.evidence.path.startsWith('.omd/discovery/')) trustedDiscoveryImage(root, item.evidence.path);
   else trustedReferenceImage(root, item.evidence.path);
   const captured = record(JSON.parse(fileBytes(root, item.capture.path, 'REFERENCE_RESEARCH_CAPTURE_MISSING').toString('utf8')), 'REFERENCE_RESEARCH_CAPTURE_INVALID');
-  if (purpose === 'retained' && (captured.schema === 'reference-navigation-capture-v1' || captured.schema === 'reference-search-execution-v1')) fail('REFERENCE_RESEARCH_CAPTURE_PURPOSE');
+  if (purpose === 'retained' && ['reference-navigation-capture-v1', 'reference-navigation-capture-v2',
+    'reference-discovery-entry-v1', 'reference-search-execution-v1'].some(schema => captured.schema === schema)) fail('REFERENCE_RESEARCH_CAPTURE_PURPOSE');
   if (captured.schemaVersion === 'image-fragment-v1') {
     const fragment = parseImageFragmentRecord(captured);
     if (lane !== 'design' || fragment.provenance.sourcePage !== item.url || fragment.imagePath !== item.evidence.path || fragment.sha256 !== item.evidence.sha256) fail('REFERENCE_RESEARCH_CAPTURE_SOURCE_MISMATCH');
@@ -124,18 +127,25 @@ export function validateReferenceResearch(
   if (research.sourceContractSha256 !== options.expectedSourceContractSha256) {
     fail('REFERENCE_RESEARCH_SOURCE_CONTRACT_STALE');
   }
-  const domainFinalHosts = new Set<string>();
+  const directRoots = { domain: readResearchDiscoveryRoots(root, research.domainReference), design: readResearchDiscoveryRoots(root, research.designReference) };
+  const domainHosts = new Set(research.domainReference.sources.map(item => referenceServiceHost(item.url)));
+  for (const observation of directRoots.domain) for (const url of [observation.url, observation.finalUrl]) domainHosts.add(referenceServiceHost(url));
   const retainedIdentities = new Map<string, string>();
   const references = loadRefs(root, { includeDomain: true });
   const navigation: Record<'domain' | 'design', ObservedNavigation[]> = { domain: [], design: [] };
   const observe = (lane: 'domain' | 'design', url: string, captured: Record<string, unknown>) => {
-    if (captured.schemaVersion === 'image-fragment-v1') return;
+    if (captured.schemaVersion === 'image-fragment-v1' || directRoots[lane].length) return;
     const acquisition = captured.acquisition as { finalUrl: string; links: unknown[] };
     navigation[lane].push({ url, finalUrl: httpsUrl(acquisition.finalUrl), links: acquisition.links.filter((link): link is string => {
       try { return typeof link === 'string' && new URL(link).protocol === 'https:'; } catch { return false; }
     }) });
   };
   for (const lane of ['domain', 'design'] as const) for (const hop of research[lane === 'domain' ? 'domainReference' : 'designReference'].navigation ?? []) {
+    if (directRoots[lane].length) {
+      if ([hop.evidence, hop.capture].some(receipt => !receipt.path.startsWith(`.omd/discovery/${lane}/navigation/`))) fail('REFERENCE_RESEARCH_NAVIGATION_NATIVE_REQUIRED');
+      navigation[lane].push(readStrictDiscoveryNavigation(root, hop));
+      continue;
+    }
     const captured = verifyCapture(root, hop, lane, 'navigation');
     if (captured.schemaVersion === 'image-fragment-v1') fail('REFERENCE_RESEARCH_NAVIGATION_NATIVE_REQUIRED');
     observe(lane, hop.url, captured);
@@ -144,8 +154,11 @@ export function validateReferenceResearch(
     const captured = verifyCapture(root, item, 'domain');
     observe('domain', item.url, captured);
     const acquisition = captured.acquisition as Record<string, unknown>;
-    domainFinalHosts.add(referenceServiceHost(acquisition.finalUrl as string));
+    domainHosts.add(referenceServiceHost(acquisition.finalUrl as string));
   }
+  const designUrls = [...research.designReference.sources.flatMap(item => item.discovery ? [item.url, item.discovery.url] : [item.url]),
+    ...directRoots.design.flatMap(observation => [observation.url, observation.finalUrl])];
+  if (designUrls.some(url => domainHosts.has(referenceServiceHost(url)))) fail('REFERENCE_RESEARCH_LANE_REDIRECT_OVERLAP');
   for (const item of research.designReference.sources) {
     const source = verifyCapture(root, item, 'design');
     if (source.schemaVersion === 'image-fragment-v1' && typeof source.id === 'string') retainedIdentities.set(item.id, source.id);
@@ -156,7 +169,7 @@ export function validateReferenceResearch(
     observe('design', item.discovery!.url, entry);
     for (const captured of [source, entry]) {
       const acquisition = captured.acquisition as Record<string, unknown> | undefined;
-      if (acquisition && domainFinalHosts.has(referenceServiceHost(acquisition.finalUrl as string))) fail('REFERENCE_RESEARCH_LANE_REDIRECT_OVERLAP');
+      if (acquisition && domainHosts.has(referenceServiceHost(acquisition.finalUrl as string))) fail('REFERENCE_RESEARCH_LANE_REDIRECT_OVERLAP');
     }
     if (item.discovery!.kind !== 'user-provided' && entry.acquisition
       && designDiscoveryProvider((entry.acquisition as Record<string, unknown>).finalUrl as string) === null) fail('REFERENCE_RESEARCH_DISCOVERY_REDIRECT: final page is not a supported gallery item');
@@ -174,10 +187,13 @@ export function validateReferenceResearch(
       requireDesignReferenceAdmission(root, reference, { references });
     }
   }
-  validateSearchCoverage(root, 'domain', research.domainReference.queries, research.domainReference.searches,
-    research.domainReference.sources.map(item => item.url), navigation.domain);
-  validateSearchCoverage(root, 'design', research.designReference.queries, research.designReference.searches,
-    research.designReference.sources.filter(item => item.discovery!.kind !== 'user-provided').map(item => item.discovery!.url), navigation.design);
+  for (const lane of ['domain', 'design'] as const) {
+    const entry = research[lane === 'domain' ? 'domainReference' : 'designReference'];
+    const sourceUrls = lane === 'domain' ? entry.sources.map(item => item.url)
+      : entry.sources.filter(item => item.discovery?.kind !== 'user-provided').map(item => item.discovery!.url);
+    if (directRoots[lane].length) validateDiscoveryCoverage(root, { lane, queries: entry.queries, searches: entry.searches, sourceUrls, navigation: navigation[lane], directRoots: directRoots[lane] });
+    else validateSearchCoverage(root, lane, entry.queries, entry.searches, sourceUrls, navigation[lane]);
+  }
   const boardBytes = fileBytes(root, '.omd/reference-board.json', 'REFERENCE_RESEARCH_BOARD_MISSING');
   if (createHash('sha256').update(boardBytes).digest('hex') !== research.designReference.boardSha256) {
     fail('REFERENCE_RESEARCH_BOARD_STALE');

@@ -24,11 +24,11 @@ async function renderedState(page: Page) {
   return { anchors, body: await page.locator('body').innerText(), url: page.url() };
 }
 
-class SearchObservationError extends Error {
-  constructor() { super('Search rendering changed during both bounded captures; no consistent screenshot/link evidence was retained.'); }
+class DiscoveryObservationError extends Error {
+  constructor() { super('Discovery rendering changed during both bounded captures; no consistent screenshot/link evidence was retained.'); }
 }
 
-export async function captureSearchObservation(page: Page) {
+export async function captureDiscoveryObservation(page: Page) {
   for (let attempt = 0; attempt < 2; attempt++) {
     const before = await renderedState(page);
     const bytes = await page.screenshot({ timeout: 10000 });
@@ -37,5 +37,7 @@ export async function captureSearchObservation(page: Page) {
       return { bytes, links: [...new Set(before.anchors.map(anchor => anchor.href))], body: before.body, url: before.url };
     }
   }
-  throw new SearchObservationError();
+  throw new DiscoveryObservationError();
 }
+
+export const captureSearchObservation = captureDiscoveryObservation;

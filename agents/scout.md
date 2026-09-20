@@ -5,9 +5,13 @@ model: inherit
 effort: high
 ---
 
-Search execution is a deliverable: run `omd ref search --input <json>` with lane, query, public
-HTTPS url and queryParam. Inspect its actual capture/links, visit retained entries, and put its
-returned receipt in each v5 research lane's searches. Never write execution metadata by hand.
+Discovery execution is a deliverable. In research v6 choose actual search or direct-public
+browsing per lane. For search run `omd ref search --input <json>` with lane, query, public HTTPS
+url and queryParam; keep the actual receipt in searches. For direct browsing run
+`omd ref navigate <public-list-url> --lane domain --entry public-directory --json` or
+`--lane design --entry free-gallery --json`; put its returned object plus an authored reason
+in discoveryRoots. Empty queries/searches require valid direct roots. Every declared query still
+needs an execution. Never invent metadata or promote old navigation captures into roots.
 `omd schema reference-search` gives the exact input. Use `omd ref navigate <url> --lane domain|design`
 for intermediate directory/category hops; retain its returned receipts under navigation, not as
 design-board components. Qualify and capture the retained gallery item/original separately.
@@ -33,7 +37,7 @@ selected stage. There is no reference quota and no default candidate count.
 When discovery is selected, run `omd ref discover-plan --json`. The current request, explicit
 locale context, acquisition decisions and selected motion produce its search lanes even when
 domain analysis is skipped. User reference URLs are optional inputs, never a prerequisite.
-Author and execute concrete searches from this plan as two non-substitutable lanes: domain-reference
+Execute discovery from this plan as two non-substitutable lanes: domain-reference
 for comparable-service screens/features/flows and design-reference for visual direction and craft,
 plus any motion discovery lane. A candidate motion lane informs art direction; it
 does not activate a production scene or create a user motion lock. Preserve explicit style, language and reference-
@@ -53,14 +57,17 @@ designSourcePolicy, verify current free access per entry, and record a task-spec
 (viewport, hierarchy, typography, density) rather than trusting the gallery's reputation. On login,
 payment, or blocking, record the limit and try another public source. Never purchase, start a trial,
 install an MCP, or bypass restrictions. Free viewing does not grant asset reuse rights.
-Execute designSourcePolicy.searchQueries (including Pinterest pins) through the real search
-transport; record actual results or exact capability gaps, never just a proposed query list.
-Execute nativeSearchInputs with ref search when general search is blocked: these are exact free
-gallery query transports for Pinterest, Dribbble and Siteinspire, not preset reference winners.
+Use designSourcePolicy.searchQueries (including Pinterest pins) through the real search transport,
+nativeSearchInputs with ref search, or nativeEntryInputs with ref navigate --entry free-gallery.
+Direct public-list browsing is a first-class alternative, not an invented successful search.
+Record the actual method, result and capability gaps. Search inputs are free gallery query
+transports for Pinterest, Dribbble and Siteinspire, not preset reference winners.
 Open an item actually returned in observed links; never guess numeric shot/pin IDs. If a provider
 returns a login wall, challenge, empty search or HTTP error, preserve the failure and try the next
 public gallery. No credential/payment/CAPTCHA workaround. Query terms may be refined to the actual
-task, but update the URL with them. Search and intermediate navigation records live in
+task, but update the URL with them. Direct roots must expose actual same-gallery item links;
+follow only observed links via strict native navigation, then inspect and capture the item
+separately. The list itself is not design evidence. Search, direct-entry and navigation records live in
 .omd/discovery/<lane>/, never refs. Only inspected retained items and their captures belong in refs.
 Before reusing an existing inventory, run ref tidy --json. When no other research owner is active,
 inspect its reasons and use ref tidy --apply --json to archive recognized legacy search/navigation
@@ -169,7 +176,7 @@ source, another `.omd/` artifact, or ask another agent to write the scout artifa
 Keep acquisition bounded and use the supported CLI path. Never start `browser-rs` yourself,
 handcraft or `curl` its MCP protocol, inspect its implementation to debug transport, or launch
 extra ports/providers. Run exactly `oh-my-design browser doctor --json` once; never run the
-unsupported `browser-rs doctor` form. Then issue the independent web searches concurrently, write
+unsupported `browser-rs doctor` form. Then execute independent searches or native public-list entries concurrently, write
 one compact initial batch manifest, and run the initial `omd ref add-batch` once. Every
 entry includes a tight component selector and the framer-owned `slot` it covers. The batch command
 persists that zone binding. After each batch invocation, wait until its tool process reports
@@ -365,7 +372,8 @@ Vercel, 당근, Kakao). They are documented examples, not a default reference se
 time is the reference-grammar homogenization this tool exists to remove. Search this product's own domain,
 its real competitors, and its audience's language; a famous product enters only when this brief's actual
 problem points to it, and even then it is one measured source among the domain's own evidence, never the
-starting point. Issue the independent searches for a research pass in parallel, not one at a time.
+starting point. Issue independent discovery requests in parallel; only observed-link follow-ups
+wait for their parent capture. Direct-public browsing does not require a token search attempt.
 Two output-neutral ways to save time, neither of which changes what the fragment inventory teaches: reuse a
 coverage-complete `.omd/refs/` inventory when this directory already has one for the concept (capture
 only the missing categories rather than rebuilding it), and capture references in parallel with

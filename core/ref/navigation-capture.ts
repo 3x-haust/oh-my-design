@@ -1,44 +1,77 @@
-import { createHash, randomUUID } from 'node:crypto';
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
-import type { Browser } from 'playwright';
-import { capturePageForRef } from '../render/index.ts';
+import type { Browser, BrowserContext, Page } from 'playwright';
+import { detectBlockReason } from '../render/index.ts';
 import type { ProjectWriteAdapter } from '../runtime/project-write.ts';
-import { readContainedRegularFile } from './reference-selection.ts';
-import { researchLane } from './store.ts';
+import { designDiscoveryDirectoryProvider } from './design-discovery-sources.ts';
+import { captureDiscoveryObservation } from './search-observation.ts';
+import { searchChallengeReason } from './search-execution.ts';
+import { DISCOVERY_LIMITATIONS, ReferenceDiscoveryError, directDiscoveryEntry, discoveryDigest, discoveryLane, publicDiscoveryUrl, validateDirectDiscoveryLinks,
+  type DirectDiscoveryEntry, type DirectDiscoveryReceipt, type DiscoveryCaptureRecord, type DiscoveryNavigationReceipt } from './discovery-record.ts';
 
-export class ReferenceNavigationError extends Error {
+export class ReferenceNavigationError extends ReferenceDiscoveryError {
   override readonly name = 'ReferenceNavigationError';
 }
-const digest = (bytes: string | Uint8Array) => createHash('sha256').update(bytes).digest('hex');
-
-export async function captureReferenceNavigation(browser: Browser, source: string, requestedLane: unknown, writer: ProjectWriteAdapter) {
-  const lane = researchLane(requestedLane);
-  const url = new URL(source);
-  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.hash || url.href !== source) {
-    throw new ReferenceNavigationError('REFERENCE_NAVIGATION_URL: use a canonical HTTP(S) URL without credentials or fragment');
-  }
-  const directory = `.omd/discovery/${lane}/navigation`;
-  const imagePath = `${directory}/${randomUUID()}.png`;
-  writer.mkdir(directory);
+async function loginOccludes(page: Page): Promise<boolean> {
+  return page.evaluate(() => Array.from(document.querySelectorAll('input[type="password"]')).some(input => {
+    const box = input.getBoundingClientRect();
+    if (box.width <= 0 || box.height <= 0 || getComputedStyle(input).visibility === 'hidden') return false;
+    const form = input.closest('form, [role="dialog"], [aria-modal="true"]');
+    const centre = document.elementFromPoint(innerWidth / 2, innerHeight / 2);
+    return form !== null && centre !== null && form.contains(centre);
+  }));
+}
+async function closeContext(context: BrowserContext): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    const capture = await capturePageForRef(browser, source, { width: 1280, height: 900 }, {
-      shotOut: join(writer.projectRoot, imagePath), adapter: writer,
+    await Promise.race([context.close(), new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => reject(new ReferenceNavigationError('context cleanup timed out after 2000ms')), 2000);
+    })]);
+  } finally { clearTimeout(timer); }
+}
+export async function captureReferenceNavigation(browser: Browser, source: string, requestedLane: unknown, writer: ProjectWriteAdapter): Promise<DiscoveryNavigationReceipt>;
+export async function captureReferenceNavigation(browser: Browser, source: string, requestedLane: unknown, writer: ProjectWriteAdapter, entry: DirectDiscoveryEntry): Promise<DirectDiscoveryReceipt>;
+export async function captureReferenceNavigation(browser: Browser, source: string, requestedLane: unknown, writer: ProjectWriteAdapter, entry: unknown): Promise<DiscoveryNavigationReceipt | DirectDiscoveryReceipt>;
+export async function captureReferenceNavigation(browser: Browser, source: string, requestedLane: unknown, writer: ProjectWriteAdapter, requestedEntry?: unknown): Promise<DiscoveryNavigationReceipt | DirectDiscoveryReceipt> {
+  const lane = discoveryLane(requestedLane);
+  const url = publicDiscoveryUrl(source);
+  const entry = requestedEntry === undefined ? undefined : directDiscoveryEntry(requestedEntry, lane);
+  if (entry === 'free-gallery' && designDiscoveryDirectoryProvider(url) === null) throw new ReferenceNavigationError('free-gallery entry requires a supported public list URL');
+  const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, serviceWorkers: 'block', acceptDownloads: false });
+  try {
+    await context.route('**/*', route => ['GET', 'HEAD'].includes(route.request().method()) ? route.continue() : route.abort());
+    context.setDefaultTimeout(10000);
+    const page = await context.newPage();
+    const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20000 });
+    const status = response?.status();
+    if (status === undefined || status < 200 || status >= 300) throw new ReferenceNavigationError('a successful native HTTP capture is required');
+    if (lane === 'design' && await loginOccludes(page)) throw new ReferenceNavigationError('login form obscures the public discovery list');
+    const observation = await captureDiscoveryObservation(page);
+    const finalUrl = publicDiscoveryUrl(observation.url);
+    const links = observation.links.filter(link => {
+      try { publicDiscoveryUrl(link); return true; }
+      catch (error) { if (error instanceof ReferenceDiscoveryError) return false; throw error; }
     });
-    const status = capture.acquisition.httpStatus;
-    if (!capture.shotSaved || status === null || status < 200 || status >= 300) {
-      throw new ReferenceNavigationError('REFERENCE_NAVIGATION_FAILED: a visible successful native capture is required');
-    }
-    const image = readContainedRegularFile(writer.projectRoot, join(writer.projectRoot, imagePath), 'navigation image');
-    const record = { schema: 'reference-navigation-capture-v1', source, researchLane: lane, kind: 'page',
-      capturedAt: new Date().toISOString(), imagePath, acquisition: capture.acquisition };
+    const blocked = searchChallengeReason(observation.body)
+      ?? detectBlockReason(await page.title(), observation.body.trim().length, status, links.length > 0);
+    if (blocked) throw new ReferenceNavigationError(blocked);
+    if (lane === 'design' && await loginOccludes(page)) throw new ReferenceNavigationError('login form obscures the public discovery list');
+    if (entry !== undefined) validateDirectDiscoveryLinks(entry, { url, finalUrl, links });
+    const directory = `.omd/discovery/${lane}/${entry === undefined ? 'navigation' : 'entries'}`;
+    const imageSha256 = discoveryDigest(observation.bytes);
+    const imagePath = `${directory}/${imageSha256}.png`;
+    const common = {
+      source: url, researchLane: lane, kind: 'page', capturedAt: new Date().toISOString(), imagePath,
+      acquisition: { requestedUrl: url, finalUrl, httpStatus: status, links, imageSha256 },
+      limitations: DISCOVERY_LIMITATIONS,
+    } as const;
+    const record: DiscoveryCaptureRecord = entry === undefined
+      ? { schema: 'reference-navigation-capture-v2', ...common }
+      : { schema: 'reference-discovery-entry-v1', method: 'direct-public', entry, ...common };
     const bytes = `${JSON.stringify(record, null, 2)}\n`;
-    const sha256 = digest(bytes);
-    const path = `${directory}/${sha256}.json`;
-    writer.writeContentAddressed(path, bytes);
-    return { url: source, evidence: { path: imagePath, sha256: digest(image) }, capture: { path, sha256 } };
-  } catch (error) {
-    if (existsSync(join(writer.projectRoot, imagePath))) writer.remove(imagePath);
-    throw error;
-  }
+    const sha256 = discoveryDigest(bytes);
+    const capture = { path: `${directory}/${sha256}.json`, sha256 };
+    writer.writeContentAddressed(imagePath, observation.bytes);
+    writer.writeContentAddressed(capture.path, bytes);
+    const receipt = { url, evidence: { path: imagePath, sha256: imageSha256 }, capture };
+    return entry === undefined ? receipt : { method: 'direct-public', entry, ...receipt };
+  } finally { await closeContext(context); }
 }

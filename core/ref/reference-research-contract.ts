@@ -1,7 +1,7 @@
 import { isAbsolute } from 'node:path';
 import { designDiscoveryProvider, referenceServiceHost } from './design-discovery-sources.ts';
 
-export const REFERENCE_RESEARCH_SCHEMA = 'reference-research-v5' as const;
+export const REFERENCE_RESEARCH_SCHEMA = 'reference-research-v6' as const;
 export const DOMAIN_REFERENCES_PATH = '.omd/refs/domain/research.json';
 export const DESIGN_REFERENCES_PATH = '.omd/refs/design/research.json';
 export const REFERENCE_RESEARCH_PATH = '.omd/reference-research.json';
@@ -39,6 +39,10 @@ const SHA256 = /^[a-f0-9]{64}$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 export type ResearchEvidence = Readonly<{ path: string; sha256: string }>;
+export type ResearchDiscoveryRoot = Readonly<{
+  method: 'direct-public'; entry: 'public-directory' | 'free-gallery'; url: string; reason: string;
+  evidence: ResearchEvidence; capture: ResearchEvidence;
+}>;
 type ResearchSource = Readonly<{
   id: string;
   url: string;
@@ -63,9 +67,10 @@ type ResearchLane = Readonly<{
   searches: readonly ResearchEvidence[];
   sources: readonly ResearchSource[];
   navigation?: readonly Readonly<{ url: string; evidence: ResearchEvidence; capture: ResearchEvidence }>[];
+  discoveryRoots?: readonly ResearchDiscoveryRoot[];
 }>;
 export type ReferenceResearch = Readonly<{
-  schema: typeof REFERENCE_RESEARCH_SCHEMA;
+  schema: typeof REFERENCE_RESEARCH_SCHEMA | 'reference-research-v5';
   sourceContractSha256: string;
   domainReference: ResearchLane & Readonly<{ benchmarkSha256: string | null }>;
   designReference: ResearchLane & Readonly<{ boardSha256: string }>;
@@ -102,8 +107,8 @@ function digest(value: unknown, code: string): string {
   return parsed;
 }
 
-function texts(value: unknown, code: string): readonly string[] {
-  if (!Array.isArray(value) || value.length === 0) fail(code);
+function texts(value: unknown, code: string, direct = false): readonly string[] {
+  if (!Array.isArray(value) || (!direct && value.length === 0) || Object.keys(value).length !== value.length) fail(code);
   const parsed = value.map((entry) => text(entry, code));
   if (new Set(parsed).size !== parsed.length) fail(`${code}_DUPLICATE`);
   return parsed;
@@ -178,16 +183,42 @@ function source(value: unknown, design: boolean, index: number): ResearchSource 
   });
 }
 
-function lane(value: unknown, keys: readonly string[], code: string, design = false): ResearchLane & Record<string, unknown> {
+function discoveryRoots(value: unknown, design: boolean): readonly ResearchDiscoveryRoot[] {
+  const code = 'REFERENCE_RESEARCH_DISCOVERY_ROOT';
+  if (!Array.isArray(value) || value.length > 100 || Object.keys(value).length !== value.length) fail(code);
+  const lane = design ? 'design' : 'domain';
+  const roots = value.map(value => {
+    const input = record(value, code);
+    exactKeys(input, ['method', 'entry', 'url', 'reason', 'evidence', 'capture'], `${code}_KEYS`);
+    const entry = design ? 'free-gallery' : 'public-directory';
+    if (input.method !== 'direct-public' || input.entry !== entry) fail(`${code}_PURPOSE`);
+    const url = new URL(httpsUrl(input.url));
+    if (url.href !== input.url || url.username || url.password || url.hash) fail(`${code}_URL`);
+    const image = evidence(input.evidence, true), capture = evidence(input.capture, true);
+    if (image.path !== `.omd/discovery/${lane}/entries/${image.sha256}.png`
+      || capture.path !== `.omd/discovery/${lane}/entries/${capture.sha256}.json`) fail(`${code}_PATH`);
+    return Object.freeze({ method: 'direct-public' as const, entry, url: url.href,
+      reason: text(input.reason, `${code}_REASON`), evidence: image, capture });
+  });
+  if (new Set(roots.map(root => root.capture.sha256)).size !== roots.length
+    || new Set(roots.map(root => root.evidence.sha256)).size !== roots.length) fail(`${code}_DUPLICATE`);
+  return Object.freeze(roots);
+}
+
+function lane(value: unknown, options: Readonly<{ keys: readonly string[]; code: string; design: boolean; direct: boolean }>): ResearchLane & Record<string, unknown> {
+  const { keys, code, design, direct } = options;
   const input = record(value, code);
-  exactKeys(input, Object.hasOwn(input, 'navigation') ? [...keys, 'navigation'] : keys, `${code}_KEYS`);
+  exactKeys(input, [...keys, ...(Object.hasOwn(input, 'navigation') ? ['navigation'] : []),
+    ...(direct && Object.hasOwn(input, 'discoveryRoots') ? ['discoveryRoots'] : [])], `${code}_KEYS`);
+  const roots = Object.hasOwn(input, 'discoveryRoots') ? discoveryRoots(input.discoveryRoots, design) : undefined;
   if (!Array.isArray(input.sources) || input.sources.length === 0) fail(`${code}_SOURCE_COVERAGE`);
   const sources = input.sources.map((value, index) => source(value, design, index));
   if (new Set(sources.map((entry) => entry.id)).size !== sources.length) fail(`${code}_SOURCE_DUPLICATE`);
-  if (!Array.isArray(input.searches) || !input.searches.length || Object.keys(input.searches).length !== input.searches.length) fail('REFERENCE_RESEARCH_SEARCH_EXECUTION_REQUIRED');
+  if (!Array.isArray(input.searches) || (!input.searches.length && !roots?.length) || Object.keys(input.searches).length !== input.searches.length) fail('REFERENCE_RESEARCH_SEARCH_EXECUTION_REQUIRED');
   const navigation = input.navigation;
   if (navigation !== undefined && (!Array.isArray(navigation) || navigation.length > 100 || Object.keys(navigation).length !== navigation.length)) fail('REFERENCE_RESEARCH_NAVIGATION_INVALID');
-  return { ...input, queries: texts(input.queries, `${code}_QUERY`), searches: input.searches.map(item => evidence(item, true)), sources,
+  return { ...input, queries: texts(input.queries, `${code}_QUERY`, Boolean(roots?.length)), searches: input.searches.map(item => evidence(item, true)), sources,
+    ...(roots === undefined ? {} : { discoveryRoots: roots }),
     ...(navigation === undefined ? {} : { navigation: (navigation as unknown[]).map(value => {
       const hop = record(value, 'REFERENCE_RESEARCH_NAVIGATION_INVALID');
       exactKeys(hop, ['url', 'evidence', 'capture'], 'REFERENCE_RESEARCH_NAVIGATION_KEYS');
@@ -197,32 +228,36 @@ function lane(value: unknown, keys: readonly string[], code: string, design = fa
 
 export function parseReferenceResearch(value: unknown): ReferenceResearch {
   const input = record(value, 'REFERENCE_RESEARCH_INVALID');
-  if (['reference-research-v1', 'reference-research-v2', 'reference-research-v3', 'reference-research-v4'].includes(input.schema as string)) fail('REFERENCE_RESEARCH_UPGRADE_REQUIRED: use omd schema reference-research; retain valid captures, run omd ref search for executed-query evidence, and republish with omd ref research-set');
+  if (['reference-research-v1', 'reference-research-v2', 'reference-research-v3', 'reference-research-v4'].includes(input.schema as string)) fail('REFERENCE_RESEARCH_UPGRADE_REQUIRED: use omd schema reference-research; retain valid captures, run omd ref search or omd ref navigate --entry for native discovery evidence, and republish with omd ref research-set');
   exactKeys(input, REFERENCE_RESEARCH_KEYS, 'REFERENCE_RESEARCH_KEYS');
-  if (input.schema !== REFERENCE_RESEARCH_SCHEMA) fail('REFERENCE_RESEARCH_SCHEMA');
+  if (input.schema !== REFERENCE_RESEARCH_SCHEMA && input.schema !== 'reference-research-v5') fail('REFERENCE_RESEARCH_SCHEMA');
   const sourceContractSha256 = digest(input.sourceContractSha256, 'REFERENCE_RESEARCH_SOURCE_CONTRACT_SHA');
-  const domain = lane(input.domainReference, REFERENCE_RESEARCH_DOMAIN_KEYS, 'REFERENCE_RESEARCH_DOMAIN');
-  const design = lane(input.designReference, REFERENCE_RESEARCH_DESIGN_KEYS, 'REFERENCE_RESEARCH_DESIGN', true);
+  const direct = input.schema === REFERENCE_RESEARCH_SCHEMA;
+  const domain = lane(input.domainReference, { keys: REFERENCE_RESEARCH_DOMAIN_KEYS, code: 'REFERENCE_RESEARCH_DOMAIN', design: false, direct });
+  const design = lane(input.designReference, { keys: REFERENCE_RESEARCH_DESIGN_KEYS, code: 'REFERENCE_RESEARCH_DESIGN', design: true, direct });
   const directions = design.sources.filter(entry => entry.visualRole === 'visual-direction');
   if (directions.length === 0) fail('REFERENCE_RESEARCH_VISUAL_DIRECTION_REQUIRED: component/usability documentation alone cannot establish visual direction');
   // Independent services, not two crops/pages of one service. This is a lane policy, not a beauty score.
-  const domainHosts = new Set(domain.sources.map(entry => referenceServiceHost(entry.url)));
-  if (design.sources.some(entry => [entry.url, entry.discovery!.url].some(url => domainHosts.has(referenceServiceHost(url))))) {
+  const domainHosts = new Set([...domain.sources, ...domain.discoveryRoots ?? []].map(entry => referenceServiceHost(entry.url)));
+  const designUrls = [...design.sources.flatMap(entry => [entry.url, entry.discovery!.url]), ...design.discoveryRoots?.map(entry => entry.url) ?? []];
+  if (designUrls.some(url => domainHosts.has(referenceServiceHost(url)))) {
     fail('REFERENCE_RESEARCH_DOMAIN_AS_VISUAL_DIRECTION: domain and design must use independent service hosts; keep the domain capture and discover a separate visual source');
   }
   const benchmarkSha256 = domain.benchmarkSha256 === null
     ? null
     : digest(domain.benchmarkSha256, 'REFERENCE_RESEARCH_BENCHMARK_SHA');
   const boardSha256 = digest(design.boardSha256, 'REFERENCE_RESEARCH_BOARD_SHA');
-  const domainPaths = new Set(domain.sources.map(entry => entry.evidence.path));
-  const domainHashes = new Set(domain.sources.map(entry => entry.evidence.sha256));
-  if (design.sources.some(entry => [entry.evidence, entry.discovery!.evidence].some(item => domainPaths.has(item.path) || domainHashes.has(item.sha256)))) {
+  const domainEvidence = [...domain.sources, ...domain.discoveryRoots ?? []].map(entry => entry.evidence);
+  const domainPaths = new Set(domainEvidence.map(entry => entry.path));
+  const domainHashes = new Set(domainEvidence.map(entry => entry.sha256));
+  const designEvidence = [...design.sources.flatMap(entry => [entry.evidence, entry.discovery!.evidence]), ...design.discoveryRoots?.map(entry => entry.evidence) ?? []];
+  if (designEvidence.some(item => domainPaths.has(item.path) || domainHashes.has(item.sha256))) {
     fail('REFERENCE_RESEARCH_LANE_EVIDENCE_REUSED');
   }
   return Object.freeze({
-    schema: REFERENCE_RESEARCH_SCHEMA,
+    schema: input.schema,
     sourceContractSha256,
-    domainReference: Object.freeze({ queries: domain.queries, searches: domain.searches, sources: domain.sources, ...(domain.navigation === undefined ? {} : { navigation: domain.navigation }), benchmarkSha256 }),
-    designReference: Object.freeze({ queries: design.queries, searches: design.searches, sources: design.sources, ...(design.navigation === undefined ? {} : { navigation: design.navigation }), boardSha256 }),
+    domainReference: Object.freeze({ queries: domain.queries, searches: domain.searches, sources: domain.sources, ...(domain.navigation === undefined ? {} : { navigation: domain.navigation }), ...(domain.discoveryRoots === undefined ? {} : { discoveryRoots: domain.discoveryRoots }), benchmarkSha256 }),
+    designReference: Object.freeze({ queries: design.queries, searches: design.searches, sources: design.sources, ...(design.navigation === undefined ? {} : { navigation: design.navigation }), ...(design.discoveryRoots === undefined ? {} : { discoveryRoots: design.discoveryRoots }), boardSha256 }),
   });
 }

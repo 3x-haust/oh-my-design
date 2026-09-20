@@ -67,14 +67,22 @@ API/catalogue access. Verify the specific entry is freely viewable now. If login
 blocking prevents inspection, record it in scout.md and try another public gallery/original source;
 never purchase, start trials, install an MCP, or bypass access controls just for research.
 
-Execute the plan's `designSourcePolicy.searchQueries` using the available search transport; they
-include Pinterest pins and a surface-appropriate gallery. Record actual search results or the precise
-blocked capability in scout.md. Do not replace an unperformed search with an invented query list.
-If general search fails, execute the plan's `designSourcePolicy.nativeSearchInputs` with `ref search`.
+Choose actual search or direct-public browsing from the plan. `designSourcePolicy.searchQueries`
+include Pinterest pins and a surface-appropriate gallery. Record the actual method, results and
+blocked capabilities in scout.md. Do not replace an unperformed search with an invented query list.
+For native search use the plan's `designSourcePolicy.nativeSearchInputs` with `ref search`.
 They bind real free-gallery queries for Pinterest, Dribbble and Siteinspire. Refine the short
 task/pattern query and URL together, then open an item actually returned in observed links; never
 guess pin/shot IDs. Login walls, challenges and empty results remain failures, not design references.
 The next public gallery is the fallback, not domain-service documentation or a paid MCP.
+For direct discovery use `designSourcePolicy.nativeEntryInputs` with
+`omd ref navigate <public-gallery-list-url> --lane design --entry free-gallery --json`.
+For comparable-service discovery use `--lane domain --entry public-directory`. In v6 put the
+returned `method`, `entry`, `url`, `evidence` and `capture` plus your `reason` in that lane's
+`discoveryRoots`. Keep `queries` and `searches` as arrays: both may be empty only when valid roots
+exist, and every declared query still needs execution. Native roots bind the actual visible list
+and its outbound links; never promote old navigation or call the list a selected reference.
+Follow its observed links, inspect the actual item, then capture retained evidence separately.
 Native reference captures use `omd ref add <url> --as <unique-name> --lane domain|design`;
 each add-batch entry has `lane: domain|design`. Captures and metadata go to `.omd/refs/domain/`
 or `.omd/refs/design/`. New CLI captures default to design, never infer domain from a hostname.
@@ -103,7 +111,7 @@ Pinterest pins, Dribbble shots, Behance case studies or website galleries. UI Bo
 optional, never a prerequisite. If a gallery blocks access, try another; if none can be inspected,
 return incomplete research rather than substituting government/service documentation.
 
-Read each actual saved image. In `reference-research-v5`, distinguish `visual-direction` from
+Read each actual saved image. In `reference-research-v6`, distinguish `visual-direction` from
 `component-support` and record `visualAssessment`: composition, typography, density, imagery,
 what to transfer and what to avoid. Component-support alone cannot complete design research.
 Domain/design source hosts, redirects and image evidence must not overlap. Each board candidate
@@ -150,7 +158,8 @@ Search the PART, in English, across many sites — the way a designer builds a b
   these captures live in the lane's `navigation/` folder and have no board component identity.
   Keep its returned native receipts in that lane's optional `navigation` array, each with
   `url`, PNG `evidence`, and JSON `capture` receipts. The checker follows observed outbound links from
-  successful search results through those captures; a disconnected chain, prose link, stale image,
+  successful search results or direct-entry links through those captures. Direct v6 chains require
+  new strict navigation-v2 captures, never all-DOM links from retained component captures. A disconnected chain, prose link, stale image,
   blocked visit or user-supplied screenshot cannot manufacture a browser navigation edge.
 - Keep the whole page when the felt direction is the point, and a scoped part when anatomy is. A
   moodboard is whole-page and visual-only by construction (`protocol/moodboard.md`).
@@ -162,7 +171,8 @@ those produces a product survey instead of a direction.
 
 ### Exploring a domain reference
 
-Execute discovery, do not merely write query strings. Use `omd ref search --input <json>` with
+Execute discovery, do not merely write query strings. Choose a native public-directory entry as
+described above, or use `omd ref search --input <json>` with
 `{lane: "domain"|"design", query, url, queryParam}`: the public HTTPS search URL must submit that
 exact query in the named parameter. Inspect the saved screenshot and actual links, then visit and
 capture retained sources/entries with the existing native reference commands. Use public Google/Bing
@@ -208,8 +218,9 @@ After the domain and design lanes both have current evidence, print `omd schema 
 --json`. The record binds the domain lane to the current benchmark when applicable and the design
 lane to the current reference board. The publisher saves `.omd/refs/domain/research.json` and
 `.omd/refs/design/research.json` alongside their own captures, with `.omd/reference-research.json` as the
-consistency receipt. All three must agree. Older receipts need v5 executed-search binding and republication, not a
-filename move or synthesized provenance. Both source and discovery observations bind PNG and native
+consistency receipt. All three must agree. Existing v5 remains readable with its search requirements;
+new v6 direct roots require new native entry captures, never a filename move or synthesized provenance.
+Both source and discovery observations bind PNG and native
 capture-JSON hashes. A gallery homepage alone is rejected. If the original source differs from the
 gallery entry, its exact URL must occur in that entry's captured outbound links; otherwise retain
 the gallery screenshot itself as visual-only, not a substitute design-system component. Never edit

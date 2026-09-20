@@ -40,6 +40,8 @@ export type ReferenceDiscoveryPlan = Readonly<{
     candidates: readonly Readonly<{ name: string; url: string; purpose: string }>[];
     searchQueries: readonly string[];
     nativeSearchInputs: readonly GallerySearchInput[];
+    nativeEntryInputs: readonly Readonly<{ lane: 'design'; entry: 'free-gallery'; url: string }>[];
+    domainEntryCommand: string | null;
     fallback: string;
   }>;
   decisions: readonly Readonly<{
@@ -50,7 +52,7 @@ export type ReferenceDiscoveryPlan = Readonly<{
     viewports: readonly Readonly<{ width: number; height: number }>[];
   }>[];
   motionEvidenceRequired: boolean;
-  sourcePolicy: 'current-search-then-live-inspection';
+  sourcePolicy: 'current-search-or-direct-public-then-live-inspection';
   queryPolicy: 'derive-from-explicit-request-and-decisions-not-locale-stereotypes';
   transferPolicy: 'measured-parts-and-motion-parameters-through-source-free-selection';
   skipReason: string | null;
@@ -166,11 +168,13 @@ export function buildReferenceDiscoveryPlan(root: string, route: RouteRecord): R
       nativeSearchInputs: Object.freeze(!discovering ? [] : gallerySearchInputs(
         [...queries.mood, ...queries.component][0] ?? (marketing ? 'typography' : 'app interface'),
       )),
-      fallback: 'Actually search and open a specific gallery/pin entry, not a homepage. Capture it with --lane design (or import-image for native app screenshots) and retain its source link. Check free access per entry. If login/payment/blocking prevents inspection, record the failed URL and try another public gallery. Component documentation alone is not a visual-direction substitute. Do not purchase, start a trial, install an MCP, bypass access controls, or claim a blocked source was inspected. Free viewing does not grant reuse rights.',
+      nativeEntryInputs: Object.freeze(galleryCandidates.map(candidate => Object.freeze({ lane: 'design' as const, entry: 'free-gallery' as const, url: candidate.url }))),
+      domainEntryCommand: discovering ? 'omd ref navigate <public-comparable-service-directory-url> --lane domain --entry public-directory --json' : null,
+      fallback: 'Use actual search results OR explicitly enter a public gallery list with ref navigate <url> --lane design --entry free-gallery --json. In v6 research put the native root plus your reason in discoveryRoots, follow observed links using ref navigate, then capture the concrete gallery item with --lane design (or import-image for native app screenshots). A list is never retained visual direction. Check free access per entry. If login/payment/blocking prevents inspection, record the failed URL and try another public gallery. Component documentation alone is not a visual-direction substitute. Do not purchase, start a trial, install an MCP, bypass access controls, or claim a blocked source was inspected. Free viewing does not grant reuse rights.',
     }),
     decisions: Object.freeze(decisions),
     motionEvidenceRequired,
-    sourcePolicy: 'current-search-then-live-inspection',
+    sourcePolicy: 'current-search-or-direct-public-then-live-inspection',
     queryPolicy: 'derive-from-explicit-request-and-decisions-not-locale-stereotypes',
     transferPolicy: 'measured-parts-and-motion-parameters-through-source-free-selection',
     skipReason: discovering ? null : route.sourceContract.referenceDiscovery.skipReason,

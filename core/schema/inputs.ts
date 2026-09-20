@@ -810,9 +810,11 @@ const REFERENCE_RESEARCH: InputSkeleton = {
   keys: REFERENCE_RESEARCH_KEYS,
   constraints: [
     'domainReference and designReference are both required and cannot substitute for one another',
-    'queries are not execution proof. Run omd ref search --input <json> with {lane: domain|design, query, url, queryParam}; the HTTPS URL must carry that exact query. Put returned receipt(s) in searches. Every query needs an execution; every non-user source/entry must occur in actual observed links and have a separate native visit capture. Blocked attempts may remain alongside a successful public alternative. Never author search receipts by hand.',
+    'v6 supports actual search or direct-public discovery, independently per lane. queries and searches remain required arrays: every declared query needs an exact execution receipt, even with direct roots. Both arrays may be empty only with nonempty valid discoveryRoots. Historical v5 remains readable unchanged, with its original search requirements and no discoveryRoots; never relabel old receipts.',
+    'For search, run omd ref search --input <json> with {lane: domain|design, query, url, queryParam}; the HTTPS URL must carry that exact query. Put returned receipt(s) in searches. Every non-user source/entry must occur in actual observed links and have a separate native visit capture. Blocked attempts may remain alongside a successful public alternative. Never author search receipts by hand.',
+    'For direct discovery, run ref navigate <public-list-url> --lane domain --entry public-directory --json or --lane design --entry free-gallery --json. Put the returned method, entry, url, evidence and capture plus your reason in discoveryRoots. Only the native entry publisher can create this receipt; old navigation captures cannot be promoted. Design roots must be supported freely visible gallery lists with actual item links, not selected items, login walls or arbitrary services. Discovery roots prove visited lists and links, not quality, official authority or a retained reference.',
     'search execution accepts Google/Bing/DuckDuckGo q endpoints and design-only Pinterest /search/pins/?q=, Dribbble /search/<query-slug> with queryParam=path, and Siteinspire /search?query=. Use the executable designSourcePolicy.nativeSearchInputs from ref discover-plan and adapt the query and URL together. Arbitrary service query fields are not search evidence.',
-    'each lane records actual queries, inspected sources and current PNG evidence plus a hashed native capture JSON; domain paths stay in .omd/refs/domain/, design source and sources[i].discovery evidence/capture receipts stay in .omd/refs/design/, and .omd/discovery/<lane>/ receipts belong only in searches or navigation, never retained gallery discovery',
+    'each lane records actual discovery, inspected sources and current PNG evidence plus a hashed native capture JSON; domain paths stay in .omd/refs/domain/, design source and sources[i].discovery evidence/capture receipts stay in .omd/refs/design/, and .omd/discovery/<lane>/ receipts belong only in searches, discoveryRoots or navigation, never retained gallery discovery',
     'research-set publishes .omd/refs/domain/research.json and .omd/refs/design/research.json separately, then .omd/reference-research.json as a consistency receipt; research-check requires all three current records',
     'neither the same evidence path nor identical bytes under a renamed path can satisfy both lanes',
     'domain and design sources/discovery entries must use independent service hosts (also checked after redirects). A new crop, path, query or filename of the same service is not a separate lane.',
@@ -824,7 +826,7 @@ const REFERENCE_RESEARCH: InputSkeleton = {
     'never pay, start trials, install an MCP, or bypass login to gather references; on restricted access record the gap in scout.md and try another public source. Free viewing is not a reuse license',
     'designReference.boardSha256 is the current storage-byte SHA-256 of .omd/reference-board.json',
     'every visual board piece binds a validated retained design source identity and PNG (path and hash); each candidate needs visual-direction evidence. An extra legacy/domain piece cannot ride alongside a qualified gallery piece.',
-    'Each lane may include navigation: [{url, evidence: {path, sha256}, capture: {path, sha256}}] for intermediate native page captures. Retained entries must be reachable from successful search results through those captures actual outbound links. Do not invent edges or relabel image-only evidence as navigation.',
+    'Each lane may include navigation: [{url, evidence: {path, sha256}, capture: {path, sha256}}] for intermediate native page captures. Retained entries must be reachable from observed search or direct-entry links. Direct v6 chains require new strict navigation-v2 captures, never hidden all-DOM links from retained components or old navigation. The direct root itself is not retained-source coverage. Do not invent edges or relabel image-only evidence as navigation.',
     'when the route carries greenfield-task-flow-benchmark, domainReference.benchmarkSha256 is the canonical taskFlowBenchmarkSha256 of the current v2 benchmark and every benchmark source URL appears in the domain lane',
     'when no benchmark applies, benchmarkSha256 is null unless an optional current benchmark was actually published',
     'run omd ref research-check after ref check and benchmark check; any missing, stale, or one-lane evidence blocks downstream work',
@@ -835,6 +837,7 @@ const REFERENCE_RESEARCH: InputSkeleton = {
     domainReference: {
       queries: ['<actual similar-service or domain task query>'],
       searches: [{ path: `.omd/discovery/domain/search-${'7'.repeat(64)}.json`, sha256: '7'.repeat(64) }],
+      discoveryRoots: [],
       sources: [{
         id: 'domain-service-a',
         url: 'https://example.com/domain-service',
@@ -849,6 +852,7 @@ const REFERENCE_RESEARCH: InputSkeleton = {
     designReference: {
       queries: ['<actual visual-direction or component-craft query>'],
       searches: [{ path: `.omd/discovery/design/search-${'8'.repeat(64)}.json`, sha256: '8'.repeat(64) }],
+      discoveryRoots: [],
       sources: [{
         id: 'design-direction-a',
         url: 'https://example.org/design-reference',
