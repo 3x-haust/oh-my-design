@@ -39,7 +39,9 @@ test('selected reference owners receive measured records while production and re
   assert.match(scout, /If discovery is selected, gather only for the named[\s\S]*unresolved decisions/i);
   assert.match(scout, /no reference[\s\S]*quota and no default candidate count/i);
   assert.match(scout, /intended and actual evidence use/i);
-  assert.match(hand, /coordinator reads\s+`omd brief production` and supplies permitted selected evidence/i);
+  assert.match(hand, /coordinator reads\s+`omd brief production`/i);
+  assert.match(hand, /passes `omd brief production --check --json`/);
+  assert.match(hand, /supplies the\s+current entry outcome with permitted selected evidence/i);
   assert.match(hand, /Do not reopen\s+the source-aware raw brief/i);
   assert.match(hand, /Do not inspect source URLs or unselected\/raw source material/i);
   assert.match(eye, /You did not build this work/i);
