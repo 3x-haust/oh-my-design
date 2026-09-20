@@ -28,7 +28,7 @@ Run `route validate --input <json> --json`, repair its grouped diagnostics toget
 same input with the same locale context and run `stage resume`. Do not use completion to diagnose
 unclassified input. Classification never substitutes for the selected research, copy or design outputs.
 Run `stage next --json` immediately and after owned output changes. It identifies missing/malformed
-authored work and early planning provenance gaps; it never marks the route complete. A structural
+authored work, undelivered entry contracts and early planning provenance gaps; it never marks the route complete. A structural
 domain check can pass with unconfirmed planning. Check the original user brief before asking for
 missing facts; do not invent confirmation or silently reduce implementation scope to a prototype.
 Use `schema frame` and `frame set --input` for atomic framing, then `frame check`. Functional
@@ -41,6 +41,18 @@ the hash or repair only the hash on an old verdict. Every writer edit requires a
 For other evidence and composition fingerprints, `omd hash <.omd/artifact-path> --json` supplies
 the exact current file digest without invoking a shell. It neither creates nor approves evidence;
 use the digest only for the actual bytes inspected. Authority files and escaping paths are refused.
+
+When `stage next` returns `reference-interpretation`, the coordinator owns that prerequisite work;
+it is not a new adaptive stage and must not be added to route input. Read `judgment input --json`
+and `schema design-judgment`, interpret the inspected observations, then publish with `judgment publish`.
+The input command supplies the resolved board's canonical evidence digest, which is different from
+the storage-manifest digest used by research. Run `judgment check --json` and recompute `stage next`.
+Scout does not impersonate the interpreter; Composer consumes the result. A changed board needs a
+new interpretation, not a new hash attached to an old verdict.
+For selected candidates, enter the Sketch stage and dispatch the isolated candidate work. Sketch
+owns its assigned directory, not the selection pointer. The coordinator records the actual rendered
+selection, reads `schema candidate-selection`, and publishes it through `candidate select`. A legacy
+folder name, missing pointer or changed candidate bytes never completes this selected stage.
 
 At each selected stage:
 
@@ -116,8 +128,12 @@ inspection and research repair remain available while production is blocked.
   Pi diagnoses unfinished authored stages with `stage next` before terminal completion. It can queue
   at most two correction turns without new validated progress. Route-bound domain/frame/board/copy/
   composition checks can each renew that allowance once; error wording, hashes, timestamps,
-  regressions and route replacement cannot refill it. Existing-route inspection,
-  route-only classification, new user input and aborts do not authorize this continuation. Unknown
+  regressions and route replacement cannot refill it. An existing route can also enroll when this
+  user turn explicitly invokes the full omd-ultradesign workflow, passes a selected entry check and
+  successfully publishes or writes that owner's work. A failed write or publisher help is not work.
+  Existing-route inspection, research-only work, route-only classification, new user input and aborts
+  do not authorize this continuation. Selected native Scout/Copy/Type/Composition writes recheck
+  current entry before mutation; cache inputs and legitimate upstream repairs remain available. Unknown
   authority errors stop; unresolved planning reports the actual statements needing user evidence.
   Production planning confirmation is not imposed on design-only handoffs, which may retain
   explicit open questions; their application-write prohibition remains unchanged.

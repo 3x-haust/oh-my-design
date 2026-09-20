@@ -15,6 +15,7 @@ import { join } from 'node:path';
 import { readPersistedRoute } from '../route/index.ts';
 import { unconfirmedPlanningStatements, validateDomainBrief } from '../domain/domain-brief.ts';
 import { ADAPTIVE_STAGE_GRAPH, type AdaptiveStageId } from '../route/adaptive-stage-graph.ts';
+import { CANDIDATE_SELECTION_POINTER_PATH } from '../brief/candidate-selection.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 
 export const DELIVERY_RECEIPT_SCHEMA = 'stage-delivery-v1' as const;
@@ -23,13 +24,13 @@ export const DELIVERY_LOG = '.omd/delivery.jsonl';
 export type StageId =
   | 'domain' | 'depth' | 'frame' | 'content-grain' | 'acquisition' | 'scout' | 'moodboard'
   | 'reference-board'
-  | 'reference-selection' | 'art-direction' | 'copy' | 'type-proof' | 'composition';
+  | 'reference-selection' | 'art-direction' | 'copy' | 'type-proof' | 'composition' | 'candidate-generation';
 
 export type StageDefinition = {
   readonly id: StageId;
-  /** The role that writes the artifact; the coordinator never substitutes for a named owner. */
+  /** The work owner; coordinator-owned CLI publication remains a separate declared handoff. */
   readonly owner: string;
-  /** Project-relative artifact whose existence proves the stage produced its output. */
+  /** Project-relative output entry point; its presence still requires current output validation. */
   readonly artifact: string;
   /** Pack-relative contracts this stage's owner must receive before it runs. */
   readonly requiredContracts: readonly string[];
@@ -49,6 +50,7 @@ export const STAGES: readonly StageDefinition[] = Object.freeze([
   { id: 'copy', owner: 'omd-writer', artifact: '.omd/copy-deck.md', requiredContracts: ['protocol/copy-deck.md', 'theory/voice.md'] },
   { id: 'type-proof', owner: 'omd-typesetter', artifact: '.omd/type-proof.md', requiredContracts: ['theory/typography.md'] },
   { id: 'composition', owner: 'omd-composer', artifact: '.omd/composition.md', requiredContracts: ['protocol/composition-contract.md', 'theory/layout.md'] },
+  { id: 'candidate-generation', owner: 'omd-sketch', artifact: CANDIDATE_SELECTION_POINTER_PATH, requiredContracts: ['protocol/composition-contract.md', 'theory/layout.md'] },
 ].map((stage) => Object.freeze({ ...stage, requiredContracts: Object.freeze(stage.requiredContracts) })) as StageDefinition[]);
 
 export type DeliveryReceipt = {

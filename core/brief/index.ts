@@ -20,6 +20,7 @@ import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import { checkContentGrain, CONTENT_GRAIN_PATH } from '../content-grain/files.ts';
 import { readFrame, type RealityLedger } from '../frame/index.ts';
 import { buildReferenceDiscoveryPlan, type ReferenceDiscoveryPlan } from '../ref/discovery-plan.ts';
+import { checkCurrentDesignJudgment } from '../design/current-judgment.ts';
 import {
   CANDIDATE_SELECTION_POINTER_PATH,
   resolveCandidateSelection,
@@ -492,6 +493,10 @@ export function buildBrief(
   if (judgmentConsumer && hasReferenceBoard && !judgmentPresent) {
     blockers.push(`selected ${stage} input missing: ${judgmentPath} — interpret the observations before applying them`);
   }
+  if (judgmentPresent) {
+    try { blockers.push(...checkCurrentDesignJudgment(root).findings); }
+    catch (error) { blockers.push(`reference interpretation: ${error instanceof Error ? error.message : String(error)}`); }
+  }
   const copyReviewPath = '.omd/.cache/copy-eye.md';
   const copyReviewRequired = stage === 'production'
     && route?.behavior.active.copyRepairWorkflow.status === 'selected';
@@ -607,7 +612,7 @@ export function buildBrief(
     existingDesignSystem,
     ...(runtimeDesignSystem === null ? {} : { runtimeDesignSystem }),
     owner: definition?.owner ?? OWNER[stage] ?? 'coordinator',
-    owns: designReview ? ['.omd/design/review.md'] : definition === undefined ? OWNS[stage] ?? [] : [definition.artifact],
+    owns: designReview ? ['.omd/design/review.md'] : definition === undefined || stage === 'candidate-generation' ? OWNS[stage] ?? [] : [definition.artifact],
     route: route === null ? null : {
       name: route.route,
       ...(route.deliveryMode === undefined ? {} : { deliveryMode: route.deliveryMode }),
@@ -631,7 +636,7 @@ export function buildBrief(
     referenceHandoff,
     referencesOmitted: gathered.length - references.length,
     contracts,
-    schemas: (designReview ? ['design-handoff'] : SCHEMAS[stage] ?? []).map((name) => ({ name, command: `omd schema ${name}` })),
+    schemas: (designReview ? ['design-handoff'] : stage === 'candidate-generation' ? ['candidate-selection'] : SCHEMAS[stage] ?? []).map((name) => ({ name, command: `omd schema ${name}` })),
     shell: shell.kind === 'browser' ? null : { kind: shell.kind, target: renderTargetHint(shell) },
     judgedBy: [...judgedBy, ...localeJudgedBy, ...localeReferenceJudgedBy,
       ...(stage === 'reference-board' && route?.references.decision === 'discover' ? [

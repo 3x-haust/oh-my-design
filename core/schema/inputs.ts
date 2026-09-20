@@ -5,6 +5,8 @@
 // key list, which costs a stage retry when it guesses wrong. `omd schema <name>` prints these.
 
 import { DEPTH_INPUT_KEYS, DEPTH_INPUT_SCHEMA, DEPTH_SCOPES } from '../deliberation/depth.ts';
+import { DESIGN_JUDGMENT_INPUT } from './design-judgment.ts';
+import { CANDIDATE_SELECTION_INPUT } from './candidate-selection.ts';
 import { TOKEN_COMMIT_SCHEMA, TOKEN_COMMIT_KEYS, RESPONSIVE_TOKEN_COMMIT_SCHEMA, RESPONSIVE_TOKEN_COMMIT_KEYS } from '../tokens/contract.ts';
 import { CAPTURE_PREPARATION_SCHEMA } from '../ref/capture-preparation.ts';
 import { EXECUTION_REQUIREMENT_GATES } from '../brief/execution-requirements.ts';
@@ -1203,6 +1205,8 @@ const DESIGN_HANDOFF: InputSkeleton = {
 };
 
 export const INPUT_SKELETONS: readonly InputSkeleton[] = [
+  DESIGN_JUDGMENT_INPUT,
+  CANDIDATE_SELECTION_INPUT,
   {
     name: 'reference-search', path: '.omd/.cache/reference-search.json', command: 'omd ref search --input .omd/.cache/reference-search.json --json',
     keys: ['lane', 'query', 'url', 'queryParam'],

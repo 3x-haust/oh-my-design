@@ -8,6 +8,7 @@ import { readPersistedRoute } from '../route/index.ts';
 import { readReferenceBoardArtifacts } from '../ref/board-artifacts.ts';
 import { checkReferenceApplication } from '../ref/reference-application.ts';
 import { validateCurrentCompositionContract } from '../composition-contract/index.ts';
+import { resolveCandidateSelection, validateCandidateSelectionPointer } from '../brief/candidate-selection.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import { stageDefinition, type StageId } from './contract.ts';
 
@@ -17,6 +18,11 @@ export function stageArtifactProblems(root: string, stage: StageId, invocation?:
     const path = stageDefinition(stage).artifact;
     const bytes = readContainedRegularFile(root, join(root, path), path);
     if (!bytes.toString('utf8').trim()) return [`${path} is empty`];
+    if (stage === 'candidate-generation') {
+      const paths = resolveCandidateSelection(root, validateCandidateSelectionPointer(JSON.parse(bytes.toString('utf8'))));
+      return paths.filter(candidatePath => !readContainedRegularFile(root, join(root, candidatePath), candidatePath).toString('utf8').trim())
+        .map(candidatePath => `${candidatePath} is empty`);
+    }
     if (stage === 'domain') {
       const domain = validateDomainBrief(JSON.parse(bytes.toString('utf8')));
       if (invocation && domain.request !== readPersistedRoute(root, invocation).request) {

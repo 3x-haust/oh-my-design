@@ -95,8 +95,20 @@ After a fresh authored route enters a checked stage, Pi can also use the same tw
 continue unfinished selected-stage authoring before source exists. It recomputes `stage next`, not
 terminal completion. A concrete planning question stops for the user's answer; existing-route
 inspection and route-only classification do not opt into this continuation.
+An explicitly invoked full workflow on an existing route also enrolls after a selected entry check
+and successful owner publication/write. A failed write, help call or read-only visit is insufficient.
+Recompute `stage next --json` after each owned publication or repair, not only at final reporting.
+If it returns `reference-interpretation`, perform that coordinator prerequisite: inspect `judgment input
+--json`, read `schema design-judgment`, author the actual hypothesis/interpretations, publish with
+`judgment publish --input .omd/.cache/design-judgment-input.json --json`, then run `judgment check`.
+The supplied digest binds the resolved board evidence, not the manifest's storage bytes. Do not add
+this work-item label as a route stage or send a blocked composition brief to Composer to author it.
+Changed reference evidence needs renewed interpretation before composition and candidates.
 Selected structural candidates need the current hash-bound `.omd/.cache/sketches/current.json`
 pointer and its complete evidence set; an arbitrary `*-selected` directory is not a selection.
+After Sketch produces its isolated candidates and the rendered selection is made, the coordinator
+uses `schema candidate-selection` and `candidate select --input` to publish that pointer. Sketch
+does not write outside its assigned candidate directory. Run `stage next` again after publication.
 
 Before selecting methods, read `omd pack protocol/human-design-loop.md --section "Visual reference gallery and concept exploration"`. A simple task is not settled visual evidence; a current supplied direction can be. Experiments stay conditional.
 

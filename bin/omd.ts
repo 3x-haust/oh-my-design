@@ -70,9 +70,9 @@ import { canonicalJson, sha256 } from '../core/ref/board-artifacts.ts';
 import { commitAiAssetDecision } from '../core/asset-sourcing/ai-decision.ts';
 import { checkProductionReadiness } from '../core/runtime/production-reference-gate.ts';
 import { readPersistedRoute } from '../core/route/index.ts';
-import { parseDesignJudgmentRecord, checkDesignHypothesis } from '../core/design/judgment.ts';
 import { publishFirstRenderCheck } from '../core/design/first-render-evidence.ts';
 import { publishDesignJudgment, readDesignJudgment, DESIGN_JUDGMENT_PATH } from '../core/design/judgment-files.ts';
+import { checkCurrentDesignJudgment, designJudgmentInput } from '../core/design/current-judgment.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -4820,9 +4820,13 @@ function cmdTextSlop(opts: Opts): never {
   process.exit(0);
 }
 
-/** `omd judgment publish|check` — interpret reference observations before composition. */
+/** `omd judgment input|publish|check` — interpret reference observations before composition. */
 async function cmdJudgment(mode: string | undefined, opts: Opts): Promise<never> {
   const projectRoot = process.cwd();
+  if (mode === 'input') {
+    console.log(JSON.stringify(designJudgmentInput(projectRoot)));
+    process.exit(0);
+  }
   if (mode === 'publish') {
     if (opts.input === undefined) throw new Error('usage: omd judgment publish --input <design-judgment.json> [--json]');
     const invocation = invocationFromActivation(opts, 'omd judgment publish');
@@ -4838,16 +4842,15 @@ async function cmdJudgment(mode: string | undefined, opts: Opts): Promise<never>
       else console.error('DESIGN_JUDGMENT_REQUIRED: publish an interpretation before composition');
       process.exit(1);
     }
-    const findings = checkDesignHypothesis(record.hypothesis);
-    const result = { ok: findings.length === 0, referenceBoardSha256: record.referenceBoardSha256, findings };
+    const result = checkCurrentDesignJudgment(projectRoot);
     if (opts.json) process.stdout.write(JSON.stringify(result));
     else {
       console.log(result.ok ? `ok — design hypothesis is specific (${record.referenceBoardSha256})` : 'design hypothesis needs revision');
-      for (const finding of findings) console.log(`  - ${finding}`);
+      for (const finding of result.findings) console.log(`  - ${finding}`);
     }
     process.exit(result.ok ? 0 : 1);
   }
-  throw new Error('usage: omd judgment publish|check [--input <design-judgment.json>] [--json]');
+  throw new Error('usage: omd judgment input|publish|check [--input <design-judgment.json>] [--json]');
 }
 
 /** `omd first-render check --page <local-build.html> --input <first-render-surface.json>` — current rendered gestalt. */

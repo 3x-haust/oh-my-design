@@ -206,6 +206,11 @@ test('production brief blocks missing selected inputs and supplies every present
   for (const name of ['index.html', 'noun-swap-test.json', 'selection.json', 'ux-models.json']) {
     writeFileSync(join(selectedCandidate, name), `${name}\n`);
   }
+  writeFileSync(join(dir, '.omd/.cache/sketches/current.json'), JSON.stringify({
+    schema: 'candidate-selection-pointer-v1', directory: 'test-selected',
+    indexSha256: createHash('sha256').update(readFileSync(join(selectedCandidate, 'index.html'))).digest('hex'),
+    selectionSha256: createHash('sha256').update(readFileSync(join(selectedCandidate, 'selection.json'))).digest('hex'),
+  }));
 
   writeFileSync(join(dir, '.omd', 'design-judgment.json'), JSON.stringify({
     schema: 'design-judgment-v1', referenceBoardSha256: 'a'.repeat(64),
