@@ -226,7 +226,8 @@ Each design source declares visualRole=visual-direction|component-support and vi
 (composition, typography, density, imagery, transfer, avoid). Each board candidate must actually
 use visual-direction evidence, and every visual piece must bind a validated source identity and
 capture, not just alias a qualified PNG. Imported visual fragments must bind their actual native
-design parent (or exact declared crop); search/domain images cannot be laundered by a source label.
+design parent (or exact declared crop with unchanged PNG format/metadata); search/domain images
+and transparency/colour-profile changes cannot be laundered by a source label.
 Usability/component documentation alone is insufficient. The generated
 refs/design/README.md displays retained previews and judgments for the user; rejected candidates
 and coverage gaps stay in scout.md. These checks enforce evidence roles, not aesthetic quality.

@@ -7,8 +7,19 @@ import { inspectDesignReferenceAdmission } from './design-admission.ts';
 import { loadRefs } from './store.ts';
 
 type ImageEvidence = Readonly<{ imagePath: string; provenance: ImageFragmentProvenance }>;
+function cropEncodingMetadata(bytes: Buffer): Buffer {
+  const metadata = [bytes.subarray(24, 29)];
+  for (let offset = 8; offset + 12 <= bytes.length;) {
+    const end = offset + 12 + bytes.readUInt32BE(offset);
+    const kind = bytes.subarray(offset + 4, offset + 8).toString('ascii');
+    if (kind !== 'IHDR' && kind !== 'IDAT' && kind !== 'IEND') metadata.push(bytes.subarray(offset, end));
+    offset = end;
+  }
+  return Buffer.concat(metadata);
+}
 function matchesCapture(sourceBytes: Buffer, fragmentBytes: Buffer, crop: ImageFragmentProvenance['cropBox']): boolean {
   if (crop === undefined) return sourceBytes.equals(fragmentBytes);
+  if (!cropEncodingMetadata(sourceBytes).equals(cropEncodingMetadata(fragmentBytes))) return false;
   const source = decodePng(sourceBytes); const fragment = decodePng(fragmentBytes);
   if (![crop.x, crop.y, crop.width, crop.height].every(Number.isInteger)
     || crop.x < 0 || crop.y < 0 || crop.width !== fragment.width || crop.height !== fragment.height
@@ -33,5 +44,5 @@ export function requireDesignImageAdmission(root: string, evidence: ImageEvidenc
       || !inspectDesignReferenceAdmission(root, reference, { references }).eligible) return false;
     return matchesCapture(readFileSync(trustedReferenceImage(root, reference.imagePath)), fragmentBytes, evidence.provenance.cropBox);
   });
-  if (!matched) throw new ReferenceBoardResolutionError('FRAGMENT_SOURCE: retain the actual native design capture; the fragment must preserve its bytes or the exact declared pixel crop');
+  if (!matched) throw new ReferenceBoardResolutionError('FRAGMENT_SOURCE: retain the actual native design capture; preserve its bytes or the exact declared pixel crop with unchanged PNG format and metadata');
 }
