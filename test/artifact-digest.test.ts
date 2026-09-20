@@ -14,12 +14,16 @@ test('public evidence hashing supplies exact local fingerprints without shell ac
   mkdirSync(join(cwd, '.omd/refs/design'), { recursive: true });
   const content = Buffer.from('카피\r\n');
   writeFileSync(join(cwd, '.omd/refs/design/capture.json'), content);
+  for (const name of ['activation', 'Activation', 'ACTIVATION']) {
+    mkdirSync(join(cwd, '.omd', name), { recursive: true });
+    writeFileSync(join(cwd, '.omd', name, 'project.key'), 'synthetic QA data, not a credential');
+  }
   symlinkSync(join(cwd, '.omd/refs/design/capture.json'), join(cwd, '.omd/link'));
   const run = (...args: string[]) => spawnSync(process.execPath, [cli, 'hash', ...args, '--json'], { cwd, encoding: 'utf8' });
   const valid = run('.omd/refs/design/capture.json');
   assert.equal(valid.status, 0, valid.stderr);
   assert.deepEqual(JSON.parse(valid.stdout), { path: '.omd/refs/design/capture.json', byteLength: content.length, sha256: createHash('sha256').update(content).digest('hex') });
-  for (const path of ['../escape', '.omd/../escape', '.omd/activation/project.key', '.omd/.project-mutation.lock', '.omd/link', '/etc/hosts']) {
+  for (const path of ['../escape', '.omd/../escape', '.omd/activation/project.key', '.omd/Activation/project.key', '.omd/ACTIVATION/project.key', '.omd/.project-mutation.lock', '.omd/link', '/etc/hosts']) {
     assert.equal(run(path).status, 1, path);
   }
   assert.equal(run().status, 1);
