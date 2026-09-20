@@ -140,8 +140,11 @@ inspection and research repair remain available while production is blocked.
   at most two correction turns without new validated progress. Route-bound domain/frame/board/copy/
   composition checks can each renew that allowance once; error wording, hashes, timestamps,
   regressions and route replacement cannot refill it. An existing route can also enroll when this
-  user turn explicitly invokes the full omd-ultradesign workflow, passes a selected entry check and
-  successfully publishes or writes that owner's work. A failed write or publisher help is not work.
+  user turn invokes the full omd-ultradesign skill alone, with no additional user prose, passes a
+  selected entry check and successfully publishes or writes that owner's work. The skill name inside
+  a longer request does not grant unrestricted automatic continuation: the prose may impose a
+  narrower scope or stop. This conservative rule is not a natural-language intent classifier.
+  Requested work and explicit validation remain available. A failed write or publisher help is not work.
   Existing-route inspection, research-only work, route-only classification, new user input and aborts
   do not authorize this continuation. Selected native Scout/Copy/Type/Composition writes recheck
   current entry before mutation; cache inputs and legitimate upstream repairs remain available. Unknown

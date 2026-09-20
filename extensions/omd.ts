@@ -226,7 +226,7 @@ export default function omdExtension(pi: PortablePiApi): void {
       try {
         result = await run(params.args, context.cwd, signal);
         if (signal?.aborted || epochs.get(context.cwd) !== taskEpoch) return { content: [{ type: 'text', text: result.text }], details: result.details };
-        if (!signal?.aborted && hasPiRoute(context.cwd)) ownedWork.commandSucceeded(context.cwd, { args: params.args, token: workToken });
+        if (hasPiRoute(context.cwd) && ownedWork.commandSucceeded(context.cwd, { args: params.args, token: workToken })) touched.add(context.cwd);
         if (params.args[0] === 'route' && params.args[1] === 'classify' && commandBootstrap
           && authoredInputs.get(context.cwd)?.has(classifyPiWrite(context.cwd, commandBootstrap.inputPath).path)) freshRoutes.add(context.cwd);
         if (freshRoutes.has(context.cwd) && ownedWork.token(context.cwd) !== undefined && params.args[0] === 'brief' && params.args.includes('--check')) workflowStarted.add(context.cwd);

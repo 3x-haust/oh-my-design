@@ -95,8 +95,12 @@ After a fresh authored route enters a checked stage, Pi can also use the same tw
 continue unfinished selected-stage authoring before source exists. It recomputes `stage next`, not
 terminal completion. A concrete planning question stops for the user's answer; existing-route
 inspection and route-only classification do not opt into this continuation.
-An explicitly invoked full workflow on an existing route also enrolls after a selected entry check
-and successful owner publication/write. A failed write, help call or read-only visit is insufficient.
+For an existing route, automatic continuation requires a standalone full-workflow skill invocation
+without additional user prose, followed by a selected entry check and successful owner publication/write.
+A skill name inside a longer request is not an unrestricted continuation grant: that request may
+limit the scope or require a stop. Execute its requested work normally, but do not auto-resume the
+rest of an existing route. A failed write, help call or read-only visit is also insufficient. Never
+reclassify a fresh route merely to evade the user's stopping boundary.
 Recompute `stage next --json` after each owned publication or repair, not only at final reporting.
 For `reference-board`, follow the returned action instead of repeating a passing entry check:
 `author-research` supplies the research schema and requires current dual-lane publication;
