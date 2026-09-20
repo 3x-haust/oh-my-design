@@ -10,7 +10,7 @@ allow:
   - Bash(omd route:*)
   - Bash(omd brief:*)
   - Bash(omd text-slop:*)
-  - Bash(omd copy:*)
+  - Bash(omd copy --check:*)
 deny: []
 instructions: |
   You own copy, not layout. Read the user brief, the scout's cited voice/audience evidence,
