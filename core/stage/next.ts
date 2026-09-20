@@ -25,20 +25,23 @@ export function nextStageWork(root: string, packRoot: string, invocation: Projec
   const incomplete = state.stages.find(s => stageArtifactProblems(root, s.stage, invocation).length > 0);
   // Resolve planning provenance early, not only at the eventual source boundary. The agent must
   // check the original brief first; absent evidence requires a question, never automatic confirmation.
-  const stage = planning.length ? 'domain' : incomplete?.stage ?? null;
+  // Design-only handoffs may deliberately retain open planning questions. Do not turn a
+  // production-only confirmation rule into a universal design-stage gate.
+  const planningBlocksProduction = planning.length > 0 && route.deliveryMode !== 'design-only' && route.strategy.stages.includes('production');
+  const stage = planningBlocksProduction ? 'domain' : incomplete?.stage ?? null;
   const brief = stage === null ? null : buildBrief(root, stage, packRoot, invocation);
   const entry = stage === null ? null : checkBriefEntry(root, stage, packRoot, invocation);
   return {
     schema: 'stage-next-v1', meaning: 'next-work-not-completion', deliveryMode: route.deliveryMode ?? 'implementation',
     stage, owner: brief?.owner ?? null,
-    action: planning.length ? 'resolve-planning-evidence' : stage === null ? 'validate-selected-gates' : incomplete?.present ? 'repair-output' : 'author-output',
+    action: planningBlocksProduction ? 'resolve-planning-evidence' : stage === null ? 'validate-selected-gates' : incomplete?.present ? 'repair-output' : 'author-output',
     problems: stage === null ? [] : stageArtifactProblems(root, stage, invocation),
     entryBlockers: entry?.blockers ?? [], planning,
     next: stage === null
       ? route.deliveryMode === 'design-only' ? 'omd completion design-check --input .omd/design-handoff.json --json' : 'omd guard production --json'
       : `omd brief ${stage} --check --json`,
     schemas: brief?.schemas ?? [], contracts: brief?.contracts ?? [], judgedBy: brief?.judgedBy ?? [],
-    instruction: planning.length
+    instruction: planningBlocksProduction
       ? 'Check each statement against the original user request/artifacts. Attach exact userEvidence only where genuinely supported. If not supplied, ask the user one concrete question quoting these statements. Do not infer confirmation, silently narrow scope, or replace the question with completion diagnostics.'
       : 'Read and deliver this stage\'s contracts, satisfy entry, execute the owned work, then its applicable output checks. Recompute stage next after changes. Remaining output quality, reference currentness, candidates, rendered evidence and independent review still require their own gates; this pointer never certifies completion.',
   };

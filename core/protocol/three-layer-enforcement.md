@@ -92,6 +92,8 @@ inspection and research repair remain available while production is blocked.
   at most two selected-stage correction turns (sharing the repair budget). Existing-route inspection,
   route-only classification, new user input and aborts do not authorize this continuation. Unknown
   authority errors stop; unresolved planning reports the actual statements needing user evidence.
+  Production planning confirmation is not imposed on design-only handoffs, which may retain
+  explicit open questions; their application-write prohibition remains unchanged.
 - Before initial route publication, Pi revalidates the current authored input at termination and
   reports its actual diagnostic groups rather than replacing them with `ROUTE_UNCLASSIFIED`.
   Known input errors share the two-pass repair budget. Read-only inspection, aborts, unknown errors,

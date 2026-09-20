@@ -237,7 +237,7 @@ export default function omdExtension(pi: PortablePiApi): void {
           const work = JSON.parse(result.text) as { schema?: string; stage?: unknown; owner?: unknown; action?: unknown; planning?: Array<{ field: string; text: string }>; instruction?: string };
           if (work.schema === 'stage-next-v1' && typeof work.stage === 'string') {
             if (context.signal?.aborted) return;
-            const askingForPlanning = (work.planning?.length ?? 0) > 0 && message.content?.some(part => part.type === 'text'
+            const askingForPlanning = work.action === 'resolve-planning-evidence' && (work.planning?.length ?? 0) > 0 && message.content?.some(part => part.type === 'text'
               && /[?？]|확인.*(?:필요|부탁)|알려.*(?:주세요|주실)|(?:please|could|can).*(?:confirm|clarify)/i.test(part.text ?? ''));
             const retry = !askingForPlanning && (repairs.get(context.cwd) ?? 0) < 2 && typeof pi.sendMessage === 'function';
             if (retry) {
@@ -247,7 +247,7 @@ export default function omdExtension(pi: PortablePiApi): void {
               { triggerTurn: true, deliverAs: 'followUp' });
             }
             const korean = message.content?.some(part => part.type === 'text' && /[가-힣]/.test(part.text ?? ''));
-            const questions = (work.planning ?? []).map(p => `- ${p.field}: ${p.text}`).join('\n');
+            const questions = work.action === 'resolve-planning-evidence' ? (work.planning ?? []).map(p => `- ${p.field}: ${p.text}`).join('\n') : '';
             const status = korean
               ? `OMD는 ${work.stage} 단계가 아직 미완료입니다. ${retry ? '해당 단계의 입력·근거를 확인하고 작업을 계속합니다.' : questions ? '아래 기획 내용의 사용자 근거가 확인되지 않았습니다. 이 내용이 요청 범위와 맞는지 확인이 필요합니다.' : '자동 수정 한도에 도달했습니다. 아래 단계의 실제 입력 오류를 해결해야 합니다.'}`
               : `OMD is incomplete at ${work.stage}. ${retry ? 'Continuing the selected-stage work.' : questions ? 'User evidence is still missing for the planning statements below; confirmation is required.' : 'Bounded repair exhausted; resolve the current stage inputs below.'}`;

@@ -52,10 +52,10 @@ function harness(cwd: string) {
       await command(['stage', 'deliver', '--stage', stage, '--contract', c.path]);
     }
   };
-  const start = async () => {
+  const start = async (starter = 'product-route-input') => {
     await emit('before_agent_start', { prompt: '/skill:omd-ultradesign Build the requested local product.' });
     // Fixture request authorizes only local demo work; not a claim about a live client or service.
-    const route = structuredClone(inputSkeleton('product-route-input').skeleton) as Record<string, unknown>;
+    const route = structuredClone(inputSkeleton(starter).skeleton) as Record<string, unknown>;
     route.request = domain().request;
     await author('.omd/.cache/route-input.json', route);
     await command(['route', 'validate', '--input', '.omd/.cache/route-input.json', '--json']);
@@ -229,4 +229,21 @@ test('atomic frame input also works over the publisher stdin transport without a
   assert.equal(run(cwd, ['frame', 'check', '--json']).status, 0);
   assert.equal(existsSync(join(cwd, '.omd/.cache/frame-input.json')), false);
   assert.ok(existsSync(join(cwd, '.omd/frame.md')));
+});
+
+test('design-only fresh work keeps open planning questions without forcing production confirmation or application writes', async t => {
+  const cwd = project(t), h = harness(cwd); await h.start('design-route-input');
+  const brief = domain(); delete (brief.planning.successSignal as { userEvidence?: unknown }).userEvidence;
+  await h.author('.omd/domain-brief.json', brief);
+  const work = JSON.parse(await h.command(['stage', 'next', '--json']));
+  assert.equal(work.deliveryMode, 'design-only');
+  assert.equal(work.stage, 'frame');
+  assert.equal(work.action, 'author-output');
+  assert.deepEqual(work.planning, [{ field: 'successSignal', text: 'Inspect confirmation' }]);
+  await h.emit('message_end', { message: final });
+  assert.equal(h.sent.length, 1);
+  assert.match(h.sent[0]![0].content, /"deliveryMode":"design-only"/);
+  const blocked = await h.emit('tool_call', { toolName: 'write', input: { path: 'package.json' } }) as { block: boolean };
+  assert.equal(blocked.block, true);
+  assert.equal(existsSync(join(cwd, 'package.json')), false);
 });
