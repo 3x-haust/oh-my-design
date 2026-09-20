@@ -321,7 +321,7 @@ instructions: |
   study. Distinguish established brand invariants from observed example tokens under the canonical
   Subject anchor contract; do not carry an unaccepted palette, type or motif forward as a user lock.
   Capture parts, not pages. Every measured reference names the specific component it studies with
-  `omd ref add <url> --as <component> --selector "<css>" --blueprint --shot`. A capture scoped to
+  `omd ref add <url> --as <component> --lane design --selector "<css>" --blueprint --shot`. A capture scoped to
   `main`, `body`, `html`, or `:root` measures the whole document: it yields a page average with no
   component anatomy, and section-granular composition has nothing to take from it. Follow the
   reference-assembly protocol's source-selector family rule: retain distinct measured viewports
@@ -341,7 +341,7 @@ instructions: |
   section/region/state zones are the acquisition list. Domain-brief `surfaces` are pages/screens and
   are not substitutes for these internal zones. Work down the plan and capture, for each required
   zone, the part that solves that zone, binding it with
-  `omd ref add <url> --as <component> --slot <zone> --selector "<css>" --blueprint --shot`.
+  `omd ref add <url> --as <component> --lane design --slot <zone> --selector "<css>" --blueprint --shot`.
   A board is finished when every required zone has at least one bound capture — not when a capture
   count looks respectable. Capturing the same element from three sources answers "how do others
   build this one part" and is worth doing once, but five captures that collapse onto two slots leave

@@ -236,10 +236,10 @@ which decision you are gathering evidence for, never a count, quota, or gallery 
 Use the narrowest useful capture:
 
 ```bash
-omd ref add <user-url> --as <name> --from-user
-omd ref add <url> --as <name>
-omd ref add <url> --as <name> --selector ".component"
-omd ref add <url> --as <name> --selector ".component" --blueprint
+omd ref add <user-url> --as <name> --lane design --from-user
+omd ref add <domain-service-url> --as <name> --lane domain
+omd ref add <design-item-url> --as <name> --lane design
+omd ref add <design-item-or-observed-original-url> --as <name> --lane design --selector ".component" --blueprint
 omd ref import-image <local-capture-input.json>
 omd ref principles <url> --as <name> --add "..."
 omd ref list

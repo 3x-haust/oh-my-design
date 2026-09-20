@@ -944,7 +944,7 @@ test('the scout and the reference protocol require component-scoped capture', ()
   assert.match(scout, /it cannot satisfy a positive-motion claim/);
   assert.match(scout, /Run `omd ref granularity` before handing the board on/);
   assert.match(scout, /Cover the result, not one slot/);
-  assert.match(scout, /`omd ref add <url> --as <component> --slot <zone> --selector "<css>" --blueprint --shot`/);
+  assert.match(scout, /`omd ref add <url> --as <component> --lane design --slot <zone> --selector "<css>" --blueprint --shot`/);
   assert.match(scout, /`REF-ZONE-UNCOVERED` names the zones that still have none/);
   assert.match(scout, /Name a capture for what it holds/);
   assert.match(scout, /`REF-NAME-MISMATCH` reports it/);

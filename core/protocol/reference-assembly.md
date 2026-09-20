@@ -154,7 +154,14 @@ Discovery always saves two separate ledgers:
   research is not visual direction merely because the comparable product looks polished.
 
 Capture into the correct lane from the beginning: `omd ref add --lane domain|design`, or `lane` on
-each add-batch entry. PNGs and native JSON metadata stay together in `.omd/refs/domain/` and
+every batch entry. Selected discovery refuses omitted lanes before acquisition. Design captures
+start with an inspected free gallery/bookmark item, then may capture its recorded original link;
+`--from-user` is only for a source the user actually supplied, never an escape from discovery.
+Capture gallery entries before batching their originals, since the observed link must already
+exist. A service task flow belongs in domain, not design merely because its layout is calm.
+A board remains a draft until `ref research-check` and `ref apply-check` pass; `stage next`
+keeps this work with Scout rather than treating a board file as finished research.
+PNGs and native JSON metadata stay together in `.omd/refs/domain/` and
 `.omd/refs/design/`; app/pin imports use `.omd/refs/design/fragments/`. Unlabelled legacy records
 remain readable for old boards but cannot satisfy new research. Domain captures are excluded from
 the default visual board inventory.

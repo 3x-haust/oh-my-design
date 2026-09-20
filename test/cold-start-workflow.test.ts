@@ -156,7 +156,8 @@ test('cold start traverses real CLI framing, independent research/copy entry and
   // public-service evidence. Full research/application validation must still refuse these alone.
   await h.command(['ref', 'add', join(fixtureRoot, 'slop.html'), '--as', 'fixture-domain', '--lane', 'domain', '--no-energy']);
   await assert.rejects(h.command(['ref', 'add', join(fixtureRoot, 'slop.html'), '--as', 'renamed-design', '--lane', 'design', '--no-energy']), /REFERENCE_LANE_SOURCE_OVERLAP/);
-  await h.command(['ref', 'add', join(fixtureRoot, 'considered.html'), '--as', 'fixture-design', '--lane', 'design', '--no-energy']);
+  await assert.rejects(h.command(['ref', 'add', join(fixtureRoot, 'considered.html'), '--as', 'fixture-design', '--lane', 'design', '--no-energy']), /DESIGN_DISCOVERY_REQUIRED/);
+  await h.command(['ref', 'add', join(fixtureRoot, 'considered.html'), '--as', 'fixture-design', '--lane', 'design', '--from-user', '--no-energy']);
   for (const lane of ['domain', 'design']) assert.ok(readdirSync(join(cwd, '.omd/refs', lane)).some(path => path.endsWith('.png')));
   await h.author('.omd/copy-deck.md', '# Not a copy deck');
   await assert.rejects(h.enter('type-proof'), /upstream copy/);

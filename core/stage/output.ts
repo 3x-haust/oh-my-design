@@ -6,6 +6,7 @@ import { validateCopyDeck, validateCurrentCopyReview } from '../copy/index.ts';
 import { readFrame } from '../frame/index.ts';
 import { readPersistedRoute } from '../route/index.ts';
 import { readReferenceBoardArtifacts } from '../ref/board-artifacts.ts';
+import { checkReferenceApplication } from '../ref/reference-application.ts';
 import { validateCurrentCompositionContract } from '../composition-contract/index.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import { stageDefinition, type StageId } from './contract.ts';
@@ -36,7 +37,20 @@ export function stageArtifactProblems(root: string, stage: StageId, invocation?:
       }
       return problems;
     }
-    if (stage === 'reference-board') readReferenceBoardArtifacts(root);
+    if (stage === 'reference-board') {
+      readReferenceBoardArtifacts(root);
+      if (invocation) {
+        const route = readPersistedRoute(root, invocation);
+        if (route.references.decision === 'discover') {
+          try {
+            checkReferenceApplication(root, { expectedSourceContractSha256: route.sourceContractSha256,
+              benchmarkRequired: route.gates.includes('greenfield-task-flow-benchmark'), expectedRequest: route.sourceContract.request });
+          } catch (error) {
+            return [`Reference board is a draft until both research lanes and their surface application pass: ${error instanceof Error ? error.message : String(error)}; run omd ref research-check --json and omd ref apply-check --json`];
+          }
+        }
+      }
+    }
     if (stage === 'composition' && invocation) return validateCurrentCompositionContract(root, invocation).map(f => f.message);
     return [];
   } catch (error) { return [error instanceof Error ? error.message : String(error)]; }

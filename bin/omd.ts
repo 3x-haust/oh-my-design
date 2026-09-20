@@ -942,13 +942,15 @@ async function cmdRefAddBatch(opts: Opts): Promise<never> {
   const { addRefsBatch } = await import('../core/ref/batch.ts');
   const specs = JSON.parse(readFileSync(resolve(manifestPath), 'utf8')) as import('../core/ref/batch.ts').RefSpec[];
   if (!Array.isArray(specs) || specs.length === 0) throw new Error('manifest must be a non-empty JSON array of reference specs');
+  const { captureLane } = await import('../core/ref/capture-intake.ts');
+  const invocation = invocationFromActivation(opts, 'omd ref add-batch');
   for (const s of specs) {
     if (!s || typeof s.source !== 'string' || typeof s.as !== 'string') {
       throw new Error('each manifest entry needs a string `source` and `as`');
     }
-    s.lane ??= 'design';
+    s.lane = captureLane(process.cwd(), s, invocation);
   }
-  const result = await addRefsBatch(process.cwd(), specs, { rulesRoot: join(root, 'core', 'rules', 'builtin') }, projectWriterFromActivation(opts, 'omd ref add-batch'));
+  const result = await addRefsBatch(process.cwd(), specs, { rulesRoot: join(root, 'core', 'rules', 'builtin'), invocation }, projectWriterFromActivation(opts, 'omd ref add-batch'));
   if (opts.json) process.stdout.write(JSON.stringify(result));
   else {
     const ok = result.outcomes.filter((o) => o.ok).length;
@@ -980,7 +982,7 @@ async function cmdRefBoard(opts: Opts): Promise<never> {
 async function cmdRefAdd(opts: Opts): Promise<never> {
   const target = opts._[0];
   if (!target || !opts.as) {
-    console.error('usage: omd ref add <url|file> --as <component> [--slot <surface>] [--selector "css"] [--image]');
+    console.error('usage: omd ref add <url|file> --as <component> --lane domain|design [--slot <surface>] [--selector "css"] [--image] [--from-user]; selected discovery requires an explicit lane and free-gallery/original-link provenance for design');
     process.exit(1);
   }
   if (opts.image && opts.selector) {
@@ -1000,8 +1002,9 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
     process.exit(1);
   }
   if (opts.preparation && (opts.image || !opts.noEnergy)) throw new Error('--preparation requires a rendered reference and --no-energy');
-  const { saveRef, researchLane } = await import('../core/ref/store.ts');
-  const lane = researchLane(opts.lane ?? 'design');
+  const { saveRef } = await import('../core/ref/store.ts');
+  const { captureLane } = await import('../core/ref/capture-intake.ts');
+  const lane = captureLane(process.cwd(), { source: target, ...(opts.lane ? { lane: opts.lane } : {}), ...(opts.fromUser ? { fromUser: true } : {}) }, invocationFromActivation(opts, 'omd ref add'));
   const adapter = projectWriterFromActivation(opts, 'omd ref add');
 
   if (opts.image) {

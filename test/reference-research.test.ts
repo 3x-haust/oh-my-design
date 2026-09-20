@@ -31,6 +31,7 @@ import { readSelectedReferenceHandoff } from '../core/ref/selected-handoff.ts';
 import { testSearchReceipt } from './helpers/search-execution.ts';
 import { validateSourceSeal, writeSourceSeal } from '../core/source-seal/index.ts';
 import { servedProjectTreeSha256 } from '../core/render/serve.ts';
+import { stageArtifactProblems } from '../core/stage/output.ts';
 
 const SOURCE_SHA = 'a'.repeat(64);
 const digest = (bytes: string | Buffer): string => createHash('sha256').update(bytes).digest('hex');
@@ -424,6 +425,24 @@ test('interrupted split publication cannot be read as a completed new research s
   assert.throws(() => readPublishedReferenceResearch(root), /LANE_STALE/);
   publishReferenceResearch(root, research, options, writer);
   assert.deepEqual(readPublishedReferenceResearch(root), parseReferenceResearch(research));
+});
+
+test('a board cannot advance past research until separate current lanes and application are published', t => {
+  const { root, research } = fixture(t);
+  const input = JSON.parse(readFileSync(new URL('fixtures/adaptive-flow/synth-marketing.json', import.meta.url), 'utf8'));
+  const invocation = publishTestAdaptiveRoute(root, input);
+  const route = readPersistedRoute(root, invocation);
+  const options = { expectedSourceContractSha256: route.sourceContractSha256, benchmarkRequired: false };
+  const writer = createTestProjectWriteAdapter(root, invocation);
+  research.sourceContractSha256 = route.sourceContractSha256;
+  assert.ok(stageArtifactProblems(root, 'reference-board', invocation).length > 0);
+  publishReferenceResearch(root, research, options, writer);
+  writeFileSync(join(root, '.omd/domain-brief.json'), JSON.stringify(domainBrief(route.request)));
+  assert.ok(stageArtifactProblems(root, 'reference-board', invocation).length > 0);
+  publishReferenceApplication(root, filledApplication(root, options), options, writer);
+  assert.deepEqual(stageArtifactProblems(root, 'reference-board', invocation), []);
+  rmSync(join(root, DESIGN_REFERENCES_PATH));
+  assert.ok(stageArtifactProblems(root, 'reference-board', invocation).length > 0);
 });
 
 test('Pi CLI publishes and checks split research without an external activation', async t => {
