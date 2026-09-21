@@ -53,6 +53,15 @@ export class OmdRuntimeSnapshotError extends Error {
   override readonly name = 'OmdRuntimeSnapshotError';
 }
 
+export function runtimeDependencyRoot(resolvedPackagePath: string): string {
+  const marker = `${sep}node_modules${sep}`;
+  const index = resolvedPackagePath.lastIndexOf(marker);
+  if (index < 0) {
+    throw new OmdRuntimeSnapshotError('OMD_RUNTIME_DEPENDENCIES_INVALID: package did not resolve through node_modules');
+  }
+  return resolvedPackagePath.slice(0, index + marker.length - 1);
+}
+
 function assertRequiredPaths(root: string): void {
   for (const path of REQUIRED_PATHS) {
     if (!existsSync(join(root, path))) {

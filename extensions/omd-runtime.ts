@@ -1,20 +1,22 @@
 import { createRequire } from 'node:module';
-import { dirname, sep } from 'node:path';
+import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createOmdRuntimeSnapshot } from './omd-runtime-snapshot.ts';
+import { createOmdRuntimeSnapshot, runtimeDependencyRoot } from './omd-runtime-snapshot.ts';
 
 const MAX_OUTPUT_CHARS = 50_000;
 const require = createRequire(import.meta.url);
 const tsxPath = require.resolve('tsx');
-const dependencyMarker = `${sep}node_modules${sep}`;
-const dependencyIndex = tsxPath.indexOf(dependencyMarker);
-if (dependencyIndex < 0) throw new Error('OMD_RUNTIME_DEPENDENCIES_INVALID: tsx did not resolve through node_modules');
-const runtimeSnapshot = createOmdRuntimeSnapshot({
-  sourceRoot: dirname(fileURLToPath(new URL('../package.json', import.meta.url))),
-  dependencyRoot: tsxPath.slice(0, dependencyIndex + dependencyMarker.length - 1),
-});
-const OMD_ENTRY = runtimeSnapshot.entryPath;
-process.once('exit', runtimeSnapshot.dispose);
+const sourceRoot = dirname(fileURLToPath(new URL('../package.json', import.meta.url)));
+const dependencyRoot = runtimeDependencyRoot(tsxPath);
+let runtimeSnapshot: ReturnType<typeof createOmdRuntimeSnapshot> | undefined;
+
+function omdEntry(): string {
+  if (runtimeSnapshot === undefined) {
+    runtimeSnapshot = createOmdRuntimeSnapshot({ sourceRoot, dependencyRoot });
+    process.once('exit', runtimeSnapshot.dispose);
+  }
+  return runtimeSnapshot.entryPath;
+}
 
 export const OMD_COMMAND_NAME = 'omd';
 
@@ -125,7 +127,7 @@ export async function runOmd(
   cwd: string,
   signal?: AbortSignal,
 ): Promise<{ text: string; details: { code: number; killed: boolean } }> {
-  const result = await pi.exec('node', [OMD_ENTRY, ...args], signal === undefined ? { cwd } : { cwd, signal });
+  const result = await pi.exec('node', [omdEntry(), ...args], signal === undefined ? { cwd } : { cwd, signal });
   const text = boundedOutput(result);
   if (result.code !== 0 || result.killed) {
     throw new Error(`OMD_CLI_FAILED (${result.code}): ${text || 'no output'}`);

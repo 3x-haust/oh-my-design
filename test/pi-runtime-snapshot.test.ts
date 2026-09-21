@@ -1,15 +1,40 @@
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { once } from 'node:events';
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import {
   createOmdRuntimeSnapshot,
   OmdRuntimeSnapshotError,
+  runtimeDependencyRoot,
   type OmdRuntimeSnapshot,
 } from '../extensions/omd-runtime-snapshot.ts';
+
+test('Pi runtime derives the nearest dependency root for nested installs', () => {
+  const nestedRoot = join(tmpdir(), 'outer', 'node_modules', '@scope', 'plugin', 'node_modules');
+  const resolvedTsx = join(nestedRoot, 'tsx', 'dist', 'loader.mjs');
+
+  assert.equal(runtimeDependencyRoot(resolvedTsx), nestedRoot);
+  assert.throws(
+    () => runtimeDependencyRoot(join(tmpdir(), 'tsx', 'dist', 'loader.mjs')),
+    /OMD_RUNTIME_DEPENDENCIES_INVALID/,
+  );
+});
+
+test('importing the Pi extension does not create a runtime snapshot', t => {
+  const runtimeTemp = mkdtempSync(join(tmpdir(), 'omd-runtime-activation-'));
+  t.after(() => rmSync(runtimeTemp, { recursive: true, force: true }));
+  const runtimeUrl = new URL('../extensions/omd-runtime.ts', import.meta.url).href;
+
+  const imported = spawnSync(process.execPath, [
+    '--import', 'tsx', '--input-type=module', '-e', 'await import(process.argv[1])', runtimeUrl,
+  ], { encoding: 'utf8', env: { ...process.env, TMPDIR: runtimeTemp } });
+
+  assert.equal(imported.status, 0, imported.stderr);
+  assert.deepEqual(readdirSync(runtimeTemp).filter(name => name.startsWith('omd-runtime-')), []);
+});
 
 test('Pi runtime keeps an immutable source snapshot after the plugin checkout changes', t => {
   const sourceRoot = mkdtempSync(join(tmpdir(), 'omd-runtime-source-'));
