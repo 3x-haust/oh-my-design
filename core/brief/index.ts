@@ -428,7 +428,10 @@ export function buildBrief(
   if (handoffRole !== undefined && (handoffRole === 'art-direction' || selectedArtDirection)
     && existsSync(join(root, '.omd/reference-pre-selection-v2.json'))) {
     try {
-      const payload = readSelectedReferenceHandoff(root, handoffRole);
+      const payload = readSelectedReferenceHandoff(root, handoffRole, route === null ? undefined : {
+        sourceContractSha256: route.sourceContractSha256,
+        request: route.request,
+      });
       referenceHandoff = {
         command: `omd ref handoff ${handoffRole} --json`, role: handoffRole,
         sha256: payload.sha256, pieces: payload.pieces.length,

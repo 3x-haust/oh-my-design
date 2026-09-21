@@ -106,6 +106,15 @@ function text(value: unknown, code: string): string {
   return value.trim();
 }
 
+function boundedText(value: unknown, code: string): string {
+  const result = text(value, code);
+  if (result.length > 4096 || Array.from(result).some(character => {
+    const point = character.codePointAt(0) ?? 0;
+    return point >= 0xd800 && point <= 0xdfff;
+  })) fail(code);
+  return result;
+}
+
 function digest(value: unknown, code: string): string {
   const parsed = text(value, code);
   if (!SHA256.test(parsed)) fail(code);
@@ -203,7 +212,7 @@ function discoveryRoots(value: unknown, design: boolean): readonly ResearchDisco
     if (image.path !== `.omd/discovery/${lane}/entries/${image.sha256}.png`
       || capture.path !== `.omd/discovery/${lane}/entries/${capture.sha256}.json`) fail(`${code}_PATH`);
     return Object.freeze({ method: 'direct-public' as const, entry, url: url.href,
-      reason: text(input.reason, `${code}_REASON`), evidence: image, capture });
+      reason: boundedText(input.reason, `${code}_REASON`), evidence: image, capture });
   });
   if (new Set(roots.map(root => root.capture.sha256)).size !== roots.length
     || new Set(roots.map(root => root.evidence.sha256)).size !== roots.length) fail(`${code}_DUPLICATE`);

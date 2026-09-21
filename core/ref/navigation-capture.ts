@@ -4,6 +4,7 @@ import type { ProjectWriteAdapter } from '../runtime/project-write.ts';
 import { designDiscoveryDirectoryProvider } from './design-discovery-sources.ts';
 import { captureDiscoveryObservation } from './search-observation.ts';
 import { observeDocumentResponses, type DocumentObserver } from './document-observation.ts';
+import { assertPublicNetworkUrl, publicIpAddress } from './public-network.ts';
 import { searchChallengeReason } from './search-execution.ts';
 import { DISCOVERY_LIMITATIONS, ReferenceDiscoveryError, directDiscoveryEntry, discoveryDigest, discoveryLane, publicDiscoveryUrl, validateDirectDiscoveryLinks,
   type DirectDiscoveryEntry, type DirectDiscoveryReceipt, type DiscoveryCaptureRecord, type DiscoveryNavigationReceipt } from './discovery-record.ts';
@@ -39,12 +40,19 @@ export async function captureReferenceNavigation(browser: Browser, source: strin
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, serviceWorkers: 'block', acceptDownloads: false });
   let documents: DocumentObserver | undefined;
   try {
-    await context.route('**/*', route => ['GET', 'HEAD'].includes(route.request().method()) ? route.continue() : route.abort());
+    await context.route('**/*', async route => {
+      if (!['GET', 'HEAD'].includes(route.request().method())) return route.abort();
+      try { await assertPublicNetworkUrl(route.request().url()); }
+      catch { return route.abort('blockedbyclient'); }
+      return route.continue();
+    });
     context.setDefaultTimeout(10000);
     const page = await context.newPage();
     documents = await observeDocumentResponses(page);
     const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20000 });
     if (!response?.ok()) throw new ReferenceNavigationError('a successful native HTTP capture is required');
+    const server = await response.serverAddr();
+    if (server !== null && !publicIpAddress(server.ipAddress)) throw new ReferenceNavigationError('native HTTP capture reached a non-public network');
     if (lane === 'design' && await loginOccludes(page)) throw new ReferenceNavigationError('login form obscures the public discovery list');
     const observation = await captureDiscoveryObservation(page, documents);
     const status = observation.httpStatus;

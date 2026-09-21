@@ -19,7 +19,8 @@ export type MarketReferenceCoverage = Readonly<{
 
 const reject = (code: string): never => { throw new Error(code); };
 const INVISIBLE = /[\p{Cc}\p{Default_Ignorable_Code_Point}\p{White_Space}\u2800\u3164\uffa0]/gu;
-const DIRECT_NEGATION = /\b(?:not|no|doesn't|does not|outside|unsupported|global only)\b|아님|아니다|제외|미지원/iu;
+const DIRECT_NEGATION = /\b(?:not|no|isn't|is not|doesn't|does not|unavailable|unsupported|outside|excludes?|excluding|global only)\b|아님|아니다|불가|제외|미지원|제공하지\s*않|지원하지\s*않|해외\s*전용|한국\s*외/iu;
+const DIRECT_SCOPE = /\b(?:serves?|serving|available|operat(?:e|es|ed|ing)|based|local(?:ized)?|market|residents?|users?|audience|directory|gallery|service|product|interface)\b|대상|제공|운영|거주|사용자|시장|서비스|디렉터리|갤러리|제품|인터페이스|앱|웹사이트/iu;
 type SourceIdentity = Readonly<{ id: string; evidence: Readonly<{ sha256: string }> }>;
 function object(value: unknown, code: string): Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return reject(code);
@@ -42,6 +43,25 @@ function explanation(value: unknown, code: string): string {
   const result = text(value, code);
   if (result.replace(INVISIBLE, '').length < 20) return reject(code);
   return result;
+}
+function containsMarketToken(reason: string, tokens: readonly string[]): boolean {
+  const normalized = reason.normalize('NFKC').toLocaleLowerCase('und');
+  return tokens.some(candidate => {
+    const token = candidate.normalize('NFKC').toLocaleLowerCase('und');
+    let offset = normalized.indexOf(token);
+    while (offset >= 0) {
+      const before = normalized.slice(0, offset).at(-1);
+      const after = normalized.slice(offset + token.length).at(0);
+      if ((before === undefined || !/[\p{L}\p{N}]/u.test(before))
+        && (after === undefined || !/[\p{L}\p{N}]/u.test(after))) return true;
+      offset = normalized.indexOf(token, offset + token.length);
+    }
+    return false;
+  });
+}
+function directRootReason(value: unknown, marketTokens: readonly string[], code: string): void {
+  const reason = explanation(value, code);
+  if (DIRECT_NEGATION.test(reason) || !DIRECT_SCOPE.test(reason) || !containsMarketToken(reason, marketTokens)) reject(code);
 }
 function texts(value: unknown, code: string): readonly string[] {
   if (!Array.isArray(value) || !value.length || Object.keys(value).length !== value.length) return reject(code);
@@ -119,11 +139,11 @@ export function validateMarketReferenceCoverage(root: string, research: Referenc
     ['DESIGN', research.designReference.discoveryRoots],
   ] as const;
   for (const [name, roots] of directLanes) {
-    if (roots?.some(root => DIRECT_NEGATION.test(root.reason)
-      || root.reason.replace(INVISIBLE, '').length < 20
-      || !marketTokens.some(token => root.reason.includes(token)))) {
-      return reject(`REFERENCE_RESEARCH_MARKET_${name}_DIRECT_ROOT_REQUIRED: explain how each direct root scopes discovery to the explicit market`);
-    }
+    roots?.forEach(root => directRootReason(
+      root.reason,
+      marketTokens,
+      `REFERENCE_RESEARCH_MARKET_${name}_DIRECT_ROOT_REQUIRED: explain how each direct root scopes discovery to the explicit market`,
+    ));
   }
   if (!research.domainReference.discoveryRoots?.length && domain.some((query, index) => research.domainReference.queries[index] !== query)) {
     return reject('REFERENCE_RESEARCH_MARKET_DOMAIN_SEARCH_REQUIRED: execute the exact target-market domain inputs before global searches');
@@ -131,7 +151,6 @@ export function validateMarketReferenceCoverage(root: string, research: Referenc
   if (!research.domainReference.discoveryRoots?.length) validateExecutionOrder(
     root, research.domainReference.searches, domain, labels, 'DOMAIN',
   );
-  if (research.designReference.discoveryRoots?.length) return;
   const briefPath = resolve(root, '.omd/domain-brief.json');
   if (!existsSync(briefPath)) return reject('REFERENCE_RESEARCH_MARKET_DESIGN_PLAN_REQUIRED: current domain queries are missing');
   const briefBytes = readStableProjectFile({ root: resolve(root), path: briefPath, label: '.omd/domain-brief.json', fs: nodeStableProjectFileSystem() });
@@ -139,6 +158,7 @@ export function validateMarketReferenceCoverage(root: string, research: Referenc
   if (expectedRequest === undefined || brief.request !== expectedRequest.trim()) {
     return reject('REFERENCE_RESEARCH_MARKET_DESIGN_PLAN_STALE: current domain queries describe another request');
   }
+  if (research.designReference.discoveryRoots?.length) return;
   const base = [...brief.referenceQueries.mood, ...brief.referenceQueries.component][0];
   if (base === undefined) return reject('REFERENCE_RESEARCH_MARKET_DESIGN_PLAN_REQUIRED: current domain queries are empty');
   const designQueries = labels.map(label => `${label} ${context.domain} ${base}`);

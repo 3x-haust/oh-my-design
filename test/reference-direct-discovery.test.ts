@@ -5,6 +5,7 @@ import test from 'node:test';
 import { captureReferenceNavigation } from '../core/ref/navigation-capture.ts';
 import { readDirectDiscoveryEntry, readStrictDiscoveryNavigation, type DirectDiscoveryEntry } from '../core/ref/discovery-record.ts';
 import { designDiscoveryDirectoryProvider } from '../core/ref/design-discovery-sources.ts';
+import { assertPublicNetworkUrl, publicIpAddress } from '../core/ref/public-network.ts';
 import { loadRefs } from '../core/ref/store.ts';
 import { withBrowser } from '../core/render/index.ts';
 import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
@@ -76,6 +77,7 @@ test('invalid mode, lane and public-list inputs refuse before opening a browser 
       [GALLERY_DIRECTORY, 'domain', 'free-gallery'], [PUBLIC_DIRECTORY, 'design', 'public-directory'],
       [GALLERY_ITEM, 'design', 'free-gallery'], ['https://www.siteinspire.com/login', 'design', 'free-gallery'],
       ['https://siteinspire.com.evil.example/', 'design', 'free-gallery'], ['http://127.0.0.1:1234/', 'domain', 'public-directory'],
+      ['https://127.0.0.1.nip.io/', 'domain', 'public-directory'], ['https://metadata.google.internal/', 'domain', 'public-directory'],
     ]) {
       assert.ok(url && lane && entry);
       await assert.rejects(captureReferenceNavigation(observed.browser, url, lane, createTestProjectWriteAdapter(root), entry), /REFERENCE_DISCOVERY/);
@@ -83,6 +85,21 @@ test('invalid mode, lane and public-list inputs refuse before opening a browser 
     assert.deepEqual(observed.contextOptions, []);
     assert.equal(existsSync(join(root, '.omd/discovery')), false);
   });
+});
+
+test('public network validation refuses private DNS answers and reserved address families', async () => {
+  await assert.rejects(assertPublicNetworkUrl('https://public.example/', async () => [
+    { address: '93.184.216.34', family: 4 }, { address: '10.0.0.1', family: 4 },
+  ]), /non-public/);
+  await assert.rejects(assertPublicNetworkUrl('https://public.example/', async () => [
+    { address: 'fe80::1', family: 6 },
+  ]), /non-public/);
+  await assert.doesNotReject(assertPublicNetworkUrl('https://public.example/', async () => [
+    { address: '93.184.216.34', family: 4 }, { address: '2606:4700:4700::1111', family: 6 },
+  ]));
+  for (const address of ['127.0.0.1', '169.254.169.254', '::1', '::ffff:127.0.0.1', 'fc00::1', '2001:db8::1']) {
+    assert.equal(publicIpAddress(address), false);
+  }
 });
 
 const unavailable: readonly Readonly<{ name: string; scenario: DiscoveryScenario; error: RegExp }>[] = [

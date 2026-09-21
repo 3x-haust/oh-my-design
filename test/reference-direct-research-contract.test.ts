@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { parseReferenceResearch, publishReferenceResearch, readPublishedReferenceResearch,
@@ -169,12 +169,48 @@ test('market coverage refuses unqualified search order and fallback without a ga
     domainReference: { ...input.domainReference, queries: [], searches: [], discoveryRoots: [{ ...rootEnvelope('domain'), reason: 'NOT serving KR; global directory only.' }] },
     designReference: { ...input.designReference, queries: [], searches: [], discoveryRoots: [rootEnvelope('design')] },
   };
-  assert.throws(() => validateMarketReferenceCoverage(fixture.root, parseReferenceResearch(direct)), /MARKET_DOMAIN_DIRECT_ROOT_REQUIRED/);
+  assert.throws(() => validateMarketReferenceCoverage(fixture.root, parseReferenceResearch(direct), options.expectedRequest), /MARKET_DOMAIN_DIRECT_ROOT_REQUIRED/);
   const scopedDirect = { ...direct,
     domainReference: { ...direct.domainReference, discoveryRoots: [{ ...rootEnvelope('domain'), reason: '대한민국 public benefits directory.' }] },
     designReference: { ...direct.designReference, discoveryRoots: [{ ...rootEnvelope('design'), reason: '대한민국 public benefits gallery list.' }] },
   };
-  assert.doesNotThrow(() => validateMarketReferenceCoverage(fixture.root, parseReferenceResearch(scopedDirect)));
+  assert.doesNotThrow(() => validateMarketReferenceCoverage(fixture.root, parseReferenceResearch(scopedDirect), options.expectedRequest));
+  for (const reason of [
+    'This service is unavailable in South Korea for public benefits.',
+    '대한민국에서는 이용 불가하지만 글로벌 공공 혜택 디렉터리입니다.',
+    'The AKRZ public directory serves benefits users.',
+    'Evidence memo captured KR during inspection.',
+  ]) {
+    const adversarial = { ...scopedDirect, domainReference: { ...scopedDirect.domainReference,
+      discoveryRoots: [{ ...rootEnvelope('domain'), reason }] } };
+    assert.throws(() => validateMarketReferenceCoverage(
+      fixture.root, parseReferenceResearch(adversarial), options.expectedRequest,
+    ), /MARKET_DOMAIN_DIRECT_ROOT_REQUIRED/);
+  }
+  for (const reason of [`${'x'.repeat(4097)} KR service`, `The KR public directory has malformed evidence \ud800`]) {
+    const adversarial = { ...scopedDirect, domainReference: { ...scopedDirect.domainReference,
+      discoveryRoots: [{ ...rootEnvelope('domain'), reason }] } };
+    assert.throws(() => parseReferenceResearch(adversarial), /DISCOVERY_ROOT_REASON/);
+  }
+  writeFileSync(join(fixture.root, '.omd/domain-brief.json'), JSON.stringify({ ...domainBrief, request: 'Another task' }));
+  assert.throws(() => validateMarketReferenceCoverage(
+    fixture.root, parseReferenceResearch(scopedDirect), options.expectedRequest,
+  ), /MARKET_DESIGN_PLAN_STALE/);
+  unlinkSync(join(fixture.root, '.omd/domain-brief.json'));
+  assert.throws(() => validateMarketReferenceCoverage(
+    fixture.root, parseReferenceResearch(scopedDirect), options.expectedRequest,
+  ), /MARKET_DESIGN_PLAN_REQUIRED/);
+});
+
+test('direct discovery root reasons are bounded and Unicode-well-formed before market validation', t => {
+  const { research } = designAdmissionFixture(t);
+  const direct = { ...research, schema: 'reference-research-v6',
+    domainReference: { ...research.domainReference, queries: [], searches: [], discoveryRoots: [rootEnvelope('domain')] },
+    designReference: { ...research.designReference, queries: [], searches: [], discoveryRoots: [rootEnvelope('design')] } };
+  for (const reason of ['x'.repeat(4097), `Malformed direct root \ud800`]) {
+    assert.throws(() => parseReferenceResearch({ ...direct, domainReference: { ...direct.domainReference,
+      discoveryRoots: [{ ...rootEnvelope('domain'), reason }] } }), /DISCOVERY_ROOT_REASON/);
+  }
 });
 
 test('every explicit market requires local reference coverage regardless of fit mode or missing audience', t => {

@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { decodePng } from '../motion/energy.ts';
 import { nodeStableProjectFileSystem, readStableProjectFile } from '../runtime/stable-project-file.ts';
 import { designDiscoveryDirectoryProvider, designDiscoveryProvider, referenceServiceHost } from './design-discovery-sources.ts';
+import { forbiddenPublicHostname } from './public-network.ts';
 
 export type DiscoveryLane = 'domain' | 'design';
 export type DirectDiscoveryEntry = 'public-directory' | 'free-gallery';
@@ -42,8 +43,7 @@ export function publicDiscoveryUrl(value: unknown): string {
   let url: URL;
   try { url = new URL(parsed); } catch { return fail('invalid public URL'); }
   if (url.protocol !== 'https:' || url.username || url.password || url.hash || url.href !== parsed
-    || !url.hostname.includes('.') || /^(?:\d+\.){3}\d+$/.test(url.hostname)
-    || /(?:\.localhost|\.local)$/.test(url.hostname)) return fail('use canonical public HTTPS URLs without credentials or fragments');
+    || !url.hostname.includes('.') || forbiddenPublicHostname(url.hostname)) return fail('use canonical public HTTPS URLs without credentials, fragments, or private-network hosts');
   return parsed;
 }
 export function discoveryLane(value: unknown): DiscoveryLane {

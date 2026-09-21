@@ -8,7 +8,6 @@ import type { CraftRefSignal } from './craft-usage.ts';
 import { querySeeds } from './reference-query.ts';
 import { gallerySearchInputs, type GallerySearchInput } from './gallery-search.ts';
 import { marketDomainQueries, marketSearchLabels } from './market-reference.ts';
-import { parseSearchInput } from './search-execution.ts';
 
 export const REFERENCE_DISCOVERY_PLAN_SCHEMA = 'reference-discovery-plan-v2' as const;
 export type DiscoveryLane = 'domain-reference' | 'design-reference' | 'motion';
@@ -123,7 +122,6 @@ export function buildReferenceDiscoveryPlan(root: string, route: RouteRecord): R
     const url = new URL('https://www.bing.com/search');
     url.searchParams.set('q', query);
     const input = Object.freeze({ lane: 'domain' as const, query, url: url.href, queryParam: 'q' as const });
-    parseSearchInput(input);
     domainSearchInputs.push(input);
   }
   // Restrained work still needs a visual reference. Gallery names are leads, never quality proof
@@ -211,10 +209,7 @@ export function buildReferenceDiscoveryPlan(root: string, route: RouteRecord): R
         `${marketing ? 'site:siteinspire.com/websites/' : 'site:dribbble.com/shots/'} ${query}`,
         ...(!marketing ? [`site:behance.net/gallery/ ${query}`] : []),
       ])),
-      nativeSearchInputs: Object.freeze(!discovering ? [] : (designQueries.length === 0 ? [designQuery] : designQueries).flatMap(gallerySearchInputs).map(input => {
-        parseSearchInput(input);
-        return input;
-      })),
+      nativeSearchInputs: Object.freeze(!discovering ? [] : (designQueries.length === 0 ? [designQuery] : designQueries).flatMap(gallerySearchInputs)),
       nativeEntryInputs: Object.freeze(galleryCandidates.map(candidate => Object.freeze({ lane: 'design' as const, entry: 'free-gallery' as const, url: candidate.url }))),
       domainEntryCommand: discovering ? 'omd ref navigate <public-comparable-service-directory-url> --lane domain --entry public-directory --json' : null,
       fallback: 'Use actual search results OR explicitly enter a public gallery list with ref navigate <url> --lane design --entry free-gallery --json. In v6 research put the native root plus your reason in discoveryRoots, follow observed links using ref navigate, then capture the concrete gallery item with --lane design (or import-image for native app screenshots). A list is never retained visual direction. Check free access per entry. If login/payment/blocking prevents inspection, record the failed URL and try another public gallery. Component documentation alone is not a visual-direction substitute. Do not purchase, start a trial, install an MCP, bypass access controls, or claim a blocked source was inspected. Free viewing does not grant reuse rights.',
