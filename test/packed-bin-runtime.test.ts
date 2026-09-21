@@ -58,9 +58,12 @@ test('Given a real offline installed tarball When each public command starts The
   const temporary = mkdtempSync(join(tmpdir(), 'omd-packed-bin-runtime-'));
   const packs = join(temporary, 'packs');
   const consumer = join(temporary, 'consumer with spaces');
+  const packageStateSentinel = join(ROOT, 'core', '.omc', `package-leak-sentinel-${process.pid}.txt`);
   try {
     mkdirSync(packs);
     mkdirSync(consumer);
+    mkdirSync(join(ROOT, 'core', '.omc'), { recursive: true });
+    writeFileSync(packageStateSentinel, 'must not ship');
     const archive = pack(packs);
     const dependencies = packOfflineWorkspaceDependencies(ROOT, packs);
     const installed = run(NPM, ['install', '--offline', '--ignore-scripts', '--no-audit', '--no-fund', archive, ...dependencies], consumer);
@@ -102,6 +105,7 @@ test('Given a real offline installed tarball When each public command starts The
       assert.doesNotMatch(doctor.stderr, /ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING/);
     }
   } finally {
+    rmSync(packageStateSentinel, { force: true });
     rmSync(temporary, { recursive: true, force: true });
   }
 });
