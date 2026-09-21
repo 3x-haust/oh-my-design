@@ -6,6 +6,7 @@ import test from 'node:test';
 import type { Page } from 'playwright';
 import { withBrowser } from '../core/render/index.ts';
 import { executeReferenceSearch, readSearchExecution, searchObserved, validateSearchCoverage } from '../core/ref/search-execution.ts';
+import { captureFrozenSearchText } from '../core/ref/search-frozen-capture.ts';
 import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
 import { testSearchReceipt } from './helpers/search-execution.ts';
 
@@ -192,6 +193,16 @@ test('pixel contrast capture is invisible to page mutation observers', async t =
     }, lightImage),
   });
   assert.equal(h.execution.results?.find(result => result.url === redirect), undefined);
+});
+
+test('frozen contrast capture stops compositor CSS animations', async () => {
+  await withBrowser(async browser => {
+    const page = await browser.newPage();
+    await page.setContent(`<style>@keyframes pulse{0%{background:black}50%{background:white}100%{background:black}}</style>
+      <a style="display:block;width:300px;height:80px;color:black;animation:pulse .01s linear infinite">South Korea service for residents</a>`);
+    const capture = await captureFrozenSearchText(page);
+    assert.deepEqual(capture.visibleText, capture.confirmedVisibleText);
+  });
 });
 
 test('render observation does not mutate pointer-event styles', async t => {

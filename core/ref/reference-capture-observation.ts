@@ -18,7 +18,8 @@ export async function captureDiscoveryObservation(page: Page, documents: Documen
     const afterDocument = await documents.current();
     if (beforeDocument.identity === afterDocument.identity && beforeDocument.httpStatus === afterDocument.httpStatus
       && JSON.stringify(before) === JSON.stringify(after)) {
-      const observed = finalizeSearchRenderedState(before, capture?.visibleText ?? Buffer.alloc(0), capture?.hiddenText ?? Buffer.alloc(0));
+      const observed = finalizeSearchRenderedState(before, capture?.visibleText ?? Buffer.alloc(0),
+        capture?.hiddenText ?? Buffer.alloc(0), capture?.confirmedVisibleText ?? Buffer.alloc(0));
       return { bytes, links: [...new Set(observed.anchors.map(anchor => anchor.href))],
         results: observed.anchors.map(anchor => ({ url: anchor.href, text: anchor.text.replace(/\s+/g, ' ').trim() }))
           .filter((result, index, all) => result.text && all.findIndex(candidate => candidate.url === result.url) === index),

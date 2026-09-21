@@ -251,7 +251,7 @@ export async function inspectRenderedState(page: Page): Promise<RawSearchRendere
 
 export async function renderedState(page: Page) {
   const raw = await inspectRenderedState(page);
-  if (raw.uncertain.length === 0) return finalizeSearchRenderedState(raw, Buffer.alloc(0), Buffer.alloc(0));
+  if (raw.uncertain.length === 0) return finalizeSearchRenderedState(raw, Buffer.alloc(0), Buffer.alloc(0), Buffer.alloc(0));
   const capture = await captureFrozenSearchText(page);
-  return finalizeSearchRenderedState(raw, capture.visibleText, capture.hiddenText);
+  return finalizeSearchRenderedState(raw, capture.visibleText, capture.hiddenText, capture.confirmedVisibleText);
 }
