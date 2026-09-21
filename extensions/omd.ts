@@ -21,7 +21,8 @@ export default function omdExtension(pi: PortablePiApi): void {
   const repairLoop = new RepairLoop();
   const revisions = new Map<string, number>();
   type PendingMutation = { path: string; before: string; production: boolean };
-  const pendingMutations = new Map<string, Map<string, PendingMutation[]>>();
+  type PendingMutationGroup = { entries: PendingMutation[]; baseline: string; production: boolean; failed: boolean };
+  const pendingMutations = new Map<string, Map<string, PendingMutationGroup>>();
   const revision = (cwd: string) => revisions.get(cwd) ?? 0;
   const bumpRevision = (cwd: string) => revisions.set(cwd, revision(cwd) + 1);
   const fileRevision = (cwd: string, path: string): string => {
@@ -36,10 +37,12 @@ export default function omdExtension(pi: PortablePiApi): void {
   const rememberMutation = (cwd: string, toolName: unknown, toolCallId: string | undefined, path: string | undefined, production = false) => {
     const key = mutationKey(toolName, toolCallId, path);
     if (key === undefined || path === undefined) return;
-    const pending = pendingMutations.get(cwd) ?? new Map<string, PendingMutation[]>();
-    const entries = pending.get(key) ?? [];
-    entries.push({ path, before: fileRevision(cwd, path), production });
-    pending.set(key, entries);
+    const pending = pendingMutations.get(cwd) ?? new Map<string, PendingMutationGroup>();
+    const before = fileRevision(cwd, path);
+    const group = pending.get(key) ?? { entries: [], baseline: before, production: false, failed: false };
+    group.entries.push({ path, before, production });
+    group.production ||= production;
+    pending.set(key, group);
     pendingMutations.set(cwd, pending);
   };
   const ownedWork = new StageWork();
@@ -143,18 +146,21 @@ export default function omdExtension(pi: PortablePiApi): void {
       if (context.signal?.aborted) return;
       ownedWork.nativeFinished(context.cwd, event);
       const key = mutationKey(event.toolName, event.toolCallId, event.input?.path);
-      const mutations = key === undefined ? undefined : pendingMutations.get(context.cwd)?.get(key);
-      const mutation = mutations?.shift();
-      if (key !== undefined && mutations?.length === 0) pendingMutations.get(context.cwd)?.delete(key);
-      if (mutation && event.isError === false && mutation.before !== fileRevision(context.cwd, mutation.path)) {
+      const group = key === undefined ? undefined : pendingMutations.get(context.cwd)?.get(key);
+      const mutation = group?.entries.shift();
+      if (group && event.isError !== false) group.failed = true;
+      const settled = group !== undefined && group.entries.length === 0;
+      if (key !== undefined && settled) pendingMutations.get(context.cwd)?.delete(key);
+      if (mutation && settled && !group.failed && group.baseline !== fileRevision(context.cwd, mutation.path)) {
         bumpRevision(context.cwd);
-        if (mutation.production) productionAttempted.add(context.cwd);
+        if (group.production) productionAttempted.add(context.cwd);
       }
     });
     pi.on!('message_end', async (event, context) => {
       const message = event.message;
       if (!touched.has(context.cwd) || message?.role !== 'assistant' || message.stopReason !== 'stop'
         || message.content?.some(part => part.type === 'toolCall')) return;
+      pendingMutations.delete(context.cwd);
       if (context.signal?.aborted) return;
       const taskEpoch = epoch(context.cwd);
       const interrupted = () => context.signal?.aborted || epochs.get(context.cwd) !== taskEpoch;

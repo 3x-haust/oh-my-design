@@ -172,6 +172,27 @@ test('overlapping id-less writes to one file retain each pending fingerprint', a
   assert.equal(sent.length, 1);
 });
 
+test('mixed-result overlapping id-less writes grant no ambiguous repair authority', async () => {
+  for (const order of ['failure-first', 'success-first'] as const) {
+    const sent: unknown[] = [];
+    const h = harness(async (_command, args) => args[2] === 'production'
+      ? { stdout: '{"ok":true}', stderr: '', code: 0, killed: false }
+      : { stdout: '{"blockers":["copy deck missing"]}', stderr: '', code: 1, killed: false }, m => { sent.push(m); });
+    await h.emit('before_agent_start', { prompt: 'omd-ultradesign' });
+    mkdirSync(join(h.cwd, 'src'));
+    writeFileSync(join(h.cwd, 'src/main.jsx'), 'base');
+    await h.emit('tool_call', { toolName: 'write', input: { path: 'src/main.jsx', content: 'changed' } });
+    await h.emit('tool_call', { toolName: 'write', input: { path: 'src/main.jsx', content: 'base' } });
+    writeFileSync(join(h.cwd, 'src/main.jsx'), 'changed');
+    const failed = { toolName: 'write', input: { path: 'src/main.jsx' }, isError: true };
+    const succeeded = { toolName: 'write', input: { path: 'src/main.jsx' }, isError: false };
+    await h.emit('tool_result', order === 'failure-first' ? failed : succeeded);
+    await h.emit('tool_result', order === 'failure-first' ? succeeded : failed);
+    await h.emit('message_end', { message: final });
+    assert.equal(sent.length, 0, `${order} is ambiguous and cannot grant implementation authority`);
+  }
+});
+
 test('blocked and failed production writes never authorize an automatic completion repair', async () => {
   for (const mode of ['blocked', 'failed'] as const) {
     const sent: unknown[] = [];
