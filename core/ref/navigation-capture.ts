@@ -3,6 +3,7 @@ import { detectBlockReason } from '../render/index.ts';
 import type { ProjectWriteAdapter } from '../runtime/project-write.ts';
 import { designDiscoveryDirectoryProvider } from './design-discovery-sources.ts';
 import { captureDiscoveryObservation } from './search-observation.ts';
+import { observeDocumentResponses, type DocumentObserver } from './document-observation.ts';
 import { searchChallengeReason } from './search-execution.ts';
 import { DISCOVERY_LIMITATIONS, ReferenceDiscoveryError, directDiscoveryEntry, discoveryDigest, discoveryLane, publicDiscoveryUrl, validateDirectDiscoveryLinks,
   type DirectDiscoveryEntry, type DirectDiscoveryReceipt, type DiscoveryCaptureRecord, type DiscoveryNavigationReceipt } from './discovery-record.ts';
@@ -36,15 +37,18 @@ export async function captureReferenceNavigation(browser: Browser, source: strin
   const entry = requestedEntry === undefined ? undefined : directDiscoveryEntry(requestedEntry, lane);
   if (entry === 'free-gallery' && designDiscoveryDirectoryProvider(url) === null) throw new ReferenceNavigationError('free-gallery entry requires a supported public list URL');
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, serviceWorkers: 'block', acceptDownloads: false });
+  let documents: DocumentObserver | undefined;
   try {
     await context.route('**/*', route => ['GET', 'HEAD'].includes(route.request().method()) ? route.continue() : route.abort());
     context.setDefaultTimeout(10000);
     const page = await context.newPage();
+    documents = await observeDocumentResponses(page);
     const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20000 });
-    const status = response?.status();
-    if (status === undefined || status < 200 || status >= 300) throw new ReferenceNavigationError('a successful native HTTP capture is required');
+    if (!response?.ok()) throw new ReferenceNavigationError('a successful native HTTP capture is required');
     if (lane === 'design' && await loginOccludes(page)) throw new ReferenceNavigationError('login form obscures the public discovery list');
-    const observation = await captureDiscoveryObservation(page);
+    const observation = await captureDiscoveryObservation(page, documents);
+    const status = observation.httpStatus;
+    if (status < 200 || status >= 300) throw new ReferenceNavigationError('a successful native HTTP capture is required');
     const finalUrl = publicDiscoveryUrl(observation.url);
     const links = observation.links.filter(link => {
       try { publicDiscoveryUrl(link); return true; }
@@ -73,5 +77,8 @@ export async function captureReferenceNavigation(browser: Browser, source: strin
     writer.writeContentAddressed(capture.path, bytes);
     const receipt = { url, evidence: { path: imagePath, sha256: imageSha256 }, capture };
     return entry === undefined ? receipt : { method: 'direct-public', entry, ...receipt };
-  } finally { await closeContext(context); }
+  } finally {
+    try { await documents?.close(); }
+    finally { await closeContext(context); }
+  }
 }

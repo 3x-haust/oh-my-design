@@ -27,6 +27,7 @@ export function discoveryBrowser(browser: Browser, scenario: DiscoveryScenario) 
   const abortedMethods: string[] = [];
   const contextOptions: Parameters<Browser['newContext']>[0][] = [];
   let closed = 0;
+  let detached = 0;
   const preparePage = async (page: Page): Promise<Page> => {
     await page.route(scenario.url, route => scenario.finalUrl
       ? route.fulfill({ status: 200, contentType: 'text/html', body: `<script>location.replace(${JSON.stringify(scenario.finalUrl)})</script>` })
@@ -54,6 +55,13 @@ export function discoveryBrowser(browser: Browser, scenario: DiscoveryScenario) 
   };
   const prepareContext = (context: BrowserContext): BrowserContext => {
     const newPage = context.newPage.bind(context);
+    const newSession = context.newCDPSession.bind(context);
+    context.newCDPSession = async target => {
+      const session = await newSession(target);
+      const detach = session.detach.bind(session);
+      session.detach = async () => { await detach(); detached++; };
+      return session;
+    };
     context.newPage = async () => preparePage(await newPage());
     context.on('close', () => { closed++; });
     return context;
@@ -66,5 +74,5 @@ export function discoveryBrowser(browser: Browser, scenario: DiscoveryScenario) 
     if (property === 'newPage') return async (options: Parameters<Browser['newPage']>[0]) => preparePage(await target.newPage(options));
     return Reflect.get(target, property, target);
   } });
-  return { browser: proxy, captures, abortedMethods, contextOptions, closed: () => closed };
+  return { browser: proxy, captures, abortedMethods, contextOptions, closed: () => closed, detached: () => detached };
 }

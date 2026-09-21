@@ -6,6 +6,7 @@ import { nodeStableProjectFileSystem, readStableProjectFile } from '../runtime/s
 import { decodePng } from '../motion/energy.ts';
 import { gallerySearchHasItems, gallerySearchProvider } from './gallery-search.ts';
 import { captureSearchObservation } from './search-observation.ts';
+import { observeDocumentResponses, type DocumentObserver } from './document-observation.ts';
 
 export const SEARCH_EXECUTION_SCHEMA = 'reference-search-execution-v1';
 type Lane = 'domain' | 'design';
@@ -93,8 +94,7 @@ function parseExecution(value: unknown): SearchExecution {
 export async function executeReferenceSearch(browser: Browser, value: unknown, writer: ProjectWriteAdapter): Promise<Receipt> {
   const input = parseSearchInput(value);
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, serviceWorkers: 'block', acceptDownloads: false });
-  await context.route('**/*', route => ['GET', 'HEAD'].includes(route.request().method()) ? route.continue() : route.abort());
-  const page = await context.newPage();
+  let documents: DocumentObserver | undefined;
   let capture: Receipt | null = null;
   let finalUrl: string | null = null;
   let httpStatus: number | null = null;
@@ -102,10 +102,13 @@ export async function executeReferenceSearch(browser: Browser, value: unknown, w
   let error: string | null = null;
   let links: string[] = [];
   try {
-    const response = await page.goto(input.url, { waitUntil: 'domcontentloaded', timeout: 20000 });
+    await context.route('**/*', route => ['GET', 'HEAD'].includes(route.request().method()) ? route.continue() : route.abort());
+    const page = await context.newPage();
+    documents = await observeDocumentResponses(page);
+    await page.goto(input.url, { waitUntil: 'domcontentloaded', timeout: 20000 });
     await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => undefined);
-    httpStatus = response?.status() ?? null;
-    const observation = await captureSearchObservation(page);
+    const observation = await captureSearchObservation(page, documents);
+    httpStatus = observation.httpStatus;
     finalUrl = url(observation.url);
     const bytes = observation.bytes;
     capture = { path: `.omd/discovery/${input.lane}/search-${hash(bytes)}.png`, sha256: hash(bytes) };
@@ -128,9 +131,12 @@ export async function executeReferenceSearch(browser: Browser, value: unknown, w
     writer.write(capture.path, bytes);
   } catch (caught) {
     // Do not present a partial navigation or old blank-page screenshot as search evidence.
-    status = 'navigation-error'; capture = null; links = [];
+    status = 'navigation-error'; capture = null; links = []; httpStatus = null;
     error = (caught instanceof Error ? caught.message : String(caught)).slice(0, 4096);
-  } finally { await context.close(); }
+  } finally {
+    try { await documents?.close(); }
+    finally { await context.close(); }
+  }
   const execution: SearchExecution = { schema: SEARCH_EXECUTION_SCHEMA, lane: input.lane, query: input.query, queryParam: input.queryParam,
     requestedUrl: input.url, finalUrl, provider: new URL(input.url).hostname, observedAt: new Date().toISOString(),
     status, httpStatus, links, capture, error, limitations: LIMITATIONS };

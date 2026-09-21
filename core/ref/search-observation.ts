@@ -1,4 +1,5 @@
 import type { Page } from 'playwright';
+import type { DocumentObserver } from './document-observation.ts';
 
 async function renderedState(page: Page) {
   const anchors = await page.locator('a[href]').evaluateAll(elements => elements.flatMap(element => {
@@ -28,13 +29,17 @@ class DiscoveryObservationError extends Error {
   constructor() { super('Discovery rendering changed during both bounded captures; no consistent screenshot/link evidence was retained.'); }
 }
 
-export async function captureDiscoveryObservation(page: Page) {
+export async function captureDiscoveryObservation(page: Page, documents: DocumentObserver) {
   for (let attempt = 0; attempt < 2; attempt++) {
+    const beforeDocument = await documents.current();
     const before = await renderedState(page);
     const bytes = await page.screenshot({ timeout: 10000 });
     const after = await renderedState(page);
-    if (JSON.stringify(before) === JSON.stringify(after)) {
-      return { bytes, links: [...new Set(before.anchors.map(anchor => anchor.href))], body: before.body, url: before.url };
+    const afterDocument = await documents.current();
+    if (beforeDocument.identity === afterDocument.identity && beforeDocument.httpStatus === afterDocument.httpStatus
+      && JSON.stringify(before) === JSON.stringify(after)) {
+      return { bytes, links: [...new Set(before.anchors.map(anchor => anchor.href))], body: before.body, url: before.url,
+        httpStatus: afterDocument.httpStatus };
     }
   }
   throw new DiscoveryObservationError();
