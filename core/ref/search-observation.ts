@@ -28,15 +28,40 @@ async function renderedState(page: Page) {
       let hidden = false;
       for (let ancestor: Element | null = parent; ancestor; ancestor = ancestor.parentElement) {
         const style = getComputedStyle(ancestor);
-        if (style.display === 'none' || style.visibility !== 'visible' || Number(style.opacity) === 0
-          || style.contentVisibility === 'hidden') { hidden = true; break; }
+        if (style.display === 'none' || style.visibility !== 'visible' || Number(style.opacity) < 0.05
+          || style.contentVisibility === 'hidden' || style.clipPath !== 'none' || style.clip !== 'auto'
+          || style.filter !== 'none' || style.getPropertyValue('mask-image') !== 'none'
+          || !['', 'none'].includes(style.getPropertyValue('-webkit-mask-image'))) { hidden = true; break; }
       }
-      if (hidden) continue;
+      const color = getComputedStyle(parent).color;
+      const fill = getComputedStyle(parent).getPropertyValue('-webkit-text-fill-color');
+      if (hidden || color === 'transparent' || /^rgba\([^)]*,\s*0(?:\.0+)?\)$/.test(color)
+        || /^rgb\([^)]*\/\s*0(?:\.0+)?\)$/.test(color)
+        || fill === 'transparent' || /^rgba\([^)]*,\s*0(?:\.0+)?\)$/.test(fill)
+        || /^rgb\([^)]*\/\s*0(?:\.0+)?\)$/.test(fill)
+        || getComputedStyle(parent).fontSize === '0px') continue;
       const range = document.createRange(); range.selectNodeContents(node);
       const rendered = Array.from(range.getClientRects()).some(rect => {
-        const x = (Math.max(0, rect.left) + Math.min(innerWidth, rect.right)) / 2;
-        const y = (Math.max(0, rect.top) + Math.min(innerHeight, rect.bottom)) / 2;
-        if (rect.right <= 0 || rect.bottom <= 0 || rect.left >= innerWidth || rect.top >= innerHeight) return false;
+        let left = Math.max(0, rect.left); let right = Math.min(innerWidth, rect.right);
+        let top = Math.max(0, rect.top); let bottom = Math.min(innerHeight, rect.bottom);
+        for (let ancestor: Element | null = parent; ancestor; ancestor = ancestor.parentElement) {
+          const style = getComputedStyle(ancestor); const box = ancestor.getBoundingClientRect();
+          if (style.overflowX !== 'visible') { left = Math.max(left, box.left); right = Math.min(right, box.right); }
+          if (style.overflowY !== 'visible') { top = Math.max(top, box.top); bottom = Math.min(bottom, box.bottom); }
+        }
+        if (right <= left || bottom <= top) return false;
+        const x = (left + right) / 2; const y = (top + bottom) / 2;
+        const occluded = Array.from(parent.querySelectorAll('*')).some(candidate => {
+          const style = getComputedStyle(candidate); const box = candidate.getBoundingClientRect();
+          const background = style.backgroundColor;
+          const z = Number.parseInt(style.zIndex, 10);
+          return ['absolute', 'fixed', 'sticky'].includes(style.position) && (!Number.isFinite(z) || z >= 0)
+            && style.visibility === 'visible' && Number(style.opacity) >= 0.05
+            && background !== 'transparent' && !/^rgba\([^)]*,\s*0(?:\.0+)?\)$/.test(background)
+            && !/^rgb\([^)]*\/\s*0(?:\.0+)?\)$/.test(background)
+            && box.left <= x && box.right >= x && box.top <= y && box.bottom >= y;
+        });
+        if (occluded) return false;
         const front = document.elementsFromPoint(x, y)[0];
         return front === parent || front?.contains(parent) === true;
       });
@@ -55,15 +80,40 @@ async function renderedState(page: Page) {
       let hidden = false;
       for (let ancestor: Element | null = parent; ancestor; ancestor = ancestor.parentElement) {
         const style = getComputedStyle(ancestor);
-        if (style.display === 'none' || style.visibility !== 'visible' || Number(style.opacity) === 0
-          || style.contentVisibility === 'hidden') { hidden = true; break; }
+        if (style.display === 'none' || style.visibility !== 'visible' || Number(style.opacity) < 0.05
+          || style.contentVisibility === 'hidden' || style.clipPath !== 'none' || style.clip !== 'auto'
+          || style.filter !== 'none' || style.getPropertyValue('mask-image') !== 'none'
+          || !['', 'none'].includes(style.getPropertyValue('-webkit-mask-image'))) { hidden = true; break; }
       }
-      if (hidden) continue;
+      const color = getComputedStyle(parent).color;
+      const fill = getComputedStyle(parent).getPropertyValue('-webkit-text-fill-color');
+      if (hidden || color === 'transparent' || /^rgba\([^)]*,\s*0(?:\.0+)?\)$/.test(color)
+        || /^rgb\([^)]*\/\s*0(?:\.0+)?\)$/.test(color)
+        || fill === 'transparent' || /^rgba\([^)]*,\s*0(?:\.0+)?\)$/.test(fill)
+        || /^rgb\([^)]*\/\s*0(?:\.0+)?\)$/.test(fill)
+        || getComputedStyle(parent).fontSize === '0px') continue;
       const range = document.createRange(); range.selectNodeContents(node);
       const rendered = Array.from(range.getClientRects()).some(rect => {
-        const x = (Math.max(0, rect.left) + Math.min(innerWidth, rect.right)) / 2;
-        const y = (Math.max(0, rect.top) + Math.min(innerHeight, rect.bottom)) / 2;
-        if (rect.right <= 0 || rect.bottom <= 0 || rect.left >= innerWidth || rect.top >= innerHeight) return false;
+        let left = Math.max(0, rect.left); let right = Math.min(innerWidth, rect.right);
+        let top = Math.max(0, rect.top); let bottom = Math.min(innerHeight, rect.bottom);
+        for (let ancestor: Element | null = parent; ancestor; ancestor = ancestor.parentElement) {
+          const style = getComputedStyle(ancestor); const box = ancestor.getBoundingClientRect();
+          if (style.overflowX !== 'visible') { left = Math.max(left, box.left); right = Math.min(right, box.right); }
+          if (style.overflowY !== 'visible') { top = Math.max(top, box.top); bottom = Math.min(bottom, box.bottom); }
+        }
+        if (right <= left || bottom <= top) return false;
+        const x = (left + right) / 2; const y = (top + bottom) / 2;
+        const occluded = Array.from(parent.querySelectorAll('*')).some(candidate => {
+          const style = getComputedStyle(candidate); const box = candidate.getBoundingClientRect();
+          const background = style.backgroundColor;
+          const z = Number.parseInt(style.zIndex, 10);
+          return ['absolute', 'fixed', 'sticky'].includes(style.position) && (!Number.isFinite(z) || z >= 0)
+            && style.visibility === 'visible' && Number(style.opacity) >= 0.05
+            && background !== 'transparent' && !/^rgba\([^)]*,\s*0(?:\.0+)?\)$/.test(background)
+            && !/^rgb\([^)]*\/\s*0(?:\.0+)?\)$/.test(background)
+            && box.left <= x && box.right >= x && box.top <= y && box.bottom >= y;
+        });
+        if (occluded) return false;
         const front = document.elementsFromPoint(x, y)[0];
         return front === parent || front?.contains(parent) === true;
       });

@@ -26,7 +26,7 @@ type DiscoveryCaptureFields = Readonly<{
 export type DiscoveryCaptureRecord = DiscoveryCaptureFields & (
   Readonly<{ schema: 'reference-navigation-capture-v2' }>
   | Readonly<{ schema: 'reference-discovery-entry-v1'; method: 'direct-public'; entry: DirectDiscoveryEntry }>
-  | Readonly<{ schema: 'reference-discovery-entry-v2'; method: 'direct-public'; entry: DirectDiscoveryEntry;
+  | Readonly<{ schema: 'reference-discovery-entry-v3'; method: 'direct-public'; entry: DirectDiscoveryEntry;
     observedText: string; linkLabels: readonly ObservedSearchResult[]; signature: string }>
 );
 
@@ -100,17 +100,23 @@ function readDiscovery(root: string, value: unknown, direct: boolean, requireCur
   if (direct && receipt.method !== 'direct-public') return fail('direct method is required');
   const keys = ['schema', 'source', 'researchLane', 'kind', 'capturedAt', 'imagePath', 'acquisition', 'limitations'];
   const decoded = JSON.parse(read(root, capture).toString('utf8')) as Record<string, unknown>;
-  if (direct ? !['reference-discovery-entry-v1', 'reference-discovery-entry-v2'].includes(decoded.schema as string)
+  if (direct ? !['reference-discovery-entry-v1', 'reference-discovery-entry-v2', 'reference-discovery-entry-v3'].includes(decoded.schema as string)
     : decoded.schema !== 'reference-navigation-capture-v2') return fail('native capture purpose/source/lane binding differs');
-  const current = direct && decoded.schema === 'reference-discovery-entry-v2';
-  const row = object(decoded, direct ? [...keys, 'method', 'entry', ...(current ? ['observedText', 'linkLabels', 'signature'] : [])] : keys);
+  const current = direct && decoded.schema === 'reference-discovery-entry-v3';
+  const legacySigned = direct && decoded.schema === 'reference-discovery-entry-v2';
+  const legacyObserved = legacySigned && Object.hasOwn(decoded, 'observedText');
+  const legacyLabels = legacyObserved && Object.hasOwn(decoded, 'linkLabels');
+  const row = object(decoded, direct ? [...keys, 'method', 'entry',
+    ...(current ? ['observedText', 'linkLabels', 'signature'] : legacySigned
+      ? [...(legacyObserved ? ['observedText'] : []), ...(legacyLabels ? ['linkLabels'] : []), 'signature'] : [])] : keys);
   if (row.source !== url || row.researchLane !== lane || row.kind !== 'page' || row.imagePath !== image.path
     || row.limitations !== DISCOVERY_LIMITATIONS || !Number.isFinite(Date.parse(text(row.capturedAt)))
     || (direct && (row.method !== 'direct-public' || row.entry !== entry))) return fail('native capture purpose/source/lane binding differs');
   if (requireCurrent && !current) return fail('current direct discovery signature required');
-  if (current) {
+  if (current || legacySigned) {
     const { signature, ...unsigned } = row;
-    if (typeof signature !== 'string' || !verifyNativeObservation(root, 'reference-discovery-entry-v2',
+    const schema = current ? 'reference-discovery-entry-v3' : 'reference-discovery-entry-v2';
+    if (typeof signature !== 'string' || !verifyNativeObservation(root, schema,
       discoveryDigest(canonicalJson(unsigned)), signature)) return fail('native direct discovery signature invalid');
   }
   const observedText = current ? text(row.observedText) : undefined;

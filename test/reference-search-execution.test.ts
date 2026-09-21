@@ -28,7 +28,9 @@ test('real isolated browser execution records actual DOM links and pixels, and p
   await withBrowser(async browser => {
     // Real Chromium page with test-owned responses, not internet search quality or provider availability.
     let status = 200;
-    let body = '<html><body><h1>Search test fixture</h1><a href="https://www.pinterest.com/pin/123/">Design entry</a></body></html>';
+    let body = `<html><body><h1>Search test fixture</h1><a href="https://www.pinterest.com/pin/123/"><script>document.write(
+      [typeof RTCPeerConnection, typeof globalThis.webkitRTCPeerConnection, typeof WebTransport].every(value => value === 'undefined')
+        ? 'Proxy-only design entry' : 'Unsafe realtime transport')</script></a></body></html>`;
     const observed: string[] = [];
     const proxy = new Proxy(browser, { get(target, prop) {
       if (prop !== 'newContext') return Reflect.get(target, prop, target);
@@ -54,6 +56,7 @@ test('real isolated browser execution records actual DOM links and pixels, and p
     assert.match(execution.capture?.path ?? '', /^\.omd\/discovery\/design\/search-[a-f0-9]{64}\.png$/);
     assert.equal(execution.status, 'page-observed');
     assert.deepEqual(execution.links, ['https://www.pinterest.com/pin/123/']);
+    assert.deepEqual(execution.results, [{ url: 'https://www.pinterest.com/pin/123/', text: 'Proxy-only design entry' }]);
     assert.deepEqual(observed, [input.url]);
     assert.equal(validateSearchCoverage(root, 'design', [input.query], [receipt], execution.links).executed, 1);
     status = 403;

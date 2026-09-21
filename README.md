@@ -130,7 +130,7 @@ Failed attempts can accompany a usable free alternative. HTTP 200 alone is not s
 The executor accepts public Google/Bing/DuckDuckGo search pages with `queryParam: "q"`; use task/pattern
 and gallery `site:` queries. Arbitrary service pages with invented query parameters are rejected.
 When search is blocked, v6/v7 also allow signed direct-public list discovery through `omd ref navigate`.
-New search-v2 and direct-entry-v2 records are project-signed and tamper-evident, but they are not
+New search-v2 and direct-entry-v3 records are project-signed and tamper-evident, but they are not
 provider-attested truth and do not certify quality, market fit or authority.
 For explicit-market local coverage, a signed search result's visible link text must name the market
 and relevant service/product scope. A localized query by itself does not make a source local.

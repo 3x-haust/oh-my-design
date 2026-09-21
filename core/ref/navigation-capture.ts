@@ -7,6 +7,7 @@ import { designDiscoveryDirectoryProvider } from './design-discovery-sources.ts'
 import { captureDiscoveryObservation } from './search-observation.ts';
 import { observeDocumentResponses, type DocumentObserver } from './document-observation.ts';
 import { createPublicNetworkProxy, publicIpAddress } from './public-network.ts';
+import { disableUnproxiedRealtimeTransports } from './browser-security.ts';
 import { searchChallengeReason } from './search-execution.ts';
 import { DISCOVERY_LIMITATIONS, ReferenceDiscoveryError, directDiscoveryEntry, discoveryDigest, discoveryLane, publicDiscoveryUrl, validateDirectDiscoveryLinks,
   type DirectDiscoveryEntry, type DirectDiscoveryReceipt, type DiscoveryCaptureRecord, type DiscoveryNavigationReceipt } from './discovery-record.ts';
@@ -45,6 +46,7 @@ export async function captureReferenceNavigation(browser: Browser, source: strin
   try {
     context = await browser.newContext({ viewport: { width: 1280, height: 900 }, serviceWorkers: 'block', acceptDownloads: false,
       proxy: { server: networkProxy.server } });
+    await disableUnproxiedRealtimeTransports(context);
     await context.route('**/*', route => ['GET', 'HEAD'].includes(route.request().method()) ? route.continue() : route.abort());
     context.setDefaultTimeout(10000);
     const page = await context.newPage();
@@ -78,7 +80,7 @@ export async function captureReferenceNavigation(browser: Browser, source: strin
     const record: DiscoveryCaptureRecord = entry === undefined
       ? { schema: 'reference-navigation-capture-v2', ...common }
       : (() => {
-        const unsigned = { schema: 'reference-discovery-entry-v2' as const, method: 'direct-public' as const, entry,
+        const unsigned = { schema: 'reference-discovery-entry-v3' as const, method: 'direct-public' as const, entry,
           ...common, observedText: observation.visibleText, linkLabels: observation.results };
         return { ...unsigned, signature: signNativeObservation(writer.projectRoot, unsigned.schema,
           discoveryDigest(canonicalJson(unsigned))) };

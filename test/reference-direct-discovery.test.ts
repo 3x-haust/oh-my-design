@@ -48,6 +48,9 @@ for (const entry of ['public-directory', 'free-gallery'] as const) {
     const url = entry === 'public-directory' ? PUBLIC_DIRECTORY : GALLERY_DIRECTORY;
     const target = entry === 'public-directory' ? DOMAIN_ITEM : GALLERY_ITEM;
     const value = await capture(t, { url, html: directoryHtml(target) }, entry);
+    const record = JSON.parse(readFileSync(join(value.root, value.receipt.capture.path), 'utf8'));
+    assert.equal(record.schema, 'reference-discovery-entry-v3');
+    assert.deepEqual(record.linkLabels, [{ url: target, text: 'Inspect entry 1' }]);
     assert.equal(value.receipt.method, 'direct-public');
     assert.equal(value.receipt.entry, entry);
     assert.deepEqual(readDirectDiscoveryEntry(value.root, value.receipt), { url, finalUrl: url, links: [target] });
@@ -72,9 +75,17 @@ test('a direct entry blocks POST requests before they can reach the endpoint', a
   assert.deepEqual(result.observed.abortedMethods, ['POST']);
 });
 
+test('direct discovery disables browser transports that bypass the pinned HTTP proxy', async t => {
+  const html = `<main><script>document.write('<h1>' +
+    ([typeof RTCPeerConnection, typeof globalThis.webkitRTCPeerConnection, typeof WebTransport].every(value => value === 'undefined')
+      ? 'Realtime transports disabled' : 'Unsafe realtime transport') + '</h1>')</script><a href="${DOMAIN_ITEM}">Inspect service</a></main>`;
+  const result = await capture(t, { url: PUBLIC_DIRECTORY, html }, 'public-directory');
+  assert.match(readCurrentDirectDiscoveryEntry(result.root, result.receipt).observedText ?? '', /Realtime transports disabled/);
+});
+
 test('direct-entry visible text excludes hidden descendant market claims', async t => {
   const result = await capture(t, { url: PUBLIC_DIRECTORY,
-    html: `<main><h1>Global service directory</h1><p>Available services<span style="display:none"> South Korea residents market</span></p><a href="${DOMAIN_ITEM}">Inspect service</a></main>` },
+    html: `<main><h1>Global service directory</h1><p>Available services<span style="display:none"> South Korea residents market</span><span style="clip-path:inset(100%)"> South Korea service market</span><span style="color:transparent"> South Korea product audience</span></p><a href="${DOMAIN_ITEM}">Inspect service</a></main>` },
   'public-directory');
   const observation = readCurrentDirectDiscoveryEntry(result.root, result.receipt);
   assert.match(observation.observedText ?? '', /Global service directory/);
@@ -83,7 +94,7 @@ test('direct-entry visible text excludes hidden descendant market claims', async
 
 test('direct-entry visible text excludes copy covered by an opaque child overlay', async t => {
   const result = await capture(t, { url: PUBLIC_DIRECTORY,
-    html: `<main><h1>Global directory</h1><p style="position:relative">South Korea service directory for residents<span style="position:absolute;inset:0;background:white">Global catalogue</span></p><a href="${DOMAIN_ITEM}">Inspect service</a></main>` },
+    html: `<main><h1>Global directory</h1><p style="position:relative">South Korea service directory for residents<span style="position:absolute;inset:0;background:white;pointer-events:none">Global catalogue</span></p><a href="${DOMAIN_ITEM}">Inspect service</a></main>` },
   'public-directory');
   const observation = readCurrentDirectDiscoveryEntry(result.root, result.receipt);
   assert.match(observation.observedText ?? '', /Global catalogue/);
@@ -125,7 +136,8 @@ test('public network validation refuses private DNS answers and reserved address
   await assert.doesNotReject(assertPublicNetworkUrl('https://public.example/', async () => [
     { address: '93.184.216.34', family: 4 }, { address: '2606:4700:4700::1111', family: 6 },
   ]));
-  for (const address of ['127.0.0.1', '169.254.169.254', '192.175.48.1', '::1', '::ffff:127.0.0.1',
+  for (const address of ['127.0.0.1', '169.254.169.254', '192.31.196.1', '192.52.193.1',
+    '192.175.48.1', '::1', '::ffff:127.0.0.1',
     '64:ff9b:1::a9fe:a9fe', '100:0:0:1::1', '2620:4f:8000::1', 'fc00::1', 'fec0::1',
     '2001:db8::1', '3fff::1', '5f00::1']) {
     assert.equal(publicIpAddress(address), false);

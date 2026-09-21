@@ -99,7 +99,7 @@ inspection and research repair remain available while production is blocked.
   independent operator families. Multiple pages or subdomains under one operator such as GOV.UK
   count once; historical v5 remains readable but cannot be relabelled as new research. Both refuse
   links unreachable from observed discovery. Current v7 market coverage additionally requires signed
-  search-v2 or direct-entry-v2 provenance tied to exact observed links and the explicit market. Search
+  search-v2 or direct-entry-v3 provenance tied to exact observed links and the explicit market. Search
   provenance binds visible result text to its link; a localized query alone is insufficient. A ccTLD
   or authored reason is insufficient. Direct roots require native capture-time purpose,
   correct lane, public-list admission, current PNG/JSON and actual visible links. Empty query/search

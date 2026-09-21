@@ -85,7 +85,7 @@ test('a rendered Bing redirect remains an observed destination with its actual p
 });
 
 test('a visible result cannot inherit market scope from a hidden descendant', async t => {
-  const h = await observe(t, { html: `${navbar}<main><a href="${redirect}">Visible item <span style="opacity:0">South Korea residents service</span></a></main>` });
+  const h = await observe(t, { html: `${navbar}<main><a href="${redirect}">Visible item <span style="opacity:0">South Korea residents service</span><span style="clip-path:inset(100%)">South Korea product gallery</span><span style="color:transparent">South Korea service market</span></a></main>` });
   assert.equal(h.execution.status, 'page-observed');
   assert.deepEqual(h.execution.results?.find(result => result.url === redirect),
     { url: redirect, text: 'Visible item' });

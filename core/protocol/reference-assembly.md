@@ -218,7 +218,9 @@ Intermediate edges in direct v6/v7 chains require strict navigation-v2 captures.
 from retained captures and historical navigation-v1 cannot shortcut a missing observed transition.
 Design roots must remain supported public lists after redirects, exposing visible same-gallery item
 links; login walls, blocked pages, selected items and arbitrary service pages are refused.
-New signed entry-v2 records stay under `.omd/discovery/<lane>/entries/`, never retained `.omd/refs/`.
+New signed entry-v3 records stay under `.omd/discovery/<lane>/entries/`, never retained `.omd/refs/`.
+Historical entry-v1/v2 records remain readable, but only entry-v3 link-label evidence can satisfy
+current explicit-market provenance.
 Do not hand-author roots, promote old captures, infer official authority from a directory, or present
 this provenance check as a quality judgment. Follow observed items and qualify/capture each retained
 reference separately. Source/redirect hosts and image bytes must remain independent across lanes.

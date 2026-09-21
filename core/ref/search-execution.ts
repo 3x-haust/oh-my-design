@@ -10,6 +10,7 @@ import { gallerySearchHasItems, gallerySearchProvider } from './gallery-search.t
 import { captureSearchObservation } from './search-observation.ts';
 import { observeDocumentResponses, type DocumentObserver } from './document-observation.ts';
 import { createPublicNetworkProxy } from './public-network.ts';
+import { disableUnproxiedRealtimeTransports } from './browser-security.ts';
 import { observedSearchTargets, type ObservedSearchResult } from './search-result.ts';
 
 export { observedSearchTargets } from './search-result.ts';
@@ -135,6 +136,7 @@ export async function executeReferenceSearch(browser: Browser, value: unknown, w
   try {
     context = await browser.newContext({ viewport: { width: 1280, height: 900 }, serviceWorkers: 'block', acceptDownloads: false,
       proxy: { server: networkProxy.server } });
+    await disableUnproxiedRealtimeTransports(context);
     await context.route('**/*', route => ['GET', 'HEAD'].includes(route.request().method()) ? route.continue() : route.abort());
     const page = await context.newPage();
     documents = await observeDocumentResponses(page);
