@@ -70,7 +70,6 @@ test('dependency mutation cannot publish a mixed runtime snapshot', async t => {
   const dependencyParent = mkdtempSync(join(tmpdir(), 'omd-runtime-dependencies-'));
   const dependencyRoot = join(dependencyParent, 'node_modules');
   const dependencyFile = join(dependencyRoot, 'volatile-package/payload.bin');
-  const readyFile = join(dependencyParent, 'ready');
   t.after(() => rmSync(sourceRoot, { recursive: true, force: true }));
   t.after(() => rmSync(dependencyParent, { recursive: true, force: true }));
   mkdirSync(join(sourceRoot, 'bin'), { recursive: true });
@@ -82,15 +81,20 @@ test('dependency mutation cannot publish a mixed runtime snapshot', async t => {
   writeFileSync(dependencyFile, Buffer.alloc(8 * 1024 * 1024, 0x41));
   const mutator = spawn(process.execPath, ['-e', [
     'const { writeFileSync } = require("node:fs");',
-    'const [target, ready] = process.argv.slice(1);',
-    'writeFileSync(ready, "ready");',
+    'const [target] = process.argv.slice(1);',
+    'process.stdout.write("ready\\n");',
     'for (let index = 0; index < 12; index += 1) {',
     '  writeFileSync(target, Buffer.alloc(8 * 1024 * 1024, index % 2 ? 0x41 : 0x42));',
     '  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5);',
     '}',
-  ].join('\n'), dependencyFile, readyFile]);
+  ].join('\n'), dependencyFile]);
+  if (mutator.stdout === null) throw new Error('mutation child did not expose a readiness stream');
+  const readiness = once(mutator.stdout, 'data').then(([chunk]) => String(chunk));
   const mutationComplete = once(mutator, 'exit');
-  while (!existsSync(readyFile)) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1);
+  const endedBeforeReady = once(mutator, 'exit').then(([code, signal]) => {
+    throw new Error(`mutation child exited before readiness: ${String(code ?? signal)}`);
+  });
+  assert.equal(await Promise.race([readiness, endedBeforeReady]), 'ready\n');
   let snapshot: OmdRuntimeSnapshot | undefined;
   try { snapshot = createOmdRuntimeSnapshot({ sourceRoot, dependencyRoot }); }
   catch (error) {

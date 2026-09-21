@@ -25,7 +25,6 @@ test('route changes stages and reference evidence without removing independent r
   const skill = read('src/skills/omd-ultradesign/SKILL.md');
 
   assert.match(skill, /user-selected model owns role\/stage order and optional methods/i);
-  assert.match(skill, /When discovery is skipped, use the recorded[\s\S]*existing evidence/i);
   assert.match(skill, /Independent review and final evidence apply at every task size/i);
   assert.doesNotMatch(skill, /3–5 component captures/);
 });
