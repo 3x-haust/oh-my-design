@@ -6,17 +6,11 @@ import { createOmdRuntimeSnapshot, runtimeDependencyRoot } from './omd-runtime-s
 const MAX_OUTPUT_CHARS = 50_000;
 const require = createRequire(import.meta.url);
 const tsxPath = require.resolve('tsx');
-const sourceRoot = dirname(fileURLToPath(new URL('../package.json', import.meta.url)));
-const dependencyRoot = runtimeDependencyRoot(tsxPath);
-let runtimeSnapshot: ReturnType<typeof createOmdRuntimeSnapshot> | undefined;
-
-function omdEntry(): string {
-  if (runtimeSnapshot === undefined) {
-    runtimeSnapshot = createOmdRuntimeSnapshot({ sourceRoot, dependencyRoot });
-    process.once('exit', runtimeSnapshot.dispose);
-  }
-  return runtimeSnapshot.entryPath;
-}
+const runtimeSnapshot = createOmdRuntimeSnapshot({
+  sourceRoot: dirname(fileURLToPath(new URL('../package.json', import.meta.url))),
+  dependencyRoot: runtimeDependencyRoot(tsxPath),
+});
+process.once('exit', runtimeSnapshot.dispose);
 
 export const OMD_COMMAND_NAME = 'omd';
 
@@ -127,7 +121,7 @@ export async function runOmd(
   cwd: string,
   signal?: AbortSignal,
 ): Promise<{ text: string; details: { code: number; killed: boolean } }> {
-  const result = await pi.exec('node', [omdEntry(), ...args], signal === undefined ? { cwd } : { cwd, signal });
+  const result = await pi.exec('node', [runtimeSnapshot.entryPath, ...args], signal === undefined ? { cwd } : { cwd, signal });
   const text = boundedOutput(result);
   if (result.code !== 0 || result.killed) {
     throw new Error(`OMD_CLI_FAILED (${result.code}): ${text || 'no output'}`);

@@ -102,7 +102,12 @@ function copyRuntime(sourceRoot: string, targetRoot: string): void {
     if (!existsSync(source)) continue;
     const target = join(targetRoot, path);
     mkdirSync(resolve(target, '..'), { recursive: true });
-    cpSync(source, target, { recursive: true, dereference: false, errorOnExist: true });
+    cpSync(source, target, {
+      recursive: true,
+      dereference: false,
+      errorOnExist: true,
+      mode: constants.COPYFILE_FICLONE,
+    });
   }
 }
 
@@ -122,11 +127,12 @@ function updateDependencyDigest(
   ancestors: ReadonlySet<string>,
 ): void {
   const absolute = join(root, path);
-  const physical = realpathSync(absolute);
-  if (physical !== root && !physical.startsWith(`${root}${sep}`)) {
+  const link = lstatSync(absolute);
+  const physical = link.isSymbolicLink() ? realpathSync(absolute) : absolute;
+  const stat = link.isSymbolicLink() ? statSync(absolute) : link;
+  if (link.isSymbolicLink() && physical !== root && !physical.startsWith(`${root}${sep}`)) {
     throw new OmdRuntimeSnapshotError(`OMD_RUNTIME_DEPENDENCIES_INVALID: external link ${path}`);
   }
-  const stat = statSync(absolute);
   hash.update(path).update('\0');
   if (stat.isDirectory()) {
     if (ancestors.has(physical)) throw new OmdRuntimeSnapshotError(`OMD_RUNTIME_DEPENDENCIES_INVALID: recursive link ${path}`);
