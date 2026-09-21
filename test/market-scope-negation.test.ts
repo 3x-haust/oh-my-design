@@ -9,6 +9,10 @@ test('market exclusion recognizes direct English and Korean denial phrases', () 
     'This service does not serve users in South Korea',
     'South Korea residents are not served by this service',
     'Unavailable to residents of South Korea',
+    'South Korea users are not eligible for this service',
+    'South Korea service is not offered to customers',
+    'South Korea is outside our coverage',
+    'This platform does not operate in South Korea',
     'South Korea was excluded from this service',
     '대한민국에서는 이 서비스를 이용할 수 없습니다',
     '대한민국 거주자는 지원 대상이 아닙니다',
@@ -24,5 +28,6 @@ test('market exclusion preserves unrelated warnings and explicit positive scope'
     'No service is available outside South Korea',
     'This service is not unavailable in South Korea',
     'South Korea is excluded from the unsupported list',
+    'Services outside South Korea are excluded from this directory',
   ]) assert.equal(negatesMarketScope(value, tokens), false, value);
 });

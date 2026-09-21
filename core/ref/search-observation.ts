@@ -20,15 +20,18 @@ export async function renderedState(page: Page) {
       const colourAlpha = colourParts.length >= 4 ? colourParts[3] ?? 0 : colour === 'transparent' ? 0 : 1;
       const ownPaint = colourAlpha >= .05 || style.backgroundImage !== 'none'
         || ['IMG', 'VIDEO', 'CANVAS', 'SVG', 'PICTURE'].includes(element.tagName);
-      const pseudoPaint = ['::before', '::after'].some(pseudo => {
+      const pseudoPaint = ['::before', '::after'].flatMap(pseudo => {
         const pseudoStyle = getComputedStyle(element, pseudo);
         const pseudoColour = pseudoStyle.backgroundColor;
         const parts = pseudoColour.match(/[\d.]+/g)?.map(Number) ?? [];
         const alpha = parts.length >= 4 ? parts[3] ?? 0 : pseudoColour === 'transparent' ? 0 : 1;
-        return !['none', 'normal'].includes(pseudoStyle.content) && Number(pseudoStyle.opacity) >= .05
-          && (alpha >= .05 || pseudoStyle.backgroundImage !== 'none');
+        if (['none', 'normal'].includes(pseudoStyle.content) || Number(pseudoStyle.opacity) < .05
+          || (alpha < .05 && pseudoStyle.backgroundImage === 'none')) return [];
+        const pseudoZ = Number.parseInt(pseudoStyle.zIndex, 10);
+        return [{ element, box, effectiveZ: Number.isFinite(pseudoZ) ? pseudoZ : effectiveZ }];
       });
-      return opacity >= .05 && (ownPaint || pseudoPaint) ? [{ element, box, effectiveZ }] : [];
+      if (opacity < .05) return [];
+      return [...(ownPaint ? [{ element, box, effectiveZ }] : []), ...pseudoPaint];
     });
 
     const anchors = new Map<HTMLAnchorElement, { href: string; text: string[]; left: number; right: number; top: number; bottom: number }>();
@@ -72,10 +75,27 @@ export async function renderedState(page: Page) {
         const transparentMask = mask !== '' && mask !== 'none' && maskColours.length > 0
           && maskColours.every(colour => colour === 'transparent'
             || /rgba\([^)]*,\s*0(?:\.0+)?\)$/.test(colour) || /rgb\([^)]*\/\s*0(?:\.0+)?%?\)$/.test(colour));
+        const clipBox = ancestor.getBoundingClientRect();
+        const inset = style.clipPath.match(/^inset\(([^)]*?)(?:\s+round\s+[^)]*)?\)$/);
+        let tinyClip = false;
+        if (inset) {
+          const raw = inset[1] ?? '';
+          const values = raw.trim().split(/\s+/).map(token => {
+            const amount = Number.parseFloat(token); if (!Number.isFinite(amount)) return 0;
+            return token.endsWith('%') ? amount / 100 : token.endsWith('px') ? amount : 0;
+          });
+          const [top = 0, right = top, bottom = top, left = right] = values.length === 2
+            ? [values[0], values[1], values[0], values[1]] : values.length === 3
+              ? [values[0], values[1], values[2], values[1]] : values;
+          tinyClip = raw.includes('%') ? top + bottom >= .99 || left + right >= .99
+            : clipBox.height - top - bottom < 2 || clipBox.width - left - right < 2;
+        }
+        const radial = style.clipPath.match(/^(?:circle|ellipse)\(\s*([0-9.]+)(px|%)/);
+        tinyClip ||= radial !== null && (radial[2] === '%' ? Number(radial[1]) < 1 : Number(radial[1]) < 2);
         if (style.display === 'none' || style.visibility !== 'visible' || opacity < .05
           || transformScale < .05 || filterOpacity < .05 || style.contentVisibility === 'hidden'
-          || /^inset\(100%/.test(style.clipPath) || /^(?:circle|ellipse)\(0(?:px|%)?/.test(style.clipPath)
-          || transparentMask || blurred || style.mixBlendMode !== 'normal') { hidden = true; break; }
+          || tinyClip || transparentMask || blurred || style.mixBlendMode !== 'normal'
+          || style.backgroundImage !== 'none') { hidden = true; break; }
       }
       const color = styles[0]?.color ?? '';
       const fill = styles[0]?.getPropertyValue('-webkit-text-fill-color') ?? '';
@@ -171,10 +191,7 @@ export async function renderedState(page: Page) {
     return {
       anchors: [...anchors.entries()].flatMap(([element, anchor]) => {
         if (anchor.text.length > 0) return [{ ...anchor, text: anchor.text.join(' ').slice(0, 4096) }];
-        const image = element.querySelector<HTMLImageElement>('img[alt]');
-        if (!image?.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) return [];
-        const box = image.getBoundingClientRect(); const label = image.alt.replace(/\s+/g, ' ').trim();
-        return box.width > 0 && box.height > 0 && label ? [{ ...anchor, text: label.slice(0, 4096) }] : [];
+        return [];
       }).slice(0, 2000),
       visibleText: visibleText.join('\n'),
     };

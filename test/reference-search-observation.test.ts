@@ -134,6 +134,24 @@ test('an opaque pseudo-element cannot leave covered market text as visible evide
   assert.equal(h.execution.results?.find(result => result.url === imageCovered), undefined);
 });
 
+test('unrendered image alt, pseudo z-index, background images and subpixel clips cannot forge labels', async t => {
+  const imageOnly = 'https://image-alt.example/service';
+  const pseudoZ = 'https://pseudo-z.example/service';
+  const gradient = 'https://gradient.example/service';
+  const clipped = 'https://subpixel-clip.example/service';
+  const h = await observe(t, { html: `${navbar}<style>
+    .pseudo-z{position:absolute;inset:0;pointer-events:none}.pseudo-z::after{content:"";position:absolute;inset:0;z-index:99;background:white}
+  </style><main>
+    <a href="${imageOnly}"><img alt="South Korea service for residents" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='40'%3E%3Crect width='120' height='40' fill='black'/%3E%3C/svg%3E"></a>
+    <div style="position:relative"><a href="${pseudoZ}">South Korea benefit service</a><span class="pseudo-z"></span></div>
+    <a href="${gradient}" style="color:white;background-image:linear-gradient(white,white)">South Korea resident service</a>
+    <a href="${clipped}" style="clip-path:inset(49.9%)">South Korea support platform</a>
+  </main>` });
+  for (const url of [imageOnly, pseudoZ, gradient, clipped]) {
+    assert.equal(h.execution.results?.find(result => result.url === url), undefined, url);
+  }
+});
+
 test('render observation does not mutate pointer-event styles', async t => {
   const h = await observe(t, { html: `${navbar}<main><a href="${redirect}">Visible service</a><span id="overlay" style="pointer-events:none;position:absolute"></span></main>`,
     afterNavigation: async page => page.evaluate(() => {

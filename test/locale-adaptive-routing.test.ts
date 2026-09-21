@@ -79,6 +79,24 @@ test('research reuses the existing scout, reference, copy, type, and composition
   if (claim && evidence) { claim.text = 'The product has a target market.'; evidence.excerpt = 'Use the selected region.'; }
   assert.throws(() => routeAdaptiveFlow(wrongAuthority, undefined, research),
     (error: unknown) => error instanceof AdaptiveRouteError && error.code === 'LOCALE_DESIGN_MARKET_AUTHORITY_REQUIRED');
+  for (const excerpt of ['Do not target Japan.', 'This service is not for Japan.', 'Japan is not our target market.',
+    'Japan is out of scope.', '일본 사용자를 대상으로 하지 마세요.']) {
+    const denied = marketFixture('synth-marketing');
+    const deniedPublication = denied.evidenceClaims as { claims: Array<{ id: string; userEvidence: Array<{ excerpt: string }> }> };
+    const deniedClaim = deniedPublication.claims.find(candidate => candidate.id === 'market-authority');
+    const deniedEvidence = deniedClaim?.userEvidence[0];
+    if (deniedEvidence) deniedEvidence.excerpt = excerpt;
+    assert.throws(() => routeAdaptiveFlow(denied, undefined, research),
+      (error: unknown) => error instanceof AdaptiveRouteError && error.code === 'LOCALE_DESIGN_MARKET_AUTHORITY_REQUIRED');
+  }
+  const substringAuthority = marketFixture('synth-marketing');
+  const substringPublication = substringAuthority.evidenceClaims as { claims: Array<{ id: string; userEvidence: Array<{ excerpt: string }> }> };
+  const substringClaim = substringPublication.claims.find(candidate => candidate.id === 'market-authority');
+  const substringEvidence = substringClaim?.userEvidence[0];
+  if (substringEvidence) substringEvidence.excerpt = 'Use the status dashboard for customers.';
+  const usResearch = routeLocaleDesignContext(context({ surfaceLocale: 'en-US', marketRegion: 'US' }));
+  assert.throws(() => routeAdaptiveFlow(substringAuthority, undefined, usResearch),
+    (error: unknown) => error instanceof AdaptiveRouteError && error.code === 'LOCALE_DESIGN_MARKET_AUTHORITY_REQUIRED');
   const routed = routeAdaptiveFlow(marketFixture('synth-marketing'), undefined, research);
   assert.equal(routed.sourceContract.localeDesign?.contextSha256, research.contextSha256);
   assert.ok(routed.gates.includes(`locale-design:research:${research.contextSha256}`));
