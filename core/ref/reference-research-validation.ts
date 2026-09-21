@@ -4,7 +4,7 @@ import { readReferenceBoardArtifacts } from './board-artifacts.ts';
 import { nodeStableProjectFileSystem, readStableProjectFile } from '../runtime/stable-project-file.ts';
 import { parseImageFragmentRecord } from './image-fragment-parser.ts';
 import { trustedDiscoveryImage, trustedReferenceImage } from './board-security.ts';
-import { designDiscoveryProvider, referenceServiceFamily, referenceServiceHost } from './design-discovery-sources.ts';
+import { designDiscoveryIdentity, designDiscoveryProvider, referenceServiceFamily, referenceServiceHost } from './design-discovery-sources.ts';
 import { validateSearchCoverage, type ObservedNavigation } from './search-execution.ts';
 import { readResearchDiscoveryRoots, validateDiscoveryCoverage } from './discovery-coverage.ts';
 import { readStrictDiscoveryNavigation } from './discovery-record.ts';
@@ -86,6 +86,7 @@ export function validateReferenceResearch(root: string, research: ReferenceResea
   const capturedDomainFamilies = new Set<string>();
   for (const observation of directRoots.domain) for (const url of [observation.url, observation.finalUrl]) domainHosts.add(serviceIdentity(url));
   const retainedIdentities = new Map<string, string>();
+  const finalDesignItems = new Set<string>();
   const references = loadRefs(root, { includeDomain: true });
   const navigation: Record<'domain' | 'design', ObservedNavigation[]> = { domain: [], design: [] };
   const observe = (lane: 'domain' | 'design', url: string, captured: Record<string, unknown>) => {
@@ -128,6 +129,13 @@ export function validateReferenceResearch(root: string, research: ReferenceResea
     const entry = verifyCapture(root, discovery, 'design');
     observe('design', item.url, source);
     observe('design', discovery.url, entry);
+    if (research.schema === 'reference-research-v7' && item.visualRole === 'visual-direction') {
+      const acquisition = entry.acquisition as Record<string, unknown> | undefined;
+      const finalUrl = typeof acquisition?.finalUrl === 'string' ? acquisition.finalUrl : discovery.url;
+      const identity = designDiscoveryIdentity(finalUrl);
+      if (identity === null) fail('REFERENCE_RESEARCH_DISCOVERY_ENTRY_REQUIRED');
+      finalDesignItems.add(identity);
+    }
     for (const captured of [source, entry]) {
       const acquisition = captured.acquisition as Record<string, unknown> | undefined;
       if (acquisition && domainHosts.has(serviceIdentity(acquisition.finalUrl as string))) fail('REFERENCE_RESEARCH_LANE_REDIRECT_OVERLAP');
@@ -150,6 +158,9 @@ export function validateReferenceResearch(root: string, research: ReferenceResea
     const visualDirections = research.designReference.sources.filter(item => item.visualRole === 'visual-direction');
     if (new Set(visualDirections.map(item => item.evidence.sha256)).size < 2) {
       fail('REFERENCE_RESEARCH_DESIGN_EVIDENCE_DIVERSITY: differently named records with identical pixels are one visual source');
+    }
+    if (finalDesignItems.size < 2) {
+      fail('REFERENCE_RESEARCH_DESIGN_DISCOVERY_DIVERSITY: final captured gallery items must remain independently distinct');
     }
   }
   for (const lane of ['domain', 'design'] as const) {

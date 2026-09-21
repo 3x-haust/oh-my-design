@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import test, { type TestContext } from 'node:test';
 import { refIdentity } from '../core/ref/identity.ts';
 import {
@@ -7,7 +8,7 @@ import {
   validateReferenceResearch,
   REFERENCE_RESEARCH_SCHEMA,
 } from '../core/ref/reference-research.ts';
-import { ADMISSION_SOURCE_SHA, designAdmissionFixture } from './helpers/design-admission.ts';
+import { ADMISSION_SOURCE_SHA, admissionHash, designAdmissionFixture } from './helpers/design-admission.ts';
 import { testSearchReceipt } from './helpers/search-execution.ts';
 
 const options = { expectedSourceContractSha256: ADMISSION_SOURCE_SHA, benchmarkRequired: false } as const;
@@ -79,7 +80,7 @@ function currentResearch(t: TestContext, secondChannel = 7) {
   });
   fixture.refreshBoard();
   const research = { ...fixture.research, schema: REFERENCE_RESEARCH_SCHEMA, marketCoverage: null };
-  return { ...fixture, research, secondSource: source };
+  return { ...fixture, research, secondSource: source, secondGallery: gallery };
 }
 
 test('current research requires two independent visual-direction source families', t => {
@@ -102,7 +103,18 @@ test('tracking parameters cannot turn one gallery item into two design direction
   assert.ok(first?.discovery);
   assert.ok(second?.discovery);
   first.discovery.url = 'https://www.pinterest.com/pin/123456789/?utm_source=first';
-  second.discovery.url = 'https://www.pinterest.co.kr/pin/123456789/?utm_source=second#detail';
+  second.discovery.url = 'https://www.pinterest.co.kr/pin/%31%32%33%34%35%36%37%38%39/?utm_source=second#detail';
+  assert.throws(() => parseReferenceResearch(fixture.research), /DESIGN_DISCOVERY_DIVERSITY/);
+});
+
+test('user-provided URL aliases cannot create two design directions', t => {
+  const fixture = currentResearch(t);
+  const first = fixture.research.designReference.sources[0];
+  const second = fixture.research.designReference.sources[1];
+  assert.ok(first?.discovery);
+  assert.ok(second?.discovery);
+  first.discovery = { ...first.discovery, kind: 'user-provided', url: 'https://gallery.example/item' };
+  second.discovery = { ...second.discovery, kind: 'user-provided', url: 'https://gallery.example/item/' };
   assert.throws(() => parseReferenceResearch(fixture.research), /DESIGN_DISCOVERY_DIVERSITY/);
 });
 
@@ -123,6 +135,21 @@ test('current research requires both visual directions to participate in the boa
   assert.throws(
     () => validateReferenceResearch(fixture.root, parseReferenceResearch(fixture.research), options),
     /BOARD_DESIGN_DIVERSITY/,
+  );
+});
+
+test('two requested gallery items redirecting to one final item are not independent', t => {
+  const fixture = currentResearch(t);
+  const path = join(fixture.root, fixture.secondGallery.capture.path);
+  const capture = JSON.parse(readFileSync(path, 'utf8')) as { acquisition: { finalUrl: string } };
+  capture.acquisition.finalUrl = fixture.gallery.source;
+  writeFileSync(path, JSON.stringify(capture));
+  const second = fixture.research.designReference.sources[1];
+  assert.ok(second?.discovery);
+  second.discovery.capture.sha256 = admissionHash(readFileSync(path));
+  assert.throws(
+    () => validateReferenceResearch(fixture.root, parseReferenceResearch(fixture.research), options),
+    /DESIGN_DISCOVERY_DIVERSITY/,
   );
 });
 

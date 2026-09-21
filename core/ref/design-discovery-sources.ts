@@ -1,10 +1,24 @@
+function decodedPath(url: URL): string | null {
+  let path: string;
+  try { path = decodeURIComponent(url.pathname).normalize('NFC'); }
+  catch { return null; }
+  if (/%[0-9a-f]{2}/i.test(path)) return null;
+  return path;
+}
+
+function canonicalItem(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  return /^\d+$/.test(value) ? BigInt(value).toString() : value.toLowerCase();
+}
+
 /** Supported public discovery entry shapes, not quality endorsements or reuse licences.
  * Free access is checked at capture time; a provider may block or charge for other features.
  * Extend this catalogue deliberately rather than labelling arbitrary domain pages as galleries. */
 export function designDiscoveryProvider(url: string): string | null {
   const parsed = new URL(url);
   const host = parsed.hostname.toLowerCase().replace(/^www\./, '');
-  const path = parsed.pathname;
+  const path = decodedPath(parsed);
+  if (path === null) return null;
   if (/^(?:[a-z]{2}\.)?pinterest\.(?:com|co\.uk|ca|de|fr|jp|co\.kr|com\.au)$/.test(host) && /^\/pin\/[^/]+\/?$/.test(path)) return 'Pinterest';
   if (host === 'dribbble.com' && /^\/shots\/\d[^/]*\/?$/.test(path)) return 'Dribbble';
   if (host === 'behance.net' && /^\/gallery\/\d+(?:\/[^/]+)?\/?$/.test(path)) return 'Behance';
@@ -19,13 +33,27 @@ export function designDiscoveryProvider(url: string): string | null {
 export function designDiscoveryItemIdentity(url: string): string | null {
   const provider = designDiscoveryProvider(url);
   if (provider === null) return null;
-  const path = new URL(url).pathname.replace(/\/+$/, '');
-  const item = provider === 'Pinterest' ? /^\/pin\/([^/]+)/.exec(path)?.[1]
-    : provider === 'Dribbble' ? /^\/shots\/(\d+)/.exec(path)?.[1]
-      : provider === 'Behance' ? /^\/gallery\/(\d+)/.exec(path)?.[1]
-        : provider === 'Siteinspire' ? /^\/websites?\/(\d+)/.exec(path)?.[1]
-          : path;
+  const decoded = decodedPath(new URL(url));
+  if (decoded === null) return null;
+  const path = decoded.replace(/\/+$/, '');
+  const item = provider === 'Pinterest' ? canonicalItem(/^\/pin\/([^/]+)/.exec(path)?.[1])
+    : provider === 'Dribbble' ? canonicalItem(/^\/shots\/(\d+)/.exec(path)?.[1])
+      : provider === 'Behance' ? canonicalItem(/^\/gallery\/(\d+)/.exec(path)?.[1])
+        : provider === 'Siteinspire' ? canonicalItem(/^\/websites?\/(\d+)/.exec(path)?.[1])
+          : provider === 'UI Bowl'
+            ? path.replace(/^\/(screens?|apps?|patterns?|components?)\//, (_match, kind: string) => `/${kind.replace(/s$/, '')}/`)
+            : path;
   return item === undefined ? null : `${provider}:${item.toLowerCase()}`;
+}
+
+export function designDiscoveryIdentity(url: string): string | null {
+  const item = designDiscoveryItemIdentity(url);
+  if (item !== null) return item;
+  const parsed = new URL(url);
+  const decoded = decodedPath(parsed);
+  if (decoded === null) return null;
+  const path = decoded.replace(/\/+$/, '') || '/';
+  return `URL:${parsed.origin}${path}`;
 }
 
 export function referenceServiceHost(url: string): string {

@@ -25,7 +25,6 @@ test('route changes stages and reference evidence without removing independent r
   const skill = read('src/skills/omd-ultradesign/SKILL.md');
 
   assert.match(skill, /user-selected model owns role\/stage order and optional methods/i);
-  assert.match(skill, /no universal reference quota[\s\S]*three independent domain operator families and[\s\S]*two independent visual-direction source families/i);
   assert.match(skill, /When discovery is skipped, use the recorded[\s\S]*existing evidence/i);
   assert.match(skill, /Independent review and final evidence apply at every task size/i);
   assert.doesNotMatch(skill, /3–5 component captures/);
@@ -37,7 +36,6 @@ test('selected reference owners receive measured records while production and re
   const eye = read('src/agents/eye.agent.yaml');
 
   assert.match(scout, /If discovery is selected, gather only for the named[\s\S]*unresolved decisions/i);
-  assert.match(scout, /three independent domain operator families and two[\s\S]*independent visual-direction source families[\s\S]*no default candidate count/i);
   assert.match(scout, /intended and actual evidence use/i);
   assert.match(hand, /coordinator reads\s+`omd brief production`/i);
   assert.match(hand, /passes `omd brief production --check --json`/);

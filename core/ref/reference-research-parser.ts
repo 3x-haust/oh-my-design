@@ -1,6 +1,6 @@
 import { isAbsolute } from 'node:path';
 import {
-  designDiscoveryItemIdentity,
+  designDiscoveryIdentity,
   designDiscoveryProvider,
   referenceServiceFamily,
   referenceServiceHost,
@@ -132,12 +132,9 @@ function requiredVisualAssessment(value: ResearchSource['visualAssessment']): No
 
 function discoveryItemIdentity(entry: ResearchSource): string {
   const discovery = requiredDiscovery(entry);
-  const supported = designDiscoveryItemIdentity(discovery.url);
-  if (supported !== null) return supported;
-  const url = new URL(discovery.url);
-  url.search = '';
-  url.hash = '';
-  return url.href;
+  const identity = designDiscoveryIdentity(discovery.url);
+  if (identity === null) fail('REFERENCE_RESEARCH_DISCOVERY_ENTRY_REQUIRED');
+  return identity;
 }
 
 function discoveryRoots(value: unknown, design: boolean): readonly ResearchDiscoveryRoot[] {

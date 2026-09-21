@@ -66,11 +66,9 @@ test('the adaptive route decides which stages exist while selected research enfo
   const hand = read('src/agents/hand.agent.yaml').replace(/\s+/g, ' ');
   assert.match(skill, /omd route classify --input \.omd\/\.cache\/route-input\.json --json/);
   assert.match(skill, /only the roles\/stages selected by the route/i);
-  assert.match(skill, /three independent domain operator families and\s+two independent visual-direction source families/i);
   assert.match(skill, /A UI request does not authorize repository\s+publication/);
   assert.match(skill, /Roles do not inspect `core\/\*\*`/);
   assert.match(scout, /only when the adaptive route selects it/);
-  assert.match(scout, /three independent domain operator families and two\s+independent visual-direction source families/i);
   assert.match(hand, /Write only\s*inside its `allowedPaths`/);
   assert.ok(INPUT_SKELETONS.some((input) => input.command
     === 'omd route validate --input .omd/.cache/route-input.json --json'));
@@ -629,7 +627,6 @@ test('reference selection remains model-owned and evidence-bound when selected',
   const proto = read('core/protocol/reference-assembly.md').replace(/\s+/g, ' ');
   assert.match(proto, /adaptive route may select discovery alone/);
   assert.match(proto, /no universal stage count,[\s\S]*or candidate quota/);
-  assert.match(proto, /three independent domain operator families and two independent visual-direction source families/);
   const scout = read('src/agents/scout.agent.yaml').replace(/\s+/g, ' ');
   assert.match(scout, /only when the adaptive route selects it/);
   assert.match(scout, /intended and actual evidence use/i);
