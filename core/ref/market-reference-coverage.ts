@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { parseLocaleDesignContext } from '../locale/design-context.ts';
 import { validateDomainBrief } from '../domain/domain-brief.ts';
 import { nodeStableProjectFileSystem, readStableProjectFile } from '../runtime/stable-project-file.ts';
-import type { ReferenceResearch } from './reference-research-contract.ts';
+import type { ReferenceResearch } from './reference-research-types.ts';
 import { isMarketQualifiedQuery, marketDomainQueries, marketSearchLabels } from './market-reference.ts';
 
 export type MarketLaneCoverage = Readonly<{
