@@ -37,7 +37,7 @@ test('Pi activation captures the runtime before the first command', t => {
       'await import(process.argv[1]);',
       'console.log(readdirSync(process.env.TMPDIR).filter(name => name.startsWith("omd-runtime-")).length);',
     ].join('\n'), runtimeUrl,
-  ], { encoding: 'utf8', env: { ...process.env, TMPDIR: runtimeTemp } });
+  ], { encoding: 'utf8', env: { ...process.env, TMPDIR: runtimeTemp }, timeout: 5_000 });
 
   assert.equal(imported.status, 0, imported.stderr);
   assert.equal(imported.stdout.trim(), '1');
@@ -74,7 +74,7 @@ test('first OMD command survives checkout removal after Pi activation', t => {
       'const result = await runtime.runOmd(pi, ["schema", "reference-research"], targetRoot);',
       'console.log(JSON.stringify({ sourceGone: !existsSync(pluginRoot), text: result.text }));',
     ].join('\n'), runtimeUrl, pluginRoot, targetRoot,
-  ], { cwd: repositoryRoot, encoding: 'utf8' });
+  ], { cwd: repositoryRoot, encoding: 'utf8', timeout: 15_000 });
 
   assert.equal(probe.status, 0, probe.stderr);
   const result = JSON.parse(probe.stdout) as { sourceGone?: unknown; text?: unknown };
@@ -133,7 +133,7 @@ test('dependency mutation cannot publish a mixed runtime snapshot', async t => {
     '  writeFileSync(target, Buffer.alloc(8 * 1024 * 1024, index % 2 ? 0x41 : 0x42));',
     '  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 5);',
     '}',
-  ].join('\n'), dependencyFile]);
+  ].join('\n'), dependencyFile], { timeout: 5_000 });
   if (mutator.stdout === null) throw new Error('mutation child did not expose a readiness stream');
   const readiness = once(mutator.stdout, 'data').then(([chunk]) => String(chunk));
   const mutationComplete = once(mutator, 'exit');

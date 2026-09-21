@@ -37,6 +37,7 @@ const RUNTIME_PATHS = [
 
 const REQUIRED_PATHS = ['package.json', 'bin/omd.mjs', 'bin/run-ts.mjs', 'bin/omd.ts'] as const;
 const MAX_COPY_ATTEMPTS = 3;
+const SNAPSHOT_DEADLINE_MS = 5_000;
 
 export type OmdRuntimeSnapshot = Readonly<{
   root: string;
@@ -51,6 +52,10 @@ export type OmdRuntimeSnapshotOptions = Readonly<{
 
 export class OmdRuntimeSnapshotError extends Error {
   override readonly name = 'OmdRuntimeSnapshotError';
+}
+
+function assertBeforeDeadline(deadline: number): void {
+  if (Date.now() > deadline) throw new OmdRuntimeSnapshotError('OMD_RUNTIME_SNAPSHOT_TIMEOUT');
 }
 
 export function runtimeDependencyRoot(resolvedPackagePath: string): string {
@@ -70,7 +75,8 @@ function assertRequiredPaths(root: string): void {
   }
 }
 
-function updateDigest(hash: ReturnType<typeof createHash>, root: string, path: string): void {
+function updateDigest(hash: ReturnType<typeof createHash>, root: string, path: string, deadline: number): void {
+  assertBeforeDeadline(deadline);
   const absolute = join(root, path);
   const stat = lstatSync(absolute);
   hash.update(path).update('\0');
@@ -79,25 +85,26 @@ function updateDigest(hash: ReturnType<typeof createHash>, root: string, path: s
   }
   if (stat.isDirectory()) {
     hash.update('directory\0');
-    for (const name of readdirSync(absolute).sort()) updateDigest(hash, root, join(path, name));
+    for (const name of readdirSync(absolute).sort()) updateDigest(hash, root, join(path, name), deadline);
     return;
   }
   if (!stat.isFile()) throw new OmdRuntimeSnapshotError(`OMD_RUNTIME_SOURCE_UNSUPPORTED: ${path}`);
   hash.update('file\0').update(readFileSync(absolute)).update('\0');
 }
 
-function runtimeDigest(root: string): string {
+function runtimeDigest(root: string, deadline: number): string {
   assertRequiredPaths(root);
   const hash = createHash('sha256');
   for (const path of RUNTIME_PATHS) {
-    if (existsSync(join(root, path))) updateDigest(hash, root, path);
+    if (existsSync(join(root, path))) updateDigest(hash, root, path, deadline);
     else hash.update(`missing\0${path}\0`);
   }
   return hash.digest('hex');
 }
 
-function copyRuntime(sourceRoot: string, targetRoot: string): void {
+function copyRuntime(sourceRoot: string, targetRoot: string, deadline: number): void {
   for (const path of RUNTIME_PATHS) {
+    assertBeforeDeadline(deadline);
     const source = join(sourceRoot, path);
     if (!existsSync(source)) continue;
     const target = join(targetRoot, path);
@@ -107,6 +114,7 @@ function copyRuntime(sourceRoot: string, targetRoot: string): void {
       dereference: false,
       errorOnExist: true,
       mode: constants.COPYFILE_FICLONE,
+      filter: () => { assertBeforeDeadline(deadline); return true; },
     });
   }
 }
@@ -125,7 +133,9 @@ function updateDependencyFingerprint(
   root: string,
   path: string,
   ancestors: ReadonlySet<string>,
+  deadline: number,
 ): void {
+  assertBeforeDeadline(deadline);
   const absolute = join(root, path);
   const link = lstatSync(absolute, { bigint: true });
   const physical = link.isSymbolicLink() ? realpathSync(absolute) : absolute;
@@ -140,23 +150,23 @@ function updateDependencyFingerprint(
     if (ancestors.has(physical)) throw new OmdRuntimeSnapshotError(`OMD_RUNTIME_DEPENDENCIES_INVALID: recursive link ${path}`);
     hash.update('directory\0');
     const next = new Set(ancestors).add(physical);
-    for (const name of readdirSync(absolute).sort()) updateDependencyFingerprint(hash, root, join(path, name), next);
+    for (const name of readdirSync(absolute).sort()) updateDependencyFingerprint(hash, root, join(path, name), next, deadline);
     return;
   }
   if (!stat.isFile()) throw new OmdRuntimeSnapshotError(`OMD_RUNTIME_DEPENDENCIES_INVALID: ${path}`);
   hash.update('file\0');
 }
 
-function dependencyFingerprint(sourceRoot: string): string {
+function dependencyFingerprint(sourceRoot: string, deadline: number): string {
   const root = dependencyRoot(sourceRoot);
   const hash = createHash('sha256');
   for (const name of readdirSync(root).sort()) {
-    if (name !== 'node_modules') updateDependencyFingerprint(hash, root, name, new Set([root]));
+    if (name !== 'node_modules') updateDependencyFingerprint(hash, root, name, new Set([root]), deadline);
   }
   return hash.digest('hex');
 }
 
-function copyDependencies(sourceRoot: string, targetRoot: string): void {
+function copyDependencies(sourceRoot: string, targetRoot: string, deadline: number): void {
   const root = dependencyRoot(sourceRoot);
   const recursiveLink = join(root, 'node_modules');
   cpSync(root, join(targetRoot, 'node_modules'), {
@@ -164,29 +174,30 @@ function copyDependencies(sourceRoot: string, targetRoot: string): void {
     dereference: true,
     errorOnExist: true,
     mode: constants.COPYFILE_FICLONE,
-    filter: source => source !== recursiveLink,
+    filter: source => { assertBeforeDeadline(deadline); return source !== recursiveLink; },
   });
 }
 
 export function createOmdRuntimeSnapshot(options: OmdRuntimeSnapshotOptions): OmdRuntimeSnapshot {
   const sourceRoot = resolve(options.sourceRoot);
+  const deadline = Date.now() + SNAPSHOT_DEADLINE_MS;
   let lastMismatch = '';
   for (let attempt = 1; attempt <= MAX_COPY_ATTEMPTS; attempt += 1) {
-    const before = runtimeDigest(sourceRoot);
+    const before = runtimeDigest(sourceRoot, deadline);
     const snapshotRoot = mkdtempSync(join(tmpdir(), 'omd-runtime-'));
     let retained = false;
     try {
-      copyRuntime(sourceRoot, snapshotRoot);
-      const copied = runtimeDigest(snapshotRoot);
+      copyRuntime(sourceRoot, snapshotRoot, deadline);
+      const copied = runtimeDigest(snapshotRoot, deadline);
       let dependencyBefore = 'none';
       let dependencyAfter = 'none';
       if (before === copied && options.dependencyRoot !== null) {
         if (!existsSync(options.dependencyRoot)) throw new OmdRuntimeSnapshotError('OMD_RUNTIME_DEPENDENCIES_INVALID');
-        dependencyBefore = dependencyFingerprint(options.dependencyRoot);
-        copyDependencies(options.dependencyRoot, snapshotRoot);
-        dependencyAfter = dependencyFingerprint(options.dependencyRoot);
+        dependencyBefore = dependencyFingerprint(options.dependencyRoot, deadline);
+        copyDependencies(options.dependencyRoot, snapshotRoot, deadline);
+        dependencyAfter = dependencyFingerprint(options.dependencyRoot, deadline);
       }
-      const after = runtimeDigest(sourceRoot);
+      const after = runtimeDigest(sourceRoot, deadline);
       if (before === copied && copied === after && dependencyBefore === dependencyAfter) {
         retained = true;
         let disposed = false;
