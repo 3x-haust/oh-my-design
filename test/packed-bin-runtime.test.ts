@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -33,8 +33,36 @@ function run(command: string, args: readonly string[], cwd: string, env?: NodeJS
   return result;
 }
 
-function pack(destination: string): string {
-  const result = run(NPM, ['pack', '--json', '--ignore-scripts', '--pack-destination', destination], ROOT);
+function packageFilePaths(sourceRoot: string): readonly string[] {
+  const result = run(NPM, ['pack', '--dry-run', '--json', '--ignore-scripts'], sourceRoot);
+  assert.equal(result.status, 0, result.stderr);
+  const entries = JSON.parse(result.stdout) as readonly { readonly files: readonly { readonly path: string }[] }[];
+  const entry = entries[0];
+  if (entry === undefined) throw new Error('npm pack dry-run returned no package entry');
+  return entry.files.map((file) => file.path);
+}
+
+function stagedPackageSource(temporary: string): string {
+  const packageSource = join(temporary, 'package source');
+  for (const path of packageFilePaths(ROOT)) {
+    const source = join(ROOT, path);
+    const destination = join(packageSource, path);
+    mkdirSync(join(destination, '..'), { recursive: true });
+    copyFileSync(source, destination);
+  }
+  for (const path of ['.npmignore', join('core', '.npmignore')]) {
+    const destination = join(packageSource, path);
+    mkdirSync(join(destination, '..'), { recursive: true });
+    copyFileSync(join(ROOT, path), destination);
+  }
+  const sentinel = join(packageSource, 'core', '.omc', 'package-leak-sentinel.txt');
+  mkdirSync(join(sentinel, '..'), { recursive: true });
+  writeFileSync(sentinel, 'must not ship');
+  return packageSource;
+}
+
+function pack(destination: string, sourceRoot = ROOT): string {
+  const result = run(NPM, ['pack', '--json', '--ignore-scripts', '--pack-destination', destination], sourceRoot);
   assert.equal(result.status, 0, result.stderr);
   const entries = JSON.parse(result.stdout) as readonly { readonly filename: string }[];
   assert.equal(entries.length, 1, 'npm pack must create one archive');
@@ -58,13 +86,11 @@ test('Given a real offline installed tarball When each public command starts The
   const temporary = mkdtempSync(join(tmpdir(), 'omd-packed-bin-runtime-'));
   const packs = join(temporary, 'packs');
   const consumer = join(temporary, 'consumer with spaces');
-  const packageStateSentinel = join(ROOT, 'core', '.omc', `package-leak-sentinel-${process.pid}.txt`);
   try {
     mkdirSync(packs);
     mkdirSync(consumer);
-    mkdirSync(join(ROOT, 'core', '.omc'), { recursive: true });
-    writeFileSync(packageStateSentinel, 'must not ship');
-    const archive = pack(packs);
+    const packageSource = stagedPackageSource(temporary);
+    const archive = pack(packs, packageSource);
     const dependencies = packOfflineWorkspaceDependencies(ROOT, packs);
     const installed = run(NPM, ['install', '--offline', '--ignore-scripts', '--no-audit', '--no-fund', archive, ...dependencies], consumer);
     assert.equal(installed.status, 0, installed.stderr);
@@ -105,7 +131,6 @@ test('Given a real offline installed tarball When each public command starts The
       assert.doesNotMatch(doctor.stderr, /ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING/);
     }
   } finally {
-    rmSync(packageStateSentinel, { force: true });
     rmSync(temporary, { recursive: true, force: true });
   }
 });
