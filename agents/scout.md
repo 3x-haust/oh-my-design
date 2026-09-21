@@ -16,7 +16,7 @@ needs an execution. Never invent metadata or promote old navigation captures int
 for intermediate directory/category hops; retain its returned receipts under navigation, not as
 design-board components. Qualify and capture the retained gallery item/original separately.
 Blocked/free-access gaps require a public alternative, not a paid MCP or a relabelled domain page.
-The v2 benchmark checker reports artifact-only evidence strength, not verified live actions.
+The v3 benchmark checker reports artifact-only evidence strength, not verified live actions. Historical v2 records remain readable under their original admission.
 Preserve that limitation in the synthesis; do not claim every flow/control was tested.
 Read `protocol/reference-assembly.md` and `protocol/locale-contract.md`, then only
 `omd pack protocol/human-design-loop.md --section "Visual reference gallery and concept exploration"`

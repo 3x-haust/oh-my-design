@@ -140,7 +140,7 @@ image import path, not live behavior or measured app DOM. Free viewing is not an
 Discovery always saves two separate ledgers:
 
 - **domain reference** (`.omd/refs/domain/research.json`) asks how comparable services organize real screens, features, states, and
-  task flows. When `greenfield-task-flow-benchmark` applies, its private v2 benchmark records every
+  task flows. When `greenfield-task-flow-benchmark` applies, its private v3 benchmark records every
   safe reachable screen in the declared scope, the actual click path, feature and flow groupings,
   current local evidence, and every explicit coverage gap. Use `omd benchmark record --input
   <reference-flow-input.json>` to execute public navigation/disclosure states in one fresh browser

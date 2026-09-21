@@ -861,7 +861,7 @@ const REFERENCE_RESEARCH: InputSkeleton = {
     'designReference.boardSha256 is the current storage-byte SHA-256 of .omd/reference-board.json',
     'every visual board piece binds a validated retained design source identity and PNG (path and hash); each candidate needs visual-direction evidence. An extra legacy/domain piece cannot ride alongside a qualified gallery piece.',
     'Each lane may include navigation: [{url, evidence: {path, sha256}, capture: {path, sha256}}] for intermediate native page captures. Retained entries must be reachable from observed search or direct-entry links. Direct v6 chains require new strict navigation-v2 captures, never hidden all-DOM links from retained components or old navigation. The direct root itself is not retained-source coverage. Do not invent edges or relabel image-only evidence as navigation.',
-    'when the route carries greenfield-task-flow-benchmark, domainReference.benchmarkSha256 is the canonical taskFlowBenchmarkSha256 of the current v2 benchmark and every benchmark source URL appears in the domain lane',
+    'when the route carries greenfield-task-flow-benchmark, domainReference.benchmarkSha256 is the canonical taskFlowBenchmarkSha256 of the current v3 benchmark and every benchmark source URL appears in the domain lane. Historical v2 remains readable under its original two-source admission.',
     'when no benchmark applies, benchmarkSha256 is null unless an optional current benchmark was actually published',
     'run omd ref research-check after ref check and benchmark check; any missing, stale, or one-lane evidence blocks downstream work',
   ],
