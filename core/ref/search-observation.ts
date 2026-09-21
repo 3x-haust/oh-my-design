@@ -92,41 +92,77 @@ export async function renderedState(page: Page) {
         }
         const radial = style.clipPath.match(/^(?:circle|ellipse)\(\s*([0-9.]+)(px|%)/);
         tinyClip ||= radial !== null && (radial[2] === '%' ? Number(radial[1]) < 1 : Number(radial[1]) < 2);
+        const polygon = style.clipPath.match(/^polygon\(([^)]*)\)$/);
+        if (polygon) {
+          const points = [...(polygon[1] ?? '').matchAll(/([0-9.]+)(%|px)\s+([0-9.]+)(%|px)/g)];
+          if (points.length >= 3) {
+            const xs = points.map(point => Number(point[1]) * (point[2] === '%' ? clipBox.width / 100 : 1));
+            const ys = points.map(point => Number(point[3]) * (point[4] === '%' ? clipBox.height / 100 : 1));
+            tinyClip ||= Math.max(...xs) - Math.min(...xs) < 2 || Math.max(...ys) - Math.min(...ys) < 2;
+          }
+        }
         if (style.display === 'none' || style.visibility !== 'visible' || opacity < .05
           || transformScale < .05 || filterOpacity < .05 || style.contentVisibility === 'hidden'
-          || tinyClip || transparentMask || blurred || style.mixBlendMode !== 'normal'
-          || style.backgroundImage !== 'none') { hidden = true; break; }
+          || tinyClip || transparentMask || blurred || style.mixBlendMode !== 'normal') { hidden = true; break; }
       }
       const color = styles[0]?.color ?? '';
       const fill = styles[0]?.getPropertyValue('-webkit-text-fill-color') ?? '';
       const effectiveFontSize = Number.parseFloat(styles[0]?.fontSize ?? '0') * transformScale;
       if (hidden || color === 'transparent' || fill === 'transparent' || effectiveFontSize < 4) continue;
 
-      let backgroundRgb = [255, 255, 255];
+      let backgroundCandidates = [[255, 255, 255]]; let unknownBackground = false;
       for (let index = styles.length - 1; index >= 0; index--) {
         const candidate = styles[index]?.backgroundColor ?? 'transparent';
         const parts = candidate.match(/[\d.]+/g)?.map(Number) ?? [];
-        if (parts.length < 3) continue;
-        let alpha = parts.length >= 4 ? parts[3] ?? 0 : candidate === 'transparent' ? 0 : 1;
-        if (candidate.includes('/') && candidate.includes('%')) alpha /= 100;
-        backgroundRgb = [0, 1, 2].map(channel => (parts[channel] ?? 0) * alpha + (backgroundRgb[channel] ?? 255) * (1 - alpha));
+        if (parts.length >= 3) {
+          let alpha = parts.length >= 4 ? parts[3] ?? 0 : candidate === 'transparent' ? 0 : 1;
+          if (candidate.includes('/') && candidate.includes('%')) alpha /= 100;
+          backgroundCandidates = backgroundCandidates.map(background => [0, 1, 2].map(channel =>
+            (parts[channel] ?? 0) * alpha + (background[channel] ?? 255) * (1 - alpha)));
+          if (alpha >= .99) unknownBackground = false;
+        }
+        const image = styles[index]?.backgroundImage ?? 'none';
+        if (image !== 'none') {
+          const tokens = image.match(/rgba?\([^)]*\)|#[0-9a-f]{3,8}\b|\b(?:white|black|transparent)\b/giu) ?? [];
+          const colours: number[][] = [];
+          for (const token of tokens) {
+            const lower = token.toLocaleLowerCase('und');
+            if (lower === 'transparent') continue;
+            if (lower === 'white' || lower === 'black') { colours.push(lower === 'white' ? [255, 255, 255] : [0, 0, 0]); continue; }
+            if (lower.startsWith('#')) {
+              const hex = lower.slice(1); const full = hex.length <= 4 ? [...hex].map(part => part + part).join('') : hex;
+              const alpha = full.length === 8 ? Number.parseInt(full.slice(6, 8), 16) / 255 : 1;
+              if (alpha >= .05) colours.push([0, 2, 4].map(offset => Number.parseInt(full.slice(offset, offset + 2), 16)));
+              continue;
+            }
+            const rgba = lower.match(/[\d.]+/g)?.map(Number) ?? [];
+            let alpha = rgba.length >= 4 ? rgba[3] ?? 0 : 1;
+            if (lower.includes('/') && lower.includes('%')) alpha /= 100;
+            if (rgba.length >= 3 && alpha >= .05) colours.push(rgba.slice(0, 3));
+          }
+          if (colours.length > 0) { backgroundCandidates = colours; unknownBackground = false; }
+          else unknownBackground = true;
+        }
       }
       const foreground = /^rgba?\(/.test(fill) ? fill : color;
       const foregroundParts = foreground.match(/[\d.]+/g)?.map(Number) ?? [];
       if (foregroundParts.length < 3) continue;
       let foregroundAlpha = foregroundParts.length >= 4 ? foregroundParts[3] ?? 0 : 1;
       if (foreground.includes('/') && foreground.includes('%')) foregroundAlpha /= 100;
-      const paintedForeground = [0, 1, 2].map(channel => (foregroundParts[channel] ?? 0) * foregroundAlpha
-        + (backgroundRgb[channel] ?? 255) * (1 - foregroundAlpha));
       const weights = [.2126, .7152, .0722];
-      const foregroundLuminance = paintedForeground.map(channel => channel / 255)
-        .map(channel => channel <= .04045 ? channel / 12.92 : ((channel + .055) / 1.055) ** 2.4)
-        .reduce((sum, channel, index) => sum + channel * (weights[index] ?? 0), 0);
-      const backgroundLuminance = backgroundRgb.map(channel => channel / 255)
-        .map(channel => channel <= .04045 ? channel / 12.92 : ((channel + .055) / 1.055) ** 2.4)
-        .reduce((sum, channel, index) => sum + channel * (weights[index] ?? 0), 0);
-      if ((Math.max(foregroundLuminance, backgroundLuminance) + .05)
-        / (Math.min(foregroundLuminance, backgroundLuminance) + .05) < 1.2) continue;
+      const lowContrast = unknownBackground || backgroundCandidates.some(backgroundRgb => {
+        const paintedForeground = [0, 1, 2].map(channel => (foregroundParts[channel] ?? 0) * foregroundAlpha
+          + (backgroundRgb[channel] ?? 255) * (1 - foregroundAlpha));
+        const foregroundLuminance = paintedForeground.map(channel => channel / 255)
+          .map(channel => channel <= .04045 ? channel / 12.92 : ((channel + .055) / 1.055) ** 2.4)
+          .reduce((sum, channel, index) => sum + channel * (weights[index] ?? 0), 0);
+        const backgroundLuminance = backgroundRgb.map(channel => channel / 255)
+          .map(channel => channel <= .04045 ? channel / 12.92 : ((channel + .055) / 1.055) ** 2.4)
+          .reduce((sum, channel, index) => sum + channel * (weights[index] ?? 0), 0);
+        return (Math.max(foregroundLuminance, backgroundLuminance) + .05)
+          / (Math.min(foregroundLuminance, backgroundLuminance) + .05) < 1.2;
+      });
+      if (lowContrast) continue;
 
       const range = document.createRange(); range.selectNodeContents(node);
       const rects = Array.from(range.getClientRects()).filter(rect => rect.width > 0 && rect.height > 0

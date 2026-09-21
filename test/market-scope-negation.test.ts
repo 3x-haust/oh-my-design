@@ -13,6 +13,8 @@ test('market exclusion recognizes direct English and Korean denial phrases', () 
     'South Korea service is not offered to customers',
     'South Korea is outside our coverage',
     'This platform does not operate in South Korea',
+    'This service is no longer available in South Korea',
+    'No services are offered in South Korea',
     'South Korea was excluded from this service',
     '대한민국에서는 이 서비스를 이용할 수 없습니다',
     '대한민국 거주자는 지원 대상이 아닙니다',

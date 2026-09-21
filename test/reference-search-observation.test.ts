@@ -139,6 +139,8 @@ test('unrendered image alt, pseudo z-index, background images and subpixel clips
   const pseudoZ = 'https://pseudo-z.example/service';
   const gradient = 'https://gradient.example/service';
   const clipped = 'https://subpixel-clip.example/service';
+  const polygon = 'https://polygon-clip.example/service';
+  const readableGradient = 'https://readable-gradient.example/service';
   const h = await observe(t, { html: `${navbar}<style>
     .pseudo-z{position:absolute;inset:0;pointer-events:none}.pseudo-z::after{content:"";position:absolute;inset:0;z-index:99;background:white}
   </style><main>
@@ -146,10 +148,14 @@ test('unrendered image alt, pseudo z-index, background images and subpixel clips
     <div style="position:relative"><a href="${pseudoZ}">South Korea benefit service</a><span class="pseudo-z"></span></div>
     <a href="${gradient}" style="color:white;background-image:linear-gradient(white,white)">South Korea resident service</a>
     <a href="${clipped}" style="clip-path:inset(49.9%)">South Korea support platform</a>
+    <a href="${polygon}" style="clip-path:polygon(49.95% 49.95%,50.05% 49.95%,50.05% 50.05%,49.95% 50.05%)">South Korea resident platform</a>
+    <a href="${readableGradient}" style="color:black;background-image:linear-gradient(#fff,#fff)">Visible service on a readable gradient</a>
   </main>` });
-  for (const url of [imageOnly, pseudoZ, gradient, clipped]) {
+  for (const url of [imageOnly, pseudoZ, gradient, clipped, polygon]) {
     assert.equal(h.execution.results?.find(result => result.url === url), undefined, url);
   }
+  assert.equal(h.execution.results?.find(result => result.url === readableGradient)?.text,
+    'Visible service on a readable gradient');
 });
 
 test('render observation does not mutate pointer-event styles', async t => {
