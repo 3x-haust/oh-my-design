@@ -1,5 +1,6 @@
 import type { Page } from 'playwright';
-import { finalizeSearchRenderedState, type RawSearchRenderedState, type SearchPixelSample } from './search-pixel-contrast.ts';
+import { collectSearchGlyphSamples } from './search-glyph-samples.ts';
+import { finalizeSearchRenderedState, type RawSearchRenderedState, type SearchPixelRequest } from './search-pixel-contrast.ts';
 
 export async function inspectRenderedState(page: Page): Promise<RawSearchRenderedState> {
   const rendered = await page.locator('body').evaluate(body => {
@@ -48,9 +49,10 @@ export async function inspectRenderedState(page: Page): Promise<RawSearchRendere
     }
 
     const visibleText: Array<{ id: number; value: string }> = [];
-    const uncertain: Array<SearchPixelSample & { href: string | null }> = [];
+    const uncertain: Array<SearchPixelRequest & { href: string | null }> = [];
     const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT);
-    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    let nodeIndex = 0;
+    for (let node = walker.nextNode(); node; node = walker.nextNode(), nodeIndex++) {
       const parent = node.parentElement;
       const value = (node.textContent ?? '').replace(/\s+/g, ' ').trim();
       if (!(parent instanceof HTMLElement) || value === '') continue;
@@ -234,7 +236,8 @@ export async function inspectRenderedState(page: Page): Promise<RawSearchRendere
       const id = visibleText.length; visibleText.push({ id, value });
       if (unknownBackground) uncertain.push({ id, href: record?.href ?? null,
         foreground: [foregroundParts[0] ?? 0, foregroundParts[1] ?? 0, foregroundParts[2] ?? 0],
-        rects: rects.map(rect => ({ left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom })) });
+        bounds: { left: Math.min(...rects.map(rect => rect.left)), top: Math.min(...rects.map(rect => rect.top)),
+          right: Math.max(...rects.map(rect => rect.right)), bottom: Math.max(...rects.map(rect => rect.bottom)) }, nodeIndex });
       if (record) record.text.push(value);
     }
     return {
@@ -245,11 +248,9 @@ export async function inspectRenderedState(page: Page): Promise<RawSearchRendere
       visibleText, uncertain, viewport: { width: innerWidth, height: innerHeight },
     };
   });
-  return { anchors: rendered.anchors, body: await page.locator('body').innerText(),
-    visibleText: rendered.visibleText, uncertain: rendered.uncertain, viewport: rendered.viewport, url: page.url() };
+  return { anchors: rendered.anchors, body: await page.locator('body').innerText(), visibleText: rendered.visibleText, uncertain: await collectSearchGlyphSamples(page, rendered.uncertain), viewport: rendered.viewport, url: page.url() };
 }
 
 export async function renderedState(page: Page) {
-  const raw = await inspectRenderedState(page);
-  return finalizeSearchRenderedState(raw, await page.screenshot({ timeout: 10000 }));
+  const raw = await inspectRenderedState(page); return finalizeSearchRenderedState(raw, await page.screenshot({ timeout: 10000 }));
 }

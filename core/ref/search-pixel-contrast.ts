@@ -3,8 +3,10 @@ import { decodePng } from '../motion/energy.ts';
 export type SearchPixelSample = Readonly<{
   id: number;
   foreground: readonly [number, number, number];
-  rects: readonly Readonly<{ left: number; top: number; right: number; bottom: number }>[];
+  points: readonly Readonly<{ x: number; y: number }>[];
+  bounds: Readonly<{ left: number; top: number; right: number; bottom: number }>;
 }>;
+export type SearchPixelRequest = Readonly<Omit<SearchPixelSample, 'points'> & { nodeIndex: number }>;
 
 export type RawSearchRenderedState = Readonly<{
   anchors: readonly Readonly<{ href: string; text: string; left: number; right: number; top: number; bottom: number }>[];
@@ -25,26 +27,27 @@ export function readableSearchPixelSamples(
   const readable = new Set<number>();
   for (const sample of samples) {
     const [fr, fg, fb] = sample.foreground;
-    for (const rect of sample.rects) {
-      const left = Math.max(0, Math.floor(rect.left * scaleX));
-      const right = Math.min(image.width - 1, Math.ceil(rect.right * scaleX));
-      const top = Math.max(0, Math.floor(rect.top * scaleY));
-      const bottom = Math.min(image.height - 1, Math.ceil(rect.bottom * scaleY));
-      let found = false;
-      for (let y = top; y <= bottom && !found; y++) for (let x = left; x <= right && !found; x++) {
+    const bounds = { left: sample.bounds.left * scaleX, right: sample.bounds.right * scaleX,
+      top: sample.bounds.top * scaleY, bottom: sample.bounds.bottom * scaleY };
+    let matches = 0;
+    for (const point of sample.points.slice(0, 256)) {
+      const expectedX = Math.round(point.x * scaleX); const expectedY = Math.round(point.y * scaleY);
+      let edge = false;
+      for (let y = expectedY - 1; y <= expectedY + 1 && !edge; y++) for (let x = expectedX - 1; x <= expectedX + 1 && !edge; x++) {
+        if (x < 0 || x >= image.width || y < 0 || y >= image.height) continue;
         const offset = (y * image.width + x) * image.channels;
         const r = image.pixels[offset] ?? 0; const g = image.pixels[offset + 1] ?? 0; const b = image.pixels[offset + 2] ?? 0;
         if (Math.abs(r - fr) + Math.abs(g - fg) + Math.abs(b - fb) > 90) continue;
         for (const [dx, dy] of [[-2, 0], [2, 0], [0, -2], [0, 2]] as const) {
           const nx = x + dx; const ny = y + dy;
-          if (nx < left || nx > right || ny < top || ny > bottom) continue;
+          if (nx < bounds.left || nx > bounds.right || ny < bounds.top || ny > bounds.bottom
+            || nx < 0 || nx >= image.width || ny < 0 || ny >= image.height) continue;
           const neighbour = (ny * image.width + nx) * image.channels;
-          const contrast = Math.abs(r - (image.pixels[neighbour] ?? 0))
-            + Math.abs(g - (image.pixels[neighbour + 1] ?? 0)) + Math.abs(b - (image.pixels[neighbour + 2] ?? 0));
-          if (contrast >= 75) { found = true; break; }
+          if (Math.abs(r - (image.pixels[neighbour] ?? 0)) + Math.abs(g - (image.pixels[neighbour + 1] ?? 0))
+            + Math.abs(b - (image.pixels[neighbour + 2] ?? 0)) >= 75) { edge = true; break; }
         }
       }
-      if (found) { readable.add(sample.id); break; }
+      if (edge && ++matches >= Math.min(3, sample.points.length)) { readable.add(sample.id); break; }
     }
   }
   return readable;
