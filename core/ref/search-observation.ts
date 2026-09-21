@@ -1,6 +1,7 @@
 import type { Page } from 'playwright';
+import { finalizeSearchRenderedState, type RawSearchRenderedState, type SearchPixelSample } from './search-pixel-contrast.ts';
 
-export async function renderedState(page: Page) {
+export async function inspectRenderedState(page: Page): Promise<RawSearchRenderedState> {
   const rendered = await page.locator('body').evaluate(body => {
     const pointerlessOverlays = Array.from(document.querySelectorAll<HTMLElement>('*')).flatMap(element => {
       const style = getComputedStyle(element);
@@ -46,7 +47,8 @@ export async function renderedState(page: Page) {
       anchors.set(element, { href: parsed.href, text: [], left: box.left, right: box.right, top: box.top, bottom: box.bottom });
     }
 
-    const visibleText: string[] = [];
+    const visibleText: Array<{ id: number; value: string }> = [];
+    const uncertain: Array<SearchPixelSample & { href: string | null }> = [];
     const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT);
     for (let node = walker.nextNode(); node; node = walker.nextNode()) {
       const parent = node.parentElement;
@@ -99,8 +101,9 @@ export async function renderedState(page: Page) {
             const xs = points.map(point => Number(point[1]) * (point[2] === '%' ? clipBox.width / 100 : 1));
             const ys = points.map(point => Number(point[3]) * (point[4] === '%' ? clipBox.height / 100 : 1));
             tinyClip ||= Math.max(...xs) - Math.min(...xs) < 2 || Math.max(...ys) - Math.min(...ys) < 2;
-          }
+          } else tinyClip = true;
         }
+        tinyClip ||= /^path\(/.test(style.clipPath) || style.clipPath.includes('calc(');
         if (style.display === 'none' || style.visibility !== 'visible' || opacity < .05
           || transformScale < .05 || filterOpacity < .05 || style.contentVisibility === 'hidden'
           || tinyClip || transparentMask || blurred || style.mixBlendMode !== 'normal') { hidden = true; break; }
@@ -123,24 +126,31 @@ export async function renderedState(page: Page) {
         }
         const image = styles[index]?.backgroundImage ?? 'none';
         if (image !== 'none') {
-          const tokens = image.match(/rgba?\([^)]*\)|#[0-9a-f]{3,8}\b|\b(?:white|black|transparent)\b/giu) ?? [];
-          const colours: number[][] = [];
+          const tokens = /(?:linear|radial|conic)-gradient\(/u.test(image)
+            ? image.match(/rgba?\([^)]*\)|#[0-9a-f]{3,8}\b|\b(?:white|black|transparent)\b/giu) ?? [] : [];
+          const colours: Array<[number, number, number, number]> = [];
           for (const token of tokens) {
             const lower = token.toLocaleLowerCase('und');
-            if (lower === 'transparent') continue;
-            if (lower === 'white' || lower === 'black') { colours.push(lower === 'white' ? [255, 255, 255] : [0, 0, 0]); continue; }
+            if (lower === 'transparent') { colours.push([0, 0, 0, 0]); continue; }
+            if (lower === 'white' || lower === 'black') { colours.push(lower === 'white' ? [255, 255, 255, 1] : [0, 0, 0, 1]); continue; }
             if (lower.startsWith('#')) {
               const hex = lower.slice(1); const full = hex.length <= 4 ? [...hex].map(part => part + part).join('') : hex;
               const alpha = full.length === 8 ? Number.parseInt(full.slice(6, 8), 16) / 255 : 1;
-              if (alpha >= .05) colours.push([0, 2, 4].map(offset => Number.parseInt(full.slice(offset, offset + 2), 16)));
+              colours.push([Number.parseInt(full.slice(0, 2), 16), Number.parseInt(full.slice(2, 4), 16),
+                Number.parseInt(full.slice(4, 6), 16), alpha]);
               continue;
             }
             const rgba = lower.match(/[\d.]+/g)?.map(Number) ?? [];
             let alpha = rgba.length >= 4 ? rgba[3] ?? 0 : 1;
             if (lower.includes('/') && lower.includes('%')) alpha /= 100;
-            if (rgba.length >= 3 && alpha >= .05) colours.push(rgba.slice(0, 3));
+            if (rgba.length >= 3) colours.push([rgba[0] ?? 0, rgba[1] ?? 0, rgba[2] ?? 0, alpha]);
           }
-          if (colours.length > 0) { backgroundCandidates = colours; unknownBackground = false; }
+          if (colours.length > 0) {
+            backgroundCandidates = colours.flatMap(([red, green, blue, alpha]) => backgroundCandidates.map(background =>
+              [red * alpha + (background[0] ?? 255) * (1 - alpha), green * alpha + (background[1] ?? 255) * (1 - alpha),
+                blue * alpha + (background[2] ?? 255) * (1 - alpha)]));
+            unknownBackground = image.includes('url(') && colours.some(colour => colour[3] < .99);
+          }
           else unknownBackground = true;
         }
       }
@@ -150,7 +160,7 @@ export async function renderedState(page: Page) {
       let foregroundAlpha = foregroundParts.length >= 4 ? foregroundParts[3] ?? 0 : 1;
       if (foreground.includes('/') && foreground.includes('%')) foregroundAlpha /= 100;
       const weights = [.2126, .7152, .0722];
-      const lowContrast = unknownBackground || backgroundCandidates.some(backgroundRgb => {
+      const lowContrast = !unknownBackground && backgroundCandidates.some(backgroundRgb => {
         const paintedForeground = [0, 1, 2].map(channel => (foregroundParts[channel] ?? 0) * foregroundAlpha
           + (backgroundRgb[channel] ?? 255) * (1 - foregroundAlpha));
         const foregroundLuminance = paintedForeground.map(channel => channel / 255)
@@ -220,8 +230,11 @@ export async function renderedState(page: Page) {
       });
       range.detach();
       if (!textVisible) continue;
-      visibleText.push(value);
       const anchor = parent.closest<HTMLAnchorElement>('a[href]'); const record = anchor ? anchors.get(anchor) : undefined;
+      const id = visibleText.length; visibleText.push({ id, value });
+      if (unknownBackground) uncertain.push({ id, href: record?.href ?? null,
+        foreground: [foregroundParts[0] ?? 0, foregroundParts[1] ?? 0, foregroundParts[2] ?? 0],
+        rects: rects.map(rect => ({ left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom })) });
       if (record) record.text.push(value);
     }
     return {
@@ -229,9 +242,14 @@ export async function renderedState(page: Page) {
         if (anchor.text.length > 0) return [{ ...anchor, text: anchor.text.join(' ').slice(0, 4096) }];
         return [];
       }).slice(0, 2000),
-      visibleText: visibleText.join('\n'),
+      visibleText, uncertain, viewport: { width: innerWidth, height: innerHeight },
     };
   });
   return { anchors: rendered.anchors, body: await page.locator('body').innerText(),
-    visibleText: rendered.visibleText, url: page.url() };
+    visibleText: rendered.visibleText, uncertain: rendered.uncertain, viewport: rendered.viewport, url: page.url() };
+}
+
+export async function renderedState(page: Page) {
+  const raw = await inspectRenderedState(page);
+  return finalizeSearchRenderedState(raw, await page.screenshot({ timeout: 10000 }));
 }

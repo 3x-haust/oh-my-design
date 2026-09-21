@@ -140,7 +140,14 @@ test('unrendered image alt, pseudo z-index, background images and subpixel clips
   const gradient = 'https://gradient.example/service';
   const clipped = 'https://subpixel-clip.example/service';
   const polygon = 'https://polygon-clip.example/service';
+  const calculated = 'https://calculated-clip.example/service';
+  const pathClip = 'https://path-clip.example/service';
   const readableGradient = 'https://readable-gradient.example/service';
+  const readableImage = 'https://readable-image.example/service';
+  const unreadableImage = 'https://unreadable-image.example/service';
+  const transparentGradient = 'https://transparent-gradient.example/service';
+  const lightImage = `data:image/svg+xml;base64,${Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="300" height="80"><rect width="300" height="80" fill="white"/></svg>').toString('base64')}`;
+  const darkImage = `data:image/svg+xml;base64,${Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="300" height="80"><rect width="300" height="80" fill="black"/></svg>').toString('base64')}`;
   const h = await observe(t, { html: `${navbar}<style>
     .pseudo-z{position:absolute;inset:0;pointer-events:none}.pseudo-z::after{content:"";position:absolute;inset:0;z-index:99;background:white}
   </style><main>
@@ -149,13 +156,20 @@ test('unrendered image alt, pseudo z-index, background images and subpixel clips
     <a href="${gradient}" style="color:white;background-image:linear-gradient(white,white)">South Korea resident service</a>
     <a href="${clipped}" style="clip-path:inset(49.9%)">South Korea support platform</a>
     <a href="${polygon}" style="clip-path:polygon(49.95% 49.95%,50.05% 49.95%,50.05% 50.05%,49.95% 50.05%)">South Korea resident platform</a>
+    <a href="${calculated}" style="clip-path:polygon(calc(50% - .1px) calc(50% - .1px),calc(50% + .1px) calc(50% - .1px),calc(50% + .1px) calc(50% + .1px))">South Korea product platform</a>
+    <a href="${pathClip}" style="clip-path:path('M 0 0 H .1 V .1 H 0 Z')">South Korea service directory</a>
     <a href="${readableGradient}" style="color:black;background-image:linear-gradient(#fff,#fff)">Visible service on a readable gradient</a>
+    <a href="${readableImage}" style="display:block;width:300px;height:80px;color:black;background-image:url('${lightImage}')">Visible service on a readable image</a>
+    <a href="${unreadableImage}" style="display:block;width:300px;height:80px;color:black;background-image:url('${darkImage}')">South Korea service hidden on an image</a>
+    <a href="${transparentGradient}" style="color:white;background-image:linear-gradient(transparent,black)">South Korea service hidden in a transparent gradient</a>
   </main>` });
-  for (const url of [imageOnly, pseudoZ, gradient, clipped, polygon]) {
+  for (const url of [imageOnly, pseudoZ, gradient, clipped, polygon, calculated, pathClip, unreadableImage, transparentGradient]) {
     assert.equal(h.execution.results?.find(result => result.url === url), undefined, url);
   }
   assert.equal(h.execution.results?.find(result => result.url === readableGradient)?.text,
     'Visible service on a readable gradient');
+  assert.equal(h.execution.results?.find(result => result.url === readableImage)?.text,
+    'Visible service on a readable image');
 });
 
 test('render observation does not mutate pointer-event styles', async t => {

@@ -81,7 +81,8 @@ test('research reuses the existing scout, reference, copy, type, and composition
     (error: unknown) => error instanceof AdaptiveRouteError && error.code === 'LOCALE_DESIGN_MARKET_AUTHORITY_REQUIRED');
   for (const excerpt of ['Do not target Japan.', 'This service is not for Japan.', 'Japan is not our target market.',
     'Japan is not our market.', 'We no longer target Japan.', 'Japan is out of scope.',
-    '일본 사용자를 대상으로 하지 마세요.', '일본 시장은 아닙니다.']) {
+    'Japan should not be a market.', 'Japan is not a good market.',
+    '일본 사용자를 대상으로 하지 마세요.', '일본 시장은 아닙니다.', '일본은 시장으로 적합하지 않습니다.']) {
     const denied = marketFixture('synth-marketing');
     const deniedPublication = denied.evidenceClaims as { claims: Array<{ id: string; userEvidence: Array<{ excerpt: string }> }> };
     const deniedClaim = deniedPublication.claims.find(candidate => candidate.id === 'market-authority');
