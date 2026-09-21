@@ -81,11 +81,10 @@ For target-market-first work, publish research v7 with `marketCoverage`. Each la
 source id exactly once with `sourceId`, the retained image's exact `evidenceSha256`, a lane-valid `scope`,
 `basis`, and `provenanceReceiptSha256`. `market-search-result` must bind the exact signed market-search
 receipt whose visible result text for the retained source or design-discovery link names the market and
-relevant scope. `market-direct-result`
-must bind the exact signed direct-public root receipt whose captured page visibly names the explicit
-market and service/product/gallery/audience scope and whose observed links include the retained source
-or design-discovery URL. URL tokens, localized queries, country-code hostnames, and freeform reasons prove
-neither. Search and direct bases may coexist in a lane. A fallback gap records the exact market, an
+relevant scope. `market-direct-result` must bind the exact signed direct-public root receipt whose visible
+label for the retained source or design-discovery link names the market and relevant scope. URL tokens,
+localized queries, country-code hostnames, page-wide headings, and freeform reasons prove neither.
+Search and direct bases may coexist in a lane. Every market attempt must be current. A fallback gap records the exact market, an
 availability/access/coverage kind, and every attempted query and root used by that lane. Freeform prose
 cannot prove local provenance or a fallback attempt. `research-check` rejects missing coverage, market drift, global-only lanes, and
 unqualified search order; repair the evidence instead of removing the policy.

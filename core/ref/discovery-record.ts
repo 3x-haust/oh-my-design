@@ -6,6 +6,7 @@ import { verifyNativeObservation } from '../runtime/self-signed-activation.ts';
 import { canonicalJson } from './board-artifacts.ts';
 import { designDiscoveryDirectoryProvider, designDiscoveryProvider, referenceServiceHost } from './design-discovery-sources.ts';
 import { forbiddenPublicHostname } from './public-network.ts';
+import type { ObservedSearchResult } from './search-result.ts';
 
 export type DiscoveryLane = 'domain' | 'design';
 export type DirectDiscoveryEntry = 'public-directory' | 'free-gallery';
@@ -14,6 +15,7 @@ export type DiscoveryNavigationReceipt = Readonly<{ url: string; evidence: Disco
 export type DirectDiscoveryReceipt = DiscoveryNavigationReceipt & Readonly<{ method: 'direct-public'; entry: DirectDiscoveryEntry }>;
 export type DiscoveryObservation = Readonly<{
   url: string; finalUrl: string; links: readonly string[]; observedText?: string; capturedAt?: string;
+  linkLabels?: readonly ObservedSearchResult[];
 }>;
 export const DISCOVERY_LIMITATIONS = 'native-public-get; stable-rendered-viewport-links; no-authentication; no-interaction-probes; not-provider-attested' as const;
 type DiscoveryCaptureFields = Readonly<{
@@ -25,7 +27,7 @@ export type DiscoveryCaptureRecord = DiscoveryCaptureFields & (
   Readonly<{ schema: 'reference-navigation-capture-v2' }>
   | Readonly<{ schema: 'reference-discovery-entry-v1'; method: 'direct-public'; entry: DirectDiscoveryEntry }>
   | Readonly<{ schema: 'reference-discovery-entry-v2'; method: 'direct-public'; entry: DirectDiscoveryEntry;
-    observedText: string; signature: string }>
+    observedText: string; linkLabels: readonly ObservedSearchResult[]; signature: string }>
 );
 
 export class ReferenceDiscoveryError extends Error {
@@ -101,7 +103,7 @@ function readDiscovery(root: string, value: unknown, direct: boolean, requireCur
   if (direct ? !['reference-discovery-entry-v1', 'reference-discovery-entry-v2'].includes(decoded.schema as string)
     : decoded.schema !== 'reference-navigation-capture-v2') return fail('native capture purpose/source/lane binding differs');
   const current = direct && decoded.schema === 'reference-discovery-entry-v2';
-  const row = object(decoded, direct ? [...keys, 'method', 'entry', ...(current ? ['observedText', 'signature'] : [])] : keys);
+  const row = object(decoded, direct ? [...keys, 'method', 'entry', ...(current ? ['observedText', 'linkLabels', 'signature'] : [])] : keys);
   if (row.source !== url || row.researchLane !== lane || row.kind !== 'page' || row.imagePath !== image.path
     || row.limitations !== DISCOVERY_LIMITATIONS || !Number.isFinite(Date.parse(text(row.capturedAt)))
     || (direct && (row.method !== 'direct-public' || row.entry !== entry))) return fail('native capture purpose/source/lane binding differs');
@@ -120,13 +122,25 @@ function readDiscovery(root: string, value: unknown, direct: boolean, requireCur
     || Object.keys(acquisition.links).length !== acquisition.links.length) return fail('invalid observed links');
   const links = acquisition.links.map(publicDiscoveryUrl);
   if (new Set(links).size !== links.length) return fail('duplicate observed links');
+  const linkLabels = current ? observedLinkLabels(row.linkLabels, links) : undefined;
   const observation = { url, finalUrl: publicDiscoveryUrl(acquisition.finalUrl), links };
   if (entry !== undefined) validateDirectDiscoveryLinks(entry, observation);
   const png = decodePng(read(root, image));
   if (png.width !== 1280 || png.height !== 900) return fail('discovery capture viewport differs');
   return requireCurrent && observedText !== undefined
-    ? { ...observation, observedText, capturedAt: text(row.capturedAt) }
+    ? { ...observation, observedText, capturedAt: text(row.capturedAt), linkLabels: linkLabels ?? [] }
     : observation;
+}
+function observedLinkLabels(value: unknown, links: readonly string[]): readonly ObservedSearchResult[] {
+  if (!Array.isArray(value) || value.length > 2000 || Object.keys(value).length !== value.length) return fail('invalid observed link labels');
+  const labels = value.map(item => {
+    const row = object(item, ['url', 'text']);
+    const label = Object.freeze({ url: publicDiscoveryUrl(row.url), text: text(row.text) });
+    if (!links.includes(label.url)) return fail('observed link label must bind an observed link');
+    return label;
+  });
+  if (new Set(labels.map(label => label.url)).size !== labels.length) return fail('duplicate observed link labels');
+  return Object.freeze(labels);
 }
 export function readDirectDiscoveryEntry(root: string, receipt: unknown): DiscoveryObservation {
   return readDiscovery(root, receipt, true);

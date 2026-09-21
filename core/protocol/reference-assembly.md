@@ -262,10 +262,10 @@ direct-public root may replace search transport, but never the per-lane local ev
 Each local classification binds `sourceId`, the exact retained `evidenceSha256`, a lane-valid `scope`,
 a closed `basis`, and the exact native `provenanceReceiptSha256`. `market-search-result` binds a signed
 market-search execution whose visible result text for that link names the explicit market and relevant
-service/product scope. `market-direct-result` binds a signed direct-public root whose captured page visibly names the
-explicit market and service/product/gallery/audience scope and whose observed links include that retained
-URL. URL tokens, localized queries, country-code hostnames, and freeform reasons are never market-service
-proof. Search and direct bases may coexist in a lane. Every global fallback gap records that same
+service/product scope. `market-direct-result` binds a signed direct-public root whose visible label for
+that retained link names the explicit market and relevant scope. URL tokens, localized queries,
+country-code hostnames, page-wide headings, and freeform reasons are never source-specific market proof.
+Search and direct bases may coexist in a lane. Every market attempt must be current. Every global fallback gap records that same
 `marketRegion`, a closed availability/access/coverage `kind`, and every exact market query and direct root
 attempted by that lane. Generic quality prose and invented attempts do not
 qualify. Root reasons remain bounded, visible, well-formed scope notes; they are not provenance.

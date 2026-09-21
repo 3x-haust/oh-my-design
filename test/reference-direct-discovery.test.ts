@@ -125,8 +125,9 @@ test('public network validation refuses private DNS answers and reserved address
   await assert.doesNotReject(assertPublicNetworkUrl('https://public.example/', async () => [
     { address: '93.184.216.34', family: 4 }, { address: '2606:4700:4700::1111', family: 6 },
   ]));
-  for (const address of ['127.0.0.1', '169.254.169.254', '::1', '::ffff:127.0.0.1',
-    '64:ff9b:1::a9fe:a9fe', '100:0:0:1::1', 'fc00::1', 'fec0::1', '2001:db8::1', '3fff::1', '5f00::1']) {
+  for (const address of ['127.0.0.1', '169.254.169.254', '192.175.48.1', '::1', '::ffff:127.0.0.1',
+    '64:ff9b:1::a9fe:a9fe', '100:0:0:1::1', '2620:4f:8000::1', 'fc00::1', 'fec0::1',
+    '2001:db8::1', '3fff::1', '5f00::1']) {
     assert.equal(publicIpAddress(address), false);
     await assert.rejects(assertPublicNetworkUrl('https://public.example/', async () => [
       { address, family: address.includes(':') ? 6 : 4 },

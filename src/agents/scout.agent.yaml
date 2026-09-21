@@ -68,10 +68,9 @@ instructions: |
   with `sourceId`, the retained image's exact `evidenceSha256`, a lane-valid `scope`, `basis`, and
   `provenanceReceiptSha256`. `market-search-result` must bind the exact signed market-search receipt whose
   visible result text for the retained source or design-discovery link names the market and relevant scope.
-  `market-direct-result` must bind the
-  exact signed direct-public root receipt whose captured page visibly names the explicit market and
-  service/product/gallery/audience scope and whose observed links include the retained source or
-  design-discovery URL. URL tokens, localized queries, country-code hostnames, and freeform reasons prove neither.
+  `market-direct-result` must bind the exact signed direct-public root receipt whose visible label for
+  the retained source or design-discovery link names the market and relevant scope. URL tokens, localized
+  queries, country-code hostnames, page-wide headings, and freeform reasons prove neither.
   Search and direct bases may coexist in a lane. A fallback gap records the exact market, an
   availability/access/coverage kind, and every attempted query and root used by that lane.
   Freeform prose cannot prove local provenance or a fallback attempt. `research-check`
@@ -149,7 +148,8 @@ instructions: |
   provider-attested truth and do not prove visual quality, market fit or authority by themselves.
   For explicit-market search provenance, the signed visible result text associated with the retained
   link must itself name the market and relevant service/product scope; a localized query alone is not local evidence.
-  Reacquire explicit-market provenance and its retained source when either is more than seven days old.
+  Reacquire every explicit-market search/direct attempt and its retained source when either is more
+  than seven days old; fallback attempts are not exempt.
   After research-check, run `omd ref apply-plan --json` and fill its input from actual image
   inspection for every current domain-brief surface. Publish using `omd ref apply-set --input
   <application.json>`, then require `omd ref apply-check --json`. This is a CLI-published synthesis,

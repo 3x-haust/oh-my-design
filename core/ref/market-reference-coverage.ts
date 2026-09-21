@@ -124,6 +124,8 @@ function validateLaneProvenance(
   sources: readonly MarketSourceIdentity[], executions: readonly MarketExecution[],
   expectedQueries: readonly string[], roots: readonly Readonly<{ url: string }>[],
 ): void {
+  for (const execution of executions) assertCurrentExecution(execution,
+    `REFERENCE_RESEARCH_MARKET_${lane}_ATTEMPT_STALE`);
   for (const local of coverage.localSources) {
     const source = sources.find(candidate => candidate.id === local.sourceId)!;
     const urls = [source.url, ...(source.discovery === undefined ? [] : [source.discovery.url])];
@@ -133,23 +135,16 @@ function validateLaneProvenance(
       marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_LOCAL_PROVENANCE`);
     }
     if (!execution.usable) marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_LOCAL_PROVENANCE`);
-    if (local.basis === 'market-search-result') {
-      const result = execution.results.find(candidate => resultReaches(candidate, urls));
-      if (result === undefined || DIRECT_NEGATION.test(result.text) || !DIRECT_SCOPE.test(result.text)
-        || !containsMarketToken(result.text, marketLabels)) {
-        marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_LOCAL_RESULT_SCOPE`);
-      }
-    } else if (!execution.links.some(link => urls.includes(link))) {
-      marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_LOCAL_PROVENANCE`);
+    const result = execution.results.find(candidate => resultReaches(candidate, urls));
+    if (result === undefined || DIRECT_NEGATION.test(result.text) || !DIRECT_SCOPE.test(result.text)
+      || !containsMarketToken(result.text, marketLabels)) {
+      marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_LOCAL_RESULT_SCOPE`);
     }
     const sourceObservedAt = Date.parse(source.observedAt);
-    const now = Date.now();
-    if (!Number.isFinite(sourceObservedAt) || !Number.isFinite(execution.observedAt)
+    if (!Number.isFinite(sourceObservedAt)
       || Math.abs(sourceObservedAt - execution.observedAt) > MAX_PROVENANCE_AGE_MS
-      || now - sourceObservedAt > MAX_PROVENANCE_AGE_MS
-      || now - execution.observedAt > MAX_PROVENANCE_AGE_MS
-      || sourceObservedAt - now > MAX_CLOCK_SKEW_MS
-      || execution.observedAt - now > MAX_CLOCK_SKEW_MS) {
+      || Date.now() - sourceObservedAt > MAX_PROVENANCE_AGE_MS
+      || sourceObservedAt - Date.now() > MAX_CLOCK_SKEW_MS) {
       marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_LOCAL_PROVENANCE_STALE`);
     }
   }
@@ -161,6 +156,11 @@ function validateLaneProvenance(
   const expectedAttempts = same(fallback.gap.attemptedRoots, rootUrls)
     && same(fallback.gap.attemptedQueries, searchAttempted ? expectedQueries : []);
   if (!expectedAttempts) marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_FALLBACK_ATTEMPTS`);
+}
+function assertCurrentExecution(execution: MarketExecution, code: string): void {
+  const now = Date.now();
+  if (!Number.isFinite(execution.observedAt) || now - execution.observedAt > MAX_PROVENANCE_AGE_MS
+    || execution.observedAt - now > MAX_CLOCK_SKEW_MS) marketReject(code);
 }
 const same = (left: readonly string[], right: readonly string[]): boolean =>
   left.length === right.length && left.every((value, index) => value === right[index]);
@@ -208,6 +208,6 @@ function validateDirectExecutions(
     }
     return Object.freeze({ sha256: receipt.capture.sha256, query: null,
       observedAt: Date.parse(observation.capturedAt ?? ''),
-      links: observation.links, results: [], usable: true });
+      links: observation.links, results: observation.linkLabels ?? [], usable: true });
   }));
 }
