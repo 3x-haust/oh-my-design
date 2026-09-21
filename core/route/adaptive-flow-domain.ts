@@ -35,9 +35,17 @@ export const MANDATORY_ADAPTIVE_GATES = Object.freeze([
 ] as const);
 
 export const OPTIONAL_STAGE_IDS = Object.freeze([
-  'domain', 'depth', 'frame', 'content-grain', 'acquisition', 'scout', 'reference-board',
+  'depth', 'frame', 'content-grain', 'acquisition', 'scout', 'moodboard', 'reference-board',
   'reference-selection', 'art-direction', 'copy', 'type-proof', 'composition',
   'candidate-generation', 'safety-validation',
+] as const);
+/**
+ * Stages every route carries. A mandatory stage is never optional-skip accounted and never
+ * accepts a `strategyDecision.skips` reason; `validateAdaptiveStrategyRails` rejects the route
+ * when one is absent.
+ */
+export const MANDATORY_STAGE_IDS = Object.freeze([
+  'domain',
 ] as const);
 export const OPTIONAL_METHOD_IDS = Object.freeze([
   'reflection-in-action', 'reference-distance', 'image-first-draft',
@@ -45,7 +53,7 @@ export const OPTIONAL_METHOD_IDS = Object.freeze([
   'ai-shipped-asset',
 ] as const);
 export const ADAPTIVE_STAGE_IDS = Object.freeze([
-  ...OPTIONAL_STAGE_IDS, 'production', 'browser-evidence', 'independent-review',
+  ...MANDATORY_STAGE_IDS, ...OPTIONAL_STAGE_IDS, 'production', 'browser-evidence', 'independent-review',
 ] as const);
 export const ADAPTIVE_ROLE_IDS = Object.freeze([
   'omd-framer', 'omd-scout', 'omd-writer', 'omd-typesetter', 'omd-composer',
@@ -54,11 +62,14 @@ export const ADAPTIVE_ROLE_IDS = Object.freeze([
 
 export type AdaptiveRouteErrorCode =
   | 'MALFORMED_ADAPTIVE_ROUTE'
+  | 'ROUTE_UNCLASSIFIED'
+  | 'DESIGN_ONLY_SCOPE_REQUIRED'
   | 'UNEXPECTED_ADAPTIVE_ROUTE_FIELD'
   | 'ADAPTIVE_SKIP_REASON_REQUIRED'
   | 'OPTIONAL_SKIP_REASON_REQUIRED'
   | 'HARD_GATE_CANNOT_SKIP'
   | 'MODEL_OWNER_REQUIRED'
+  | 'DOMAIN_ANALYSIS_REQUIRED'
   | 'PRODUCTION_REQUIRED'
   | 'FINAL_EVIDENCE_REQUIRED'
   | 'INDEPENDENT_REVIEW_REQUIRED'
@@ -125,6 +136,7 @@ export type AdaptiveLearningContext = Readonly<{
 }>;
 export type ModelCapabilityRouteInput = Readonly<{ now: number; routingInput: unknown }>;
 export type AdaptiveRouteInput = Readonly<{
+  deliveryMode?: 'design-only';
   schema: typeof ADAPTIVE_ROUTE_INPUT_SCHEMA;
   request: string;
   projectMode: 'greenfield' | 'existing';
@@ -141,6 +153,7 @@ export type AdaptiveRouteInput = Readonly<{
   strategyDecision: AdaptiveStrategyDecision;
 }>;
 export type AdaptiveSourceContract = Readonly<{
+  deliveryMode?: 'design-only';
   schema: typeof ADAPTIVE_SOURCE_CONTRACT_SCHEMA;
   request: string;
   projectMode: 'greenfield' | 'existing';
@@ -170,6 +183,7 @@ export type ValidatedAdaptiveRouteInput = Omit<AdaptiveRouteInput,
   localeDesign?: LocaleDesignRoute;
 }>;
 export type AdaptiveRouteRecord = Readonly<{
+  deliveryMode?: 'design-only';
   schema: typeof ADAPTIVE_ROUTE_RECORD_SCHEMA;
   route: 'adaptive';
   request: string;

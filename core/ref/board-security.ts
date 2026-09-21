@@ -2,6 +2,7 @@ import { lstatSync, readFileSync, realpathSync } from 'node:fs';
 import { extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { inflateSync } from 'node:zlib';
 import { ReferenceBoardResolutionError } from './board-contract.ts';
+import { nodeStableProjectFileSystem, readStableProjectFile } from '../runtime/stable-project-file.ts';
 
 const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 const MAX_COMPRESSED_BYTES = 50 * 1024 * 1024;
@@ -134,3 +135,10 @@ export function trustedReferenceImage(root: string, imagePath: string): string {
 export const trustedReferenceDirectory = (root: string, path: string): string => trustedReferenceEntry(root, path, true);
 
 export const trustedComponentCaptureImage = trustedReferenceImage;
+
+export function trustedDiscoveryImage(root: string, imagePath: string): string {
+  if (!/^\.omd\/discovery\/(?:domain|design)\/.+\.png$/.test(imagePath) || imagePath.includes('\\') || imagePath.split('/').includes('..')) fail('discovery image must remain in its diagnostic namespace');
+  const path = resolve(root, imagePath);
+  isPng(readStableProjectFile({ root: resolve(root), path, label: 'discovery image', fs: nodeStableProjectFileSystem() }));
+  return path;
+}

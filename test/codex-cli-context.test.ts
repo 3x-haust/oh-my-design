@@ -42,6 +42,7 @@ test('research and type roles discover their brokered browser path without recei
   const scout = codexCliContext(cli, process.execPath, 'omd-scout');
   assert.match(scout, /host-brokered OMD browser CLI/);
   assert.match(scout, /ir, render, ref add, ref add-batch, craft-capture/);
+  assert.match(scout, /ref search, ref navigate/);
   assert.match(scout, /absence of an interactive browser MCP tool does not mean these commands are unavailable/);
   assert.match(scout, /reference-capture-preparation/);
   assert.match(scout, /not arbitrary typing, submission, navigation, or a logged-in session/);

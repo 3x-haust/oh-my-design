@@ -16,7 +16,7 @@ service, provider, or runtime.
 | Stage | Sole owner | Validated input | Durable/cache output | Machine check, function, or command | Explicit fallback or stop |
 |---|---|---|---|---|---|
 | brief blocks | `omd-framer` | Current user brief, cited user/evidence records, explicit-user taste profile, and applicable task constraints | Durable `.omd/frame.md`, including the task coverage matrix only where the surface requires it | `omd frame set …`; `omd frame show` must read the completed record | Missing cited evidence or required frame fields stops reference work at the brief; do not invent taste, task, or a reference target. |
-| fragment inventory | `omd-scout` | Valid brief blocks, user URLs first, component inventory, and user-directed capture permission | Durable measured component records and local captures under `.omd/refs/`; provenance-bound image fragments under `.omd/refs/fragments/`; raw captures remain scout-local | `omd ref add … --selector … --blueprint --shot` for a measured component; `omd ref import-image <input.json>` for a local user-directed image-region capture | Capability-check `browser-rs` first through the supported browser doctor. For ordinary component inspection, use the headless, reduced-motion `omd render`, `omd ir`, or `omd probe` fallback when that provider is not callable on the current host/connection, has no platform build, or the user declines it. Record the actual limitation; a transient failure is not permission to switch. User-directed image-region capture still requires the actual supporting browser tool. If no lawful local capture can be made, omit the fragment and report the coverage gap. Never scrape, hotlink, or ship source pixels. |
+| fragment inventory | `omd-scout` | Valid brief blocks, user URLs first, component inventory, and user-directed capture permission | Durable measured component records and local captures under `.omd/refs/`; provenance-bound image fragments under `.omd/refs/design/fragments/`; raw captures remain scout-local | `omd ref add … --selector … --blueprint --shot` for a measured component; `omd ref import-image <input.json>` for a local user-directed image-region capture | Capability-check `browser-rs` first through the supported browser doctor. For ordinary component inspection, use the headless, reduced-motion `omd render`, `omd ir`, or `omd probe` fallback when that provider is not callable on the current host/connection, has no platform build, or the user declines it. Record the actual limitation; a transient failure is not permission to switch. User-directed image-region capture still requires the actual supporting browser tool. If no lawful local capture can be made, omit the fragment and report the coverage gap. Never scrape, hotlink, or ship source pixels. |
 | brick analysis | `omd-scout` | The validated fragment inventory, measured invariants/blueprints, rights/provenance, task blocks, and coverage gaps | Durable sanitized brick principles in the retained `.omd/refs/*.json` records plus `.omd/scout.md`; source identities and raw pixels remain only in the fragment inventory | `omd ref principles …` refuses an unmeasured source; candidate `omd ref check` rejects an empty or contaminated transferable brick | A contaminated, duplicate, rights-unclear-for-use, or unmeasurable fragment is a rejected or anti-reference brick. If no lawful sanitized brick can answer a required decision, stop candidate assembly for that decision and report the gap. |
 | candidate assemblies | `omd-scout` | Validated fragment inventory, sanitized brick analysis, and frame/task targets | Durable `.omd/reference-board.json` as internal raw evidence; canonical capture, sanitized assembly, and typed projection remain behind the reference commands | Run `omd schema reference-board`, copy its exact skeleton and grid constraints, then `omd ref board --input <candidate-assemblies.json>` derives identities/frame binding and persists the validated board; then `omd ref check`; then `omd ref candidates` | A failed check, missing required zone in either candidate, stale PNG/provenance, contaminated selector/text, or no viable candidate stops before chat presentation. Do not infer or extend the printed schema, open/emit/ask the user to inspect an HTML, PNG, or board UI, or run `omd-board`. |
 | locale-reference binding (market-grounded reference work only) | `omd-scout` | Current market-grounded board plus its current cultural profile, projection, and captured-source receipts | Source-free `.omd/reference-locale-binding.json` and private `.omd/reference-locale-binding-evidence.json` | Run `omd schema reference-locale-binding`, then `omd ref locale-bind --input <bindings.json>`, then `omd ref locale-bind-check`; `omd ref check` also requires it for a market-bound v3 board | A source URL not present in the profile, an unavailable source, a positive use outside `native-category`/same-task `global-equivalent`, transfer from `contested`/`unknown`, a silent unbound matching source, or a candidate with no native first-party component stops selection. |
@@ -27,7 +27,42 @@ service, provider, or runtime.
 
 ## Reference roles
 
-Every reference serves one of two roles, and the domain brief's `referenceQueries` seed both:
+### Screen-by-screen application of the two research lanes
+
+For routes requiring dual reference research, Scout follows validated `research-check` with
+`omd ref apply-plan --json`. The draft derives exact destination surface names and input hashes
+from the current domain brief and research; it deliberately contains no invented judgments.
+It requires a v2 `target: {route, state}` for each screen. Bind the real planned destination path
+and observable state before production; final application review rejects a different screen's capture.
+Scout inspects the images, fills the draft's input, and publishes through `omd ref apply-set`.
+`apply-check` verifies complete surface coverage, correct-lane reference IDs, explicit partial/
+brief-derived gaps, current inputs and consistent publication. Both lanes must inform at least one
+surface; a particular screen may lack direct evidence and must say why. Support-only references
+cannot claim direct visual coverage. Requirements states/flows still belong to their existing
+contracts; screenshots do not prove behavior. This adds no fixed reference or candidate quota.
+
+`.omd/reference-application.md` is the human-facing application table. The source-bearing JSON
+stays with Scout/coordinator; Composer and Hand receive only the derived decision projection in
+briefs and selected handoffs. No source URLs, hosts or capture paths belong in decision prose.
+The projection does not replace selected assembly, approved tokens, actual reference-usage evidence,
+or blind final review. It records what should be applied and checked, not what has already passed.
+Existing valid native captures remain usable; v5 execution binding, inspection and application are required before
+downstream composition/production and design-only/terminal completion. Changed research, domain
+brief or missing/edited derived outputs fails closed. Do not repair hashes to invent a review.
+
+The application is now an approved source-seal input. After authenticated final-v2 evidence,
+`omd ref apply-review-plan --json` derives deterministic surface/criterion IDs and the exact allowed
+final observation/capture/viewport/state set. Inspect every criterion at desktop and mobile, then
+publish `apply-review-set --input <json>` with met/revise/justified-departure and concrete reasons.
+`apply-review-check` and terminal preflight reject missing, duplicate, stale, unrelated or unresolved
+rows. Changed source/build/plan means new current evidence and re-review, not reusing old judgments.
+This agent-authored review is not human approval, independent reviewer attestation or a beauty score.
+
+The workflow adapts Design Flow Harness's actual-image analysis → screen reference linkage →
+representative concept → expansion approach, while retaining OMD's independent research lanes,
+adaptive concept/selection policy and source-free production boundary.
+
+Every reference serves one of three roles, and the domain brief's `referenceQueries` seed all three:
 
 - **① component design** — a detailed section, component, or button whose *structure* is the value.
   It is captured as a scoped measured record (`omd ref add … --selector … --blueprint --shot`): the
@@ -42,6 +77,35 @@ Every reference serves one of two roles, and the domain brief's `referenceQuerie
   ratio), preserve a scroll-linked reference's scroll response, and be reduced-motion safe. A static,
   faint, or scroll-dropping reproduction fails — the craft reference does not pass just because a
   generation was attempted. This is how the "seeing is not building" gap is closed with evidence.
+- **③ mood** — the whole-page, visual-only lane (`omd ref mood …`, `protocol/moodboard.md`). It fixes
+  a felt direction before anything is assembled and transfers declared qualities only. It is study
+  material by construction: `MOOD_BYTES_IN_PRODUCTION` is a hard failure if a mood capture's bytes,
+  path, or digest reach production source.
+
+### The two axes
+
+Roles are names; the machine-consumed contract is two axes (`core/ref/reference-scope.ts`). Scope is
+whole-or-part; evidence is measured-or-visual-only. There are four combinations and no more — a new
+need selects a combination rather than adding a role.
+
+| scope | evidence | role | what it is | may transfer | structural claims |
+| --- | --- | --- | --- | --- | --- |
+| whole | visual-only | mood | a whole artifact, looked at | declared felt qualities | no |
+| whole | measured | component | a whole page as the unit of study | measured invariants, page composition | yes |
+| part | measured | component, craft | component anatomy | measured invariants, geometry | yes |
+| part | visual-only | craft, mood | a crop or supplied image, looked at | declared geometry, principles | no |
+
+**A visual-only capture may never support a structural claim.** A screenshot does not measure that a
+padding is 16px; a design built from "the spacing looks 8-ish" is the derivative failure this
+boundary exists to prevent. `requireStructuralClaim` refuses the claim by name, and
+`omd ref granularity` reports such captures as `REF-VISUAL-ONLY` — appearance without anatomy, usable
+for direction and detail but not as parts, zone coverage, or kinship.
+
+Distances between a candidate and a slop centroid, a category mean, or an adopted direction are all
+read in ONE shared space (`core/visual-vector.ts`), so the three gates are comparable readings rather
+than three unrelated heuristics. `omd ref gates` reports them; `DISTINCTIVENESS_FLOOR`,
+`CATEGORY_MEAN_FLOOR`, `COHERENCE_CEILING`, and `NEAR_DUPLICATE` start advisory, following the
+precedent in `core/composition-contract/visual-richness.ts`.
 
 `omd craft-capture … --json` returns its measured `reference-craft-v1` on stdout; it does not
 automatically publish a file. When retention is required, the owning role preserves the actual output
@@ -59,14 +123,141 @@ the current route, explicit request, locale context and Framer-owned acquisition
 not depend on the optional domain-analysis stage. Existing domain queries supplement it only while
 they describe the current request. The user supplies the task, not a required reference list.
 
-Scout turns each selected lane into current searches: subject identity, task/component anatomy,
+Scout turns each selected lane into current search or direct-public discovery: subject identity, task/component anatomy,
 visual craft beyond the product category, and the plan's motion investigation. New marketing may
 investigate a motion candidate without selecting it for production; selected `motion-one` additionally
 requires positive measured evidence. Explicit preferences
 for a reference region or gallery belong in those searches; a language alone does not imply a
-country's style or a target market. Directories such as Awwwards, FWA and GDWEB are lead sources,
-not fixed winners or a visual preset. Search results lead to the actual site and relevant case study;
-live desktop/mobile inspection, scoped captures and motion measurements establish the evidence.
+country's style or a target market. Prefer freely inspectable screen/pattern galleries (for example
+UI Bowl and relevant Pinterest entries) for apps/product UI, and website galleries (for example
+Siteinspire and Pinterest) for website/marketing direction. The discovery plan supplies surface-aware
+leads, not fixed winners or guarantees of free catalogue/API access. Verify each entry's current free
+access, open it beyond the thumbnail, and follow its original where available. If access is blocked,
+record the limit and try another public source; never purchase, start trials, install an MCP, or
+bypass access controls. A screenshot-only reference can establish visual anatomy through the native
+image import path, not live behavior or measured app DOM. Free viewing is not an asset reuse license.
+
+Discovery always saves two separate ledgers:
+
+- **domain reference** (`.omd/refs/domain/research.json`) asks how comparable services organize real screens, features, states, and
+  task flows. When `greenfield-task-flow-benchmark` applies, its private v3 benchmark records every
+  safe reachable screen in the declared scope, the actual click path, feature and flow groupings,
+  current local evidence, and every explicit coverage gap. Use `omd benchmark record --input
+  <reference-flow-input.json>` to execute public navigation/disclosure states in one fresh browser
+  context. Attach its signed execution receipt to each completed flow and preserve the returned
+  action/result/evidence bindings. `omd benchmark check` authenticates and re-hashes those transitions;
+  selected product benchmarks require `liveFlowVerified: true`. Legacy artifacts without executions
+  remain readable but unverified. Login, payment, destructive or unsupported actions are explicit
+  exclusions, never inferred successes. Verification covers only the recorded scope, not all controls.
+- **design reference** (`.omd/refs/design/research.json`) asks how the destination should feel and be composed. It uses the measured
+  board, mood, typography, component, and craft evidence already defined by this protocol. Domain
+  research is not visual direction merely because the comparable product looks polished.
+
+Capture into the correct lane from the beginning: `omd ref add --lane domain|design`, or `lane` on
+every batch entry. Selected discovery refuses omitted lanes before acquisition. Design captures
+start with an inspected free gallery/bookmark item, then may capture its recorded original link;
+`--from-user` is only for a source the user actually supplied, never an escape from discovery.
+Capture gallery entries before batching their originals, since the observed link must already
+exist. A service task flow belongs in domain, not design merely because its layout is calm.
+For an intermediate category/directory hop, use `omd ref navigate <url> --lane domain|design --json`.
+It returns the `url`, `evidence`, and `capture` object for the lane's `navigation` array, stored
+under `.omd/discovery/<lane>/navigation/`. These receipts have no board component identity and never
+substitute for retained design evidence. Research validation requires a native search or direct-entry
+root followed by observed links, not a URL written from memory.
+A batch is checked against its own pending sources as well as already saved references before
+acquisition. A rejected board is resolved before publication and cannot replace an earlier board.
+Final redirected service hosts are checked before screenshot publication, including pending
+captures in the same batch. A gallery item redirected to a directory belongs in navigation,
+not a primary design slot; choose and capture an observed item from that directory instead.
+A board remains a draft until `ref research-check` and `ref apply-check` pass; `stage next`
+keeps this work with Scout rather than treating a board file as finished research.
+PNGs and native JSON metadata stay together in `.omd/refs/domain/` and
+`.omd/refs/design/`; app/pin imports use `.omd/refs/design/fragments/`. Unlabelled legacy records
+remain inspectable but cannot satisfy selected discovery without current qualification. `ref list`
+marks ineligible records; selected boards and actionable briefs reject/exclude them. Domain captures are excluded from
+the default visual board inventory.
+
+Search PNGs/receipts, direct-entry lists and intermediate navigation are diagnostics, stored only in
+`.omd/discovery/<lane>/`; `.omd/refs/<lane>/` holds retained evidence. At the start of research in an
+existing project run `omd ref tidy --json`. If it identifies old diagnostic clutter or ineligible
+design captures, inspect the reasons and run `omd ref tidy --apply --json` before reacquisition.
+The guarded operation archives exact bytes and a recovery manifest under `.omd/archive/references/`
+before removing the old paths. It never relabels domain evidence or rewrites judgment hashes;
+dependent research/boards must be rebuilt and rechecked. Do not run cleanup concurrently with another
+active research owner. Unknown files and valid references remain untouched.
+
+`omd ref research-set` is the sole publisher of both files and writes `.omd/reference-research.json`
+last as their consistency receipt. `research-check` and downstream gates require all three current
+records. New research uses v6; historical v5 remains readable unchanged with its search requirements
+and cannot contain direct roots. Each lane can use `searches` from `omd ref search --input <json>` with
+`{lane, query, url, queryParam}`. The URL submits the exact query; a fresh browser records observed
+links, a 1280×900 screenshot and HTTP/error outcome, without reusing login state or clicking controls.
+Inspect the page: HTTP 200 alone does not prove useful results or free access. All queries require
+execution receipts; every non-user retained domain source/design entry must occur in observed links
+and have its own native visit capture. Failed attempts may accompany a usable free alternative;
+they cannot satisfy retained-source coverage. Arbitrary imported logs are not native execution proof.
+
+Alternatively, v6 accepts direct browsing of free public lists without a search engine. Use
+`omd ref navigate <public-list-url> --lane domain --entry public-directory --json` for comparable
+services, or `--lane design --entry free-gallery` for a supported gallery's visible item list.
+`ref discover-plan` exposes design `nativeEntryInputs` and a domain entry command; these are leads,
+not approved references. Put the native returned `method: direct-public`, `entry`, `url`, PNG
+`evidence`, JSON `capture`, and your authored `reason` in the lane's optional `discoveryRoots`.
+Queries/searches remain required arrays and may both be empty only with valid nonempty roots.
+Every declared query still needs an exact execution, including failed attempts alongside direct roots.
+The native entry publisher uses a fresh GET/HEAD-only context, blocks service workers/downloads,
+performs no click/hover probes, and captures stable visible links with the matching viewport PNG.
+Only actual outbound links seed reachability: the root URL itself is not retained-source evidence.
+Intermediate edges in direct v6 chains require strict navigation-v2 captures. Hidden all-DOM links
+from retained captures and historical navigation-v1 cannot shortcut a missing observed transition.
+Design roots must remain supported public lists after redirects, exposing visible same-gallery item
+links; login walls, blocked pages, selected items and arbitrary service pages are refused.
+Root records stay under `.omd/discovery/<lane>/entries/`, never retained `.omd/refs/`.
+Do not hand-author roots, promote old captures, infer official authority from a directory, or present
+this provenance check as a quality judgment. Follow observed items and qualify/capture each retained
+reference separately. Source/redirect hosts and image bytes must remain independent across lanes.
+
+The executor accepts Google/Bing `/search` and DuckDuckGo root/HTML/lite `q` endpoints,
+plus design-only Pinterest `/search/pins/?q=`, Dribbble `/search/<query-slug>` (`queryParam: path`),
+and Siteinspire `/search?query=` (`queryParam: query`). `ref discover-plan` supplies ready-to-run
+`designSourcePolicy.nativeSearchInputs`; adapt its short task/pattern terms and matching URL together.
+Use native gallery search when general search is blocked. HTTP 200 and actual same-provider item links
+are required; login walls, empty results and challenge responses remain failed attempts. Retain only
+an item actually observed in those results, never guessed shot IDs. Siteinspire now uses numeric
+`/website/<id-slug>` item URLs; category/selected directories are navigation, not gallery items.
+Search gallery names with task/pattern terms (for example `site:pinterest.com/pin/ ...`), then inspect the actual entry. Known search
+redirect links may be decoded as discovery targets; decoding never counts as visiting them.
+The catalogue uses public browser pages, not Google's paid/custom XML API. Query parameter references:
+[Google](https://developers.google.com/custom-search/docs/xml_results) and
+[DuckDuckGo](https://duckduckgo.com/duckduckgo-help-pages/settings/params).
+Each source binds PNG evidence and native capture-JSON hashes. Design `discovery` binds
+another inspected entry/capture, not just a homepage or free-access assertion. For a different
+original source, the gallery capture must contain its exact URL in observed outbound links. When
+the original is unavailable, retain the gallery image as image-only; never use unrelated component
+docs as its evidence. No rewriting of native metadata is authorized to repair a failed check.
+The quality reason explains task/viewport fit, hierarchy, typography or density;
+provider prestige is insufficient. This is inspectable provenance, not authenticated proof of taste
+or browsing. Missing native provenance must be collected, never backfilled from memory. Older
+records retain their original version's requirements; new direct provenance must be acquired through
+the native entry publisher before v6 republication. Valid retained captures need not be reacquired.
+The same evidence path OR identical bytes under another filename cannot satisfy both lanes.
+
+The two lanes use independent service hosts, including after redirects. A second path or crop of a
+domain service is not a visual direction. Non-user discovery must match a supported public gallery
+item (Pinterest, Dribbble, Behance, Siteinspire, Land-book, Godly, or UI Bowl); never label domain
+documentation as a gallery. Add new providers deliberately to design-discovery-sources.ts.
+Each design source declares visualRole=visual-direction|component-support and visualAssessment
+(composition, typography, density, imagery, transfer, avoid). Each board candidate must actually
+use visual-direction evidence, and every visual piece must bind a validated source identity and
+capture, not just alias a qualified PNG. Imported visual fragments must bind their actual native
+design parent (or exact declared crop with unchanged PNG format/metadata); search/domain images
+and transparency/colour-profile changes cannot be laundered by a source label.
+Usability/component documentation alone is insufficient. The generated
+refs/design/README.md displays retained previews and judgments for the user; rejected candidates
+and coverage gaps stay in scout.md. These checks enforce evidence roles, not aesthetic quality.
+New marketing still does not
+impersonate a product workflow: it gathers a domain adoption/page journey and design direction,
+while the task-flow benchmark remains selected only for applicable product work.
 
 ### User-shared posts and component directories
 

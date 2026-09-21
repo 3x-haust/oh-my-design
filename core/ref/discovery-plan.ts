@@ -5,9 +5,11 @@ import { validateDomainBrief, type DomainReferenceQueries } from '../domain/doma
 import { validateAcquisitionPlan, type AcquisitionPlan, type AcquisitionZoneV2 } from '../deliberation/contracts.ts';
 import type { RouteRecord } from '../route/index.ts';
 import type { CraftRefSignal } from './craft-usage.ts';
+import { querySeeds } from './reference-query.ts';
+import { gallerySearchInputs, type GallerySearchInput } from './gallery-search.ts';
 
 export const REFERENCE_DISCOVERY_PLAN_SCHEMA = 'reference-discovery-plan-v1' as const;
-export type DiscoveryLane = 'subject-identity' | 'task-components' | 'visual-craft' | 'motion';
+export type DiscoveryLane = 'domain-reference' | 'design-reference' | 'motion';
 
 /** Read-only acquisition input, not a search receipt or a design prescription. */
 export type ReferenceDiscoveryPlan = Readonly<{
@@ -31,6 +33,17 @@ export type ReferenceDiscoveryPlan = Readonly<{
     evidence: readonly string[];
   }>[];
   galleryDirectories: readonly string[];
+  designSourcePolicy: Readonly<{
+    access: 'free-only-verify-at-inspection';
+    domainOutput: '.omd/refs/domain/research.json';
+    designOutput: '.omd/refs/design/research.json';
+    candidates: readonly Readonly<{ name: string; url: string; purpose: string }>[];
+    searchQueries: readonly string[];
+    nativeSearchInputs: readonly GallerySearchInput[];
+    nativeEntryInputs: readonly Readonly<{ lane: 'design'; entry: 'free-gallery'; url: string }>[];
+    domainEntryCommand: string | null;
+    fallback: string;
+  }>;
   decisions: readonly Readonly<{
     zoneId: string;
     question: string;
@@ -39,7 +52,7 @@ export type ReferenceDiscoveryPlan = Readonly<{
     viewports: readonly Readonly<{ width: number; height: number }>[];
   }>[];
   motionEvidenceRequired: boolean;
-  sourcePolicy: 'current-search-then-live-inspection';
+  sourcePolicy: 'current-search-or-direct-public-then-live-inspection';
   queryPolicy: 'derive-from-explicit-request-and-decisions-not-locale-stereotypes';
   transferPolicy: 'measured-parts-and-motion-parameters-through-source-free-selection';
   skipReason: string | null;
@@ -57,7 +70,7 @@ function acquisition(root: string): AcquisitionPlan | null {
 
 function currentDomainQueries(root: string, request: string): DomainReferenceQueries {
   const path = join(root, '.omd/domain-brief.json');
-  if (!existsSync(path)) return { component: [], craft: [] };
+  if (!existsSync(path)) return { component: [], craft: [], mood: [] };
   const brief = validateDomainBrief(JSON.parse(readFileSync(path, 'utf8')));
   if (brief.request !== request.trim()) {
     throw new Error('reference discovery domain queries describe an earlier request; refresh the selected domain record');
@@ -65,19 +78,32 @@ function currentDomainQueries(root: string, request: string): DomainReferenceQue
   return brief.referenceQueries;
 }
 
-/** Domain analysis is optional. Reference discovery and selected motion must survive its absence. */
+/**
+ * Domain analysis is a mandatory stage, so a missing brief is a contract gap rather than a lawful
+ * absence; the empty-query fallback stays only for records published before the stage became required.
+ */
 export function buildReferenceDiscoveryPlan(root: string, route: RouteRecord): ReferenceDiscoveryPlan {
   const discovering = route.references.decision === 'discover';
   const locale = route.sourceContract.localeDesign;
   const plan = discovering ? acquisition(root) : null;
-  const queries = discovering ? currentDomainQueries(root, route.request) : { component: [], craft: [] };
+  const queries = discovering ? currentDomainQueries(root, route.request) : { component: [], craft: [], mood: [] };
   const expressiveNeed = route.sourceContract.designAxes.expressiveDesignNeed;
   const surface = readFrame(root)?.uxSurface ?? null;
   const marketing = surface === 'marketing' || route.sourceContract.referenceDiscovery.taskNeed === 'new-marketing';
   const motionEvidenceRequired = discovering && route.strategy.methods.includes('motion-one');
-  const visualCraft = discovering && (expressiveNeed === 'showpiece' || motionEvidenceRequired
-    || marketing && expressiveNeed !== 'restrained');
-  const motionDiscovery = motionEvidenceRequired || visualCraft && marketing;
+  // Restrained work still needs a visual reference. Gallery names are leads, never quality proof
+  // or a promise that a provider's entire catalogue/API is free.
+  const galleryCandidates = !discovering ? [] : marketing ? [
+    { name: 'Siteinspire', url: 'https://www.siteinspire.com/', purpose: 'Website composition, typography, rhythm; follow the entry to the live site.' },
+    { name: 'Pinterest', url: 'https://www.pinterest.com/', purpose: 'Visual-direction discovery; open the pin and trace its original, not just a thumbnail.' },
+  ] : [
+    { name: 'Pinterest', url: 'https://www.pinterest.com/', purpose: 'App UI/component discovery; verify screen provenance and target viewport before retaining.' },
+    { name: 'Dribbble', url: 'https://dribbble.com/', purpose: 'Public app UI shots by pattern; distinguish concepts from released screens, no paid download needed.' },
+    { name: 'Behance', url: 'https://www.behance.net/', purpose: 'Public product case-study screen sequences; inspect actual screen images, not only presentation covers.' },
+    { name: 'UI Bowl', url: 'https://uibowl.io/', purpose: 'Optional public app screens only; do not require or purchase the paid MCP.' },
+    { name: 'Siteinspire', url: 'https://www.siteinspire.com/', purpose: 'Complementary web typography/layout; not a substitute for product-screen anatomy.' },
+  ];
+  const motionDiscovery = motionEvidenceRequired;
   const decisions = (plan?.zones ?? []).filter(zone => zone.required).map(zone => {
     const bound = plan?.schema === 'reference-acquisition-plan-v2' ? zone as AcquisitionZoneV2 : null;
     return Object.freeze({
@@ -89,31 +115,28 @@ export function buildReferenceDiscoveryPlan(root: string, route: RouteRecord): R
     });
   });
   const lanes: ReferenceDiscoveryPlan['lanes'][number][] = [];
+  // Every discovery route answers two independent questions: how the domain task is solved, and how
+  // the product should feel. Similar services cannot satisfy the second; visual references cannot satisfy the first.
   if (discovering) {
     lanes.push({
-      id: 'subject-identity',
-      purpose: 'Establish the actual subject and its first-party invariants without borrowing category branding.',
-      querySeeds: [],
-      evidence: ['current first-party source', 'verified fact versus visual choice'],
-    }, {
-      id: 'task-components',
-      purpose: 'Find strong products that solve the named adoption or work decisions.',
-      querySeeds: [...queries.component, ...decisions.map(decision => decision.question)],
-      evidence: ['live component state', 'paired-viewport anatomy', 'zone-bound native capture'],
+      id: 'domain-reference',
+      purpose: 'Find at least three comparable services from independent operator families and inspect their task flows: information architecture, domain vocabulary, states, and actionable sequence. Multiple pages or subdomains under one operator count once.',
+      querySeeds: [...querySeeds('component', queries.component), ...decisions.map(decision => decision.question)],
+      evidence: ['three independent service families', 'live similar-service task flows', 'domain objects and states', 'paired-viewport anatomy', 'zone-bound native capture'],
+    });
+    lanes.push({
+      id: 'design-reference',
+      purpose: 'Find visual direction across many sites: layout rhythm, density, type, colour, material, and component craft.',
+      querySeeds: querySeeds('mood', [...queries.mood, ...queries.component]),
+      evidence: ['whole-page visual captures', 'several candidates before narrowing', 'measured layout and type parts'],
     });
   }
-  if (visualCraft) lanes.push({
-    id: 'visual-craft',
-    purpose: 'Find high-craft composition and typography for the requested expression, beyond the product category alone.',
-    querySeeds: queries.craft,
-    evidence: ['live whole-page rhythm', 'relevant case study', 'measured section parts'],
-  });
-  if (motionDiscovery) lanes.push({
+  if (discovering && motionDiscovery) lanes.push({
     id: 'motion',
     purpose: motionEvidenceRequired
       ? 'Observe the selected interaction or scroll mechanism in motion, then measure how it is built.'
       : 'Investigate a relevant motion candidate before art direction settles; observation does not select a production scene.',
-    querySeeds: queries.craft,
+    querySeeds: querySeeds('craft', queries.craft),
     evidence: ['actual trigger and changing state', 'timing or scroll progress', 'native craft capture', 'reduced-motion consequence'],
   });
   return Object.freeze({
@@ -131,10 +154,27 @@ export function buildReferenceDiscoveryPlan(root: string, route: RouteRecord): R
     }),
     expressiveNeed,
     lanes: Object.freeze(lanes.map(lane => Object.freeze(lane))),
-    galleryDirectories: Object.freeze(visualCraft ? ['Awwwards', 'FWA', 'GDWEB'] : []),
+    galleryDirectories: Object.freeze(galleryCandidates.map(source => source.name)),
+    designSourcePolicy: Object.freeze({
+      access: 'free-only-verify-at-inspection',
+      domainOutput: '.omd/refs/domain/research.json',
+      designOutput: '.omd/refs/design/research.json',
+      candidates: Object.freeze(galleryCandidates),
+      searchQueries: Object.freeze(!discovering ? [] : [
+        `site:pinterest.com/pin/ ${[...queries.mood, ...queries.component][0] ?? route.sourceContract.taskOutcome.goal}`,
+        `${marketing ? 'site:siteinspire.com/websites/' : 'site:dribbble.com/shots/'} ${queries.component[0] ?? route.sourceContract.taskOutcome.goal}`,
+        ...(!marketing ? [`site:behance.net/gallery/ ${queries.component[0] ?? route.sourceContract.taskOutcome.goal}`] : []),
+      ]),
+      nativeSearchInputs: Object.freeze(!discovering ? [] : gallerySearchInputs(
+        [...queries.mood, ...queries.component][0] ?? (marketing ? 'typography' : 'app interface'),
+      )),
+      nativeEntryInputs: Object.freeze(galleryCandidates.map(candidate => Object.freeze({ lane: 'design' as const, entry: 'free-gallery' as const, url: candidate.url }))),
+      domainEntryCommand: discovering ? 'omd ref navigate <public-comparable-service-directory-url> --lane domain --entry public-directory --json' : null,
+      fallback: 'Use actual search results OR explicitly enter a public gallery list with ref navigate <url> --lane design --entry free-gallery --json. In v6 research put the native root plus your reason in discoveryRoots, follow observed links using ref navigate, then capture the concrete gallery item with --lane design (or import-image for native app screenshots). A list is never retained visual direction. Check free access per entry. If login/payment/blocking prevents inspection, record the failed URL and try another public gallery. Component documentation alone is not a visual-direction substitute. Do not purchase, start a trial, install an MCP, bypass access controls, or claim a blocked source was inspected. Free viewing does not grant reuse rights.',
+    }),
     decisions: Object.freeze(decisions),
     motionEvidenceRequired,
-    sourcePolicy: 'current-search-then-live-inspection',
+    sourcePolicy: 'current-search-or-direct-public-then-live-inspection',
     queryPolicy: 'derive-from-explicit-request-and-decisions-not-locale-stereotypes',
     transferPolicy: 'measured-parts-and-motion-parameters-through-source-free-selection',
     skipReason: discovering ? null : route.sourceContract.referenceDiscovery.skipReason,

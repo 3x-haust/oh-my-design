@@ -11,6 +11,7 @@
 // derivative failure the transfer boundary forbids. This module names that condition.
 
 import type { Invariants, Reference } from '../types.ts';
+import type { ReferenceGrade } from './reference-scope.ts';
 import { referenceMeasuredInvariants } from './measurement-coverage.ts';
 import type { ReferenceBoardManifest } from './board-contract.ts';
 import { designSignal, LOW_SIGNAL } from './signal.ts';
@@ -150,7 +151,7 @@ export function slotClaimAndCapture(ref: Pick<Reference, 'component' | 'selector
 }
 
 export type GranularityFinding = {
-  readonly id: 'REF-WHOLE-PAGE' | 'REF-MISSING-ANATOMY' | 'REF-DUPLICATE-CAPTURE' | 'REF-NO-PARTS' | 'REF-PART-CONCENTRATION' | 'REF-ZONE-UNCOVERED' | 'REF-NAME-MISMATCH' | 'REF-SOURCE-CONCENTRATION' | 'REF-KINSHIP-UNRESOLVED' | 'REF-LOW-SIGNAL-BOARD' | 'REF-CRAFT-UNGATHERED' | 'REF-NO-DESKTOP-EVIDENCE';
+  readonly id: 'REF-WHOLE-PAGE' | 'REF-VISUAL-ONLY' | 'REF-NO-IMAGE' | 'REF-MISSING-ANATOMY' | 'REF-DUPLICATE-CAPTURE' | 'REF-NO-PARTS' | 'REF-PART-CONCENTRATION' | 'REF-ZONE-UNCOVERED' | 'REF-NAME-MISMATCH' | 'REF-SOURCE-CONCENTRATION' | 'REF-KINSHIP-UNRESOLVED' | 'REF-LOW-SIGNAL-BOARD' | 'REF-CRAFT-UNGATHERED' | 'REF-NO-DESKTOP-EVIDENCE';
   readonly message: string;
   /** Reference identifiers the finding is about, as `source (component)`. */
   readonly refs: readonly string[];
@@ -168,6 +169,26 @@ export function captureSelector(ref: Pick<Reference, 'selector'> & { blueprint?:
 export function isWholePageCapture(ref: Pick<Reference, 'selector'> & { blueprint?: { selector?: string } }): boolean {
   const selector = captureSelector(ref);
   return selector === '' || PAGE_ROOT_SELECTORS.has(selector);
+}
+
+/**
+ * The two axes as a reference actually carries them.
+ *
+ * Scope follows the selector. Evidence is `visual-only` only when the record affirmatively says the
+ * capture was not measured: an imported image (`kind: 'image'`), or a record whose
+ * `measurementCoverage` reports both extraction probes as not-measured. A selector-scoped capture
+ * with no blueprint is legacy-unknown, not visual-only — treating absence of a blueprint as proof
+ * of absence of measurement would silently disqualify every pre-blueprint record.
+ */
+export function referenceGrade(
+  ref: Pick<Reference, 'selector' | 'kind' | 'invariants' | 'capturePreparation'> & { blueprint?: { selector?: string; nodes?: readonly unknown[] } },
+): ReferenceGrade {
+  const coverage = ref.invariants ? referenceMeasuredInvariants(ref)?.measurementCoverage : undefined;
+  const knownUnmeasured = ref.kind === 'image' || coverage?.interactionProbe === 'not-measured' && coverage.motionProbe === 'not-measured';
+  return Object.freeze({
+    scope: isWholePageCapture(ref) ? 'whole' as const : 'part' as const,
+    evidence: knownUnmeasured ? 'visual-only' as const : 'measured' as const,
+  });
 }
 
 /**
@@ -221,7 +242,12 @@ export function auditBoardGranularity(
   const missingAnatomy = measurable.filter(isOpaqueFrameCapture);
   // Opaque frame boxes are preserved as historical records, but are not measurements of the
   // component shown in their screenshots. They cannot establish parts, coverage, or kinship.
-  const anatomical = measurable.filter((ref) => !isOpaqueFrameCapture(ref));
+  //
+  // A visual-only capture is excluded for the same reason one level stronger: it carries
+  // appearance, not anatomy, so it cannot establish parts, zone coverage, or kinship either. It
+  // remains usable as mood/detail evidence through `reference-scope.ts` role permissions.
+  const visualOnly = measurable.filter((ref) => referenceGrade(ref).evidence === 'visual-only');
+  const anatomical = measurable.filter((ref) => !isOpaqueFrameCapture(ref) && referenceGrade(ref).evidence === 'measured');
 
   const missingVisualReferences = componentClaims === undefined ? [] : [...componentClaims].filter((referenceId) => !audited.some((ref) => refIdentity(ref.source, ref.component) === referenceId));
   if (missingVisualReferences.length > 0) {
@@ -248,6 +274,27 @@ export function auditBoardGranularity(
       message:
         `${wholePage.length} reference${wholePage.length === 1 ? ' was' : 's were'} captured at a page root rather than a part, so ${wholePage.length === 1 ? 'it carries' : 'they carry'} a whole-page average and no component anatomy. Recapture the specific component with \`omd ref add <url> --as <component> --selector "<css>" --blueprint --shot\`; a page-level capture can only be traced, and tracing a whole page is the derivative failure the transfer boundary forbids.`,
       refs: wholePage.map(label),
+    });
+  }
+
+  if (visualOnly.length > 0) {
+    findings.push({
+      id: 'REF-VISUAL-ONLY',
+      message:
+        `${visualOnly.length} reference${visualOnly.length === 1 ? '' : 's'} carr${visualOnly.length === 1 ? 'ies' : 'y'} no measured blueprint, so ${visualOnly.length === 1 ? 'it is' : 'they are'} visual-only evidence: appearance without anatomy. Visual-only captures cannot establish parts, zone coverage, spacing, or kinship — a screenshot does not measure that a padding is 16px. Use ${visualOnly.length === 1 ? 'it' : 'them'} for direction and detail, or recapture with \`--selector "<css>" --blueprint\` to make the anatomy measured.`,
+      refs: visualOnly.map(label),
+    });
+  }
+
+  // A reference without its image cannot be re-examined: the measured ladders survive and the screen
+  // that produced them does not. Reported so an omission that was already recorded is still visible.
+  const imageless = audited.filter((ref) => (ref.imagePath ?? '').trim() === '');
+  if (imageless.length > 0) {
+    findings.push({
+      id: 'REF-NO-IMAGE',
+      message:
+        `${imageless.length} reference${imageless.length === 1 ? '' : 's'} hold${imageless.length === 1 ? 's' : ''} no image${imageless.length === 1 ? '' : 's'}. A reference keeps its screen so the decision behind the numbers can be re-examined later; without it, a reader can see the ladders but not the design they came from. Recapture with \`omd ref add <url> --as <component>\` (the image is captured by default), or record why with \`--no-shot --no-shot-reason "<why>"\`.`,
+      refs: imageless.map(label),
     });
   }
 

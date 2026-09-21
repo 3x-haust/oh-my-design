@@ -29,7 +29,7 @@ function assertRoutingError(run: () => unknown, code: DesignAxisRoutingErrorCode
     assert.ok(error instanceof DesignAxisRoutingError);
     assert.equal(error.name, 'DesignAxisRoutingError');
     assert.equal(error.code, code);
-    assert.equal(error.message, code);
+    assert.ok(error.message === code || error.message.startsWith(`${code}: `));
     return true;
   });
 }

@@ -24,6 +24,13 @@ On that skip, compose from the selected frame/copy/type/scout/reference projecti
 receipt; do not fabricate a register, motion decision, metaphor contract, image draft, handoff, or
 art-direction/motion/settled-selection hashes. Preserve all other selected prerequisites, current
 evaluator lineage, source-free boundaries, and design-quality acceptance criteria.
+When the brief or selected reference handoff includes screenApplication/referenceApplication,
+use its source-free screen decisions to connect the domain task and visual treatment to actual
+page composition. Preserve partial/brief-derived gaps and doNotTransfer boundaries. These are
+interpreted research inputs, not authority to override approved copy, tokens or selected assembly.
+Turn the screen checks into observable composition/candidate criteria; do not mark them passed.
+Explore structurally different representative renders with real copy where the current route
+selects candidates; do not expand the whole component library before resolving that direction.
 Independently selected image-first exploration still requires its coordinator-chosen draft or
 authorized CSS/SVG fallback; the art-direction skip does not remove that selected prerequisite.
 When art direction is selected (and on non-adaptive routes that require it), receive the immutable
@@ -79,8 +86,22 @@ contract and the existing decision graph, never a new graph. Each affected decis
 `content-grain:<grain-sha256>:<trait-id>` exactly, and its acceptance criteria retain the fixture
 and browser-testable falsifier. Do not inspect raw source content or infer style or taste from Grain.
 
-Read the frame's `uxSurface` classification first; it selects the composition grammar
-(`theory/ux.md` §Surface types). For a `product` surface, write the experience spine as
+Read the persisted `DesignHypothesis` before writing composition. It is the judgment layer between
+reference observation and implementation: do not turn `radiusLadder`, `typeScale`, or `animatedShare`
+into global rules. Ask why an observation worked there, decide its relevance and scope, then compose
+from the hypothesis. Run `omd judgment check` before `omd composition --check`.
+
+After the first render, extract the initial viewport projection and run:
+
+```text
+omd first-render check --page <local-build.html> --input .omd/.cache/first-render-surface.json
+```
+
+A `revise` result is not a final polish request. It means the first gestalt missed the hypothesis:
+the dominant object is absent, utility chrome overrides the task, or purpose is unclear. Comparison
+is checked only when the hypothesis explicitly requires it; comparison/trust advisories do not
+automatically force a redesign. Fix critical composition findings and rerun the real render; do not silence
+the critic by changing its thresholds.  (`theory/ux.md` §Surface types). For a `product` surface, write the experience spine as
 the task loop (orient → locate → act → feedback → next/recover) over screen regions and
 reachable states, never as a persuasion ladder; make the dominant first-viewport anchor
 the work object itself (table, queue, canvas, form, or data view at representative
@@ -342,7 +363,7 @@ alternatives L4 perspectives will judge. Do not manufacture failure evidence bef
 risk can remain medium until a real constraint is tested.
 
 <task_flow_benchmark_contract>
-TASK_FLOW_BENCHMARK_ABI_V1. When `.omd/task-flow-benchmark-projection.json` is supplied,
+TASK_FLOW_BENCHMARK_ABI_V2. When `.omd/task-flow-benchmark-projection.json` is supplied,
 `Candidate axes` contains 2–3 structurally distinct UX models bound to benchmark pattern IDs and
 frame task IDs. Each closes macro-layout family, flow topology, dominant work object,
 decision-support sequence, domain bindings, observable consequences, costliest-error recovery,

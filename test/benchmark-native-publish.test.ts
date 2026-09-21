@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { closeSync, constants, linkSync, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, closeSync, constants, linkSync, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -56,6 +56,29 @@ test('native Darwin publisher publishes exclusive files and directories', { skip
   });
 });
 
+test('native Darwin publisher preserves a sealed directory without reopening write access', { skip: !darwin, concurrency: false }, () => {
+  const identity = nativeIdentity();
+  inTemporaryDirectory(() => {
+    mkdirSync('sealed-source');
+    writeFileSync('sealed-source/payload', 'sealed bytes', { mode: 0o444 });
+    chmodSync('sealed-source', 0o555);
+    const inode = lstatSync('sealed-source').ino;
+    let published = false;
+    try {
+      publishDirectoryExclusive('sealed-source', 'sealed-destination', identity);
+      published = true;
+      assert.equal(lstatSync('sealed-destination').ino, inode);
+      assert.equal(lstatSync('sealed-destination').mode & 0o777, 0o555);
+      assert.equal(lstatSync('sealed-destination/payload').mode & 0o777, 0o444);
+      assert.equal(readFileSync('sealed-destination/payload', 'utf8'), 'sealed bytes');
+      expectCode(() => publishDirectoryExclusive('sealed-destination', 'sealed-destination', identity), 'DESTINATION_EXISTS');
+    } finally {
+      // Test-owned fixture cleanup only; publication itself must never chmod the candidate.
+      chmodSync(published ? 'sealed-destination' : 'sealed-source', 0o700);
+    }
+  });
+});
+
 test('native Darwin publisher rejects existing destinations and invalid sources', { skip: !darwin, concurrency: false }, () => {
   const identity = nativeIdentity();
   inTemporaryDirectory(() => {
@@ -98,4 +121,22 @@ test('native source contains no nonexclusive publication fallback', () => {
   assert.doesNotMatch(source, /\b(?:rename|renameat|link|symlink|copyfile)\s*\(/);
   assert.match(source, /publish-file-exclusive/);
   assert.match(source, /publish-directory-exclusive/);
+});
+
+test('native rename diagnostics preserve the stable refusal code and do not publish on permission failure', { skip: !darwin || process.getuid?.() === 0, concurrency: false }, () => {
+  const identity = nativeIdentity();
+  inTemporaryDirectory(directory => {
+    writeFileSync('source', 'cannot publish through a read-only parent');
+    chmodSync(directory, 0o500);
+    try {
+      assert.throws(() => publishFileExclusive('source', 'destination', identity), (error: unknown) => {
+        assert.ok(error instanceof ExclusivePublicationError);
+        assert.equal(error.code, 'RENAME_FAILED');
+        assert.match(error.message, /errno=\d+/);
+        return true;
+      });
+      assert.equal(readFileSync('source', 'utf8'), 'cannot publish through a read-only parent');
+      assert.throws(() => lstatSync('destination'), /ENOENT/);
+    } finally { chmodSync(directory, 0o700); }
+  });
 });

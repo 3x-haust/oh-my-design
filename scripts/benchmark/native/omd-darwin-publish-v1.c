@@ -51,6 +51,13 @@ static void fail(const char *code, enum exit_code status) {
   exit(status);
 }
 
+static void fail_errno(const char *code, enum exit_code status) {
+  const int saved_errno = errno;
+  /* Keep the ABI's exit/status token unchanged; stdout is diagnostic only. */
+  fprintf(stdout, "errno=%d (%s)\n", saved_errno, strerror(saved_errno));
+  fail(code, status);
+}
+
 int main(int argc, char **argv) {
   const char *command;
   const char *source_name;
@@ -81,12 +88,12 @@ int main(int argc, char **argv) {
   if (fstatat(PARENT_FD, destination_name, &destination_stat, AT_SYMLINK_NOFOLLOW) == 0) {
     fail("DESTINATION_EXISTS", EXIT_DESTINATION_EXISTS);
   }
-  if (errno != ENOENT) fail("RENAME_FAILED", EXIT_RENAME_FAILED);
+  if (errno != ENOENT) fail_errno("RENAME_FAILED", EXIT_RENAME_FAILED);
 
   if (renameatx_np(PARENT_FD, source_name, PARENT_FD, destination_name, RENAME_EXCL) != 0) {
     if (errno == EEXIST) fail("DESTINATION_EXISTS", EXIT_DESTINATION_EXISTS);
     if (errno == ENOTSUP || errno == EINVAL) fail("EXCLUSIVE_RENAME_UNSUPPORTED", EXIT_EXCLUSIVE_RENAME_UNSUPPORTED);
-    fail("RENAME_FAILED", EXIT_RENAME_FAILED);
+    fail_errno("RENAME_FAILED", EXIT_RENAME_FAILED);
   }
 
   if (fstatat(PARENT_FD, source_name, &source_path_stat, AT_SYMLINK_NOFOLLOW) == 0 || errno != ENOENT ||

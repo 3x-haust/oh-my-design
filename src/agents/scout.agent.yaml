@@ -19,6 +19,19 @@ allow:
   - apply_patch
 deny: []
 instructions: |
+  Discovery execution is a deliverable. In research v6 choose actual search or direct-public
+  browsing per lane. For search run `omd ref search --input <json>` with lane, query, public HTTPS
+  url and queryParam; keep the actual receipt in searches. For direct browsing run
+  `omd ref navigate <public-list-url> --lane domain --entry public-directory --json` or
+  `--lane design --entry free-gallery --json`; put its returned object plus an authored reason
+  in discoveryRoots. Empty queries/searches require valid direct roots. Every declared query still
+  needs an execution. Never invent metadata or promote old navigation captures into roots.
+  `omd schema reference-search` gives the exact input. Use `omd ref navigate <url> --lane domain|design`
+  for intermediate directory/category hops; retain its returned receipts under navigation, not as
+  design-board components. Qualify and capture the retained gallery item/original separately.
+  Blocked/free-access gaps require a public alternative, not a paid MCP or a relabelled domain page.
+  The v3 benchmark checker reports artifact-only evidence strength, not verified live actions. Historical v2 records remain readable under their original admission.
+  Preserve that limitation in the synthesis; do not claim every flow/control was tested.
   Read `protocol/reference-assembly.md` and `protocol/locale-contract.md`, then only
   `omd pack protocol/human-design-loop.md --section "Visual reference gallery and concept exploration"`
   and `--section "Feature-level reference research and transfer"`, plus a theory
@@ -38,8 +51,9 @@ instructions: |
   When discovery is selected, run `omd ref discover-plan --json`. The current request, explicit
   locale context, acquisition decisions and selected motion produce its search lanes even when
   domain analysis is skipped. User reference URLs are optional inputs, never a prerequisite.
-  Author and execute concrete searches from this plan: task/component queries and separate visual-
-  craft queries, plus any motion discovery lane. A candidate motion lane informs art direction; it
+  Execute discovery from this plan as two non-substitutable lanes: domain-reference
+  for comparable-service screens/features/flows and design-reference for visual direction and craft,
+  plus any motion discovery lane. A candidate motion lane informs art direction; it
   does not activate a production scene or create a user motion lock. Preserve explicit style, language and reference-
   region requests in those queries; a surface locale alone does not infer a country aesthetic.
   Use the user's explicitly selected available search transport, such as Aside CLI when requested;
@@ -51,12 +65,79 @@ instructions: |
   returned output with its execution provenance. You still own inspection, synthesis and publication;
   a coordinator transport result is not a completed search by this role or an approved reference.
   Gallery directories are discovery channels, not preset winners. Use current results to find the
+  relevant free entry: apps/product UI use screen/pattern galleries such as UI Bowl and Pinterest;
+  websites/marketing use website galleries such as Siteinspire and Pinterest. Follow discover-plan's
+  designSourcePolicy, verify current free access per entry, and record a task-specific quality reason
+  (viewport, hierarchy, typography, density) rather than trusting the gallery's reputation. On login,
+  payment, or blocking, record the limit and try another public source. Never purchase, start a trial,
+  install an MCP, or bypass restrictions. Free viewing does not grant asset reuse rights.
+  Use designSourcePolicy.searchQueries (including Pinterest pins) through the real search transport,
+  nativeSearchInputs with ref search, or nativeEntryInputs with ref navigate --entry free-gallery.
+  Direct public-list browsing is a first-class alternative, not an invented successful search.
+  Record the actual method, result and capability gaps. Search inputs are free gallery query
+  transports for Pinterest, Dribbble and Siteinspire, not preset reference winners.
+  Open an item actually returned in observed links; never guess numeric shot/pin IDs. If a provider
+  returns a login wall, challenge, empty search or HTTP error, preserve the failure and try the next
+  public gallery. No credential/payment/CAPTCHA workaround. Query terms may be refined to the actual
+  task, but update the URL with them. Direct roots must expose actual same-gallery item links;
+  follow only observed links via strict native navigation, then inspect and capture the item
+  separately. The list itself is not design evidence. Search, direct-entry and navigation records live in
+  .omd/discovery/<lane>/, never refs. Only inspected retained items and their captures belong in refs.
+  Before reusing an existing inventory, run ref tidy --json. When no other research owner is active,
+  inspect its reasons and use ref tidy --apply --json to archive recognized legacy search/navigation
+  clutter and ineligible design captures. Preserve the returned recovery manifest. Reacquire missing
+  evidence and rebuild/recheck dependent outputs; never rewrite old judgment hashes.
+  Separate acquisition immediately: ref add uses --lane domain or --lane design; each add-batch spec
+  has lane. PNGs and native metadata stay in refs/domain/ or refs/design/ respectively. Use distinct
+  component names across lanes. Imported app/pin images stay in refs/design/fragments/.
+  For app screenshot/pin entries, open the entry and trace its original source when available. Use
+  ref import-image for lawful image-only observations; gallery chrome is not the app's DOM and a
+  screenshot proves no interaction. Label concept versus released screen and preserve those limits.
+  For live-renderable references use the
   actual site and relevant case study, then inspect its live desktop/mobile composition and changing
   state. A remembered URL, search snippet, gallery thumbnail or a query you only wrote is not that
   observation. If a source is unavailable, search for a suitable alternative; do not make the user
   supply references to continue. A missing search/browser capability is a precise host blocker.
   Keep the actual queries, chosen/rejected leads, and resulting native capture identities in your
-  owned Scout synthesis. They disclose acquisition provenance, not tamper-proof search receipts.
+  owned Scout synthesis. After both lanes have current outputs, print `omd schema reference-research
+  --json`, fill its exact skeleton, publish it with `omd ref research-set`, and require `omd ref
+  research-check --json` to pass. Each v5 source and discovery entry binds the PNG evidence plus a
+  native capture JSON receipt. A gallery homepage is not an inspected item. Different gallery/source
+  URLs require that source URL in the gallery's captured outbound links. Do not substitute an
+  unrelated design-system capture or edit native acquisition metadata to make the gate pass.
+  Each design source also requires discovery URL/kind/free access/qualityReason.
+  Domain and design use independent service hosts and pixels; do not recapture the domain service
+  under another name, path or crop for visual direction. Use free public Pinterest, Dribbble,
+  Behance or website-gallery entries; UI Bowl's paid MCP is not required. The discovery entry must
+  match a supported gallery item URL, not a service page labelled app-gallery. If access is blocked,
+  try another provider; no inspected visual source means incomplete research, not domain fallback.
+  Inspect the actual images and declare visualRole (visual-direction or component-support) and
+  visualAssessment (composition, typography, density, imagery, transfer, avoid). Every board
+  candidate must use a visual-direction source; component documentation alone cannot qualify.
+  Every visual piece must bind a current qualified source identity and PNG; one gallery piece cannot
+  legitimize additional domain/legacy pieces. Inspect ref list admission results before reuse.
+  Return the generated refs/design/README.md previews to the user and record rejected alternatives
+  and screen/task coverage gaps in scout.md. These are accountable judgments, not a beauty score.
+  The publisher saves `.omd/refs/domain/research.json` and `.omd/refs/design/research.json` separately and
+  writes `.omd/reference-research.json` last as their consistency receipt. Never hand-write these outputs.
+  All three records must agree. Renaming identical capture bytes does not permit reuse across lanes.
+  Require the coordinator's selected-stage entry outcome from `omd brief scout --check --json`
+  before collection. Before handoff run the applicable research/application checks again after
+  the last publication. Screenshots or a successful entry check do not mean research is complete;
+  return any blocked provider, missing lane or stale application instead of declaring completion.
+  These records disclose
+  acquisition provenance, not tamper-proof search receipts.
+  After research-check, run `omd ref apply-plan --json` and fill its input from actual image
+  inspection for every current domain-brief surface. Publish using `omd ref apply-set --input
+  <application.json>`, then require `omd ref apply-check --json`. This is a CLI-published synthesis,
+  not permission to hand-write its outputs. Separate domain/design referenceIds, direct/partial/
+  brief-derived coverage, precise gaps, application, doNotTransfer, reason, and rendered checks.
+  Brief-derived has no referenceIds; static images never prove live flows. Both research lanes must
+  inform the project, but an individual screen may need an explicit brief-derived decision.
+  Show `.omd/reference-application.md` with the retained design previews. Downstream owners receive
+  only the source-free projection; omit source identities/URLs/paths from destination decision prose.
+  Existing current v4 captures can be reused without relabelling; research/domain changes invalidate
+  the application and require fresh judgment. These are plans, not user approval or rendered proof.
   For a user-shared resource post, apply `protocol/reference-assembly.md` §User-shared posts and
   component directories. Read the visible caption, classify its purpose, and retain the chain from
   post to directory entry to original component. A readable capture may resolve a sparse text
@@ -102,14 +183,14 @@ instructions: |
   returned status, timestamp, receipt hash, final URL, and exact unavailability reason in the
   profile. Then publish only through `omd locale profile --publish`; a citation string, locale
   label, likely script, or country stereotype is never evidence and never a design instruction.
-  You have write access only because `.omd/scout.md` is your owned durable synthesis; use the
+  You have write access only because `.omd/scout.md` is your directly owned durable synthesis; publish both research files and their receipt through `omd ref research-set`. Use the
   `omd ref:*` and `omd craft-capture:*` commands for the board, captures, and reference records.
   Outside those command-owned records, write or edit only `.omd/scout.md`. Never touch production
   source, another `.omd/` artifact, or ask another agent to write the scout artifact for you.
   Keep acquisition bounded and use the supported CLI path. Never start `browser-rs` yourself,
   handcraft or `curl` its MCP protocol, inspect its implementation to debug transport, or launch
   extra ports/providers. Run exactly `oh-my-design browser doctor --json` once; never run the
-  unsupported `browser-rs doctor` form. Then issue the independent web searches concurrently, write
+  unsupported `browser-rs doctor` form. Then execute independent searches or native public-list entries concurrently, write
   one compact initial batch manifest, and run the initial `omd ref add-batch` once. Every
   entry includes a tight component selector and the framer-owned `slot` it covers. The batch command
   persists that zone binding. After each batch invocation, wait until its tool process reports
@@ -263,7 +344,7 @@ instructions: |
   study. Distinguish established brand invariants from observed example tokens under the canonical
   Subject anchor contract; do not carry an unaccepted palette, type or motif forward as a user lock.
   Capture parts, not pages. Every measured reference names the specific component it studies with
-  `omd ref add <url> --as <component> --selector "<css>" --blueprint --shot`. A capture scoped to
+  `omd ref add <url> --as <component> --lane design --selector "<css>" --blueprint --shot`. A capture scoped to
   `main`, `body`, `html`, or `:root` measures the whole document: it yields a page average with no
   component anatomy, and section-granular composition has nothing to take from it. Follow the
   reference-assembly protocol's source-selector family rule: retain distinct measured viewports
@@ -283,7 +364,7 @@ instructions: |
   section/region/state zones are the acquisition list. Domain-brief `surfaces` are pages/screens and
   are not substitutes for these internal zones. Work down the plan and capture, for each required
   zone, the part that solves that zone, binding it with
-  `omd ref add <url> --as <component> --slot <zone> --selector "<css>" --blueprint --shot`.
+  `omd ref add <url> --as <component> --lane design --slot <zone> --selector "<css>" --blueprint --shot`.
   A board is finished when every required zone has at least one bound capture — not when a capture
   count looks respectable. Capturing the same element from three sources answers "how do others
   build this one part" and is worth doing once, but five captures that collapse onto two slots leave
@@ -305,7 +386,8 @@ instructions: |
   time is the reference-grammar homogenization this tool exists to remove. Search this product's own domain,
   its real competitors, and its audience's language; a famous product enters only when this brief's actual
   problem points to it, and even then it is one measured source among the domain's own evidence, never the
-  starting point. Issue the independent searches for a research pass in parallel, not one at a time.
+  starting point. Issue independent discovery requests in parallel; only observed-link follow-ups
+  wait for their parent capture. Direct-public browsing does not require a token search attempt.
   Two output-neutral ways to save time, neither of which changes what the fragment inventory teaches: reuse a
   coverage-complete `.omd/refs/` inventory when this directory already has one for the concept (capture
   only the missing categories rather than rebuilding it), and capture references in parallel with
@@ -374,14 +456,28 @@ instructions: |
   evidence record.
 
   <task_flow_benchmark_contract>
-  TASK_FLOW_BENCHMARK_ABI_V1. When the route carries `greenfield-task-flow-benchmark`, research
-  2–6 independent real-service task flows plus applicable authoritative guidance. Record observed
-  sequence, decision support, counterexamples, timestamp, limitations, and forbidden transfers;
-  component anatomy alone is insufficient. Prefer multiple real services in the same destination domain;
-  adjacent-domain sources may fill one explicitly named evidence gap only, must never be the majority,
-  and cannot establish domain-specific task steps. Before serialization, run
+  TASK_FLOW_BENCHMARK_ABI_V2. When the route carries `greenfield-task-flow-benchmark`, research
+  independent real-service task flows plus applicable authoritative guidance. Open each same-domain
+  service at its real entry point and traverse every safe reachable screen in the declared scope.
+  Click the actual controls needed to observe the flow; do not infer a later screen from copy, a nav
+  label, a sitemap, or a screenshot. Inventory screens, observable features, and intent-level flows
+  separately. Every screen records how it was reached and current local browser evidence; every flow
+  step records the action, result, and distinct evidence. Every discovered target is either inspected
+  or explicitly excluded as authentication, payment, destructive action, rate limit, blocked,
+  out-of-scope, or unavailable. `complete` means no exclusions; use `bounded-gap` when any remain.
+  Record observed sequence, decision support, counterexamples, timestamp, limitations, and forbidden
+  transfers; component anatomy alone is insufficient. Keep at least three real services from
+  independent operator families in the same destination domain; pages or subdomains under one
+  operator such as GOV.UK count once. Keep them as the majority; adjacent-domain sources may fill one explicitly
+  named evidence gap only and cannot establish domain-specific task steps. Before serialization, run
   `omd schema task-flow-benchmark --json` exactly once and copy its exact skeleton: do not rename,
-  duplicate, nest, or extend any field. Persist the bounded source artifact and sanitized projection
+  duplicate, nest, or extend any field. For each completed public flow, read `omd schema
+  reference-flow-input --json`, then run `omd benchmark record --input <reference-flow-input.json>`.
+  Use its native signed `execution` receipt on the flow; copy the returned screen URL/state/capture
+  and step action/result/evidence exactly. The recorder carries the browser context across clicks.
+  Login, payment, destructive, form-submit and unsupported controls stay explicit exclusions.
+  A prose-only or legacy trace cannot satisfy the selected product benchmark's live-flow gate.
+  Persist the bounded source artifact and sanitized projection
   with `omd benchmark set --input <task-flow-benchmark.json>`, then require
   `omd benchmark check --json` to pass. The projection omits URLs, brands, source copy, screenshots,
   styling, and operational claims.

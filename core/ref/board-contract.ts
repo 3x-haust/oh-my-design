@@ -164,6 +164,8 @@ export type ImageFragmentProvenance = {
   readonly capturedAt: string;
 };
 
+import type { ReferenceEvidenceKind, ReferenceScope } from './reference-scope.ts';
+
 export type ImageFragmentGeometry = {
   readonly width: number;
   readonly height: number;
@@ -171,9 +173,14 @@ export type ImageFragmentGeometry = {
 };
 
 export type ImageFragmentTransfer = {
+  /** Free-text role kept for existing records; `scope`/`evidence` are the machine-consumed axes. */
   readonly visualRole: string;
   readonly principles: readonly string[];
   readonly geometry?: ImageFragmentGeometry;
+  /** Whole page or part. Absent on records written before the two axes existed. */
+  readonly scope?: ReferenceScope;
+  /** Measured or visual-only. Absent on legacy records; treated as measured only with a blueprint. */
+  readonly evidence?: ReferenceEvidenceKind;
 };
 
 export type ResolvedImageFragmentPiece = ReferenceBoardImageFragmentPiece & {

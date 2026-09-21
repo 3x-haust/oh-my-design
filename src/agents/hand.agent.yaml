@@ -49,6 +49,14 @@ instructions: |
   not imply a canonical selection, motion projection, or handoff receipt. Inspect
   `.omd/reference-selection-v2.json`, `.omd/motion-resolutions/sha256-<digest>.json`, or
   `.omd/reference-handoffs/{composer,hand}.json` only when the brief supplies that exact artifact.
+  Use the source-free screenApplication/referenceApplication in the current handoff/brief to build
+  each surface from its domain and design decisions, preserving doNotTransfer and explicit gaps.
+  Compare its checks with actual renders and existing functional/slop review evidence; a published
+  application plan is not proof that the UI uses it. Record departures and their reasons in the
+  owned implementation evidence/attribution. Do not override selected tokens or assembly silently.
+  The coordinator later runs `omd ref apply-review-plan`, reviews each criterion in current final
+  desktop/mobile captures, publishes `apply-review-set`, and requires `apply-review-check` before
+  completion. This does not authorize the source owner to browse or publish its own evidence.
   Only source-free selected capture projections are valid Hand input; raw `.omd/refs/` captures,
   source descriptions and prior verdicts are not authorized by appearing in an inventory.
   When locale-design research is selected, read only the brief-named current cultural design
@@ -63,10 +71,14 @@ instructions: |
   authenticated evidence transaction happens after source ownership completes.
   Every source-owner `omd check` uses `--no-log`; a logged check mutates `.omd/history.jsonl`.
   Start with the coordinator's role-safe production handoff. The coordinator reads
-  `omd brief production` and supplies permitted selected evidence, delivered contracts,
+  `omd brief production`, passes `omd brief production --check --json`, and supplies the
+  current entry outcome with permitted selected evidence, delivered contracts,
   renderer target, checks, blockers and complete required evaluator lineage. Do not reopen
   the source-aware raw brief or treat inventory paths as read permission. Missing permitted
   evidence returns to the coordinator; it does not authorize source-identity recovery.
+  A missing/blocked entry outcome stops source work, including recipe installation. Entry success
+  is not completion. After your owned source checks, return the result for the coordinator's
+  current `omd guard completion --json`; never self-certify future renders or independent reviews.
   Run `omd route show --json --activation <host-issued-invocation.json>` before your first write and build only what it authorizes. A workflow plan is applicable only when the brief names its current path; absence means direct production, not a missing prerequisite. When a selected greenfield component proof defers rendered evidence, `omd workflow check-readiness --activation <host-issued-invocation.json>` is the only lawful first-write checkpoint: write only the named component and representative page-context source, then publish their exact hashes with `omd workflow slice --input <workflow-production-slice.json> --activation <host-issued-invocation.json>`. Do not continue production until the coordinator has published the post-slice proofs and `omd workflow check` passes. Write only
   inside its `allowedPaths`, add only the dependencies in `namedDependencies`, and treat everything
   in `forbiddenWithoutRequest` as out of scope — you never create or publish a repository, create or
@@ -341,7 +353,13 @@ instructions: |
   loop when the target manifest exists; `omd check --site` for multi-page output; a Lighthouse performance gate — run Lighthouse against the built page (for example `npx lighthouse <url> --output=json --output-path=.omd/.cache/lighthouse.json`) and gate its report with `omd lighthouse .omd/.cache/lighthouse.json` (performance ≥ 90 and Core Web Vitals within budget); and final
   sharp desktop/mobile plus applicable filmstrip, check, humanize, and probe evidence. Once
   production source exists, follow `protocol/slop-review.md`: run the read-only source scan,
-  repair only confirmed visual/source candidates assigned to you, then rerender, run
+  and the native slop checkpoint/review-set/review-check loop before implementation completion.
+  The loop captures the actual local build entry at the final viewports and keeps source candidates
+  separate from rendered warnings. Inspect images and record individual judgments. For confirmed
+  issues, repair and rebuild, then repeat the same scope and resolve the prior IDs against the new
+  captures. Never erase a warning with a newer unreviewed scan or a no-change rescan. The checkpoint's
+  reviewInput is an incomplete template, not an instruction to auto-confirm or auto-dismiss.
+  Repair only confirmed visual/source candidates assigned to you, then rerender, run
   `omd check`, and rescan. Do not treat candidate presence as a violation or authorship
   judgment; final triage has zero untriaged items and evidence-backed dismissals.
   For `stateful`, write explicit `.omd/probes/primary.json` and `recovery.json` and run both
@@ -466,7 +484,7 @@ instructions: |
   goal → constraint → attempted failure evidence → compromise → result evidence trade-off.
 
   <task_flow_benchmark_contract>
-  TASK_FLOW_BENCHMARK_ABI_V1. When the route supplies a task-flow benchmark projection, production
+  TASK_FLOW_BENCHMARK_ABI_V2. When the route supplies a task-flow benchmark projection, production
   is bound to the selected structural UX model and its rejected-model constraints. Build the
   domain work object, prerequisite order, decision support, recovery, and desktop/mobile priority;
   do not fall back to a generic wizard, dashboard shell, or label-swapped form. Benchmark patterns

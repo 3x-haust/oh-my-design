@@ -4,9 +4,11 @@ import { capturePageForRef, captureEnergy, withBrowser, parseViewport, REFERENCE
 import { normalize } from '../ir/normalize.ts';
 import { extractInvariants } from './invariants.ts';
 import { captureBlueprint } from './blueprint.ts';
-import { saveRef, refImagePath } from './store.ts';
+import { saveRef, refImagePath, researchLane } from './store.ts';
 import { loadRules, check } from '../rules/engine.ts';
 import type { ProjectWriteAdapter } from '../runtime/project-write.ts';
+import type { ProjectRunInvocation } from '../runtime/invocation.ts';
+import { captureFinalUrlGuard, validateCaptureBatch } from './capture-intake.ts';
 import { parseCapturePreparation, type CapturePreparation } from './capture-preparation.ts';
 
 /**
@@ -15,6 +17,7 @@ import { parseCapturePreparation, type CapturePreparation } from './capture-prep
  * so a motion reference that needs an energy study goes through the single-ref `omd ref add` path.
  */
 export interface RefSpec {
+  lane?: 'domain' | 'design';
   source: string;
   as: string;
   selector?: string;
@@ -51,9 +54,11 @@ export interface BatchResult {
 export async function addRefsBatch(
   cwd: string,
   specs: RefSpec[],
-  opts: { rulesRoot: string; concurrency?: number },
+  opts: { rulesRoot: string; concurrency?: number; invocation?: ProjectRunInvocation },
   adapter: ProjectWriteAdapter,
 ): Promise<BatchResult> {
+  validateCaptureBatch(cwd, specs, opts.invocation);
+  const validateFinalUrl = captureFinalUrlGuard(cwd, specs, opts.invocation);
   const concurrency = Math.max(1, opts.concurrency ?? 4);
   const rules = loadRules(opts.rulesRoot);
   const outcomes: BatchOutcome[] = new Array<BatchOutcome>(specs.length);
@@ -67,15 +72,17 @@ export async function addRefsBatch(
         if (i >= specs.length) return;
         const spec = specs[i]!;
         try {
+          const lane = spec.lane === undefined ? undefined : researchLane(spec.lane);
           if (spec.preparation !== undefined && spec.energy !== false) throw new Error('reference capture preparation requires energy:false');
           const preparation = spec.preparation === undefined ? undefined : parseCapturePreparation(spec.preparation);
-          const shotOut = spec.shot && spec.selector
-            ? refImagePath(adapter.projectRoot, { source: spec.source, component: spec.as })
+          const shotOut = spec.shot
+            ? refImagePath(adapter.projectRoot, { source: spec.source, component: spec.as, ...(lane ? { researchLane: lane } : {}) })
             : undefined;
           if (shotOut) adapter.mkdir(relative(adapter.projectRoot, dirname(shotOut)));
           const viewport = parseViewport(spec.viewport ?? REFERENCE_VIEWPORT);
-          const { raw, shotSaved, capturePreparation } = await capturePageForRef(browser, spec.source, viewport, {
+          const { raw, shotSaved, capturePreparation, acquisition } = await capturePageForRef(browser, spec.source, viewport, {
             selector: spec.selector ?? null,
+            validateFinalUrl: url => validateFinalUrl(i, url),
             ...(preparation ? { preparation } : {}),
             ...(shotOut ? { shotOut, adapter } : {}),
           });
@@ -88,6 +95,8 @@ export async function addRefsBatch(
           const slopCount = check(ir, rules, { categories: ['slop'] }).length;
           const blueprint = spec.blueprint && spec.selector ? captureBlueprint(raw.nodes, spec.selector) : undefined;
           saveRef(cwd, {
+            ...(lane ? { researchLane: lane } : {}),
+            acquisition,
             source: spec.source,
             component: spec.as,
             kind: spec.selector ? 'component' : 'page',

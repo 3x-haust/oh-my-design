@@ -81,6 +81,8 @@ const FINAL_EVIDENCE_STABLE_DESCRIPTOR_ADAPTER = 'core/evidence/final-v2.ts';
 const FINAL_EVIDENCE_STABLE_DESCRIPTOR_EXCEPTION = 'final-evidence-v2 stable descriptor adapter (audited capability owner)';
 const FIGMA_AUTHORITY_STORE_ADAPTER = 'core/figma/artifact-authority-store.ts';
 const FIGMA_AUTHORITY_STORE_EXCEPTION = 'external host-owned Figma artifact authority store (audited exact-identity adapter)';
+const ACTIVATION_KEY_STORE = 'core/runtime/self-signed-activation.ts';
+const ACTIVATION_KEY_STORE_EXCEPTION = 'project activation key store (audited: 0600 keys, 0700 directory, fsync before rename, no unlink or rmdir)';
 const GUARD_ENTRYPOINTS = [
   'writeExternalObservationFile',
   'createExternalObservationDirectory',
@@ -168,6 +170,38 @@ function figmaAuthorityStoreAdapter(
     && source.includes("if (directory === undefined || dirname(path) !== directory) throw new Error('Figma authority record escaped its project directory')")
     && !source.includes('rmSync(');
 }
+/**
+ * The activation key store is the one writer that cannot go through the guard, because it must
+ * exist before any invocation exists to carry authority. It is therefore audited on its own source
+ * instead: the key and journal are created with restrictive modes, a key is written to a staging
+ * path and fsynced before rename, and the module never removes a file.
+ *
+ * Verification-side exceptions must also refuse a symlinked key, which is asserted in the test suite
+ * rather than here, since the refusal is a security property and not a shape the audit can see.
+ */
+function activationKeyStoreAdapter(
+  filePath: string,
+  source: string,
+  directMutations: readonly UnguardedProjectMutation[],
+): boolean {
+  const operations = directMutations.map((mutation) => mutation.operation).sort().join(',');
+  // The exact operation list is asserted from what the inventory sees, so adding another direct
+  // write to this module fails the audit rather than silently widening the exception.
+  return filePath === ACTIVATION_KEY_STORE
+    && operations === 'chmodSync,chmodSync,mkdirSync,mkdirSync,openSync,renameSync,writeFileSync,writeFileSync,writeFileSync,writeSync'
+    && directMutations.length === 10
+    && source.includes("mkdirSync(directory, { recursive: true, mode: 0o700 })")
+    && source.includes("as string, { mode: 0o600 }")
+    && source.includes('fsyncSync(fd)')
+    && source.includes('renameSync(staging, privatePath)')
+    && source.includes('chmodSync(privatePath, 0o600)')
+    && source.includes('if (!stat.isFile() || stat.isSymbolicLink()) fail(')
+    && source.includes('if (lstatSync(path).isSymbolicLink()) fail(')
+    && !source.includes('rmSync(')
+    && !source.includes('unlinkSync(')
+    && !source.includes('rmdirSync(');
+}
+
 function sourcePath(repositoryRoot: string, absolutePath: string): string {
   return relative(repositoryRoot, absolutePath).split('\\').join('/');
 }
@@ -540,6 +574,7 @@ export function inventoryProjectRunMutations(
     const reviewerLiveSocketException = reviewerLiveSocketCleanupException(filePath, source, directMutations);
     const finalEvidenceDescriptorAdapter = finalEvidenceStableDescriptorAdapter(filePath, source, directMutations);
     const figmaAuthorityAdapter = figmaAuthorityStoreAdapter(filePath, source, directMutations);
+    const activationKeyAdapter = activationKeyStoreAdapter(filePath, source, directMutations);
     const hasExternalObservationWrapper = filePath === GUARD_BOUNDARY
       && source.includes('export function writeExternalObservationFile')
       && source.includes('export function createExternalObservationDirectory');
@@ -549,7 +584,7 @@ export function inventoryProjectRunMutations(
       ? 'guarded'
       : reviewerLiveSocketException
         ? 'external-exception'
-        : finalEvidenceDescriptorAdapter || figmaAuthorityAdapter
+        : finalEvidenceDescriptorAdapter || figmaAuthorityAdapter || activationKeyAdapter
           ? 'external-exception'
           : 'unclassified';
     const exception = hasExternalObservationWrapper
@@ -560,7 +595,9 @@ export function inventoryProjectRunMutations(
           ? FINAL_EVIDENCE_STABLE_DESCRIPTOR_EXCEPTION
           : figmaAuthorityAdapter
             ? FIGMA_AUTHORITY_STORE_EXCEPTION
-            : undefined;
+            : activationKeyAdapter
+              ? ACTIVATION_KEY_STORE_EXCEPTION
+              : undefined;
     owners.push({
       filePath,
       classification,

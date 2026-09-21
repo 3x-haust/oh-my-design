@@ -136,7 +136,10 @@ test('runs the FD3 seal launcher end-to-end: durable claim, PENDING receipt, nat
     const identityPath = nativeIdentityPath(x.root);
     const input = sealInput(x, archiveRoot, finalization, identityPath, sha256('seal-run-happy-path'));
     const result = await withLauncherArgv(() => runDependencySeal({ dryRun: false, input }));
-    assert.equal(result.eligible, true);
+    assert.equal(result.eligible, true, JSON.stringify({
+      eligibility: evaluateEligibility(archiveRoot, 'snapshot-001'),
+      verdict: JSON.parse(readFileSync(archiveLayout(archiveRoot, 'snapshot-001').verdict, 'utf8')),
+    }));
     assert.equal(existsSync(join(x.snapshots, 'snapshot-001')), true);
     const layout = archiveLayout(archiveRoot, 'snapshot-001');
     assert.equal(existsSync(layout.claim), true);
@@ -154,7 +157,10 @@ test('a second contender for the same snapshot id yields a durable conflict and 
     const finalization = sourceFinalizationFixture(x.root);
     const identityPath = nativeIdentityPath(x.root);
     const first = await withLauncherArgv(() => runDependencySeal({ dryRun: false, input: sealInput(x, archiveRoot, finalization, identityPath, sha256('seal-run-conflict-first')) }));
-    assert.equal(first.eligible, true);
+    assert.equal(first.eligible, true, JSON.stringify({
+      eligibility: evaluateEligibility(archiveRoot, 'snapshot-001'),
+      verdict: JSON.parse(readFileSync(archiveLayout(archiveRoot, 'snapshot-001').verdict, 'utf8')),
+    }));
     const second = await withLauncherArgv(() => runDependencySeal({ dryRun: false, input: sealInput(x, archiveRoot, finalization, identityPath, sha256('seal-run-conflict-second')) }));
     assert.equal(second.eligible, false);
     const outcome = evaluateEligibility(archiveRoot, 'snapshot-001');
@@ -163,5 +169,23 @@ test('a second contender for the same snapshot id yields a durable conflict and 
     assert.match(outcome.reason, /durable conflict exists/);
     const layout = archiveLayout(archiveRoot, 'snapshot-001');
     assert.ok(readdirSync(layout.conflicts).length >= 1);
+  } finally { removeFixture(x.root); }
+});
+
+test('an early worker rejection retains its actual stderr without accepting an incomplete FD3 exchange', { skip: !darwin, concurrency: false, timeout: 60_000 }, async () => {
+  const x = fixture();
+  const archiveRoot = join(x.root, 'archive');
+  try {
+    const finalization = sourceFinalizationFixture(x.root);
+    const identityPath = nativeIdentityPath(x.root);
+    rmSync(join(x.browser, 'INSTALLATION_COMPLETE'));
+    const result = await withLauncherArgv(() => runDependencySeal({ dryRun: false,
+      input: sealInput(x, archiveRoot, finalization, identityPath, sha256('rejected-worker')) }));
+    assert.equal(result.eligible, false);
+    const verdict = JSON.parse(readFileSync(archiveLayout(archiveRoot, 'snapshot-001').verdict, 'utf8'));
+    assert.equal(verdict.status, 'REJECTED');
+    assert.match(verdict.reason, /EOF before finite shutdown/);
+    assert.match(verdict.reason, /child exit=1/);
+    assert.match(verdict.reason, /INSTALLATION_COMPLETE/);
   } finally { removeFixture(x.root); }
 });

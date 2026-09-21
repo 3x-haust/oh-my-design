@@ -1,9 +1,10 @@
-import { readdirSync, readFileSync, existsSync } from 'node:fs';
+import { readdirSync, readFileSync, existsSync, lstatSync } from 'node:fs';
 import { join, basename } from 'node:path';
 import type { Invariants, Reference } from '../types.ts';
 import { type ProjectWriteAdapter, requireProjectWriteAdapter } from '../runtime/project-write.ts';
 import { hasAssemblyPayload } from './board-sanitization.ts';
 import { referenceMeasuredInvariants } from './measurement-coverage.ts';
+import { refIdentity } from './identity.ts';
 
 /** Backfills invariants written before typography/motion/interaction measurement existed. */
 function withInvariantDefaults(invariants: Invariants | null | undefined): Invariants | null {
@@ -27,6 +28,14 @@ function withInvariantDefaults(invariants: Invariants | null | undefined): Invar
 
 const refsDir = (cwd: string): string => join(cwd, '.omd', 'refs');
 
+export function researchLane(value: unknown): 'domain' | 'design' {
+  if (value !== 'domain' && value !== 'design') throw new Error('REFERENCE_LANE_REQUIRED: use domain or design');
+  return value;
+}
+function lanePrefix(ref: Pick<Reference, 'researchLane'>): string {
+  return ref.researchLane === undefined ? '.omd/refs' : `.omd/refs/${researchLane(ref.researchLane)}`;
+}
+
 /** Hostname of a URL, or the basename (without extension) of a file path. */
 function hostPart(source: string): string {
   try {
@@ -39,17 +48,44 @@ function hostPart(source: string): string {
 }
 
 function slugFor(ref: Pick<Reference, 'source' | 'component'>): string {
-  return `${hostPart(ref.source)}.${ref.component}`;
+  return `${hostPart(ref.source)}.${ref.component}.${refIdentity(ref.source, ref.component)}`;
 }
 
 export function saveRef(cwd: string, ref: Reference, adapter: ProjectWriteAdapter): string {
+  assertReferenceLaneSeparation(cwd, ref);
   return requireProjectWriteAdapter(cwd, adapter)
-    .write(`.omd/refs/${slugFor(ref)}.json`, `${JSON.stringify(ref, null, 2)}\n`);
+    .write(`${lanePrefix(ref)}/${slugFor(ref)}.json`, `${JSON.stringify(ref, null, 2)}\n`);
+}
+
+export function refRecordPath(cwd: string, ref: Pick<Reference, 'source' | 'component' | 'researchLane'>): string {
+  const current = join(cwd, lanePrefix(ref), `${slugFor(ref)}.json`);
+  if (existsSync(current)) return current;
+  // Read old records without migrating or overwriting their evidence. A same-host different URL
+  // must never resolve to another page's historical file.
+  const legacy = join(cwd, lanePrefix(ref), `${hostPart(ref.source)}.${ref.component}.json`);
+  if (existsSync(legacy) && !lstatSync(legacy).isSymbolicLink()) {
+    try { const saved = JSON.parse(readFileSync(legacy, 'utf8')); if (saved.source === ref.source && saved.component === ref.component) return legacy; } catch { /* current path remains missing */ }
+  }
+  return current;
 }
 
 /** Path of the scoped component screenshot for a reference (`omd ref add … --shot`). */
-export function refImagePath(cwd: string, ref: Pick<Reference, 'source' | 'component'>): string {
-  return join(refsDir(cwd), `${slugFor(ref)}.png`);
+export function refImagePath(cwd: string, ref: Pick<Reference, 'source' | 'component' | 'researchLane'>): string {
+  assertReferenceLaneSeparation(cwd, ref);
+  return join(cwd, lanePrefix(ref), `${slugFor(ref)}.png`);
+}
+
+/** Stop the reported same-page relabeling before another PNG is written. Legacy unlabelled records
+ * remain readable; publication performs the stricter service-host and redirect checks. */
+export function assertReferenceLaneSeparation(cwd: string, ref: Pick<Reference, 'source' | 'researchLane'>): void {
+  if (!ref.researchLane) return;
+  const page = (source: string): string => {
+    try { const url = new URL(source); url.search = ''; url.hash = ''; url.hostname = url.hostname.replace(/^www\./, ''); url.pathname = url.pathname.replace(/\/+$/, '') || '/'; return url.href; }
+    catch { return source; }
+  };
+  if (loadRefs(cwd, { includeDomain: true }).some(item => item.researchLane && item.researchLane !== ref.researchLane && page(item.source) === page(ref.source))) {
+    throw new Error('REFERENCE_LANE_SOURCE_OVERLAP: this page already belongs to the other research lane; a renamed crop is not independent research');
+  }
 }
 
 function isReference(value: unknown): value is Partial<Reference> & Pick<Reference, 'source' | 'component'> {
@@ -61,21 +97,30 @@ function isReference(value: unknown): value is Partial<Reference> & Pick<Referen
   );
 }
 
-export function loadRefs(cwd: string): Reference[] {
+export function loadRefs(cwd: string, options: { includeDomain?: boolean } = {}): Reference[] {
   const dir = refsDir(cwd);
   let files: string[];
   try {
     files = readdirSync(dir).filter((f) => f.endsWith('.json'));
+    for (const lane of options.includeDomain ? ['design', 'domain'] : ['design']) {
+      const directory = join(dir, lane);
+      if (existsSync(directory) && lstatSync(directory).isDirectory() && !lstatSync(directory).isSymbolicLink()) {
+        files.push(...readdirSync(directory).filter(f => f.endsWith('.json')).map(f => `${lane}/${f}`));
+      }
+    }
   } catch {
     return [];
   }
 
   const refs: Reference[] = [];
-  for (const file of files) {
+  for (const file of files.sort()) {
     try {
       const parsed: unknown = JSON.parse(readFileSync(join(dir, file), 'utf8'));
       if (isReference(parsed)) {
+        if (!options.includeDomain && parsed.researchLane === 'domain') continue;
         refs.push({
+          ...(parsed.researchLane !== undefined ? { researchLane: researchLane(parsed.researchLane) } : {}),
+          ...(parsed.acquisition !== undefined ? { acquisition: parsed.acquisition } : {}),
           source: parsed.source,
           component: parsed.component,
           kind: parsed.kind ?? 'page',
@@ -95,6 +140,9 @@ export function loadRefs(cwd: string): Reference[] {
           ...(parsed.blueprint !== undefined ? { blueprint: parsed.blueprint } : {}),
           // imagePath is absent on references captured before --shot was introduced.
           ...(parsed.imagePath !== undefined ? { imagePath: parsed.imagePath } : {}),
+          // Recorded only when a capture was explicitly skipped or failed; without it, an imageless
+          // reference would be indistinguishable from one whose record predates image capture.
+          ...(parsed.imageOmittedReason !== undefined ? { imageOmittedReason: parsed.imageOmittedReason } : {}),
           // viewport is absent on references captured before capture width was recorded; a board
           // with no recorded viewport cannot prove it is desktop evidence rather than a phone crop.
           ...(parsed.viewport !== undefined ? { viewport: parsed.viewport } : {}),
@@ -106,7 +154,9 @@ export function loadRefs(cwd: string): Reference[] {
     }
   }
 
-  return refs.sort((a, b) => a.source.localeCompare(b.source) || a.component.localeCompare(b.component));
+  // A fresh lane capture supersedes its unlabelled legacy identity, without deleting history.
+  const unique = new Map(refs.map(ref => [JSON.stringify([ref.researchLane ?? 'design', ref.source, ref.component]), ref]));
+  return [...unique.values()].sort((a, b) => a.source.localeCompare(b.source) || a.component.localeCompare(b.component));
 }
 
 /**
@@ -120,7 +170,9 @@ export function addPrinciples(
   principles: string[],
   adapter: ProjectWriteAdapter,
 ): void {
-  const path = join(refsDir(cwd), `${slugFor({ source, component })}.json`);
+  const candidates = loadRefs(cwd, { includeDomain: true }).filter(ref => ref.source === source && ref.component === component);
+  if (candidates.length > 1) throw new Error('REFERENCE_ID_AMBIGUOUS: use distinct component names for the two research lanes');
+  const path = refRecordPath(cwd, { source, component, ...(candidates[0]?.researchLane ? { researchLane: candidates[0].researchLane } : {}) });
   if (!existsSync(path)) {
     throw new Error(`no reference found for ${source} (${component})`);
   }
@@ -140,5 +192,5 @@ export function addPrinciples(
   }
 
   requireProjectWriteAdapter(cwd, adapter)
-    .write(`.omd/refs/${slugFor({ source, component })}.json`, `${JSON.stringify(ref, null, 2)}\n`);
+    .write(`${lanePrefix(ref)}/${slugFor({ source, component })}.json`, `${JSON.stringify(ref, null, 2)}\n`);
 }

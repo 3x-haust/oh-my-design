@@ -169,7 +169,8 @@ supplied identities and writes only its new host-granted leaf; the coordinator d
 that output directory. A missing baseline returns to the coordinator as an input problem. A successful
 child process without a nonempty regular `index.html` is not a completed source artifact.
 
-Run `omd-codex role run --agent omd-study --input <one-task.md> --json`. The host alone chooses a fresh
+Run the `omd-study` role from the host session you are already in, using that host's own subagent
+facility. The host alone chooses a fresh
 `.omd/.cache/studies/study-<id>/` leaf and returns `studyDirectory` in the signed role result.
 The helper writes `index.html` and local study assets only there. It gets no delegated publication,
 browser or other-role authority. Do not substitute a caller-chosen directory or all of `.omd` as its

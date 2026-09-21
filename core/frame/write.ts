@@ -71,7 +71,7 @@ export function writeFrameRecord(cwd: string, opts: {
     throw new Error('Marketing and editorial surfaces must not include a task coverage matrix.');
   }
   if ((normalizedSurface === 'product' || normalizedSurface === 'mixed') && taskCoverageMatrix === undefined) {
-    throw new Error('Product and mixed surfaces require a valid task coverage matrix.');
+    throw new Error('Product and mixed surfaces require a valid task coverage matrix. Run omd schema frame, author its input, then omd frame set --input <frame-input.json>. For inline input use --task-matrix "T1 | goal: … | start: … | actions: … | success: … | recovery: … | viewports: desktop,mobile | requirements: none". Functional requirements JSON and --entry-surface are separate inputs, not the task matrix.');
   }
   const body = [
     '## The given problem', '', opts.problem.trim(), '',

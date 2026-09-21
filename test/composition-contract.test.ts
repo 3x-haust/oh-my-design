@@ -62,13 +62,24 @@ function persistValidCurrentArtDirection(root: string): { artDirectionRecord: st
   };
   const source = 'https://fixture.example/composition';
   const component = 'composition';
-  const imagePath = refImagePath(root, { source, component });
+  const image = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNgYGAAAAAEAAH2FzhVAAAAAElFTkSuQmCC', 'base64');
+  const imageSha256 = createHash('sha256').update(image).digest('hex');
+  const imagePath = refImagePath(root, { source, component, researchLane: 'design' });
   const reference: Reference = {
+    researchLane: 'design', acquisition: { requestedUrl: source, finalUrl: source, httpStatus: 200, links: [], imageSha256 },
     source, component, kind: 'component', capturedAt: '2026-01-01T00:00:00.000Z', selector: '#composition-fixture',
     invariants, principles: ['Keep the hierarchy independent.'], blueprint, imagePath: relative(root, imagePath),
   };
   saveRef(root, reference, writer);
-  writeFileSync(imagePath, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNgYGAAAAAEAAH2FzhVAAAAAElFTkSuQmCC', 'base64'));
+  writeFileSync(imagePath, image);
+  const gallery = 'https://www.pinterest.com/pin/123456789/';
+  const galleryImagePath = refImagePath(root, { source: gallery, component: 'discovery', researchLane: 'design' });
+  saveRef(root, {
+    source: gallery, component: 'discovery', researchLane: 'design', kind: 'page', capturedAt: reference.capturedAt,
+    acquisition: { requestedUrl: gallery, finalUrl: gallery, httpStatus: 200, links: [source], imageSha256 },
+    imagePath: relative(root, galleryImagePath), invariants: null, principles: [],
+  }, writer);
+  writeFileSync(galleryImagePath, image);
   writeFileSync(join(root, '.omd', 'reference-board.json'), JSON.stringify({
     schemaVersion: 'reference-board-v1', frameSha256: 'a'.repeat(64),
     candidates: [{

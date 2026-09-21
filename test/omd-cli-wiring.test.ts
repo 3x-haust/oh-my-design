@@ -184,7 +184,17 @@ test('printed input skeletons carry exactly the keys their validators accept', a
   assert.match(directionHelp, /both approvedMotionRecipe and approvedMotionRecipeReceipt/);
   assert.match(directionHelp, /exact receipt-bound evaluatorAssessment and evaluatorResult payload serialization/);
   assert.match(directionHelp, /not permission to reconstruct unseen judgments/);
-  assert.equal(INPUT_SKELETONS.length, 25);
+  assert.equal(INPUT_SKELETONS.length, 37);
+  for (const name of ['design-judgment', 'candidate-selection']) {
+    const input = inputSkeleton(name);
+    assert.deepEqual(Object.keys(input.skeleton as object), [...input.keys]);
+  }
+  const { parseSearchInput } = await import('../core/ref/search-execution.ts');
+  assert.doesNotThrow(() => parseSearchInput(inputSkeleton('reference-search').skeleton));
+  for (const name of ['route-input', 'product-route-input', 'design-route-input']) {
+    const route = inputSkeleton(name);
+    assert.deepEqual(Object.keys(route.skeleton as object).sort(), [...route.keys].sort());
+  }
   const featureMeasurements = inputSkeleton('reference-feature-measurements');
   assert.deepEqual(featureMeasurements.keys, ['id', 'quantity', 'sourceNodes', 'targetAnchors']);
   assert.ok(Array.isArray(featureMeasurements.skeleton));
@@ -239,6 +249,12 @@ test('printed input skeletons carry exactly the keys their validators accept', a
     'schema', 'surface', 'domain', 'sourceContractSha256', 'sources', 'taskSteps', 'counterexamples',
   ]);
   assert.doesNotThrow(() => parseTaskFlowBenchmark(benchmark.skeleton));
+  const research = inputSkeleton('reference-research');
+  const { parseReferenceResearch } = await import('../core/ref/reference-research.ts');
+  assert.deepEqual(Object.keys(research.skeleton as object), [
+    'schema', 'sourceContractSha256', 'domainReference', 'designReference',
+  ]);
+  assert.doesNotThrow(() => parseReferenceResearch(research.skeleton));
   const entrySurface = inputSkeleton('entry-surface-contract');
   assert.deepEqual(Object.keys(entrySurface.skeleton as object), [
     'schema', 'entryPath', 'prerequisiteTaskId', 'dependentTaskId', 'purposeText',
@@ -258,7 +274,7 @@ test('printed input skeletons carry exactly the keys their validators accept', a
   assert.match(printedBoard.stdout, /every piece grid contains exactly column, span, order/);
   assert.match(printedBoard.stdout, /"grid": \{\s+"column": 1,\s+"span": 12,\s+"order": 0/s);
   const listed = run(['schema', 'list', '--json'], dir);
-  assert.deepEqual(JSON.parse(listed.stdout).map((entry: { name: string }) => entry.name), ['route-input', 'route-ai-asset', 'reality-ledger', 'domain-brief', 'depth-input', 'content-grain', 'acquisition-plan', 'reference-board', 'reference-image-fragment', 'reference-feature-measurements', 'reference-capture-preparation', 'reference-locale-binding', 'task-flow-benchmark', 'art-direction-check', 'token-commit', 'responsive-token-commit', 'locale-contract', 'locale-design-context', 'cultural-design-profile', 'functional-requirements', 'decision-graph', 'entry-surface-contract', 'final-render-reviewer-packet', 'trusted-lifecycle-manifest', 'design-quality-observation-projection']);
+  assert.deepEqual(JSON.parse(listed.stdout).map((entry: { name: string }) => entry.name), ['design-judgment', 'candidate-selection', 'reference-search', 'first-render-surface', 'slop-scope', 'route-input', 'design-route-input', 'product-route-input', 'design-handoff', 'route-ai-asset', 'reality-ledger', 'domain-brief', 'depth-input', 'content-grain', 'acquisition-plan', 'reference-board', 'reference-image-fragment', 'reference-feature-measurements', 'reference-capture-preparation', 'reference-locale-binding', 'task-flow-benchmark', 'reference-research', 'art-direction-check', 'token-commit', 'responsive-token-commit', 'locale-contract', 'locale-design-context', 'cultural-design-profile', 'functional-requirements', 'frame', 'decision-graph', 'entry-surface-contract', 'final-render-reviewer-packet', 'trusted-lifecycle-manifest', 'design-quality-observation-projection', 'reference-flow-input', 'runtime-design-inventory-input']);
 });
 
 test('reality-ledger schema exposes its closed category vocabulary', async () => {
@@ -377,8 +393,10 @@ test('declared craft queries with no measured craft record fail the board audit'
   const dir = project();
   writeFile(dir, '.omd/domain-brief.json', JSON.stringify({
     schema: 'domain-brief-v1', request: 'r', domain: 'd', summary: 's',
-    surfaces: [{ name: 'landing', purpose: 'p' }], coreObjects: ['o'], audience: 'a',
-    referenceQueries: { component: ['nav'], craft: ['awwwards editorial motion'] }, researched: false,
+    surfaces: [{ name: 'landing', purpose: 'p', evidence: [{ status: 'observed', reference: 'https://example.com' }] }],
+    coreObjects: [{ name: 'o', evidence: [{ status: 'observed', reference: 'https://example.com' }] }],
+    audience: { description: 'a', evidence: [{ status: 'user-provided', reference: 'user-message' }] },
+    referenceQueries: { component: ['nav'], craft: ['awwwards editorial motion'], mood: ['editorial, restrained, ink-on-paper'] },
   }));
   writeFile(dir, '.omd/refs/still.json', JSON.stringify({
     source: 'https://a.example', component: 'nav', kind: 'component', selector: '.nav',

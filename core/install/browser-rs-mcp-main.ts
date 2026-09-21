@@ -1,5 +1,21 @@
 import { BROWSER_RS_MCP_REAPER } from './browser-rs-mcp-reaper.ts';
 
+// Inlined into the standalone launcher; also exercised directly with a closing IPC channel.
+export const BROWSER_RS_MCP_CONTROL_SEND = String.raw`
+function sendControl(child, message, onError) {
+  if (!child.connected) return;
+  const failed = (error) => {
+    if (!error) return;
+    if (error.code !== 'ERR_IPC_CHANNEL_CLOSED' && error.code !== 'EPIPE') onError(error);
+    // connected is only a snapshot. A callback prevents Node from emitting an unhandled
+    // error after the reaper exits between that check and send(). Disconnect lets a live
+    // reaper observe lost ownership and clean up; the main still awaits its exact exit.
+    if (child.connected) { try { child.disconnect(); } catch {} }
+  };
+  try { child.send(message, failed); } catch (error) { failed(error); }
+}
+`;
+
 export type BrowserRsLauncherRelease = {
   readonly platform: string;
   readonly arch: string;
@@ -25,6 +41,7 @@ const version = ${JSON.stringify(version)};
 const receiptSchema = ${JSON.stringify(receiptSchema)};
 const token = randomUUID();
 const EXIT_TIMEOUT_MS = 3000;
+${BROWSER_RS_MCP_CONTROL_SEND}
 
 function executable(path) {
   try { accessSync(path, constants.X_OK); return true; } catch { return false; }
@@ -115,13 +132,15 @@ async function main() {
   process.stdin.pipe(reaper.stdin);
   reaper.stdout.pipe(process.stdout);
   reaper.stderr.pipe(process.stderr);
-  reaper.send({ type: 'init', token, kind: 'profile', parent: temporary, binary, environment, sentinelPort: address.port });
   let lease;
   let released = false;
   let requestedExit;
   let initError;
+  const send = (message) => sendControl(reaper, message, (error) => {
+    initError = { code: error.code ?? 'UNKNOWN', error: error.message ?? String(error) };
+  });
   const handlers = [['SIGHUP', 129], ['SIGINT', 130], ['SIGTERM', 143]].map(([signal, code]) => {
-    const handler = () => { requestedExit = code; if (reaper.connected) reaper.send({ type: 'signal', token, signal }); };
+    const handler = () => { requestedExit = code; send({ type: 'signal', token, signal }); };
     process.once(signal, handler);
     return { signal, handler };
   });
@@ -135,12 +154,12 @@ async function main() {
         kind: message.kind, parent: message.parent, path: message.path, childPid: message.childPid,
         device: message.device, inode: message.inode, createdAt: message.createdAt,
       };
-      if (reaper.connected) reaper.send({ type: 'lease-held', token });
+      send({ type: 'lease-held', token });
     } else if (message.type === 'complete' && message.kind === 'profile' && message.removed === true) released = true;
     else if (message.type === 'error') initError = message;
   });
+  send({ type: 'init', token, kind: 'profile', parent: temporary, binary, environment, sentinelPort: address.port });
   const result = await new Promise((resolve) => reaper.once('exit', (code, signal) => resolve({ code, signal })));
-  for (const item of handlers) process.off(item.signal, item.handler);
   if (!released && lease !== undefined) {
     signalGroup(lease.childPid, 'SIGTERM');
     try { await bounded(sentinelClosed, () => signalGroup(lease.childPid, 'SIGKILL')); }
@@ -149,8 +168,11 @@ async function main() {
   }
   sentinelSocket?.destroy();
   await new Promise((resolve) => server.close(() => resolve()));
+  // A pending signal must not restore Node's default termination during fallback cleanup.
+  for (const item of handlers) process.off(item.signal, item.handler);
   if (initError !== undefined) console.error('browser-rs: ' + (initError.code ?? 'UNKNOWN') + ': ' + initError.error);
   if (requestedExit !== undefined) process.exitCode = requestedExit;
+  else if (initError !== undefined) process.exitCode = 1;
   else process.exitCode = result.signal === null ? (result.code ?? 1) : 1;
 }
 main().catch((error) => { console.error('browser-rs: ' + (error instanceof Error ? error.message : String(error))); process.exitCode = 1; });

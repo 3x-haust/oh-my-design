@@ -35,7 +35,7 @@ function expressiveMedical(): unknown {
   }
   Reflect.set(designAxes, 'expressiveDesignNeed', 'showpiece');
   Reflect.set(strategy, 'roles', ['omd-framer', 'omd-scout', 'omd-writer', 'omd-typesetter', 'omd-composer', 'omd-sketch', 'omd-hand', 'omd-eye']);
-  Reflect.set(strategy, 'stages', ['frame', 'content-grain', 'scout', 'reference-board', 'safety-validation', 'art-direction', 'copy', 'type-proof', 'composition', 'candidate-generation', 'production', 'browser-evidence', 'independent-review']);
+  Reflect.set(strategy, 'stages', ['domain', 'frame', 'content-grain', 'scout', 'reference-board', 'safety-validation', 'art-direction', 'copy', 'type-proof', 'composition', 'candidate-generation', 'production', 'browser-evidence', 'independent-review']);
   Reflect.set(strategy, 'executionWaves', [
     { id: 'frame', mode: 'concurrent', roles: ['omd-framer'] },
     { id: 'parallel-research-copy', mode: 'concurrent', roles: ['omd-scout', 'omd-writer'] },
@@ -137,8 +137,11 @@ test('adaptive source validation rejects stale, forged, changed-reason, cross-pr
     }
 
     writeFileSync(sealPath, `${JSON.stringify(original, null, 2)}\n`);
-    const staleInvocation = createTestProjectRunInvocation(directory, 'different-current-run');
-    assert.ok(validateSourceSeal(directory, staleInvocation).some((finding) => /authority|route/i.test(finding.message)));
+    // A DIFFERENT invocation of the same project still validates. Every CLI command is its own
+    // invocation, so treating a fresh one as stale meant nothing could read its own seal — the
+    // failing behavior this boundary was corrected for. What must still fail is ANOTHER project.
+    const freshInvocation = createTestProjectRunInvocation(directory, 'different-current-run');
+    assert.equal(validateSourceSeal(directory, freshInvocation).some((finding) => /authority|route/i.test(finding.message)), false);
     const crossProjectInvocation = createTestProjectRunInvocation(other, 'skip-failure-matrix');
     assert.ok(validateSourceSeal(directory, crossProjectInvocation).some((finding) => /authority|route/i.test(finding.message)));
   } finally {

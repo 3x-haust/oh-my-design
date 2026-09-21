@@ -13,21 +13,24 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { readPersistedRoute } from '../route/index.ts';
+import { unconfirmedPlanningStatements, validateDomainBrief } from '../domain/domain-brief.ts';
 import { ADAPTIVE_STAGE_GRAPH, type AdaptiveStageId } from '../route/adaptive-stage-graph.ts';
+import { CANDIDATE_SELECTION_POINTER_PATH } from '../brief/candidate-selection.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 
 export const DELIVERY_RECEIPT_SCHEMA = 'stage-delivery-v1' as const;
 export const DELIVERY_LOG = '.omd/delivery.jsonl';
 
 export type StageId =
-  | 'domain' | 'depth' | 'frame' | 'content-grain' | 'acquisition' | 'scout' | 'reference-board'
-  | 'reference-selection' | 'art-direction' | 'copy' | 'type-proof' | 'composition';
+  | 'domain' | 'depth' | 'frame' | 'content-grain' | 'acquisition' | 'scout' | 'moodboard'
+  | 'reference-board'
+  | 'reference-selection' | 'art-direction' | 'copy' | 'type-proof' | 'composition' | 'candidate-generation';
 
 export type StageDefinition = {
   readonly id: StageId;
-  /** The role that writes the artifact; the coordinator never substitutes for a named owner. */
+  /** The work owner; coordinator-owned CLI publication remains a separate declared handoff. */
   readonly owner: string;
-  /** Project-relative artifact whose existence proves the stage produced its output. */
+  /** Project-relative output entry point; its presence still requires current output validation. */
   readonly artifact: string;
   /** Pack-relative contracts this stage's owner must receive before it runs. */
   readonly requiredContracts: readonly string[];
@@ -41,11 +44,13 @@ export const STAGES: readonly StageDefinition[] = Object.freeze([
   { id: 'acquisition', owner: 'omd-framer', artifact: '.omd/acquisition-plan.json', requiredContracts: ['protocol/reference-assembly.md'] },
   { id: 'scout', owner: 'omd-scout', artifact: '.omd/scout.md', requiredContracts: ['protocol/reference-assembly.md'] },
   { id: 'reference-board', owner: 'omd-scout', artifact: '.omd/reference-board.json', requiredContracts: ['protocol/reference-assembly.md'] },
+  { id: 'moodboard', owner: 'omd-scout', artifact: '.omd/moodboard.json', requiredContracts: ['protocol/reference-assembly.md', 'protocol/moodboard.md'] },
   { id: 'reference-selection', owner: 'coordinator', artifact: '.omd/reference-pre-selection-v2.json', requiredContracts: ['protocol/reference-assembly.md'] },
   { id: 'art-direction', owner: 'coordinator', artifact: '.omd/art-direction.json', requiredContracts: ['protocol/design-deliberation.md'] },
   { id: 'copy', owner: 'omd-writer', artifact: '.omd/copy-deck.md', requiredContracts: ['protocol/copy-deck.md', 'theory/voice.md'] },
   { id: 'type-proof', owner: 'omd-typesetter', artifact: '.omd/type-proof.md', requiredContracts: ['theory/typography.md'] },
   { id: 'composition', owner: 'omd-composer', artifact: '.omd/composition.md', requiredContracts: ['protocol/composition-contract.md', 'theory/layout.md'] },
+  { id: 'candidate-generation', owner: 'omd-sketch', artifact: CANDIDATE_SELECTION_POINTER_PATH, requiredContracts: ['protocol/composition-contract.md', 'theory/layout.md'] },
 ].map((stage) => Object.freeze({ ...stage, requiredContracts: Object.freeze(stage.requiredContracts) })) as StageDefinition[]);
 
 export type DeliveryReceipt = {
@@ -193,11 +198,11 @@ export type StageRequirement = {
  * route listing order, is the producer contract for that mode; return its selected transitive
  * prerequisites so a consumer cannot outrun a real dependency while same-wave peers stay runnable.
  */
-function adaptivePrerequisiteStages(
+export function adaptivePrerequisiteStages(
   projectRoot: string,
   invocation: ProjectRunInvocation,
-  stage: StageId,
-): readonly StageId[] | undefined {
+  stage: AdaptiveStageId,
+): readonly AdaptiveStageId[] | undefined {
   if (!existsSync(join(projectRoot, '.omd', 'route.json'))) return undefined;
   const route = readPersistedRoute(projectRoot, invocation);
   const selected = new Set(route.strategy.stages);
@@ -214,7 +219,7 @@ function adaptivePrerequisiteStages(
     }
   };
   visit(stage as AdaptiveStageId);
-  return [...dependencies] as StageId[];
+  return [...dependencies];
 }
 
 /**
@@ -222,6 +227,16 @@ function adaptivePrerequisiteStages(
  * cannot detect for itself: an earlier owner never produced its artifact, and a contract this
  * stage must obey was never delivered with its current bytes.
  */
+/**
+ * Planning intent is the one input search cannot supply, so a run that reaches production with an
+ * unresolved hypothesis would ship a business goal nobody stated. This is the check production runs.
+ */
+export function requireConfirmedPlanningForProduction(projectRoot: string): readonly string[] {
+  const path = join(projectRoot, '.omd', 'domain-brief.json');
+  if (!existsSync(path)) return [];
+  return unconfirmedPlanningStatements(validateDomainBrief(JSON.parse(readFileSync(path, 'utf8'))).planning);
+}
+
 export function requireStage(
   projectRoot: string,
   packRoot: string,

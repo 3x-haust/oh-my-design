@@ -145,6 +145,25 @@ Record these fields for the reviewed surface:
 - **Next action**: the concrete action/state the final text makes available
 - **Owner handoff**: writer changed deck -> copy check -> hand synchronizes source, or N/A
 
+### The interchangeability test
+
+What makes copy read as machine-written is not a word or a punctuation mark. It is that the line
+**could ship unchanged from any other product in the category**. Chasing banned phrases cannot fix
+that: removing "unlock the power" leaves the argument untouched.
+
+Ask of each line:
+
+> If the product name were erased, could this belong to a competitor? Could an informed reader
+> challenge the claim? Does it name anything in particular?
+
+A claim that survives only because it is unfalsifiable is the failure. Run
+`omd copy-specificity` to list lines that name no object, number, surface, or user phrase, and name
+the particular thing instead of smoothing the sentence. Distinctive copy needs material a competitor
+does not have — this run's own objects, the user's own words, a measured number.
+
+A line earns specificity by naming something real. Adjectives asserting quality without naming
+anything interchangeable, and a balanced conclusion that avoids a real choice is not a safe answer.
+
 Also record proposition repetition, CTA prediction, terminology, read-aloud/register,
 emotion, and applicable error/empty/recovery/accessibility checks. This is a review record,
 not a style score or detector report. Missing input-contract context is a gap for the writer,

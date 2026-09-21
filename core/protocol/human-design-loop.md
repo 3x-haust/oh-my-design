@@ -52,12 +52,14 @@ classification in a fresh authorized route, then reissue all affected contracts 
 
 ## Domain analysis
 
-When the adaptive route selects domain analysis, it records `.omd/domain-brief.json`
-(`domain-brief-v1`, validated by `omd domain check`). This method identifies the
-domain, its canonical surfaces, its core objects, and its audience, and emits the scout's two-role
-reference queries (component design and top-tier craft). An unfamiliar domain or named product is
-researched, not guessed. It feeds the frame and the scout; it never designs or writes code. The full
-contract is `protocol/domain-analysis.md`.
+Domain analysis is a mandatory stage: every route selects it, and no skip reason removes it. It
+records `.omd/domain-brief.json` (`domain-brief-v1`, validated by `omd domain check`). This step
+identifies the domain, its canonical surfaces, its core objects, and its audience, and emits the
+scout's two-role reference queries (component design and top-tier craft). Every surface, object, and
+audience claim carries its source as `observed`, `user-provided`, or `inferred`, and a claim resting
+on inference alone fails with `UNSOURCED_DOMAIN_CLAIM`; an unfamiliar domain or named product is
+observed in the browser, not guessed. It feeds the frame and the scout; it never designs or writes
+code. The full contract is `protocol/domain-analysis.md`.
 
 ## Stack routing
 
@@ -429,12 +431,18 @@ frame, decisions, or authorship, and it reports without editing.
 This protocol exclusively owns the exact copy-eye report format, including its fields and
 cardinality. Roles may state their review or preservation responsibility and point here, but
 must not restate that format.
+The coordinator obtains `omd copy review-input --json` and supplies its exact `content` and
+`sha256` together to the copy editor. This read-only command is available before production;
+do not guess a hash, use a placeholder, or require a blocked shell hashing command. The
+snapshot supplies identity, never a verdict. A new snapshot requires a real new review.
 The coordinator first
-preserves the report verbatim at `.omd/.cache/copy-eye.md` with exact `Mode: copy-editor`,
+preserves the returned report verbatim in an input file such as `.omd/.cache/copy-eye-input.md` with exact `Mode: copy-editor`,
 `Review time: <ISO 8601 timestamp>`, `Reviewed copy-deck SHA-256: <64 lowercase hex>`,
 exactly `Verdict: CLEAN` or `Verdict: REVISE`, and a non-empty `Findings:` section. It immediately runs
 `omd copy review-publish --input <exact-copy-eye.md>`; publication fails unless the structurally
-valid report names the current deck bytes. `REVISE` goes to the writer without invoking the
+valid report names the current deck bytes, then writes `.omd/.cache/copy-eye.md`. Keep the input
+separate from that published path so a rejected attempt cannot overwrite the last review.
+`REVISE` goes to the writer without invoking the
 terminal gate. `CLEAN` proceeds to `omd copy --review-check`, which also requires the current
 deck hash and exact clean verdict. These checks do not prove blindness or semantic review quality.
 After the writer receives findings and revises the deck, the old report becomes stale and cannot close the run.

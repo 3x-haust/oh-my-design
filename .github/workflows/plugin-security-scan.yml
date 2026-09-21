@@ -15,14 +15,20 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: hashgraph-online/ai-plugin-scanner-action@5d17bb20ed8878ef1e82ed3ddf433522dbd36b26 # v1.2.532
+      # v3 scanner fixes task-* secret and RegExp.exec shell-injection false positives.
+      - uses: hashgraph-online/ai-plugin-scanner-action@1c7b18e191376dd17550d4bff41fd8c9f71e4ca8 # v1.2.691
         with:
           plugin_dir: "."
           config: ".plugin-scanner.toml"
+          trust_repository_policy: true
           min_score: 80
           fail_on_severity: high
+          install_cisco: true
+          cisco_skill_scan: "on"
           format: json
           output: scanner-report.json
+      - name: Verify scanner regressions
+        run: python3 -P scripts/verify-security-scanner.py
       - name: Print scanner report
         if: always()
         run: cat scanner-report.json || true

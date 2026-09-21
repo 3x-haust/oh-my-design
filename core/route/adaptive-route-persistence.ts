@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import {
@@ -12,6 +13,7 @@ import { failAdaptiveRoute, type AdaptiveRouteRecord } from './adaptive-flow-dom
 import { routeAdaptiveFlow } from './adaptive-flow.ts';
 import { parseRouteRecord } from './adaptive-route-record.ts';
 import { publishAdaptiveRouteScopeEvidence } from './adaptive-route-scope.ts';
+import { authorizeDerivedPayload } from '../runtime/activation.ts';
 import { adaptiveSourceContractSha256, canonicalRouteJson } from './adaptive-source-contract.ts';
 import {
   adaptiveRouteAuthorityBytes,
@@ -96,6 +98,10 @@ export function publishAdaptiveRoute(
     const recordSha256 = adaptiveRouteRecordSha256(record);
     const recordPath = `route-records/sha256-${recordSha256}.json`;
     const authorityBytes = adaptiveRouteAuthorityBytes(record, recordSha256, invocation);
+    // The CLI derived these bytes from the record it is publishing, so it is the authority for them:
+    // there is no launcher to ask, and asking one to bless our own derivation was circular. The
+    // authorization names this exact purpose and this exact digest, so it authorizes nothing else.
+    authorizeDerivedPayload(invocation, root, 'adaptive-route-authority', authorityBytes);
     requireAdaptiveRouteAuthority(root, invocation, authorityBytes);
     publishAdaptiveRouteScopeEvidence(root, recordSha256, writer, invocation);
     writer.writeContentAddressed(`.omd/${adaptiveRouteAuthorityPath(authorityBytes)}`, authorityBytes);
@@ -150,6 +156,7 @@ function requireCurrentLocaleDesignContext(root: string, expected: LocaleDesignR
 export function readPersistedRoute(root: string, invocation: ProjectRunInvocation): AdaptiveRouteRecord {
   try {
     if (invocation === undefined) return failAdaptiveRoute('ROUTE_AUTHORITY_REQUIRED');
+    if (!existsSync(resolve(root, '.omd/route.json'))) return failAdaptiveRoute('ROUTE_UNCLASSIFIED', 'no published route exists; run omd route validate --input .omd/.cache/route-input.json --json, repair its named errors, then route classify with the same input. Completion is not available before classification.');
     for (let attempt = 0; attempt < 3; attempt += 1) {
       const sourcePointerBytes = stableRead(root, 'route-source.json', 'adaptive route source pointer');
       const routePointerBytes = stableRead(root, 'route.json', 'adaptive route pointer');
@@ -193,6 +200,10 @@ export function readPersistedRoute(root: string, invocation: ProjectRunInvocatio
         routePointer.sha256,
         invocation,
       );
+      // Reading re-derives the same authority bytes, so the reader is again the authority for them.
+      // This is a consistency check, not a second approval: the persisted file must equal what this
+      // process derives, which is what detects a tampered record.
+      authorizeDerivedPayload(invocation, root, 'adaptive-route-authority', authorityBytes);
       requireAdaptiveRouteAuthority(root, invocation, authorityBytes);
       let persistedAuthority: Buffer;
       try {

@@ -243,6 +243,45 @@ function validateCanonicalSelectionSlots(selection: ReferenceSelectionV2): void 
   }
 }
 
+/**
+ * When a moodboard exists, the metaphor must be traceable to it.
+ *
+ * The plan's rule: `register` and `metaphorQualities` are derived from mood items, or the run
+ * records a reasoned skip. Without this the moodboard is decoration bolted next to a decision that
+ * ignored it. A skip is lawful — a supplied reference or an existing brand fixes direction on its
+ * own — but it has to be stated, and every cited item must actually exist on the board.
+ */
+export type MoodBindingInput = Readonly<{
+  /** Item ids the current moodboard holds. Empty when there is no moodboard. */
+  moodItemIds: readonly string[];
+  /** Reasons each alternative skipped mood derivation. */
+  skipReasons: readonly { register: Register; reason: string }[];
+}>;
+
+export function requireMoodDerivation(
+  alternatives: readonly ArtDirectionAlternative[],
+  input: MoodBindingInput,
+): void {
+  if (input.moodItemIds.length === 0) {
+    // No board is a lawful state: nothing to derive from and nothing to cite.
+    if (alternatives.some((alternative) => (alternative.moodItemIds ?? []).length > 0)) {
+      throw new ArtDirectionValidationError('an alternative cites mood items but the run has no moodboard');
+    }
+    return;
+  }
+  const known = new Set(input.moodItemIds);
+  for (const alternative of alternatives) {
+    for (const id of alternative.moodItemIds ?? []) {
+      if (!known.has(id)) throw new ArtDirectionValidationError(`alternative cites mood item ${id}, which the current moodboard does not hold`);
+    }
+    if ((alternative.moodItemIds ?? []).length > 0) continue;
+    const skip = input.skipReasons.find((entry) => entry.register === alternative.register);
+    if (skip === undefined || skip.reason.trim() === '') {
+      throw new ArtDirectionValidationError(`alternative ${alternative.register} neither cites mood items nor records a reason for skipping mood derivation`);
+    }
+  }
+}
+
 function validateReferenceBindings(bindings: CanonicalReferenceBindings): readonly ArtDirectionReference[] {
   requireHash(bindings.canonicalSelectionSha256, 'canonicalSelectionSha256');
   requireHash(bindings.canonicalHandoffSha256, 'canonicalHandoffSha256');
@@ -271,17 +310,29 @@ function validateAlternative(
   alternative: ArtDirectionAlternative,
   references: readonly ArtDirectionReference[],
 ): void {
-  if (typeof alternative !== 'object' || alternative === null || !hasExactKeys(alternative, [
+  if (typeof alternative !== 'object' || alternative === null) {
+    throw new ArtDirectionValidationError('alternative has an invalid exact shape');
+  }
+  // `moodItemIds` is optional: a route whose direction came from a supplied reference or an
+  // existing brand has no moodboard, and records that as a reasoned skip. When present it must be a
+  // non-empty list of non-empty ids, so a half-filled binding is rejected rather than ignored.
+  const alternativeKeys = [
     'register', 'subjectIdentityFit', 'metaphorQualities', 'literalPropsToReject',
     'staticReferenceSlotIds', 'motionReferenceSlotIds', 'conceptRole', 'macroCompositionHypothesis',
     'motionHypothesis', 'uxAccessibilityPerformanceRisks', 'lawfulImplementationPath', 'rejectionCondition',
-  ]) || !isRegister(alternative.register) || !isMotionDecision(alternative.motionHypothesis)
+    ...('moodItemIds' in alternative && alternative.moodItemIds !== undefined ? ['moodItemIds'] : []),
+  ];
+  if (!hasExactKeys(alternative, alternativeKeys)
+    || !isRegister(alternative.register) || !isMotionDecision(alternative.motionHypothesis)
     || !Array.isArray(alternative.metaphorQualities) || alternative.metaphorQualities.length === 0
     || !alternative.metaphorQualities.every((quality) => typeof quality === 'string' && quality.trim() !== '')
     || !Array.isArray(alternative.literalPropsToReject) || alternative.literalPropsToReject.length === 0
     || !alternative.literalPropsToReject.every((prop) => typeof prop === 'string' && prop.trim() !== '')
     || !Array.isArray(alternative.staticReferenceSlotIds) || !Array.isArray(alternative.motionReferenceSlotIds)
     || !Array.isArray(alternative.uxAccessibilityPerformanceRisks)
+    || ('moodItemIds' in alternative && alternative.moodItemIds !== undefined
+      && (!Array.isArray(alternative.moodItemIds) || alternative.moodItemIds.length === 0
+        || !alternative.moodItemIds.every((id) => typeof id === 'string' && id.trim() !== '')))
     || !['subjectIdentityFit', 'conceptRole', 'macroCompositionHypothesis', 'lawfulImplementationPath', 'rejectionCondition']
       .every((field) => typeof alternative[field as keyof ArtDirectionAlternative] === 'string')
     || !alternative.staticReferenceSlotIds.every((slotId) => typeof slotId === 'string' && slotId.trim() !== '')

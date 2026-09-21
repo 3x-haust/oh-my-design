@@ -75,6 +75,119 @@ extension registers `/omd` for a project doctor check and the structured `omd_cl
 existing OMD CLI. Compatibility requires the public Pi extension/package API; fork-only APIs are
 not used.
 
+Pi's `omd_cli` does not need an external activation file. First run
+`omd route validate --input .omd/.cache/route-input.json --json`, repair the named input errors,
+then publish with `route classify`. An input validation error is not missing host authentication.
+
+[Three-layer enforcement](core/protocol/three-layer-enforcement.md) connects **declaration → stage/owner procedure → automatic refusal**.
+The coordinator inspects each brief, delivers its contracts, then runs `omd brief <stage> --check --json`.
+Plain brief inspection is not entry permission. Production entry uses the full production readiness
+validator; routed `recipe add` checks all targets before writing, even outside Pi.
+Pi's public `tool_call` / `message_end` hooks ensure native `write`/`edit` application mutations
+and arbitrary `bash` wait for current pre-production inputs; research inputs and directly owned
+design documents remain writable. The completion hook withholds an unverified final success claim.
+OMD commands are queued per project to prevent sibling calls from competing for the mutation lock.
+During a source-writing turn, repairable terminal failures can trigger up to two custom repair/recheck follow-ups per user input;
+authority failures and user aborts do not. Message replacement semantics are verified against Pi
+0.85.1; forks must support that public event behavior, not merely expose an `on` function.
+Run `/omd` after `/reload`; hook-less compatible hosts explicitly report that only CLI checks exist.
+Hooks are workflow gates, not an OS sandbox or proof of design quality. External processes/custom
+mutation tools are outside this hook boundary, and streamed draft text may precede final validation.
+Independent reviewer authorization is still required by implementation final evidence; Pi does not
+manufacture it. After upgrading, revalidate/reclassify the original approved route with the current
+build if old build/skill authority is stale. `stage status.completed` means artifact presence only.
+
+Reference research is saved separately: `.omd/refs/domain/research.json` for similar-service screens,
+features and flows, and `.omd/refs/design/research.json` for composition, type, density and component
+craft. `omd ref discover-plan --json` suggests screen galleries such as UI Bowl/Pinterest for product
+UI and website galleries such as Siteinspire/Pinterest for marketing. Verify free access per entry;
+on blocked/login/paid access, use another public source without purchases, trials or MCP installation.
+Free viewing does not grant reuse rights. Record the inspected screen, discovery entry and concrete
+quality reason, not just a prestigious gallery name. Use `omd schema reference-research --json`,
+`omd ref research-set --input <input.json>` and `omd ref research-check --json` to publish/check both
+files and their aggregate consistency receipt. Capture PNGs and metadata directly into their own
+folders with `ref add --lane domain|design` or `lane` on each add-batch entry. Inspect them with
+`ref list --lane domain|design --json`; domain captures do not silently enter the visual board.
+v3 binds source and gallery-entry PNGs to their native capture JSON. A homepage is not an inspected
+entry, and a different original source must appear in the gallery's observed outbound links.
+Older records need v5 execution binding and republication, retaining valid native captures.
+Domain/design hosts, final redirects and PNG evidence must be independent. Non-user discovery must
+be a supported public gallery item, not a service page labelled as a gallery. Public Pinterest,
+Dribbble and Behance items do not require UI Bowl's paid MCP. Free viewing is checked per item.
+Design sources declare visual-direction or component-support with observed composition, type,
+density, imagery, transfer and exclusions. Every board candidate uses visual-direction evidence;
+support-only documentation cannot complete the lane. Inspect previews in `.omd/refs/design/README.md`.
+These are provenance/role checks, not a machine certification of beauty.
+
+v5 requires actual search receipts, not query prose: `omd ref search --input <json>` accepts
+`{lane, query, url, queryParam}` and records a fresh-browser GET, actual links/capture or failure.
+Put its returned receipt in the lane's `searches`. Every query must match an execution and retained
+non-user sources/entries must occur in observed links and have separate native visit captures.
+Failed attempts can accompany a usable free alternative. HTTP 200 alone is not search quality.
+The executor accepts public Google/Bing/DuckDuckGo search pages with `queryParam: "q"`; use task/pattern
+and gallery `site:` queries. Arbitrary service pages with invented query parameters are rejected.
+
+After research, `omd ref apply-plan --json` creates an incomplete input draft for every current
+domain-brief surface. Inspect the actual images, fill the draft's `input`, and publish it using
+`omd ref apply-set --input <application.json>`; `omd ref apply-check --json` verifies it. Each screen
+keeps separate domain/design reference IDs, direct/partial/brief-derived coverage, gaps, what to
+apply, what not to transfer, why, and future rendered checks. `.omd/reference-application.md` shows
+the plan; briefs and selected handoffs deliver only the source-free decision projection. Research
+or scope changes invalidate it. Current v4 captures can be retained without recapture, but no
+decisions are invented for them. This adapts Design Flow Harness's screen-linked research approach,
+not its fixed Figma pipeline. A plan does not prove rendered use, quality, or user approval.
+
+Source sealing now binds the application plan. After authenticated final evidence, run
+`omd ref apply-review-plan --json`, inspect each criterion on current desktop/mobile captures,
+then `apply-review-set --input <json>` and `apply-review-check --json`. Missing, unresolved or stale
+judgments block terminal completion; changes require resealing, recapture and re-review.
+Review reasons are agent-authored, not human approval. `omd schema reference-flow-input` and
+`omd benchmark record --input <flow.json>` execute public navigation/disclosure steps in one fresh
+context and publish signed, project-bound receipts. Only bound completed flows can report
+`liveFlowVerified: true`; artifact-only history remains unverified and cannot clear a selected product
+benchmark. Login, payment, submission and destructive controls remain explicit exclusions.
+
+Similarity discovery may keep intermediate native captures in each lane's optional `navigation`
+array (`url`, PNG `evidence`, JSON `capture`). Only observed links rooted in a successful search
+extend the chain. Screen application v2 binds each destination route/state before production;
+final review cannot substitute a home capture for a different surface. First-render checking uses
+`--page <local-build.html>` plus the observed projection, saves a native capture, and invalidates
+its report when the hypothesis/source/build changes. Comparison is explicitly task-applicable and
+advisories do not block completion by themselves.
+
+For an existing service, `omd init --json` inventories static CSS variables/declarations and `$value`
+token JSON into `.omd/existing-design-system.json` and `.md`. Scopes, aliases and source locations/hashes
+remain intact. It never changes app files or approved `.omd/tokens.json`. Future briefs reuse the
+inventory; `omd init --check` detects stale inputs and `omd init --refresh` refreshes observations.
+Keep authored decisions in `.omd/design-system-decisions.md`, preserved across refreshes. Runtime styles,
+Tailwind configuration and component variants are not silently inferred from static files.
+For runtime values use `omd schema runtime-design-inventory-input` then `omd init --input <input.json>`:
+named component selectors and optional SPA states are rendered from a bundled local build. Computed
+CSS-in-JS/utility styles and custom properties are saved in `.omd/runtime-design-system.json` and `.md`.
+`init --check` detects stale source/build/captures; `init --refresh` repeats the recorded scope. Future
+briefs reuse current observations, never treating them as approved semantic tokens or unvisited variants.
+
+Implementation completion uses `omd schema slop-scope` → `omd slop checkpoint --input <scope.json>` →
+inspect the native captures → `omd slop review-set --input <review.json>`. Confirmed issues require
+owner repair, rebuild, same-scope recapture/rescan, and an explicit after-render resolution.
+`omd slop review-check`, CLI finalization and terminal preflight reject missing, stale or unresolved
+loops. Candidates/warnings remain advisory; reasoned dismissals are valid and a clean first review
+needs no invented repair. Capture currently supports local HTML build entries, not arbitrary localhost
+ports. Optional per-view `state: {name,startRoute,route,actions,assertions}` covers SPA routes, modals
+and error states; the native executor preserves state and blocks external networking/API writes.
+Final linked browser states require matching route/state/viewport scope and exact viewport pixels
+from the authenticated final capture; replay the same deterministic data and settled state. Native
+checkpoint/inventory signatures reject edited documents masquerading as observations. This does not replace
+functional coverage, independent quality review, or user approval.
+Legacy files are preserved; renamed identical images still cannot satisfy both lanes.
+
+For design before implementation, use `omd schema design-route-input` with `deliveryMode: design-only`.
+Output stays under `.omd/**`; research, design, review, and handoff proceed without application source.
+Bind the documents using `omd schema design-handoff`, then run
+`omd completion design-check --input .omd/design-handoff.json --json`.
+This checks document integrity, reference evidence, and write scope. It does not attest application
+behavior or independent review authorship.
+
 ### Claude Code — plugin marketplace
 
 ```text

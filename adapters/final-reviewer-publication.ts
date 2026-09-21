@@ -24,8 +24,7 @@ import {
 } from '../core/runtime/final-render-review.ts';
 import type { ProjectRunInvocation } from '../core/runtime/invocation.ts';
 import { nodeStableProjectFileSystem } from '../core/runtime/stable-project-file.ts';
-import type { CodexRoleAuthorityReceipt } from './codex-role-runtime.ts';
-
+import type { CodexRoleAuthorityReceipt } from '../core/runtime/role-receipt.ts';
 const SHA256 = /^[a-f0-9]{64}$/;
 const LANE_CONTRACTS = {
   'blind-review-v2': {

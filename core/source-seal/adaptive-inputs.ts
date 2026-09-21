@@ -15,6 +15,7 @@ import { intentLedgerSha256, validateIntentCurrentPointer, validateIntentLedger 
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import { nodeStableProjectFileSystem, readStableProjectFile } from '../runtime/stable-project-file.ts';
 import { readCurrentCulturalDesignProfile } from '../locale/cultural-profile-files.ts';
+import { checkReferenceApplication, REFERENCE_APPLICATION_PATH, REFERENCE_APPLICATION_PROJECTION_PATH } from '../ref/reference-application.ts';
 import {
   REFERENCE_LOCALE_BINDING_EVIDENCE_PATH,
   REFERENCE_LOCALE_BINDING_PATH,
@@ -44,6 +45,7 @@ export type AdaptiveSourceSealRoute = Readonly<{
   authority: Receipt;
   selectedModel: AdaptiveRouteRecord['selectedModel'];
   stages: readonly StageBinding[];
+  referenceApplication?: readonly Receipt[];
 }>;
 
 const hash = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
@@ -162,6 +164,19 @@ export function createAdaptiveSourceSealRoute(root: string, invocation: ProjectR
   const routePath = `.omd/${routePointer.record}`;
   const sourcePath = `.omd/${sourcePointer.record}`;
   const authorityPath = `.omd/${adaptiveRouteAuthorityPath(authorityBytes)}`;
+  const stages = stageBindings(root, record, routePointer.sha256, authoritySha256, invocation);
+  // Selected research decisions are approved production inputs, not mutable notes outside the seal.
+  // Keep non-discovery/copy-only routes free of unrelated reference requirements.
+  const requiresApplication = record.gates.includes('dual-reference-research')
+    || (record.projectMode === 'greenfield' && existsSync(resolve(root, '.omd/reference-research.json')));
+  // Partial pre-production snapshots remain possible. They cannot pass application review/final
+  // completion: that gate requires the exact application input digest. Publishing the missing plan
+  // changes this route binding and invalidates the preliminary seal rather than blessing it later.
+  const needsApplication = requiresApplication && existsSync(resolve(root, REFERENCE_APPLICATION_PATH));
+  if (needsApplication) checkReferenceApplication(root, {
+    expectedSourceContractSha256: record.sourceContractSha256,
+    benchmarkRequired: record.gates.includes('greenfield-task-flow-benchmark'), expectedRequest: record.request,
+  });
   return Object.freeze({
     schema: ADAPTIVE_SOURCE_SEAL_ROUTE_SCHEMA,
     pointer: receipt(root, '.omd/route.json', 'adaptive route pointer'),
@@ -170,7 +185,11 @@ export function createAdaptiveSourceSealRoute(root: string, invocation: ProjectR
     sourceContract: receipt(root, sourcePath, 'adaptive route source contract'),
     authority: receipt(root, authorityPath, 'adaptive route authority'),
     selectedModel: record.selectedModel,
-    stages: stageBindings(root, record, routePointer.sha256, authoritySha256, invocation),
+    stages,
+    ...(needsApplication ? { referenceApplication: Object.freeze([
+      receipt(root, REFERENCE_APPLICATION_PATH, 'screen reference application'),
+      receipt(root, REFERENCE_APPLICATION_PROJECTION_PATH, 'source-free reference application'),
+    ]) } : {}),
   });
 }
 
@@ -191,6 +210,7 @@ function isStage(value: unknown): value is StageBinding {
 }
 export function adaptiveSourceSealInputHashes(route: AdaptiveSourceSealRoute): Record<string, string> {
   const hashes: Record<string, string> = {};
+  if (route.referenceApplication) hashes.referenceApplicationSha256 = route.referenceApplication[0]!.sha256;
   for (const stage of route.stages) {
     if (stage.status !== 'selected') continue;
     const artifact = stage.id === 'art-direction' ? stage.artifacts[1] : stage.artifacts[0];
@@ -205,7 +225,11 @@ export function adaptiveSourceSealInputHashes(route: AdaptiveSourceSealRoute): R
 }
 
 export function isAdaptiveSourceSealRoute(value: unknown): value is AdaptiveSourceSealRoute {
-  if (!object(value) || Object.keys(value).length !== 8 || value.schema !== ADAPTIVE_SOURCE_SEAL_ROUTE_SCHEMA) return false;
+  if (!object(value) || Object.keys(value).length !== (Object.hasOwn(value, 'referenceApplication') ? 9 : 8) || value.schema !== ADAPTIVE_SOURCE_SEAL_ROUTE_SCHEMA) return false;
+  if (Object.hasOwn(value, 'referenceApplication') && (!Array.isArray(value.referenceApplication)
+    || value.referenceApplication.length !== 2 || !value.referenceApplication.every(isReceipt)
+    || value.referenceApplication[0]?.path !== REFERENCE_APPLICATION_PATH
+    || value.referenceApplication[1]?.path !== REFERENCE_APPLICATION_PROJECTION_PATH)) return false;
   if (![value.pointer, value.record, value.sourcePointer, value.sourceContract, value.authority].every(isReceipt)) return false;
   if (!object(value.selectedModel) || !Array.isArray(value.stages) || value.stages.length !== APPROVED_INPUTS.length
     || !value.stages.every(isStage)) return false;

@@ -110,7 +110,7 @@ contract above; it authorizes only that exact route-selected preproduction scene
 autonomously ideated interaction.
 
 <task_flow_benchmark_contract>
-TASK_FLOW_BENCHMARK_ABI_V1. For applicable greenfield product routes, realize one isolated
+TASK_FLOW_BENCHMARK_ABI_V2. For applicable greenfield product routes, realize one isolated
 structural sketch per composer UX model. Preserve its benchmark pattern IDs, task topology,
 dominant work object, costly-error recovery, and mobile priority. A palette, font, card, or
 decoration variant is not a candidate. Return render receipts that let an independent structure

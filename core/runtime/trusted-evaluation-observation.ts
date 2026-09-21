@@ -128,7 +128,7 @@ export function writeTrustedEvaluationObservation(input: Readonly<{
     const browserObservations = receipt.captures.map((capture) => {
       const core: BrowserObservationCore = {
         schema: BROWSER_OBSERVATION_SCHEMA,
-        testedUrl: receipt.testedUrl,
+        testedUrl: capture.testedUrl ?? receipt.testedUrl,
         testedState: capture.outcomeRef === undefined
           ? 'trusted-evaluation'
           : `outcome-${hash(Buffer.from(capture.outcomeRef)).slice(0, 16)}`,

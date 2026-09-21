@@ -7,6 +7,7 @@ import { resolveRenderTarget as resolveTarget } from './serve.ts';
 import { computeEnergy } from '../motion/energy.ts';
 import type { EnergyCurve, MotionMeasurement, RawIr } from '../types.ts';
 import { PREPARED_MEASUREMENT_COVERAGE } from '../ref/measurement-coverage.ts';
+import { designDiscoveryProvider } from '../ref/design-discovery-sources.ts';
 import { parseCapturePreparation, prepareReferenceCapture, observeCapturePreparation, type CapturePreparation, type CapturePreparationReceipt } from '../ref/capture-preparation.ts';
 import { type ProjectWriteAdapter, requireProjectWriteAdapter } from '../runtime/project-write.ts';
 import type { RenderedBeat, RenderedBeatProof } from '../copy/index.ts';
@@ -115,7 +116,7 @@ const CHALLENGE_TITLE_PATTERNS: RegExp[] = [
  * hollow page; returns null when the page looks valid.
  *
  * Rules, in order:
- *   1. HTTP 403 or any 5xx → explicitly blocked or server error
+ *   1. HTTP 4xx/5xx → unavailable, blocked, or server error (never reference content)
  *   2. Challenge-page title → Cloudflare / WAF interstitial
  *   3. Near-empty body (< 200 visible chars) → hollow unless a visible, nonempty
  *      component has been measured in a successful response. Length alone does
@@ -127,7 +128,7 @@ export function detectBlockReason(
   httpStatus: number | null,
   hasMeasuredComponent = false,
 ): string | null {
-  if (httpStatus !== null && (httpStatus === 403 || httpStatus >= 500)) {
+  if (httpStatus !== null && httpStatus >= 400) {
     return `HTTP ${httpStatus}`;
   }
   for (const pattern of CHALLENGE_TITLE_PATTERNS) {
@@ -160,6 +161,7 @@ async function assertNotBlocked(
   selector: string | null = null,
 ): Promise<void> {
   if (resolvedUrl.startsWith('file:')) return; // local files are never bot-challenged
+  if (await galleryLoginOccludes(page, resolvedUrl)) throw new BlockedPageError('gallery login form obscures the reference; inspect another public source');
   const title = await page.title().catch(() => '');
   const bodyTextLength = await page
     .evaluate(() => (document.body?.innerText?.trim() ?? '').length)
@@ -168,7 +170,8 @@ async function assertNotBlocked(
   // No caller-controlled bypass: only a live, explicitly scoped component can
   // resolve the weak short-body signal. HTTP and challenge signals still win.
   if (reason?.startsWith('near-empty body') && selector !== null) {
-    const measured = await page.$eval(selector, (element) => {
+    const measured = await page.locator(selector).evaluateAll((elements) => {
+      const element = elements[0];
       if (!(element instanceof HTMLElement) || element === document.body
         || element === document.documentElement) return false;
       const box = element.getBoundingClientRect();
@@ -183,6 +186,20 @@ async function assertNotBlocked(
     reason = detectBlockReason(title, bodyTextLength, httpStatus, measured);
   }
   if (reason !== null) throw new BlockedPageError(reason);
+}
+
+/** Do not save a gallery's login overlay as an app design. A navbar login link or a sidebar form
+ * does not hide the primary capture, and an actual product login screen is not a gallery block. */
+export async function galleryLoginOccludes(page: import('playwright').Page, url: string): Promise<boolean> {
+  if (designDiscoveryProvider(url) === null) return false;
+  return page.evaluate(() => Array.from(document.querySelectorAll('input[type="password"]')).some(input => {
+    const box = input.getBoundingClientRect();
+    if (box.width <= 0 || box.height <= 0 || getComputedStyle(input).visibility === 'hidden') return false;
+    const form = input.closest('form, [role="dialog"], [aria-modal="true"]');
+    if (!form) return false;
+    const centre = document.elementFromPoint(innerWidth / 2, innerHeight / 2);
+    return centre !== null && form.contains(centre);
+  }));
 }
 
 /**
@@ -255,11 +272,13 @@ type Browser = import('playwright').Browser;
 export async function withBrowser<T>(fn: (browser: Browser) => Promise<T>): Promise<T> {
   const { chromium } = await import('playwright');
   // Always headless — OMD never opens a visible browser window in any situation.
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch({ headless: true, timeout: 30000 });
   try {
     return await fn(browser);
   } finally {
-    await browser.close();
+    let cleanupTimer: ReturnType<typeof setTimeout> | undefined;
+    try { await Promise.race([browser.close(), new Promise<void>((_, reject) => { cleanupTimer = setTimeout(() => reject(new Error('browser cleanup timed out after 2000ms')), 2000); })]); }
+    finally { clearTimeout(cleanupTimer); }
   }
 }
 
@@ -714,14 +733,15 @@ export async function capturePageForRef(
   browser: Browser,
   target: string,
   viewport: Viewport,
-  opts: { selector?: string | null; shotOut?: string; adapter?: ProjectWriteAdapter; preparation?: CapturePreparation; bestEffortShot?: boolean },
-): Promise<{ raw: RawIr; shotSaved: boolean; shotError?: string; capturePreparation?: CapturePreparationReceipt }> {
+  opts: { selector?: string | null; shotOut?: string; adapter?: ProjectWriteAdapter; preparation?: CapturePreparation; bestEffortShot?: boolean; validateFinalUrl?: (url: string) => void },
+): Promise<{ raw: RawIr; shotSaved: boolean; shotError?: string; capturePreparation?: CapturePreparationReceipt; acquisition: { requestedUrl: string; finalUrl: string; httpStatus: number | null; links: string[]; imageSha256: string | null } }> {
   const preparation = opts.preparation === undefined ? undefined : parseCapturePreparation(opts.preparation);
   return onPage(browser, target, viewport, async (page, httpStatus, resolvedUrl) => {
     const executedActions = preparation ? await prepareReferenceCapture(page, preparation) : undefined;
     // Hover/tab probes can close disclosures or move initial focus; null means not measured.
     const raw = await extractIrCore(page, httpStatus, resolvedUrl, opts.selector ?? null, preparation === undefined);
     if (preparation) await observeCapturePreparation(page, preparation);
+    await assertNotBlocked(page, httpStatus, resolvedUrl, opts.selector ?? null);
     let shotSaved = false;
     let shotBytes: Buffer | undefined;
     let shotError: string | undefined;
@@ -736,6 +756,9 @@ export async function capturePageForRef(
           shotError = error instanceof Error ? error.message : String(error);
         }
       }
+    } else if (opts.shotOut) {
+      if (!opts.adapter) throw new Error('reference screenshot requires a project-write adapter');
+      shotBytes = await page.screenshot({ fullPage: true });
     }
     let capturePreparation: CapturePreparationReceipt | undefined;
     if (preparation) {
@@ -748,6 +771,9 @@ export async function capturePageForRef(
         notMeasured: ['interaction-probe', 'motion-probe', 'energy-curve'],
       };
     }
+    const finalUrl = page.url();
+    const links = await page.locator('a[href]').evaluateAll(elements => [...new Set(elements.map(el => (el as HTMLAnchorElement).href).filter(url => /^https?:\/\//.test(url)))]);
+    opts.validateFinalUrl?.(finalUrl);
     // Keep bytes private until all observations have passed, including after the screenshot.
     if (shotBytes && opts.shotOut && opts.adapter) {
       try {
@@ -758,7 +784,9 @@ export async function capturePageForRef(
         shotError = error instanceof Error ? error.message : String(error);
       }
     }
-    return { raw, shotSaved, ...(shotError ? { shotError } : {}), ...(capturePreparation ? { capturePreparation } : {}) };
+    return { raw, shotSaved, acquisition: { requestedUrl: target, finalUrl, httpStatus, links,
+      imageSha256: shotSaved && shotBytes ? createHash('sha256').update(shotBytes).digest('hex') : null,
+    }, ...(shotError ? { shotError } : {}), ...(capturePreparation ? { capturePreparation } : {}) };
   });
 }
 /**

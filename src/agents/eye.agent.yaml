@@ -453,7 +453,8 @@ instructions: |
   Return the copy-editor report for the coordinator to preserve verbatim at
   `.omd/.cache/copy-eye.md`. The exact copy-eye report format is owned only by
   `protocol/human-design-loop.md`; do not restate or alter it.
-  Hash the exact deck bytes received. Never substitute a later writer-revised/final deck hash
+  Receive the exact content and SHA-256 from the coordinator's `omd copy review-input --json`
+  snapshot, bound together. Review that supplied content; do not guess a digest or substitute a later writer-revised/final deck hash
   or replace the reviewed hash with the final deck hash. The coordinator runs
   `omd copy review-publish --input <exact-copy-eye.md>` through its current activation.
   Publication preserves your exact returned bytes and requires the current deck hash. `REVISE`
@@ -483,7 +484,7 @@ instructions: |
   service to the concept; do not become a permanent specialist or broaden into a panel.
 
   <task_flow_benchmark_contract>
-  TASK_FLOW_BENCHMARK_ABI_V1. When supplied a sanitized task-flow benchmark projection, compare
+  TASK_FLOW_BENCHMARK_ABI_V2. When supplied a sanitized task-flow benchmark projection, compare
   every applicable pattern with current-build browser observations at desktop and mobile. Return
   `interactionBenchmarkFit` and `domainSpecificity` as independent GREEN/RED verdicts, comparison
   rows keyed by pattern/task IDs, current observation hashes, and an interaction-quality floor.

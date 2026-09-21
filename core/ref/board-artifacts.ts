@@ -111,8 +111,13 @@ export const projectRawReferenceBoard = (root: string, board: ResolvedReferenceB
 });
 
 export function readReferenceBoardArtifacts(root: string, manifestPath = join(root, '.omd', 'reference-board.json')): ReferenceBoardArtifacts {
-  const canonicalRoot = trustedProjectRoot(root);
+  trustedProjectRoot(root);
   const parsed: unknown = JSON.parse(readFileSync(manifestPath, 'utf8'));
+  return resolveReferenceBoardArtifacts(root, parsed);
+}
+
+export function resolveReferenceBoardArtifacts(root: string, parsed: unknown): ReferenceBoardArtifacts {
+  const canonicalRoot = trustedProjectRoot(root);
   const manifest = parseReferenceBoard(parsed);
   if (manifest.schemaVersion !== 'reference-board-v1') {
     if (manifest.projectSha256 !== referenceBoardProjectSha256(canonicalRoot)) throw new Error('reference board project binding is stale or cross-project');

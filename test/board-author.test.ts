@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -60,4 +60,23 @@ test('board author rejects a candidate that silently drops a required acquisitio
   const bad = structuredClone(input) as { candidates: { pieces: unknown[] }[] };
   bad.candidates[1]!.pieces.pop();
   assert.throws(() => authorReferenceBoard(root, bad), /does not cover required zones: proof/);
+});
+
+test('failed board resolution cannot create or replace a published board', t => {
+  const { root, input } = project();
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const target = join(root, '.omd/reference-board.json');
+  const inputPath = join(root, 'candidate-assemblies.json');
+  const valid = JSON.stringify(input);
+  const invalid = valid.replaceAll('https://example.com/hero', 'https://missing.example/hero');
+  const run = (content: string) => {
+    writeFileSync(inputPath, content);
+    return spawnSync(process.execPath, [CLI, 'ref', 'board', '--input', inputPath, '--json'], { cwd: root, encoding: 'utf8' });
+  };
+  assert.equal(run(invalid).status, 1);
+  assert.equal(existsSync(target), false);
+  assert.equal(run(valid).status, 0);
+  const before = readFileSync(target);
+  assert.equal(run(invalid).status, 1);
+  assert.deepEqual(readFileSync(target), before);
 });

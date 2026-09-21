@@ -1,0 +1,276 @@
+{
+  "schema": "adaptive-design-route-input-v1",
+  "request": "Implement a new React product workflow with evidence-backed recommendations and recoverable preparation steps.",
+  "projectMode": "greenfield",
+  "namedDependencies": [],
+  "allowedPaths": [
+    "src/**",
+    "package.json",
+    "index.html",
+    "vite.config.*",
+    "tsconfig*.json",
+    "public/**"
+  ],
+  "taskOutcome": {
+    "schema": "task-outcome-contract-v1",
+    "goal": "Find relevant options and prepare one request.",
+    "mustHave": [
+      "Show evidence, unknown conditions and the next action."
+    ],
+    "mustNotHave": [
+      "Do not submit to a live service or assert unverified eligibility."
+    ],
+    "completionEvidence": [
+      "Desktop/mobile task-flow and keyboard evidence."
+    ],
+    "strategyFreedom": [
+      "Choose task-fit composition without weakening safety."
+    ]
+  },
+  "uxPolicy": {
+    "schema": "ux-policy-v1",
+    "decisions": [
+      {
+        "id": "task-complete",
+        "kind": "required_outcome",
+        "status": "required"
+      },
+      {
+        "id": "safety-truthful-status",
+        "kind": "hard_safety_rail",
+        "status": "enforced"
+      },
+      {
+        "id": "accessibility",
+        "kind": "required_outcome",
+        "status": "required"
+      },
+      {
+        "id": "recovery-next-action",
+        "kind": "required_outcome",
+        "status": "required"
+      }
+    ]
+  },
+  "evidenceClaims": {
+    "schema": "evidence-claim-publication-v1",
+    "claims": [
+      {
+        "id": "user-request",
+        "text": "Implement in React.",
+        "status": "confirmed",
+        "userEvidence": [
+          {
+            "kind": "explicit-user-evidence",
+            "source": "user-message",
+            "reference": "message-1",
+            "excerpt": "Implement in React."
+          }
+        ]
+      },
+      {
+        "id": "local-demo",
+        "text": "A local fixture may support prototype evaluation.",
+        "status": "hypothesis",
+        "basis": "No live integration is authorized."
+      }
+    ],
+    "userFacts": [
+      "user-request"
+    ],
+    "workingContext": [
+      "local-demo"
+    ]
+  },
+  "referenceDiscovery": {
+    "schema": "reference-discovery-input-v1",
+    "taskNeed": "new-product",
+    "uncertainty": "unresolved",
+    "existingEvidence": "none",
+    "intendedUse": "Separate domain task flows and visual design references.",
+    "existingEvidenceUse": null,
+    "skipReason": null
+  },
+  "designAxes": {
+    "schema": "design-axis-input-v1",
+    "taskSize": "large",
+    "failureRisk": "high",
+    "uxNeed": "rigorous",
+    "expressiveDesignNeed": "balanced"
+  },
+  "modelCapability": {
+    "now": 0,
+    "routingInput": {
+      "schema": "model-capability-probe-routing-input-v1",
+      "selectedModel": {
+        "selection": "host-selection",
+        "provider": "host-provider",
+        "modelId": "host-model",
+        "revision": "current"
+      },
+      "profile": null
+    }
+  },
+  "browserDecisionContext": {
+    "schema": "adaptive-browser-decision-context-v1",
+    "status": "pending",
+    "decisionIds": [],
+    "reason": "fresh linked observation is pending"
+  },
+  "validatedLearningContext": {
+    "schema": "adaptive-learning-context-v1",
+    "status": "none",
+    "learningIds": [],
+    "reason": "no validated scoped learning applies"
+  },
+  "strategyDecision": {
+    "schema": "adaptive-strategy-decision-v1",
+    "owner": "user-selected-model",
+    "roles": [
+      "omd-framer",
+      "omd-scout",
+      "omd-writer",
+      "omd-typesetter",
+      "omd-composer",
+      "omd-sketch",
+      "omd-hand",
+      "omd-eye"
+    ],
+    "stages": [
+      "domain",
+      "frame",
+      "scout",
+      "reference-board",
+      "copy",
+      "type-proof",
+      "composition",
+      "candidate-generation",
+      "safety-validation",
+      "production",
+      "browser-evidence",
+      "independent-review"
+    ],
+    "executionWaves": [
+      {
+        "id": "frame",
+        "mode": "concurrent",
+        "roles": [
+          "omd-framer"
+        ]
+      },
+      {
+        "id": "scout",
+        "mode": "concurrent",
+        "roles": [
+          "omd-scout"
+        ]
+      },
+      {
+        "id": "writer",
+        "mode": "concurrent",
+        "roles": [
+          "omd-writer"
+        ]
+      },
+      {
+        "id": "typesetter",
+        "mode": "concurrent",
+        "roles": [
+          "omd-typesetter"
+        ]
+      },
+      {
+        "id": "composer",
+        "mode": "concurrent",
+        "roles": [
+          "omd-composer"
+        ]
+      },
+      {
+        "id": "sketch",
+        "mode": "concurrent",
+        "roles": [
+          "omd-sketch"
+        ]
+      },
+      {
+        "id": "production",
+        "mode": "concurrent",
+        "roles": [
+          "omd-hand"
+        ]
+      },
+      {
+        "id": "review",
+        "mode": "concurrent",
+        "roles": [
+          "omd-eye"
+        ]
+      }
+    ],
+    "methods": [
+      "design-strategy-balanced-delivery",
+      "model-capability-probe",
+      "evidence-claim-accounting",
+      "decision-linked-browser-observation",
+      "rigorous-task-accessibility-validation",
+      "design-strategy-safety-recovery",
+      "copy-repair-workflow",
+      "evidence-driven-refinement",
+      "reference-discovery",
+      "reference-assembly"
+    ],
+    "aiAssets": [],
+    "attributionCategories": [
+      "tokens",
+      "composition"
+    ],
+    "skips": [
+      {
+        "id": "depth",
+        "reason": "Core product flow is defined; deep deliberation is unnecessary beyond the selected rigorous safety and accessibility work."
+      },
+      {
+        "id": "content-grain",
+        "reason": "The provided product brief contains representative copy and state detail sufficient for this pass."
+      },
+      {
+        "id": "moodboard",
+        "reason": "The measured reference board settles the visual direction without a separate moodboard."
+      },
+      {
+        "id": "acquisition",
+        "reason": "No user-supplied URLs or first-party assets require acquisition."
+      },
+      {
+        "id": "reference-selection",
+        "reason": "The coordinator will select the strongest board candidate without a separate routed stage."
+      },
+      {
+        "id": "art-direction",
+        "reason": "No metaphorical art direction is necessary for a high-trust utility workflow."
+      },
+      {
+        "id": "motion-one",
+        "reason": "Motion is limited to purposeful state feedback and is not a selected scene."
+      },
+      {
+        "id": "reference-distance",
+        "reason": "No source-distance comparison is needed without a selected visual packet."
+      },
+      {
+        "id": "reflection-in-action",
+        "reason": "The selected browser evidence and final review provide the needed feedback loop."
+      },
+      {
+        "id": "image-first-draft",
+        "reason": "A runnable UI study is more useful than an image draft for this stateful application."
+      },
+      {
+        "id": "ai-shipped-asset",
+        "reason": "No generated asset ships."
+      }
+    ],
+    "rationale": "This is a high-risk, stateful new product. The route combines domain framing, measured reference discovery, copy/type/composition work, explicit safety validation, production ownership, browser evidence and independent review. The first implementation focuses on the user’s concrete next action rather than an intake recap."
+  }
+}

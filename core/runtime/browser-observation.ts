@@ -91,7 +91,7 @@ function testedUrl(value: unknown): string {
   const input = text(value, 'testedUrl');
   let parsed: URL;
   try { parsed = new URL(input); } catch { return fail('MALFORMED_BROWSER_OBSERVATION', 'testedUrl must be an absolute browser URL'); }
-  if (!['http:', 'https:', 'file:'].includes(parsed.protocol) || parsed.username !== '' || parsed.password !== '' || parsed.hash !== '' || parsed.href !== input) fail('MALFORMED_BROWSER_OBSERVATION', 'testedUrl must be a canonical browser URL without credentials or fragment');
+  if (!['http:', 'https:', 'file:'].includes(parsed.protocol) || parsed.username !== '' || parsed.password !== '' || parsed.href !== input) fail('MALFORMED_BROWSER_OBSERVATION', 'testedUrl must be a canonical browser URL without credentials; preserve observed SPA query/fragment state');
   return input;
 }
 function parseRef(value: unknown, label: string): BrowserObservationDecisionRef {

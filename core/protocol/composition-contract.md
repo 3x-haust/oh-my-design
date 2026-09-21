@@ -47,6 +47,8 @@ Hashes cover `.omd/frame.md`, `.omd/copy-deck.md`, `.omd/type-proof.md`, and
 `.omd/scout.md`. When `.omd/scout.md` does not exist, the scout line is instead
 `- Scout SHA-256: N/A — <specific reason>`. Never invent a scout hash. Any frame, copy,
 type-proof, or scout-summary change invalidates the contract; rerun composer and the check.
+The coordinator obtains these current file digests with `omd hash <.omd/artifact-path> --json`
+and supplies them with the permitted input packet. A digest is identity, not evidence of review.
 
 ## Experience spine
 

@@ -42,6 +42,12 @@ export type LegacyArtDirectionAlternative = ArtDirectionAlternativeBase;
 export type ArtDirectionAlternative = ArtDirectionAlternativeBase & {
   readonly metaphorQualities: readonly string[];
   readonly literalPropsToReject: readonly string[];
+  /**
+   * Moodboard items this alternative's metaphor was derived from. Optional: a run whose direction
+   * came from a supplied reference or an existing brand has no moodboard, and records that as a
+   * reasoned skip instead. When a moodboard exists, its items are the evidence behind the metaphor.
+   */
+  readonly moodItemIds?: readonly string[];
 };
 
 export type RejectedArtDirectionAlternative = {
@@ -139,7 +145,7 @@ export function artDirectionSha256(value: unknown): string {
 const LEGACY_DECISION_KEYS = ['activationSha256', 'alternativesSha256', 'authorInvocationSha256', 'authorPayloadSha256', 'authorResultSha256', 'boardSha256', 'conceptRole', 'consideredAlternatives', 'currentUserBeatExceptionReceiptSha256', 'fallbackPath', 'implementationLane', 'intentSha256', 'motionDecision', 'motionResolutionProjectionSha256', 'performanceAccessibilityBudget', 'preSelectionSha256', 'rejectedAlternatives', 'route', 'schemaVersion', 'selectedMotionReferenceSlotIds', 'selectedRegister', 'selectedStaticReferenceSlotIds', 'settledSelectionSha256', 'source'] as const;
 const DECISION_KEYS = [...LEGACY_DECISION_KEYS, 'literalPropsToReject', 'metaphorQualities'] as const;
 const LEGACY_ALTERNATIVE_KEYS = ['conceptRole', 'lawfulImplementationPath', 'macroCompositionHypothesis', 'motionHypothesis', 'motionReferenceSlotIds', 'register', 'rejectionCondition', 'staticReferenceSlotIds', 'subjectIdentityFit', 'uxAccessibilityPerformanceRisks'] as const;
-const ALTERNATIVE_KEYS = [...LEGACY_ALTERNATIVE_KEYS, 'literalPropsToReject', 'metaphorQualities'] as const;
+const ALTERNATIVE_KEYS = [...LEGACY_ALTERNATIVE_KEYS, 'literalPropsToReject', 'metaphorQualities', 'moodItemIds'] as const;
 const REJECTION_KEYS = ['citedReferenceSlotIds', 'reason', 'register'] as const;
 
 function exactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
@@ -179,9 +185,13 @@ export function validateArtDirectionDecisionShape(value: unknown): ParsedArtDire
   // Shape validation is not current-user authority; the resolver verifies the actual register lock.
   if (alternativeCount === 0 || registers.size !== alternativeCount || !registers.has(value.selectedRegister)
     || (alternativeCount === 1 && value.source !== 'explicit-user')
-    || value.consideredAlternatives.some((alternative) => !isRecord(alternative) || !exactKeys(alternative, alternativeKeys)
+    || value.consideredAlternatives.some((alternative) => !isRecord(alternative)
+      || !exactKeys(alternative, current
+        ? (alternative.moodItemIds === undefined ? ALTERNATIVE_KEYS.filter((key) => key !== 'moodItemIds') : alternativeKeys)
+        : LEGACY_ALTERNATIVE_KEYS)
       || !isRegister(alternative.register) || !isMotionDecision(alternative.motionHypothesis)
       || (current && (!isNonEmptyStringArray(alternative.metaphorQualities) || !isNonEmptyStringArray(alternative.literalPropsToReject)))
+      || (current && alternative.moodItemIds !== undefined && !isNonEmptyStringArray(alternative.moodItemIds))
       || !isNonEmptyStringArray(alternative.staticReferenceSlotIds) || !isStringArray(alternative.motionReferenceSlotIds)
       || !isNonEmptyStringArray(alternative.uxAccessibilityPerformanceRisks)
       || ['conceptRole', 'lawfulImplementationPath', 'macroCompositionHypothesis', 'rejectionCondition', 'subjectIdentityFit'].some((field) => typeof alternative[field] !== 'string' || alternative[field].trim() === ''))

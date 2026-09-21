@@ -74,6 +74,108 @@ pi install npm:@3xhaust/oh-my-design
 프로젝트 doctor 검사용 `/omd`와 기존 OMD CLI를 구조화된 인자로 실행하는 `omd_cli` 도구를
 등록합니다. 공개 Pi extension/package API만 사용하며 fork 전용 API에는 의존하지 않습니다.
 
+Pi에서 `omd_cli`를 사용할 때 외부 activation 파일은 필요하지 않습니다. 라우트 입력은 먼저
+`omd route validate --input .omd/.cache/route-input.json --json`으로 검사하고, 오류에 표시된
+필드를 고친 다음 `route classify`로 저장합니다. 입력 오류를 인증 누락으로 처리하지 않습니다.
+
+[3-Layer 실행 계약](core/protocol/three-layer-enforcement.md)은 **규칙 선언 → 단계·에이전트 절차 → 자동 차단**을 연결합니다.
+코디네이터는 단계별 brief를 읽고 계약을 전달한 뒤 `omd brief <stage> --check --json`으로 진입을 검증합니다.
+일반 `brief` 조회 성공은 진입 허가가 아닙니다. production 진입은 `guard production`과 같은 실검증을 사용하고,
+라우트가 있는 프로젝트의 `recipe add`도 Pi 없이 CLI에서 모든 출력 경로를 쓰기 전에 검사합니다.
+Pi의 공개 `tool_call`/`message_end` 훅은 앱 파일 `write`/`edit`와 임의 `bash`가 현재 설계 입력 검증을
+통과해야 실행되도록 합니다. 리서치 입력·직접 소유한 설계 문서 작성은 계속 가능합니다. 최종 검증에 실패하면
+검증되지 않은 완료 응답을 보류합니다. OMD 명령은 프로젝트별로 직렬화해 mutation lock 충돌을 줄입니다.
+소스 작성을 시도한 턴의 수정 가능한 최종 실패는 사용자 입력당 최대 두 번의 수정·재검사 후속 작업으로 이어집니다.
+권한 부족이나 사용자 중단은 자동 재시도하지 않습니다. 최종 메시지 교체 API는 Pi 0.85.1 기준이며,
+fork도 단순한 `on` 함수뿐 아니라 같은 이벤트 반환 동작을 지원해야 합니다.
+`/reload` 후 `/omd`로 확인하세요. 이벤트 훅이 없는 호스트는 CLI 검사만 가능하다고 표시합니다.
+이는 OS 샌드박스나 미적 품질 보증이 아닙니다. 외부 프로세스·별도 쓰기 도구는 훅의 경계 밖이며,
+스트리밍 초안은 최종 검증 전에 보일 수 있습니다. 독립 리뷰 권한을 임의로 만들지도 않습니다.
+업데이트로 기존 build/skill 권한이 오래됐다면 원래 승인된 범위로 route validate/classify를 다시 실행해야
+합니다. `stage status.completed`는 파일 존재 목록이지 검증 완료 목록이 아닙니다.
+
+레퍼런스 조사는 **도메인**(`.omd/refs/domain/research.json`: 유사 서비스의 화면·기능·플로우)과
+**디자인**(`.omd/refs/design/research.json`: 구성·타이포·밀도·컴포넌트)으로 따로 저장합니다.
+`omd ref add <url> --as <name> --lane domain|design`으로 캡처 PNG와 메타데이터부터 각 폴더에
+저장합니다. `ref add-batch`의 각 항목도 `lane`을 지정합니다. `ref list --lane domain|design --json`으로
+따로 조회할 수 있으며, 도메인 캡처는 시각 디자인 보드에 자동으로 섞이지 않습니다.
+`omd ref discover-plan --json`은 앱/제품 UI에 Pinterest·Dribbble·Behance(선택적으로 UI Bowl 공개 화면), 웹/마케팅에 Siteinspire·Pinterest
+같은 탐색 후보를 제시합니다. 실제 무료 열람 가능한 항목만 사용하며, 막힌 출처는 다른 공개
+출처로 대체합니다. 유료 결제·체험 시작·MCP 자동 설치는 하지 않습니다. 무료 열람과 재사용
+권한은 별개입니다. 갤러리 이름만으로 품질을 인정하지 않고 원본 화면과 선택 이유를 기록합니다.
+`omd schema reference-research --json` → `omd ref research-set --input <input.json>` →
+`omd ref research-check --json`으로 두 파일과 통합 일치 기록을 검증합니다. 갤러리 홈 주소만으로는
+통과하지 않습니다. 개별 항목의 PNG·캡처 JSON과 원본 출처를 대조하고, 원본이 다른 페이지라면
+갤러리에서 실제 관찰한 링크가 그 출처를 가리켜야 합니다. v4에서는 두 조사의 출처 호스트·최종
+리다이렉트·이미지 중복도 거부합니다. 업무 페이지를 갤러리라고 이름 붙이거나 다른 영역을
+캡처해 디자인 조사를 대신할 수 없습니다. 유료 UI Bowl MCP 없이 공개 항목으로 진행합니다.
+디자인 자료는 `visual-direction`과 `component-support`를 구분하고 구성·타이포·밀도·이미지·
+적용할 것·제외할 것을 기록합니다. 모든 보드 후보가 시각 방향 자료를 실제 사용해야 합니다.
+미리보기와 선정 이유는 `.omd/refs/design/README.md`에서 확인합니다. 예전 기록은 삭제하지 않으며,
+유효한 캡처를 보존한 채 검색 실행 기록을 연결해 v5로 재발행합니다. 자동 검증은 미적 품질의 인증이 아닙니다.
+
+v5에서는 검색어만 적어서는 통과하지 않습니다. `omd ref search --input <json>`에
+`{lane, query, url, queryParam}`을 주면 새 브라우저의 실제 GET·관찰 링크·캡처·실패를 기록합니다.
+반환된 영수증을 각 조사의 `searches`에 넣습니다. 모든 검색어는 실행 기록과 일치해야 하고,
+선정한 비사용자 출처/갤러리 항목은 관찰 링크와 별도의 실제 방문 캡처로 이어져야 합니다.
+실패 기록은 무료 대체 출처의 성공 기록과 함께 남길 수 있습니다. HTTP 200만으로 품질을 인정하지 않습니다.
+검색 실행은 Google/Bing/DuckDuckGo 공개 검색 페이지와 `queryParam: "q"`를 사용합니다. 화면·패턴 키워드에
+`site:pinterest.com/pin/` 같은 출처 조건을 조합하며, 업무 페이지에 임의 검색 파라미터를 붙인 것은 거부합니다.
+
+조사 후 `omd ref apply-plan --json`으로 현재 도메인 브리프의 모든 화면에 대한 미완성 입력을
+받습니다. 실제 이미지를 보고 `input`을 채운 뒤 `omd ref apply-set --input <application.json>`과
+`omd ref apply-check --json`을 실행합니다. 화면마다 도메인/디자인 참조 ID, 직접/부분/브리프 기반
+근거, 공백, 적용할 내용·옮기지 않을 내용·이유·실제 렌더에서 확인할 기준을 나눠 기록합니다.
+사용자는 `.omd/reference-application.md`를 보고, 제작자는 brief/선택 핸드오프의 출처가 제거된
+설계 결정만 받습니다. 조사나 화면 범위가 바뀌면 재검토해야 합니다. 유효한 v4 캡처는 재수집 없이
+활용할 수 있지만 판단을 자동으로 채워주지는 않습니다. Design Flow Harness의 화면별 활용 방식을
+적용한 것이며, 고정 Figma 순서나 새 승인 단계를 강제하지 않습니다. 계획은 구현·미감·승인 증명이 아닙니다.
+
+이제 source-seal도 적용 계획을 묶습니다. 인증된 최종 증거 이후 `omd ref apply-review-plan --json`으로
+모든 화면의 기준을 받아 현재 데스크톱·모바일 캡처와 대조하고, `apply-review-set --input <json>` →
+`apply-review-check --json`으로 기록·검증합니다. 누락·수정 필요·오래된 판정은 완료를 막습니다.
+계획·소스·빌드가 바뀌면 재봉인·재캡처·재검토해야 합니다. 에이전트 판정은 사용자 승인이 아닙니다.
+적용 계획 v2에는 각 화면의 `target: {route, state}`도 기록합니다. 홈 캡처로 다른 화면을
+검토할 수 없습니다. `omd schema reference-flow-input` → `omd benchmark record --input <flow.json>`은
+같은 브라우저 문맥에서 공개 링크·펼침·탭 이동을 실행하고 단계별 캡처와 서명된 기록을 저장합니다.
+선택된 제품 벤치마크의 완료 플로우는 이 기록이 필요합니다. `liveFlowVerified`는 실행된 범위에만
+적용되며 로그인·결제·제출·삭제와 미방문 화면은 검증 완료로 바꾸지 않습니다.
+검색 결과에서 관련 핀을 따라간 경우 각 조사 레인의 `navigation`에 중간 페이지의 네이티브 캡처를
+넣습니다. 실제 관찰한 링크로 연결된 경로만 인정하며, 같은 사이트의 다른 페이지도 서로 다른 파일로 저장합니다.
+
+기존 서비스는 프로젝트 폴더에서 `omd init --json`을 실행하면 현재 CSS 변수·선언과 `$value`
+토큰 JSON을 `.omd/existing-design-system.json` 및 `.md`로 정리합니다. 테마·미디어쿼리 범위와
+별칭, 출처 위치·해시를 보존하며 앱 코드·승인된 `.omd/tokens.json`은 변경하지 않습니다.
+다음 작업의 brief가 이 자료를 전달합니다. `omd init --check`로 변경 여부를 확인하고,
+변경 내용을 검토한 뒤 `omd init --refresh`로 갱신합니다. 의도적인 변경 결정은 별도
+`.omd/design-system-decisions.md`에 남기며 재실행해도 보존합니다. Tailwind 설정·CSS-in-JS·
+컴포넌트 변형은 정적 파일에서 추정하지 않습니다. 실제 계산값은 `omd schema runtime-design-inventory-input`의
+로컬 빌드·선택자·화면 상태를 지정한 뒤 `omd init --input <input.json>`으로 수집합니다.
+`.omd/runtime-design-system.json`과 `.md`에 컴포넌트/상태별 계산 스타일과 CSS 변수를 저장하고 다음 brief에서
+재사용합니다. `init --check`는 소스·빌드·캡처 변경을 감지하고 `init --refresh`는 같은 범위를 다시 관찰합니다.
+관찰한 utility/CSS-in-JS 스타일은 승인된 의미 토큰이나 미방문 변형의 증명이 아닙니다.
+
+구현 완료 전에는 `omd schema slop-scope`의 실제 로컬 빌드 HTML·뷰포트 목록으로
+`omd slop checkpoint --input <scope.json>`을 실행합니다. 저장된 화면을 보고 반환된 `reviewInput`에
+각 후보·경고의 확인/제외 판단과 근거를 작성해 `omd slop review-set --input <review.json>`으로 저장합니다.
+확인된 문제는 수정·재빌드 후 같은 범위를 재검사하고, 새 화면을 근거로 이전 문제의 해결을 기록합니다.
+`omd slop review-check` 및 CLI finalize·완료 preflight는 누락·미처리·오래된 증거를 거부합니다.
+경고 개수 자체를 오류로 승격하지 않으며, 최초 검사에서 문제가 없다면 가짜 수정 라운드는 필요 없습니다.
+SPA 화면·모달·오류 상태는 각 뷰에 `state: {name,startRoute,route,actions,assertions}`를 추가합니다.
+실제 동작 후 상태를 유지한 채 캡처·검사하고 최종 증거의 경로·상태·뷰포트와 대조합니다.
+상태명만으로 통과하지 않으며 최종 인증 캡처의 뷰포트 픽셀과도 일치해야 합니다. 같은 테스트 데이터와
+안정된 상태로 재현해야 하며, 검사·런타임 수집 기록은 서명으로 임의 재작성을 감지합니다.
+외부 네트워크·API 쓰기는 차단하므로 로컬 번들/테스트 데이터가 필요합니다.
+첫 렌더 검사는 `first-render check --page <local-build.html> --input <surface.json>`으로 현재
+가설·소스·빌드·네이티브 캡처를 묶습니다. 단순 권고만으로 완료를 막지 않으며 비교 검사는 가설의
+`comparisonRequired`가 참인 작업에만 적용합니다.
+
+“실제 개발 전까지만” 요청은 `omd schema design-route-input`의 `deliveryMode: design-only`를
+사용합니다. 출력은 `.omd/**`로 제한하고 레퍼런스 조사·설계·검토·핸드오프까지 진행합니다.
+마지막에 `omd schema design-handoff`에 따라 문서 해시를 기록하고
+`omd completion design-check --input .omd/design-handoff.json --json`으로 확인합니다.
+이 검사는 문서 무결성·레퍼런스 증거·쓰기 범위를 검증하며, 앱 동작이나 리뷰어 독립성을 인증하지 않습니다.
+
 ### Claude Code — 플러그인 마켓플레이스
 
 ```text

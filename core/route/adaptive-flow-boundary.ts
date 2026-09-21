@@ -132,7 +132,7 @@ export function parseAdaptiveStrategyDecision(value: unknown): AdaptiveStrategyD
   if (item.get('schema') !== ADAPTIVE_STRATEGY_DECISION_SCHEMA) return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE');
   if (item.get('owner') !== 'user-selected-model') return failAdaptiveRoute('MODEL_OWNER_REQUIRED');
   const skips = array(item.get('skips')).map(skip);
-  if (new Set(skips.map((entry) => entry.id)).size !== skips.length) return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE');
+  if (new Set(skips.map((entry) => entry.id)).size !== skips.length) return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE', 'strategyDecision.skips must have unique ids; remove duplicate entries, not the required skip reasons');
   const attributionCategories = ids(item.get('attributionCategories'), false, true);
   if (attributionCategories.some((category) => !ADAPTIVE_ATTRIBUTION_CATEGORIES.includes(category as never)))
     return failAdaptiveRoute('ATTRIBUTION_COVERAGE_INVALID');
@@ -182,10 +182,14 @@ export function parseAdaptiveRouteInput(value: unknown): AdaptiveRouteInput {
       && value !== null
       && !Array.isArray(value)
       && Object.hasOwn(value, 'projectMode');
-    const item = fields(value, hasProjectMode ? ADAPTIVE_ROUTE_INPUT_KEYS : legacyKeys, true);
+    const baseKeys = hasProjectMode ? ADAPTIVE_ROUTE_INPUT_KEYS : legacyKeys;
+    const hasMode = typeof value === 'object' && value !== null && Object.hasOwn(value, 'deliveryMode');
+    const item = fields(value, hasMode ? [...baseKeys, 'deliveryMode'] : baseKeys, true);
+    if (hasMode && item.get('deliveryMode') !== 'design-only') return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE', 'deliveryMode must be design-only, or omitted for implementation');
     if (item.get('schema') !== ADAPTIVE_ROUTE_INPUT_SCHEMA) return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE');
     return Object.freeze({
       schema: ADAPTIVE_ROUTE_INPUT_SCHEMA,
+      ...(hasMode ? { deliveryMode: 'design-only' as const } : {}),
       request: text(item.get('request')),
       projectMode: item.get('projectMode') === undefined
         ? 'existing'

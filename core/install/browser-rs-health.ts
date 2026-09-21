@@ -3,6 +3,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 export const BROWSER_RS_COMPATIBLE_VERSION = 'compatible (version unknown)';
 const BROWSER_RS_HELP_MAX_BUFFER = 64 * 1024;
 const BROWSER_RS_STREAM_DRAIN_MS = 50;
+const BROWSER_RS_GROUP_REAP_MS = 1_000;
 const BROWSER_RS_HELP_SIGNATURE = [
   'browser-rs — stealth MCP browser (stdio or HTTP)',
   '--headless',
@@ -53,6 +54,25 @@ function killProcessTree(child: ChildProcess): void {
   child.kill('SIGKILL');
 }
 
+/** A direct child's exit/closed pipes do not prove its SIGKILLed descendants have exited.
+ * Observe the owned detached group disappearing before reporting the probe settled. */
+async function processGroupReaped(pid: number | undefined): Promise<boolean> {
+  if (pid === undefined || process.platform === 'win32') return true;
+  if (!Number.isSafeInteger(pid) || pid <= 1) return false;
+  const deadline = performance.now() + BROWSER_RS_GROUP_REAP_MS;
+  for (;;) {
+    try { process.kill(-pid, 0); }
+    catch (error) {
+      if (missingProcess(error)) return true;
+      // Darwin can report EPERM while a killed/orphaned group is being reaped. This is
+      // not proof of disappearance: keep observing within the same finite deadline.
+      if (!(error instanceof Error && 'code' in error && error.code === 'EPERM')) return false;
+    }
+    if (performance.now() >= deadline) return false;
+    await new Promise(resolve => setTimeout(resolve, 10));
+  }
+}
+
 function processRun(path: string, args: readonly string[], timeoutMs: number): Promise<BrowserRsProcessResult> {
   return new Promise((resolve) => {
     let settled = false;
@@ -62,6 +82,7 @@ function processRun(path: string, args: readonly string[], timeoutMs: number): P
     let timer: NodeJS.Timeout | undefined;
     let drainTimer: NodeJS.Timeout | undefined;
     let cleanup = (): void => {};
+    let processGroup: number | undefined;
     const stdout: CapturedOutput = { chunks: [], size: 0 };
     const stderr: CapturedOutput = { chunks: [], size: 0 };
     const finish = (result: BrowserRsProcessResult): void => {
@@ -70,7 +91,10 @@ function processRun(path: string, args: readonly string[], timeoutMs: number): P
       if (timer !== undefined) clearTimeout(timer);
       if (drainTimer !== undefined) clearTimeout(drainTimer);
       cleanup();
-      resolve(result);
+      void processGroupReaped(processGroup).then(reaped => resolve(reaped ? result : {
+        kind: 'completed', stdout: result.stdout, stderr: result.stderr,
+        detail: 'browser-rs provider process group did not terminate within the bounded cleanup period',
+      }));
     };
     let child: ChildProcess;
     try {
@@ -79,6 +103,7 @@ function processRun(path: string, args: readonly string[], timeoutMs: number): P
         stdio: ['pipe', 'pipe', 'pipe'],
         shell: false,
       });
+      processGroup = child.pid;
     } catch (error) {
       if (error instanceof Error) finish({ kind: 'completed', stdout: '', stderr: '', detail: error.message });
       else throw error;
@@ -117,6 +142,8 @@ function processRun(path: string, args: readonly string[], timeoutMs: number): P
     };
     const onExit = (code: number | null, signal: NodeJS.Signals | null): void => {
       if (timer !== undefined) clearTimeout(timer);
+      // Help probes never own a surviving daemon, including one that closed inherited pipes.
+      killProcessTree(child);
       if (stdoutEnded && stderrEnded) {
         finish(resultForExit(code, signal));
         return;
