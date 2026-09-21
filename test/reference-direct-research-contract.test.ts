@@ -6,8 +6,28 @@ import { parseReferenceResearch, publishReferenceResearch, readPublishedReferenc
   referenceResearchArtifacts, validateReferenceResearch, REFERENCE_RESEARCH_SCHEMA } from '../core/ref/reference-research.ts';
 import { ADMISSION_SOURCE_SHA, admissionHash, designAdmissionFixture } from './helpers/design-admission.ts';
 import { testSearchReceipt } from './helpers/search-execution.ts';
+import { validateMarketReferenceCoverage } from '../core/ref/market-reference-coverage.ts';
 
 const options = { expectedSourceContractSha256: ADMISSION_SOURCE_SHA, benchmarkRequired: false };
+function searchReceiptAt(root: string, lane: 'domain' | 'design', receipt: { path: string }, observedAt: string) {
+  const record = JSON.parse(readFileSync(join(root, receipt.path), 'utf8'));
+  record.observedAt = observedAt;
+  const bytes = `${JSON.stringify(record, null, 2)}\n`;
+  const sha256 = admissionHash(bytes);
+  const path = `.omd/refs/${lane}/search-${sha256}.json`;
+  writeFileSync(join(root, path), bytes);
+  return { path, sha256 };
+}
+const domainBrief = {
+  schema: 'domain-brief-v1', request: 'Study Korean public benefits', domain: 'public benefits',
+  summary: 'Compare public benefits',
+  surfaces: [{ name: 'home', purpose: 'Find a benefit', evidence: [{ status: 'user-provided', reference: 'test' }] }],
+  coreObjects: [{ name: 'benefit', evidence: [{ status: 'user-provided', reference: 'test' }] }],
+  audience: { description: 'Korean residents', evidence: [{ status: 'user-provided', reference: 'test' }] },
+  referenceQueries: { component: ['benefit card'], craft: ['eligibility feedback'], mood: ['visual task'] },
+  planning: { businessGoal: { text: 'Find benefits' }, successSignal: { text: 'Open a relevant benefit' },
+    nonGoals: [{ text: 'Do not submit official applications' }] },
+};
 // Parser-only envelope; this does not claim that capture files exist or prove publication.
 function rootEnvelope(lane: 'domain' | 'design') {
   const digest = (lane === 'domain' ? 'c' : 'd').repeat(64);
@@ -57,6 +77,7 @@ test('explicit-market v7 refuses global-only research without mutation and accep
     marketRegion: 'KR', audience: '한국에서 공공 혜택을 비교하는 주민', domain: 'public benefits',
     surface: 'product', desiredFit: 'market-grounded', brandInvariants: ['Eligibility facts remain source-bound'],
   }));
+  writeFileSync(join(fixture.root, '.omd/domain-brief.json'), JSON.stringify(domainBrief));
   const domainQueries = ['대한민국 public benefits', 'South Korea public benefits service'];
   const designQueries = ['대한민국 public benefits visual task', 'South Korea public benefits visual task'];
   const input = {
@@ -70,14 +91,21 @@ test('explicit-market v7 refuses global-only research without mutation and accep
   assert.throws(() => publishReferenceResearch(fixture.root, input, options, fixture.writer), /MARKET_COVERAGE_REQUIRED/);
   assert.deepEqual(published.map(path => readFileSync(path)), before, 'refusal must not replace prior published research');
   const globalOnly = { marketRegion: 'KR',
-    domain: { localSourceIds: [], globalFallback: { sourceIds: ['domain-1', 'domain-2', 'domain-3'], gap: 'No other local operators were public.' } },
-    design: { localSourceIds: ['visual'], globalFallback: null } };
+    domain: { localSources: [], globalFallback: { sourceIds: ['domain-1', 'domain-2', 'domain-3'], gap: 'No other local operators were public.' } },
+    design: { localSources: [{ sourceId: 'visual', reason: 'The gallery item documents a Korean product interface.' }], globalFallback: null } };
   assert.throws(() => parseReferenceResearch({ ...input, marketCoverage: globalOnly }), /MARKET_DOMAIN_LOCAL/);
   const documented = { marketRegion: 'KR',
-    domain: { localSourceIds: ['domain-1'], globalFallback: { sourceIds: ['domain-2', 'domain-3'], gap: 'Only one independently operated local service exposed the complete task state publicly.' } },
-    design: { localSourceIds: ['visual'], globalFallback: null } };
+    domain: { localSources: [{ sourceId: 'domain-1', reason: 'The captured service exposes the named benefits task to residents in Korea.' }], globalFallback: { sourceIds: ['domain-2', 'domain-3'], gap: 'Only one independently operated local service exposed the complete task state publicly.' } },
+    design: { localSources: [{ sourceId: 'visual', reason: 'The inspected gallery item shows Korean product hierarchy and type at the target viewport.' }], globalFallback: null } };
   const parsed = parseReferenceResearch({ ...input, marketCoverage: documented });
   assert.doesNotThrow(() => validateReferenceResearch(fixture.root, parsed, options));
+  const globalQuery = 'global public benefits examples';
+  const globalReceipt = searchReceiptAt(fixture.root, 'domain', testSearchReceipt(
+    fixture.root, 'domain', globalQuery, [fixture.domain.source],
+  ), '2026-09-19T00:00:00.000Z');
+  const wrongOrder = { ...input, marketCoverage: documented, domainReference: { ...input.domainReference,
+    queries: [...domainQueries, globalQuery], searches: [...input.domainReference.searches, globalReceipt] } };
+  assert.throws(() => validateReferenceResearch(fixture.root, parseReferenceResearch(wrongOrder), options), /SEARCH_ORDER/);
 });
 
 test('market coverage refuses unqualified search order and fallback without a gap', t => {
@@ -87,15 +115,65 @@ test('market coverage refuses unqualified search order and fallback without a ga
     marketRegion: 'KR', audience: '한국 사용자', domain: 'public benefits', surface: 'product',
     desiredFit: 'market-grounded', brandInvariants: ['Facts remain source-bound'],
   }));
+  writeFileSync(join(fixture.root, '.omd/domain-brief.json'), JSON.stringify(domainBrief));
   const coverage = { marketRegion: 'KR',
-    domain: { localSourceIds: ['domain-1', 'domain-2', 'domain-3'], globalFallback: null },
-    design: { localSourceIds: ['visual'], globalFallback: null } };
+    domain: { localSources: ['domain-1', 'domain-2', 'domain-3'].map(sourceId => ({ sourceId, reason: `${sourceId} serves the captured Korean benefits task.` })), globalFallback: null },
+    design: { localSources: [{ sourceId: 'visual', reason: 'The inspected item shows a Korean product interface.' }], globalFallback: null } };
   const input = { ...fixture.research, schema: REFERENCE_RESEARCH_SCHEMA, marketCoverage: coverage };
   assert.throws(() => validateReferenceResearch(fixture.root, parseReferenceResearch(input), options), /MARKET_DOMAIN_SEARCH_REQUIRED/);
+  const exactDomainQueries = ['대한민국 public benefits', 'South Korea public benefits service'];
+  const exactDomain = { ...input, domainReference: { ...input.domainReference,
+    queries: exactDomainQueries, searches: exactDomainQueries.map(query => testSearchReceipt(
+      fixture.root, 'domain', query, [fixture.domain.source, fixture.domainTwo.source, fixture.domainThree.source],
+    )) } };
+  const arbitraryDesign = { ...exactDomain, designReference: { ...exactDomain.designReference,
+    queries: ['대한민국 public benefits arbitrary suffix', 'South Korea public benefits arbitrary suffix'] } };
+  assert.throws(() => validateReferenceResearch(fixture.root, parseReferenceResearch(arbitraryDesign), options), /MARKET_DESIGN_SEARCH_REQUIRED/);
   const emptyGap = { ...coverage, domain: {
-    localSourceIds: ['domain-1', 'domain-2'], globalFallback: { sourceIds: ['domain-3'], gap: ' ' },
+    localSources: coverage.domain.localSources.slice(0, 2), globalFallback: { sourceIds: ['domain-3'], gap: ' ' },
   } };
   assert.throws(() => parseReferenceResearch({ ...input, marketCoverage: emptyGap }), /FALLBACK_GAP/);
+  const emptyLocalReason = structuredClone(coverage);
+  const firstLocalSource = emptyLocalReason.domain.localSources[0];
+  assert.ok(firstLocalSource);
+  firstLocalSource.reason = ' ';
+  assert.throws(() => parseReferenceResearch({ ...input, marketCoverage: emptyLocalReason }), /LOCAL_REASON/);
+  const invisibleGap = { ...coverage, domain: {
+    localSources: coverage.domain.localSources.slice(0, 2),
+    globalFallback: { sourceIds: ['domain-3'], gap: '\u200b' },
+  } };
+  assert.throws(() => parseReferenceResearch({ ...input, marketCoverage: invisibleGap }), /FALLBACK_GAP/);
+  const oversizedGap = { ...invisibleGap, domain: { ...invisibleGap.domain,
+    globalFallback: { sourceIds: ['domain-3'], gap: 'x'.repeat(4097) } } };
+  assert.throws(() => parseReferenceResearch({ ...input, marketCoverage: oversizedGap }), /FALLBACK_GAP/);
+  const direct = { ...input,
+    domainReference: { ...input.domainReference, queries: [], searches: [], discoveryRoots: [rootEnvelope('domain')] },
+    designReference: { ...input.designReference, queries: [], searches: [], discoveryRoots: [rootEnvelope('design')] },
+  };
+  assert.throws(() => validateMarketReferenceCoverage(fixture.root, parseReferenceResearch(direct)), /MARKET_DOMAIN_DIRECT_ROOT_REQUIRED/);
+  const scopedDirect = { ...direct,
+    domainReference: { ...direct.domainReference, discoveryRoots: [{ ...rootEnvelope('domain'), reason: '대한민국 public benefits directory.' }] },
+    designReference: { ...direct.designReference, discoveryRoots: [{ ...rootEnvelope('design'), reason: '대한민국 public benefits gallery list.' }] },
+  };
+  assert.doesNotThrow(() => validateMarketReferenceCoverage(fixture.root, parseReferenceResearch(scopedDirect)));
+});
+
+test('every explicit market requires local reference coverage regardless of fit mode or missing audience', t => {
+  const fixture = designAdmissionFixture(t);
+  const contexts = [
+    { desiredFit: 'locale-mechanics-only', audience: null },
+    { desiredFit: 'market-grounded', audience: null },
+  ];
+  for (const context of contexts) {
+    writeFileSync(join(fixture.root, '.omd/locale-design-context.json'), JSON.stringify({
+      schema: 'locale-design-context-v1', conversationLanguage: 'ko-KR', surfaceLocale: 'ko-KR',
+      marketRegion: 'KR', domain: 'public benefits', surface: 'product',
+      brandInvariants: ['Facts remain source-bound'], ...context,
+    }));
+    assert.throws(() => validateReferenceResearch(
+      fixture.root, parseReferenceResearch(fixture.research), options,
+    ), /MARKET_COVERAGE_REQUIRED/);
+  }
 });
 
 test('v6 refuses fewer than three independent domain service families', t => {

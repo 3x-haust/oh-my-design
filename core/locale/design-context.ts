@@ -170,7 +170,9 @@ export function parseLocaleDesignContext(value: unknown): LocaleDesignContext {
     if (typeof marketValue !== 'string') return fail('marketRegion must be a region subtag or null');
     const normalized = marketValue.trim().toUpperCase();
     if (!REGION.test(normalized)) return fail('marketRegion must be a two-letter or three-digit region subtag');
-    if (new Intl.DisplayNames(['en'], { type: 'region' }).of(normalized) === 'Unknown Region') {
+    const displayName = new Intl.DisplayNames(['en'], { type: 'region' }).of(normalized);
+    if (displayName === undefined || displayName === normalized || displayName === 'Unknown Region'
+      || normalized === 'XA' || normalized === 'XB') {
       return fail('marketRegion must identify a recognized region');
     }
     marketRegion = normalized;

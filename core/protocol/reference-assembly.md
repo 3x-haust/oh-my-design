@@ -249,8 +249,8 @@ independent local visual-direction/design sources in design. Record a concrete c
 using the policy's global-equivalent fallback. This is acquisition scope, not a country-style preset;
 the later locale profile and locale binding still decide which measured mechanisms may transfer.
 Research v7 is the executable refusal layer for this policy. Its `marketCoverage` classifies every
-source in each lane exactly once as target-market evidence or documented global fallback, retains at
-least one local source per lane, and binds the explicit market. Search-based research must execute the
+source in each lane exactly once as source-specific target-market evidence with a concrete reason or
+documented global fallback, retains at least one local source per lane, and binds the explicit market. Search-based research must execute the
 plan's exact market domain inputs and market-plus-domain design searches before global queries. A
 direct-public root may replace search transport, but never the per-lane local evidence or fallback gap.
 
