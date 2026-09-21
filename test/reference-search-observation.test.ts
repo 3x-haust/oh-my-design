@@ -84,6 +84,13 @@ test('a rendered Bing redirect remains an observed destination with its actual p
   assert.deepEqual(readFileSync(join(h.root, h.execution.capture.path)), h.captures[0]);
 });
 
+test('a visible result cannot inherit market scope from a hidden descendant', async t => {
+  const h = await observe(t, { html: `${navbar}<main><a href="${redirect}">Visible item <span style="opacity:0">South Korea residents service</span></a></main>` });
+  assert.equal(h.execution.status, 'page-observed');
+  assert.deepEqual(h.execution.results?.find(result => result.url === redirect),
+    { url: redirect, text: 'Visible item' });
+});
+
 test('hydration after a screenshot requires a coherent recapture before retaining links', async t => {
   const h = await observe(t, { html: navbar, afterCapture: async (page, count) => {
     if (count === 1) await page.evaluate(href => {

@@ -20,15 +20,11 @@ async function renderedState(page: Page) {
     }
     const hit = document.elementFromPoint((left + right) / 2, (top + bottom) / 2);
     if (!hit || !element.contains(hit)) return [];
-    return [{ href, text: element.innerText, left, right, top, bottom }];
-  }).slice(0, 2000));
-  const visibleText = await page.locator('body').evaluate(body => {
-    const selector = 'h1, h2, h3, p, li, a, button, [role="heading"]';
-    const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT);
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
     const lines: string[] = [];
     for (let node = walker.nextNode(); node; node = walker.nextNode()) {
       const parent = node.parentElement;
-      if (parent === null || parent.closest(selector) === null) continue;
+      if (parent === null) continue;
       let hidden = false;
       for (let ancestor: Element | null = parent; ancestor; ancestor = ancestor.parentElement) {
         const style = getComputedStyle(ancestor);
@@ -36,18 +32,44 @@ async function renderedState(page: Page) {
           || style.contentVisibility === 'hidden') { hidden = true; break; }
       }
       if (hidden) continue;
-      const range = document.createRange();
-      range.selectNodeContents(node);
-      const rendered = Array.from(range.getClientRects()).some(box => {
-        const left = Math.max(0, box.left); const right = Math.min(innerWidth, box.right);
-        const top = Math.max(0, box.top); const bottom = Math.min(innerHeight, box.bottom);
-        if (right <= left || bottom <= top) return false;
-        const hit = document.elementFromPoint((left + right) / 2, (top + bottom) / 2);
-        return hit !== null && parent.contains(hit);
+      const range = document.createRange(); range.selectNodeContents(node);
+      const rendered = Array.from(range.getClientRects()).some(rect => {
+        const x = (Math.max(0, rect.left) + Math.min(innerWidth, rect.right)) / 2;
+        const y = (Math.max(0, rect.top) + Math.min(innerHeight, rect.bottom)) / 2;
+        if (rect.right <= 0 || rect.bottom <= 0 || rect.left >= innerWidth || rect.top >= innerHeight) return false;
+        const front = document.elementsFromPoint(x, y)[0];
+        return front === parent || front?.contains(parent) === true;
       });
       range.detach();
-      const text = (node.textContent ?? '').replace(/\s+/g, ' ').trim();
-      if (rendered && text) lines.push(text);
+      const value = (node.textContent ?? '').replace(/\s+/g, ' ').trim();
+      if (rendered && value) lines.push(value);
+    }
+    return [{ href, text: lines.join(' ').slice(0, 4096), left, right, top, bottom }];
+  }).slice(0, 2000));
+  const visibleText = await page.locator('body').evaluate(body => {
+    const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT);
+    const lines: string[] = [];
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const parent = node.parentElement;
+      if (parent === null || parent.closest('h1, h2, h3, p, li, a, button, [role="heading"]') === null) continue;
+      let hidden = false;
+      for (let ancestor: Element | null = parent; ancestor; ancestor = ancestor.parentElement) {
+        const style = getComputedStyle(ancestor);
+        if (style.display === 'none' || style.visibility !== 'visible' || Number(style.opacity) === 0
+          || style.contentVisibility === 'hidden') { hidden = true; break; }
+      }
+      if (hidden) continue;
+      const range = document.createRange(); range.selectNodeContents(node);
+      const rendered = Array.from(range.getClientRects()).some(rect => {
+        const x = (Math.max(0, rect.left) + Math.min(innerWidth, rect.right)) / 2;
+        const y = (Math.max(0, rect.top) + Math.min(innerHeight, rect.bottom)) / 2;
+        if (rect.right <= 0 || rect.bottom <= 0 || rect.left >= innerWidth || rect.top >= innerHeight) return false;
+        const front = document.elementsFromPoint(x, y)[0];
+        return front === parent || front?.contains(parent) === true;
+      });
+      range.detach();
+      const value = (node.textContent ?? '').replace(/\s+/g, ' ').trim();
+      if (rendered && value) lines.push(value);
     }
     return lines.join('\n').slice(0, 4096);
   });

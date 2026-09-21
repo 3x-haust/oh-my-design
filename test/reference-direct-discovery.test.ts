@@ -81,6 +81,15 @@ test('direct-entry visible text excludes hidden descendant market claims', async
   assert.doesNotMatch(observation.observedText ?? '', /South Korea/);
 });
 
+test('direct-entry visible text excludes copy covered by an opaque child overlay', async t => {
+  const result = await capture(t, { url: PUBLIC_DIRECTORY,
+    html: `<main><h1>Global directory</h1><p style="position:relative">South Korea service directory for residents<span style="position:absolute;inset:0;background:white">Global catalogue</span></p><a href="${DOMAIN_ITEM}">Inspect service</a></main>` },
+  'public-directory');
+  const observation = readCurrentDirectDiscoveryEntry(result.root, result.receipt);
+  assert.match(observation.observedText ?? '', /Global catalogue/);
+  assert.doesNotMatch(observation.observedText ?? '', /South Korea/);
+});
+
 test('the observed Siteinspire category-list route supports direct entry when item links are visible', async t => {
   const url = 'https://www.siteinspire.com/websites/category/minimal';
   const result = await capture(t, { url, html: directoryHtml(GALLERY_ITEM) });
@@ -117,7 +126,7 @@ test('public network validation refuses private DNS answers and reserved address
     { address: '93.184.216.34', family: 4 }, { address: '2606:4700:4700::1111', family: 6 },
   ]));
   for (const address of ['127.0.0.1', '169.254.169.254', '::1', '::ffff:127.0.0.1',
-    '64:ff9b:1::a9fe:a9fe', '100:0:0:1::1', 'fc00::1', '2001:db8::1', '3fff::1', '5f00::1']) {
+    '64:ff9b:1::a9fe:a9fe', '100:0:0:1::1', 'fc00::1', 'fec0::1', '2001:db8::1', '3fff::1', '5f00::1']) {
     assert.equal(publicIpAddress(address), false);
     await assert.rejects(assertPublicNetworkUrl('https://public.example/', async () => [
       { address, family: address.includes(':') ? 6 : 4 },

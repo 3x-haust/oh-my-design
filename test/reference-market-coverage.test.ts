@@ -141,6 +141,16 @@ test('explicit-market v7 binds local sources and fallback to executed market evi
       searches: [staleSearchReceipt, input.domainReference.searches[1]!] } };
   assert.throws(() => validateReferenceResearch(fixture.root,
     parseReferenceResearch(staleSearchInput), options), /MARKET_DOMAIN_LOCAL_PROVENANCE_STALE/);
+  const futureObservedAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+  const futureReceipt = testSearchReceipt(fixture.root, 'domain', domainQueries[0]!,
+    [fixture.domain.source], false, futureObservedAt);
+  const futureCoverage = structuredClone(documented);
+  futureCoverage.domain.localSources[0]!.provenanceReceiptSha256 = futureReceipt.sha256;
+  const futureInput = { ...input, marketCoverage: futureCoverage,
+    domainReference: { ...input.domainReference,
+      searches: [futureReceipt, input.domainReference.searches[1]!] } };
+  assert.throws(() => validateReferenceResearch(fixture.root,
+    parseReferenceResearch(futureInput), options), /MARKET_DOMAIN_LOCAL_PROVENANCE_STALE/);
   const wrongGap = structuredClone(documented);
   wrongGap.domain.globalFallback!.gap.marketRegion = 'CA';
   assert.throws(() => validateReferenceResearch(fixture.root,
@@ -155,6 +165,7 @@ test('explicit-market v7 binds local sources and fallback to executed market evi
 
 test('market search and direct provenance refuse malformed scope, attempts, roots, and stale plans', t => {
   const fixture = designAdmissionFixture(t);
+  const domainQueries = ['대한민국 public benefits', 'South Korea public benefits service'];
   writeFileSync(join(fixture.root, '.omd/locale-design-context.json'), JSON.stringify(context));
   writeFileSync(join(fixture.root, '.omd/domain-brief.json'), JSON.stringify(domainBrief));
   const coverage = { marketRegion: 'KR',
@@ -189,6 +200,25 @@ test('market search and direct provenance refuse malformed scope, attempts, root
       sources: badRoot.designReference.sources.map(source => ({ ...source,
         discovery: { ...source.discovery, url: designItem } })), discoveryRoots: [designRoot] } };
   assert.doesNotThrow(() => validateMarketReferenceCoverage(fixture.root, parseReferenceResearch(scoped), options.expectedRequest));
+  const mixedSearches = domainQueries.map(query => testSearchReceipt(fixture.root, 'domain', query,
+    [fixture.domain.source, fixture.domainTwo.source, fixture.domainThree.source]));
+  const mixedCoverage = { ...directCoverage,
+    domain: {
+      localSources: [
+        localDirectSource('domain-1', fixture.domain.evidence.sha256, 'service', domainRoot.capture.sha256),
+        localSearchSource('domain-2', fixture.domainTwo.evidence.sha256, 'service', mixedSearches[0]!.sha256),
+      ],
+      globalFallback: { sourceIds: ['domain-3'], gap: fallbackGap(domainQueries, [domainRoot.url]) },
+    } };
+  const mixed = { ...scoped, marketCoverage: mixedCoverage,
+    domainReference: { ...scoped.domainReference, queries: domainQueries,
+      searches: mixedSearches, discoveryRoots: [domainRoot] } };
+  assert.doesNotThrow(() => validateMarketReferenceCoverage(fixture.root,
+    parseReferenceResearch(mixed), options.expectedRequest));
+  const incompleteMixed = structuredClone(mixed);
+  incompleteMixed.marketCoverage.domain.globalFallback!.gap.attemptedQueries = [];
+  assert.throws(() => validateMarketReferenceCoverage(fixture.root,
+    parseReferenceResearch(incompleteMixed), options.expectedRequest), /MARKET_DOMAIN_FALLBACK_ATTEMPTS/);
   const genericRoot = directRootAt(fixture.root, 'domain', 'https://attacker.kr/tasks?note=South%20Korea',
     fixture.research.domainReference.sources.map(source => source.url), 'Global directory for Canadian services.');
   const selfAttested = { ...scoped,
