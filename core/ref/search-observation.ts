@@ -1,6 +1,5 @@
 import type { Page } from 'playwright';
-import { collectSearchGlyphSamples } from './search-glyph-samples.ts';
-import { finalizeSearchRenderedState, type RawSearchRenderedState, type SearchPixelRequest } from './search-pixel-contrast.ts';
+import { finalizeSearchRenderedState, HIDE_SEARCH_TEXT_STYLE, type RawSearchRenderedState, type SearchPixelSample } from './search-pixel-contrast.ts';
 
 export async function inspectRenderedState(page: Page): Promise<RawSearchRenderedState> {
   const rendered = await page.locator('body').evaluate(body => {
@@ -49,10 +48,9 @@ export async function inspectRenderedState(page: Page): Promise<RawSearchRendere
     }
 
     const visibleText: Array<{ id: number; value: string }> = [];
-    const uncertain: Array<SearchPixelRequest & { href: string | null }> = [];
+    const uncertain: SearchPixelSample[] = [];
     const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT);
-    let nodeIndex = 0;
-    for (let node = walker.nextNode(); node; node = walker.nextNode(), nodeIndex++) {
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
       const parent = node.parentElement;
       const value = (node.textContent ?? '').replace(/\s+/g, ' ').trim();
       if (!(parent instanceof HTMLElement) || value === '') continue;
@@ -235,9 +233,8 @@ export async function inspectRenderedState(page: Page): Promise<RawSearchRendere
       const anchor = parent.closest<HTMLAnchorElement>('a[href]'); const record = anchor ? anchors.get(anchor) : undefined;
       const id = visibleText.length; visibleText.push({ id, value });
       if (unknownBackground) uncertain.push({ id, href: record?.href ?? null,
-        foreground: [foregroundParts[0] ?? 0, foregroundParts[1] ?? 0, foregroundParts[2] ?? 0],
-        bounds: { left: Math.min(...rects.map(rect => rect.left)), top: Math.min(...rects.map(rect => rect.top)),
-          right: Math.max(...rects.map(rect => rect.right)), bottom: Math.max(...rects.map(rect => rect.bottom)) }, nodeIndex });
+        minimumChangedPixels: Math.min(256, Math.max(12, [...value].filter(character => !/\s/u.test(character)).length * 4)),
+        rects: rects.map(rect => ({ left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom })) });
       if (record) record.text.push(value);
     }
     return {
@@ -248,9 +245,12 @@ export async function inspectRenderedState(page: Page): Promise<RawSearchRendere
       visibleText, uncertain, viewport: { width: innerWidth, height: innerHeight },
     };
   });
-  return { anchors: rendered.anchors, body: await page.locator('body').innerText(), visibleText: rendered.visibleText, uncertain: await collectSearchGlyphSamples(page, rendered.uncertain), viewport: rendered.viewport, url: page.url() };
+  return { anchors: rendered.anchors, body: await page.locator('body').innerText(), visibleText: rendered.visibleText, uncertain: rendered.uncertain, viewport: rendered.viewport, url: page.url() };
 }
 
 export async function renderedState(page: Page) {
-  const raw = await inspectRenderedState(page); return finalizeSearchRenderedState(raw, await page.screenshot({ timeout: 10000 }));
+  const raw = await inspectRenderedState(page); const bytes = await page.screenshot({ timeout: 10000, animations: 'disabled' });
+  const withoutText = raw.uncertain.length > 0
+    ? await page.screenshot({ timeout: 10000, animations: 'disabled', style: HIDE_SEARCH_TEXT_STYLE }) : bytes;
+  return finalizeSearchRenderedState(raw, bytes, withoutText);
 }

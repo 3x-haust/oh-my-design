@@ -164,7 +164,7 @@ test('unrendered image alt, pseudo z-index, background images and subpixel clips
     <a href="${readableImage}" style="display:block;width:300px;height:80px;color:black;background-image:url('${lightImage}')">Visible service on a readable image</a>
     <a href="${unreadableImage}" style="display:block;width:300px;height:80px;color:black;background-image:url('${darkImage}')">South Korea service hidden on an image</a>
     <a href="${transparentGradient}" style="color:white;background-image:linear-gradient(transparent,black)">South Korea service hidden in a transparent gradient</a>
-    <a href="${unrelatedEdge}" style="display:block;width:300px;height:80px;color:black;letter-spacing:180px;background-image:url('${markedImage}')">X</a>
+    <a href="${unrelatedEdge}" style="display:block;width:300px;height:80px;color:black;white-space:pre;text-decoration:none;background-image:url('${markedImage}')">X                    </a>
   </main>` });
   for (const url of [imageOnly, pseudoZ, gradient, clipped, polygon, calculated, pathClip, unreadableImage,
     transparentGradient, unrelatedEdge]) {
