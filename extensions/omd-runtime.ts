@@ -1,7 +1,20 @@
+import { createRequire } from 'node:module';
+import { dirname, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createOmdRuntimeSnapshot } from './omd-runtime-snapshot.ts';
 
 const MAX_OUTPUT_CHARS = 50_000;
-const OMD_ENTRY = fileURLToPath(new URL('../bin/omd.mjs', import.meta.url));
+const require = createRequire(import.meta.url);
+const tsxPath = require.resolve('tsx');
+const dependencyMarker = `${sep}node_modules${sep}`;
+const dependencyIndex = tsxPath.indexOf(dependencyMarker);
+if (dependencyIndex < 0) throw new Error('OMD_RUNTIME_DEPENDENCIES_INVALID: tsx did not resolve through node_modules');
+const runtimeSnapshot = createOmdRuntimeSnapshot({
+  sourceRoot: dirname(fileURLToPath(new URL('../package.json', import.meta.url))),
+  dependencyRoot: tsxPath.slice(0, dependencyIndex + dependencyMarker.length - 1),
+});
+const OMD_ENTRY = runtimeSnapshot.entryPath;
+process.once('exit', runtimeSnapshot.dispose);
 
 export const OMD_COMMAND_NAME = 'omd';
 
@@ -90,15 +103,19 @@ function boundedOutput(result: ExecResult): string {
 export function guardFailure(error: unknown): { summary: string; repairable: boolean } {
   const raw = error instanceof Error ? error.message : String(error);
   const payload = raw.replace(/^OMD_CLI_FAILED \([^)]*\):\s*/, '');
+  let parsed: { blockers?: unknown } | undefined;
   try {
-    const parsed = JSON.parse(payload) as { blockers?: unknown };
-    if (Array.isArray(parsed.blockers) && parsed.blockers.length && parsed.blockers.every(b => typeof b === 'string')) {
-      const blockers = parsed.blockers as string[];
-      return { summary: blockers.slice(0, 12).map(b => `- ${b}`).join('\n')
-        + (blockers.length > 12 ? `\n(+${blockers.length - 12}; omd guard production --json)` : ''),
-      repairable: !blockers.some(b => /^(?:route:|unconfirmed planning:)|authority|outside the current route|production is not selected|forbids application/i.test(b)) };
-    }
-  } catch { /* A terminal authority/validation error is ordinary text, not a readiness report. */ }
+    parsed = JSON.parse(payload) as { blockers?: unknown };
+  } catch (parseError) {
+    if (!(parseError instanceof SyntaxError)) throw parseError;
+  }
+  if (parsed !== undefined && Array.isArray(parsed.blockers) && parsed.blockers.length
+    && parsed.blockers.every(blocker => typeof blocker === 'string')) {
+    const blockers = parsed.blockers as string[];
+    return { summary: blockers.slice(0, 12).map(blocker => `- ${blocker}`).join('\n')
+      + (blockers.length > 12 ? `\n(+${blockers.length - 12}; omd guard production --json)` : ''),
+    repairable: !blockers.some(blocker => /^(?:route:|unconfirmed planning:)|authority|outside the current route|production is not selected|forbids application/i.test(blocker)) };
+  }
   return { summary: raw.slice(0, 12000), repairable: /SLOP_REVIEW_REQUIRED:|REFERENCE_APPLICATION_REVIEW:/.test(raw) };
 }
 

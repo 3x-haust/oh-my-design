@@ -253,7 +253,10 @@ renamed into another file can satisfy both lanes. Do not hand-write a completion
 gate is missing or stale.
 
 Every board candidate must actually use retained design-lane image evidence, matched by path and
-hash. A separate folder of unused gallery screenshots does not demonstrate visual transfer. Every
+hash. Current v7 research retains at least two visual-direction sources from independent original
+service families and distinct inspected gallery items, with different PNG bytes, and both directions
+participate in the board. Repeated pages, crops, aliases or capture names from one product count once.
+A separate folder of unused gallery screenshots does not demonstrate visual transfer. Every
 research batch entry needs `shot: true`; a metadata-only capture cannot satisfy the research gate.
 
 ### What is not a reference

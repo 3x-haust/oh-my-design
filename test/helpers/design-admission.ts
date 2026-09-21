@@ -71,5 +71,31 @@ export function designAdmissionFixture(t: TestContext) {
       boardSha256: admissionHash(readFileSync(boardPath)) },
   };
   const refreshBoard = () => { writeFileSync(boardPath, JSON.stringify(board)); research.designReference.boardSha256 = admissionHash(readFileSync(boardPath)); };
-  return { root, writer, source, gallery, domain, domainTwo, domainThree, capture, receipt, board, boardPath, research, refreshBoard };
+  const addSecondDesignDirection = () => {
+    const secondSource = capture('https://second-visual.example/task', 'workspace', 'design', 21);
+    const secondGallery = capture('https://dribbble.com/shots/12345678-Task-workspace', 'gallery-two', 'design', 22, [secondSource.source]);
+    research.designReference.sources.push({
+      id: 'visual-two', url: secondSource.source, observedAt, decision: 'Workspace proportion',
+      finding: 'A broad task region stays distinct from supporting evidence.',
+      evidence: secondSource.evidence, capture: secondSource.capture, visualRole: 'visual-direction',
+      visualAssessment: { composition: 'Broad task region with narrow support', typography: 'Task title leads compact labels',
+        density: 'Spacious primary task with dense evidence rows', imagery: 'No decorative imagery',
+        transfer: 'Adapt task-to-evidence proportion', avoid: 'Do not copy branding or content' },
+      discovery: { url: secondGallery.source, kind: 'app-gallery', access: 'free',
+        qualityReason: 'The inspected task layout adds useful proportion and readable hierarchy.',
+        evidence: secondGallery.evidence, capture: secondGallery.capture },
+    });
+    research.designReference.searches = [testSearchReceipt(root, 'design', research.designReference.queries[0]!,
+      [gallery.source, secondGallery.source])];
+    board.candidates[0]!.pieces.push({
+      slotId: 'workspace', sourceKind: 'component-capture', referenceId: refIdentity(secondSource.source, 'workspace'),
+      targetComponent: 'Workspace', targetSelector: '#workspace', taskIds: ['T1'], reason: 'Use task-to-evidence proportion.',
+      take: ['proportion'], avoid: 'Do not copy branding.', adaptation: 'Use local content and tokens.',
+      evidenceAxes: { rights: 'lawful', signal: 'high-visual-system', staticAxis: 'available', motionAxis: 'absent' },
+      grid: { column: 1, span: 12, order: 1 },
+    });
+    refreshBoard();
+    return { source: secondSource, gallery: secondGallery, sourceId: 'visual-two' as const };
+  };
+  return { root, writer, source, gallery, domain, domainTwo, domainThree, capture, receipt, board, boardPath, research, refreshBoard, addSecondDesignDirection };
 }

@@ -4,7 +4,9 @@ This protocol is the sole authority for selected reference-work ownership and de
 It is a chat-first workflow, not a board application. The adaptive route may select discovery alone,
 or add brick analysis, candidate assembly, selection, and production usage when the task outcome
 needs them. It records a reason for each omitted optional method; there is no universal stage count,
-order beyond actual data dependencies, reference quota, or candidate quota.
+order beyond actual data dependencies, or candidate quota. Current selected research still enforces
+its evidence-diversity minimum: three independent domain operator families and two independent
+visual-direction source families.
 
 Each selected artifact has exactly one owner. A dependent selected stage consumes its validated
 predecessor rather than reconstructing it from a source page, screenshot, or earlier conversation.
@@ -284,6 +286,11 @@ use visual-direction evidence, and every visual piece must bind a validated sour
 capture, not just alias a qualified PNG. Imported visual fragments must bind their actual native
 design parent (or exact declared crop with unchanged PNG format/metadata); search/domain images
 and transparency/colour-profile changes cannot be laundered by a source label.
+Current v7 research compares at least two visual-direction sources from independent original service
+families and distinct inspected gallery items. Their retained PNG bytes differ, and both directions
+appear in the board. Repeated pages, crops, aliases or capture names from one product remain one
+source. This is a minimum comparison set, not a requirement to collage both sources into every
+candidate or copy either source literally.
 Usability/component documentation alone is insufficient. The generated
 refs/design/README.md displays retained previews and judgments for the user; rejected candidates
 and coverage gaps stay in scout.md. These checks enforce evidence roles, not aesthetic quality.
