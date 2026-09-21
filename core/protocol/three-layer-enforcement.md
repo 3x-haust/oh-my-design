@@ -93,12 +93,14 @@ inspection and research repair remain available while production is blocked.
   same-wave independent Scout/Writer work remains available. It never checks for the output that
   the entering owner is about to create. Plain brief and frame show remain inspection only.
   Its production mode uses the same readiness validator as `guard production`.
-- Research v6 permits actual search or explicit native direct-public roots; v5 keeps its original
+- Research v6/v7 permit actual search or explicit native direct-public roots; v5 keeps its original
   search requirements unchanged. Both refuse missing/mismatched declared search receipts or retained
   links, and new v6 domain research requires at least three retained comparable services from three
   independent operator families. Multiple pages or subdomains under one operator such as GOV.UK
   count once; historical v5 remains readable but cannot be relabelled as new research. Both refuse
-  links unreachable from observed discovery. Direct roots require native entry-v1 capture-time purpose,
+  links unreachable from observed discovery. Current v7 market coverage additionally requires signed
+  search-v2 or direct-entry-v2 provenance tied to exact observed links and the explicit market; a ccTLD
+  or authored reason is insufficient. Direct roots require native capture-time purpose,
   correct lane, public-list admission, current PNG/JSON and actual visible links. Empty query/search
   arrays require valid nonempty roots. Old navigation cannot become a root; direct chains require
   strict navigation-v2, never hidden all-DOM retained-capture edges or the root URL itself.

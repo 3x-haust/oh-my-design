@@ -188,8 +188,8 @@ active research owner. Unknown files and valid references remain untouched.
 
 `omd ref research-set` is the sole publisher of both files and writes `.omd/reference-research.json`
 last as their consistency receipt. `research-check` and downstream gates require all three current
-records. New research uses v7; historical v5/v6 remain readable unchanged with their original requirements
-and cannot contain direct roots. Each lane can use `searches` from `omd ref search --input <json>` with
+records. New research uses v7. Historical v5 remains readable with its search-only requirements;
+historical v6 remains readable with its original search-or-direct-root requirements. Each lane can use `searches` from `omd ref search --input <json>` with
 `{lane, query, url, queryParam}`. The URL submits the exact query; a fresh browser records observed
 links, a 1280×900 screenshot and HTTP/error outcome, without reusing login state or clicking controls.
 Inspect the page: HTTP 200 alone does not prove useful results or free access. All queries require
@@ -205,14 +205,14 @@ not approved references. Put the native returned `method: direct-public`, `entry
 `evidence`, JSON `capture`, and your authored `reason` in the lane's optional `discoveryRoots`.
 Queries/searches remain required arrays and may both be empty only with valid nonempty roots.
 Every declared query still needs an exact execution, including failed attempts alongside direct roots.
-The native entry publisher uses a fresh GET/HEAD-only context, blocks service workers/downloads,
+The native entry publisher uses a DNS-pinned fresh GET/HEAD-only context, blocks service workers/downloads,
 performs no click/hover probes, and captures stable visible links with the matching viewport PNG.
 Only actual outbound links seed reachability: the root URL itself is not retained-source evidence.
 Intermediate edges in direct v6/v7 chains require strict navigation-v2 captures. Hidden all-DOM links
 from retained captures and historical navigation-v1 cannot shortcut a missing observed transition.
 Design roots must remain supported public lists after redirects, exposing visible same-gallery item
 links; login walls, blocked pages, selected items and arbitrary service pages are refused.
-Root records stay under `.omd/discovery/<lane>/entries/`, never retained `.omd/refs/`.
+New signed entry-v2 records stay under `.omd/discovery/<lane>/entries/`, never retained `.omd/refs/`.
 Do not hand-author roots, promote old captures, infer official authority from a directory, or present
 this provenance check as a quality judgment. Follow observed items and qualify/capture each retained
 reference separately. Source/redirect hosts and image bytes must remain independent across lanes.
@@ -254,10 +254,10 @@ fallback, retains at least one local source per lane, and binds the explicit mar
 plan's exact market domain inputs and market-plus-domain design searches before global queries. A
 direct-public root may replace search transport, but never the per-lane local evidence or fallback gap.
 Each local classification binds `sourceId`, the exact retained `evidenceSha256`, a lane-valid `scope`,
-and a closed `basis`. `market-search-result` also binds the exact market-search receipt SHA-256, whose
-observed links must contain the retained source or its declared design-discovery URL. `market-domain`
-uses no search receipt and is accepted only when the retained source or design-discovery host uses the
-explicit market's country-code domain. Freeform prose never proves local provenance. Every global
+a closed `basis`, and the exact native `provenanceReceiptSha256`. `market-search-result` binds a signed
+market-search execution whose observed links contain the retained source or its declared design-discovery
+URL. `market-direct-result` binds a signed direct-public root whose captured, market-qualified URL leads
+to that retained URL. A country-code hostname or freeform reason is never market-service proof. Every global
 fallback gap records that same `marketRegion`, a closed availability/access/coverage `kind`, and the
 exact market queries or direct roots attempted. Generic quality prose and invented attempts do not
 qualify. Root reasons remain bounded, visible, well-formed scope notes; they are not provenance.

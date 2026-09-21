@@ -79,9 +79,10 @@ only after recording the local coverage gap. `unscoped` means no country may be 
 conversation language or surface locale.
 For target-market-first work, publish research v7 with `marketCoverage`. Each lane must classify every
 source id exactly once with `sourceId`, the retained image's exact `evidenceSha256`, a lane-valid `scope`,
-`basis`, and `searchReceiptSha256`. `market-search-result` must bind the exact market-search receipt whose
-observed links contain the retained source or design-discovery URL. `market-domain` uses a null receipt
-and requires a retained source/discovery host under the explicit market country-code domain. A fallback
+`basis`, and `provenanceReceiptSha256`. `market-search-result` must bind the exact signed market-search
+receipt whose observed links contain the retained source or design-discovery URL. `market-direct-result`
+must bind the exact signed direct-public root receipt, a captured market-qualified URL, and an observed
+link to the retained source or design-discovery URL. A country-code hostname or freeform reason proves neither. A fallback
 gap records the exact market, an availability/access/coverage kind, and the exact attempted queries or
 roots. Freeform prose cannot prove local provenance or a fallback attempt. `research-check` rejects missing coverage, market drift, global-only lanes, and
 unqualified search order; repair the evidence instead of removing the policy.

@@ -6,6 +6,8 @@ import { validateDomainBrief } from '../domain/domain-brief.ts';
 import { nodeStableProjectFileSystem, readStableProjectFile } from '../runtime/stable-project-file.ts';
 import type { ReferenceResearch } from './reference-research-types.ts';
 import { isMarketQualifiedQuery, marketDomainQueries, marketSearchLabels } from './market-reference.ts';
+import { readCurrentDirectDiscoveryEntry } from './discovery-record.ts';
+import { readSearchExecution, SEARCH_EXECUTION_SCHEMA } from './search-execution.ts';
 import {
   marketObject, marketReject, marketText, marketTexts,
   type MarketLaneCoverage, type MarketSourceIdentity,
@@ -70,8 +72,9 @@ export function validateMarketReferenceCoverage(root: string, research: Referenc
     && domainQueries.some((query, index) => research.domainReference.queries[index] !== query)) {
     return marketReject('REFERENCE_RESEARCH_MARKET_DOMAIN_SEARCH_REQUIRED: execute the exact target-market domain inputs before global searches');
   }
-  const domainExecutions = research.domainReference.discoveryRoots?.length ? [] : validateExecutionOrder(
-    root, research.domainReference.searches, domainQueries, labels, 'DOMAIN');
+  const domainExecutions = research.domainReference.discoveryRoots?.length
+    ? validateDirectExecutions(root, research.domainReference.discoveryRoots, marketTokens, 'DOMAIN')
+    : validateExecutionOrder(root, research.domainReference.searches, domainQueries, labels, 'DOMAIN');
   const briefPath = resolve(root, '.omd/domain-brief.json');
   if (!existsSync(briefPath)) return marketReject('REFERENCE_RESEARCH_MARKET_DESIGN_PLAN_REQUIRED: current domain queries are missing');
   const briefBytes = readStableProjectFile({ root: resolve(root), path: briefPath, label: '.omd/domain-brief.json', fs: nodeStableProjectFileSystem() });
@@ -86,20 +89,16 @@ export function validateMarketReferenceCoverage(root: string, research: Referenc
     || research.designReference.queries.slice(0, labels.length).some(query => !isMarketQualifiedQuery(query, labels)))) {
     return marketReject('REFERENCE_RESEARCH_MARKET_DESIGN_SEARCH_REQUIRED: execute market-and-domain-qualified design searches before global searches');
   }
-  const designExecutions = research.designReference.discoveryRoots?.length ? [] : validateExecutionOrder(
-    root, research.designReference.searches, designQueries, labels, 'DESIGN');
+  const designExecutions = research.designReference.discoveryRoots?.length
+    ? validateDirectExecutions(root, research.designReference.discoveryRoots, marketTokens, 'DESIGN')
+    : validateExecutionOrder(root, research.designReference.searches, designQueries, labels, 'DESIGN');
   validateLaneProvenance('DOMAIN', context.marketRegion, research.marketCoverage.domain,
     research.domainReference.sources, domainExecutions, domainQueries, research.domainReference.discoveryRoots ?? []);
   validateLaneProvenance('DESIGN', context.marketRegion, research.marketCoverage.design,
     research.designReference.sources, designExecutions, designQueries, research.designReference.discoveryRoots ?? []);
 }
 
-type MarketExecution = Readonly<{ sha256: string; query: string; observedAt: number; links: readonly string[] }>;
-function marketDomain(url: string, marketRegion: string): boolean {
-  if (!/^[A-Z]{2}$/.test(marketRegion)) return false;
-  const suffix = marketRegion === 'GB' ? 'uk' : marketRegion.toLowerCase();
-  return new URL(url).hostname.toLowerCase().replace(/\.$/, '').endsWith(`.${suffix}`);
-}
+type MarketExecution = Readonly<{ sha256: string; query: string | null; observedAt: number; links: readonly string[] }>;
 function validateLaneProvenance(
   lane: 'DOMAIN' | 'DESIGN', marketRegion: string, coverage: MarketLaneCoverage,
   sources: readonly MarketSourceIdentity[], executions: readonly MarketExecution[],
@@ -108,11 +107,10 @@ function validateLaneProvenance(
   for (const local of coverage.localSources) {
     const source = sources.find(candidate => candidate.id === local.sourceId)!;
     const urls = [source.url, ...(source.discovery === undefined ? [] : [source.discovery.url])];
-    if (local.basis === 'market-domain') {
-      if (!urls.some(url => marketDomain(url, marketRegion))) marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_LOCAL_PROVENANCE`);
-      continue;
+    const execution = executions.find(candidate => candidate.sha256 === local.provenanceReceiptSha256);
+    if ((local.basis === 'market-search-result') !== (execution?.query !== null)) {
+      marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_LOCAL_PROVENANCE`);
     }
-    const execution = executions.find(candidate => candidate.sha256 === local.searchReceiptSha256);
     if (execution === undefined || !execution.links.some(link => urls.includes(link))) {
       marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_LOCAL_PROVENANCE`);
     }
@@ -134,13 +132,9 @@ function validateExecutionOrder(
   labels: readonly string[], lane: 'DOMAIN' | 'DESIGN',
 ): readonly MarketExecution[] {
   const executions = receipts.map(receipt => {
-    const path = resolve(root, receipt.path);
-    const bytes = readStableProjectFile({ root: resolve(root), path, label: receipt.path, fs: nodeStableProjectFileSystem() });
-    if (createHash('sha256').update(bytes).digest('hex') !== receipt.sha256) return marketReject('REFERENCE_RESEARCH_EVIDENCE_STALE');
-    const value = marketObject(JSON.parse(bytes.toString('utf8')), `REFERENCE_RESEARCH_MARKET_${lane}_SEARCH`);
-    return { sha256: receipt.sha256, query: marketText(value.query, `REFERENCE_RESEARCH_MARKET_${lane}_SEARCH_QUERY`),
-      observedAt: Date.parse(marketText(value.observedAt, `REFERENCE_RESEARCH_MARKET_${lane}_SEARCH_TIME`)),
-      links: marketTexts(value.links, `REFERENCE_RESEARCH_MARKET_${lane}_SEARCH_LINKS`, true) };
+    const execution = readSearchExecution(root, receipt, lane.toLowerCase() as 'domain' | 'design');
+    if (execution.schema !== SEARCH_EXECUTION_SCHEMA) return marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_SEARCH_AUTHORITY`);
+    return { sha256: receipt.sha256, query: execution.query, observedAt: Date.parse(execution.observedAt), links: execution.links };
   });
   const expected = expectedQueries.map(query => executions.find(execution => execution.query === query)
     ?? marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_SEARCH_REQUIRED`));
@@ -151,4 +145,23 @@ function validateExecutionOrder(
     return marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_SEARCH_ORDER: target-market searches must execute before global searches`);
   }
   return Object.freeze(expected);
+}
+
+function validateDirectExecutions(
+  root: string,
+  roots: NonNullable<ReferenceResearch['domainReference']['discoveryRoots']>,
+  marketTokens: readonly string[],
+  lane: 'DOMAIN' | 'DESIGN',
+): readonly MarketExecution[] {
+  return Object.freeze(roots.map(receipt => {
+    let scoped: string;
+    try { scoped = decodeURIComponent(receipt.url).replace(/[+_/-]+/g, ' '); }
+    catch { return marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_DIRECT_PROVENANCE`); }
+    if (!containsMarketToken(scoped, marketTokens)) {
+      return marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_DIRECT_PROVENANCE`);
+    }
+    const { reason: _reason, ...nativeReceipt } = receipt;
+    const observation = readCurrentDirectDiscoveryEntry(root, nativeReceipt);
+    return Object.freeze({ sha256: receipt.capture.sha256, query: null, observedAt: 0, links: observation.links });
+  }));
 }

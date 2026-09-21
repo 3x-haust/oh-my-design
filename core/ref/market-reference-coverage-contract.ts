@@ -3,8 +3,8 @@ export type MarketLaneCoverage = Readonly<{
     sourceId: string;
     evidenceSha256: string;
     scope: 'service' | 'product' | 'gallery' | 'audience';
-    basis: 'market-search-result' | 'market-domain';
-    searchReceiptSha256: string | null;
+    basis: 'market-search-result' | 'market-direct-result';
+    provenanceReceiptSha256: string;
   }>[];
   globalFallback: Readonly<{
     sourceIds: readonly string[];
@@ -61,19 +61,18 @@ function lane(value: unknown, sources: readonly MarketSourceIdentity[], label: s
     || Object.keys(input.localSources).length !== input.localSources.length) return marketReject(`${code}_LOCAL`);
   const localSources = Object.freeze(input.localSources.map(value => {
     const source = marketObject(value, `${code}_LOCAL`);
-    exact(source, ['sourceId', 'evidenceSha256', 'scope', 'basis', 'searchReceiptSha256'], `${code}_LOCAL_KEYS`);
+    exact(source, ['sourceId', 'evidenceSha256', 'scope', 'basis', 'provenanceReceiptSha256'], `${code}_LOCAL_KEYS`);
     const sourceId = marketText(source.sourceId, `${code}_LOCAL_ID`);
     const retained = sources.find(candidate => candidate.id === sourceId);
     if (retained === undefined || source.evidenceSha256 !== retained.evidence.sha256) return marketReject(`${code}_LOCAL_EVIDENCE`);
     const scopes = label === 'domain' ? ['service', 'audience'] : ['product', 'gallery', 'audience'];
     if (!scopes.includes(source.scope as string)) return marketReject(`${code}_LOCAL_SCOPE`);
-    if (source.basis !== 'market-search-result' && source.basis !== 'market-domain') return marketReject(`${code}_LOCAL_BASIS`);
-    const searchReceiptSha256 = source.searchReceiptSha256 === null ? null : marketText(source.searchReceiptSha256, `${code}_LOCAL_SEARCH`);
-    if (searchReceiptSha256 !== null && !/^[a-f0-9]{64}$/.test(searchReceiptSha256)) return marketReject(`${code}_LOCAL_SEARCH`);
-    if ((source.basis === 'market-domain') !== (searchReceiptSha256 === null)) return marketReject(`${code}_LOCAL_BASIS`);
+    if (source.basis !== 'market-search-result' && source.basis !== 'market-direct-result') return marketReject(`${code}_LOCAL_BASIS`);
+    const provenanceReceiptSha256 = marketText(source.provenanceReceiptSha256, `${code}_LOCAL_RECEIPT`);
+    if (!/^[a-f0-9]{64}$/.test(provenanceReceiptSha256)) return marketReject(`${code}_LOCAL_RECEIPT`);
     return Object.freeze({ sourceId, evidenceSha256: retained.evidence.sha256,
       scope: source.scope as MarketLaneCoverage['localSources'][number]['scope'],
-      basis: source.basis, searchReceiptSha256 });
+      basis: source.basis, provenanceReceiptSha256 });
   }));
   let globalFallback: MarketLaneCoverage['globalFallback'] = null;
   if (input.globalFallback !== null) {

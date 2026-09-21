@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
 import { decodePng } from '../motion/energy.ts';
 import { nodeStableProjectFileSystem, readStableProjectFile } from '../runtime/stable-project-file.ts';
+import { verifyNativeObservation } from '../runtime/self-signed-activation.ts';
+import { canonicalJson } from './board-artifacts.ts';
 import { designDiscoveryDirectoryProvider, designDiscoveryProvider, referenceServiceHost } from './design-discovery-sources.ts';
 import { forbiddenPublicHostname } from './public-network.ts';
 
@@ -20,6 +22,7 @@ type DiscoveryCaptureFields = Readonly<{
 export type DiscoveryCaptureRecord = DiscoveryCaptureFields & (
   Readonly<{ schema: 'reference-navigation-capture-v2' }>
   | Readonly<{ schema: 'reference-discovery-entry-v1'; method: 'direct-public'; entry: DirectDiscoveryEntry }>
+  | Readonly<{ schema: 'reference-discovery-entry-v2'; method: 'direct-public'; entry: DirectDiscoveryEntry; signature: string }>
 );
 
 export class ReferenceDiscoveryError extends Error {
@@ -79,7 +82,7 @@ function read(root: string, receipt: DiscoveryEvidence): Buffer {
   if (discoveryDigest(bytes) !== receipt.sha256) return fail('discovery evidence changed');
   return bytes;
 }
-function readDiscovery(root: string, value: unknown, direct: boolean): DiscoveryObservation {
+function readDiscovery(root: string, value: unknown, direct: boolean, requireCurrent = false): DiscoveryObservation {
   const receipt = object(value, direct ? ['method', 'entry', 'url', 'evidence', 'capture'] : ['url', 'evidence', 'capture']);
   const url = publicDiscoveryUrl(receipt.url);
   const image = evidence(receipt.evidence); const capture = evidence(receipt.capture);
@@ -91,11 +94,20 @@ function readDiscovery(root: string, value: unknown, direct: boolean): Discovery
   const entry = direct ? directDiscoveryEntry(receipt.entry, lane) : undefined;
   if (direct && receipt.method !== 'direct-public') return fail('direct method is required');
   const keys = ['schema', 'source', 'researchLane', 'kind', 'capturedAt', 'imagePath', 'acquisition', 'limitations'];
-  const row = object(JSON.parse(read(root, capture).toString('utf8')), direct ? [...keys, 'method', 'entry'] : keys);
-  if (row.schema !== (direct ? 'reference-discovery-entry-v1' : 'reference-navigation-capture-v2')
-    || row.source !== url || row.researchLane !== lane || row.kind !== 'page' || row.imagePath !== image.path
+  const decoded = JSON.parse(read(root, capture).toString('utf8')) as Record<string, unknown>;
+  if (direct ? !['reference-discovery-entry-v1', 'reference-discovery-entry-v2'].includes(decoded.schema as string)
+    : decoded.schema !== 'reference-navigation-capture-v2') return fail('native capture purpose/source/lane binding differs');
+  const current = direct && decoded.schema === 'reference-discovery-entry-v2';
+  const row = object(decoded, direct ? [...keys, 'method', 'entry', ...(current ? ['signature'] : [])] : keys);
+  if (row.source !== url || row.researchLane !== lane || row.kind !== 'page' || row.imagePath !== image.path
     || row.limitations !== DISCOVERY_LIMITATIONS || !Number.isFinite(Date.parse(text(row.capturedAt)))
     || (direct && (row.method !== 'direct-public' || row.entry !== entry))) return fail('native capture purpose/source/lane binding differs');
+  if (requireCurrent && !current) return fail('current direct discovery signature required');
+  if (current) {
+    const { signature, ...unsigned } = row;
+    if (typeof signature !== 'string' || !verifyNativeObservation(root, 'reference-discovery-entry-v2',
+      discoveryDigest(canonicalJson(unsigned)), signature)) return fail('native direct discovery signature invalid');
+  }
   const acquisition = object(row.acquisition, ['requestedUrl', 'finalUrl', 'httpStatus', 'links', 'imageSha256']);
   if (acquisition.requestedUrl !== url || acquisition.imageSha256 !== image.sha256
     || typeof acquisition.httpStatus !== 'number' || !Number.isInteger(acquisition.httpStatus)
@@ -112,6 +124,9 @@ function readDiscovery(root: string, value: unknown, direct: boolean): Discovery
 }
 export function readDirectDiscoveryEntry(root: string, receipt: unknown): DiscoveryObservation {
   return readDiscovery(root, receipt, true);
+}
+export function readCurrentDirectDiscoveryEntry(root: string, receipt: unknown): DiscoveryObservation {
+  return readDiscovery(root, receipt, true, true);
 }
 export function readStrictDiscoveryNavigation(root: string, receipt: unknown): DiscoveryObservation {
   return readDiscovery(root, receipt, false);

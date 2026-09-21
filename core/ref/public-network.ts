@@ -18,7 +18,8 @@ for (const [network, prefix] of [
 ] as const) blockedV4.addSubnet(network, prefix, 'ipv4');
 for (const [network, prefix] of [
   ['::', 96], ['::ffff:0:0', 96], ['64:ff9b::', 96], ['100::', 64], ['2001::', 23],
-  ['2001:db8::', 32], ['2002::', 16], ['fc00::', 7], ['fe80::', 10], ['ff00::', 8],
+  ['2001:db8::', 32], ['2002::', 16], ['3fff::', 20], ['5f00::', 16],
+  ['fc00::', 7], ['fe80::', 10], ['ff00::', 8],
 ] as const) blockedV6.addSubnet(network, prefix, 'ipv6');
 
 const FORBIDDEN_HOST_SUFFIXES = [

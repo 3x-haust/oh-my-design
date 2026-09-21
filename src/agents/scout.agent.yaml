@@ -66,9 +66,10 @@ instructions: |
   not infer a market from conversation language, surface locale, script or likely user location.
   Publish v7 `marketCoverage` for target-market-first work. Classify every lane source exactly once
   with `sourceId`, the retained image's exact `evidenceSha256`, a lane-valid `scope`, `basis`, and
-  `searchReceiptSha256`. `market-search-result` must bind the exact market-search receipt whose observed
-  links contain the retained source or design-discovery URL. `market-domain` must use a null receipt and
-  a retained source/discovery host under the explicit market country-code domain. A fallback gap records
+  `provenanceReceiptSha256`. `market-search-result` must bind the exact signed market-search receipt whose
+  observed links contain the retained source or design-discovery URL. `market-direct-result` must bind the
+  exact signed direct-public root receipt, a captured market-qualified URL, and an observed link to the
+  retained source or design-discovery URL. A country-code hostname or freeform reason proves neither. A fallback gap records
   the exact market, an availability/access/coverage kind, and the exact attempted queries or roots.
   Freeform prose cannot prove local provenance or a fallback attempt. `research-check`
   rejects market drift, global-only lanes and unqualified search order.

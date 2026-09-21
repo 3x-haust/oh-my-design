@@ -45,7 +45,8 @@ function verifyCapture(root: string, item: { url: string; evidence: ResearchEvid
   else trustedReferenceImage(root, item.evidence.path);
   const captured = record(JSON.parse(readReferenceResearchFileBytes(root, item.capture.path, 'REFERENCE_RESEARCH_CAPTURE_MISSING').toString('utf8')), 'REFERENCE_RESEARCH_CAPTURE_INVALID');
   if (purpose === 'retained' && ['reference-navigation-capture-v1', 'reference-navigation-capture-v2',
-    'reference-discovery-entry-v1', 'reference-search-execution-v1'].some(schema => captured.schema === schema)) fail('REFERENCE_RESEARCH_CAPTURE_PURPOSE');
+    'reference-discovery-entry-v1', 'reference-discovery-entry-v2',
+    'reference-search-execution-v1', 'reference-search-execution-v2'].some(schema => captured.schema === schema)) fail('REFERENCE_RESEARCH_CAPTURE_PURPOSE');
   if (captured.schemaVersion === 'image-fragment-v1') {
     const fragment = parseImageFragmentRecord(captured);
     if (lane !== 'design' || fragment.provenance.sourcePage !== item.url || fragment.imagePath !== item.evidence.path || fragment.sha256 !== item.evidence.sha256) fail('REFERENCE_RESEARCH_CAPTURE_SOURCE_MISMATCH');

@@ -1,6 +1,8 @@
 import type { Browser, BrowserContext, Page } from 'playwright';
 import { detectBlockReason } from '../render/index.ts';
 import type { ProjectWriteAdapter } from '../runtime/project-write.ts';
+import { signNativeObservation } from '../runtime/self-signed-activation.ts';
+import { canonicalJson } from './board-artifacts.ts';
 import { designDiscoveryDirectoryProvider } from './design-discovery-sources.ts';
 import { captureDiscoveryObservation } from './search-observation.ts';
 import { observeDocumentResponses, type DocumentObserver } from './document-observation.ts';
@@ -75,7 +77,11 @@ export async function captureReferenceNavigation(browser: Browser, source: strin
     } as const;
     const record: DiscoveryCaptureRecord = entry === undefined
       ? { schema: 'reference-navigation-capture-v2', ...common }
-      : { schema: 'reference-discovery-entry-v1', method: 'direct-public', entry, ...common };
+      : (() => {
+        const unsigned = { schema: 'reference-discovery-entry-v2' as const, method: 'direct-public' as const, entry, ...common };
+        return { ...unsigned, signature: signNativeObservation(writer.projectRoot, unsigned.schema,
+          discoveryDigest(canonicalJson(unsigned))) };
+      })();
     const bytes = `${JSON.stringify(record, null, 2)}\n`;
     const sha256 = discoveryDigest(bytes);
     const capture = { path: `${directory}/${sha256}.json`, sha256 };

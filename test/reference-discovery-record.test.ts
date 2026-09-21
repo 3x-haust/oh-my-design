@@ -84,7 +84,7 @@ test('rehashing a different-sized PNG does not establish a native discovery view
     assert.ok(record.acquisition && typeof record.acquisition === 'object');
     Object.assign(record.acquisition, { imageSha256: sha256 });
   });
-  assert.throws(() => readDirectDiscoveryEntry(root, { ...rewritten, evidence: { path, sha256 } }), /viewport differs/);
+  assert.throws(() => readDirectDiscoveryEntry(root, { ...rewritten, evidence: { path, sha256 } }), /signature invalid|viewport differs/);
 });
 
 test('ordinary strict navigation rejects legacy schema even when its hash and purpose path match', async t => {
