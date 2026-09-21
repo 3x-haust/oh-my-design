@@ -46,10 +46,10 @@ jobs:
         run: git diff --exit-code -- agents skills dist
       - name: Native lifecycle and isolated browser regressions
         if: matrix.suite == 'full'
-        # The CLI integration fixture performs repeated native browser lifecycles. On shared
+        # The CLI and HTTP-binding fixtures perform repeated native browser lifecycles. On shared
         # runners its strict 2s close deadline can be starved by a second browser test file.
-        # Keep the deadline and every assertion; run this entire file without competing files.
-        run: node --test --test-concurrency=1 test/benchmark-native-publish.test.ts test/benchmark-dependency-snapshot.test.ts test/browser-rs-doctor-runtime.test.ts test/harness-v2-cli.test.ts
+        # Keep the deadline and every assertion; run these entire files without competing files.
+        run: node --test --test-concurrency=1 test/benchmark-native-publish.test.ts test/benchmark-dependency-snapshot.test.ts test/browser-rs-doctor-runtime.test.ts test/harness-v2-cli.test.ts test/discovery-http-binding.test.ts
       - name: Complete harness suite (including native Darwin publication)
         if: matrix.suite == 'full'
         # Shared Darwin runners showed compositor failures and 100ms VM deadline misses
@@ -60,7 +60,7 @@ jobs:
           suite_files=()
           for suite_file in test/*.test.ts; do
             # Already executed in full in the isolated step, not skipped or retried.
-            if [[ "$suite_file" != "test/harness-v2-cli.test.ts" ]]; then
+            if [[ "$suite_file" != "test/harness-v2-cli.test.ts" && "$suite_file" != "test/discovery-http-binding.test.ts" ]]; then
               suite_files+=("$suite_file")
             fi
           done
