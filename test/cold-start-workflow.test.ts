@@ -180,7 +180,7 @@ test('cold start traverses real CLI framing, independent research/copy entry and
   await assert.rejects(h.command(['guard', 'completion', '--json']));
 });
 
-test('planning gaps are named early, cannot be inferred away, and fresh-stage retry is bounded/reset by real input', async t => {
+test('planning gaps are named early, cannot be inferred away, and no-progress recovery resets only on real input', async t => {
   const cwd = project(t), h = harness(cwd); await h.start();
   const brief = domain(); delete (brief.planning.successSignal as { userEvidence?: unknown }).userEvidence;
   await h.author('.omd/domain-brief.json', brief);
@@ -190,14 +190,14 @@ test('planning gaps are named early, cannot be inferred away, and fresh-stage re
   assert.equal(work.action, 'resolve-planning-evidence');
   assert.deepEqual(work.planning, [{ field: 'successSignal', text: 'Inspect confirmation' }]);
   for (let i = 0; i < 3; i++) await h.emit('message_end', { message: final });
-  assert.equal(h.sent.length, 2);
+  assert.equal(h.sent.length, 3);
   const held = await h.emit('message_end', { message: final }) as { message: typeof final };
   assert.match(held.message.content[0]!.text, /successSignal: Inspect confirmation/);
   assert.deepEqual(JSON.parse(readFileSync(join(cwd, '.omd/domain-brief.json'), 'utf8')), brief);
   await h.emit('input', { source: 'interactive' });
   await h.emit('before_agent_start', { prompt: 'What happened? Only inspect.' });
   assert.equal(await h.emit('message_end', { message: final }), undefined);
-  assert.equal(h.sent.length, 2);
+  assert.equal(h.sent.length, 3);
 });
 
 test('only closed read-only inventory syntax is exempt from the source gate', () => {

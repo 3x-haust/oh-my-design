@@ -86,23 +86,31 @@ test('current successful gates allow in-scope writes and preserve final message;
   assert.equal(h.calls.length, count);
 });
 
-test('repairable terminal failures trigger at most two custom follow-ups; only real new input resets the budget', async () => {
+test('repairable terminal failures stop on repeated no-progress but successful repair activity keeps the loop alive', async () => {
   const sent: Array<Parameters<NonNullable<PortablePiApi['sendMessage']>>> = [];
-  const h = harness(undefined, (...args) => { sent.push(args); });
+  const h = harness(async (_command, args) => args[2] === 'production'
+    ? { stdout: '{"ok":true}', stderr: '', code: 0, killed: false }
+    : { stdout: JSON.stringify({ blockers: ['copy deck missing'] }), stderr: '', code: 1, killed: false }, (...args) => { sent.push(args); });
   await h.emit('before_agent_start', { prompt: 'omd-ultradesign' });
-  await h.emit('tool_call', { toolName: 'write', input: { path: 'src/main.jsx' } });
-  for (let round = 0; round < 4; round++) {
+  for (let round = 0; round < 5; round++) {
+    const toolCallId = `repair-${round}`;
+    await h.emit('tool_call', { toolName: 'write', toolCallId, input: { path: 'src/main.jsx', content: `round ${round}` } });
+    await h.emit('tool_result', { toolName: 'write', toolCallId, input: { path: 'src/main.jsx' }, isError: false });
     await h.emit('before_agent_start', { prompt: 'Follow-up repair' });
     await h.emit('message_end', { message: final });
     await h.emit('input', { source: 'extension' });
   }
-  assert.equal(sent.length, 2);
+  assert.equal(sent.length, 5, 'successful in-scope repair work must permit more than two rechecks');
   assert.deepEqual(sent[0]![1], { triggerTurn: true, deliverAs: 'followUp' });
   assert.equal(sent[0]![0].customType, 'omd-gate-repair');
+
+  for (let round = 0; round < 4; round++) await h.emit('message_end', { message: final });
+  assert.equal(sent.length, 7, 'two recovery turns are allowed after work stops changing, then the cycle is held');
   await h.emit('input', { source: 'interactive' });
-  await h.emit('tool_call', { toolName: 'write', input: { path: 'src/main.jsx' } });
+  await h.emit('tool_call', { toolName: 'write', toolCallId: 'new-request', input: { path: 'src/main.jsx' } });
+  await h.emit('tool_result', { toolName: 'write', toolCallId: 'new-request', input: { path: 'src/main.jsx' }, isError: false });
   await h.emit('message_end', { message: final });
-  assert.equal(sent.length, 3);
+  assert.equal(sent.length, 8);
 });
 
 test('authority failures, user aborts and tool-use messages do not trigger automatic repair', async () => {
@@ -119,7 +127,7 @@ test('authority failures, user aborts and tool-use messages do not trigger autom
   assert.equal(sent.length, 0);
 });
 
-test('missing rendered application review enters the bounded repair loop only after source work', async () => {
+test('missing rendered application review enters the progress-driven repair loop only after source work', async () => {
   const sent: unknown[] = [];
   const h = harness(async (_command, args) => args[2] === 'production'
     ? { stdout: '{"ok":true}', stderr: '', code: 0, killed: false }
@@ -127,9 +135,10 @@ test('missing rendered application review enters the bounded repair loop only af
   await h.emit('before_agent_start', { prompt: 'omd-ultradesign' });
   await h.emit('tool_call', { toolName: 'omd_cli', input: { args: ['ref', 'apply-review-plan', '--json'] } });
   assert.equal(await h.emit('message_end', { message: final }), undefined);
-  await h.emit('tool_call', { toolName: 'write', input: { path: 'src/main.jsx' } });
-  for (let attempt = 0; attempt < 3; attempt++) await h.emit('message_end', { message: final });
-  assert.equal(sent.length, 2);
+  await h.emit('tool_call', { toolName: 'write', toolCallId: 'source', input: { path: 'src/main.jsx' } });
+  await h.emit('tool_result', { toolName: 'write', toolCallId: 'source', input: { path: 'src/main.jsx' }, isError: false });
+  for (let attempt = 0; attempt < 4; attempt++) await h.emit('message_end', { message: final });
+  assert.equal(sent.length, 3);
 });
 
 test('research-only work and read-only reference handoffs never authorize automatic implementation repairs', async () => {

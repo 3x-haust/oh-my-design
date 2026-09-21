@@ -155,7 +155,7 @@ test('board work repairs research before application and returns to research whe
   const lane = (id: string) => ({ referenceIds: [id], coverage: 'direct', gap: null,
     application: 'Anchor the confirmation record.', doNotTransfer: 'Source branding and claims.', reason: 'Readers need their current record first.' });
   publishReferenceApplication(f.root, { ...plan, screens: plan.screens.map(row => ({ ...row,
-    target: { route: '/confirmation', state: 'initial' }, domain: lane('domain'), design: lane('visual'), checks: ['Record heading is visible.'] })) }, options, writer);
+    target: { route: '/confirmation', state: 'initial' }, domain: lane('domain-1'), design: lane('visual'), checks: ['Record heading is visible.'] })) }, options, writer);
   assert.equal(nextStageWork(f.root, pack, invocation).action, 'interpret-references');
   const applicationBefore = readFileSync(join(f.root, '.omd/reference-application.json'));
   const captureBefore = readFileSync(f.source.path);

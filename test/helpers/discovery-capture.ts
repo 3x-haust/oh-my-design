@@ -7,7 +7,7 @@ export const PUBLIC_DIRECTORY = 'https://www.gov.uk/browse/benefits';
 export const GALLERY_DIRECTORY = 'https://www.siteinspire.com/';
 export const GALLERY_ITEM = 'https://www.siteinspire.com/website/123-example';
 export const DOMAIN_ITEM = 'https://www.gov.uk/benefits-calculators';
-export const directoryHtml = (href: string): string => `<main><h1>Public directory</h1><a href="${href}">Inspect this entry</a><p>${'Inspect the listed public resource and compare its task and presentation. '.repeat(5)}</p></main>`;
+export const directoryHtml = (...hrefs: string[]): string => `<main><h1>Public directory</h1>${hrefs.map((href, index) => `<a href="${href}">Inspect entry ${index + 1}</a>`).join('')}<p>${'Inspect the listed public resource and compare its task and presentation. '.repeat(5)}</p></main>`;
 export type DiscoveryScenario = Readonly<{
   url: string;
   html: string;

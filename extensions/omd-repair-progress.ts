@@ -1,25 +1,33 @@
-const VALIDATED_STAGES = new Set(['domain', 'frame', 'reference-board', 'copy', 'composition']);
-type Credit = { route: string; seen: Set<string> };
+const MAX_STAGNANT_PASSES = 2;
+type LoopState = { scope: string; seen: Set<string>; stagnant: number; passes: number };
+export type RepairDecision = Readonly<{ retry: boolean; pass: number; stalled: boolean }>;
 
-export class RepairProgress {
-  private readonly projects = new Map<string, Credit>();
+export class RepairLoop {
+  private readonly projects = new Map<string, Map<string, LoopState>>();
   clear(): void { this.projects.clear(); }
   delete(cwd: string): void { this.projects.delete(cwd); }
-  observe(cwd: string, value: unknown): boolean {
-    if (!value || typeof value !== 'object' || !('routeSha256' in value) || !('validatedStages' in value)
-      || typeof value.routeSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(value.routeSha256)
-      || !Array.isArray(value.validatedStages)
-      || !value.validatedStages.every((s: unknown) => typeof s === 'string' && VALIDATED_STAGES.has(s))) return false;
-    let credit = this.projects.get(cwd);
-    if (!credit) {
-      this.projects.set(cwd, { route: value.routeSha256, seen: new Set(value.validatedStages) });
-      return true;
+  next(cwd: string, lane: string, scope: string, marker: unknown, revision: number): RepairDecision {
+    let lanes = this.projects.get(cwd);
+    if (!lanes) { lanes = new Map(); this.projects.set(cwd, lanes); }
+    const token = JSON.stringify({ marker, revision });
+    let state = lanes.get(lane);
+    if (!state) {
+      state = { scope, seen: new Set([token]), stagnant: 0, passes: 1 };
+      lanes.set(lane, state);
+      return { retry: true, pass: state.passes, stalled: false };
     }
-    if (credit.route !== value.routeSha256) return false;
-    let earned = false;
-    for (const stage of value.validatedStages) {
-      if (!credit.seen.has(stage)) { credit.seen.add(stage); earned = true; }
+    if (state.scope !== scope) return { retry: false, pass: state.passes, stalled: true };
+    if (!state.seen.has(token)) {
+      state.seen.add(token);
+      state.stagnant = 0;
+      state.passes++;
+      return { retry: true, pass: state.passes, stalled: false };
     }
-    return earned;
+    state.stagnant++;
+    if (state.stagnant <= MAX_STAGNANT_PASSES) {
+      state.passes++;
+      return { retry: true, pass: state.passes, stalled: false };
+    }
+    return { retry: false, pass: state.passes, stalled: true };
   }
 }

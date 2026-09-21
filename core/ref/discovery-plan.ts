@@ -120,9 +120,9 @@ export function buildReferenceDiscoveryPlan(root: string, route: RouteRecord): R
   if (discovering) {
     lanes.push({
       id: 'domain-reference',
-      purpose: 'Find similar services and task flows: information architecture, domain vocabulary, states, and actionable sequence.',
+      purpose: 'Find at least three comparable services from independent operator families and inspect their task flows: information architecture, domain vocabulary, states, and actionable sequence. Multiple pages or subdomains under one operator count once.',
       querySeeds: [...querySeeds('component', queries.component), ...decisions.map(decision => decision.question)],
-      evidence: ['live similar-service task flow', 'domain objects and states', 'paired-viewport anatomy', 'zone-bound native capture'],
+      evidence: ['three independent service families', 'live similar-service task flows', 'domain objects and states', 'paired-viewport anatomy', 'zone-bound native capture'],
     });
     lanes.push({
       id: 'design-reference',

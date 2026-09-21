@@ -1,5 +1,5 @@
 import { isAbsolute } from 'node:path';
-import { designDiscoveryProvider, referenceServiceHost } from './design-discovery-sources.ts';
+import { designDiscoveryProvider, referenceServiceFamily } from './design-discovery-sources.ts';
 
 export const REFERENCE_RESEARCH_SCHEMA = 'reference-research-v6' as const;
 export const DOMAIN_REFERENCES_PATH = '.omd/refs/domain/research.json';
@@ -235,13 +235,19 @@ export function parseReferenceResearch(value: unknown): ReferenceResearch {
   const direct = input.schema === REFERENCE_RESEARCH_SCHEMA;
   const domain = lane(input.domainReference, { keys: REFERENCE_RESEARCH_DOMAIN_KEYS, code: 'REFERENCE_RESEARCH_DOMAIN', design: false, direct });
   const design = lane(input.designReference, { keys: REFERENCE_RESEARCH_DESIGN_KEYS, code: 'REFERENCE_RESEARCH_DESIGN', design: true, direct });
+  if (direct && domain.sources.length < 3) {
+    fail('REFERENCE_RESEARCH_DOMAIN_SOURCE_COVERAGE: new research requires at least three independently inspected comparable services');
+  }
+  if (direct && new Set(domain.sources.map(entry => referenceServiceFamily(entry.url))).size < 3) {
+    fail('REFERENCE_RESEARCH_DOMAIN_SOURCE_DIVERSITY: use at least three independent service families; pages or subdomains under one operator such as GOV.UK count once');
+  }
   const directions = design.sources.filter(entry => entry.visualRole === 'visual-direction');
   if (directions.length === 0) fail('REFERENCE_RESEARCH_VISUAL_DIRECTION_REQUIRED: component/usability documentation alone cannot establish visual direction');
   // Independent services, not two crops/pages of one service. This is a lane policy, not a beauty score.
-  const domainHosts = new Set([...domain.sources, ...domain.discoveryRoots ?? []].map(entry => referenceServiceHost(entry.url)));
+  const domainHosts = new Set([...domain.sources, ...domain.discoveryRoots ?? []].map(entry => referenceServiceFamily(entry.url)));
   const designUrls = [...design.sources.flatMap(entry => [entry.url, entry.discovery!.url]), ...design.discoveryRoots?.map(entry => entry.url) ?? []];
-  if (designUrls.some(url => domainHosts.has(referenceServiceHost(url)))) {
-    fail('REFERENCE_RESEARCH_DOMAIN_AS_VISUAL_DIRECTION: domain and design must use independent service hosts; keep the domain capture and discover a separate visual source');
+  if (designUrls.some(url => domainHosts.has(referenceServiceFamily(url)))) {
+    fail('REFERENCE_RESEARCH_DOMAIN_AS_VISUAL_DIRECTION: domain and design must use independent service families; keep the domain capture and discover a separate visual source');
   }
   const benchmarkSha256 = domain.benchmarkSha256 === null
     ? null

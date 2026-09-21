@@ -5,7 +5,7 @@ export type { PortablePiApi, PortablePiCommand, PortablePiEvent, PortablePiHook,
 import { classifyPiWrite, hasPiRoute, isPreproductionReadCommand } from './omd-guard.ts';
 import { routeValidationArgs, type RouteBootstrap } from './omd-route-bootstrap.ts';
 import { resumeRouteInput } from './omd-bootstrap-repair.ts';
-import { RepairProgress } from './omd-repair-progress.ts';
+import { RepairLoop } from './omd-repair-progress.ts';
 import { StageWork, checkNativeStageEntry, nativeEntryStage, nativeOwnedStage } from './omd-stage-work.ts';
 
 export const OMD_TOOL_NAME = 'omd_cli';
@@ -15,8 +15,11 @@ export default function omdExtension(pi: PortablePiApi): void {
   const managed = new Set<string>();
   const touched = new Set<string>();
   const productionAttempted = new Set<string>();
-  const repairs = new Map<string, number>();
-  const progress = new RepairProgress();
+  const repairLoop = new RepairLoop();
+  const revisions = new Map<string, number>();
+  const pendingMutations = new Map<string, Set<string>>();
+  const revision = (cwd: string) => revisions.get(cwd) ?? 0;
+  const bumpRevision = (cwd: string) => revisions.set(cwd, revision(cwd) + 1);
   const ownedWork = new StageWork();
   const epochs = new Map<string, symbol>();
   const epoch = (cwd: string): symbol => {
@@ -43,13 +46,14 @@ export default function omdExtension(pi: PortablePiApi): void {
   const guarded = (cwd: string) => managed.has(cwd) || hasPiRoute(cwd);
   const hooksAvailable = 'on' in pi && typeof pi.on === 'function';
   if (hooksAvailable) {
-    pi.on!('session_start', async () => { epochs.clear(); progress.clear(); ownedWork.clear(); managed.clear(); touched.clear(); productionAttempted.clear(); repairs.clear(); authoredInputs.clear(); bootstraps.clear(); freshRoutes.clear(); workflowStarted.clear(); });
+    pi.on!('session_start', async () => { epochs.clear(); repairLoop.clear(); revisions.clear(); pendingMutations.clear(); ownedWork.clear(); managed.clear(); touched.clear(); productionAttempted.clear(); authoredInputs.clear(); bootstraps.clear(); freshRoutes.clear(); workflowStarted.clear(); });
     pi.on!('input', async (event, context) => {
       if (event.source === 'interactive' || event.source === 'rpc') {
         epochs.delete(context.cwd);
-        progress.delete(context.cwd);
+        repairLoop.delete(context.cwd);
+        revisions.delete(context.cwd);
+        pendingMutations.delete(context.cwd);
         ownedWork.delete(context.cwd);
-        repairs.delete(context.cwd);
         touched.delete(context.cwd);
         productionAttempted.delete(context.cwd);
         authoredInputs.delete(context.cwd);
@@ -101,6 +105,10 @@ export default function omdExtension(pi: PortablePiApi): void {
             paths.add(classification.path);
             authoredInputs.set(context.cwd, paths);
           }
+          if (event.toolCallId) {
+            const pending = pendingMutations.get(context.cwd) ?? new Set<string>();
+            pending.add(event.toolCallId); pendingMutations.set(context.cwd, pending);
+          }
           return;
         }
         productionAttempted.add(context.cwd);
@@ -108,11 +116,19 @@ export default function omdExtension(pi: PortablePiApi): void {
       }
       try {
         await run(['guard', 'production', ...(target === undefined ? [] : ['--path', target]), '--json'], context.cwd, context.signal);
+        if (event.toolCallId) {
+          const pending = pendingMutations.get(context.cwd) ?? new Set<string>();
+          pending.add(event.toolCallId); pendingMutations.set(context.cwd, pending);
+        }
       } catch (error) {
         return { block: true, reason: `OMD_PRODUCTION_BLOCKED: ${error instanceof Error ? error.message : String(error)}\nRepair the named design inputs through omd_cli; use read for inspection. Do not bypass with bash, scripts, or a different file tool.` };
       }
     });
-    pi.on!('tool_result', async (event, context) => { if (!context.signal?.aborted) ownedWork.nativeFinished(context.cwd, event); });
+    pi.on!('tool_result', async (event, context) => {
+      if (context.signal?.aborted) return;
+      ownedWork.nativeFinished(context.cwd, event);
+      if (event.toolCallId && pendingMutations.get(context.cwd)?.delete(event.toolCallId) && event.isError === false) bumpRevision(context.cwd);
+    });
     pi.on!('message_end', async (event, context) => {
       const message = event.message;
       if (!touched.has(context.cwd) || message?.role !== 'assistant' || message.stopReason !== 'stop'
@@ -122,30 +138,37 @@ export default function omdExtension(pi: PortablePiApi): void {
       const interrupted = () => context.signal?.aborted || epochs.get(context.cwd) !== taskEpoch;
       const bootstrap = bootstraps.get(context.cwd);
       if (bootstrap !== undefined && !hasPiRoute(context.cwd)) {
-        return resumeRouteInput(bootstrap, { ...context, message, run, interrupted, repairs, pi });
+        return resumeRouteInput(bootstrap, { ...context, message, run, interrupted, repairLoop, revision: revision(context.cwd), pi });
       }
       if ((workflowStarted.has(context.cwd) || ownedWork.started(context.cwd)) && hasPiRoute(context.cwd)) {
         try {
           const result = await run(['stage', 'next', '--json'], context.cwd, context.signal);
           if (interrupted()) return;
-          const work = JSON.parse(result.text) as { schema?: string; stage?: unknown; owner?: unknown; action?: unknown; planning?: Array<{ field: string; text: string }>; instruction?: string; progress?: unknown };
-          if (work.schema === 'stage-next-v1' && progress.observe(context.cwd, work.progress)) repairs.set(context.cwd, 0);
+          const work = JSON.parse(result.text) as { schema?: string; stage?: unknown; owner?: unknown; action?: unknown; problems?: unknown; entryBlockers?: unknown; next?: unknown; planning?: Array<{ field: string; text: string }>; instruction?: string; progress?: { routeSha256?: unknown; validatedStages?: unknown } };
           if (work.schema === 'stage-next-v1' && typeof work.stage === 'string') {
             if (interrupted()) return;
             const askingForPlanning = work.action === 'resolve-planning-evidence' && (work.planning?.length ?? 0) > 0 && message.content?.some(part => part.type === 'text'
               && /[?？]|확인.*(?:필요|부탁)|알려.*(?:주세요|주실)|(?:please|could|can).*(?:confirm|clarify)/i.test(part.text ?? ''));
-            const retry = !askingForPlanning && (repairs.get(context.cwd) ?? 0) < 2 && typeof pi.sendMessage === 'function';
+            const routeSha256 = typeof work.progress?.routeSha256 === 'string' && /^[a-f0-9]{64}$/.test(work.progress.routeSha256)
+              ? work.progress.routeSha256 : null;
+            const decision = routeSha256 === null
+              ? { retry: false, pass: 0, stalled: true }
+              : repairLoop.next(context.cwd, 'stage', routeSha256, {
+                stage: work.stage, action: work.action, problems: work.problems,
+                entryBlockers: work.entryBlockers, next: work.next,
+                validatedStages: work.progress?.validatedStages,
+              }, revision(context.cwd));
+            const retry = !askingForPlanning && decision.retry && typeof pi.sendMessage === 'function';
             if (retry) {
-              repairs.set(context.cwd, (repairs.get(context.cwd) ?? 0) + 1);
               pi.sendMessage!({ customType: 'omd-stage-repair', display: true,
-                content: `OMD selected-stage repair ${repairs.get(context.cwd)}/2. Continue only the freshly started user-authorized workflow from this current work pointer, not from guard completion. Do the selected owner's real work and checks. On Pi without delegation use explicit sequential role passes; do not claim independent review. For planning evidence first reread the original request; attach only genuinely supported excerpts or ask one concrete missing-fact question and stop. Never fabricate research, weaken scope/gates, or start production before readiness.\n${result.text}` },
+                content: `OMD selected-stage repair ${decision.pass}. Continue until this selected workflow is unblocked while each pass changes owned artifacts or advances the current work pointer; there is no fixed total retry ceiling. Work from this pointer, not from guard completion. Do the selected owner's real work and checks. On Pi without delegation use explicit sequential role passes; do not claim independent review. For planning evidence first reread the original request; attach only genuinely supported excerpts or ask one concrete missing-fact question and stop. Never fabricate research, weaken scope/gates, or start production before readiness.\n${result.text}` },
               { triggerTurn: true, deliverAs: 'followUp' });
             }
             const korean = message.content?.some(part => part.type === 'text' && /[가-힣]/.test(part.text ?? ''));
             const questions = work.action === 'resolve-planning-evidence' ? (work.planning ?? []).map(p => `- ${p.field}: ${p.text}`).join('\n') : '';
             const status = korean
-              ? `OMD는 ${work.stage} 단계가 아직 미완료입니다. ${retry ? '해당 단계의 입력·근거를 확인하고 작업을 계속합니다.' : questions ? '아래 기획 내용의 사용자 근거가 확인되지 않았습니다. 이 내용이 요청 범위와 맞는지 확인이 필요합니다.' : '자동 수정 한도에 도달했습니다. 아래 단계의 실제 입력 오류를 해결해야 합니다.'}`
-              : `OMD is incomplete at ${work.stage}. ${retry ? 'Continuing the selected-stage work.' : questions ? 'User evidence is still missing for the planning statements below; confirmation is required.' : 'Bounded repair exhausted; resolve the current stage inputs below.'}`;
+              ? `OMD는 ${work.stage} 단계가 아직 미완료입니다. ${retry ? '해당 단계의 입력·근거를 수정하고 재검증하는 루프를 계속합니다.' : questions ? '아래 기획 내용의 사용자 근거가 확인되지 않았습니다. 이 내용이 요청 범위와 맞는지 확인이 필요합니다.' : decision.stalled ? '같은 작업 상태가 실제 진전 없이 반복되어 순환을 차단했습니다. 아래 소유 산출물을 실제로 변경해야 합니다.' : '아래 단계의 실제 입력 오류를 해결해야 합니다.'}`
+              : `OMD is incomplete at ${work.stage}. ${retry ? 'Continuing the repair/recheck loop for the selected stage.' : questions ? 'User evidence is still missing for the planning statements below; confirmation is required.' : decision.stalled ? 'The same work state repeated without verified progress; change the owned artifact before retrying.' : 'Resolve the current stage inputs below.'}`;
             return { message: { ...message, content: [...(message.content ?? []).filter(part => part.type !== 'text'),
               { type: 'text', text: `${status}\n\n${questions || result.text}` }] } };
           }
@@ -166,18 +189,18 @@ export default function omdExtension(pi: PortablePiApi): void {
         const failure = guardFailure(error);
         // A research/document-only or diagnostic turn does not authorize implementing the
         // remainder of a persisted route. Automatic repair belongs to this turn's source work.
-        const retry = productionAttempted.has(context.cwd) && failure.repairable && (repairs.get(context.cwd) ?? 0) < 2
+        const decision = repairLoop.next(context.cwd, 'completion', 'current-route', failure.summary, revision(context.cwd));
+        const retry = productionAttempted.has(context.cwd) && failure.repairable && decision.retry
           && 'sendMessage' in pi && typeof pi.sendMessage === 'function';
         if (retry) {
-          repairs.set(context.cwd, (repairs.get(context.cwd) ?? 0) + 1);
           pi.sendMessage!({ customType: 'omd-gate-repair', display: true,
-            content: `OMD repair pass ${repairs.get(context.cwd)}/2: terminal validation failed. Continue the existing user-authorized task by repairing the named selected-stage inputs or rendered review loop, then rerun guard completion. Read the applicable brief/contracts; do not forge evidence, alter the route to remove requirements, or claim independent review. Stop if a user fact/authority is missing or the user pauses.\n${failure.summary}` },
+            content: `OMD repair pass ${decision.pass}: terminal validation failed. Continue the existing user-authorized task until the gate passes while each pass changes the relevant artifact or blocker; there is no fixed total retry ceiling. Repair the named selected-stage inputs or rendered review loop, then rerun guard completion. Read the applicable brief/contracts; do not forge evidence, alter the route to remove requirements, or claim independent review. Stop only for repeated no-progress, missing user fact/authority, or user pause.\n${failure.summary}` },
           { triggerTurn: true, deliverAs: 'followUp' });
         }
         const korean = message.content?.some(part => part.type === 'text' && /[가-힣]/.test(part.text ?? ''));
         const status = korean
-          ? `OMD 작업은 미완료입니다. 완료 검증을 통과하지 못해 최종 완료 보고를 보류했습니다.${retry ? ' 누락된 작업의 수정·재검사를 이어갑니다.' : ' 누락·오래된 산출물 또는 권한 문제를 해결한 뒤 guard completion을 다시 실행해야 합니다.'}`
-          : `OMD is incomplete. The final completion claim was withheld because validation failed.${retry ? ' Continuing a bounded repair/recheck pass.' : ' Resolve the missing/stale evidence or authority, then rerun guard completion.'}`;
+          ? `OMD 작업은 미완료입니다. 완료 검증을 통과하지 못해 최종 완료 보고를 보류했습니다.${retry ? ' 누락된 작업의 수정·재검사 루프를 이어갑니다.' : decision.stalled ? ' 동일 차단 상태가 실제 진전 없이 반복되어 순환을 멈췄습니다. 관련 산출물을 실제로 변경한 뒤 다시 검증해야 합니다.' : ' 누락·오래된 산출물 또는 권한 문제를 해결한 뒤 guard completion을 다시 실행해야 합니다.'}`
+          : `OMD is incomplete. The final completion claim was withheld because validation failed.${retry ? ' Continuing the progress-driven repair/recheck loop.' : decision.stalled ? ' The same blocker repeated without verified progress; change the relevant artifact before rechecking.' : ' Resolve the missing/stale evidence or authority, then rerun guard completion.'}`;
         return { message: { ...message, content: [
           ...(message.content ?? []).filter(part => part.type !== 'text'),
           { type: 'text', text: `${status}\n\n${failure.summary}` },
@@ -227,6 +250,8 @@ export default function omdExtension(pi: PortablePiApi): void {
         result = await run(params.args, context.cwd, signal);
         if (signal?.aborted || epochs.get(context.cwd) !== taskEpoch) return { content: [{ type: 'text', text: result.text }], details: result.details };
         if (hasPiRoute(context.cwd) && ownedWork.commandSucceeded(context.cwd, { args: params.args, token: workToken })) touched.add(context.cwd);
+        if (/^(?:frame|domain|route|ref|copy|type|composition|slop|lifecycle|finalize|complete)$/.test(String(params.args[0]))
+          && !/^(?:show|check|validate|list|handoff|discover-plan|research-check|apply-plan|apply-check|apply-review-plan|apply-review-check|review-check|review-input)$/.test(String(params.args[1]))) bumpRevision(context.cwd);
         if (params.args[0] === 'route' && params.args[1] === 'classify' && commandBootstrap
           && authoredInputs.get(context.cwd)?.has(classifyPiWrite(context.cwd, commandBootstrap.inputPath).path)) freshRoutes.add(context.cwd);
         if (freshRoutes.has(context.cwd) && ownedWork.token(context.cwd) !== undefined && params.args[0] === 'brief' && params.args.includes('--check')) workflowStarted.add(context.cwd);

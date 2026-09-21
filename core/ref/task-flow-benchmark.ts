@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { isAbsolute, resolve, sep } from 'node:path';
 import { nodeStableProjectFileSystem, readStableProjectFile } from '../runtime/stable-project-file.ts';
 import { readLiveReferenceFlow } from './live-flow.ts';
+import { referenceServiceFamily } from './design-discovery-sources.ts';
 
 export const TASK_FLOW_BENCHMARK_SCHEMA =
   'task-flow-benchmark-v2' as const;
@@ -583,13 +584,14 @@ export function parseTaskFlowBenchmark(
 
   if (!Array.isArray(input.sources)) fail('TASK_FLOW_BENCHMARK_SOURCE_COVERAGE');
   const sources = input.sources.map(parseSource);
-  if (sources.length < 2 || sources.length > 6) {
+  if (sources.length < 3 || sources.length > 6) {
     fail('TASK_FLOW_BENCHMARK_SOURCE_COVERAGE');
   }
   uniqueIds(sources, 'TASK_FLOW_BENCHMARK_SOURCE_DUPLICATE');
   const sameDomain = sources.filter((source) => source.kind === 'same-domain-service').length;
   const adjacent = sources.filter((source) => source.kind === 'adjacent-domain-service').length;
-  if (sameDomain < 2 || sameDomain <= adjacent) {
+  const sameDomainFamilies = new Set(sources.filter(source => source.kind === 'same-domain-service').map(source => referenceServiceFamily(source.url)));
+  if (sameDomain < 3 || sameDomain <= adjacent || sameDomainFamilies.size < 3) {
     fail('TASK_FLOW_BENCHMARK_SAME_DOMAIN_COVERAGE');
   }
 

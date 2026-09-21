@@ -85,13 +85,15 @@ Blocked tool calls return repair instructions to the model. A failed terminal ga
 claim; it does not create a fake review or auto-retry missing authority. Report the strongest verified
 result, missing evidence and exact limitation. A build plus one check is not a completed repair loop.
 On hosts with custom follow-up messages, repairable terminal failures in a source-writing turn trigger
-at most two repair passes per real user input. Research/document-only turns never authorize automatic
-implementation of the remaining route. Each pass may repair multiple blockers and rerun existing checks.
+a progress-driven repair/recheck loop. There is no fixed total pass ceiling while owned artifacts or
+the current work pointer advance. Repeating the same verified state without any successful repair
+activity stops the cycle after two recovery turns. Research/document-only turns never authorize
+automatic implementation of the remaining route. Each pass may repair multiple blockers and rerun existing checks.
 Before a route exists, Pi may also retry an already-authored route input using current structured
 diagnostics. This repairs setup only, not missing deliverables. A failed classification retains its real
 cause; authority errors do not retry. Input-only work does not authorize publishing or implementation.
 Pause/abort and missing user facts/authority never authorize an automatic retry or a scope change.
-After a fresh authored route enters a checked stage, Pi can also use the same two-pass budget to
+After a fresh authored route enters a checked stage, Pi can use the same progress-driven loop to
 continue unfinished selected-stage authoring before source exists. It recomputes `stage next`, not
 terminal completion. A concrete planning question stops for the user's answer; existing-route
 inspection and route-only classification do not opt into this continuation.

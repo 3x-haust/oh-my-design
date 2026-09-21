@@ -20,6 +20,16 @@ export function referenceServiceHost(url: string): string {
   return new URL(url).hostname.toLowerCase().replace(/^www\./, '');
 }
 
+export function referenceServiceFamily(url: string): string {
+  const host = referenceServiceHost(url);
+  const labels = host.split('.');
+  if (labels.length < 3) return host;
+  const suffix = labels.slice(-2).join('.');
+  if (['gov.uk', 'nhs.uk', 'go.kr', 'gov.au', 'gc.ca'].includes(suffix)) return suffix;
+  if (['co.uk', 'org.uk', 'com.au', 'com.br', 'co.jp', 'co.kr', 'co.nz'].includes(suffix)) return labels.slice(-3).join('.');
+  return suffix;
+}
+
 export function designDiscoveryDirectoryProvider(url: string): string | null {
   if (designDiscoveryProvider(url) !== null) return null;
   const parsed = new URL(url);

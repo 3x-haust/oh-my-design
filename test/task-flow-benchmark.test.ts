@@ -71,6 +71,11 @@ function benchmark(): any {
         observedPatterns: ['unknown remains a valid answer'],
         forbiddenTransfers: ['provider identity', 'availability'],
       },
+      {
+        ...exploredSource('source-c', 'https://example.net/field-service-c', 'c'),
+        observedPatterns: ['requirements remain visible before commitment'],
+        forbiddenTransfers: ['service guarantees', 'eligibility claims'],
+      },
     ],
     taskSteps: [
       {
@@ -112,7 +117,7 @@ test('task-flow benchmark binds multiple observed services to task order', () =>
     expectedSourceContractSha256: SHA,
   });
 
-  assert.equal(parsed.sources.length, 2);
+  assert.equal(parsed.sources.length, 3);
   assert.deepEqual(parsed.taskSteps.map((step) => step.id), [
     'observe',
     'evidence',
@@ -196,6 +201,12 @@ test('same-domain services remain the basis instead of adjacent products or guid
   const adjacent = benchmark();
   adjacent.sources[1]!.kind = 'adjacent-domain-service';
   assert.throws(() => parseTaskFlowBenchmark(adjacent), /TASK_FLOW_BENCHMARK_SAME_DOMAIN_COVERAGE/);
+});
+
+test('three pages under one service family cannot pad domain coverage', () => {
+  const oneFamily = benchmark();
+  oneFamily.sources.forEach((source: any, index: number) => { source.url = `https://${index ? `service-${index}.` : ''}gov.uk/task`; });
+  assert.throws(() => parseTaskFlowBenchmark(oneFamily), /TASK_FLOW_BENCHMARK_SAME_DOMAIN_COVERAGE/);
 });
 
 test('current local browser evidence is required for every screen and flow step', t => {

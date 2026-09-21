@@ -28,6 +28,7 @@ function harness(cwd: string, exec?: PortablePiApi['exec']) {
   const calls: string[][] = [];
   const sent: Array<Parameters<NonNullable<PortablePiApi['sendMessage']>>> = [];
   let tool!: PortablePiTool;
+  let writeSequence = 0;
   omdExtension({
     on: (name, hook) => { hooks.set(name, hook); },
     registerTool: value => { tool = value; }, registerCommand() {},
@@ -46,9 +47,11 @@ function harness(cwd: string, exec?: PortablePiApi['exec']) {
       return tool.execute('test', { args }, undefined, undefined, { cwd });
     },
     async author(value = fixture()) {
-      assert.equal(await emit('tool_call', { toolName: 'write', input: { path: inputPath } }), undefined);
+      const toolCallId = `route-input-${++writeSequence}`;
+      assert.equal(await emit('tool_call', { toolName: 'write', toolCallId, input: { path: inputPath, content: JSON.stringify(value) } }), undefined);
       mkdirSync(join(cwd, '.omd/.cache'), { recursive: true });
       writeFileSync(join(cwd, inputPath), JSON.stringify(value));
+      await emit('tool_result', { toolName: 'write', toolCallId, input: { path: inputPath }, isError: false });
     },
     async end() { return await emit('message_end', { message: final }) as { message: typeof final }; },
   };
@@ -133,7 +136,7 @@ test('real Pi setup: reject, diagnose, bounded repair, validate, classify and en
   assert.equal(existsSync(join(cwd, '.omd/copy-deck.md')), false);
 });
 
-test('bootstrap retries are bounded and reread current input; input-only recovery does not authorize publication', async t => {
+test('bootstrap retries stop on repeated unchanged input and reread current input; input-only recovery does not authorize publication', async t => {
   const cwd = mkdtempSync(join(tmpdir(), 'omd-bootstrap-budget-'));
   t.after(() => rmSync(cwd, { recursive: true, force: true }));
   let pass = false;
@@ -144,7 +147,7 @@ test('bootstrap retries are bounded and reread current input; input-only recover
   for (let i = 0; i < 4; i++) {
     await h.end(); await h.emit('input', { source: 'extension' });
   }
-  assert.equal(h.sent.length, 2);
+  assert.equal(h.sent.length, 3);
   assert.match(h.sent[0]![0].content, /input editing and validation only; do not publish/);
   assert.ok(h.calls.every(args => args.includes('--locale-context')));
   pass = true;
@@ -155,7 +158,22 @@ test('bootstrap retries are bounded and reread current input; input-only recover
   assert.equal(await h.end(), undefined);
   pass = false; await h.author();
   await assert.rejects(h.run(['route', 'validate', '--input', inputPath, '--json']));
-  await h.end(); assert.equal(h.sent.length, 3);
+  await h.end(); assert.equal(h.sent.length, 4);
+});
+
+test('bootstrap keeps repairing beyond two passes while the authored input changes', async t => {
+  const cwd = mkdtempSync(join(tmpdir(), 'omd-bootstrap-progress-'));
+  t.after(() => rmSync(cwd, { recursive: true, force: true }));
+  const h = harness(cwd, async () => ({ stdout: failureReport(), stderr: '', code: 1, killed: false }));
+  await h.emit('before_agent_start', { prompt: 'omd-ultradesign' });
+  for (let round = 0; round < 5; round++) {
+    const value = fixture(); value.request = `Repair round ${round}`;
+    await h.author(value);
+    await assert.rejects(h.run(['route', 'validate', '--input', inputPath, '--json']));
+    await h.end(); await h.emit('input', { source: 'extension' });
+  }
+  assert.equal(h.sent.length, 5);
+  assert.ok(h.sent.every(([message]) => message.customType === 'omd-route-repair'));
 });
 
 test('read-only validation, user aborts, authority errors and existing routes cannot trigger bootstrap continuation', async t => {

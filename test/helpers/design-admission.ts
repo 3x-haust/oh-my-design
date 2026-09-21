@@ -45,6 +45,8 @@ export function designAdmissionFixture(t: TestContext) {
   const source = capture('https://visual.example/task', 'hero', 'design', 1);
   const gallery = capture('https://www.pinterest.com/pin/123456789/', 'gallery', 'design', 2, [source.source]);
   const domain = capture('https://domain.example/task', 'domain', 'domain', 3);
+  const domainTwo = capture('https://domain-two.example/task', 'domain', 'domain', 4);
+  const domainThree = capture('https://domain-three.example/task', 'domain', 'domain', 5);
   const board = {
     schemaVersion: 'reference-board-v1', frameSha256: 'b'.repeat(64),
     candidates: [{ id: 'candidate', label: 'Candidate', route: '/', rationale: 'Measured hierarchy.', pieces: [{
@@ -58,8 +60,8 @@ export function designAdmissionFixture(t: TestContext) {
   const boardPath = join(root, '.omd/reference-board.json'); writeFileSync(boardPath, JSON.stringify(board));
   const research = {
     schema: 'reference-research-v5', sourceContractSha256: ADMISSION_SOURCE_SHA,
-    domainReference: { queries: ['service task'], searches: [testSearchReceipt(root, 'domain', 'service task', [domain.source])],
-      sources: [{ id: 'domain', url: domain.source, observedAt: '2026-09-21', decision: 'Task order', finding: 'Review before submission', evidence: domain.evidence, capture: domain.capture }], benchmarkSha256: null },
+    domainReference: { queries: ['service task'], searches: [testSearchReceipt(root, 'domain', 'service task', [domain.source, domainTwo.source, domainThree.source])],
+      sources: [domain, domainTwo, domainThree].map((entry, index) => ({ id: `domain-${index + 1}`, url: entry.source, observedAt: '2026-09-21', decision: 'Task order', finding: 'Review before submission', evidence: entry.evidence, capture: entry.capture })), benchmarkSha256: null },
     designReference: { queries: ['visual task'], searches: [testSearchReceipt(root, 'design', 'visual task', [gallery.source])],
       sources: [{ id: 'visual', url: source.source, observedAt: '2026-09-21', decision: 'Visual hierarchy', finding: 'Heading anchors work', evidence: source.evidence, capture: source.capture,
         visualRole: 'visual-direction', visualAssessment: { composition: 'Anchored task', typography: 'Heading contrast', density: 'Compact controls', imagery: 'None', transfer: 'Task hierarchy', avoid: 'Branding' },
@@ -67,5 +69,5 @@ export function designAdmissionFixture(t: TestContext) {
       boardSha256: admissionHash(readFileSync(boardPath)) },
   };
   const refreshBoard = () => { writeFileSync(boardPath, JSON.stringify(board)); research.designReference.boardSha256 = admissionHash(readFileSync(boardPath)); };
-  return { root, writer, source, gallery, domain, capture, receipt, board, boardPath, research, refreshBoard };
+  return { root, writer, source, gallery, domain, domainTwo, domainThree, capture, receipt, board, boardPath, research, refreshBoard };
 }

@@ -39,21 +39,34 @@ function harness(t: { after(fn: () => void): void }) {
     interruptDuringDiagnosis: () => { duringDiagnosis = () => emit('input', { source: 'interactive' }); } };
 }
 
-test('new validated stage progress renews bounded repair but repeats and cycles do not', async t => {
+test('distinct advancing work pointers continue beyond the former two-pass ceiling', async t => {
   const h = harness(t); await h.start();
-  await h.end(); await h.end(); await h.end();
-  assert.equal(h.sent.length, 2);
-  h.work.progress.validatedStages = ['domain'];
-  await h.end(); await h.end(); await h.end();
-  assert.equal(h.sent.length, 4, 'a validated stage must not inherit an exhausted global counter');
-  h.work.progress.validatedStages = []; await h.end();
-  h.work.progress.validatedStages = ['domain']; await h.end();
-  assert.equal(h.sent.length, 4, 'revalidating a previously credited stage is not new progress');
-  h.work.stage = 'frame'; await h.end();
-  assert.equal(h.sent.length, 4, 'a different error/stage without validated progress earns nothing');
+  for (const [stage, action, validatedStages] of [
+    ['domain', 'repair-output', []],
+    ['frame', 'author-output', ['domain']],
+    ['reference-board', 'author-research', ['domain', 'frame']],
+    ['reference-board', 'apply-references', ['domain', 'frame']],
+    ['reference-interpretation', 'interpret-references', ['domain', 'frame', 'reference-board']],
+    ['copy', 'repair-output', ['domain', 'frame', 'reference-board']],
+  ] as const) {
+    h.work.stage = stage;
+    h.work.action = action;
+    h.work.progress.validatedStages = [...validatedStages];
+    await h.end();
+  }
+  assert.equal(h.sent.length, 6, 'real stage/substage advancement must not inherit a fixed global retry ceiling');
+});
+
+test('an unchanged work pointer stops only after repeated no-progress turns', async t => {
+  const h = harness(t); await h.start();
+  await h.end(); await h.end(); await h.end(); await h.end();
+  assert.equal(h.sent.length, 3, 'the initial repair plus two recovery turns are allowed before a verified stall');
+  const held = await h.end() as { message: { content: Array<{ type: string; text: string }> } };
+  assert.match(held.message.content.find(part => part.type === 'text')?.text ?? '', /진전|progress/i);
   h.work.progress.routeSha256 = 'b'.repeat(64);
-  h.work.progress.validatedStages = ['domain', 'frame']; await h.end();
-  assert.equal(h.sent.length, 4, 'changing the route cannot manufacture repair credit');
+  h.work.stage = 'frame';
+  await h.end();
+  assert.equal(h.sent.length, 3, 'changing route identity cannot manufacture repair progress');
 });
 
 test('interactive input during an awaited diagnosis prevents the old task from scheduling work', async t => {

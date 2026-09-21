@@ -22,7 +22,7 @@ function applicationInput(root: string) {
   const decision = { coverage: 'direct', gap: null, application: 'Keep task requirements visible.',
     doNotTransfer: 'Do not reuse branding.', reason: 'The work object needs clear hierarchy.' };
   return { ...draft, screens: [{ surface: 'home', target: { route: '/', state: 'initial' },
-    domain: { ...decision, referenceIds: ['domain'] }, design: { ...decision, referenceIds: ['visual'] }, checks: ['Task requirements remain visible.'] }] };
+    domain: { ...decision, referenceIds: ['domain-1'] }, design: { ...decision, referenceIds: ['visual'] }, checks: ['Task requirements remain visible.'] }] };
 }
 
 test('direct-entry identity and discovery paths cannot leak through application decision prose', async t => {
@@ -31,7 +31,7 @@ test('direct-entry identity and discovery paths cannot leak through application 
     const research = await directResearch(browser, fixture);
     const url = 'https://directory.example/tasks';
     const finalUrl = 'https://redirected-directory.example/tasks';
-    const observed = discoveryBrowser(browser, { url, finalUrl, html: directoryHtml(fixture.domain.source) });
+    const observed = discoveryBrowser(browser, { url, finalUrl, html: directoryHtml(fixture.domain.source, fixture.domainTwo.source, fixture.domainThree.source) });
     const receipt = await captureReferenceNavigation(observed.browser, url, 'domain', fixture.writer, 'public-directory');
     const input = { ...research, domainReference: { ...research.domainReference, discoveryRoots: [{ ...receipt, reason: 'Inspect listed tasks.' }] } };
     publishReferenceResearch(fixture.root, input, options, fixture.writer);

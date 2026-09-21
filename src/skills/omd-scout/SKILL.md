@@ -186,6 +186,10 @@ success and query prose cannot replace one. Do not hand-author or edit execution
 The domain-reference lane and the design-reference lane are independent deliverables. Keep a
 competitor's task-flow evidence in domain and use a different service's visual evidence for design;
 separate observations of the same service do not satisfy the independent-host lane contract.
+New domain research retains at least three comparable services from three independent operator
+families. GOV.UK pages and subdomains count as one family, as do pages/subdomains under any other
+single operator. Follow multiple observed directory/search results; do not pad coverage with routes
+from the first service that happens to be reachable.
 
 For a selected product task-flow benchmark, use `omd schema reference-flow-input` and
 `omd benchmark record --input <flow.json> --json`. One fresh context executes the declared public
@@ -196,7 +200,8 @@ bounded exclusions, not successful tests. This proves only declared visited stat
 control in an entire service. Free public references remain the only requirement.
 
 For an applicable product task-flow benchmark, do not stop at the landing page or first useful
-screen. Declare the safe inspection scope, open each same-domain service at its real entry point, and
+screen. Declare the safe inspection scope, open at least three independent same-domain service
+families at their real entry points, and
 traverse every reachable screen in that scope. Click the actual non-destructive controls needed to
 observe the sequence. Organize the result three ways:
 

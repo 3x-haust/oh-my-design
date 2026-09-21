@@ -95,6 +95,9 @@ inspection and research repair remain available while production is blocked.
   Its production mode uses the same readiness validator as `guard production`.
 - Research v6 permits actual search or explicit native direct-public roots; v5 keeps its original
   search requirements unchanged. Both refuse missing/mismatched declared search receipts or retained
+  links, and new v6 domain research requires at least three retained comparable services from three
+  independent operator families. Multiple pages or subdomains under one operator such as GOV.UK
+  count once; historical v5 remains readable but cannot be relabelled as new research. Both refuse
   links unreachable from observed discovery. Direct roots require native entry-v1 capture-time purpose,
   correct lane, public-list admission, current PNG/JSON and actual visible links. Empty query/search
   arrays require valid nonempty roots. Old navigation cannot become a root; direct chains require
@@ -143,13 +146,15 @@ inspection and research repair remain available while production is blocked.
   an OMD route remains standalone; `recipe show/list` are inspection, not implementation.
 - Pi checks native write/edit and non-allowlisted shell calls at the source boundary and checks
   final messages after OMD mutations. CLI-owned evidence cannot be directly authored. Failed
-  completion may trigger at most two repair turns for an actual source-writing task; aborts,
+  completion triggers a progress-driven repair/recheck loop for an actual source-writing task. It has
+  no fixed total pass ceiling while owned artifacts or the current work pointer advance; the same
+  verified state without successful repair activity stops after two recovery turns. Aborts,
   missing authority and research-only turns do not authorize automatic implementation.
 - For a route authored and successfully classified in this user turn, after a checked stage entry,
   Pi diagnoses unfinished authored stages with `stage next` before terminal completion. It can queue
-  at most two correction turns without new validated progress. Route-bound domain/frame/board/copy/
-  composition checks can each renew that allowance once; error wording, hashes, timestamps,
-  regressions and route replacement cannot refill it. An existing route can also enroll when this
+  correction turns while successful owned mutations or a genuinely new current work pointer prove
+  progress. The same state can receive two recovery turns before the host stops a no-progress cycle;
+  route replacement cannot manufacture progress. An existing route can also enroll when this
   user turn invokes the full omd-ultradesign skill alone, with no additional user prose, passes a
   selected entry check and successfully publishes or writes that owner's work. The skill name inside
   a longer request does not grant unrestricted automatic continuation: the prose may impose a
@@ -163,7 +168,7 @@ inspection and research repair remain available while production is blocked.
   explicit open questions; their application-write prohibition remains unchanged.
 - Before initial route publication, Pi revalidates the current authored input at termination and
   reports its actual diagnostic groups rather than replacing them with `ROUTE_UNCLASSIFIED`.
-  Known input errors share the two-pass repair budget. Read-only inspection, aborts, unknown errors,
+  Known input errors use the same progress-driven rule. Read-only inspection, aborts, unknown errors,
   missing user facts/authority and pre-existing routes do not authorize bootstrap repair. An input-only
   repair does not authorize classification; retrying an already-attempted classification preserves
   the same user-authorized delivery mode. No extension writes or publishes a route on the model's behalf.

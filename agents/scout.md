@@ -452,8 +452,9 @@ step records the action, result, and distinct evidence. Every discovered target 
 or explicitly excluded as authentication, payment, destructive action, rate limit, blocked,
 out-of-scope, or unavailable. `complete` means no exclusions; use `bounded-gap` when any remain.
 Record observed sequence, decision support, counterexamples, timestamp, limitations, and forbidden
-transfers; component anatomy alone is insufficient. Keep at least two real services in the same destination domain
-and keep them as the majority; adjacent-domain sources may fill one explicitly
+transfers; component anatomy alone is insufficient. Keep at least three real services from
+independent operator families in the same destination domain; pages or subdomains under one
+operator such as GOV.UK count once. Keep them as the majority; adjacent-domain sources may fill one explicitly
 named evidence gap only and cannot establish domain-specific task steps. Before serialization, run
 `omd schema task-flow-benchmark --json` exactly once and copy its exact skeleton: do not rename,
 duplicate, nest, or extend any field. For each completed public flow, read `omd schema

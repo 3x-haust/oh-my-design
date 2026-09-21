@@ -36,6 +36,20 @@ test('v6 parses direct-only lanes and retains direct roots in each lane artifact
   assert.deepEqual(artifacts['.omd/refs/design/research.json'].discoveryRoots, input.designReference.discoveryRoots);
 });
 
+test('v6 refuses fewer than three independent domain service families', t => {
+  const { research } = designAdmissionFixture(t);
+  const direct = { ...research, schema: 'reference-research-v6',
+    domainReference: { ...research.domainReference, queries: [], searches: [], discoveryRoots: [rootEnvelope('domain')] },
+    designReference: { ...research.designReference, queries: [], searches: [], discoveryRoots: [rootEnvelope('design')] } };
+  assert.throws(() => parseReferenceResearch({ ...direct,
+    domainReference: { ...direct.domainReference, sources: direct.domainReference.sources.slice(0, 2) } }), /DOMAIN_SOURCE_COVERAGE/);
+  const oneFamily = direct.domainReference.sources.map((source, index) => ({ ...source,
+    url: [`https://www.gov.uk/task-${index}`, `https://benefits.gov.uk/task-${index}`, `https://service.gov.uk/task-${index}`][index] }));
+  assert.throws(() => parseReferenceResearch({ ...direct,
+    domainReference: { ...direct.domainReference, sources: oneFamily } }), /DOMAIN_SOURCE_DIVERSITY/);
+  assert.doesNotThrow(() => parseReferenceResearch(direct));
+});
+
 test('v6 search-only lanes preserve omitted and explicitly empty direct roots', t => {
   const { research } = designAdmissionFixture(t);
   const input = { ...research, schema: 'reference-research-v6', designReference: { ...research.designReference, discoveryRoots: [] } };
