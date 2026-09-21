@@ -21,12 +21,21 @@ import {
 } from './helpers/project-write.ts';
 
 const fixture = (name: string): unknown => JSON.parse(readFileSync(new URL(`fixtures/adaptive-flow/${name}.json`, import.meta.url), 'utf8'));
+const marketFixture = (name: string): Record<string, unknown> => {
+  const value = fixture(name) as Record<string, unknown>;
+  const publication = value.evidenceClaims as { claims: unknown[]; userFacts: string[] };
+  publication.claims.push({ id: 'market-authority', text: 'The product targets Japan.', status: 'confirmed',
+    userEvidence: [{ kind: 'explicit-user-evidence', source: 'user-message', reference: 'market-request', excerpt: 'Build this for users in Japan.' }] });
+  publication.userFacts.push('market-authority');
+  return value;
+};
 const sha256 = (value: string): string => createHash('sha256').update(value).digest('hex');
 const context = (overrides: Record<string, unknown> = {}): Record<string, unknown> => ({
   schema: 'locale-design-context-v1', conversationLanguage: 'ko-KR', surfaceLocale: 'ja-JP',
-  marketRegion: 'JP', audience: 'Adults comparing a public mission archive',
+  marketRegion: 'JP', marketAuthorityClaimId: 'market-authority', audience: 'Adults comparing a public mission archive',
   domain: 'public lunar mission archive', surface: 'product', desiredFit: 'market-grounded',
   brandInvariants: ['Mission facts do not change across locales'], ...overrides,
+  ...(overrides.marketRegion === null && !Object.hasOwn(overrides, 'marketAuthorityClaimId') ? { marketAuthorityClaimId: null } : {}),
 });
 
 test('no-context routes retain canonical bytes without injecting locale context', () => {
@@ -61,11 +70,20 @@ test('clarification cannot enter adaptive production', () => {
 
 test('research reuses the existing scout, reference, copy, type, and composition path', () => {
   const research = routeLocaleDesignContext(context());
-  const routed = routeAdaptiveFlow(fixture('synth-marketing'), undefined, research);
+  assert.throws(() => routeAdaptiveFlow(fixture('synth-marketing'), undefined, research),
+    (error: unknown) => error instanceof AdaptiveRouteError && error.code === 'LOCALE_DESIGN_MARKET_AUTHORITY_REQUIRED');
+  const wrongAuthority = marketFixture('synth-marketing');
+  const publication = wrongAuthority.evidenceClaims as { claims: Array<{ id: string; text: string; userEvidence: Array<{ excerpt: string }> }> };
+  const claim = publication.claims.find(candidate => candidate.id === 'market-authority');
+  const evidence = claim?.userEvidence[0];
+  if (claim && evidence) { claim.text = 'The product has a target market.'; evidence.excerpt = 'Use the selected region.'; }
+  assert.throws(() => routeAdaptiveFlow(wrongAuthority, undefined, research),
+    (error: unknown) => error instanceof AdaptiveRouteError && error.code === 'LOCALE_DESIGN_MARKET_AUTHORITY_REQUIRED');
+  const routed = routeAdaptiveFlow(marketFixture('synth-marketing'), undefined, research);
   assert.equal(routed.sourceContract.localeDesign?.contextSha256, research.contextSha256);
   assert.ok(routed.gates.includes(`locale-design:research:${research.contextSha256}`));
 
-  const missingType = structuredClone(fixture('synth-marketing')) as Record<string, unknown>;
+  const missingType = structuredClone(marketFixture('synth-marketing')) as Record<string, unknown>;
   const strategy = Reflect.get(missingType, 'strategyDecision') as Record<string, unknown>;
   Reflect.set(strategy, 'stages', (Reflect.get(strategy, 'stages') as string[]).filter((stage) => stage !== 'type-proof'));
   const skips = Reflect.get(strategy, 'skips') as Record<string, unknown>[];
@@ -108,7 +126,7 @@ test('persisted locale route is replayable and rejects changed or missing compan
   writeFileSync(join(root, '.omd', 'locale-design-context.json'), `${JSON.stringify(rawContext)}\n`);
   const locale = routeLocaleDesignContext(rawContext);
   const invocation = createTestProjectRunInvocation(root, 'locale-route-persistence');
-  const input = fixture('synth-marketing');
+  const input = marketFixture('synth-marketing');
   const record = routeAdaptiveFlow(input, undefined, locale);
   const authority = adaptiveRouteAuthorityBytes(record, adaptiveRouteRecordSha256(record), invocation);
   authorizeTestProjectRunPayloads(root, invocation, [{ purpose: 'adaptive-route-authority', payload: authority }]);

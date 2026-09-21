@@ -3,6 +3,7 @@
   "conversationLanguage": "ko-KR",
   "surfaceLocale": "ko-KR",
   "marketRegion": "KR",
+  "marketAuthorityClaimId": "market-authority",
   "audience": "OMD 설치 여부를 평가하는 한국의 개발자와 프로덕트 빌더",
   "domain": "코딩 에이전트를 위한 증거 기반 인터페이스 디자인 워크플로 설치 검토",
   "surface": "marketing",

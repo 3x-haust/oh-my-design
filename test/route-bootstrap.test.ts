@@ -96,9 +96,12 @@ test('a fresh explicit Korean market reaches target-market-first discovery throu
   const input = fixture(); repair(input);
   input.strategyDecision.stages.splice(input.strategyDecision.stages.indexOf('reference-board') + 1, 0, 'reference-selection');
   input.strategyDecision.skips = input.strategyDecision.skips.filter((skip: { id: string }) => skip.id !== 'reference-selection');
+  input.evidenceClaims.claims.push({ id: 'market-authority', text: 'The product targets South Korea.', status: 'confirmed',
+    userEvidence: [{ kind: 'explicit-user-evidence', source: 'user-message', reference: 'market-request', excerpt: '한국 사용자를 위한 서비스' }] });
+  input.evidenceClaims.userFacts.push('market-authority');
   const context = {
     schema: 'locale-design-context-v1', conversationLanguage: 'ko-KR', surfaceLocale: 'ko-KR',
-    marketRegion: 'KR', audience: '한국에서 공공 혜택을 비교하는 주민', domain: 'public benefits',
+    marketRegion: 'KR', marketAuthorityClaimId: 'market-authority', audience: '한국에서 공공 혜택을 비교하는 주민', domain: 'public benefits',
     surface: 'product', desiredFit: 'market-grounded', brandInvariants: ['Facts remain source-bound'],
   };
   writeFileSync(join(root, inputPath), JSON.stringify(input));

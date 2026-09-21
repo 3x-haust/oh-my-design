@@ -28,6 +28,7 @@ import { adaptiveMotionContract } from './adaptive-motion-ambition.ts';
 import { validateAdaptiveAiAssetSelection } from './adaptive-ai-assets.ts';
 import { requiredAttributionCategories, validateAttributionCoverage } from './adaptive-attribution.ts';
 import { parseLocaleDesignRoute, type LocaleDesignRoute } from '../locale/design-context.ts';
+import { hasLocaleMarketAuthority } from './locale-market-authority.ts';
 
 function validateRecommendation(strategy: AdaptiveStrategyDecision, value: RecommendedMethodDecision): void {
   const skipped = strategy.skips.some((entry) => entry.id === value.id);
@@ -209,6 +210,10 @@ function validateLocaleDesignRoute(input: ValidatedAdaptiveRouteInput): void {
   if (locale.decision === 'ask') return failAdaptiveRoute('LOCALE_DESIGN_CLARIFICATION_REQUIRED');
   const strategy = input.strategyDecision;
   if (locale.decision === 'research') {
+    if (!hasLocaleMarketAuthority(locale, input.evidenceClaims)) {
+      return failAdaptiveRoute('LOCALE_DESIGN_MARKET_AUTHORITY_REQUIRED',
+        'explicit marketRegion must bind through marketAuthorityClaimId to a confirmed evidenceClaims.userFacts claim whose user evidence names that market');
+    }
     const stages = ['scout', 'reference-board', 'reference-selection', 'copy', 'type-proof', 'composition'];
     const roles = ['omd-scout', 'omd-writer', 'omd-typesetter', 'omd-composer'];
     const methods = ['reference-discovery', 'parallel-reference-acquisition'];
@@ -284,7 +289,9 @@ export function diagnoseAdaptiveRouteInput(value: unknown, localeDesign?: Locale
   const check: RouteCheck = (path, run) => {
     try { run(); } catch (error) {
       if (!(error instanceof Error)) throw error;
-      const code = 'code' in error && typeof error.code === 'string' ? error.code : error.message.split(':')[0]!;
+      const code = 'code' in error && typeof error.code === 'string'
+        ? error.code
+        : (error.message.split(':')[0] ?? 'MALFORMED_ADAPTIVE_ROUTE');
       // Unexpected exceptions are bugs, not model-repairable input diagnostics.
       if (!/^[A-Z][A-Z0-9_]+$/.test(code)) throw error;
       diagnostics.push({ path, code, message: error.message });
@@ -293,13 +300,14 @@ export function diagnoseAdaptiveRouteInput(value: unknown, localeDesign?: Locale
   let input: ValidatedAdaptiveRouteInput | undefined;
   check('input', () => { input = validated(value, localeDesign); });
   if (input !== undefined) {
-    checkAdaptiveInput(input, check);
+    const currentInput = input;
+    checkAdaptiveInput(currentInput, check);
     // A required discovery method brings a wave constraint even when the method is missing.
     // Project it only for diagnostics; never rewrite the caller's strategy or publish it.
-    if (input.referenceDiscovery.decision === 'discover' && !input.strategyDecision.methods.includes('parallel-reference-acquisition')) {
-      const strategy = input.strategyDecision;
+    if (currentInput.referenceDiscovery.decision === 'discover' && !currentInput.strategyDecision.methods.includes('parallel-reference-acquisition')) {
+      const strategy = currentInput.strategyDecision;
       check('strategyDecision.executionWaves', () => validateAdaptiveExecutionWaves({ ...strategy,
-        methods: [...strategy.methods, 'parallel-reference-acquisition'] }, input!.deliveryMode));
+        methods: [...strategy.methods, 'parallel-reference-acquisition'] }, currentInput.deliveryMode));
     }
   }
   return diagnostics.filter((entry, index) => diagnostics.findIndex(other => other.message === entry.message) === index);

@@ -1,8 +1,8 @@
 export const LOCALE_DESIGN_CONTEXT_SCHEMA = 'locale-design-context-v1' as const;
 export const LOCALE_DESIGN_ROUTE_SCHEMA = 'locale-design-route-v1' as const;
 export const LOCALE_DESIGN_CONTEXT_KEYS = [
-  'schema', 'conversationLanguage', 'surfaceLocale', 'marketRegion', 'audience', 'domain',
-  'surface', 'desiredFit', 'brandInvariants',
+  'schema', 'conversationLanguage', 'surfaceLocale', 'marketRegion', 'marketAuthorityClaimId',
+  'audience', 'domain', 'surface', 'desiredFit', 'brandInvariants',
 ] as const;
 export const LOCALE_DESIGN_SURFACES = ['product', 'marketing', 'editorial', 'mixed'] as const;
 export const LOCALE_DESIGN_FITS = ['market-grounded', 'locale-mechanics-only'] as const;
@@ -14,6 +14,7 @@ export type LocaleDesignContext = Readonly<{
   conversationLanguage: string | null;
   surfaceLocale: string;
   marketRegion: string | null;
+  marketAuthorityClaimId: string | null;
   audience: string | null;
   domain: string;
   surface: LocaleDesignSurface;

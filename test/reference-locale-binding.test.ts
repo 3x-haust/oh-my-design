@@ -34,7 +34,7 @@ function fixture() {
   mkdirSync(join(root, '.omd', 'refs'), { recursive: true });
   const context = {
     schema: 'locale-design-context-v1', conversationLanguage: 'ko-KR', surfaceLocale: 'ja-JP',
-    marketRegion: 'JP', audience: 'Adults comparing public cultural events',
+    marketRegion: 'JP', marketAuthorityClaimId: 'market-authority', audience: 'Adults comparing public cultural events',
     domain: 'cultural event discovery', surface: 'product', desiredFit: 'market-grounded',
     brandInvariants: ['Event facts remain unchanged'],
   };

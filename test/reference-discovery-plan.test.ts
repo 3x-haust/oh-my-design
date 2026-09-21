@@ -44,7 +44,7 @@ test('explicit Korean surface mechanics remain separate from market and source-c
   const root = project(t);
   const locale = routeLocaleDesignContext({
     schema: 'locale-design-context-v1', conversationLanguage: 'ko', surfaceLocale: 'ko',
-    marketRegion: null, audience: 'Developers', domain: 'Instrument launch', surface: 'marketing',
+    marketRegion: null, marketAuthorityClaimId: null, audience: 'Developers', domain: 'Instrument launch', surface: 'marketing',
     desiredFit: 'locale-mechanics-only', brandInvariants: ['Supplied instrument facts'],
   });
   const plan = buildReferenceDiscoveryPlan(root, routeAdaptiveFlow(fixture(), undefined, locale));
@@ -65,18 +65,24 @@ test('an explicit Korean market makes both reference lanes target-market-first w
   const root = project(t);
   const locale = routeLocaleDesignContext({
     schema: 'locale-design-context-v1', conversationLanguage: 'ko-KR', surfaceLocale: 'ko-KR',
-    marketRegion: 'KR', audience: 'Korean residents comparing public benefits',
+    marketRegion: 'KR', marketAuthorityClaimId: 'market-authority', audience: 'Korean residents comparing public benefits',
     domain: 'public benefit discovery', surface: 'marketing', desiredFit: 'market-grounded',
     brandInvariants: ['Eligibility facts remain source-bound'],
   });
-  const plan = buildReferenceDiscoveryPlan(root, routeAdaptiveFlow(fixture(), undefined, locale));
+  const input = fixture();
+  input.evidenceClaims.claims.push({ id: 'market-authority', text: 'The product targets South Korea.', status: 'confirmed',
+    userEvidence: [{ kind: 'explicit-user-evidence', source: 'user-message', reference: 'market-request', excerpt: 'Build this for users in South Korea.' }] });
+  input.evidenceClaims.userFacts.push('market-authority');
+  const plan = buildReferenceDiscoveryPlan(root, routeAdaptiveFlow(input, undefined, locale));
   assert.equal(plan.schema, 'reference-discovery-plan-v2');
   assert.deepEqual(plan.marketReferencePolicy, {
-    mode: 'target-market-first', marketRegion: 'KR', marketLabel: 'South Korea', marketSearchLabels: ['대한민국', 'South Korea'],
+    mode: 'target-market-first', marketRegion: 'KR', marketLabel: 'South Korea', marketSearchLabels: ['대한민국', '한국', 'South Korea'],
     audience: 'Korean residents comparing public benefits', targetMarketCoverage: 'required-in-domain-and-design',
     domainSearchInputs: [
       { lane: 'domain', query: '대한민국 public benefit discovery',
         url: 'https://www.bing.com/search?q=%EB%8C%80%ED%95%9C%EB%AF%BC%EA%B5%AD+public+benefit+discovery', queryParam: 'q' },
+      { lane: 'domain', query: '한국 public benefit discovery service',
+        url: 'https://www.bing.com/search?q=%ED%95%9C%EA%B5%AD+public+benefit+discovery+service', queryParam: 'q' },
       { lane: 'domain', query: 'South Korea public benefit discovery service',
         url: 'https://www.bing.com/search?q=South+Korea+public+benefit+discovery+service', queryParam: 'q' },
     ],

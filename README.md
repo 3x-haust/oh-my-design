@@ -335,7 +335,8 @@ become mainland China, and `zh-CN` and `zh-TW` remain separate contexts.
 
 For ordinary `/ultradesign` use, state the surface language and intended market/audience. If market
 or audience authority is missing, OMD asks one focused question and stops that research route if it
-remains unresolved. A mechanics-only route checks real target-language copy and type mechanics but
+remains unresolved. The locale context's `marketAuthorityClaimId` must name a confirmed
+`evidenceClaims.userFacts` claim whose user evidence actually names that market. A mechanics-only route checks real target-language copy and type mechanics but
 makes no cultural-fit claim. A market-grounded route collects current
 standards, a global equivalent or exact unavailability, native first-party category evidence, and a
 counterexample for the named decisions. It preserves only `supported`/`shared` mechanisms, routes conflict

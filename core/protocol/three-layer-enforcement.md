@@ -8,6 +8,7 @@ stage is mandatory; an explicit route skip remains a skip. Repetition alone is n
 | Rule | Required outcome | Executable boundary |
 | --- | --- | --- |
 | Route setup | Use the task-appropriate starter; preserve user facts, risk, scope and selected work while repairing input errors. Input validity is not publication or task completion. | `omd route validate --input <json> --json`; `route classify`; Pi setup recovery |
+| Market authority | Never infer a country from language or locale. An explicit market context names a confirmed `evidenceClaims.userFacts` claim with actual user evidence for that market, and the same locale context is bound to validation and classification. | Locale-context parser; `LOCALE_DESIGN_MARKET_AUTHORITY_REQUIRED`; route replay/currentness checks |
 | Selected stages | Preserve the approved scope and dependency groups; never relabel product UX to evade an error. | `omd brief <stage> --check --json`; `omd guard production --json` |
 | Separate research | When selected, domain task/feature evidence and design craft evidence remain distinct, with current per-screen application decisions. New domain research inspects at least three independent operator families after redirects; pages or subdomains under one operator count once. A failed search is a gap, not a fabricated reference. | `omd ref research-check --json`; `omd ref apply-check --json`; production/completion gates |
 | Executed discovery | Query prose is not acquisition evidence. Retained non-user entries trace to actual observed links and separately captured visits. | `omd ref search --input <json>` or `omd ref navigate`; current v7 research publication/currentness checks |
@@ -96,7 +97,8 @@ inspection and research repair remain available while production is blocked.
 - Research v6/v7 permit actual search or explicit native direct-public roots; v5 keeps its original
   search requirements unchanged. Both refuse missing/mismatched declared search receipts or retained
   links, and current v6/v7 domain research requires at least three retained comparable services from three
-  independent operator families. Multiple pages or subdomains under one operator such as GOV.UK
+  independent operator families. For v7 target-market work, all three are current local-market sources;
+  a global fallback cannot replace local comparison coverage. Multiple pages or subdomains under one operator such as GOV.UK
   count once; historical v5 remains readable but cannot be relabelled as new research. Both refuse
   links unreachable from observed discovery. Current v7 market coverage additionally requires signed
   search-v2 or direct-entry-v3 provenance tied to exact observed links and the explicit market. Search

@@ -18,12 +18,14 @@ const context = (overrides: Record<string, unknown> = {}): Record<string, unknow
   conversationLanguage: 'ko-KR',
   surfaceLocale: 'ja-JP',
   marketRegion: 'JP',
+  marketAuthorityClaimId: 'market-authority',
   audience: 'Adults comparing a public mission archive',
   domain: 'public lunar mission archive',
   surface: 'product',
   desiredFit: 'market-grounded',
   brandInvariants: ['Mission facts do not change across locales'],
   ...overrides,
+  ...(overrides.marketRegion === null && !Object.hasOwn(overrides, 'marketAuthorityClaimId') ? { marketAuthorityClaimId: null } : {}),
 });
 
 test('context keeps conversation, surface locale, and explicit market independent', () => {

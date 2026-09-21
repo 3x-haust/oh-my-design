@@ -1,7 +1,8 @@
 export function marketSearchLabels(marketRegion: string, surfaceLocale: string): readonly string[] {
   const english = new Intl.DisplayNames(['en'], { type: 'region' }).of(marketRegion) ?? marketRegion;
   const native = new Intl.DisplayNames([surfaceLocale], { type: 'region' }).of(marketRegion) ?? marketRegion;
-  return Object.freeze([...new Set([native, english])]);
+  const localAliases = marketRegion === 'KR' ? ['한국'] : [];
+  return Object.freeze([...new Set([native, ...localAliases, english])]);
 }
 
 export function marketDomainQueries(marketRegion: string, surfaceLocale: string, domain: string): readonly string[] {

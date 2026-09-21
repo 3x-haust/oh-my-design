@@ -90,11 +90,17 @@ export function parseLocaleDesignContext(value: unknown): LocaleDesignContext {
     marketRegion = normalized;
   }
   const conversationValue = item.get('conversationLanguage');
+  const marketAuthorityClaimId = nullableText(item.get('marketAuthorityClaimId'), 'marketAuthorityClaimId');
+  if (marketRegion === null && marketAuthorityClaimId !== null) return fail('marketAuthorityClaimId requires an explicit marketRegion');
+  if (marketRegion !== null && desiredFit === 'market-grounded' && marketAuthorityClaimId === null) {
+    return fail('market-grounded marketRegion requires marketAuthorityClaimId from a confirmed user fact');
+  }
   return Object.freeze({
     schema: LOCALE_DESIGN_CONTEXT_SCHEMA,
     conversationLanguage: conversationValue === null ? null : locale(conversationValue, 'conversationLanguage'),
     surfaceLocale: locale(item.get('surfaceLocale'), 'surfaceLocale'),
     marketRegion,
+    marketAuthorityClaimId,
     audience: nullableText(item.get('audience'), 'audience'),
     domain: text(item.get('domain'), 'domain', DOMAIN_TEXT_LIMIT),
     surface: surface as LocaleDesignSurface,

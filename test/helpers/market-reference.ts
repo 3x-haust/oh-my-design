@@ -17,7 +17,7 @@ export const marketDomainBrief = {
     nonGoals: [{ text: 'Do not submit official applications' }] },
 };
 export const marketContext = { schema: 'locale-design-context-v1', conversationLanguage: 'ko-KR', surfaceLocale: 'ko-KR',
-  marketRegion: 'KR', audience: '한국에서 공공 혜택을 비교하는 주민', domain: 'public benefits',
+  marketRegion: 'KR', marketAuthorityClaimId: 'market-authority', audience: '한국에서 공공 혜택을 비교하는 주민', domain: 'public benefits',
   surface: 'product', desiredFit: 'market-grounded', brandInvariants: ['Facts remain source-bound'] };
 export const localSearchSource = (sourceId: string, evidenceSha256: string, scope: 'service' | 'product', searchReceiptSha256: string) => ({
   sourceId, evidenceSha256, scope, basis: 'market-search-result', provenanceReceiptSha256: searchReceiptSha256,

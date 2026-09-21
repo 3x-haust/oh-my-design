@@ -10,6 +10,7 @@ import { readCurrentDirectDiscoveryEntry } from './discovery-record.ts';
 import { negatesMarketScope } from './market-scope-negation.ts';
 import { readSearchExecution, SEARCH_EXECUTION_SCHEMA } from './search-execution.ts';
 import { resultReaches, type ObservedSearchResult } from './search-result.ts';
+import { referenceServiceFamily } from './design-discovery-sources.ts';
 import {
   marketObject, marketReject, marketText, marketTexts,
   type MarketLaneCoverage, type MarketSourceIdentity,
@@ -80,6 +81,12 @@ export function validateMarketReferenceCoverage(root: string, research: Referenc
     return marketReject('REFERENCE_RESEARCH_MARKET_COVERAGE_REQUIRED: publish v7 with source-specific local-market provenance for both lanes and a concrete gap for every global fallback');
   }
   if (research.marketCoverage.marketRegion !== context.marketRegion) return marketReject('REFERENCE_RESEARCH_MARKET_REGION_STALE');
+  const localDomainIds = new Set(research.marketCoverage.domain.localSources.map(source => source.sourceId));
+  const localDomainFamilies = new Set(research.domainReference.sources
+    .filter(source => localDomainIds.has(source.id)).map(source => referenceServiceFamily(source.url)));
+  if (localDomainIds.size < 3 || localDomainFamilies.size < 3) {
+    return marketReject('REFERENCE_RESEARCH_MARKET_DOMAIN_LOCAL_DIVERSITY: inspect at least three target-market services from independent operator families before using global fallback');
+  }
   const labels = marketSearchLabels(context.marketRegion, context.surfaceLocale);
   const domainQueries = marketDomainQueries(context.marketRegion, context.surfaceLocale, context.domain);
   const marketTokens = [context.marketRegion, ...labels];
@@ -143,7 +150,8 @@ function validateLaneProvenance(
   for (const execution of executions) assertCurrentExecution(execution,
     `REFERENCE_RESEARCH_MARKET_${lane}_ATTEMPT_STALE`);
   for (const local of coverage.localSources) {
-    const source = sources.find(candidate => candidate.id === local.sourceId)!;
+    const source = sources.find(candidate => candidate.id === local.sourceId)
+      ?? marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_LOCAL_PROVENANCE`);
     const urls = [source.url, ...(source.discovery === undefined ? [] : [source.discovery.url])];
     const execution = executions.find(candidate => candidate.sha256 === local.provenanceReceiptSha256)
       ?? marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_LOCAL_PROVENANCE`);
@@ -164,7 +172,8 @@ function validateLaneProvenance(
   if (fallback === null) return;
   if (fallback.gap.marketRegion !== marketRegion) marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_FALLBACK_MARKET`);
   for (const binding of fallback.provenance) {
-    const source = sources.find(candidate => candidate.id === binding.sourceId)!;
+    const source = sources.find(candidate => candidate.id === binding.sourceId)
+      ?? marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_FALLBACK_PROVENANCE`);
     const urls = [source.url, ...(source.discovery === undefined ? [] : [source.discovery.url])];
     const execution = executions.find(candidate => candidate.sha256 === binding.provenanceReceiptSha256)
       ?? marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_FALLBACK_PROVENANCE`);
