@@ -686,6 +686,7 @@ const TASK_FLOW_BENCHMARK: InputSkeleton = {
     'sources contains 2..6 independently inspected sources and at least two same-domain-service sources; same-domain services must outnumber adjacent-domain services',
     'each source records every safe reachable screen in its declared scope, every discovered target as either inspected or explicitly excluded, and a connected reachedBy path from an entry screen',
     'coverage.status is complete only with zero exclusions; bounded-gap requires explicit authentication, payment, destructive-action, rate-limit, blocked, out-of-scope, or unavailable exclusions with reasons',
+    'coverage.excludedTargets is an array of objects with exactly id, url, category, reason: a unique nonempty id, the actual discovered HTTPS url, one of the exclusion categories above, and a nonempty observed reason. Never replace these objects with strings or omit discovered targets to claim complete coverage. coverage.discoveredTargetCount must equal screens.length + excludedTargets.length.',
     'screens bind current local browser evidence under .omd/refs/; every flow step has distinct current evidence, a concrete action, and its observed result',
     'features group observed behavior by real screen ids; flows organize the clicked sequence by user intent. Every inspected screen must appear in at least one feature or flow',
     'a service source needs at least one completed flow. Record blocked attempts with a limitation instead of claiming completion',
@@ -706,11 +707,16 @@ const TASK_FLOW_BENCHMARK: InputSkeleton = {
         observedAt: '2026-08-25',
         coverage: {
           scope: 'public repair service overview and detail pages reachable from the supplied entry page',
-          status: 'complete',
-          discoveredTargetCount: 2,
+          status: 'bounded-gap',
+          discoveredTargetCount: 3,
           entryScreenIds: ['a-intake'],
           inspectedScreenIds: ['a-intake', 'a-review'],
-          excludedTargets: [],
+          excludedTargets: [{
+            id: 'a-account',
+            url: 'https://example.com/repair-booking-a/account',
+            category: 'authentication',
+            reason: 'The discovered account link requires sign-in; account access was not attempted.',
+          }],
         },
         screens: [
           {
