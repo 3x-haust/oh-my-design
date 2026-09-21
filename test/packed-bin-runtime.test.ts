@@ -65,6 +65,7 @@ test('Given a real offline installed tarball When each public command starts The
     const dependencies = packOfflineWorkspaceDependencies(ROOT, packs);
     const installed = run(NPM, ['install', '--offline', '--ignore-scripts', '--no-audit', '--no-fund', archive, ...dependencies], consumer);
     assert.equal(installed.status, 0, installed.stderr);
+    assert.equal(existsSync(join(consumer, PACKAGE, 'core', '.omc')), false, 'packed runtime must exclude local agent/session state');
 
     for (const command of COMMANDS) {
       const executable = installedCommand(consumer, command.name);

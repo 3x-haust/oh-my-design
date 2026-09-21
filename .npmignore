@@ -1,0 +1,2 @@
+# Local agent/session state is never part of the published runtime package.
+core/.omc/
