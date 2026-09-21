@@ -110,6 +110,7 @@ test('repairable terminal failures stop on repeated no-progress but successful r
   assert.equal(sent.length, 7, 'two recovery turns are allowed after work stops changing, then the cycle is held');
   await h.emit('input', { source: 'interactive' });
   await h.emit('tool_call', { toolName: 'write', toolCallId: 'new-request', input: { path: 'src/main.jsx' } });
+  writeFileSync(join(h.cwd, 'src/main.jsx'), 'new request bytes');
   await h.emit('tool_result', { toolName: 'write', toolCallId: 'new-request', input: { path: 'src/main.jsx' }, isError: false });
   await h.emit('message_end', { message: final });
   assert.equal(sent.length, 8);
@@ -122,7 +123,10 @@ test('identical writes and successful publisher help do not manufacture repair p
     : { stdout: '{"blockers":["copy deck missing"]}', stderr: '', code: 1, killed: false }, m => { sent.push(m); });
   await h.emit('before_agent_start', { prompt: 'omd-ultradesign' });
   mkdirSync(join(h.cwd, 'src'));
+  await h.emit('tool_call', { toolName: 'write', toolCallId: 'seed', input: { path: 'src/main.jsx', content: 'same bytes' } });
   writeFileSync(join(h.cwd, 'src/main.jsx'), 'same bytes');
+  await h.emit('tool_result', { toolName: 'write', toolCallId: 'seed', input: { path: 'src/main.jsx' }, isError: false });
+  await h.emit('message_end', { message: final });
   for (let round = 0; round < 5; round++) {
     const toolCallId = `same-${round}`;
     await h.emit('tool_call', { toolName: 'write', toolCallId, input: { path: 'src/main.jsx', content: 'same bytes' } });
@@ -150,6 +154,22 @@ test('genuine writes without a tool call id still count as repair progress', asy
   assert.equal(sent.length, 5);
 });
 
+test('blocked and failed production writes never authorize an automatic completion repair', async () => {
+  for (const mode of ['blocked', 'failed'] as const) {
+    const sent: unknown[] = [];
+    const h = harness(async (_command, args) => args[2] === 'production' && mode === 'failed'
+      ? { stdout: '{"ok":true}', stderr: '', code: 0, killed: false }
+      : { stdout: '{"blockers":["copy deck missing"]}', stderr: '', code: 1, killed: false }, m => { sent.push(m); });
+    await h.emit('before_agent_start', { prompt: 'omd-ultradesign' });
+    const toolCallId = `${mode}-write`;
+    const decision = await h.emit('tool_call', { toolName: 'write', toolCallId, input: { path: 'src/main.jsx', content: 'attempt' } });
+    if (mode === 'blocked') assert.equal(blocked(decision), true);
+    else await h.emit('tool_result', { toolName: 'write', toolCallId, input: { path: 'src/main.jsx' }, isError: true });
+    await h.emit('message_end', { message: final });
+    assert.equal(sent.length, 0, `${mode} source activity is not successful work`);
+  }
+});
+
 test('authority failures, user aborts and tool-use messages do not trigger automatic repair', async () => {
   const sent: unknown[] = [];
   const h = harness(async () => ({ stdout: '', stderr: 'FINAL_REVIEWER_LANE_AUTHORIZATION_REQUIRED', code: 1, killed: false }), m => { sent.push(m); });
@@ -172,7 +192,9 @@ test('missing rendered application review enters the progress-driven repair loop
   await h.emit('before_agent_start', { prompt: 'omd-ultradesign' });
   await h.emit('tool_call', { toolName: 'omd_cli', input: { args: ['ref', 'apply-review-plan', '--json'] } });
   assert.equal(await h.emit('message_end', { message: final }), undefined);
+  mkdirSync(join(h.cwd, 'src'));
   await h.emit('tool_call', { toolName: 'write', toolCallId: 'source', input: { path: 'src/main.jsx' } });
+  writeFileSync(join(h.cwd, 'src/main.jsx'), 'application source');
   await h.emit('tool_result', { toolName: 'write', toolCallId: 'source', input: { path: 'src/main.jsx' }, isError: false });
   for (let attempt = 0; attempt < 4; attempt++) await h.emit('message_end', { message: final });
   assert.equal(sent.length, 3);

@@ -20,7 +20,7 @@ export default function omdExtension(pi: PortablePiApi): void {
   const productionAttempted = new Set<string>();
   const repairLoop = new RepairLoop();
   const revisions = new Map<string, number>();
-  const pendingMutations = new Map<string, Map<string, { path: string; before: string }>>();
+  const pendingMutations = new Map<string, Map<string, { path: string; before: string; production: boolean }>>();
   const revision = (cwd: string) => revisions.get(cwd) ?? 0;
   const bumpRevision = (cwd: string) => revisions.set(cwd, revision(cwd) + 1);
   const fileRevision = (cwd: string, path: string): string => {
@@ -32,11 +32,11 @@ export default function omdExtension(pi: PortablePiApi): void {
   };
   const mutationKey = (toolName: unknown, toolCallId: string | undefined, path: unknown) => toolCallId
     ?? (typeof toolName === 'string' && typeof path === 'string' ? `${toolName}:${path}` : undefined);
-  const rememberMutation = (cwd: string, toolName: unknown, toolCallId: string | undefined, path: string | undefined) => {
+  const rememberMutation = (cwd: string, toolName: unknown, toolCallId: string | undefined, path: string | undefined, production = false) => {
     const key = mutationKey(toolName, toolCallId, path);
     if (key === undefined || path === undefined) return;
-    const pending = pendingMutations.get(cwd) ?? new Map<string, { path: string; before: string }>();
-    pending.set(key, { path, before: fileRevision(cwd, path) });
+    const pending = pendingMutations.get(cwd) ?? new Map<string, { path: string; before: string; production: boolean }>();
+    pending.set(key, { path, before: fileRevision(cwd, path), production });
     pendingMutations.set(cwd, pending);
   };
   const ownedWork = new StageWork();
@@ -127,12 +127,11 @@ export default function omdExtension(pi: PortablePiApi): void {
           rememberMutation(context.cwd, event.toolName, event.toolCallId, classification.path);
           return;
         }
-        productionAttempted.add(context.cwd);
         target = classification.path;
       }
       try {
         await run(['guard', 'production', ...(target === undefined ? [] : ['--path', target]), '--json'], context.cwd, context.signal);
-        if (name !== 'bash') rememberMutation(context.cwd, event.toolName, event.toolCallId, target);
+        if (name !== 'bash') rememberMutation(context.cwd, event.toolName, event.toolCallId, target, true);
       } catch (error) {
         return { block: true, reason: `OMD_PRODUCTION_BLOCKED: ${error instanceof Error ? error.message : String(error)}\nRepair the named design inputs through omd_cli; use read for inspection. Do not bypass with bash, scripts, or a different file tool.` };
       }
@@ -143,7 +142,10 @@ export default function omdExtension(pi: PortablePiApi): void {
       const key = mutationKey(event.toolName, event.toolCallId, event.input?.path);
       const mutation = key === undefined ? undefined : pendingMutations.get(context.cwd)?.get(key);
       if (key !== undefined) pendingMutations.get(context.cwd)?.delete(key);
-      if (mutation && event.isError === false && mutation.before !== fileRevision(context.cwd, mutation.path)) bumpRevision(context.cwd);
+      if (mutation && event.isError === false && mutation.before !== fileRevision(context.cwd, mutation.path)) {
+        bumpRevision(context.cwd);
+        if (mutation.production) productionAttempted.add(context.cwd);
+      }
     });
     pi.on!('message_end', async (event, context) => {
       const message = event.message;
@@ -258,7 +260,6 @@ export default function omdExtension(pi: PortablePiApi): void {
       }
       if (guarded(context.cwd) && params.args[0] === 'recipe' && params.args[1] === 'add') {
         touched.add(context.cwd);
-        productionAttempted.add(context.cwd);
         await run(['guard', 'production', '--json'], context.cwd, signal);
       }
       let result: Awaited<ReturnType<typeof run>>;
@@ -266,6 +267,7 @@ export default function omdExtension(pi: PortablePiApi): void {
         result = await run(params.args, context.cwd, signal);
         if (signal?.aborted || epochs.get(context.cwd) !== taskEpoch) return { content: [{ type: 'text', text: result.text }], details: result.details };
         if (hasPiRoute(context.cwd) && ownedWork.commandSucceeded(context.cwd, { args: params.args, token: workToken })) touched.add(context.cwd);
+        if (params.args[0] === 'recipe' && params.args[1] === 'add') productionAttempted.add(context.cwd);
         if (params.args[0] === 'route' && params.args[1] === 'classify' && commandBootstrap
           && authoredInputs.get(context.cwd)?.has(classifyPiWrite(context.cwd, commandBootstrap.inputPath).path)) freshRoutes.add(context.cwd);
         if (freshRoutes.has(context.cwd) && ownedWork.token(context.cwd) !== undefined && params.args[0] === 'brief' && params.args.includes('--check')) workflowStarted.add(context.cwd);
