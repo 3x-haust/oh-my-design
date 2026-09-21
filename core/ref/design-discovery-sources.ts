@@ -17,7 +17,7 @@ export function designDiscoveryProvider(url: string): string | null {
 }
 
 export function referenceServiceHost(url: string): string {
-  return new URL(url).hostname.toLowerCase().replace(/^www\./, '');
+  return new URL(url).hostname.toLowerCase().replace(/\.$/, '').replace(/^www\./, '');
 }
 
 export function referenceServiceFamily(url: string): string {
@@ -26,7 +26,9 @@ export function referenceServiceFamily(url: string): string {
   if (labels.length < 3) return host;
   const suffix = labels.slice(-2).join('.');
   if (['gov.uk', 'nhs.uk', 'go.kr', 'gov.au', 'gc.ca'].includes(suffix)) return suffix;
-  if (['co.uk', 'org.uk', 'com.au', 'com.br', 'co.jp', 'co.kr', 'co.nz'].includes(suffix)) return labels.slice(-3).join('.');
+  const [secondLevel, country] = labels.slice(-2);
+  if (country?.length === 2 && secondLevel && ['gov', 'gob', 'go', 'gc'].includes(secondLevel)) return suffix;
+  if (country?.length === 2 && secondLevel && ['ac', 'co', 'com', 'edu', 'net', 'org'].includes(secondLevel)) return labels.slice(-3).join('.');
   return suffix;
 }
 

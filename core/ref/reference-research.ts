@@ -6,7 +6,7 @@ import type { ProjectWriteAdapter } from '../runtime/project-write.ts';
 import { nodeStableProjectFileSystem, readStableProjectFile } from '../runtime/stable-project-file.ts';
 import { parseImageFragmentRecord } from './image-fragment-parser.ts';
 import { trustedDiscoveryImage, trustedReferenceImage } from './board-security.ts';
-import { designDiscoveryProvider, referenceServiceFamily } from './design-discovery-sources.ts';
+import { designDiscoveryProvider, referenceServiceFamily, referenceServiceHost } from './design-discovery-sources.ts';
 import { validateSearchCoverage, type ObservedNavigation } from './search-execution.ts';
 import { readResearchDiscoveryRoots, validateDiscoveryCoverage } from './discovery-coverage.ts';
 import { readStrictDiscoveryNavigation } from './discovery-record.ts';
@@ -127,9 +127,11 @@ export function validateReferenceResearch(
   if (research.sourceContractSha256 !== options.expectedSourceContractSha256) {
     fail('REFERENCE_RESEARCH_SOURCE_CONTRACT_STALE');
   }
+  const serviceIdentity = research.schema === 'reference-research-v6' ? referenceServiceFamily : referenceServiceHost;
   const directRoots = { domain: readResearchDiscoveryRoots(root, research.domainReference), design: readResearchDiscoveryRoots(root, research.designReference) };
-  const domainHosts = new Set(research.domainReference.sources.map(item => referenceServiceFamily(item.url)));
-  for (const observation of directRoots.domain) for (const url of [observation.url, observation.finalUrl]) domainHosts.add(referenceServiceFamily(url));
+  const domainHosts = new Set(research.domainReference.sources.map(item => serviceIdentity(item.url)));
+  const capturedDomainFamilies = new Set<string>();
+  for (const observation of directRoots.domain) for (const url of [observation.url, observation.finalUrl]) domainHosts.add(serviceIdentity(url));
   const retainedIdentities = new Map<string, string>();
   const references = loadRefs(root, { includeDomain: true });
   const navigation: Record<'domain' | 'design', ObservedNavigation[]> = { domain: [], design: [] };
@@ -154,11 +156,14 @@ export function validateReferenceResearch(
     const captured = verifyCapture(root, item, 'domain');
     observe('domain', item.url, captured);
     const acquisition = captured.acquisition as Record<string, unknown>;
-    domainHosts.add(referenceServiceFamily(acquisition.finalUrl as string));
+    const finalFamily = referenceServiceFamily(acquisition.finalUrl as string);
+    domainHosts.add(serviceIdentity(acquisition.finalUrl as string));
+    capturedDomainFamilies.add(finalFamily);
   }
+  if (research.schema === 'reference-research-v6' && capturedDomainFamilies.size < 3) fail('REFERENCE_RESEARCH_DOMAIN_SOURCE_DIVERSITY');
   const designUrls = [...research.designReference.sources.flatMap(item => item.discovery ? [item.url, item.discovery.url] : [item.url]),
     ...directRoots.design.flatMap(observation => [observation.url, observation.finalUrl])];
-  if (designUrls.some(url => domainHosts.has(referenceServiceFamily(url)))) fail('REFERENCE_RESEARCH_LANE_REDIRECT_OVERLAP');
+  if (designUrls.some(url => domainHosts.has(serviceIdentity(url)))) fail('REFERENCE_RESEARCH_LANE_REDIRECT_OVERLAP');
   for (const item of research.designReference.sources) {
     const source = verifyCapture(root, item, 'design');
     if (source.schemaVersion === 'image-fragment-v1' && typeof source.id === 'string') retainedIdentities.set(item.id, source.id);
@@ -169,7 +174,7 @@ export function validateReferenceResearch(
     observe('design', item.discovery!.url, entry);
     for (const captured of [source, entry]) {
       const acquisition = captured.acquisition as Record<string, unknown> | undefined;
-      if (acquisition && domainHosts.has(referenceServiceFamily(acquisition.finalUrl as string))) fail('REFERENCE_RESEARCH_LANE_REDIRECT_OVERLAP');
+      if (acquisition && domainHosts.has(serviceIdentity(acquisition.finalUrl as string))) fail('REFERENCE_RESEARCH_LANE_REDIRECT_OVERLAP');
     }
     if (item.discovery!.kind !== 'user-provided' && entry.acquisition
       && designDiscoveryProvider((entry.acquisition as Record<string, unknown>).finalUrl as string) === null) fail('REFERENCE_RESEARCH_DISCOVERY_REDIRECT: final page is not a supported gallery item');

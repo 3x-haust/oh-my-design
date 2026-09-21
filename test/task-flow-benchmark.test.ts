@@ -56,7 +56,7 @@ function exploredSource(id: string, origin: string, suffix: string) {
 
 function benchmark(): any {
   return {
-    schema: 'task-flow-benchmark-v2',
+    schema: 'task-flow-benchmark-v3',
     surface: 'product',
     domain: 'residential-field-service',
     sourceContractSha256: SHA,
@@ -124,6 +124,15 @@ test('task-flow benchmark binds multiple observed services to task order', () =>
     'availability',
   ]);
   assert.match(taskFlowBenchmarkSha256(parsed), /^[a-f0-9]{64}$/);
+});
+
+test('historical v2 benchmark keeps its original two-source admission', () => {
+  const historical = benchmark();
+  historical.schema = 'task-flow-benchmark-v2';
+  historical.sources = historical.sources.slice(0, 2);
+  const parsed = parseTaskFlowBenchmark(historical);
+  assert.equal(parsed.schema, 'task-flow-benchmark-v2');
+  assert.equal(parsed.sources.length, 2);
 });
 
 test('an editorial task-flow preserves its grammar through projection with unchanged evidence obligations', () => {

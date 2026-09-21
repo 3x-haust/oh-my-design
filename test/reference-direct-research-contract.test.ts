@@ -24,6 +24,16 @@ test('v5 publication preserves its version and absent optional fields', t => {
   assert.equal(JSON.parse(readFileSync(join(root, '.omd/reference-research.json'), 'utf8')).schema, 'reference-research-v5');
 });
 
+test('historical v5 keeps its original exact-host lane separation', t => {
+  const { research } = designAdmissionFixture(t);
+  const historical = { ...research,
+    domainReference: { ...research.domainReference, sources: research.domainReference.sources.map((source, index) => ({ ...source,
+      url: index === 0 ? 'https://benefits.gov.uk/task' : source.url })) },
+    designReference: { ...research.designReference, sources: research.designReference.sources.map(source => ({ ...source,
+      url: 'https://service.gov.uk/task' })) } };
+  assert.doesNotThrow(() => parseReferenceResearch(historical));
+});
+
 test('v6 parses direct-only lanes and retains direct roots in each lane artifact', t => {
   const { research } = designAdmissionFixture(t);
   const input = { ...research, schema: 'reference-research-v6',
@@ -48,6 +58,43 @@ test('v6 refuses fewer than three independent domain service families', t => {
   assert.throws(() => parseReferenceResearch({ ...direct,
     domainReference: { ...direct.domainReference, sources: oneFamily } }), /DOMAIN_SOURCE_DIVERSITY/);
   assert.doesNotThrow(() => parseReferenceResearch(direct));
+});
+
+test('service-family comparison canonicalizes a DNS root trailing dot', t => {
+  const { research } = designAdmissionFixture(t);
+  const direct = { ...research, schema: 'reference-research-v6',
+    domainReference: { ...research.domainReference, queries: [], searches: [], discoveryRoots: [rootEnvelope('domain')] },
+    designReference: { ...research.designReference, queries: [], searches: [], discoveryRoots: [rootEnvelope('design')] } };
+  const aliases = direct.domainReference.sources.map((source, index) => ({ ...source,
+    url: index === 0 ? 'https://example.com./task' : `https://service-${index}.example.com/task` }));
+  assert.throws(() => parseReferenceResearch({ ...direct,
+    domainReference: { ...direct.domainReference, sources: aliases } }), /DOMAIN_SOURCE_DIVERSITY/);
+});
+
+test('common country-code registrable domains remain independent families', t => {
+  const { research } = designAdmissionFixture(t);
+  const direct = { ...research, schema: 'reference-research-v6',
+    domainReference: { ...research.domainReference, queries: [], searches: [], discoveryRoots: [rootEnvelope('domain')] },
+    designReference: { ...research.designReference, queries: [], searches: [], discoveryRoots: [rootEnvelope('design')] } };
+  const independent = direct.domainReference.sources.map((source, index) => ({ ...source,
+    url: `https://${['alpha', 'bravo', 'charlie'][index]}.com.mx/task` }));
+  assert.doesNotThrow(() => parseReferenceResearch({ ...direct,
+    domainReference: { ...direct.domainReference, sources: independent } }));
+});
+
+test('v6 publication measures independent domain families after redirects', t => {
+  const fixture = designAdmissionFixture(t);
+  const finalUrl = 'https://www.gov.uk/benefits';
+  for (const entry of [fixture.domain, fixture.domainTwo, fixture.domainThree]) {
+    const capture = JSON.parse(readFileSync(entry.path, 'utf8')) as { acquisition: { finalUrl: string } };
+    capture.acquisition.finalUrl = finalUrl;
+    writeFileSync(entry.path, JSON.stringify(capture));
+  }
+  const redirected = { ...fixture.research, schema: 'reference-research-v6',
+    domainReference: { ...fixture.research.domainReference,
+      sources: fixture.research.domainReference.sources.map(source => ({ ...source, capture: fixture.receipt(join(fixture.root, source.capture.path)) })) },
+    designReference: { ...fixture.research.designReference } };
+  assert.throws(() => publishReferenceResearch(fixture.root, redirected, options, fixture.writer), /DOMAIN_SOURCE_DIVERSITY/);
 });
 
 test('v6 search-only lanes preserve omitted and explicitly empty direct roots', t => {

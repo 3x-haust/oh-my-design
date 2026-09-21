@@ -5,7 +5,8 @@ import { readLiveReferenceFlow } from './live-flow.ts';
 import { referenceServiceFamily } from './design-discovery-sources.ts';
 
 export const TASK_FLOW_BENCHMARK_SCHEMA =
-  'task-flow-benchmark-v2' as const;
+  'task-flow-benchmark-v3' as const;
+const LEGACY_TASK_FLOW_BENCHMARK_SCHEMA = 'task-flow-benchmark-v2' as const;
 export const TASK_FLOW_BENCHMARK_PROJECTION_SCHEMA =
   'task-flow-benchmark-projection-v1' as const;
 // Editorial reading, section navigation and saved-reading flows retain their
@@ -200,7 +201,7 @@ type BenchmarkCounterexample = Readonly<{
 }>;
 
 export type TaskFlowBenchmark = Readonly<{
-  schema: typeof TASK_FLOW_BENCHMARK_SCHEMA;
+  schema: typeof TASK_FLOW_BENCHMARK_SCHEMA | typeof LEGACY_TASK_FLOW_BENCHMARK_SCHEMA;
   surface: BenchmarkSurface;
   domain: string;
   sourceContractSha256: string;
@@ -562,9 +563,10 @@ export function parseTaskFlowBenchmark(
 ): TaskFlowBenchmark {
   const input = record(value, 'TASK_FLOW_BENCHMARK_INVALID');
   exactKeys(input, TASK_FLOW_BENCHMARK_KEYS, 'TASK_FLOW_BENCHMARK_KEYS');
-  if (input.schema !== TASK_FLOW_BENCHMARK_SCHEMA) {
+  if (input.schema !== TASK_FLOW_BENCHMARK_SCHEMA && input.schema !== LEGACY_TASK_FLOW_BENCHMARK_SCHEMA) {
     fail('TASK_FLOW_BENCHMARK_SCHEMA');
   }
+  const current = input.schema === TASK_FLOW_BENCHMARK_SCHEMA;
   if (!TASK_FLOW_BENCHMARK_SURFACES.includes(input.surface as BenchmarkSurface)) {
     fail('TASK_FLOW_BENCHMARK_SURFACE');
   }
@@ -584,14 +586,14 @@ export function parseTaskFlowBenchmark(
 
   if (!Array.isArray(input.sources)) fail('TASK_FLOW_BENCHMARK_SOURCE_COVERAGE');
   const sources = input.sources.map(parseSource);
-  if (sources.length < 3 || sources.length > 6) {
+  if (sources.length < (current ? 3 : 2) || sources.length > 6) {
     fail('TASK_FLOW_BENCHMARK_SOURCE_COVERAGE');
   }
   uniqueIds(sources, 'TASK_FLOW_BENCHMARK_SOURCE_DUPLICATE');
   const sameDomain = sources.filter((source) => source.kind === 'same-domain-service').length;
   const adjacent = sources.filter((source) => source.kind === 'adjacent-domain-service').length;
   const sameDomainFamilies = new Set(sources.filter(source => source.kind === 'same-domain-service').map(source => referenceServiceFamily(source.url)));
-  if (sameDomain < 3 || sameDomain <= adjacent || sameDomainFamilies.size < 3) {
+  if (sameDomain < (current ? 3 : 2) || sameDomain <= adjacent || (current && sameDomainFamilies.size < 3)) {
     fail('TASK_FLOW_BENCHMARK_SAME_DOMAIN_COVERAGE');
   }
 
@@ -630,7 +632,7 @@ export function parseTaskFlowBenchmark(
   }
 
   return {
-    schema: TASK_FLOW_BENCHMARK_SCHEMA,
+    schema: input.schema as TaskFlowBenchmark['schema'],
     surface: input.surface as BenchmarkSurface,
     domain: text(input.domain, 'TASK_FLOW_BENCHMARK_DOMAIN'),
     sourceContractSha256,

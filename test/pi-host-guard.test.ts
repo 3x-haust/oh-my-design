@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -92,9 +92,11 @@ test('repairable terminal failures stop on repeated no-progress but successful r
     ? { stdout: '{"ok":true}', stderr: '', code: 0, killed: false }
     : { stdout: JSON.stringify({ blockers: ['copy deck missing'] }), stderr: '', code: 1, killed: false }, (...args) => { sent.push(args); });
   await h.emit('before_agent_start', { prompt: 'omd-ultradesign' });
+  mkdirSync(join(h.cwd, 'src'));
   for (let round = 0; round < 5; round++) {
     const toolCallId = `repair-${round}`;
     await h.emit('tool_call', { toolName: 'write', toolCallId, input: { path: 'src/main.jsx', content: `round ${round}` } });
+    writeFileSync(join(h.cwd, 'src/main.jsx'), `round ${round}`);
     await h.emit('tool_result', { toolName: 'write', toolCallId, input: { path: 'src/main.jsx' }, isError: false });
     await h.emit('before_agent_start', { prompt: 'Follow-up repair' });
     await h.emit('message_end', { message: final });
@@ -111,6 +113,41 @@ test('repairable terminal failures stop on repeated no-progress but successful r
   await h.emit('tool_result', { toolName: 'write', toolCallId: 'new-request', input: { path: 'src/main.jsx' }, isError: false });
   await h.emit('message_end', { message: final });
   assert.equal(sent.length, 8);
+});
+
+test('identical writes and successful publisher help do not manufacture repair progress', async () => {
+  const sent: unknown[] = [];
+  const h = harness(async (_command, args) => args[2] === 'production' || args[1] === 'frame'
+    ? { stdout: '{"ok":true}', stderr: '', code: 0, killed: false }
+    : { stdout: '{"blockers":["copy deck missing"]}', stderr: '', code: 1, killed: false }, m => { sent.push(m); });
+  await h.emit('before_agent_start', { prompt: 'omd-ultradesign' });
+  mkdirSync(join(h.cwd, 'src'));
+  writeFileSync(join(h.cwd, 'src/main.jsx'), 'same bytes');
+  for (let round = 0; round < 5; round++) {
+    const toolCallId = `same-${round}`;
+    await h.emit('tool_call', { toolName: 'write', toolCallId, input: { path: 'src/main.jsx', content: 'same bytes' } });
+    writeFileSync(join(h.cwd, 'src/main.jsx'), 'same bytes');
+    await h.emit('tool_result', { toolName: 'write', toolCallId, input: { path: 'src/main.jsx' }, isError: false });
+    await h.tool.execute(`help-${round}`, { args: ['frame', 'set', '--help'] }, undefined, undefined, { cwd: h.cwd });
+    await h.emit('message_end', { message: final });
+  }
+  assert.equal(sent.length, 3, 'successful no-op activity must not reset the no-progress allowance');
+});
+
+test('genuine writes without a tool call id still count as repair progress', async () => {
+  const sent: unknown[] = [];
+  const h = harness(async (_command, args) => args[2] === 'production'
+    ? { stdout: '{"ok":true}', stderr: '', code: 0, killed: false }
+    : { stdout: '{"blockers":["copy deck missing"]}', stderr: '', code: 1, killed: false }, m => { sent.push(m); });
+  await h.emit('before_agent_start', { prompt: 'omd-ultradesign' });
+  mkdirSync(join(h.cwd, 'src'));
+  for (let round = 0; round < 5; round++) {
+    await h.emit('tool_call', { toolName: 'write', input: { path: 'src/main.jsx', content: `round ${round}` } });
+    writeFileSync(join(h.cwd, 'src/main.jsx'), `round ${round}`);
+    await h.emit('tool_result', { toolName: 'write', input: { path: 'src/main.jsx' }, isError: false });
+    await h.emit('message_end', { message: final });
+  }
+  assert.equal(sent.length, 5);
 });
 
 test('authority failures, user aborts and tool-use messages do not trigger automatic repair', async () => {

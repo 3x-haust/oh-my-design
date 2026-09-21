@@ -75,3 +75,28 @@ test('interactive input during an awaited diagnosis prevents the old task from s
   assert.equal(await h.end(), undefined);
   assert.equal(h.sent.length, 0);
 });
+
+test('completion repair state cannot cross a replaced route', async t => {
+  const cwd = mkdtempSync(join(tmpdir(), 'omd-completion-scope-'));
+  t.after(() => rmSync(cwd, { recursive: true, force: true }));
+  mkdirSync(join(cwd, '.omd'), { recursive: true });
+  writeFileSync(join(cwd, '.omd/route.json'), '{"route":"first"}');
+  const hooks = new Map<string, PortablePiHook>();
+  const sent: unknown[] = [];
+  omdExtension({
+    on: (name, handler) => { hooks.set(name, handler); }, registerCommand() {}, registerTool() {},
+    sendMessage: message => { sent.push(message); },
+    async exec(_command, args) {
+      if (args[1] === 'stage') return { stdout: '{}', stderr: '', code: 0, killed: false };
+      return { stdout: '{"blockers":["copy deck missing"]}', stderr: '', code: 1, killed: false };
+    },
+  });
+  const emit = (name: string, event: Parameters<PortablePiHook>[0]) => hooks.get(name)!(event, { cwd });
+  await emit('before_agent_start', { prompt: 'omd-ultradesign' });
+  await emit('tool_call', { toolName: 'write', input: { path: 'src/main.jsx' } });
+  await emit('message_end', { message: final });
+  assert.equal(sent.length, 1);
+  writeFileSync(join(cwd, '.omd/route.json'), '{"route":"replacement"}');
+  await emit('message_end', { message: final });
+  assert.equal(sent.length, 1, 'route replacement must stall the prior completion loop');
+});

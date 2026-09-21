@@ -1,5 +1,5 @@
 import { isAbsolute } from 'node:path';
-import { designDiscoveryProvider, referenceServiceFamily } from './design-discovery-sources.ts';
+import { designDiscoveryProvider, referenceServiceFamily, referenceServiceHost } from './design-discovery-sources.ts';
 
 export const REFERENCE_RESEARCH_SCHEMA = 'reference-research-v6' as const;
 export const DOMAIN_REFERENCES_PATH = '.omd/refs/domain/research.json';
@@ -244,9 +244,10 @@ export function parseReferenceResearch(value: unknown): ReferenceResearch {
   const directions = design.sources.filter(entry => entry.visualRole === 'visual-direction');
   if (directions.length === 0) fail('REFERENCE_RESEARCH_VISUAL_DIRECTION_REQUIRED: component/usability documentation alone cannot establish visual direction');
   // Independent services, not two crops/pages of one service. This is a lane policy, not a beauty score.
-  const domainHosts = new Set([...domain.sources, ...domain.discoveryRoots ?? []].map(entry => referenceServiceFamily(entry.url)));
+  const serviceIdentity = direct ? referenceServiceFamily : referenceServiceHost;
+  const domainHosts = new Set([...domain.sources, ...domain.discoveryRoots ?? []].map(entry => serviceIdentity(entry.url)));
   const designUrls = [...design.sources.flatMap(entry => [entry.url, entry.discovery!.url]), ...design.discoveryRoots?.map(entry => entry.url) ?? []];
-  if (designUrls.some(url => domainHosts.has(referenceServiceFamily(url)))) {
+  if (designUrls.some(url => domainHosts.has(serviceIdentity(url)))) {
     fail('REFERENCE_RESEARCH_DOMAIN_AS_VISUAL_DIRECTION: domain and design must use independent service families; keep the domain capture and discover a separate visual source');
   }
   const benchmarkSha256 = domain.benchmarkSha256 === null
