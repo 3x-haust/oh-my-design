@@ -1,5 +1,10 @@
 import { isAbsolute } from 'node:path';
-import { designDiscoveryProvider, referenceServiceFamily, referenceServiceHost } from './design-discovery-sources.ts';
+import {
+  designDiscoveryItemIdentity,
+  designDiscoveryProvider,
+  referenceServiceFamily,
+  referenceServiceHost,
+} from './design-discovery-sources.ts';
 import { parseMarketReferenceCoverage } from './market-reference-coverage.ts';
 import {
   REFERENCE_RESEARCH_DESIGN_KEYS, REFERENCE_RESEARCH_DOMAIN_KEYS, REFERENCE_RESEARCH_EVIDENCE_KEYS,
@@ -125,6 +130,16 @@ function requiredVisualAssessment(value: ResearchSource['visualAssessment']): No
   return value;
 }
 
+function discoveryItemIdentity(entry: ResearchSource): string {
+  const discovery = requiredDiscovery(entry);
+  const supported = designDiscoveryItemIdentity(discovery.url);
+  if (supported !== null) return supported;
+  const url = new URL(discovery.url);
+  url.search = '';
+  url.hash = '';
+  return url.href;
+}
+
 function discoveryRoots(value: unknown, design: boolean): readonly ResearchDiscoveryRoot[] {
   const code = 'REFERENCE_RESEARCH_DISCOVERY_ROOT';
   if (!Array.isArray(value) || value.length > 100 || Object.keys(value).length !== value.length) fail(code);
@@ -186,7 +201,7 @@ export function parseReferenceResearch(value: unknown): ReferenceResearch {
   if (current && new Set(visualDirections.map(entry => referenceServiceFamily(entry.url))).size < 2) {
     fail('REFERENCE_RESEARCH_DESIGN_SOURCE_DIVERSITY: use at least two independent original design families; repeated pages, crops, or captures from one product count once');
   }
-  if (current && new Set(visualDirections.map(entry => requiredDiscovery(entry).url)).size < 2) {
+  if (current && new Set(visualDirections.map(discoveryItemIdentity)).size < 2) {
     fail('REFERENCE_RESEARCH_DESIGN_DISCOVERY_DIVERSITY: use distinct inspected gallery items for the visual comparison');
   }
   const serviceIdentity = direct ? referenceServiceFamily : referenceServiceHost;

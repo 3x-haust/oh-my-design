@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import {
+  constants,
   cpSync,
   existsSync,
   lstatSync,
@@ -8,7 +9,6 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
-  symlinkSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
@@ -95,37 +95,54 @@ function copyRuntime(sourceRoot: string, targetRoot: string): void {
   }
 }
 
+function copyDependencies(sourceRoot: string, targetRoot: string): void {
+  const dependencyRoot = resolve(sourceRoot);
+  const stat = lstatSync(dependencyRoot);
+  if (!stat.isDirectory() || basename(dependencyRoot) !== 'node_modules') {
+    throw new OmdRuntimeSnapshotError('OMD_RUNTIME_DEPENDENCIES_INVALID');
+  }
+  const recursiveLink = join(dependencyRoot, 'node_modules');
+  cpSync(dependencyRoot, join(targetRoot, 'node_modules'), {
+    recursive: true,
+    dereference: true,
+    errorOnExist: true,
+    mode: constants.COPYFILE_FICLONE,
+    filter: source => source !== recursiveLink,
+  });
+}
+
 export function createOmdRuntimeSnapshot(options: OmdRuntimeSnapshotOptions): OmdRuntimeSnapshot {
   const sourceRoot = resolve(options.sourceRoot);
   let lastMismatch = '';
   for (let attempt = 1; attempt <= MAX_COPY_ATTEMPTS; attempt += 1) {
     const before = runtimeDigest(sourceRoot);
     const snapshotRoot = mkdtempSync(join(tmpdir(), 'omd-runtime-'));
-    copyRuntime(sourceRoot, snapshotRoot);
-    const copied = runtimeDigest(snapshotRoot);
-    const after = runtimeDigest(sourceRoot);
-    if (before === copied && copied === after) {
-      if (options.dependencyRoot !== null) {
-        const dependencyRoot = resolve(options.dependencyRoot);
-        if (!existsSync(dependencyRoot) || basename(dependencyRoot) !== 'node_modules') {
-          rmSync(snapshotRoot, { recursive: true, force: true });
-          throw new OmdRuntimeSnapshotError('OMD_RUNTIME_DEPENDENCIES_INVALID');
+    let retained = false;
+    try {
+      copyRuntime(sourceRoot, snapshotRoot);
+      const copied = runtimeDigest(snapshotRoot);
+      const after = runtimeDigest(sourceRoot);
+      if (before === copied && copied === after) {
+        if (options.dependencyRoot !== null) {
+          if (!existsSync(options.dependencyRoot)) throw new OmdRuntimeSnapshotError('OMD_RUNTIME_DEPENDENCIES_INVALID');
+          copyDependencies(options.dependencyRoot, snapshotRoot);
         }
-        symlinkSync(dependencyRoot, join(snapshotRoot, 'node_modules'), process.platform === 'win32' ? 'junction' : 'dir');
+        retained = true;
+        let disposed = false;
+        return Object.freeze({
+          root: snapshotRoot,
+          entryPath: join(snapshotRoot, 'bin/omd.mjs'),
+          dispose: () => {
+            if (disposed) return;
+            disposed = true;
+            rmSync(snapshotRoot, { recursive: true, force: true });
+          },
+        });
       }
-      let disposed = false;
-      return Object.freeze({
-        root: snapshotRoot,
-        entryPath: join(snapshotRoot, 'bin/omd.mjs'),
-        dispose: () => {
-          if (disposed) return;
-          disposed = true;
-          rmSync(snapshotRoot, { recursive: true, force: true });
-        },
-      });
+      lastMismatch = `attempt ${attempt}: ${before}/${copied}/${after}`;
+    } finally {
+      if (!retained) rmSync(snapshotRoot, { recursive: true, force: true });
     }
-    lastMismatch = `attempt ${attempt}: ${before}/${copied}/${after}`;
-    rmSync(snapshotRoot, { recursive: true, force: true });
   }
   throw new OmdRuntimeSnapshotError(`OMD_RUNTIME_SOURCE_UNSTABLE: ${lastMismatch}`);
 }

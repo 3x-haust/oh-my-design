@@ -95,6 +95,17 @@ test('current research requires two independent visual-direction source families
   assert.throws(() => parseReferenceResearch(repeatedFamily), /DESIGN_SOURCE_DIVERSITY/);
 });
 
+test('tracking parameters cannot turn one gallery item into two design directions', t => {
+  const fixture = currentResearch(t);
+  const first = fixture.research.designReference.sources[0];
+  const second = fixture.research.designReference.sources[1];
+  assert.ok(first?.discovery);
+  assert.ok(second?.discovery);
+  first.discovery.url = 'https://www.pinterest.com/pin/123456789/?utm_source=first';
+  second.discovery.url = 'https://www.pinterest.co.kr/pin/123456789/?utm_source=second#detail';
+  assert.throws(() => parseReferenceResearch(fixture.research), /DESIGN_DISCOVERY_DIVERSITY/);
+});
+
 test('current research refuses duplicate design pixels under different source records', t => {
   const fixture = currentResearch(t, 1);
   assert.throws(

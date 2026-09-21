@@ -16,6 +16,18 @@ export function designDiscoveryProvider(url: string): string | null {
   return null;
 }
 
+export function designDiscoveryItemIdentity(url: string): string | null {
+  const provider = designDiscoveryProvider(url);
+  if (provider === null) return null;
+  const path = new URL(url).pathname.replace(/\/+$/, '');
+  const item = provider === 'Pinterest' ? /^\/pin\/([^/]+)/.exec(path)?.[1]
+    : provider === 'Dribbble' ? /^\/shots\/(\d+)/.exec(path)?.[1]
+      : provider === 'Behance' ? /^\/gallery\/(\d+)/.exec(path)?.[1]
+        : provider === 'Siteinspire' ? /^\/websites?\/(\d+)/.exec(path)?.[1]
+          : path;
+  return item === undefined ? null : `${provider}:${item.toLowerCase()}`;
+}
+
 export function referenceServiceHost(url: string): string {
   return new URL(url).hostname.toLowerCase().replace(/\.$/, '').replace(/^www\./, '');
 }
