@@ -89,6 +89,10 @@ a progress-driven repair/recheck loop. There is no fixed total pass ceiling whil
 the current work pointer advance. Repeating the same verified state without any successful repair
 activity stops the cycle after two recovery turns. Research/document-only turns never authorize
 automatic implementation of the remaining route. Each pass may repair multiple blockers and rerun existing checks.
+Keep the user oriented during long work without narrating every tool call. At each meaningful phase
+boundary and before an automatic repair continuation, publish one concise visible progress note that
+states what was just verified, which owner/action runs next, and which check follows. A queued hidden
+instruction or a bare “continuing” sentence is not a progress update.
 Before a route exists, Pi may also retry an already-authored route input using current structured
 diagnostics. This repairs setup only, not missing deliverables. A failed classification retains its real
 cause; authority errors do not retry. Input-only work does not authorize publishing or implementation.

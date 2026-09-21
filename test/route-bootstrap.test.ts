@@ -108,6 +108,9 @@ test('real Pi setup: reject, diagnose, bounded repair, validate, classify and en
   await assert.rejects(h.run(['route', 'classify', '--input', inputPath, '--json']), /REFERENCE_WORK_MISMATCH/);
   assert.equal(existsSync(join(cwd, '.omd/route.json')), false);
   const stopped = await h.end();
+  const progress = stopped.message.content[0]!.text.split('\n\n')[0] ?? '';
+  assert.match(progress, new RegExp(inputPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(progress, /route validate/);
   assert.match(stopped.message.content[0]!.text, /REFERENCE_WORK_MISMATCH/);
   assert.match(stopped.message.content[0]!.text, /hypothesis-validation/);
   assert.doesNotMatch(stopped.message.content[0]!.text, /ROUTE_UNCLASSIFIED/);

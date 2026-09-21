@@ -99,7 +99,8 @@ test('repairable terminal failures stop on repeated no-progress but successful r
     writeFileSync(join(h.cwd, 'src/main.jsx'), `round ${round}`);
     await h.emit('tool_result', { toolName: 'write', toolCallId, input: { path: 'src/main.jsx' }, isError: false });
     await h.emit('before_agent_start', { prompt: 'Follow-up repair' });
-    await h.emit('message_end', { message: final });
+    const held = await h.emit('message_end', { message: final }) as { message: typeof final };
+    if (round === 0) assert.match((held.message.content[0]?.text ?? '').split('\n\n')[0] ?? '', /guard completion/);
     await h.emit('input', { source: 'extension' });
   }
   assert.equal(sent.length, 5, 'successful in-scope repair work must permit more than two rechecks');

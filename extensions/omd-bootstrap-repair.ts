@@ -37,7 +37,7 @@ export async function resumeRouteInput(bootstrap: RouteBootstrap, task: Bootstra
   const retry = repairable && decision.retry && 'sendMessage' in pi && typeof pi.sendMessage === 'function';
   if (retry) {
     pi.sendMessage!({ customType: 'omd-route-repair', display: true,
-      content: `OMD route-input repair pass ${decision.pass}. Repair the named fields together in the already-authored input ${JSON.stringify(bootstrap.inputPath)} and rerun omd_cli with args ${JSON.stringify(bootstrap.validationArgs)}. Continue while the input bytes or structured diagnostics make progress; do not stop because of a fixed retry count. This is input repair, not application implementation or completed research. Preserve the original user request, facts, delivery mode, risk, scope and required stages. Do not invent evidence, authority or an optional skip to bypass a check. Stop only for repeated no-progress, a missing user fact/authority, or user pause. ${bootstrap.classificationAttempted
+      content: `OMD route-input repair pass ${decision.pass}. Start this turn with one concise user-visible progress note naming the input being repaired and the next validation command. Repair the named fields together in the already-authored input ${JSON.stringify(bootstrap.inputPath)} and rerun omd_cli with args ${JSON.stringify(bootstrap.validationArgs)}. Continue while the input bytes or structured diagnostics make progress; do not stop because of a fixed retry count. This is input repair, not application implementation or completed research. Preserve the original user request, facts, delivery mode, risk, scope and required stages. Do not invent evidence, authority or an optional skip to bypass a check. Stop only for repeated no-progress, a missing user fact/authority, or user pause. ${bootstrap.classificationAttempted
         ? 'Classification was already attempted in this task: after validation passes, retry that authorized classification with the same input/context, then stage resume and continue only the original user-authorized workflow.'
         : 'Classification has not been attempted: this repair authorizes input editing and validation only; do not publish a route or start downstream work from this follow-up.'}\n${summary}` },
     { triggerTurn: true, deliverAs: 'followUp' });
@@ -48,8 +48,18 @@ export async function resumeRouteInput(bootstrap: RouteBootstrap, task: Bootstra
       : `OMD route input validation passed, but no route was published.${retry ? ' Retrying the already-requested classification.' : ' Input validity is not downstream design or application completion.'}`
     : korean ? `OMD 실행 계획 단계에서 중단되었습니다. 라우트가 등록되지 않아 후속 단계 진입·완료를 확인할 수 없습니다.${retry ? ' 아래 입력 오류를 묶어서 수정·재검증합니다.' : decision.stalled ? ' 동일 입력과 오류가 반복되어 진전 없는 순환을 차단했습니다. 실제 입력을 바꾸거나 필요한 사용자 근거를 받아야 합니다.' : ' 아래 검증·등록 상태를 확인해야 합니다. 완료 검사를 반복해도 실행 계획 문제는 해결되지 않습니다.'}`
       : `OMD stopped at route setup; no route was published, so downstream entry/completion is not established.${retry ? ' Repairing and revalidating the input errors together.' : decision.stalled ? ' The same input and diagnostics repeated without progress; change the actual input or obtain the required user evidence.' : ' Resolve the validation/publication status below; rerunning completion cannot repair route setup.'}`;
+  const validationCommand = `omd ${bootstrap.validationArgs.join(' ')}`;
+  const progress = retry
+    ? inputValid
+      ? korean
+        ? `이제 ${bootstrap.inputPath}의 라우트 등록을 다시 시도한 뒤 stage resume으로 다음 단계를 확인하겠습니다.`
+        : `Next, I will retry route publication for ${bootstrap.inputPath}, then inspect the next stage with stage resume.`
+      : korean
+        ? `이제 ${bootstrap.inputPath}의 지적된 필드를 함께 수정하고 ${validationCommand}로 다시 검증하겠습니다.`
+        : `Next, I will repair the named fields in ${bootstrap.inputPath} and revalidate with ${validationCommand}.`
+    : '';
   return { message: { ...message, content: [
     ...(message.content ?? []).filter(part => part.type !== 'text'),
-    { type: 'text', text: `${status}\n\n${summary}` },
+    { type: 'text', text: `${status}${progress ? `\n${progress}` : ''}\n\n${summary}` },
   ] } };
 }

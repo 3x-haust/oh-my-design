@@ -13,7 +13,8 @@ function harness(t: { after(fn: () => void): void }) {
   const sent: unknown[] = [];
   let tool: PortablePiTool | undefined;
   let duringDiagnosis: (() => Promise<unknown>) | undefined;
-  const work = { schema: 'stage-next-v1', stage: 'copy', action: 'repair-output',
+  const work = { schema: 'stage-next-v1', stage: 'copy', owner: 'omd-writer', action: 'repair-output',
+    next: 'omd brief copy --check --json',
     progress: { routeSha256: 'a'.repeat(64), validatedStages: [] as string[] } };
   omdExtension({
     on: (name, handler) => { hooks.set(name, handler); }, registerCommand() {}, registerTool: value => { tool = value; },
@@ -55,6 +56,15 @@ test('distinct advancing work pointers continue beyond the former two-pass ceili
     await h.end();
   }
   assert.equal(h.sent.length, 6, 'real stage/substage advancement must not inherit a fixed global retry ceiling');
+});
+
+test('a visible continuation names the current owner, action and next validation before raw diagnostics', async t => {
+  const h = harness(t); await h.start();
+  const held = await h.end() as { message: { content: Array<{ type: string; text: string }> } };
+  const firstParagraph = (held.message.content.find(part => part.type === 'text')?.text ?? '').split('\n\n')[0] ?? '';
+  assert.match(firstParagraph, /omd-writer/);
+  assert.match(firstParagraph, /repair-output/);
+  assert.match(firstParagraph, /omd brief copy --check --json/);
 });
 
 test('an unchanged work pointer stops only after repeated no-progress turns', async t => {

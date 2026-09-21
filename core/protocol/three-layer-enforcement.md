@@ -150,6 +150,10 @@ inspection and research repair remain available while production is blocked.
   no fixed total pass ceiling while owned artifacts or the current work pointer advance; the same
   verified state without successful repair activity stops after two recovery turns. Aborts,
   missing authority and research-only turns do not authorize automatic implementation.
+- Pi keeps automatic work visible at meaningful phase boundaries without narrating every tool call.
+  Before each queued route, stage or completion repair, the visible assistant message names the
+  current state, next owner/action and following validation command. The follow-up instruction repeats
+  that communication contract so a long repair turn starts with the same concise orientation.
 - For a route authored and successfully classified in this user turn, after a checked stage entry,
   Pi diagnoses unfinished authored stages with `stage next` before terminal completion. It can queue
   correction turns while successful owned mutations or a genuinely new current work pointer prove

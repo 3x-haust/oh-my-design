@@ -91,7 +91,7 @@ export default function omdExtension(pi: PortablePiApi): void {
       ownedWork.activate(context.cwd, event.prompt ?? '');
       if (/omd-ultradesign|skill:omd-/i.test(event.prompt ?? '')) managed.add(context.cwd);
       if (!guarded(context.cwd)) return;
-      return { systemPrompt: `${event.systemPrompt ?? ''}\nOMD host gates are active: declaration → procedure → automatic refusal (protocol/three-layer-enforcement.md). Use omd_cli for OMD commands. Before initial publication use the task-appropriate route starter and route validate --json; repair the grouped input diagnostics, then classify and stage next --json. The current work pointer names real missing/malformed inputs; it never certifies completion. For framing use schema frame, frame set --input, then frame check. Inspect domain check unconfirmedPlanning early; cite actual user excerpts or ask about missing facts. Do not use guard completion to diagnose an unclassified route. The coordinator inspects each selected stage brief, delivers contracts, then runs brief <stage> --check --json before its owner starts. Plain brief inspection is not permission. Before application writes run guard production; repair each selected-stage blocker, never replace CLI-owned records or relabel product UX to skip checks. Use read and standalone inventory commands during research. After completing the selected owned work and its checks, run guard completion before a completion report; do not use a terminal missing-output list as the next-stage procedure. Build/captures alone are not completion; report blocked/partial work accurately. Research/document authoring remains available.` };
+      return { systemPrompt: `${event.systemPrompt ?? ''}\nOMD host gates are active: declaration → procedure → automatic refusal (protocol/three-layer-enforcement.md). Use omd_cli for OMD commands. Before initial publication use the task-appropriate route starter and route validate --json; repair the grouped input diagnostics, then classify and stage next --json. The current work pointer names real missing/malformed inputs; it never certifies completion. For framing use schema frame, frame set --input, then frame check. Inspect domain check unconfirmedPlanning early; cite actual user excerpts or ask about missing facts. Do not use guard completion to diagnose an unclassified route. The coordinator inspects each selected stage brief, delivers contracts, then runs brief <stage> --check --json before its owner starts. Plain brief inspection is not permission. Before application writes run guard production; repair each selected-stage blocker, never replace CLI-owned records or relabel product UX to skip checks. Use read and standalone inventory commands during research. After completing the selected owned work and its checks, run guard completion before a completion report; do not use a terminal missing-output list as the next-stage procedure. Build/captures alone are not completion; report blocked/partial work accurately. At each meaningful phase boundary and before an automatic repair continuation, give the user one concise visible progress note: what was just verified, what owner/action runs next, and which check will follow. Do not narrate every tool call or expose hidden reasoning. Research/document authoring remains available.` };
     });
     pi.on!('tool_call', async (event, context) => {
       if (event.toolName === OMD_TOOL_NAME) {
@@ -189,7 +189,7 @@ export default function omdExtension(pi: PortablePiApi): void {
             const retry = !askingForPlanning && decision.retry && typeof pi.sendMessage === 'function';
             if (retry) {
               pi.sendMessage!({ customType: 'omd-stage-repair', display: true,
-                content: `OMD selected-stage repair ${decision.pass}. Continue until this selected workflow is unblocked while each pass changes owned artifacts or advances the current work pointer; there is no fixed total retry ceiling. Work from this pointer, not from guard completion. Do the selected owner's real work and checks. On Pi without delegation use explicit sequential role passes; do not claim independent review. For planning evidence first reread the original request; attach only genuinely supported excerpts or ask one concrete missing-fact question and stop. Never fabricate research, weaken scope/gates, or start production before readiness.\n${result.text}` },
+                content: `OMD selected-stage repair ${decision.pass}. Start this turn with one concise user-visible progress note naming the current stage, owner/action and next check, then continue until this selected workflow is unblocked while each pass changes owned artifacts or advances the current work pointer; there is no fixed total retry ceiling. Work from this pointer, not from guard completion. Do the selected owner's real work and checks. On Pi without delegation use explicit sequential role passes; do not claim independent review. For planning evidence first reread the original request; attach only genuinely supported excerpts or ask one concrete missing-fact question and stop. Never fabricate research, weaken scope/gates, or start production before readiness.\n${result.text}` },
               { triggerTurn: true, deliverAs: 'followUp' });
             }
             const korean = message.content?.some(part => part.type === 'text' && /[가-힣]/.test(part.text ?? ''));
@@ -197,8 +197,16 @@ export default function omdExtension(pi: PortablePiApi): void {
             const status = korean
               ? `OMD는 ${work.stage} 단계가 아직 미완료입니다. ${retry ? '해당 단계의 입력·근거를 수정하고 재검증하는 루프를 계속합니다.' : questions ? '아래 기획 내용의 사용자 근거가 확인되지 않았습니다. 이 내용이 요청 범위와 맞는지 확인이 필요합니다.' : decision.stalled ? '같은 작업 상태가 실제 진전 없이 반복되어 순환을 차단했습니다. 아래 소유 산출물을 실제로 변경해야 합니다.' : '아래 단계의 실제 입력 오류를 해결해야 합니다.'}`
               : `OMD is incomplete at ${work.stage}. ${retry ? 'Continuing the repair/recheck loop for the selected stage.' : questions ? 'User evidence is still missing for the planning statements below; confirmation is required.' : decision.stalled ? 'The same work state repeated without verified progress; change the owned artifact before retrying.' : 'Resolve the current stage inputs below.'}`;
+            const owner = typeof work.owner === 'string' ? work.owner : `${work.stage} owner`;
+            const action = typeof work.action === 'string' ? work.action : 'repair-output';
+            const next = typeof work.next === 'string' ? work.next : `omd brief ${work.stage} --check --json`;
+            const progress = retry
+              ? korean
+                ? `이제 ${owner}가 ${action} 작업을 진행하고 ${next}로 다시 검증하겠습니다.`
+                : `Next, ${owner} will perform ${action}, then revalidate with ${next}.`
+              : '';
             return { message: { ...message, content: [...(message.content ?? []).filter(part => part.type !== 'text'),
-              { type: 'text', text: `${status}\n\n${questions || result.text}` }] } };
+              { type: 'text', text: `${status}${progress ? `\n${progress}` : ''}\n\n${questions || result.text}` }] } };
           }
         } catch (error) {
           // Unknown/authority errors are not an invitation to auto-repair the route.
@@ -222,16 +230,21 @@ export default function omdExtension(pi: PortablePiApi): void {
           && 'sendMessage' in pi && typeof pi.sendMessage === 'function';
         if (retry) {
           pi.sendMessage!({ customType: 'omd-gate-repair', display: true,
-            content: `OMD repair pass ${decision.pass}: terminal validation failed. Continue the existing user-authorized task until the gate passes while each pass changes the relevant artifact or blocker; there is no fixed total retry ceiling. Repair the named selected-stage inputs or rendered review loop, then rerun guard completion. Read the applicable brief/contracts; do not forge evidence, alter the route to remove requirements, or claim independent review. Stop only for repeated no-progress, missing user fact/authority, or user pause.\n${failure.summary}` },
+            content: `OMD repair pass ${decision.pass}: terminal validation failed. Start this turn with one concise user-visible progress note naming the blocker being handled and the next check, then continue the existing user-authorized task until the gate passes while each pass changes the relevant artifact or blocker; there is no fixed total retry ceiling. Repair the named selected-stage inputs or rendered review loop, then rerun guard completion. Read the applicable brief/contracts; do not forge evidence, alter the route to remove requirements, or claim independent review. Stop only for repeated no-progress, missing user fact/authority, or user pause.\n${failure.summary}` },
           { triggerTurn: true, deliverAs: 'followUp' });
         }
         const korean = message.content?.some(part => part.type === 'text' && /[가-힣]/.test(part.text ?? ''));
         const status = korean
           ? `OMD 작업은 미완료입니다. 완료 검증을 통과하지 못해 최종 완료 보고를 보류했습니다.${retry ? ' 누락된 작업의 수정·재검사 루프를 이어갑니다.' : decision.stalled ? ' 동일 차단 상태가 실제 진전 없이 반복되어 순환을 멈췄습니다. 관련 산출물을 실제로 변경한 뒤 다시 검증해야 합니다.' : ' 누락·오래된 산출물 또는 권한 문제를 해결한 뒤 guard completion을 다시 실행해야 합니다.'}`
           : `OMD is incomplete. The final completion claim was withheld because validation failed.${retry ? ' Continuing the progress-driven repair/recheck loop.' : decision.stalled ? ' The same blocker repeated without verified progress; change the relevant artifact before rechecking.' : ' Resolve the missing/stale evidence or authority, then rerun guard completion.'}`;
+        const progress = retry
+          ? korean
+            ? '이제 차단 목록의 관련 산출물을 실제로 수정하고 omd guard completion --json을 다시 실행하겠습니다.'
+            : 'Next, I will repair the relevant blocked artifacts and rerun omd guard completion --json.'
+          : '';
         return { message: { ...message, content: [
           ...(message.content ?? []).filter(part => part.type !== 'text'),
-          { type: 'text', text: `${status}\n\n${failure.summary}` },
+          { type: 'text', text: `${status}${progress ? `\n${progress}` : ''}\n\n${failure.summary}` },
         ] } };
       }
     });
