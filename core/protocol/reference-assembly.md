@@ -242,6 +242,13 @@ records retain their original version's requirements; new direct provenance must
 the native entry publisher before v6 republication. Valid retained captures need not be reacquired.
 The same evidence path OR identical bytes under another filename cannot satisfy both lanes.
 
+Discovery-plan v2 carries `marketReferencePolicy`. When its mode is `target-market-first`, execute the
+provided domain search input before unqualified global searches and use its market-qualified design
+search inputs. Both lanes owe current target-market evidence: comparable task services in domain, and
+independent local visual-direction/design sources in design. Record a concrete coverage gap before
+using the policy's global-equivalent fallback. This is acquisition scope, not a country-style preset;
+the later locale profile and locale binding still decide which measured mechanisms may transfer.
+
 The two lanes use independent service hosts, including after redirects. A second path or crop of a
 domain service is not a visual direction. Non-user discovery must match a supported public gallery
 item (Pinterest, Dribbble, Behance, Siteinspire, Land-book, Godly, or UI Bowl); never label domain

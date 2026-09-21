@@ -42,6 +42,14 @@ for comparable-service screens/features/flows and design-reference for visual di
 plus any motion discovery lane. A candidate motion lane informs art direction; it
 does not activate a production scene or create a user motion lock. Preserve explicit style, language and reference-
 region requests in those queries; a surface locale alone does not infer a country aesthetic.
+Inspect discover-plan v2 `marketReferencePolicy` before either lane. With
+`mode: target-market-first`, execute its domain search input and market-qualified design searches
+first. Domain references must be comparable services actually serving the named task and audience
+in that market. Design references must be independent, quality-inspected local visual-direction
+evidence discovered through the allowed gallery/product path; being local is not a quality score.
+Record a concrete target-market coverage gap before using a global equivalent. Never reuse one
+operator across lanes or turn a region label into a country-wide style preset. With `unscoped`, do
+not infer a market from conversation language, surface locale, script or likely user location.
 Use the user's explicitly selected available search transport, such as Aside CLI when requested;
 otherwise use the host's native web-search tool. Rendering a search engine's HTML with
 `omd ir` is not the search transport; if the selected search tool is absent or explicitly disabled,

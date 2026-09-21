@@ -330,6 +330,10 @@ Use `.omd/route.json` as the machine-consumed strategy. Do not substitute a reme
   packet never becomes source colour, copy, imagery, typeface, or an asset.
 - For market-grounded references, run `omd ref locale-bind` after the board; its source-free output
   binds local pieces to current profile decisions and captures, and `locale-bind-check` gates use.
+- Before the board, honor discovery-plan v2 `marketReferencePolicy`: an explicit market makes both
+  domain and design discovery target-market-first. Local comparable services and independent local
+  visual sources come before global equivalents; a recorded local coverage gap is required before
+  fallback. Surface language alone never supplies a market or a country-style direction.
 - Production, decision-linked browser evidence and fresh independent `omd-eye` review always end the route.
 
 Artifact ownership remains exclusive: frame/acquisition `omd-framer`; scout/reference `omd-scout`;

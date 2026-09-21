@@ -70,6 +70,13 @@ never purchase, start trials, install an MCP, or bypass access controls just for
 Choose actual search or direct-public browsing from the plan. `designSourcePolicy.searchQueries`
 include Pinterest pins and a surface-appropriate gallery. Record the actual method, results and
 blocked capabilities in scout.md. Do not replace an unperformed search with an invented query list.
+Read `marketReferencePolicy` before searching. When its mode is `target-market-first`, execute its
+domain search input and the market-qualified design searches first. Keep the lanes independent:
+domain sources must actually serve the named task/audience in the target market; design sources must
+provide high-quality local visual direction through inspected gallery/product evidence, not reuse the
+domain services or accept a weak screen merely because it is local. Use unqualified global equivalents
+only after recording the local coverage gap. `unscoped` means no country may be inferred from the
+conversation language or surface locale.
 For native search use the plan's `designSourcePolicy.nativeSearchInputs` with `ref search`.
 They bind real free-gallery queries for Pinterest, Dribbble and Siteinspire. Refine the short
 task/pattern query and URL together, then open an item actually returned in observed links; never
