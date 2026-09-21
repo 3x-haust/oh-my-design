@@ -82,6 +82,17 @@ test('common country-code registrable domains remain independent families', t =>
     domainReference: { ...direct.domainReference, sources: independent } }));
 });
 
+test('private public-suffix tenants remain independent service families', t => {
+  const { research } = designAdmissionFixture(t);
+  const direct = { ...research, schema: 'reference-research-v6',
+    domainReference: { ...research.domainReference, queries: [], searches: [], discoveryRoots: [rootEnvelope('domain')] },
+    designReference: { ...research.designReference, queries: [], searches: [], discoveryRoots: [rootEnvelope('design')] } };
+  const independent = direct.domainReference.sources.map((source, index) => ({ ...source,
+    url: `https://${['alpha', 'bravo', 'charlie'][index]}.github.io/task` }));
+  assert.doesNotThrow(() => parseReferenceResearch({ ...direct,
+    domainReference: { ...direct.domainReference, sources: independent } }));
+});
+
 test('v6 publication measures independent domain families after redirects', t => {
   const fixture = designAdmissionFixture(t);
   const finalUrl = 'https://www.gov.uk/benefits';

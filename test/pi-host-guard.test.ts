@@ -154,6 +154,24 @@ test('genuine writes without a tool call id still count as repair progress', asy
   assert.equal(sent.length, 5);
 });
 
+test('overlapping id-less writes to one file retain each pending fingerprint', async () => {
+  const sent: unknown[] = [];
+  const h = harness(async (_command, args) => args[2] === 'production'
+    ? { stdout: '{"ok":true}', stderr: '', code: 0, killed: false }
+    : { stdout: '{"blockers":["copy deck missing"]}', stderr: '', code: 1, killed: false }, m => { sent.push(m); });
+  await h.emit('before_agent_start', { prompt: 'omd-ultradesign' });
+  mkdirSync(join(h.cwd, 'src'));
+  writeFileSync(join(h.cwd, 'src/main.jsx'), 'base');
+  await h.emit('tool_call', { toolName: 'write', input: { path: 'src/main.jsx', content: 'first' } });
+  await h.emit('tool_call', { toolName: 'write', input: { path: 'src/main.jsx', content: 'second' } });
+  writeFileSync(join(h.cwd, 'src/main.jsx'), 'first');
+  await h.emit('tool_result', { toolName: 'write', input: { path: 'src/main.jsx' }, isError: false });
+  writeFileSync(join(h.cwd, 'src/main.jsx'), 'second');
+  await h.emit('tool_result', { toolName: 'write', input: { path: 'src/main.jsx' }, isError: false });
+  await h.emit('message_end', { message: final });
+  assert.equal(sent.length, 1);
+});
+
 test('blocked and failed production writes never authorize an automatic completion repair', async () => {
   for (const mode of ['blocked', 'failed'] as const) {
     const sent: unknown[] = [];

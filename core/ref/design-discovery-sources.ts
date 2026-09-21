@@ -28,8 +28,7 @@ export function referenceServiceFamily(url: string): string {
   if (['gov.uk', 'nhs.uk', 'go.kr', 'gov.au', 'gc.ca'].includes(suffix)) return suffix;
   const [secondLevel, country] = labels.slice(-2);
   if (country?.length === 2 && secondLevel && ['gov', 'gob', 'go', 'gc'].includes(secondLevel)) return suffix;
-  if (country?.length === 2 && secondLevel && ['ac', 'co', 'com', 'edu', 'net', 'org'].includes(secondLevel)) return labels.slice(-3).join('.');
-  return suffix;
+  return getDomain(host, { allowPrivateDomains: true }) ?? host;
 }
 
 export function designDiscoveryDirectoryProvider(url: string): string | null {
@@ -49,3 +48,4 @@ export function designDiscoveryDirectoryProvider(url: string): string | null {
   if (host === 'uibowl.io' && ['/', '/screens', '/apps', '/patterns', '/components'].includes(path)) return 'UI Bowl';
   return null;
 }
+import { getDomain } from 'tldts';

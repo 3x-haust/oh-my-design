@@ -20,7 +20,8 @@ export default function omdExtension(pi: PortablePiApi): void {
   const productionAttempted = new Set<string>();
   const repairLoop = new RepairLoop();
   const revisions = new Map<string, number>();
-  const pendingMutations = new Map<string, Map<string, { path: string; before: string; production: boolean }>>();
+  type PendingMutation = { path: string; before: string; production: boolean };
+  const pendingMutations = new Map<string, Map<string, PendingMutation[]>>();
   const revision = (cwd: string) => revisions.get(cwd) ?? 0;
   const bumpRevision = (cwd: string) => revisions.set(cwd, revision(cwd) + 1);
   const fileRevision = (cwd: string, path: string): string => {
@@ -35,8 +36,10 @@ export default function omdExtension(pi: PortablePiApi): void {
   const rememberMutation = (cwd: string, toolName: unknown, toolCallId: string | undefined, path: string | undefined, production = false) => {
     const key = mutationKey(toolName, toolCallId, path);
     if (key === undefined || path === undefined) return;
-    const pending = pendingMutations.get(cwd) ?? new Map<string, { path: string; before: string; production: boolean }>();
-    pending.set(key, { path, before: fileRevision(cwd, path), production });
+    const pending = pendingMutations.get(cwd) ?? new Map<string, PendingMutation[]>();
+    const entries = pending.get(key) ?? [];
+    entries.push({ path, before: fileRevision(cwd, path), production });
+    pending.set(key, entries);
     pendingMutations.set(cwd, pending);
   };
   const ownedWork = new StageWork();
@@ -140,8 +143,9 @@ export default function omdExtension(pi: PortablePiApi): void {
       if (context.signal?.aborted) return;
       ownedWork.nativeFinished(context.cwd, event);
       const key = mutationKey(event.toolName, event.toolCallId, event.input?.path);
-      const mutation = key === undefined ? undefined : pendingMutations.get(context.cwd)?.get(key);
-      if (key !== undefined) pendingMutations.get(context.cwd)?.delete(key);
+      const mutations = key === undefined ? undefined : pendingMutations.get(context.cwd)?.get(key);
+      const mutation = mutations?.shift();
+      if (key !== undefined && mutations?.length === 0) pendingMutations.get(context.cwd)?.delete(key);
       if (mutation && event.isError === false && mutation.before !== fileRevision(context.cwd, mutation.path)) {
         bumpRevision(context.cwd);
         if (mutation.production) productionAttempted.add(context.cwd);
