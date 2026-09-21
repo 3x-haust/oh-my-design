@@ -153,6 +153,23 @@ test('two requested gallery items redirecting to one final item are not independ
   );
 });
 
+test('two declared visual sources redirecting to one product family are not independent', t => {
+  const fixture = currentResearch(t);
+  const path = join(fixture.root, fixture.secondSource.capture.path);
+  const capture = JSON.parse(readFileSync(path, 'utf8')) as { acquisition: { finalUrl: string } };
+  const first = fixture.research.designReference.sources[0];
+  assert.ok(first);
+  capture.acquisition.finalUrl = first.url;
+  writeFileSync(path, JSON.stringify(capture));
+  const second = fixture.research.designReference.sources[1];
+  assert.ok(second);
+  second.capture.sha256 = admissionHash(readFileSync(path));
+  assert.throws(
+    () => validateReferenceResearch(fixture.root, parseReferenceResearch(fixture.research), options),
+    /DESIGN_SOURCE_DIVERSITY/,
+  );
+});
+
 test('two independent visual directions with distinct pixels and board use pass', t => {
   const fixture = currentResearch(t);
   const parsed = parseReferenceResearch(fixture.research);

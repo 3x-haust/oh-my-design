@@ -87,6 +87,7 @@ export function validateReferenceResearch(root: string, research: ReferenceResea
   for (const observation of directRoots.domain) for (const url of [observation.url, observation.finalUrl]) domainHosts.add(serviceIdentity(url));
   const retainedIdentities = new Map<string, string>();
   const finalDesignItems = new Set<string>();
+  const finalDesignSourceFamilies = new Set<string>();
   const references = loadRefs(root, { includeDomain: true });
   const navigation: Record<'domain' | 'design', ObservedNavigation[]> = { domain: [], design: [] };
   const observe = (lane: 'domain' | 'design', url: string, captured: Record<string, unknown>) => {
@@ -122,6 +123,11 @@ export function validateReferenceResearch(root: string, research: ReferenceResea
   for (const item of research.designReference.sources) {
     const discovery = requiredDiscovery(item);
     const source = verifyCapture(root, item, 'design');
+    if (research.schema === 'reference-research-v7' && item.visualRole === 'visual-direction') {
+      const acquisition = source.acquisition as Record<string, unknown> | undefined;
+      const finalUrl = typeof acquisition?.finalUrl === 'string' ? acquisition.finalUrl : item.url;
+      finalDesignSourceFamilies.add(referenceServiceFamily(finalUrl));
+    }
     if (localMarketSources.design.has(item.id)) assertCurrentMarketCapture(referenceCaptureTimestamp(source), 'DESIGN');
     if (source.schemaVersion === 'image-fragment-v1' && typeof source.id === 'string') retainedIdentities.set(item.id, source.id);
     else if (typeof source.component === 'string') retainedIdentities.set(item.id, refIdentity(item.url, source.component));
@@ -161,6 +167,9 @@ export function validateReferenceResearch(root: string, research: ReferenceResea
     }
     if (finalDesignItems.size < 2) {
       fail('REFERENCE_RESEARCH_DESIGN_DISCOVERY_DIVERSITY: final captured gallery items must remain independently distinct');
+    }
+    if (finalDesignSourceFamilies.size < 2) {
+      fail('REFERENCE_RESEARCH_DESIGN_SOURCE_DIVERSITY: final captured visual sources must remain in independent service families');
     }
   }
   for (const lane of ['domain', 'design'] as const) {
