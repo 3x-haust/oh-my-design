@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { designDiscoveryProvider } from '../core/ref/design-discovery-sources.ts';
+import { designDiscoveryIdentity, designDiscoveryItemIdentity, designDiscoveryProvider } from '../core/ref/design-discovery-sources.ts';
 import { executeReferenceSearch, parseSearchInput, readSearchExecution, validateSearchCoverage } from '../core/ref/search-execution.ts';
 import { withBrowser } from '../core/render/index.ts';
 import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
@@ -66,6 +66,39 @@ test('current Siteinspire item URLs are gallery items but directory aliases are 
   for (const path of ['/', '/search?query=dashboard', '/websites/selected', '/websites/category/minimal']) {
     assert.equal(designDiscoveryProvider(`https://www.siteinspire.com${path}`), null);
   }
+});
+
+test('gallery item identity ignores tracking and mutable display aliases', () => {
+  assert.equal(
+    designDiscoveryItemIdentity('https://www.pinterest.com/pin/123456789/?utm_source=one'),
+    designDiscoveryItemIdentity('https://www.pinterest.co.kr/pin/%31%32%33%34%35%36%37%38%39/?utm_source=two#detail'),
+  );
+  assert.equal(
+    designDiscoveryItemIdentity('https://dribbble.com/shots/12345678-Old-title'),
+    designDiscoveryItemIdentity('https://dribbble.com/shots/12345678-New-title?utm_campaign=x'),
+  );
+  assert.equal(
+    designDiscoveryItemIdentity('https://dribbble.com/shots/0012345678-Old-title'),
+    designDiscoveryItemIdentity('https://dribbble.com/shots/12345678-New-title'),
+  );
+  assert.notEqual(
+    designDiscoveryItemIdentity('https://dribbble.com/shots/12345678-Task-workspace'),
+    designDiscoveryItemIdentity('https://dribbble.com/shots/87654321-Task-workspace'),
+  );
+  assert.equal(
+    designDiscoveryItemIdentity('https://land-book.com/websites/finance-dashboard'),
+    designDiscoveryItemIdentity('https://land-book.com/websites/%66inance-dashboard?utm_source=alias'),
+  );
+  assert.equal(designDiscoveryProvider('https://www.pinterest.com/pin/%2531%2532%2533/'), null);
+  assert.equal(designDiscoveryProvider('https://land-book.com/websites/%2566inance-dashboard'), null);
+  assert.equal(
+    designDiscoveryItemIdentity('https://uibowl.io/screen/task/detail'),
+    designDiscoveryItemIdentity('https://uibowl.io/screens/task/detail'),
+  );
+  assert.equal(
+    designDiscoveryIdentity('https://gallery.example/item/?utm_source=one#detail'),
+    designDiscoveryIdentity('https://gallery.example/item'),
+  );
 });
 
 test('gallery search requires observed same-provider items; login walls and unrelated links cannot establish coverage', async t => {

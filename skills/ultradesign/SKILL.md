@@ -309,8 +309,10 @@ Use `.omd/route.json` as the machine-consumed strategy. Do not substitute a reme
 `standard`, or `deep` sequence.
 
 - Launch only the roles/stages selected by the route in model-owned/dependency order; apply selected
-  methods and preserve every reasoned skip. When reference discovery is selected, there is no reference quota;
-  When it is skipped, use the recorded existing evidence.
+  methods and preserve every reasoned skip. There is no universal reference quota, but current
+  selected research enforces its evidence minimum: three independent domain operator families and
+  two independent visual-direction source families. When discovery is skipped, use the recorded
+  existing evidence.
 - Candidate generation, framing, copy isolation, typography proof, composition, art direction, and
   refinement are conditional methods. Their own contracts apply when selected; absence requires the
   route reason, not an invented artifact.

@@ -47,7 +47,9 @@ instructions: |
   structural-sketch stage owned by `omd-sketch`. Never interpret a skipped or selected
   `candidate-generation` stage as a skipped or selected reference board, or vice versa. Author a
   board only when `reference-board` is selected; otherwise hand measured records directly to the next
-  selected stage. There is no reference quota and no default candidate count.
+  selected stage. Current research needs three independent domain operator families and two
+  independent visual-direction source families; this is evidence diversity, not a query or capture
+  quota. There is no default candidate count.
   When discovery is selected, run `omd ref discover-plan --json`. The current request, explicit
   locale context, acquisition decisions and selected motion produce its search lanes even when
   domain analysis is skipped. User reference URLs are optional inputs, never a prerequisite.
@@ -126,7 +128,10 @@ instructions: |
   native capture JSON receipt. A gallery homepage is not an inspected item. Different gallery/source
   URLs require that source URL in the gallery's captured outbound links. Do not substitute an
   unrelated design-system capture or edit native acquisition metadata to make the gate pass.
-  Each design source also requires discovery URL/kind/free access/qualityReason.
+  Each design source also requires discovery URL/kind/free access/qualityReason. Current v7 research
+  retains at least two visual-direction sources from independent original service families and distinct
+  inspected gallery items, with different PNG bytes. Both must participate in the board; repeated
+  pages, crops, aliases or capture names from one product count once.
   Domain and design use independent service hosts and pixels; do not recapture the domain service
   under another name, path or crop for visual direction. Use free public Pinterest, Dribbble,
   Behance or website-gallery entries; UI Bowl's paid MCP is not required. The discovery entry must

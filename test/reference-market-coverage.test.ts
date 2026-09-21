@@ -30,6 +30,7 @@ function searchReceiptAt(root: string, lane: 'domain' | 'design', receipt: { pat
 
 test('explicit-market v7 binds local sources and fallback to executed market evidence', t => {
   const fixture = designAdmissionFixture(t);
+  const secondVisual = fixture.addSecondDesignDirection();
   publishReferenceResearch(fixture.root, fixture.research, options, fixture.writer);
   const published = Object.keys(referenceResearchArtifacts(parseReferenceResearch(fixture.research))).map(path => join(fixture.root, path));
   const before = published.map(path => readFileSync(path));
@@ -46,20 +47,27 @@ test('explicit-market v7 binds local sources and fallback to executed market evi
         [fixture.domain.source, fixture.domainTwo.source, fixture.domainThree.source, domainFour.source])),
       sources: [...fixture.research.domainReference.sources, domainFourSource] },
     designReference: { ...fixture.research.designReference, queries: designQueries,
-      searches: designQueries.map(query => testSearchReceipt(fixture.root, 'design', query, [fixture.gallery.source])) } };
+      searches: designQueries.map(query => testSearchReceipt(fixture.root, 'design', query,
+        [fixture.gallery.source, secondVisual.gallery.source])) } };
   assert.throws(() => publishReferenceResearch(fixture.root, input, options, fixture.writer), /MARKET_COVERAGE_REQUIRED/);
   assert.deepEqual(published.map(path => readFileSync(path)), before);
   const globalOnly = { marketRegion: 'KR',
     domain: { localSources: [], globalFallback: fallbackCoverage(['domain-1', 'domain-2', 'domain-3', 'domain-4'],
       input.domainReference.searches[0]!.sha256, fallbackGap(domainQueries)) },
-    design: { localSources: [localSearchSource('visual', fixture.source.evidence.sha256, 'product', input.designReference.searches[0]!.sha256)], globalFallback: null } };
+    design: { localSources: [
+      localSearchSource('visual', fixture.source.evidence.sha256, 'product', input.designReference.searches[0]!.sha256),
+      localSearchSource(secondVisual.sourceId, secondVisual.source.evidence.sha256, 'product', input.designReference.searches[0]!.sha256),
+    ], globalFallback: null } };
   assert.throws(() => parseReferenceResearch({ ...input, marketCoverage: globalOnly }), /MARKET_DOMAIN_LOCAL/);
   const documented = { marketRegion: 'KR',
     domain: { localSources: [fixture.domain, fixture.domainTwo, fixture.domainThree].map((source, index) =>
       localSearchSource(`domain-${index + 1}`, source.evidence.sha256, 'service', input.domainReference.searches[0]!.sha256)),
       globalFallback: fallbackCoverage(['domain-4'], input.domainReference.searches[0]!.sha256,
         fallbackGap(domainQueries)) },
-    design: { localSources: [localSearchSource('visual', fixture.source.evidence.sha256, 'product', input.designReference.searches[0]!.sha256)], globalFallback: null } };
+    design: { localSources: [
+      localSearchSource('visual', fixture.source.evidence.sha256, 'product', input.designReference.searches[0]!.sha256),
+      localSearchSource(secondVisual.sourceId, secondVisual.source.evidence.sha256, 'product', input.designReference.searches[0]!.sha256),
+    ], globalFallback: null } };
   const parsed = parseReferenceResearch({ ...input, marketCoverage: documented });
   assert.doesNotThrow(() => validateReferenceResearch(fixture.root, parsed, options));
   const firstLocal = documented.domain.localSources[0]; assert.ok(firstLocal);

@@ -1,5 +1,10 @@
 import { isAbsolute } from 'node:path';
-import { designDiscoveryProvider, referenceServiceFamily, referenceServiceHost } from './design-discovery-sources.ts';
+import {
+  designDiscoveryIdentity,
+  designDiscoveryProvider,
+  referenceServiceFamily,
+  referenceServiceHost,
+} from './design-discovery-sources.ts';
 import { parseMarketReferenceCoverage } from './market-reference-coverage.ts';
 import {
   REFERENCE_RESEARCH_DESIGN_KEYS, REFERENCE_RESEARCH_DOMAIN_KEYS, REFERENCE_RESEARCH_EVIDENCE_KEYS,
@@ -108,8 +113,28 @@ function source(value: unknown, design: boolean, index: number): ResearchSource 
     evidence: evidence(input.evidence, false, `${fieldPath}.evidence`),
     capture: evidence(input.capture, false, `${fieldPath}.capture`),
     ...(discovery ? { discovery } : {}),
-    ...(design ? { visualRole: input.visualRole as NonNullable<ResearchSource['visualRole']>, visualAssessment: visualAssessment! } : {}),
+    ...(design ? {
+      visualRole: input.visualRole as NonNullable<ResearchSource['visualRole']>,
+      visualAssessment: requiredVisualAssessment(visualAssessment),
+    } : {}),
   });
+}
+
+function requiredDiscovery(entry: ResearchSource): NonNullable<ResearchSource['discovery']> {
+  if (entry.discovery === undefined) fail('REFERENCE_RESEARCH_DESIGN_DISCOVERY_REQUIRED');
+  return entry.discovery;
+}
+
+function requiredVisualAssessment(value: ResearchSource['visualAssessment']): NonNullable<ResearchSource['visualAssessment']> {
+  if (value === undefined) fail('REFERENCE_RESEARCH_VISUAL_ASSESSMENT');
+  return value;
+}
+
+function discoveryItemIdentity(entry: ResearchSource): string {
+  const discovery = requiredDiscovery(entry);
+  const identity = designDiscoveryIdentity(discovery.url);
+  if (identity === null) fail('REFERENCE_RESEARCH_DISCOVERY_ENTRY_REQUIRED');
+  return identity;
 }
 
 function discoveryRoots(value: unknown, design: boolean): readonly ResearchDiscoveryRoot[] {
@@ -167,17 +192,25 @@ export function parseReferenceResearch(value: unknown): ReferenceResearch {
   const design = lane(input.designReference, { keys: REFERENCE_RESEARCH_DESIGN_KEYS, code: 'REFERENCE_RESEARCH_DESIGN', design: true, direct });
   if (direct && domain.sources.length < 3) fail('REFERENCE_RESEARCH_DOMAIN_SOURCE_COVERAGE: new research requires at least three independently inspected comparable services');
   if (direct && new Set(domain.sources.map(entry => referenceServiceFamily(entry.url))).size < 3) fail('REFERENCE_RESEARCH_DOMAIN_SOURCE_DIVERSITY: use at least three independent service families; pages or subdomains under one operator such as GOV.UK count once');
-  if (design.sources.filter(entry => entry.visualRole === 'visual-direction').length === 0) fail('REFERENCE_RESEARCH_VISUAL_DIRECTION_REQUIRED: component/usability documentation alone cannot establish visual direction');
+  const visualDirections = design.sources.filter(entry => entry.visualRole === 'visual-direction');
+  if (visualDirections.length === 0) fail('REFERENCE_RESEARCH_VISUAL_DIRECTION_REQUIRED: component/usability documentation alone cannot establish visual direction');
+  if (current && visualDirections.length < 2) fail('REFERENCE_RESEARCH_DESIGN_SOURCE_COVERAGE: current research requires at least two independently inspected visual-direction sources');
+  if (current && new Set(visualDirections.map(entry => referenceServiceFamily(entry.url))).size < 2) {
+    fail('REFERENCE_RESEARCH_DESIGN_SOURCE_DIVERSITY: use at least two independent original design families; repeated pages, crops, or captures from one product count once');
+  }
+  if (current && new Set(visualDirections.map(discoveryItemIdentity)).size < 2) {
+    fail('REFERENCE_RESEARCH_DESIGN_DISCOVERY_DIVERSITY: use distinct inspected gallery items for the visual comparison');
+  }
   const serviceIdentity = direct ? referenceServiceFamily : referenceServiceHost;
   const domainHosts = new Set([...domain.sources, ...domain.discoveryRoots ?? []].map(entry => serviceIdentity(entry.url)));
-  const designUrls = [...design.sources.flatMap(entry => [entry.url, entry.discovery!.url]), ...design.discoveryRoots?.map(entry => entry.url) ?? []];
+  const designUrls = [...design.sources.flatMap(entry => [entry.url, requiredDiscovery(entry).url]), ...design.discoveryRoots?.map(entry => entry.url) ?? []];
   if (designUrls.some(url => domainHosts.has(serviceIdentity(url)))) fail('REFERENCE_RESEARCH_DOMAIN_AS_VISUAL_DIRECTION: domain and design must use independent service families; keep the domain capture and discover a separate visual source');
   const benchmarkSha256 = domain.benchmarkSha256 === null ? null : digest(domain.benchmarkSha256, 'REFERENCE_RESEARCH_BENCHMARK_SHA');
   const boardSha256 = digest(design.boardSha256, 'REFERENCE_RESEARCH_BOARD_SHA');
   const domainEvidence = [...domain.sources, ...domain.discoveryRoots ?? []].map(entry => entry.evidence);
   const domainPaths = new Set(domainEvidence.map(entry => entry.path));
   const domainHashes = new Set(domainEvidence.map(entry => entry.sha256));
-  const designEvidence = [...design.sources.flatMap(entry => [entry.evidence, entry.discovery!.evidence]), ...design.discoveryRoots?.map(entry => entry.evidence) ?? []];
+  const designEvidence = [...design.sources.flatMap(entry => [entry.evidence, requiredDiscovery(entry).evidence]), ...design.discoveryRoots?.map(entry => entry.evidence) ?? []];
   if (designEvidence.some(item => domainPaths.has(item.path) || domainHashes.has(item.sha256))) fail('REFERENCE_RESEARCH_LANE_EVIDENCE_REUSED');
   const coverage = current ? parseMarketReferenceCoverage(input.marketCoverage, domain.sources, design.sources) : null;
   return Object.freeze({

@@ -119,8 +119,11 @@ Domain/design hosts, final redirects and PNG evidence must be independent. Non-u
 be a supported public gallery item, not a service page labelled as a gallery. Public Pinterest,
 Dribbble and Behance items do not require UI Bowl's paid MCP. Free viewing is checked per item.
 Design sources declare visual-direction or component-support with observed composition, type,
-density, imagery, transfer and exclusions. Every board candidate uses visual-direction evidence;
-support-only documentation cannot complete the lane. Inspect previews in `.omd/refs/design/README.md`.
+density, imagery, transfer and exclusions. Current v7 needs at least two independent visual-direction
+service families from distinct inspected gallery items with different PNG bytes, and both directions
+must participate in the current board. Tracking URL variants, renamed captures, and unused screenshots
+do not count. Every board candidate uses visual-direction evidence; support-only documentation cannot
+complete the lane. Inspect previews in `.omd/refs/design/README.md`.
 These are provenance/role checks, not a machine certification of beauty.
 
 Current v7 requires native acquisition evidence, not query prose. `omd ref search --input <json>` accepts

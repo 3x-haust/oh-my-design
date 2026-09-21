@@ -12,6 +12,7 @@ import { directRootAt, fallbackCoverage, fallbackGap, localDirectSource, localSe
 
 test('market search and direct provenance refuse malformed scope, attempts, roots, and stale plans', t => {
   const fixture = designAdmissionFixture(t);
+  const secondVisual = fixture.addSecondDesignDirection();
   const domainQueries = ['대한민국 public benefits', '한국 public benefits service', 'South Korea public benefits service'];
   const oldObservedAt = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString();
   writeFileSync(join(fixture.root, '.omd/locale-design-context.json'), JSON.stringify(context));
@@ -19,7 +20,10 @@ test('market search and direct provenance refuse malformed scope, attempts, root
   const coverage = { marketRegion: 'KR',
     domain: { localSources: fixture.research.domainReference.sources.map(source => localSearchSource(
       source.id, source.evidence.sha256, 'service', 'e'.repeat(64))), globalFallback: null },
-    design: { localSources: [localSearchSource('visual', fixture.source.evidence.sha256, 'product', 'e'.repeat(64))], globalFallback: null } };
+    design: { localSources: [
+      localSearchSource('visual', fixture.source.evidence.sha256, 'product', 'e'.repeat(64)),
+      localSearchSource(secondVisual.sourceId, secondVisual.source.evidence.sha256, 'product', 'e'.repeat(64)),
+    ], globalFallback: null } };
   const input = { ...fixture.research, schema: REFERENCE_RESEARCH_SCHEMA, marketCoverage: coverage };
   assert.throws(() => validateReferenceResearch(fixture.root, parseReferenceResearch(input), options), /MARKET_DOMAIN_SEARCH_REQUIRED/);
   const emptyGap = { ...coverage, domain: { localSources: coverage.domain.localSources.slice(0, 2),
@@ -39,18 +43,24 @@ test('market search and direct provenance refuse malformed scope, attempts, root
   assert.throws(() => validateMarketReferenceCoverage(fixture.root, parseReferenceResearch(badRoot), options.expectedRequest), /MARKET_DOMAIN_DIRECT_ROOT_REQUIRED/);
   const domainRoot = directRootAt(fixture.root, 'domain', 'https://directory.example/south-korea/tasks',
     fixture.research.domainReference.sources.map(source => source.url));
-  const designItem = 'https://www.siteinspire.com/websites/10267-south-korea-example';
-  const designRoot = directRootAt(fixture.root, 'design', 'https://www.siteinspire.com/websites/category/south-korea', [designItem]);
+  const designItems = [
+    'https://www.siteinspire.com/website/10267-south-korea-example',
+    'https://www.siteinspire.com/website/10268-south-korea-workspace',
+  ];
+  const designRoot = directRootAt(fixture.root, 'design', 'https://www.siteinspire.com/websites/category/south-korea', designItems);
   const directCoverage = { marketRegion: 'KR',
     domain: { localSources: [fixture.domain, fixture.domainTwo, fixture.domainThree].map((source, index) =>
       localDirectSource(`domain-${index + 1}`, source.evidence.sha256, 'service', domainRoot.capture.sha256)),
       globalFallback: null },
-    design: { localSources: [localDirectSource('visual', fixture.source.evidence.sha256, 'product', designRoot.capture.sha256)], globalFallback: null } };
+    design: { localSources: [
+      localDirectSource('visual', fixture.source.evidence.sha256, 'product', designRoot.capture.sha256),
+      localDirectSource(secondVisual.sourceId, secondVisual.source.evidence.sha256, 'product', designRoot.capture.sha256),
+    ], globalFallback: null } };
   const scoped = { ...badRoot, marketCoverage: directCoverage,
     domainReference: { ...badRoot.domainReference, discoveryRoots: [domainRoot] },
     designReference: { ...badRoot.designReference,
-      sources: badRoot.designReference.sources.map(source => ({ ...source,
-        discovery: { ...source.discovery, url: designItem } })), discoveryRoots: [designRoot] } };
+      sources: badRoot.designReference.sources.map((source, index) => ({ ...source,
+        discovery: { ...source.discovery, url: designItems[index]! } })), discoveryRoots: [designRoot] } };
   assert.doesNotThrow(() => validateMarketReferenceCoverage(fixture.root, parseReferenceResearch(scoped), options.expectedRequest));
   const staleCoexistingSearch = testSearchReceipt(fixture.root, 'domain', domainQueries[0]!,
     [fixture.domain.source], false, oldObservedAt);
