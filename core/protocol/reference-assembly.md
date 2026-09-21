@@ -249,15 +249,18 @@ independent local visual-direction/design sources in design. Record a concrete c
 using the policy's global-equivalent fallback. This is acquisition scope, not a country-style preset;
 the later locale profile and locale binding still decide which measured mechanisms may transfer.
 Research v7 is the executable refusal layer for this policy. Its `marketCoverage` classifies every
-source in each lane exactly once as source-specific target-market evidence with a concrete reason or
-documented global fallback, retains at least one local source per lane, and binds the explicit market. Search-based research must execute the
+source in each lane exactly once as evidence-bound target-market material or documented global
+fallback, retains at least one local source per lane, and binds the explicit market. Search-based research must execute the
 plan's exact market domain inputs and market-plus-domain design searches before global queries. A
 direct-public root may replace search transport, but never the per-lane local evidence or fallback gap.
-Every retained local-source reason must name the explicit market and the service, product, gallery, or
-audience scope it actually supports. Every global fallback gap must name that same market and the
-specific local availability, access, or coverage shortage; generic quality prose does not qualify.
-Each local classification also binds the exact retained image SHA-256; prose alone cannot reclassify a
-different capture. Reasons, root scope, and fallback gaps use bounded visible well-formed text.
+Each local classification binds `sourceId`, the exact retained `evidenceSha256`, a lane-valid `scope`,
+and a closed `basis`. `market-search-result` also binds the exact market-search receipt SHA-256, whose
+observed links must contain the retained source or its declared design-discovery URL. `market-domain`
+uses no search receipt and is accepted only when the retained source or design-discovery host uses the
+explicit market's country-code domain. Freeform prose never proves local provenance. Every global
+fallback gap records that same `marketRegion`, a closed availability/access/coverage `kind`, and the
+exact market queries or direct roots attempted. Generic quality prose and invented attempts do not
+qualify. Root reasons remain bounded, visible, well-formed scope notes; they are not provenance.
 
 The two lanes use independent service hosts, including after redirects. A second path or crop of a
 domain service is not a visual direction. Non-user discovery must match a supported public gallery

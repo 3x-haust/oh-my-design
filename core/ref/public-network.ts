@@ -1,8 +1,12 @@
 import { lookup as dnsLookup } from 'node:dns/promises';
-import { BlockList, isIP } from 'node:net';
+import { createServer } from 'node:http';
+import { BlockList, connect as netConnect, isIP } from 'node:net';
+import type { Duplex } from 'node:stream';
 
 type LookupAddress = Readonly<{ address: string; family: number }>;
 export type PublicHostLookup = (hostname: string) => Promise<readonly LookupAddress[]>;
+type PublicTcpConnect = (address: string, port: number, family: 4 | 6) => Duplex;
+export type PublicNetworkProxy = Readonly<{ server: string; close(): Promise<void> }>;
 
 const blockedV4 = new BlockList();
 const blockedV6 = new BlockList();
@@ -35,12 +39,82 @@ export function publicIpAddress(address: string): boolean {
 }
 
 const systemLookup: PublicHostLookup = hostname => dnsLookup(hostname, { all: true, verbatim: true });
+const systemConnect: PublicTcpConnect = (address, port, family) => netConnect({ host: address, port, family });
 
-export async function assertPublicNetworkUrl(value: string, lookup: PublicHostLookup = systemLookup): Promise<void> {
-  const url = new URL(value);
-  if (url.protocol !== 'https:' || forbiddenPublicHostname(url.hostname)) throw new Error('public HTTPS destination required');
-  const addresses = await lookup(url.hostname);
+export async function resolvePublicDestination(
+  hostname: string,
+  lookup: PublicHostLookup = systemLookup,
+): Promise<Readonly<{ address: string; family: 4 | 6 }>> {
+  if (forbiddenPublicHostname(hostname)) throw new Error('public HTTPS destination required');
+  const addresses = await lookup(hostname);
   if (!addresses.length || addresses.some(({ address, family }) => family !== isIP(address) || !publicIpAddress(address))) {
     throw new Error('destination resolves to a non-public network');
   }
+  const selected = addresses[0]!;
+  return Object.freeze({ address: selected.address, family: selected.family as 4 | 6 });
+}
+
+export async function assertPublicNetworkUrl(value: string, lookup: PublicHostLookup = systemLookup): Promise<void> {
+  const url = new URL(value);
+  if (url.protocol !== 'https:') throw new Error('public HTTPS destination required');
+  await resolvePublicDestination(url.hostname, lookup);
+}
+
+function target(authority: string | undefined): Readonly<{ hostname: string; port: number }> {
+  if (authority === undefined || !authority.endsWith(':443')) throw new Error('CONNECT target required');
+  const url = new URL(`https://${authority}`);
+  if (url.username || url.password || url.pathname !== '/' || url.search || url.hash) {
+    throw new Error('only canonical HTTPS CONNECT targets are allowed');
+  }
+  return Object.freeze({ hostname: url.hostname, port: 443 });
+}
+
+export async function createPublicNetworkProxy(options: Readonly<{
+  lookup?: PublicHostLookup;
+  connect?: PublicTcpConnect;
+}> = {}): Promise<PublicNetworkProxy> {
+  const lookup = options.lookup ?? systemLookup;
+  const connect = options.connect ?? systemConnect;
+  const sockets = new Set<Duplex>();
+  const server = createServer((_request, response) => {
+    response.writeHead(403, { connection: 'close' });
+    response.end();
+  });
+  server.on('connection', socket => {
+    sockets.add(socket);
+    socket.once('close', () => sockets.delete(socket));
+  });
+  server.on('connect', (request, client, head) => {
+    void (async () => {
+      try {
+        const destination = target(request.url);
+        const resolved = await resolvePublicDestination(destination.hostname, lookup);
+        const upstream = connect(resolved.address, destination.port, resolved.family);
+        sockets.add(upstream);
+        upstream.once('close', () => sockets.delete(upstream));
+        upstream.once('error', () => client.destroy());
+        upstream.once('connect', () => {
+          client.write('HTTP/1.1 200 Connection Established\r\n\r\n');
+          if (head.length) upstream.write(head);
+          client.pipe(upstream);
+          upstream.pipe(client);
+        });
+      } catch {
+        client.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');
+      }
+    })();
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => { server.off('error', reject); resolve(); });
+  });
+  const address = server.address();
+  if (address === null || typeof address === 'string') throw new Error('public network proxy failed to bind');
+  return Object.freeze({
+    server: `http://127.0.0.1:${address.port}`,
+    async close() {
+      for (const socket of sockets) socket.destroy();
+      await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+    },
+  });
 }

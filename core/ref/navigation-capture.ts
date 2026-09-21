@@ -4,7 +4,7 @@ import type { ProjectWriteAdapter } from '../runtime/project-write.ts';
 import { designDiscoveryDirectoryProvider } from './design-discovery-sources.ts';
 import { captureDiscoveryObservation } from './search-observation.ts';
 import { observeDocumentResponses, type DocumentObserver } from './document-observation.ts';
-import { assertPublicNetworkUrl, publicIpAddress } from './public-network.ts';
+import { createPublicNetworkProxy, publicIpAddress } from './public-network.ts';
 import { searchChallengeReason } from './search-execution.ts';
 import { DISCOVERY_LIMITATIONS, ReferenceDiscoveryError, directDiscoveryEntry, discoveryDigest, discoveryLane, publicDiscoveryUrl, validateDirectDiscoveryLinks,
   type DirectDiscoveryEntry, type DirectDiscoveryReceipt, type DiscoveryCaptureRecord, type DiscoveryNavigationReceipt } from './discovery-record.ts';
@@ -37,15 +37,13 @@ export async function captureReferenceNavigation(browser: Browser, source: strin
   const url = publicDiscoveryUrl(source);
   const entry = requestedEntry === undefined ? undefined : directDiscoveryEntry(requestedEntry, lane);
   if (entry === 'free-gallery' && designDiscoveryDirectoryProvider(url) === null) throw new ReferenceNavigationError('free-gallery entry requires a supported public list URL');
-  const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, serviceWorkers: 'block', acceptDownloads: false });
+  const networkProxy = await createPublicNetworkProxy();
+  let context: BrowserContext | undefined;
   let documents: DocumentObserver | undefined;
   try {
-    await context.route('**/*', async route => {
-      if (!['GET', 'HEAD'].includes(route.request().method())) return route.abort();
-      try { await assertPublicNetworkUrl(route.request().url()); }
-      catch { return route.abort('blockedbyclient'); }
-      return route.continue();
-    });
+    context = await browser.newContext({ viewport: { width: 1280, height: 900 }, serviceWorkers: 'block', acceptDownloads: false,
+      proxy: { server: networkProxy.server } });
+    await context.route('**/*', route => ['GET', 'HEAD'].includes(route.request().method()) ? route.continue() : route.abort());
     context.setDefaultTimeout(10000);
     const page = await context.newPage();
     documents = await observeDocumentResponses(page);
@@ -87,6 +85,9 @@ export async function captureReferenceNavigation(browser: Browser, source: strin
     return entry === undefined ? receipt : { method: 'direct-public', entry, ...receipt };
   } finally {
     try { await documents?.close(); }
-    finally { await closeContext(context); }
+    finally {
+      try { if (context !== undefined) await closeContext(context); }
+      finally { await networkProxy.close(); }
+    }
   }
 }

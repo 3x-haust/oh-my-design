@@ -64,11 +64,13 @@ instructions: |
   Record a concrete target-market coverage gap before using a global equivalent. Never reuse one
   operator across lanes or turn a region label into a country-wide style preset. With `unscoped`, do
   not infer a market from conversation language, surface locale, script or likely user location.
-  Publish v7 `marketCoverage` for target-market-first work. Classify every lane source exactly once,
-  keep at least one target-market source in each lane with a source-specific reason that names the
-  explicit market, explains which service, product, gallery, or audience scope it supports, and binds
-  the retained image's exact SHA-256. A fallback gap must name the same market and its specific local
-  availability, access, or coverage shortage; generic quality prose is refused. `research-check`
+  Publish v7 `marketCoverage` for target-market-first work. Classify every lane source exactly once
+  with `sourceId`, the retained image's exact `evidenceSha256`, a lane-valid `scope`, `basis`, and
+  `searchReceiptSha256`. `market-search-result` must bind the exact market-search receipt whose observed
+  links contain the retained source or design-discovery URL. `market-domain` must use a null receipt and
+  a retained source/discovery host under the explicit market country-code domain. A fallback gap records
+  the exact market, an availability/access/coverage kind, and the exact attempted queries or roots.
+  Freeform prose cannot prove local provenance or a fallback attempt. `research-check`
   rejects market drift, global-only lanes and unqualified search order.
   Use the user's explicitly selected available search transport, such as Aside CLI when requested;
   otherwise use the host's native web-search tool. Rendering a search engine's HTML with

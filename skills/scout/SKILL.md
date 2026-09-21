@@ -78,10 +78,12 @@ domain services or accept a weak screen merely because it is local. Use unqualif
 only after recording the local coverage gap. `unscoped` means no country may be inferred from the
 conversation language or surface locale.
 For target-market-first work, publish research v7 with `marketCoverage`. Each lane must classify every
-source id exactly once, keep at least one target-market source with a source-specific reason naming the
-explicit market, explaining its supported service, product, gallery, or audience scope, and binding that
-retained image's exact SHA-256. A fallback gap must name the same market and the specific local availability,
-access, or coverage shortage; generic prose does not qualify. `research-check` rejects missing coverage, market drift, global-only lanes, and
+source id exactly once with `sourceId`, the retained image's exact `evidenceSha256`, a lane-valid `scope`,
+`basis`, and `searchReceiptSha256`. `market-search-result` must bind the exact market-search receipt whose
+observed links contain the retained source or design-discovery URL. `market-domain` uses a null receipt
+and requires a retained source/discovery host under the explicit market country-code domain. A fallback
+gap records the exact market, an availability/access/coverage kind, and the exact attempted queries or
+roots. Freeform prose cannot prove local provenance or a fallback attempt. `research-check` rejects missing coverage, market drift, global-only lanes, and
 unqualified search order; repair the evidence instead of removing the policy.
 For native search use the plan's `designSourcePolicy.nativeSearchInputs` with `ref search`.
 They bind real free-gallery queries for Pinterest, Dribbble and Siteinspire. Refine the short

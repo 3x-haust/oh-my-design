@@ -1,4 +1,4 @@
-import type { MarketReferenceCoverage } from './market-reference-coverage.ts';
+import type { MarketReferenceCoverage } from './market-reference-coverage-contract.ts';
 
 export const REFERENCE_RESEARCH_SCHEMA = 'reference-research-v7' as const;
 export const DOMAIN_REFERENCES_PATH = '.omd/refs/domain/research.json';

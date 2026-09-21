@@ -2,10 +2,13 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
+import { connect } from 'node:net';
+import { PassThrough } from 'node:stream';
+import { once } from 'node:events';
 import { captureReferenceNavigation } from '../core/ref/navigation-capture.ts';
 import { readDirectDiscoveryEntry, readStrictDiscoveryNavigation, type DirectDiscoveryEntry } from '../core/ref/discovery-record.ts';
 import { designDiscoveryDirectoryProvider } from '../core/ref/design-discovery-sources.ts';
-import { assertPublicNetworkUrl, publicIpAddress } from '../core/ref/public-network.ts';
+import { assertPublicNetworkUrl, createPublicNetworkProxy, publicIpAddress } from '../core/ref/public-network.ts';
 import { loadRefs } from '../core/ref/store.ts';
 import { withBrowser } from '../core/render/index.ts';
 import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
@@ -48,7 +51,12 @@ for (const entry of ['public-directory', 'free-gallery'] as const) {
     assert.equal(value.receipt.entry, entry);
     assert.deepEqual(readDirectDiscoveryEntry(value.root, value.receipt), { url, finalUrl: url, links: [target] });
     assert.deepEqual(readFileSync(join(value.root, value.receipt.evidence.path)), value.observed.captures[0]);
-    assert.deepEqual(value.observed.contextOptions, [{ viewport: { width: 1280, height: 900 }, serviceWorkers: 'block', acceptDownloads: false }]);
+    assert.equal(value.observed.contextOptions.length, 1);
+    const contextOptions = value.observed.contextOptions[0]!;
+    assert.deepEqual({ ...contextOptions, proxy: undefined }, {
+      viewport: { width: 1280, height: 900 }, serviceWorkers: 'block', acceptDownloads: false, proxy: undefined,
+    });
+    assert.match(contextOptions.proxy?.server ?? '', /^http:\/\/127\.0\.0\.1:\d+$/);
     assert.equal(value.observed.closed(), 1);
     assert.equal(existsSync(join(value.root, '.omd/refs')), false);
     assert.deepEqual(loadRefs(value.root, { includeDomain: true }), []);
@@ -100,6 +108,28 @@ test('public network validation refuses private DNS answers and reserved address
   for (const address of ['127.0.0.1', '169.254.169.254', '::1', '::ffff:127.0.0.1', 'fc00::1', '2001:db8::1']) {
     assert.equal(publicIpAddress(address), false);
   }
+});
+
+test('the CONNECT proxy pins the socket to the exact validated DNS answer', async t => {
+  const connected: string[] = [];
+  const proxy = await createPublicNetworkProxy({
+    lookup: async () => [{ address: '93.184.216.34', family: 4 }],
+    connect: address => {
+      connected.push(address);
+      const stream = new PassThrough();
+      queueMicrotask(() => stream.emit('connect'));
+      return stream;
+    },
+  });
+  t.after(() => proxy.close());
+  const port = Number(new URL(proxy.server).port);
+  const client = connect(port, '127.0.0.1');
+  t.after(() => client.destroy());
+  await once(client, 'connect');
+  client.write('CONNECT rebinding.example:443 HTTP/1.1\r\nHost: rebinding.example:443\r\n\r\n');
+  const [bytes] = await once(client, 'data') as [Buffer];
+  assert.match(bytes.toString('utf8'), /^HTTP\/1\.1 200/);
+  assert.deepEqual(connected, ['93.184.216.34']);
 });
 
 const unavailable: readonly Readonly<{ name: string; scenario: DiscoveryScenario; error: RegExp }>[] = [
