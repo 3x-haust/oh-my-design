@@ -26,9 +26,11 @@ async function renderedState(page: Page) {
       const parent = node.parentElement;
       if (parent === null) continue;
       let hidden = false;
+      let opacity = 1;
       for (let ancestor: Element | null = parent; ancestor; ancestor = ancestor.parentElement) {
         const style = getComputedStyle(ancestor);
-        if (style.display === 'none' || style.visibility !== 'visible' || Number(style.opacity) < 0.05
+        const level = Number(style.opacity); opacity *= Number.isFinite(level) ? level : 1;
+        if (style.display === 'none' || style.visibility !== 'visible' || opacity < 0.05
           || style.contentVisibility === 'hidden' || style.clipPath !== 'none' || style.clip !== 'auto'
           || style.filter !== 'none' || style.getPropertyValue('mask-image') !== 'none'
           || !['', 'none'].includes(style.getPropertyValue('-webkit-mask-image'))) { hidden = true; break; }
@@ -61,7 +63,21 @@ async function renderedState(page: Page) {
             && !/^rgb\([^)]*\/\s*0(?:\.0+)?\)$/.test(background)
             && box.left <= x && box.right >= x && box.top <= y && box.bottom >= y;
         });
-        if (occluded) return false;
+        let pseudoOccluded = false;
+        for (let owner: Element | null = parent; owner && !pseudoOccluded; owner = owner.parentElement) {
+          pseudoOccluded = ['::before', '::after'].some(pseudo => {
+            const style = getComputedStyle(owner, pseudo); const box = owner.getBoundingClientRect();
+            const background = style.backgroundColor; const z = Number.parseInt(style.zIndex, 10);
+            const horizontal = (style.left !== 'auto' && style.right !== 'auto') || Number.parseFloat(style.width) >= box.width;
+            const vertical = (style.top !== 'auto' && style.bottom !== 'auto') || Number.parseFloat(style.height) >= box.height;
+            const aboveText = pseudo === '::after' ? !Number.isFinite(z) || z >= 0 : Number.isFinite(z) && z > 0;
+            return !['none', 'normal'].includes(style.content) && ['absolute', 'fixed', 'sticky'].includes(style.position)
+              && aboveText && horizontal && vertical && box.left <= x && box.right >= x
+              && box.top <= y && box.bottom >= y && background !== 'transparent'
+              && !/^rgba\([^)]*,\s*0(?:\.0+)?\)$/.test(background) && !/^rgb\([^)]*\/\s*0(?:\.0+)?\)$/.test(background);
+          });
+        }
+        if (occluded || pseudoOccluded) return false;
         const front = document.elementsFromPoint(x, y)[0];
         return front === parent || front?.contains(parent) === true;
       });
@@ -78,9 +94,11 @@ async function renderedState(page: Page) {
       const parent = node.parentElement;
       if (parent === null || parent.closest('h1, h2, h3, p, li, a, button, [role="heading"]') === null) continue;
       let hidden = false;
+      let opacity = 1;
       for (let ancestor: Element | null = parent; ancestor; ancestor = ancestor.parentElement) {
         const style = getComputedStyle(ancestor);
-        if (style.display === 'none' || style.visibility !== 'visible' || Number(style.opacity) < 0.05
+        const level = Number(style.opacity); opacity *= Number.isFinite(level) ? level : 1;
+        if (style.display === 'none' || style.visibility !== 'visible' || opacity < 0.05
           || style.contentVisibility === 'hidden' || style.clipPath !== 'none' || style.clip !== 'auto'
           || style.filter !== 'none' || style.getPropertyValue('mask-image') !== 'none'
           || !['', 'none'].includes(style.getPropertyValue('-webkit-mask-image'))) { hidden = true; break; }
@@ -113,7 +131,21 @@ async function renderedState(page: Page) {
             && !/^rgb\([^)]*\/\s*0(?:\.0+)?\)$/.test(background)
             && box.left <= x && box.right >= x && box.top <= y && box.bottom >= y;
         });
-        if (occluded) return false;
+        let pseudoOccluded = false;
+        for (let owner: Element | null = parent; owner && !pseudoOccluded; owner = owner.parentElement) {
+          pseudoOccluded = ['::before', '::after'].some(pseudo => {
+            const style = getComputedStyle(owner, pseudo); const box = owner.getBoundingClientRect();
+            const background = style.backgroundColor; const z = Number.parseInt(style.zIndex, 10);
+            const horizontal = (style.left !== 'auto' && style.right !== 'auto') || Number.parseFloat(style.width) >= box.width;
+            const vertical = (style.top !== 'auto' && style.bottom !== 'auto') || Number.parseFloat(style.height) >= box.height;
+            const aboveText = pseudo === '::after' ? !Number.isFinite(z) || z >= 0 : Number.isFinite(z) && z > 0;
+            return !['none', 'normal'].includes(style.content) && ['absolute', 'fixed', 'sticky'].includes(style.position)
+              && aboveText && horizontal && vertical && box.left <= x && box.right >= x
+              && box.top <= y && box.bottom >= y && background !== 'transparent'
+              && !/^rgba\([^)]*,\s*0(?:\.0+)?\)$/.test(background) && !/^rgb\([^)]*\/\s*0(?:\.0+)?\)$/.test(background);
+          });
+        }
+        if (occluded || pseudoOccluded) return false;
         const front = document.elementsFromPoint(x, y)[0];
         return front === parent || front?.contains(parent) === true;
       });

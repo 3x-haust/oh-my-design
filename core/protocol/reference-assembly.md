@@ -267,9 +267,11 @@ market-search execution whose visible result text for that link names the explic
 service/product scope. `market-direct-result` binds a signed direct-public root whose visible label for
 that retained link names the explicit market and relevant scope. URL tokens, localized queries,
 country-code hostnames, page-wide headings, and freeform reasons are never source-specific market proof.
-Search and direct bases may coexist in a lane. Every market attempt must be current. Every global fallback gap records that same
-`marketRegion`, a closed availability/access/coverage `kind`, and every exact market query and direct root
-attempted by that lane. Generic quality prose and invented attempts do not
+Search and direct bases may coexist in a lane. Every declared search and direct attempt must be current.
+Every global fallback binds each chosen source to a current signed visible link through
+`provenance=[{sourceId,provenanceReceiptSha256}]`; its gap records that same `marketRegion`, a closed
+availability/access/coverage `kind`, and every exact query and direct root attempted by that lane.
+Every chosen retained capture must be current. Generic quality prose and invented attempts do not
 qualify. Root reasons remain bounded, visible, well-formed scope notes; they are not provenance.
 
 The two lanes use independent service hosts, including after redirects. A second path or crop of a

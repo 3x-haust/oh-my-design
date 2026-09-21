@@ -20,8 +20,24 @@ export type { MarketLaneCoverage, MarketReferenceCoverage } from './market-refer
 const INVISIBLE = /[\p{Cc}\p{Default_Ignorable_Code_Point}\p{White_Space}\u2800\u3164\uffa0]/gu;
 const DIRECT_NEGATION = /\b(?:not|no|isn't|is not|doesn't|does not|unavailable|unsupported|outside|excludes?|excluded|excluding|global only)\b|아님|아니다|불가|제외|미지원|제공하지\s*않|지원하지\s*않|해외\s*전용|한국\s*외/iu;
 const DIRECT_SCOPE = /\b(?:serves?|serving|available|operat(?:e|es|ed|ing)|based|local(?:ized)?|market|residents?|users?|audience|directory|gallery|service|product|interface)\b|대상|제공|운영|거주|사용자|시장|서비스|디렉터리|갤러리|제품|인터페이스|앱|웹사이트/iu;
+const SCOPE_TERMS = {
+  service: /\b(?:services?|benefits?|support|welfare|applications?|platform)\b|서비스|혜택|지원|복지|신청|플랫폼/iu,
+  product: /\b(?:products?|apps?|applications?|interfaces?|websites?|sites?|ui)\b|제품|프로덕트|앱|애플리케이션|인터페이스|웹사이트|사이트|UI/iu,
+  gallery: /\b(?:gallery|design|reference|showcase|inspiration)\b|갤러리|디자인|레퍼런스|쇼케이스/iu,
+  audience: /\b(?:residents?|users?|audience|citizens?|customers?|people)\b|거주|주민|사용자|대상|시민|고객|이용자/iu,
+} as const;
 const MAX_PROVENANCE_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+export function assertCurrentMarketCapture(value: unknown, lane: 'DOMAIN' | 'DESIGN'): void {
+  const capturedAt = typeof value === 'string' ? Date.parse(value) : Number.NaN;
+  const now = Date.now();
+  if (!Number.isFinite(capturedAt) || now - capturedAt > MAX_PROVENANCE_AGE_MS
+    || capturedAt - now > MAX_CLOCK_SKEW_MS) {
+    marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_CAPTURE_STALE`);
+  }
+}
 
 function explanation(value: unknown, code: string): string {
   const result = marketText(value, code);
@@ -72,7 +88,7 @@ export function validateMarketReferenceCoverage(root: string, research: Referenc
   ] as const) roots?.forEach(root => directRootReason(root.reason, marketTokens,
     `REFERENCE_RESEARCH_MARKET_${name}_DIRECT_ROOT_REQUIRED: explain how each direct root scopes discovery to the explicit market`));
   const domainSearchRequired = laneNeedsMarketSearch(research.marketCoverage.domain,
-    research.domainReference.discoveryRoots ?? []);
+    research.domainReference.discoveryRoots ?? [], research.domainReference.searches);
   if (domainSearchRequired
     && domainQueries.some((query, index) => research.domainReference.queries[index] !== query)) {
     return marketReject('REFERENCE_RESEARCH_MARKET_DOMAIN_SEARCH_REQUIRED: execute the exact target-market domain inputs before global searches');
@@ -92,7 +108,7 @@ export function validateMarketReferenceCoverage(root: string, research: Referenc
   if (base === undefined) return marketReject('REFERENCE_RESEARCH_MARKET_DESIGN_PLAN_REQUIRED: current domain queries are empty');
   const designQueries = labels.map(label => `${label} ${context.domain} ${base}`);
   const designSearchRequired = laneNeedsMarketSearch(research.marketCoverage.design,
-    research.designReference.discoveryRoots ?? []);
+    research.designReference.discoveryRoots ?? [], research.designReference.searches);
   if (designSearchRequired && (designQueries.some((query, index) => research.designReference.queries[index] !== query)
     || research.designReference.queries.slice(0, labels.length).some(query => !isMarketQualifiedQuery(query, labels)))) {
     return marketReject('REFERENCE_RESEARCH_MARKET_DESIGN_SEARCH_REQUIRED: execute market-and-domain-qualified design searches before global searches');
@@ -115,8 +131,8 @@ type MarketExecution = Readonly<{
   results: readonly ObservedSearchResult[];
   usable: boolean;
 }>;
-function laneNeedsMarketSearch(coverage: MarketLaneCoverage, roots: readonly unknown[]): boolean {
-  return !roots.length || coverage.localSources.some(source => source.basis === 'market-search-result')
+function laneNeedsMarketSearch(coverage: MarketLaneCoverage, roots: readonly unknown[], searches: readonly unknown[]): boolean {
+  return searches.length > 0 || !roots.length || coverage.localSources.some(source => source.basis === 'market-search-result')
     || (coverage.globalFallback?.gap.attemptedQueries.length ?? 0) > 0;
 }
 function validateLaneProvenance(
@@ -137,25 +153,39 @@ function validateLaneProvenance(
     if (!execution.usable) marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_LOCAL_PROVENANCE`);
     const result = execution.results.find(candidate => resultReaches(candidate, urls));
     if (result === undefined || DIRECT_NEGATION.test(result.text) || !DIRECT_SCOPE.test(result.text)
+      || !SCOPE_TERMS[local.scope].test(result.text)
       || !containsMarketToken(result.text, marketLabels)) {
       marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_LOCAL_RESULT_SCOPE`);
     }
-    const sourceObservedAt = Date.parse(source.observedAt);
-    if (!Number.isFinite(sourceObservedAt)
-      || Math.abs(sourceObservedAt - execution.observedAt) > MAX_PROVENANCE_AGE_MS
-      || Date.now() - sourceObservedAt > MAX_PROVENANCE_AGE_MS
-      || sourceObservedAt - Date.now() > MAX_CLOCK_SKEW_MS) {
-      marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_LOCAL_PROVENANCE_STALE`);
-    }
+    assertCurrentSourceObservation(source.observedAt, execution.observedAt,
+      `REFERENCE_RESEARCH_MARKET_${lane}_LOCAL_PROVENANCE_STALE`);
   }
   const fallback = coverage.globalFallback;
   if (fallback === null) return;
   if (fallback.gap.marketRegion !== marketRegion) marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_FALLBACK_MARKET`);
+  for (const binding of fallback.provenance) {
+    const source = sources.find(candidate => candidate.id === binding.sourceId)!;
+    const urls = [source.url, ...(source.discovery === undefined ? [] : [source.discovery.url])];
+    const execution = executions.find(candidate => candidate.sha256 === binding.provenanceReceiptSha256)
+      ?? marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_FALLBACK_PROVENANCE`);
+    if (!execution.usable || !execution.results.some(result => resultReaches(result, urls))) {
+      marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_FALLBACK_PROVENANCE`);
+    }
+    assertCurrentSourceObservation(source.observedAt, execution.observedAt,
+      `REFERENCE_RESEARCH_MARKET_${lane}_FALLBACK_PROVENANCE_STALE`);
+  }
   const rootUrls = roots.map(root => root.url);
   const attemptedQueries = executions.flatMap(execution => execution.query === null ? [] : [execution.query]);
   const expectedAttempts = same(fallback.gap.attemptedRoots, rootUrls)
     && same(fallback.gap.attemptedQueries, attemptedQueries);
   if (!expectedAttempts) marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_FALLBACK_ATTEMPTS`);
+}
+function assertCurrentSourceObservation(value: string, executionObservedAt: number, code: string): void {
+  const observedAt = Date.parse(value);
+  const today = Date.parse(new Date().toISOString().slice(0, 10));
+  const executionDay = Date.parse(new Date(executionObservedAt).toISOString().slice(0, 10));
+  if (!Number.isFinite(observedAt) || Math.abs(observedAt - executionDay) > MAX_PROVENANCE_AGE_MS
+    || today - observedAt > MAX_PROVENANCE_AGE_MS || observedAt - today > DAY_MS) marketReject(code);
 }
 function assertCurrentExecution(execution: MarketExecution, code: string): void {
   const now = Date.now();
@@ -191,7 +221,7 @@ function validateExecutionOrder(
     && (!Number.isFinite(execution.observedAt) || execution.observedAt <= latestRequired))) {
     return marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_SEARCH_ORDER: target-market searches must execute before global searches`);
   }
-  return Object.freeze(executions.filter(execution => isMarketQualifiedQuery(execution.query, labels)));
+  return Object.freeze(executions);
 }
 
 function validateDirectExecutions(

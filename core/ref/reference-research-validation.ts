@@ -12,7 +12,7 @@ import { isRetainedReferencePath, requireDesignReferenceAdmission } from './desi
 import { loadRefs } from './store.ts';
 import { requireDesignImageAdmission } from './design-image-admission.ts';
 import { refIdentity } from './identity.ts';
-import { validateMarketReferenceCoverage } from './market-reference-coverage.ts';
+import { assertCurrentMarketCapture, validateMarketReferenceCoverage } from './market-reference-coverage.ts';
 import { parseTaskFlowBenchmark, taskFlowBenchmarkSha256, validateTaskFlowBenchmarkEvidence } from './task-flow-benchmark.ts';
 import { fail, httpsUrl, record, type ReferenceResearch, type ResearchEvidence, type ValidationOptions } from './reference-research-contract.ts';
 
@@ -68,6 +68,13 @@ export function validateReferenceResearch(root: string, research: ReferenceResea
   if (research.sourceContractSha256 !== options.expectedSourceContractSha256) fail('REFERENCE_RESEARCH_SOURCE_CONTRACT_STALE');
   validateMarketReferenceCoverage(root, research, options.expectedRequest);
   const serviceIdentity = research.schema === 'reference-research-v5' ? referenceServiceHost : referenceServiceFamily;
+  const marketCoverage = research.schema === 'reference-research-v7' ? research.marketCoverage : null;
+  const localMarketSources = marketCoverage != null
+    ? { domain: new Set([...marketCoverage.domain.localSources.map(item => item.sourceId),
+      ...marketCoverage.domain.globalFallback?.sourceIds ?? []]),
+      design: new Set([...marketCoverage.design.localSources.map(item => item.sourceId),
+        ...marketCoverage.design.globalFallback?.sourceIds ?? []]) }
+    : { domain: new Set<string>(), design: new Set<string>() };
   const directRoots = { domain: readResearchDiscoveryRoots(root, research.domainReference), design: readResearchDiscoveryRoots(root, research.designReference) };
   const domainHosts = new Set(research.domainReference.sources.map(item => serviceIdentity(item.url)));
   const capturedDomainFamilies = new Set<string>();
@@ -94,6 +101,7 @@ export function validateReferenceResearch(root: string, research: ReferenceResea
   }
   for (const item of research.domainReference.sources) {
     const captured = verifyCapture(root, item, 'domain');
+    if (localMarketSources.domain.has(item.id)) assertCurrentMarketCapture(captured.capturedAt, 'DOMAIN');
     observe('domain', item.url, captured);
     const acquisition = captured.acquisition as Record<string, unknown>;
     const finalFamily = referenceServiceFamily(acquisition.finalUrl as string);
@@ -106,6 +114,7 @@ export function validateReferenceResearch(root: string, research: ReferenceResea
   if (designUrls.some(url => domainHosts.has(serviceIdentity(url)))) fail('REFERENCE_RESEARCH_LANE_REDIRECT_OVERLAP');
   for (const item of research.designReference.sources) {
     const source = verifyCapture(root, item, 'design');
+    if (localMarketSources.design.has(item.id)) assertCurrentMarketCapture(source.capturedAt, 'DESIGN');
     if (source.schemaVersion === 'image-fragment-v1' && typeof source.id === 'string') retainedIdentities.set(item.id, source.id);
     else if (typeof source.component === 'string') retainedIdentities.set(item.id, refIdentity(item.url, source.component));
     else fail('REFERENCE_RESEARCH_CAPTURE_SOURCE_MISMATCH');

@@ -8,6 +8,7 @@ export type MarketLaneCoverage = Readonly<{
   }>[];
   globalFallback: Readonly<{
     sourceIds: readonly string[];
+    provenance: readonly Readonly<{ sourceId: string; provenanceReceiptSha256: string }>[];
     gap: Readonly<{
       marketRegion: string;
       kind: 'availability' | 'access' | 'coverage';
@@ -48,10 +49,10 @@ export function marketText(value: unknown, code: string): string {
   })) return marketReject(code);
   return result;
 }
-export function marketTexts(value: unknown, code: string, allowEmpty = false): readonly string[] {
+export function marketTexts(value: unknown, code: string, allowEmpty = false, allowDuplicates = false): readonly string[] {
   if (!Array.isArray(value) || (!allowEmpty && !value.length) || Object.keys(value).length !== value.length) return marketReject(code);
   const result = value.map(item => marketText(item, code));
-  if (new Set(result).size !== result.length) return marketReject(`${code}_DUPLICATE`);
+  if (!allowDuplicates && new Set(result).size !== result.length) return marketReject(`${code}_DUPLICATE`);
   return Object.freeze(result);
 }
 function lane(value: unknown, sources: readonly MarketSourceIdentity[], label: string): MarketLaneCoverage {
@@ -78,16 +79,29 @@ function lane(value: unknown, sources: readonly MarketSourceIdentity[], label: s
   let globalFallback: MarketLaneCoverage['globalFallback'] = null;
   if (input.globalFallback !== null) {
     const fallback = marketObject(input.globalFallback, `${code}_FALLBACK`);
-    exact(fallback, ['sourceIds', 'gap'], `${code}_FALLBACK_KEYS`);
+    exact(fallback, ['sourceIds', 'provenance', 'gap'], `${code}_FALLBACK_KEYS`);
     const gap = marketObject(fallback.gap, `${code}_FALLBACK_GAP`);
     exact(gap, ['marketRegion', 'kind', 'attemptedQueries', 'attemptedRoots'], `${code}_FALLBACK_GAP_KEYS`);
     const marketRegion = marketText(gap.marketRegion, `${code}_FALLBACK_MARKET`).toUpperCase();
     if (!/^(?:[A-Z]{2}|\d{3})$/.test(marketRegion)
       || !['availability', 'access', 'coverage'].includes(gap.kind as string)) return marketReject(`${code}_FALLBACK_GAP`);
-    const attemptedQueries = marketTexts(gap.attemptedQueries, `${code}_FALLBACK_QUERIES`, true);
+    const attemptedQueries = marketTexts(gap.attemptedQueries, `${code}_FALLBACK_QUERIES`, true, true);
     const attemptedRoots = marketTexts(gap.attemptedRoots, `${code}_FALLBACK_ROOTS`, true);
     if (!attemptedQueries.length && !attemptedRoots.length) return marketReject(`${code}_FALLBACK_ATTEMPTS`);
-    globalFallback = Object.freeze({ sourceIds: marketTexts(fallback.sourceIds, `${code}_FALLBACK_SOURCES`),
+    const sourceIds = marketTexts(fallback.sourceIds, `${code}_FALLBACK_SOURCES`);
+    if (!Array.isArray(fallback.provenance) || Object.keys(fallback.provenance).length !== fallback.provenance.length) {
+      return marketReject(`${code}_FALLBACK_PROVENANCE`);
+    }
+    const provenance = Object.freeze(fallback.provenance.map(value => {
+      const binding = marketObject(value, `${code}_FALLBACK_PROVENANCE`);
+      exact(binding, ['sourceId', 'provenanceReceiptSha256'], `${code}_FALLBACK_PROVENANCE_KEYS`);
+      const sourceId = marketText(binding.sourceId, `${code}_FALLBACK_PROVENANCE_ID`);
+      const provenanceReceiptSha256 = marketText(binding.provenanceReceiptSha256, `${code}_FALLBACK_PROVENANCE_RECEIPT`);
+      if (!/^[a-f0-9]{64}$/.test(provenanceReceiptSha256)) return marketReject(`${code}_FALLBACK_PROVENANCE_RECEIPT`);
+      return Object.freeze({ sourceId, provenanceReceiptSha256 });
+    }));
+    if (!sameIds(sourceIds, provenance.map(item => item.sourceId))) return marketReject(`${code}_FALLBACK_PROVENANCE_COVERAGE`);
+    globalFallback = Object.freeze({ sourceIds, provenance,
       gap: Object.freeze({ marketRegion, kind: gap.kind as 'availability' | 'access' | 'coverage', attemptedQueries, attemptedRoots }) });
   }
   const classified = [...localSources.map(source => source.sourceId), ...globalFallback?.sourceIds ?? []];
@@ -95,6 +109,10 @@ function lane(value: unknown, sources: readonly MarketSourceIdentity[], label: s
   if (new Set(classified).size !== classified.length || classified.length !== sourceIds.length
     || classified.some(id => !sourceIds.includes(id))) return marketReject(`${code}_COVERAGE`);
   return Object.freeze({ localSources, globalFallback });
+}
+
+function sameIds(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((id, index) => id === right[index]) && new Set(right).size === right.length;
 }
 
 export function parseMarketReferenceCoverage(

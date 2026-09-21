@@ -84,8 +84,9 @@ receipt whose visible result text for the retained source or design-discovery li
 relevant scope. `market-direct-result` must bind the exact signed direct-public root receipt whose visible
 label for the retained source or design-discovery link names the market and relevant scope. URL tokens,
 localized queries, country-code hostnames, page-wide headings, and freeform reasons prove neither.
-Search and direct bases may coexist in a lane. Every market attempt must be current. A fallback gap records the exact market, an
-availability/access/coverage kind, and every attempted query and root used by that lane. Freeform prose
+Search and direct bases may coexist in a lane. Every declared search and direct attempt must be current. A fallback records
+`provenance=[{sourceId,provenanceReceiptSha256}]` so each chosen global source binds a current signed visible link, then records the exact market, an
+availability/access/coverage kind, and every attempted query and root used by that lane. Every chosen retained capture must also be current. Freeform prose
 cannot prove local provenance or a fallback attempt. `research-check` rejects missing coverage, market drift, global-only lanes, and
 unqualified search order; repair the evidence instead of removing the policy.
 For native search use the plan's `designSourcePolicy.nativeSearchInputs` with `ref search`.

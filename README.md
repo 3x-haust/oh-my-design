@@ -136,7 +136,9 @@ For explicit-market local coverage, a signed search result's visible link text m
 and relevant service/product scope. A localized query by itself does not make a source local.
 Both that provenance and the retained source observation must be no more than seven days old.
 Direct-public local coverage applies the same rule to the selected link's visible label; a market
-heading elsewhere on the directory cannot qualify an unrelated service. Fallback attempts are also time-limited.
+heading elsewhere on the directory cannot qualify an unrelated service. Every declared attempt and
+chosen retained capture is time-limited. Each global fallback source also binds to the exact signed
+search/direct receipt whose visible label reached it.
 
 After research, `omd ref apply-plan --json` creates an incomplete input draft for every current
 domain-brief surface. Inspect the actual images, fill the draft's `input`, and publish it using

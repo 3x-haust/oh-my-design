@@ -28,6 +28,9 @@ export const localDirectSource = (sourceId: string, evidenceSha256: string, scop
 export const fallbackGap = (attemptedQueries: readonly string[], attemptedRoots: readonly string[] = []) => ({
   marketRegion: 'KR', kind: 'coverage', attemptedQueries, attemptedRoots,
 });
+export const fallbackCoverage = (sourceIds: readonly string[], provenanceReceiptSha256: string,
+  gap: ReturnType<typeof fallbackGap>) => ({ sourceIds,
+  provenance: sourceIds.map(sourceId => ({ sourceId, provenanceReceiptSha256 })), gap });
 export function rootEnvelope(lane: 'domain' | 'design') {
   const digest = (lane === 'domain' ? 'c' : 'd').repeat(64);
   return { method: 'direct-public', entry: lane === 'domain' ? 'public-directory' : 'free-gallery',
