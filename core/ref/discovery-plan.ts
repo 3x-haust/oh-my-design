@@ -109,7 +109,6 @@ export function buildReferenceDiscoveryPlan(root: string, route: RouteRecord): R
     ? []
     : marketSearchLabels(marketRegion, locale.context.surfaceLocale);
   const marketLabel = searchLabels.at(-1) ?? null;
-  const nativeMarketLabel = searchLabels[0] ?? null;
   const domainQueries = locale === undefined
     ? []
     : marketRegion === null ? [] : [...marketDomainQueries(marketRegion, locale.context.surfaceLocale, locale.context.domain)];
