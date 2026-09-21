@@ -35,9 +35,14 @@ export type SelectedReferenceHandoff = Readonly<{
   }>)[];
   sha256: string;
 }>;
+export type SelectedReferenceCurrentRoute = Readonly<{ sourceContractSha256: string; request: string }>;
 
 /** Read the selected canonical content, not just its lineage receipt. No project writes. */
-export function readSelectedReferenceHandoff(root: string, role: ReferenceHandoffRole): SelectedReferenceHandoff {
+export function readSelectedReferenceHandoff(
+  root: string,
+  role: ReferenceHandoffRole,
+  currentRoute?: SelectedReferenceCurrentRoute,
+): SelectedReferenceHandoff {
   if (!REFERENCE_HANDOFF_ROLES.includes(role)) throw new Error('reference handoff role must be art-direction, composer, or hand');
   const receiptPath = `.omd/reference-handoffs/${role}.json`;
   const receiptBytes = readContainedRegularFile(root, receiptPath, 'current reference handoff');
@@ -71,8 +76,11 @@ export function readSelectedReferenceHandoff(root: string, role: ReferenceHandof
     return [{ ...piece, evidence, availability: pending ? 'pending-motion-review' as const : 'selected' as const }];
   });
   const research = existsSync(resolve(root, '.omd/reference-research.json')) ? readPublishedReferenceResearch(root) : null;
+  if (research !== null && currentRoute === undefined) throw new Error('current route binding is required for reference handoff');
   const screenApplication = research === null ? undefined : checkReferenceApplication(root, {
-    expectedSourceContractSha256: research.sourceContractSha256, benchmarkRequired: research.domainReference.benchmarkSha256 !== null,
+    expectedSourceContractSha256: currentRoute!.sourceContractSha256,
+    expectedRequest: currentRoute!.request,
+    benchmarkRequired: research.domainReference.benchmarkSha256 !== null,
   });
   const content = {
     schemaVersion: 'selected-reference-handoff-v1' as const,

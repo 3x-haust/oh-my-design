@@ -87,8 +87,9 @@ Pi's public `tool_call` / `message_end` hooks ensure native `write`/`edit` appli
 and arbitrary `bash` wait for current pre-production inputs; research inputs and directly owned
 design documents remain writable. The completion hook withholds an unverified final success claim.
 OMD commands are queued per project to prevent sibling calls from competing for the mutation lock.
-During a source-writing turn, repairable terminal failures can trigger up to two custom repair/recheck follow-ups per user input;
-authority failures and user aborts do not. Message replacement semantics are verified against Pi
+During a source-writing turn, repairable terminal failures keep triggering repair/recheck follow-ups
+while the named work pointer or authored evidence changes. Two consecutive unchanged failure states
+stop the loop; authority failures and user aborts do not retry. Message replacement semantics are verified against Pi
 0.85.1; forks must support that public event behavior, not merely expose an `on` function.
 Run `/omd` after `/reload`; hook-less compatible hosts explicitly report that only CLI checks exist.
 Hooks are workflow gates, not an OS sandbox or proof of design quality. External processes/custom
@@ -108,9 +109,12 @@ quality reason, not just a prestigious gallery name. Use `omd schema reference-r
 files and their aggregate consistency receipt. Capture PNGs and metadata directly into their own
 folders with `ref add --lane domain|design` or `lane` on each add-batch entry. Inspect them with
 `ref list --lane domain|design --json`; domain captures do not silently enter the visual board.
-v3 binds source and gallery-entry PNGs to their native capture JSON. A homepage is not an inspected
+Current v7 research binds source and gallery-entry PNGs to native capture JSON, keeps domain and
+design lanes separate, and records source-specific market coverage when a market is explicit. A homepage is not an inspected
 entry, and a different original source must appear in the gallery's observed outbound links.
-Older records need v5 execution binding and republication, retaining valid native captures.
+Historical v5 remains readable with search-only requirements; v6 retains its search-or-direct-root
+contract. Reuse valid captured evidence only when current validators permit, then publish through v7
+without relabelling historical bytes.
 Domain/design hosts, final redirects and PNG evidence must be independent. Non-user discovery must
 be a supported public gallery item, not a service page labelled as a gallery. Public Pinterest,
 Dribbble and Behance items do not require UI Bowl's paid MCP. Free viewing is checked per item.
@@ -119,13 +123,23 @@ density, imagery, transfer and exclusions. Every board candidate uses visual-dir
 support-only documentation cannot complete the lane. Inspect previews in `.omd/refs/design/README.md`.
 These are provenance/role checks, not a machine certification of beauty.
 
-v5 requires actual search receipts, not query prose: `omd ref search --input <json>` accepts
+Current v7 requires native acquisition evidence, not query prose. `omd ref search --input <json>` accepts
 `{lane, query, url, queryParam}` and records a fresh-browser GET, actual links/capture or failure.
 Put its returned receipt in the lane's `searches`. Every query must match an execution and retained
 non-user sources/entries must occur in observed links and have separate native visit captures.
 Failed attempts can accompany a usable free alternative. HTTP 200 alone is not search quality.
 The executor accepts public Google/Bing/DuckDuckGo search pages with `queryParam: "q"`; use task/pattern
 and gallery `site:` queries. Arbitrary service pages with invented query parameters are rejected.
+When search is blocked, v6/v7 also allow signed direct-public list discovery through `omd ref navigate`.
+New search-v2 and direct-entry-v3 records are project-signed and tamper-evident, but they are not
+provider-attested truth and do not certify quality, market fit or authority.
+For explicit-market local coverage, a signed search result's visible link text must name the market
+and relevant service/product scope. A localized query by itself does not make a source local.
+Both that provenance and the retained source observation must be no more than seven days old.
+Direct-public local coverage applies the same rule to the selected link's visible label; a market
+heading elsewhere on the directory cannot qualify an unrelated service. Every declared attempt and
+chosen retained capture is time-limited. Each global fallback source also binds to the exact signed
+search/direct receipt whose visible label reached it.
 
 After research, `omd ref apply-plan --json` creates an incomplete input draft for every current
 domain-brief surface. Inspect the actual images, fill the draft's `input`, and publish it using
@@ -321,7 +335,8 @@ become mainland China, and `zh-CN` and `zh-TW` remain separate contexts.
 
 For ordinary `/ultradesign` use, state the surface language and intended market/audience. If market
 or audience authority is missing, OMD asks one focused question and stops that research route if it
-remains unresolved. A mechanics-only route checks real target-language copy and type mechanics but
+remains unresolved. The locale context's `marketAuthorityClaimId` must name a confirmed
+`evidenceClaims.userFacts` claim whose user evidence actually names that market. A mechanics-only route checks real target-language copy and type mechanics but
 makes no cultural-fit claim. A market-grounded route collects current
 standards, a global equivalent or exact unavailability, native first-party category evidence, and a
 counterexample for the named decisions. It preserves only `supported`/`shared` mechanisms, routes conflict

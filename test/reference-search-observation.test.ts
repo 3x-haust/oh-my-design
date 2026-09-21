@@ -6,6 +6,7 @@ import test from 'node:test';
 import type { Page } from 'playwright';
 import { withBrowser } from '../core/render/index.ts';
 import { executeReferenceSearch, readSearchExecution, searchObserved, validateSearchCoverage } from '../core/ref/search-execution.ts';
+import { captureFrozenSearchText } from '../core/ref/search-frozen-capture.ts';
 import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
 import { testSearchReceipt } from './helpers/search-execution.ts';
 
@@ -67,19 +68,154 @@ test('hidden result anchors cannot turn a navbar-only capture into observed disc
     <section style="display:none"><a href="https://hidden.example/">Removed result</a></section>
     <a style="visibility:hidden" href="https://invisible.example/">Invisible result</a>` });
   assert.deepEqual(h.execution.links, ['https://www.bing.com/images']);
+  assert.deepEqual(h.execution.results, [{ url: 'https://www.bing.com/images', text: 'Images' }]);
   assert.equal(h.execution.status, 'empty-observation');
   assert.equal(searchObserved(h.execution), false);
   assert.ok(h.execution.capture);
   assert.throws(() => validateSearchCoverage(h.root, 'domain', [input.query], [h.receipt], [target]), /not an observed/);
 });
 
+test('only canonical visible HTTPS links are retained', async t => {
+  const valid = 'https://valid.example/service';
+  const h = await observe(t, { html: `${navbar}<main>
+    <a href="${valid}">Visible service</a>
+    <a href="http://insecure.example/service">Insecure</a>
+    <a href="https://user:secret@credentialed.example/service">Credentialed</a>
+    <a href="https://fragment.example/service#details">Fragment</a>
+    <a href="javascript:void(0)">Script</a>
+    <a href="about:blank">Blank</a>
+    <a href="https://scaled.example/service" style="transform:scale(.001)">Scaled away</a>
+    <a href="https://clipped.example/service" style="clip-path:circle(0)">Clipped away</a>
+    <a href="https://contrast.example/service" style="color:white;background:white">No contrast</a>
+  </main>` });
+  assert.deepEqual(h.execution.links, ['https://www.bing.com/images', valid]);
+  assert.deepEqual(h.execution.results?.find(result => result.url === valid),
+    { url: valid, text: 'Visible service' });
+});
+
 test('a rendered Bing redirect remains an observed destination with its actual pixels', async t => {
-  const h = await observe(t, { html: `${navbar}<main><a href="${redirect}">Benefits</a></main>` });
+  const h = await observe(t, { html: `${navbar}<main><a style="filter:drop-shadow(1px 1px black);clip-path:inset(0);mask-image:linear-gradient(black,black)" href="${redirect}">Benefits</a></main>` });
   assert.equal(h.execution.status, 'page-observed');
   assert.ok(h.execution.links.includes(redirect));
+  assert.ok(h.execution.results?.some(result => result.url === redirect && result.text === 'Benefits'));
   assert.equal(validateSearchCoverage(h.root, 'domain', [input.query], [h.receipt], [target]).executed, 1);
   assert.ok(h.execution.capture);
   assert.deepEqual(readFileSync(join(h.root, h.execution.capture.path)), h.captures[0]);
+});
+
+test('visible stacking, clipping, masks and transparent overlays preserve real labels', async t => {
+  const clear = 'https://clear.example/service'; const transparent = 'https://transparent.example/service';
+  const h = await observe(t, { html: `${navbar}<style>.clear::after{content:"";position:absolute;inset:0;background:white;opacity:0}</style><main><div style="position:relative"><a href="${redirect}" style="position:relative;z-index:10;clip-path:polygon(0 0,100% 0,100% 100%,0 100%);mask-image:linear-gradient(white,white)">South Korea service for residents</a><span style="position:absolute;inset:0;z-index:1;background:white;pointer-events:none"></span></div><a class="clear" style="position:relative" href="${clear}">Visible supporting copy</a><div style="position:relative;background:rgba(0,0,0,.01)"><a href="${transparent}">Visible through transparent overlay</a><span style="position:absolute;inset:0;background:rgba(255,255,255,.01);pointer-events:none"></span></div></main>` });
+  assert.equal(h.execution.results?.find(result => result.url === redirect)?.text,
+    'South Korea service for residents');
+  assert.equal(h.execution.results?.find(result => result.url === clear)?.text, 'Visible supporting copy');
+  assert.equal(h.execution.results?.find(result => result.url === transparent)?.text,
+    'Visible through transparent overlay');
+});
+
+test('a visible result cannot inherit market scope from a hidden descendant', async t => {
+  const h = await observe(t, { html: `${navbar}<main><a href="${redirect}">Visible item <span style="opacity:0">South Korea residents service</span><span style="clip-path:inset(100%)">South Korea product gallery</span><span style="clip-path:circle(0)">South Korea resident product</span><span style="mask-image:linear-gradient(transparent,transparent)">South Korea product interface</span><span style="filter:blur(100px)">South Korea service application</span><span style="color:transparent">South Korea service market</span><span style="color:rgba(0,0,0,.01)">South Korea resident service</span><span style="color:black;-webkit-text-fill-color:white;background:white">South Korea public service</span><span style="color:white;background:white">South Korea benefit service</span><span style="font-size:1px;line-height:1px">South Korea resident platform</span><span style="transform:scale(.05)">South Korea service portal</span><span style="transform:scale(.001)">South Korea support platform</span><span style="transform:scale(.2)"><span style="transform:scale(.2)">South Korea support directory</span></span><span style="filter:opacity(.001)">South Korea product service</span><span style="opacity:.1"><span style="opacity:.1"><span style="opacity:.1">South Korea service for residents</span></span></span></a></main>` });
+  assert.equal(h.execution.status, 'page-observed');
+  assert.deepEqual(h.execution.results?.find(result => result.url === redirect),
+    { url: redirect, text: 'Visible item' });
+});
+
+test('an opaque pseudo-element cannot leave covered market text as visible evidence', async t => {
+  const sibling = 'https://sibling.example/service';
+  const pseudoSibling = 'https://pseudo-sibling.example/service';
+  const imageCovered = 'https://image-covered.example/service';
+  const image = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg"%3E%3Crect width="100%25" height="100%25" fill="white"/%3E%3C/svg%3E';
+  const ancestor = 'https://ancestor-covered.example/service';
+  const h = await observe(t, { html: `${navbar}<style>.covered{position:relative}.covered::after,.sibling-cover::after,.ancestor-cover::after{content:"";position:absolute;inset:0;background-image:linear-gradient(white,white)}</style><main><a href="https://visible.example/service">Visible result</a><a class="covered" href="${redirect}">South Korea service for residents</a><div style="position:relative"><a href="${sibling}">South Korea benefit service</a><span style="position:absolute;inset:0;background:white;pointer-events:none"></span></div><div style="position:relative"><a href="${pseudoSibling}">South Korea resident service</a><span class="sibling-cover" style="position:absolute;inset:0;pointer-events:none;z-index:1"></span></div><section class="ancestor-cover" style="position:relative"><div><a href="${ancestor}">South Korea support service</a></div></section><div style="position:relative"><a href="${imageCovered}">South Korea support platform</a><img src='${image}' style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1"></div></main>` });
+  assert.equal(h.execution.status, 'page-observed');
+  assert.equal(h.execution.results?.find(result => result.url === redirect), undefined);
+  assert.equal(h.execution.results?.find(result => result.url === sibling), undefined);
+  assert.equal(h.execution.results?.find(result => result.url === pseudoSibling), undefined);
+  assert.equal(h.execution.results?.find(result => result.url === ancestor), undefined);
+  assert.equal(h.execution.results?.find(result => result.url === imageCovered), undefined);
+});
+
+test('unrendered image alt, pseudo z-index, background images and subpixel clips cannot forge labels', async t => {
+  const imageOnly = 'https://image-alt.example/service';
+  const pseudoZ = 'https://pseudo-z.example/service';
+  const gradient = 'https://gradient.example/service';
+  const clipped = 'https://subpixel-clip.example/service';
+  const polygon = 'https://polygon-clip.example/service';
+  const calculated = 'https://calculated-clip.example/service';
+  const pathClip = 'https://path-clip.example/service';
+  const readableGradient = 'https://readable-gradient.example/service';
+  const readableImage = 'https://readable-image.example/service';
+  const unreadableImage = 'https://unreadable-image.example/service';
+  const transparentGradient = 'https://transparent-gradient.example/service';
+  const unrelatedEdge = 'https://unrelated-edge.example/service';
+  const underlineOnly = 'https://underline-only.example/service';
+  const lightImage = `data:image/svg+xml;base64,${Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="300" height="80"><rect width="300" height="80" fill="white"/></svg>').toString('base64')}`;
+  const darkImage = `data:image/svg+xml;base64,${Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="300" height="80"><rect width="300" height="80" fill="black"/></svg>').toString('base64')}`;
+  const markedImage = `data:image/svg+xml;base64,${Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="300" height="80"><rect width="300" height="80" fill="black"/><rect x="180" width="4" height="80" fill="white"/></svg>').toString('base64')}`;
+  const h = await observe(t, { html: `${navbar}<style>
+    .pseudo-z{position:absolute;inset:0;pointer-events:none}.pseudo-z::after{content:"";position:absolute;inset:0;z-index:99;background:white}
+  </style><main>
+    <a href="${imageOnly}"><img alt="South Korea service for residents" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='40'%3E%3Crect width='120' height='40' fill='black'/%3E%3C/svg%3E"></a>
+    <div style="position:relative"><a href="${pseudoZ}">South Korea benefit service</a><span class="pseudo-z"></span></div>
+    <a href="${gradient}" style="color:white;background-image:linear-gradient(white,white)">South Korea resident service</a>
+    <a href="${clipped}" style="clip-path:inset(49.9%)">South Korea support platform</a>
+    <a href="${polygon}" style="clip-path:polygon(49.95% 49.95%,50.05% 49.95%,50.05% 50.05%,49.95% 50.05%)">South Korea resident platform</a>
+    <a href="${calculated}" style="clip-path:polygon(calc(50% - .1px) calc(50% - .1px),calc(50% + .1px) calc(50% - .1px),calc(50% + .1px) calc(50% + .1px))">South Korea product platform</a>
+    <a href="${pathClip}" style="clip-path:path('M 0 0 H .1 V .1 H 0 Z')">South Korea service directory</a>
+    <a href="${readableGradient}" style="color:black;background-image:linear-gradient(#fff,#fff)">Visible service on a readable gradient</a>
+    <a href="${readableImage}" style="display:block;width:300px;height:80px;color:black;background-image:url('${lightImage}')">Visible service on a readable image</a>
+    <a href="${unreadableImage}" style="display:block;width:300px;height:80px;color:black;background-image:url('${darkImage}')">South Korea service hidden on an image</a>
+    <a href="${transparentGradient}" style="color:white;background-image:linear-gradient(transparent,black)">South Korea service hidden in a transparent gradient</a>
+    <a href="${unrelatedEdge}" style="display:block;width:300px;height:80px;color:black;white-space:pre;text-decoration:none;background-image:url('${markedImage}')">X                    </a>
+    <a href="${underlineOnly}" style="display:block;width:300px;height:80px;color:black;text-decoration:underline;text-decoration-color:white;background-image:url('${darkImage}')">South Korea service with only an underline</a>
+  </main>` });
+  for (const url of [imageOnly, pseudoZ, gradient, clipped, polygon, calculated, pathClip, unreadableImage,
+    transparentGradient, unrelatedEdge, underlineOnly]) {
+    assert.equal(h.execution.results?.find(result => result.url === url), undefined, url);
+  }
+  assert.equal(h.execution.results?.find(result => result.url === readableGradient)?.text,
+    'Visible service on a readable gradient');
+  assert.equal(h.execution.results?.find(result => result.url === readableImage)?.text,
+    'Visible service on a readable image');
+});
+
+test('pixel contrast capture is invisible to page mutation observers', async t => {
+  const darkImage = `data:image/svg+xml;base64,${Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="300" height="80"><rect width="300" height="80" fill="black"/></svg>').toString('base64')}`;
+  const lightImage = `data:image/svg+xml;base64,${Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="300" height="80"><rect width="300" height="80" fill="white"/></svg>').toString('base64')}`;
+  const h = await observe(t, {
+    html: `<a id="watched" href="${redirect}" style="display:block;width:300px;height:80px;color:black;background-image:url('${darkImage}')">South Korea service for residents</a>`,
+    afterNavigation: page => page.evaluate(light => {
+      const observer = new MutationObserver(() => {
+        observer.disconnect(); const watched = document.querySelector<HTMLElement>('#watched');
+        if (watched) watched.style.backgroundImage = `url('${light}')`;
+      });
+      observer.observe(document.documentElement, { attributes: true, childList: true, subtree: true });
+    }, lightImage),
+  });
+  assert.equal(h.execution.results?.find(result => result.url === redirect), undefined);
+});
+
+test('frozen contrast capture stops compositor CSS animations', async () => {
+  await withBrowser(async browser => {
+    const page = await browser.newPage();
+    await page.setContent(`<style>@keyframes pulse{0%{background:black}50%{background:white}100%{background:black}}</style>
+      <a style="display:block;width:300px;height:80px;color:black;animation:pulse .01s linear infinite">South Korea service for residents</a>`);
+    const capture = await captureFrozenSearchText(page);
+    assert.deepEqual(capture.visibleText, capture.confirmedVisibleText);
+  });
+});
+
+test('render observation does not mutate pointer-event styles', async t => {
+  const h = await observe(t, { html: `${navbar}<main><a href="${redirect}">Visible service</a><span id="overlay" style="pointer-events:none;position:absolute"></span></main>`,
+    afterNavigation: async page => page.evaluate(() => {
+      const overlay = document.querySelector('#overlay');
+      if (!overlay) throw new Error('missing overlay');
+      new MutationObserver(() => { document.body.dataset.observedMutation = 'yes'; })
+        .observe(overlay, { attributes: true, attributeFilter: ['style'] });
+    }),
+    afterCapture: async page => assert.equal(await page.locator('body').getAttribute('data-observed-mutation'), null),
+  });
+  assert.equal(h.execution.results?.find(result => result.url === redirect)?.text, 'Visible service');
 });
 
 test('hydration after a screenshot requires a coherent recapture before retaining links', async t => {

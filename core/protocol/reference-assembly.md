@@ -46,8 +46,10 @@ stays with Scout/coordinator; Composer and Hand receive only the derived decisio
 briefs and selected handoffs. No source URLs, hosts or capture paths belong in decision prose.
 The projection does not replace selected assembly, approved tokens, actual reference-usage evidence,
 or blind final review. It records what should be applied and checked, not what has already passed.
-Existing valid native captures remain usable; v5 execution binding, inspection and application are required before
-downstream composition/production and design-only/terminal completion. Changed research, domain
+Existing valid native captures remain usable only when current validators and schema migration permit.
+Publish current work as v7 without relabelling historical bytes; historical v5 remains search-only and
+historical v6 retains its original search-or-direct-root contract. Current execution binding, inspection
+and application are required before downstream composition/production and design-only/terminal completion. Changed research, domain
 brief or missing/edited derived outputs fails closed. Do not repair hashes to invent a review.
 
 The application is now an approved source-seal input. After authenticated final-v2 evidence,
@@ -188,16 +190,20 @@ active research owner. Unknown files and valid references remain untouched.
 
 `omd ref research-set` is the sole publisher of both files and writes `.omd/reference-research.json`
 last as their consistency receipt. `research-check` and downstream gates require all three current
-records. New research uses v6; historical v5 remains readable unchanged with its search requirements
-and cannot contain direct roots. Each lane can use `searches` from `omd ref search --input <json>` with
+records. New research uses v7. Historical v5 remains readable with its search-only requirements;
+historical v6 remains readable with its original search-or-direct-root requirements. Each lane can use `searches` from `omd ref search --input <json>` with
 `{lane, query, url, queryParam}`. The URL submits the exact query; a fresh browser records observed
 links, a 1280×900 screenshot and HTTP/error outcome, without reusing login state or clicking controls.
+Current signed search records also bind each retained visible result label to its observed link.
+For explicit-market local coverage, that link-associated text must name the market and relevant
+service/product scope; market terms in the query alone do not qualify a source as local.
+Current v7 market provenance and its retained source observation must both be no more than seven days old.
 Inspect the page: HTTP 200 alone does not prove useful results or free access. All queries require
 execution receipts; every non-user retained domain source/design entry must occur in observed links
 and have its own native visit capture. Failed attempts may accompany a usable free alternative;
 they cannot satisfy retained-source coverage. Arbitrary imported logs are not native execution proof.
 
-Alternatively, v6 accepts direct browsing of free public lists without a search engine. Use
+Alternatively, v6/v7 accept direct browsing of free public lists without a search engine. Use
 `omd ref navigate <public-list-url> --lane domain --entry public-directory --json` for comparable
 services, or `--lane design --entry free-gallery` for a supported gallery's visible item list.
 `ref discover-plan` exposes design `nativeEntryInputs` and a domain entry command; these are leads,
@@ -205,14 +211,16 @@ not approved references. Put the native returned `method: direct-public`, `entry
 `evidence`, JSON `capture`, and your authored `reason` in the lane's optional `discoveryRoots`.
 Queries/searches remain required arrays and may both be empty only with valid nonempty roots.
 Every declared query still needs an exact execution, including failed attempts alongside direct roots.
-The native entry publisher uses a fresh GET/HEAD-only context, blocks service workers/downloads,
+The native entry publisher uses a DNS-pinned fresh GET/HEAD-only context, blocks service workers/downloads,
 performs no click/hover probes, and captures stable visible links with the matching viewport PNG.
 Only actual outbound links seed reachability: the root URL itself is not retained-source evidence.
-Intermediate edges in direct v6 chains require strict navigation-v2 captures. Hidden all-DOM links
+Intermediate edges in direct v6/v7 chains require strict navigation-v2 captures. Hidden all-DOM links
 from retained captures and historical navigation-v1 cannot shortcut a missing observed transition.
 Design roots must remain supported public lists after redirects, exposing visible same-gallery item
 links; login walls, blocked pages, selected items and arbitrary service pages are refused.
-Root records stay under `.omd/discovery/<lane>/entries/`, never retained `.omd/refs/`.
+New signed entry-v3 records stay under `.omd/discovery/<lane>/entries/`, never retained `.omd/refs/`.
+Historical entry-v1/v2 records remain readable, but only entry-v3 link-label evidence can satisfy
+current explicit-market provenance.
 Do not hand-author roots, promote old captures, infer official authority from a directory, or present
 this provenance check as a quality judgment. Follow observed items and qualify/capture each retained
 reference separately. Source/redirect hosts and image bytes must remain independent across lanes.
@@ -239,8 +247,32 @@ The quality reason explains task/viewport fit, hierarchy, typography or density;
 provider prestige is insufficient. This is inspectable provenance, not authenticated proof of taste
 or browsing. Missing native provenance must be collected, never backfilled from memory. Older
 records retain their original version's requirements; new direct provenance must be acquired through
-the native entry publisher before v6 republication. Valid retained captures need not be reacquired.
+the native entry publisher before v6/v7 republication. Valid retained captures need not be reacquired.
 The same evidence path OR identical bytes under another filename cannot satisfy both lanes.
+
+Discovery-plan v2 carries `marketReferencePolicy`. When its mode is `target-market-first`, execute the
+provided domain search input before unqualified global searches and use its market-qualified design
+search inputs. Both lanes owe current target-market evidence: comparable task services in domain, and
+independent local visual-direction/design sources in design. Record a concrete coverage gap before
+using the policy's global-equivalent fallback. This is acquisition scope, not a country-style preset;
+the later locale profile and locale binding still decide which measured mechanisms may transfer.
+Research v7 is the executable refusal layer for this policy. Its `marketCoverage` classifies every
+source in each lane exactly once as evidence-bound target-market material or documented global
+fallback, retains at least one local source per lane, and binds the explicit market. Search-based research must execute the
+plan's exact market domain inputs and market-plus-domain design searches before global queries. A
+direct-public root may replace search transport, but never the per-lane local evidence or fallback gap.
+Each local classification binds `sourceId`, the exact retained `evidenceSha256`, a lane-valid `scope`,
+a closed `basis`, and the exact native `provenanceReceiptSha256`. `market-search-result` binds a signed
+market-search execution whose visible result text for that link names the explicit market and relevant
+service/product scope. `market-direct-result` binds a signed direct-public root whose visible label for
+that retained link names the explicit market and relevant scope. URL tokens, localized queries,
+country-code hostnames, page-wide headings, and freeform reasons are never source-specific market proof.
+Search and direct bases may coexist in a lane. Every declared search and direct attempt must be current.
+Every global fallback binds each chosen source to a current signed visible link through
+`provenance=[{sourceId,provenanceReceiptSha256}]`; its gap records that same `marketRegion`, a closed
+availability/access/coverage `kind`, and every exact query and direct root attempted by that lane.
+Every chosen retained capture must be current. Generic quality prose and invented attempts do not
+qualify. Root reasons remain bounded, visible, well-formed scope notes; they are not provenance.
 
 The two lanes use independent service hosts, including after redirects. A second path or crop of a
 domain service is not a visual direction. Non-user discovery must match a supported public gallery
@@ -283,8 +315,8 @@ transport is a capability gap, not permission to claim an unexecuted search. Thi
 Scout's browser-rs capture ownership or downstream source-free transfer.
 
 Scout records actual queries, inspected/rejected leads and native capture identities in its existing
-synthesis. This is disclosed provenance, not a tamper-proof search receipt or a substitute for native
-capture. No extra reference quota or discovery artifact is introduced. Selected `motion-one` cannot
+synthesis. Host search output alone is disclosed provenance, not project-signed native acquisition
+evidence or a substitute for native capture. No extra reference quota or discovery artifact is introduced. Selected `motion-one` cannot
 pass `omd ref granularity` with only still captures merely because domain analysis was skipped.
 The settled source-free assembly carries measured relationships and motion parameters into
 composition and production; existing usage, fidelity and browser checks prove their actual use.

@@ -72,7 +72,7 @@ function filledApplication(root: string, options: { expectedSourceContractSha256
 
 function applicationFixture(t: { after(fn: () => void): void }) {
   const value = fixture(t);
-  const options = { expectedSourceContractSha256: SOURCE_SHA, benchmarkRequired: false };
+  const options = { expectedSourceContractSha256: SOURCE_SHA, expectedRequest: 'Study the service', benchmarkRequired: false };
   const writer = createTestProjectWriteAdapter(value.root);
   publishReferenceResearch(value.root, value.research, options, writer);
   writeFileSync(join(value.root, '.omd/domain-brief.json'), JSON.stringify(domainBrief()));
@@ -612,14 +612,17 @@ test('selected role handoff includes source-free screen application and refuses 
   const invocation = createTestProjectRunInvocation(f.root);
   selectReferenceCandidateV2(f.root, 'candidate', [{ slotId: 'hero', obligationDisposition: 'used', obligationReason: 'Selected hierarchy for this screen.' }], invocation);
   writeReferenceHandoffReceipt(f.root, 'art-direction', invocation);
-  assert.throws(() => readSelectedReferenceHandoff(f.root, 'art-direction'));
+  const current = { sourceContractSha256: f.options.expectedSourceContractSha256, request: f.options.expectedRequest };
+  assert.throws(() => readSelectedReferenceHandoff(f.root, 'art-direction', current));
   publishReferenceApplication(f.root, f.application, f.options, f.writer);
-  const handoff = readSelectedReferenceHandoff(f.root, 'art-direction');
+  const handoff = readSelectedReferenceHandoff(f.root, 'art-direction', current);
   assert.equal(handoff.screenApplication?.screens.length, 2);
   assert.equal(handoff.screenApplication?.screens[0]!.design.application, f.application.screens[0]!.design.application);
   assert.doesNotMatch(JSON.stringify(handoff), /domain\.example|design\.example|referenceIds|\.omd\/refs/);
+  assert.throws(() => readSelectedReferenceHandoff(f.root, 'art-direction', { ...current, request: 'Another request' }), /another request/);
+  assert.throws(() => readSelectedReferenceHandoff(f.root, 'art-direction', { ...current, sourceContractSha256: '0'.repeat(64) }), /stale/i);
   rmSync(join(f.root, REFERENCE_APPLICATION_PATH));
-  assert.throws(() => readSelectedReferenceHandoff(f.root, 'art-direction'));
+  assert.throws(() => readSelectedReferenceHandoff(f.root, 'art-direction', current));
 });
 
 test('a benchmark-selected product route cannot complete with a prose-only domain lane', t => {

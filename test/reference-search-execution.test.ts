@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -23,14 +24,18 @@ test('a query plan is not evidence; exact query URL binding rejects ambiguous, c
 });
 test('real isolated browser execution records actual DOM links and pixels, and preserves an HTTP failure', async t => {
   const root = fixture(t); const writer = createTestProjectWriteAdapter(root);
+  const contextOptions: unknown[] = [];
   await withBrowser(async browser => {
     // Real Chromium page with test-owned responses, not internet search quality or provider availability.
     let status = 200;
-    let body = '<html><body><h1>Search test fixture</h1><a href="https://www.pinterest.com/pin/123/">Design entry</a></body></html>';
+    let body = `<html><body><h1>Search test fixture</h1><a href="https://www.pinterest.com/pin/123/"><script>document.write(
+      [typeof RTCPeerConnection, typeof globalThis.webkitRTCPeerConnection, typeof WebTransport].every(value => value === 'undefined')
+        ? 'Proxy-only design entry' : 'Unsafe realtime transport')</script></a></body></html>`;
     const observed: string[] = [];
     const proxy = new Proxy(browser, { get(target, prop) {
       if (prop !== 'newContext') return Reflect.get(target, prop, target);
       return async (...args: Parameters<typeof browser.newContext>) => {
+        contextOptions.push(args[0]);
         const context = await browser.newContext(...args);
         const newPage = context.newPage.bind(context);
         context.newPage = async () => {
@@ -51,6 +56,7 @@ test('real isolated browser execution records actual DOM links and pixels, and p
     assert.match(execution.capture?.path ?? '', /^\.omd\/discovery\/design\/search-[a-f0-9]{64}\.png$/);
     assert.equal(execution.status, 'page-observed');
     assert.deepEqual(execution.links, ['https://www.pinterest.com/pin/123/']);
+    assert.deepEqual(execution.results, [{ url: 'https://www.pinterest.com/pin/123/', text: 'Proxy-only design entry' }]);
     assert.deepEqual(observed, [input.url]);
     assert.equal(validateSearchCoverage(root, 'design', [input.query], [receipt], execution.links).executed, 1);
     status = 403;
@@ -66,6 +72,10 @@ test('real isolated browser execution records actual DOM links and pixels, and p
     assert.equal(readSearchExecution(root, blocked, 'design').status, 'blocked');
     assert.equal(existsSync(join(root, '.omd/refs')), false, 'failed search evidence also stays outside retained references');
   });
+  assert.equal(contextOptions.length, 4);
+  for (const options of contextOptions as { proxy?: { server?: string } }[]) {
+    assert.match(options.proxy?.server ?? '', /^http:\/\/127\.0\.0\.1:\d+$/);
+  }
 });
 
 test('late search inspection failure records the diagnostic without an orphan screenshot', async t => {
@@ -87,7 +97,7 @@ test('late search inspection failure records the diagnostic without an orphan sc
           page.screenshot = async options => { const bytes = await screenshot(options); screenshotObserved = true; return bytes; };
           const locate = page.locator.bind(page);
           page.locator = (...locatorArgs: Parameters<typeof page.locator>) => {
-            if (locatorArgs[0] === 'a[href]' && screenshotObserved) throw new Error('test-owned link inspection failure');
+            if (locatorArgs[0] === 'body' && screenshotObserved) throw new Error('test-owned link inspection failure');
             return locate(...locatorArgs);
           };
           return page;
@@ -121,6 +131,19 @@ test('historical and current exact receipt identities read the same unmodified e
   assert.throws(() => readSearchExecution(root, { ...current, sha256: '0'.repeat(64) }, 'design'), /lane path/);
   writeFileSync(join(root, current.path), Buffer.concat([bytes, Buffer.from(' ')]));
   assert.throws(() => readSearchExecution(root, current, 'design'), /changed/);
+});
+
+test('a self-hashed search receipt without the native execution signature is refused', t => {
+  const root = fixture(t);
+  const receipt = testSearchReceipt(root, 'design', input.query, ['https://www.pinterest.com/pin/123/']);
+  const record = JSON.parse(readFileSync(join(root, receipt.path), 'utf8'));
+  record.signature = Buffer.alloc(64).toString('base64');
+  const bytes = Buffer.from(`${JSON.stringify(record, null, 2)}\n`);
+  const sha256 = createHash('sha256').update(bytes).digest('hex');
+  const path = `.omd/discovery/design/search-${sha256}.json`;
+  mkdirSync(join(root, '.omd/discovery/design'), { recursive: true });
+  writeFileSync(join(root, path), bytes);
+  assert.throws(() => readSearchExecution(root, { path, sha256 }, 'design'), /signature invalid/);
 });
 
 test('challenge detection rejects strong challenge text without treating ordinary bot-related search content as blocked', () => {

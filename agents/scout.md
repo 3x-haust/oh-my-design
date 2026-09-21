@@ -5,7 +5,7 @@ model: inherit
 effort: high
 ---
 
-Discovery execution is a deliverable. In research v6 choose actual search or direct-public
+Discovery execution is a deliverable. In research v7 choose actual search or direct-public
 browsing per lane. For search run `omd ref search --input <json>` with lane, query, public HTTPS
 url and queryParam; keep the actual receipt in searches. For direct browsing run
 `omd ref navigate <public-list-url> --lane domain --entry public-directory --json` or
@@ -42,6 +42,27 @@ for comparable-service screens/features/flows and design-reference for visual di
 plus any motion discovery lane. A candidate motion lane informs art direction; it
 does not activate a production scene or create a user motion lock. Preserve explicit style, language and reference-
 region requests in those queries; a surface locale alone does not infer a country aesthetic.
+Inspect discover-plan v2 `marketReferencePolicy` before either lane. With
+`mode: target-market-first`, execute its domain search input and market-qualified design searches
+first. Domain references must be comparable services actually serving the named task and audience
+in that market. Design references must be independent, quality-inspected local visual-direction
+evidence discovered through the allowed gallery/product path; being local is not a quality score.
+Record a concrete target-market coverage gap before using a global equivalent. Never reuse one
+operator across lanes or turn a region label into a country-wide style preset. With `unscoped`, do
+not infer a market from conversation language, surface locale, script or likely user location.
+Publish v7 `marketCoverage` for target-market-first work. Classify every lane source exactly once
+with `sourceId`, the retained image's exact `evidenceSha256`, a lane-valid `scope`, `basis`, and
+`provenanceReceiptSha256`. `market-search-result` must bind the exact signed market-search receipt whose
+visible result text for the retained source or design-discovery link names the market and relevant scope.
+`market-direct-result` must bind the exact signed direct-public root receipt whose visible label for
+the retained source or design-discovery link names the market and relevant scope. URL tokens, localized
+queries, country-code hostnames, page-wide headings, and freeform reasons prove neither.
+Search and direct bases may coexist in a lane. Every declared search and direct attempt must be current.
+A fallback records `provenance=[{sourceId,provenanceReceiptSha256}]` so each chosen global source
+binds a current signed visible link, then records the exact market, an availability/access/coverage
+kind, and every attempted query and root used by that lane. Every chosen retained capture must be current.
+Freeform prose cannot prove local provenance or a fallback attempt. `research-check`
+rejects market drift, global-only lanes and unqualified search order.
 Use the user's explicitly selected available search transport, such as Aside CLI when requested;
 otherwise use the host's native web-search tool. Rendering a search engine's HTML with
 `omd ir` is not the search transport; if the selected search tool is absent or explicitly disabled,
@@ -87,7 +108,7 @@ supply references to continue. A missing search/browser capability is a precise 
 Keep the actual queries, chosen/rejected leads, and resulting native capture identities in your
 owned Scout synthesis. After both lanes have current outputs, print `omd schema reference-research
 --json`, fill its exact skeleton, publish it with `omd ref research-set`, and require `omd ref
-research-check --json` to pass. Each v5 source and discovery entry binds the PNG evidence plus a
+research-check --json` to pass. Each current v7 source and discovery entry binds the PNG evidence plus a
 native capture JSON receipt. A gallery homepage is not an inspected item. Different gallery/source
 URLs require that source URL in the gallery's captured outbound links. Do not substitute an
 unrelated design-system capture or edit native acquisition metadata to make the gate pass.
@@ -111,8 +132,12 @@ Require the coordinator's selected-stage entry outcome from `omd brief scout --c
 before collection. Before handoff run the applicable research/application checks again after
 the last publication. Screenshots or a successful entry check do not mean research is complete;
 return any blocked provider, missing lane or stale application instead of declaring completion.
-These records disclose
-acquisition provenance, not tamper-proof search receipts.
+These project-signed native records provide tamper-evident acquisition provenance. They are not
+provider-attested truth and do not prove visual quality, market fit or authority by themselves.
+For explicit-market search provenance, the signed visible result text associated with the retained
+link must itself name the market and relevant service/product scope; a localized query alone is not local evidence.
+Reacquire every explicit-market search/direct attempt and its retained source when either is more
+than seven days old; fallback attempts are not exempt.
 After research-check, run `omd ref apply-plan --json` and fill its input from actual image
 inspection for every current domain-brief surface. Publish using `omd ref apply-set --input
 <application.json>`, then require `omd ref apply-check --json`. This is a CLI-published synthesis,

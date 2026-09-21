@@ -28,6 +28,15 @@ Preserve that preference in current discovery queries. Do not drop it, infer it 
 turn it into a country-wide style preset. Script mechanics and the existing target audience remain
 separate; a genuine market-fit request still follows the research route below.
 
+When the context contains an explicit market region, reference discovery is target-market-first in
+both independent lanes. The domain lane starts with comparable services that actually serve the
+named task and audience in that market. The design lane starts with market-qualified gallery searches
+and high-quality product/design sources from that market, while remaining independent from the domain
+operators. A local URL is not automatically good design, and a country label is not a visual style.
+Use a global equivalent only after recording the target-market coverage gap; it supplements missing
+task or craft evidence rather than silently replacing local research. Conversation language or a bare
+surface locale never activates this policy without an explicit market.
+
 ## Cultural design routing
 
 The derived locale-design route has exactly three decisions:

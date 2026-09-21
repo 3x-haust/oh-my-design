@@ -56,6 +56,7 @@ export function checkTerminalCompletion(root: string, invocation: ProjectRunInvo
       validateReferenceResearch(root, research, {
         expectedSourceContractSha256: route.sourceContractSha256,
         benchmarkRequired: route.gates.includes('greenfield-task-flow-benchmark'),
+        expectedRequest: route.request,
       });
       const application = checkReferenceApplication(root, { expectedSourceContractSha256: route.sourceContractSha256,
         benchmarkRequired: route.gates.includes('greenfield-task-flow-benchmark'), expectedRequest: route.request });

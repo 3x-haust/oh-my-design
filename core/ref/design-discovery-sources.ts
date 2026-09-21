@@ -25,9 +25,9 @@ export function referenceServiceFamily(url: string): string {
   const labels = host.split('.');
   if (labels.length < 3) return host;
   const suffix = labels.slice(-2).join('.');
-  if (['gov.uk', 'nhs.uk', 'go.kr', 'gov.au', 'gc.ca'].includes(suffix)) return suffix;
+  if (['gov.uk', 'nhs.uk', 'gov.au', 'gc.ca'].includes(suffix)) return suffix;
   const [secondLevel, country] = labels.slice(-2);
-  if (country?.length === 2 && secondLevel && ['gov', 'gob', 'go', 'gc'].includes(secondLevel)) return suffix;
+  if (country?.length === 2 && secondLevel && ['gov', 'gob', 'gc'].includes(secondLevel)) return suffix;
   return getDomain(host, { allowPrivateDomains: true }) ?? host;
 }
 

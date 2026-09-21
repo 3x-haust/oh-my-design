@@ -57,7 +57,10 @@ function nativeCapture(root: string, reference: Reference): DesignReferenceAdmis
   }
   try {
     const raw: unknown = JSON.parse(readContainedRegularFile(root, path, 'retained design capture').toString('utf8'));
-    if (!object(raw) || raw.schema === 'reference-navigation-capture-v1' || raw.schema === 'reference-search-execution-v1') return rejected('purpose', 'Navigation and search records are discovery diagnostics.');
+    if (!object(raw) || raw.schema === 'reference-navigation-capture-v1'
+      || raw.schema === 'reference-search-execution-v1' || raw.schema === 'reference-search-execution-v2') {
+      return rejected('purpose', 'Navigation and search records are discovery diagnostics.');
+    }
     if (raw.source !== reference.source || raw.component !== reference.component || raw.imagePath !== reference.imagePath
       || raw.researchLane !== 'design') return rejected('capture', 'The inspected record does not bind this retained source and image.');
     const acquisition = reference.acquisition;

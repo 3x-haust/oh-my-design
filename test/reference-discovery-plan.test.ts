@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { routeAdaptiveFlow } from '../core/route/index.ts';
 import { routeLocaleDesignContext } from '../core/locale/design-context.ts';
 import { buildReferenceDiscoveryPlan, missingDiscoveryMotionEvidence } from '../core/ref/discovery-plan.ts';
+import { parseSearchInput } from '../core/ref/search-execution.ts';
 import { buildBrief, formatBrief } from '../core/brief/index.ts';
 import { publishTestAdaptiveRoute } from './helpers/project-write.ts';
 
@@ -43,7 +44,7 @@ test('explicit Korean surface mechanics remain separate from market and source-c
   const root = project(t);
   const locale = routeLocaleDesignContext({
     schema: 'locale-design-context-v1', conversationLanguage: 'ko', surfaceLocale: 'ko',
-    marketRegion: null, audience: 'Developers', domain: 'Instrument launch', surface: 'marketing',
+    marketRegion: null, marketAuthorityClaimId: null, audience: 'Developers', domain: 'Instrument launch', surface: 'marketing',
     desiredFit: 'locale-mechanics-only', brandInvariants: ['Supplied instrument facts'],
   });
   const plan = buildReferenceDiscoveryPlan(root, routeAdaptiveFlow(fixture(), undefined, locale));
@@ -51,7 +52,49 @@ test('explicit Korean surface mechanics remain separate from market and source-c
   assert.equal(plan.locale.explicitMarket, null);
   assert.equal(plan.locale.culturalDecision, 'mechanics-only');
   assert.equal(plan.lanes.some(lane => lane.id === 'design-reference'), true);
+  assert.deepEqual(plan.marketReferencePolicy, {
+    mode: 'unscoped', marketRegion: null, marketLabel: null, audience: null,
+    marketSearchLabels: [],
+    targetMarketCoverage: 'not-required', domainSearchInputs: [], fallback: 'ordinary-reference-discovery',
+    styleInference: 'forbidden',
+  });
   assert.doesNotMatch(JSON.stringify(plan), /Korean style|Korean users|Korean market/);
+});
+
+test('an explicit Korean market makes both reference lanes target-market-first without inferring a country style', t => {
+  const root = project(t);
+  const locale = routeLocaleDesignContext({
+    schema: 'locale-design-context-v1', conversationLanguage: 'ko-KR', surfaceLocale: 'ko-KR',
+    marketRegion: 'KR', marketAuthorityClaimId: 'market-authority', audience: 'Korean residents comparing public benefits',
+    domain: 'public benefit discovery', surface: 'marketing', desiredFit: 'market-grounded',
+    brandInvariants: ['Eligibility facts remain source-bound'],
+  });
+  const input = fixture();
+  input.evidenceClaims.claims.push({ id: 'market-authority', text: 'The product targets South Korea.', status: 'confirmed',
+    userEvidence: [{ kind: 'explicit-user-evidence', source: 'user-message', reference: 'market-request', excerpt: 'Build this for users in South Korea.' }] });
+  input.evidenceClaims.userFacts.push('market-authority');
+  const plan = buildReferenceDiscoveryPlan(root, routeAdaptiveFlow(input, undefined, locale));
+  assert.equal(plan.schema, 'reference-discovery-plan-v2');
+  assert.deepEqual(plan.marketReferencePolicy, {
+    mode: 'target-market-first', marketRegion: 'KR', marketLabel: 'South Korea', marketSearchLabels: ['대한민국', '한국', 'South Korea'],
+    audience: 'Korean residents comparing public benefits', targetMarketCoverage: 'required-in-domain-and-design',
+    domainSearchInputs: [
+      { lane: 'domain', query: '대한민국 public benefit discovery',
+        url: 'https://www.bing.com/search?q=%EB%8C%80%ED%95%9C%EB%AF%BC%EA%B5%AD+public+benefit+discovery', queryParam: 'q' },
+      { lane: 'domain', query: '한국 public benefit discovery service',
+        url: 'https://www.bing.com/search?q=%ED%95%9C%EA%B5%AD+public+benefit+discovery+service', queryParam: 'q' },
+      { lane: 'domain', query: 'South Korea public benefit discovery service',
+        url: 'https://www.bing.com/search?q=South+Korea+public+benefit+discovery+service', queryParam: 'q' },
+    ],
+    fallback: 'global-equivalent-only-after-documented-target-market-gap', styleInference: 'forbidden',
+  });
+  const firstDomainSearch = plan.marketReferencePolicy.domainSearchInputs[0];
+  assert.ok(firstDomainSearch);
+  assert.equal(parseSearchInput(firstDomainSearch).lane, 'domain');
+  assert.ok(plan.lanes.find(lane => lane.id === 'domain-reference')?.querySeeds.includes('대한민국 public benefit discovery'));
+  assert.ok(plan.lanes.find(lane => lane.id === 'design-reference')?.querySeeds.some(query => query.startsWith('대한민국 ')));
+  assert.ok(plan.designSourcePolicy.nativeSearchInputs.some(input => input.query.startsWith('대한민국 ')));
+  assert.ok(plan.designSourcePolicy.nativeSearchInputs.some(input => input.query.startsWith('South Korea ')));
 });
 
 test('a one-sentence balanced marketing route investigates craft and motion without inventing a scene lock', t => {
@@ -89,8 +132,10 @@ test('search decisions are the current owned acquisition questions, not guessed 
   const plan = buildReferenceDiscoveryPlan(root, routeAdaptiveFlow(fixture()));
   assert.deepEqual(plan.decisions.map(decision => decision.zoneId), ['patch-example']);
   assert.deepEqual(plan.lanes.find(lane => lane.id === 'domain-reference')?.querySeeds, [question]);
-  assert.equal(plan.decisions[0]!.state, 'A labeled connection example changes after interaction.');
-  assert.equal(plan.decisions[0]!.viewports.length, 2);
+  const decision = plan.decisions[0];
+  assert.ok(decision);
+  assert.equal(decision.state, 'A labeled connection example changes after interaction.');
+  assert.equal(decision.viewports.length, 2);
 });
 
 test('selected motion cannot be satisfied by static captures or waived by omitting domain analysis', t => {

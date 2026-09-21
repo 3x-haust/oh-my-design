@@ -17,7 +17,7 @@ import { routeLocaleDesignContext } from '../core/locale/design-context.ts';
 const CLI = fileURLToPath(new URL('../bin/omd.ts', import.meta.url));
 const context = (overrides: Record<string, unknown> = {}): Record<string, unknown> => ({
   schema: 'locale-design-context-v1', conversationLanguage: 'ko-KR', surfaceLocale: 'ja-JP',
-  marketRegion: 'JP', audience: 'Adults comparing a public mission archive',
+  marketRegion: 'JP', marketAuthorityClaimId: 'market-authority', audience: 'Adults comparing a public mission archive',
   domain: 'public lunar mission archive', surface: 'product', desiredFit: 'market-grounded',
   brandInvariants: ['Mission facts do not change across locales'], ...overrides,
 });

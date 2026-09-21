@@ -18,12 +18,14 @@ const context = (overrides: Record<string, unknown> = {}): Record<string, unknow
   conversationLanguage: 'ko-KR',
   surfaceLocale: 'ja-JP',
   marketRegion: 'JP',
+  marketAuthorityClaimId: 'market-authority',
   audience: 'Adults comparing a public mission archive',
   domain: 'public lunar mission archive',
   surface: 'product',
   desiredFit: 'market-grounded',
   brandInvariants: ['Mission facts do not change across locales'],
   ...overrides,
+  ...(overrides.marketRegion === null && !Object.hasOwn(overrides, 'marketAuthorityClaimId') ? { marketAuthorityClaimId: null } : {}),
 });
 
 test('context keeps conversation, surface locale, and explicit market independent', () => {
@@ -97,6 +99,15 @@ test('malformed, unknown, inherited, accessor, invisible, and duplicate input fa
     context({ surfaceLocale: 'english_US' }),
     context({ surfaceLocale: 'und' }),
     context({ marketRegion: 'Japan' }),
+    context({ marketRegion: 'ZZ' }),
+    context({ marketRegion: 'AA' }),
+    context({ marketRegion: 'XX' }),
+    context({ marketRegion: '999' }),
+    context({ marketRegion: '000' }),
+    context({ marketRegion: 'QM' }),
+    context({ marketRegion: 'XA' }),
+    context({ domain: `benefit\ud800portal` }),
+    context({ domain: 'x'.repeat(513) }),
     context({ brandInvariants: ['Same', 'Same'] }),
   ];
   for (const value of cases) assert.throws(() => parseLocaleDesignContext(value), LocaleDesignContextError);

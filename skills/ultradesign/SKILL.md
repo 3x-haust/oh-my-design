@@ -159,6 +159,17 @@ omd stage next --json
 omd route show
 ```
 
+When the user explicitly supplies a country/market and audience, bootstrap that authority before
+classification. Run `omd schema locale-design-context`, author
+`.omd/locale-design-context.json` from those user-supplied facts, set `marketAuthorityClaimId` to a
+confirmed `evidenceClaims.userFacts` claim whose `explicit-user-evidence` names that market, and inspect it with
+`omd locale plan --input .omd/locale-design-context.json --json`. Then append
+`--locale-context .omd/locale-design-context.json` to both `route validate` and `route classify`.
+Use the same file for every repair/recheck. A surface language or locale alone never authorizes a
+country: if no market was supplied, keep `marketRegion` null and do not silently add one. This
+bootstrap is required on a fresh project as well as a resumed project; otherwise reference
+discovery remains intentionally unscoped.
+
 On a brokered Codex invocation append the supplied `--activation` to publishing/reading commands.
 The example above is for a new product implementation. For existing/bounded work use `omd schema route-input`;
 for design-only use `omd schema design-route-input`. Choose axes, scope, dependencies, optional methods
@@ -305,7 +316,7 @@ Use `.omd/route.json` as the machine-consumed strategy. Do not substitute a reme
   route reason, not an invented artifact.
 - Dual research finishes with Scout's screen application: `omd ref apply-plan --json` → fill the
   input from actual images → `omd ref apply-set --input <application.json>` → `omd ref apply-check`.
-  Query strings alone are not research: Scout uses native search receipts or v6 `discoveryRoots`
+  Query strings alone are not research: Scout uses native search receipts or v6/v7 `discoveryRoots`
   from `ref navigate --entry public-directory` (domain) / `--entry free-gallery` (design).
   Direct browsing of public lists is allowed without a search engine. Retained entries still trace
   to actual visible links and separate native visits; lists/search images stay outside refs.
@@ -330,6 +341,10 @@ Use `.omd/route.json` as the machine-consumed strategy. Do not substitute a reme
   packet never becomes source colour, copy, imagery, typeface, or an asset.
 - For market-grounded references, run `omd ref locale-bind` after the board; its source-free output
   binds local pieces to current profile decisions and captures, and `locale-bind-check` gates use.
+- Before the board, honor discovery-plan v2 `marketReferencePolicy`: an explicit market makes both
+  domain and design discovery target-market-first. Local comparable services and independent local
+  visual sources come before global equivalents; a recorded local coverage gap is required before
+  fallback. Surface language alone never supplies a market or a country-style direction.
 - Production, decision-linked browser evidence and fresh independent `oh-my-design:eye` review always end the route.
 
 Artifact ownership remains exclusive: frame/acquisition `oh-my-design:framer`; scout/reference `oh-my-design:scout`;

@@ -1583,7 +1583,14 @@ async function cmdRefHandoff(opts: Opts): Promise<never> {
     throw new Error('usage: omd ref handoff <art-direction|composer|hand> [--json]');
   }
   const { readSelectedReferenceHandoff } = await import('../core/ref/selected-handoff.ts');
-  const result = readSelectedReferenceHandoff(process.cwd(), role);
+  const researchExists = existsSync(resolve(process.cwd(), '.omd/reference-research.json'));
+  const currentRoute = researchExists
+    ? readPersistedRoute(process.cwd(), invocationFromActivation(opts, 'omd ref handoff'))
+    : undefined;
+  const result = readSelectedReferenceHandoff(process.cwd(), role, currentRoute === undefined ? undefined : {
+    sourceContractSha256: currentRoute.sourceContractSha256,
+    request: currentRoute.request,
+  });
   await new Promise<void>((done, reject) => {
     process.stdout.write(`${JSON.stringify(result, null, opts.json ? undefined : 2)}\n`, error => error ? reject(error) : done());
   });
@@ -2413,6 +2420,7 @@ async function cmdRefResearch(mode: 'set' | 'check', opts: Opts): Promise<never>
   const validation = {
     expectedSourceContractSha256: route.sourceContractSha256,
     benchmarkRequired: route.gates.includes('greenfield-task-flow-benchmark'),
+    expectedRequest: route.request,
   };
   validateReferenceResearch(process.cwd(), research, validation);
   const path = '.omd/reference-research.json';

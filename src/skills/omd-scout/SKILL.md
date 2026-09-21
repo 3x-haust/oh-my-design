@@ -70,6 +70,25 @@ never purchase, start trials, install an MCP, or bypass access controls just for
 Choose actual search or direct-public browsing from the plan. `designSourcePolicy.searchQueries`
 include Pinterest pins and a surface-appropriate gallery. Record the actual method, results and
 blocked capabilities in scout.md. Do not replace an unperformed search with an invented query list.
+Read `marketReferencePolicy` before searching. When its mode is `target-market-first`, execute its
+domain search input and the market-qualified design searches first. Keep the lanes independent:
+domain sources must actually serve the named task/audience in the target market; design sources must
+provide high-quality local visual direction through inspected gallery/product evidence, not reuse the
+domain services or accept a weak screen merely because it is local. Use unqualified global equivalents
+only after recording the local coverage gap. `unscoped` means no country may be inferred from the
+conversation language or surface locale.
+For target-market-first work, publish research v7 with `marketCoverage`. Each lane must classify every
+source id exactly once with `sourceId`, the retained image's exact `evidenceSha256`, a lane-valid `scope`,
+`basis`, and `provenanceReceiptSha256`. `market-search-result` must bind the exact signed market-search
+receipt whose visible result text for the retained source or design-discovery link names the market and
+relevant scope. `market-direct-result` must bind the exact signed direct-public root receipt whose visible
+label for the retained source or design-discovery link names the market and relevant scope. URL tokens,
+localized queries, country-code hostnames, page-wide headings, and freeform reasons prove neither.
+Search and direct bases may coexist in a lane. Every declared search and direct attempt must be current. A fallback records
+`provenance=[{sourceId,provenanceReceiptSha256}]` so each chosen global source binds a current signed visible link, then records the exact market, an
+availability/access/coverage kind, and every attempted query and root used by that lane. Every chosen retained capture must also be current. Freeform prose
+cannot prove local provenance or a fallback attempt. `research-check` rejects missing coverage, market drift, global-only lanes, and
+unqualified search order; repair the evidence instead of removing the policy.
 For native search use the plan's `designSourcePolicy.nativeSearchInputs` with `ref search`.
 They bind real free-gallery queries for Pinterest, Dribbble and Siteinspire. Refine the short
 task/pattern query and URL together, then open an item actually returned in observed links; never
@@ -77,7 +96,7 @@ guess pin/shot IDs. Login walls, challenges and empty results remain failures, n
 The next public gallery is the fallback, not domain-service documentation or a paid MCP.
 For direct discovery use `designSourcePolicy.nativeEntryInputs` with
 `omd ref navigate <public-gallery-list-url> --lane design --entry free-gallery --json`.
-For comparable-service discovery use `--lane domain --entry public-directory`. In v6 put the
+For comparable-service discovery use `--lane domain --entry public-directory`. In v6/v7 put the
 returned `method`, `entry`, `url`, `evidence` and `capture` plus your `reason` in that lane's
 `discoveryRoots`. Keep `queries` and `searches` as arrays: both may be empty only when valid roots
 exist, and every declared query still needs execution. Native roots bind the actual visible list
@@ -111,7 +130,7 @@ Pinterest pins, Dribbble shots, Behance case studies or website galleries. UI Bo
 optional, never a prerequisite. If a gallery blocks access, try another; if none can be inspected,
 return incomplete research rather than substituting government/service documentation.
 
-Read each actual saved image. In `reference-research-v6`, distinguish `visual-direction` from
+Read each actual saved image. In `reference-research-v7`, distinguish `visual-direction` from
 `component-support` and record `visualAssessment`: composition, typography, density, imagery,
 what to transfer and what to avoid. Component-support alone cannot complete design research.
 Domain/design source hosts, redirects and image evidence must not overlap. Each board candidate
@@ -158,7 +177,7 @@ Search the PART, in English, across many sites — the way a designer builds a b
   these captures live in the lane's `navigation/` folder and have no board component identity.
   Keep its returned native receipts in that lane's optional `navigation` array, each with
   `url`, PNG `evidence`, and JSON `capture` receipts. The checker follows observed outbound links from
-  successful search results or direct-entry links through those captures. Direct v6 chains require
+  successful search results or direct-entry links through those captures. Direct v6/v7 chains require
   new strict navigation-v2 captures, never all-DOM links from retained component captures. A disconnected chain, prose link, stale image,
   blocked visit or user-supplied screenshot cannot manufacture a browser navigation edge.
 - Keep the whole page when the felt direction is the point, and a scoped part when anatomy is. A
@@ -224,7 +243,7 @@ After the domain and design lanes both have current evidence, print `omd schema 
 lane to the current reference board. The publisher saves `.omd/refs/domain/research.json` and
 `.omd/refs/design/research.json` alongside their own captures, with `.omd/reference-research.json` as the
 consistency receipt. All three must agree. Existing v5 remains readable with its search requirements;
-new v6 direct roots require new native entry captures, never a filename move or synthesized provenance.
+v6/v7 direct roots require new native entry captures, never a filename move or synthesized provenance.
 Both source and discovery observations bind PNG and native
 capture-JSON hashes. A gallery homepage alone is rejected. If the original source differs from the
 gallery entry, its exact URL must occur in that entry's captured outbound links; otherwise retain

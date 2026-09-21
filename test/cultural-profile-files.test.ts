@@ -32,11 +32,18 @@ import {
   createTestProjectWriteAdapter,
 } from './helpers/project-write.ts';
 
-const fixture = (): Record<string, unknown> => JSON.parse(readFileSync(new URL('fixtures/adaptive-flow/synth-marketing.json', import.meta.url), 'utf8'));
+const fixture = (): Record<string, unknown> => {
+  const value = JSON.parse(readFileSync(new URL('fixtures/adaptive-flow/synth-marketing.json', import.meta.url), 'utf8')) as Record<string, unknown>;
+  const publication = value.evidenceClaims as { claims: unknown[]; userFacts: string[] };
+  publication.claims.push({ id: 'market-authority', text: 'The product targets Japan.', status: 'confirmed',
+    userEvidence: [{ kind: 'explicit-user-evidence', source: 'user-message', reference: 'market-request', excerpt: 'Build this for users in Japan.' }] });
+  publication.userFacts.push('market-authority');
+  return value;
+};
 const PACK_ROOT = fileURLToPath(new URL('../core', import.meta.url));
 const context = (): Record<string, unknown> => ({
   schema: 'locale-design-context-v1', conversationLanguage: 'ko-KR', surfaceLocale: 'ja-JP',
-  marketRegion: 'JP', audience: 'Adults comparing a public mission archive',
+  marketRegion: 'JP', marketAuthorityClaimId: 'market-authority', audience: 'Adults comparing a public mission archive',
   domain: 'public lunar mission archive', surface: 'product', desiredFit: 'market-grounded',
   brandInvariants: ['Mission facts do not change across locales'],
 });

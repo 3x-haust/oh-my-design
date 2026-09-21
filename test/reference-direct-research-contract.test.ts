@@ -6,7 +6,8 @@ import { parseReferenceResearch, publishReferenceResearch, readPublishedReferenc
   referenceResearchArtifacts } from '../core/ref/reference-research.ts';
 import { ADMISSION_SOURCE_SHA, admissionHash, designAdmissionFixture } from './helpers/design-admission.ts';
 
-const options = { expectedSourceContractSha256: ADMISSION_SOURCE_SHA, benchmarkRequired: false };
+const options = { expectedSourceContractSha256: ADMISSION_SOURCE_SHA, benchmarkRequired: false,
+  expectedRequest: 'Study Korean public benefits' };
 // Parser-only envelope; this does not claim that capture files exist or prove publication.
 function rootEnvelope(lane: 'domain' | 'design') {
   const digest = (lane === 'domain' ? 'c' : 'd').repeat(64);
@@ -46,6 +47,17 @@ test('v6 parses direct-only lanes and retains direct roots in each lane artifact
   assert.deepEqual(artifacts['.omd/refs/design/research.json'].discoveryRoots, input.designReference.discoveryRoots);
 });
 
+test('direct discovery root reasons are bounded and Unicode-well-formed before market validation', t => {
+  const { research } = designAdmissionFixture(t);
+  const direct = { ...research, schema: 'reference-research-v6',
+    domainReference: { ...research.domainReference, queries: [], searches: [], discoveryRoots: [rootEnvelope('domain')] },
+    designReference: { ...research.designReference, queries: [], searches: [], discoveryRoots: [rootEnvelope('design')] } };
+  for (const reason of ['x'.repeat(4097), `Malformed direct root \ud800`]) {
+    assert.throws(() => parseReferenceResearch({ ...direct, domainReference: { ...direct.domainReference,
+      discoveryRoots: [{ ...rootEnvelope('domain'), reason }] } }), /DISCOVERY_ROOT_REASON/);
+  }
+});
+
 test('v6 refuses fewer than three independent domain service families', t => {
   const { research } = designAdmissionFixture(t);
   const direct = { ...research, schema: 'reference-research-v6',
@@ -80,6 +92,10 @@ test('common country-code registrable domains remain independent families', t =>
     url: `https://${['alpha', 'bravo', 'charlie'][index]}.com.mx/task` }));
   assert.doesNotThrow(() => parseReferenceResearch({ ...direct,
     domainReference: { ...direct.domainReference, sources: independent } }));
+  const koreanPublicOperators = direct.domainReference.sources.map((source, index) => ({ ...source,
+    url: `https://${['bokjiro', 'seoul', 'youthcenter'][index]}.go.kr/task` }));
+  assert.doesNotThrow(() => parseReferenceResearch({ ...direct,
+    domainReference: { ...direct.domainReference, sources: koreanPublicOperators } }));
 });
 
 test('private public-suffix tenants remain independent service families', t => {
@@ -178,7 +194,7 @@ test('new diagnostic schemas cannot be relabeled into retained research and refu
   const before = paths.map(path => readFileSync(path));
   const path = join(fixture.root, fixture.domain.capture.path);
   const captured = JSON.parse(readFileSync(path, 'utf8'));
-  for (const schema of ['reference-navigation-capture-v2', 'reference-discovery-entry-v1']) {
+  for (const schema of ['reference-navigation-capture-v2', 'reference-discovery-entry-v1', 'reference-discovery-entry-v2', 'reference-discovery-entry-v3']) {
     const bytes = JSON.stringify({ ...captured, schema });
     writeFileSync(path, bytes);
     const input = { ...fixture.research, domainReference: { ...fixture.research.domainReference,
