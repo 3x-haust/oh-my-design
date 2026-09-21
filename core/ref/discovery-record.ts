@@ -12,7 +12,7 @@ export type DirectDiscoveryEntry = 'public-directory' | 'free-gallery';
 export type DiscoveryEvidence = Readonly<{ path: string; sha256: string }>;
 export type DiscoveryNavigationReceipt = Readonly<{ url: string; evidence: DiscoveryEvidence; capture: DiscoveryEvidence }>;
 export type DirectDiscoveryReceipt = DiscoveryNavigationReceipt & Readonly<{ method: 'direct-public'; entry: DirectDiscoveryEntry }>;
-export type DiscoveryObservation = Readonly<{ url: string; finalUrl: string; links: readonly string[] }>;
+export type DiscoveryObservation = Readonly<{ url: string; finalUrl: string; links: readonly string[]; observedText?: string }>;
 export const DISCOVERY_LIMITATIONS = 'native-public-get; stable-rendered-viewport-links; no-authentication; no-interaction-probes; not-provider-attested' as const;
 type DiscoveryCaptureFields = Readonly<{
   source: string; researchLane: DiscoveryLane; kind: 'page'; capturedAt: string; imagePath: string;
@@ -98,7 +98,7 @@ function readDiscovery(root: string, value: unknown, direct: boolean, requireCur
   if (direct ? !['reference-discovery-entry-v1', 'reference-discovery-entry-v2'].includes(decoded.schema as string)
     : decoded.schema !== 'reference-navigation-capture-v2') return fail('native capture purpose/source/lane binding differs');
   const current = direct && decoded.schema === 'reference-discovery-entry-v2';
-  const row = object(decoded, direct ? [...keys, 'method', 'entry', ...(current ? ['signature'] : [])] : keys);
+  const row = object(decoded, direct ? [...keys, 'method', 'entry', ...(current ? ['observedText', 'signature'] : [])] : keys);
   if (row.source !== url || row.researchLane !== lane || row.kind !== 'page' || row.imagePath !== image.path
     || row.limitations !== DISCOVERY_LIMITATIONS || !Number.isFinite(Date.parse(text(row.capturedAt)))
     || (direct && (row.method !== 'direct-public' || row.entry !== entry))) return fail('native capture purpose/source/lane binding differs');
@@ -108,6 +108,7 @@ function readDiscovery(root: string, value: unknown, direct: boolean, requireCur
     if (typeof signature !== 'string' || !verifyNativeObservation(root, 'reference-discovery-entry-v2',
       discoveryDigest(canonicalJson(unsigned)), signature)) return fail('native direct discovery signature invalid');
   }
+  const observedText = current ? text(row.observedText) : undefined;
   const acquisition = object(row.acquisition, ['requestedUrl', 'finalUrl', 'httpStatus', 'links', 'imageSha256']);
   if (acquisition.requestedUrl !== url || acquisition.imageSha256 !== image.sha256
     || typeof acquisition.httpStatus !== 'number' || !Number.isInteger(acquisition.httpStatus)
@@ -120,7 +121,7 @@ function readDiscovery(root: string, value: unknown, direct: boolean, requireCur
   if (entry !== undefined) validateDirectDiscoveryLinks(entry, observation);
   const png = decodePng(read(root, image));
   if (png.width !== 1280 || png.height !== 900) return fail('discovery capture viewport differs');
-  return observation;
+  return requireCurrent && observedText !== undefined ? { ...observation, observedText } : observation;
 }
 export function readDirectDiscoveryEntry(root: string, receipt: unknown): DiscoveryObservation {
   return readDiscovery(root, receipt, true);

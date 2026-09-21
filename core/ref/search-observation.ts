@@ -22,7 +22,19 @@ async function renderedState(page: Page) {
     if (!hit || !element.contains(hit)) return [];
     return [{ href, text: element.innerText, left, right, top, bottom }];
   }).slice(0, 2000));
-  return { anchors, body: await page.locator('body').innerText(), url: page.url() };
+  const visibleText = await page.locator('body').evaluate(body => Array.from(body.querySelectorAll('h1, h2, h3, p, li, a, button, [role="heading"]'))
+    .flatMap(element => {
+      const box = element.getBoundingClientRect();
+      if (box.right <= 0 || box.bottom <= 0 || box.left >= innerWidth || box.top >= innerHeight) return [];
+      for (let ancestor: Element | null = element; ancestor; ancestor = ancestor.parentElement) {
+        const style = getComputedStyle(ancestor);
+        if (style.display === 'none' || style.visibility !== 'visible' || Number(style.opacity) === 0
+          || style.contentVisibility === 'hidden') return [];
+      }
+      const text = (element.textContent ?? '').trim();
+      return text ? [text] : [];
+    }).join('\n').slice(0, 4096));
+  return { anchors, body: await page.locator('body').innerText(), visibleText, url: page.url() };
 }
 
 class DiscoveryObservationError extends Error {
@@ -38,7 +50,8 @@ export async function captureDiscoveryObservation(page: Page, documents: Documen
     const afterDocument = await documents.current();
     if (beforeDocument.identity === afterDocument.identity && beforeDocument.httpStatus === afterDocument.httpStatus
       && JSON.stringify(before) === JSON.stringify(after)) {
-      return { bytes, links: [...new Set(before.anchors.map(anchor => anchor.href))], body: before.body, url: before.url,
+      return { bytes, links: [...new Set(before.anchors.map(anchor => anchor.href))], body: before.body,
+        visibleText: before.visibleText, url: before.url,
         httpStatus: afterDocument.httpStatus };
     }
   }

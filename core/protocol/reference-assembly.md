@@ -256,8 +256,9 @@ direct-public root may replace search transport, but never the per-lane local ev
 Each local classification binds `sourceId`, the exact retained `evidenceSha256`, a lane-valid `scope`,
 a closed `basis`, and the exact native `provenanceReceiptSha256`. `market-search-result` binds a signed
 market-search execution whose observed links contain the retained source or its declared design-discovery
-URL. `market-direct-result` binds a signed direct-public root whose captured, market-qualified URL leads
-to that retained URL. A country-code hostname or freeform reason is never market-service proof. Every global
+URL. `market-direct-result` binds a signed direct-public root whose captured page visibly names the
+explicit market and service/product/gallery/audience scope and whose observed links include that retained
+URL. URL tokens, a country-code hostname, or a freeform reason are never market-service proof. Every global
 fallback gap records that same `marketRegion`, a closed availability/access/coverage `kind`, and the
 exact market queries or direct roots attempted. Generic quality prose and invented attempts do not
 qualify. Root reasons remain bounded, visible, well-formed scope notes; they are not provenance.

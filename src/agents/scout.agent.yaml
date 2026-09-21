@@ -68,8 +68,9 @@ instructions: |
   with `sourceId`, the retained image's exact `evidenceSha256`, a lane-valid `scope`, `basis`, and
   `provenanceReceiptSha256`. `market-search-result` must bind the exact signed market-search receipt whose
   observed links contain the retained source or design-discovery URL. `market-direct-result` must bind the
-  exact signed direct-public root receipt, a captured market-qualified URL, and an observed link to the
-  retained source or design-discovery URL. A country-code hostname or freeform reason proves neither. A fallback gap records
+  exact signed direct-public root receipt whose captured page visibly names the explicit market and
+  service/product/gallery/audience scope and whose observed links include the retained source or
+  design-discovery URL. URL tokens, a country-code hostname, or freeform reason prove neither. A fallback gap records
   the exact market, an availability/access/coverage kind, and the exact attempted queries or roots.
   Freeform prose cannot prove local provenance or a fallback attempt. `research-check`
   rejects market drift, global-only lanes and unqualified search order.

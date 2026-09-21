@@ -52,7 +52,8 @@ function searchReceiptAt(root: string, lane: 'domain' | 'design', receipt: { pat
   writeFileSync(join(root, path), bytes);
   return { path, sha256 };
 }
-function directRootAt(root: string, lane: 'domain' | 'design', url: string, links: readonly string[]) {
+function directRootAt(root: string, lane: 'domain' | 'design', url: string, links: readonly string[],
+  observedText = `South Korea ${lane === 'domain' ? 'service directory for residents' : 'design gallery products'}.`) {
   const image = testPng(1280, 900, lane === 'design' ? 1 : 0);
   const imageSha256 = admissionHash(image);
   const imagePath = `.omd/discovery/${lane}/entries/${imageSha256}.png`;
@@ -62,7 +63,8 @@ function directRootAt(root: string, lane: 'domain' | 'design', url: string, link
     entry: lane === 'domain' ? 'public-directory' : 'free-gallery', source: url, researchLane: lane,
     kind: 'page', capturedAt: '2026-09-21T00:00:00.000Z', imagePath,
     acquisition: { requestedUrl: url, finalUrl: url, httpStatus: 200, links, imageSha256 },
-    limitations: 'native-public-get; stable-rendered-viewport-links; no-authentication; no-interaction-probes; not-provider-attested' };
+    limitations: 'native-public-get; stable-rendered-viewport-links; no-authentication; no-interaction-probes; not-provider-attested',
+    observedText };
   const record = { ...unsigned, signature: signNativeObservation(root, unsigned.schema,
     admissionHash(canonicalJson(unsigned))) };
   const bytes = `${JSON.stringify(record, null, 2)}\n`;
@@ -153,8 +155,8 @@ test('market search and direct provenance refuse malformed scope, attempts, root
       sources: badRoot.designReference.sources.map(source => ({ ...source,
         discovery: { ...source.discovery, url: designItem } })), discoveryRoots: [designRoot] } };
   assert.doesNotThrow(() => validateMarketReferenceCoverage(fixture.root, parseReferenceResearch(scoped), options.expectedRequest));
-  const genericRoot = directRootAt(fixture.root, 'domain', 'https://directory.example/tasks',
-    fixture.research.domainReference.sources.map(source => source.url));
+  const genericRoot = directRootAt(fixture.root, 'domain', 'https://attacker.kr/tasks?note=South%20Korea',
+    fixture.research.domainReference.sources.map(source => source.url), 'Global directory for Canadian services.');
   const selfAttested = { ...scoped,
     domainReference: { ...scoped.domainReference, discoveryRoots: [{ ...genericRoot, reason: 'South Korea public benefits directory.' }] },
     marketCoverage: { ...directCoverage, domain: { ...directCoverage.domain,

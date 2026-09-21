@@ -73,7 +73,7 @@ export function validateMarketReferenceCoverage(root: string, research: Referenc
     return marketReject('REFERENCE_RESEARCH_MARKET_DOMAIN_SEARCH_REQUIRED: execute the exact target-market domain inputs before global searches');
   }
   const domainExecutions = research.domainReference.discoveryRoots?.length
-    ? validateDirectExecutions(root, research.domainReference.discoveryRoots, marketTokens, 'DOMAIN')
+    ? validateDirectExecutions(root, research.domainReference.discoveryRoots, labels, 'DOMAIN')
     : validateExecutionOrder(root, research.domainReference.searches, domainQueries, labels, 'DOMAIN');
   const briefPath = resolve(root, '.omd/domain-brief.json');
   if (!existsSync(briefPath)) return marketReject('REFERENCE_RESEARCH_MARKET_DESIGN_PLAN_REQUIRED: current domain queries are missing');
@@ -90,7 +90,7 @@ export function validateMarketReferenceCoverage(root: string, research: Referenc
     return marketReject('REFERENCE_RESEARCH_MARKET_DESIGN_SEARCH_REQUIRED: execute market-and-domain-qualified design searches before global searches');
   }
   const designExecutions = research.designReference.discoveryRoots?.length
-    ? validateDirectExecutions(root, research.designReference.discoveryRoots, marketTokens, 'DESIGN')
+    ? validateDirectExecutions(root, research.designReference.discoveryRoots, labels, 'DESIGN')
     : validateExecutionOrder(root, research.designReference.searches, designQueries, labels, 'DESIGN');
   validateLaneProvenance('DOMAIN', context.marketRegion, research.marketCoverage.domain,
     research.domainReference.sources, domainExecutions, domainQueries, research.domainReference.discoveryRoots ?? []);
@@ -150,18 +150,17 @@ function validateExecutionOrder(
 function validateDirectExecutions(
   root: string,
   roots: NonNullable<ReferenceResearch['domainReference']['discoveryRoots']>,
-  marketTokens: readonly string[],
+  marketLabels: readonly string[],
   lane: 'DOMAIN' | 'DESIGN',
 ): readonly MarketExecution[] {
   return Object.freeze(roots.map(receipt => {
-    let scoped: string;
-    try { scoped = decodeURIComponent(receipt.url).replace(/[+_/-]+/g, ' '); }
-    catch { return marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_DIRECT_PROVENANCE`); }
-    if (!containsMarketToken(scoped, marketTokens)) {
-      return marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_DIRECT_PROVENANCE`);
-    }
     const { reason: _reason, ...nativeReceipt } = receipt;
     const observation = readCurrentDirectDiscoveryEntry(root, nativeReceipt);
+    const observedText = observation.observedText ?? '';
+    if (DIRECT_NEGATION.test(observedText) || !DIRECT_SCOPE.test(observedText)
+      || !containsMarketToken(observedText, marketLabels)) {
+      return marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_DIRECT_PROVENANCE`);
+    }
     return Object.freeze({ sha256: receipt.capture.sha256, query: null, observedAt: 0, links: observation.links });
   }));
 }

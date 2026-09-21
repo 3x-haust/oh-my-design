@@ -6,7 +6,8 @@ import { connect } from 'node:net';
 import { PassThrough } from 'node:stream';
 import { once } from 'node:events';
 import { captureReferenceNavigation } from '../core/ref/navigation-capture.ts';
-import { readDirectDiscoveryEntry, readStrictDiscoveryNavigation, type DirectDiscoveryEntry } from '../core/ref/discovery-record.ts';
+import { readCurrentDirectDiscoveryEntry, readDirectDiscoveryEntry, readStrictDiscoveryNavigation,
+  type DirectDiscoveryEntry } from '../core/ref/discovery-record.ts';
 import { designDiscoveryDirectoryProvider } from '../core/ref/design-discovery-sources.ts';
 import { assertPublicNetworkUrl, createPublicNetworkProxy, publicIpAddress } from '../core/ref/public-network.ts';
 import { loadRefs } from '../core/ref/store.ts';
@@ -50,6 +51,7 @@ for (const entry of ['public-directory', 'free-gallery'] as const) {
     assert.equal(value.receipt.method, 'direct-public');
     assert.equal(value.receipt.entry, entry);
     assert.deepEqual(readDirectDiscoveryEntry(value.root, value.receipt), { url, finalUrl: url, links: [target] });
+    assert.match(readCurrentDirectDiscoveryEntry(value.root, value.receipt).observedText ?? '', /Public directory/);
     assert.deepEqual(readFileSync(join(value.root, value.receipt.evidence.path)), value.observed.captures[0]);
     assert.equal(value.observed.contextOptions.length, 1);
     const contextOptions = value.observed.contextOptions[0]!;
