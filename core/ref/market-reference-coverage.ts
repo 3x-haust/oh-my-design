@@ -21,6 +21,7 @@ const reject = (code: string): never => { throw new Error(code); };
 const INVISIBLE = /[\p{Cc}\p{Default_Ignorable_Code_Point}\p{White_Space}\u2800\u3164\uffa0]/gu;
 const DIRECT_NEGATION = /\b(?:not|no|isn't|is not|doesn't|does not|unavailable|unsupported|outside|excludes?|excluding|global only)\b|아님|아니다|불가|제외|미지원|제공하지\s*않|지원하지\s*않|해외\s*전용|한국\s*외/iu;
 const DIRECT_SCOPE = /\b(?:serves?|serving|available|operat(?:e|es|ed|ing)|based|local(?:ized)?|market|residents?|users?|audience|directory|gallery|service|product|interface)\b|대상|제공|운영|거주|사용자|시장|서비스|디렉터리|갤러리|제품|인터페이스|앱|웹사이트/iu;
+const MARKET_GAP = /\b(?:lack|lacks|lacking|missing|unavailable|blocked|only|fewer|insufficient|could not|cannot|unable)\b|부족|없(?:음|다)|찾지\s*못|접근\s*불가|차단|한정|제한|미확인|뿐/iu;
 type SourceIdentity = Readonly<{ id: string; evidence: Readonly<{ sha256: string }> }>;
 function object(value: unknown, code: string): Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return reject(code);
@@ -62,6 +63,12 @@ function containsMarketToken(reason: string, tokens: readonly string[]): boolean
 function directRootReason(value: unknown, marketTokens: readonly string[], code: string): void {
   const reason = explanation(value, code);
   if (DIRECT_NEGATION.test(reason) || !DIRECT_SCOPE.test(reason) || !containsMarketToken(reason, marketTokens)) reject(code);
+}
+function localSourceReason(reason: string, marketTokens: readonly string[], code: string): void {
+  if (DIRECT_NEGATION.test(reason) || !DIRECT_SCOPE.test(reason) || !containsMarketToken(reason, marketTokens)) reject(code);
+}
+function fallbackGap(gap: string, marketTokens: readonly string[], code: string): void {
+  if (!MARKET_GAP.test(gap) || !DIRECT_SCOPE.test(gap) || !containsMarketToken(gap, marketTokens)) reject(code);
 }
 function texts(value: unknown, code: string): readonly string[] {
   if (!Array.isArray(value) || !value.length || Object.keys(value).length !== value.length) return reject(code);
@@ -134,6 +141,17 @@ export function validateMarketReferenceCoverage(root: string, research: Referenc
   const labels = marketSearchLabels(context.marketRegion, context.surfaceLocale);
   const domain = marketDomainQueries(context.marketRegion, context.surfaceLocale, context.domain);
   const marketTokens = [context.marketRegion, ...labels];
+  for (const [name, coverage] of [
+    ['DOMAIN', research.marketCoverage.domain],
+    ['DESIGN', research.marketCoverage.design],
+  ] as const) {
+    coverage.localSources.forEach(source => localSourceReason(
+      source.reason, marketTokens, `REFERENCE_RESEARCH_MARKET_${name}_LOCAL_REASON`,
+    ));
+    if (coverage.globalFallback !== null) fallbackGap(
+      coverage.globalFallback.gap, marketTokens, `REFERENCE_RESEARCH_MARKET_${name}_FALLBACK_GAP`,
+    );
+  }
   const directLanes = [
     ['DOMAIN', research.domainReference.discoveryRoots],
     ['DESIGN', research.designReference.discoveryRoots],

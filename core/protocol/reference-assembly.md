@@ -253,6 +253,9 @@ source in each lane exactly once as source-specific target-market evidence with 
 documented global fallback, retains at least one local source per lane, and binds the explicit market. Search-based research must execute the
 plan's exact market domain inputs and market-plus-domain design searches before global queries. A
 direct-public root may replace search transport, but never the per-lane local evidence or fallback gap.
+Every retained local-source reason must name the explicit market and the service, product, gallery, or
+audience scope it actually supports. Every global fallback gap must name that same market and the
+specific local availability, access, or coverage shortage; generic quality prose does not qualify.
 Each local classification also binds the exact retained image SHA-256; prose alone cannot reclassify a
 different capture. Reasons, root scope, and fallback gaps use bounded visible well-formed text.
 

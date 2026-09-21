@@ -97,10 +97,20 @@ test('explicit-market v7 refuses global-only research without mutation and accep
     design: { localSources: [localSource('visual', fixture.source.evidence.sha256, 'The gallery item documents a Korean product interface.')], globalFallback: null } };
   assert.throws(() => parseReferenceResearch({ ...input, marketCoverage: globalOnly }), /MARKET_DOMAIN_LOCAL/);
   const documented = { marketRegion: 'KR',
-    domain: { localSources: [localSource('domain-1', fixture.domain.evidence.sha256, 'The captured service exposes the named benefits task to residents in Korea.')], globalFallback: { sourceIds: ['domain-2', 'domain-3'], gap: 'Only one independently operated local service exposed the complete task state publicly.' } },
-    design: { localSources: [localSource('visual', fixture.source.evidence.sha256, 'The inspected gallery item shows Korean product hierarchy and type at the target viewport.')], globalFallback: null } };
+    domain: { localSources: [localSource('domain-1', fixture.domain.evidence.sha256, 'The captured service exposes the named benefits task to residents in South Korea.')], globalFallback: { sourceIds: ['domain-2', 'domain-3'], gap: 'Only one independently operated South Korea service exposed the complete task state publicly.' } },
+    design: { localSources: [localSource('visual', fixture.source.evidence.sha256, 'The inspected gallery item shows a South Korea product interface at the target viewport.')], globalFallback: null } };
   const parsed = parseReferenceResearch({ ...input, marketCoverage: documented });
   assert.doesNotThrow(() => validateReferenceResearch(fixture.root, parsed, options));
+  const genericLocal = structuredClone(documented);
+  genericLocal.design.localSources[0]!.reason = 'This source has useful typography and hierarchy.';
+  assert.throws(() => validateReferenceResearch(
+    fixture.root, parseReferenceResearch({ ...input, marketCoverage: genericLocal }), options,
+  ), /MARKET_DESIGN_LOCAL_REASON/);
+  const genericGap = structuredClone(documented);
+  genericGap.domain.globalFallback!.gap = 'Broader coverage requires additional references.';
+  assert.throws(() => validateReferenceResearch(
+    fixture.root, parseReferenceResearch({ ...input, marketCoverage: genericGap }), options,
+  ), /MARKET_DOMAIN_FALLBACK_GAP/);
   const globalQuery = 'global public benefits examples';
   const globalReceipt = searchReceiptAt(fixture.root, 'domain', testSearchReceipt(
     fixture.root, 'domain', globalQuery, [fixture.domain.source],
@@ -122,9 +132,9 @@ test('market coverage refuses unqualified search order and fallback without a ga
   writeFileSync(join(fixture.root, '.omd/domain-brief.json'), JSON.stringify(domainBrief));
   const coverage = { marketRegion: 'KR',
     domain: { localSources: fixture.research.domainReference.sources.map(source => localSource(
-      source.id, source.evidence.sha256, `${source.id} serves the captured Korean benefits task.`,
+      source.id, source.evidence.sha256, `${source.id} serves the captured South Korea benefits task.`,
     )), globalFallback: null },
-    design: { localSources: [localSource('visual', fixture.source.evidence.sha256, 'The inspected item shows a Korean product interface.')], globalFallback: null } };
+    design: { localSources: [localSource('visual', fixture.source.evidence.sha256, 'The inspected item shows a South Korea product interface.')], globalFallback: null } };
   const input = { ...fixture.research, schema: REFERENCE_RESEARCH_SCHEMA, marketCoverage: coverage };
   assert.throws(() => validateReferenceResearch(fixture.root, parseReferenceResearch(input), options), /MARKET_DOMAIN_SEARCH_REQUIRED/);
   const exactDomainQueries = ['대한민국 public benefits', 'South Korea public benefits service'];
