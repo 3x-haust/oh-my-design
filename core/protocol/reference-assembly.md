@@ -253,6 +253,8 @@ source in each lane exactly once as source-specific target-market evidence with 
 documented global fallback, retains at least one local source per lane, and binds the explicit market. Search-based research must execute the
 plan's exact market domain inputs and market-plus-domain design searches before global queries. A
 direct-public root may replace search transport, but never the per-lane local evidence or fallback gap.
+Each local classification also binds the exact retained image SHA-256; prose alone cannot reclassify a
+different capture. Reasons, root scope, and fallback gaps use bounded visible well-formed text.
 
 The two lanes use independent service hosts, including after redirects. A second path or crop of a
 domain service is not a visual direction. Non-user discovery must match a supported public gallery

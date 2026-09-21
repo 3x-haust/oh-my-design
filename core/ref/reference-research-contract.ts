@@ -83,6 +83,7 @@ export type ReferenceResearch = Readonly<{
 export type ValidationOptions = Readonly<{
   expectedSourceContractSha256: string;
   benchmarkRequired: boolean;
+  expectedRequest?: string;
 }>;
 
 export function fail(code: string): never {
@@ -267,7 +268,7 @@ export function parseReferenceResearch(value: unknown): ReferenceResearch {
     fail('REFERENCE_RESEARCH_LANE_EVIDENCE_REUSED');
   }
   const coverage = current ? parseMarketReferenceCoverage(input.marketCoverage,
-    domain.sources.map(entry => entry.id), design.sources.map(entry => entry.id)) : null;
+    domain.sources, design.sources) : null;
   return Object.freeze({
     schema: input.schema as ReferenceResearch['schema'],
     sourceContractSha256,

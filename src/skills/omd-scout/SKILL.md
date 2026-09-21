@@ -79,7 +79,7 @@ only after recording the local coverage gap. `unscoped` means no country may be 
 conversation language or surface locale.
 For target-market-first work, publish research v7 with `marketCoverage`. Each lane must classify every
 source id exactly once, keep at least one target-market source with a source-specific reason explaining
-how it serves the named market/task/audience, and attach a concrete gap to every
+how it serves the named market/task/audience plus that retained image's exact SHA-256, and attach a concrete gap to every
 global fallback set. `research-check` rejects missing coverage, market drift, global-only lanes, and
 unqualified search order; repair the evidence instead of removing the policy.
 For native search use the plan's `designSourcePolicy.nativeSearchInputs` with `ref search`.

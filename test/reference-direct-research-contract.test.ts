@@ -8,7 +8,8 @@ import { ADMISSION_SOURCE_SHA, admissionHash, designAdmissionFixture } from './h
 import { testSearchReceipt } from './helpers/search-execution.ts';
 import { validateMarketReferenceCoverage } from '../core/ref/market-reference-coverage.ts';
 
-const options = { expectedSourceContractSha256: ADMISSION_SOURCE_SHA, benchmarkRequired: false };
+const options = { expectedSourceContractSha256: ADMISSION_SOURCE_SHA, benchmarkRequired: false,
+  expectedRequest: 'Study Korean public benefits' };
 function searchReceiptAt(root: string, lane: 'domain' | 'design', receipt: { path: string }, observedAt: string) {
   const record = JSON.parse(readFileSync(join(root, receipt.path), 'utf8'));
   record.observedAt = observedAt;
@@ -18,6 +19,7 @@ function searchReceiptAt(root: string, lane: 'domain' | 'design', receipt: { pat
   writeFileSync(join(root, path), bytes);
   return { path, sha256 };
 }
+const localSource = (sourceId: string, evidenceSha256: string, reason: string) => ({ sourceId, evidenceSha256, reason });
 const domainBrief = {
   schema: 'domain-brief-v1', request: 'Study Korean public benefits', domain: 'public benefits',
   summary: 'Compare public benefits',
@@ -92,20 +94,22 @@ test('explicit-market v7 refuses global-only research without mutation and accep
   assert.deepEqual(published.map(path => readFileSync(path)), before, 'refusal must not replace prior published research');
   const globalOnly = { marketRegion: 'KR',
     domain: { localSources: [], globalFallback: { sourceIds: ['domain-1', 'domain-2', 'domain-3'], gap: 'No other local operators were public.' } },
-    design: { localSources: [{ sourceId: 'visual', reason: 'The gallery item documents a Korean product interface.' }], globalFallback: null } };
+    design: { localSources: [localSource('visual', fixture.source.evidence.sha256, 'The gallery item documents a Korean product interface.')], globalFallback: null } };
   assert.throws(() => parseReferenceResearch({ ...input, marketCoverage: globalOnly }), /MARKET_DOMAIN_LOCAL/);
   const documented = { marketRegion: 'KR',
-    domain: { localSources: [{ sourceId: 'domain-1', reason: 'The captured service exposes the named benefits task to residents in Korea.' }], globalFallback: { sourceIds: ['domain-2', 'domain-3'], gap: 'Only one independently operated local service exposed the complete task state publicly.' } },
-    design: { localSources: [{ sourceId: 'visual', reason: 'The inspected gallery item shows Korean product hierarchy and type at the target viewport.' }], globalFallback: null } };
+    domain: { localSources: [localSource('domain-1', fixture.domain.evidence.sha256, 'The captured service exposes the named benefits task to residents in Korea.')], globalFallback: { sourceIds: ['domain-2', 'domain-3'], gap: 'Only one independently operated local service exposed the complete task state publicly.' } },
+    design: { localSources: [localSource('visual', fixture.source.evidence.sha256, 'The inspected gallery item shows Korean product hierarchy and type at the target viewport.')], globalFallback: null } };
   const parsed = parseReferenceResearch({ ...input, marketCoverage: documented });
   assert.doesNotThrow(() => validateReferenceResearch(fixture.root, parsed, options));
   const globalQuery = 'global public benefits examples';
   const globalReceipt = searchReceiptAt(fixture.root, 'domain', testSearchReceipt(
     fixture.root, 'domain', globalQuery, [fixture.domain.source],
-  ), '2026-09-19T00:00:00.000Z');
+  ), '2026-09-20T00:00:00.000Z');
   const wrongOrder = { ...input, marketCoverage: documented, domainReference: { ...input.domainReference,
     queries: [...domainQueries, globalQuery], searches: [...input.domainReference.searches, globalReceipt] } };
   assert.throws(() => validateReferenceResearch(fixture.root, parseReferenceResearch(wrongOrder), options), /SEARCH_ORDER/);
+  writeFileSync(join(fixture.root, '.omd/domain-brief.json'), JSON.stringify({ ...domainBrief, request: 'Another task' }));
+  assert.throws(() => validateReferenceResearch(fixture.root, parsed, options), /MARKET_DESIGN_PLAN_STALE/);
 });
 
 test('market coverage refuses unqualified search order and fallback without a gap', t => {
@@ -117,8 +121,10 @@ test('market coverage refuses unqualified search order and fallback without a ga
   }));
   writeFileSync(join(fixture.root, '.omd/domain-brief.json'), JSON.stringify(domainBrief));
   const coverage = { marketRegion: 'KR',
-    domain: { localSources: ['domain-1', 'domain-2', 'domain-3'].map(sourceId => ({ sourceId, reason: `${sourceId} serves the captured Korean benefits task.` })), globalFallback: null },
-    design: { localSources: [{ sourceId: 'visual', reason: 'The inspected item shows a Korean product interface.' }], globalFallback: null } };
+    domain: { localSources: fixture.research.domainReference.sources.map(source => localSource(
+      source.id, source.evidence.sha256, `${source.id} serves the captured Korean benefits task.`,
+    )), globalFallback: null },
+    design: { localSources: [localSource('visual', fixture.source.evidence.sha256, 'The inspected item shows a Korean product interface.')], globalFallback: null } };
   const input = { ...fixture.research, schema: REFERENCE_RESEARCH_SCHEMA, marketCoverage: coverage };
   assert.throws(() => validateReferenceResearch(fixture.root, parseReferenceResearch(input), options), /MARKET_DOMAIN_SEARCH_REQUIRED/);
   const exactDomainQueries = ['대한민국 public benefits', 'South Korea public benefits service'];
@@ -138,6 +144,16 @@ test('market coverage refuses unqualified search order and fallback without a ga
   assert.ok(firstLocalSource);
   firstLocalSource.reason = ' ';
   assert.throws(() => parseReferenceResearch({ ...input, marketCoverage: emptyLocalReason }), /LOCAL_REASON/);
+  const wrongLocalEvidence = structuredClone(coverage);
+  const wrongEvidenceSource = wrongLocalEvidence.domain.localSources[0];
+  assert.ok(wrongEvidenceSource);
+  wrongEvidenceSource.evidenceSha256 = '0'.repeat(64);
+  assert.throws(() => parseReferenceResearch({ ...input, marketCoverage: wrongLocalEvidence }), /LOCAL_EVIDENCE/);
+  const malformedLocalReason = structuredClone(coverage);
+  const malformedReasonSource = malformedLocalReason.domain.localSources[0];
+  assert.ok(malformedReasonSource);
+  malformedReasonSource.reason = `The captured market signal is malformed \ud800`;
+  assert.throws(() => parseReferenceResearch({ ...input, marketCoverage: malformedLocalReason }), /LOCAL_REASON/);
   const invisibleGap = { ...coverage, domain: {
     localSources: coverage.domain.localSources.slice(0, 2),
     globalFallback: { sourceIds: ['domain-3'], gap: '\u200b' },
@@ -146,8 +162,11 @@ test('market coverage refuses unqualified search order and fallback without a ga
   const oversizedGap = { ...invisibleGap, domain: { ...invisibleGap.domain,
     globalFallback: { sourceIds: ['domain-3'], gap: 'x'.repeat(4097) } } };
   assert.throws(() => parseReferenceResearch({ ...input, marketCoverage: oversizedGap }), /FALLBACK_GAP/);
+  const malformedGap = { ...invisibleGap, domain: { ...invisibleGap.domain,
+    globalFallback: { sourceIds: ['domain-3'], gap: `No additional public local operator was found \ud800` } } };
+  assert.throws(() => parseReferenceResearch({ ...input, marketCoverage: malformedGap }), /FALLBACK_GAP/);
   const direct = { ...input,
-    domainReference: { ...input.domainReference, queries: [], searches: [], discoveryRoots: [rootEnvelope('domain')] },
+    domainReference: { ...input.domainReference, queries: [], searches: [], discoveryRoots: [{ ...rootEnvelope('domain'), reason: 'NOT serving KR; global directory only.' }] },
     designReference: { ...input.designReference, queries: [], searches: [], discoveryRoots: [rootEnvelope('design')] },
   };
   assert.throws(() => validateMarketReferenceCoverage(fixture.root, parseReferenceResearch(direct)), /MARKET_DOMAIN_DIRECT_ROOT_REQUIRED/);

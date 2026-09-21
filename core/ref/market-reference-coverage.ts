@@ -8,7 +8,7 @@ import type { ReferenceResearch } from './reference-research-contract.ts';
 import { isMarketQualifiedQuery, marketDomainQueries, marketSearchLabels } from './market-reference.ts';
 
 export type MarketLaneCoverage = Readonly<{
-  localSources: readonly Readonly<{ sourceId: string; reason: string }>[];
+  localSources: readonly Readonly<{ sourceId: string; evidenceSha256: string; reason: string }>[];
   globalFallback: Readonly<{ sourceIds: readonly string[]; gap: string }> | null;
 }>;
 export type MarketReferenceCoverage = Readonly<{
@@ -19,6 +19,8 @@ export type MarketReferenceCoverage = Readonly<{
 
 const reject = (code: string): never => { throw new Error(code); };
 const INVISIBLE = /[\p{Cc}\p{Default_Ignorable_Code_Point}\p{White_Space}\u2800\u3164\uffa0]/gu;
+const DIRECT_NEGATION = /\b(?:not|no|doesn't|does not|outside|unsupported|global only)\b|아님|아니다|제외|미지원/iu;
+type SourceIdentity = Readonly<{ id: string; evidence: Readonly<{ sha256: string }> }>;
 function object(value: unknown, code: string): Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return reject(code);
   return value as Record<string, unknown>;
@@ -30,7 +32,15 @@ function exact(value: Record<string, unknown>, keys: readonly string[], code: st
 function text(value: unknown, code: string): string {
   if (typeof value !== 'string') return reject(code);
   const result = value.trim();
-  if (!result || result.length > 4096 || !result.replace(INVISIBLE, '')) return reject(code);
+  if (!result || result.length > 4096 || !result.replace(INVISIBLE, '') || Array.from(result).some(character => {
+    const point = character.codePointAt(0) ?? 0;
+    return point >= 0xd800 && point <= 0xdfff;
+  })) return reject(code);
+  return result;
+}
+function explanation(value: unknown, code: string): string {
+  const result = text(value, code);
+  if (result.replace(INVISIBLE, '').length < 20) return reject(code);
   return result;
 }
 function texts(value: unknown, code: string): readonly string[] {
@@ -39,7 +49,7 @@ function texts(value: unknown, code: string): readonly string[] {
   if (new Set(result).size !== result.length) return reject(`${code}_DUPLICATE`);
   return Object.freeze(result);
 }
-function lane(value: unknown, sourceIds: readonly string[], label: string): MarketLaneCoverage {
+function lane(value: unknown, sources: readonly SourceIdentity[], label: string): MarketLaneCoverage {
   const code = `REFERENCE_RESEARCH_MARKET_${label.toUpperCase()}`;
   const input = object(value, code);
   exact(input, ['localSources', 'globalFallback'], `${code}_KEYS`);
@@ -47,9 +57,12 @@ function lane(value: unknown, sourceIds: readonly string[], label: string): Mark
     || Object.keys(input.localSources).length !== input.localSources.length) return reject(`${code}_LOCAL`);
   const localSources = Object.freeze(input.localSources.map(value => {
     const source = object(value, `${code}_LOCAL`);
-    exact(source, ['sourceId', 'reason'], `${code}_LOCAL_KEYS`);
-    return Object.freeze({ sourceId: text(source.sourceId, `${code}_LOCAL_ID`),
-      reason: text(source.reason, `${code}_LOCAL_REASON`) });
+    exact(source, ['sourceId', 'evidenceSha256', 'reason'], `${code}_LOCAL_KEYS`);
+    const sourceId = text(source.sourceId, `${code}_LOCAL_ID`);
+    const retained = sources.find(candidate => candidate.id === sourceId);
+    if (retained === undefined || source.evidenceSha256 !== retained.evidence.sha256) return reject(`${code}_LOCAL_EVIDENCE`);
+    return Object.freeze({ sourceId, evidenceSha256: retained.evidence.sha256,
+      reason: explanation(source.reason, `${code}_LOCAL_REASON`) });
   }));
   let globalFallback: MarketLaneCoverage['globalFallback'] = null;
   if (input.globalFallback !== null) {
@@ -57,10 +70,11 @@ function lane(value: unknown, sourceIds: readonly string[], label: string): Mark
     exact(fallback, ['sourceIds', 'gap'], `${code}_FALLBACK_KEYS`);
     globalFallback = Object.freeze({
       sourceIds: texts(fallback.sourceIds, `${code}_FALLBACK_SOURCES`),
-      gap: text(fallback.gap, `${code}_FALLBACK_GAP`),
+      gap: explanation(fallback.gap, `${code}_FALLBACK_GAP`),
     });
   }
   const classified = [...localSources.map(source => source.sourceId), ...globalFallback?.sourceIds ?? []];
+  const sourceIds = sources.map(source => source.id);
   if (new Set(classified).size !== classified.length || classified.length !== sourceIds.length
     || classified.some(id => !sourceIds.includes(id))) return reject(`${code}_COVERAGE`);
   return Object.freeze({ localSources, globalFallback });
@@ -68,8 +82,8 @@ function lane(value: unknown, sourceIds: readonly string[], label: string): Mark
 
 export function parseMarketReferenceCoverage(
   value: unknown,
-  domainIds: readonly string[],
-  designIds: readonly string[],
+  domainSources: readonly SourceIdentity[],
+  designSources: readonly SourceIdentity[],
 ): MarketReferenceCoverage | null {
   if (value === null) return null;
   const input = object(value, 'REFERENCE_RESEARCH_MARKET_COVERAGE');
@@ -77,10 +91,10 @@ export function parseMarketReferenceCoverage(
   const marketRegion = text(input.marketRegion, 'REFERENCE_RESEARCH_MARKET_REGION').toUpperCase();
   if (!/^(?:[A-Z]{2}|\d{3})$/.test(marketRegion)) return reject('REFERENCE_RESEARCH_MARKET_REGION');
   return Object.freeze({ marketRegion,
-    domain: lane(input.domain, domainIds, 'domain'), design: lane(input.design, designIds, 'design') });
+    domain: lane(input.domain, domainSources, 'domain'), design: lane(input.design, designSources, 'design') });
 }
 
-export function validateMarketReferenceCoverage(root: string, research: ReferenceResearch): void {
+export function validateMarketReferenceCoverage(root: string, research: ReferenceResearch, expectedRequest?: string): void {
   const contextPath = resolve(root, '.omd/locale-design-context.json');
   if (!existsSync(contextPath)) {
     if (research.schema === 'reference-research-v7' && research.marketCoverage !== null) return reject('REFERENCE_RESEARCH_MARKET_CONTEXT_REQUIRED');
@@ -105,7 +119,9 @@ export function validateMarketReferenceCoverage(root: string, research: Referenc
     ['DESIGN', research.designReference.discoveryRoots],
   ] as const;
   for (const [name, roots] of directLanes) {
-    if (roots?.some(root => !marketTokens.some(token => root.reason.includes(token)))) {
+    if (roots?.some(root => DIRECT_NEGATION.test(root.reason)
+      || root.reason.replace(INVISIBLE, '').length < 20
+      || !marketTokens.some(token => root.reason.includes(token)))) {
       return reject(`REFERENCE_RESEARCH_MARKET_${name}_DIRECT_ROOT_REQUIRED: explain how each direct root scopes discovery to the explicit market`);
     }
   }
@@ -120,6 +136,9 @@ export function validateMarketReferenceCoverage(root: string, research: Referenc
   if (!existsSync(briefPath)) return reject('REFERENCE_RESEARCH_MARKET_DESIGN_PLAN_REQUIRED: current domain queries are missing');
   const briefBytes = readStableProjectFile({ root: resolve(root), path: briefPath, label: '.omd/domain-brief.json', fs: nodeStableProjectFileSystem() });
   const brief = validateDomainBrief(JSON.parse(briefBytes.toString('utf8')));
+  if (expectedRequest === undefined || brief.request !== expectedRequest.trim()) {
+    return reject('REFERENCE_RESEARCH_MARKET_DESIGN_PLAN_STALE: current domain queries describe another request');
+  }
   const base = [...brief.referenceQueries.mood, ...brief.referenceQueries.component][0];
   if (base === undefined) return reject('REFERENCE_RESEARCH_MARKET_DESIGN_PLAN_REQUIRED: current domain queries are empty');
   const designQueries = labels.map(label => `${label} ${context.domain} ${base}`);
@@ -150,7 +169,7 @@ function validateExecutionOrder(
   if (expected.some(execution => !Number.isFinite(execution.observedAt))) return reject(`REFERENCE_RESEARCH_MARKET_${lane}_SEARCH_TIME`);
   const latestRequired = Math.max(...expected.map(execution => execution.observedAt));
   if (executions.some(execution => !isMarketQualifiedQuery(execution.query, labels)
-    && (!Number.isFinite(execution.observedAt) || execution.observedAt < latestRequired))) {
+    && (!Number.isFinite(execution.observedAt) || execution.observedAt <= latestRequired))) {
     return reject(`REFERENCE_RESEARCH_MARKET_${lane}_SEARCH_ORDER: target-market searches must execute before global searches`);
   }
 }

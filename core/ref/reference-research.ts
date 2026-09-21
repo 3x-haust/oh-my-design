@@ -133,7 +133,7 @@ export function validateReferenceResearch(
   if (research.sourceContractSha256 !== options.expectedSourceContractSha256) {
     fail('REFERENCE_RESEARCH_SOURCE_CONTRACT_STALE');
   }
-  validateMarketReferenceCoverage(root, research);
+  validateMarketReferenceCoverage(root, research, options.expectedRequest);
   const serviceIdentity = research.schema === 'reference-research-v5' ? referenceServiceHost : referenceServiceFamily;
   const directRoots = { domain: readResearchDiscoveryRoots(root, research.domainReference), design: readResearchDiscoveryRoots(root, research.designReference) };
   const domainHosts = new Set(research.domainReference.sources.map(item => serviceIdentity(item.url)));

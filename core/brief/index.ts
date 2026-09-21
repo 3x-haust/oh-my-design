@@ -472,6 +472,7 @@ export function buildBrief(
       validateReferenceResearch(root, research, {
         expectedSourceContractSha256: route.sourceContractSha256,
         benchmarkRequired: route.gates.includes('greenfield-task-flow-benchmark'),
+        expectedRequest: route.request,
       });
       referenceApplication = checkReferenceApplication(root, {
         expectedSourceContractSha256: route.sourceContractSha256,

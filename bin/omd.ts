@@ -2413,6 +2413,7 @@ async function cmdRefResearch(mode: 'set' | 'check', opts: Opts): Promise<never>
   const validation = {
     expectedSourceContractSha256: route.sourceContractSha256,
     benchmarkRequired: route.gates.includes('greenfield-task-flow-benchmark'),
+    expectedRequest: route.request,
   };
   validateReferenceResearch(process.cwd(), research, validation);
   const path = '.omd/reference-research.json';

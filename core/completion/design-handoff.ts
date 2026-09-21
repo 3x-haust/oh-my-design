@@ -66,6 +66,7 @@ export function validateDesignHandoffArtifacts(root: string, route: AdaptiveRout
     validateReferenceResearch(root, readPublishedReferenceResearch(root), {
       expectedSourceContractSha256: route.sourceContractSha256,
       benchmarkRequired: route.gates.includes('greenfield-task-flow-benchmark'),
+      expectedRequest: route.request,
     });
     checkReferenceApplication(root, { expectedSourceContractSha256: route.sourceContractSha256,
       benchmarkRequired: route.gates.includes('greenfield-task-flow-benchmark'), expectedRequest: route.request });
