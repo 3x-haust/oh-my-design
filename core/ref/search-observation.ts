@@ -1,246 +1,142 @@
 import type { Page } from 'playwright';
 
 export async function renderedState(page: Page) {
-  const anchors = await page.locator('a[href]').evaluateAll(elements => {
-    const pointerless = Array.from(document.querySelectorAll('*')).filter(element => getComputedStyle(element).pointerEvents === 'none');
-    return elements.flatMap(element => {
-    if (!(element instanceof HTMLAnchorElement)) return [];
-    const href = element.href;
+  const rendered = await page.locator('body').evaluate(body => {
+    const pointerless = Array.from(document.querySelectorAll<HTMLElement>('*'))
+      .filter(element => getComputedStyle(element).pointerEvents === 'none')
+      .map(element => ({ element, value: element.style.getPropertyValue('pointer-events'),
+        priority: element.style.getPropertyPriority('pointer-events') }));
+    for (const entry of pointerless) entry.element.style.setProperty('pointer-events', 'auto', 'important');
     try {
-      const link = new URL(href);
-      if (link.protocol !== 'https:' || link.username || link.password || link.hash) return [];
-    } catch { return []; }
-    const box = element.getBoundingClientRect();
-    const left = Math.max(0, box.left); const right = Math.min(innerWidth, box.right);
-    const top = Math.max(0, box.top); const bottom = Math.min(innerHeight, box.bottom);
-    if (right <= left || bottom <= top) return [];
-    for (let ancestor: Element | null = element; ancestor; ancestor = ancestor.parentElement) {
-      const style = getComputedStyle(ancestor);
-      if (style.display === 'none' || style.visibility !== 'visible' || Number(style.opacity) === 0
-        || style.contentVisibility === 'hidden') return [];
-    }
-    const hit = document.elementFromPoint((left + right) / 2, (top + bottom) / 2);
-    if (!hit || !element.contains(hit)) return [];
-    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
-    const lines: string[] = [];
-    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-      const parent = node.parentElement;
-      if (parent === null) continue;
-      let hidden = false;
-      let opacity = 1;
-      const ancestors: Element[] = [];
-      const styles: CSSStyleDeclaration[] = [];
-      for (let ancestor: Element | null = parent; ancestor; ancestor = ancestor.parentElement) {
-        const style = getComputedStyle(ancestor);
-        ancestors.push(ancestor); styles.push(style);
-        const level = Number(style.opacity); opacity *= Number.isFinite(level) ? level : 1;
-        const matrix = style.transform === 'none' ? null : new DOMMatrixReadOnly(style.transform);
-        const mask = style.getPropertyValue('mask-image') || style.getPropertyValue('-webkit-mask-image');
-        if (style.display === 'none' || style.visibility !== 'visible' || opacity < 0.05
-          || style.contentVisibility === 'hidden' || (style.clipPath !== 'none' && !/^inset\(0(?:px|%)?\)$/.test(style.clipPath))
-          || style.clip !== 'auto' || /opacity\(\s*(?:0(?:\.0+)?|0%)\s*\)|blur\(\s*(?:[89]|[1-9]\d)(?:\.\d+)?px/.test(style.filter)
-          || style.mixBlendMode !== 'normal' || style.backgroundImage !== 'none'
-          || (!['', 'none'].includes(mask) && !/^linear-gradient\(rgb\(0, 0, 0\), rgb\(0, 0, 0\)\)$/.test(mask))
-          || (matrix !== null && Math.min(Math.hypot(matrix.a, matrix.b), Math.hypot(matrix.c, matrix.d)) < 0.05)) { hidden = true; break; }
+      const anchors = new Map<HTMLAnchorElement, { href: string; text: string[]; left: number; right: number; top: number; bottom: number }>();
+      for (const element of body.querySelectorAll<HTMLAnchorElement>('a[href]')) {
+        let href: string;
+        try { href = new URL(element.href).href; } catch { continue; }
+        if (!element.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) continue;
+        const box = element.getBoundingClientRect();
+        if (box.width <= 0 || box.height <= 0 || box.right <= 0 || box.bottom <= 0
+          || box.left >= innerWidth || box.top >= innerHeight) continue;
+        anchors.set(element, { href, text: [], left: box.left, right: box.right, top: box.top, bottom: box.bottom });
       }
-      const color = styles[0]?.color ?? '';
-      const fill = styles[0]?.getPropertyValue('-webkit-text-fill-color') ?? '';
-      const backgrounds = styles.map(style => style.backgroundColor);
-      let red = 255; let green = 255; let blue = 255;
-      for (let index = backgrounds.length - 1; index >= 0; index--) {
-        const channels = backgrounds[index]!.match(/[\d.]+/g)?.map(Number) ?? [];
-        if (channels.length < 3) continue;
-        const alpha = channels[3] ?? 1;
-        red = channels[0]! * alpha + red * (1 - alpha);
-        green = channels[1]! * alpha + green * (1 - alpha);
-        blue = channels[2]! * alpha + blue * (1 - alpha);
-      }
-      const foreground = (fill && fill !== 'currentcolor' ? fill : color).match(/[\d.]+/g)?.map(Number) ?? [];
-      const foregroundAlpha = (foreground[3] ?? 1) * opacity;
-      const textRed = (foreground[0] ?? red) * foregroundAlpha + red * (1 - foregroundAlpha);
-      const textGreen = (foreground[1] ?? green) * foregroundAlpha + green * (1 - foregroundAlpha);
-      const textBlue = (foreground[2] ?? blue) * foregroundAlpha + blue * (1 - foregroundAlpha);
-      const backgroundLum = 0.2126 * (red <= 10.016 ? red / 3294.6 : Math.pow((red / 255 + .055) / 1.055, 2.4))
-        + 0.7152 * (green <= 10.016 ? green / 3294.6 : Math.pow((green / 255 + .055) / 1.055, 2.4))
-        + 0.0722 * (blue <= 10.016 ? blue / 3294.6 : Math.pow((blue / 255 + .055) / 1.055, 2.4));
-      const textLum = 0.2126 * (textRed <= 10.016 ? textRed / 3294.6 : Math.pow((textRed / 255 + .055) / 1.055, 2.4))
-        + 0.7152 * (textGreen <= 10.016 ? textGreen / 3294.6 : Math.pow((textGreen / 255 + .055) / 1.055, 2.4))
-        + 0.0722 * (textBlue <= 10.016 ? textBlue / 3294.6 : Math.pow((textBlue / 255 + .055) / 1.055, 2.4));
-      const contrast = (Math.max(backgroundLum, textLum) + .05) / (Math.min(backgroundLum, textLum) + .05);
-      if (hidden || color === 'transparent' || /^rgba\([^)]*,\s*0(?:\.0+)?\)$/.test(color)
-        || /^rgb\([^)]*\/\s*0(?:\.0+)?\)$/.test(color)
-        || fill === 'transparent' || /^rgba\([^)]*,\s*0(?:\.0+)?\)$/.test(fill)
-        || /^rgb\([^)]*\/\s*0(?:\.0+)?\)$/.test(fill)
-        || styles[0]?.fontSize === '0px' || contrast < 1.5) continue;
-      const range = document.createRange(); range.selectNodeContents(node);
-      const rendered = Array.from(range.getClientRects()).some(rect => {
-        let left = Math.max(0, rect.left); let right = Math.min(innerWidth, rect.right);
-        let top = Math.max(0, rect.top); let bottom = Math.min(innerHeight, rect.bottom);
-        for (let index = 0; index < ancestors.length; index++) {
-          const style = styles[index]!; const box = ancestors[index]!.getBoundingClientRect();
-          if (style.overflowX !== 'visible') { left = Math.max(left, box.left); right = Math.min(right, box.right); }
-          if (style.overflowY !== 'visible') { top = Math.max(top, box.top); bottom = Math.min(bottom, box.bottom); }
+
+      const visibleText: string[] = [];
+      const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        const parent = node.parentElement;
+        const value = (node.textContent ?? '').replace(/\s+/g, ' ').trim();
+        if (!(parent instanceof HTMLElement) || value === '') continue;
+
+        const styles: CSSStyleDeclaration[] = [];
+        let opacity = 1; let transformScale = 1; let filterOpacity = 1; let hidden = false;
+        for (let ancestor: HTMLElement | null = parent; ancestor; ancestor = ancestor.parentElement) {
+          const style = getComputedStyle(ancestor); styles.push(style);
+          const level = Number(style.opacity); opacity *= Number.isFinite(level) ? level : 1;
+          if (style.transform !== 'none') {
+            const matrix = new DOMMatrixReadOnly(style.transform);
+            transformScale *= Math.min(Math.hypot(matrix.a, matrix.b), Math.hypot(matrix.c, matrix.d));
+          }
+          for (const match of style.filter.matchAll(/opacity\(\s*([0-9.]+)(%)?\s*\)/g)) {
+            const amount = Number(match[1]); filterOpacity *= match[2] ? amount / 100 : amount;
+          }
+          if (style.display === 'none' || style.visibility !== 'visible' || opacity < .05
+            || transformScale < .05 || filterOpacity < .05 || style.contentVisibility === 'hidden'
+            || /^inset\(100%/.test(style.clipPath)
+            || /blur\(\s*(?:[89]|[1-9]\d)(?:\.\d+)?px/.test(style.filter)
+            || style.mixBlendMode !== 'normal') { hidden = true; break; }
         }
-        if (right <= left || bottom <= top) return false;
-        const x = (left + right) / 2; const y = (top + bottom) / 2;
-        const occluded = Array.from(parent.querySelectorAll('*')).some(candidate => {
-          const style = getComputedStyle(candidate); const box = candidate.getBoundingClientRect();
-          const background = style.backgroundColor;
-          const z = Number.parseInt(style.zIndex, 10);
-          return ['absolute', 'fixed', 'sticky'].includes(style.position) && (!Number.isFinite(z) || z >= 0)
-            && style.visibility === 'visible' && Number(style.opacity) >= 0.05
-            && background !== 'transparent' && !/^rgba\([^)]*,\s*0(?:\.0+)?\)$/.test(background)
-            && !/^rgb\([^)]*\/\s*0(?:\.0+)?\)$/.test(background)
-            && box.left <= x && box.right >= x && box.top <= y && box.bottom >= y;
-        });
-        const pointerlessOccluded = pointerless.some(candidate => {
-          if (candidate === parent || candidate.contains(parent) || parent.contains(candidate)) return false;
-          const style = getComputedStyle(candidate); const box = candidate.getBoundingClientRect();
-          const z = Number.parseInt(style.zIndex, 10); const follows = Boolean(parent.compareDocumentPosition(candidate) & Node.DOCUMENT_POSITION_FOLLOWING);
-          return ['absolute', 'fixed', 'sticky'].includes(style.position) && (z > 0 || (!Number.isFinite(z) && follows))
-            && style.visibility === 'visible' && Number(style.opacity) >= .05 && box.left <= x && box.right >= x
-            && box.top <= y && box.bottom >= y && style.backgroundColor !== 'transparent'
-            && !/^rgba\([^)]*,\s*0(?:\.0+)?\)$/.test(style.backgroundColor)
-            && !/^rgb\([^)]*\/\s*0(?:\.0+)?\)$/.test(style.backgroundColor);
-        });
-        let pseudoOccluded = false;
-        const proofContainer = parent.closest('a, h1, h2, h3, p, li, button, [role="heading"]');
-        const pseudoOwners = proofContainer && proofContainer !== parent ? [parent, proofContainer] : [parent];
-        for (const owner of pseudoOwners) {
-          if (pseudoOccluded) break;
-          pseudoOccluded = ['::before', '::after'].some(pseudo => {
-            const style = getComputedStyle(owner, pseudo); const box = owner.getBoundingClientRect();
-            const background = style.backgroundColor; const z = Number.parseInt(style.zIndex, 10);
-            const horizontal = (style.left !== 'auto' && style.right !== 'auto') || Number.parseFloat(style.width) >= box.width;
-            const vertical = (style.top !== 'auto' && style.bottom !== 'auto') || Number.parseFloat(style.height) >= box.height;
-            const aboveText = pseudo === '::after' ? !Number.isFinite(z) || z >= 0 : Number.isFinite(z) && z > 0;
-            return !['none', 'normal'].includes(style.content) && ['absolute', 'fixed', 'sticky'].includes(style.position)
-              && aboveText && horizontal && vertical && box.left <= x && box.right >= x
-              && box.top <= y && box.bottom >= y && background !== 'transparent'
-              && !/^rgba\([^)]*,\s*0(?:\.0+)?\)$/.test(background) && !/^rgb\([^)]*\/\s*0(?:\.0+)?\)$/.test(background);
+        const color = styles[0]?.color ?? '';
+        const fill = styles[0]?.getPropertyValue('-webkit-text-fill-color') ?? '';
+        if (hidden || color === 'transparent' || fill === 'transparent'
+          || /^rgba\([^)]*,\s*0(?:\.0+)?\)$/.test(color) || /^rgb\([^)]*\/\s*0(?:\.0+)?\)$/.test(color)) continue;
+
+        let background = 'rgb(255, 255, 255)';
+        for (const style of styles) {
+          const candidate = style.backgroundColor;
+          if (candidate !== 'transparent' && !/^rgba\([^)]*,\s*0(?:\.0+)?\)$/.test(candidate)
+            && !/^rgb\([^)]*\/\s*0(?:\.0+)?\)$/.test(candidate)) { background = candidate; break; }
+        }
+        const foregroundRgb = color.match(/[\d.]+/g)?.slice(0, 3).map(Number);
+        const backgroundRgb = background.match(/[\d.]+/g)?.slice(0, 3).map(Number);
+        if (foregroundRgb?.length === 3 && backgroundRgb?.length === 3) {
+          const foregroundLuminance = foregroundRgb.map(channel => channel / 255)
+            .map(channel => channel <= .04045 ? channel / 12.92 : ((channel + .055) / 1.055) ** 2.4)
+            .reduce((sum, channel, index) => sum + channel * [.2126, .7152, .0722][index]!, 0);
+          const backgroundLuminance = backgroundRgb.map(channel => channel / 255)
+            .map(channel => channel <= .04045 ? channel / 12.92 : ((channel + .055) / 1.055) ** 2.4)
+            .reduce((sum, channel, index) => sum + channel * [.2126, .7152, .0722][index]!, 0);
+          if ((Math.max(foregroundLuminance, backgroundLuminance) + .05)
+            / (Math.min(foregroundLuminance, backgroundLuminance) + .05) < 1.2) continue;
+        }
+
+        const range = document.createRange(); range.selectNodeContents(node);
+        const rects = Array.from(range.getClientRects()).filter(rect => rect.width > 0 && rect.height > 0
+          && rect.right > 0 && rect.bottom > 0 && rect.left < innerWidth && rect.top < innerHeight);
+        const textVisible = rects.some(rect => {
+          const points = [[rect.left + 1, rect.top + 1], [rect.right - 1, rect.top + 1],
+            [rect.left + rect.width / 2, rect.top + rect.height / 2],
+            [rect.left + 1, rect.bottom - 1], [rect.right - 1, rect.bottom - 1]];
+          return points.some(([rawX, rawY]) => {
+            const x = Math.min(innerWidth - 1, Math.max(0, rawX ?? 0));
+            const y = Math.min(innerHeight - 1, Math.max(0, rawY ?? 0));
+            const stack = document.elementsFromPoint(x, y);
+            const parentIndex = stack.findIndex(element => element === parent || element.contains(parent));
+            if (parentIndex < 0) return false;
+            const covered = stack.slice(0, parentIndex).some(candidate => {
+              if (candidate.contains(parent)) return false;
+              const style = getComputedStyle(candidate); let alpha = 1;
+              for (let owner: Element | null = candidate; owner; owner = owner.parentElement) {
+                const amount = Number(getComputedStyle(owner).opacity); alpha *= Number.isFinite(amount) ? amount : 1;
+              }
+              const colour = style.backgroundColor;
+              const alphaMatch = colour.match(/rgba\([^)]*,\s*([\d.]+)\)|rgb\([^)]*\/\s*([\d.]+)(%)?\)/);
+              const colourAlpha = alphaMatch ? Number(alphaMatch[1] ?? alphaMatch[2]) / (alphaMatch[3] ? 100 : 1)
+                : colour === 'transparent' ? 0 : 1;
+              const painted = colourAlpha >= .05 || style.backgroundImage !== 'none'
+                || ['IMG', 'VIDEO', 'CANVAS', 'SVG', 'PICTURE'].includes(candidate.tagName);
+              return alpha >= .05 && painted;
+            });
+            if (covered) return false;
+
+            const proofContainer = parent.closest('a, h1, h2, h3, p, li, button, [role="heading"]');
+            const pseudoOwners = proofContainer && proofContainer !== parent ? [parent, proofContainer] : [parent];
+            for (const owner of pseudoOwners) {
+              const ownerBox = owner.getBoundingClientRect();
+              const pseudoCovered = ['::before', '::after'].some(pseudo => {
+                const style = getComputedStyle(owner, pseudo); const z = Number.parseInt(style.zIndex, 10);
+                const horizontal = (style.left !== 'auto' && style.right !== 'auto') || Number.parseFloat(style.width) >= ownerBox.width;
+                const vertical = (style.top !== 'auto' && style.bottom !== 'auto') || Number.parseFloat(style.height) >= ownerBox.height;
+                const aboveText = pseudo === '::after' ? !Number.isFinite(z) || z >= 0 : Number.isFinite(z) && z > 0;
+                const colour = style.backgroundColor;
+                const alphaMatch = colour.match(/rgba\([^)]*,\s*([\d.]+)\)|rgb\([^)]*\/\s*([\d.]+)(%)?\)/);
+                const colourAlpha = alphaMatch ? Number(alphaMatch[1] ?? alphaMatch[2]) / (alphaMatch[3] ? 100 : 1)
+                  : colour === 'transparent' ? 0 : 1;
+                return !['none', 'normal'].includes(style.content) && ['absolute', 'fixed', 'sticky'].includes(style.position)
+                  && aboveText && horizontal && vertical && Number(style.opacity) >= .05
+                  && x >= ownerBox.left && x <= ownerBox.right && y >= ownerBox.top && y <= ownerBox.bottom
+                  && (colourAlpha >= .05 || style.backgroundImage !== 'none');
+              });
+              if (pseudoCovered) return false;
+            }
+            return true;
           });
-        }
-        if (occluded || pointerlessOccluded || pseudoOccluded) return false;
-        const front = document.elementsFromPoint(x, y)[0];
-        return front === parent || front?.contains(parent) === true;
-      });
-      range.detach();
-      const value = (node.textContent ?? '').replace(/\s+/g, ' ').trim();
-      if (rendered && value) lines.push(value);
-    }
-      return [{ href, text: lines.join(' ').slice(0, 4096), left, right, top, bottom }];
-    }).slice(0, 2000);
-  });
-  const visibleText = await page.locator('body').evaluate(body => {
-    const pointerless = Array.from(document.querySelectorAll('*')).filter(element => getComputedStyle(element).pointerEvents === 'none');
-    const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT);
-    const lines: string[] = [];
-    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-      const parent = node.parentElement;
-      if (parent === null || parent.closest('h1, h2, h3, p, li, a, button, [role="heading"]') === null) continue;
-      let hidden = false;
-      let opacity = 1;
-      const ancestors: Element[] = [];
-      const styles: CSSStyleDeclaration[] = [];
-      for (let ancestor: Element | null = parent; ancestor; ancestor = ancestor.parentElement) {
-        const style = getComputedStyle(ancestor);
-        ancestors.push(ancestor); styles.push(style);
-        const level = Number(style.opacity); opacity *= Number.isFinite(level) ? level : 1;
-        const matrix = style.transform === 'none' ? null : new DOMMatrixReadOnly(style.transform);
-        const mask = style.getPropertyValue('mask-image') || style.getPropertyValue('-webkit-mask-image');
-        if (style.display === 'none' || style.visibility !== 'visible' || opacity < 0.05
-          || style.contentVisibility === 'hidden' || (style.clipPath !== 'none' && !/^inset\(0(?:px|%)?\)$/.test(style.clipPath))
-          || style.clip !== 'auto' || /opacity\(\s*(?:0(?:\.0+)?|0%)\s*\)|blur\(\s*(?:[89]|[1-9]\d)(?:\.\d+)?px/.test(style.filter)
-          || style.mixBlendMode !== 'normal' || style.backgroundImage !== 'none'
-          || (!['', 'none'].includes(mask) && !/^linear-gradient\(rgb\(0, 0, 0\), rgb\(0, 0, 0\)\)$/.test(mask))
-          || (matrix !== null && Math.min(Math.hypot(matrix.a, matrix.b), Math.hypot(matrix.c, matrix.d)) < 0.05)) { hidden = true; break; }
-      }
-      const color = styles[0]?.color ?? '';
-      const fill = styles[0]?.getPropertyValue('-webkit-text-fill-color') ?? '';
-      const backgrounds = styles.map(style => style.backgroundColor);
-      let red = 255; let green = 255; let blue = 255;
-      for (let index = backgrounds.length - 1; index >= 0; index--) {
-        const channels = backgrounds[index]!.match(/[\d.]+/g)?.map(Number) ?? [];
-        if (channels.length < 3) continue;
-        const alpha = channels[3] ?? 1;
-        red = channels[0]! * alpha + red * (1 - alpha);
-        green = channels[1]! * alpha + green * (1 - alpha);
-        blue = channels[2]! * alpha + blue * (1 - alpha);
-      }
-      const foreground = (fill && fill !== 'currentcolor' ? fill : color).match(/[\d.]+/g)?.map(Number) ?? [];
-      const foregroundAlpha = (foreground[3] ?? 1) * opacity;
-      const textRed = (foreground[0] ?? red) * foregroundAlpha + red * (1 - foregroundAlpha);
-      const textGreen = (foreground[1] ?? green) * foregroundAlpha + green * (1 - foregroundAlpha);
-      const textBlue = (foreground[2] ?? blue) * foregroundAlpha + blue * (1 - foregroundAlpha);
-      const backgroundLum = 0.2126 * (red <= 10.016 ? red / 3294.6 : Math.pow((red / 255 + .055) / 1.055, 2.4))
-        + 0.7152 * (green <= 10.016 ? green / 3294.6 : Math.pow((green / 255 + .055) / 1.055, 2.4))
-        + 0.0722 * (blue <= 10.016 ? blue / 3294.6 : Math.pow((blue / 255 + .055) / 1.055, 2.4));
-      const textLum = 0.2126 * (textRed <= 10.016 ? textRed / 3294.6 : Math.pow((textRed / 255 + .055) / 1.055, 2.4))
-        + 0.7152 * (textGreen <= 10.016 ? textGreen / 3294.6 : Math.pow((textGreen / 255 + .055) / 1.055, 2.4))
-        + 0.0722 * (textBlue <= 10.016 ? textBlue / 3294.6 : Math.pow((textBlue / 255 + .055) / 1.055, 2.4));
-      const contrast = (Math.max(backgroundLum, textLum) + .05) / (Math.min(backgroundLum, textLum) + .05);
-      if (hidden || color === 'transparent' || /^rgba\([^)]*,\s*0(?:\.0+)?\)$/.test(color)
-        || /^rgb\([^)]*\/\s*0(?:\.0+)?\)$/.test(color)
-        || fill === 'transparent' || /^rgba\([^)]*,\s*0(?:\.0+)?\)$/.test(fill)
-        || /^rgb\([^)]*\/\s*0(?:\.0+)?\)$/.test(fill)
-        || styles[0]?.fontSize === '0px' || contrast < 1.5) continue;
-      const range = document.createRange(); range.selectNodeContents(node);
-      const rendered = Array.from(range.getClientRects()).some(rect => {
-        let left = Math.max(0, rect.left); let right = Math.min(innerWidth, rect.right);
-        let top = Math.max(0, rect.top); let bottom = Math.min(innerHeight, rect.bottom);
-        for (let index = 0; index < ancestors.length; index++) {
-          const style = styles[index]!; const box = ancestors[index]!.getBoundingClientRect();
-          if (style.overflowX !== 'visible') { left = Math.max(left, box.left); right = Math.min(right, box.right); }
-          if (style.overflowY !== 'visible') { top = Math.max(top, box.top); bottom = Math.min(bottom, box.bottom); }
-        }
-        if (right <= left || bottom <= top) return false;
-        const x = (left + right) / 2; const y = (top + bottom) / 2;
-        const occluded = Array.from(parent.querySelectorAll('*')).some(candidate => {
-          const style = getComputedStyle(candidate); const box = candidate.getBoundingClientRect();
-          const background = style.backgroundColor;
-          const z = Number.parseInt(style.zIndex, 10);
-          return ['absolute', 'fixed', 'sticky'].includes(style.position) && (!Number.isFinite(z) || z >= 0)
-            && style.visibility === 'visible' && Number(style.opacity) >= 0.05
-            && background !== 'transparent' && !/^rgba\([^)]*,\s*0(?:\.0+)?\)$/.test(background)
-            && !/^rgb\([^)]*\/\s*0(?:\.0+)?\)$/.test(background)
-            && box.left <= x && box.right >= x && box.top <= y && box.bottom >= y;
         });
-        const pointerlessOccluded = pointerless.some(candidate => {
-          if (candidate === parent || candidate.contains(parent) || parent.contains(candidate)) return false;
-          const style = getComputedStyle(candidate); const box = candidate.getBoundingClientRect();
-          const z = Number.parseInt(style.zIndex, 10); const follows = Boolean(parent.compareDocumentPosition(candidate) & Node.DOCUMENT_POSITION_FOLLOWING);
-          return ['absolute', 'fixed', 'sticky'].includes(style.position) && (z > 0 || (!Number.isFinite(z) && follows))
-            && style.visibility === 'visible' && Number(style.opacity) >= .05 && box.left <= x && box.right >= x
-            && box.top <= y && box.bottom >= y && style.backgroundColor !== 'transparent'
-            && !/^rgba\([^)]*,\s*0(?:\.0+)?\)$/.test(style.backgroundColor)
-            && !/^rgb\([^)]*\/\s*0(?:\.0+)?\)$/.test(style.backgroundColor);
-        });
-        let pseudoOccluded = false;
-        const proofContainer = parent.closest('a, h1, h2, h3, p, li, button, [role="heading"]');
-        const pseudoOwners = proofContainer && proofContainer !== parent ? [parent, proofContainer] : [parent];
-        for (const owner of pseudoOwners) {
-          if (pseudoOccluded) break;
-          pseudoOccluded = ['::before', '::after'].some(pseudo => {
-            const style = getComputedStyle(owner, pseudo); const box = owner.getBoundingClientRect();
-            const background = style.backgroundColor; const z = Number.parseInt(style.zIndex, 10);
-            const horizontal = (style.left !== 'auto' && style.right !== 'auto') || Number.parseFloat(style.width) >= box.width;
-            const vertical = (style.top !== 'auto' && style.bottom !== 'auto') || Number.parseFloat(style.height) >= box.height;
-            const aboveText = pseudo === '::after' ? !Number.isFinite(z) || z >= 0 : Number.isFinite(z) && z > 0;
-            return !['none', 'normal'].includes(style.content) && ['absolute', 'fixed', 'sticky'].includes(style.position)
-              && aboveText && horizontal && vertical && box.left <= x && box.right >= x
-              && box.top <= y && box.bottom >= y && background !== 'transparent'
-              && !/^rgba\([^)]*,\s*0(?:\.0+)?\)$/.test(background) && !/^rgb\([^)]*\/\s*0(?:\.0+)?\)$/.test(background);
-          });
-        }
-        if (occluded || pointerlessOccluded || pseudoOccluded) return false;
-        const front = document.elementsFromPoint(x, y)[0];
-        return front === parent || front?.contains(parent) === true;
-      });
-      range.detach();
-      const value = (node.textContent ?? '').replace(/\s+/g, ' ').trim();
-      if (rendered && value) lines.push(value);
+        range.detach();
+        if (!textVisible) continue;
+        visibleText.push(value);
+        const anchor = parent.closest<HTMLAnchorElement>('a[href]');
+        if (anchor && anchors.has(anchor)) anchors.get(anchor)!.text.push(value);
+      }
+      return {
+        anchors: [...anchors.values()].map(anchor => ({ ...anchor, text: anchor.text.join(' ').slice(0, 4096) })).slice(0, 2000),
+        visibleText: visibleText.join('\n'),
+      };
+    } finally {
+      for (const entry of pointerless) {
+        if (entry.value) entry.element.style.setProperty('pointer-events', entry.value, entry.priority);
+        else entry.element.style.removeProperty('pointer-events');
+      }
     }
-    return lines.join('\n').slice(0, 4096);
   });
-  return { anchors, body: await page.locator('body').innerText(), visibleText, url: page.url() };
+  return { anchors: rendered.anchors, body: await page.locator('body').innerText(),
+    visibleText: rendered.visibleText, url: page.url() };
 }

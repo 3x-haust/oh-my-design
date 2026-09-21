@@ -92,6 +92,10 @@ test('common country-code registrable domains remain independent families', t =>
     url: `https://${['alpha', 'bravo', 'charlie'][index]}.com.mx/task` }));
   assert.doesNotThrow(() => parseReferenceResearch({ ...direct,
     domainReference: { ...direct.domainReference, sources: independent } }));
+  const koreanPublicOperators = direct.domainReference.sources.map((source, index) => ({ ...source,
+    url: `https://${['bokjiro', 'seoul', 'youthcenter'][index]}.go.kr/task` }));
+  assert.doesNotThrow(() => parseReferenceResearch({ ...direct,
+    domainReference: { ...direct.domainReference, sources: koreanPublicOperators } }));
 });
 
 test('private public-suffix tenants remain independent service families', t => {

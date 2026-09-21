@@ -85,7 +85,7 @@ test('direct discovery disables browser transports that bypass the pinned HTTP p
 
 test('direct-entry visible text excludes hidden descendant market claims', async t => {
   const result = await capture(t, { url: PUBLIC_DIRECTORY,
-    html: `<main><h1>Global service directory</h1><p>Available services<span style="display:none"> South Korea residents market</span><span style="clip-path:inset(100%)"> South Korea service market</span><span style="color:transparent"> South Korea product audience</span><span style="color:white;background:white"> South Korea benefit service</span><span style="transform:scale(.001)"> South Korea support platform</span><span style="opacity:.1"><span style="opacity:.1"><span style="opacity:.1"> South Korea service for residents</span></span></span></p><a href="${DOMAIN_ITEM}">Inspect service</a></main>` },
+    html: `<main><h1>Global service directory</h1><p>Available services<span style="display:none"> South Korea residents market</span><span style="clip-path:inset(100%)"> South Korea service market</span><span style="color:transparent"> South Korea product audience</span><span style="color:white;background:white"> South Korea benefit service</span><span style="transform:scale(.001)"> South Korea support platform</span><span style="transform:scale(.2)"><span style="transform:scale(.2)"> South Korea support directory</span></span><span style="filter:opacity(.001)"> South Korea product service</span><span style="opacity:.1"><span style="opacity:.1"><span style="opacity:.1"> South Korea service for residents</span></span></span></p><a href="${DOMAIN_ITEM}">Inspect service</a></main>` },
   'public-directory');
   const observation = readCurrentDirectDiscoveryEntry(result.root, result.receipt);
   assert.match(observation.observedText ?? '', /Global service directory/);
@@ -93,8 +93,9 @@ test('direct-entry visible text excludes hidden descendant market claims', async
 });
 
 test('direct-entry visible text excludes copy covered by an opaque child overlay', async t => {
+  const image = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg"%3E%3Crect width="100%25" height="100%25" fill="white"/%3E%3C/svg%3E';
   const result = await capture(t, { url: PUBLIC_DIRECTORY,
-    html: `<main><h1>Global directory</h1><p style="position:relative">South Korea service directory for residents<span style="position:absolute;inset:0;background:white;pointer-events:none">Global catalogue</span></p><a href="${DOMAIN_ITEM}">Inspect service</a></main>` },
+    html: `<main><h1>Global directory</h1><p style="position:relative">South Korea service directory for residents<span style="position:absolute;inset:0;background:white;pointer-events:none">Global catalogue</span></p><p style="position:relative">South Korea product market<img src='${image}' style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1"></p><a href="${DOMAIN_ITEM}">Inspect service</a></main>` },
   'public-directory');
   const observation = readCurrentDirectDiscoveryEntry(result.root, result.receipt);
   assert.match(observation.observedText ?? '', /Global catalogue/);

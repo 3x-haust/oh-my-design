@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { routeAdaptiveFlow, diagnoseAdaptiveRouteInput } from '../core/route/adaptive-flow.ts';
 import { inputSkeleton } from '../core/schema/inputs.ts';
 import omdExtension, { type PortablePiApi, type PortablePiHook, type PortablePiTool } from '../extensions/omd.ts';
@@ -12,6 +13,7 @@ import { classificationAllowsInputRepair, routeInputFailure, routeValidationArgs
 const fixture = () => JSON.parse(readFileSync(new URL('fixtures/adaptive-flow/bootstrap-test013.json', import.meta.url), 'utf8'));
 const inputPath = '.omd/.cache/route-input.json';
 const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('OMD_') && key !== 'NODE_TEST_CONTEXT'));
+const cliPath = fileURLToPath(new URL('../bin/omd.mjs', import.meta.url));
 const final = { role: 'assistant', stopReason: 'stop', content: [{ type: 'text', text: '실행 계획 오류로 중단했습니다.' }] };
 const failureReport = (codes = ['REFERENCE_WORK_MISMATCH']) => JSON.stringify({ schema: 'adaptive-route-validation-v1', ok: false, published: false,
   diagnostics: codes.map(code => ({ path: 'strategyDecision.methods', code, message: `${code}: missing required input` })) });
@@ -85,6 +87,43 @@ test('every route starter has consistent prerequisites; examples do not waive re
     assert.ok(diagnoseAdaptiveRouteInput(input).some(d => d.code === 'SAFETY_WORK_REQUIRED'), name);
     assert.throws(() => routeAdaptiveFlow(input), /SAFETY_WORK_REQUIRED/, name);
   }
+});
+
+test('a fresh explicit Korean market reaches target-market-first discovery through the CLI', t => {
+  const root = mkdtempSync(join(tmpdir(), 'omd-fresh-market-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  mkdirSync(join(root, '.omd/.cache'), { recursive: true });
+  const input = fixture(); repair(input);
+  input.strategyDecision.stages.splice(input.strategyDecision.stages.indexOf('reference-board') + 1, 0, 'reference-selection');
+  input.strategyDecision.skips = input.strategyDecision.skips.filter((skip: { id: string }) => skip.id !== 'reference-selection');
+  const context = {
+    schema: 'locale-design-context-v1', conversationLanguage: 'ko-KR', surfaceLocale: 'ko-KR',
+    marketRegion: 'KR', audience: '한국에서 공공 혜택을 비교하는 주민', domain: 'public benefits',
+    surface: 'product', desiredFit: 'market-grounded', brandInvariants: ['Facts remain source-bound'],
+  };
+  writeFileSync(join(root, inputPath), JSON.stringify(input));
+  writeFileSync(join(root, '.omd/locale-design-context.json'), JSON.stringify(context));
+  const run = (args: string[]) => spawnSync(process.execPath, [cliPath, ...args], {
+    cwd: root, encoding: 'utf8', env, timeout: 20000,
+  });
+  const locale = run(['locale', 'plan', '--input', '.omd/locale-design-context.json', '--json']);
+  assert.equal(locale.status, 0, locale.stderr);
+  assert.equal(JSON.parse(locale.stdout).route.decision, 'research');
+  const routeArgs = ['--input', inputPath, '--locale-context', '.omd/locale-design-context.json', '--json'];
+  const validated = run(['route', 'validate', ...routeArgs]);
+  assert.equal(validated.status, 0, `${validated.stderr}\n${validated.stdout}`);
+  const classified = run(['route', 'classify', ...routeArgs]);
+  assert.equal(classified.status, 0, `${classified.stderr}\n${classified.stdout}`);
+  const discovered = run(['ref', 'discover-plan', '--json']);
+  assert.equal(discovered.status, 0, discovered.stderr);
+  const plan = JSON.parse(discovered.stdout);
+  assert.equal(plan.marketReferencePolicy.mode, 'target-market-first');
+  assert.equal(plan.marketReferencePolicy.marketRegion, 'KR');
+  assert.equal(plan.marketReferencePolicy.targetMarketCoverage, 'required-in-domain-and-design');
+  assert.deepEqual(plan.lanes.slice(0, 2).map((lane: { id: string }) => lane.id),
+    ['domain-reference', 'design-reference']);
+  assert.ok(plan.marketReferencePolicy.domainSearchInputs.length >= 2);
+  assert.ok(plan.designSourcePolicy.nativeSearchInputs.some((entry: { query: string }) => entry.query.startsWith('대한민국 ')));
 });
 
 test('wave parsing explains accepted mode and sequential-host semantics without accepting invented enums', () => {

@@ -70,6 +70,24 @@ test('explicit-market v7 binds local sources and fallback to executed market evi
       searches: [noLoginReceipt, input.domainReference.searches[1]!] } };
   assert.doesNotThrow(() => validateReferenceResearch(fixture.root,
     parseReferenceResearch(noLoginInput), options));
+  for (const label of [
+    'South Korea benefits service with unsupported browser notices',
+    'Not only South Korea residents use this benefits service',
+  ]) {
+    const positiveReceipt = testSearchReceipt(fixture.root, 'domain', domainQueries[0]!,
+      [fixture.domain.source, fixture.domainTwo.source, fixture.domainThree.source], false,
+      new Date().toISOString(), label);
+    const positiveCoverage = structuredClone(documented);
+    positiveCoverage.domain.localSources[0]!.provenanceReceiptSha256 = positiveReceipt.sha256;
+    positiveCoverage.domain.globalFallback!.provenance.forEach(binding => {
+      binding.provenanceReceiptSha256 = positiveReceipt.sha256;
+    });
+    assert.doesNotThrow(() => validateReferenceResearch(fixture.root, parseReferenceResearch({
+      ...input, marketCoverage: positiveCoverage,
+      domainReference: { ...input.domainReference,
+        searches: [positiveReceipt, input.domainReference.searches[1]!] },
+    }), options));
+  }
   const laterNegationReceipt = testSearchReceipt(fixture.root, 'domain', domainQueries[0]!,
     [fixture.domain.source, fixture.domainTwo.source, fixture.domainThree.source], false,
     new Date().toISOString(), 'South Korea benefits service directory; this service is not available in South Korea');

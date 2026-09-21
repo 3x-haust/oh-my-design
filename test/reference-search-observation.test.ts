@@ -84,8 +84,18 @@ test('a rendered Bing redirect remains an observed destination with its actual p
   assert.deepEqual(readFileSync(join(h.root, h.execution.capture.path)), h.captures[0]);
 });
 
+test('visible stacking, clipping, masks and transparent overlays preserve real labels', async t => {
+  const clear = 'https://clear.example/service'; const transparent = 'https://transparent.example/service';
+  const h = await observe(t, { html: `${navbar}<style>.clear::after{content:"";position:absolute;inset:0;background:white;opacity:0}</style><main><div style="position:relative"><a href="${redirect}" style="position:relative;z-index:10;clip-path:polygon(0 0,100% 0,100% 100%,0 100%);mask-image:linear-gradient(white,white)">South Korea service for residents</a><span style="position:absolute;inset:0;z-index:1;background:white;pointer-events:none"></span></div><a class="clear" style="position:relative" href="${clear}">Visible supporting copy</a><div style="position:relative"><a href="${transparent}">Visible through transparent overlay</a><span style="position:absolute;inset:0;background:rgba(255,255,255,.01);pointer-events:none"></span></div></main>` });
+  assert.equal(h.execution.results?.find(result => result.url === redirect)?.text,
+    'South Korea service for residents');
+  assert.equal(h.execution.results?.find(result => result.url === clear)?.text, 'Visible supporting copy');
+  assert.equal(h.execution.results?.find(result => result.url === transparent)?.text,
+    'Visible through transparent overlay');
+});
+
 test('a visible result cannot inherit market scope from a hidden descendant', async t => {
-  const h = await observe(t, { html: `${navbar}<main><a href="${redirect}">Visible item <span style="opacity:0">South Korea residents service</span><span style="clip-path:inset(100%)">South Korea product gallery</span><span style="color:transparent">South Korea service market</span><span style="color:white;background:white">South Korea benefit service</span><span style="transform:scale(.001)">South Korea support platform</span><span style="opacity:.1"><span style="opacity:.1"><span style="opacity:.1">South Korea service for residents</span></span></span></a></main>` });
+  const h = await observe(t, { html: `${navbar}<main><a href="${redirect}">Visible item <span style="opacity:0">South Korea residents service</span><span style="clip-path:inset(100%)">South Korea product gallery</span><span style="color:transparent">South Korea service market</span><span style="color:white;background:white">South Korea benefit service</span><span style="transform:scale(.001)">South Korea support platform</span><span style="transform:scale(.2)"><span style="transform:scale(.2)">South Korea support directory</span></span><span style="filter:opacity(.001)">South Korea product service</span><span style="opacity:.1"><span style="opacity:.1"><span style="opacity:.1">South Korea service for residents</span></span></span></a></main>` });
   assert.equal(h.execution.status, 'page-observed');
   assert.deepEqual(h.execution.results?.find(result => result.url === redirect),
     { url: redirect, text: 'Visible item' });
@@ -93,10 +103,13 @@ test('a visible result cannot inherit market scope from a hidden descendant', as
 
 test('an opaque pseudo-element cannot leave covered market text as visible evidence', async t => {
   const sibling = 'https://sibling.example/service';
-  const h = await observe(t, { html: `${navbar}<style>.covered{position:relative}.covered::after{content:"";position:absolute;inset:0;background:white}</style><main><a class="covered" href="${redirect}">South Korea service for residents</a><div style="position:relative"><a href="${sibling}">South Korea benefit service</a><span style="position:absolute;inset:0;background:white;pointer-events:none"></span></div></main>` });
+  const imageCovered = 'https://image-covered.example/service';
+  const image = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg"%3E%3Crect width="100%25" height="100%25" fill="white"/%3E%3C/svg%3E';
+  const h = await observe(t, { html: `${navbar}<style>.covered{position:relative}.covered::after{content:"";position:absolute;inset:0;background-image:linear-gradient(white,white)}</style><main><a class="covered" href="${redirect}">South Korea service for residents</a><div style="position:relative"><a href="${sibling}">South Korea benefit service</a><span style="position:absolute;inset:0;background:white;pointer-events:none"></span></div><div style="position:relative"><a href="${imageCovered}">South Korea support platform</a><img src='${image}' style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1"></div></main>` });
   assert.equal(h.execution.status, 'page-observed');
   assert.equal(h.execution.results?.find(result => result.url === redirect), undefined);
   assert.equal(h.execution.results?.find(result => result.url === sibling), undefined);
+  assert.equal(h.execution.results?.find(result => result.url === imageCovered), undefined);
 });
 
 test('hydration after a screenshot requires a coherent recapture before retaining links', async t => {

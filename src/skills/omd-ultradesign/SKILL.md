@@ -159,6 +159,16 @@ omd stage next --json
 omd route show
 ```
 
+When the user explicitly supplies a country/market and audience, bootstrap that authority before
+classification. Run `omd schema locale-design-context`, author
+`.omd/locale-design-context.json` from those user-supplied facts, and inspect it with
+`omd locale plan --input .omd/locale-design-context.json --json`. Then append
+`--locale-context .omd/locale-design-context.json` to both `route validate` and `route classify`.
+Use the same file for every repair/recheck. A surface language or locale alone never authorizes a
+country: if no market was supplied, keep `marketRegion` null and do not silently add one. This
+bootstrap is required on a fresh project as well as a resumed project; otherwise reference
+discovery remains intentionally unscoped.
+
 On a brokered Codex invocation append the supplied `--activation` to publishing/reading commands.
 The example above is for a new product implementation. For existing/bounded work use `omd schema route-input`;
 for design-only use `omd schema design-route-input`. Choose axes, scope, dependencies, optional methods

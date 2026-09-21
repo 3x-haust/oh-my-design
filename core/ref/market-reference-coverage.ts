@@ -7,6 +7,7 @@ import { nodeStableProjectFileSystem, readStableProjectFile } from '../runtime/s
 import type { ReferenceResearch } from './reference-research-types.ts';
 import { isMarketQualifiedQuery, marketDomainQueries, marketSearchLabels } from './market-reference.ts';
 import { readCurrentDirectDiscoveryEntry } from './discovery-record.ts';
+import { negatesMarketScope } from './market-scope-negation.ts';
 import { readSearchExecution, SEARCH_EXECUTION_SCHEMA } from './search-execution.ts';
 import { resultReaches, type ObservedSearchResult } from './search-result.ts';
 import {
@@ -18,7 +19,6 @@ export { parseMarketReferenceCoverage } from './market-reference-coverage-contra
 export type { MarketLaneCoverage, MarketReferenceCoverage } from './market-reference-coverage-contract.ts';
 
 const INVISIBLE = /[\p{Cc}\p{Default_Ignorable_Code_Point}\p{White_Space}\u2800\u3164\uffa0]/gu;
-const MARKET_NEGATION = /\b(?:not|isn't|is not|doesn't|does not|unavailable|unsupported|outside|excludes?|excluded|excluding|global only)\b|아님|아니다|불가|제외|미지원|제공하지\s*않|지원하지\s*않|해외\s*전용|한국\s*외/iu;
 const DIRECT_SCOPE = /\b(?:serves?|serving|available|operat(?:e|es|ed|ing)|based|local(?:ized)?|market|residents?|users?|audience|directory|gallery|service|product|interface)\b|대상|제공|운영|거주|사용자|시장|서비스|디렉터리|갤러리|제품|인터페이스|앱|웹사이트/iu;
 const SCOPE_TERMS = {
   service: /\b(?:services?|benefits?|support|welfare|applications?|platform)\b|서비스|혜택|지원|복지|신청|플랫폼/iu,
@@ -62,19 +62,6 @@ function containsMarketToken(reason: string, tokens: readonly string[]): boolean
 function directRootReason(value: unknown, marketTokens: readonly string[], code: string): void {
   const reason = explanation(value, code);
   if (negatesMarketScope(reason, marketTokens) || !DIRECT_SCOPE.test(reason) || !containsMarketToken(reason, marketTokens)) marketReject(code);
-}
-
-function negatesMarketScope(value: string, tokens: readonly string[]): boolean {
-  const normalized = value.normalize('NFKC').toLocaleLowerCase('und');
-  return tokens.some(candidate => {
-    const token = candidate.normalize('NFKC').toLocaleLowerCase('und');
-    let index = normalized.indexOf(token);
-    while (index >= 0) {
-      if (MARKET_NEGATION.test(normalized.slice(Math.max(0, index - 48), index + token.length + 48))) return true;
-      index = normalized.indexOf(token, index + token.length);
-    }
-    return false;
-  });
 }
 
 export function validateMarketReferenceCoverage(root: string, research: ReferenceResearch, expectedRequest?: string): void {
