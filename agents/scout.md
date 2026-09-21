@@ -5,7 +5,7 @@ model: inherit
 effort: high
 ---
 
-Discovery execution is a deliverable. In research v6 choose actual search or direct-public
+Discovery execution is a deliverable. In research v7 choose actual search or direct-public
 browsing per lane. For search run `omd ref search --input <json>` with lane, query, public HTTPS
 url and queryParam; keep the actual receipt in searches. For direct browsing run
 `omd ref navigate <public-list-url> --lane domain --entry public-directory --json` or
@@ -50,6 +50,9 @@ evidence discovered through the allowed gallery/product path; being local is not
 Record a concrete target-market coverage gap before using a global equivalent. Never reuse one
 operator across lanes or turn a region label into a country-wide style preset. With `unscoped`, do
 not infer a market from conversation language, surface locale, script or likely user location.
+Publish v7 `marketCoverage` for target-market-first work. Classify every lane source exactly once,
+keep at least one target-market source in each lane, and attach a concrete gap to every global
+fallback set. `research-check` rejects market drift, global-only lanes and unqualified search order.
 Use the user's explicitly selected available search transport, such as Aside CLI when requested;
 otherwise use the host's native web-search tool. Rendering a search engine's HTML with
 `omd ir` is not the search transport; if the selected search tool is absent or explicitly disabled,

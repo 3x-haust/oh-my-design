@@ -3,8 +3,9 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { parseReferenceResearch, publishReferenceResearch, readPublishedReferenceResearch,
-  referenceResearchArtifacts } from '../core/ref/reference-research.ts';
+  referenceResearchArtifacts, validateReferenceResearch, REFERENCE_RESEARCH_SCHEMA } from '../core/ref/reference-research.ts';
 import { ADMISSION_SOURCE_SHA, admissionHash, designAdmissionFixture } from './helpers/design-admission.ts';
+import { testSearchReceipt } from './helpers/search-execution.ts';
 
 const options = { expectedSourceContractSha256: ADMISSION_SOURCE_SHA, benchmarkRequired: false };
 // Parser-only envelope; this does not claim that capture files exist or prove publication.
@@ -44,6 +45,57 @@ test('v6 parses direct-only lanes and retains direct roots in each lane artifact
   const artifacts = referenceResearchArtifacts(parsed);
   assert.deepEqual(artifacts['.omd/refs/domain/research.json'].discoveryRoots, input.domainReference.discoveryRoots);
   assert.deepEqual(artifacts['.omd/refs/design/research.json'].discoveryRoots, input.designReference.discoveryRoots);
+});
+
+test('explicit-market v7 refuses global-only research without mutation and accepts documented fallback', t => {
+  const fixture = designAdmissionFixture(t);
+  publishReferenceResearch(fixture.root, fixture.research, options, fixture.writer);
+  const published = Object.keys(referenceResearchArtifacts(parseReferenceResearch(fixture.research))).map(path => join(fixture.root, path));
+  const before = published.map(path => readFileSync(path));
+  writeFileSync(join(fixture.root, '.omd/locale-design-context.json'), JSON.stringify({
+    schema: 'locale-design-context-v1', conversationLanguage: 'ko-KR', surfaceLocale: 'ko-KR',
+    marketRegion: 'KR', audience: '한국에서 공공 혜택을 비교하는 주민', domain: 'public benefits',
+    surface: 'product', desiredFit: 'market-grounded', brandInvariants: ['Eligibility facts remain source-bound'],
+  }));
+  const domainQueries = ['대한민국 public benefits', 'South Korea public benefits service'];
+  const designQueries = ['대한민국 public benefits visual task', 'South Korea public benefits visual task'];
+  const input = {
+    ...fixture.research, schema: REFERENCE_RESEARCH_SCHEMA, marketCoverage: null,
+    domainReference: { ...fixture.research.domainReference, queries: domainQueries,
+      searches: domainQueries.map(query => testSearchReceipt(fixture.root, 'domain', query,
+        [fixture.domain.source, fixture.domainTwo.source, fixture.domainThree.source])) },
+    designReference: { ...fixture.research.designReference, queries: designQueries,
+      searches: designQueries.map(query => testSearchReceipt(fixture.root, 'design', query, [fixture.gallery.source])) },
+  };
+  assert.throws(() => publishReferenceResearch(fixture.root, input, options, fixture.writer), /MARKET_COVERAGE_REQUIRED/);
+  assert.deepEqual(published.map(path => readFileSync(path)), before, 'refusal must not replace prior published research');
+  const globalOnly = { marketRegion: 'KR',
+    domain: { localSourceIds: [], globalFallback: { sourceIds: ['domain-1', 'domain-2', 'domain-3'], gap: 'No other local operators were public.' } },
+    design: { localSourceIds: ['visual'], globalFallback: null } };
+  assert.throws(() => parseReferenceResearch({ ...input, marketCoverage: globalOnly }), /MARKET_DOMAIN_LOCAL/);
+  const documented = { marketRegion: 'KR',
+    domain: { localSourceIds: ['domain-1'], globalFallback: { sourceIds: ['domain-2', 'domain-3'], gap: 'Only one independently operated local service exposed the complete task state publicly.' } },
+    design: { localSourceIds: ['visual'], globalFallback: null } };
+  const parsed = parseReferenceResearch({ ...input, marketCoverage: documented });
+  assert.doesNotThrow(() => validateReferenceResearch(fixture.root, parsed, options));
+});
+
+test('market coverage refuses unqualified search order and fallback without a gap', t => {
+  const fixture = designAdmissionFixture(t);
+  writeFileSync(join(fixture.root, '.omd/locale-design-context.json'), JSON.stringify({
+    schema: 'locale-design-context-v1', conversationLanguage: 'ko-KR', surfaceLocale: 'ko-KR',
+    marketRegion: 'KR', audience: '한국 사용자', domain: 'public benefits', surface: 'product',
+    desiredFit: 'market-grounded', brandInvariants: ['Facts remain source-bound'],
+  }));
+  const coverage = { marketRegion: 'KR',
+    domain: { localSourceIds: ['domain-1', 'domain-2', 'domain-3'], globalFallback: null },
+    design: { localSourceIds: ['visual'], globalFallback: null } };
+  const input = { ...fixture.research, schema: REFERENCE_RESEARCH_SCHEMA, marketCoverage: coverage };
+  assert.throws(() => validateReferenceResearch(fixture.root, parseReferenceResearch(input), options), /MARKET_DOMAIN_SEARCH_REQUIRED/);
+  const emptyGap = { ...coverage, domain: {
+    localSourceIds: ['domain-1', 'domain-2'], globalFallback: { sourceIds: ['domain-3'], gap: ' ' },
+  } };
+  assert.throws(() => parseReferenceResearch({ ...input, marketCoverage: emptyGap }), /FALLBACK_GAP/);
 });
 
 test('v6 refuses fewer than three independent domain service families', t => {

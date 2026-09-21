@@ -59,6 +59,7 @@ export class LocaleDesignContextError extends Error {
 
 const INVISIBLE = /[\p{Cc}\p{Default_Ignorable_Code_Point}\p{White_Space}\u2800\u3164\uffa0]/gu;
 const REGION = /^(?:[A-Z]{2}|\d{3})$/;
+const DOMAIN_TEXT_LIMIT = 512;
 
 function fail(message: string): never { throw new LocaleDesignContextError(message); }
 
@@ -81,10 +82,15 @@ function fields(value: unknown): ReadonlyMap<string, unknown> {
   return result;
 }
 
-function text(value: unknown, label: string): string {
+function text(value: unknown, label: string, limit = Number.POSITIVE_INFINITY): string {
   if (typeof value !== 'string') return fail(`${label} must be text`);
   const normalized = value.trim();
   if (normalized.replace(INVISIBLE, '').length === 0) return fail(`${label} must contain visible text`);
+  if (normalized.length > limit) return fail(`${label} must be at most ${limit} UTF-16 code units`);
+  if (Array.from(normalized).some(character => {
+    const point = character.codePointAt(0) ?? 0;
+    return point >= 0xd800 && point <= 0xdfff;
+  })) return fail(`${label} must contain well-formed Unicode`);
   return normalized;
 }
 
@@ -164,6 +170,9 @@ export function parseLocaleDesignContext(value: unknown): LocaleDesignContext {
     if (typeof marketValue !== 'string') return fail('marketRegion must be a region subtag or null');
     const normalized = marketValue.trim().toUpperCase();
     if (!REGION.test(normalized)) return fail('marketRegion must be a two-letter or three-digit region subtag');
+    if (new Intl.DisplayNames(['en'], { type: 'region' }).of(normalized) === 'Unknown Region') {
+      return fail('marketRegion must identify a recognized region');
+    }
     marketRegion = normalized;
   }
   const conversationValue = item.get('conversationLanguage');
@@ -173,7 +182,7 @@ export function parseLocaleDesignContext(value: unknown): LocaleDesignContext {
     surfaceLocale: locale(item.get('surfaceLocale'), 'surfaceLocale'),
     marketRegion,
     audience: nullableText(item.get('audience'), 'audience'),
-    domain: text(item.get('domain'), 'domain'),
+    domain: text(item.get('domain'), 'domain', DOMAIN_TEXT_LIMIT),
     surface: surface as LocaleDesignSurface,
     desiredFit: desiredFit as LocaleDesignFit,
     brandInvariants: invariants(item.get('brandInvariants')),

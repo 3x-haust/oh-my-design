@@ -305,7 +305,7 @@ Use `.omd/route.json` as the machine-consumed strategy. Do not substitute a reme
   route reason, not an invented artifact.
 - Dual research finishes with Scout's screen application: `omd ref apply-plan --json` → fill the
   input from actual images → `omd ref apply-set --input <application.json>` → `omd ref apply-check`.
-  Query strings alone are not research: Scout uses native search receipts or v6 `discoveryRoots`
+  Query strings alone are not research: Scout uses native search receipts or v6/v7 `discoveryRoots`
   from `ref navigate --entry public-directory` (domain) / `--entry free-gallery` (design).
   Direct browsing of public lists is allowed without a search engine. Retained entries still trace
   to actual visible links and separate native visits; lists/search images stay outside refs.

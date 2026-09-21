@@ -188,7 +188,7 @@ active research owner. Unknown files and valid references remain untouched.
 
 `omd ref research-set` is the sole publisher of both files and writes `.omd/reference-research.json`
 last as their consistency receipt. `research-check` and downstream gates require all three current
-records. New research uses v6; historical v5 remains readable unchanged with its search requirements
+records. New research uses v7; historical v5/v6 remain readable unchanged with their original requirements
 and cannot contain direct roots. Each lane can use `searches` from `omd ref search --input <json>` with
 `{lane, query, url, queryParam}`. The URL submits the exact query; a fresh browser records observed
 links, a 1280×900 screenshot and HTTP/error outcome, without reusing login state or clicking controls.
@@ -197,7 +197,7 @@ execution receipts; every non-user retained domain source/design entry must occu
 and have its own native visit capture. Failed attempts may accompany a usable free alternative;
 they cannot satisfy retained-source coverage. Arbitrary imported logs are not native execution proof.
 
-Alternatively, v6 accepts direct browsing of free public lists without a search engine. Use
+Alternatively, v6/v7 accept direct browsing of free public lists without a search engine. Use
 `omd ref navigate <public-list-url> --lane domain --entry public-directory --json` for comparable
 services, or `--lane design --entry free-gallery` for a supported gallery's visible item list.
 `ref discover-plan` exposes design `nativeEntryInputs` and a domain entry command; these are leads,
@@ -208,7 +208,7 @@ Every declared query still needs an exact execution, including failed attempts a
 The native entry publisher uses a fresh GET/HEAD-only context, blocks service workers/downloads,
 performs no click/hover probes, and captures stable visible links with the matching viewport PNG.
 Only actual outbound links seed reachability: the root URL itself is not retained-source evidence.
-Intermediate edges in direct v6 chains require strict navigation-v2 captures. Hidden all-DOM links
+Intermediate edges in direct v6/v7 chains require strict navigation-v2 captures. Hidden all-DOM links
 from retained captures and historical navigation-v1 cannot shortcut a missing observed transition.
 Design roots must remain supported public lists after redirects, exposing visible same-gallery item
 links; login walls, blocked pages, selected items and arbitrary service pages are refused.
@@ -239,7 +239,7 @@ The quality reason explains task/viewport fit, hierarchy, typography or density;
 provider prestige is insufficient. This is inspectable provenance, not authenticated proof of taste
 or browsing. Missing native provenance must be collected, never backfilled from memory. Older
 records retain their original version's requirements; new direct provenance must be acquired through
-the native entry publisher before v6 republication. Valid retained captures need not be reacquired.
+the native entry publisher before v6/v7 republication. Valid retained captures need not be reacquired.
 The same evidence path OR identical bytes under another filename cannot satisfy both lanes.
 
 Discovery-plan v2 carries `marketReferencePolicy`. When its mode is `target-market-first`, execute the
@@ -248,6 +248,11 @@ search inputs. Both lanes owe current target-market evidence: comparable task se
 independent local visual-direction/design sources in design. Record a concrete coverage gap before
 using the policy's global-equivalent fallback. This is acquisition scope, not a country-style preset;
 the later locale profile and locale binding still decide which measured mechanisms may transfer.
+Research v7 is the executable refusal layer for this policy. Its `marketCoverage` classifies every
+source in each lane exactly once as target-market evidence or documented global fallback, retains at
+least one local source per lane, and binds the explicit market. Search-based research must execute the
+plan's exact market domain inputs and market-plus-domain design searches before global queries. A
+direct-public root may replace search transport, but never the per-lane local evidence or fallback gap.
 
 The two lanes use independent service hosts, including after redirects. A second path or crop of a
 domain service is not a visual direction. Non-user discovery must match a supported public gallery

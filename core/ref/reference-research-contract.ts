@@ -1,16 +1,19 @@
 import { isAbsolute } from 'node:path';
 import { designDiscoveryProvider, referenceServiceFamily, referenceServiceHost } from './design-discovery-sources.ts';
+import { parseMarketReferenceCoverage, type MarketReferenceCoverage } from './market-reference-coverage.ts';
 
-export const REFERENCE_RESEARCH_SCHEMA = 'reference-research-v6' as const;
+export const REFERENCE_RESEARCH_SCHEMA = 'reference-research-v7' as const;
 export const DOMAIN_REFERENCES_PATH = '.omd/refs/domain/research.json';
 export const DESIGN_REFERENCES_PATH = '.omd/refs/design/research.json';
 export const REFERENCE_RESEARCH_PATH = '.omd/reference-research.json';
 export const REFERENCE_RESEARCH_KEYS = [
   'schema',
   'sourceContractSha256',
+  'marketCoverage',
   'domainReference',
   'designReference',
 ] as const;
+const REFERENCE_RESEARCH_LEGACY_KEYS = REFERENCE_RESEARCH_KEYS.filter(key => key !== 'marketCoverage');
 export const REFERENCE_RESEARCH_LANE_KEYS = [
   'queries',
   'searches',
@@ -70,8 +73,9 @@ type ResearchLane = Readonly<{
   discoveryRoots?: readonly ResearchDiscoveryRoot[];
 }>;
 export type ReferenceResearch = Readonly<{
-  schema: typeof REFERENCE_RESEARCH_SCHEMA | 'reference-research-v5';
+  schema: typeof REFERENCE_RESEARCH_SCHEMA | 'reference-research-v6' | 'reference-research-v5';
   sourceContractSha256: string;
+  marketCoverage?: MarketReferenceCoverage | null;
   domainReference: ResearchLane & Readonly<{ benchmarkSha256: string | null }>;
   designReference: ResearchLane & Readonly<{ boardSha256: string }>;
 }>;
@@ -229,10 +233,11 @@ function lane(value: unknown, options: Readonly<{ keys: readonly string[]; code:
 export function parseReferenceResearch(value: unknown): ReferenceResearch {
   const input = record(value, 'REFERENCE_RESEARCH_INVALID');
   if (['reference-research-v1', 'reference-research-v2', 'reference-research-v3', 'reference-research-v4'].includes(input.schema as string)) fail('REFERENCE_RESEARCH_UPGRADE_REQUIRED: use omd schema reference-research; retain valid captures, run omd ref search or omd ref navigate --entry for native discovery evidence, and republish with omd ref research-set');
-  exactKeys(input, REFERENCE_RESEARCH_KEYS, 'REFERENCE_RESEARCH_KEYS');
-  if (input.schema !== REFERENCE_RESEARCH_SCHEMA && input.schema !== 'reference-research-v5') fail('REFERENCE_RESEARCH_SCHEMA');
+  const current = input.schema === REFERENCE_RESEARCH_SCHEMA;
+  exactKeys(input, current ? REFERENCE_RESEARCH_KEYS : REFERENCE_RESEARCH_LEGACY_KEYS, 'REFERENCE_RESEARCH_KEYS');
+  if (!current && input.schema !== 'reference-research-v6' && input.schema !== 'reference-research-v5') fail('REFERENCE_RESEARCH_SCHEMA');
   const sourceContractSha256 = digest(input.sourceContractSha256, 'REFERENCE_RESEARCH_SOURCE_CONTRACT_SHA');
-  const direct = input.schema === REFERENCE_RESEARCH_SCHEMA;
+  const direct = input.schema !== 'reference-research-v5';
   const domain = lane(input.domainReference, { keys: REFERENCE_RESEARCH_DOMAIN_KEYS, code: 'REFERENCE_RESEARCH_DOMAIN', design: false, direct });
   const design = lane(input.designReference, { keys: REFERENCE_RESEARCH_DESIGN_KEYS, code: 'REFERENCE_RESEARCH_DESIGN', design: true, direct });
   if (direct && domain.sources.length < 3) {
@@ -261,9 +266,12 @@ export function parseReferenceResearch(value: unknown): ReferenceResearch {
   if (designEvidence.some(item => domainPaths.has(item.path) || domainHashes.has(item.sha256))) {
     fail('REFERENCE_RESEARCH_LANE_EVIDENCE_REUSED');
   }
+  const coverage = current ? parseMarketReferenceCoverage(input.marketCoverage,
+    domain.sources.map(entry => entry.id), design.sources.map(entry => entry.id)) : null;
   return Object.freeze({
-    schema: input.schema,
+    schema: input.schema as ReferenceResearch['schema'],
     sourceContractSha256,
+    ...(current ? { marketCoverage: coverage } : {}),
     domainReference: Object.freeze({ queries: domain.queries, searches: domain.searches, sources: domain.sources, ...(domain.navigation === undefined ? {} : { navigation: domain.navigation }), ...(domain.discoveryRoots === undefined ? {} : { discoveryRoots: domain.discoveryRoots }), benchmarkSha256 }),
     designReference: Object.freeze({ queries: design.queries, searches: design.searches, sources: design.sources, ...(design.navigation === undefined ? {} : { navigation: design.navigation }), ...(design.discoveryRoots === undefined ? {} : { discoveryRoots: design.discoveryRoots }), boardSha256 }),
   });

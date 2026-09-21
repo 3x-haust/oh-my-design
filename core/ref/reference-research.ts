@@ -14,6 +14,7 @@ import { isRetainedReferencePath, requireDesignReferenceAdmission } from './desi
 import { loadRefs } from './store.ts';
 import { requireDesignImageAdmission } from './design-image-admission.ts';
 import { refIdentity } from './identity.ts';
+import { validateMarketReferenceCoverage } from './market-reference-coverage.ts';
 import {
   parseTaskFlowBenchmark,
   taskFlowBenchmarkSha256,
@@ -27,9 +28,14 @@ export type { ReferenceResearch } from './reference-research-contract.ts';
 /** Separate, inspectable deliverables; the aggregate is a consistency receipt written last. */
 export function referenceResearchArtifacts(research: ReferenceResearch) {
   const envelope = { sourceContractSha256: research.sourceContractSha256 };
+  const market = research.schema === 'reference-research-v7'
+    ? { marketRegion: research.marketCoverage?.marketRegion ?? null }
+    : {};
   return {
-    [DOMAIN_REFERENCES_PATH]: { schema: 'domain-references-v1', ...envelope, ...research.domainReference },
-    [DESIGN_REFERENCES_PATH]: { schema: 'design-references-v1', ...envelope, ...research.designReference },
+    [DOMAIN_REFERENCES_PATH]: { schema: research.schema === 'reference-research-v7' ? 'domain-references-v2' : 'domain-references-v1', ...envelope, ...market,
+      ...(research.schema === 'reference-research-v7' ? { marketCoverage: research.marketCoverage?.domain ?? null } : {}), ...research.domainReference },
+    [DESIGN_REFERENCES_PATH]: { schema: research.schema === 'reference-research-v7' ? 'design-references-v2' : 'design-references-v1', ...envelope, ...market,
+      ...(research.schema === 'reference-research-v7' ? { marketCoverage: research.marketCoverage?.design ?? null } : {}), ...research.designReference },
     [REFERENCE_RESEARCH_PATH]: research,
   };
 }
@@ -127,7 +133,8 @@ export function validateReferenceResearch(
   if (research.sourceContractSha256 !== options.expectedSourceContractSha256) {
     fail('REFERENCE_RESEARCH_SOURCE_CONTRACT_STALE');
   }
-  const serviceIdentity = research.schema === 'reference-research-v6' ? referenceServiceFamily : referenceServiceHost;
+  validateMarketReferenceCoverage(root, research);
+  const serviceIdentity = research.schema === 'reference-research-v5' ? referenceServiceHost : referenceServiceFamily;
   const directRoots = { domain: readResearchDiscoveryRoots(root, research.domainReference), design: readResearchDiscoveryRoots(root, research.designReference) };
   const domainHosts = new Set(research.domainReference.sources.map(item => serviceIdentity(item.url)));
   const capturedDomainFamilies = new Set<string>();
@@ -160,7 +167,7 @@ export function validateReferenceResearch(
     domainHosts.add(serviceIdentity(acquisition.finalUrl as string));
     capturedDomainFamilies.add(finalFamily);
   }
-  if (research.schema === 'reference-research-v6' && capturedDomainFamilies.size < 3) fail('REFERENCE_RESEARCH_DOMAIN_SOURCE_DIVERSITY');
+  if (research.schema !== 'reference-research-v5' && capturedDomainFamilies.size < 3) fail('REFERENCE_RESEARCH_DOMAIN_SOURCE_DIVERSITY');
   const designUrls = [...research.designReference.sources.flatMap(item => item.discovery ? [item.url, item.discovery.url] : [item.url]),
     ...directRoots.design.flatMap(observation => [observation.url, observation.finalUrl])];
   if (designUrls.some(url => domainHosts.has(serviceIdentity(url)))) fail('REFERENCE_RESEARCH_LANE_REDIRECT_OVERLAP');

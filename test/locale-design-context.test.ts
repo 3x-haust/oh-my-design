@@ -97,6 +97,9 @@ test('malformed, unknown, inherited, accessor, invisible, and duplicate input fa
     context({ surfaceLocale: 'english_US' }),
     context({ surfaceLocale: 'und' }),
     context({ marketRegion: 'Japan' }),
+    context({ marketRegion: 'ZZ' }),
+    context({ domain: `benefit\ud800portal` }),
+    context({ domain: 'x'.repeat(513) }),
     context({ brandInvariants: ['Same', 'Same'] }),
   ];
   for (const value of cases) assert.throws(() => parseLocaleDesignContext(value), LocaleDesignContextError);

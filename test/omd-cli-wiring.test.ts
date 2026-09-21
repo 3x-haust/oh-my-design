@@ -252,7 +252,7 @@ test('printed input skeletons carry exactly the keys their validators accept', a
   const research = inputSkeleton('reference-research');
   const { parseReferenceResearch } = await import('../core/ref/reference-research.ts');
   assert.deepEqual(Object.keys(research.skeleton as object), [
-    'schema', 'sourceContractSha256', 'domainReference', 'designReference',
+    'schema', 'sourceContractSha256', 'marketCoverage', 'domainReference', 'designReference',
   ]);
   assert.doesNotThrow(() => parseReferenceResearch(research.skeleton));
   const entrySurface = inputSkeleton('entry-surface-contract');

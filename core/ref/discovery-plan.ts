@@ -7,6 +7,8 @@ import type { RouteRecord } from '../route/index.ts';
 import type { CraftRefSignal } from './craft-usage.ts';
 import { querySeeds } from './reference-query.ts';
 import { gallerySearchInputs, type GallerySearchInput } from './gallery-search.ts';
+import { marketDomainQueries, marketSearchLabels } from './market-reference.ts';
+import { parseSearchInput } from './search-execution.ts';
 
 export const REFERENCE_DISCOVERY_PLAN_SCHEMA = 'reference-discovery-plan-v2' as const;
 export type DiscoveryLane = 'domain-reference' | 'design-reference' | 'motion';
@@ -104,24 +106,25 @@ export function buildReferenceDiscoveryPlan(root: string, route: RouteRecord): R
   const marketing = surface === 'marketing' || route.sourceContract.referenceDiscovery.taskNeed === 'new-marketing';
   const motionEvidenceRequired = discovering && route.strategy.methods.includes('motion-one');
   const marketRegion = discovering ? locale?.context.marketRegion ?? null : null;
-  const marketLabel = marketRegion === null
-    ? null
-    : new Intl.DisplayNames(['en'], { type: 'region' }).of(marketRegion) ?? marketRegion;
-  const nativeMarketLabel = marketRegion === null || locale === undefined
-    ? null
-    : new Intl.DisplayNames([locale.context.surfaceLocale], { type: 'region' }).of(marketRegion) ?? marketRegion;
-  const marketSearchLabels = marketLabel === null ? [] : [...new Set([nativeMarketLabel ?? marketLabel, marketLabel])];
-  const marketDomainQueries = locale === undefined
+  const searchLabels = marketRegion === null || locale === undefined
     ? []
-    : marketSearchLabels.map(label => `${label} ${locale.context.domain}${label === nativeMarketLabel && label !== marketLabel ? '' : ' service'}`);
+    : marketSearchLabels(marketRegion, locale.context.surfaceLocale);
+  const marketLabel = searchLabels.at(-1) ?? null;
+  const nativeMarketLabel = searchLabels[0] ?? null;
+  const domainQueries = locale === undefined
+    ? []
+    : marketRegion === null ? [] : [...marketDomainQueries(marketRegion, locale.context.surfaceLocale, locale.context.domain)];
   const baseDesignQuery = [...queries.mood, ...queries.component][0] ?? (marketing ? 'typography' : 'app interface');
-  const designQueries = marketSearchLabels.map(label => `${label} ${baseDesignQuery}`);
+  const designSubject = locale === undefined ? baseDesignQuery : `${locale.context.domain} ${baseDesignQuery}`;
+  const designQueries = searchLabels.map(label => `${label} ${designSubject}`);
   const designQuery = designQueries[0] ?? baseDesignQuery;
   const domainSearchInputs: DomainSearchInput[] = [];
-  for (const query of marketDomainQueries) {
+  for (const query of domainQueries) {
     const url = new URL('https://www.bing.com/search');
     url.searchParams.set('q', query);
-    domainSearchInputs.push(Object.freeze({ lane: 'domain', query, url: url.href, queryParam: 'q' }));
+    const input = Object.freeze({ lane: 'domain' as const, query, url: url.href, queryParam: 'q' as const });
+    parseSearchInput(input);
+    domainSearchInputs.push(input);
   }
   // Restrained work still needs a visual reference. Gallery names are leads, never quality proof
   // or a promise that a provider's entire catalogue/API is free.
@@ -153,7 +156,7 @@ export function buildReferenceDiscoveryPlan(root: string, route: RouteRecord): R
     lanes.push({
       id: 'domain-reference',
       purpose: 'Find at least three comparable services from independent operator families and inspect their task flows: information architecture, domain vocabulary, states, and actionable sequence. Multiple pages or subdomains under one operator count once.',
-      querySeeds: [...marketDomainQueries, ...querySeeds('component', queries.component), ...decisions.map(decision => decision.question)],
+      querySeeds: [...domainQueries, ...querySeeds('component', queries.component), ...decisions.map(decision => decision.question)],
       evidence: [...(marketLabel === null ? [] : [`comparable services actively serving ${marketLabel}`]), 'three independent service families', 'live similar-service task flows', 'domain objects and states', 'paired-viewport anatomy', 'zone-bound native capture'],
     });
     lanes.push({
@@ -188,7 +191,7 @@ export function buildReferenceDiscoveryPlan(root: string, route: RouteRecord): R
       mode: marketLabel === null ? 'unscoped' : 'target-market-first',
       marketRegion,
       marketLabel,
-      marketSearchLabels: Object.freeze(marketSearchLabels),
+      marketSearchLabels: searchLabels,
       audience: marketLabel === null ? null : locale?.context.audience ?? null,
       targetMarketCoverage: marketLabel === null ? 'not-required' : 'required-in-domain-and-design',
       domainSearchInputs: Object.freeze(domainSearchInputs),
@@ -208,7 +211,10 @@ export function buildReferenceDiscoveryPlan(root: string, route: RouteRecord): R
         `${marketing ? 'site:siteinspire.com/websites/' : 'site:dribbble.com/shots/'} ${query}`,
         ...(!marketing ? [`site:behance.net/gallery/ ${query}`] : []),
       ])),
-      nativeSearchInputs: Object.freeze(!discovering ? [] : (designQueries.length === 0 ? [designQuery] : designQueries).flatMap(gallerySearchInputs)),
+      nativeSearchInputs: Object.freeze(!discovering ? [] : (designQueries.length === 0 ? [designQuery] : designQueries).flatMap(gallerySearchInputs).map(input => {
+        parseSearchInput(input);
+        return input;
+      })),
       nativeEntryInputs: Object.freeze(galleryCandidates.map(candidate => Object.freeze({ lane: 'design' as const, entry: 'free-gallery' as const, url: candidate.url }))),
       domainEntryCommand: discovering ? 'omd ref navigate <public-comparable-service-directory-url> --lane domain --entry public-directory --json' : null,
       fallback: 'Use actual search results OR explicitly enter a public gallery list with ref navigate <url> --lane design --entry free-gallery --json. In v6 research put the native root plus your reason in discoveryRoots, follow observed links using ref navigate, then capture the concrete gallery item with --lane design (or import-image for native app screenshots). A list is never retained visual direction. Check free access per entry. If login/payment/blocking prevents inspection, record the failed URL and try another public gallery. Component documentation alone is not a visual-direction substitute. Do not purchase, start a trial, install an MCP, bypass access controls, or claim a blocked source was inspected. Free viewing does not grant reuse rights.',
