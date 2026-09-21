@@ -120,36 +120,38 @@ function dependencyRoot(sourceRoot: string): string {
   return realpathSync(requested);
 }
 
-function updateDependencyDigest(
+function updateDependencyFingerprint(
   hash: ReturnType<typeof createHash>,
   root: string,
   path: string,
   ancestors: ReadonlySet<string>,
 ): void {
   const absolute = join(root, path);
-  const link = lstatSync(absolute);
+  const link = lstatSync(absolute, { bigint: true });
   const physical = link.isSymbolicLink() ? realpathSync(absolute) : absolute;
-  const stat = link.isSymbolicLink() ? statSync(absolute) : link;
+  const stat = link.isSymbolicLink() ? statSync(absolute, { bigint: true }) : link;
   if (link.isSymbolicLink() && physical !== root && !physical.startsWith(`${root}${sep}`)) {
     throw new OmdRuntimeSnapshotError(`OMD_RUNTIME_DEPENDENCIES_INVALID: external link ${path}`);
   }
-  hash.update(path).update('\0');
+  hash.update(path).update('\0')
+    .update(link.isSymbolicLink() ? `link\0${physical}\0` : 'entry\0')
+    .update(`${stat.dev}\0${stat.ino}\0${stat.mode}\0${stat.size}\0${stat.mtimeNs}\0${stat.ctimeNs}\0`);
   if (stat.isDirectory()) {
     if (ancestors.has(physical)) throw new OmdRuntimeSnapshotError(`OMD_RUNTIME_DEPENDENCIES_INVALID: recursive link ${path}`);
     hash.update('directory\0');
     const next = new Set(ancestors).add(physical);
-    for (const name of readdirSync(absolute).sort()) updateDependencyDigest(hash, root, join(path, name), next);
+    for (const name of readdirSync(absolute).sort()) updateDependencyFingerprint(hash, root, join(path, name), next);
     return;
   }
   if (!stat.isFile()) throw new OmdRuntimeSnapshotError(`OMD_RUNTIME_DEPENDENCIES_INVALID: ${path}`);
-  hash.update('file\0').update(readFileSync(absolute)).update('\0');
+  hash.update('file\0');
 }
 
-function dependencyDigest(sourceRoot: string): string {
+function dependencyFingerprint(sourceRoot: string): string {
   const root = dependencyRoot(sourceRoot);
   const hash = createHash('sha256');
   for (const name of readdirSync(root).sort()) {
-    if (name !== 'node_modules') updateDependencyDigest(hash, root, name, new Set([root]));
+    if (name !== 'node_modules') updateDependencyFingerprint(hash, root, name, new Set([root]));
   }
   return hash.digest('hex');
 }
@@ -177,17 +179,15 @@ export function createOmdRuntimeSnapshot(options: OmdRuntimeSnapshotOptions): Om
       copyRuntime(sourceRoot, snapshotRoot);
       const copied = runtimeDigest(snapshotRoot);
       let dependencyBefore = 'none';
-      let dependencyCopied = 'none';
       let dependencyAfter = 'none';
       if (before === copied && options.dependencyRoot !== null) {
         if (!existsSync(options.dependencyRoot)) throw new OmdRuntimeSnapshotError('OMD_RUNTIME_DEPENDENCIES_INVALID');
-        dependencyBefore = dependencyDigest(options.dependencyRoot);
+        dependencyBefore = dependencyFingerprint(options.dependencyRoot);
         copyDependencies(options.dependencyRoot, snapshotRoot);
-        dependencyCopied = dependencyDigest(join(snapshotRoot, 'node_modules'));
-        dependencyAfter = dependencyDigest(options.dependencyRoot);
+        dependencyAfter = dependencyFingerprint(options.dependencyRoot);
       }
       const after = runtimeDigest(sourceRoot);
-      if (before === copied && copied === after && dependencyBefore === dependencyCopied && dependencyCopied === dependencyAfter) {
+      if (before === copied && copied === after && dependencyBefore === dependencyAfter) {
         retained = true;
         let disposed = false;
         return Object.freeze({
@@ -200,7 +200,7 @@ export function createOmdRuntimeSnapshot(options: OmdRuntimeSnapshotOptions): Om
           },
         });
       }
-      lastMismatch = `attempt ${attempt}: source=${before}/${copied}/${after}; dependencies=${dependencyBefore}/${dependencyCopied}/${dependencyAfter}`;
+      lastMismatch = `attempt ${attempt}: source=${before}/${copied}/${after}; dependencies=${dependencyBefore}/${dependencyAfter}`;
     } finally {
       if (!retained) rmSync(snapshotRoot, { recursive: true, force: true });
     }

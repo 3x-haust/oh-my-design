@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { once } from 'node:events';
-import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { constants, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -48,19 +48,16 @@ test('first OMD command survives checkout removal after Pi activation', t => {
   const targetRoot = mkdtempSync(join(tmpdir(), 'omd-runtime-target-'));
   t.after(() => rmSync(pluginRoot, { recursive: true, force: true }));
   t.after(() => rmSync(targetRoot, { recursive: true, force: true }));
-  mkdirSync(join(pluginRoot, 'bin'), { recursive: true });
-  mkdirSync(join(pluginRoot, 'extensions'), { recursive: true });
-  mkdirSync(join(pluginRoot, 'node_modules'), { recursive: true });
-  writeFileSync(join(pluginRoot, 'package.json'), '{"type":"module"}');
-  writeFileSync(join(pluginRoot, 'bin/omd.mjs'), [
-    'console.log(JSON.stringify({ schema: "production-readiness-v1", ok: false, blockers: ["contract not delivered"] }));',
-    'process.exitCode = 1;',
-  ].join('\n'));
-  writeFileSync(join(pluginRoot, 'bin/run-ts.mjs'), 'export {};\n');
-  writeFileSync(join(pluginRoot, 'bin/omd.ts'), 'export {};\n');
-  cpSync(join(repositoryRoot, 'extensions/omd-runtime.ts'), join(pluginRoot, 'extensions/omd-runtime.ts'));
-  cpSync(join(repositoryRoot, 'extensions/omd-runtime-snapshot.ts'), join(pluginRoot, 'extensions/omd-runtime-snapshot.ts'));
-  cpSync(join(repositoryRoot, 'node_modules/tsx'), join(pluginRoot, 'node_modules/tsx'), { recursive: true });
+  for (const path of ['package.json', 'bin', 'core', 'adapters', 'extensions', 'src', 'scripts', 'dist', 'skills', 'agents', '.mcp.json', '.claude-plugin', '.codex-plugin', '.agents', 'README.md', 'README.ko.md', 'LICENSE']) {
+    const source = join(repositoryRoot, path);
+    if (existsSync(source)) cpSync(source, join(pluginRoot, path), { recursive: true, mode: constants.COPYFILE_FICLONE });
+  }
+  cpSync(join(repositoryRoot, 'node_modules'), join(pluginRoot, 'node_modules'), {
+    recursive: true,
+    dereference: false,
+    mode: constants.COPYFILE_FICLONE,
+    filter: source => !['.bin', 'node_modules'].includes(source.slice(join(repositoryRoot, 'node_modules').length + 1)),
+  });
 
   const runtimeUrl = pathToFileURL(join(pluginRoot, 'extensions/omd-runtime.ts')).href;
   const probe = spawnSync(process.execPath, [
@@ -74,18 +71,15 @@ test('first OMD command survives checkout removal after Pi activation', t => {
       '  const child = spawnSync(command, args, { cwd: options.cwd, encoding: "utf8" });',
       '  return { stdout: child.stdout ?? "", stderr: child.stderr ?? "", code: child.status ?? 1, killed: child.signal !== null };',
       '} };',
-      'try { await runtime.runOmd(pi, ["guard", "production", "--json"], targetRoot); }',
-      'catch (error) {',
-      '  console.log(JSON.stringify({ sourceGone: !existsSync(pluginRoot), failure: runtime.guardFailure(error), raw: String(error) }));',
-      '}',
+      'const result = await runtime.runOmd(pi, ["schema", "reference-research"], targetRoot);',
+      'console.log(JSON.stringify({ sourceGone: !existsSync(pluginRoot), text: result.text }));',
     ].join('\n'), runtimeUrl, pluginRoot, targetRoot,
   ], { cwd: repositoryRoot, encoding: 'utf8' });
 
   assert.equal(probe.status, 0, probe.stderr);
-  const result = JSON.parse(probe.stdout) as { sourceGone?: unknown; failure?: { repairable?: unknown }; raw?: unknown };
+  const result = JSON.parse(probe.stdout) as { sourceGone?: unknown; text?: unknown };
   assert.equal(result.sourceGone, true);
-  assert.equal(result.failure?.repairable, true);
-  assert.doesNotMatch(String(result.raw), /ERR_MODULE_NOT_FOUND|OMD_RUNTIME_SOURCE_INCOMPLETE/);
+  assert.match(String(result.text), /reference-research-v7/);
 });
 
 test('Pi runtime keeps an immutable source snapshot after the plugin checkout changes', t => {
