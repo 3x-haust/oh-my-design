@@ -1,7 +1,5 @@
 import { decodePng } from '../motion/energy.ts';
 
-export const HIDE_SEARCH_TEXT_STYLE = 'a, a * { -webkit-text-fill-color: transparent !important; text-shadow: none !important; text-decoration-color: currentColor !important; }';
-
 export type SearchPixelSample = Readonly<{
   id: number;
   href: string | null;
@@ -24,6 +22,7 @@ export function readableSearchPixelSamples(
   viewport: Readonly<{ width: number; height: number }>,
   samples: readonly SearchPixelSample[],
 ): ReadonlySet<number> {
+  if (samples.length === 0) return new Set();
   const image = decodePng(bytes); const withoutText = decodePng(withoutTextBytes);
   if (image.width !== withoutText.width || image.height !== withoutText.height || image.channels !== withoutText.channels) return new Set();
   const scaleX = image.width / viewport.width; const scaleY = image.height / viewport.height;

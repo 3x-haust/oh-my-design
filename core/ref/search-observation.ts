@@ -1,5 +1,6 @@
 import type { Page } from 'playwright';
-import { finalizeSearchRenderedState, HIDE_SEARCH_TEXT_STYLE, type RawSearchRenderedState, type SearchPixelSample } from './search-pixel-contrast.ts';
+import { captureFrozenSearchText } from './search-frozen-capture.ts';
+import { finalizeSearchRenderedState, type RawSearchRenderedState, type SearchPixelSample } from './search-pixel-contrast.ts';
 
 export async function inspectRenderedState(page: Page): Promise<RawSearchRenderedState> {
   const rendered = await page.locator('body').evaluate(body => {
@@ -249,8 +250,8 @@ export async function inspectRenderedState(page: Page): Promise<RawSearchRendere
 }
 
 export async function renderedState(page: Page) {
-  const raw = await inspectRenderedState(page); const bytes = await page.screenshot({ timeout: 10000, animations: 'disabled' });
-  const withoutText = raw.uncertain.length > 0
-    ? await page.screenshot({ timeout: 10000, animations: 'disabled', style: HIDE_SEARCH_TEXT_STYLE }) : bytes;
-  return finalizeSearchRenderedState(raw, bytes, withoutText);
+  const raw = await inspectRenderedState(page);
+  if (raw.uncertain.length === 0) return finalizeSearchRenderedState(raw, Buffer.alloc(0), Buffer.alloc(0));
+  const capture = await captureFrozenSearchText(page);
+  return finalizeSearchRenderedState(raw, capture.visibleText, capture.hiddenText);
 }

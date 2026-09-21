@@ -147,6 +147,7 @@ test('unrendered image alt, pseudo z-index, background images and subpixel clips
   const unreadableImage = 'https://unreadable-image.example/service';
   const transparentGradient = 'https://transparent-gradient.example/service';
   const unrelatedEdge = 'https://unrelated-edge.example/service';
+  const underlineOnly = 'https://underline-only.example/service';
   const lightImage = `data:image/svg+xml;base64,${Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="300" height="80"><rect width="300" height="80" fill="white"/></svg>').toString('base64')}`;
   const darkImage = `data:image/svg+xml;base64,${Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="300" height="80"><rect width="300" height="80" fill="black"/></svg>').toString('base64')}`;
   const markedImage = `data:image/svg+xml;base64,${Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="300" height="80"><rect width="300" height="80" fill="black"/><rect x="180" width="4" height="80" fill="white"/></svg>').toString('base64')}`;
@@ -165,15 +166,32 @@ test('unrendered image alt, pseudo z-index, background images and subpixel clips
     <a href="${unreadableImage}" style="display:block;width:300px;height:80px;color:black;background-image:url('${darkImage}')">South Korea service hidden on an image</a>
     <a href="${transparentGradient}" style="color:white;background-image:linear-gradient(transparent,black)">South Korea service hidden in a transparent gradient</a>
     <a href="${unrelatedEdge}" style="display:block;width:300px;height:80px;color:black;white-space:pre;text-decoration:none;background-image:url('${markedImage}')">X                    </a>
+    <a href="${underlineOnly}" style="display:block;width:300px;height:80px;color:black;text-decoration:underline;text-decoration-color:white;background-image:url('${darkImage}')">South Korea service with only an underline</a>
   </main>` });
   for (const url of [imageOnly, pseudoZ, gradient, clipped, polygon, calculated, pathClip, unreadableImage,
-    transparentGradient, unrelatedEdge]) {
+    transparentGradient, unrelatedEdge, underlineOnly]) {
     assert.equal(h.execution.results?.find(result => result.url === url), undefined, url);
   }
   assert.equal(h.execution.results?.find(result => result.url === readableGradient)?.text,
     'Visible service on a readable gradient');
   assert.equal(h.execution.results?.find(result => result.url === readableImage)?.text,
     'Visible service on a readable image');
+});
+
+test('pixel contrast capture is invisible to page mutation observers', async t => {
+  const darkImage = `data:image/svg+xml;base64,${Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="300" height="80"><rect width="300" height="80" fill="black"/></svg>').toString('base64')}`;
+  const lightImage = `data:image/svg+xml;base64,${Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="300" height="80"><rect width="300" height="80" fill="white"/></svg>').toString('base64')}`;
+  const h = await observe(t, {
+    html: `<a id="watched" href="${redirect}" style="display:block;width:300px;height:80px;color:black;background-image:url('${darkImage}')">South Korea service for residents</a>`,
+    afterNavigation: page => page.evaluate(light => {
+      const observer = new MutationObserver(() => {
+        observer.disconnect(); const watched = document.querySelector<HTMLElement>('#watched');
+        if (watched) watched.style.backgroundImage = `url('${light}')`;
+      });
+      observer.observe(document.documentElement, { attributes: true, childList: true, subtree: true });
+    }, lightImage),
+  });
+  assert.equal(h.execution.results?.find(result => result.url === redirect), undefined);
 });
 
 test('render observation does not mutate pointer-event styles', async t => {
