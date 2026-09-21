@@ -13,6 +13,7 @@ import { loadRefs } from './store.ts';
 import { requireDesignImageAdmission } from './design-image-admission.ts';
 import { refIdentity } from './identity.ts';
 import { assertCurrentMarketCapture, validateMarketReferenceCoverage } from './market-reference-coverage.ts';
+import { referenceCaptureTimestamp } from './reference-capture-time.ts';
 import { parseTaskFlowBenchmark, taskFlowBenchmarkSha256, validateTaskFlowBenchmarkEvidence } from './task-flow-benchmark.ts';
 import { fail, httpsUrl, record, type ReferenceResearch, type ResearchEvidence, type ValidationOptions } from './reference-research-contract.ts';
 
@@ -101,7 +102,7 @@ export function validateReferenceResearch(root: string, research: ReferenceResea
   }
   for (const item of research.domainReference.sources) {
     const captured = verifyCapture(root, item, 'domain');
-    if (localMarketSources.domain.has(item.id)) assertCurrentMarketCapture(captured.capturedAt, 'DOMAIN');
+    if (localMarketSources.domain.has(item.id)) assertCurrentMarketCapture(referenceCaptureTimestamp(captured), 'DOMAIN');
     observe('domain', item.url, captured);
     const acquisition = captured.acquisition as Record<string, unknown>;
     const finalFamily = referenceServiceFamily(acquisition.finalUrl as string);
@@ -114,7 +115,7 @@ export function validateReferenceResearch(root: string, research: ReferenceResea
   if (designUrls.some(url => domainHosts.has(serviceIdentity(url)))) fail('REFERENCE_RESEARCH_LANE_REDIRECT_OVERLAP');
   for (const item of research.designReference.sources) {
     const source = verifyCapture(root, item, 'design');
-    if (localMarketSources.design.has(item.id)) assertCurrentMarketCapture(source.capturedAt, 'DESIGN');
+    if (localMarketSources.design.has(item.id)) assertCurrentMarketCapture(referenceCaptureTimestamp(source), 'DESIGN');
     if (source.schemaVersion === 'image-fragment-v1' && typeof source.id === 'string') retainedIdentities.set(item.id, source.id);
     else if (typeof source.component === 'string') retainedIdentities.set(item.id, refIdentity(item.url, source.component));
     else fail('REFERENCE_RESEARCH_CAPTURE_SOURCE_MISMATCH');

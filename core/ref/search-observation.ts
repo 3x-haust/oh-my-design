@@ -1,8 +1,9 @@
 import type { Page } from 'playwright';
-import type { DocumentObserver } from './document-observation.ts';
 
-async function renderedState(page: Page) {
-  const anchors = await page.locator('a[href]').evaluateAll(elements => elements.flatMap(element => {
+export async function renderedState(page: Page) {
+  const anchors = await page.locator('a[href]').evaluateAll(elements => {
+    const pointerless = Array.from(document.querySelectorAll('*')).filter(element => getComputedStyle(element).pointerEvents === 'none');
+    return elements.flatMap(element => {
     if (!(element instanceof HTMLAnchorElement)) return [];
     const href = element.href;
     try {
@@ -33,11 +34,14 @@ async function renderedState(page: Page) {
         const style = getComputedStyle(ancestor);
         ancestors.push(ancestor); styles.push(style);
         const level = Number(style.opacity); opacity *= Number.isFinite(level) ? level : 1;
+        const matrix = style.transform === 'none' ? null : new DOMMatrixReadOnly(style.transform);
+        const mask = style.getPropertyValue('mask-image') || style.getPropertyValue('-webkit-mask-image');
         if (style.display === 'none' || style.visibility !== 'visible' || opacity < 0.05
-          || style.contentVisibility === 'hidden' || style.clipPath !== 'none' || style.clip !== 'auto'
-          || style.filter !== 'none' || style.mixBlendMode !== 'normal' || style.backgroundImage !== 'none'
-          || style.getPropertyValue('mask-image') !== 'none'
-          || !['', 'none'].includes(style.getPropertyValue('-webkit-mask-image'))) { hidden = true; break; }
+          || style.contentVisibility === 'hidden' || (style.clipPath !== 'none' && !/^inset\(0(?:px|%)?\)$/.test(style.clipPath))
+          || style.clip !== 'auto' || /opacity\(\s*(?:0(?:\.0+)?|0%)\s*\)|blur\(\s*(?:[89]|[1-9]\d)(?:\.\d+)?px/.test(style.filter)
+          || style.mixBlendMode !== 'normal' || style.backgroundImage !== 'none'
+          || (!['', 'none'].includes(mask) && !/^linear-gradient\(rgb\(0, 0, 0\), rgb\(0, 0, 0\)\)$/.test(mask))
+          || (matrix !== null && Math.min(Math.hypot(matrix.a, matrix.b), Math.hypot(matrix.c, matrix.d)) < 0.05)) { hidden = true; break; }
       }
       const color = styles[0]?.color ?? '';
       const fill = styles[0]?.getPropertyValue('-webkit-text-fill-color') ?? '';
@@ -89,6 +93,16 @@ async function renderedState(page: Page) {
             && !/^rgb\([^)]*\/\s*0(?:\.0+)?\)$/.test(background)
             && box.left <= x && box.right >= x && box.top <= y && box.bottom >= y;
         });
+        const pointerlessOccluded = pointerless.some(candidate => {
+          if (candidate === parent || candidate.contains(parent) || parent.contains(candidate)) return false;
+          const style = getComputedStyle(candidate); const box = candidate.getBoundingClientRect();
+          const z = Number.parseInt(style.zIndex, 10); const follows = Boolean(parent.compareDocumentPosition(candidate) & Node.DOCUMENT_POSITION_FOLLOWING);
+          return ['absolute', 'fixed', 'sticky'].includes(style.position) && (z > 0 || (!Number.isFinite(z) && follows))
+            && style.visibility === 'visible' && Number(style.opacity) >= .05 && box.left <= x && box.right >= x
+            && box.top <= y && box.bottom >= y && style.backgroundColor !== 'transparent'
+            && !/^rgba\([^)]*,\s*0(?:\.0+)?\)$/.test(style.backgroundColor)
+            && !/^rgb\([^)]*\/\s*0(?:\.0+)?\)$/.test(style.backgroundColor);
+        });
         let pseudoOccluded = false;
         const proofContainer = parent.closest('a, h1, h2, h3, p, li, button, [role="heading"]');
         const pseudoOwners = proofContainer && proofContainer !== parent ? [parent, proofContainer] : [parent];
@@ -106,7 +120,7 @@ async function renderedState(page: Page) {
               && !/^rgba\([^)]*,\s*0(?:\.0+)?\)$/.test(background) && !/^rgb\([^)]*\/\s*0(?:\.0+)?\)$/.test(background);
           });
         }
-        if (occluded || pseudoOccluded) return false;
+        if (occluded || pointerlessOccluded || pseudoOccluded) return false;
         const front = document.elementsFromPoint(x, y)[0];
         return front === parent || front?.contains(parent) === true;
       });
@@ -114,9 +128,11 @@ async function renderedState(page: Page) {
       const value = (node.textContent ?? '').replace(/\s+/g, ' ').trim();
       if (rendered && value) lines.push(value);
     }
-    return [{ href, text: lines.join(' ').slice(0, 4096), left, right, top, bottom }];
-  }).slice(0, 2000));
+      return [{ href, text: lines.join(' ').slice(0, 4096), left, right, top, bottom }];
+    }).slice(0, 2000);
+  });
   const visibleText = await page.locator('body').evaluate(body => {
+    const pointerless = Array.from(document.querySelectorAll('*')).filter(element => getComputedStyle(element).pointerEvents === 'none');
     const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT);
     const lines: string[] = [];
     for (let node = walker.nextNode(); node; node = walker.nextNode()) {
@@ -130,11 +146,14 @@ async function renderedState(page: Page) {
         const style = getComputedStyle(ancestor);
         ancestors.push(ancestor); styles.push(style);
         const level = Number(style.opacity); opacity *= Number.isFinite(level) ? level : 1;
+        const matrix = style.transform === 'none' ? null : new DOMMatrixReadOnly(style.transform);
+        const mask = style.getPropertyValue('mask-image') || style.getPropertyValue('-webkit-mask-image');
         if (style.display === 'none' || style.visibility !== 'visible' || opacity < 0.05
-          || style.contentVisibility === 'hidden' || style.clipPath !== 'none' || style.clip !== 'auto'
-          || style.filter !== 'none' || style.mixBlendMode !== 'normal' || style.backgroundImage !== 'none'
-          || style.getPropertyValue('mask-image') !== 'none'
-          || !['', 'none'].includes(style.getPropertyValue('-webkit-mask-image'))) { hidden = true; break; }
+          || style.contentVisibility === 'hidden' || (style.clipPath !== 'none' && !/^inset\(0(?:px|%)?\)$/.test(style.clipPath))
+          || style.clip !== 'auto' || /opacity\(\s*(?:0(?:\.0+)?|0%)\s*\)|blur\(\s*(?:[89]|[1-9]\d)(?:\.\d+)?px/.test(style.filter)
+          || style.mixBlendMode !== 'normal' || style.backgroundImage !== 'none'
+          || (!['', 'none'].includes(mask) && !/^linear-gradient\(rgb\(0, 0, 0\), rgb\(0, 0, 0\)\)$/.test(mask))
+          || (matrix !== null && Math.min(Math.hypot(matrix.a, matrix.b), Math.hypot(matrix.c, matrix.d)) < 0.05)) { hidden = true; break; }
       }
       const color = styles[0]?.color ?? '';
       const fill = styles[0]?.getPropertyValue('-webkit-text-fill-color') ?? '';
@@ -186,6 +205,16 @@ async function renderedState(page: Page) {
             && !/^rgb\([^)]*\/\s*0(?:\.0+)?\)$/.test(background)
             && box.left <= x && box.right >= x && box.top <= y && box.bottom >= y;
         });
+        const pointerlessOccluded = pointerless.some(candidate => {
+          if (candidate === parent || candidate.contains(parent) || parent.contains(candidate)) return false;
+          const style = getComputedStyle(candidate); const box = candidate.getBoundingClientRect();
+          const z = Number.parseInt(style.zIndex, 10); const follows = Boolean(parent.compareDocumentPosition(candidate) & Node.DOCUMENT_POSITION_FOLLOWING);
+          return ['absolute', 'fixed', 'sticky'].includes(style.position) && (z > 0 || (!Number.isFinite(z) && follows))
+            && style.visibility === 'visible' && Number(style.opacity) >= .05 && box.left <= x && box.right >= x
+            && box.top <= y && box.bottom >= y && style.backgroundColor !== 'transparent'
+            && !/^rgba\([^)]*,\s*0(?:\.0+)?\)$/.test(style.backgroundColor)
+            && !/^rgb\([^)]*\/\s*0(?:\.0+)?\)$/.test(style.backgroundColor);
+        });
         let pseudoOccluded = false;
         const proofContainer = parent.closest('a, h1, h2, h3, p, li, button, [role="heading"]');
         const pseudoOwners = proofContainer && proofContainer !== parent ? [parent, proofContainer] : [parent];
@@ -203,7 +232,7 @@ async function renderedState(page: Page) {
               && !/^rgba\([^)]*,\s*0(?:\.0+)?\)$/.test(background) && !/^rgb\([^)]*\/\s*0(?:\.0+)?\)$/.test(background);
           });
         }
-        if (occluded || pseudoOccluded) return false;
+        if (occluded || pointerlessOccluded || pseudoOccluded) return false;
         const front = document.elementsFromPoint(x, y)[0];
         return front === parent || front?.contains(parent) === true;
       });
@@ -215,29 +244,3 @@ async function renderedState(page: Page) {
   });
   return { anchors, body: await page.locator('body').innerText(), visibleText, url: page.url() };
 }
-
-class DiscoveryObservationError extends Error {
-  constructor() { super('Discovery rendering changed during both bounded captures; no consistent screenshot/link evidence was retained.'); }
-}
-
-export async function captureDiscoveryObservation(page: Page, documents: DocumentObserver) {
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const beforeDocument = await documents.current();
-    const before = await renderedState(page);
-    const bytes = await page.screenshot({ timeout: 10000 });
-    const after = await renderedState(page);
-    const afterDocument = await documents.current();
-    if (beforeDocument.identity === afterDocument.identity && beforeDocument.httpStatus === afterDocument.httpStatus
-      && JSON.stringify(before) === JSON.stringify(after)) {
-      return { bytes, links: [...new Set(before.anchors.map(anchor => anchor.href))],
-        results: before.anchors.map(anchor => ({ url: anchor.href, text: anchor.text.replace(/\s+/g, ' ').trim() }))
-          .filter((result, index, all) => result.text && all.findIndex(candidate => candidate.url === result.url) === index),
-        body: before.body,
-        visibleText: before.visibleText, url: before.url,
-        httpStatus: afterDocument.httpStatus };
-    }
-  }
-  throw new DiscoveryObservationError();
-}
-
-export const captureSearchObservation = captureDiscoveryObservation;

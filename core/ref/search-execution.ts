@@ -7,7 +7,7 @@ import { signNativeObservation, verifyNativeObservation } from '../runtime/self-
 import { decodePng } from '../motion/energy.ts';
 import { canonicalJson } from './board-artifacts.ts';
 import { gallerySearchHasItems, gallerySearchProvider } from './gallery-search.ts';
-import { captureSearchObservation } from './search-observation.ts';
+import { captureSearchObservation } from './reference-capture-observation.ts';
 import { observeDocumentResponses, type DocumentObserver } from './document-observation.ts';
 import { createPublicNetworkProxy } from './public-network.ts';
 import { disableUnproxiedRealtimeTransports } from './browser-security.ts';

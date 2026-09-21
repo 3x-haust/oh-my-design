@@ -4,7 +4,7 @@ import type { ProjectWriteAdapter } from '../runtime/project-write.ts';
 import { signNativeObservation } from '../runtime/self-signed-activation.ts';
 import { canonicalJson } from './board-artifacts.ts';
 import { designDiscoveryDirectoryProvider } from './design-discovery-sources.ts';
-import { captureDiscoveryObservation } from './search-observation.ts';
+import { captureDiscoveryObservation } from './reference-capture-observation.ts';
 import { observeDocumentResponses, type DocumentObserver } from './document-observation.ts';
 import { createPublicNetworkProxy, publicIpAddress } from './public-network.ts';
 import { disableUnproxiedRealtimeTransports } from './browser-security.ts';

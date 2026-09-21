@@ -57,6 +57,32 @@ test('explicit-market v7 binds local sources and fallback to executed market evi
     design: { localSources: [localSearchSource('visual', fixture.source.evidence.sha256, 'product', input.designReference.searches[0]!.sha256)], globalFallback: null } };
   const parsed = parseReferenceResearch({ ...input, marketCoverage: documented });
   assert.doesNotThrow(() => validateReferenceResearch(fixture.root, parsed, options));
+  const noLoginReceipt = testSearchReceipt(fixture.root, 'domain', domainQueries[0]!,
+    [fixture.domain.source, fixture.domainTwo.source, fixture.domainThree.source], false,
+    new Date().toISOString(), 'South Korea benefits service — no login required');
+  const noLoginCoverage = structuredClone(documented);
+  noLoginCoverage.domain.localSources[0]!.provenanceReceiptSha256 = noLoginReceipt.sha256;
+  noLoginCoverage.domain.globalFallback!.provenance.forEach(binding => {
+    binding.provenanceReceiptSha256 = noLoginReceipt.sha256;
+  });
+  const noLoginInput = { ...input, marketCoverage: noLoginCoverage,
+    domainReference: { ...input.domainReference,
+      searches: [noLoginReceipt, input.domainReference.searches[1]!] } };
+  assert.doesNotThrow(() => validateReferenceResearch(fixture.root,
+    parseReferenceResearch(noLoginInput), options));
+  const laterNegationReceipt = testSearchReceipt(fixture.root, 'domain', domainQueries[0]!,
+    [fixture.domain.source, fixture.domainTwo.source, fixture.domainThree.source], false,
+    new Date().toISOString(), 'South Korea benefits service directory; this service is not available in South Korea');
+  const laterNegationCoverage = structuredClone(documented);
+  laterNegationCoverage.domain.localSources[0]!.provenanceReceiptSha256 = laterNegationReceipt.sha256;
+  laterNegationCoverage.domain.globalFallback!.provenance.forEach(binding => {
+    binding.provenanceReceiptSha256 = laterNegationReceipt.sha256;
+  });
+  const laterNegationInput = { ...input, marketCoverage: laterNegationCoverage,
+    domainReference: { ...input.domainReference,
+      searches: [laterNegationReceipt, input.domainReference.searches[1]!] } };
+  assert.throws(() => validateReferenceResearch(fixture.root,
+    parseReferenceResearch(laterNegationInput), options), /REFERENCE_RESEARCH_MARKET_DOMAIN_LOCAL_RESULT_SCOPE/);
   const nextLocalDate = new Date(Date.now() + DAY_FOR_TEST).toISOString().slice(0, 10);
   const timezoneAhead = structuredClone({ ...input, marketCoverage: documented });
   timezoneAhead.domainReference.sources[0]!.observedAt = nextLocalDate;
