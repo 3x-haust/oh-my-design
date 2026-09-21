@@ -27,27 +27,53 @@ async function renderedState(page: Page) {
       if (parent === null) continue;
       let hidden = false;
       let opacity = 1;
+      const ancestors: Element[] = [];
+      const styles: CSSStyleDeclaration[] = [];
       for (let ancestor: Element | null = parent; ancestor; ancestor = ancestor.parentElement) {
         const style = getComputedStyle(ancestor);
+        ancestors.push(ancestor); styles.push(style);
         const level = Number(style.opacity); opacity *= Number.isFinite(level) ? level : 1;
         if (style.display === 'none' || style.visibility !== 'visible' || opacity < 0.05
           || style.contentVisibility === 'hidden' || style.clipPath !== 'none' || style.clip !== 'auto'
-          || style.filter !== 'none' || style.getPropertyValue('mask-image') !== 'none'
+          || style.filter !== 'none' || style.mixBlendMode !== 'normal' || style.backgroundImage !== 'none'
+          || style.getPropertyValue('mask-image') !== 'none'
           || !['', 'none'].includes(style.getPropertyValue('-webkit-mask-image'))) { hidden = true; break; }
       }
-      const color = getComputedStyle(parent).color;
-      const fill = getComputedStyle(parent).getPropertyValue('-webkit-text-fill-color');
+      const color = styles[0]?.color ?? '';
+      const fill = styles[0]?.getPropertyValue('-webkit-text-fill-color') ?? '';
+      const backgrounds = styles.map(style => style.backgroundColor);
+      let red = 255; let green = 255; let blue = 255;
+      for (let index = backgrounds.length - 1; index >= 0; index--) {
+        const channels = backgrounds[index]!.match(/[\d.]+/g)?.map(Number) ?? [];
+        if (channels.length < 3) continue;
+        const alpha = channels[3] ?? 1;
+        red = channels[0]! * alpha + red * (1 - alpha);
+        green = channels[1]! * alpha + green * (1 - alpha);
+        blue = channels[2]! * alpha + blue * (1 - alpha);
+      }
+      const foreground = (fill && fill !== 'currentcolor' ? fill : color).match(/[\d.]+/g)?.map(Number) ?? [];
+      const foregroundAlpha = (foreground[3] ?? 1) * opacity;
+      const textRed = (foreground[0] ?? red) * foregroundAlpha + red * (1 - foregroundAlpha);
+      const textGreen = (foreground[1] ?? green) * foregroundAlpha + green * (1 - foregroundAlpha);
+      const textBlue = (foreground[2] ?? blue) * foregroundAlpha + blue * (1 - foregroundAlpha);
+      const backgroundLum = 0.2126 * (red <= 10.016 ? red / 3294.6 : Math.pow((red / 255 + .055) / 1.055, 2.4))
+        + 0.7152 * (green <= 10.016 ? green / 3294.6 : Math.pow((green / 255 + .055) / 1.055, 2.4))
+        + 0.0722 * (blue <= 10.016 ? blue / 3294.6 : Math.pow((blue / 255 + .055) / 1.055, 2.4));
+      const textLum = 0.2126 * (textRed <= 10.016 ? textRed / 3294.6 : Math.pow((textRed / 255 + .055) / 1.055, 2.4))
+        + 0.7152 * (textGreen <= 10.016 ? textGreen / 3294.6 : Math.pow((textGreen / 255 + .055) / 1.055, 2.4))
+        + 0.0722 * (textBlue <= 10.016 ? textBlue / 3294.6 : Math.pow((textBlue / 255 + .055) / 1.055, 2.4));
+      const contrast = (Math.max(backgroundLum, textLum) + .05) / (Math.min(backgroundLum, textLum) + .05);
       if (hidden || color === 'transparent' || /^rgba\([^)]*,\s*0(?:\.0+)?\)$/.test(color)
         || /^rgb\([^)]*\/\s*0(?:\.0+)?\)$/.test(color)
         || fill === 'transparent' || /^rgba\([^)]*,\s*0(?:\.0+)?\)$/.test(fill)
         || /^rgb\([^)]*\/\s*0(?:\.0+)?\)$/.test(fill)
-        || getComputedStyle(parent).fontSize === '0px') continue;
+        || styles[0]?.fontSize === '0px' || contrast < 1.5) continue;
       const range = document.createRange(); range.selectNodeContents(node);
       const rendered = Array.from(range.getClientRects()).some(rect => {
         let left = Math.max(0, rect.left); let right = Math.min(innerWidth, rect.right);
         let top = Math.max(0, rect.top); let bottom = Math.min(innerHeight, rect.bottom);
-        for (let ancestor: Element | null = parent; ancestor; ancestor = ancestor.parentElement) {
-          const style = getComputedStyle(ancestor); const box = ancestor.getBoundingClientRect();
+        for (let index = 0; index < ancestors.length; index++) {
+          const style = styles[index]!; const box = ancestors[index]!.getBoundingClientRect();
           if (style.overflowX !== 'visible') { left = Math.max(left, box.left); right = Math.min(right, box.right); }
           if (style.overflowY !== 'visible') { top = Math.max(top, box.top); bottom = Math.min(bottom, box.bottom); }
         }
@@ -64,7 +90,10 @@ async function renderedState(page: Page) {
             && box.left <= x && box.right >= x && box.top <= y && box.bottom >= y;
         });
         let pseudoOccluded = false;
-        for (let owner: Element | null = parent; owner && !pseudoOccluded; owner = owner.parentElement) {
+        const proofContainer = parent.closest('a, h1, h2, h3, p, li, button, [role="heading"]');
+        const pseudoOwners = proofContainer && proofContainer !== parent ? [parent, proofContainer] : [parent];
+        for (const owner of pseudoOwners) {
+          if (pseudoOccluded) break;
           pseudoOccluded = ['::before', '::after'].some(pseudo => {
             const style = getComputedStyle(owner, pseudo); const box = owner.getBoundingClientRect();
             const background = style.backgroundColor; const z = Number.parseInt(style.zIndex, 10);
@@ -95,27 +124,53 @@ async function renderedState(page: Page) {
       if (parent === null || parent.closest('h1, h2, h3, p, li, a, button, [role="heading"]') === null) continue;
       let hidden = false;
       let opacity = 1;
+      const ancestors: Element[] = [];
+      const styles: CSSStyleDeclaration[] = [];
       for (let ancestor: Element | null = parent; ancestor; ancestor = ancestor.parentElement) {
         const style = getComputedStyle(ancestor);
+        ancestors.push(ancestor); styles.push(style);
         const level = Number(style.opacity); opacity *= Number.isFinite(level) ? level : 1;
         if (style.display === 'none' || style.visibility !== 'visible' || opacity < 0.05
           || style.contentVisibility === 'hidden' || style.clipPath !== 'none' || style.clip !== 'auto'
-          || style.filter !== 'none' || style.getPropertyValue('mask-image') !== 'none'
+          || style.filter !== 'none' || style.mixBlendMode !== 'normal' || style.backgroundImage !== 'none'
+          || style.getPropertyValue('mask-image') !== 'none'
           || !['', 'none'].includes(style.getPropertyValue('-webkit-mask-image'))) { hidden = true; break; }
       }
-      const color = getComputedStyle(parent).color;
-      const fill = getComputedStyle(parent).getPropertyValue('-webkit-text-fill-color');
+      const color = styles[0]?.color ?? '';
+      const fill = styles[0]?.getPropertyValue('-webkit-text-fill-color') ?? '';
+      const backgrounds = styles.map(style => style.backgroundColor);
+      let red = 255; let green = 255; let blue = 255;
+      for (let index = backgrounds.length - 1; index >= 0; index--) {
+        const channels = backgrounds[index]!.match(/[\d.]+/g)?.map(Number) ?? [];
+        if (channels.length < 3) continue;
+        const alpha = channels[3] ?? 1;
+        red = channels[0]! * alpha + red * (1 - alpha);
+        green = channels[1]! * alpha + green * (1 - alpha);
+        blue = channels[2]! * alpha + blue * (1 - alpha);
+      }
+      const foreground = (fill && fill !== 'currentcolor' ? fill : color).match(/[\d.]+/g)?.map(Number) ?? [];
+      const foregroundAlpha = (foreground[3] ?? 1) * opacity;
+      const textRed = (foreground[0] ?? red) * foregroundAlpha + red * (1 - foregroundAlpha);
+      const textGreen = (foreground[1] ?? green) * foregroundAlpha + green * (1 - foregroundAlpha);
+      const textBlue = (foreground[2] ?? blue) * foregroundAlpha + blue * (1 - foregroundAlpha);
+      const backgroundLum = 0.2126 * (red <= 10.016 ? red / 3294.6 : Math.pow((red / 255 + .055) / 1.055, 2.4))
+        + 0.7152 * (green <= 10.016 ? green / 3294.6 : Math.pow((green / 255 + .055) / 1.055, 2.4))
+        + 0.0722 * (blue <= 10.016 ? blue / 3294.6 : Math.pow((blue / 255 + .055) / 1.055, 2.4));
+      const textLum = 0.2126 * (textRed <= 10.016 ? textRed / 3294.6 : Math.pow((textRed / 255 + .055) / 1.055, 2.4))
+        + 0.7152 * (textGreen <= 10.016 ? textGreen / 3294.6 : Math.pow((textGreen / 255 + .055) / 1.055, 2.4))
+        + 0.0722 * (textBlue <= 10.016 ? textBlue / 3294.6 : Math.pow((textBlue / 255 + .055) / 1.055, 2.4));
+      const contrast = (Math.max(backgroundLum, textLum) + .05) / (Math.min(backgroundLum, textLum) + .05);
       if (hidden || color === 'transparent' || /^rgba\([^)]*,\s*0(?:\.0+)?\)$/.test(color)
         || /^rgb\([^)]*\/\s*0(?:\.0+)?\)$/.test(color)
         || fill === 'transparent' || /^rgba\([^)]*,\s*0(?:\.0+)?\)$/.test(fill)
         || /^rgb\([^)]*\/\s*0(?:\.0+)?\)$/.test(fill)
-        || getComputedStyle(parent).fontSize === '0px') continue;
+        || styles[0]?.fontSize === '0px' || contrast < 1.5) continue;
       const range = document.createRange(); range.selectNodeContents(node);
       const rendered = Array.from(range.getClientRects()).some(rect => {
         let left = Math.max(0, rect.left); let right = Math.min(innerWidth, rect.right);
         let top = Math.max(0, rect.top); let bottom = Math.min(innerHeight, rect.bottom);
-        for (let ancestor: Element | null = parent; ancestor; ancestor = ancestor.parentElement) {
-          const style = getComputedStyle(ancestor); const box = ancestor.getBoundingClientRect();
+        for (let index = 0; index < ancestors.length; index++) {
+          const style = styles[index]!; const box = ancestors[index]!.getBoundingClientRect();
           if (style.overflowX !== 'visible') { left = Math.max(left, box.left); right = Math.min(right, box.right); }
           if (style.overflowY !== 'visible') { top = Math.max(top, box.top); bottom = Math.min(bottom, box.bottom); }
         }
@@ -132,7 +187,10 @@ async function renderedState(page: Page) {
             && box.left <= x && box.right >= x && box.top <= y && box.bottom >= y;
         });
         let pseudoOccluded = false;
-        for (let owner: Element | null = parent; owner && !pseudoOccluded; owner = owner.parentElement) {
+        const proofContainer = parent.closest('a, h1, h2, h3, p, li, button, [role="heading"]');
+        const pseudoOwners = proofContainer && proofContainer !== parent ? [parent, proofContainer] : [parent];
+        for (const owner of pseudoOwners) {
+          if (pseudoOccluded) break;
           pseudoOccluded = ['::before', '::after'].some(pseudo => {
             const style = getComputedStyle(owner, pseudo); const box = owner.getBoundingClientRect();
             const background = style.backgroundColor; const z = Number.parseInt(style.zIndex, 10);

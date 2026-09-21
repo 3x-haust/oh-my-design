@@ -169,7 +169,7 @@ test('explicit-market v7 binds local sources and fallback to executed market evi
     parseReferenceResearch({ ...input, marketCoverage: wrongGap }), options), /MARKET_DOMAIN_FALLBACK_MARKET/);
   const globalQuery = 'global public benefits examples';
   const globalReceipt = searchReceiptAt(fixture.root, 'domain', testSearchReceipt(
-    fixture.root, 'domain', globalQuery, [fixture.domain.source]), '2026-09-20T00:00:00.000Z');
+    fixture.root, 'domain', globalQuery, [fixture.domain.source]), new Date(Date.now() - 60_000).toISOString());
   const wrongOrder = { ...input, marketCoverage: documented, domainReference: { ...input.domainReference,
     queries: [...domainQueries, globalQuery], searches: [...input.domainReference.searches, globalReceipt] } };
   assert.throws(() => validateReferenceResearch(fixture.root, parseReferenceResearch(wrongOrder), options), /SEARCH_ORDER/);

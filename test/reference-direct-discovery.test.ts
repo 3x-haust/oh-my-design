@@ -85,7 +85,7 @@ test('direct discovery disables browser transports that bypass the pinned HTTP p
 
 test('direct-entry visible text excludes hidden descendant market claims', async t => {
   const result = await capture(t, { url: PUBLIC_DIRECTORY,
-    html: `<main><h1>Global service directory</h1><p>Available services<span style="display:none"> South Korea residents market</span><span style="clip-path:inset(100%)"> South Korea service market</span><span style="color:transparent"> South Korea product audience</span><span style="opacity:.1"><span style="opacity:.1"><span style="opacity:.1"> South Korea service for residents</span></span></span></p><a href="${DOMAIN_ITEM}">Inspect service</a></main>` },
+    html: `<main><h1>Global service directory</h1><p>Available services<span style="display:none"> South Korea residents market</span><span style="clip-path:inset(100%)"> South Korea service market</span><span style="color:transparent"> South Korea product audience</span><span style="color:white;background:white"> South Korea benefit service</span><span style="opacity:.1"><span style="opacity:.1"><span style="opacity:.1"> South Korea service for residents</span></span></span></p><a href="${DOMAIN_ITEM}">Inspect service</a></main>` },
   'public-directory');
   const observation = readCurrentDirectDiscoveryEntry(result.root, result.receipt);
   assert.match(observation.observedText ?? '', /Global service directory/);

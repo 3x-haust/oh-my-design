@@ -135,4 +135,3 @@ test('market search and direct provenance refuse malformed scope, attempts, root
   unlinkSync(join(fixture.root, '.omd/domain-brief.json'));
   assert.throws(() => validateMarketReferenceCoverage(fixture.root, parseReferenceResearch(scoped), options.expectedRequest), /PLAN_REQUIRED/);
 });
-
