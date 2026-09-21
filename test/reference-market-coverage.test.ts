@@ -53,7 +53,8 @@ function searchReceiptAt(root: string, lane: 'domain' | 'design', receipt: { pat
   return { path, sha256 };
 }
 function directRootAt(root: string, lane: 'domain' | 'design', url: string, links: readonly string[],
-  observedText = `South Korea ${lane === 'domain' ? 'service directory for residents' : 'design gallery products'}.`) {
+  observedText = `South Korea ${lane === 'domain' ? 'service directory for residents' : 'design gallery products'}.`,
+  capturedAt = '2026-09-21T00:00:00.000Z') {
   const image = testPng(1280, 900, lane === 'design' ? 1 : 0);
   const imageSha256 = admissionHash(image);
   const imagePath = `.omd/discovery/${lane}/entries/${imageSha256}.png`;
@@ -61,7 +62,7 @@ function directRootAt(root: string, lane: 'domain' | 'design', url: string, link
   writeFileSync(join(root, imagePath), image);
   const unsigned = { schema: 'reference-discovery-entry-v2', method: 'direct-public',
     entry: lane === 'domain' ? 'public-directory' : 'free-gallery', source: url, researchLane: lane,
-    kind: 'page', capturedAt: '2026-09-21T00:00:00.000Z', imagePath,
+    kind: 'page', capturedAt, imagePath,
     acquisition: { requestedUrl: url, finalUrl: url, httpStatus: 200, links, imageSha256 },
     limitations: 'native-public-get; stable-rendered-viewport-links; no-authentication; no-interaction-probes; not-provider-attested',
     observedText };
@@ -107,6 +108,15 @@ test('explicit-market v7 binds local sources and fallback to executed market evi
   forgedLocal.design.localSources[0]!.provenanceReceiptSha256 = 'f'.repeat(64);
   assert.throws(() => validateReferenceResearch(fixture.root,
     parseReferenceResearch({ ...input, marketCoverage: forgedLocal }), options), /MARKET_DESIGN_LOCAL_PROVENANCE/);
+  const blockedReceipt = testSearchReceipt(fixture.root, 'domain', domainQueries[0]!,
+    [fixture.domain.source], true);
+  const blockedCoverage = structuredClone(documented);
+  blockedCoverage.domain.localSources[0]!.provenanceReceiptSha256 = blockedReceipt.sha256;
+  const blockedInput = { ...input, marketCoverage: blockedCoverage,
+    domainReference: { ...input.domainReference,
+      searches: [blockedReceipt, input.domainReference.searches[1]!] } };
+  assert.throws(() => validateReferenceResearch(fixture.root,
+    parseReferenceResearch(blockedInput), options), /MARKET_DOMAIN_LOCAL_PROVENANCE/);
   const wrongGap = structuredClone(documented);
   wrongGap.domain.globalFallback!.gap.marketRegion = 'CA';
   assert.throws(() => validateReferenceResearch(fixture.root,
@@ -168,6 +178,15 @@ test('market search and direct provenance refuse malformed scope, attempts, root
   forgedDirect.marketCoverage.domain.localSources[0]!.provenanceReceiptSha256 = 'f'.repeat(64);
   assert.throws(() => validateMarketReferenceCoverage(fixture.root,
     parseReferenceResearch(forgedDirect), options.expectedRequest), /MARKET_DOMAIN_LOCAL_PROVENANCE/);
+  const staleRoot = directRootAt(fixture.root, 'domain', 'https://directory.example/south-korea/stale',
+    fixture.research.domainReference.sources.map(source => source.url), undefined, '2026-08-01T00:00:00.000Z');
+  const stale = { ...scoped,
+    domainReference: { ...scoped.domainReference, discoveryRoots: [staleRoot] },
+    marketCoverage: { ...directCoverage, domain: { ...directCoverage.domain,
+      localSources: [localDirectSource('domain-1', fixture.domain.evidence.sha256, 'service', staleRoot.capture.sha256)],
+      globalFallback: { sourceIds: ['domain-2', 'domain-3'], gap: fallbackGap([], [staleRoot.url]) } } } };
+  assert.throws(() => validateMarketReferenceCoverage(fixture.root,
+    parseReferenceResearch(stale), options.expectedRequest), /MARKET_DOMAIN_LOCAL_PROVENANCE_STALE/);
   const excluded = { ...scoped, domainReference: { ...scoped.domainReference,
     discoveryRoots: [{ ...domainRoot, reason: 'South Korea was excluded; this service serves Canadian users.' }] } };
   assert.throws(() => validateMarketReferenceCoverage(fixture.root, parseReferenceResearch(excluded), options.expectedRequest), /DIRECT_ROOT_REQUIRED/);

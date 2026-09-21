@@ -22,18 +22,35 @@ async function renderedState(page: Page) {
     if (!hit || !element.contains(hit)) return [];
     return [{ href, text: element.innerText, left, right, top, bottom }];
   }).slice(0, 2000));
-  const visibleText = await page.locator('body').evaluate(body => Array.from(body.querySelectorAll('h1, h2, h3, p, li, a, button, [role="heading"]'))
-    .flatMap(element => {
-      const box = element.getBoundingClientRect();
-      if (box.right <= 0 || box.bottom <= 0 || box.left >= innerWidth || box.top >= innerHeight) return [];
-      for (let ancestor: Element | null = element; ancestor; ancestor = ancestor.parentElement) {
+  const visibleText = await page.locator('body').evaluate(body => {
+    const selector = 'h1, h2, h3, p, li, a, button, [role="heading"]';
+    const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT);
+    const lines: string[] = [];
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const parent = node.parentElement;
+      if (parent === null || parent.closest(selector) === null) continue;
+      let hidden = false;
+      for (let ancestor: Element | null = parent; ancestor; ancestor = ancestor.parentElement) {
         const style = getComputedStyle(ancestor);
         if (style.display === 'none' || style.visibility !== 'visible' || Number(style.opacity) === 0
-          || style.contentVisibility === 'hidden') return [];
+          || style.contentVisibility === 'hidden') { hidden = true; break; }
       }
-      const text = (element.textContent ?? '').trim();
-      return text ? [text] : [];
-    }).join('\n').slice(0, 4096));
+      if (hidden) continue;
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      const rendered = Array.from(range.getClientRects()).some(box => {
+        const left = Math.max(0, box.left); const right = Math.min(innerWidth, box.right);
+        const top = Math.max(0, box.top); const bottom = Math.min(innerHeight, box.bottom);
+        if (right <= left || bottom <= top) return false;
+        const hit = document.elementFromPoint((left + right) / 2, (top + bottom) / 2);
+        return hit !== null && parent.contains(hit);
+      });
+      range.detach();
+      const text = (node.textContent ?? '').replace(/\s+/g, ' ').trim();
+      if (rendered && text) lines.push(text);
+    }
+    return lines.join('\n').slice(0, 4096);
+  });
   return { anchors, body: await page.locator('body').innerText(), visibleText, url: page.url() };
 }
 

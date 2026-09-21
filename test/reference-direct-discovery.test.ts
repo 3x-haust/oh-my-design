@@ -72,6 +72,15 @@ test('a direct entry blocks POST requests before they can reach the endpoint', a
   assert.deepEqual(result.observed.abortedMethods, ['POST']);
 });
 
+test('direct-entry visible text excludes hidden descendant market claims', async t => {
+  const result = await capture(t, { url: PUBLIC_DIRECTORY,
+    html: `<main><h1>Global service directory</h1><p>Available services<span style="display:none"> South Korea residents market</span></p><a href="${DOMAIN_ITEM}">Inspect service</a></main>` },
+  'public-directory');
+  const observation = readCurrentDirectDiscoveryEntry(result.root, result.receipt);
+  assert.match(observation.observedText ?? '', /Global service directory/);
+  assert.doesNotMatch(observation.observedText ?? '', /South Korea/);
+});
+
 test('the observed Siteinspire category-list route supports direct entry when item links are visible', async t => {
   const url = 'https://www.siteinspire.com/websites/category/minimal';
   const result = await capture(t, { url, html: directoryHtml(GALLERY_ITEM) });
@@ -133,6 +142,33 @@ test('the CONNECT proxy pins the socket to the exact validated DNS answer', asyn
   const [bytes] = await once(client, 'data') as [Buffer];
   assert.match(bytes.toString('utf8'), /^HTTP\/1\.1 200/);
   assert.deepEqual(connected, ['93.184.216.34']);
+});
+
+test('the CONNECT proxy does not create an upstream after its client closes during DNS', async t => {
+  let releaseLookup: (() => void) | undefined;
+  let markLookupStarted: (() => void) | undefined;
+  const lookupStarted = new Promise<void>(resolve => { markLookupStarted = resolve; });
+  const lookupReleased = new Promise<void>(resolve => { releaseLookup = resolve; });
+  let upstreamCreated = 0;
+  let upstream: PassThrough | undefined;
+  const proxy = await createPublicNetworkProxy({
+    lookup: async () => {
+      markLookupStarted?.();
+      await lookupReleased;
+      return [{ address: '93.184.216.34', family: 4 }];
+    },
+    connect: () => { upstreamCreated++; upstream = new PassThrough(); return upstream; },
+  });
+  t.after(() => proxy.close());
+  const client = connect(Number(new URL(proxy.server).port), '127.0.0.1');
+  await once(client, 'connect');
+  client.write('CONNECT delayed.example:443 HTTP/1.1\r\nHost: delayed.example:443\r\n\r\n');
+  await lookupStarted;
+  client.destroy();
+  await once(client, 'close');
+  releaseLookup?.();
+  await new Promise(resolve => setTimeout(resolve, 20));
+  assert.ok(upstreamCreated === 0 || upstream?.destroyed);
 });
 
 const unavailable: readonly Readonly<{ name: string; scenario: DiscoveryScenario; error: RegExp }>[] = [

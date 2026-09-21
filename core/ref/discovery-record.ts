@@ -12,7 +12,9 @@ export type DirectDiscoveryEntry = 'public-directory' | 'free-gallery';
 export type DiscoveryEvidence = Readonly<{ path: string; sha256: string }>;
 export type DiscoveryNavigationReceipt = Readonly<{ url: string; evidence: DiscoveryEvidence; capture: DiscoveryEvidence }>;
 export type DirectDiscoveryReceipt = DiscoveryNavigationReceipt & Readonly<{ method: 'direct-public'; entry: DirectDiscoveryEntry }>;
-export type DiscoveryObservation = Readonly<{ url: string; finalUrl: string; links: readonly string[]; observedText?: string }>;
+export type DiscoveryObservation = Readonly<{
+  url: string; finalUrl: string; links: readonly string[]; observedText?: string; capturedAt?: string;
+}>;
 export const DISCOVERY_LIMITATIONS = 'native-public-get; stable-rendered-viewport-links; no-authentication; no-interaction-probes; not-provider-attested' as const;
 type DiscoveryCaptureFields = Readonly<{
   source: string; researchLane: DiscoveryLane; kind: 'page'; capturedAt: string; imagePath: string;
@@ -22,7 +24,8 @@ type DiscoveryCaptureFields = Readonly<{
 export type DiscoveryCaptureRecord = DiscoveryCaptureFields & (
   Readonly<{ schema: 'reference-navigation-capture-v2' }>
   | Readonly<{ schema: 'reference-discovery-entry-v1'; method: 'direct-public'; entry: DirectDiscoveryEntry }>
-  | Readonly<{ schema: 'reference-discovery-entry-v2'; method: 'direct-public'; entry: DirectDiscoveryEntry; signature: string }>
+  | Readonly<{ schema: 'reference-discovery-entry-v2'; method: 'direct-public'; entry: DirectDiscoveryEntry;
+    observedText: string; signature: string }>
 );
 
 export class ReferenceDiscoveryError extends Error {
@@ -121,7 +124,9 @@ function readDiscovery(root: string, value: unknown, direct: boolean, requireCur
   if (entry !== undefined) validateDirectDiscoveryLinks(entry, observation);
   const png = decodePng(read(root, image));
   if (png.width !== 1280 || png.height !== 900) return fail('discovery capture viewport differs');
-  return requireCurrent && observedText !== undefined ? { ...observation, observedText } : observation;
+  return requireCurrent && observedText !== undefined
+    ? { ...observation, observedText, capturedAt: text(row.capturedAt) }
+    : observation;
 }
 export function readDirectDiscoveryEntry(root: string, receipt: unknown): DiscoveryObservation {
   return readDiscovery(root, receipt, true);

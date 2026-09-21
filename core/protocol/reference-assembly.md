@@ -46,8 +46,10 @@ stays with Scout/coordinator; Composer and Hand receive only the derived decisio
 briefs and selected handoffs. No source URLs, hosts or capture paths belong in decision prose.
 The projection does not replace selected assembly, approved tokens, actual reference-usage evidence,
 or blind final review. It records what should be applied and checked, not what has already passed.
-Existing valid native captures remain usable; v5 execution binding, inspection and application are required before
-downstream composition/production and design-only/terminal completion. Changed research, domain
+Existing valid native captures remain usable only when current validators and schema migration permit.
+Publish current work as v7 without relabelling historical bytes; historical v5 remains search-only and
+historical v6 retains its original search-or-direct-root contract. Current execution binding, inspection
+and application are required before downstream composition/production and design-only/terminal completion. Changed research, domain
 brief or missing/edited derived outputs fails closed. Do not repair hashes to invent a review.
 
 The application is now an approved source-seal input. After authenticated final-v2 evidence,
@@ -304,8 +306,8 @@ transport is a capability gap, not permission to claim an unexecuted search. Thi
 Scout's browser-rs capture ownership or downstream source-free transfer.
 
 Scout records actual queries, inspected/rejected leads and native capture identities in its existing
-synthesis. This is disclosed provenance, not a tamper-proof search receipt or a substitute for native
-capture. No extra reference quota or discovery artifact is introduced. Selected `motion-one` cannot
+synthesis. Host search output alone is disclosed provenance, not project-signed native acquisition
+evidence or a substitute for native capture. No extra reference quota or discovery artifact is introduced. Selected `motion-one` cannot
 pass `omd ref granularity` with only still captures merely because domain analysis was skipped.
 The settled source-free assembly carries measured relationships and motion parameters into
 composition and production; existing usage, fidelity and browser checks prove their actual use.

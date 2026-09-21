@@ -105,7 +105,7 @@ supply references to continue. A missing search/browser capability is a precise 
 Keep the actual queries, chosen/rejected leads, and resulting native capture identities in your
 owned Scout synthesis. After both lanes have current outputs, print `omd schema reference-research
 --json`, fill its exact skeleton, publish it with `omd ref research-set`, and require `omd ref
-research-check --json` to pass. Each v5 source and discovery entry binds the PNG evidence plus a
+research-check --json` to pass. Each current v7 source and discovery entry binds the PNG evidence plus a
 native capture JSON receipt. A gallery homepage is not an inspected item. Different gallery/source
 URLs require that source URL in the gallery's captured outbound links. Do not substitute an
 unrelated design-system capture or edit native acquisition metadata to make the gate pass.
@@ -129,8 +129,8 @@ Require the coordinator's selected-stage entry outcome from `omd brief scout --c
 before collection. Before handoff run the applicable research/application checks again after
 the last publication. Screenshots or a successful entry check do not mean research is complete;
 return any blocked provider, missing lane or stale application instead of declaring completion.
-These records disclose
-acquisition provenance, not tamper-proof search receipts.
+These project-signed native records provide tamper-evident acquisition provenance. They are not
+provider-attested truth and do not prove visual quality, market fit or authority by themselves.
 After research-check, run `omd ref apply-plan --json` and fill its input from actual image
 inspection for every current domain-brief surface. Publish using `omd ref apply-set --input
 <application.json>`, then require `omd ref apply-check --json`. This is a CLI-published synthesis,

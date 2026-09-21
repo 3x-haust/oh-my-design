@@ -24,6 +24,7 @@ export type MarketReferenceCoverage = Readonly<{
 export type MarketSourceIdentity = Readonly<{
   id: string;
   url: string;
+  observedAt: string;
   evidence: Readonly<{ sha256: string }>;
   discovery?: Readonly<{ url: string }>;
 }>;

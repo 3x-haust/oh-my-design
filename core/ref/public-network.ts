@@ -86,19 +86,27 @@ export async function createPublicNetworkProxy(options: Readonly<{
     socket.once('close', () => sockets.delete(socket));
   });
   server.on('connect', (request, client, head) => {
+    let clientClosed = client.destroyed;
+    let upstream: Duplex | undefined;
+    const closeUpstream = () => { clientClosed = true; upstream?.destroy(); };
+    client.once('end', closeUpstream);
+    client.once('close', closeUpstream);
     void (async () => {
       try {
         const destination = target(request.url);
         const resolved = await resolvePublicDestination(destination.hostname, lookup);
-        const upstream = connect(resolved.address, destination.port, resolved.family);
-        sockets.add(upstream);
-        upstream.once('close', () => sockets.delete(upstream));
-        upstream.once('error', () => client.destroy());
-        upstream.once('connect', () => {
+        if (clientClosed || client.destroyed) return;
+        const connected = connect(resolved.address, destination.port, resolved.family);
+        upstream = connected;
+        sockets.add(connected);
+        connected.once('close', () => sockets.delete(connected));
+        connected.once('error', () => client.destroy());
+        connected.once('connect', () => {
+          if (clientClosed || client.destroyed) { connected.destroy(); return; }
           client.write('HTTP/1.1 200 Connection Established\r\n\r\n');
-          if (head.length) upstream.write(head);
-          client.pipe(upstream);
-          upstream.pipe(client);
+          if (head.length) connected.write(head);
+          client.pipe(connected);
+          connected.pipe(client);
         });
       } catch {
         client.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');

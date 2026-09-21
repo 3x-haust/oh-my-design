@@ -241,7 +241,7 @@ After the domain and design lanes both have current evidence, print `omd schema 
 lane to the current reference board. The publisher saves `.omd/refs/domain/research.json` and
 `.omd/refs/design/research.json` alongside their own captures, with `.omd/reference-research.json` as the
 consistency receipt. All three must agree. Existing v5 remains readable with its search requirements;
-new v6/v7 direct roots require new native entry captures, never a filename move or synthesized provenance.
+v6/v7 direct roots require new native entry captures, never a filename move or synthesized provenance.
 Both source and discovery observations bind PNG and native
 capture-JSON hashes. A gallery homepage alone is rejected. If the original source differs from the
 gallery entry, its exact URL must occur in that entry's captured outbound links; otherwise retain

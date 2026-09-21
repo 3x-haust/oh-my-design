@@ -19,6 +19,7 @@ export type { MarketLaneCoverage, MarketReferenceCoverage } from './market-refer
 const INVISIBLE = /[\p{Cc}\p{Default_Ignorable_Code_Point}\p{White_Space}\u2800\u3164\uffa0]/gu;
 const DIRECT_NEGATION = /\b(?:not|no|isn't|is not|doesn't|does not|unavailable|unsupported|outside|excludes?|excluded|excluding|global only)\b|아님|아니다|불가|제외|미지원|제공하지\s*않|지원하지\s*않|해외\s*전용|한국\s*외/iu;
 const DIRECT_SCOPE = /\b(?:serves?|serving|available|operat(?:e|es|ed|ing)|based|local(?:ized)?|market|residents?|users?|audience|directory|gallery|service|product|interface)\b|대상|제공|운영|거주|사용자|시장|서비스|디렉터리|갤러리|제품|인터페이스|앱|웹사이트/iu;
+const MAX_PROVENANCE_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 function explanation(value: unknown, code: string): string {
   const result = marketText(value, code);
@@ -98,7 +99,13 @@ export function validateMarketReferenceCoverage(root: string, research: Referenc
     research.designReference.sources, designExecutions, designQueries, research.designReference.discoveryRoots ?? []);
 }
 
-type MarketExecution = Readonly<{ sha256: string; query: string | null; observedAt: number; links: readonly string[] }>;
+type MarketExecution = Readonly<{
+  sha256: string;
+  query: string | null;
+  observedAt: number;
+  links: readonly string[];
+  usable: boolean;
+}>;
 function validateLaneProvenance(
   lane: 'DOMAIN' | 'DESIGN', marketRegion: string, coverage: MarketLaneCoverage,
   sources: readonly MarketSourceIdentity[], executions: readonly MarketExecution[],
@@ -107,12 +114,18 @@ function validateLaneProvenance(
   for (const local of coverage.localSources) {
     const source = sources.find(candidate => candidate.id === local.sourceId)!;
     const urls = [source.url, ...(source.discovery === undefined ? [] : [source.discovery.url])];
-    const execution = executions.find(candidate => candidate.sha256 === local.provenanceReceiptSha256);
-    if ((local.basis === 'market-search-result') !== (execution?.query !== null)) {
+    const execution = executions.find(candidate => candidate.sha256 === local.provenanceReceiptSha256)
+      ?? marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_LOCAL_PROVENANCE`);
+    if ((local.basis === 'market-search-result') !== (execution.query !== null)) {
       marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_LOCAL_PROVENANCE`);
     }
-    if (execution === undefined || !execution.links.some(link => urls.includes(link))) {
+    if (!execution.usable || !execution.links.some(link => urls.includes(link))) {
       marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_LOCAL_PROVENANCE`);
+    }
+    const sourceObservedAt = Date.parse(source.observedAt);
+    if (!Number.isFinite(sourceObservedAt) || !Number.isFinite(execution.observedAt)
+      || Math.abs(sourceObservedAt - execution.observedAt) > MAX_PROVENANCE_AGE_MS) {
+      marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_LOCAL_PROVENANCE_STALE`);
     }
   }
   const fallback = coverage.globalFallback;
@@ -134,7 +147,13 @@ function validateExecutionOrder(
   const executions = receipts.map(receipt => {
     const execution = readSearchExecution(root, receipt, lane.toLowerCase() as 'domain' | 'design');
     if (execution.schema !== SEARCH_EXECUTION_SCHEMA) return marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_SEARCH_AUTHORITY`);
-    return { sha256: receipt.sha256, query: execution.query, observedAt: Date.parse(execution.observedAt), links: execution.links };
+    return {
+      sha256: receipt.sha256,
+      query: execution.query,
+      observedAt: Date.parse(execution.observedAt),
+      links: execution.links,
+      usable: execution.status === 'page-observed' || execution.status === 'gallery-observed',
+    };
   });
   const expected = expectedQueries.map(query => executions.find(execution => execution.query === query)
     ?? marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_SEARCH_REQUIRED`));
@@ -161,6 +180,8 @@ function validateDirectExecutions(
       || !containsMarketToken(observedText, marketLabels)) {
       return marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_DIRECT_PROVENANCE`);
     }
-    return Object.freeze({ sha256: receipt.capture.sha256, query: null, observedAt: 0, links: observation.links });
+    return Object.freeze({ sha256: receipt.capture.sha256, query: null,
+      observedAt: Date.parse(observation.capturedAt ?? ''),
+      links: observation.links, usable: true });
   }));
 }

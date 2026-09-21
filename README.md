@@ -108,9 +108,12 @@ quality reason, not just a prestigious gallery name. Use `omd schema reference-r
 files and their aggregate consistency receipt. Capture PNGs and metadata directly into their own
 folders with `ref add --lane domain|design` or `lane` on each add-batch entry. Inspect them with
 `ref list --lane domain|design --json`; domain captures do not silently enter the visual board.
-v3 binds source and gallery-entry PNGs to their native capture JSON. A homepage is not an inspected
+Current v7 research binds source and gallery-entry PNGs to native capture JSON, keeps domain and
+design lanes separate, and records source-specific market coverage when a market is explicit. A homepage is not an inspected
 entry, and a different original source must appear in the gallery's observed outbound links.
-Older records need v5 execution binding and republication, retaining valid native captures.
+Historical v5 remains readable with search-only requirements; v6 retains its search-or-direct-root
+contract. Reuse valid captured evidence only when current validators permit, then publish through v7
+without relabelling historical bytes.
 Domain/design hosts, final redirects and PNG evidence must be independent. Non-user discovery must
 be a supported public gallery item, not a service page labelled as a gallery. Public Pinterest,
 Dribbble and Behance items do not require UI Bowl's paid MCP. Free viewing is checked per item.
@@ -119,13 +122,16 @@ density, imagery, transfer and exclusions. Every board candidate uses visual-dir
 support-only documentation cannot complete the lane. Inspect previews in `.omd/refs/design/README.md`.
 These are provenance/role checks, not a machine certification of beauty.
 
-v5 requires actual search receipts, not query prose: `omd ref search --input <json>` accepts
+Current v7 requires native acquisition evidence, not query prose. `omd ref search --input <json>` accepts
 `{lane, query, url, queryParam}` and records a fresh-browser GET, actual links/capture or failure.
 Put its returned receipt in the lane's `searches`. Every query must match an execution and retained
 non-user sources/entries must occur in observed links and have separate native visit captures.
 Failed attempts can accompany a usable free alternative. HTTP 200 alone is not search quality.
 The executor accepts public Google/Bing/DuckDuckGo search pages with `queryParam: "q"`; use task/pattern
 and gallery `site:` queries. Arbitrary service pages with invented query parameters are rejected.
+When search is blocked, v6/v7 also allow signed direct-public list discovery through `omd ref navigate`.
+New search-v2 and direct-entry-v2 records are project-signed and tamper-evident, but they are not
+provider-attested truth and do not certify quality, market fit or authority.
 
 After research, `omd ref apply-plan --json` creates an incomplete input draft for every current
 domain-brief surface. Inspect the actual images, fill the draft's `input`, and publish it using
