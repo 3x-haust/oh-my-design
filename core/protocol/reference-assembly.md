@@ -194,6 +194,10 @@ records. New research uses v7. Historical v5 remains readable with its search-on
 historical v6 remains readable with its original search-or-direct-root requirements. Each lane can use `searches` from `omd ref search --input <json>` with
 `{lane, query, url, queryParam}`. The URL submits the exact query; a fresh browser records observed
 links, a 1280×900 screenshot and HTTP/error outcome, without reusing login state or clicking controls.
+Current signed search records also bind each retained visible result label to its observed link.
+For explicit-market local coverage, that link-associated text must name the market and relevant
+service/product scope; market terms in the query alone do not qualify a source as local.
+Current v7 market provenance and its retained source observation must both be no more than seven days old.
 Inspect the page: HTTP 200 alone does not prove useful results or free access. All queries require
 execution receipts; every non-user retained domain source/design entry must occur in observed links
 and have its own native visit capture. Failed attempts may accompany a usable free alternative;

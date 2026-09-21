@@ -45,8 +45,11 @@ function rootEnvelope(lane: 'domain' | 'design') {
 }
 function searchReceiptAt(root: string, lane: 'domain' | 'design', receipt: { path: string }, observedAt: string) {
   const record = JSON.parse(readFileSync(join(root, receipt.path), 'utf8'));
-  record.observedAt = observedAt;
-  const bytes = `${JSON.stringify(record, null, 2)}\n`;
+  const { signature: _signature, ...unsignedRecord } = record;
+  const unsigned = { ...unsignedRecord, observedAt };
+  const updated = { ...unsigned, signature: signNativeObservation(root, unsigned.schema,
+    admissionHash(canonicalJson(unsigned))) };
+  const bytes = `${JSON.stringify(updated, null, 2)}\n`;
   const sha256 = admissionHash(bytes);
   const path = `.omd/refs/${lane}/search-${sha256}.json`;
   writeFileSync(join(root, path), bytes);
@@ -54,7 +57,7 @@ function searchReceiptAt(root: string, lane: 'domain' | 'design', receipt: { pat
 }
 function directRootAt(root: string, lane: 'domain' | 'design', url: string, links: readonly string[],
   observedText = `South Korea ${lane === 'domain' ? 'service directory for residents' : 'design gallery products'}.`,
-  capturedAt = '2026-09-21T00:00:00.000Z') {
+  capturedAt = new Date().toISOString()) {
   const image = testPng(1280, 900, lane === 'design' ? 1 : 0);
   const imageSha256 = admissionHash(image);
   const imagePath = `.omd/discovery/${lane}/entries/${imageSha256}.png`;
@@ -117,6 +120,27 @@ test('explicit-market v7 binds local sources and fallback to executed market evi
       searches: [blockedReceipt, input.domainReference.searches[1]!] } };
   assert.throws(() => validateReferenceResearch(fixture.root,
     parseReferenceResearch(blockedInput), options), /MARKET_DOMAIN_LOCAL_PROVENANCE/);
+  const unscopedReceipt = testSearchReceipt(fixture.root, 'domain', domainQueries[0]!,
+    [fixture.domain.source], false, new Date().toISOString(), 'Global directory for Canadian services');
+  const unscopedCoverage = structuredClone(documented);
+  unscopedCoverage.domain.localSources[0]!.provenanceReceiptSha256 = unscopedReceipt.sha256;
+  const unscopedInput = { ...input, marketCoverage: unscopedCoverage,
+    domainReference: { ...input.domainReference,
+      searches: [unscopedReceipt, input.domainReference.searches[1]!] } };
+  assert.throws(() => validateReferenceResearch(fixture.root,
+    parseReferenceResearch(unscopedInput), options), /MARKET_DOMAIN_LOCAL_RESULT_SCOPE/);
+  const oldObservedAt = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString();
+  const staleSearchReceipt = testSearchReceipt(fixture.root, 'domain', domainQueries[0]!,
+    [fixture.domain.source], false, oldObservedAt);
+  const staleSearchCoverage = structuredClone(documented);
+  staleSearchCoverage.domain.localSources[0]!.provenanceReceiptSha256 = staleSearchReceipt.sha256;
+  const staleSearchInput = { ...input, marketCoverage: staleSearchCoverage,
+    domainReference: { ...input.domainReference,
+      sources: input.domainReference.sources.map((source, index) => index === 0
+        ? { ...source, observedAt: oldObservedAt.slice(0, 10) } : source),
+      searches: [staleSearchReceipt, input.domainReference.searches[1]!] } };
+  assert.throws(() => validateReferenceResearch(fixture.root,
+    parseReferenceResearch(staleSearchInput), options), /MARKET_DOMAIN_LOCAL_PROVENANCE_STALE/);
   const wrongGap = structuredClone(documented);
   wrongGap.domain.globalFallback!.gap.marketRegion = 'CA';
   assert.throws(() => validateReferenceResearch(fixture.root,
@@ -178,10 +202,14 @@ test('market search and direct provenance refuse malformed scope, attempts, root
   forgedDirect.marketCoverage.domain.localSources[0]!.provenanceReceiptSha256 = 'f'.repeat(64);
   assert.throws(() => validateMarketReferenceCoverage(fixture.root,
     parseReferenceResearch(forgedDirect), options.expectedRequest), /MARKET_DOMAIN_LOCAL_PROVENANCE/);
+  const oldObservedAt = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString();
   const staleRoot = directRootAt(fixture.root, 'domain', 'https://directory.example/south-korea/stale',
-    fixture.research.domainReference.sources.map(source => source.url), undefined, '2026-08-01T00:00:00.000Z');
+    fixture.research.domainReference.sources.map(source => source.url), undefined, oldObservedAt);
   const stale = { ...scoped,
-    domainReference: { ...scoped.domainReference, discoveryRoots: [staleRoot] },
+    domainReference: { ...scoped.domainReference,
+      sources: scoped.domainReference.sources.map((source, index) => index === 0
+        ? { ...source, observedAt: oldObservedAt.slice(0, 10) } : source),
+      discoveryRoots: [staleRoot] },
     marketCoverage: { ...directCoverage, domain: { ...directCoverage.domain,
       localSources: [localDirectSource('domain-1', fixture.domain.evidence.sha256, 'service', staleRoot.capture.sha256)],
       globalFallback: { sourceIds: ['domain-2', 'domain-3'], gap: fallbackGap([], [staleRoot.url]) } } } };

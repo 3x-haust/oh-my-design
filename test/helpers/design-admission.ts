@@ -28,16 +28,18 @@ export function designAdmissionFixture(t: TestContext) {
   t.after(() => rmSync(root, { recursive: true, force: true }));
   mkdirSync(join(root, '.omd/refs'), { recursive: true });
   const writer = createTestProjectWriteAdapter(root);
+  const capturedAt = new Date().toISOString();
+  const observedAt = capturedAt.slice(0, 10);
   const receipt = (path: string) => ({ path: relative(root, path), sha256: admissionHash(readFileSync(path)) });
   const capture = (source: string, component: string, lane: 'domain' | 'design', channel: number, links: string[] = []) => {
     const png = admissionPng(channel);
     const image = refImagePath(root, { source, component, researchLane: lane });
     const ref: Reference = {
-      source, component, researchLane: lane, kind: 'component', selector: '#hero', capturedAt: '2026-09-21T00:00:00.000Z',
+      source, component, researchLane: lane, kind: 'component', selector: '#hero', capturedAt,
       acquisition: { requestedUrl: source, finalUrl: source, httpStatus: 200, links, imageSha256: admissionHash(png) },
       imagePath: relative(root, image), principles: ['Use measured hierarchy.'],
       invariants: { spacingLadder: [8], radiusLadder: [4], elevationLevels: 0, centeredRatio: 0, tokenCoverage: 1, paddingWeight: 8, typeScale: [], fontFamilies: [], weightLadder: [], motionDurations: [], easingVocab: [], animatedShare: 0, hoverCoverage: 0, focusCoverage: 0, animatedProperties: [], hasReducedMotion: false, scrollChoreography: [] },
-      blueprint: { selector: '#hero', capturedAt: '2026-09-21T00:00:00.000Z', nodes: [{ id: 'hero', role: 'container', children: [], box: { w: 120, h: 40 } }] },
+      blueprint: { selector: '#hero', capturedAt, nodes: [{ id: 'hero', role: 'container', children: [], box: { w: 120, h: 40 } }] },
     };
     const path = saveRef(root, ref, writer); writeFileSync(image, png);
     return { ref, path, source, evidence: receipt(image), capture: receipt(path) };
@@ -61,9 +63,9 @@ export function designAdmissionFixture(t: TestContext) {
   const research = {
     schema: 'reference-research-v5', sourceContractSha256: ADMISSION_SOURCE_SHA,
     domainReference: { queries: ['service task'], searches: [testSearchReceipt(root, 'domain', 'service task', [domain.source, domainTwo.source, domainThree.source])],
-      sources: [domain, domainTwo, domainThree].map((entry, index) => ({ id: `domain-${index + 1}`, url: entry.source, observedAt: '2026-09-21', decision: 'Task order', finding: 'Review before submission', evidence: entry.evidence, capture: entry.capture })), benchmarkSha256: null },
+      sources: [domain, domainTwo, domainThree].map((entry, index) => ({ id: `domain-${index + 1}`, url: entry.source, observedAt, decision: 'Task order', finding: 'Review before submission', evidence: entry.evidence, capture: entry.capture })), benchmarkSha256: null },
     designReference: { queries: ['visual task'], searches: [testSearchReceipt(root, 'design', 'visual task', [gallery.source])],
-      sources: [{ id: 'visual', url: source.source, observedAt: '2026-09-21', decision: 'Visual hierarchy', finding: 'Heading anchors work', evidence: source.evidence, capture: source.capture,
+      sources: [{ id: 'visual', url: source.source, observedAt, decision: 'Visual hierarchy', finding: 'Heading anchors work', evidence: source.evidence, capture: source.capture,
         visualRole: 'visual-direction', visualAssessment: { composition: 'Anchored task', typography: 'Heading contrast', density: 'Compact controls', imagery: 'None', transfer: 'Task hierarchy', avoid: 'Branding' },
         discovery: { url: gallery.source, kind: 'app-gallery', access: 'free', qualityReason: 'Task remains legible.', evidence: gallery.evidence, capture: gallery.capture } }],
       boardSha256: admissionHash(readFileSync(boardPath)) },

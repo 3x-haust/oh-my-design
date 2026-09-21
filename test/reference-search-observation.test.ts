@@ -67,6 +67,7 @@ test('hidden result anchors cannot turn a navbar-only capture into observed disc
     <section style="display:none"><a href="https://hidden.example/">Removed result</a></section>
     <a style="visibility:hidden" href="https://invisible.example/">Invisible result</a>` });
   assert.deepEqual(h.execution.links, ['https://www.bing.com/images']);
+  assert.deepEqual(h.execution.results, [{ url: 'https://www.bing.com/images', text: 'Images' }]);
   assert.equal(h.execution.status, 'empty-observation');
   assert.equal(searchObserved(h.execution), false);
   assert.ok(h.execution.capture);
@@ -77,6 +78,7 @@ test('a rendered Bing redirect remains an observed destination with its actual p
   const h = await observe(t, { html: `${navbar}<main><a href="${redirect}">Benefits</a></main>` });
   assert.equal(h.execution.status, 'page-observed');
   assert.ok(h.execution.links.includes(redirect));
+  assert.ok(h.execution.results?.some(result => result.url === redirect && result.text === 'Benefits'));
   assert.equal(validateSearchCoverage(h.root, 'domain', [input.query], [h.receipt], [target]).executed, 1);
   assert.ok(h.execution.capture);
   assert.deepEqual(readFileSync(join(h.root, h.execution.capture.path)), h.captures[0]);

@@ -131,6 +131,9 @@ the last publication. Screenshots or a successful entry check do not mean resear
 return any blocked provider, missing lane or stale application instead of declaring completion.
 These project-signed native records provide tamper-evident acquisition provenance. They are not
 provider-attested truth and do not prove visual quality, market fit or authority by themselves.
+For explicit-market search provenance, the signed visible result text associated with the retained
+link must itself name the market and relevant service/product scope; a localized query alone is not local evidence.
+Reacquire explicit-market provenance and its retained source when either is more than seven days old.
 After research-check, run `omd ref apply-plan --json` and fill its input from actual image
 inspection for every current domain-brief surface. Publish using `omd ref apply-set --input
 <application.json>`, then require `omd ref apply-check --json`. This is a CLI-published synthesis,

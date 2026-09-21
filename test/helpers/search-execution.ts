@@ -18,7 +18,8 @@ export function testPng(width = 1280, height = 900, fill = 0): Buffer {
   if (fill) for (let row = 0; row < height; row++) pixels.fill(fill, row * (width * 3 + 1) + 1, (row + 1) * (width * 3 + 1));
   return Buffer.concat([Buffer.from('89504e470d0a1a0a', 'hex'), chunk('IHDR', header), chunk('IDAT', deflateSync(pixels)), chunk('IEND', Buffer.alloc(0))]);
 }
-export function testSearchReceipt(root: string, lane: 'domain' | 'design', query: string, links: string[], failed = false) {
+export function testSearchReceipt(root: string, lane: 'domain' | 'design', query: string, links: string[], failed = false,
+  observedAt = new Date().toISOString(), resultText = `${query} service product gallery`) {
   const save = (bytes: Buffer, extension: string) => {
     const sha256 = createHash('sha256').update(bytes).digest('hex');
     const path = `.omd/refs/${lane}/search-${sha256}.${extension}`;
@@ -28,8 +29,8 @@ export function testSearchReceipt(root: string, lane: 'domain' | 'design', query
   };
   const url = new URL('https://www.google.com/search'); url.searchParams.set('q', query);
   const unsigned = { schema: 'reference-search-execution-v2', lane, query, queryParam: 'q', requestedUrl: url.href, finalUrl: url.href,
-    provider: url.hostname, observedAt: '2026-09-20T00:00:00.000Z', status: failed ? 'http-error' : 'page-observed', httpStatus: failed ? 403 : 200,
-    links, capture: save(testPng(), 'png'), error: failed ? 'HTTP 403' : null,
+    provider: url.hostname, observedAt, status: failed ? 'http-error' : 'page-observed', httpStatus: failed ? 403 : 200,
+    links, results: links.map(url => ({ url, text: resultText })), capture: save(testPng(), 'png'), error: failed ? 'HTTP 403' : null,
     limitations: 'observed-links-not-ranked-results; no-clicks; no-authentication; not-provider-attested' };
   const record = { ...unsigned, signature: signNativeObservation(root, unsigned.schema,
     createHash('sha256').update(canonicalJson(unsigned)).digest('hex')) };

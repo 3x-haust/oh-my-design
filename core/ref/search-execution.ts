@@ -10,6 +10,9 @@ import { gallerySearchHasItems, gallerySearchProvider } from './gallery-search.t
 import { captureSearchObservation } from './search-observation.ts';
 import { observeDocumentResponses, type DocumentObserver } from './document-observation.ts';
 import { createPublicNetworkProxy } from './public-network.ts';
+import { observedSearchTargets, type ObservedSearchResult } from './search-result.ts';
+
+export { observedSearchTargets } from './search-result.ts';
 
 export const SEARCH_EXECUTION_SCHEMA = 'reference-search-execution-v2';
 const HISTORICAL_SEARCH_EXECUTION_SCHEMA = 'reference-search-execution-v1';
@@ -21,6 +24,7 @@ export type SearchExecution = Readonly<{
   requestedUrl: string; finalUrl: string | null; provider: string;
   observedAt: string; status: 'page-observed' | 'gallery-observed' | 'empty-observation' | 'blocked' | 'http-error' | 'navigation-error'; httpStatus: number | null;
   links: readonly string[]; capture: Receipt | null; error: string | null;
+  results?: readonly ObservedSearchResult[];
   limitations: 'observed-links-not-ranked-results; no-clicks; no-authentication; not-provider-attested';
   signature?: string;
 }>;
@@ -70,7 +74,7 @@ function parseExecution(value: unknown): SearchExecution {
     ? Object.getOwnPropertyDescriptor(value, 'schema') : undefined;
   const current = schema !== undefined && 'value' in schema && schema.value === SEARCH_EXECUTION_SCHEMA;
   const keys = ['schema', 'lane', 'query', 'queryParam', 'requestedUrl', 'finalUrl', 'provider', 'observedAt', 'status', 'httpStatus', 'links', 'capture', 'error', 'limitations'];
-  const row = object(value, current ? [...keys, 'signature'] : keys);
+  const row = object(value, current ? [...keys, 'results', 'signature'] : keys);
   const input = parseSearchInput({ lane: row.lane, query: row.query, queryParam: row.queryParam, url: row.requestedUrl });
   if (![SEARCH_EXECUTION_SCHEMA, HISTORICAL_SEARCH_EXECUTION_SCHEMA].includes(row.schema as string)
     || row.limitations !== LIMITATIONS || row.provider !== new URL(input.url).hostname
@@ -80,6 +84,7 @@ function parseExecution(value: unknown): SearchExecution {
   if (!Array.isArray(row.links) || row.links.length > 2000 || Object.keys(row.links).length !== row.links.length) return fail('invalid observed links');
   const links = row.links.map(url);
   if (new Set(links).size !== links.length) return fail('duplicate links');
+  const results = current ? parseResults(row.results, links) : undefined;
   if (row.status === 'page-observed' && (row.httpStatus !== 200 || row.capture === null || row.finalUrl === null || row.error !== null)) return fail('observed page needs HTTP 200 and capture');
   if (row.status === 'gallery-observed' && (row.httpStatus !== 200
     || row.capture === null || row.finalUrl === null || row.error !== null || !gallerySearchHasItems(input, links))) return fail('observed gallery needs successful HTTP, capture and actual gallery-item links');
@@ -97,7 +102,19 @@ function parseExecution(value: unknown): SearchExecution {
     status: row.status as SearchExecution['status'], httpStatus: row.httpStatus as number | null, links,
     capture: row.capture === null ? null : parseReceipt(row.capture, input.lane, 'png'),
     error: row.error === null ? null : text(row.error), limitations: LIMITATIONS };
-  return current ? { ...parsed, signature: text(row.signature) } : parsed;
+  return current ? { ...parsed, results: results ?? [], signature: text(row.signature) } : parsed;
+}
+
+function parseResults(value: unknown, links: readonly string[]): readonly ObservedSearchResult[] {
+  if (!Array.isArray(value) || value.length > 2000 || Object.keys(value).length !== value.length) return fail('invalid observed results');
+  const results = value.map(item => {
+    const row = object(item, ['url', 'text']);
+    const result = { url: url(row.url), text: text(row.text) };
+    if (!links.includes(result.url)) return fail('observed result must bind an observed link');
+    return Object.freeze(result);
+  });
+  if (new Set(results.map(result => result.url)).size !== results.length) return fail('duplicate observed results');
+  return Object.freeze(results);
 }
 
 /** Fresh browser context, no user session, clicks, form fills, payment, or login. This records
@@ -114,6 +131,7 @@ export async function executeReferenceSearch(browser: Browser, value: unknown, w
   let status: SearchExecution['status'] = 'navigation-error';
   let error: string | null = null;
   let links: string[] = [];
+  let results: ObservedSearchResult[] = [];
   try {
     context = await browser.newContext({ viewport: { width: 1280, height: 900 }, serviceWorkers: 'block', acceptDownloads: false,
       proxy: { server: networkProxy.server } });
@@ -128,6 +146,7 @@ export async function executeReferenceSearch(browser: Browser, value: unknown, w
     captureBytes = observation.bytes;
     capture = { path: `.omd/discovery/${input.lane}/search-${hash(captureBytes)}.png`, sha256: hash(captureBytes) };
     links = observation.links;
+    results = observation.results;
     const challenge = searchChallengeReason(observation.body);
     const gallery = gallerySearchProvider(input) !== null;
     const httpOk = httpStatus === 200;
@@ -145,7 +164,7 @@ export async function executeReferenceSearch(browser: Browser, value: unknown, w
     }
   } catch (caught) {
     // Do not present a partial navigation or old blank-page screenshot as search evidence.
-    status = 'navigation-error'; capture = null; captureBytes = null; links = []; httpStatus = null;
+    status = 'navigation-error'; capture = null; captureBytes = null; links = []; results = []; httpStatus = null;
     error = (caught instanceof Error ? caught.message : String(caught)).slice(0, 4096);
   } finally {
     try { await documents?.close(); }
@@ -156,7 +175,7 @@ export async function executeReferenceSearch(browser: Browser, value: unknown, w
   }
   const unsigned = { schema: SEARCH_EXECUTION_SCHEMA, lane: input.lane, query: input.query, queryParam: input.queryParam,
     requestedUrl: input.url, finalUrl, provider: new URL(input.url).hostname, observedAt: new Date().toISOString(),
-    status, httpStatus, links, capture, error, limitations: LIMITATIONS } as const;
+    status, httpStatus, links, results, capture, error, limitations: LIMITATIONS } as const;
   const execution: SearchExecution = { ...unsigned,
     signature: signNativeObservation(writer.projectRoot, SEARCH_EXECUTION_SCHEMA, hash(canonicalJson(unsigned))) };
   const bytes = `${JSON.stringify(execution, null, 2)}\n`;
@@ -234,23 +253,4 @@ export function observedNavigationTargets(targets: readonly string[], navigation
     }
   }
   return reached;
-}
-
-/** Decode only known search redirect links that were actually present in the DOM. Decoding is
- * discovery, not a visit: research-check still requires the destination's native capture. */
-export function observedSearchTargets(execution: Pick<SearchExecution, 'links'>): string[] {
-  const targets = new Set(execution.links);
-  for (const link of execution.links) {
-    const parsed = new URL(link);
-    let target = parsed.hostname === 'www.google.com' && parsed.pathname === '/url'
-      ? parsed.searchParams.get('q') ?? parsed.searchParams.get('url')
-      : ['duckduckgo.com', 'html.duckduckgo.com', 'lite.duckduckgo.com'].includes(parsed.hostname) && parsed.pathname === '/l/'
-        ? parsed.searchParams.get('uddg') : null;
-    if (parsed.hostname === 'www.bing.com' && parsed.pathname === '/ck/a') {
-      const encoded = parsed.searchParams.get('u');
-      if (encoded?.startsWith('a1')) target = Buffer.from(encoded.slice(2), 'base64url').toString('utf8');
-    }
-    if (target) { try { targets.add(url(target)); } catch { /* not a public canonical target */ } }
-  }
-  return [...targets];
 }

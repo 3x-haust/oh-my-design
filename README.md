@@ -132,6 +132,9 @@ and gallery `site:` queries. Arbitrary service pages with invented query paramet
 When search is blocked, v6/v7 also allow signed direct-public list discovery through `omd ref navigate`.
 New search-v2 and direct-entry-v2 records are project-signed and tamper-evident, but they are not
 provider-attested truth and do not certify quality, market fit or authority.
+For explicit-market local coverage, a signed search result's visible link text must name the market
+and relevant service/product scope. A localized query by itself does not make a source local.
+Both that provenance and the retained source observation must be no more than seven days old.
 
 After research, `omd ref apply-plan --json` creates an incomplete input draft for every current
 domain-brief surface. Inspect the actual images, fill the draft's `input`, and publish it using
