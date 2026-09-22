@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, readdirSync, realpathSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, readdirSync, realpathSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
@@ -10,6 +10,7 @@ import { capturePageForRef, withBrowser, galleryLoginOccludes } from '../core/re
 import { loadRefs, refImagePath, researchLane, saveRef, addPrinciples } from '../core/ref/store.ts';
 import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
 import { addRefsBatch } from '../core/ref/batch.ts';
+import { commitCapturedReference } from '../core/ref/capture-commit.ts';
 
 test('final URL refusal leaves the reference output tree unchanged', async t => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-lane-refusal-')));
@@ -32,6 +33,42 @@ test('batch capture failure does not pre-create the reference output tree', asyn
   }, createTestProjectWriteAdapter(root));
   assert.equal(result.outcomes[0]?.ok, false);
   assert.equal(existsSync(join(root, '.omd/refs')), false);
+});
+
+test('batch post-capture validation failure leaves no orphan screenshot', async t => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-lane-post-capture-refusal-')));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const rulesRoot = join(root, 'rules');
+  mkdirSync(rulesRoot);
+  writeFileSync(join(rulesRoot, 'stuck.yaml'), `
+id: STUCK-001
+layer: 1
+category: slop
+severity: warn
+when: "(() => { while (true) {} })()"
+assert: "true"
+message: stuck
+`);
+  const source = fileURLToPath(new URL('fixtures/considered.html', import.meta.url));
+  const result = await addRefsBatch(root, [{ source, as: 'rejected', lane: 'design', fromUser: true, shot: true, energy: false }], {
+    rulesRoot, concurrency: 1,
+  }, createTestProjectWriteAdapter(root));
+  assert.equal(result.outcomes[0]?.ok, false);
+  assert.match(result.outcomes[0]?.error ?? '', /STUCK-001.*timed out/);
+  assert.equal(existsSync(join(root, '.omd/refs')), false);
+});
+
+test('reference commit failure removes a new image and restores previous evidence', t => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-lane-commit-rollback-')));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const writer = createTestProjectWriteAdapter(root);
+  const imagePath = join(root, '.omd/refs/design/capture.png');
+  assert.throws(() => commitCapturedReference(writer, imagePath, Buffer.from('new'), () => { throw new Error('record rejected'); }), /record rejected/);
+  assert.equal(existsSync(imagePath), false);
+  writer.mkdir('.omd/refs/design');
+  writer.write('.omd/refs/design/capture.png', Buffer.from('previous'));
+  assert.throws(() => commitCapturedReference(writer, imagePath, Buffer.from('replacement'), () => { throw new Error('record rejected'); }), /record rejected/);
+  assert.equal(readFileSync(imagePath, 'utf8'), 'previous');
 });
 
 test('actual full-page captures retain HTTP/link provenance and stay in separate lane directories', async t => {
