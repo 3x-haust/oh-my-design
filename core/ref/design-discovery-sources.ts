@@ -19,6 +19,7 @@ const PAGE_FLOWS_SCREEN = new RegExp(`^/screens/${UUID_PATH}/?$`, 'i');
  * Extend this catalogue deliberately rather than labelling arbitrary domain pages as galleries. */
 export function designDiscoveryProvider(url: string): string | null {
   const parsed = new URL(url);
+  if (parsed.protocol !== 'https:' || parsed.port !== '') return null;
   const host = parsed.hostname.toLowerCase().replace(/^www\./, '');
   const path = decodedPath(parsed);
   if (path === null) return null;
@@ -79,6 +80,7 @@ export function referenceServiceFamily(url: string): string {
 export function designDiscoveryDirectoryProvider(url: string): string | null {
   if (designDiscoveryProvider(url) !== null) return null;
   const parsed = new URL(url);
+  if (parsed.protocol !== 'https:' || parsed.port !== '') return null;
   const host = referenceServiceHost(url);
   const path = parsed.pathname.replace(/\/+$/, '') || '/';
   if (/\/(?:login|signin|sign-in|signup|sign-up|pricing|plans|checkout|subscribe)(?:\/|$)/i.test(path)) return null;

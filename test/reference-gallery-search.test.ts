@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { designDiscoveryIdentity, designDiscoveryItemIdentity, designDiscoveryProvider } from '../core/ref/design-discovery-sources.ts';
+import { designDiscoveryDirectoryProvider, designDiscoveryIdentity, designDiscoveryItemIdentity, designDiscoveryProvider } from '../core/ref/design-discovery-sources.ts';
 import { executeReferenceSearch, parseSearchInput, readSearchExecution, validateSearchCoverage } from '../core/ref/search-execution.ts';
 import { withBrowser } from '../core/render/index.ts';
 import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
@@ -59,7 +59,12 @@ test('product-screen providers accept concrete screens but reject their director
     'https://mobbin.com/explore/screens/------------------------------------',
     'https://pageflows.com/screens/1234567890abcdef1234567890abcdef1234/',
     'https://mobbin.com/explore/screens/7b35b6c7f954-4dcb-b320-3ad873339477',
+    'http://mobbin.com/explore/screens/7b35b6c7-f954-4dcb-b320-3ad873339477',
+    'https://pageflows.com:8443/screens/6753bc45-9853-4b61-a78e-c95827d347e5/',
   ]) assert.equal(designDiscoveryProvider(url), null);
+  for (const url of ['http://mobbin.com/explore/screens', 'https://pageflows.com:8443/screens/']) {
+    assert.equal(designDiscoveryDirectoryProvider(url), null);
+  }
 });
 
 test('selected discovery offers explicit direct public entry inputs while skipped discovery offers none', t => {
