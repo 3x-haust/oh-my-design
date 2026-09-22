@@ -95,6 +95,18 @@ test('website gallery wrappers are discovery evidence, not retained visual evide
   });
 });
 
+test('a user marker cannot promote gallery wrapper chrome into retained evidence', t => {
+  const { root, capture } = designAdmissionFixture(t);
+  const wrapper = capture('https://mobbin.com/explore/screens/7b35b6c7-f954-4dcb-b320-3ad873339477', 'user-gallery-wrapper', 'design', 60);
+  wrapper.ref.origin = 'user';
+  const retained = inspectDesignReferenceAdmission(root, wrapper.ref);
+  assert.equal(retained.eligible, false);
+  assert.equal(retained.code, 'discovery');
+  const provenance = inspectDesignReferenceAdmission(root, wrapper.ref, { purpose: 'discovery' });
+  assert.equal(provenance.eligible, true);
+  assert.equal(provenance.code, 'gallery');
+});
+
 test('selected discovery refuses a copied domain image with a gallery source declaration', t => {
   const { root, domain, gallery, research } = designAdmissionFixture(t);
   writeFileSync(join(root, '.omd/reference-research.json'), JSON.stringify(research));

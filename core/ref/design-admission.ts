@@ -112,7 +112,6 @@ export function inspectDesignReferenceAdmission(root: string, reference: Referen
   if (!acquisition) return rejected('capture', 'Native acquisition is missing.');
   if (domainConflict(root, reference, references)) return rejected('domain-reuse', 'Domain source or image evidence cannot be retained as independent design evidence.');
   // The existing native --from-user contract is preserved; this marker is not independent proof of a conversation.
-  if (reference.origin === 'user') return { eligible: true, code: 'user-provided', reason: 'Native capture explicitly recorded as supplied by the user.' };
   const sourceProvider = provider(reference.source);
   const finalProvider = provider(acquisition.finalUrl);
   if (sourceProvider !== null && finalProvider !== null) {
@@ -122,6 +121,7 @@ export function inspectDesignReferenceAdmission(root: string, reference: Referen
     }
     return { eligible: true, code: 'gallery', reason: 'Successful native capture of a supported gallery item.', discoverySource: reference.source };
   }
+  if (reference.origin === 'user') return { eligible: true, code: 'user-provided', reason: 'Native capture explicitly recorded as supplied by the user.' };
   const entry = references.find(other => other.researchLane === 'design' && gallery(other.source)
     && other.acquisition && sameGalleryProvider(other.source, other.acquisition.finalUrl) && other.acquisition.links.includes(reference.source)
     && nativeCapture(root, other) === null && !domainConflict(root, other, references));
