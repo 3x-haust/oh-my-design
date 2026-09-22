@@ -13,6 +13,7 @@ import {
   validateReferenceResearch,
   publishReferenceResearch,
   readPublishedReferenceResearch,
+  referenceResearchArtifacts,
   DOMAIN_REFERENCES_PATH,
   DESIGN_REFERENCES_PATH,
 } from '../core/ref/reference-research.ts';
@@ -29,6 +30,7 @@ import { selectReferenceCandidateV2 } from '../core/ref/reference-selection.ts';
 import { writeReferenceHandoffReceipt } from '../core/ref/reference-handoff.ts';
 import { readSelectedReferenceHandoff } from '../core/ref/selected-handoff.ts';
 import { testSearchReceipt } from './helpers/search-execution.ts';
+import { designAdmissionFixture } from './helpers/design-admission.ts';
 import { validateSourceSeal, writeSourceSeal } from '../core/source-seal/index.ts';
 import { servedProjectTreeSha256 } from '../core/render/serve.ts';
 import { stageArtifactProblems } from '../core/stage/output.ts';
@@ -155,8 +157,23 @@ function fixture(t: { after(fn: () => void): void }) {
       boardSha256: sha256(readFileSync(boardPath)),
     },
   };
-  return { root, research, boardPath };
+  return { root, research, boardPath, writer };
 }
+
+test('historical v5 wrapper records remain readable but cannot satisfy current completion evidence', t => {
+  const value = fixture(t);
+  const source = value.research.designReference.sources[0]!;
+  source.url = source.discovery.url;
+  source.evidence = source.discovery.evidence;
+  source.capture = source.discovery.capture;
+  for (const [path, artifact] of Object.entries(referenceResearchArtifacts(parseReferenceResearch(value.research)))) {
+    value.writer.write(path, `${JSON.stringify(artifact, null, 2)}\n`);
+  }
+  assert.equal(readPublishedReferenceResearch(value.root).schema, 'reference-research-v5');
+  assert.throws(() => validateReferenceResearch(value.root, parseReferenceResearch(value.research), {
+    expectedSourceContractSha256: SOURCE_SHA, benchmarkRequired: false,
+  }), /DESIGN_REFERENCE_INELIGIBLE: discovery/);
+});
 
 test('two-track reference research binds separate live evidence and the current design board', t => {
   const value = fixture(t);
@@ -274,12 +291,22 @@ test('support-only design research and absent visual observations fail; recorded
 });
 
 test('board candidates cannot use only support evidence while visual direction sits unused', t => {
-  const { root, research } = fixture(t);
-  const source = research.designReference.sources[0]!;
-  source.visualRole = 'component-support';
-  research.designReference.sources.push({ ...source, id: 'direction-b', visualRole: 'visual-direction',
-    url: source.discovery.url, evidence: source.discovery.evidence, capture: source.discovery.capture });
-  assert.throws(() => validateReferenceResearch(root, parseReferenceResearch(research), {
+  const value = designAdmissionFixture(t);
+  const support = value.capture('https://support.example/task', 'support', 'design', 41);
+  const gallery = value.capture('https://dribbble.com/shots/22334455-Support-pattern', 'support-gallery', 'design', 42, [support.source]);
+  value.research.designReference.sources.push({
+    id: 'support', url: support.source, observedAt: new Date().toISOString().slice(0, 10),
+    decision: 'Supporting component anatomy', finding: 'Compact controls preserve room for the primary task.',
+    evidence: support.evidence, capture: support.capture, visualRole: 'component-support',
+    visualAssessment: { composition: 'Compact supporting region', typography: 'Small labels remain legible',
+      density: 'Dense secondary controls', imagery: 'No decorative imagery', transfer: 'Adapt control grouping', avoid: 'Do not copy branding' },
+    discovery: { url: gallery.source, kind: 'app-gallery', access: 'free',
+      qualityReason: 'The inspected controls are a useful secondary component reference.', evidence: gallery.evidence, capture: gallery.capture },
+  });
+  value.research.designReference.searches = [testSearchReceipt(value.root, 'design', 'visual task', [value.gallery.source, gallery.source])];
+  value.board.candidates[0]!.pieces[0]!.referenceId = refIdentity(support.source, 'support');
+  value.refreshBoard();
+  assert.throws(() => validateReferenceResearch(value.root, parseReferenceResearch(value.research), {
     expectedSourceContractSha256: SOURCE_SHA, benchmarkRequired: false,
   }), /BOARD_DESIGN_COVERAGE/);
 });
@@ -326,7 +353,7 @@ test('gallery and original-source captures need an observed link, not two unrela
   }), /DISCOVERY_LINK_MISMATCH/);
 });
 
-test('collecting gallery evidence without using it in any board candidate cannot complete design research', t => {
+test('collecting a gallery wrapper as retained evidence cannot complete design research', t => {
   const { root, research } = fixture(t);
   const source = research.designReference.sources[0]!;
   source.url = source.discovery.url;
@@ -334,7 +361,7 @@ test('collecting gallery evidence without using it in any board candidate cannot
   source.capture = source.discovery.capture;
   assert.throws(() => validateReferenceResearch(root, parseReferenceResearch(research), {
     expectedSourceContractSha256: SOURCE_SHA, benchmarkRequired: false,
-  }), /BOARD_DESIGN_COVERAGE/);
+  }), /DESIGN_REFERENCE_INELIGIBLE: discovery/);
 });
 
 test('lane-swapped PNG paths and failed acquisitions are rejected', t => {

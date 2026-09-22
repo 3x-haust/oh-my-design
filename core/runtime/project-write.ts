@@ -1,4 +1,4 @@
-import { chmodSync, constants as fsConstants, closeSync, fstatSync, fsyncSync, ftruncateSync, linkSync, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, realpathSync, renameSync, rmSync, unlinkSync, writeSync } from 'node:fs';
+import { chmodSync, constants as fsConstants, closeSync, fstatSync, fsyncSync, ftruncateSync, linkSync, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, realpathSync, renameSync, rmdirSync, rmSync, unlinkSync, writeSync } from 'node:fs';
 import type { Stats } from 'node:fs';
 import { hostname } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
@@ -28,6 +28,7 @@ export type ProjectWriteAdapter = {
   write(relativePath: string, content: string | Uint8Array): string;
   writeContentAddressed(relativePath: string, content: string | Uint8Array): string;
   remove(relativePath: string): string;
+  removeEmptyDirectory(relativePath: string): string;
 };
 
 /**
@@ -67,6 +68,7 @@ const trustedAdapterMetadata = new WeakMap<ProjectWriteAdapter, Readonly<{
   write: ProjectWriteAdapter['write'];
   writeContentAddressed: ProjectWriteAdapter['writeContentAddressed'];
   remove: ProjectWriteAdapter['remove'];
+  removeEmptyDirectory: ProjectWriteAdapter['removeEmptyDirectory'];
   invocation: ProjectRunInvocation;
 }>>();
 const PROJECT_MUTATION_LOCK = '.omd/.project-mutation.lock';
@@ -237,6 +239,12 @@ function resolveProjectPath(projectRoot: string, relativePath: string): string {
   if (pathFromRoot === '' || pathFromRoot === '..' || pathFromRoot.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) || pathFromRoot.startsWith('/')) {
     throw new ProjectWriteError('relativePath must stay inside the project root');
   }
+  return target;
+}
+
+export function validateProjectWritePath(projectRoot: string, relativePath: string): string {
+  const target = resolveProjectPath(projectRoot, relativePath);
+  requireRealProjectAncestors(projectRoot, target);
   return target;
 }
 
@@ -427,6 +435,27 @@ export function removeProjectFile(request: Omit<ProjectWriteRequest, 'content'>)
     if (!stats.isFile()) throw new ProjectWriteError(`${request.relativePath} is not a regular project file`);
     unlinkSync(target);
     fsyncDirectory(dirname(target));
+    return target;
+  });
+}
+
+export function removeEmptyProjectDirectory(request: Omit<ProjectWriteRequest, 'content'>): string {
+  return withProjectMutationLock(request.projectRoot, request.invocation, () => {
+    requireGuardedProjectWrite(request.projectRoot, request.invocation);
+    const target = resolveProjectPath(request.projectRoot, request.relativePath);
+    requireRealProjectAncestors(request.projectRoot, target);
+    try {
+      const stats = lstatSync(target);
+      if (!stats.isDirectory() || stats.isSymbolicLink()) {
+        throw new ProjectWriteError(`${request.relativePath} is not a real project directory`);
+      }
+      rmdirSync(target);
+      fsyncDirectory(dirname(target));
+    } catch (error) {
+      if (error instanceof ProjectWriteError) throw error;
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== 'ENOENT' && code !== 'ENOTEMPTY' && code !== 'EEXIST') throw error;
+    }
     return target;
   });
 }
@@ -775,6 +804,9 @@ export function createProjectWriteAdapter(
     remove(relativePath) {
       return removeProjectFile({ projectRoot: resolvedProjectRoot, relativePath, invocation });
     },
+    removeEmptyDirectory(relativePath) {
+      return removeEmptyProjectDirectory({ projectRoot: resolvedProjectRoot, relativePath, invocation });
+    },
   };
   trustedAdapters.add(adapter);
   trustedAdapterMetadata.set(adapter, Object.freeze({
@@ -783,6 +815,7 @@ export function createProjectWriteAdapter(
     write: adapter.write,
     writeContentAddressed: adapter.writeContentAddressed,
     remove: adapter.remove,
+    removeEmptyDirectory: adapter.removeEmptyDirectory,
     invocation,
   }));
   return Object.freeze(adapter);
@@ -799,6 +832,7 @@ export function requireProjectWriteAdapter(
     || adapter.write !== metadata.write
     || adapter.writeContentAddressed !== metadata.writeContentAddressed
     || adapter.remove !== metadata.remove
+    || adapter.removeEmptyDirectory !== metadata.removeEmptyDirectory
     || !Object.isFrozen(adapter)
     || !trustedAdapters.has(adapter)) {
     throw new ProjectWriteError('a trusted immutable project-write adapter is required');

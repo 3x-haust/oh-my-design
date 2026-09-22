@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { readPersistedRoute } from '../route/index.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
-import { designDiscoveryProvider, referenceServiceHost } from './design-discovery-sources.ts';
+import { designDiscoveryItemIdentity, referenceServiceHost } from './design-discovery-sources.ts';
 import { readContainedRegularFile } from './reference-selection.ts';
 import { assertReferenceLaneSeparation, loadRefs, researchLane } from './store.ts';
 
@@ -11,8 +11,8 @@ type CaptureIntent = Readonly<{ source: string; lane?: string; fromUser?: boolea
 export class ReferenceIntakeError extends Error {
   override readonly name = 'ReferenceIntakeError';
 }
-function gallery(url: string): boolean {
-  try { return designDiscoveryProvider(url) !== null; } catch { return false; }
+function galleryItem(url: string): string | null {
+  try { return designDiscoveryItemIdentity(url); } catch { return null; }
 }
 function host(url: string): string | null {
   try { return referenceServiceHost(url) || null; } catch { return null; }
@@ -31,8 +31,11 @@ export function captureFinalUrlGuard(root: string, specs: readonly CaptureIntent
       || loadRefs(root, { includeDomain: true }).some(ref => ref.researchLane && ref.researchLane !== lane
         && [host(ref.source), host(ref.acquisition?.finalUrl ?? '')].includes(service)));
     if (overlap) throw new ReferenceIntakeError('REFERENCE_LANE_SERVICE_OVERLAP: the final captured service belongs to the other research lane');
-    if (lane === 'design' && spec.fromUser !== true && gallery(spec.source) && !gallery(finalUrl)) {
-      throw new ReferenceIntakeError('DESIGN_DISCOVERY_REDIRECT: the gallery item redirected to an unqualified page; use ref navigate for discovery hops');
+    const requestedGalleryItem = galleryItem(spec.source);
+    const finalGalleryItem = galleryItem(finalUrl);
+    if (lane === 'design' && (requestedGalleryItem !== null || finalGalleryItem !== null)
+      && requestedGalleryItem !== finalGalleryItem) {
+      throw new ReferenceIntakeError('DESIGN_DISCOVERY_REDIRECT: the captured page must remain the exact requested gallery item; use ref navigate for discovery hops');
     }
     // Reserve synchronously before an async PNG write lets a sibling capture publish.
     observed.set(index, finalUrl);
@@ -64,15 +67,16 @@ export function captureLane(root: string, spec: CaptureIntent, invocation?: Proj
     && [host(ref.source), host(ref.acquisition?.finalUrl ?? '')].includes(service))) {
     throw new ReferenceIntakeError('REFERENCE_LANE_SERVICE_OVERLAP: choose independent services for domain and design research');
   }
-  if (lane === 'domain' || gallery(spec.source) || spec.fromUser === true) return lane;
+  if (lane === 'domain' || galleryItem(spec.source) !== null || spec.fromUser === true) return lane;
   const discovered = refs.some(ref => {
     const observation = ref.acquisition;
-    if (ref.researchLane !== 'design' || !gallery(ref.source) || !observation || !gallery(observation.finalUrl)
+    if (ref.researchLane !== 'design' || !observation || galleryItem(ref.source) === null
+      || galleryItem(ref.source) !== galleryItem(observation.finalUrl)
       || observation.httpStatus === null || observation.httpStatus < 200 || observation.httpStatus >= 300
       || !observation.links.includes(spec.source) || !ref.imagePath) return false;
     const bytes = readContainedRegularFile(root, join(root, ref.imagePath), 'design discovery capture');
     return createHash('sha256').update(bytes).digest('hex') === observation.imageSha256;
   });
-  if (!discovered) throw new ReferenceIntakeError('DESIGN_DISCOVERY_REQUIRED: capture a free Pinterest/Dribbble/Behance/Siteinspire/Land-book/Godly/UI Bowl item first, then its observed original link. Task/domain service pages belong in --lane domain. Use --from-user only for a reference the user actually supplied.');
+  if (!discovered) throw new ReferenceIntakeError('DESIGN_DISCOVERY_REQUIRED: capture a free Pinterest/Dribbble/Behance/Siteinspire/Land-book/Godly/UI Bowl/Mobbin/Page Flows item first, then its observed original link. Task/domain service pages belong in --lane domain. Use --from-user only for a reference the user actually supplied.');
   return lane;
 }

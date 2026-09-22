@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { isAbsolute, join, relative } from 'node:path';
 import type { Reference } from '../types.ts';
 import { readContainedRegularFile } from './reference-selection.ts';
-import { designDiscoveryProvider, referenceServiceHost } from './design-discovery-sources.ts';
+import { designDiscoveryItemIdentity, designDiscoveryProvider, referenceServiceHost } from './design-discovery-sources.ts';
 import { trustedReferenceImage } from './board-security.ts';
 import { loadRefs, refRecordPath } from './store.ts';
 
@@ -13,12 +13,23 @@ export type DesignReferenceAdmission = Readonly<{
   reason: string;
   discoverySource?: string;
 }>;
-type AdmissionOptions = Readonly<{ references?: readonly Reference[] }>;
+type AdmissionOptions = Readonly<{
+  references?: readonly Reference[];
+  purpose?: 'retained' | 'discovery' | 'image-parent';
+}>;
 const digest = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
 const object = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 const rejected = (code: DesignReferenceAdmission['code'], reason: string): DesignReferenceAdmission => ({ eligible: false, code, reason });
-const gallery = (source: string): boolean => {
-  try { return designDiscoveryProvider(source) !== null; } catch (error) { if (error instanceof TypeError) return false; throw error; }
+const provider = (source: string): string | null => {
+  try { return designDiscoveryProvider(source); } catch (error) { if (error instanceof TypeError) return null; throw error; }
+};
+const gallery = (source: string): boolean => provider(source) !== null;
+const galleryItem = (source: string): string | null => {
+  try { return designDiscoveryItemIdentity(source); } catch (error) { if (error instanceof TypeError) return null; throw error; }
+};
+const sameGalleryItem = (source: string, finalUrl: string): boolean => {
+  const sourceItem = galleryItem(source);
+  return sourceItem !== null && sourceItem === galleryItem(finalUrl);
 };
 const host = (source: string): string | null => {
   try { return referenceServiceHost(source) || null; } catch (error) { if (error instanceof TypeError) return null; throw error; }
@@ -104,10 +115,20 @@ export function inspectDesignReferenceAdmission(root: string, reference: Referen
   if (!acquisition) return rejected('capture', 'Native acquisition is missing.');
   if (domainConflict(root, reference, references)) return rejected('domain-reuse', 'Domain source or image evidence cannot be retained as independent design evidence.');
   // The existing native --from-user contract is preserved; this marker is not independent proof of a conversation.
+  const sourceProvider = provider(reference.source);
+  const finalProvider = provider(acquisition.finalUrl);
+  if (sourceProvider !== null || finalProvider !== null) {
+    if (sourceProvider === null) return rejected('discovery', 'The capture redirected into a gallery wrapper; retain the observed original or exact useful image/crop instead.');
+    if (finalProvider === null) return rejected('discovery', 'The gallery item redirected away from its inspectable entry; capture the original under its own source URL.');
+    if (!sameGalleryItem(reference.source, acquisition.finalUrl)) return rejected('discovery', 'The gallery item redirected to a different concrete item.');
+    if ((options.purpose ?? 'retained') === 'retained') {
+      return rejected('discovery', `${sourceProvider} is discovery provenance; follow its observed original or import the exact useful image/crop before retaining visual evidence.`);
+    }
+    return { eligible: true, code: 'gallery', reason: 'Successful native capture of a supported gallery item.', discoverySource: reference.source };
+  }
   if (reference.origin === 'user') return { eligible: true, code: 'user-provided', reason: 'Native capture explicitly recorded as supplied by the user.' };
-  if (gallery(reference.source) && gallery(acquisition.finalUrl)) return { eligible: true, code: 'gallery', reason: 'Successful retained native capture of a supported gallery item.', discoverySource: reference.source };
   const entry = references.find(other => other.researchLane === 'design' && gallery(other.source)
-    && other.acquisition && gallery(other.acquisition.finalUrl) && other.acquisition.links.includes(reference.source)
+    && other.acquisition && sameGalleryItem(other.source, other.acquisition.finalUrl) && other.acquisition.links.includes(reference.source)
     && nativeCapture(root, other) === null && !domainConflict(root, other, references));
   if (entry) return { eligible: true, code: 'observed-original', reason: 'Original source was observed in a retained native gallery item.', discoverySource: entry.source };
   return rejected('discovery', 'Capture a supported gallery item and its observed original link, or retain a reference actually supplied by the user.');

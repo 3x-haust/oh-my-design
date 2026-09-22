@@ -98,7 +98,7 @@ function source(value: unknown, design: boolean, index: number): ResearchSource 
       fail('REFERENCE_RESEARCH_DISCOVERY_ENTRY_REQUIRED: capture the inspected gallery item, not its homepage');
     }
     if (entry.kind !== 'user-provided' && designDiscoveryProvider(entryUrl) === null) {
-      fail('REFERENCE_RESEARCH_DISCOVERY_PROVIDER: use an inspected Pinterest/Dribbble/Behance/Siteinspire/Land-book/Godly/UI Bowl item; a service or documentation page is not a gallery');
+      fail('REFERENCE_RESEARCH_DISCOVERY_PROVIDER: use an inspected Pinterest/Dribbble/Behance/Siteinspire/Land-book/Godly/UI Bowl/Mobbin/Page Flows item; a service or documentation page is not a gallery');
     }
     discovery = Object.freeze({
       url: entryUrl, kind: entry.kind as NonNullable<ResearchSource['discovery']>['kind'],

@@ -100,11 +100,12 @@ build if old build/skill authority is stale. `stage status.completed` means arti
 
 Reference research is saved separately: `.omd/refs/domain/research.json` for similar-service screens,
 features and flows, and `.omd/refs/design/research.json` for composition, type, density and component
-craft. `omd ref discover-plan --json` suggests screen galleries such as UI Bowl/Pinterest for product
+craft. `omd ref discover-plan --json` suggests screen galleries such as Mobbin/Page Flows/UI Bowl/Pinterest for product
 UI and website galleries such as Siteinspire/Pinterest for marketing. Verify free access per entry;
 on blocked/login/paid access, use another public source without purchases, trials or MCP installation.
 Free viewing does not grant reuse rights. Record the inspected screen, discovery entry and concrete
-quality reason, not just a prestigious gallery name. Use `omd schema reference-research --json`,
+quality reason, not just a prestigious gallery name. Gallery pages are discovery wrappers: retain
+the observed original or an exact useful image/crop, not the wrapper chrome. Use `omd schema reference-research --json`,
 `omd ref research-set --input <input.json>` and `omd ref research-check --json` to publish/check both
 files and their aggregate consistency receipt. Capture PNGs and metadata directly into their own
 folders with `ref add --lane domain|design` or `lane` on each add-batch entry. Inspect them with

@@ -13,6 +13,7 @@ import { type ProjectWriteAdapter, requireProjectWriteAdapter } from '../runtime
 import type { RenderedBeat, RenderedBeatProof } from '../copy/index.ts';
 import { requireMotionResultAuthorization, requireRenderedBeatResultAuthorization, type ProjectRunInvocation } from '../runtime/invocation.ts';
 const MAX_NODES = 4000;
+const BROWSER_CLEANUP_TIMEOUT_MS = 5_000;
 const MOTION_CAPTURE_EVENT_TIMEOUT_MS = 5_000;
 const reducedMotionRemovalThreshold = (noiseFloor: number): number => noiseFloor * 2;
 
@@ -277,7 +278,9 @@ export async function withBrowser<T>(fn: (browser: Browser) => Promise<T>): Prom
     return await fn(browser);
   } finally {
     let cleanupTimer: ReturnType<typeof setTimeout> | undefined;
-    try { await Promise.race([browser.close(), new Promise<void>((_, reject) => { cleanupTimer = setTimeout(() => reject(new Error('browser cleanup timed out after 2000ms')), 2000); })]); }
+    try { await Promise.race([browser.close(), new Promise<void>((_, reject) => {
+      cleanupTimer = setTimeout(() => reject(new Error(`browser cleanup timed out after ${BROWSER_CLEANUP_TIMEOUT_MS}ms`)), BROWSER_CLEANUP_TIMEOUT_MS);
+    })]); }
     finally { clearTimeout(cleanupTimer); }
   }
 }
@@ -733,8 +736,8 @@ export async function capturePageForRef(
   browser: Browser,
   target: string,
   viewport: Viewport,
-  opts: { selector?: string | null; shotOut?: string; adapter?: ProjectWriteAdapter; preparation?: CapturePreparation; bestEffortShot?: boolean; validateFinalUrl?: (url: string) => void },
-): Promise<{ raw: RawIr; shotSaved: boolean; shotError?: string; capturePreparation?: CapturePreparationReceipt; acquisition: { requestedUrl: string; finalUrl: string; httpStatus: number | null; links: string[]; imageSha256: string | null } }> {
+  opts: { selector?: string | null; shotOut?: string; adapter?: ProjectWriteAdapter; preparation?: CapturePreparation; bestEffortShot?: boolean; deferShotWrite?: boolean; validateFinalUrl?: (url: string) => void },
+): Promise<{ raw: RawIr; shotSaved: boolean; shotBytes?: Buffer; shotError?: string; capturePreparation?: CapturePreparationReceipt; acquisition: { requestedUrl: string; finalUrl: string; httpStatus: number | null; links: string[]; imageSha256: string | null } }> {
   const preparation = opts.preparation === undefined ? undefined : parseCapturePreparation(opts.preparation);
   return onPage(browser, target, viewport, async (page, httpStatus, resolvedUrl) => {
     const executedActions = preparation ? await prepareReferenceCapture(page, preparation) : undefined;
@@ -775,7 +778,7 @@ export async function capturePageForRef(
     const links = await page.locator('a[href]').evaluateAll(elements => [...new Set(elements.map(el => (el as HTMLAnchorElement).href).filter(url => /^https?:\/\//.test(url)))]);
     opts.validateFinalUrl?.(finalUrl);
     // Keep bytes private until all observations have passed, including after the screenshot.
-    if (shotBytes && opts.shotOut && opts.adapter) {
+    if (shotBytes && opts.shotOut && opts.adapter && !opts.deferShotWrite) {
       try {
         await writeScreenshot(async () => shotBytes!, requireProjectWriteAdapter(opts.adapter.projectRoot, opts.adapter), opts.shotOut);
         shotSaved = true;
@@ -785,8 +788,8 @@ export async function capturePageForRef(
       }
     }
     return { raw, shotSaved, acquisition: { requestedUrl: target, finalUrl, httpStatus, links,
-      imageSha256: shotSaved && shotBytes ? createHash('sha256').update(shotBytes).digest('hex') : null,
-    }, ...(shotError ? { shotError } : {}), ...(capturePreparation ? { capturePreparation } : {}) };
+      imageSha256: shotBytes ? createHash('sha256').update(shotBytes).digest('hex') : null,
+    }, ...(shotBytes ? { shotBytes } : {}), ...(shotError ? { shotError } : {}), ...(capturePreparation ? { capturePreparation } : {}) };
   });
 }
 /**

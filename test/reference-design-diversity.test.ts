@@ -138,7 +138,7 @@ test('current research requires both visual directions to participate in the boa
   );
 });
 
-test('two requested gallery items redirecting to one final item are not independent', t => {
+test('a cross-provider gallery redirect invalidates its observed-original chain', t => {
   const fixture = currentResearch(t);
   const path = join(fixture.root, fixture.secondGallery.capture.path);
   const capture = JSON.parse(readFileSync(path, 'utf8')) as { acquisition: { finalUrl: string } };
@@ -149,7 +149,7 @@ test('two requested gallery items redirecting to one final item are not independ
   second.discovery.capture.sha256 = admissionHash(readFileSync(path));
   assert.throws(
     () => validateReferenceResearch(fixture.root, parseReferenceResearch(fixture.research), options),
-    /DESIGN_DISCOVERY_DIVERSITY/,
+    /DESIGN_REFERENCE_INELIGIBLE: discovery: Capture a supported gallery item and its observed original link/,
   );
 });
 

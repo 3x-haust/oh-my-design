@@ -986,6 +986,7 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
     console.error('usage: omd ref add <url|file> --as <component> --lane domain|design [--slot <surface>] [--selector "css"] [--image] [--from-user]; selected discovery requires an explicit lane and free-gallery/original-link provenance for design');
     process.exit(1);
   }
+  const component = opts.as;
   if (opts.image && opts.selector) {
     console.error('--image and --selector cannot be used together: an image has no subtree to scope.');
     process.exit(1);
@@ -1015,7 +1016,7 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
     const path = saveRef(process.cwd(), {
       researchLane: lane,
       source: target,
-      component: opts.as,
+      component,
       kind: 'image',
       capturedAt: new Date().toISOString(),
       ...(opts.slot ? { slot: opts.slot } : {}),
@@ -1045,11 +1046,10 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
   const absShot = opts.noShot
     ? undefined
     : refImagePath(adapter.projectRoot, { source: target, component: opts.as, researchLane: lane });
-  if (absShot) adapter.mkdir(relative(adapter.projectRoot, dirname(absShot)));
-  const { raw, shotSaved, shotError, capturePreparation, acquisition } = await withBrowser(browser => capturePageForRef(browser, target, captureViewport, {
+  const { raw, shotBytes, shotError, capturePreparation, acquisition } = await withBrowser(browser => capturePageForRef(browser, target, captureViewport, {
     selector: opts.selector ?? null,
     validateFinalUrl: url => validateFinalUrl(0, url),
-    ...(absShot ? { shotOut: absShot, adapter } : {}),
+    ...(absShot ? { shotOut: absShot, adapter, deferShotWrite: true } : {}),
     ...(preparation ? { preparation } : {}),
     bestEffortShot: preparation === undefined,
   }));
@@ -1076,35 +1076,35 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
     console.error(`blueprint: ${blueprint.nodes.length} nodes captured`);
   }
 
-  const imagePath = shotSaved && absShot ? relative(adapter.projectRoot, absShot) : undefined;
-  if (imagePath) console.error(`shot: ${imagePath}`);
-  // A capture that failed is as unverifiable as one that was skipped, so both are recorded rather
-  // than reported once to stderr and forgotten.
-  const imageOmittedReason = imagePath !== undefined
-    ? undefined
-    : opts.noShotReason ?? (shotError === undefined ? 'the capture produced no image' : `capture failed: ${shotError}`);
+  const { commitCapturedReference } = await import('../core/ref/capture-commit.ts');
+  const committed = commitCapturedReference(adapter, absShot, shotBytes, imagePath => {
+    const imageOmittedReason = imagePath !== undefined
+      ? undefined
+      : opts.noShotReason ?? (shotError === undefined ? 'the capture produced no image' : `capture failed: ${shotError}`);
+    return saveRef(process.cwd(), {
+      researchLane: lane,
+      acquisition,
+      source: target,
+      component,
+      kind: opts.selector ? 'component' : 'page',
+      capturedAt: new Date().toISOString(),
+      ...(opts.selector ? { selector: opts.selector } : {}),
+      ...(opts.slot ? { slot: opts.slot } : {}),
+      invariants,
+      principles: [],
+      slopCount,
+      ...(opts.fromUser ? { origin: 'user' as const } : {}),
+      ...(imageOmittedReason === undefined ? {} : { imageOmittedReason }),
+      ...(energyCurve !== null ? { energyCurve } : {}),
+      ...(blueprint !== undefined ? { blueprint } : {}),
+      ...(imagePath !== undefined ? { imagePath } : {}),
+      viewport: captureViewport,
+      ...(capturePreparation ? { capturePreparation } : {}),
+    }, adapter);
+  });
+  const path = committed.value;
+  if (committed.imagePath) console.error(`shot: ${committed.imagePath}`);
   if (shotError) console.error(`shot skipped: ${shotError}`);
-
-  const path = saveRef(process.cwd(), {
-    researchLane: lane,
-    acquisition,
-    source: target,
-    component: opts.as,
-    kind: opts.selector ? 'component' : 'page',
-    capturedAt: new Date().toISOString(),
-    ...(opts.selector ? { selector: opts.selector } : {}),
-    ...(opts.slot ? { slot: opts.slot } : {}),
-    invariants,
-    principles: [],
-    slopCount,
-    ...(opts.fromUser ? { origin: 'user' as const } : {}),
-    ...(imageOmittedReason === undefined ? {} : { imageOmittedReason }),
-    ...(energyCurve !== null ? { energyCurve } : {}),
-    ...(blueprint !== undefined ? { blueprint } : {}),
-    ...(imagePath !== undefined ? { imagePath } : {}),
-    viewport: captureViewport,
-    ...(capturePreparation ? { capturePreparation } : {}),
-  }, adapter);
   console.log(path);
   console.log(JSON.stringify(invariants, null, 2));
   console.error(`slop findings: ${slopCount}${slopCount > 0 ? `  [${slopIds.join(', ')}]` : ''}`);
@@ -1224,6 +1224,8 @@ async function cmdRefList(opts: Opts): Promise<never> {
   const references = loadRefs(process.cwd(), { includeDomain: true });
   const refs = references.filter(ref => lane === undefined || (ref.researchLane ?? 'design') === lane).map(ref => ({
     ...ref, admission: ref.researchLane === 'domain' ? null : inspectDesignReferenceAdmission(process.cwd(), ref, { references }),
+    discoveryAdmission: ref.researchLane === 'domain' ? null
+      : inspectDesignReferenceAdmission(process.cwd(), ref, { references, purpose: 'discovery' }),
   }));
   if (opts.json) { process.stdout.write(JSON.stringify(refs)); process.exit(0); }
   if (refs.length === 0) {
@@ -1232,8 +1234,11 @@ async function cmdRefList(opts: Opts): Promise<never> {
   }
   for (const ref of refs) {
     const granularity = ref.selector ? `[${ref.kind} ${ref.selector}]` : `[${ref.kind}]`;
-    const userNote = `  [${ref.researchLane ?? 'legacy-design'}]${ref.origin === 'user' ? '  [user]' : ''}`
-      + (ref.admission && !ref.admission.eligible ? `  [ineligible: ${ref.admission.code}; inspect ref tidy --json]` : '');
+    const admissionNote = ref.admission && !ref.admission.eligible
+      ? ref.discoveryAdmission?.eligible ? `  [provenance-only: ${ref.admission.code}]`
+        : `  [ineligible: ${ref.admission.code}; inspect ref tidy --json]`
+      : '';
+    const userNote = `  [${ref.researchLane ?? 'legacy-design'}]${ref.origin === 'user' ? '  [user]' : ''}${admissionNote}`;
     if (ref.kind === 'image' || ref.invariants === null) {
       console.log(`${ref.source}  ${ref.component}  ${granularity}${userNote}`);
       continue;

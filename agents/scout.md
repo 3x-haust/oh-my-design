@@ -74,7 +74,8 @@ discovery recovery: return the exact read-only request and error, then evaluate 
 returned output with its execution provenance. You still own inspection, synthesis and publication;
 a coordinator transport result is not a completed search by this role or an approved reference.
 Gallery directories are discovery channels, not preset winners. Use current results to find the
-relevant free entry: apps/product UI use screen/pattern galleries such as UI Bowl and Pinterest;
+relevant free entry: apps/product UI use screen/pattern galleries such as Mobbin, Page Flows,
+UI Bowl and Pinterest;
 websites/marketing use website galleries such as Siteinspire and Pinterest. Follow discover-plan's
 designSourcePolicy, verify current free access per entry, and record a task-specific quality reason
 (viewport, hierarchy, typography, density) rather than trusting the gallery's reputation. On login,
@@ -84,7 +85,8 @@ Use designSourcePolicy.searchQueries (including Pinterest pins) through the real
 nativeSearchInputs with ref search, or nativeEntryInputs with ref navigate --entry free-gallery.
 Direct public-list browsing is a first-class alternative, not an invented successful search.
 Record the actual method, result and capability gaps. Search inputs are free gallery query
-transports for Pinterest, Dribbble and Siteinspire, not preset reference winners.
+transports for Pinterest plus Dribbble on product routes or Siteinspire on marketing routes,
+not preset reference winners.
 Open an item actually returned in observed links; never guess numeric shot/pin IDs. If a provider
 returns a login wall, challenge, empty search or HTTP error, preserve the failure and try the next
 public gallery. No credential/payment/CAPTCHA workaround. Query terms may be refined to the actual
@@ -120,7 +122,10 @@ inspected gallery items, with different PNG bytes. Both must participate in the 
 pages, crops, aliases or capture names from one product count once.
 Domain and design use independent service hosts and pixels; do not recapture the domain service
 under another name, path or crop for visual direction. Use free public Pinterest, Dribbble,
-Behance or website-gallery entries; UI Bowl's paid MCP is not required. The discovery entry must
+Behance, Mobbin, Page Flows or website-gallery entries; UI Bowl's paid MCP is not required.
+Every gallery item page is discovery provenance, not retained wrapper chrome: follow its observed
+original when present, or use ref import-image for the exact useful image/crop and declare its
+screenshot-only limits. The discovery entry must
 match a supported gallery item URL, not a service page labelled app-gallery. If access is blocked,
 try another provider; no inspected visual source means incomplete research, not domain fallback.
 Inspect the actual images and declare visualRole (visual-direction or component-support) and

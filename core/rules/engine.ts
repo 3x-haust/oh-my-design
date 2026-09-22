@@ -23,6 +23,7 @@ export function loadRules(dirPath: string): Rule[] {
 type Compiled = Script;
 
 const cache = new Map<string, Compiled>();
+const RULE_EVALUATION_TIMEOUT_MS = 250;
 
 function compile(ruleId: string, expr: string): Compiled {
   const key = ruleId + ' ' + expr;
@@ -39,7 +40,7 @@ function compile(ruleId: string, expr: string): Compiled {
 function evalExpr(ruleId: string, expr: string, node: Node, ir: Ir, value: RuleValue): unknown {
   try {
     const context = { node: structuredClone(node), ir: structuredClone(ir), value: structuredClone(value) };
-    return compile(ruleId, expr).runInNewContext(context, { timeout: 100, contextCodeGeneration: { strings: false, wasm: false } });
+    return compile(ruleId, expr).runInNewContext(context, { timeout: RULE_EVALUATION_TIMEOUT_MS, contextCodeGeneration: { strings: false, wasm: false } });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     throw new Error(`rule ${ruleId}: error evaluating "${expr}": ${message}`);
@@ -89,4 +90,3 @@ export function check(ir: Ir, rules: Rule[], opts: { layers?: Layer[]; categorie
   violations.sort((a, b) => cmp(a.path, b.path) || cmp(a.id, b.id));
   return violations;
 }
-

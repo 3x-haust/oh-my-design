@@ -1490,7 +1490,7 @@ test('observation retention keeps graph-current records and requires a trusted w
     const retained = retainObservationV2(directory, { currentArtifact, maxRecords: 1 }, writer);
     assert.equal(retained.retained.length, 2);
     assert.throws(() => retainObservationV2(directory, { currentArtifact, maxRecords: 0 }, writer), /positive integer/);
-    assert.throws(() => retainObservationV2(directory, { currentArtifact, maxRecords: 1 }, { projectRoot: directory, mkdir() { return ''; }, write() { return ''; }, writeContentAddressed() { return ''; }, remove() { return ''; } }), /trusted (?:active|immutable) project-write adapter/);
+    assert.throws(() => retainObservationV2(directory, { currentArtifact, maxRecords: 1 }, { projectRoot: directory, mkdir() { return ''; }, write() { return ''; }, writeContentAddressed() { return ''; }, remove() { return ''; }, removeEmptyDirectory() { return ''; } }), /trusted (?:active|immutable) project-write adapter/);
   } finally { clean(directory); }
 });
 

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { dirname, relative } from 'node:path';
+import { relative } from 'node:path';
 import { capturePageForRef, captureEnergy, withBrowser, parseViewport, REFERENCE_VIEWPORT } from '../render/index.ts';
 import { normalize } from '../ir/normalize.ts';
 import { extractInvariants } from './invariants.ts';
@@ -10,6 +10,7 @@ import type { ProjectWriteAdapter } from '../runtime/project-write.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import { captureFinalUrlGuard, validateCaptureBatch } from './capture-intake.ts';
 import { parseCapturePreparation, type CapturePreparation } from './capture-preparation.ts';
+import { commitCapturedReference } from './capture-commit.ts';
 
 /**
  * One reference to capture in a batch. Same shape as an `omd ref add --selector … --blueprint --shot`
@@ -78,13 +79,12 @@ export async function addRefsBatch(
           const shotOut = spec.shot
             ? refImagePath(adapter.projectRoot, { source: spec.source, component: spec.as, ...(lane ? { researchLane: lane } : {}) })
             : undefined;
-          if (shotOut) adapter.mkdir(relative(adapter.projectRoot, dirname(shotOut)));
           const viewport = parseViewport(spec.viewport ?? REFERENCE_VIEWPORT);
-          const { raw, shotSaved, capturePreparation, acquisition } = await capturePageForRef(browser, spec.source, viewport, {
+          const { raw, shotBytes, capturePreparation, acquisition } = await capturePageForRef(browser, spec.source, viewport, {
             selector: spec.selector ?? null,
             validateFinalUrl: url => validateFinalUrl(i, url),
             ...(preparation ? { preparation } : {}),
-            ...(shotOut ? { shotOut, adapter } : {}),
+            ...(shotOut ? { shotOut, adapter, deferShotWrite: true } : {}),
           });
           // Motion is evidence, not decoration: a board captured without it cannot answer what a
           // reference does on scroll, and every craft query in the brief goes unanswered while the
@@ -94,7 +94,7 @@ export async function addRefsBatch(
           const invariants = extractInvariants(ir);
           const slopCount = check(ir, rules, { categories: ['slop'] }).length;
           const blueprint = spec.blueprint && spec.selector ? captureBlueprint(raw.nodes, spec.selector) : undefined;
-          saveRef(cwd, {
+          commitCapturedReference(adapter, shotOut, shotBytes, imagePath => saveRef(cwd, {
             ...(lane ? { researchLane: lane } : {}),
             acquisition,
             source: spec.source,
@@ -109,11 +109,11 @@ export async function addRefsBatch(
             slopCount,
             ...(spec.fromUser ? { origin: 'user' as const } : {}),
             ...(blueprint !== undefined ? { blueprint } : {}),
-            ...(shotSaved && shotOut ? { imagePath: relative(adapter.projectRoot, shotOut) } : {}),
+            ...(imagePath ? { imagePath } : {}),
             ...(energyCurve !== null ? { energyCurve } : {}),
             viewport,
             ...(capturePreparation ? { capturePreparation } : {}),
-          }, adapter);
+          }, adapter));
           outcomes[i] = { source: spec.source, as: spec.as, ok: true, slopCount };
         } catch (err) {
           outcomes[i] = { source: spec.source, as: spec.as, ok: false, error: err instanceof Error ? err.message : String(err) };

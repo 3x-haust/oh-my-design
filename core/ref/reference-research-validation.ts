@@ -153,11 +153,11 @@ export function validateReferenceResearch(root: string, research: ReferenceResea
       const acquisition = record(entry.acquisition, 'REFERENCE_RESEARCH_DISCOVERY_LINK_REQUIRED');
       if (!Array.isArray(acquisition.links) || !acquisition.links.includes(item.url)) fail('REFERENCE_RESEARCH_DISCOVERY_LINK_MISMATCH');
     }
-    for (const [captured, url] of [[source, item.url], [entry, discovery.url]] as const) {
+    for (const [captured, url, purpose] of [[source, item.url, 'retained'], [entry, discovery.url, 'discovery']] as const) {
       if (captured.schemaVersion === 'image-fragment-v1') continue;
       const reference = references.find(ref => ref.researchLane === 'design' && ref.source === url && ref.component === captured.component);
       if (!reference) fail('REFERENCE_RESEARCH_CAPTURE_SOURCE_MISMATCH');
-      requireDesignReferenceAdmission(root, reference, { references });
+      requireDesignReferenceAdmission(root, reference, { references, purpose });
     }
   }
   if (research.schema === 'reference-research-v7') {

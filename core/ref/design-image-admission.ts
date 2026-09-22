@@ -41,7 +41,7 @@ export function requireDesignImageAdmission(root: string, evidence: ImageEvidenc
   const fragmentBytes = readFileSync(trustedReferenceImage(root, evidence.imagePath));
   const matched = references.some(reference => {
     if (reference.source !== evidence.provenance.sourcePage || !reference.imagePath
-      || !inspectDesignReferenceAdmission(root, reference, { references }).eligible) return false;
+      || !inspectDesignReferenceAdmission(root, reference, { references, purpose: 'image-parent' }).eligible) return false;
     return matchesCapture(readFileSync(trustedReferenceImage(root, reference.imagePath)), fragmentBytes, evidence.provenance.cropBox);
   });
   if (!matched) throw new ReferenceBoardResolutionError('FRAGMENT_SOURCE: retain the actual native design capture; preserve its bytes or the exact declared pixel crop with unchanged PNG format and metadata');

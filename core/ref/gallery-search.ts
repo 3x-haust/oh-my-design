@@ -21,14 +21,15 @@ export function gallerySearchHasItems(input: SearchRequest, links: readonly stri
     && referenceServiceHost(link) === referenceServiceHost(input.url));
 }
 
-export function gallerySearchInputs(query: string): readonly GallerySearchInput[] {
+export function gallerySearchInputs(query: string, surface: 'marketing' | 'product'): readonly GallerySearchInput[] {
   const queryText = query.trim();
   if (!queryText) return [];
   const pinterest = new URL('https://www.pinterest.com/search/pins/'); pinterest.searchParams.set('q', queryText);
   const siteinspire = new URL('https://www.siteinspire.com/search'); siteinspire.searchParams.set('query', queryText);
   return [
     { lane: 'design', query: queryText, url: pinterest.href, queryParam: 'q' },
-    { lane: 'design', query: queryText, url: `https://dribbble.com/search/${encodeURIComponent(queryText.toLowerCase().replace(/\s+/g, '-'))}`, queryParam: 'path' },
-    { lane: 'design', query: queryText, url: siteinspire.href, queryParam: 'query' },
+    surface === 'marketing'
+      ? { lane: 'design', query: queryText, url: siteinspire.href, queryParam: 'query' }
+      : { lane: 'design', query: queryText, url: `https://dribbble.com/search/${encodeURIComponent(queryText.toLowerCase().replace(/\s+/g, '-'))}`, queryParam: 'path' },
   ];
 }

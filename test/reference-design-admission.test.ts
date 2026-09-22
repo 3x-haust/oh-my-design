@@ -68,6 +68,70 @@ test('valid gallery and observed original retain research publication', t => {
   assert.doesNotThrow(() => validateReferenceResearch(root, parseReferenceResearch(research), options));
 });
 
+test('website gallery wrappers are discovery evidence, not retained visual evidence', t => {
+  const { root, capture, writer } = designAdmissionFixture(t);
+  const cases = [
+    'https://www.pinterest.com/pin/987654321/',
+    'https://dribbble.com/shots/19161192-Benefits-Dashboard-UI',
+    'https://www.behance.net/gallery/123456789/Task-workspace',
+    'https://www.siteinspire.com/website/13593-yuri-roga',
+    'https://land-book.com/websites/finance-dashboard',
+    'https://godly.website/website/task-workspace',
+    'https://uibowl.io/screens/task/detail',
+    'https://mobbin.com/explore/screens/7b35b6c7-f954-4dcb-b320-3ad873339477',
+    'https://pageflows.com/screens/6753bc45-9853-4b61-a78e-c95827d347e5/',
+  ];
+  cases.forEach((url, index) => {
+    const original = capture(`https://wrapper-original-${index}.example/task`, `original-${index}`, 'design', 30 + index * 2);
+    const wrapper = capture(url, `gallery-wrapper-${index}`, 'design', 31 + index * 2, [original.source]);
+    saveRef(root, wrapper.ref, writer);
+    const wrapperAdmission = inspectDesignReferenceAdmission(root, wrapper.ref);
+    assert.equal(wrapperAdmission.eligible, false);
+    assert.equal(wrapperAdmission.code, 'discovery');
+    const originalAdmission = inspectDesignReferenceAdmission(root, original.ref);
+    assert.equal(originalAdmission.eligible, true);
+    assert.equal(originalAdmission.code, 'observed-original');
+    assert.equal(originalAdmission.discoverySource, wrapper.source);
+  });
+});
+
+test('a user marker cannot promote gallery wrapper chrome into retained evidence', t => {
+  const { root, capture } = designAdmissionFixture(t);
+  const wrapper = capture('https://mobbin.com/explore/screens/7b35b6c7-f954-4dcb-b320-3ad873339477', 'user-gallery-wrapper', 'design', 60);
+  wrapper.ref.origin = 'user';
+  const retained = inspectDesignReferenceAdmission(root, wrapper.ref);
+  assert.equal(retained.eligible, false);
+  assert.equal(retained.code, 'discovery');
+  const provenance = inspectDesignReferenceAdmission(root, wrapper.ref, { purpose: 'discovery' });
+  assert.equal(provenance.eligible, true);
+  assert.equal(provenance.code, 'gallery');
+});
+
+test('a user marker cannot bypass gallery policy through redirects', t => {
+  const { root, capture } = designAdmissionFixture(t);
+  const away = capture('https://mobbin.com/explore/screens/7b35b6c7-f954-4dcb-b320-3ad873339477', 'redirect-away', 'design', 61);
+  away.ref.origin = 'user';
+  assert.ok(away.ref.acquisition);
+  away.ref.acquisition.finalUrl = 'https://actual-product.example/screen';
+  assert.equal(inspectDesignReferenceAdmission(root, away.ref).eligible, false);
+
+  const changedItem = capture('https://mobbin.com/explore/screens/7b35b6c7-f954-4dcb-b320-3ad873339477', 'redirect-item', 'design', 63);
+  assert.ok(changedItem.ref.acquisition);
+  changedItem.ref.acquisition.finalUrl = 'https://mobbin.com/explore/screens/82f0afed-ed7c-4a16-9a8b-4a593b03bcd4';
+  assert.equal(inspectDesignReferenceAdmission(root, changedItem.ref, { purpose: 'discovery' }).eligible, false);
+
+  const changedProvider = capture('https://mobbin.com/explore/screens/7b35b6c7-f954-4dcb-b320-3ad873339477', 'redirect-provider', 'design', 64);
+  assert.ok(changedProvider.ref.acquisition);
+  changedProvider.ref.acquisition.finalUrl = 'https://pageflows.com/screens/6753bc45-9853-4b61-a78e-c95827d347e5/';
+  assert.equal(inspectDesignReferenceAdmission(root, changedProvider.ref, { purpose: 'discovery' }).eligible, false);
+
+  const into = capture('https://actual-product.example/screen', 'redirect-into', 'design', 62);
+  into.ref.origin = 'user';
+  assert.ok(into.ref.acquisition);
+  into.ref.acquisition.finalUrl = 'https://pageflows.com/screens/6753bc45-9853-4b61-a78e-c95827d347e5/';
+  assert.equal(inspectDesignReferenceAdmission(root, into.ref).eligible, false);
+});
+
 test('selected discovery refuses a copied domain image with a gallery source declaration', t => {
   const { root, domain, gallery, research } = designAdmissionFixture(t);
   writeFileSync(join(root, '.omd/reference-research.json'), JSON.stringify(research));
