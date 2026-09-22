@@ -101,6 +101,7 @@ test('installRecipe writes the files to disk and reports what landed', () => {
     write: (path: string) => path,
     writeContentAddressed: (path: string) => path,
     remove: (path: string) => path,
+    removeEmptyDirectory: (path: string) => path,
   };
   assert.throws(() => installRecipe(PACK, 'scroll-reveal', {
     stack: 'vanilla',

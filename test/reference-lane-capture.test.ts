@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, readdirSync, realpathSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, readdirSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
@@ -65,10 +65,26 @@ test('reference commit failure removes a new image and restores previous evidenc
   const imagePath = join(root, '.omd/refs/design/capture.png');
   assert.throws(() => commitCapturedReference(writer, imagePath, Buffer.from('new'), () => { throw new Error('record rejected'); }), /record rejected/);
   assert.equal(existsSync(imagePath), false);
+  assert.equal(existsSync(join(root, '.omd/refs')), false);
   writer.mkdir('.omd/refs/design');
   writer.write('.omd/refs/design/capture.png', Buffer.from('previous'));
   assert.throws(() => commitCapturedReference(writer, imagePath, Buffer.from('replacement'), () => { throw new Error('record rejected'); }), /record rejected/);
   assert.equal(readFileSync(imagePath, 'utf8'), 'previous');
+});
+
+test('reference commit validates containment and real ancestors before probing the image target', t => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-lane-commit-containment-')));
+  const outside = realpathSync(mkdtempSync(join(tmpdir(), 'omd-lane-commit-outside-')));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  t.after(() => rmSync(outside, { recursive: true, force: true }));
+  const writer = createTestProjectWriteAdapter(root);
+  const escaped = join(outside, 'escaped-reference.png');
+  assert.throws(() => commitCapturedReference(writer, escaped, Buffer.from('image'), () => 'record'), /relativePath must stay inside/);
+  assert.equal(existsSync(escaped), false);
+  writer.mkdir('.omd');
+  symlinkSync(outside, join(root, '.omd/refs'));
+  assert.throws(() => commitCapturedReference(writer, join(root, '.omd/refs/design/capture.png'), Buffer.from('image'), () => 'record'), /ancestor must be a real directory/);
+  assert.deepEqual(readdirSync(outside), []);
 });
 
 test('actual full-page captures retain HTTP/link provenance and stay in separate lane directories', async t => {
