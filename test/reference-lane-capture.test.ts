@@ -9,6 +9,7 @@ import test from 'node:test';
 import { capturePageForRef, withBrowser, galleryLoginOccludes } from '../core/render/index.ts';
 import { loadRefs, refImagePath, researchLane, saveRef, addPrinciples } from '../core/ref/store.ts';
 import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
+import { addRefsBatch } from '../core/ref/batch.ts';
 
 test('final URL refusal leaves the reference output tree unchanged', async t => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-lane-refusal-')));
@@ -18,7 +19,18 @@ test('final URL refusal leaves the reference output tree unchanged', async t => 
   const shotOut = join(root, '.omd/refs/design/rejected.png');
   await assert.rejects(withBrowser(browser => capturePageForRef(browser, source, { width: 640, height: 480 }, {
     shotOut, adapter: writer, validateFinalUrl: () => { throw new Error('final URL rejected'); },
-  })), /final URL rejected/);
+  })));
+  assert.equal(existsSync(join(root, '.omd/refs')), false);
+});
+
+test('batch capture failure does not pre-create the reference output tree', async t => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-lane-batch-refusal-')));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const source = join(root, 'missing.html');
+  const result = await addRefsBatch(root, [{ source, as: 'rejected', lane: 'design', fromUser: true, shot: true, energy: false }], {
+    rulesRoot: fileURLToPath(new URL('../core/rules/builtin', import.meta.url)), concurrency: 1,
+  }, createTestProjectWriteAdapter(root));
+  assert.equal(result.outcomes[0]?.ok, false);
   assert.equal(existsSync(join(root, '.omd/refs')), false);
 });
 

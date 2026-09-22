@@ -1045,10 +1045,12 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
   const absShot = opts.noShot
     ? undefined
     : refImagePath(adapter.projectRoot, { source: target, component: opts.as, researchLane: lane });
-  if (absShot) adapter.mkdir(relative(adapter.projectRoot, dirname(absShot)));
   const { raw, shotSaved, shotError, capturePreparation, acquisition } = await withBrowser(browser => capturePageForRef(browser, target, captureViewport, {
     selector: opts.selector ?? null,
-    validateFinalUrl: url => validateFinalUrl(0, url),
+    validateFinalUrl: url => {
+      validateFinalUrl(0, url);
+      if (absShot) adapter.mkdir(relative(adapter.projectRoot, dirname(absShot)));
+    },
     ...(absShot ? { shotOut: absShot, adapter } : {}),
     ...(preparation ? { preparation } : {}),
     bestEffortShot: preparation === undefined,
