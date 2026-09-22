@@ -235,9 +235,10 @@ Use native gallery search when general search is blocked. HTTP 200 and actual sa
 are required; login walls, empty results and challenge responses remain failed attempts. Retain only
 an item actually observed in those results, never guessed shot IDs. Siteinspire now uses numeric
 `/website/<id-slug>` item URLs; category/selected directories are navigation, not gallery items.
-Its item page is also an intermediary wrapper rather than retained visual evidence: follow the
-observed outbound link and capture the showcased original website. Mobbin `/explore/screens/<uuid>`
-and Page Flows `/screens/<uuid>` are concrete product-screen entries; their list pages remain discovery only.
+Every gallery item page is provenance rather than retained wrapper chrome: follow an observed
+original when present, or import the exact useful image/crop for screenshot-only evidence. Mobbin
+`/explore/screens/<uuid>` and Page Flows `/screens/<uuid>` are concrete product-screen entries;
+their list pages remain discovery only and their surrounding gallery UI is not the product screen.
 Search gallery names with task/pattern terms (for example `site:pinterest.com/pin/ ...`), then inspect the actual entry. Known search
 redirect links may be decoded as discovery targets; decoding never counts as visiting them.
 The catalogue uses public browser pages, not Google's paid/custom XML API. Query parameter references:
@@ -283,9 +284,10 @@ The two lanes use independent service hosts, including after redirects. A second
 domain service is not a visual direction. Non-user discovery must match a supported public gallery
 item (Pinterest, Dribbble, Behance, Siteinspire, Land-book, Godly, UI Bowl, Mobbin, or Page Flows); never label domain
 documentation as a gallery. Add new providers deliberately to design-discovery-sources.ts.
-For product UI, retain concrete screen/pattern evidence rather than a website-showcase wrapper.
-For website/marketing, a Siteinspire item can establish the discovery link but the retained visual
-source is the captured original site. `inspectDesignReferenceAdmission` refuses the wrapper itself.
+For product UI, retain the concrete screen/pattern image rather than gallery UI. For website/marketing,
+the retained visual source is the captured original site when available. Otherwise use the exact
+native image-import path and declare its screenshot-only limits. `inspectDesignReferenceAdmission`
+refuses every gallery wrapper as a retained component/page while allowing its exact image parent.
 Each design source declares visualRole=visual-direction|component-support and visualAssessment
 (composition, typography, density, imagery, transfer, avoid). Each board candidate must actually
 use visual-direction evidence, and every visual piece must bind a validated source identity and

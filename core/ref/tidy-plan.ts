@@ -20,8 +20,10 @@ export function referenceTidyCandidates(root: string): readonly TidyCandidate[] 
   const references = loadRefs(root, { includeDomain: true });
   const decisions = references.map(reference => ({ reference,
     admission: reference.researchLane === 'domain' ? null : inspectDesignReferenceAdmission(root, reference, { references }),
+    discoveryAdmission: reference.researchLane === 'domain' ? null
+      : inspectDesignReferenceAdmission(root, reference, { references, purpose: 'discovery' }),
   }));
-  const protectedImages = new Set(decisions.filter(item => item.admission === null || item.admission.eligible)
+  const protectedImages = new Set(decisions.filter(item => item.admission === null || item.admission.eligible || item.discoveryAdmission?.eligible)
     .flatMap(item => item.reference.imagePath ? [relative(resolve(root), resolve(root, item.reference.imagePath))] : []));
   // Unknown/duplicate records also retain ownership of an image; tidy does not interpret them.
   const loadedPaths = new Set(references.map(reference => relative(resolve(root), refRecordPath(root, reference))));
@@ -75,8 +77,8 @@ export function referenceTidyCandidates(root: string): readonly TidyCandidate[] 
       if (!protectedImages.has(image.path)) select(image, 'legacy-navigation-capture');
     }
   }
-  for (const { reference, admission } of decisions) {
-    if (admission === null || admission.eligible) continue;
+  for (const { reference, admission, discoveryAdmission } of decisions) {
+    if (admission === null || admission.eligible || discoveryAdmission?.eligible) continue;
     const path = relative(resolve(root), refRecordPath(root, reference));
     // The physical domain lane is never reclassified through a conflicting JSON label.
     if (path.startsWith('.omd/refs/domain/')) continue;

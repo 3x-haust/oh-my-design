@@ -1224,6 +1224,8 @@ async function cmdRefList(opts: Opts): Promise<never> {
   const references = loadRefs(process.cwd(), { includeDomain: true });
   const refs = references.filter(ref => lane === undefined || (ref.researchLane ?? 'design') === lane).map(ref => ({
     ...ref, admission: ref.researchLane === 'domain' ? null : inspectDesignReferenceAdmission(process.cwd(), ref, { references }),
+    discoveryAdmission: ref.researchLane === 'domain' ? null
+      : inspectDesignReferenceAdmission(process.cwd(), ref, { references, purpose: 'discovery' }),
   }));
   if (opts.json) { process.stdout.write(JSON.stringify(refs)); process.exit(0); }
   if (refs.length === 0) {
@@ -1232,8 +1234,11 @@ async function cmdRefList(opts: Opts): Promise<never> {
   }
   for (const ref of refs) {
     const granularity = ref.selector ? `[${ref.kind} ${ref.selector}]` : `[${ref.kind}]`;
-    const userNote = `  [${ref.researchLane ?? 'legacy-design'}]${ref.origin === 'user' ? '  [user]' : ''}`
-      + (ref.admission && !ref.admission.eligible ? `  [ineligible: ${ref.admission.code}; inspect ref tidy --json]` : '');
+    const admissionNote = ref.admission && !ref.admission.eligible
+      ? ref.discoveryAdmission?.eligible ? `  [provenance-only: ${ref.admission.code}]`
+        : `  [ineligible: ${ref.admission.code}; inspect ref tidy --json]`
+      : '';
+    const userNote = `  [${ref.researchLane ?? 'legacy-design'}]${ref.origin === 'user' ? '  [user]' : ''}${admissionNote}`;
     if (ref.kind === 'image' || ref.invariants === null) {
       console.log(`${ref.source}  ${ref.component}  ${granularity}${userNote}`);
       continue;

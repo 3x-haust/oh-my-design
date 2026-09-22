@@ -13,7 +13,10 @@ export type DesignReferenceAdmission = Readonly<{
   reason: string;
   discoverySource?: string;
 }>;
-type AdmissionOptions = Readonly<{ references?: readonly Reference[] }>;
+type AdmissionOptions = Readonly<{
+  references?: readonly Reference[];
+  purpose?: 'retained' | 'discovery' | 'image-parent';
+}>;
 const digest = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
 const object = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 const rejected = (code: DesignReferenceAdmission['code'], reason: string): DesignReferenceAdmission => ({ eligible: false, code, reason });
@@ -21,6 +24,10 @@ const provider = (source: string): string | null => {
   try { return designDiscoveryProvider(source); } catch (error) { if (error instanceof TypeError) return null; throw error; }
 };
 const gallery = (source: string): boolean => provider(source) !== null;
+const sameGalleryProvider = (source: string, finalUrl: string): boolean => {
+  const sourceProvider = provider(source);
+  return sourceProvider !== null && sourceProvider === provider(finalUrl);
+};
 const host = (source: string): string | null => {
   try { return referenceServiceHost(source) || null; } catch (error) { if (error instanceof TypeError) return null; throw error; }
 };
@@ -108,13 +115,15 @@ export function inspectDesignReferenceAdmission(root: string, reference: Referen
   if (reference.origin === 'user') return { eligible: true, code: 'user-provided', reason: 'Native capture explicitly recorded as supplied by the user.' };
   const sourceProvider = provider(reference.source);
   const finalProvider = provider(acquisition.finalUrl);
-  if (sourceProvider !== null && sourceProvider === finalProvider
-    && ['Siteinspire', 'Land-book', 'Godly'].includes(sourceProvider)) {
-    return rejected('discovery', `${sourceProvider} is a discovery wrapper; follow and capture the showcased original website before retaining visual evidence.`);
+  if (sourceProvider !== null && finalProvider !== null) {
+    if (sourceProvider !== finalProvider) return rejected('discovery', 'The gallery item redirected to another provider.');
+    if ((options.purpose ?? 'retained') === 'retained') {
+      return rejected('discovery', `${sourceProvider} is discovery provenance; follow its observed original or import the exact useful image/crop before retaining visual evidence.`);
+    }
+    return { eligible: true, code: 'gallery', reason: 'Successful native capture of a supported gallery item.', discoverySource: reference.source };
   }
-  if (sourceProvider !== null && finalProvider !== null) return { eligible: true, code: 'gallery', reason: 'Successful retained native capture of a supported gallery item.', discoverySource: reference.source };
   const entry = references.find(other => other.researchLane === 'design' && gallery(other.source)
-    && other.acquisition && gallery(other.acquisition.finalUrl) && other.acquisition.links.includes(reference.source)
+    && other.acquisition && sameGalleryProvider(other.source, other.acquisition.finalUrl) && other.acquisition.links.includes(reference.source)
     && nativeCapture(root, other) === null && !domainConflict(root, other, references));
   if (entry) return { eligible: true, code: 'observed-original', reason: 'Original source was observed in a retained native gallery item.', discoverySource: entry.source };
   return rejected('discovery', 'Capture a supported gallery item and its observed original link, or retain a reference actually supplied by the user.');

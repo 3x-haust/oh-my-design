@@ -55,6 +55,11 @@ test('product-screen providers accept concrete screens but reject their director
   for (const url of ['https://mobbin.com/explore/screens', 'https://pageflows.com/screens/']) {
     assert.equal(designDiscoveryProvider(url), null);
   }
+  for (const url of [
+    'https://mobbin.com/explore/screens/------------------------------------',
+    'https://pageflows.com/screens/1234567890abcdef1234567890abcdef1234/',
+    'https://mobbin.com/explore/screens/7b35b6c7f954-4dcb-b320-3ad873339477',
+  ]) assert.equal(designDiscoveryProvider(url), null);
 });
 
 test('selected discovery offers explicit direct public entry inputs while skipped discovery offers none', t => {

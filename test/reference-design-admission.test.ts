@@ -71,9 +71,15 @@ test('valid gallery and observed original retain research publication', t => {
 test('website gallery wrappers are discovery evidence, not retained visual evidence', t => {
   const { root, capture, writer } = designAdmissionFixture(t);
   const cases = [
+    'https://www.pinterest.com/pin/987654321/',
+    'https://dribbble.com/shots/19161192-Benefits-Dashboard-UI',
+    'https://www.behance.net/gallery/123456789/Task-workspace',
     'https://www.siteinspire.com/website/13593-yuri-roga',
     'https://land-book.com/websites/finance-dashboard',
     'https://godly.website/website/task-workspace',
+    'https://uibowl.io/screens/task/detail',
+    'https://mobbin.com/explore/screens/7b35b6c7-f954-4dcb-b320-3ad873339477',
+    'https://pageflows.com/screens/6753bc45-9853-4b61-a78e-c95827d347e5/',
   ];
   cases.forEach((url, index) => {
     const original = capture(`https://wrapper-original-${index}.example/task`, `original-${index}`, 'design', 30 + index * 2);

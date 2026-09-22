@@ -137,8 +137,9 @@ instructions: |
   Domain and design use independent service hosts and pixels; do not recapture the domain service
   under another name, path or crop for visual direction. Use free public Pinterest, Dribbble,
   Behance, Mobbin, Page Flows or website-gallery entries; UI Bowl's paid MCP is not required.
-  A Siteinspire item is only a discovery wrapper: follow its observed outbound link and retain the
-  showcased original site, never the wrapper chrome. The discovery entry must
+  Every gallery item page is discovery provenance, not retained wrapper chrome: follow its observed
+  original when present, or use ref import-image for the exact useful image/crop and declare its
+  screenshot-only limits. The discovery entry must
   match a supported gallery item URL, not a service page labelled app-gallery. If access is blocked,
   try another provider; no inspected visual source means incomplete research, not domain fallback.
   Inspect the actual images and declare visualRole (visual-direction or component-support) and

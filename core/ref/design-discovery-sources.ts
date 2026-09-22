@@ -10,6 +10,9 @@ function canonicalItem(value: string | undefined): string | undefined {
   if (value === undefined) return undefined;
   return /^\d+$/.test(value) ? BigInt(value).toString() : value.toLowerCase();
 }
+const UUID_PATH = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
+const MOBBIN_SCREEN = new RegExp(`^/explore/screens/${UUID_PATH}/?$`, 'i');
+const PAGE_FLOWS_SCREEN = new RegExp(`^/screens/${UUID_PATH}/?$`, 'i');
 
 /** Supported public discovery entry shapes, not quality endorsements or reuse licences.
  * Free access is checked at capture time; a provider may block or charge for other features.
@@ -25,8 +28,8 @@ export function designDiscoveryProvider(url: string): string | null {
   if (host === 'siteinspire.com' && /^\/websites?\/\d[^/]*\/?$/.test(path)) return 'Siteinspire';
   if (host === 'land-book.com' && /^\/websites\/[^/]+\/?$/.test(path)) return 'Land-book';
   if (host === 'godly.website' && /^\/website\/[^/]+\/?$/.test(path)) return 'Godly';
-  if (host === 'mobbin.com' && /^\/explore\/screens\/[0-9a-f-]{36}\/?$/i.test(path)) return 'Mobbin';
-  if (host === 'pageflows.com' && /^\/screens\/[0-9a-f-]{36}\/?$/i.test(path)) return 'Page Flows';
+  if (host === 'mobbin.com' && MOBBIN_SCREEN.test(path)) return 'Mobbin';
+  if (host === 'pageflows.com' && PAGE_FLOWS_SCREEN.test(path)) return 'Page Flows';
   // UI Bowl public access is not its paid MCP. Only a real item path is accepted.
   if (host === 'uibowl.io' && /^\/(?:screens?|apps?|patterns?|components?)\/[^/]+(?:\/[^/]+)*\/?$/.test(path)) return 'UI Bowl';
   return null;
