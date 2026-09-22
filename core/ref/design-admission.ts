@@ -17,9 +17,10 @@ type AdmissionOptions = Readonly<{ references?: readonly Reference[] }>;
 const digest = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
 const object = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 const rejected = (code: DesignReferenceAdmission['code'], reason: string): DesignReferenceAdmission => ({ eligible: false, code, reason });
-const gallery = (source: string): boolean => {
-  try { return designDiscoveryProvider(source) !== null; } catch (error) { if (error instanceof TypeError) return false; throw error; }
+const provider = (source: string): string | null => {
+  try { return designDiscoveryProvider(source); } catch (error) { if (error instanceof TypeError) return null; throw error; }
 };
+const gallery = (source: string): boolean => provider(source) !== null;
 const host = (source: string): string | null => {
   try { return referenceServiceHost(source) || null; } catch (error) { if (error instanceof TypeError) return null; throw error; }
 };
@@ -105,7 +106,13 @@ export function inspectDesignReferenceAdmission(root: string, reference: Referen
   if (domainConflict(root, reference, references)) return rejected('domain-reuse', 'Domain source or image evidence cannot be retained as independent design evidence.');
   // The existing native --from-user contract is preserved; this marker is not independent proof of a conversation.
   if (reference.origin === 'user') return { eligible: true, code: 'user-provided', reason: 'Native capture explicitly recorded as supplied by the user.' };
-  if (gallery(reference.source) && gallery(acquisition.finalUrl)) return { eligible: true, code: 'gallery', reason: 'Successful retained native capture of a supported gallery item.', discoverySource: reference.source };
+  const sourceProvider = provider(reference.source);
+  const finalProvider = provider(acquisition.finalUrl);
+  if (sourceProvider !== null && sourceProvider === finalProvider
+    && ['Siteinspire', 'Land-book', 'Godly'].includes(sourceProvider)) {
+    return rejected('discovery', `${sourceProvider} is a discovery wrapper; follow and capture the showcased original website before retaining visual evidence.`);
+  }
+  if (sourceProvider !== null && finalProvider !== null) return { eligible: true, code: 'gallery', reason: 'Successful retained native capture of a supported gallery item.', discoverySource: reference.source };
   const entry = references.find(other => other.researchLane === 'design' && gallery(other.source)
     && other.acquisition && gallery(other.acquisition.finalUrl) && other.acquisition.links.includes(reference.source)
     && nativeCapture(root, other) === null && !domainConflict(root, other, references));

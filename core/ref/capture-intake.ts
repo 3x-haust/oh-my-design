@@ -73,6 +73,6 @@ export function captureLane(root: string, spec: CaptureIntent, invocation?: Proj
     const bytes = readContainedRegularFile(root, join(root, ref.imagePath), 'design discovery capture');
     return createHash('sha256').update(bytes).digest('hex') === observation.imageSha256;
   });
-  if (!discovered) throw new ReferenceIntakeError('DESIGN_DISCOVERY_REQUIRED: capture a free Pinterest/Dribbble/Behance/Siteinspire/Land-book/Godly/UI Bowl item first, then its observed original link. Task/domain service pages belong in --lane domain. Use --from-user only for a reference the user actually supplied.');
+  if (!discovered) throw new ReferenceIntakeError('DESIGN_DISCOVERY_REQUIRED: capture a free Pinterest/Dribbble/Behance/Siteinspire/Land-book/Godly/UI Bowl/Mobbin/Page Flows item first, then its observed original link. Task/domain service pages belong in --lane domain. Use --from-user only for a reference the user actually supplied.');
   return lane;
 }

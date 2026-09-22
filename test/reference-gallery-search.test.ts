@@ -1,14 +1,18 @@
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { designDiscoveryIdentity, designDiscoveryItemIdentity, designDiscoveryProvider } from '../core/ref/design-discovery-sources.ts';
 import { executeReferenceSearch, parseSearchInput, readSearchExecution, validateSearchCoverage } from '../core/ref/search-execution.ts';
 import { withBrowser } from '../core/render/index.ts';
 import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
 import { buildReferenceDiscoveryPlan } from '../core/ref/discovery-plan.ts';
 import { routeAdaptiveFlow } from '../core/route/index.ts';
+
+const cli = fileURLToPath(new URL('../bin/omd.mjs', import.meta.url));
 
 const inputs = [
   { lane: 'design', query: 'benefits dashboard', url: 'https://dribbble.com/search/benefits-dashboard', queryParam: 'path' },
@@ -23,11 +27,33 @@ test('discovery plan supplies executable gallery searches without requiring inve
   const plan = buildReferenceDiscoveryPlan(root, route);
   const native: unknown = Reflect.get(plan.designSourcePolicy, 'nativeSearchInputs');
   assert.ok(Array.isArray(native));
-  assert.equal(native.length, 3);
+  assert.equal(native.length, 2);
   for (const input of native) {
     const parsed = parseSearchInput(input);
     assert.equal(parsed.lane, 'design');
     assert.equal(parsed.query, 'app interface');
+  }
+});
+
+test('installed CLI flushes the complete discovery plan for automation consumers', t => {
+  const root = mkdtempSync(join(tmpdir(), 'omd-gallery-cli-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  mkdirSync(join(root, '.omd'));
+  copyFileSync(fileURLToPath(new URL('fixtures/adaptive-flow/medical-new-product.json', import.meta.url)), join(root, 'route-input.json'));
+  const run = (args: readonly string[]) => spawnSync(process.execPath, [cli, ...args], { cwd: root, encoding: 'utf8' });
+  const classified = run(['route', 'classify', '--input', 'route-input.json', '--json']);
+  assert.equal(classified.status, 0, classified.stderr);
+  const discovered = run(['ref', 'discover-plan', '--json']);
+  assert.equal(discovered.status, 0, discovered.stderr);
+  const plan = JSON.parse(discovered.stdout);
+  assert.deepEqual(plan.galleryDirectories, ['Mobbin', 'Page Flows', 'Pinterest', 'Dribbble', 'Behance', 'UI Bowl']);
+});
+
+test('product-screen providers accept concrete screens but reject their directory pages', () => {
+  assert.equal(designDiscoveryProvider('https://mobbin.com/explore/screens/7b35b6c7-f954-4dcb-b320-3ad873339477'), 'Mobbin');
+  assert.equal(designDiscoveryProvider('https://pageflows.com/screens/6753bc45-9853-4b61-a78e-c95827d347e5/'), 'Page Flows');
+  for (const url of ['https://mobbin.com/explore/screens', 'https://pageflows.com/screens/']) {
+    assert.equal(designDiscoveryProvider(url), null);
   }
 });
 

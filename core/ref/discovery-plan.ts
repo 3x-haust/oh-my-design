@@ -129,11 +129,12 @@ export function buildReferenceDiscoveryPlan(root: string, route: RouteRecord): R
     { name: 'Siteinspire', url: 'https://www.siteinspire.com/', purpose: 'Website composition, typography, rhythm; follow the entry to the live site.' },
     { name: 'Pinterest', url: 'https://www.pinterest.com/', purpose: 'Visual-direction discovery; open the pin and trace its original, not just a thumbnail.' },
   ] : [
+    { name: 'Mobbin', url: 'https://mobbin.com/explore/screens', purpose: 'Public product-screen examples by task and pattern; retain a concrete screen, not the directory.' },
+    { name: 'Page Flows', url: 'https://pageflows.com/screens/', purpose: 'Public product screens and flow steps; retain a concrete screen and inspect surrounding flow context.' },
     { name: 'Pinterest', url: 'https://www.pinterest.com/', purpose: 'App UI/component discovery; verify screen provenance and target viewport before retaining.' },
     { name: 'Dribbble', url: 'https://dribbble.com/', purpose: 'Public app UI shots by pattern; distinguish concepts from released screens, no paid download needed.' },
     { name: 'Behance', url: 'https://www.behance.net/', purpose: 'Public product case-study screen sequences; inspect actual screen images, not only presentation covers.' },
     { name: 'UI Bowl', url: 'https://uibowl.io/', purpose: 'Optional public app screens only; do not require or purchase the paid MCP.' },
-    { name: 'Siteinspire', url: 'https://www.siteinspire.com/', purpose: 'Complementary web typography/layout; not a substitute for product-screen anatomy.' },
   ];
   const motionDiscovery = motionEvidenceRequired;
   const decisions = (plan?.zones ?? []).filter(zone => zone.required).map(zone => {
@@ -205,10 +206,11 @@ export function buildReferenceDiscoveryPlan(root: string, route: RouteRecord): R
       candidates: Object.freeze(galleryCandidates),
       searchQueries: Object.freeze(!discovering ? [] : (designQueries.length === 0 ? [designQuery] : designQueries).flatMap(query => [
         `site:pinterest.com/pin/ ${query}`,
-        `${marketing ? 'site:siteinspire.com/websites/' : 'site:dribbble.com/shots/'} ${query}`,
-        ...(!marketing ? [`site:behance.net/gallery/ ${query}`] : []),
+        `${marketing ? 'site:siteinspire.com/websites/' : 'site:mobbin.com/explore/screens/'} ${query}`,
+        ...(!marketing ? [`site:pageflows.com/screens/ ${query}`, `site:dribbble.com/shots/ ${query}`, `site:behance.net/gallery/ ${query}`] : []),
       ])),
-      nativeSearchInputs: Object.freeze(!discovering ? [] : (designQueries.length === 0 ? [designQuery] : designQueries).flatMap(gallerySearchInputs)),
+      nativeSearchInputs: Object.freeze(!discovering ? [] : (designQueries.length === 0 ? [designQuery] : designQueries)
+        .flatMap(query => gallerySearchInputs(query, marketing ? 'marketing' : 'product'))),
       nativeEntryInputs: Object.freeze(galleryCandidates.map(candidate => Object.freeze({ lane: 'design' as const, entry: 'free-gallery' as const, url: candidate.url }))),
       domainEntryCommand: discovering ? 'omd ref navigate <public-comparable-service-directory-url> --lane domain --entry public-directory --json' : null,
       fallback: 'Use actual search results OR explicitly enter a public gallery list with ref navigate <url> --lane design --entry free-gallery --json. In v6/v7 research put the native root plus your reason in discoveryRoots, follow observed links using ref navigate, then capture the concrete gallery item with --lane design (or import-image for native app screenshots). A list is never retained visual direction. Check free access per entry. If login/payment/blocking prevents inspection, record the failed URL and try another public gallery. Component documentation alone is not a visual-direction substitute. Do not purchase, start a trial, install an MCP, bypass access controls, or claim a blocked source was inspected. Free viewing does not grant reuse rights.',

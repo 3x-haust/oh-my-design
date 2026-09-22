@@ -68,6 +68,27 @@ test('valid gallery and observed original retain research publication', t => {
   assert.doesNotThrow(() => validateReferenceResearch(root, parseReferenceResearch(research), options));
 });
 
+test('website gallery wrappers are discovery evidence, not retained visual evidence', t => {
+  const { root, capture, writer } = designAdmissionFixture(t);
+  const cases = [
+    'https://www.siteinspire.com/website/13593-yuri-roga',
+    'https://land-book.com/websites/finance-dashboard',
+    'https://godly.website/website/task-workspace',
+  ];
+  cases.forEach((url, index) => {
+    const original = capture(`https://wrapper-original-${index}.example/task`, `original-${index}`, 'design', 30 + index * 2);
+    const wrapper = capture(url, `gallery-wrapper-${index}`, 'design', 31 + index * 2, [original.source]);
+    saveRef(root, wrapper.ref, writer);
+    const wrapperAdmission = inspectDesignReferenceAdmission(root, wrapper.ref);
+    assert.equal(wrapperAdmission.eligible, false);
+    assert.equal(wrapperAdmission.code, 'discovery');
+    const originalAdmission = inspectDesignReferenceAdmission(root, original.ref);
+    assert.equal(originalAdmission.eligible, true);
+    assert.equal(originalAdmission.code, 'observed-original');
+    assert.equal(originalAdmission.discoverySource, wrapper.source);
+  });
+});
+
 test('selected discovery refuses a copied domain image with a gallery source declaration', t => {
   const { root, domain, gallery, research } = designAdmissionFixture(t);
   writeFileSync(join(root, '.omd/reference-research.json'), JSON.stringify(research));

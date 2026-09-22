@@ -100,10 +100,11 @@ fork도 단순한 `on` 함수뿐 아니라 같은 이벤트 반환 동작을 지
 `omd ref add <url> --as <name> --lane domain|design`으로 캡처 PNG와 메타데이터부터 각 폴더에
 저장합니다. `ref add-batch`의 각 항목도 `lane`을 지정합니다. `ref list --lane domain|design --json`으로
 따로 조회할 수 있으며, 도메인 캡처는 시각 디자인 보드에 자동으로 섞이지 않습니다.
-`omd ref discover-plan --json`은 앱/제품 UI에 Pinterest·Dribbble·Behance(선택적으로 UI Bowl 공개 화면), 웹/마케팅에 Siteinspire·Pinterest
+`omd ref discover-plan --json`은 앱/제품 UI에 Mobbin·Page Flows·Pinterest·Dribbble·Behance(선택적으로 UI Bowl 공개 화면), 웹/마케팅에 Siteinspire·Pinterest
 같은 탐색 후보를 제시합니다. 실제 무료 열람 가능한 항목만 사용하며, 막힌 출처는 다른 공개
 출처로 대체합니다. 유료 결제·체험 시작·MCP 자동 설치는 하지 않습니다. 무료 열람과 재사용
 권한은 별개입니다. 갤러리 이름만으로 품질을 인정하지 않고 원본 화면과 선택 이유를 기록합니다.
+Siteinspire 작품 페이지는 탐색용 중간 화면이므로 그 화면 자체가 아니라 실제로 연결된 원본 사이트를 디자인 근거로 저장합니다.
 `omd schema reference-research --json` → `omd ref research-set --input <input.json>` →
 `omd ref research-check --json`으로 두 파일과 통합 일치 기록을 검증합니다. 갤러리 홈 주소만으로는
 통과하지 않습니다. 개별 항목의 PNG·캡처 JSON과 원본 출처를 대조하고, 원본이 다른 페이지라면

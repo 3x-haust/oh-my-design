@@ -133,7 +133,7 @@ investigate a motion candidate without selecting it for production; selected `mo
 requires positive measured evidence. Explicit preferences
 for a reference region or gallery belong in those searches; a language alone does not imply a
 country's style or a target market. Prefer freely inspectable screen/pattern galleries (for example
-UI Bowl and relevant Pinterest entries) for apps/product UI, and website galleries (for example
+Mobbin, Page Flows, UI Bowl and relevant Pinterest entries) for apps/product UI, and website galleries (for example
 Siteinspire and Pinterest) for website/marketing direction. The discovery plan supplies surface-aware
 leads, not fixed winners or guarantees of free catalogue/API access. Verify each entry's current free
 access, open it beyond the thumbnail, and follow its original where available. If access is blocked,
@@ -235,6 +235,9 @@ Use native gallery search when general search is blocked. HTTP 200 and actual sa
 are required; login walls, empty results and challenge responses remain failed attempts. Retain only
 an item actually observed in those results, never guessed shot IDs. Siteinspire now uses numeric
 `/website/<id-slug>` item URLs; category/selected directories are navigation, not gallery items.
+Its item page is also an intermediary wrapper rather than retained visual evidence: follow the
+observed outbound link and capture the showcased original website. Mobbin `/explore/screens/<uuid>`
+and Page Flows `/screens/<uuid>` are concrete product-screen entries; their list pages remain discovery only.
 Search gallery names with task/pattern terms (for example `site:pinterest.com/pin/ ...`), then inspect the actual entry. Known search
 redirect links may be decoded as discovery targets; decoding never counts as visiting them.
 The catalogue uses public browser pages, not Google's paid/custom XML API. Query parameter references:
@@ -278,8 +281,11 @@ qualify. Root reasons remain bounded, visible, well-formed scope notes; they are
 
 The two lanes use independent service hosts, including after redirects. A second path or crop of a
 domain service is not a visual direction. Non-user discovery must match a supported public gallery
-item (Pinterest, Dribbble, Behance, Siteinspire, Land-book, Godly, or UI Bowl); never label domain
+item (Pinterest, Dribbble, Behance, Siteinspire, Land-book, Godly, UI Bowl, Mobbin, or Page Flows); never label domain
 documentation as a gallery. Add new providers deliberately to design-discovery-sources.ts.
+For product UI, retain concrete screen/pattern evidence rather than a website-showcase wrapper.
+For website/marketing, a Siteinspire item can establish the discovery link but the retained visual
+source is the captured original site. `inspectDesignReferenceAdmission` refuses the wrapper itself.
 Each design source declares visualRole=visual-direction|component-support and visualAssessment
 (composition, typography, density, imagery, transfer, avoid). Each board candidate must actually
 use visual-direction evidence, and every visual piece must bind a validated source identity and

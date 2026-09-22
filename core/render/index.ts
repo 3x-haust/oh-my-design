@@ -13,6 +13,7 @@ import { type ProjectWriteAdapter, requireProjectWriteAdapter } from '../runtime
 import type { RenderedBeat, RenderedBeatProof } from '../copy/index.ts';
 import { requireMotionResultAuthorization, requireRenderedBeatResultAuthorization, type ProjectRunInvocation } from '../runtime/invocation.ts';
 const MAX_NODES = 4000;
+const BROWSER_CLEANUP_TIMEOUT_MS = 5_000;
 const MOTION_CAPTURE_EVENT_TIMEOUT_MS = 5_000;
 const reducedMotionRemovalThreshold = (noiseFloor: number): number => noiseFloor * 2;
 
@@ -277,7 +278,9 @@ export async function withBrowser<T>(fn: (browser: Browser) => Promise<T>): Prom
     return await fn(browser);
   } finally {
     let cleanupTimer: ReturnType<typeof setTimeout> | undefined;
-    try { await Promise.race([browser.close(), new Promise<void>((_, reject) => { cleanupTimer = setTimeout(() => reject(new Error('browser cleanup timed out after 2000ms')), 2000); })]); }
+    try { await Promise.race([browser.close(), new Promise<void>((_, reject) => {
+      cleanupTimer = setTimeout(() => reject(new Error(`browser cleanup timed out after ${BROWSER_CLEANUP_TIMEOUT_MS}ms`)), BROWSER_CLEANUP_TIMEOUT_MS);
+    })]); }
     finally { clearTimeout(cleanupTimer); }
   }
 }
