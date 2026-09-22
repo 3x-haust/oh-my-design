@@ -450,7 +450,7 @@ const ROUTE_INPUT: InputSkeleton = {
     'Before choosing or skipping visual methods, read `omd pack protocol/human-design-loop.md --section "Visual reference gallery and concept exploration"`. An exploration skip names the current supplied direction or existing visible evidence that settles the content-to-form relationship. Functional simplicity, quietness, no metaphor, no shipped bitmap, or future review alone do not settle it. A bounded change to a current visual target may skip experiments; do not reopen that target or impose a candidate quota.',
     `referenceDiscovery.taskNeed is one of: ${REFERENCE_DISCOVERY_TASK_NEEDS.join(', ')}`,
     'referenceDiscovery.uncertainty is unresolved or resolved; existingEvidence is none, insufficient, or sufficient; a new marketing page uses new-marketing even when its user-supplied content is complete',
-    'When projectMode is greenfield and referenceDiscovery.taskNeed is new-product, the task-flow benchmark requires stages scout, reference-board, composition and candidate-generation and roles omd-scout, omd-composer and omd-sketch. These are existing stage/role IDs, not a stage named task-flow. Keep dependency order and executionWaves valid; benchmark input and publication use omd schema task-flow-benchmark.',
+    'When projectMode is greenfield and referenceDiscovery.taskNeed is new-product, the task-flow benchmark requires stages scout, reference-board, reference-selection, composition and candidate-generation and roles omd-scout, omd-composer and omd-sketch. The coordinator selects the strongest evidence-backed board candidate before composition. These are existing stage/role IDs, not a stage named task-flow. Keep dependency order and executionWaves valid; benchmark input and publication use omd schema task-flow-benchmark.',
     'For new-product, new-marketing, or unresolved discovery: uncertainty="unresolved", existingEvidence="none" or "insufficient", existingEvidenceUse=null, skipReason=null. Both null keys are required; do not omit them or replace null with explanatory prose.',
     'For skipped discovery on existing work: uncertainty="resolved", existingEvidence="sufficient", existingEvidenceUse and skipReason are non-empty descriptions of actual evidence use and the skip reason.',
     'the user-selected model owns role, stage, and method order',
@@ -1183,7 +1183,7 @@ const RESPONSIVE_TOKEN_COMMIT: InputSkeleton = {
   name: 'responsive-token-commit',
   keys: RESPONSIVE_TOKEN_COMMIT_KEYS,
   constraints: [
-    ...TOKEN_COMMIT.constraints!,
+    ...(TOKEN_COMMIT.constraints ?? []),
     'responsiveTypeScales is non-empty, with exactly maxWidth and typeScale per entry; replace the quoted maxWidth placeholder with a JSON number; positive finite maxWidth values strictly ascend without duplicates',
     'maxWidth is an inclusive CSS viewport-width cap; first matching entry wins; top-level typeScale applies above all caps; each scale independently meets the same floors',
     'choose caps from the approved responsive proof; spacing/color/font roles remain shared; page drift checks use only the active scale at the supplied --viewport, never the union; check every approved viewport',
@@ -1212,7 +1212,7 @@ const DESIGN_ROUTE_INPUT: InputSkeleton = {
     strategyDecision: {
       schema: 'adaptive-strategy-decision-v1', owner: 'user-selected-model',
       roles: ['omd-framer', 'omd-scout', 'omd-writer', 'omd-typesetter', 'omd-composer', 'omd-sketch', 'omd-eye'],
-      stages: ['domain', 'frame', 'scout', 'reference-board', 'copy', 'type-proof', 'composition', 'candidate-generation', 'independent-review'],
+      stages: ['domain', 'frame', 'scout', 'reference-board', 'reference-selection', 'copy', 'type-proof', 'composition', 'candidate-generation', 'independent-review'],
       executionWaves: [
         { id: 'frame', mode: 'concurrent', roles: ['omd-framer'] },
         { id: 'research-copy', mode: 'concurrent', roles: ['omd-scout', 'omd-writer'] },
@@ -1224,7 +1224,7 @@ const DESIGN_ROUTE_INPUT: InputSkeleton = {
       methods: ['design-strategy-balanced-delivery', 'model-capability-probe', 'evidence-claim-accounting', 'hypothesis-validation', 'design-handoff-review', 'reference-discovery', 'parallel-reference-acquisition', 'copy-repair-workflow'],
       aiAssets: [], attributionCategories: ['tokens', 'composition'],
       skips: [
-        ...['depth', 'content-grain', 'acquisition', 'moodboard', 'reference-selection', 'art-direction', 'safety-validation', 'reflection-in-action', 'reference-distance', 'image-first-draft', 'evidence-driven-refinement', 'motion-one', 'ai-shipped-asset'].map((id) => ({ id, reason: '<record the task-specific reason; select this stage/method instead when required>' })),
+        ...['depth', 'content-grain', 'acquisition', 'moodboard', 'art-direction', 'safety-validation', 'reflection-in-action', 'reference-distance', 'image-first-draft', 'evidence-driven-refinement', 'motion-one', 'ai-shipped-asset'].map((id) => ({ id, reason: '<record the task-specific reason; select this stage/method instead when required>' })),
       ],
       rationale: '<why this design strategy reaches the requested handoff without application implementation>',
     },
@@ -1234,7 +1234,7 @@ const DESIGN_ROUTE_INPUT: InputSkeleton = {
 const PRODUCT_ROUTE_INPUT: InputSkeleton = {
   ...ROUTE_INPUT,
   name: 'product-route-input',
-  constraints: [...ROUTE_INPUT.constraints!,
+  constraints: [...(ROUTE_INPUT.constraints ?? []),
     'This is a greenfield product implementation example, not a universal sequence or a design-only handoff. Use new-marketing for a marketing task, not a fictitious product workflow. Keep every real user requirement and choose optional work deliberately.',
     'Replace allowedPaths with the selected stack\'s actual source, asset, manifest, lockfile and build-config paths before publication. namedDependencies preserves libraries explicitly requested by the user (for example react); examples do not authorize an unrelated dependency or stack change.',
   ],
@@ -1246,7 +1246,7 @@ const PRODUCT_ROUTE_INPUT: InputSkeleton = {
     strategyDecision: {
       schema: 'adaptive-strategy-decision-v1', owner: 'user-selected-model',
       roles: ['omd-framer', 'omd-scout', 'omd-writer', 'omd-typesetter', 'omd-composer', 'omd-sketch', 'omd-hand', 'omd-eye'],
-      stages: ['domain', 'frame', 'scout', 'reference-board', 'copy', 'type-proof', 'composition', 'candidate-generation', 'production', 'browser-evidence', 'independent-review'],
+      stages: ['domain', 'frame', 'scout', 'reference-board', 'reference-selection', 'copy', 'type-proof', 'composition', 'candidate-generation', 'production', 'browser-evidence', 'independent-review'],
       executionWaves: [
         { id: 'frame', mode: 'concurrent', roles: ['omd-framer'] },
         { id: 'research-copy', mode: 'concurrent', roles: ['omd-scout', 'omd-writer'] },
@@ -1258,7 +1258,7 @@ const PRODUCT_ROUTE_INPUT: InputSkeleton = {
       ],
       methods: ['design-strategy-balanced-delivery', 'model-capability-probe', 'evidence-claim-accounting', 'hypothesis-validation', 'decision-linked-browser-observation', 'reference-discovery', 'parallel-reference-acquisition', 'copy-repair-workflow'],
       aiAssets: [], attributionCategories: ['tokens', 'composition'],
-      skips: ['depth', 'content-grain', 'acquisition', 'moodboard', 'reference-selection', 'art-direction', 'safety-validation', 'reflection-in-action', 'reference-distance', 'image-first-draft', 'evidence-driven-refinement', 'motion-one', 'ai-shipped-asset']
+      skips: ['depth', 'content-grain', 'acquisition', 'moodboard', 'art-direction', 'safety-validation', 'reflection-in-action', 'reference-distance', 'image-first-draft', 'evidence-driven-refinement', 'motion-one', 'ai-shipped-asset']
         .map(id => ({ id, reason: '<record the task-specific reason; select this stage/method instead when required>' })),
       rationale: '<why this implementation strategy reaches the real outcomes; replace example choices with the task-specific decisions>',
     },

@@ -122,6 +122,30 @@ test('current reference outputs lead to coordinator interpretation, not an owner
   assert.equal(nextStageWork(f.root, pack, invocation).action, 'interpret-references');
 });
 
+test('a missing reference board points to discovery work instead of repeating entry checks', t => {
+  const root = mkdtempSync(join(tmpdir(), 'omd-stage-reference-pointer-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const input = routeInput();
+  input.referenceDiscovery = { ...input.referenceDiscovery, uncertainty: 'unresolved', existingEvidence: 'none', existingEvidenceUse: null, skipReason: null };
+  input.strategyDecision.stages.splice(1, 0, 'scout', 'reference-board');
+  input.strategyDecision.roles.unshift('omd-scout');
+  input.strategyDecision.executionWaves[0].roles.unshift('omd-scout');
+  input.strategyDecision.methods.push('reference-discovery', 'parallel-reference-acquisition');
+  input.strategyDecision.skips = input.strategyDecision.skips.filter((skip: { id: string }) => !['scout', 'reference-board', 'reference-discovery'].includes(skip.id));
+  const invocation = copyProject(root, input);
+  writeFileSync(join(root, '.omd/scout.md'), '# Scoped reference observations\n');
+  const receipts = (['domain', 'scout', 'reference-board'] as const).flatMap(stage => stageDefinition(stage).requiredContracts.map(contract =>
+    deliveryReceipt(stage, contract, contractSha256(pack, contract), '2026-09-21T00:00:00Z')));
+  writeFileSync(join(root, '.omd/delivery.jsonl'), receipts.map(receipt => JSON.stringify(receipt)).join('\n') + '\n');
+
+  const work = nextStageWork(root, pack, invocation);
+  assert.equal(work.stage, 'reference-board');
+  assert.equal(work.action, 'author-output');
+  assert.equal(work.next, 'omd ref discover-plan --json');
+  assert.match(work.instruction, /multiple real domain-service flows/);
+  assert.match(work.instruction, /Run checks only after the owned board artifact changes/);
+});
+
 test('board work repairs research before application and returns to research when a retained receipt changes', t => {
   const f = designAdmissionFixture(t), input = routeInput();
   input.referenceDiscovery = { ...input.referenceDiscovery, uncertainty: 'unresolved', existingEvidence: 'none', existingEvidenceUse: null, skipReason: null };

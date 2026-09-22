@@ -13,6 +13,7 @@ export type DiscoveryScenario = Readonly<{
   html: string;
   status?: number;
   finalUrl?: string;
+  serverAddress?: string;
   afterCapture?: (page: Page, count: number) => Promise<void>;
 }>;
 
@@ -34,6 +35,17 @@ export function discoveryBrowser(browser: Browser, scenario: DiscoveryScenario) 
       : route.fulfill({ status: scenario.status ?? 200, contentType: 'text/html', body: scenario.html }));
     if (scenario.finalUrl) await page.route(scenario.finalUrl, route => route.fulfill({ status: scenario.status ?? 200, contentType: 'text/html', body: scenario.html }));
     const goto = page.goto.bind(page);
+    const serverAddress = scenario.serverAddress;
+    if (serverAddress !== undefined && scenario.finalUrl === undefined) {
+      page.goto = async (...args: Parameters<Page['goto']>) => {
+        const response = await goto(...args);
+        if (response === null) return null;
+        return new Proxy(response, { get(target, property) {
+          if (property === 'serverAddr') return async () => ({ ipAddress: serverAddress, port: 443 });
+          return Reflect.get(target, property, target);
+        } });
+      };
+    }
     if (scenario.finalUrl) {
       const finalUrl = scenario.finalUrl;
       page.goto = async (...args: Parameters<Page['goto']>) => {

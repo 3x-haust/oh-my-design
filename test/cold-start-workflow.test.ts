@@ -112,11 +112,11 @@ test('cold start traverses real CLI framing, independent research/copy entry and
   assert.equal(help.status, 0, help.stderr); assert.match(help.stdout, /--task-matrix/);
   assert.deepEqual(readdirSync(cwd), []);
   await h.start();
-  await assert.rejects(h.enter('candidate-generation'), /upstream composition/);
+  assert.match(await h.enter('candidate-generation'), /upstream composition/);
   await h.deliver('frame');
-  await assert.rejects(h.enter('frame'), /upstream artifact missing.*domain-brief/);
+  assert.match(await h.enter('frame'), /upstream artifact missing.*domain-brief/);
   await h.author('.omd/domain-brief.json', {});
-  await assert.rejects(h.enter('frame'), /upstream domain/);
+  assert.match(await h.enter('frame'), /upstream domain/);
   await h.author('.omd/domain-brief.json', domain());
   assert.equal(JSON.parse(await h.command(['domain', 'check', '--json'])).unconfirmedPlanning.length, 0);
   await h.enter('frame');
@@ -149,7 +149,7 @@ test('cold start traverses real CLI framing, independent research/copy entry and
   for (const stage of ['scout', 'copy', 'type-proof']) await h.deliver(stage);
   await h.enter('scout');
   await h.enter('copy'); // Writer does NOT wait for Scout's output merely because of array order.
-  await assert.rejects(h.enter('type-proof'), /upstream artifact missing.*copy-deck/);
+  assert.match(await h.enter('type-proof'), /upstream artifact missing.*copy-deck/);
   const plan = JSON.parse(await h.command(['ref', 'discover-plan', '--json']));
   assert.equal(plan.lanes.length, 2);
   // Native captured fixtures exercise the research write path, not source writes or invented
@@ -160,14 +160,14 @@ test('cold start traverses real CLI framing, independent research/copy entry and
   await h.command(['ref', 'add', join(fixtureRoot, 'considered.html'), '--as', 'fixture-design', '--lane', 'design', '--from-user', '--no-energy']);
   for (const lane of ['domain', 'design']) assert.ok(readdirSync(join(cwd, '.omd/refs', lane)).some(path => path.endsWith('.png')));
   await h.author('.omd/copy-deck.md', '# Not a copy deck');
-  await assert.rejects(h.enter('type-proof'), /upstream copy/);
+  assert.match(await h.enter('type-proof'), /upstream copy/);
   await h.author('.omd/copy-deck.md', deck);
   await h.command(['copy', '--check']);
-  await assert.rejects(h.enter('type-proof'), /upstream copy.*current copy review/);
+  assert.match(await h.enter('type-proof'), /upstream copy.*current copy review/);
   await h.author('.omd/.cache/copy-eye.md', `Mode: copy-editor\nReview time: 2026-09-21T00:00:00Z\nReviewed copy-deck SHA-256: ${copyDeckSha256(Buffer.from(deck))}\nVerdict: CLEAN\nFindings: Same-session test fixture; no independent review attestation.\n`);
   await h.enter('type-proof');
   await h.author('.omd/copy-deck.md', deck + '\nChanged after review.\n');
-  await assert.rejects(h.enter('type-proof'), /upstream copy.*current copy-deck bytes/);
+  assert.match(await h.enter('type-proof'), /upstream copy.*current copy-deck bytes/);
   await h.author('.omd/copy-deck.md', deck);
   const requirements = JSON.parse(await h.command(['schema', 'functional-requirements', '--json']));
   assert.equal(requirements.path, '.omd/.cache/functional-requirements.json');
@@ -177,7 +177,8 @@ test('cold start traverses real CLI framing, independent research/copy entry and
   const refused = await h.emit('tool_call', { toolName: 'write', input: { path: 'package.json' } }) as { block: boolean };
   assert.equal(refused.block, true);
   assert.equal(existsSync(join(cwd, 'package.json')), false);
-  await assert.rejects(h.command(['guard', 'completion', '--json']));
+  const completion = JSON.parse(await h.command(['guard', 'completion', '--json']));
+  assert.ok(completion.blockers.length > 0);
 });
 
 test('planning gaps are named early, cannot be inferred away, and no-progress recovery resets only on real input', async t => {
@@ -256,7 +257,9 @@ test('design-only fresh work keeps open planning questions without forcing produ
   assert.deepEqual(work.planning, [{ field: 'successSignal', text: 'Inspect confirmation' }]);
   await h.emit('message_end', { message: final });
   assert.equal(h.sent.length, 1);
-  assert.match(h.sent[0]![0].content, /"deliveryMode":"design-only"/);
+  assert.match(h.sent[0]![0].content, /Owner: omd-framer/);
+  assert.match(h.sent[0]![0].content, /Required action: author-output/);
+  assert.doesNotMatch(h.sent[0]![0].content, /stage-next-v1/);
   const blocked = await h.emit('tool_call', { toolName: 'write', input: { path: 'package.json' } }) as { block: boolean };
   assert.equal(blocked.block, true);
   assert.equal(existsSync(join(cwd, 'package.json')), false);

@@ -181,7 +181,7 @@ test('the newly recognized publishers preserve help, failure, selection and task
     const h = harness(t); await h.activate();
     if (mode === 'unselected') h.unselected.add(stage);
     const entry = h.run(['brief', mode === 'wrong-stage' ? 'frame' : stage, '--check', '--json']);
-    if (mode === 'unselected') await assert.rejects(entry); else await entry;
+    if (mode === 'unselected') assert.equal((await entry).details.code, 1); else await entry;
     if (mode === 'failure') h.failPublication();
     if (mode === 'new-input') { await h.emit('input', { source: 'interactive' }); await h.activate('Report status.'); }
     const publication = h.run([command, action, ...(mode === 'help' ? ['--help'] : ['--input', '.omd/.cache/owned.json'])]);
