@@ -114,7 +114,9 @@ export function inspectDesignReferenceAdmission(root: string, reference: Referen
   // The existing native --from-user contract is preserved; this marker is not independent proof of a conversation.
   const sourceProvider = provider(reference.source);
   const finalProvider = provider(acquisition.finalUrl);
-  if (sourceProvider !== null && finalProvider !== null) {
+  if (sourceProvider !== null || finalProvider !== null) {
+    if (sourceProvider === null) return rejected('discovery', 'The capture redirected into a gallery wrapper; retain the observed original or exact useful image/crop instead.');
+    if (finalProvider === null) return rejected('discovery', 'The gallery item redirected away from its inspectable entry; capture the original under its own source URL.');
     if (sourceProvider !== finalProvider) return rejected('discovery', 'The gallery item redirected to another provider.');
     if ((options.purpose ?? 'retained') === 'retained') {
       return rejected('discovery', `${sourceProvider} is discovery provenance; follow its observed original or import the exact useful image/crop before retaining visual evidence.`);

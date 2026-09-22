@@ -107,6 +107,21 @@ test('a user marker cannot promote gallery wrapper chrome into retained evidence
   assert.equal(provenance.code, 'gallery');
 });
 
+test('a user marker cannot bypass gallery policy through redirects', t => {
+  const { root, capture } = designAdmissionFixture(t);
+  const away = capture('https://mobbin.com/explore/screens/7b35b6c7-f954-4dcb-b320-3ad873339477', 'redirect-away', 'design', 61);
+  away.ref.origin = 'user';
+  assert.ok(away.ref.acquisition);
+  away.ref.acquisition.finalUrl = 'https://actual-product.example/screen';
+  assert.equal(inspectDesignReferenceAdmission(root, away.ref).eligible, false);
+
+  const into = capture('https://actual-product.example/screen', 'redirect-into', 'design', 62);
+  into.ref.origin = 'user';
+  assert.ok(into.ref.acquisition);
+  into.ref.acquisition.finalUrl = 'https://pageflows.com/screens/6753bc45-9853-4b61-a78e-c95827d347e5/';
+  assert.equal(inspectDesignReferenceAdmission(root, into.ref).eligible, false);
+});
+
 test('selected discovery refuses a copied domain image with a gallery source declaration', t => {
   const { root, domain, gallery, research } = designAdmissionFixture(t);
   writeFileSync(join(root, '.omd/reference-research.json'), JSON.stringify(research));
