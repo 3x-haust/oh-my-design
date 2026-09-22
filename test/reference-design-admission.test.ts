@@ -115,6 +115,16 @@ test('a user marker cannot bypass gallery policy through redirects', t => {
   away.ref.acquisition.finalUrl = 'https://actual-product.example/screen';
   assert.equal(inspectDesignReferenceAdmission(root, away.ref).eligible, false);
 
+  const changedItem = capture('https://mobbin.com/explore/screens/7b35b6c7-f954-4dcb-b320-3ad873339477', 'redirect-item', 'design', 63);
+  assert.ok(changedItem.ref.acquisition);
+  changedItem.ref.acquisition.finalUrl = 'https://mobbin.com/explore/screens/82f0afed-ed7c-4a16-9a8b-4a593b03bcd4';
+  assert.equal(inspectDesignReferenceAdmission(root, changedItem.ref, { purpose: 'discovery' }).eligible, false);
+
+  const changedProvider = capture('https://mobbin.com/explore/screens/7b35b6c7-f954-4dcb-b320-3ad873339477', 'redirect-provider', 'design', 64);
+  assert.ok(changedProvider.ref.acquisition);
+  changedProvider.ref.acquisition.finalUrl = 'https://pageflows.com/screens/6753bc45-9853-4b61-a78e-c95827d347e5/';
+  assert.equal(inspectDesignReferenceAdmission(root, changedProvider.ref, { purpose: 'discovery' }).eligible, false);
+
   const into = capture('https://actual-product.example/screen', 'redirect-into', 'design', 62);
   into.ref.origin = 'user';
   assert.ok(into.ref.acquisition);

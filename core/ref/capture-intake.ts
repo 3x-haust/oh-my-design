@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { readPersistedRoute } from '../route/index.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
-import { designDiscoveryProvider, referenceServiceHost } from './design-discovery-sources.ts';
+import { designDiscoveryItemIdentity, designDiscoveryProvider, referenceServiceHost } from './design-discovery-sources.ts';
 import { readContainedRegularFile } from './reference-selection.ts';
 import { assertReferenceLaneSeparation, loadRefs, researchLane } from './store.ts';
 
@@ -13,6 +13,9 @@ export class ReferenceIntakeError extends Error {
 }
 function gallery(url: string): boolean {
   try { return designDiscoveryProvider(url) !== null; } catch { return false; }
+}
+function galleryItem(url: string): string | null {
+  try { return designDiscoveryItemIdentity(url); } catch { return null; }
 }
 function host(url: string): string | null {
   try { return referenceServiceHost(url) || null; } catch { return null; }
@@ -31,8 +34,11 @@ export function captureFinalUrlGuard(root: string, specs: readonly CaptureIntent
       || loadRefs(root, { includeDomain: true }).some(ref => ref.researchLane && ref.researchLane !== lane
         && [host(ref.source), host(ref.acquisition?.finalUrl ?? '')].includes(service)));
     if (overlap) throw new ReferenceIntakeError('REFERENCE_LANE_SERVICE_OVERLAP: the final captured service belongs to the other research lane');
-    if (lane === 'design' && spec.fromUser !== true && gallery(spec.source) && !gallery(finalUrl)) {
-      throw new ReferenceIntakeError('DESIGN_DISCOVERY_REDIRECT: the gallery item redirected to an unqualified page; use ref navigate for discovery hops');
+    const requestedGalleryItem = galleryItem(spec.source);
+    const finalGalleryItem = galleryItem(finalUrl);
+    if (lane === 'design' && (requestedGalleryItem !== null || finalGalleryItem !== null)
+      && requestedGalleryItem !== finalGalleryItem) {
+      throw new ReferenceIntakeError('DESIGN_DISCOVERY_REDIRECT: the captured page must remain the exact requested gallery item; use ref navigate for discovery hops');
     }
     // Reserve synchronously before an async PNG write lets a sibling capture publish.
     observed.set(index, finalUrl);
