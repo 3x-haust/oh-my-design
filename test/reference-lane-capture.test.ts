@@ -1,13 +1,26 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, readdirSync, realpathSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, readdirSync, realpathSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { capturePageForRef, withBrowser, galleryLoginOccludes } from '../core/render/index.ts';
 import { loadRefs, refImagePath, researchLane, saveRef, addPrinciples } from '../core/ref/store.ts';
 import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
+
+test('final URL refusal leaves the reference output tree unchanged', async t => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-lane-refusal-')));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const writer = createTestProjectWriteAdapter(root);
+  const source = fileURLToPath(new URL('fixtures/considered.html', import.meta.url));
+  const shotOut = join(root, '.omd/refs/design/rejected.png');
+  await assert.rejects(withBrowser(browser => capturePageForRef(browser, source, { width: 640, height: 480 }, {
+    shotOut, adapter: writer, validateFinalUrl: () => { throw new Error('final URL rejected'); },
+  })), /final URL rejected/);
+  assert.equal(existsSync(join(root, '.omd/refs')), false);
+});
 
 test('actual full-page captures retain HTTP/link provenance and stay in separate lane directories', async t => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-lane-browser-')));

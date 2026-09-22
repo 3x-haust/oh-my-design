@@ -96,6 +96,12 @@ test('a rule whose when-expression throws is reported, not silently skipped', ()
   assert.throws(() => check(ir, bad), /BAD-001/);
 });
 
+test('a nonterminating repository rule remains bounded', () => {
+  const stuck: Rule[] = [{ id: 'STUCK-001', layer: 1, category: 'system', severity: 'error',
+    when: '(() => { while (true) {} })()', assert: 'true', message: 'x' }];
+  assert.throws(() => check(ir, stuck), /STUCK-001.*timed out/);
+});
+
 test('team rules can reference frame concepts (Layer 2)', () => {
   const teamRule: Rule[] = [{
     id: 'BRAND-014',

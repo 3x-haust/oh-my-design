@@ -78,11 +78,13 @@ export async function addRefsBatch(
           const shotOut = spec.shot
             ? refImagePath(adapter.projectRoot, { source: spec.source, component: spec.as, ...(lane ? { researchLane: lane } : {}) })
             : undefined;
-          if (shotOut) adapter.mkdir(relative(adapter.projectRoot, dirname(shotOut)));
           const viewport = parseViewport(spec.viewport ?? REFERENCE_VIEWPORT);
           const { raw, shotSaved, capturePreparation, acquisition } = await capturePageForRef(browser, spec.source, viewport, {
             selector: spec.selector ?? null,
-            validateFinalUrl: url => validateFinalUrl(i, url),
+            validateFinalUrl: url => {
+              validateFinalUrl(i, url);
+              if (shotOut) adapter.mkdir(relative(adapter.projectRoot, dirname(shotOut)));
+            },
             ...(preparation ? { preparation } : {}),
             ...(shotOut ? { shotOut, adapter } : {}),
           });
