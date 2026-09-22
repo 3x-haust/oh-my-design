@@ -6,7 +6,7 @@ import { canonicalJson } from './board-artifacts.ts';
 import { designDiscoveryDirectoryProvider } from './design-discovery-sources.ts';
 import { captureDiscoveryObservation } from './reference-capture-observation.ts';
 import { observeDocumentResponses, type DocumentObserver } from './document-observation.ts';
-import { createPublicNetworkProxy, publicIpAddress } from './public-network.ts';
+import { createPublicNetworkProxy } from './public-network.ts';
 import { disableUnproxiedRealtimeTransports } from './browser-security.ts';
 import { searchChallengeReason } from './search-execution.ts';
 import { DISCOVERY_LIMITATIONS, ReferenceDiscoveryError, directDiscoveryEntry, discoveryDigest, discoveryLane, publicDiscoveryUrl, validateDirectDiscoveryLinks,
@@ -53,8 +53,6 @@ export async function captureReferenceNavigation(browser: Browser, source: strin
     documents = await observeDocumentResponses(page);
     const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20000 });
     if (!response?.ok()) throw new ReferenceNavigationError('a successful native HTTP capture is required');
-    const server = await response.serverAddr();
-    if (server !== null && !publicIpAddress(server.ipAddress)) throw new ReferenceNavigationError('native HTTP capture reached a non-public network');
     if (lane === 'design' && await loginOccludes(page)) throw new ReferenceNavigationError('login form obscures the public discovery list');
     const observation = await captureDiscoveryObservation(page, documents);
     const status = observation.httpStatus;

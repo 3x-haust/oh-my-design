@@ -194,6 +194,7 @@ test('production brief blocks missing selected inputs and supplies every present
     '.omd/content-grain.json',
     '.omd/scout.md',
     '.omd/reference-board.json',
+    '.omd/reference-pre-selection-v2.json',
     '.omd/copy-deck.md',
     '.omd/composition.md',
   ];
@@ -250,6 +251,7 @@ test('candidate generation has a Sketch-owned brief with selected upstream input
     '.omd/content-grain.json',
     '.omd/scout.md',
     '.omd/reference-board.json',
+    '.omd/reference-pre-selection-v2.json',
     '.omd/copy-deck.md',
     '.omd/composition.md',
   ];

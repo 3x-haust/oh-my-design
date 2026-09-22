@@ -33,6 +33,15 @@ test('new navigation binds only rendered links to its captured viewport', async 
   });
 });
 
+test('a validated CONNECT proxy loopback address is not mistaken for the public destination', async t => {
+  const result = await capture(t, {
+    url: GALLERY_DIRECTORY,
+    html: directoryHtml(GALLERY_ITEM),
+    serverAddress: '127.0.0.1',
+  });
+  assert.ok(result.receipt.capture.path.startsWith('.omd/discovery/design/entries/'));
+});
+
 const entryLanes = { 'public-directory': 'domain', 'free-gallery': 'design' } as const;
 async function capture(t: { after(fn: () => void): void }, scenario: DiscoveryScenario, entry: DirectDiscoveryEntry = 'free-gallery') {
   const root = discoveryFixture(t);

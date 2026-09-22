@@ -35,7 +35,7 @@ function expressiveMedical(): unknown {
   }
   Reflect.set(designAxes, 'expressiveDesignNeed', 'showpiece');
   Reflect.set(strategy, 'roles', ['omd-framer', 'omd-scout', 'omd-writer', 'omd-typesetter', 'omd-composer', 'omd-sketch', 'omd-hand', 'omd-eye']);
-  Reflect.set(strategy, 'stages', ['domain', 'frame', 'content-grain', 'scout', 'reference-board', 'safety-validation', 'art-direction', 'copy', 'type-proof', 'composition', 'candidate-generation', 'production', 'browser-evidence', 'independent-review']);
+  Reflect.set(strategy, 'stages', ['domain', 'frame', 'content-grain', 'scout', 'reference-board', 'reference-selection', 'safety-validation', 'art-direction', 'copy', 'type-proof', 'composition', 'candidate-generation', 'production', 'browser-evidence', 'independent-review']);
   Reflect.set(strategy, 'executionWaves', [
     { id: 'frame', mode: 'concurrent', roles: ['omd-framer'] },
     { id: 'parallel-research-copy', mode: 'concurrent', roles: ['omd-scout', 'omd-writer'] },
@@ -50,7 +50,7 @@ function expressiveMedical(): unknown {
   if (!Array.isArray(methods) || !Array.isArray(skips)) throw new Error('medical fixture strategy lists are missing');
   Reflect.set(strategy, 'methods', [...methods, 'image-first-draft', 'motion-one', 'motion-ambition:award-level']);
   Reflect.set(strategy, 'attributionCategories', ['tokens', 'motion', 'composition']);
-  const selected = new Set(['art-direction', 'type-proof', 'candidate-generation', 'image-first-draft', 'motion-one']);
+  const selected = new Set(['reference-selection', 'art-direction', 'type-proof', 'candidate-generation', 'image-first-draft', 'motion-one']);
   Reflect.set(strategy, 'skips', skips.filter((entry) => typeof entry === 'object' && entry !== null && !selected.has(String(Reflect.get(entry, 'id')))));
   return value;
 }

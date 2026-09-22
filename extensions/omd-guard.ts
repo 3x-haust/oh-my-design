@@ -13,6 +13,19 @@ export function isPreproductionReadCommand(command: unknown): boolean {
   return /^(?:pwd && )?rg --files(?: --hidden)?(?: -g '(?:!?[a-zA-Z0-9_.*/-]+)')*(?: \| head (?:-n )?[1-9][0-9]{0,3}| \| head -[1-9][0-9]{0,3})?$/.test(text);
 }
 
+const OMD_MUTATING_ROOTS = /^(?:frame|domain|route|ref|copy|type|composition|slop|lifecycle|finalize|complete)$/;
+const OMD_READ_ACTIONS = /^(?:show|check|validate|list|handoff|discover-plan|research-check|apply-plan|apply-check|apply-review-plan|apply-review-check|review-check|review-input)$/;
+const OMD_MUTATING_PAIRS = new Set([
+  'stage deliver', 'grain set', 'acquisition set', 'candidate select', 'judgment publish', 'benchmark record',
+]);
+
+export function isMutatingOmdCommand(args: readonly string[]): boolean {
+  if (args.includes('--help') || args.includes('-h')) return false;
+  if (args[0] === 'recipe' && args[1] === 'add') return true;
+  if (OMD_MUTATING_PAIRS.has(`${args[0] ?? ''} ${args[1] ?? ''}`)) return true;
+  return OMD_MUTATING_ROOTS.test(args[0] ?? '') && !OMD_READ_ACTIONS.test(args[1] ?? '');
+}
+
 export type WriteClassification = { kind: 'authoring' | 'production' | 'blocked'; path: string; reason?: string };
 
 export function classifyPiWrite(root: string, input: unknown): WriteClassification {
@@ -31,7 +44,9 @@ export function classifyPiWrite(root: string, input: unknown): WriteClassificati
     try {
       if (lstatSync(current).isSymbolicLink()) return { kind: 'blocked', path, reason: 'symlink write target/ancestor is not permitted' };
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') return { kind: 'blocked', path, reason: 'target cannot be inspected' };
+      if (!(error instanceof Error && Reflect.get(error, 'code') === 'ENOENT')) {
+        return { kind: 'blocked', path, reason: 'target cannot be inspected' };
+      }
     }
   }
   if (!path.startsWith('.omd/')) return { kind: 'production', path };

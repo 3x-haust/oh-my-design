@@ -123,6 +123,18 @@ test('test-012 failures identify safety methods, terminal stage order and contra
   assert.doesNotThrow(() => routeAdaptiveFlow(input()));
 });
 
+test('greenfield new-product discovery cannot skip reference selection', () => {
+  const value = input();
+  value.strategyDecision.stages = value.strategyDecision.stages.filter((stage: string) => stage !== 'reference-selection');
+  value.strategyDecision.skips.push({ id: 'reference-selection', reason: 'Skip selection.' });
+  assert.throws(() => routeAdaptiveFlow(value), (error: unknown) => {
+    assert.ok(error instanceof AdaptiveRouteError);
+    assert.equal(error.code, 'GREENFIELD_TASK_FLOW_STAGE_REQUIRED');
+    assert.match(error.message, /reference-selection/);
+    return true;
+  });
+});
+
 test('test-012 missing route is unclassified, not malformed or a request for external activation', t => {
   const dir = mkdtempSync(join(tmpdir(), 'omd-unclassified-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));

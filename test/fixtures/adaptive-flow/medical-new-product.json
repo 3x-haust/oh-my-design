@@ -141,6 +141,7 @@
       "content-grain",
       "scout",
       "reference-board",
+      "reference-selection",
       "safety-validation",
       "copy",
       "composition",
@@ -222,10 +223,6 @@
       {
         "id": "acquisition",
         "reason": "Discovery can target the named safety decisions without a separate acquisition artifact."
-      },
-      {
-        "id": "reference-selection",
-        "reason": "The route uses decision coverage rather than a candidate-board selection ritual."
       },
       {
         "id": "art-direction",

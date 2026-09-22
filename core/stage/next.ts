@@ -17,9 +17,11 @@ export function nextStageWork(root: string, packRoot: string, invocation: Projec
   if (state.stages.some(s => s.stage === 'domain' && s.present) && !stageArtifactProblems(root, 'domain', invocation).length) {
     const brief = validateDomainBrief(JSON.parse(readFileSync(join(root, '.omd/domain-brief.json'), 'utf8')));
     for (const field of unconfirmedPlanningStatements(brief.planning)) {
+      const match = field.match(/\d+/);
       const statement = field.startsWith('nonGoals[')
-        ? brief.planning.nonGoals[Number(field.match(/\d+/)![0])]!
+        ? match === null ? undefined : brief.planning.nonGoals[Number(match[0])]
         : brief.planning[field as 'businessGoal' | 'successSignal'];
+      if (statement === undefined) throw new Error(`Invalid planning field: ${field}`);
       planning.push({ field, text: statement.text });
     }
   }
@@ -40,6 +42,8 @@ export function nextStageWork(root: string, packRoot: string, invocation: Projec
   const research = stage === 'reference-board' && entry?.blockers.length === 0 && route.references.decision === 'discover'
     ? referenceResearchWork(root, { expectedSourceContractSha256: route.sourceContractSha256,
       benchmarkRequired: route.gates.includes('greenfield-task-flow-benchmark'), expectedRequest: route.request }) : null;
+  const missingReferenceBoard = stage === 'reference-board' && incomplete?.present === false
+    && entry?.blockers.length === 0 && route.references.decision === 'discover';
   return {
     schema: 'stage-next-v1', meaning: 'next-work-not-completion', deliveryMode: route.deliveryMode ?? 'implementation',
     stage, owner: brief?.owner ?? null,
@@ -51,13 +55,17 @@ export function nextStageWork(root: string, packRoot: string, invocation: Projec
     action: planningBlocksProduction ? 'resolve-planning-evidence' : stage === null ? 'validate-selected-gates' : incomplete?.present ? 'repair-output' : 'author-output',
     problems: stage === null ? [] : stageArtifactProblems(root, stage, invocation),
     entryBlockers: entry?.blockers ?? [], planning,
-    next: stage === null
+    next: missingReferenceBoard
+      ? 'omd ref discover-plan --json'
+      : stage === null
       ? route.deliveryMode === 'design-only' ? 'omd completion design-check --input .omd/design-handoff.json --json' : 'omd guard production --json'
       : `omd brief ${stage} --check --json`,
     schemas: brief?.schemas ?? [], contracts: brief?.contracts ?? [], judgedBy: brief?.judgedBy ?? [],
     instruction: planningBlocksProduction
       ? 'Check each statement against the original user request/artifacts. Attach exact userEvidence only where genuinely supported. If not supplied, ask the user one concrete question quoting these statements. Do not infer confirmation, silently narrow scope, or replace the question with completion diagnostics.'
-      : 'Read and deliver this stage\'s contracts, satisfy entry, execute the owned work, then its applicable output checks. Recompute stage next after changes. Remaining output quality, reference currentness, candidates, rendered evidence and independent review still require their own gates; this pointer never certifies completion.',
+      : missingReferenceBoard
+        ? 'Execute the discovery plan instead of repeating brief or reference checks. Capture multiple real domain-service flows and separate design-quality gallery references, retain only evidence with useful observations, then use omd schema reference-board and publish the board with omd ref board --input <candidate-assemblies.json>. Run checks only after the owned board artifact changes, then recompute stage next.'
+        : 'Read and deliver this stage\'s contracts, satisfy entry, execute the owned work, then its applicable output checks. Recompute stage next after changes. Remaining output quality, reference currentness, candidates, rendered evidence and independent review still require their own gates; this pointer never certifies completion.',
     ...(research ?? interpretation ?? {}),
   };
 }

@@ -141,6 +141,7 @@
       "frame",
       "scout",
       "reference-board",
+      "reference-selection",
       "copy",
       "type-proof",
       "composition",
@@ -241,10 +242,6 @@
       {
         "id": "acquisition",
         "reason": "No user-supplied URLs or first-party assets require acquisition."
-      },
-      {
-        "id": "reference-selection",
-        "reason": "The coordinator will select the strongest board candidate without a separate routed stage."
       },
       {
         "id": "art-direction",

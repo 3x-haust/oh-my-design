@@ -130,7 +130,7 @@ test('medical new-product work keeps safety, UX, evidence, and review while pres
     'omd-framer', 'omd-scout', 'omd-composer', 'omd-sketch', 'omd-writer', 'omd-hand', 'omd-eye',
   ]);
   assert.deepEqual(routed.strategy.stages, [
-    'domain', 'frame', 'content-grain', 'scout', 'reference-board', 'safety-validation', 'copy',
+    'domain', 'frame', 'content-grain', 'scout', 'reference-board', 'reference-selection', 'safety-validation', 'copy',
     'composition', 'candidate-generation', 'production', 'browser-evidence', 'independent-review',
   ]);
   assert.ok(routed.strategy.methods.includes('design-strategy-safety-recovery'));
@@ -374,6 +374,7 @@ test('every topological permutation passes and every dependency inversion fails'
       assert.ok(typeof strategy === 'object' && strategy !== null);
       const expanded = [...order];
       expanded.splice(expanded.indexOf('scout') + 1, 0, 'reference-board');
+      expanded.splice(expanded.indexOf('reference-board') + 1, 0, 'reference-selection');
       expanded.splice(expanded.indexOf('composition') + 1, 0, 'candidate-generation');
       Reflect.set(strategy, 'stages', ['domain', ...expanded, 'production', 'browser-evidence', 'independent-review']);
     });

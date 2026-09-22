@@ -170,11 +170,12 @@ function validateTaskFlowBenchmarkRoute(
   for (const stage of [
     'scout',
     'reference-board',
+    'reference-selection',
     'composition',
     'candidate-generation',
   ] as const) {
     if (!input.strategyDecision.stages.includes(stage)) {
-      failAdaptiveRoute('GREENFIELD_TASK_FLOW_STAGE_REQUIRED');
+      failAdaptiveRoute('GREENFIELD_TASK_FLOW_STAGE_REQUIRED', `greenfield new-product requires selected stage ${stage}`);
     }
   }
   for (const role of ['omd-scout', 'omd-composer', 'omd-sketch'] as const) {

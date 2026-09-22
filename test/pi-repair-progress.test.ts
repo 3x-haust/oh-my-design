@@ -15,6 +15,8 @@ function harness(t: { after(fn: () => void): void }) {
   let duringDiagnosis: (() => Promise<unknown>) | undefined;
   const work = { schema: 'stage-next-v1', stage: 'copy', owner: 'omd-writer', action: 'repair-output',
     next: 'omd brief copy --check --json',
+    instruction: 'Repair the copy deck, publish its current review, then run the named check.',
+    problems: ['copy review is stale'], entryBlockers: [] as string[],
     progress: { routeSha256: 'a'.repeat(64), validatedStages: [] as string[] } };
   omdExtension({
     on: (name, handler) => { hooks.set(name, handler); }, registerCommand() {}, registerTool: value => { tool = value; },
@@ -36,7 +38,9 @@ function harness(t: { after(fn: () => void): void }) {
     await tool.execute('route', { args: ['route', 'classify', '--input', '.omd/.cache/route.json'] }, undefined, undefined, { cwd });
     await tool.execute('brief', { args: ['brief', 'domain', '--check'] }, undefined, undefined, { cwd });
   }
-  return { work, sent, emit, start, end: () => emit('message_end', { message: final }),
+  return { work, sent, emit, start, run: (args: string[]) => {
+    assert.ok(tool); return tool.execute(args.join('-'), { args }, undefined, undefined, { cwd });
+  }, end: () => emit('message_end', { message: final }),
     interruptDuringDiagnosis: () => { duringDiagnosis = () => emit('input', { source: 'interactive' }); } };
 }
 
@@ -65,6 +69,18 @@ test('a visible continuation names the current owner, action and next validation
   assert.match(firstParagraph, /omd-writer/);
   assert.match(firstParagraph, /repair-output/);
   assert.match(firstParagraph, /omd brief copy --check --json/);
+  const followUp = h.sent[0] as { content: string };
+  assert.match(followUp.content, /Repair the copy deck, publish its current review/);
+  assert.doesNotMatch(followUp.content, /"schema":"stage-next-v1"/);
+});
+
+test('a successful mutating OMD publication counts as progress after the stage loop stalls', async t => {
+  const h = harness(t); await h.start();
+  await h.end(); await h.end(); await h.end(); await h.end();
+  assert.equal(h.sent.length, 3);
+  await h.run(['frame', 'set', '--input', '.omd/.cache/frame.json']);
+  await h.end();
+  assert.equal(h.sent.length, 4, 'successful CLI publication must advance the repair revision');
 });
 
 test('an unchanged work pointer stops only after repeated no-progress turns', async t => {

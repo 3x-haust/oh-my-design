@@ -107,6 +107,39 @@ test('omd_cli fails closed on a nonzero CLI exit', async () => {
   );
 });
 
+test('omd_cli returns structured exit-one JSON diagnostics without a failed tool result', async () => {
+  const diagnostic = { ok: false, blockers: ['reference board missing'] };
+  const loaded = loadExtension(async () => ({
+    stdout: `${JSON.stringify(diagnostic)}\n`,
+    stderr: '',
+    code: 1,
+    killed: false,
+  }));
+  const result = await loaded.tool.execute(
+    'check-1',
+    { args: ['guard', 'production', '--json'] },
+    undefined,
+    undefined,
+    { cwd: '/tmp/project' },
+  );
+  assert.deepEqual(JSON.parse(result.content[0]?.text ?? ''), diagnostic);
+  assert.deepEqual(result.details, { code: 1, killed: false });
+});
+
+test('omd_cli keeps malformed, fatal and killed command failures as tool errors', async () => {
+  for (const result of [
+    { stdout: 'not json', stderr: '', code: 1, killed: false },
+    { stdout: '{"ok":false}', stderr: 'fatal', code: 1, killed: false },
+    { stdout: '{"ok":false}', stderr: '', code: 2, killed: false },
+    { stdout: '{"ok":false}', stderr: '', code: 1, killed: true },
+  ]) {
+    const loaded = loadExtension(async () => result);
+    await assert.rejects(loaded.tool.execute(
+      'fatal', { args: ['guard', 'production', '--json'] }, undefined, undefined, { cwd: '/tmp/project' },
+    ));
+  }
+});
+
 test('/omd runs doctor only and rejects host-specific arguments', async () => {
   const calls: string[][] = [];
   const notifications: Array<{ message: string; level: string | undefined }> = [];

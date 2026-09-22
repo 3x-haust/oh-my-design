@@ -39,6 +39,34 @@ type ExecResult = Readonly<{
   killed: boolean;
 }>;
 
+export type OmdRunResult = Readonly<{
+  text: string;
+  details: { code: number; killed: boolean };
+}>;
+
+export class OmdCommandError extends Error {
+  override readonly name = 'OmdCommandError';
+  readonly output: string;
+  readonly stdout: string;
+  readonly stderr: string;
+  readonly code: number;
+  readonly killed: boolean;
+  constructor(
+    output: string,
+    stdout: string,
+    stderr: string,
+    code: number,
+    killed: boolean,
+  ) {
+    super(`OMD_CLI_FAILED (${code}): ${output || 'no output'}`);
+    this.output = output;
+    this.stdout = stdout;
+    this.stderr = stderr;
+    this.code = code;
+    this.killed = killed;
+  }
+}
+
 type ExecOptions = Readonly<{
   cwd: string;
   signal?: AbortSignal;
@@ -120,14 +148,31 @@ export async function runOmd(
   args: readonly string[],
   cwd: string,
   signal?: AbortSignal,
-): Promise<{ text: string; details: { code: number; killed: boolean } }> {
+): Promise<OmdRunResult> {
   const result = await pi.exec('node', [runtimeSnapshot.entryPath, ...args], signal === undefined ? { cwd } : { cwd, signal });
   const text = boundedOutput(result);
   if (result.code !== 0 || result.killed) {
-    throw new Error(`OMD_CLI_FAILED (${result.code}): ${text || 'no output'}`);
+    throw new OmdCommandError(text, result.stdout, result.stderr, result.code, result.killed);
   }
   return {
     text: text || 'OMD completed successfully.',
     details: { code: result.code, killed: result.killed },
   };
+}
+
+export function structuredToolDiagnostic(error: unknown, args: readonly string[]): OmdRunResult | null {
+  const [root, action] = args;
+  const expectedCheck = root === 'guard' || (root === 'route' && action === 'validate')
+    || (root === 'brief' && args.includes('--check'))
+    || /^(?:check|validate|research-check|apply-check|apply-review-check|review-check)$/.test(action ?? '');
+  if (!(error instanceof OmdCommandError) || error.code !== 1 || error.killed || !expectedCheck || !args.includes('--json')
+    || error.stderr.trim() !== '' || error.stdout.trim() === '') return null;
+  try {
+    const parsed: unknown = JSON.parse(error.stdout);
+    if (typeof parsed !== 'object' || parsed === null) return null;
+  } catch (parseError) {
+    if (parseError instanceof SyntaxError) return null;
+    throw parseError;
+  }
+  return { text: error.stdout.trim(), details: { code: error.code, killed: false } };
 }
