@@ -37,7 +37,7 @@ const RUNTIME_PATHS = [
 
 const REQUIRED_PATHS = ['package.json', 'bin/omd.mjs', 'bin/run-ts.mjs', 'bin/omd.ts'] as const;
 const MAX_COPY_ATTEMPTS = 3;
-const SNAPSHOT_DEADLINE_MS = 5_000;
+const SNAPSHOT_DEADLINE_MS = 15_000;
 
 export type OmdRuntimeSnapshot = Readonly<{
   root: string;
