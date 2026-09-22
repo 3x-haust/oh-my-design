@@ -13,6 +13,7 @@ import {
   validateReferenceResearch,
   publishReferenceResearch,
   readPublishedReferenceResearch,
+  referenceResearchArtifacts,
   DOMAIN_REFERENCES_PATH,
   DESIGN_REFERENCES_PATH,
 } from '../core/ref/reference-research.ts';
@@ -156,8 +157,23 @@ function fixture(t: { after(fn: () => void): void }) {
       boardSha256: sha256(readFileSync(boardPath)),
     },
   };
-  return { root, research, boardPath };
+  return { root, research, boardPath, writer };
 }
+
+test('historical v5 wrapper records remain readable but cannot satisfy current completion evidence', t => {
+  const value = fixture(t);
+  const source = value.research.designReference.sources[0]!;
+  source.url = source.discovery.url;
+  source.evidence = source.discovery.evidence;
+  source.capture = source.discovery.capture;
+  for (const [path, artifact] of Object.entries(referenceResearchArtifacts(parseReferenceResearch(value.research)))) {
+    value.writer.write(path, `${JSON.stringify(artifact, null, 2)}\n`);
+  }
+  assert.equal(readPublishedReferenceResearch(value.root).schema, 'reference-research-v5');
+  assert.throws(() => validateReferenceResearch(value.root, parseReferenceResearch(value.research), {
+    expectedSourceContractSha256: SOURCE_SHA, benchmarkRequired: false,
+  }), /DESIGN_REFERENCE_INELIGIBLE: discovery/);
+});
 
 test('two-track reference research binds separate live evidence and the current design board', t => {
   const value = fixture(t);
