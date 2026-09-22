@@ -9,8 +9,10 @@ import { promisify } from 'node:util';
 import test from 'node:test';
 import { inputSkeleton } from '../core/schema/inputs.ts';
 import { loadRefs } from '../core/ref/store.ts';
-import { captureFinalUrlGuard } from '../core/ref/capture-intake.ts';
+import { captureFinalUrlGuard, captureLane } from '../core/ref/capture-intake.ts';
 import { publishTestAdaptiveRoute } from './helpers/project-write.ts';
+import { designAdmissionFixture } from './helpers/design-admission.ts';
+import { saveRef } from '../core/ref/store.ts';
 
 const cli = fileURLToPath(new URL('../bin/omd.mjs', import.meta.url));
 const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('OMD_') && key !== 'NODE_TEST_CONTEXT'));
@@ -29,6 +31,15 @@ test('a gallery capture must remain the exact requested item regardless of user 
   assert.throws(() => user(0, 'https://user-reference.example/view'), /DESIGN_DISCOVERY_REDIRECT/);
   const intoGallery = captureFinalUrlGuard(cwd, [{ source: 'https://user-reference.example/view', lane: 'design', fromUser: true }], invocation);
   assert.throws(() => intoGallery(0, source), /DESIGN_DISCOVERY_REDIRECT/);
+});
+
+test('a changed gallery item cannot authorize a later original-source capture', t => {
+  const value = designAdmissionFixture(t);
+  const invocation = publishTestAdaptiveRoute(value.root, inputSkeleton('product-route-input').skeleton);
+  assert.ok(value.gallery.ref.acquisition);
+  value.gallery.ref.acquisition.finalUrl = 'https://www.pinterest.com/pin/987654321/';
+  saveRef(value.root, value.gallery.ref, value.writer);
+  assert.throws(() => captureLane(value.root, { source: value.source.source, lane: 'design' }, invocation), /DESIGN_DISCOVERY_REQUIRED/);
 });
 
 test('redirect aliases cannot publish opposite-lane images in concurrent batches or single recapture', async t => {

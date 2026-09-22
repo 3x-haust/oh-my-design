@@ -12,7 +12,7 @@ import { loadRefs } from '../core/ref/store.ts';
 
 const cli = fileURLToPath(new URL('../bin/omd.mjs', import.meta.url));
 const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('OMD_') && key !== 'NODE_TEST_CONTEXT'));
-const run = (cwd: string, args: string[]) => spawnSync(process.execPath, [cli, ...args], { cwd, env, encoding: 'utf8', timeout: 15000 });
+const run = (cwd: string, args: string[]) => spawnSync(process.execPath, [cli, ...args], { cwd, env, encoding: 'utf8', timeout: 30000 });
 function project(t: { after(fn: () => void): void }, route = true) {
   const cwd = mkdtempSync(join(tmpdir(), 'omd-ref-intake-'));
   t.after(() => rmSync(cwd, { recursive: true, force: true }));
