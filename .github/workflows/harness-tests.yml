@@ -52,7 +52,12 @@ jobs:
         # The CLI and HTTP-binding fixtures perform repeated native browser lifecycles. On shared
         # runners their strict close/runtime-snapshot deadlines can be starved by another test file.
         # Keep the deadlines and every assertion; run these entire files without competing files.
-        run: node --test --test-concurrency=1 test/benchmark-native-publish.test.ts test/benchmark-dependency-snapshot.test.ts test/browser-rs-doctor-runtime.test.ts test/harness-v2-cli.test.ts test/discovery-http-binding.test.ts test/cold-start-workflow.test.ts
+        run: >-
+          node --test --test-concurrency=1
+          test/benchmark-native-publish.test.ts test/benchmark-dependency-snapshot.test.ts
+          test/browser-rs-doctor-runtime.test.ts test/harness-v2-cli.test.ts
+          test/discovery-http-binding.test.ts test/cold-start-workflow.test.ts
+          test/human-design-loop.test.ts test/static-direction-evidence.test.ts
       - name: Complete harness suite (including native Darwin publication)
         if: matrix.suite == 'full'
         # Shared Darwin runners showed compositor failures and 100ms VM deadline misses
@@ -63,7 +68,7 @@ jobs:
           suite_files=()
           for suite_file in test/*.test.ts; do
             # Already executed in full in the isolated step, not skipped or retried.
-            if [[ "$suite_file" != "test/harness-v2-cli.test.ts" && "$suite_file" != "test/discovery-http-binding.test.ts" && "$suite_file" != "test/cold-start-workflow.test.ts" ]]; then
+            if [[ "$suite_file" != "test/harness-v2-cli.test.ts" && "$suite_file" != "test/discovery-http-binding.test.ts" && "$suite_file" != "test/cold-start-workflow.test.ts" && "$suite_file" != "test/human-design-loop.test.ts" && "$suite_file" != "test/static-direction-evidence.test.ts" ]]; then
               suite_files+=("$suite_file")
             fi
           done
