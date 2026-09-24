@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 const SKILL_PATH = fileURLToPath(new URL('../src/skills/omd-ultradesign/SKILL.md', import.meta.url));
 
 function fullBuildRequest(request: string): boolean {
-  const quotedBuildCommand = /(?:구현|개발|제작|완성|빌드)\s*(?:해|부탁)|만들어|\b(?:build|implement|develop|create)\b/iu;
+  const quotedBuildCommand = /구현|개발|제작|완성|빌드|만들|\b(?:build|implement|develop|create)\b/iu;
   let fenced = false;
   const lines = request.split(/\r?\n/).flatMap(raw => {
     const line = raw.trim();
@@ -16,11 +16,11 @@ function fullBuildRequest(request: string): boolean {
       .replace(/\x60[^\x60\n]*\x60|"[^"\n]*"|'[^'\n]*'|“[^”\n]*”|‘[^’\n]*’|「[^」\n]*」/gu,
         quoted => quotedBuildCommand.test(quoted) ? '' : quoted.slice(1, -1))];
   });
-  if (/(?:구현|개발|제작|코딩).{0,18}하지\s*(?:마|말)|\b(?:stop after|do not continue|do not implement|do not build|don't build|never build)\b|\b(?:only|just)\s+(?:inspect|research|review|analyze)\b/iu.test(lines.join('\n'))) return false;
+  if (/(?:구현|개발|제작|코딩).{0,18}하지\s*(?:마|말)|\b(?:stop after|do not continue|do not implement|do not build|don't build|never build)\b/iu.test(lines.join('\n'))) return false;
   let decision: boolean | null = null;
   for (const line of lines) {
     const matches = [
-      ...[...line.matchAll(/(?:레퍼런스|참고|리서치|조사|검사|확인|보고|분석).{0,18}(?:만|까지만).{0,18}(?:해\s*줘|해\s*주세요|하자|진행)|\b(?:research only|inspect only)\b/giu)]
+      ...[...line.matchAll(/(?:레퍼런스|참고|리서치|조사|검사|확인|보고|분석).{0,18}(?:만|까지만).{0,18}(?:해\s*줘|해\s*주세요|하자|진행)|\b(?:research only|inspect only)\b|\b(?:only|just)\s+(?:inspect|research|review|analyze)\b/giu)]
         .map(match => ({ index: match.index, build: false })),
       ...[...line.matchAll(/(?:서비스|제품|앱|리액트|React|랜딩(?:페이지)?|웹사이트|화면|대시보드).{0,80}?(?:(?:구현|개발|제작|완성|빌드)\s*(?:해\s*(?:줘|주세요|줘요)|하세요|해라|부탁(?:해요|드립니다)?)|만들(?:어\s*(?:줘|주세요|줘요)|어라|세요))|\b(?:build|implement|develop|create)\b.{0,120}\b(?:app|product|service|website|landing page|dashboard)\b/giu)]
         .map(match => ({ index: match.index, build: true })),
