@@ -5,6 +5,25 @@ import { fileURLToPath } from 'node:url';
 
 const SKILL_PATH = fileURLToPath(new URL('../src/skills/omd-ultradesign/SKILL.md', import.meta.url));
 
+function withoutInlineCode(line: string, quotedBuildCommand: RegExp): string {
+  const runs = [...line.matchAll(/\x60+/gu)];
+  let result = '';
+  let cursor = 0;
+  for (let index = 0; index < runs.length;) {
+    const opening = runs[index]!;
+    const start = opening.index;
+    const closeIndex = runs.findIndex((run, candidate) => candidate > index && run[0].length === opening[0].length);
+    result += line.slice(cursor, start);
+    if (closeIndex < 0) return result;
+    const closing = runs[closeIndex]!;
+    const contents = line.slice(start + opening[0].length, closing.index);
+    if (!quotedBuildCommand.test(contents)) result += contents;
+    cursor = closing.index + closing[0].length;
+    index = closeIndex + 1;
+  }
+  return result + line.slice(cursor);
+}
+
 function fullBuildRequest(request: string): boolean {
   const quotedBuildCommand = /구현|개발|제작|완성|빌드|만들|\b(?:build|implement|develop|create)\b/iu;
   let fenced = false;
@@ -12,9 +31,7 @@ function fullBuildRequest(request: string): boolean {
     const line = raw.trim();
     if (/^(?:```|~~~)/u.test(line)) { fenced = !fenced; return []; }
     if (fenced || !line || /^(?:>|\|)/u.test(line) || /^(?:예시|인용|example|quote)\s*[:：]/iu.test(line)) return [];
-    return [line.replace(/^[-*]\s+/u, '')
-      .replace(/(\x60+)(?!\x60)[^\n]*?\1(?!\x60)/gu,
-        (quoted, ticks: string) => quotedBuildCommand.test(quoted) ? '' : quoted.slice(ticks.length, -ticks.length))
+    return [withoutInlineCode(line.replace(/^[-*]\s+/u, ''), quotedBuildCommand)
       .replace(/"[^"\n]*"|'[^'\n]*'|“[^”\n]*”|‘[^’\n]*’|「[^」\n]*」/gu,
         quoted => quotedBuildCommand.test(quoted) ? '' : quoted.slice(1, -1))];
   });
