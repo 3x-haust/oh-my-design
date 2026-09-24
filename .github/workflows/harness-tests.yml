@@ -24,8 +24,13 @@ jobs:
           # Use the current stable Darwin runner; never unseal a snapshot to publish it.
           - os: macos-26
             suite: full
+            node: '22.23.2'
+          - os: macos-26
+            suite: full
+            node: '24.11.0'
           - os: ubuntu-latest
             suite: portable-pi
+            node: '24.11.0'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 25
     steps:
@@ -34,9 +39,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          # Test fixture authorization relies on Node 24's test-isolation child argv.
-          # Match the verified Pi development runtime without weakening production authority.
-          node-version: '24.11.0'
+          node-version: ${{ matrix.node }}
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
