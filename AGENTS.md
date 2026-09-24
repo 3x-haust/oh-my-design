@@ -73,7 +73,9 @@ the broker. A coordinator, role task, or installed agent profile must not invent
 - Locale-grounded design keeps conversation language, surface locale, explicit market region,
   audience/task, domain, surface, desired fit, and brand invariants separate in the sole writable
   `.omd/locale-design-context.json`. A locale or likely script may select mechanics; it never infers
-  a market, register, or country aesthetic. Missing market/audience authority yields one question.
+  cultural fit, register, or country aesthetic. Missing market/audience authority yields one question.
+  A Korean-language user brief may default reference discovery to Korean services in both lanes;
+  that research preference does not populate locale-design authority or dictate visual style.
 - `mechanics-only` proves real target-language type without a cultural-fit claim. `research` binds
   current standard, global-equivalent or unavailable, native first-party, and counterexample source
   receipts into a content-addressed profile. Composer, Hand, and Eye receive only the source-free

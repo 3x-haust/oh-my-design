@@ -11,6 +11,7 @@ import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import { captureFinalUrlGuard, validateCaptureBatch } from './capture-intake.ts';
 import { parseCapturePreparation, type CapturePreparation } from './capture-preparation.ts';
 import { commitCapturedReference } from './capture-commit.ts';
+import { designDiscoveryProvider } from './design-discovery-sources.ts';
 
 /**
  * One reference to capture in a batch. Same shape as an `omd ref add --selector … --blueprint --shot`
@@ -74,6 +75,8 @@ export async function addRefsBatch(
         const spec = specs[i]!;
         try {
           const lane = spec.lane === undefined ? undefined : researchLane(spec.lane);
+          const galleryImage = lane === 'design' && spec.source.startsWith('https://') && designDiscoveryProvider(spec.source) !== null;
+          if (galleryImage && spec.blueprint) throw new Error('DESIGN_GALLERY_IMAGE_ONLY: a gallery image has pixels, not measurable app DOM anatomy');
           if (spec.preparation !== undefined && spec.energy !== false) throw new Error('reference capture preparation requires energy:false');
           const preparation = spec.preparation === undefined ? undefined : parseCapturePreparation(spec.preparation);
           const shotOut = spec.shot
@@ -82,6 +85,7 @@ export async function addRefsBatch(
           const viewport = parseViewport(spec.viewport ?? REFERENCE_VIEWPORT);
           const { raw, shotBytes, capturePreparation, acquisition } = await capturePageForRef(browser, spec.source, viewport, {
             selector: spec.selector ?? null,
+            requireImageElement: galleryImage,
             validateFinalUrl: url => validateFinalUrl(i, url),
             ...(preparation ? { preparation } : {}),
             ...(shotOut ? { shotOut, adapter, deferShotWrite: true } : {}),
@@ -89,22 +93,22 @@ export async function addRefsBatch(
           // Motion is evidence, not decoration: a board captured without it cannot answer what a
           // reference does on scroll, and every craft query in the brief goes unanswered while the
           // record still looks complete. One extra pass per capture, skipped only on request.
-          const energyCurve = spec.energy === false ? null : await captureEnergy(spec.source, { viewport });
+          const energyCurve = spec.energy === false || galleryImage ? null : await captureEnergy(spec.source, { viewport });
           const ir = normalize(raw);
           const invariants = extractInvariants(ir);
           const slopCount = check(ir, rules, { categories: ['slop'] }).length;
-          const blueprint = spec.blueprint && spec.selector ? captureBlueprint(raw.nodes, spec.selector) : undefined;
+          const blueprint = !galleryImage && spec.blueprint && spec.selector ? captureBlueprint(raw.nodes, spec.selector) : undefined;
           commitCapturedReference(adapter, shotOut, shotBytes, imagePath => saveRef(cwd, {
             ...(lane ? { researchLane: lane } : {}),
             acquisition,
             source: spec.source,
             component: spec.as,
-            kind: spec.selector ? 'component' : 'page',
+            kind: galleryImage ? 'image' : spec.selector ? 'component' : 'page',
             capturedAt: new Date().toISOString(),
             captureBatchId,
             ...(spec.selector ? { selector: spec.selector } : {}),
             ...(spec.slot ? { slot: spec.slot } : {}),
-            invariants,
+            invariants: galleryImage ? null : invariants,
             principles: [],
             slopCount,
             ...(spec.fromUser ? { origin: 'user' as const } : {}),

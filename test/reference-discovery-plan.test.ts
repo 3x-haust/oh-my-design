@@ -10,6 +10,7 @@ import { buildReferenceDiscoveryPlan, missingDiscoveryMotionEvidence } from '../
 import { parseSearchInput } from '../core/ref/search-execution.ts';
 import { buildBrief, formatBrief } from '../core/brief/index.ts';
 import { publishTestAdaptiveRoute } from './helpers/project-write.ts';
+import { inferredKoreanReferenceMarket } from '../core/ref/market-reference.ts';
 
 const fixture = (name = 'synth-marketing') => JSON.parse(readFileSync(
   fileURLToPath(new URL(`fixtures/adaptive-flow/${name}.json`, import.meta.url)), 'utf8'));
@@ -20,6 +21,23 @@ function project(t: { after(fn: () => void): void }) {
   return root;
 }
 const still = { source: 'captured-reference', scrollFired: false, animatedShare: 0, peakEnergy: 0 };
+
+test('Korean product brief starts both research lanes in Korea without asserting a Korean visual style', t => {
+  const input = fixture('medical-new-product');
+  input.request = '복지 혜택을 찾아 신청까지 이어가는 한국어 서비스를 만들어줘.';
+  input.taskOutcome.goal = '복지 혜택을 탐색하고 신청을 준비한다.';
+  const plan = buildReferenceDiscoveryPlan(project(t), routeAdaptiveFlow(input));
+  assert.equal(plan.marketReferencePolicy.marketRegion, 'KR');
+  assert.equal(plan.marketReferencePolicy.mode, 'target-market-first');
+  assert.equal(plan.marketReferencePolicy.targetMarketCoverage, 'required-in-domain-and-design');
+  assert.ok(plan.marketReferencePolicy.domainSearchInputs[0]?.query.startsWith('대한민국 '));
+  for (const lead of ['복지로 맞춤형급여안내', '정부24 혜택알리미', '서울복지포털 맞춤검색']) {
+    assert.ok(plan.lanes.find(lane => lane.id === 'domain-reference')?.querySeeds.includes(lead));
+  }
+  assert.ok(plan.designSourcePolicy.nativeSearchInputs.some(candidate => candidate.query.startsWith('한국 ')));
+  assert.equal(plan.marketReferencePolicy.styleInference, 'forbidden');
+  assert.equal(inferredKoreanReferenceMarket('미국 복지 신청을 위한 한국어 서비스'), null);
+});
 
 test('URL-free showpiece requests receive automatic craft and motion lanes on a route that always carries domain', t => {
   const root = project(t);
@@ -81,8 +99,8 @@ test('an explicit Korean market makes both reference lanes target-market-first w
     domainSearchInputs: [
       { lane: 'domain', query: '대한민국 public benefit discovery',
         url: 'https://www.bing.com/search?q=%EB%8C%80%ED%95%9C%EB%AF%BC%EA%B5%AD+public+benefit+discovery', queryParam: 'q' },
-      { lane: 'domain', query: '한국 public benefit discovery service',
-        url: 'https://www.bing.com/search?q=%ED%95%9C%EA%B5%AD+public+benefit+discovery+service', queryParam: 'q' },
+      { lane: 'domain', query: '한국 public benefit discovery 서비스',
+        url: 'https://www.bing.com/search?q=%ED%95%9C%EA%B5%AD+public+benefit+discovery+%EC%84%9C%EB%B9%84%EC%8A%A4', queryParam: 'q' },
       { lane: 'domain', query: 'South Korea public benefit discovery service',
         url: 'https://www.bing.com/search?q=South+Korea+public+benefit+discovery+service', queryParam: 'q' },
     ],

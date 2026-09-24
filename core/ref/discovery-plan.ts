@@ -7,7 +7,7 @@ import type { RouteRecord } from '../route/index.ts';
 import type { CraftRefSignal } from './craft-usage.ts';
 import { querySeeds } from './reference-query.ts';
 import { gallerySearchInputs, type GallerySearchInput } from './gallery-search.ts';
-import { marketDomainQueries, marketSearchLabels } from './market-reference.ts';
+import { inferredKoreanReferenceMarket, marketDomainQueries, marketSearchLabels } from './market-reference.ts';
 
 export const REFERENCE_DISCOVERY_PLAN_SCHEMA = 'reference-discovery-plan-v2' as const;
 export type DiscoveryLane = 'domain-reference' | 'design-reference' | 'motion';
@@ -81,14 +81,14 @@ function acquisition(root: string): AcquisitionPlan | null {
   return checked.value;
 }
 
-function currentDomainQueries(root: string, request: string): DomainReferenceQueries {
+function currentDomainResearch(root: string, request: string): Readonly<{ queries: DomainReferenceQueries; domain: string | null; audience: string | null }> {
   const path = join(root, '.omd/domain-brief.json');
-  if (!existsSync(path)) return { component: [], craft: [], mood: [] };
+  if (!existsSync(path)) return { queries: { component: [], craft: [], mood: [] }, domain: null, audience: null };
   const brief = validateDomainBrief(JSON.parse(readFileSync(path, 'utf8')));
   if (brief.request !== request.trim()) {
     throw new Error('reference discovery domain queries describe an earlier request; refresh the selected domain record');
   }
-  return brief.referenceQueries;
+  return { queries: brief.referenceQueries, domain: brief.domain, audience: brief.audience.description };
 }
 
 /**
@@ -99,21 +99,24 @@ export function buildReferenceDiscoveryPlan(root: string, route: RouteRecord): R
   const discovering = route.references.decision === 'discover';
   const locale = route.sourceContract.localeDesign;
   const plan = discovering ? acquisition(root) : null;
-  const queries = discovering ? currentDomainQueries(root, route.request) : { component: [], craft: [], mood: [] };
+  const domainResearch = discovering ? currentDomainResearch(root, route.request) : { queries: { component: [], craft: [], mood: [] }, domain: null, audience: null };
+  const queries = domainResearch.queries;
   const expressiveNeed = route.sourceContract.designAxes.expressiveDesignNeed;
   const surface = readFrame(root)?.uxSurface ?? null;
   const marketing = surface === 'marketing' || route.sourceContract.referenceDiscovery.taskNeed === 'new-marketing';
   const motionEvidenceRequired = discovering && route.strategy.methods.includes('motion-one');
-  const marketRegion = discovering ? locale?.context.marketRegion ?? null : null;
-  const searchLabels = marketRegion === null || locale === undefined
+  const marketRegion = discovering ? locale?.context.marketRegion ?? inferredKoreanReferenceMarket(route.request) : null;
+  const surfaceLocale = locale?.context.surfaceLocale ?? 'ko';
+  const searchLabels = marketRegion === null
     ? []
-    : marketSearchLabels(marketRegion, locale.context.surfaceLocale);
+    : marketSearchLabels(marketRegion, surfaceLocale);
   const marketLabel = searchLabels.at(-1) ?? null;
-  const domainQueries = locale === undefined
-    ? []
-    : marketRegion === null ? [] : [...marketDomainQueries(marketRegion, locale.context.surfaceLocale, locale.context.domain)];
-  const baseDesignQuery = [...queries.mood, ...queries.component][0] ?? (marketing ? 'typography' : 'app interface');
-  const designSubject = locale === undefined ? baseDesignQuery : `${locale.context.domain} ${baseDesignQuery}`;
+  const domain = locale?.context.domain ?? domainResearch.domain ?? route.sourceContract.taskOutcome.goal;
+  const domainQueries = marketRegion === null ? [] : [...marketDomainQueries(marketRegion, surfaceLocale, domain)];
+  const comparableLeads = marketRegion === 'KR' && /복지|혜택|welfare|benefits?/iu.test(domain)
+    ? ['복지로 맞춤형급여안내', '정부24 혜택알리미', '서울복지포털 맞춤검색'] : [];
+  const baseDesignQuery = [...queries.component, ...queries.mood][0] ?? (marketing ? 'typography' : 'app interface');
+  const designSubject = marketRegion === null ? baseDesignQuery : `${domain} ${baseDesignQuery}`;
   const designQueries = searchLabels.map(label => `${label} ${designSubject}`);
   const designQuery = designQueries[0] ?? baseDesignQuery;
   const domainSearchInputs: DomainSearchInput[] = [];
@@ -154,14 +157,14 @@ export function buildReferenceDiscoveryPlan(root: string, route: RouteRecord): R
     lanes.push({
       id: 'domain-reference',
       purpose: 'Find at least three comparable services from independent operator families and inspect their task flows: information architecture, domain vocabulary, states, and actionable sequence. Multiple pages or subdomains under one operator count once.',
-      querySeeds: [...domainQueries, ...querySeeds('component', queries.component), ...decisions.map(decision => decision.question)],
+      querySeeds: [...domainQueries, ...comparableLeads, ...querySeeds('component', queries.component), ...decisions.map(decision => decision.question)],
       evidence: [...(marketLabel === null ? [] : [`comparable services actively serving ${marketLabel}`]), 'three independent service families', 'live similar-service task flows', 'domain objects and states', 'paired-viewport anatomy', 'zone-bound native capture'],
     });
     lanes.push({
       id: 'design-reference',
       purpose: 'Find visual direction across many sites: layout rhythm, density, type, colour, material, and component craft.',
       querySeeds: [...designQueries, ...querySeeds('mood', [...queries.mood, ...queries.component])],
-      evidence: [...(marketLabel === null ? [] : [`visual direction from products or design sources serving ${marketLabel}`]), 'whole-page visual captures', 'several candidates before narrowing', 'measured layout and type parts'],
+      evidence: [...(marketLabel === null ? [] : [`visual direction from products or design sources serving ${marketLabel}`]), 'actual product screens or exact UI images, never gallery wrapper pages', 'several candidates before narrowing', 'measured layout and type parts'],
     });
   }
   if (discovering && motionDiscovery) lanes.push({
@@ -190,7 +193,7 @@ export function buildReferenceDiscoveryPlan(root: string, route: RouteRecord): R
       marketRegion,
       marketLabel,
       marketSearchLabels: searchLabels,
-      audience: marketLabel === null ? null : locale?.context.audience ?? null,
+      audience: marketLabel === null ? null : locale?.context.audience ?? domainResearch.audience,
       targetMarketCoverage: marketLabel === null ? 'not-required' : 'required-in-domain-and-design',
       domainSearchInputs: Object.freeze(domainSearchInputs),
       fallback: marketLabel === null ? 'ordinary-reference-discovery' : 'global-equivalent-only-after-documented-target-market-gap',
@@ -213,7 +216,7 @@ export function buildReferenceDiscoveryPlan(root: string, route: RouteRecord): R
         .flatMap(query => gallerySearchInputs(query, marketing ? 'marketing' : 'product'))),
       nativeEntryInputs: Object.freeze(galleryCandidates.map(candidate => Object.freeze({ lane: 'design' as const, entry: 'free-gallery' as const, url: candidate.url }))),
       domainEntryCommand: discovering ? 'omd ref navigate <public-comparable-service-directory-url> --lane domain --entry public-directory --json' : null,
-      fallback: 'Use actual search results OR explicitly enter a public gallery list with ref navigate <url> --lane design --entry free-gallery --json. In v6/v7 research put the native root plus your reason in discoveryRoots, follow observed links using ref navigate, then capture the concrete gallery item with --lane design (or import-image for native app screenshots). A list is never retained visual direction. Check free access per entry. If login/payment/blocking prevents inspection, record the failed URL and try another public gallery. Component documentation alone is not a visual-direction substitute. Do not purchase, start a trial, install an MCP, bypass access controls, or claim a blocked source was inspected. Free viewing does not grant reuse rights.',
+      fallback: 'Use actual search results OR explicitly enter a public gallery list with ref navigate <url> --lane design --entry free-gallery --json. In v6/v7 research put the native root plus your reason in discoveryRoots, follow observed links and visit the concrete gallery item with ref navigate --lane design; keep that visit under discovery. Retain its observed original with ref add or capture one loaded UI img element with ref add <item-url> --lane design --selector <img-css>; cropping is not required. A list or wrapper page is never retained visual direction. Check free access per entry. If login/payment/blocking prevents inspection, record the failed URL and try another public gallery. Component documentation alone is not a visual-direction substitute. Do not purchase, start a trial, install an MCP, bypass access controls, or claim a blocked source was inspected. Free viewing does not grant reuse rights.',
     }),
     decisions: Object.freeze(decisions),
     motionEvidenceRequired,

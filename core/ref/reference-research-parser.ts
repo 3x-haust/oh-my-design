@@ -63,14 +63,16 @@ export function httpsUrl(value: unknown): string {
   return parsed;
 }
 
-function evidence(value: unknown, diagnostic = false, fieldPath?: string): ResearchEvidence {
+function evidence(value: unknown, diagnostic: boolean | 'gallery-visit' = false, fieldPath?: string): ResearchEvidence {
   const input = record(value, 'REFERENCE_RESEARCH_EVIDENCE_INVALID');
   exactKeys(input, REFERENCE_RESEARCH_EVIDENCE_KEYS, 'REFERENCE_RESEARCH_EVIDENCE_KEYS');
   const pathError = fieldPath === undefined ? 'REFERENCE_RESEARCH_EVIDENCE_PATH'
-    : `REFERENCE_RESEARCH_EVIDENCE_PATH: ${fieldPath}.path must be a project-relative retained reference path under .omd/refs/; use native ref add or ref import-image receipts and keep navigation captures in the lane's navigation array`;
+    : `REFERENCE_RESEARCH_EVIDENCE_PATH: ${fieldPath}.path must be a project-relative retained reference path under .omd/refs/ or an exact content-addressed design gallery visit under .omd/discovery/design/navigation/`;
   const path = text(input.path, pathError);
+  const allowedDiscovery = diagnostic === true ? path.startsWith('.omd/discovery/')
+    : diagnostic === 'gallery-visit' && /^\.omd\/discovery\/design\/navigation\/[a-f0-9]{64}\.(?:png|json)$/.test(path);
   if (isAbsolute(path) || path.includes('\\') || path.split('/').includes('..')
-    || !(path.startsWith('.omd/refs/') || (diagnostic && path.startsWith('.omd/discovery/')))) fail(pathError);
+    || !(path.startsWith('.omd/refs/') || allowedDiscovery)) fail(pathError);
   return Object.freeze({ path, sha256: digest(input.sha256, 'REFERENCE_RESEARCH_EVIDENCE_SHA') });
 }
 
@@ -103,8 +105,8 @@ function source(value: unknown, design: boolean, index: number): ResearchSource 
     discovery = Object.freeze({
       url: entryUrl, kind: entry.kind as NonNullable<ResearchSource['discovery']>['kind'],
       access: 'free', qualityReason: text(entry.qualityReason, 'REFERENCE_RESEARCH_DESIGN_QUALITY_REASON'),
-      evidence: evidence(entry.evidence, false, `${fieldPath}.discovery.evidence`),
-      capture: evidence(entry.capture, false, `${fieldPath}.discovery.capture`),
+      evidence: evidence(entry.evidence, 'gallery-visit', `${fieldPath}.discovery.evidence`),
+      capture: evidence(entry.capture, 'gallery-visit', `${fieldPath}.discovery.capture`),
     });
   }
   return Object.freeze({

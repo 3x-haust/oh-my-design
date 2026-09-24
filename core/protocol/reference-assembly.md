@@ -158,10 +158,13 @@ Discovery always saves two separate ledgers:
   research is not visual direction merely because the comparable product looks polished.
 
 Capture into the correct lane from the beginning: `omd ref add --lane domain|design`, or `lane` on
-every batch entry. Selected discovery refuses omitted lanes before acquisition. Design captures
-start with an inspected free gallery/bookmark item, then may capture its recorded original link;
+every batch entry. Selected discovery refuses omitted lanes before acquisition. Design discovery
+starts with an inspected free gallery/bookmark item via `omd ref navigate --lane design`, then
+retains its recorded original link via `omd ref add` or captures one actual UI image element with
+`omd ref add <item-url> --lane design --selector <img-css>`, then imports that local PNG with
+`omd ref import-image` for a board piece. It is visual-only; a crop is not required.
 `--from-user` is only for a source the user actually supplied, never an escape from discovery.
-Capture gallery entries before batching their originals, since the observed link must already
+Visit gallery entries before batching their originals, since the observed link must already
 exist. A service task flow belongs in domain, not design merely because its layout is calm.
 For an intermediate category/directory hop, use `omd ref navigate <url> --lane domain|design --json`.
 It returns the `url`, `evidence`, and `capture` object for the lane's `navigation` array, stored
@@ -181,7 +184,7 @@ remain inspectable but cannot satisfy selected discovery without current qualifi
 marks ineligible records; selected boards and actionable briefs reject/exclude them. Domain captures are excluded from
 the default visual board inventory.
 
-Search PNGs/receipts, direct-entry lists and intermediate navigation are diagnostics, stored only in
+Search PNGs/receipts, direct-entry lists and gallery-item visits are diagnostics, stored only in
 `.omd/discovery/<lane>/`; `.omd/refs/<lane>/` holds retained evidence. At the start of research in an
 existing project run `omd ref tidy --json`. If it identifies old diagnostic clutter or ineligible
 design captures, inspect the reasons and run `omd ref tidy --apply --json` before reacquisition.
@@ -236,7 +239,8 @@ are required; login walls, empty results and challenge responses remain failed a
 an item actually observed in those results, never guessed shot IDs. Siteinspire now uses numeric
 `/website/<id-slug>` item URLs; category/selected directories are navigation, not gallery items.
 Every gallery item page is provenance rather than retained wrapper chrome: follow an observed
-original when present, or import the exact useful image/crop for screenshot-only evidence. Mobbin
+original when present, or capture the actual loaded UI image element for screenshot-only evidence.
+Cropping is optional. Mobbin
 `/explore/screens/<uuid>` and Page Flows `/screens/<uuid>` are concrete product-screen entries;
 their list pages remain discovery only and their surrounding gallery UI is not the product screen.
 Search gallery names with task/pattern terms (for example `site:pinterest.com/pin/ ...`), then inspect the actual entry. Known search
@@ -245,7 +249,8 @@ The catalogue uses public browser pages, not Google's paid/custom XML API. Query
 [Google](https://developers.google.com/custom-search/docs/xml_results) and
 [DuckDuckGo](https://duckduckgo.com/duckduckgo-help-pages/settings/params).
 Each source binds PNG evidence and native capture-JSON hashes. Design `discovery` binds
-another inspected entry/capture, not just a homepage or free-access assertion. For a different
+an inspected gallery-item navigation receipt under `.omd/discovery/design/navigation/`, not just
+a homepage or free-access assertion. For a different
 original source, the gallery capture must contain its exact URL in observed outbound links. When
 the original is unavailable, retain the gallery image as image-only; never use unrelated component
 docs as its evidence. No rewriting of native metadata is authorized to repair a failed check.
@@ -292,7 +297,7 @@ Each design source declares visualRole=visual-direction|component-support and vi
 (composition, typography, density, imagery, transfer, avoid). Each board candidate must actually
 use visual-direction evidence, and every visual piece must bind a validated source identity and
 capture, not just alias a qualified PNG. Imported visual fragments must bind their actual native
-design parent (or exact declared crop with unchanged PNG format/metadata); search/domain images
+design capture or gallery-item discovery image. An exact crop is supported but optional; search/domain images
 and transparency/colour-profile changes cannot be laundered by a source label.
 Current v7 research compares at least two visual-direction sources from independent original service
 families and distinct inspected gallery items. Their retained PNG bytes differ, and both directions

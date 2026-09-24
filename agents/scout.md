@@ -14,7 +14,8 @@ in discoveryRoots. Empty queries/searches require valid direct roots. Every decl
 needs an execution. Never invent metadata or promote old navigation captures into roots.
 `omd schema reference-search` gives the exact input. Use `omd ref navigate <url> --lane domain|design`
 for intermediate directory/category hops; retain its returned receipts under navigation, not as
-design-board components. Qualify and capture the retained gallery item/original separately.
+design-board components. Visit a concrete gallery item under discovery, then retain only its
+observed original screen or actual UI image in the design lane.
 Blocked/free-access gaps require a public alternative, not a paid MCP or a relabelled domain page.
 The v3 benchmark checker reports artifact-only evidence strength, not verified live actions. Historical v2 records remain readable under their original admission.
 Preserve that limitation in the synthesis; do not claim every flow/control was tested.
@@ -91,9 +92,14 @@ Open an item actually returned in observed links; never guess numeric shot/pin I
 returns a login wall, challenge, empty search or HTTP error, preserve the failure and try the next
 public gallery. No credential/payment/CAPTCHA workaround. Query terms may be refined to the actual
 task, but update the URL with them. Direct roots must expose actual same-gallery item links;
-follow only observed links via strict native navigation, then inspect and capture the item
-separately. The list itself is not design evidence. Search, direct-entry and navigation records live in
-.omd/discovery/<lane>/, never refs. Only inspected retained items and their captures belong in refs.
+follow only observed links via strict native navigation, then visit the concrete gallery item
+with `omd ref navigate <item-url> --lane design --json`. The list and gallery wrapper are not
+retained design evidence. Search, direct-entry and navigation records live in
+.omd/discovery/<lane>/, never refs. Only an observed original product screen or the exact UI
+image element itself belongs in refs/design. Use `omd ref add <item-url> --lane design
+--selector <img-css>` after the visit for an image-only item, then `omd ref import-image`
+with source-page and rights notes before using it in the board. Its record is visual-only;
+a crop is not mandatory and its pixels cannot prove app DOM structure.
 Before reusing an existing inventory, run ref tidy --json. When no other research owner is active,
 inspect its reasons and use ref tidy --apply --json to archive recognized legacy search/navigation
 clutter and ineligible design captures. Preserve the returned recovery manifest. Reacquire missing
@@ -124,7 +130,7 @@ Domain and design use independent service hosts and pixels; do not recapture the
 under another name, path or crop for visual direction. Use free public Pinterest, Dribbble,
 Behance, Mobbin, Page Flows or website-gallery entries; UI Bowl's paid MCP is not required.
 Every gallery item page is discovery provenance, not retained wrapper chrome: follow its observed
-original when present, or use ref import-image for the exact useful image/crop and declare its
+original when present, or use ref import-image for the exact UI image and declare its
 screenshot-only limits. The discovery entry must
 match a supported gallery item URL, not a service page labelled app-gallery. If access is blocked,
 try another provider; no inspected visual source means incomplete research, not domain fallback.
@@ -334,10 +340,11 @@ Mobbin, Behance, Land-book, Godly, Savee, and equivalents) — plus award showca
 gather enough high-craft main-screen references for this domain and register to support a
 visual decision, and sanitize each into the canonical multi-axis synthesis (macro layout,
 density, typography, spacing/rhythm, component anatomy, surface/material, colour role, motion).
-A gallery image's local capture lives under `.omd/refs/` as Scout-owned evidence; downstream receives
+A gallery visit lives under `.omd/discovery/design/`; an imported UI image lives under
+`.omd/refs/design/fragments/` as Scout-owned evidence. Downstream receives
 its sanitized measured part and may copy the measured layout/treatment with attribution, but never
 the raw pixels. For a Pinterest-like or gallery image, capture the user-selected region through
-browser-rs, retain source-page provenance and rights notes, and import only the resulting local
+browser-rs when needed, retain source-page provenance and rights notes, and import only the resulting local
 PNG with `omd ref import-image <input.json>` using `omd schema reference-image-fragment`;
 never scrape, hotlink, or ship remote source bytes.
 Capture and use references at part granularity: study the whole reference, then take only the

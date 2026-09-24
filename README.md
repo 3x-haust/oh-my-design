@@ -104,14 +104,18 @@ craft. `omd ref discover-plan --json` suggests screen galleries such as Mobbin/P
 UI and website galleries such as Siteinspire/Pinterest for marketing. Verify free access per entry;
 on blocked/login/paid access, use another public source without purchases, trials or MCP installation.
 Free viewing does not grant reuse rights. Record the inspected screen, discovery entry and concrete
-quality reason, not just a prestigious gallery name. Gallery pages are discovery wrappers: retain
-the observed original or an exact useful image/crop, not the wrapper chrome. Use `omd schema reference-research --json`,
+quality reason, not just a prestigious gallery name. Visit gallery items with `omd ref navigate
+<item-url> --lane design --json`; their captures stay under `.omd/discovery/design/`. Retain the
+observed original or capture the loaded UI image with `ref add <item-url> --lane design
+--selector <img-css>`, not the wrapper chrome; cropping is optional. Use `omd schema reference-research --json`,
 `omd ref research-set --input <input.json>` and `omd ref research-check --json` to publish/check both
 files and their aggregate consistency receipt. Capture PNGs and metadata directly into their own
 folders with `ref add --lane domain|design` or `lane` on each add-batch entry. Inspect them with
 `ref list --lane domain|design --json`; domain captures do not silently enter the visual board.
 Current v7 research binds source and gallery-entry PNGs to native capture JSON, keeps domain and
-design lanes separate, and records source-specific market coverage when a market is explicit. A homepage is not an inspected
+design lanes separate, and records source-specific market coverage when a market is explicit or a
+Korean-language user brief starts Korean-first reference research. That default never dictates a
+country aesthetic. A homepage is not an inspected
 entry, and a different original source must appear in the gallery's observed outbound links.
 Historical v5 remains readable with search-only requirements; v6 retains its search-or-direct-root
 contract. Reuse valid captured evidence only when current validators permit, then publish through v7

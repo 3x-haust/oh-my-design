@@ -4,10 +4,11 @@ import { join } from 'node:path';
 import { readPersistedRoute } from '../route/index.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import { designDiscoveryItemIdentity, referenceServiceHost } from './design-discovery-sources.ts';
+import { observedGalleryItems } from './gallery-evidence.ts';
 import { readContainedRegularFile } from './reference-selection.ts';
 import { assertReferenceLaneSeparation, loadRefs, researchLane } from './store.ts';
 
-type CaptureIntent = Readonly<{ source: string; lane?: string; fromUser?: boolean }>;
+type CaptureIntent = Readonly<{ source: string; lane?: string; fromUser?: boolean; selector?: string; shot?: boolean }>;
 export class ReferenceIntakeError extends Error {
   override readonly name = 'ReferenceIntakeError';
 }
@@ -59,6 +60,14 @@ export function captureLane(root: string, spec: CaptureIntent, invocation?: Proj
     : false;
   if (selected === undefined) throw new ReferenceIntakeError('REFERENCE_INTAKE_AUTHORITY_REQUIRED');
   const lane = researchLane(selected ? spec.lane : spec.lane ?? 'design');
+  if (lane === 'design' && galleryItem(spec.source) !== null) {
+    if (!spec.selector || spec.shot !== true) {
+      throw new ReferenceIntakeError('DESIGN_GALLERY_DISCOVERY_ONLY: visit the gallery item with omd ref navigate --lane design, then capture its actual UI image element with ref add --selector <img> and a screenshot; never retain the wrapper page');
+    }
+    if (!observedGalleryItems(root).some(item => item.url === spec.source)) {
+      throw new ReferenceIntakeError('DESIGN_DISCOVERY_REQUIRED: visit this exact gallery item with omd ref navigate --lane design before retaining its UI image');
+    }
+  }
   if (!selected) return lane;
   assertReferenceLaneSeparation(root, { source: spec.source, researchLane: lane });
   const refs = loadRefs(root, { includeDomain: true });
@@ -68,6 +77,7 @@ export function captureLane(root: string, spec: CaptureIntent, invocation?: Proj
     throw new ReferenceIntakeError('REFERENCE_LANE_SERVICE_OVERLAP: choose independent services for domain and design research');
   }
   if (lane === 'domain' || galleryItem(spec.source) !== null || spec.fromUser === true) return lane;
+  if (observedGalleryItems(root).some(item => item.links.includes(spec.source))) return lane;
   const discovered = refs.some(ref => {
     const observation = ref.acquisition;
     if (ref.researchLane !== 'design' || !observation || galleryItem(ref.source) === null

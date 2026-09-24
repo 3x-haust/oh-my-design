@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { join, relative } from 'node:path';
 import test from 'node:test';
 import { parseReferenceResearch, publishReferenceResearch, validateReferenceResearch } from '../core/ref/reference-research.ts';
 import { refIdentity } from '../core/ref/identity.ts';
@@ -12,6 +12,16 @@ import { briefReferences } from '../core/brief/index.ts';
 import { loadReferenceBoard } from '../core/ref/board.ts';
 import { inspectDesignReferenceAdmission, requiresDesignReferenceAdmission } from '../core/ref/design-admission.ts';
 import { testSearchReceipt } from './helpers/search-execution.ts';
+import { captureReferenceNavigation } from '../core/ref/navigation-capture.ts';
+import { captureLane } from '../core/ref/capture-intake.ts';
+import { withBrowser } from '../core/render/index.ts';
+import { capturePageForRef } from '../core/render/index.ts';
+import { discoveryBrowser, directoryHtml } from './helpers/discovery-capture.ts';
+import { inputSkeleton } from '../core/schema/inputs.ts';
+import { testPng } from './helpers/search-execution.ts';
+import { refImagePath } from '../core/ref/store.ts';
+import { decodePng } from '../core/motion/energy.ts';
+import { referenceGrade } from '../core/ref/board-granularity.ts';
 
 const options = { expectedSourceContractSha256: ADMISSION_SOURCE_SHA, benchmarkRequired: false };
 
@@ -65,6 +75,73 @@ test('image import rejects domain PNG relabelled as gallery provenance', t => {
 
 test('valid gallery and observed original retain research publication', t => {
   const { root, research } = designAdmissionFixture(t);
+  assert.doesNotThrow(() => validateReferenceResearch(root, parseReferenceResearch(research), options));
+});
+
+test('native gallery discovery keeps wrapper pixels outside refs/design and admits its observed original', async t => {
+  const { root, source, gallery, research, writer } = designAdmissionFixture(t);
+  rmSync(gallery.path); rmSync(join(root, gallery.evidence.path));
+  const invocation = publishTestAdaptiveRoute(root, inputSkeleton('product-route-input').skeleton);
+  const visit = await withBrowser(async browser => captureReferenceNavigation(
+    discoveryBrowser(browser, { url: gallery.source, html: directoryHtml(source.source) }).browser,
+    gallery.source, 'design', writer,
+  ));
+  assert.equal(captureLane(root, { source: source.source, lane: 'design' }, invocation), 'design');
+  assert.equal(inspectDesignReferenceAdmission(root, source.ref).code, 'observed-original');
+  assert.throws(() => captureLane(root, { source: gallery.source, lane: 'design' }, invocation), /DESIGN_GALLERY_DISCOVERY_ONLY/);
+  const retained = research.designReference.sources[0]; assert.ok(retained);
+  retained.discovery.evidence = visit.evidence;
+  retained.discovery.capture = visit.capture;
+  assert.doesNotThrow(() => validateReferenceResearch(root, parseReferenceResearch(research), options));
+});
+
+test('a visited gallery may retain only its actual UI image element without cropping', async t => {
+  const { root, gallery, writer, research, board, receipt, refreshBoard } = designAdmissionFixture(t);
+  const invocation = publishTestAdaptiveRoute(root, inputSkeleton('product-route-input').skeleton);
+  const source = gallery.source;
+  const image = testPng(320, 200, 22);
+  const html = `${directoryHtml('https://visual.example/task')}<img class="actual-ui" src="data:image/png;base64,${image.toString('base64')}" alt="Application screen">`;
+  const shotPath = refImagePath(root, { source, component: 'actual-ui', researchLane: 'design' });
+  const { result, visit } = await withBrowser(async browser => {
+    const observed = discoveryBrowser(browser, { url: source, html });
+    const visit = await captureReferenceNavigation(observed.browser, source, 'design', writer);
+    assert.equal(captureLane(root, { source, lane: 'design', selector: '.actual-ui', shot: true }, invocation), 'design');
+    await assert.rejects(capturePageForRef(observed.browser, source, { width: 1280, height: 900 }, {
+      selector: 'main', shotOut: shotPath, adapter: writer, requireImageElement: true,
+    }), /DESIGN_GALLERY_IMAGE_REQUIRED/);
+    assert.equal(existsSync(shotPath), false);
+    const result = await capturePageForRef(observed.browser, source, { width: 1280, height: 900 }, {
+      selector: '.actual-ui', shotOut: shotPath, adapter: writer,
+      requireImageElement: true, deferShotWrite: true,
+    });
+    return { result, visit };
+  });
+  assert.ok(result.shotBytes);
+  assert.ok(decodePng(result.shotBytes).width < 1280);
+  writer.write(relative(root, shotPath), result.shotBytes);
+  const retained = { ...gallery.ref, source, component: 'actual-ui', kind: 'image' as const, invariants: null,
+    selector: '.actual-ui', acquisition: { ...result.acquisition, imageSha256: admissionHash(result.shotBytes) },
+    imagePath: relative(root, shotPath) };
+  saveRef(root, retained, writer);
+  assert.equal(inspectDesignReferenceAdmission(root, retained).code, 'gallery-image');
+  assert.equal(referenceGrade(retained).evidence, 'visual-only');
+  const imported = persistImageFragment(root, {
+    inputPath: retained.imagePath,
+    provenance: { sourcePage: source, captureRegion: 'Actual UI image', licenseStatus: 'unknown', rightsNotes: 'Study only', capturedAt: new Date().toISOString() },
+    transfer: { visualRole: 'Application screen hierarchy', principles: ['Keep the action legible.'] },
+  }, createTestProjectRunInvocation(root));
+  assert.ok(imported.imagePath.startsWith('.omd/refs/design/fragments/'));
+  const visual = research.designReference.sources[0]; assert.ok(visual);
+  visual.url = source;
+  visual.evidence = receipt(join(root, imported.imagePath));
+  visual.capture = receipt(join(root, '.omd/refs/design/fragments', `${imported.id}.json`));
+  visual.discovery.evidence = visit.evidence;
+  visual.discovery.capture = visit.capture;
+  const piece = board.candidates[0]?.pieces[0]; assert.ok(piece);
+  piece.sourceKind = 'image-fragment';
+  piece.referenceId = imported.id;
+  piece.take = ['density'];
+  refreshBoard();
   assert.doesNotThrow(() => validateReferenceResearch(root, parseReferenceResearch(research), options));
 });
 

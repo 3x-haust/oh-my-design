@@ -15,3 +15,12 @@ test('every explicit market requires current local coverage regardless of fit mo
       parseReferenceResearch(fixture.research), marketOptions), /MARKET_COVERAGE_REQUIRED/);
   }
 });
+
+test('a Korean-language service brief cannot silently publish only UK and US references', t => {
+  const fixture = designAdmissionFixture(t);
+  assert.throws(() => validateReferenceResearch(fixture.root,
+    parseReferenceResearch(fixture.research), {
+      ...marketOptions,
+      expectedRequest: '복지 혜택을 찾고 신청을 도와주는 한국어 서비스를 만든다.',
+    }), /MARKET_COVERAGE_REQUIRED/);
+});

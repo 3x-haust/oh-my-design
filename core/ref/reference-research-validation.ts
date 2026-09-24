@@ -132,7 +132,11 @@ export function validateReferenceResearch(root: string, research: ReferenceResea
     if (source.schemaVersion === 'image-fragment-v1' && typeof source.id === 'string') retainedIdentities.set(item.id, source.id);
     else if (typeof source.component === 'string') retainedIdentities.set(item.id, refIdentity(item.url, source.component));
     else fail('REFERENCE_RESEARCH_CAPTURE_SOURCE_MISMATCH');
-    const entry = verifyCapture(root, discovery, 'design');
+    const galleryVisit = discovery.capture.path.startsWith('.omd/discovery/design/navigation/');
+    if (galleryVisit) readStrictDiscoveryNavigation(root, {
+      url: discovery.url, evidence: discovery.evidence, capture: discovery.capture,
+    });
+    const entry = verifyCapture(root, discovery, 'design', galleryVisit ? 'navigation' : 'retained');
     observe('design', item.url, source);
     observe('design', discovery.url, entry);
     if (research.schema === 'reference-research-v7' && item.visualRole === 'visual-direction') {
@@ -155,6 +159,7 @@ export function validateReferenceResearch(root: string, research: ReferenceResea
     }
     for (const [captured, url, purpose] of [[source, item.url, 'retained'], [entry, discovery.url, 'discovery']] as const) {
       if (captured.schemaVersion === 'image-fragment-v1') continue;
+      if (purpose === 'discovery' && galleryVisit) continue;
       const reference = references.find(ref => ref.researchLane === 'design' && ref.source === url && ref.component === captured.component);
       if (!reference) fail('REFERENCE_RESEARCH_CAPTURE_SOURCE_MISMATCH');
       requireDesignReferenceAdmission(root, reference, { references, purpose });
