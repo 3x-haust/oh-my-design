@@ -1050,10 +1050,10 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
   const absShot = opts.noShot
     ? undefined
     : refImagePath(adapter.projectRoot, { source: target, component: opts.as, researchLane: lane });
-  const { raw, shotBytes, shotError, capturePreparation, acquisition } = await withBrowser(browser => capturePageForRef(browser, target, captureViewport, {
+  const { raw, shotBytes, shotError, capturePreparation, acquisition, visibleText } = await withBrowser(browser => capturePageForRef(browser, target, captureViewport, {
     selector: opts.selector ?? null,
     requireImageElement: galleryImage,
-    validateFinalUrl: (url, raw) => validateFinalUrl(0, url, raw),
+    validateFinalUrl: (url, visibleText) => validateFinalUrl(0, url, visibleText),
     ...(absShot ? { shotOut: absShot, adapter, deferShotWrite: true } : {}),
     ...(preparation ? { preparation } : {}),
     bestEffortShot: preparation === undefined && !galleryImage,
@@ -1089,6 +1089,7 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
     return saveRef(process.cwd(), {
       researchLane: lane,
       acquisition,
+      ...((visibleText.match(/[가-힣]/gu)?.length ?? 0) >= 8 ? { visibleKoreanText: true as const } : {}),
       source: target,
       component,
       kind: galleryImage ? 'image' : opts.selector ? 'component' : 'page',

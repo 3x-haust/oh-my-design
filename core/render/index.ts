@@ -763,8 +763,8 @@ export async function capturePageForRef(
   browser: Browser,
   target: string,
   viewport: Viewport,
-  opts: { selector?: string | null; shotOut?: string; adapter?: ProjectWriteAdapter; preparation?: CapturePreparation; bestEffortShot?: boolean; deferShotWrite?: boolean; validateFinalUrl?: (url: string, raw: RawIr) => void; requireImageElement?: boolean },
-): Promise<{ raw: RawIr; shotSaved: boolean; shotBytes?: Buffer; shotError?: string; capturePreparation?: CapturePreparationReceipt; acquisition: { requestedUrl: string; finalUrl: string; httpStatus: number | null; links: string[]; imageSha256: string | null } }> {
+  opts: { selector?: string | null; shotOut?: string; adapter?: ProjectWriteAdapter; preparation?: CapturePreparation; bestEffortShot?: boolean; deferShotWrite?: boolean; validateFinalUrl?: (url: string, visibleText: string) => void; requireImageElement?: boolean },
+): Promise<{ raw: RawIr; shotSaved: boolean; shotBytes?: Buffer; shotError?: string; visibleText: string; capturePreparation?: CapturePreparationReceipt; acquisition: { requestedUrl: string; finalUrl: string; httpStatus: number | null; links: string[]; imageSha256: string | null } }> {
   const preparation = opts.preparation === undefined ? undefined : parseCapturePreparation(opts.preparation);
   return onPage(browser, target, viewport, async (page, httpStatus, resolvedUrl) => {
     if (opts.requireImageElement) {
@@ -816,7 +816,8 @@ export async function capturePageForRef(
     }
     const finalUrl = page.url();
     const links = await page.locator('a[href]').evaluateAll(elements => [...new Set(elements.map(el => (el as HTMLAnchorElement).href).filter(url => /^https?:\/\//.test(url)))]);
-    opts.validateFinalUrl?.(finalUrl, raw);
+    const visibleText = await page.evaluate(() => document.body?.innerText.slice(0, 12000) ?? '');
+    opts.validateFinalUrl?.(finalUrl, visibleText);
     // Keep bytes private until all observations have passed, including after the screenshot.
     if (shotBytes && opts.shotOut && opts.adapter && !opts.deferShotWrite) {
       try {
@@ -827,7 +828,7 @@ export async function capturePageForRef(
         shotError = error instanceof Error ? error.message : String(error);
       }
     }
-    return { raw, shotSaved, acquisition: { requestedUrl: target, finalUrl, httpStatus, links,
+    return { raw, shotSaved, visibleText, acquisition: { requestedUrl: target, finalUrl, httpStatus, links,
       imageSha256: shotBytes ? createHash('sha256').update(shotBytes).digest('hex') : null,
     }, ...(shotBytes ? { shotBytes } : {}), ...(shotError ? { shotError } : {}), ...(capturePreparation ? { capturePreparation } : {}) };
   }, REFERENCE_CAPTURE_TIMEOUT_MS);

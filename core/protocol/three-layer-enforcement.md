@@ -125,8 +125,10 @@ inspection and research repair remain available while production is blocked.
   Final URL checks run before PNG publication; redirected hosts and simultaneous batch captures
   cannot enter opposite lanes under different starting URLs. A gallery redirect must still be a
   qualified item, unless the reference was genuinely supplied by the user.
-  Korean-first domain work also refuses non-user captures with neither visible Korean UI text nor a Korean
-  host until validated local-lane research exists. A `.com` host is not a disqualifier. Non-user
+  Korean-first domain work also refuses non-user captures with neither page-level visible Korean UI
+  text nor a Korean host until three recent independent local domain captures exist or current local
+  research is published. A scoped selector does not hide the page language. PNG bytes must still
+  match each capture's hash before they count. A `.com` host is not a disqualifier. Non-user
   `--image` cannot bypass the live-page language check; genuine user-supplied images keep their
   explicit provenance and cannot masquerade as researched service screens.
   Research reachability extends from

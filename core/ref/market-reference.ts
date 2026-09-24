@@ -1,3 +1,5 @@
+const KOREAN_WELFARE_SERVICE_QUERIES = Object.freeze(['복지로', '정부24 혜택알리미', '서울복지포털', '웰로']);
+
 export function inferredKoreanReferenceMarket(request: string): 'KR' | null {
   if (!/[가-힣]{2,}/u.test(request)) return null;
   if (/미국|영국|일본|중국|캐나다|호주|독일|프랑스|대만|싱가포르|베트남|해외|글로벌|국제|다국가/u.test(request)
@@ -14,7 +16,7 @@ export function marketSearchLabels(marketRegion: string, surfaceLocale: string):
 
 export function marketDomainQueries(marketRegion: string, surfaceLocale: string, domain: string): readonly string[] {
   if (marketRegion === 'KR' && /복지|welfare|public benefits?/iu.test(domain)) {
-    return Object.freeze(['복지로', '정부24 혜택알리미', '서울복지포털', '웰로']);
+    return KOREAN_WELFARE_SERVICE_QUERIES;
   }
   const labels = marketSearchLabels(marketRegion, surfaceLocale);
   const english = labels.at(-1);
@@ -23,5 +25,5 @@ export function marketDomainQueries(marketRegion: string, surfaceLocale: string,
 
 export function isMarketQualifiedQuery(query: string, labels: readonly string[]): boolean {
   return labels.some(label => query === label || query.startsWith(`${label} `))
-    || (labels.includes('한국') && inferredKoreanReferenceMarket(query) === 'KR');
+    || (labels.includes('한국') && KOREAN_WELFARE_SERVICE_QUERIES.includes(query));
 }

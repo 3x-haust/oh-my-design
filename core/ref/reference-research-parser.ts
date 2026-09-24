@@ -30,7 +30,8 @@ function exactKeys(value: Record<string, unknown>, keys: readonly string[], code
     if (fieldPath === undefined) fail(code);
     const missing = expected.filter(key => !actual.includes(key));
     const extra = actual.filter(key => !expected.includes(key));
-    fail(`${code}: ${fieldPath} missing=[${missing.join(',')}] extra=[${extra.join(',')}]`);
+    const safeExtra = extra.slice(0, 8).map(key => /^[A-Za-z0-9_-]{1,64}$/u.test(key) ? key : '<unsafe-key>');
+    fail(`${code}: ${fieldPath} missing=[${missing.join(',')}] extra=[${safeExtra.join(',')}]${extra.length > 8 ? ` (+${extra.length - 8} more)` : ''}`);
   }
 }
 
@@ -69,8 +70,8 @@ export function httpsUrl(value: unknown): string {
 }
 
 function evidence(value: unknown, diagnostic: boolean | 'gallery-visit' = false, fieldPath?: string): ResearchEvidence {
-  const input = record(value, 'REFERENCE_RESEARCH_EVIDENCE_INVALID');
-  exactKeys(input, REFERENCE_RESEARCH_EVIDENCE_KEYS, 'REFERENCE_RESEARCH_EVIDENCE_KEYS');
+  const input = record(value, fieldPath === undefined ? 'REFERENCE_RESEARCH_EVIDENCE_INVALID' : `REFERENCE_RESEARCH_EVIDENCE_INVALID: ${fieldPath}`);
+  exactKeys(input, REFERENCE_RESEARCH_EVIDENCE_KEYS, 'REFERENCE_RESEARCH_EVIDENCE_KEYS', fieldPath);
   const pathError = fieldPath === undefined ? 'REFERENCE_RESEARCH_EVIDENCE_PATH'
     : `REFERENCE_RESEARCH_EVIDENCE_PATH: ${fieldPath}.path must be a project-relative retained reference path under .omd/refs/ or an exact content-addressed design gallery visit under .omd/discovery/design/navigation/`;
   const path = text(input.path, pathError);
@@ -85,8 +86,8 @@ function evidence(value: unknown, diagnostic: boolean | 'gallery-visit' = false,
 
 function source(value: unknown, design: boolean, index: number): ResearchSource {
   const fieldPath = `${design ? 'designReference' : 'domainReference'}.sources[${index}]`;
-  const input = record(value, 'REFERENCE_RESEARCH_SOURCE_INVALID');
-  exactKeys(input, design ? [...REFERENCE_RESEARCH_SOURCE_KEYS, 'discovery', 'visualRole', 'visualAssessment'] : REFERENCE_RESEARCH_SOURCE_KEYS, 'REFERENCE_RESEARCH_SOURCE_KEYS');
+  const input = record(value, `REFERENCE_RESEARCH_SOURCE_INVALID: ${fieldPath}`);
+  exactKeys(input, design ? [...REFERENCE_RESEARCH_SOURCE_KEYS, 'discovery', 'visualRole', 'visualAssessment'] : REFERENCE_RESEARCH_SOURCE_KEYS, 'REFERENCE_RESEARCH_SOURCE_KEYS', fieldPath);
   const observedAt = text(input.observedAt, 'REFERENCE_RESEARCH_OBSERVED_AT');
   if (!DATE.test(observedAt)) fail('REFERENCE_RESEARCH_OBSERVED_AT');
   let discovery: ResearchSource['discovery'];

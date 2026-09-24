@@ -10,7 +10,7 @@ import { buildReferenceDiscoveryPlan, missingDiscoveryMotionEvidence } from '../
 import { parseSearchInput } from '../core/ref/search-execution.ts';
 import { buildBrief, formatBrief } from '../core/brief/index.ts';
 import { publishTestAdaptiveRoute } from './helpers/project-write.ts';
-import { inferredKoreanReferenceMarket } from '../core/ref/market-reference.ts';
+import { inferredKoreanReferenceMarket, isMarketQualifiedQuery } from '../core/ref/market-reference.ts';
 
 const fixture = (name = 'synth-marketing') => JSON.parse(readFileSync(
   fileURLToPath(new URL(`fixtures/adaptive-flow/${name}.json`, import.meta.url)), 'utf8'));
@@ -38,6 +38,8 @@ test('Korean product brief starts both research lanes in Korea without asserting
   assert.ok(plan.designSourcePolicy.nativeSearchInputs.some(candidate => candidate.query.startsWith('한국 ')));
   assert.equal(plan.marketReferencePolicy.styleInference, 'forbidden');
   assert.equal(inferredKoreanReferenceMarket('미국 복지 신청을 위한 한국어 서비스'), null);
+  assert.equal(isMarketQualifiedQuery('미니멀 앱 UI', ['대한민국', '한국', 'South Korea']), false);
+  assert.equal(isMarketQualifiedQuery('정부24 혜택알리미', ['대한민국', '한국', 'South Korea']), true);
 });
 
 test('URL-free showpiece requests receive automatic craft and motion lanes on a route that always carries domain', t => {

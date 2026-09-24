@@ -100,12 +100,46 @@ test('an existing route keeps repairing a checked stage for an explicit full Rea
 test('a packaged skill with a scoped research-only request does not resume an existing route', async t => {
   const h = harness(t);
   await h.activate(`${expandedSkillOnly()}\n\n# 복지 서비스\n레퍼런스만 조사해줘`);
+  await h.run(['route', 'classify', '--input', '.omd/.cache/existing.json']);
   await h.run(['brief', 'scout', '--check', '--json']);
   h.failPublication();
   await assert.rejects(h.run(['ref', 'research-set', '--input', '.omd/.cache/research.json']));
   await h.end();
   assert.equal(h.commands.some(args => args[0] === 'stage' && args[1] === 'next'), false);
   assert.deepEqual(h.sent, []);
+});
+
+test('an earlier stop instruction cannot be overridden by a quoted build example', async t => {
+  const h = harness(t);
+  await h.activate(`${expandedSkillOnly()}\n\n레퍼런스만 조사해줘. 구현은 하지 마.\n\n> 리액트로 구현해줘`);
+  await h.run(['route', 'classify', '--input', '.omd/.cache/existing.json']);
+  await h.run(['brief', 'scout', '--check', '--json']);
+  await h.end();
+  assert.equal(h.commands.some(args => args[0] === 'stage' && args[1] === 'next'), false);
+  assert.deepEqual(h.sent, []);
+});
+
+test('a full build directive before later requirements still resumes selected-stage repair', async t => {
+  const h = harness(t);
+  await h.activate(`${expandedSkillOnly()}\n\nReact로 복지 서비스를 구현해 주세요.\n\n# 요구사항\n추천 이유와 신청 상태를 분리한다.`);
+  await h.run(['route', 'classify', '--input', '.omd/.cache/existing.json']);
+  await h.run(['brief', 'scout', '--check', '--json']);
+  h.failPublication();
+  await assert.rejects(h.run(['ref', 'research-set', '--input', '.omd/.cache/research.json']));
+  await h.end();
+  assert.deepEqual(h.commands.at(-1), ['stage', 'next', '--json']);
+  assert.deepEqual(h.sent, ['omd-stage-repair']);
+});
+
+test('natural full-build wording across product and landing surfaces grants continuation', async t => {
+  for (const request of ['복지 서비스를 만들어줘', 'Build the complete app.\nVerify the flows.', '한국어 랜딩페이지를 구현해 주세요']) {
+    const h = harness(t);
+    await h.activate(`${expandedSkillOnly()}\n\n${request}`);
+    await h.run(['route', 'classify', '--input', '.omd/.cache/existing.json']);
+    await h.run(['brief', 'scout', '--check', '--json']);
+    await h.end();
+    assert.deepEqual(h.commands.at(-1), ['stage', 'next', '--json'], request);
+  }
 });
 
 test('a checked different stage does not authorize a successful publisher as owned work', async t => {
