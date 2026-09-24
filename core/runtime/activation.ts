@@ -92,7 +92,8 @@ const canonicalCliPath = realpathSync(fileURLToPath(new URL('../../bin/omd.ts', 
 const testRoot = fileURLToPath(new URL('../../test', import.meta.url));
 const canonicalTestRoot = existsSync(testRoot) ? realpathSync(testRoot) : undefined;
 const testEntrypoint = executedCliPath === undefined || canonicalTestRoot === undefined ? undefined : relative(canonicalTestRoot, executedCliPath);
-const NODE_TEST_MODE = process.execArgv.some((arg) => arg.startsWith('--test-isolation='))
+const NODE_TEST_MODE = (process.env.NODE_TEST_CONTEXT === 'child-v8'
+  || process.execArgv.some((arg) => arg.startsWith('--test-isolation=')))
   && testEntrypoint !== undefined
   && testEntrypoint !== ''
   && testEntrypoint !== '..'

@@ -165,10 +165,13 @@ classification. Run `omd schema locale-design-context`, author
 confirmed `evidenceClaims.userFacts` claim whose `explicit-user-evidence` names that market, and inspect it with
 `omd locale plan --input .omd/locale-design-context.json --json`. Then append
 `--locale-context .omd/locale-design-context.json` to both `route validate` and `route classify`.
-Use the same file for every repair/recheck. A surface language or locale alone never authorizes a
-country: if no market was supplied, keep `marketRegion` null and do not silently add one. This
-bootstrap is required on a fresh project as well as a resumed project; otherwise reference
-discovery remains intentionally unscoped.
+Use the same file for every repair/recheck. A surface language or locale alone never authorizes
+cultural fit: if no market was supplied, keep `marketRegion` null and do not silently add one.
+For reference discovery only, a Korean-language user brief defaults to Korean services and
+Korean-relevant design examples unless a different market is stated. Check
+`omd ref discover-plan --json` before searching; its market policy applies to both independent
+lanes and never supplies a country aesthetic. This bootstrap is required for a cultural-design
+claim on a fresh or resumed project, not for the Korean reference-search default.
 
 On a brokered Codex invocation append the supplied `--activation` to publishing/reading commands.
 The example above is for a new product implementation. For existing/bounded work use `omd schema route-input`;

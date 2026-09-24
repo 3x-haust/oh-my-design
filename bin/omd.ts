@@ -1007,7 +1007,8 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
   const { saveRef } = await import('../core/ref/store.ts');
   const { captureLane, captureFinalUrlGuard } = await import('../core/ref/capture-intake.ts');
   const invocation = invocationFromActivation(opts, 'omd ref add');
-  const intent = { source: target, ...(opts.lane ? { lane: opts.lane } : {}), ...(opts.fromUser ? { fromUser: true } : {}) };
+  const intent = { source: target, ...(opts.lane ? { lane: opts.lane } : {}), ...(opts.fromUser ? { fromUser: true } : {}),
+    ...(opts.selector ? { selector: opts.selector } : {}), shot: !opts.noShot && !opts.image };
   const lane = captureLane(process.cwd(), intent, invocation);
   const validateFinalUrl = captureFinalUrlGuard(process.cwd(), [{ ...intent, lane }], invocation);
   const adapter = projectWriterFromActivation(opts, 'omd ref add');
@@ -1035,6 +1036,9 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
   const { loadRules, check } = await import('../core/rules/engine.ts');
 
   const { capturePageForRef, withBrowser, captureEnergy, parseViewport, REFERENCE_VIEWPORT } = await import('../core/render/index.ts');
+  const { designDiscoveryProvider } = await import('../core/ref/design-discovery-sources.ts');
+  const galleryImage = lane === 'design' && target.startsWith('https://') && designDiscoveryProvider(target) !== null;
+  if (galleryImage && opts.blueprint) throw new Error('DESIGN_GALLERY_IMAGE_ONLY: a gallery image has pixels, not measurable app DOM anatomy');
   const { parseCapturePreparation } = await import('../core/ref/capture-preparation.ts');
   const preparation = opts.preparation ? parseCapturePreparation(JSON.parse(readFileSync(resolve(opts.preparation), 'utf8'))) : undefined;
   const captureViewport = parseViewport(opts.viewport ?? REFERENCE_VIEWPORT);
@@ -1048,15 +1052,16 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
     : refImagePath(adapter.projectRoot, { source: target, component: opts.as, researchLane: lane });
   const { raw, shotBytes, shotError, capturePreparation, acquisition } = await withBrowser(browser => capturePageForRef(browser, target, captureViewport, {
     selector: opts.selector ?? null,
+    requireImageElement: galleryImage,
     validateFinalUrl: url => validateFinalUrl(0, url),
     ...(absShot ? { shotOut: absShot, adapter, deferShotWrite: true } : {}),
     ...(preparation ? { preparation } : {}),
-    bestEffortShot: preparation === undefined,
+    bestEffortShot: preparation === undefined && !galleryImage,
   }));
   const ir = normalize(raw);
   const invariants = extractInvariants(ir);
 
-  const slopViolations = check(ir, loadRules(join(root, 'core', 'rules', 'builtin')), { categories: ['slop'] });
+  const slopViolations = galleryImage ? [] : check(ir, loadRules(join(root, 'core', 'rules', 'builtin')), { categories: ['slop'] });
   const slopCount = slopViolations.length;
   const slopIds = [...new Set(slopViolations.map((v) => v.id))];
 
@@ -1065,7 +1070,7 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
   // Sees ALL motion including GSAP/rAF — closing the getAnimations() blind spot.
   // Failure is silently ignored: a blocked page or unsupported format must not prevent
   // the reference from being saved.
-  const energyCurve = opts.noEnergy ? null : await captureEnergy(target, { viewport: captureViewport });
+  const energyCurve = opts.noEnergy || galleryImage ? null : await captureEnergy(target, { viewport: captureViewport });
 
   // Blueprint: full-resolution structural snapshot with skin abstracted to color roles.
   // Only captured when --blueprint is passed together with --selector.
@@ -1086,11 +1091,11 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
       acquisition,
       source: target,
       component,
-      kind: opts.selector ? 'component' : 'page',
+      kind: galleryImage ? 'image' : opts.selector ? 'component' : 'page',
       capturedAt: new Date().toISOString(),
       ...(opts.selector ? { selector: opts.selector } : {}),
       ...(opts.slot ? { slot: opts.slot } : {}),
-      invariants,
+      invariants: galleryImage ? null : invariants,
       principles: [],
       slopCount,
       ...(opts.fromUser ? { origin: 'user' as const } : {}),
@@ -1110,7 +1115,7 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
   console.error(`slop findings: ${slopCount}${slopCount > 0 ? `  [${slopIds.join(', ')}]` : ''}`);
 
   const signal = designSignal(invariants, blueprint);
-  if (signal.score < LOW_SIGNAL) {
+  if (!galleryImage && signal.score < LOW_SIGNAL) {
     console.error(
       `warning: low design signal (${signal.score} — missing: ${signal.missing.join(', ')}).\n`
       + 'Measured DOM evidence is insufficient; this is not a visual-quality judgment.\n'

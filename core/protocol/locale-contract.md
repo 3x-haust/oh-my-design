@@ -22,9 +22,13 @@ locale, explicit market region, audience, domain, surface, desired fit, and bran
 distinct fields. A language is not a country, and a locale or likely script never implies a market,
 audience, register, or national aesthetic.
 
+For reference acquisition only, a Korean-language user brief is enough to start with Korean
+services and Korean-relevant design examples when no different market is specified. This is a
+research default, not a claim that the destination has Korean cultural fit or a national style.
+
 An explicit request to study a region's websites or award galleries is a reference-acquisition
 preference, not by itself a claim about the destination's market or that audience's cultural fit.
-Preserve that preference in current discovery queries. Do not drop it, infer it from language, or
+Preserve that preference in current discovery queries. Do not drop it or
 turn it into a country-wide style preset. Script mechanics and the existing target audience remain
 separate; a genuine market-fit request still follows the research route below.
 
@@ -34,8 +38,9 @@ named task and audience in that market. The design lane starts with market-quali
 and high-quality product/design sources from that market, while remaining independent from the domain
 operators. A local URL is not automatically good design, and a country label is not a visual style.
 Use a global equivalent only after recording the target-market coverage gap; it supplements missing
-task or craft evidence rather than silently replacing local research. Conversation language or a bare
-surface locale never activates this policy without an explicit market.
+task or craft evidence rather than silently replacing local research. An explicit market activates
+this policy; a Korean-language user brief may activate it as a reference-only default without
+changing the cultural-design route.
 
 ## Cultural design routing
 

@@ -14,6 +14,8 @@ import type { RenderedBeat, RenderedBeatProof } from '../copy/index.ts';
 import { requireMotionResultAuthorization, requireRenderedBeatResultAuthorization, type ProjectRunInvocation } from '../runtime/invocation.ts';
 const MAX_NODES = 4000;
 const BROWSER_CLEANUP_TIMEOUT_MS = 5_000;
+const REFERENCE_CAPTURE_TIMEOUT_MS = 60_000;
+const REFERENCE_ENERGY_TIMEOUT_MS = 30_000;
 const MOTION_CAPTURE_EVENT_TIMEOUT_MS = 5_000;
 const reducedMotionRemovalThreshold = (noiseFloor: number): number => noiseFloor * 2;
 
@@ -291,19 +293,43 @@ export async function onPage<T>(
   target: string,
   viewport: Viewport,
   fn: (page: import('playwright').Page, httpStatus: number | null, resolvedUrl: string, loadTimestampMs: number) => Promise<T>,
+  deadlineMs?: number,
 ): Promise<T> {
   const page = await browser.newPage({ viewport });
-  const resolved = await resolveTarget(target);
+  let resolved: Awaited<ReturnType<typeof resolveTarget>> | undefined;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let expired = false;
   try {
-    const observedLoad = page.waitForEvent('load');
-    const response = await page.goto(resolved.url, { waitUntil: 'domcontentloaded' });
-    await observedLoad;
-    const loadTimestampMs = Date.now();
-    await waitForDocumentFonts(page);
-    return await fn(page, response?.status() ?? null, resolved.url, loadTimestampMs);
+    resolved = await resolveTarget(target);
+    const targetUrl = resolved.url;
+    const work = async (): Promise<T> => {
+      const observedLoad = deadlineMs === undefined ? page.waitForEvent('load') : null;
+      const response = await page.goto(targetUrl, deadlineMs === undefined
+        ? { waitUntil: 'domcontentloaded' } : { waitUntil: 'load', timeout: 20_000 });
+      if (observedLoad !== null) await observedLoad;
+      const loadTimestampMs = Date.now();
+      await waitForDocumentFonts(page);
+      return fn(page, response?.status() ?? null, targetUrl, loadTimestampMs);
+    };
+    if (deadlineMs === undefined) return await work();
+    return await Promise.race([work(), new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => {
+        expired = true;
+        void page.close().catch(() => {});
+        reject(new Error(`reference capture timed out after ${deadlineMs}ms; inspect another public source`));
+      }, deadlineMs);
+    })]);
   } finally {
-    await page.close();
-    await resolved.close();
+    if (timer !== undefined) clearTimeout(timer);
+    if (expired) {
+      let closeTimer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await Promise.race([page.close().catch(() => {}), new Promise<void>(resolveTimeout => {
+          closeTimer = setTimeout(resolveTimeout, 2_000);
+        })]);
+      } finally { if (closeTimer !== undefined) clearTimeout(closeTimer); }
+    } else await page.close();
+    await resolved?.close();
   }
 }
 function canonicalResultBytes(value: unknown): Buffer {
@@ -325,8 +351,9 @@ async function withPage<T>(
   target: string,
   viewport: Viewport,
   fn: (page: import('playwright').Page, httpStatus: number | null, resolvedUrl: string) => Promise<T>,
+  deadlineMs?: number,
 ): Promise<T> {
-  return withBrowser((browser) => onPage(browser, target, viewport, fn));
+  return withBrowser((browser) => onPage(browser, target, viewport, fn, deadlineMs));
 }
 
 export function parseViewport(s = '390x844'): Viewport {
@@ -688,7 +715,7 @@ export async function captureEnergy(
         buffers.push(await page.screenshot({ fullPage: false }));
       }
       return computeEnergy(buffers);
-    });
+    }, REFERENCE_ENERGY_TIMEOUT_MS);
   } catch {
     return null;
   }
@@ -736,10 +763,23 @@ export async function capturePageForRef(
   browser: Browser,
   target: string,
   viewport: Viewport,
-  opts: { selector?: string | null; shotOut?: string; adapter?: ProjectWriteAdapter; preparation?: CapturePreparation; bestEffortShot?: boolean; deferShotWrite?: boolean; validateFinalUrl?: (url: string) => void },
+  opts: { selector?: string | null; shotOut?: string; adapter?: ProjectWriteAdapter; preparation?: CapturePreparation; bestEffortShot?: boolean; deferShotWrite?: boolean; validateFinalUrl?: (url: string) => void; requireImageElement?: boolean },
 ): Promise<{ raw: RawIr; shotSaved: boolean; shotBytes?: Buffer; shotError?: string; capturePreparation?: CapturePreparationReceipt; acquisition: { requestedUrl: string; finalUrl: string; httpStatus: number | null; links: string[]; imageSha256: string | null } }> {
   const preparation = opts.preparation === undefined ? undefined : parseCapturePreparation(opts.preparation);
   return onPage(browser, target, viewport, async (page, httpStatus, resolvedUrl) => {
+    if (opts.requireImageElement) {
+      if (!opts.selector || !opts.shotOut) throw new Error('DESIGN_GALLERY_IMAGE_REQUIRED: select one visible UI image and retain its screenshot');
+      const eligible = await page.locator(opts.selector).evaluateAll(elements => {
+        if (elements.length !== 1 || !(elements[0] instanceof HTMLImageElement)) return false;
+        const image = elements[0];
+        const box = image.getBoundingClientRect();
+        const style = getComputedStyle(image);
+        return image.complete && image.naturalWidth >= 100 && image.naturalHeight >= 100
+          && box.width >= 100 && box.height >= 100 && style.visibility === 'visible'
+          && style.display !== 'none' && Number(style.opacity) > 0;
+      });
+      if (!eligible) throw new Error('DESIGN_GALLERY_IMAGE_REQUIRED: selector must identify one loaded, visible UI image element, not gallery chrome');
+    }
     const executedActions = preparation ? await prepareReferenceCapture(page, preparation) : undefined;
     // Hover/tab probes can close disclosures or move initial focus; null means not measured.
     const raw = await extractIrCore(page, httpStatus, resolvedUrl, opts.selector ?? null, preparation === undefined);
@@ -790,7 +830,7 @@ export async function capturePageForRef(
     return { raw, shotSaved, acquisition: { requestedUrl: target, finalUrl, httpStatus, links,
       imageSha256: shotBytes ? createHash('sha256').update(shotBytes).digest('hex') : null,
     }, ...(shotBytes ? { shotBytes } : {}), ...(shotError ? { shotError } : {}), ...(capturePreparation ? { capturePreparation } : {}) };
-  });
+  }, REFERENCE_CAPTURE_TIMEOUT_MS);
 }
 /**
  * Captures the load-only canonical motion scene and saves selector-local screenshots

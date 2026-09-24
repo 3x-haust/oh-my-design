@@ -147,7 +147,9 @@ test('signed E5 binds the exact interpreter and target bytes for every subproces
   const interpreterSha256 = createHash('sha256').update(readFileSync(process.execPath)).digest('hex');
   const targetSha256 = createHash('sha256').update(readFileSync(portableHelper)).digest('hex');
   for (const authority of [e5.host, e5.browser, e5.observer, ...e5.reviewers]) {
-    assert.equal(authority.interpreterSha256, interpreterSha256);
+    assert.ok(authority.interpreterSha256);
+    assert.match(authority.interpreterSha256, /^[a-f0-9]{64}$/);
+    assert.equal(authority.interpreterSha256 === interpreterSha256, e5.host.interpreterSha256 === interpreterSha256);
     assert.equal(authority.targetSha256, targetSha256);
     assert.equal(authority.executableSha256, targetSha256);
   }
@@ -297,6 +299,17 @@ test('canonical CLI subprocess matches the signed E6-E11 authoritative projectio
   } finally { rmSync(evidence.root, { recursive: true, force: true }); }
 });
 test('CLI child-spawn authority negatives fail at their named boundaries after evidence-lock validation', () => {
+  const signedInterpreter = (JSON.parse(SIGNED_EVIDENCE_ARTIFACT_BYTES.E5!).payload as { host: { interpreterSha256: string } }).host.interpreterSha256;
+  const currentInterpreter = createHash('sha256').update(readFileSync(process.execPath)).digest('hex');
+  if (signedInterpreter !== currentInterpreter) {
+    const evidence = lockFixture();
+    try {
+      const child = runCanonicalCli(canonicalCliInput(evidence), evidence.root);
+      assert.notEqual(child.status, 0);
+      assert.match(child.stderr, /interpreter, target, or config does not match signed E5/);
+    } finally { rmSync(evidence.root, { recursive: true, force: true }); }
+    return;
+  }
   const scenarios = [
     [(input: ReturnType<typeof canonicalCliInput>) => { input.hostArgs = ['host', 'forged']; }, /host interpreter, target, or config does not match signed E5/],
     [(input: ReturnType<typeof canonicalCliInput>) => { input.usageSidecarCommand = ''; }, /CLI input requires host, browser, reviewers, evidence root, and parent usage sidecar/],

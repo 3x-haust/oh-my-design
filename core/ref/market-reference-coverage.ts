@@ -5,12 +5,12 @@ import { parseLocaleDesignContext } from '../locale/design-context.ts';
 import { validateDomainBrief } from '../domain/domain-brief.ts';
 import { nodeStableProjectFileSystem, readStableProjectFile } from '../runtime/stable-project-file.ts';
 import type { ReferenceResearch } from './reference-research-types.ts';
-import { isMarketQualifiedQuery, marketDomainQueries, marketSearchLabels } from './market-reference.ts';
+import { inferredKoreanReferenceMarket, isMarketQualifiedQuery, marketDomainQueries, marketSearchLabels } from './market-reference.ts';
 import { readCurrentDirectDiscoveryEntry } from './discovery-record.ts';
 import { negatesMarketScope } from './market-scope-negation.ts';
 import { readSearchExecution, SEARCH_EXECUTION_SCHEMA } from './search-execution.ts';
 import { resultReaches, type ObservedSearchResult } from './search-result.ts';
-import { referenceServiceFamily } from './design-discovery-sources.ts';
+import { referenceServiceFamily, referenceServiceHost } from './design-discovery-sources.ts';
 import {
   marketObject, marketReject, marketText, marketTexts,
   type MarketLaneCoverage, type MarketSourceIdentity,
@@ -67,29 +67,38 @@ function directRootReason(value: unknown, marketTokens: readonly string[], code:
 
 export function validateMarketReferenceCoverage(root: string, research: ReferenceResearch, expectedRequest?: string): void {
   const contextPath = resolve(root, '.omd/locale-design-context.json');
-  if (!existsSync(contextPath)) {
-    if (research.schema === 'reference-research-v7' && research.marketCoverage !== null) return marketReject('REFERENCE_RESEARCH_MARKET_CONTEXT_REQUIRED');
-    return;
-  }
-  const bytes = readStableProjectFile({ root: resolve(root), path: contextPath, label: '.omd/locale-design-context.json', fs: nodeStableProjectFileSystem() });
-  const context = parseLocaleDesignContext(JSON.parse(bytes.toString('utf8')));
-  if (context.marketRegion === null) {
+  const context = existsSync(contextPath)
+    ? parseLocaleDesignContext(JSON.parse(readStableProjectFile({ root: resolve(root), path: contextPath,
+      label: '.omd/locale-design-context.json', fs: nodeStableProjectFileSystem() }).toString('utf8')))
+    : null;
+  const inferred = expectedRequest === undefined ? null : inferredKoreanReferenceMarket(expectedRequest);
+  const marketRegion = context?.marketRegion ?? inferred;
+  if (marketRegion === null) {
     if (research.schema === 'reference-research-v7' && research.marketCoverage !== null) return marketReject('REFERENCE_RESEARCH_MARKET_COVERAGE_UNSCOPED');
     return;
   }
   if (research.schema !== 'reference-research-v7' || research.marketCoverage === null || research.marketCoverage === undefined) {
     return marketReject('REFERENCE_RESEARCH_MARKET_COVERAGE_REQUIRED: publish v7 with source-specific local-market provenance for both lanes and a concrete gap for every global fallback');
   }
-  if (research.marketCoverage.marketRegion !== context.marketRegion) return marketReject('REFERENCE_RESEARCH_MARKET_REGION_STALE');
+  if (research.marketCoverage.marketRegion !== marketRegion) return marketReject('REFERENCE_RESEARCH_MARKET_REGION_STALE');
   const localDomainIds = new Set(research.marketCoverage.domain.localSources.map(source => source.sourceId));
   const localDomainFamilies = new Set(research.domainReference.sources
     .filter(source => localDomainIds.has(source.id)).map(source => referenceServiceFamily(source.url)));
   if (localDomainIds.size < 3 || localDomainFamilies.size < 3) {
     return marketReject('REFERENCE_RESEARCH_MARKET_DOMAIN_LOCAL_DIVERSITY: inspect at least three target-market services from independent operator families before using global fallback');
   }
-  const labels = marketSearchLabels(context.marketRegion, context.surfaceLocale);
-  const domainQueries = marketDomainQueries(context.marketRegion, context.surfaceLocale, context.domain);
-  const marketTokens = [context.marketRegion, ...labels];
+  const surfaceLocale = context?.surfaceLocale ?? 'ko';
+  const briefPath = resolve(root, '.omd/domain-brief.json');
+  if (!existsSync(briefPath)) return marketReject('REFERENCE_RESEARCH_MARKET_DESIGN_PLAN_REQUIRED: current domain queries are missing');
+  const briefBytes = readStableProjectFile({ root: resolve(root), path: briefPath, label: '.omd/domain-brief.json', fs: nodeStableProjectFileSystem() });
+  const brief = validateDomainBrief(JSON.parse(briefBytes.toString('utf8')));
+  if (expectedRequest === undefined || brief.request !== expectedRequest.trim()) {
+    return marketReject('REFERENCE_RESEARCH_MARKET_DESIGN_PLAN_STALE: current domain queries describe another request');
+  }
+  const domain = context?.domain ?? brief.domain;
+  const labels = marketSearchLabels(marketRegion, surfaceLocale);
+  const domainQueries = marketDomainQueries(marketRegion, surfaceLocale, domain);
+  const marketTokens = [marketRegion, ...labels];
   for (const [name, roots] of [
     ['DOMAIN', research.domainReference.discoveryRoots], ['DESIGN', research.designReference.discoveryRoots],
   ] as const) roots?.forEach(root => directRootReason(root.reason, marketTokens,
@@ -104,16 +113,9 @@ export function validateMarketReferenceCoverage(root: string, research: Referenc
     ...(domainSearchRequired ? validateExecutionOrder(root, research.domainReference.searches, domainQueries, labels, 'DOMAIN') : []),
     ...validateDirectExecutions(root, research.domainReference.discoveryRoots ?? [], 'DOMAIN'),
   ];
-  const briefPath = resolve(root, '.omd/domain-brief.json');
-  if (!existsSync(briefPath)) return marketReject('REFERENCE_RESEARCH_MARKET_DESIGN_PLAN_REQUIRED: current domain queries are missing');
-  const briefBytes = readStableProjectFile({ root: resolve(root), path: briefPath, label: '.omd/domain-brief.json', fs: nodeStableProjectFileSystem() });
-  const brief = validateDomainBrief(JSON.parse(briefBytes.toString('utf8')));
-  if (expectedRequest === undefined || brief.request !== expectedRequest.trim()) {
-    return marketReject('REFERENCE_RESEARCH_MARKET_DESIGN_PLAN_STALE: current domain queries describe another request');
-  }
-  const base = [...brief.referenceQueries.mood, ...brief.referenceQueries.component][0];
+  const base = [...brief.referenceQueries.component, ...brief.referenceQueries.mood][0];
   if (base === undefined) return marketReject('REFERENCE_RESEARCH_MARKET_DESIGN_PLAN_REQUIRED: current domain queries are empty');
-  const designQueries = labels.map(label => `${label} ${context.domain} ${base}`);
+  const designQueries = labels.map(label => `${label} ${domain} ${base}`);
   const designSearchRequired = laneNeedsMarketSearch(research.marketCoverage.design,
     research.designReference.discoveryRoots ?? [], research.designReference.searches);
   if (designSearchRequired && (designQueries.some((query, index) => research.designReference.queries[index] !== query)
@@ -124,9 +126,9 @@ export function validateMarketReferenceCoverage(root: string, research: Referenc
     ...(designSearchRequired ? validateExecutionOrder(root, research.designReference.searches, designQueries, labels, 'DESIGN') : []),
     ...validateDirectExecutions(root, research.designReference.discoveryRoots ?? [], 'DESIGN'),
   ];
-  validateLaneProvenance('DOMAIN', context.marketRegion, labels, research.marketCoverage.domain,
+  validateLaneProvenance('DOMAIN', marketRegion, labels, research.marketCoverage.domain,
     research.domainReference.sources, domainExecutions, research.domainReference.discoveryRoots ?? []);
-  validateLaneProvenance('DESIGN', context.marketRegion, labels, research.marketCoverage.design,
+  validateLaneProvenance('DESIGN', marketRegion, labels, research.marketCoverage.design,
     research.designReference.sources, designExecutions, research.designReference.discoveryRoots ?? []);
 }
 
@@ -152,6 +154,12 @@ function validateLaneProvenance(
   for (const local of coverage.localSources) {
     const source = sources.find(candidate => candidate.id === local.sourceId)
       ?? marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_LOCAL_PROVENANCE`);
+    const serviceHost = referenceServiceHost(source.url);
+    if (marketRegion === 'KR' && lane === 'DOMAIN'
+      && /(?:^|\.)(?:gov|nhs)(?:\.[a-z]{2})?$/u.test(serviceHost)
+      && serviceHost !== 'gov.kr' && !serviceHost.endsWith('.gov.kr')) {
+      marketReject('REFERENCE_RESEARCH_MARKET_DOMAIN_LOCAL_RESULT_SCOPE');
+    }
     const urls = [source.url, ...(source.discovery === undefined ? [] : [source.discovery.url])];
     const execution = executions.find(candidate => candidate.sha256 === local.provenanceReceiptSha256)
       ?? marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_LOCAL_PROVENANCE`);
@@ -162,7 +170,8 @@ function validateLaneProvenance(
     const result = execution.results.find(candidate => resultReaches(candidate, urls));
     if (result === undefined || negatesMarketScope(result.text, marketLabels) || !DIRECT_SCOPE.test(result.text)
       || !SCOPE_TERMS[local.scope].test(result.text)
-      || !containsMarketToken(result.text, marketLabels)) {
+      || !(containsMarketToken(result.text, marketLabels)
+        || (marketRegion === 'KR' && inferredKoreanReferenceMarket(result.text) === 'KR'))) {
       marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_LOCAL_RESULT_SCOPE`);
     }
     assertCurrentSourceObservation(source.observedAt, execution.observedAt,

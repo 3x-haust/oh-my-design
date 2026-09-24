@@ -45,7 +45,9 @@ test('selected discovery rejects a domain service explicitly relabelled design w
   assert.match(result.stderr, /DESIGN_DISCOVERY_REQUIRED/);
   assert.equal(existsSync(join(cwd, '.omd/refs')), false);
   const gallery = run(cwd, ['ref', 'add', 'https://dribbble.com/shots/123-screen', '--as', 'visual-study', '--image', '--lane', 'design']);
-  assert.equal(gallery.status, 0, gallery.stderr);
+  assert.equal(gallery.status, 1, gallery.stderr);
+  assert.match(gallery.stderr, /DESIGN_GALLERY_DISCOVERY_ONLY/);
+  assert.equal(existsSync(join(cwd, '.omd/refs')), false);
 });
 
 test('batch preflight rejects an incomplete lane manifest atomically before browser launch', t => {

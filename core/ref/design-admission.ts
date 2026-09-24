@@ -6,10 +6,11 @@ import { readContainedRegularFile } from './reference-selection.ts';
 import { designDiscoveryItemIdentity, designDiscoveryProvider, referenceServiceHost } from './design-discovery-sources.ts';
 import { trustedReferenceImage } from './board-security.ts';
 import { loadRefs, refRecordPath } from './store.ts';
+import { observedGalleryItems } from './gallery-evidence.ts';
 
 export type DesignReferenceAdmission = Readonly<{
   eligible: boolean;
-  code: 'gallery' | 'observed-original' | 'user-provided' | 'lane' | 'purpose' | 'capture' | 'domain-reuse' | 'discovery';
+  code: 'gallery' | 'gallery-image' | 'observed-original' | 'user-provided' | 'lane' | 'purpose' | 'capture' | 'domain-reuse' | 'discovery';
   reason: string;
   discoverySource?: string;
 }>;
@@ -77,7 +78,7 @@ function nativeCapture(root: string, reference: Reference): DesignReferenceAdmis
     const acquisition = reference.acquisition;
     const userFile = reference.origin === 'user' && (isAbsolute(reference.source) || reference.source.startsWith('file:'))
       && acquisition?.finalUrl.startsWith('file:') === true && acquisition.httpStatus === null;
-    if (!['page', 'component'].includes(reference.kind) || !Number.isFinite(Date.parse(reference.capturedAt))
+    if (!['page', 'component', 'image'].includes(reference.kind) || !Number.isFinite(Date.parse(reference.capturedAt))
       || !acquisition || acquisition.requestedUrl !== reference.source || typeof acquisition.finalUrl !== 'string'
       || !Array.isArray(acquisition.links) || acquisition.links.some(link => typeof link !== 'string')
       || (!userFile && (typeof acquisition.httpStatus !== 'number' || acquisition.httpStatus < 200 || acquisition.httpStatus >= 300))) {
@@ -121,12 +122,17 @@ export function inspectDesignReferenceAdmission(root: string, reference: Referen
     if (sourceProvider === null) return rejected('discovery', 'The capture redirected into a gallery wrapper; retain the observed original or exact useful image/crop instead.');
     if (finalProvider === null) return rejected('discovery', 'The gallery item redirected away from its inspectable entry; capture the original under its own source URL.');
     if (!sameGalleryItem(reference.source, acquisition.finalUrl)) return rejected('discovery', 'The gallery item redirected to a different concrete item.');
+    if (reference.kind === 'image' && reference.selector && observedGalleryItems(root).some(item => item.url === reference.source)) {
+      return { eligible: true, code: 'gallery-image', reason: 'The retained capture is a selected UI image element from a separately visited gallery item.', discoverySource: reference.source };
+    }
     if ((options.purpose ?? 'retained') === 'retained') {
       return rejected('discovery', `${sourceProvider} is discovery provenance; follow its observed original or import the exact useful image/crop before retaining visual evidence.`);
     }
     return { eligible: true, code: 'gallery', reason: 'Successful native capture of a supported gallery item.', discoverySource: reference.source };
   }
   if (reference.origin === 'user') return { eligible: true, code: 'user-provided', reason: 'Native capture explicitly recorded as supplied by the user.' };
+  const observed = observedGalleryItems(root).find(item => item.links.includes(reference.source));
+  if (observed) return { eligible: true, code: 'observed-original', reason: 'Original source was observed in a native gallery discovery visit.', discoverySource: observed.url };
   const entry = references.find(other => other.researchLane === 'design' && gallery(other.source)
     && other.acquisition && sameGalleryItem(other.source, other.acquisition.finalUrl) && other.acquisition.links.includes(reference.source)
     && nativeCapture(root, other) === null && !domainConflict(root, other, references));

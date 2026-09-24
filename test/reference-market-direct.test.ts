@@ -13,7 +13,7 @@ import { directRootAt, fallbackCoverage, fallbackGap, localDirectSource, localSe
 test('market search and direct provenance refuse malformed scope, attempts, roots, and stale plans', t => {
   const fixture = designAdmissionFixture(t);
   const secondVisual = fixture.addSecondDesignDirection();
-  const domainQueries = ['대한민국 public benefits', '한국 public benefits service', 'South Korea public benefits service'];
+  const domainQueries = ['대한민국 public benefits', '한국 public benefits 서비스', 'South Korea public benefits service'];
   const oldObservedAt = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString();
   writeFileSync(join(fixture.root, '.omd/locale-design-context.json'), JSON.stringify(context));
   writeFileSync(join(fixture.root, '.omd/domain-brief.json'), JSON.stringify(domainBrief));

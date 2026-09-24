@@ -39,8 +39,8 @@ test('explicit-market v7 binds local sources and fallback to executed market evi
   const domainFour = fixture.capture('https://domain-four.example/task', 'domain', 'domain', 6);
   const domainFourSource = { id: 'domain-4', url: domainFour.source, observedAt: new Date().toISOString().slice(0, 10),
     decision: 'Task order', finding: 'Review before submission', evidence: domainFour.evidence, capture: domainFour.capture };
-  const domainQueries = ['대한민국 public benefits', '한국 public benefits service', 'South Korea public benefits service'];
-  const designQueries = ['대한민국 public benefits visual task', '한국 public benefits visual task', 'South Korea public benefits visual task'];
+  const domainQueries = ['대한민국 public benefits', '한국 public benefits 서비스', 'South Korea public benefits service'];
+  const designQueries = ['대한민국 public benefits benefit card', '한국 public benefits benefit card', 'South Korea public benefits benefit card'];
   const input = { ...fixture.research, schema: REFERENCE_RESEARCH_SCHEMA, marketCoverage: null,
     domainReference: { ...fixture.research.domainReference, queries: domainQueries,
       searches: domainQueries.map(query => testSearchReceipt(fixture.root, 'domain', query,
@@ -91,6 +91,53 @@ test('explicit-market v7 binds local sources and fallback to executed market evi
       searches: [noLoginReceipt, ...input.domainReference.searches.slice(1)] } };
   assert.doesNotThrow(() => validateReferenceResearch(fixture.root,
     parseReferenceResearch(noLoginInput), options));
+  const koreanReceipt = testSearchReceipt(fixture.root, 'domain', domainQueries[0]!,
+    [fixture.domain.source, fixture.domainTwo.source, fixture.domainThree.source, domainFour.source], false,
+    new Date().toISOString(), '복지로 복지 서비스 신청 대상과 준비 서류 안내');
+  const koreanCoverage = structuredClone(documented);
+  koreanCoverage.domain.localSources.forEach(source => { source.provenanceReceiptSha256 = koreanReceipt.sha256; });
+  koreanCoverage.domain.globalFallback!.provenance.forEach(binding => {
+    binding.provenanceReceiptSha256 = koreanReceipt.sha256;
+  });
+  assert.doesNotThrow(() => validateReferenceResearch(fixture.root, parseReferenceResearch({
+    ...input, marketCoverage: koreanCoverage,
+    domainReference: { ...input.domainReference,
+      searches: [koreanReceipt, ...input.domainReference.searches.slice(1)] },
+  }), options));
+  const uk = fixture.capture('https://www.gov.uk/benefits', 'uk-benefits', 'domain', 7);
+  const ukReceipt = testSearchReceipt(fixture.root, 'domain', domainQueries[0]!,
+    [uk.source, fixture.domainTwo.source, fixture.domainThree.source, domainFour.source], false,
+    new Date().toISOString(), '복지 서비스 신청 대상과 준비 서류 안내');
+  const ukCoverage = structuredClone(documented);
+  ukCoverage.domain.localSources.forEach(source => { source.provenanceReceiptSha256 = ukReceipt.sha256; });
+  ukCoverage.domain.localSources[0]!.evidenceSha256 = uk.evidence.sha256;
+  ukCoverage.domain.globalFallback!.provenance.forEach(binding => {
+    binding.provenanceReceiptSha256 = ukReceipt.sha256;
+  });
+  assert.throws(() => validateReferenceResearch(fixture.root, parseReferenceResearch({
+    ...input, marketCoverage: ukCoverage,
+    domainReference: { ...input.domainReference,
+      searches: [ukReceipt, ...input.domainReference.searches.slice(1)],
+      sources: [{ ...input.domainReference.sources[0], url: uk.source,
+        evidence: uk.evidence, capture: uk.capture }, ...input.domainReference.sources.slice(1)] },
+  }), options), /MARKET_DOMAIN_LOCAL_RESULT_SCOPE/);
+  const govKr = fixture.capture('https://www.gov.kr/portal/benefitAlimi', 'korean-benefits', 'domain', 8);
+  const govKrReceipt = testSearchReceipt(fixture.root, 'domain', domainQueries[0]!,
+    [govKr.source, fixture.domainTwo.source, fixture.domainThree.source, domainFour.source], false,
+    new Date().toISOString(), '정부24 혜택알리미 복지 서비스 신청 안내');
+  const govKrCoverage = structuredClone(documented);
+  govKrCoverage.domain.localSources.forEach(source => { source.provenanceReceiptSha256 = govKrReceipt.sha256; });
+  govKrCoverage.domain.localSources[0]!.evidenceSha256 = govKr.evidence.sha256;
+  govKrCoverage.domain.globalFallback!.provenance.forEach(binding => {
+    binding.provenanceReceiptSha256 = govKrReceipt.sha256;
+  });
+  assert.doesNotThrow(() => validateReferenceResearch(fixture.root, parseReferenceResearch({
+    ...input, marketCoverage: govKrCoverage,
+    domainReference: { ...input.domainReference,
+      searches: [govKrReceipt, ...input.domainReference.searches.slice(1)],
+      sources: [{ ...input.domainReference.sources[0], url: govKr.source,
+        evidence: govKr.evidence, capture: govKr.capture }, ...input.domainReference.sources.slice(1)] },
+  }), options));
   for (const label of [
     'South Korea benefits service with unsupported browser notices',
     'Not only South Korea residents use this benefits service',

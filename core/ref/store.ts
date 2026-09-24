@@ -5,6 +5,7 @@ import { type ProjectWriteAdapter, requireProjectWriteAdapter } from '../runtime
 import { hasAssemblyPayload } from './board-sanitization.ts';
 import { referenceMeasuredInvariants } from './measurement-coverage.ts';
 import { refIdentity } from './identity.ts';
+import { designDiscoveryProvider } from './design-discovery-sources.ts';
 
 /** Backfills invariants written before typography/motion/interaction measurement existed. */
 function withInvariantDefaults(invariants: Invariants | null | undefined): Invariants | null {
@@ -52,6 +53,16 @@ function slugFor(ref: Pick<Reference, 'source' | 'component'>): string {
 }
 
 export function saveRef(cwd: string, ref: Reference, adapter: ProjectWriteAdapter): string {
+  if (ref.researchLane === 'design' && existsSync(join(cwd, '.omd/route.json'))) {
+    try {
+      if (designDiscoveryProvider(ref.source) !== null
+        && (ref.kind !== 'image' || !ref.selector || !ref.imagePath)) {
+        throw new Error('DESIGN_GALLERY_DISCOVERY_ONLY: gallery wrappers belong under .omd/discovery/design/, not .omd/refs/design/');
+      }
+    } catch (error) {
+      if (!(error instanceof TypeError)) throw error;
+    }
+  }
   assertReferenceLaneSeparation(cwd, ref);
   return requireProjectWriteAdapter(cwd, adapter)
     .write(`${lanePrefix(ref)}/${slugFor(ref)}.json`, `${JSON.stringify(ref, null, 2)}\n`);

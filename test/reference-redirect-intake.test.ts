@@ -12,7 +12,6 @@ import { loadRefs } from '../core/ref/store.ts';
 import { captureFinalUrlGuard, captureLane } from '../core/ref/capture-intake.ts';
 import { publishTestAdaptiveRoute } from './helpers/project-write.ts';
 import { designAdmissionFixture } from './helpers/design-admission.ts';
-import { saveRef } from '../core/ref/store.ts';
 
 const cli = fileURLToPath(new URL('../bin/omd.mjs', import.meta.url));
 const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('OMD_') && key !== 'NODE_TEST_CONTEXT'));
@@ -38,7 +37,7 @@ test('a changed gallery item cannot authorize a later original-source capture', 
   const invocation = publishTestAdaptiveRoute(value.root, inputSkeleton('product-route-input').skeleton);
   assert.ok(value.gallery.ref.acquisition);
   value.gallery.ref.acquisition.finalUrl = 'https://www.pinterest.com/pin/987654321/';
-  saveRef(value.root, value.gallery.ref, value.writer);
+  writeFileSync(value.gallery.path, JSON.stringify(value.gallery.ref));
   assert.throws(() => captureLane(value.root, { source: value.source.source, lane: 'design' }, invocation), /DESIGN_DISCOVERY_REQUIRED/);
 });
 
