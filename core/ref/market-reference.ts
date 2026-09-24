@@ -2,8 +2,8 @@ const KOREAN_WELFARE_SERVICE_QUERIES = Object.freeze(['복지로', '정부24 혜
 
 export function isKoreanLanguageServiceText(visibleText: string): boolean {
   const korean = visibleText.match(/[가-힣]/gu)?.length ?? 0;
-  const latin = visibleText.match(/[A-Za-z]/gu)?.length ?? 0;
-  return korean >= 8 && korean / (korean + latin) >= 0.15;
+  const letters = visibleText.match(/\p{L}/gu)?.length ?? 0;
+  return korean >= 8 && korean / letters >= 0.5;
 }
 
 export function inferredKoreanReferenceMarket(request: string): 'KR' | null {

@@ -6,9 +6,8 @@ import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import { designDiscoveryItemIdentity, referenceServiceHost } from './design-discovery-sources.ts';
 import { observedGalleryItems } from './gallery-evidence.ts';
 import { inferredKoreanReferenceMarket, isKoreanLanguageServiceText } from './market-reference.ts';
-import { validateMarketReferenceCoverage } from './market-reference-coverage.ts';
 import { readContainedRegularFile } from './reference-selection.ts';
-import { readPublishedReferenceResearch } from './reference-research.ts';
+import { readPublishedReferenceResearch, validateReferenceResearch } from './reference-research.ts';
 import { assertReferenceLaneSeparation, loadRefs, researchLane } from './store.ts';
 
 type CaptureIntent = Readonly<{ source: string; lane?: string; fromUser?: boolean; selector?: string; shot?: boolean; image?: boolean }>;
@@ -31,7 +30,11 @@ export function captureFinalUrlGuard(root: string, specs: readonly CaptureIntent
     if (!existsSync(join(root, '.omd/reference-research.json'))) return false;
     try {
       const research = readPublishedReferenceResearch(root);
-      validateMarketReferenceCoverage(root, research, route.request);
+      validateReferenceResearch(root, research, {
+        expectedSourceContractSha256: route.sourceContractSha256,
+        benchmarkRequired: route.gates.includes('greenfield-task-flow-benchmark'),
+        expectedRequest: route.request,
+      });
       return (research.marketCoverage?.domain.localSources.length ?? 0) >= 3;
     } catch { return false; }
   };

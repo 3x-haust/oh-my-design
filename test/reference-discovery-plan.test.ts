@@ -10,7 +10,7 @@ import { buildReferenceDiscoveryPlan, missingDiscoveryMotionEvidence } from '../
 import { parseSearchInput } from '../core/ref/search-execution.ts';
 import { buildBrief, formatBrief } from '../core/brief/index.ts';
 import { publishTestAdaptiveRoute } from './helpers/project-write.ts';
-import { inferredKoreanReferenceMarket, isMarketQualifiedQuery } from '../core/ref/market-reference.ts';
+import { inferredKoreanReferenceMarket, isKoreanLanguageServiceText, isMarketQualifiedQuery } from '../core/ref/market-reference.ts';
 
 const fixture = (name = 'synth-marketing') => JSON.parse(readFileSync(
   fileURLToPath(new URL(`fixtures/adaptive-flow/${name}.json`, import.meta.url)), 'utf8'));
@@ -49,6 +49,13 @@ test('a benefits-only Korean brief still requires four named local welfare searc
   const plan = buildReferenceDiscoveryPlan(project(t), routeAdaptiveFlow(input));
   assert.deepEqual(plan.marketReferencePolicy.domainSearchInputs.map(item => item.query),
     ['복지로', '정부24 혜택알리미', '서울복지포털', '웰로']);
+});
+
+test('Korean-language service admission measures all visible scripts, not a small translated label', () => {
+  assert.equal(isKoreanLanguageServiceText('나에게 맞는 복지 혜택을 찾아 신청을 준비하세요'), true);
+  assert.equal(isKoreanLanguageServiceText('A'.repeat(70) + '한국어 도움말과 접근성 안내를 확인하세요'), false);
+  assert.equal(isKoreanLanguageServiceText('日本語の社会保障申請案内'.repeat(100)
+    + '한국어 도움말과 접근성 안내를 확인하세요'), false);
 });
 
 test('URL-free showpiece requests receive automatic craft and motion lanes on a route that always carries domain', t => {
