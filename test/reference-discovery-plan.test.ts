@@ -30,8 +30,9 @@ test('Korean product brief starts both research lanes in Korea without asserting
   assert.equal(plan.marketReferencePolicy.marketRegion, 'KR');
   assert.equal(plan.marketReferencePolicy.mode, 'target-market-first');
   assert.equal(plan.marketReferencePolicy.targetMarketCoverage, 'required-in-domain-and-design');
-  assert.ok(plan.marketReferencePolicy.domainSearchInputs[0]?.query.startsWith('대한민국 '));
-  for (const lead of ['복지로 맞춤형급여안내', '정부24 혜택알리미', '서울복지포털 맞춤검색']) {
+  assert.deepEqual(plan.marketReferencePolicy.domainSearchInputs.map(input => input.query),
+    ['복지로', '정부24 혜택알리미', '서울복지포털', '웰로']);
+  for (const lead of ['복지로 맞춤형급여안내', '정부24 혜택알리미', '서울복지포털 맞춤검색', '웰로 맞춤형 정책 추천']) {
     assert.ok(plan.lanes.find(lane => lane.id === 'domain-reference')?.querySeeds.includes(lead));
   }
   assert.ok(plan.designSourcePolicy.nativeSearchInputs.some(candidate => candidate.query.startsWith('한국 ')));
@@ -97,19 +98,21 @@ test('an explicit Korean market makes both reference lanes target-market-first w
     mode: 'target-market-first', marketRegion: 'KR', marketLabel: 'South Korea', marketSearchLabels: ['대한민국', '한국', 'South Korea'],
     audience: 'Korean residents comparing public benefits', targetMarketCoverage: 'required-in-domain-and-design',
     domainSearchInputs: [
-      { lane: 'domain', query: '대한민국 public benefit discovery',
-        url: 'https://www.bing.com/search?q=%EB%8C%80%ED%95%9C%EB%AF%BC%EA%B5%AD+public+benefit+discovery', queryParam: 'q' },
-      { lane: 'domain', query: '한국 public benefit discovery 서비스',
-        url: 'https://www.bing.com/search?q=%ED%95%9C%EA%B5%AD+public+benefit+discovery+%EC%84%9C%EB%B9%84%EC%8A%A4', queryParam: 'q' },
-      { lane: 'domain', query: 'South Korea public benefit discovery service',
-        url: 'https://www.bing.com/search?q=South+Korea+public+benefit+discovery+service', queryParam: 'q' },
+      { lane: 'domain', query: '복지로',
+        url: 'https://search.daum.net/search?w=tot&q=%EB%B3%B5%EC%A7%80%EB%A1%9C', queryParam: 'q' },
+      { lane: 'domain', query: '정부24 혜택알리미',
+        url: 'https://search.daum.net/search?w=tot&q=%EC%A0%95%EB%B6%8024+%ED%98%9C%ED%83%9D%EC%95%8C%EB%A6%AC%EB%AF%B8', queryParam: 'q' },
+      { lane: 'domain', query: '서울복지포털',
+        url: 'https://search.daum.net/search?w=tot&q=%EC%84%9C%EC%9A%B8%EB%B3%B5%EC%A7%80%ED%8F%AC%ED%84%B8', queryParam: 'q' },
+      { lane: 'domain', query: '웰로',
+        url: 'https://search.daum.net/search?w=tot&q=%EC%9B%B0%EB%A1%9C', queryParam: 'q' },
     ],
     fallback: 'global-equivalent-only-after-documented-target-market-gap', styleInference: 'forbidden',
   });
   const firstDomainSearch = plan.marketReferencePolicy.domainSearchInputs[0];
   assert.ok(firstDomainSearch);
   assert.equal(parseSearchInput(firstDomainSearch).lane, 'domain');
-  assert.ok(plan.lanes.find(lane => lane.id === 'domain-reference')?.querySeeds.includes('대한민국 public benefit discovery'));
+  assert.ok(plan.lanes.find(lane => lane.id === 'domain-reference')?.querySeeds.includes('복지로'));
   assert.ok(plan.lanes.find(lane => lane.id === 'design-reference')?.querySeeds.some(query => query.startsWith('대한민국 ')));
   assert.ok(plan.designSourcePolicy.nativeSearchInputs.some(input => input.query.startsWith('대한민국 ')));
   assert.ok(plan.designSourcePolicy.nativeSearchInputs.some(input => input.query.startsWith('South Korea ')));

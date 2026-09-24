@@ -131,8 +131,9 @@ Scout turns each selected lane into current search or direct-public discovery: s
 visual craft beyond the product category, and the plan's motion investigation. New marketing may
 investigate a motion candidate without selecting it for production; selected `motion-one` additionally
 requires positive measured evidence. Explicit preferences
-for a reference region or gallery belong in those searches; a language alone does not imply a
-country's style or a target market. Prefer freely inspectable screen/pattern galleries (for example
+for a reference region or gallery belong in those searches. A Korean-language task request selects
+Korean-first reference search, including Korean-language `.com` services; it does not assert a
+country style or authorize market-grounded cultural claims. Prefer freely inspectable screen/pattern galleries (for example
 Mobbin, Page Flows, UI Bowl and relevant Pinterest entries) for apps/product UI, and website galleries (for example
 Siteinspire and Pinterest) for website/marketing direction. The discovery plan supplies surface-aware
 leads, not fixed winners or guarantees of free catalogue/API access. Verify each entry's current free
@@ -230,7 +231,8 @@ Do not hand-author roots, promote old captures, infer official authority from a 
 this provenance check as a quality judgment. Follow observed items and qualify/capture each retained
 reference separately. Source/redirect hosts and image bytes must remain independent across lanes.
 
-The executor accepts Google/Bing `/search` and DuckDuckGo root/HTML/lite `q` endpoints,
+The executor accepts Google/Bing `/search`, DuckDuckGo root/HTML/lite `q` endpoints, and Daum
+`/search?w=tot&q=` for free Korean web search,
 plus design-only Pinterest `/search/pins/?q=`, Dribbble `/search/<query-slug>` (`queryParam: path`),
 and Siteinspire `/search?query=` (`queryParam: query`). `ref discover-plan` supplies ready-to-run
 `designSourcePolicy.nativeSearchInputs`; adapt its short task/pattern terms and matching URL together.
@@ -266,6 +268,10 @@ provided domain search input before unqualified global searches and use its mark
 search inputs. Both lanes owe current target-market evidence: comparable task services in domain, and
 independent local visual-direction/design sources in design. Record a concrete coverage gap before
 using the policy's global-equivalent fallback. This is acquisition scope, not a country-style preset;
+for Korean welfare work, the exact domain inputs name 복지로, 정부24 혜택알리미, 서울복지포털 and 웰로,
+and the current observed result link determines the destination URL. If a site is blocked, inspect
+another Korean-language operator before foreign fallback. A retained Korean-language service page
+can be local evidence on a `.com` host; a foreign government's English page cannot fill that slot.
 the later locale profile and locale binding still decide which measured mechanisms may transfer.
 Research v7 is the executable refusal layer for this policy. Its `marketCoverage` classifies every
 source in each lane exactly once as evidence-bound target-market material or documented global

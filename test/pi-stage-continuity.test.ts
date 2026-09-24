@@ -84,6 +84,30 @@ test('failed publisher and native write outcomes do not establish owned work', a
   assert.deepEqual(native.sent, []);
 });
 
+test('an existing route keeps repairing a checked stage for an explicit full React build brief', async t => {
+  const h = harness(t);
+  await h.activate(`${expandedSkillOnly()}\n\n# 복지 신청 서비스 기획서\n홈, 혜택 탐색, 신청 준비를 포함한 데스크톱 제품입니다.\n리액트로 구현해줘`);
+  await h.run(['route', 'classify', '--input', '.omd/.cache/existing.json']);
+  await h.run(['brief', 'scout', '--check', '--json']);
+  h.failPublication();
+  await assert.rejects(h.run(['ref', 'research-set', '--input', '.omd/.cache/research.json']));
+
+  await h.end();
+  assert.deepEqual(h.commands.at(-1), ['stage', 'next', '--json']);
+  assert.deepEqual(h.sent, ['omd-stage-repair']);
+});
+
+test('a packaged skill with a scoped research-only request does not resume an existing route', async t => {
+  const h = harness(t);
+  await h.activate(`${expandedSkillOnly()}\n\n# 복지 서비스\n레퍼런스만 조사해줘`);
+  await h.run(['brief', 'scout', '--check', '--json']);
+  h.failPublication();
+  await assert.rejects(h.run(['ref', 'research-set', '--input', '.omd/.cache/research.json']));
+  await h.end();
+  assert.equal(h.commands.some(args => args[0] === 'stage' && args[1] === 'next'), false);
+  assert.deepEqual(h.sent, []);
+});
+
 test('a checked different stage does not authorize a successful publisher as owned work', async t => {
   const h = harness(t); await h.activate();
   await h.run(['brief', 'frame', '--check', '--json']);

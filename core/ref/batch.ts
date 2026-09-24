@@ -86,7 +86,7 @@ export async function addRefsBatch(
           const { raw, shotBytes, capturePreparation, acquisition } = await capturePageForRef(browser, spec.source, viewport, {
             selector: spec.selector ?? null,
             requireImageElement: galleryImage,
-            validateFinalUrl: url => validateFinalUrl(i, url),
+            validateFinalUrl: (url, raw) => validateFinalUrl(i, url, raw),
             ...(preparation ? { preparation } : {}),
             ...(shotOut ? { shotOut, adapter, deferShotWrite: true } : {}),
           });

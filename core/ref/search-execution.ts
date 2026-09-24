@@ -50,14 +50,16 @@ function digest(value: unknown): string { const result = text(value); return /^[
 // Public browser search surfaces only; no paid API or arbitrary page with a made-up ?q field.
 // Endpoint availability is observed at runtime, never promised by this catalogue.
 const SEARCH_ENDPOINTS = new Set(['https://www.google.com/search', 'https://www.bing.com/search', 'https://duckduckgo.com/',
-  'https://html.duckduckgo.com/html/', 'https://lite.duckduckgo.com/lite/']);
+  'https://html.duckduckgo.com/html/', 'https://lite.duckduckgo.com/lite/', 'https://search.daum.net/search']);
 export function parseSearchInput(value: unknown): SearchInput {
   const row = object(value, ['lane', 'query', 'url', 'queryParam']);
   if (row.lane !== 'domain' && row.lane !== 'design') return fail('lane must be domain or design');
   const input: SearchInput = { lane: row.lane, query: text(row.query), url: url(row.url), queryParam: text(row.queryParam) };
   const parsed = new URL(input.url);
   if (gallerySearchProvider(input) !== null) return input;
-  if (input.queryParam !== 'q' || !SEARCH_ENDPOINTS.has(`${parsed.origin}${parsed.pathname}`)) return fail('unsupported or mismatched query endpoint; use Google/Bing/DuckDuckGo with q, or the exact design-only gallery input from ref discover-plan');
+  if (input.queryParam !== 'q' || !SEARCH_ENDPOINTS.has(`${parsed.origin}${parsed.pathname}`)) return fail('unsupported or mismatched query endpoint; use Google/Bing/DuckDuckGo/Daum with q, or the exact design-only gallery input from ref discover-plan');
+  if (parsed.hostname === 'search.daum.net' && (parsed.searchParams.get('w') !== 'tot'
+    || [...parsed.searchParams.keys()].sort().join(',') !== 'q,w')) return fail('Daum search requires exactly w=tot and one q parameter');
   const terms = parsed.searchParams.getAll(input.queryParam);
   if (terms.length !== 1 || terms[0] !== input.query) return fail('URL must submit the exact query once under queryParam');
   return input;

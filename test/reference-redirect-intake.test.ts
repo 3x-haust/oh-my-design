@@ -12,9 +12,29 @@ import { loadRefs } from '../core/ref/store.ts';
 import { captureFinalUrlGuard, captureLane } from '../core/ref/capture-intake.ts';
 import { publishTestAdaptiveRoute } from './helpers/project-write.ts';
 import { designAdmissionFixture } from './helpers/design-admission.ts';
+import type { RawIr } from '../core/types.ts';
 
 const cli = fileURLToPath(new URL('../bin/omd.mjs', import.meta.url));
 const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('OMD_') && key !== 'NODE_TEST_CONTEXT'));
+test('a Korean brief refuses foreign-only domain captures before writing, but accepts Korean-language services regardless of TLD', t => {
+  const cwd = mkdtempSync(join(tmpdir(), 'omd-korean-intake-'));
+  t.after(() => rmSync(cwd, { recursive: true, force: true }));
+  const input = { ...(inputSkeleton('product-route-input').skeleton as Record<string, unknown>),
+    request: '한국어로 복지 혜택을 찾고 신청하는 데스크톱 서비스를 구현해줘.' };
+  const invocation = publishTestAdaptiveRoute(cwd, input);
+  const english: RawIr = { nodes: [{ id: 'title', name: 'title', type: 'TEXT', path: 'h1', parent: null,
+    box: { x: 0, y: 0, w: 400, h: 50 }, children: [], text: 'Find government benefits and financial help' }] };
+  const korean: RawIr = { nodes: [{ ...english.nodes[0]!, text: '나에게 맞는 복지 혜택을 찾고 신청 준비를 시작하세요' }] };
+  const guard = captureFinalUrlGuard(cwd, [{ source: 'https://www.usa.gov/benefits', lane: 'domain' }], invocation);
+  assert.throws(() => guard(0, 'https://www.usa.gov/benefits', english), /REFERENCE_MARKET_LOCAL_FIRST/);
+  assert.throws(() => captureLane(cwd, { source: 'https://www.usa.gov/benefits', lane: 'domain', image: true }, invocation),
+    /REFERENCE_MARKET_LOCAL_FIRST/);
+  assert.equal(captureLane(cwd, { source: 'https://www.usa.gov/benefits', lane: 'domain', image: true,
+    fromUser: true }, invocation), 'domain');
+  const koreanGuard = captureFinalUrlGuard(cwd, [{ source: 'https://wello.info/benefits', lane: 'domain' }], invocation);
+  assert.doesNotThrow(() => koreanGuard(0, 'https://wello.info/benefits', korean));
+  assert.equal(existsSync(join(cwd, '.omd/refs')), false);
+});
 test('a gallery capture must remain the exact requested item regardless of user origin', t => {
   const cwd = mkdtempSync(join(tmpdir(), 'omd-gallery-redirect-'));
   t.after(() => rmSync(cwd, { recursive: true, force: true }));

@@ -5,18 +5,29 @@ import { fileURLToPath } from 'node:url';
 
 const SKILL_PATH = fileURLToPath(new URL('../src/skills/omd-ultradesign/SKILL.md', import.meta.url));
 
-function persistedRouteGrant(prompt: string): boolean {
+function fullBuildRequest(request: string): boolean {
+  const directive = request.split(/\r?\n/).map(line => line.trim()).filter(Boolean).at(-1) ?? '';
+  if (/(?:\b(?:only|just|stop after|do not continue|research|inspect|status)\b|(?:조사|확인|보고)만|까지만)/i.test(directive)) return false;
+  return /(?:서비스|제품|앱|리액트|React).{0,40}(?:구현|개발|만들|완성)(?:해\s*줘|해주세요|해줘요)/i.test(directive)
+    || /^(?:build|implement)\b.*\b(?:complete|full|entire)\b.*\b(?:app|product|service)\b/i.test(directive);
+}
+
+function persistedRouteGrant(prompt: string): 'skill-only' | 'full-build' | null {
   const request = prompt.trim();
-  if (/^(?:\/skill:|\$)?omd-ultradesign$/i.test(request)) return true;
+  if (/^(?:\/skill:|\$)?omd-ultradesign$/i.test(request)) return 'skill-only';
+  const direct = /^(?:\/skill:|\$)omd-ultradesign\s+([\s\S]+)$/i.exec(request);
+  if (direct !== null) return fullBuildRequest(direct[1] ?? '') ? 'full-build' : null;
   const header = `<skill name="omd-ultradesign" location="${SKILL_PATH}">`;
-  if (!request.startsWith(`${header}\n`)) return false;
+  if (!request.startsWith(`${header}\n`)) return null;
   try {
     const source = readFileSync(SKILL_PATH, 'utf8').replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
     const delimiter = source.startsWith('---') ? source.indexOf('\n---', 3) : -1;
     const body = (delimiter < 0 ? source : source.slice(delimiter + 4)).trim();
-    return request === `${header}\nReferences are relative to ${dirname(SKILL_PATH)}.\n\n${body}\n</skill>`;
+    const expansion = `${header}\nReferences are relative to ${dirname(SKILL_PATH)}.\n\n${body}\n</skill>`;
+    if (request === expansion) return 'skill-only';
+    return request.startsWith(`${expansion}\n\n`) && fullBuildRequest(request.slice(expansion.length).trim()) ? 'full-build' : null;
   } catch (error) {
-    if (error instanceof Error) return false;
+    if (error instanceof Error) return null;
     throw error;
   }
 }
@@ -38,6 +49,7 @@ type NativeWork = Readonly<{ stage: string; tool: string; path: string }>;
 type WorkflowTask = {
   readonly token: symbol;
   readonly resumeGranted: boolean;
+  readonly entryContinues: boolean;
   readonly checked: Set<string>;
   readonly pending: Map<string, NativeWork>;
   started: boolean;
@@ -49,10 +61,11 @@ export class StageWork {
   delete(cwd: string): void { this.tasks.delete(cwd); }
   activate(cwd: string, prompt: string): void {
     if (!/(?:^|\s)(?:\/skill:|\$)?omd-ultradesign(?:\s|$)|<skill\s+name=["']omd-ultradesign["']/i.test(prompt) || this.tasks.has(cwd)) return;
-    this.tasks.set(cwd, { token: Symbol(), resumeGranted: persistedRouteGrant(prompt), checked: new Set(), pending: new Map(), started: false });
+    const grant = persistedRouteGrant(prompt);
+    this.tasks.set(cwd, { token: Symbol(), resumeGranted: grant !== null, entryContinues: grant === 'full-build', checked: new Set(), pending: new Map(), started: false });
   }
   token(cwd: string): symbol | undefined { return this.tasks.get(cwd)?.token; }
-  started(cwd: string): boolean { const task = this.tasks.get(cwd); return task !== undefined && task.resumeGranted && task.started; }
+  started(cwd: string): boolean { const task = this.tasks.get(cwd); return task !== undefined && task.resumeGranted && (task.started || (task.entryContinues && task.checked.size > 0)); }
   checked(cwd: string, stage: string): void { this.tasks.get(cwd)?.checked.add(stage); }
   unselected(cwd: string, stage: string): void { this.tasks.get(cwd)?.checked.delete(stage); }
   commandSucceeded(cwd: string, command: Readonly<{ args: readonly string[]; token: symbol | undefined }>): boolean {

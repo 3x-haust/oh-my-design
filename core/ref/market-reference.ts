@@ -13,11 +13,15 @@ export function marketSearchLabels(marketRegion: string, surfaceLocale: string):
 }
 
 export function marketDomainQueries(marketRegion: string, surfaceLocale: string, domain: string): readonly string[] {
+  if (marketRegion === 'KR' && /복지|welfare|public benefits?/iu.test(domain)) {
+    return Object.freeze(['복지로', '정부24 혜택알리미', '서울복지포털', '웰로']);
+  }
   const labels = marketSearchLabels(marketRegion, surfaceLocale);
   const english = labels.at(-1);
   return Object.freeze(labels.map((label, index) => `${label} ${domain}${label === english ? ' service' : index === 0 ? '' : ' 서비스'}`));
 }
 
 export function isMarketQualifiedQuery(query: string, labels: readonly string[]): boolean {
-  return labels.some(label => query === label || query.startsWith(`${label} `));
+  return labels.some(label => query === label || query.startsWith(`${label} `))
+    || (labels.includes('한국') && inferredKoreanReferenceMarket(query) === 'KR');
 }

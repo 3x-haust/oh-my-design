@@ -763,7 +763,7 @@ export async function capturePageForRef(
   browser: Browser,
   target: string,
   viewport: Viewport,
-  opts: { selector?: string | null; shotOut?: string; adapter?: ProjectWriteAdapter; preparation?: CapturePreparation; bestEffortShot?: boolean; deferShotWrite?: boolean; validateFinalUrl?: (url: string) => void; requireImageElement?: boolean },
+  opts: { selector?: string | null; shotOut?: string; adapter?: ProjectWriteAdapter; preparation?: CapturePreparation; bestEffortShot?: boolean; deferShotWrite?: boolean; validateFinalUrl?: (url: string, raw: RawIr) => void; requireImageElement?: boolean },
 ): Promise<{ raw: RawIr; shotSaved: boolean; shotBytes?: Buffer; shotError?: string; capturePreparation?: CapturePreparationReceipt; acquisition: { requestedUrl: string; finalUrl: string; httpStatus: number | null; links: string[]; imageSha256: string | null } }> {
   const preparation = opts.preparation === undefined ? undefined : parseCapturePreparation(opts.preparation);
   return onPage(browser, target, viewport, async (page, httpStatus, resolvedUrl) => {
@@ -816,7 +816,7 @@ export async function capturePageForRef(
     }
     const finalUrl = page.url();
     const links = await page.locator('a[href]').evaluateAll(elements => [...new Set(elements.map(el => (el as HTMLAnchorElement).href).filter(url => /^https?:\/\//.test(url)))]);
-    opts.validateFinalUrl?.(finalUrl);
+    opts.validateFinalUrl?.(finalUrl, raw);
     // Keep bytes private until all observations have passed, including after the screenshot.
     if (shotBytes && opts.shotOut && opts.adapter && !opts.deferShotWrite) {
       try {
