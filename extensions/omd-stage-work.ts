@@ -5,35 +5,51 @@ import { fileURLToPath } from 'node:url';
 
 const SKILL_PATH = fileURLToPath(new URL('../src/skills/omd-ultradesign/SKILL.md', import.meta.url));
 
-function withoutInlineCode(line: string, quotedBuildCommand: RegExp): string {
-  const runs = [...line.matchAll(/\x60+/gu)];
+function withoutFencedCode(request: string): string {
+  let fence: { marker: string; length: number } | null = null;
+  return request.split(/\r?\n/).flatMap(raw => {
+    const line = raw.trim();
+    const delimiter = /^(\x60{3,}|~{3,})(.*)$/u.exec(line);
+    if (fence) {
+      if (delimiter && delimiter[1]![0] === fence.marker
+        && delimiter[1]!.length >= fence.length && delimiter[2]!.trim() === '') fence = null;
+      return [];
+    }
+    if (delimiter && (delimiter[1]![0] === '~' || !delimiter[2]!.includes('\x60'))) {
+      fence = { marker: delimiter[1]![0]!, length: delimiter[1]!.length };
+      return [];
+    }
+    return [raw];
+  }).join('\n');
+}
+
+function withoutInlineCode(request: string, quotedInstruction: RegExp): string {
+  const runs = [...request.matchAll(/\x60+/gu)];
   let result = '';
   let cursor = 0;
   for (let index = 0; index < runs.length;) {
     const opening = runs[index]!;
     const start = opening.index;
     const closeIndex = runs.findIndex((run, candidate) => candidate > index && run[0].length === opening[0].length);
-    result += line.slice(cursor, start);
-    if (closeIndex < 0) return result + line.slice(start);
+    result += request.slice(cursor, start);
+    if (closeIndex < 0) return result + request.slice(start);
     const closing = runs[closeIndex]!;
-    const contents = line.slice(start + opening[0].length, closing.index);
-    if (!quotedBuildCommand.test(contents)) result += contents;
+    const contents = request.slice(start + opening[0].length, closing.index);
+    if (!quotedInstruction.test(contents)) result += contents;
     cursor = closing.index + closing[0].length;
     index = closeIndex + 1;
   }
-  return result + line.slice(cursor);
+  return result + request.slice(cursor);
 }
 
 function fullBuildRequest(request: string): boolean {
-  const quotedBuildCommand = /구현|개발|제작|완성|빌드|만들|\b(?:build|implement|develop|create)\b/iu;
-  let fenced = false;
-  const lines = withoutInlineCode(request, quotedBuildCommand).split(/\r?\n/).flatMap(raw => {
+  const quotedInstruction = /구현|개발|제작|완성|빌드|만들|(?:레퍼런스|참고|리서치|조사).{0,18}(?:만|까지만)|\b(?:build|implement|develop|create|research only|inspect only|stop after|do not continue|do not implement|do not build|don't build|never build|(?:only|just)\s+(?:inspect|research|review|analyze))\b/iu;
+  const lines = withoutInlineCode(withoutFencedCode(request), quotedInstruction).split(/\r?\n/).flatMap(raw => {
     const line = raw.trim();
-    if (/^(?:```|~~~)/u.test(line)) { fenced = !fenced; return []; }
-    if (fenced || !line || /^(?:>|\|)/u.test(line) || /^(?:예시|인용|example|quote)\s*[:：]/iu.test(line)) return [];
+    if (!line || /^(?:>|\|)/u.test(line) || /^(?:예시|인용|example|quote)\s*[:：]/iu.test(line)) return [];
     return [line.replace(/^[-*]\s+/u, '')
       .replace(/"[^"\n]*"|'[^'\n]*'|“[^”\n]*”|‘[^’\n]*’|「[^」\n]*」/gu,
-        quoted => quotedBuildCommand.test(quoted) ? '' : quoted.slice(1, -1))];
+        quoted => quotedInstruction.test(quoted) ? '' : quoted.slice(1, -1))];
   });
   if (/(?:구현|개발|제작|코딩).{0,18}하지\s*(?:마|말)|\b(?:stop after|do not continue|do not implement|do not build|don't build|never build)\b/iu.test(lines.join('\n'))) return false;
   let decision: boolean | null = null;
