@@ -1006,6 +1006,7 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
   if (opts.preparation && (opts.image || !opts.noEnergy)) throw new Error('--preparation requires a rendered reference and --no-energy');
   const { saveRef } = await import('../core/ref/store.ts');
   const { captureLane, captureFinalUrlGuard } = await import('../core/ref/capture-intake.ts');
+  const { isKoreanLanguageServiceText } = await import('../core/ref/market-reference.ts');
   const invocation = invocationFromActivation(opts, 'omd ref add');
   const intent = { source: target, ...(opts.lane ? { lane: opts.lane } : {}), ...(opts.fromUser ? { fromUser: true } : {}),
     ...(opts.selector ? { selector: opts.selector } : {}), shot: !opts.noShot && !opts.image, image: !!opts.image };
@@ -1089,7 +1090,7 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
     return saveRef(process.cwd(), {
       researchLane: lane,
       acquisition,
-      ...((visibleText.match(/[가-힣]/gu)?.length ?? 0) >= 8 ? { visibleKoreanText: true as const } : {}),
+      ...(isKoreanLanguageServiceText(visibleText) ? { visibleKoreanText: true as const } : {}),
       source: target,
       component,
       kind: galleryImage ? 'image' : opts.selector ? 'component' : 'page',

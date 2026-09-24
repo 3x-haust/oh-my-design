@@ -132,7 +132,9 @@ test('a full build directive before later requirements still resumes selected-st
 });
 
 test('natural full-build wording across product and landing surfaces grants continuation', async t => {
-  for (const request of ['복지 서비스를 만들어줘', 'Build the complete app.\nVerify the flows.', '한국어 랜딩페이지를 구현해 주세요']) {
+  for (const request of ['복지 서비스를 만들어줘', '복지 서비스를 구현 해줘', '복지 서비스 구현 부탁해요',
+    'Build the complete app.\nVerify the flows.', 'Build a dashboard', '한국어 랜딩페이지를 구현해 주세요',
+    '참고 자료만 조사한 뒤 React 앱을 구현해줘']) {
     const h = harness(t);
     await h.activate(`${expandedSkillOnly()}\n\n${request}`);
     await h.run(['route', 'classify', '--input', '.omd/.cache/existing.json']);
@@ -140,6 +142,16 @@ test('natural full-build wording across product and landing surfaces grants cont
     await h.end();
     assert.deepEqual(h.commands.at(-1), ['stage', 'next', '--json'], request);
   }
+});
+
+test('inline quoted build wording is not an instruction to continue production', async t => {
+  const h = harness(t);
+  await h.activate(expandedSkillOnly() + '\n\n인용문 "복지 서비스를 만들어줘"의 어투를 분석해줘');
+  await h.run(['route', 'classify', '--input', '.omd/.cache/existing.json']);
+  await h.run(['brief', 'scout', '--check', '--json']);
+  await h.end();
+  assert.equal(h.commands.some(args => args[0] === 'stage' && args[1] === 'next'), false);
+  assert.deepEqual(h.sent, []);
 });
 
 test('a checked different stage does not authorize a successful publisher as owned work', async t => {

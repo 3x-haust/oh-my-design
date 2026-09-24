@@ -11,12 +11,21 @@ function fullBuildRequest(request: string): boolean {
     const line = raw.trim();
     if (/^(?:```|~~~)/u.test(line)) { fenced = !fenced; return []; }
     if (fenced || !line || /^(?:>|\|)/u.test(line) || /^(?:예시|인용|example|quote)\s*[:：]/iu.test(line)) return [];
-    return [line.replace(/^[-*]\s+/u, '')];
+    return [line.replace(/^[-*]\s+/u, '')
+      .replace(/"[^"\n]*"|'[^'\n]*'|“[^”\n]*”|‘[^’\n]*’|「[^」\n]*」/gu, '')];
   });
-  const instructions = lines.join('\n');
-  if (/(?:레퍼런스|참고|리서치|조사|검사|확인|보고|분석).{0,18}(?:만|까지만).{0,18}(?:해\s*줘|해\s*주세요|하자|진행)|(?:구현|개발|제작|코딩).{0,18}하지\s*(?:마|말)|\b(?:research only|inspect only|stop after|do not continue|do not implement)\b/iu.test(instructions)) return false;
-  return lines.some(line => /(?:서비스|제품|앱|리액트|React|랜딩(?:페이지)?|웹사이트|화면).{0,80}(?:(?:구현|개발|제작|완성|빌드)(?:해\s*(?:줘|주세요|줘요)|하세요|해라)|만들(?:어\s*(?:줘|주세요|줘요)|어라|세요))/iu.test(line)
-    || /^(?:build|implement|develop|create)\b.{0,120}\b(?:app|product|service|website|landing page)\b/iu.test(line));
+  if (/(?:구현|개발|제작|코딩).{0,18}하지\s*(?:마|말)|\b(?:stop after|do not continue|do not implement)\b/iu.test(lines.join('\n'))) return false;
+  let decision: boolean | null = null;
+  for (const line of lines) {
+    const matches = [
+      ...[...line.matchAll(/(?:레퍼런스|참고|리서치|조사|검사|확인|보고|분석).{0,18}(?:만|까지만).{0,18}(?:해\s*줘|해\s*주세요|하자|진행)|\b(?:research only|inspect only)\b/giu)]
+        .map(match => ({ index: match.index, build: false })),
+      ...[...line.matchAll(/(?:서비스|제품|앱|리액트|React|랜딩(?:페이지)?|웹사이트|화면|대시보드).{0,80}?(?:(?:구현|개발|제작|완성|빌드)\s*(?:해\s*(?:줘|주세요|줘요)|하세요|해라|부탁(?:해요|드립니다)?)|만들(?:어\s*(?:줘|주세요|줘요)|어라|세요))|\b(?:build|implement|develop|create)\b.{0,120}\b(?:app|product|service|website|landing page|dashboard)\b/giu)]
+        .map(match => ({ index: match.index, build: true })),
+    ].sort((a, b) => a.index - b.index);
+    for (const match of matches) decision = match.build;
+  }
+  return decision === true;
 }
 
 function persistedRouteGrant(prompt: string): 'skill-only' | 'full-build' | null {

@@ -119,8 +119,9 @@ design lanes separate, and records source-specific market coverage when a market
 Korean-language user brief starts Korean-first reference research. That default never dictates a
 country aesthetic. Korean welfare discovery now starts with actual service-name searches on the
 public Daum web endpoint; Korean-language `.com` products can qualify, while English foreign
-government domain captures are refused until three independent current local captures exist or
-local-domain research is validated. Selector-scoped captures check language on the full visible page.
+government domain captures are refused until current local-domain research validates the local
+coverage and any global fallback. Locally authored capture files or `--from-user` alone do not
+unlock that fallback. Selector-scoped captures check the full page's visible-language balance.
 A homepage is not an inspected
 entry, and a different original source must appear in the gallery's observed outbound links.
 Historical v5 remains readable with search-only requirements; v6 retains its search-or-direct-root

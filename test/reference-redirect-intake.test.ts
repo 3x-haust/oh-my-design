@@ -29,8 +29,13 @@ test('a Korean brief refuses foreign-only domain captures before writing, but ac
   assert.throws(() => guard(0, 'https://www.usa.gov/benefits', english), /REFERENCE_MARKET_LOCAL_FIRST/);
   assert.throws(() => captureLane(cwd, { source: 'https://www.usa.gov/benefits', lane: 'domain', image: true }, invocation),
     /REFERENCE_MARKET_LOCAL_FIRST/);
-  assert.equal(captureLane(cwd, { source: 'https://www.usa.gov/benefits', lane: 'domain', image: true,
-    fromUser: true }, invocation), 'domain');
+  assert.throws(() => captureLane(cwd, { source: 'https://www.usa.gov/benefits', lane: 'domain', image: true,
+    fromUser: true }, invocation), /REFERENCE_MARKET_LOCAL_FIRST/);
+  const allegedUser = captureFinalUrlGuard(cwd, [{ source: 'https://www.usa.gov/benefits', lane: 'domain',
+    fromUser: true }], invocation);
+  assert.throws(() => allegedUser(0, 'https://www.usa.gov/benefits', english), /REFERENCE_MARKET_LOCAL_FIRST/);
+  assert.throws(() => guard(0, 'https://www.usa.gov/benefits',
+    english.repeat(100) + ' 한국어 도움말과 접근성 안내를 확인하세요'), /REFERENCE_MARKET_LOCAL_FIRST/);
   const koreanGuard = captureFinalUrlGuard(cwd, [{ source: 'https://wello.info/benefits', lane: 'domain' }], invocation);
   assert.doesNotThrow(() => koreanGuard(0, 'https://wello.info/benefits', korean));
   assert.equal(existsSync(join(cwd, '.omd/refs')), false);
@@ -48,14 +53,15 @@ test('a Korean brief refuses foreign-only domain captures before writing, but ac
       imagePath, invariants: null, principles: [],
     }));
   }
-  assert.doesNotThrow(() => guard(0, 'https://www.usa.gov/benefits', english),
-    'three independent local captures permit a documented global fallback before publication');
+  assert.throws(() => guard(0, 'https://www.usa.gov/benefits', english), /REFERENCE_MARKET_LOCAL_FIRST/,
+    'locally authored JSON and image bytes cannot authorize foreign fallback before research publication');
 });
 
 test('selector-scoped capture still checks visible language on the full source page', async t => {
   const server = createServer((_request, response) => {
     response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    response.end('<main><h1>나에게 맞는 복지 혜택을 찾아 신청을 준비하세요</h1><div id="icon">OK</div></main>');
+    response.end('<main><p>' + 'A'.repeat(12001) + '</p><h1>'
+      + '나에게 맞는 복지 혜택을 찾아 신청을 준비하세요'.repeat(400) + '</h1><div id="icon">OK</div></main>');
   });
   await new Promise<void>(resolve => server.listen(0, resolve));
   t.after(() => new Promise<void>(resolve => server.close(() => resolve())));
@@ -64,6 +70,7 @@ test('selector-scoped capture still checks visible language on the full source p
   await withBrowser(browser => capturePageForRef(browser, `http://127.0.0.1:${address.port}/`,
     { width: 1280, height: 900 }, { selector: '#icon', validateFinalUrl: (_url, text) => { pageText = text; } }));
   assert.match(pageText, /나에게 맞는 복지 혜택/u);
+  assert.ok(pageText.length > 12000);
 });
 test('a gallery capture must remain the exact requested item regardless of user origin', t => {
   const cwd = mkdtempSync(join(tmpdir(), 'omd-gallery-redirect-'));

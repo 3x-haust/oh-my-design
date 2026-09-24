@@ -3,9 +3,9 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { readPersistedRoute } from '../route/index.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
-import { designDiscoveryItemIdentity, referenceServiceFamily, referenceServiceHost } from './design-discovery-sources.ts';
+import { designDiscoveryItemIdentity, referenceServiceHost } from './design-discovery-sources.ts';
 import { observedGalleryItems } from './gallery-evidence.ts';
-import { inferredKoreanReferenceMarket } from './market-reference.ts';
+import { inferredKoreanReferenceMarket, isKoreanLanguageServiceText } from './market-reference.ts';
 import { validateMarketReferenceCoverage } from './market-reference-coverage.ts';
 import { readContainedRegularFile } from './reference-selection.ts';
 import { readPublishedReferenceResearch } from './reference-research.ts';
@@ -28,21 +28,6 @@ export function captureFinalUrlGuard(root: string, specs: readonly CaptureIntent
   if (route.references.decision !== 'discover') return (_index: number, _finalUrl: string, _visibleText?: string): void => {};
   const koreanReferences = (route.sourceContract.localeDesign?.context.marketRegion ?? inferredKoreanReferenceMarket(route.request)) === 'KR';
   const localDomainResearchReady = (): boolean => {
-    const localFamilies = new Set(loadRefs(root, { includeDomain: true }).flatMap(ref => {
-      const observedAt = Date.parse(ref.capturedAt);
-      if (ref.researchLane !== 'domain' || !ref.imagePath || !ref.acquisition
-        || ref.acquisition.httpStatus === null || ref.acquisition.httpStatus < 200 || ref.acquisition.httpStatus >= 300
-        || !Number.isFinite(observedAt) || observedAt - Date.now() > 5 * 60 * 1000
-        || Date.now() - observedAt > 7 * 24 * 60 * 60 * 1000) return [];
-      try {
-        const finalUrl = new URL(ref.acquisition.finalUrl);
-        if (!ref.visibleKoreanText && !finalUrl.hostname.endsWith('.kr')) return [];
-        const image = readContainedRegularFile(root, join(root, ref.imagePath), 'local domain reference image');
-        if (createHash('sha256').update(image).digest('hex') !== ref.acquisition.imageSha256) return [];
-        return [referenceServiceFamily(finalUrl.href)];
-      } catch { return []; }
-    }));
-    if (localFamilies.size >= 3) return true;
     if (!existsSync(join(root, '.omd/reference-research.json'))) return false;
     try {
       const research = readPublishedReferenceResearch(root);
@@ -54,8 +39,8 @@ export function captureFinalUrlGuard(root: string, specs: readonly CaptureIntent
   return (index: number, finalUrl: string, visibleText?: string): void => {
     const spec = specs[index]!;
     const lane = researchLane(spec.lane);
-    if (koreanReferences && lane === 'domain' && !spec.fromUser && !localDomainResearchReady()) {
-      const visibleKorean = (visibleText?.match(/[가-힣]/gu)?.length ?? 0) >= 8;
+    if (koreanReferences && lane === 'domain' && !localDomainResearchReady()) {
+      const visibleKorean = isKoreanLanguageServiceText(visibleText ?? '');
       const koreanHost = new URL(finalUrl).hostname.endsWith('.kr');
       if (!visibleKorean && !koreanHost) throw new ReferenceIntakeError('REFERENCE_MARKET_LOCAL_FIRST: this Korean-language brief needs Korean-service evidence before foreign fallback. A visibly Korean-language service counts even on a .com domain; inspect local results or use another accessible Korean source.');
     }
@@ -102,7 +87,7 @@ export function captureLane(root: string, spec: CaptureIntent, invocation?: Proj
     }
   }
   if (!selected) return lane;
-  if (lane === 'domain' && spec.image && !spec.fromUser) {
+  if (lane === 'domain' && spec.image) {
     if (invocation === undefined) throw new ReferenceIntakeError('REFERENCE_INTAKE_AUTHORITY_REQUIRED');
     const route = readPersistedRoute(root, invocation);
     if ((route.sourceContract.localeDesign?.context.marketRegion ?? inferredKoreanReferenceMarket(route.request)) === 'KR') {

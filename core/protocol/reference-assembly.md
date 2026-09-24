@@ -272,7 +272,10 @@ for Korean welfare work, the exact domain inputs name 복지로, 정부24 혜택
 and the current observed result link determines the destination URL. If a site is blocked, inspect
 another Korean-language operator before foreign fallback. A retained Korean-language service page
 can be local evidence on a `.com` host; a foreign government's English page cannot fill that slot.
-the later locale profile and locale binding still decide which measured mechanisms may transfer.
+The local-first admission examines the full visible page's language balance; a small Korean label on
+an otherwise English service does not qualify. Foreign domain capture waits for validated published
+local-domain research, not three editable capture records or a `--from-user` flag. The later locale
+profile and locale binding still decide which measured mechanisms may transfer.
 Research v7 is the executable refusal layer for this policy. Its `marketCoverage` classifies every
 source in each lane exactly once as evidence-bound target-market material or documented global
 fallback, retains at least one local source per lane, and binds the explicit market. Search-based research must execute the

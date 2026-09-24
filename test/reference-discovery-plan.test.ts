@@ -42,6 +42,15 @@ test('Korean product brief starts both research lanes in Korea without asserting
   assert.equal(isMarketQualifiedQuery('정부24 혜택알리미', ['대한민국', '한국', 'South Korea']), true);
 });
 
+test('a benefits-only Korean brief still requires four named local welfare searches', t => {
+  const input = fixture('medical-new-product');
+  input.request = '한국어로 혜택 탐색과 신청을 돕는 서비스를 만들어줘.';
+  input.taskOutcome.goal = '혜택 탐색';
+  const plan = buildReferenceDiscoveryPlan(project(t), routeAdaptiveFlow(input));
+  assert.deepEqual(plan.marketReferencePolicy.domainSearchInputs.map(item => item.query),
+    ['복지로', '정부24 혜택알리미', '서울복지포털', '웰로']);
+});
+
 test('URL-free showpiece requests receive automatic craft and motion lanes on a route that always carries domain', t => {
   const root = project(t);
   const input = fixture();

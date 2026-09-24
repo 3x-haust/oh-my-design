@@ -816,7 +816,7 @@ export async function capturePageForRef(
     }
     const finalUrl = page.url();
     const links = await page.locator('a[href]').evaluateAll(elements => [...new Set(elements.map(el => (el as HTMLAnchorElement).href).filter(url => /^https?:\/\//.test(url)))]);
-    const visibleText = await page.evaluate(() => document.body?.innerText.slice(0, 12000) ?? '');
+    const visibleText = await page.evaluate(() => document.body?.innerText ?? '');
     opts.validateFinalUrl?.(finalUrl, visibleText);
     // Keep bytes private until all observations have passed, including after the screenshot.
     if (shotBytes && opts.shotOut && opts.adapter && !opts.deferShotWrite) {

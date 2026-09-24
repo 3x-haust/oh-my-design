@@ -1,5 +1,11 @@
 const KOREAN_WELFARE_SERVICE_QUERIES = Object.freeze(['복지로', '정부24 혜택알리미', '서울복지포털', '웰로']);
 
+export function isKoreanLanguageServiceText(visibleText: string): boolean {
+  const korean = visibleText.match(/[가-힣]/gu)?.length ?? 0;
+  const latin = visibleText.match(/[A-Za-z]/gu)?.length ?? 0;
+  return korean >= 8 && korean / (korean + latin) >= 0.15;
+}
+
 export function inferredKoreanReferenceMarket(request: string): 'KR' | null {
   if (!/[가-힣]{2,}/u.test(request)) return null;
   if (/미국|영국|일본|중국|캐나다|호주|독일|프랑스|대만|싱가포르|베트남|해외|글로벌|국제|다국가/u.test(request)
@@ -15,7 +21,7 @@ export function marketSearchLabels(marketRegion: string, surfaceLocale: string):
 }
 
 export function marketDomainQueries(marketRegion: string, surfaceLocale: string, domain: string): readonly string[] {
-  if (marketRegion === 'KR' && /복지|welfare|public benefits?/iu.test(domain)) {
+  if (marketRegion === 'KR' && /복지|혜택|welfare|benefits?|public benefits?/iu.test(domain)) {
     return KOREAN_WELFARE_SERVICE_QUERIES;
   }
   const labels = marketSearchLabels(marketRegion, surfaceLocale);
