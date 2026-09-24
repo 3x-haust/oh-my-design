@@ -14,7 +14,7 @@ function withoutInlineCode(line: string, quotedBuildCommand: RegExp): string {
     const start = opening.index;
     const closeIndex = runs.findIndex((run, candidate) => candidate > index && run[0].length === opening[0].length);
     result += line.slice(cursor, start);
-    if (closeIndex < 0) return result;
+    if (closeIndex < 0) return result + line.slice(start);
     const closing = runs[closeIndex]!;
     const contents = line.slice(start + opening[0].length, closing.index);
     if (!quotedBuildCommand.test(contents)) result += contents;
@@ -27,11 +27,11 @@ function withoutInlineCode(line: string, quotedBuildCommand: RegExp): string {
 function fullBuildRequest(request: string): boolean {
   const quotedBuildCommand = /구현|개발|제작|완성|빌드|만들|\b(?:build|implement|develop|create)\b/iu;
   let fenced = false;
-  const lines = request.split(/\r?\n/).flatMap(raw => {
+  const lines = withoutInlineCode(request, quotedBuildCommand).split(/\r?\n/).flatMap(raw => {
     const line = raw.trim();
     if (/^(?:```|~~~)/u.test(line)) { fenced = !fenced; return []; }
     if (fenced || !line || /^(?:>|\|)/u.test(line) || /^(?:예시|인용|example|quote)\s*[:：]/iu.test(line)) return [];
-    return [withoutInlineCode(line.replace(/^[-*]\s+/u, ''), quotedBuildCommand)
+    return [line.replace(/^[-*]\s+/u, '')
       .replace(/"[^"\n]*"|'[^'\n]*'|“[^”\n]*”|‘[^’\n]*’|「[^」\n]*」/gu,
         quoted => quotedBuildCommand.test(quoted) ? '' : quoted.slice(1, -1))];
   });
