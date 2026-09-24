@@ -136,6 +136,7 @@ test('natural full-build wording across product and landing surfaces grants cont
     'Build the complete app.\nVerify the flows.', 'Build a dashboard', '한국어 랜딩페이지를 구현해 주세요',
     '참고 자료만 조사한 뒤 React 앱을 구현해줘', 'Only inspect references first, then build a dashboard',
     'Only review the references first; then implement the app', 'Build a "website"',
+    'Build a \x60\x60website\x60\x60',
     '복지 "서비스"를 구현해줘']) {
     const h = harness(t);
     await h.activate(`${expandedSkillOnly()}\n\n${request}`);
@@ -149,6 +150,7 @@ test('natural full-build wording across product and landing surfaces grants cont
 test('inline quoted build wording is not an instruction to continue production', async t => {
   for (const request of ['인용문 "복지 서비스를 만들어줘"의 어투를 분석해줘',
     '다음 예문을 분석해줘: \x60복지 서비스를 만들어줘\x60',
+    '다음 예문을 분석해줘: \x60\x60복지 서비스를 만들어줘\x60\x60',
     '인용문 “복지 서비스를 구현하세요”의 문체를 분석해줘',
     '인용문 “한국어 랜딩페이지를 완성하세요”의 문체를 분석해줘',
     'Build a dashboard, but do not build it yet',

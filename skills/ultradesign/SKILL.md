@@ -102,7 +102,8 @@ continue unfinished selected-stage authoring before source exists. It recomputes
 terminal completion. A concrete planning question stops for the user's answer; existing-route
 inspection and route-only classification do not opt into this continuation.
 For an existing route, automatic continuation requires a standalone full-workflow skill invocation
-and successful checked owner work, or a full React/product build request accompanying the exact skill
+and successful checked owner work, or an explicit full-build request (app, product, dashboard, website
+or landing page) accompanying the exact skill
 invocation and a checked selected-stage entry. In the latter case a failed owner publisher still
 returns to `stage next` for a bounded repair turn instead of falling straight to terminal completion.
 Research-only, inspection-only and explicit stop requests never gain that grant. A skill name inside
