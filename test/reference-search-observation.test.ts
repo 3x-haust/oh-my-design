@@ -86,6 +86,13 @@ test('a task-word header help link is not a captured search result', async t => 
   assert.throws(() => validateSearchCoverage(h.root, 'domain', [request.query], [h.receipt], [help]), /not an observed/);
 });
 
+test('search navigation tabs stay chrome even when nested inside main', async t => {
+  const target = 'https://www.gov.uk/browse/benefits';
+  const h = await observe(t, { html: `<main><nav><a href="${target}">Benefits result tab</a></nav><h1>No task results</h1></main>` });
+  assert.deepEqual(h.execution.links, []);
+  assert.equal(h.execution.status, 'empty-observation');
+});
+
 test('only canonical visible HTTPS links are retained', async t => {
   const valid = 'https://valid.example/service';
   const h = await observe(t, { html: `${navbar}<main>

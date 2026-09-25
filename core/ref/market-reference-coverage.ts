@@ -304,7 +304,14 @@ function validateDirectExecutions(
 ): readonly MarketExecution[] {
   return Object.freeze(roots.map(receipt => {
     const { reason: _reason, ...nativeReceipt } = receipt;
-    const observation = readCurrentDirectDiscoveryEntry(root, nativeReceipt);
+    let observation: ReturnType<typeof readCurrentDirectDiscoveryEntry>;
+    try { observation = readCurrentDirectDiscoveryEntry(root, nativeReceipt); }
+    catch (error) {
+      if (error instanceof Error && /native discovery capture is stale/u.test(error.message)) {
+        marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_ATTEMPT_STALE`);
+      }
+      throw error;
+    }
     return Object.freeze({ sha256: receipt.capture.sha256, query: null,
       observedAt: Date.parse(observation.capturedAt ?? ''),
       links: observation.links, results: observation.linkLabels ?? [], usable: true });

@@ -239,6 +239,14 @@ test('short Korean service names and task synonyms remain valid search results',
   }
 });
 
+test('an unrelated long news title does not become a welfare service result', t => {
+  const root = fixture(t);
+  const source = 'https://news.example/story';
+  const receipt = testSearchReceipt(root, 'domain', '복지로', [source], false,
+    new Date().toISOString(), 'Trending News Today');
+  assert.throws(() => validateSearchCoverage(root, 'domain', ['복지로'], [receipt], [source]), /not an observed search link/);
+});
+
 test('a signed search from before route publication cannot satisfy current research', t => {
   const root = fixture(t);
   const source = 'https://service.example/task';

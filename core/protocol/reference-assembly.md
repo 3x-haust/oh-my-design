@@ -240,13 +240,14 @@ Queries/searches remain required arrays and may both be empty only with valid no
 Every declared query still needs an exact execution, including failed attempts alongside direct roots.
 The native entry publisher uses a DNS-pinned fresh GET/HEAD-only context, blocks service workers/downloads,
 performs no click/hover probes, and captures stable visible links with the matching viewport PNG.
-Only actual outbound links seed reachability: the root URL itself is not retained-source evidence.
-Intermediate edges in direct v6/v7 chains require strict navigation-v2 captures. Hidden all-DOM links
+An exact current signed v4 root URL may itself be a retained comparable-service source when its
+captured page has a useful task surface and at least one content link; its observed content links
+also seed descendants. Intermediate edges in direct v6/v7 chains require strict navigation-v4 captures. Hidden all-DOM links
 from retained captures and historical navigation-v1 cannot shortcut a missing observed transition.
 Design roots must remain supported public lists after redirects, exposing visible same-gallery item
 links; login walls, blocked pages, selected items and arbitrary service pages are refused.
-New signed entry-v3 records stay under `.omd/discovery/<lane>/entries/`, never retained `.omd/refs/`.
-Historical entry-v1/v2 records remain readable, but only entry-v3 link-label evidence can satisfy
+New signed entry-v4 records stay under `.omd/discovery/<lane>/entries/`, never retained `.omd/refs/`.
+Historical entry-v1/v2/v3 records remain readable, but only entry-v4 content-link evidence can satisfy
 current explicit-market provenance.
 Do not hand-author roots, promote old captures, infer official authority from a directory, or present
 this provenance check as a quality judgment. Follow observed items and qualify/capture each retained

@@ -4,6 +4,11 @@ export type ObservedSearchResult = Readonly<{ url: string; text: string }>;
 
 const SEARCH_STOP_WORDS = new Set(['and', 'for', 'from', 'into', 'the', 'with', 'that', 'this', 'have', 'will', 'user', 'users',
   'create', 'build', 'make', 'find', 'service', 'services', 'website', 'design', 'application', 'app', 'safe', 'safely']);
+const RELATED_TASK_TERMS = [
+  { query: /복지|혜택|welfare|benefits?/iu, result: /복지|혜택|지원|정책|welfare|benefits?/iu },
+  { query: /medication|medicine|dosage|prescription|pharmacy|refill|처방|약품|투약/iu,
+    result: /medication|medicine|dosage|prescription|pharmacy|refill|처방|약품|투약/iu },
+] as const;
 export function actionableSearchTargets(execution: Readonly<{ lane: 'domain' | 'design'; query: string; provider: string;
   results?: readonly ObservedSearchResult[] }>): readonly string[] {
   const tokens = [...new Set((execution.query.toLowerCase().match(/[가-힣]{2,}|[a-z0-9]{3,}/gu) ?? [])
@@ -12,15 +17,14 @@ export function actionableSearchTargets(execution: Readonly<{ lane: 'domain' | '
   for (const result of execution.results ?? []) {
     const label = result.text.toLowerCase();
     const related = tokens.some(token => label.includes(token));
-    const koreanWelfare = /복지|혜택/u.test(execution.query) && /복지|혜택/u.test(label);
-    const substantive = (label.match(/[\p{L}\p{N}]{2,}/gu)?.length ?? 0) >= 2 && [...label].length >= 10;
+    const relatedTask = RELATED_TASK_TERMS.some(group => group.query.test(execution.query) && group.result.test(label));
     if (/\b(?:help|support|settings|cookie|privacy|accessibility|terms|feedback)\b|도움말|쿠키|접근성|개인정보|설정|약관/iu.test(label)) continue;
     for (const target of observedSearchTargets({ links: [result.url] })) {
       let host: string;
       try { host = new URL(target).hostname.toLowerCase(); } catch { continue; }
       if (execution.lane === 'domain' && (host === execution.provider || host.endsWith(`.${execution.provider}`))) continue;
       if (execution.lane === 'design' ? designDiscoveryProvider(target) !== null
-        : related || koreanWelfare || substantive) targets.add(target);
+        : related || relatedTask) targets.add(target);
     }
   }
   return [...targets];

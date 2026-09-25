@@ -2,8 +2,8 @@ import type { Page } from 'playwright';
 import { captureFrozenSearchText } from './search-frozen-capture.ts';
 import { finalizeSearchRenderedState, type RawSearchRenderedState, type SearchPixelSample } from './search-pixel-contrast.ts';
 
-export async function inspectRenderedState(page: Page): Promise<RawSearchRenderedState> {
-  const rendered = await page.locator('body').evaluate(body => {
+export async function inspectRenderedState(page: Page, purpose: 'search' | 'discovery' = 'search'): Promise<RawSearchRenderedState> {
+  const rendered = await page.locator('body').evaluate((body, purpose) => {
     const pointerlessOverlays = Array.from(document.querySelectorAll<HTMLElement>('*')).flatMap(element => {
       const style = getComputedStyle(element);
       if (style.pointerEvents !== 'none' || !['absolute', 'fixed', 'sticky'].includes(style.position)
@@ -241,19 +241,25 @@ export async function inspectRenderedState(page: Page): Promise<RawSearchRendere
     return {
       anchors: [...anchors.entries()].flatMap(([element, anchor]) => {
         if (anchor.text.length > 0) {
-          let chrome = Boolean(element.closest('header, nav, footer, [role="navigation"], [role="banner"], [role="contentinfo"], [role="dialog"], [aria-modal="true"]'))
+          const label = anchor.text.join(' ').slice(0, 4096);
+          const globalRegion = Boolean(element.closest('header, nav, [role="navigation"], [role="banner"]'))
             && !element.closest('main');
+          const chromeLabel = /\b(?:home|all|images|videos|maps|news|help|support|settings|cookie|privacy|accessibility|terms|feedback|account|sign in|log in)\b|홈|전체|이미지|동영상|지도|뉴스|도움말|쿠키|접근성|개인정보|설정|약관|로그인/u.test(label.toLowerCase());
+          let chrome = Boolean(element.closest('footer, [role="contentinfo"], [role="dialog"], [aria-modal="true"]'))
+            || (purpose === 'search'
+              ? Boolean(element.closest('header, nav, [role="navigation"], [role="banner"]'))
+              : globalRegion && chromeLabel);
           for (let ancestor: Element | null = element; ancestor && ancestor !== body; ancestor = ancestor.parentElement) {
-            chrome ||= /(?:^|[-_\s])(?:cookie|consent|privacy|accessib\w*|header|footer|navbar|toolbar|breadcrumb|skip)(?:$|[-_\s])/iu
+            chrome ||= /(?:^|[-_\s])(?:cookie|consent|privacy|accessib\w*|toolbar|breadcrumb|skip)(?:$|[-_\s])/iu
               .test(`${ancestor.id} ${ancestor.className}`);
           }
-          return [{ ...anchor, text: anchor.text.join(' ').slice(0, 4096), chrome }];
+          return [{ ...anchor, text: label, chrome }];
         }
         return [];
       }).slice(0, 2000),
       visibleText, uncertain, viewport: { width: innerWidth, height: innerHeight },
     };
-  });
+  }, purpose);
   return { anchors: rendered.anchors, body: await page.locator('body').innerText(), visibleText: rendered.visibleText, uncertain: rendered.uncertain, viewport: rendered.viewport, url: page.url() };
 }
 

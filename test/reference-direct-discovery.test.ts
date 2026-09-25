@@ -7,6 +7,7 @@ import { connect } from 'node:net';
 import { PassThrough } from 'node:stream';
 import { once } from 'node:events';
 import { captureReferenceNavigation, readReferenceDiscoveryAttempt, ReferenceNavigationError } from '../core/ref/navigation-capture.ts';
+import { validateDiscoveryCoverage } from '../core/ref/discovery-coverage.ts';
 import { readCurrentDirectDiscoveryEntry, readDirectDiscoveryEntry, readStrictDiscoveryNavigation,
   type DirectDiscoveryEntry } from '../core/ref/discovery-record.ts';
 import { designDiscoveryDirectoryProvider } from '../core/ref/design-discovery-sources.ts';
@@ -180,6 +181,28 @@ test('the CONNECT proxy pins the socket to the exact validated DNS answer', asyn
   assert.deepEqual(connected, ['93.184.216.34']);
 });
 
+test('the CONNECT proxy absorbs repeated upstream socket errors after closing the client', async t => {
+  let upstream: PassThrough | undefined;
+  const proxy = await createPublicNetworkProxy({
+    lookup: async () => [{ address: '93.184.216.34', family: 4 }],
+    connect: () => {
+      upstream = new PassThrough();
+      queueMicrotask(() => upstream?.emit('connect'));
+      return upstream;
+    },
+  });
+  t.after(() => proxy.close());
+  const client = connect(Number(new URL(proxy.server).port), '127.0.0.1');
+  t.after(() => client.destroy());
+  await once(client, 'connect');
+  client.write('CONNECT reset.example:443 HTTP/1.1\r\nHost: reset.example:443\r\n\r\n');
+  const [bytes] = await once(client, 'data') as [Buffer];
+  assert.match(bytes.toString('utf8'), /^HTTP\/1\.1 200/);
+  assert.ok(upstream);
+  upstream.emit('error', new Error('first reset'));
+  assert.doesNotThrow(() => upstream?.emit('error', new Error('late reset')));
+});
+
 test('the CONNECT proxy does not create an upstream after its client closes during DNS', async t => {
   let releaseLookup: (() => void) | undefined;
   let markLookupStarted: (() => void) | undefined;
@@ -249,6 +272,21 @@ test('cookie and global navigation links cannot turn a page into a domain discov
     <header><nav><a href="https://www.nhs.uk/">NHS home</a></nav></header><main><h1>Medicines A to Z</h1>
     <p>Browse the medicine information, understand the purpose of each treatment, and review its safety details before continuing to an individual medicine page.</p></main>`;
   await assert.rejects(capture(t, { url: PUBLIC_DIRECTORY, html }, 'public-directory'), /visible followable/);
+});
+
+test('a task-specific primary navigation link remains a valid observed service path', async t => {
+  const html = `<header><nav><a href="${DOMAIN_ITEM}">Benefits</a><a href="https://site.example/cookie-settings">Cookie settings</a></nav></header>
+    <main><h1>Public benefit directory</h1><p>Compare relevant support, review requirements, and follow the benefits task before preparing an application.</p></main>`;
+  const result = await capture(t, { url: PUBLIC_DIRECTORY, html }, 'public-directory');
+  assert.deepEqual(readCurrentDirectDiscoveryEntry(result.root, result.receipt).links, [DOMAIN_ITEM]);
+});
+
+test('a current signed task-bearing direct root can itself be the comparable service', async t => {
+  const result = await capture(t, { url: PUBLIC_DIRECTORY, html: directoryHtml(DOMAIN_ITEM) }, 'public-directory');
+  const observation = readCurrentDirectDiscoveryEntry(result.root, result.receipt);
+  assert.doesNotThrow(() => validateDiscoveryCoverage(result.root, {
+    lane: 'domain', queries: [], searches: [], sourceUrls: [PUBLIC_DIRECTORY], navigation: [], directRoots: [observation],
+  }));
 });
 
 test('snapshot changes are recaptured once and a second change leaves no image', async t => {

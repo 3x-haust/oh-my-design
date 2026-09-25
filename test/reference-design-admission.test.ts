@@ -25,6 +25,13 @@ import { referenceGrade } from '../core/ref/board-granularity.ts';
 
 const options = { expectedSourceContractSha256: ADMISSION_SOURCE_SHA, benchmarkRequired: false };
 
+function refreshSearchesAfterRoute(root: string, research: ReturnType<typeof designAdmissionFixture>['research']): void {
+  research.domainReference.searches = research.domainReference.queries.map(query =>
+    testSearchReceipt(root, 'domain', query, research.domainReference.sources.map(source => source.url)));
+  research.designReference.searches = research.designReference.queries.map(query =>
+    testSearchReceipt(root, 'design', query, research.designReference.sources.map(source => source.discovery.url)));
+}
+
 test('research publication rejects an extra legacy domain visual while preserving the existing board', t => {
   const fixture = designAdmissionFixture(t);
   const { root, source, domain, board, boardPath, research, writer } = fixture;
@@ -82,6 +89,7 @@ test('native gallery discovery keeps wrapper pixels outside refs/design and admi
   const { root, source, gallery, research, writer } = designAdmissionFixture(t);
   rmSync(gallery.path); rmSync(join(root, gallery.evidence.path));
   const invocation = publishTestAdaptiveRoute(root, inputSkeleton('product-route-input').skeleton);
+  refreshSearchesAfterRoute(root, research);
   const visit = await withBrowser(async browser => captureReferenceNavigation(
     discoveryBrowser(browser, { url: gallery.source, html: directoryHtml(source.source) }).browser,
     gallery.source, 'design', writer,
@@ -98,6 +106,7 @@ test('native gallery discovery keeps wrapper pixels outside refs/design and admi
 test('a visited gallery may retain only its actual UI image element without cropping', async t => {
   const { root, gallery, writer, research, board, receipt, refreshBoard } = designAdmissionFixture(t);
   const invocation = publishTestAdaptiveRoute(root, inputSkeleton('product-route-input').skeleton);
+  refreshSearchesAfterRoute(root, research);
   const source = gallery.source;
   const image = testPng(320, 200, 22);
   const html = `${directoryHtml('https://visual.example/task')}<img class="actual-ui" src="data:image/png;base64,${image.toString('base64')}" alt="Application screen">`;

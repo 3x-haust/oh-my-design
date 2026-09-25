@@ -197,7 +197,7 @@ Search the PART, in English, across many sites — the way a designer builds a b
   Keep its returned native receipts in that lane's optional `navigation` array, each with
   `url`, PNG `evidence`, and JSON `capture` receipts. The checker follows observed outbound links from
   successful search results or direct-entry links through those captures. Direct v6/v7 chains require
-  new strict navigation-v2 captures, never all-DOM links from retained component captures. A disconnected chain, prose link, stale image,
+  new strict navigation-v4 captures, never all-DOM links from retained component captures. A disconnected chain, prose link, stale image,
   blocked visit or user-supplied screenshot cannot manufacture a browser navigation edge.
 - Keep the whole page when the felt direction is the point, and a scoped part when anatomy is. A
   moodboard is whole-page and visual-only by construction (`protocol/moodboard.md`).
