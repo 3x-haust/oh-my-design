@@ -10,6 +10,7 @@ import omdExtension, {
   type PortablePiCommand,
   type PortablePiTool,
 } from '../extensions/omd.ts';
+import { formatOmdProgress } from '../extensions/omd-runtime.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 
@@ -126,6 +127,18 @@ test('omd_cli returns structured exit-one JSON diagnostics without a failed tool
   assert.deepEqual(result.details, { code: 1, killed: false });
 });
 
+test('a partly failed discovery batch keeps its successful receipt in structured Pi output', async () => {
+  const partial = { ok: false, concurrency: 2, outcomes: [
+    { kind: 'search', ok: true, receipt: { path: '.omd/discovery/domain/search-a.json', sha256: 'a'.repeat(64) } },
+    { kind: 'navigate', ok: false, error: 'site unavailable' },
+  ] };
+  const loaded = loadExtension(async () => ({ stdout: JSON.stringify(partial), stderr: '', code: 1, killed: false }));
+  const result = await loaded.tool.execute('batch', { args: ['ref', 'discover-batch', '--input', 'batch.json', '--json'] },
+    undefined, undefined, { cwd: '/tmp/project' });
+  assert.deepEqual(JSON.parse(result.content[0]?.text ?? ''), partial);
+  assert.equal(result.details.code, 1);
+});
+
 test('omd_cli keeps malformed, fatal and killed command failures as tool errors', async () => {
   for (const result of [
     { stdout: 'not json', stderr: '', code: 1, killed: false },
@@ -138,6 +151,81 @@ test('omd_cli keeps malformed, fatal and killed command failures as tool errors'
       'fatal', { args: ['guard', 'production', '--json'] }, undefined, undefined, { cwd: '/tmp/project' },
     ));
   }
+});
+
+test('Given a user-interrupted browser command When CDP teardown fails Then omd_cli reports cancellation instead of the teardown error', async () => {
+  const controller = new AbortController();
+  const loaded = loadExtension(async () => {
+    controller.abort();
+    return { stdout: '', stderr: 'cdpSession.detach: Target page, context or browser has been closed', code: 1, killed: true };
+  });
+  await assert.rejects(
+    loaded.tool.execute('interrupted', { args: ['ref', 'navigate', 'https://example.test/', '--json'] }, controller.signal, undefined, { cwd: '/tmp/project' }),
+    error => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /OMD_CLI_CANCELLED/);
+      assert.doesNotMatch(error.message, /cdpSession\.detach/);
+      return true;
+    },
+  );
+});
+
+test('Given a running browser command When omd_cli starts Then Pi receives a visible progress update before completion', async () => {
+  let complete: ((result: { stdout: string; stderr: string; code: number; killed: boolean }) => void) | undefined;
+  const pending = new Promise<{ stdout: string; stderr: string; code: number; killed: boolean }>(resolve => { complete = resolve; });
+  let markStarted: (() => void) | undefined;
+  const started = new Promise<void>(resolve => { markStarted = resolve; });
+  const loaded = loadExtension(async () => { markStarted?.(); return pending; });
+  const updates: Array<{ content: Array<{ type: 'text'; text: string }> }> = [];
+  const running = loaded.tool.execute('progress', { args: ['ref', 'navigate', 'https://example.test/', '--json'] }, undefined,
+    (update: { content: Array<{ type: 'text'; text: string }> }) => { updates.push(update); }, { cwd: '/tmp/project' });
+  try {
+    await started;
+    const text = updates[0]?.content[0]?.text ?? '';
+    assert.match(text, /레퍼런스.*방문/);
+    assert.match(text, /example\.test/);
+    assert.match(text, /아직 결과/);
+  } finally {
+    assert.ok(complete);
+    complete({ stdout: 'ok\n', stderr: '', code: 0, killed: false });
+    await running;
+  }
+});
+
+test('long-running progress names the command, target, elapsed time, and unknown internal state', () => {
+  const message = formatOmdProgress(['ref', 'add', 'https://example.test/private?token=secret', '--lane', 'design'], 'running', 130);
+  assert.match(message, /디자인 레퍼런스/);
+  assert.match(message, /example\.test\/private/);
+  assert.match(message, /2분 10초/);
+  assert.match(message, /아직 결과/);
+  assert.match(message, /ESC/);
+  assert.doesNotMatch(message, /token=secret/);
+});
+
+test('a queued omd_cli command reports that it has not started, then reports execution', async () => {
+  let finishFirst: (() => void) | undefined;
+  const firstPending = new Promise<void>(resolve => { finishFirst = resolve; });
+  let calls = 0;
+  const loaded = loadExtension(async () => {
+    calls += 1;
+    if (calls === 1) await firstPending;
+    return { stdout: 'ok', stderr: '', code: 0, killed: false };
+  });
+  const first = loaded.tool.execute('first', { args: ['ref', 'search', '--input', 'first.json'] }, undefined, undefined, { cwd: '/tmp/project' });
+  const updates: string[] = [];
+  const second = loaded.tool.execute('second', { args: ['ref', 'navigate', 'https://example.test/', '--lane', 'domain'] }, undefined,
+    update => { updates.push(update.content[0]?.text ?? ''); }, { cwd: '/tmp/project' });
+  try {
+    await new Promise(resolve => setImmediate(resolve));
+    assert.match(updates[0] ?? '', /대기 중/);
+    assert.match(updates[0] ?? '', /아직 시작되지 않았/);
+    assert.equal(calls, 1);
+  } finally {
+    assert.ok(finishFirst);
+    finishFirst();
+    await Promise.all([first, second]);
+  }
+  assert.match(updates.at(-1) ?? '', /실행 중/);
 });
 
 test('/omd runs doctor only and rejects host-specific arguments', async () => {

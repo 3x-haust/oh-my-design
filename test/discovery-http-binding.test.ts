@@ -188,6 +188,18 @@ test('about:blank cannot claim a main-document HTTP response', async () => {
   });
 });
 
+test('Given a closed reference page When its document observer is disposed Then CDP cleanup does not fail', async () => {
+  await withBrowser(async browser => {
+    const context = await browser.newContext();
+    try {
+      const page = await context.newPage();
+      const documents = await observeDocumentResponses(page);
+      await page.close();
+      await documents.close();
+    } finally { await context.close(); }
+  });
+});
+
 test('history-only URL changes retain their actual main-document HTTP binding', async t => {
   const root = discoveryFixture(t);
   await withBrowser(async browser => {

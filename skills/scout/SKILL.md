@@ -59,9 +59,11 @@ it contains useful, non-duplicate evidence for every applicable category:
 
 ### Collecting a visual direction
 
-When a selected reference board is missing, run `omd ref work-next --json` for the current
-evidence-derived action. Use `omd ref advance --json` for a named native search, public gallery
-entry or observed-link visit, then recompute work-next. Each call advances only one source attempt;
+When a selected reference board is missing, first batch independent plan-derived searches and
+known public lists with `omd ref discover-batch --input <json> --json`; inspect every outcome.
+Then run `omd ref work-next --json` for the current evidence-derived action. Use
+`omd ref advance --json` for a dependent observed-link visit or remaining single lead, then
+recompute work-next. Each advance call handles only one source attempt;
 a signed unavailable attempt redirects to the next public lead, not to another copy of the plan.
 Treat search navigation, help and settings links as page chrome, not candidate services or visual
 references; a search with no task-related lead should advance to the next public source.
@@ -121,6 +123,12 @@ For native search use the plan's `designSourcePolicy.nativeSearchInputs` with `r
 They bind real free-gallery queries for Pinterest, Dribbble and Siteinspire. Refine only unscoped
 task/pattern queries and URLs together; keep explicit-market native inputs exact. Then open an item actually returned in observed links; never
 guess pin/shot IDs. Login walls, challenges and empty results remain failures, not design references.
+When two or more independent searches or known public lists are ready, run
+`omd schema reference-discovery-batch`, then `omd ref discover-batch --input <json> --json`.
+It shares one browser across up to four concurrent isolated visits. Inspect each outcome and
+retain successful signed receipts even when another item fails. Follow-up item URLs wait for
+their parent's observed links; do not invent or pre-batch them. Batch outputs stay in discovery,
+not in the retained design/domain reference inventory.
 The next public gallery is the fallback, not domain-service documentation or a paid MCP.
 For direct discovery use `designSourcePolicy.nativeEntryInputs` with
 `omd ref navigate <public-gallery-list-url> --lane design --entry free-gallery --json`.

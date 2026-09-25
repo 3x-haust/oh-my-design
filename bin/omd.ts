@@ -1051,27 +1051,25 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
   const absShot = opts.noShot
     ? undefined
     : refImagePath(adapter.projectRoot, { source: target, component: opts.as, researchLane: lane });
-  const { raw, shotBytes, shotError, capturePreparation, acquisition, visibleText } = await withBrowser(browser => capturePageForRef(browser, target, captureViewport, {
-    selector: opts.selector ?? null,
-    requireImageElement: galleryImage,
-    validateFinalUrl: (url, visibleText) => validateFinalUrl(0, url, visibleText),
-    ...(absShot ? { shotOut: absShot, adapter, deferShotWrite: true } : {}),
-    ...(preparation ? { preparation } : {}),
-    bestEffortShot: preparation === undefined && !galleryImage,
-  }));
+  const { raw, shotBytes, shotError, capturePreparation, acquisition, visibleText, energyCurve } = await withBrowser(async browser => {
+    const captured = await capturePageForRef(browser, target, captureViewport, {
+      selector: opts.selector ?? null,
+      requireImageElement: galleryImage,
+      validateFinalUrl: (url, visibleText) => validateFinalUrl(0, url, visibleText),
+      ...(absShot ? { shotOut: absShot, adapter, deferShotWrite: true } : {}),
+      ...(preparation ? { preparation } : {}),
+      bestEffortShot: preparation === undefined && !galleryImage,
+    });
+    const energyCurve = opts.noEnergy || galleryImage || captured.acquisition.noticeDismissals?.length
+      ? null : await captureEnergy(target, { viewport: captureViewport, browser });
+    return { ...captured, energyCurve };
+  });
   const ir = normalize(raw);
   const invariants = extractInvariants(ir);
 
   const slopViolations = galleryImage ? [] : check(ir, loadRules(join(root, 'core', 'rules', 'builtin')), { categories: ['slop'] });
   const slopCount = slopViolations.length;
   const slopIds = [...new Set(slopViolations.map((v) => v.id))];
-
-  // Energy curve: capture pixel-diff motion energy for the reference. Uses a second
-  // Playwright session so the cost is one extra browser launch per `omd ref add`.
-  // Sees ALL motion including GSAP/rAF — closing the getAnimations() blind spot.
-  // Failure is silently ignored: a blocked page or unsupported format must not prevent
-  // the reference from being saved.
-  const energyCurve = opts.noEnergy || galleryImage || acquisition.noticeDismissals?.length ? null : await captureEnergy(target, { viewport: captureViewport });
 
   // Blueprint: full-resolution structural snapshot with skin abstracted to color roles.
   // Only captured when --blueprint is passed together with --selector.
@@ -2578,6 +2576,17 @@ async function cmdRefNavigate(opts: Opts): Promise<never> {
   const receipt = await withBrowser(browser => captureReferenceNavigation(browser, source, opts.lane, writer, opts.entry));
   console.log(JSON.stringify(receipt));
   process.exit(0);
+}
+
+async function cmdRefDiscoveryBatch(opts: Opts): Promise<never> {
+  if (opts._.length || !opts.input) throw new Error('usage: omd ref discover-batch --input <operations.json> [--json]');
+  const { parseDiscoveryBatchInput, runDiscoveryBatch } = await import('../core/ref/discovery-batch.ts');
+  const { withBrowser } = await import('../core/render/index.ts');
+  const items = parseDiscoveryBatchInput(inputJson(opts.input, 'omd ref discover-batch'));
+  const writer = projectWriterFromActivation(opts, 'omd ref discover-batch');
+  const result = await withBrowser(browser => runDiscoveryBatch(browser, process.cwd(), items, writer));
+  process.stdout.write(`${JSON.stringify({ ok: result.outcomes.every(outcome => outcome.ok), ...result }, null, opts.json ? undefined : 2)}\n`);
+  process.exit(result.outcomes.every(outcome => outcome.ok) ? 0 : 1);
 }
 
 /** Fails when the captured board holds no parts to compose section by section. */
@@ -5113,6 +5122,7 @@ function usage(): never {
     + '  ref research-set --input research.json     bind separate domain/design lane evidence to current outputs\n'
     + '  ref research-check                         require both lanes and re-hash their evidence and outputs\n'
     + '  ref search --input <json>                  execute a public query GET and record actual links/capture or failure\n'
+    + '  ref discover-batch --input <json>          run independent search/navigation requests concurrently in one browser\n'
     + '  ref tidy [--apply] [--json]                preview clutter; --apply archives exact bytes before guarded removal\n'
     + '  ref apply-plan --json                      draft screen-by-screen use from current research/domain brief\n'
     + '  ref apply-set --input application.json      publish interpreted domain/design decisions for every screen\n'
@@ -5465,6 +5475,7 @@ async function main(): Promise<never> {
     const opts = parseArgs(args.slice(2));
     if (sub === 'tidy') return cmdRefTidy(opts);
     if (sub === 'navigate') return cmdRefNavigate(opts);
+    if (sub === 'discover-batch') return cmdRefDiscoveryBatch(opts);
     if (sub === 'discover-plan') return cmdRefDiscoveryPlan(opts);
     if (sub === 'work-next') return cmdRefDiscoveryWork('next', opts);
     if (sub === 'advance') return cmdRefDiscoveryWork('advance', opts);

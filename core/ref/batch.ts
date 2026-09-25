@@ -14,11 +14,6 @@ import { commitCapturedReference } from './capture-commit.ts';
 import { designDiscoveryProvider } from './design-discovery-sources.ts';
 import { isKoreanLanguageServiceText } from './market-reference.ts';
 
-/**
- * One reference to capture in a batch. Same shape as an `omd ref add --selector … --blueprint --shot`
- * call, minus the energy (motion) pass: batch capture is optimised for the common non-motion board,
- * so a motion reference that needs an energy study goes through the single-ref `omd ref add` path.
- */
 export interface RefSpec {
   lane?: 'domain' | 'design';
   source: string;
@@ -49,10 +44,7 @@ export interface BatchResult {
 }
 
 /**
- * Capture many references concurrently over ONE shared browser. Each reference is one page and one
- * navigation (IR plus an optional scoped screenshot), so the board is built in a fraction of the
- * wall time of one-browser-launch-per-reference — and with byte-identical per-reference results,
- * so the output the board feeds is unchanged. A single reference failing never fails the batch.
+ * Capture many references concurrently over ONE shared browser. A single reference failing never fails the batch.
  */
 export async function addRefsBatch(
   cwd: string,
@@ -94,7 +86,7 @@ export async function addRefsBatch(
           // Motion is evidence, not decoration: a board captured without it cannot answer what a
           // reference does on scroll, and every craft query in the brief goes unanswered while the
           // record still looks complete. One extra pass per capture, skipped only on request.
-          const energyCurve = spec.energy === false || galleryImage || acquisition.noticeDismissals?.length ? null : await captureEnergy(spec.source, { viewport });
+          const energyCurve = spec.energy === false || galleryImage || acquisition.noticeDismissals?.length ? null : await captureEnergy(spec.source, { viewport, browser });
           const ir = normalize(raw);
           const invariants = extractInvariants(ir);
           const slopCount = check(ir, rules, { categories: ['slop'] }).length;

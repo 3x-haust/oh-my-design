@@ -127,6 +127,14 @@ the current route, explicit request, locale context and Framer-owned acquisition
 not depend on the optional domain-analysis stage. Existing domain queries supplement it only while
 they describe the current request. The user supplies the task, not a required reference list.
 
+For two or more independent planned queries or already-known public-list URLs, use
+`omd schema reference-discovery-batch` and `omd ref discover-batch --input <json> --json`.
+The command runs up to four isolated visits concurrently in one browser and returns an ordered
+result per item. Each successful item retains the same signed search/navigation evidence as its
+single-command form; a failed sibling remains a gap, not a reason to discard successful receipts.
+An observed-link follow-up is dependent and must wait for its parent's capture. The batch saves
+discovery provenance only; retained references still require separate scoped capture and judgment.
+
 Scout turns each selected lane into current search or direct-public discovery: subject identity, task/component anatomy,
 visual craft beyond the product category, and the plan's motion investigation. New marketing may
 investigate a motion candidate without selecting it for production; selected `motion-one` additionally

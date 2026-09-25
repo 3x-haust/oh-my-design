@@ -16,6 +16,14 @@ export class DocumentObservationError extends Error {
 
 export async function observeDocumentResponses(page: Page): Promise<DocumentObserver> {
   const session = await page.context().newCDPSession(page);
+  const detach = async (): Promise<void> => {
+    if (page.isClosed()) return;
+    try { await session.detach(); }
+    catch (error) {
+      if (page.isClosed()) return;
+      throw error;
+    }
+  };
   try {
     const initial = await session.send('Page.getFrameTree');
     const mainFrameId = initial.frameTree.frame.id;
@@ -35,11 +43,11 @@ export async function observeDocumentResponses(page: Page): Promise<DocumentObse
       },
       async close() {
         session.off('Network.responseReceived', responseReceived);
-        await session.detach();
+        await detach();
       },
     };
   } catch (error) {
-    await session.detach();
+    await detach();
     throw error;
   }
 }

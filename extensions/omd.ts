@@ -2,7 +2,7 @@ import { Type } from 'typebox';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { runOmd, registerDoctorCommand, structuredToolDiagnostic, type PortablePiApi } from './omd-runtime.ts';
+import { runOmd, monitorOmdProgress, registerDoctorCommand, structuredToolDiagnostic, OmdCancelledError, type PortablePiApi } from './omd-runtime.ts';
 export { OMD_COMMAND_NAME } from './omd-runtime.ts';
 export type { PortablePiApi, PortablePiCommand, PortablePiEvent, PortablePiHook, PortablePiTool } from './omd-runtime.ts';
 import { classifyPiWrite, hasPiRoute, isMutatingOmdCommand, isPreproductionReadCommand } from './omd-guard.ts';
@@ -59,11 +59,14 @@ export default function omdExtension(pi: PortablePiApi): void {
   const workflowStarted = new Set<string>();
   // Pi may execute sibling tools concurrently. Serialize OMD commands per project so two
   // legitimate publishers cannot collide with OMD's project mutation lock.
-  const run = (args: readonly string[], cwd: string, signal?: AbortSignal) => {
-    const previous = queues.get(cwd) ?? Promise.resolve();
+  const run = (args: readonly string[], cwd: string, signal?: AbortSignal, onUpdate?: Parameters<typeof runOmd>[4]) => {
+    const queued = queues.get(cwd);
+    const stopWaiting = queued === undefined ? () => undefined : monitorOmdProgress(args, 'queued', signal, onUpdate);
+    const previous = queued ?? Promise.resolve();
     const next = previous.catch(() => undefined).then(() => {
-      signal?.throwIfAborted();
-      return runOmd(pi, args, cwd, signal);
+      stopWaiting();
+      if (signal?.aborted) throw new OmdCancelledError();
+      return runOmd(pi, args, cwd, signal, onUpdate);
     });
     queues.set(cwd, next);
     void next.finally(() => { if (queues.get(cwd) === next) queues.delete(cwd); }).catch(() => undefined);
@@ -198,7 +201,7 @@ export default function omdExtension(pi: PortablePiApi): void {
     parameters: Type.Object({
       args: Type.Array(Type.String(), { minItems: 1 }),
     }, { additionalProperties: false }),
-    async execute(_toolCallId, params, signal, _onUpdate, context) {
+    async execute(_toolCallId, params, signal, onUpdate, context) {
       const workToken = ownedWork.token(context.cwd);
       const taskEpoch = epoch(context.cwd);
       if (!Array.isArray(params.args) || params.args.length === 0 || params.args.some((arg) => typeof arg !== 'string')) {
@@ -206,7 +209,7 @@ export default function omdExtension(pi: PortablePiApi): void {
       }
       const pendingReference = pendingReferenceWork.get(context.cwd);
       const referenceMutation = params.args[0] === 'ref'
-        && ['advance', 'search', 'navigate', 'add', 'add-batch', 'import-image', 'exclude', 'board'].includes(params.args[1] ?? '');
+        && ['advance', 'search', 'navigate', 'discover-batch', 'add', 'add-batch', 'import-image', 'exclude', 'board'].includes(params.args[1] ?? '');
       const boardBefore = pendingReference !== undefined && referenceMutation ? fileRevision(context.cwd, '.omd/reference-board.json') : undefined;
       if (params.args[0] === 'route' && params.args[1] === 'classify') managed.add(context.cwd);
       const candidate = routeValidationArgs(params.args);
@@ -232,7 +235,7 @@ export default function omdExtension(pi: PortablePiApi): void {
       }
       let result: Awaited<ReturnType<typeof run>>;
       try {
-        result = await run(params.args, context.cwd, signal);
+        result = await run(params.args, context.cwd, signal, onUpdate);
         if (signal?.aborted || epochs.get(context.cwd) !== taskEpoch) return { content: [{ type: 'text', text: result.text }], details: result.details };
         if (pendingReference !== undefined && referenceMutation) {
           const boardAfter = fileRevision(context.cwd, '.omd/reference-board.json');
