@@ -1299,6 +1299,7 @@ export const INPUT_SKELETONS: readonly InputSkeleton[] = [
     constraints: [
       'Replace every example with 1–16 independent current-task operations. A search item contains kind and the exact reference-search input; a navigate item contains kind, source, lane and optional entry.',
       'Group only independent queries or already-known public URLs. Follow-up item URLs must first appear in an observed parent result; never guess a gallery item or use a search result as a retained reference.',
+      'For target-market-first plans, run required market-qualified domain/design searches in market-only batches and wait for their outcomes before any separate unqualified-global batch. Input order inside one concurrent batch does not establish search order.',
       'The command uses one browser with up to four concurrent isolated contexts. Inspect every ordered outcome: partial failures remain gaps and their successful neighbors remain usable signed evidence.',
     ],
     skeleton: [

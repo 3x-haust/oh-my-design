@@ -24,6 +24,10 @@ up to four isolated visits run concurrently in one browser. Inspect every ordere
 successful receipts remain evidence even when another item fails. Do not batch a follow-up
 URL before its parent capture actually exposes that link. A batch outcome is discovery,
 never a retained domain or design board reference.
+With target-market-first policy, put all required market-qualified domain/design searches in
+market-only batches and wait for their outcomes before starting any unqualified global search
+batch. Never mix market-qualified and global searches in one concurrent batch: research-check
+verifies the signed observation times, not the manifest order.
 Blocked/free-access gaps require a public alternative, not a paid MCP or a relabelled domain page.
 The v3 benchmark checker reports artifact-only evidence strength, not verified live actions. Historical v2 records remain readable under their original admission.
 Preserve that limitation in the synthesis; do not claim every flow/control was tested.

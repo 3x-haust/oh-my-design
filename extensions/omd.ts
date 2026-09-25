@@ -70,7 +70,20 @@ export default function omdExtension(pi: PortablePiApi): void {
     });
     queues.set(cwd, next);
     void next.finally(() => { if (queues.get(cwd) === next) queues.delete(cwd); }).catch(() => undefined);
-    return next;
+    if (queued === undefined || signal === undefined) return next;
+    if (signal.aborted) {
+      stopWaiting();
+      return Promise.reject(new OmdCancelledError());
+    }
+    let onAbort: (() => void) | undefined;
+    const cancelled = new Promise<never>((_resolve, reject) => {
+      onAbort = () => { stopWaiting(); reject(new OmdCancelledError()); };
+      signal.addEventListener('abort', onAbort, { once: true });
+      if (signal.aborted) onAbort();
+    });
+    return Promise.race([next, cancelled]).finally(() => {
+      if (onAbort !== undefined) signal.removeEventListener('abort', onAbort);
+    });
   };
   const guarded = (cwd: string) => managed.has(cwd) || hasPiRoute(cwd);
   const hook = 'on' in pi ? pi.on : undefined;

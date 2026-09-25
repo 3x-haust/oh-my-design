@@ -58,8 +58,8 @@ function displayTarget(value: string | undefined): string | undefined {
   if (value === undefined) return undefined;
   try {
     const url = new URL(value);
-    return url.protocol === 'https:' || url.protocol === 'http:' ? `${url.host}${url.pathname}` : value;
-  } catch { return value; }
+    return url.protocol === 'https:' || url.protocol === 'http:' ? url.host : '입력 파일';
+  } catch { return '입력 파일'; }
 }
 
 export function formatOmdProgress(args: readonly string[], status: 'queued' | 'running', elapsedSeconds: number): string {
@@ -241,6 +241,9 @@ export function structuredToolDiagnostic(error: unknown, args: readonly string[]
   try {
     const parsed: unknown = JSON.parse(error.stdout);
     if (typeof parsed !== 'object' || parsed === null) return null;
+    if (root === 'ref' && action === 'discover-batch'
+      && (!('ok' in parsed) || parsed.ok !== false
+        || !('outcomes' in parsed) || !Array.isArray(parsed.outcomes))) return null;
   } catch (parseError) {
     if (parseError instanceof SyntaxError) return null;
     throw parseError;

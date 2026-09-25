@@ -139,6 +139,12 @@ test('a partly failed discovery batch keeps its successful receipt in structured
   assert.equal(result.details.code, 1);
 });
 
+test('a malformed discovery batch failure is not presented as a valid partial result', async () => {
+  const loaded = loadExtension(async () => ({ stdout: '{"ok":false}', stderr: '', code: 1, killed: false }));
+  await assert.rejects(loaded.tool.execute('batch', { args: ['ref', 'discover-batch', '--input', 'batch.json', '--json'] },
+    undefined, undefined, { cwd: '/tmp/project' }), /OMD_CLI_FAILED/);
+});
+
 test('omd_cli keeps malformed, fatal and killed command failures as tool errors', async () => {
   for (const result of [
     { stdout: 'not json', stderr: '', code: 1, killed: false },
@@ -195,11 +201,12 @@ test('Given a running browser command When omd_cli starts Then Pi receives a vis
 test('long-running progress names the command, target, elapsed time, and unknown internal state', () => {
   const message = formatOmdProgress(['ref', 'add', 'https://example.test/private?token=secret', '--lane', 'design'], 'running', 130);
   assert.match(message, /디자인 레퍼런스/);
-  assert.match(message, /example\.test\/private/);
+  assert.match(message, /example\.test/);
   assert.match(message, /2분 10초/);
   assert.match(message, /아직 결과/);
   assert.match(message, /ESC/);
   assert.doesNotMatch(message, /token=secret/);
+  assert.doesNotMatch(message, /private/);
 });
 
 test('a queued omd_cli command reports that it has not started, then reports execution', async () => {
@@ -226,6 +233,39 @@ test('a queued omd_cli command reports that it has not started, then reports exe
     await Promise.all([first, second]);
   }
   assert.match(updates.at(-1) ?? '', /실행 중/);
+});
+
+test('an interrupted queued command settles promptly without allowing later commands to overtake the running command', async () => {
+  let finishFirst: (() => void) | undefined;
+  const firstPending = new Promise<void>(resolve => { finishFirst = resolve; });
+  let markFirstStarted: (() => void) | undefined;
+  const firstStarted = new Promise<void>(resolve => { markFirstStarted = resolve; });
+  const calls: string[] = [];
+  const loaded = loadExtension(async (_command, args) => {
+    calls.push(args[2] ?? '');
+    if (calls.length === 1) { markFirstStarted?.(); await firstPending; }
+    return { stdout: 'ok', stderr: '', code: 0, killed: false };
+  });
+  const first = loaded.tool.execute('first', { args: ['ref', 'search', '--input', 'first.json'] }, undefined, undefined, { cwd: '/tmp/project' });
+  await firstStarted;
+  const controller = new AbortController();
+  const second = loaded.tool.execute('second', { args: ['ref', 'navigate', 'https://example.test/'] }, controller.signal,
+    undefined, { cwd: '/tmp/project' });
+  controller.abort();
+  const third = loaded.tool.execute('third', { args: ['ref', 'discover-plan', '--json'] }, undefined,
+    undefined, { cwd: '/tmp/project' });
+  try {
+    await Promise.race([
+      assert.rejects(second, /OMD_CLI_CANCELLED/),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('queued cancellation waited for the prior command')), 100)),
+    ]);
+    assert.deepEqual(calls, ['search']);
+  } finally {
+    assert.ok(finishFirst);
+    finishFirst();
+    await Promise.all([first, third]);
+  }
+  assert.deepEqual(calls, ['search', 'discover-plan']);
 });
 
 test('/omd runs doctor only and rejects host-specific arguments', async () => {

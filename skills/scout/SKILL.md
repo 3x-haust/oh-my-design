@@ -61,6 +61,9 @@ it contains useful, non-duplicate evidence for every applicable category:
 
 When a selected reference board is missing, first batch independent plan-derived searches and
 known public lists with `omd ref discover-batch --input <json> --json`; inspect every outcome.
+For target-market-first work, complete market-only batches in both lanes before starting a
+separate unqualified-global batch. Never mix those searches in one concurrent batch: the
+market-first check uses actual observation timestamps, not the input list order.
 Then run `omd ref work-next --json` for the current evidence-derived action. Use
 `omd ref advance --json` for a dependent observed-link visit or remaining single lead, then
 recompute work-next. Each advance call handles only one source attempt;
