@@ -11,6 +11,8 @@ export async function isSelectedAppContent(page: Page, layerSelector: string, se
         const targets = document.querySelectorAll(selector);
         if (targets.length !== 1 || targets[0] === root || !root.contains(targets[0]!)) return false;
         const target = targets[0]!, box = target.getBoundingClientRect();
+        const identity = `${target.id} ${typeof target.className === 'string' ? target.className : ''}`;
+        if (/(?:^|[\s_-])(?:error|recovery|maintenance|outage)(?:$|[\s_-])/i.test(identity)) return false;
         const purpose = (target.textContent ?? '').replace(/\s+/g, ' ').trim();
         if (/service (?:is )?(?:temporarily )?unavailable|please try again later|잠시 후 다시 이용해 주세요|홈으로 돌아가기/i.test(purpose)) return false;
         if (box.width <= 0 || box.height <= 0 || target.matches('html,body,main,header,nav,footer,h1,h2,h3,h4,h5,h6,a,button,[role="button"]')
