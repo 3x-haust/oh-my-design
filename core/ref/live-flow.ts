@@ -66,8 +66,9 @@ async function safeClick(page: Page, selector: string, origin: string): Promise<
   if (link) { if (new URL(publicUrl(new URL(info.href!, page.url()).href)).origin !== origin) return fail('cross-service navigation requires a separate flow'); }
   else if (!(info.tag === 'SUMMARY' || (info.tag === 'BUTTON' && info.type === 'button' && ((info.controls && info.expanded !== null) || info.role === 'tab')))) return fail('only links, disclosure buttons, summary and tabs are safe reference clicks');
   if (info.tag === 'BUTTON' && hasSuspendedReferenceScripts(page)) return fail('same-document scripted action is unavailable after visual-only notice suppression; record a bounded gap or inspect another public source');
+  const previousUrl = page.url();
   await control.click({ timeout: 3000, noWaitAfter: false });
-  if (link) await resumeScriptsOnNewReferenceDocument(page);
+  if (link) await resumeScriptsOnNewReferenceDocument(page, previousUrl);
 }
 
 /** One fresh browser context preserves the actual step-to-step state; no authored receipt input. */

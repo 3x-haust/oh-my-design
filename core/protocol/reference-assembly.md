@@ -457,9 +457,9 @@ The URL must remain unchanged and no dim backdrop may remain; the title, control
 and backdrop count are retained in the private capture/flow receipt.
 Page scripts remain suspended for that document after suppression. CSS/DOM and pixels remain
 inspectable, but interaction, motion, and second-pass energy measurements are marked unmeasured;
-a full-document safe link navigation may reload the new document to resume scripts. A same-document
-JavaScript-only state that cannot be reached safely is an explicit coverage gap, not a captured
-feature claim.
+a full-document safe link navigation may reload the new document to resume scripts. A browser-native
+same-document fragment link may be inspected with scripts still suspended; a JavaScript-only state
+that cannot be reached safely is an explicit coverage gap, not a captured feature claim.
 Roleless popup containers and visible modal-like overlays also require clearance or refusal. An
 unknown, consent, login, payment, or unclosable notice is a visual-obstruction
 refusal, never a screenshot to publish. Inspect that

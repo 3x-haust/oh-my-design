@@ -237,6 +237,27 @@ test('a legitimate full-viewport app shell is not mistaken for a popup', async t
   assert.equal(existsSync(shotOut), true);
 });
 
+test('a safe notice can be suppressed over a fixed full-viewport app shell', async t => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-fixed-shell-notice-')));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const server = createServer((_request, response) => {
+    response.setHeader('content-type', 'text/html');
+    response.end(`<!doctype html><title>Public service</title><main id="app" style="position:fixed;inset:0;background:white;overflow:auto">
+      <h1>Benefits workspace</h1><p>${'Inspect public benefits and requirements. '.repeat(12)}</p></main>
+      <div role="dialog" aria-modal="true" aria-label="Service notice" style="position:fixed;left:35%;top:25%;width:30%;height:40%;background:white">
+      <button type="button" aria-label="Close">Close</button></div>`);
+  });
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())));
+  const address = server.address(); assert.ok(address && typeof address !== 'string');
+  const writer = createTestProjectWriteAdapter(root); writer.mkdir('.omd/refs/domain');
+  const shotOut = join(root, '.omd/refs/domain/app-notice.png');
+  const result = await withBrowser(browser => capturePageForRef(browser, `http://127.0.0.1:${address.port}`,
+    { width: 800, height: 600 }, { shotOut, adapter: writer }));
+  assert.equal(result.acquisition.noticeDismissals?.length, 1);
+  assert.equal(existsSync(shotOut), true);
+});
+
 test('site scripts stay disabled after suppression so delayed style observers cannot mutate state', async t => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-style-observer-')));
   t.after(() => rmSync(root, { recursive: true, force: true }));

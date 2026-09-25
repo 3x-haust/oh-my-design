@@ -41,7 +41,8 @@ async function coveringLayers(page: Page): Promise<{ selector: string; name: str
       const background = style.backgroundColor.match(/^rgba?\((\d+)[,\s]+(\d+)[,\s]+(\d+)(?:[,\s/]+([\d.]+))?\)$/);
       if (!namedOverlay && (!background || Number(background[4] ?? 1) < 0.15) && style.backgroundImage === 'none' && style.backdropFilter === 'none') return false;
       if (!namedOverlay
-        && element.querySelector('main,header,nav,footer') !== null && (element.textContent?.trim().length ?? 0) > 200) return false;
+        && (element.matches('main,header,nav,footer') || element.querySelector('main,header,nav,footer') !== null)
+        && (element.textContent?.trim().length ?? 0) > 200) return false;
       const box = element.getBoundingClientRect();
       if (box.width * box.height < width * height * 0.6) return false;
       return onTop(element, 0.5, 0.5) && points.filter(([x, y]) => onTop(element, x!, y!)).length >= 2;
@@ -69,11 +70,18 @@ async function suppressByBrowserStyle(page: Page, selectors: readonly string[]):
   });
 }
 
-export async function resumeScriptsOnNewReferenceDocument(page: Page): Promise<void> {
+export async function resumeScriptsOnNewReferenceDocument(page: Page, previousUrl?: string): Promise<void> {
   const sheet = sheets.get(page);
   if (!sheet) return;
   const tree = await sheet.session.send('Page.getFrameTree');
-  if (tree.frameTree.frame.loaderId === sheet.loaderId) obstruction('same-document navigation cannot safely resume page scripts after notice suppression');
+  if (tree.frameTree.frame.loaderId === sheet.loaderId) {
+    if (previousUrl) {
+      const before = new URL(previousUrl), after = new URL(page.url());
+      if (before.hash !== after.hash && before.origin === after.origin
+        && before.pathname === after.pathname && before.search === after.search) return;
+    }
+    obstruction('same-document navigation cannot safely resume page scripts after notice suppression');
+  }
   await sheet.session.send('Emulation.setScriptExecutionDisabled', { value: false });
   sheets.delete(page);
   await page.reload({ waitUntil: 'domcontentloaded', timeout: 15000 });
