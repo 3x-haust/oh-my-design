@@ -165,7 +165,7 @@ test('reference capture refuses unknown popups and covering layers but clears a 
         : mode === 'app-root-featureless-error'
         ? '<div id="app"><header>현재 서비스 연결이 원활하지 않습니다</header><nav><a href="#home">홈</a><a href="#help">도움말</a></nav><main><section>잠시 후 다시 이용해 주세요</section></main></div>'
         : mode === 'app-root-recovery-error'
-        ? '<div id="app"><header>현재 서비스 연결이 원활하지 않습니다</header><nav><a href="#home">홈</a><a href="#help">도움말</a></nav><main><section>잠시 후 다시 이용해 주세요 <a id="recovery" href="/">홈으로 돌아가기</a><a href="/help">고객센터</a></section></main></div>'
+        ? '<div id="app"><header>현재 서비스 연결이 원활하지 않습니다</header><nav><a href="#home">홈</a><a href="#help">도움말</a></nav><main><section id="recovery-panel">잠시 후 다시 이용해 주세요 <a id="recovery" href="/">홈으로 돌아가기</a><a href="/help">고객센터</a></section></main></div>'
         : mode === 'white-mask'
         ? '<div id="mask"></div><div role="dialog" aria-modal="true" aria-label="Service notice"><button type="button" aria-label="Close">Close</button></div>'
         : '<div class="modal-backdrop"></div><div role="dialog" aria-modal="true" aria-label="Service notice"><button type="button" aria-label="Close">Close</button></div>';
@@ -191,6 +191,12 @@ test('reference capture refuses unknown popups and covering layers but clears a 
           { width: 800, height: 600 }, { shotOut, adapter: writer, selector: mode === 'app-root-recovery-error' ? '#recovery' : '#benefits' })),
         /REFERENCE_CAPTURE_VISUAL_OBSTRUCTION/);
         assert.equal(existsSync(shotOut), false);
+        if (mode === 'app-root-recovery-error') {
+          await assert.rejects(withBrowser(browser => capturePageForRef(browser, `http://127.0.0.1:${address.port}`,
+            { width: 800, height: 600 }, { shotOut, adapter: writer, selector: '#recovery-panel' })),
+          /REFERENCE_CAPTURE_VISUAL_OBSTRUCTION/);
+          assert.equal(existsSync(shotOut), false);
+        }
       }
     } else {
       const result = await withBrowser(browser => capturePageForRef(browser, `http://127.0.0.1:${address.port}`,
