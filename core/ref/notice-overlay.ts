@@ -43,7 +43,8 @@ async function coveringLayers(page: Page): Promise<{ selector: string; name: str
       const background = style.backgroundColor.match(/^rgba?\((\d+)[,\s]+(\d+)[,\s]+(\d+)(?:[,\s/]+([\d.]+))?\)$/);
       if (!namedOverlay && (!background || Number(background[4] ?? 1) < 0.15) && style.backgroundImage === 'none' && style.backdropFilter === 'none') return false;
       if (!namedOverlay
-        && (element.matches('main') || element.querySelector('main') !== null)) return false;
+        && (element.matches('main') || element.querySelector('main') !== null
+          || (element.querySelector('header,nav') !== null && element.querySelector('section,article') !== null))) return false;
       const box = element.getBoundingClientRect();
       if (box.width * box.height < width * height * 0.6) return false;
       return onTop(element, 0.5, 0.5) && points.filter(([x, y]) => onTop(element, x!, y!)).length >= 2;
