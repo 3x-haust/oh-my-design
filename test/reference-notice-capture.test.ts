@@ -133,7 +133,7 @@ test('a prepared feature refuses an unrelated consent modal instead of saving ob
 });
 
 test('reference capture refuses unknown popups and covering layers but clears a notice backdrop', async t => {
-  for (const mode of ['custom', 'orphaned-backdrop', 'white-mask', 'embedded-overlay', 'service-error', 'structured-error', 'korean-maintenance', 'hidden-main-error', 'nested-main-error', 'app-root-error', 'app-root-korean-error', 'app-root-hidden-nav-error', 'app-root-visible-nav-error', 'app-root-opacity-nav-error', 'app-root-hidden-content-error', 'app-root-featureless-error'] as const) {
+  for (const mode of ['custom', 'orphaned-backdrop', 'white-mask', 'embedded-overlay', 'service-error', 'structured-error', 'korean-maintenance', 'hidden-main-error', 'nested-main-error', 'app-root-error', 'app-root-korean-error', 'app-root-hidden-nav-error', 'app-root-visible-nav-error', 'app-root-opacity-nav-error', 'app-root-hidden-content-error', 'app-root-featureless-error', 'app-root-recovery-error'] as const) {
     const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-visual-overlay-')));
     t.after(() => rmSync(root, { recursive: true, force: true }));
     const popup = mode === 'custom'
@@ -164,6 +164,8 @@ test('reference capture refuses unknown popups and covering layers but clears a 
         ? '<div id="app"><header>현재 서비스 연결이 원활하지 않습니다</header><nav><a href="#home">홈</a><a href="#help">도움말</a></nav><main hidden><a href="/benefit-a">Benefit A</a><a href="/benefit-b">Benefit B</a></main><section>잠시 후 다시 이용해 주세요</section></div>'
         : mode === 'app-root-featureless-error'
         ? '<div id="app"><header>현재 서비스 연결이 원활하지 않습니다</header><nav><a href="#home">홈</a><a href="#help">도움말</a></nav><main><section>잠시 후 다시 이용해 주세요</section></main></div>'
+        : mode === 'app-root-recovery-error'
+        ? '<div id="app"><header>현재 서비스 연결이 원활하지 않습니다</header><nav><a href="#home">홈</a><a href="#help">도움말</a></nav><main><section>잠시 후 다시 이용해 주세요 <a href="/">홈으로 돌아가기</a><a href="/help">고객센터</a></section></main></div>'
         : mode === 'white-mask'
         ? '<div id="mask"></div><div role="dialog" aria-modal="true" aria-label="Service notice"><button type="button" aria-label="Close">Close</button></div>'
         : '<div class="modal-backdrop"></div><div role="dialog" aria-modal="true" aria-label="Service notice"><button type="button" aria-label="Close">Close</button></div>';
@@ -173,7 +175,7 @@ test('reference capture refuses unknown popups and covering layers but clears a 
         #backdrop,.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.7)}#mask,#service-error,#message-panel,#app{position:fixed;inset:0;background:white}
         .cl-overlay{position:fixed;inset:0;background:transparent}#embedded-message{position:absolute;left:30%;top:30%;background:white;padding:20px}
         #service-popup,[role=dialog]{position:fixed;left:35%;top:25%;width:30%;height:40%;background:white}</style>
-        ${mode === 'app-root-korean-error' || mode === 'app-root-hidden-nav-error' || mode === 'app-root-visible-nav-error' || mode === 'app-root-opacity-nav-error' || mode === 'app-root-hidden-content-error' || mode === 'app-root-featureless-error' ? '' : `<main><h1>Benefits</h1><p>${'Compare current benefits and application requirements. '.repeat(12)}</p></main>`}${popup}`);
+        ${mode === 'app-root-korean-error' || mode === 'app-root-hidden-nav-error' || mode === 'app-root-visible-nav-error' || mode === 'app-root-opacity-nav-error' || mode === 'app-root-hidden-content-error' || mode === 'app-root-featureless-error' || mode === 'app-root-recovery-error' ? '' : `<main><h1>Benefits</h1><p>${'Compare current benefits and application requirements. '.repeat(12)}</p></main>`}${popup}`);
     });
     await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
     t.after(() => new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())));
@@ -314,7 +316,7 @@ test('a legitimate full-viewport app shell is not mistaken for a popup', async t
   assert.equal(existsSync(shotOut), true);
 });
 
-test('a fixed div app shell with header and content is not treated as an obstruction', async t => {
+test('a fixed div app shell requires a selected visible feature instead of automatic trust', async t => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-div-app-shell-')));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const server = createServer((_request, response) => {
@@ -330,8 +332,11 @@ test('a fixed div app shell with header and content is not treated as an obstruc
   const address = server.address(); assert.ok(address && typeof address !== 'string');
   const writer = createTestProjectWriteAdapter(root); writer.mkdir('.omd/refs/domain');
   const shotOut = join(root, '.omd/refs/domain/div-app.png');
+  await assert.rejects(withBrowser(browser => capturePageForRef(browser, `http://127.0.0.1:${address.port}`,
+    { width: 800, height: 600 }, { shotOut, adapter: writer })), /REFERENCE_CAPTURE_VISUAL_OBSTRUCTION/);
+  assert.equal(existsSync(shotOut), false);
   const result = await withBrowser(browser => capturePageForRef(browser, `http://127.0.0.1:${address.port}`,
-    { width: 800, height: 600 }, { shotOut, adapter: writer }));
+    { width: 800, height: 600 }, { shotOut, adapter: writer, selector: '#benefits' }));
   assert.equal(result.acquisition.noticeDismissals, undefined);
   assert.equal(existsSync(shotOut), true);
 });

@@ -36,39 +36,41 @@ async function coveringLayers(page: Page): Promise<{ selector: string; name: str
       }
       return `html > ${parts.join(' > ')}`;
     };
-    const exposed = (node: Element) => {
-      const box = node.getBoundingClientRect();
-      if (box.width <= 0 || box.height <= 0) return false;
-      for (let current: Element | null = node; current; current = current.parentElement) {
-        const style = getComputedStyle(current);
-        if (style.display === 'none' || style.visibility !== 'visible' || Number(style.opacity) < 0.2) return false;
-      }
-      const top = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
-      return top === node || (top !== null && node.contains(top));
-    };
     return [...document.querySelectorAll('body *')].filter(element => {
       const style = getComputedStyle(element);
       if (!['fixed', 'absolute'].includes(style.position) || style.display === 'none' || style.visibility !== 'visible' || Number(style.opacity) < 0.2 || Number(style.zIndex) < 0) return false;
       const namedOverlay = /overlay|backdrop|shade|dimmer|scrim/i.test(`${element.id} ${element.className}`);
       const errorLayer = /error|unavailable|failure|blocked|오류|장애|접속불가/i.test(`${element.id} ${element.className}`)
         || /\b(?:unavailable|temporarily|maintenance|outage|interruption|server error|not found|try again later)\b|(?:서비스|시스템|서버).{0,8}(?:점검|중단|오류|장애|이용 불가)|점검 중|접속 불가|잠시 후 다시/i.test((element.querySelector('h1,h2,h3,header')?.textContent ?? '').trim());
-      const appRoot = /^(?:app|root|__next|application)$/i.test(element.id) || element.getAttribute('role') === 'application';
       const mains = [...document.querySelectorAll('main')];
       const soleMain = element.matches('main') && mains.length === 1;
-      const navigationLinks = [...element.querySelectorAll('nav a[href], [role="navigation"] a[href]')].filter(exposed);
-      const ownedMain = mains.length === 1 && element.contains(mains[0]!) ? mains[0]! : null;
-      const featureLinks = ownedMain ? [...ownedMain.querySelectorAll('a[href],button,[role="button"]')].filter(exposed) : [];
-      const structuredApp = appRoot && ownedMain !== null && exposed(ownedMain)
-        && navigationLinks.length >= 2 && featureLinks.length >= 2;
       const background = style.backgroundColor.match(/^rgba?\((\d+)[,\s]+(\d+)[,\s]+(\d+)(?:[,\s/]+([\d.]+))?\)$/);
       if (!namedOverlay && (!background || Number(background[4] ?? 1) < 0.15) && style.backgroundImage === 'none' && style.backdropFilter === 'none') return false;
-      if (!namedOverlay && !errorLayer && (soleMain || structuredApp)) return false;
+      if (!namedOverlay && !errorLayer && soleMain) return false;
       const box = element.getBoundingClientRect();
       if (box.width * box.height < width * height * 0.6) return false;
       return onTop(element, 0.5, 0.5) && points.filter(([x, y]) => onTop(element, x!, y!)).length >= 2;
     }).map(element => ({ selector: path(element), name: `${element.id} ${element.className}` }))
       .filter(item => item.selector);
   }).toString())) as Promise<{ selector: string; name: string }[]>;
+}
+
+async function isSelectedAppContent(page: Page, layerSelector: string, selected: readonly string[]): Promise<boolean> {
+  if (!selected.length) return false;
+  return page.evaluate(({ layerSelector, selected }) => {
+    const root = document.querySelector(layerSelector);
+    if (!root || !(/^(?:app|root|__next|application)$/i.test(root.id) || root.getAttribute('role') === 'application')) return false;
+    return selected.some(selector => {
+      try {
+        const targets = document.querySelectorAll(selector);
+        if (targets.length !== 1 || targets[0] === root || !root.contains(targets[0]!)) return false;
+        const target = targets[0]!, box = target.getBoundingClientRect();
+        if (box.width <= 0 || box.height <= 0 || target.closest('[role="dialog"],[role="alertdialog"],dialog[open]')) return false;
+        const top = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+        return top === target || (top !== null && target.contains(top));
+      } catch { return false; }
+    });
+  }, { layerSelector, selected: [...selected] });
 }
 
 async function suppressByBrowserStyle(page: Page, selectors: readonly string[]): Promise<void> {
@@ -206,8 +208,12 @@ export async function clearReferenceNotices(page: Page, allowedStateSelectors: r
     if (visibleIndex < 0) {
       const blocked = sheets.get(page)?.blockedRequests ?? [];
       if (blocked.length) obstruction(`suppressed document attempted a request (${blocked.join(', ')})`);
-      if (!intentionalModal && (await coveringLayers(page)).length)
-        obstruction('a covering layer still obscures the reference viewport');
+      if (!intentionalModal) {
+        for (const layer of await coveringLayers(page)) {
+          if (!await isSelectedAppContent(page, layer.selector, allowedStateSelectors))
+            obstruction('a covering layer still obscures the reference viewport');
+        }
+      }
       return dismissals;
     }
     const dialog = dialogs.nth(visibleIndex);

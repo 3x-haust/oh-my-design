@@ -786,7 +786,10 @@ export async function capturePageForRef(
       });
       if (!eligible) throw new Error('DESIGN_GALLERY_IMAGE_REQUIRED: selector must identify one loaded, visible UI image element, not gallery chrome');
     }
-    const allowedStateSelectors = preparation?.assertions.filter(assertion => assertion.state === 'visible').map(assertion => assertion.selector) ?? [];
+    const allowedStateSelectors = [
+      ...(opts.selector ? [opts.selector] : []),
+      ...(preparation?.assertions.filter(assertion => assertion.state === 'visible').map(assertion => assertion.selector) ?? []),
+    ];
     const noticeDismissals = await clearReferenceNotices(page, allowedStateSelectors, 1000);
     const executedActions = preparation ? await prepareReferenceCapture(page, preparation) : undefined;
     let raw = await extractIrCore(page, httpStatus, resolvedUrl, opts.selector ?? null, false);

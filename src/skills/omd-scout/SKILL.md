@@ -223,9 +223,12 @@ native flow for each branch from an entry screen, capture each reachable route/t
 and bind every feature screen to its actual signed step screenshot. A homepage or whole-page image
 does not stand in for unopened features. Keep the feature-to-screen-to-flow mapping and explicit
 unreachable exclusions in the benchmark. Before accepting any retained image, inspect its pixels:
-informational notices should be closed in the same browser context before capture, while consent,
+informational notices should be visually suppressed in the same browser context before capture, while consent,
 login, unknown or unclosable modals and orphaned dim backdrops must be recorded as access gaps
 rather than saved as evidence. A prepared feature state is not exempt from unrelated obstructions.
+For a fixed full-viewport app container, select a specific visible feature or assert it in the
+native flow. Navigation or recovery controls alone do not prove the app is available; if the
+feature cannot be inspected, record a bounded gap instead of keeping a possible error screen.
 Informational notices are visually suppressed by a browser-owned stylesheet without clicking the
 site's control, executing its handler, or removing DOM nodes. The receipt says `visual-only`; do
 not claim that the site's real dismissal or

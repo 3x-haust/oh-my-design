@@ -471,8 +471,11 @@ modal state remains an intentional capture and is not auto-dismissed, but other 
 prepared state are still refused. After capturing, recheck for
 a late notice and recapture the clean state if it appeared. Do not use `--no-shot`, a renamed PNG,
 or a source URL alone as a substitute for the clean state-specific image.
-An ambiguous fixed full-viewport container without a sole semantic main or an explicit app root
-with actual navigation and content is a bounded gap, not a reason to retain an error screen.
+An ambiguous fixed full-viewport app container is not accepted from its shape, navigation links,
+or recovery controls alone. Select a specific visible feature inside it (or assert that feature in
+a native flow) before capturing; without that scoped evidence, record a bounded gap rather than
+retain a possible error screen. A sole semantic main remains inspectable unless an error or other
+covering state is detected.
 
 When a required source state is an open menu or disclosure, print `omd schema reference-capture-preparation`.
 Pass its closed JSON object through `omd ref add … --preparation <json> --no-energy`, or embed it as

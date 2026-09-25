@@ -106,7 +106,8 @@ export async function recordLiveReferenceFlow(browser: Browser, rootInput: strin
     context.on('page', other => { if (other !== page) { blocked.push('popup excluded'); void other.close(); } });
     let response = await page.goto(input.url, { waitUntil: 'domcontentloaded', timeout: 15000 });
     page.on('response', r => { if (r.request().isNavigationRequest() && r.frame() === page.mainFrame()) response = r; });
-    const initialDismissals = await clearReferenceNotices(page, [], 1000);
+    const initialDismissals = await clearReferenceNotices(page,
+      input.steps[0]!.assertions.filter(assertion => assertion.state === 'visible').map(assertion => assertion.selector), 1000);
     for (const [index, step] of input.steps.entries()) {
       const beforeUrl = page.url();
       for (const selector of step.clicks) await safeClick(page, selector, origin);
