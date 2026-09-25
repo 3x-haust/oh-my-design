@@ -187,7 +187,7 @@ export async function clearReferenceNotices(page: Page, allowedStateSelectors: r
     if (visibleIndex < 0) {
       const blocked = sheets.get(page)?.blockedRequests ?? [];
       if (blocked.length) obstruction(`suppressed document attempted a request (${blocked.join(', ')})`);
-      if (!intentionalModal && (await coveringLayers(page)).some(layer => sheets.has(page) || BACKDROP_NAME.test(layer.name)))
+      if (!intentionalModal && (await coveringLayers(page)).length)
         obstruction('a covering layer still obscures the reference viewport');
       return dismissals;
     }

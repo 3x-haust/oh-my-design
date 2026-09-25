@@ -133,20 +133,22 @@ test('a prepared feature refuses an unrelated consent modal instead of saving ob
 });
 
 test('reference capture refuses unknown popups and covering layers but clears a notice backdrop', async t => {
-  for (const mode of ['custom', 'orphaned-backdrop', 'white-mask', 'embedded-overlay'] as const) {
+  for (const mode of ['custom', 'orphaned-backdrop', 'white-mask', 'embedded-overlay', 'service-error'] as const) {
     const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-visual-overlay-')));
     t.after(() => rmSync(root, { recursive: true, force: true }));
     const popup = mode === 'custom'
       ? '<div id="backdrop"></div><div id="service-popup"><h2>Unknown popup</h2><button type="button">Close</button></div>'
       : mode === 'embedded-overlay'
         ? '<div class="cl-overlay"><div id="embedded-message">Message popup: service unavailable</div></div>'
+        : mode === 'service-error'
+        ? '<div id="service-error"><h2>Service unavailable</h2></div>'
         : mode === 'white-mask'
         ? '<div id="mask"></div><div role="dialog" aria-modal="true" aria-label="Service notice"><button type="button" aria-label="Close">Close</button></div>'
         : '<div class="modal-backdrop"></div><div role="dialog" aria-modal="true" aria-label="Service notice"><button type="button" aria-label="Close">Close</button></div>';
     const server = createServer((_request, response) => {
       response.setHeader('content-type', 'text/html');
       response.end(`<!doctype html><title>Public benefits</title><style>body{margin:0;background:white}main{padding:40px}
-        #backdrop,.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.7)}#mask{position:fixed;inset:0;background:white}
+        #backdrop,.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.7)}#mask,#service-error{position:fixed;inset:0;background:white}
         .cl-overlay{position:fixed;inset:0;background:transparent}#embedded-message{position:absolute;left:30%;top:30%;background:white;padding:20px}
         #service-popup,[role=dialog]{position:fixed;left:35%;top:25%;width:30%;height:40%;background:white}</style>
         <main><h1>Benefits</h1><p>${'Compare current benefits and application requirements. '.repeat(12)}</p></main>${popup}`);
@@ -156,7 +158,7 @@ test('reference capture refuses unknown popups and covering layers but clears a 
     const address = server.address(); assert.ok(address && typeof address !== 'string');
     const writer = createTestProjectWriteAdapter(root); writer.mkdir('.omd/refs/domain');
     const shotOut = join(root, `.omd/refs/domain/${mode}.png`);
-    if (mode === 'custom' || mode === 'white-mask' || mode === 'embedded-overlay') {
+    if (mode === 'custom' || mode === 'white-mask' || mode === 'embedded-overlay' || mode === 'service-error') {
       await assert.rejects(withBrowser(browser => capturePageForRef(browser, `http://127.0.0.1:${address.port}`,
         { width: 800, height: 600 }, { shotOut, adapter: writer })), /REFERENCE_CAPTURE_VISUAL_OBSTRUCTION/);
       assert.equal(existsSync(shotOut), false);
