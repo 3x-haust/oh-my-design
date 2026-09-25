@@ -133,7 +133,7 @@ test('a prepared feature refuses an unrelated consent modal instead of saving ob
 });
 
 test('reference capture refuses unknown popups and covering layers but clears a notice backdrop', async t => {
-  for (const mode of ['custom', 'orphaned-backdrop', 'white-mask', 'embedded-overlay', 'service-error', 'structured-error'] as const) {
+  for (const mode of ['custom', 'orphaned-backdrop', 'white-mask', 'embedded-overlay', 'service-error', 'structured-error', 'korean-maintenance'] as const) {
     const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-visual-overlay-')));
     t.after(() => rmSync(root, { recursive: true, force: true }));
     const popup = mode === 'custom'
@@ -144,6 +144,8 @@ test('reference capture refuses unknown popups and covering layers but clears a 
         ? '<div id="service-error"><h2>Service unavailable</h2></div>'
         : mode === 'structured-error'
         ? `<div id="message-panel"><header>Service unavailable</header><section>${'Please try again later. '.repeat(12)}</section></div>`
+        : mode === 'korean-maintenance'
+        ? '<div id="message-panel"><header>서비스 점검 중</header><section>잠시 후 다시 이용해 주세요</section></div>'
         : mode === 'white-mask'
         ? '<div id="mask"></div><div role="dialog" aria-modal="true" aria-label="Service notice"><button type="button" aria-label="Close">Close</button></div>'
         : '<div class="modal-backdrop"></div><div role="dialog" aria-modal="true" aria-label="Service notice"><button type="button" aria-label="Close">Close</button></div>';
@@ -160,7 +162,7 @@ test('reference capture refuses unknown popups and covering layers but clears a 
     const address = server.address(); assert.ok(address && typeof address !== 'string');
     const writer = createTestProjectWriteAdapter(root); writer.mkdir('.omd/refs/domain');
     const shotOut = join(root, `.omd/refs/domain/${mode}.png`);
-    if (mode === 'custom' || mode === 'white-mask' || mode === 'embedded-overlay' || mode === 'service-error' || mode === 'structured-error') {
+    if (mode === 'custom' || mode === 'white-mask' || mode === 'embedded-overlay' || mode === 'service-error' || mode === 'structured-error' || mode === 'korean-maintenance') {
       await assert.rejects(withBrowser(browser => capturePageForRef(browser, `http://127.0.0.1:${address.port}`,
         { width: 800, height: 600 }, { shotOut, adapter: writer })), /REFERENCE_CAPTURE_VISUAL_OBSTRUCTION/);
       assert.equal(existsSync(shotOut), false);
