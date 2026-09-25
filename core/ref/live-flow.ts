@@ -8,7 +8,7 @@ import { signNativeObservation, verifyNativeObservation } from '../runtime/self-
 import { requireProjectWriteAdapter, type ProjectWriteAdapter } from '../runtime/project-write.ts';
 import { readStableProjectFile, nodeStableProjectFileSystem } from '../runtime/stable-project-file.ts';
 import { decodePng } from '../motion/energy.ts';
-import { clearReferenceNotices, hasSuspendedReferenceScripts, resumeScriptsOnNewReferenceDocument, type NoticeDismissal } from './notice-overlay.ts';
+import { clearReferenceNotices, hasSuspendedReferenceScripts, prepareSuppressedReferenceLink, resumeScriptsOnNewReferenceDocument, type NoticeDismissal } from './notice-overlay.ts';
 
 type Receipt = { path: string; sha256: string };
 type StepInput = { screenId: string; state: string; clicks: string[]; assertions: ViewAssertion[] };
@@ -67,6 +67,11 @@ async function safeClick(page: Page, selector: string, origin: string): Promise<
   else if (!(info.tag === 'SUMMARY' || (info.tag === 'BUTTON' && info.type === 'button' && ((info.controls && info.expanded !== null) || info.role === 'tab')))) return fail('only links, disclosure buttons, summary and tabs are safe reference clicks');
   if (info.tag === 'BUTTON' && hasSuspendedReferenceScripts(page)) return fail('same-document scripted action is unavailable after visual-only notice suppression; record a bounded gap or inspect another public source');
   const previousUrl = page.url();
+  if (link && hasSuspendedReferenceScripts(page)) {
+    const destination = new URL(info.href!, previousUrl);
+    if (destination.pathname !== new URL(previousUrl).pathname || destination.search !== new URL(previousUrl).search)
+      prepareSuppressedReferenceLink(page, destination.href);
+  }
   await control.click({ timeout: 3000, noWaitAfter: false });
   if (link) await resumeScriptsOnNewReferenceDocument(page, previousUrl);
 }

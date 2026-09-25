@@ -457,8 +457,10 @@ The URL must remain unchanged and no dim backdrop may remain; the title, control
 and backdrop count are retained in the private capture/flow receipt.
 Page scripts remain suspended for that document after suppression. CSS/DOM and pixels remain
 inspectable, but interaction, motion, and second-pass energy measurements are marked unmeasured;
-a full-document safe link navigation may reload the new document to resume scripts. A browser-native
-same-document fragment link may be inspected with scripts still suspended; a JavaScript-only state
+a full-document safe link navigation may reload the new document to resume scripts. Subsequent
+requests from the suppressed document are aborted and attempted requests refuse its evidence,
+including CSS resources activated by a fragment target. A browser-native same-document fragment
+link may be inspected only when it remains request-free with scripts still suspended; a JavaScript-only state
 that cannot be reached safely is an explicit coverage gap, not a captured feature claim.
 Roleless popup containers and visible modal-like overlays also require clearance or refusal. An
 unknown, consent, login, payment, or unclosable notice is a visual-obstruction

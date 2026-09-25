@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { decodePng } from '../core/motion/energy.ts';
 import { capturePageForRef, withBrowser } from '../core/render/index.ts';
-import { clearReferenceNotices, resumeScriptsOnNewReferenceDocument } from '../core/ref/notice-overlay.ts';
+import { clearReferenceNotices, prepareSuppressedReferenceLink, resumeScriptsOnNewReferenceDocument } from '../core/ref/notice-overlay.ts';
 import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
 
 const content = (mode: 'notice' | 'consent' | 'unclosable') => `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>복지 서비스</title>
@@ -189,12 +189,38 @@ test('a safe feature link still loads its stylesheet after visual-only notice su
     try {
       await page.goto(base);
       assert.equal((await clearReferenceNotices(page)).length, 1);
+      prepareSuppressedReferenceLink(page, `${base}/detail`);
       await page.locator('#detail').click();
       await resumeScriptsOnNewReferenceDocument(page);
       assert.equal(await page.locator('h1').textContent(), 'Feature detail');
       assert.equal(await page.locator('#feature').evaluate(element => getComputedStyle(element).backgroundColor), 'rgb(1, 2, 3)');
       assert.equal(await page.locator('#feature').getAttribute('data-hydrated'), 'yes');
       assert.ok(requests.includes('/detail.css'));
+    } finally { await page.close(); }
+  });
+});
+
+test('a hash target cannot fetch a stateful resource after notice suppression', async t => {
+  const requests: string[] = [];
+  const server = createServer((request, response) => {
+    if (request.url === '/mutate') { requests.push(request.method ?? ''); response.end('unexpected'); return; }
+    response.setHeader('content-type', 'text/html');
+    response.end(`<!doctype html><title>Public benefits</title><style>#target:target{background-image:url('/mutate')}</style>
+      <main><h1>Benefits</h1><p>${'Browse public benefits and requirements. '.repeat(12)}</p>
+      <a id="jump" href="#target">Jump to details</a><section id="target">Public detail</section></main>
+      <div role="dialog" aria-modal="true" aria-label="Service notice"><button type="button" aria-label="Close">Close</button></div>`);
+  });
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())));
+  const address = server.address(); assert.ok(address && typeof address !== 'string');
+  await withBrowser(async browser => {
+    const page = await browser.newPage({ serviceWorkers: 'block' });
+    try {
+      await page.goto(`http://127.0.0.1:${address.port}`);
+      assert.equal((await clearReferenceNotices(page)).length, 1);
+      await page.locator('#jump').click();
+      await assert.rejects(clearReferenceNotices(page, [], 300), /REFERENCE_CAPTURE_VISUAL_OBSTRUCTION: suppressed document attempted a request/);
+      assert.deepEqual(requests, []);
     } finally { await page.close(); }
   });
 });
@@ -243,7 +269,7 @@ test('a safe notice can be suppressed over a fixed full-viewport app shell', asy
   const server = createServer((_request, response) => {
     response.setHeader('content-type', 'text/html');
     response.end(`<!doctype html><title>Public service</title><main id="app" style="position:fixed;inset:0;background:white;overflow:auto">
-      <h1>Benefits workspace</h1><p>${'Inspect public benefits and requirements. '.repeat(12)}</p></main>
+      <h1>Benefits workspace</h1><p>Browse services</p></main>
       <div role="dialog" aria-modal="true" aria-label="Service notice" style="position:fixed;left:35%;top:25%;width:30%;height:40%;background:white">
       <button type="button" aria-label="Close">Close</button></div>`);
   });
@@ -253,7 +279,7 @@ test('a safe notice can be suppressed over a fixed full-viewport app shell', asy
   const writer = createTestProjectWriteAdapter(root); writer.mkdir('.omd/refs/domain');
   const shotOut = join(root, '.omd/refs/domain/app-notice.png');
   const result = await withBrowser(browser => capturePageForRef(browser, `http://127.0.0.1:${address.port}`,
-    { width: 800, height: 600 }, { shotOut, adapter: writer }));
+    { width: 800, height: 600 }, { shotOut, adapter: writer, selector: '#app' }));
   assert.equal(result.acquisition.noticeDismissals?.length, 1);
   assert.equal(existsSync(shotOut), true);
 });

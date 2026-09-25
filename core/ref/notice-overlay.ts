@@ -8,7 +8,9 @@ const SENSITIVE = /쿠키|cookie|consent|동의|privacy|개인정보|로그인|s
 const SENSITIVE_BODY = /쿠키|cookie|consent|동의|privacy|개인정보|결제|payment|로그인(?:해|하기|하세요|후)|sign\s?in|log\s?in/i;
 const CLOSE = /^(?:close(?:\s+(?:dialog|popup|window))?|dismiss|닫기|(?:창|팝업)\s*닫기|[×✕x])$/i;
 const BACKDROP_NAME = /overlay|backdrop|shade|dimmer|scrim/i;
-const sheets = new WeakMap<Page, { session: CDPSession; id: string; loaderId: string; selectors: string[] }>();
+type SuppressedDocument = { session: CDPSession; id: string; loaderId: string; selectors: string[];
+  blockedRequests: string[]; requestGuard?: (route: Route) => Promise<void>; allowedNavigationUrl: string | undefined };
+const sheets = new WeakMap<Page, SuppressedDocument>();
 const browserExpression = (source: string) => `(() => { const __name = (callback) => callback; return (${source})(); })()`;
 
 function obstruction(message: string): never {
@@ -41,8 +43,7 @@ async function coveringLayers(page: Page): Promise<{ selector: string; name: str
       const background = style.backgroundColor.match(/^rgba?\((\d+)[,\s]+(\d+)[,\s]+(\d+)(?:[,\s/]+([\d.]+))?\)$/);
       if (!namedOverlay && (!background || Number(background[4] ?? 1) < 0.15) && style.backgroundImage === 'none' && style.backdropFilter === 'none') return false;
       if (!namedOverlay
-        && (element.matches('main,header,nav,footer') || element.querySelector('main,header,nav,footer') !== null)
-        && (element.textContent?.trim().length ?? 0) > 200) return false;
+        && (element.matches('main') || element.querySelector('main') !== null)) return false;
       const box = element.getBoundingClientRect();
       if (box.width * box.height < width * height * 0.6) return false;
       return onTop(element, 0.5, 0.5) && points.filter(([x, y]) => onTop(element, x!, y!)).length >= 2;
@@ -60,7 +61,7 @@ async function suppressByBrowserStyle(page: Page, selectors: readonly string[]):
     const tree = await session.send('Page.getFrameTree');
     const created = await session.send('CSS.createStyleSheet', { frameId: tree.frameTree.frame.id });
     await session.send('Emulation.setScriptExecutionDisabled', { value: true });
-    sheet = { session, id: created.styleSheetId, loaderId: tree.frameTree.frame.loaderId, selectors: [] };
+    sheet = { session, id: created.styleSheetId, loaderId: tree.frameTree.frame.loaderId, selectors: [], blockedRequests: [], allowedNavigationUrl: undefined };
     sheets.set(page, sheet);
   }
   sheet.selectors.push(...selectors);
@@ -70,11 +71,33 @@ async function suppressByBrowserStyle(page: Page, selectors: readonly string[]):
   });
 }
 
+async function guardSuppressedDocumentRequests(page: Page): Promise<void> {
+  const sheet = sheets.get(page);
+  if (!sheet || sheet.requestGuard) return;
+  const guard = async (route: Route) => {
+    const request = route.request();
+    if (sheet.allowedNavigationUrl === request.url() && request.isNavigationRequest() && request.method() === 'GET')
+      return route.continue();
+    if (sheet.blockedRequests.length < 5) sheet.blockedRequests.push(`${request.method()}:${request.resourceType()}`);
+    return route.abort();
+  };
+  await page.context().route('**/*', guard);
+  sheet.requestGuard = guard;
+}
+
+export function prepareSuppressedReferenceLink(page: Page, destination: string): void {
+  const sheet = sheets.get(page);
+  if (!sheet) return;
+  if (sheet.blockedRequests.length) obstruction(`suppressed document attempted a request (${sheet.blockedRequests.join(', ')})`);
+  sheet.allowedNavigationUrl = destination;
+}
+
 export async function resumeScriptsOnNewReferenceDocument(page: Page, previousUrl?: string): Promise<void> {
   const sheet = sheets.get(page);
   if (!sheet) return;
   const tree = await sheet.session.send('Page.getFrameTree');
   if (tree.frameTree.frame.loaderId === sheet.loaderId) {
+    sheet.allowedNavigationUrl = undefined;
     if (previousUrl) {
       const before = new URL(previousUrl), after = new URL(page.url());
       if (before.hash !== after.hash && before.origin === after.origin
@@ -82,6 +105,7 @@ export async function resumeScriptsOnNewReferenceDocument(page: Page, previousUr
     }
     obstruction('same-document navigation cannot safely resume page scripts after notice suppression');
   }
+  if (sheet.requestGuard) await page.context().unroute('**/*', sheet.requestGuard);
   await sheet.session.send('Emulation.setScriptExecutionDisabled', { value: false });
   sheets.delete(page);
   await page.reload({ waitUntil: 'domcontentloaded', timeout: 15000 });
@@ -158,6 +182,8 @@ export async function clearReferenceNotices(page: Page, allowedStateSelectors: r
       break;
     }
     if (visibleIndex < 0) {
+      const blocked = sheets.get(page)?.blockedRequests ?? [];
+      if (blocked.length) obstruction(`suppressed document attempted a request (${blocked.join(', ')})`);
       if (!intentionalModal && (await coveringLayers(page)).some(layer => sheets.has(page) || BACKDROP_NAME.test(layer.name)))
         obstruction('a covering layer still obscures the reference viewport');
       return dismissals;
@@ -209,6 +235,7 @@ export async function clearReferenceNotices(page: Page, allowedStateSelectors: r
       if (page.url() !== beforeUrl || (await coveringLayers(page)).length) obstruction(`notice visual suppression did not clear the viewport: ${title}`);
       return backdrops.length;
     });
+    await guardSuppressedDocumentRequests(page);
     dismissals.push({ dialog: title, control: closeName, method: 'visual-only', suppressedBackdrops });
   }
   obstruction('too many stacked notices');
