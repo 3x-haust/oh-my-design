@@ -133,7 +133,7 @@ test('a prepared feature refuses an unrelated consent modal instead of saving ob
 });
 
 test('reference capture refuses unknown popups and covering layers but clears a notice backdrop', async t => {
-  for (const mode of ['custom', 'orphaned-backdrop', 'white-mask', 'embedded-overlay', 'service-error', 'structured-error', 'korean-maintenance'] as const) {
+  for (const mode of ['custom', 'orphaned-backdrop', 'white-mask', 'embedded-overlay', 'service-error', 'structured-error', 'korean-maintenance', 'hidden-main-error'] as const) {
     const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-visual-overlay-')));
     t.after(() => rmSync(root, { recursive: true, force: true }));
     const popup = mode === 'custom'
@@ -146,12 +146,14 @@ test('reference capture refuses unknown popups and covering layers but clears a 
         ? `<div id="message-panel"><header>Service unavailable</header><section>${'Please try again later. '.repeat(12)}</section></div>`
         : mode === 'korean-maintenance'
         ? '<div id="message-panel"><header>서비스 점검 중</header><section>잠시 후 다시 이용해 주세요</section></div>'
+        : mode === 'hidden-main-error'
+        ? '<div id="message-panel"><header>Temporarily unavailable</header><section>Please try again later</section></div>'
         : mode === 'white-mask'
         ? '<div id="mask"></div><div role="dialog" aria-modal="true" aria-label="Service notice"><button type="button" aria-label="Close">Close</button></div>'
         : '<div class="modal-backdrop"></div><div role="dialog" aria-modal="true" aria-label="Service notice"><button type="button" aria-label="Close">Close</button></div>';
     const server = createServer((_request, response) => {
       response.setHeader('content-type', 'text/html');
-      response.end(`<!doctype html><title>Public benefits</title><style>body{margin:0;background:white}main{padding:40px}
+      response.end(`<!doctype html><title>Public benefits</title><style>body{margin:0;background:white}main{padding:40px}${mode === 'hidden-main-error' ? 'main{display:none}' : ''}
         #backdrop,.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.7)}#mask,#service-error,#message-panel{position:fixed;inset:0;background:white}
         .cl-overlay{position:fixed;inset:0;background:transparent}#embedded-message{position:absolute;left:30%;top:30%;background:white;padding:20px}
         #service-popup,[role=dialog]{position:fixed;left:35%;top:25%;width:30%;height:40%;background:white}</style>
@@ -162,7 +164,7 @@ test('reference capture refuses unknown popups and covering layers but clears a 
     const address = server.address(); assert.ok(address && typeof address !== 'string');
     const writer = createTestProjectWriteAdapter(root); writer.mkdir('.omd/refs/domain');
     const shotOut = join(root, `.omd/refs/domain/${mode}.png`);
-    if (mode === 'custom' || mode === 'white-mask' || mode === 'embedded-overlay' || mode === 'service-error' || mode === 'structured-error' || mode === 'korean-maintenance') {
+    if (mode === 'custom' || mode === 'white-mask' || mode === 'embedded-overlay' || mode === 'service-error' || mode === 'structured-error' || mode === 'korean-maintenance' || mode === 'hidden-main-error') {
       await assert.rejects(withBrowser(browser => capturePageForRef(browser, `http://127.0.0.1:${address.port}`,
         { width: 800, height: 600 }, { shotOut, adapter: writer })), /REFERENCE_CAPTURE_VISUAL_OBSTRUCTION/);
       assert.equal(existsSync(shotOut), false);
@@ -301,8 +303,9 @@ test('a fixed div app shell with header and content is not treated as an obstruc
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const server = createServer((_request, response) => {
     response.setHeader('content-type', 'text/html');
-    response.end(`<!doctype html><title>Public service</title><div id="app" style="position:fixed;inset:0;background:white;overflow:auto">
-      <header><h1>Benefits workspace</h1></header><section><p>${'Inspect public benefits and requirements. '.repeat(12)}</p></section></div>`);
+    response.end(`<!doctype html><title>Public service</title><div id="app" style="position:fixed;inset:0;background:white;overflow:auto;z-index:10">
+      <header><h1>Benefits workspace</h1></header><section><p>${'Inspect public benefits and requirements. '.repeat(12)}</p></section></div>
+      <footer style="position:absolute;inset:0;z-index:0">Background footer content</footer>`);
   });
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
   t.after(() => new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())));
