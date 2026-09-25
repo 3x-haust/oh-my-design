@@ -171,7 +171,7 @@ test('reference capture refuses unknown popups and covering layers but clears a 
         : '<div class="modal-backdrop"></div><div role="dialog" aria-modal="true" aria-label="Service notice"><button type="button" aria-label="Close">Close</button></div>';
     const server = createServer((_request, response) => {
       response.setHeader('content-type', 'text/html');
-      response.end(`<!doctype html><title>Public benefits</title><style>body{margin:0;background:white}main{padding:40px}${mode === 'hidden-main-error' || mode === 'app-root-error' ? 'body > main{display:none}' : ''}
+      response.end(`<!doctype html><meta charset="utf-8"><title>Public benefits</title><style>body{margin:0;background:white}main{padding:40px}${mode === 'hidden-main-error' || mode === 'app-root-error' ? 'body > main{display:none}' : ''}
         #backdrop,.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.7)}#mask,#service-error,#message-panel,#app{position:fixed;inset:0;background:white}
         .cl-overlay{position:fixed;inset:0;background:transparent}#embedded-message{position:absolute;left:30%;top:30%;background:white;padding:20px}
         #service-popup,[role=dialog]{position:fixed;left:35%;top:25%;width:30%;height:40%;background:white}</style>
@@ -339,7 +339,8 @@ test('a fixed div app shell requires a selected visible feature instead of autom
     response.end(`<!doctype html><title>Public service</title><div id="app" style="position:fixed;inset:0;background:white;overflow:auto;z-index:10">
       <header><h1>Benefits workspace</h1><nav><a href="#benefits">Benefits</a><a href="#applications">Applications</a></nav></header>
       <main><section id="benefits"><p>${'Inspect public benefits and requirements. '.repeat(12)}</p><a href="/benefit-a">Benefit A</a></section>
-      <section id="applications">Application steps <a href="/application">Continue application</a></section></main></div>
+      <section id="applications">Application steps <a href="/application">Continue application</a></section>
+      <section id="benefits-support">Support programs <a href="/support">Get support for your application</a></section></main></div>
       <footer style="position:absolute;inset:0;z-index:0">Background footer content</footer>`);
   });
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
@@ -359,6 +360,10 @@ test('a fixed div app shell requires a selected visible feature instead of autom
     { width: 800, height: 600 }, { shotOut, adapter: writer, selector: '#benefits' }));
   assert.equal(result.acquisition.noticeDismissals, undefined);
   assert.equal(existsSync(shotOut), true);
+  const supportShot = join(root, '.omd/refs/domain/div-app-support.png');
+  await withBrowser(browser => capturePageForRef(browser, `http://127.0.0.1:${address.port}`,
+    { width: 800, height: 600 }, { shotOut: supportShot, adapter: writer, selector: '#benefits-support' }));
+  assert.equal(existsSync(supportShot), true);
 });
 
 test('a safe notice can be suppressed over a fixed full-viewport app shell', async t => {

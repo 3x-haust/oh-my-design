@@ -11,8 +11,8 @@ export async function isSelectedAppContent(page: Page, layerSelector: string, se
         const targets = document.querySelectorAll(selector);
         if (targets.length !== 1 || targets[0] === root || !root.contains(targets[0]!)) return false;
         const target = targets[0]!, box = target.getBoundingClientRect();
-        const purpose = `${target.id} ${target.className} ${target.textContent ?? ''}`.replace(/\s+/g, ' ').trim();
-        if (/recovery|maintenance|error|retry|try again|back home|help center|support|복구|점검|오류|장애|다시 시도|잠시 후|홈으로 돌아|고객센터|이용해 주세요/i.test(purpose)) return false;
+        const purpose = (target.textContent ?? '').replace(/\s+/g, ' ').trim();
+        if (/service (?:is )?(?:temporarily )?unavailable|please try again later|잠시 후 다시 이용해 주세요|홈으로 돌아가기/i.test(purpose)) return false;
         if (box.width <= 0 || box.height <= 0 || target.matches('html,body,main,header,nav,footer,h1,h2,h3,h4,h5,h6,a,button,[role="button"]')
           || target.closest('nav,header,footer,[role="dialog"],[role="alertdialog"],dialog[open]')) return false;
         for (let current: Element | null = target; current; current = current.parentElement) {
