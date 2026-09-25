@@ -167,7 +167,7 @@ test('reference capture refuses unknown popups and covering layers but clears a 
         : mode === 'app-root-recovery-error'
         ? '<div id="app"><header>현재 서비스 연결이 원활하지 않습니다</header><nav><a href="#home">홈</a><a href="#help">도움말</a></nav><main><section id="recovery-panel">잠시 후 다시 이용해 주세요 <a id="recovery" href="/">홈으로 돌아가기</a><a href="/help">고객센터</a></section></main></div>'
         : mode === 'app-root-recovery-alternate'
-        ? '<div id="app"><header>문제가 발생했습니다</header><main><section id="recovery-panel">문제가 발생했습니다. 다시 시도해주세요. <a href="/">홈으로</a></section></main></div>'
+        ? '<div id="app"><header>문제가 발생했습니다</header><main><section id="message-panel">문제가 발생했습니다. 다시 시도해주세요. <a href="/">홈으로</a></section></main></div>'
         : mode === 'white-mask'
         ? '<div id="mask"></div><div role="dialog" aria-modal="true" aria-label="Service notice"><button type="button" aria-label="Close">Close</button></div>'
         : '<div class="modal-backdrop"></div><div role="dialog" aria-modal="true" aria-label="Service notice"><button type="button" aria-label="Close">Close</button></div>';
@@ -190,7 +190,7 @@ test('reference capture refuses unknown popups and covering layers but clears a 
       assert.equal(existsSync(shotOut), false);
       if (mode === 'app-root-recovery-error' || mode === 'app-root-recovery-alternate' || mode === 'app-root-opacity-nav-error') {
         await assert.rejects(withBrowser(browser => capturePageForRef(browser, `http://127.0.0.1:${address.port}`,
-          { width: 800, height: 600 }, { shotOut, adapter: writer, selector: mode === 'app-root-opacity-nav-error' ? '#benefits' : mode === 'app-root-recovery-error' ? '#recovery' : '#recovery-panel' })),
+          { width: 800, height: 600 }, { shotOut, adapter: writer, selector: mode === 'app-root-opacity-nav-error' ? '#benefits' : mode === 'app-root-recovery-error' ? '#recovery' : '#message-panel' })),
         /REFERENCE_CAPTURE_VISUAL_OBSTRUCTION/);
         assert.equal(existsSync(shotOut), false);
         if (mode === 'app-root-recovery-error') {
