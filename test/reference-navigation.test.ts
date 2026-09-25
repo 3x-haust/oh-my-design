@@ -40,7 +40,7 @@ test('navigation-only capture preserves observed gallery hops without entering t
   const record = JSON.parse(readFileSync(join(cwd, result.capture.path), 'utf8'));
   assert.equal(record.component, undefined);
   assert.equal(record.kind, 'page');
-  assert.equal(record.schema, 'reference-navigation-capture-v3');
+  assert.equal(record.schema, 'reference-navigation-capture-v4');
   assert.equal(record.researchLane, 'design');
   assert.equal(record.acquisition.httpStatus, 200);
   assert.ok(record.acquisition.links.includes(GALLERY_ITEM));

@@ -50,11 +50,10 @@ function domainCandidate(value: string): boolean {
   return publicCandidate(value) && !/^(?:www\.)?(?:facebook\.com|instagram\.com|youtube\.com|linkedin\.com|twitter\.com|x\.com)$/u
     .test(new URL(value).hostname.toLowerCase());
 }
-function domainSearchResults(search: SearchExecution, plan: ReferenceDiscoveryPlan): readonly string[] {
+function domainSearchResults(search: SearchExecution): readonly string[] {
   const labels = new Map((search.results ?? []).flatMap(result =>
     observedSearchTargets({ links: [result.url] }).map(url => [url, result.text] as const)));
-  const knownFamilies = new Set(plan.marketReferencePolicy.domainEntryInputs.map(item => referenceServiceFamily(item.url)));
-  return actionableSearchTargets(search, knownFamilies).filter(url => {
+  return actionableSearchTargets(search).filter(url => {
     if (!publicCandidate(url)) return false;
     const host = new URL(url).hostname.toLowerCase();
     return host !== search.provider && !host.endsWith(`.${search.provider}`)
@@ -82,7 +81,7 @@ function nextLaneAction(lane: Lane, plan: ReferenceDiscoveryPlan, evidence: Lane
   const visited = new Set([...evidence.visits, ...evidence.entries].flatMap(item =>
     [item.observation.url, item.observation.finalUrl]));
   const rootTargets = [...new Set([...evidence.searches.filter(searchObserved).flatMap(search => lane === 'domain'
-    ? domainSearchResults(search, plan) : actionableSearchTargets(search).filter(publicCandidate)),
+    ? domainSearchResults(search) : actionableSearchTargets(search).filter(publicCandidate)),
     ...evidence.entries.flatMap(item => item.observation.links.filter(url => lane === 'domain'
       ? domainCandidate(url) : publicCandidate(url) && designDiscoveryProvider(url) !== null))])];
   const rootSet = new Set(rootTargets);

@@ -55,7 +55,7 @@ function mislabeledDesign(root: string, hostname: string): void {
 }
 function unavailableSearch(root: string, input: { readonly lane: 'domain' | 'design'; readonly query: string;
   readonly url: string; readonly queryParam: string }, observedAt = new Date().toISOString()): void {
-  const unsigned = { schema: 'reference-search-execution-v2', lane: input.lane, query: input.query,
+  const unsigned = { schema: 'reference-search-execution-v3', lane: input.lane, query: input.query,
     queryParam: input.queryParam, requestedUrl: input.url, finalUrl: null,
     provider: new URL(input.url).hostname, observedAt,
     status: 'navigation-error', httpStatus: null, links: [], results: [], capture: null,
@@ -74,7 +74,7 @@ function observedSearch(root: string, input: { readonly lane: 'domain' | 'design
   const imageSha256 = sha256(image);
   const imagePath = `.omd/discovery/${input.lane}/search-${imageSha256}.png`;
   writeFileSync(join(root, imagePath), image);
-  const unsigned = { schema: 'reference-search-execution-v2', lane: input.lane, query: input.query,
+  const unsigned = { schema: 'reference-search-execution-v3', lane: input.lane, query: input.query,
     queryParam: input.queryParam, requestedUrl: input.url, finalUrl: input.url,
     provider: new URL(input.url).hostname, observedAt: new Date().toISOString(),
     status: 'page-observed', httpStatus: 200, links: results.map(result => result.url), results,
@@ -101,7 +101,7 @@ function visitedItem(root: string, url: string, lane: 'domain' | 'design' = 'des
   const imageSha256 = sha256(image);
   const imagePath = `${directory}/${imageSha256}.png`;
   writeFileSync(join(root, imagePath), image);
-  const unsigned = { schema: 'reference-navigation-capture-v3', source: url, researchLane: lane, kind: 'page',
+  const unsigned = { schema: 'reference-navigation-capture-v4', source: url, researchLane: lane, kind: 'page',
     capturedAt: new Date().toISOString(), imagePath,
     acquisition: { requestedUrl: url, finalUrl: url, httpStatus: 200, links, imageSha256 },
     limitations: 'native-public-get; stable-rendered-viewport-links; no-authentication; no-interaction-probes; not-provider-attested' };
@@ -159,7 +159,7 @@ test('retained families do not skip remaining required market searches after a s
   assert.equal(after.action?.input?.query, '정부24 혜택알리미');
 });
 
-test('observed generic-label service links remain eligible while private links are skipped', t => {
+test('generic search labels and private links do not become candidate services without a signed direct root', t => {
   const root = fixture(t);
   const route = routeAdaptiveFlow(routeInput());
   const input = referenceDiscoveryWork(root, route).action?.input;
@@ -169,8 +169,8 @@ test('observed generic-label service links remain eligible while private links a
     { url: 'https://www.welfarehello.com/recommend-policy/', text: '바로가기' },
   ]);
   const work = referenceDiscoveryWork(root, route);
-  assert.equal(work.action?.kind, 'follow-link');
-  assert.equal(work.action?.url, 'https://www.welfarehello.com/recommend-policy/');
+  assert.equal(work.action?.kind, 'search');
+  assert.notEqual(work.action?.input?.url, input.url);
 });
 
 test('a search header help link is not a domain task result or a next visit', t => {

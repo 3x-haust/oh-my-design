@@ -22,7 +22,7 @@ function fixture(t: { after(fn: () => void): void }, signed: boolean): string {
   const image = testPng();
   const imageSha256 = sha256(image);
   writeFileSync(join(root, directory, `${imageSha256}.png`), image);
-  const schema = signed ? 'reference-navigation-capture-v3' : 'reference-navigation-capture-v2';
+  const schema = signed ? 'reference-navigation-capture-v4' : 'reference-navigation-capture-v2';
   const record = { schema, source, researchLane: 'domain', kind: 'page', capturedAt: new Date().toISOString(),
     imagePath: `${directory}/${imageSha256}.png`,
     acquisition: { requestedUrl: source, finalUrl: source, httpStatus: 200, links: [], imageSha256 },

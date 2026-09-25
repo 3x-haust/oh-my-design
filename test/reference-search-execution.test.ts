@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -8,6 +8,8 @@ import { executeReferenceSearch, observedSearchTargets, parseSearchInput, readSe
 import { withBrowser } from '../core/render/index.ts';
 import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
 import { testSearchReceipt } from './helpers/search-execution.ts';
+import { canonicalJson } from '../core/ref/board-artifacts.ts';
+import { signNativeObservation } from '../core/runtime/self-signed-activation.ts';
 
 const input = { lane: 'design', query: 'task panels', url: 'https://www.google.com/search?q=task+panels', queryParam: 'q' };
 function fixture(t: { after(fn: () => void): void }) {
@@ -140,6 +142,24 @@ test('historical and current exact receipt identities read the same unmodified e
   assert.throws(() => readSearchExecution(root, current, 'design'), /changed/);
 });
 
+test('a signed v2 search stays readable but cannot establish current result provenance', t => {
+  const root = fixture(t);
+  const source = 'https://service.example/task';
+  const latest = testSearchReceipt(root, 'domain', 'service task', [source]);
+  const current = JSON.parse(readFileSync(join(root, latest.path), 'utf8')) as Record<string, unknown>;
+  const { signature: _signature, ...fields } = current;
+  const unsigned = { ...fields, schema: 'reference-search-execution-v2' };
+  const legacy = { ...unsigned, signature: signNativeObservation(root, unsigned.schema,
+    createHash('sha256').update(canonicalJson(unsigned)).digest('hex')) };
+  const bytes = `${JSON.stringify(legacy, null, 2)}\n`;
+  const sha256 = createHash('sha256').update(bytes).digest('hex');
+  const receipt = { path: `.omd/discovery/domain/search-${sha256}.json`, sha256 };
+  mkdirSync(join(root, '.omd/discovery/domain'), { recursive: true });
+  writeFileSync(join(root, receipt.path), bytes);
+  assert.equal(readSearchExecution(root, receipt, 'domain').schema, 'reference-search-execution-v2');
+  assert.throws(() => validateSearchCoverage(root, 'domain', ['service task'], [receipt], [source]), /current signed search execution/);
+});
+
 test('a self-hashed search receipt without the native execution signature is refused', t => {
   const root = fixture(t);
   const receipt = testSearchReceipt(root, 'design', input.query, ['https://www.pinterest.com/pin/123/']);
@@ -205,6 +225,30 @@ test('a visible but unrelated search header link cannot establish research reach
   const receipt = testSearchReceipt(root, 'domain', 'medication order', [target], false,
     new Date().toISOString(), 'Accessibility help');
   assert.throws(() => validateSearchCoverage(root, 'domain', ['medication order'], [receipt], [target]), /not an observed search link/);
+});
+
+test('short Korean service names and task synonyms remain valid search results', t => {
+  const root = fixture(t);
+  for (const row of [
+    { query: '웰로', url: 'https://www.welfarehello.com/recommend-policy/', label: '웰로 맞춤형 정책 추천' },
+    { query: 'medication order', url: 'https://www.walgreens.com/topic/pharmacy/prescription-refills.jsp',
+      label: 'Walgreens Prescription Refills' },
+  ]) {
+    const receipt = testSearchReceipt(root, 'domain', row.query, [row.url], false, new Date().toISOString(), row.label);
+    assert.equal(validateSearchCoverage(root, 'domain', [row.query], [receipt], [row.url]).executed, 1);
+  }
+});
+
+test('a signed search from before route publication cannot satisfy current research', t => {
+  const root = fixture(t);
+  const source = 'https://service.example/task';
+  const receipt = testSearchReceipt(root, 'domain', 'service task', [source]);
+  mkdirSync(join(root, '.omd'), { recursive: true });
+  const routePath = join(root, '.omd/route.json');
+  writeFileSync(routePath, '{}');
+  const later = new Date(Date.now() + 1000);
+  utimesSync(routePath, later, later);
+  assert.throws(() => validateSearchCoverage(root, 'domain', ['service task'], [receipt], [source]), /after the route publication is required/);
 });
 test('written query lists, wrong-lane receipts, unobserved entries, stale bytes and symlinks fail closed', t => {
   const root = fixture(t);

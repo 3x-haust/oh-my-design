@@ -207,10 +207,13 @@ active research owner. Unknown files and valid references remain untouched.
 `omd ref research-set` is the sole publisher of both files and writes `.omd/reference-research.json`
 last as their consistency receipt. `research-check` and downstream gates require all three current
 records. New research uses v7. Historical v5 remains readable with its search-only requirements;
-historical v6 remains readable with its original search-or-direct-root requirements. Each lane can use `searches` from `omd ref search --input <json>` with
+historical v6 remains parseable, but current publication rechecks any direct roots with signed v4
+evidence after the current route; migrate older roots through a fresh native visit. Each lane can use `searches` from `omd ref search --input <json>` with
 `{lane, query, url, queryParam}`. The URL submits the exact query; a fresh browser records observed
 links, a 1280×900 screenshot and HTTP/error outcome, without reusing login state or clicking controls.
-Current signed search records also bind each retained visible result label to its observed link.
+Current signed search v3 records bind each retained visible result label to its observed link and
+exclude browser-observed header, navigation, footer, and consent chrome from actionable links.
+Older signed v2 records remain readable as history but require recapture for current research.
 Visible search chrome (help, navigation tabs, settings, pagination) is not a task result: follow
 only task-related service links or concrete gallery items. An observed search page with no such
 lead advances to another public search or direct entry, not to a header/footer link.
@@ -219,7 +222,7 @@ queries before global searches. Other unscoped query seeds are adaptable; do not
 market inputs. A local result's link-associated text normally names the market and relevant
 service/product scope. A generic domain-service link label such as `바로가기` qualifies only when
 the separately retained, current site capture records visibly Korean text and a current signed
-native direct-entry v3 for that exact service URL observes Korean-language service content.
+native direct-entry v4 for that exact service URL observes Korean-language service content.
 Neither a market term in the query nor a generic label alone establishes local provenance.
 Current v7 market provenance and its retained source observation must both be no more than seven days old.
 Inspect the page: HTTP 200 alone does not prove useful results or free access. All queries require

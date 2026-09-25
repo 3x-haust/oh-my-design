@@ -387,7 +387,17 @@ test('explicit-market v7 binds local sources and fallback to executed market evi
   const invocation = publishTestAdaptiveRoute(fixture.root, routeInput);
   const route = readPersistedRoute(fixture.root, invocation);
   writeFileSync(join(fixture.root, '.omd/domain-brief.json'), JSON.stringify({ ...domainBrief, request }));
-  const current = { ...input, sourceContractSha256: route.sourceContractSha256, marketCoverage: documented };
+  const currentDomainSearches = domainQueries.map(query => testSearchReceipt(fixture.root, 'domain', query,
+    [fixture.domain.source, fixture.domainTwo.source, fixture.domainThree.source, domainFour.source]));
+  const currentDesignSearches = designQueries.map(query => testSearchReceipt(fixture.root, 'design', query,
+    [fixture.gallery.source, secondVisual.gallery.source]));
+  const currentCoverage = structuredClone(documented);
+  currentCoverage.domain.localSources.forEach(source => { source.provenanceReceiptSha256 = currentDomainSearches[0]!.sha256; });
+  currentCoverage.domain.globalFallback!.provenance.forEach(binding => { binding.provenanceReceiptSha256 = currentDomainSearches[0]!.sha256; });
+  currentCoverage.design.localSources.forEach(source => { source.provenanceReceiptSha256 = currentDesignSearches[0]!.sha256; });
+  const current = { ...input, sourceContractSha256: route.sourceContractSha256, marketCoverage: currentCoverage,
+    domainReference: { ...input.domainReference, searches: currentDomainSearches },
+    designReference: { ...input.designReference, searches: currentDesignSearches } };
   publishReferenceResearch(fixture.root, current, {
     ...options, expectedSourceContractSha256: route.sourceContractSha256, expectedRequest: request,
   }, fixture.writer);

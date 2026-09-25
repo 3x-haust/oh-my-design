@@ -28,7 +28,7 @@ test('new navigation binds only rendered links to its captured viewport', async 
     const record = JSON.parse(readFileSync(join(root, receipt.capture.path), 'utf8'));
     // Then hidden DOM anchors cannot become discovery edges.
     assert.deepEqual(record.acquisition.links, [DOMAIN_ITEM]);
-    assert.equal(record.schema, 'reference-navigation-capture-v3');
+    assert.equal(record.schema, 'reference-navigation-capture-v4');
     assert.deepEqual(readStrictDiscoveryNavigation(root, receipt), { url: PUBLIC_DIRECTORY, finalUrl: PUBLIC_DIRECTORY, links: [DOMAIN_ITEM] });
     assert.throws(() => readDirectDiscoveryEntry(root, { method: 'direct-public', entry: 'public-directory', ...receipt }), /purpose path/);
   });
@@ -59,7 +59,7 @@ for (const entry of ['public-directory', 'free-gallery'] as const) {
     const target = entry === 'public-directory' ? DOMAIN_ITEM : GALLERY_ITEM;
     const value = await capture(t, { url, html: directoryHtml(target) }, entry);
     const record = JSON.parse(readFileSync(join(value.root, value.receipt.capture.path), 'utf8'));
-    assert.equal(record.schema, 'reference-discovery-entry-v3');
+    assert.equal(record.schema, 'reference-discovery-entry-v4');
     assert.deepEqual(record.linkLabels, [{ url: target, text: 'Inspect entry 1' }]);
     assert.equal(value.receipt.method, 'direct-public');
     assert.equal(value.receipt.entry, entry);
@@ -242,6 +242,13 @@ for (const row of unavailable) {
 
 test('a self-link alone cannot make a domain page a discovery root', async t => {
   await assert.rejects(capture(t, { url: PUBLIC_DIRECTORY, html: directoryHtml(PUBLIC_DIRECTORY) }, 'public-directory'), /visible followable/);
+});
+
+test('cookie and global navigation links cannot turn a page into a domain discovery root', async t => {
+  const html = `<div id="cookie-banner"><a href="https://www.nhs.uk/our-policies/choose-your-cookie-settings/">Choose your cookie settings</a></div>
+    <header><nav><a href="https://www.nhs.uk/">NHS home</a></nav></header><main><h1>Medicines A to Z</h1>
+    <p>Browse the medicine information, understand the purpose of each treatment, and review its safety details before continuing to an individual medicine page.</p></main>`;
+  await assert.rejects(capture(t, { url: PUBLIC_DIRECTORY, html }, 'public-directory'), /visible followable/);
 });
 
 test('snapshot changes are recaptured once and a second change leaves no image', async t => {

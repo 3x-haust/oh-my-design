@@ -161,6 +161,13 @@ function fixture(t: { after(fn: () => void): void }) {
   return { root, research, boardPath, writer };
 }
 
+function refreshSearchesAfterRoute(root: string, research: ReturnType<typeof fixture>['research']): void {
+  research.domainReference.searches = research.domainReference.queries.map(query =>
+    testSearchReceipt(root, 'domain', query, research.domainReference.sources.map(source => source.url)));
+  research.designReference.searches = research.designReference.queries.map(query =>
+    testSearchReceipt(root, 'design', query, research.designReference.sources.map(source => source.discovery.url)));
+}
+
 test('historical v5 wrapper records remain readable but cannot satisfy current completion evidence', t => {
   const value = fixture(t);
   const source = value.research.designReference.sources[0]!;
@@ -202,7 +209,7 @@ test('gallery similarity hops require native current captures rooted in a real s
   const imagePath = `.omd/discovery/design/navigation/${imageSha256}.png`;
   writer.write(imagePath, png);
   const unsigned = {
-    schema: 'reference-navigation-capture-v3', source: start, researchLane: 'design', kind: 'page',
+    schema: 'reference-navigation-capture-v4', source: start, researchLane: 'design', kind: 'page',
     capturedAt: new Date().toISOString(), imagePath,
     acquisition: { requestedUrl: start, finalUrl: start, httpStatus: 200, links: [retained.url], imageSha256 },
     limitations: 'native-public-get; stable-rendered-viewport-links; no-authentication; no-interaction-probes; not-provider-attested',
@@ -477,6 +484,7 @@ test('a board cannot advance past research until separate current lanes and appl
   const options = { expectedSourceContractSha256: route.sourceContractSha256, benchmarkRequired: false };
   const writer = createTestProjectWriteAdapter(root, invocation);
   research.sourceContractSha256 = route.sourceContractSha256;
+  refreshSearchesAfterRoute(root, research);
   assert.ok(stageArtifactProblems(root, 'reference-board', invocation).length > 0);
   publishReferenceResearch(root, research, options, writer);
   writeFileSync(join(root, '.omd/domain-brief.json'), JSON.stringify(domainBrief(route.request)));
@@ -504,6 +512,7 @@ test('Pi CLI publishes and checks split research without an external activation'
   await run(['route', 'classify', '--input', '.omd/route-input.json', '--json']);
   const route = JSON.parse((await run(['route', 'show', '--json'])).content[0]!.text);
   research.sourceContractSha256 = route.sourceContractSha256;
+  refreshSearchesAfterRoute(root, research);
   writeFileSync(join(root, '.omd/research-input.json'), JSON.stringify(research));
   const result = JSON.parse((await run(['ref', 'research-set', '--input', '.omd/research-input.json', '--json'])).content[0]!.text);
   assert.equal(result.domainPath, DOMAIN_REFERENCES_PATH);
@@ -629,6 +638,7 @@ test('production briefs require the current application and deliver decisions wi
   const options = { expectedSourceContractSha256: route.sourceContractSha256, benchmarkRequired: false };
   const writer = createTestProjectWriteAdapter(f.root, invocation);
   f.research.sourceContractSha256 = route.sourceContractSha256;
+  refreshSearchesAfterRoute(f.root, f.research);
   publishReferenceResearch(f.root, f.research, options, writer);
   writeFileSync(join(f.root, '.omd/domain-brief.json'), JSON.stringify(domainBrief(route.request)));
   assert.ok(buildBrief(f.root, 'composition', undefined, invocation).blockers.some(blocker => blocker.includes('apply-check')));
@@ -688,6 +698,7 @@ test('publishing or changing application decisions invalidates preliminary and f
   writeSourceSeal(f.root, invocation);
   assert.deepEqual(validateSourceSeal(f.root, invocation), []);
   f.research.sourceContractSha256 = route.sourceContractSha256;
+  refreshSearchesAfterRoute(f.root, f.research);
   publishReferenceResearch(f.root, f.research, options, writer);
   writeFileSync(join(f.root, '.omd/domain-brief.json'), JSON.stringify(domainBrief(route.request)));
   const application = filledApplication(f.root, options);

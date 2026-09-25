@@ -16,7 +16,7 @@ export function readResearchDiscoveryRoots(root: string, lane: Pick<ReferenceRes
 function targets(origin: DiscoveryRoot): readonly string[] {
   switch (origin.method) {
     case 'executed-search': return origin.targets;
-    case 'direct-public': return origin.observation.links.filter(link => link !== origin.observation.url && link !== origin.observation.finalUrl);
+    case 'direct-public': return [origin.observation.url, origin.observation.finalUrl, ...origin.observation.links];
     default: return assertNever(origin);
   }
 }

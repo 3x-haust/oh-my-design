@@ -36,8 +36,11 @@ type DiscoveryCaptureFields = Readonly<{
 export type DiscoveryCaptureRecord = DiscoveryCaptureFields & (
   Readonly<{ schema: 'reference-navigation-capture-v2' }>
   | Readonly<{ schema: 'reference-navigation-capture-v3'; signature: string }>
+  | Readonly<{ schema: 'reference-navigation-capture-v4'; signature: string }>
   | Readonly<{ schema: 'reference-discovery-entry-v1'; method: 'direct-public'; entry: DirectDiscoveryEntry }>
   | Readonly<{ schema: 'reference-discovery-entry-v3'; method: 'direct-public'; entry: DirectDiscoveryEntry;
+    observedText: string; linkLabels: readonly ObservedSearchResult[]; signature: string }>
+  | Readonly<{ schema: 'reference-discovery-entry-v4'; method: 'direct-public'; entry: DirectDiscoveryEntry;
     observedText: string; linkLabels: readonly ObservedSearchResult[]; signature: string }>
 );
 
@@ -111,18 +114,21 @@ function readDiscovery(root: string, value: unknown, direct: boolean, requireCur
   if (direct && receipt.method !== 'direct-public') return fail('direct method is required');
   const keys = ['schema', 'source', 'researchLane', 'kind', 'capturedAt', 'imagePath', 'acquisition', 'limitations'];
   const decoded = JSON.parse(read(root, capture).toString('utf8')) as Record<string, unknown>;
-  if (direct ? !['reference-discovery-entry-v1', 'reference-discovery-entry-v2', 'reference-discovery-entry-v3'].includes(decoded.schema as string)
-    : !['reference-navigation-capture-v2', 'reference-navigation-capture-v3'].includes(decoded.schema as string)) return fail('native capture purpose/source/lane binding differs');
-  const currentDirect = direct && decoded.schema === 'reference-discovery-entry-v3';
-  const currentNavigation = !direct && decoded.schema === 'reference-navigation-capture-v3';
+  if (direct ? !['reference-discovery-entry-v1', 'reference-discovery-entry-v2', 'reference-discovery-entry-v3', 'reference-discovery-entry-v4'].includes(decoded.schema as string)
+    : !['reference-navigation-capture-v2', 'reference-navigation-capture-v3', 'reference-navigation-capture-v4'].includes(decoded.schema as string)) return fail('native capture purpose/source/lane binding differs');
+  const currentDirect = direct && decoded.schema === 'reference-discovery-entry-v4';
+  const currentNavigation = !direct && decoded.schema === 'reference-navigation-capture-v4';
+  const previousDirect = direct && decoded.schema === 'reference-discovery-entry-v3';
+  const previousNavigation = !direct && decoded.schema === 'reference-navigation-capture-v3';
+  const signedDirect = currentDirect || previousDirect;
   const current = currentDirect || currentNavigation;
   const legacySigned = direct && decoded.schema === 'reference-discovery-entry-v2';
   const legacyObserved = legacySigned && Object.hasOwn(decoded, 'observedText');
   const legacyLabels = legacyObserved && Object.hasOwn(decoded, 'linkLabels');
   const row = object(decoded, direct ? [...keys, 'method', 'entry',
-    ...(currentDirect ? ['observedText', 'linkLabels', 'signature'] : legacySigned
+    ...(signedDirect ? ['observedText', 'linkLabels', 'signature'] : legacySigned
       ? [...(legacyObserved ? ['observedText'] : []), ...(legacyLabels ? ['linkLabels'] : []), 'signature'] : [])]
-    : [...keys, ...(currentNavigation ? ['signature'] : [])]);
+    : [...keys, ...(currentNavigation || previousNavigation ? ['signature'] : [])]);
   if (row.source !== url || row.researchLane !== lane || row.kind !== 'page' || row.imagePath !== image.path
     || row.limitations !== DISCOVERY_LIMITATIONS || !Number.isFinite(Date.parse(text(row.capturedAt)))
     || (direct && (row.method !== 'direct-public' || row.entry !== entry))) return fail('native capture purpose/source/lane binding differs');
@@ -130,15 +136,17 @@ function readDiscovery(root: string, value: unknown, direct: boolean, requireCur
     ? 'current direct discovery signature required' : 'current native discovery signature required');
   if (requireCurrent && (Date.parse(row.capturedAt as string) < currentReferenceEvidenceAfter(root)
     || Date.parse(row.capturedAt as string) > Date.now() + 5 * 60 * 1000)) return fail('native discovery capture is stale for the current route');
-  if (current || legacySigned) {
+  if (current || previousDirect || previousNavigation || legacySigned) {
     const { signature, ...unsigned } = row;
-    const schema = currentDirect ? 'reference-discovery-entry-v3'
-      : currentNavigation ? 'reference-navigation-capture-v3' : 'reference-discovery-entry-v2';
+    const schema = currentDirect ? 'reference-discovery-entry-v4'
+      : currentNavigation ? 'reference-navigation-capture-v4'
+        : previousDirect ? 'reference-discovery-entry-v3'
+          : previousNavigation ? 'reference-navigation-capture-v3' : 'reference-discovery-entry-v2';
     if (typeof signature !== 'string' || !verifyNativeObservation(root, schema,
       discoveryDigest(canonicalJson(unsigned)), signature)) return fail(direct
         ? 'native direct discovery signature invalid' : 'native discovery signature invalid');
   }
-  const observedText = currentDirect ? text(row.observedText) : undefined;
+  const observedText = signedDirect ? text(row.observedText) : undefined;
   const acquisition = object(row.acquisition, ['requestedUrl', 'finalUrl', 'httpStatus', 'links', 'imageSha256']);
   if (acquisition.requestedUrl !== url || acquisition.imageSha256 !== image.sha256
     || typeof acquisition.httpStatus !== 'number' || !Number.isInteger(acquisition.httpStatus)
@@ -147,7 +155,7 @@ function readDiscovery(root: string, value: unknown, direct: boolean, requireCur
     || Object.keys(acquisition.links).length !== acquisition.links.length) return fail('invalid observed links');
   const links = acquisition.links.map(publicDiscoveryUrl);
   if (new Set(links).size !== links.length) return fail('duplicate observed links');
-  const linkLabels = currentDirect ? observedLinkLabels(row.linkLabels, links) : undefined;
+  const linkLabels = signedDirect ? observedLinkLabels(row.linkLabels, links) : undefined;
   const observation = { url, finalUrl: publicDiscoveryUrl(acquisition.finalUrl), links };
   if (entry !== undefined) validateDirectDiscoveryLinks(entry, observation);
   const png = decodePng(read(root, image));

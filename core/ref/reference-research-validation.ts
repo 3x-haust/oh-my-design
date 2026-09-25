@@ -45,9 +45,9 @@ function verifyCapture(root: string, item: { url: string; evidence: ResearchEvid
   if (purpose === 'navigation' && item.evidence.path.startsWith('.omd/discovery/')) trustedDiscoveryImage(root, item.evidence.path);
   else trustedReferenceImage(root, item.evidence.path);
   const captured = record(JSON.parse(readReferenceResearchFileBytes(root, item.capture.path, 'REFERENCE_RESEARCH_CAPTURE_MISSING').toString('utf8')), 'REFERENCE_RESEARCH_CAPTURE_INVALID');
-  if (purpose === 'retained' && ['reference-navigation-capture-v1', 'reference-navigation-capture-v2', 'reference-navigation-capture-v3',
-    'reference-discovery-entry-v1', 'reference-discovery-entry-v2', 'reference-discovery-entry-v3',
-    'reference-search-execution-v1', 'reference-search-execution-v2'].some(schema => captured.schema === schema)) fail('REFERENCE_RESEARCH_CAPTURE_PURPOSE');
+  if (purpose === 'retained' && ['reference-navigation-capture-v1', 'reference-navigation-capture-v2', 'reference-navigation-capture-v3', 'reference-navigation-capture-v4',
+    'reference-discovery-entry-v1', 'reference-discovery-entry-v2', 'reference-discovery-entry-v3', 'reference-discovery-entry-v4',
+    'reference-search-execution-v1', 'reference-search-execution-v2', 'reference-search-execution-v3'].some(schema => captured.schema === schema)) fail('REFERENCE_RESEARCH_CAPTURE_PURPOSE');
   if (captured.schemaVersion === 'image-fragment-v1') {
     const fragment = parseImageFragmentRecord(captured);
     if (lane !== 'design' || fragment.provenance.sourcePage !== item.url || fragment.imagePath !== item.evidence.path || fragment.sha256 !== item.evidence.sha256) fail('REFERENCE_RESEARCH_CAPTURE_SOURCE_MISMATCH');
@@ -71,7 +71,12 @@ function requiredDiscovery(item: ReferenceResearch['designReference']['sources']
 }
 
 function currentNavigation(root: string, item: { url: string; evidence: ResearchEvidence; capture: ResearchEvidence }): ObservedNavigation {
-  const observation = readCurrentDiscoveryNavigation(root, item);
+  let observation: ReturnType<typeof readCurrentDiscoveryNavigation>;
+  try { observation = readCurrentDiscoveryNavigation(root, item); }
+  catch (error) {
+    if (error instanceof Error && /native discovery capture is stale/u.test(error.message)) fail('REFERENCE_RESEARCH_NAVIGATION_STALE');
+    throw error;
+  }
   if (observation.capturedAt === undefined || Date.parse(observation.capturedAt) < currentReferenceEvidenceAfter(root)) {
     fail('REFERENCE_RESEARCH_NAVIGATION_STALE');
   }

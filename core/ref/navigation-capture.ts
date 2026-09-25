@@ -170,8 +170,8 @@ export async function captureReferenceNavigation(browser: Browser, source: strin
       limitations: DISCOVERY_LIMITATIONS,
     } as const;
     const unsigned = entry === undefined
-      ? { schema: 'reference-navigation-capture-v3' as const, ...common }
-      : { schema: 'reference-discovery-entry-v3' as const, method: 'direct-public' as const, entry,
+      ? { schema: 'reference-navigation-capture-v4' as const, ...common }
+      : { schema: 'reference-discovery-entry-v4' as const, method: 'direct-public' as const, entry,
         ...common, observedText: observation.visibleText, linkLabels: observation.results };
     const record: DiscoveryCaptureRecord = { ...unsigned, signature: signNativeObservation(writer.projectRoot,
       unsigned.schema, discoveryDigest(canonicalJson(unsigned))) };

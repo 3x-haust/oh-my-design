@@ -240,7 +240,15 @@ export async function inspectRenderedState(page: Page): Promise<RawSearchRendere
     }
     return {
       anchors: [...anchors.entries()].flatMap(([element, anchor]) => {
-        if (anchor.text.length > 0) return [{ ...anchor, text: anchor.text.join(' ').slice(0, 4096) }];
+        if (anchor.text.length > 0) {
+          let chrome = Boolean(element.closest('header, nav, footer, [role="navigation"], [role="banner"], [role="contentinfo"], [role="dialog"], [aria-modal="true"]'))
+            && !element.closest('main');
+          for (let ancestor: Element | null = element; ancestor && ancestor !== body; ancestor = ancestor.parentElement) {
+            chrome ||= /(?:^|[-_\s])(?:cookie|consent|privacy|accessib\w*|header|footer|navbar|toolbar|breadcrumb|skip)(?:$|[-_\s])/iu
+              .test(`${ancestor.id} ${ancestor.className}`);
+          }
+          return [{ ...anchor, text: anchor.text.join(' ').slice(0, 4096), chrome }];
+        }
         return [];
       }).slice(0, 2000),
       visibleText, uncertain, viewport: { width: innerWidth, height: innerHeight },

@@ -12,7 +12,7 @@ import { testPng } from './helpers/search-execution.ts';
 
 const GALLERY_ITEM = 'https://www.siteinspire.com/website/123-example';
 const ORIGINAL = 'https://original.example/';
-type NavigationSchema = 'reference-navigation-capture-v2' | 'reference-navigation-capture-v3';
+type NavigationSchema = 'reference-navigation-capture-v2' | 'reference-navigation-capture-v3' | 'reference-navigation-capture-v4';
 
 function fixture(t: { after(fn: () => void): void }): Readonly<{ root: string; route: string; publishedAt: number }> {
   const root = mkdtempSync(join(tmpdir(), 'omd-navigation-provenance-'));
@@ -38,7 +38,7 @@ function navigation(root: string, schema: NavigationSchema, capturedAt: number,
     acquisition: { requestedUrl: GALLERY_ITEM, finalUrl: GALLERY_ITEM, httpStatus: 200,
       links, imageSha256 }, limitations: DISCOVERY_LIMITATIONS,
   } as const;
-  const signature = schema === 'reference-navigation-capture-v3'
+  const signature = schema === 'reference-navigation-capture-v3' || schema === 'reference-navigation-capture-v4'
     ? providedSignature ?? signNativeObservation(root, schema, discoveryDigest(canonicalJson(unsigned))) : undefined;
   const record = signature === undefined ? unsigned : { ...unsigned, signature };
   const bytes = `${JSON.stringify(record, null, 2)}\n`;
@@ -70,8 +70,8 @@ test('gallery admission rejects rehashed links with a mismatched native signatur
   // Given a valid visit and a second self-hashed record carrying altered links with its signature.
   const { root } = fixture(t);
   const capturedAt = Date.now();
-  const signature = navigation(root, 'reference-navigation-capture-v3', capturedAt);
-  navigation(root, 'reference-navigation-capture-v3', capturedAt, ['https://forged.example/'], signature);
+  const signature = navigation(root, 'reference-navigation-capture-v4', capturedAt);
+  navigation(root, 'reference-navigation-capture-v4', capturedAt, ['https://forged.example/'], signature);
   // When gallery originals are enumerated.
   const items = observedGalleryItems(root);
   // Then only the original signed link survives.
@@ -81,7 +81,7 @@ test('gallery admission rejects rehashed links with a mismatched native signatur
 test('a signed current navigation visit supplies discovery and gallery originals', t => {
   // Given a current signed gallery item visit.
   const { root } = fixture(t);
-  navigation(root, 'reference-navigation-capture-v3', Date.now());
+  navigation(root, 'reference-navigation-capture-v4', Date.now());
   // When current discovery and gallery evidence are read.
   const evidence = readCurrentReferenceDiscoveryEvidence(root);
   const items = observedGalleryItems(root);
@@ -93,7 +93,7 @@ test('a signed current navigation visit supplies discovery and gallery originals
 test('gallery admission expires a signed visit before the current route', t => {
   // Given a signed gallery visit preceding route publication.
   const { root, publishedAt } = fixture(t);
-  navigation(root, 'reference-navigation-capture-v3', publishedAt - 1000);
+  navigation(root, 'reference-navigation-capture-v4', publishedAt - 1000);
   // When gallery originals are enumerated.
   const items = observedGalleryItems(root);
   // Then the earlier visit does not authorize an original.
@@ -105,9 +105,16 @@ test('gallery admission expires a signed visit after seven days', t => {
   const { root, route } = fixture(t);
   const old = Date.now() - 8 * 24 * 60 * 60 * 1000;
   utimesSync(route, new Date(old - 1000), new Date(old - 1000));
-  navigation(root, 'reference-navigation-capture-v3', old);
+  navigation(root, 'reference-navigation-capture-v4', old);
   // When gallery originals are enumerated.
   const items = observedGalleryItems(root);
   // Then the stale visit does not authorize an original.
   assert.deepEqual(items, []);
+});
+
+test('a signed v3 visit remains historical but cannot authorize current gallery originals', t => {
+  const { root } = fixture(t);
+  navigation(root, 'reference-navigation-capture-v3', Date.now());
+  assert.deepEqual(readCurrentReferenceDiscoveryEvidence(root).design.visits, []);
+  assert.deepEqual(observedGalleryItems(root), []);
 });

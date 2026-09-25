@@ -41,7 +41,7 @@ function signedRecord(root: string, directory: string, prefix: string,
 function failedSearch(root: string, request: { lane: 'domain' | 'design'; query: string; url: string; queryParam: string }, at: number): void {
   if (request.lane !== 'domain') throw new Error('test expected domain input');
   signedRecord(root, '.omd/discovery/domain', 'search-', {
-    schema: 'reference-search-execution-v2', lane: request.lane, query: request.query,
+    schema: 'reference-search-execution-v3', lane: request.lane, query: request.query,
     queryParam: request.queryParam, requestedUrl: request.url, finalUrl: null,
     provider: new URL(request.url).hostname, observedAt: new Date(at).toISOString(),
     status: 'navigation-error', httpStatus: null, links: [], results: [], capture: null,
@@ -61,7 +61,7 @@ function visitedItem(root: string, source: string, at: number): void {
   const image = testPng();
   const imageSha256 = sha256(image);
   writeFileSync(join(root, directory, `${imageSha256}.png`), image);
-  const record = { schema: 'reference-navigation-capture-v3', source, researchLane: 'domain', kind: 'page',
+  const record = { schema: 'reference-navigation-capture-v4', source, researchLane: 'domain', kind: 'page',
     capturedAt: new Date(at).toISOString(), imagePath: `${directory}/${imageSha256}.png`,
     acquisition: { requestedUrl: source, finalUrl: source, httpStatus: 200, links: [], imageSha256 },
     limitations: 'native-public-get; stable-rendered-viewport-links; no-authentication; no-interaction-probes; not-provider-attested' };
@@ -76,7 +76,7 @@ function observedSearch(root: string, request: { lane: 'domain' | 'design'; quer
   const imagePath = `${directory}/search-${imageSha256}.png`;
   writeFileSync(join(root, imagePath), image);
   signedRecord(root, directory, 'search-', {
-    schema: 'reference-search-execution-v2', lane: 'domain', query: request.query,
+    schema: 'reference-search-execution-v3', lane: 'domain', query: request.query,
     queryParam: request.queryParam, requestedUrl: request.url, finalUrl: request.url,
     provider: new URL(request.url).hostname, observedAt: new Date(at).toISOString(),
     status: 'page-observed', httpStatus: 200, links: [source], results: [{ url: source, text: '복지 혜택 서비스' }],

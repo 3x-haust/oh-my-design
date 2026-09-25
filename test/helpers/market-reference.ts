@@ -48,7 +48,7 @@ export function directRootAt(root: string, lane: 'domain' | 'design', url: strin
   const imagePath = `.omd/discovery/${lane}/entries/${imageSha256}.png`;
   mkdirSync(join(root, `.omd/discovery/${lane}/entries`), { recursive: true });
   writeFileSync(join(root, imagePath), image);
-  const unsigned = { schema: 'reference-discovery-entry-v3', method: 'direct-public',
+  const unsigned = { schema: 'reference-discovery-entry-v4', method: 'direct-public',
     entry: lane === 'domain' ? 'public-directory' : 'free-gallery', source: url, researchLane: lane,
     kind: 'page', capturedAt, imagePath,
     acquisition: { requestedUrl: url, finalUrl: url, httpStatus: 200, links, imageSha256 },

@@ -53,6 +53,18 @@ test('current direct-entry link labels are covered by the native signature', asy
   assert.throws(() => readCurrentDirectDiscoveryEntry(root, tampered), /native direct discovery signature invalid/);
 });
 
+test('a previously signed v3 entry is archival until recaptured with content-only links', async t => {
+  const { root, receipt } = await currentCapture(t);
+  const record = JSON.parse(readFileSync(join(root, receipt.capture.path), 'utf8')) as Record<string, unknown>;
+  const { signature: _signature, ...fields } = record;
+  const unsigned = { ...fields, schema: 'reference-discovery-entry-v3' };
+  const legacy = { ...unsigned, signature: signNativeObservation(root, unsigned.schema,
+    discoveryDigest(canonicalJson(unsigned))) };
+  const oldReceipt = storeRecord(root, receipt, legacy);
+  assert.equal(readDirectDiscoveryEntry(root, oldReceipt).url, PUBLIC_DIRECTORY);
+  assert.throws(() => readCurrentDirectDiscoveryEntry(root, oldReceipt), /current direct discovery signature required/);
+});
+
 test('a signed direct entry older than route publication cannot authorize current research', async t => {
   const { root, receipt } = await currentCapture(t);
   const routePath = join(root, '.omd/route.json');
