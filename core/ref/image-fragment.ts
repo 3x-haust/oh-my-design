@@ -88,7 +88,7 @@ export function persistImageFragment(root: string, value: unknown, invocation: P
   const input = parseImageFragmentInput(value);
   if (input.inputPath.startsWith('.omd/discovery/') || input.inputPath.startsWith('.omd/refs/domain/')
     || (input.inputPath.startsWith('.omd/refs/design/') && !isRetainedReferencePath(input.inputPath, 'design'))) {
-    fail('FRAGMENT_SOURCE: discovery diagnostics and domain images are not retained design evidence');
+    fail('FRAGMENT_SOURCE: discovery diagnostics and domain images are not retained design evidence. Visit a concrete gallery item, then use ref add <item-url> --lane design --selector <actual UI image> --shot; import only that retained image or its exact crop');
   }
   const sourcePath = trustedReferenceImage(root, input.inputPath);
   if (requiresDesignReferenceAdmission(root)) requireDesignImageAdmission(root, { imagePath: input.inputPath, provenance: input.provenance });

@@ -32,10 +32,14 @@ test('Korean product brief starts both research lanes in Korea without asserting
   assert.equal(plan.marketReferencePolicy.targetMarketCoverage, 'required-in-domain-and-design');
   assert.deepEqual(plan.marketReferencePolicy.domainSearchInputs.map(input => input.query),
     ['복지로', '정부24 혜택알리미', '서울복지포털', '웰로']);
+  assert.deepEqual(plan.marketReferencePolicy.domainEntryInputs.map(input => new URL(input.url).hostname),
+    ['www.bokjiro.go.kr', 'plus.gov.kr', 'wis.seoul.go.kr', 'www.welfarehello.com']);
   for (const lead of ['복지로 맞춤형급여안내', '정부24 혜택알리미', '서울복지포털 맞춤검색', '웰로 맞춤형 정책 추천']) {
     assert.ok(plan.lanes.find(lane => lane.id === 'domain-reference')?.querySeeds.includes(lead));
   }
   assert.ok(plan.designSourcePolicy.nativeSearchInputs.some(candidate => candidate.query.startsWith('한국 ')));
+  assert.ok(plan.designSourcePolicy.nativeSearchInputs.some(candidate => candidate.query === '한국 복지 앱 UI 디자인'),
+    'Korean welfare visual searches should use a short UI pattern, not the whole product outcome');
   assert.equal(plan.marketReferencePolicy.styleInference, 'forbidden');
   assert.equal(inferredKoreanReferenceMarket('미국 복지 신청을 위한 한국어 서비스'), null);
   assert.equal(isMarketQualifiedQuery('미니멀 앱 UI', ['대한민국', '한국', 'South Korea']), false);
@@ -92,7 +96,7 @@ test('explicit Korean surface mechanics remain separate from market and source-c
   assert.deepEqual(plan.marketReferencePolicy, {
     mode: 'unscoped', marketRegion: null, marketLabel: null, audience: null,
     marketSearchLabels: [],
-    targetMarketCoverage: 'not-required', domainSearchInputs: [], fallback: 'ordinary-reference-discovery',
+    targetMarketCoverage: 'not-required', domainSearchInputs: [], domainEntryInputs: [], fallback: 'ordinary-reference-discovery',
     styleInference: 'forbidden',
   });
   assert.doesNotMatch(JSON.stringify(plan), /Korean style|Korean users|Korean market/);
@@ -124,6 +128,12 @@ test('an explicit Korean market makes both reference lanes target-market-first w
         url: 'https://search.daum.net/search?w=tot&q=%EC%84%9C%EC%9A%B8%EB%B3%B5%EC%A7%80%ED%8F%AC%ED%84%B8', queryParam: 'q' },
       { lane: 'domain', query: '웰로',
         url: 'https://search.daum.net/search?w=tot&q=%EC%9B%B0%EB%A1%9C', queryParam: 'q' },
+    ],
+    domainEntryInputs: [
+      { lane: 'domain', entry: 'public-directory', url: 'https://www.bokjiro.go.kr/ssis-tbu/' },
+      { lane: 'domain', entry: 'public-directory', url: 'https://plus.gov.kr/portal/benefitV2/' },
+      { lane: 'domain', entry: 'public-directory', url: 'https://wis.seoul.go.kr/' },
+      { lane: 'domain', entry: 'public-directory', url: 'https://www.welfarehello.com/recommend-policy/situation/main/ALL' },
     ],
     fallback: 'global-equivalent-only-after-documented-target-market-gap', styleInference: 'forbidden',
   });

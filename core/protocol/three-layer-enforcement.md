@@ -14,6 +14,7 @@ stage is mandatory; an explicit route skip remains a skip. Repetition alone is n
 | Reference capture quality | Every declared public feature screen is captured in a signed native flow at a viewport that visibly contains its asserted state. A fixed full-viewport app container needs a selected visible feature, not inferred safety from its navigation or recovery controls. Informational notices are visually suppressed without invoking their close controls before retained pixels; consent, unknown, or unclosable obstructions are gaps, not visual evidence. Interaction probes cannot change the saved initial-state image. | `omd benchmark record`/`check`; `ref add`/`add-batch` capture refusal; current v3 evidence validation |
 | Korean reference scope | A Korean-language task brief starts Korean-service reference discovery without asserting a Korean cultural style. Predominantly Korean-language source UI can qualify regardless of domain suffix. Foreign-only domain captures require validated published local-domain research; editable captures and `--from-user` alone do not unlock fallback. Design-gallery pixels remain judged by the research provenance gate. A blocked Korean provider redirects discovery to another Korean operator and public transport. | `omd ref discover-plan --json`; `ref add`/`add-batch` market admission; v7 market coverage |
 | Executed discovery | Query prose is not acquisition evidence. Retained non-user entries trace to actual observed links and separately captured visits. | `omd ref search --input <json>` or `omd ref navigate`; current v7 research publication/currentness checks |
+| Reference acquisition continuity | A selected missing board resolves to one current acquisition action. Native search/navigation failure is a signed diagnostic attempt, never a retained reference. Repeating plan/check commands cannot substitute for the action. Exhaustion requires current signed failures across the available public routes and never licenses an empty board. | `omd ref work-next --json`; `omd ref advance --json`; Pi owned-work refusal; stage-next work digest |
 | Rendered reference use | Every screen criterion has current desktop/mobile capture judgments; unresolved or stale results cannot complete. | Source seal binds the application; `omd ref apply-review-check --json`; terminal preflight |
 | Current copy and design inputs | Selected copy, current copy review, type proof, composition and candidate selection must exist and satisfy their applicable checks before source work. A PRD or stub is not their replacement. | Production readiness and its current-artifact validators |
 | Source ownership | Only the authorized owner and paths may change. A recipe is a source write too. | Pi write/edit boundary; routed `recipe add` inside the CLI |
@@ -51,6 +52,16 @@ directs `apply-references` to `ref apply-plan --json` for current per-surface de
 the pointer after native publication. Do not repeatedly run a passing board entry check or author
 application decisions before their research exists. These actions do not add route stages or
 validated-progress credits; stale research takes precedence over a missing application file.
+When the board itself is missing, use `omd ref work-next --json` to read the current evidence-derived
+action. `omd ref advance --json` executes exactly one native public search or navigation action and
+records its outcome before the pointer is recomputed. A visited gallery item is still only discovery:
+Scout inspects its actual UI image or observed original, retains useful evidence with `ref add`, and
+authors the board with `ref board --input`. An unsuitable inspected item receives a CLI-owned
+`ref exclude` decision bound to its exact current native visit and a specific observed reason;
+an exclusion is judgment, not proof that a provider was unavailable. If every planned public path
+has current signed unavailable attempts or explicitly excluded observed candidates, keep the board
+missing and report those precise sources and reasons. Do not repeat
+`discover-plan`, `brief --check`, or `stage next` while the same owned action remains outstanding.
 For a Korean welfare task, run the discovery plan's exact service-name searches on a public Korean
 search transport and follow current observed links. Korean copy on a `.com` service may qualify;
 an English foreign government page does not become a Korean reference by saving it under `domain`.
@@ -189,6 +200,13 @@ inspection and research repair remain available while production is blocked.
   no fixed total pass ceiling while owned artifacts or the current work pointer advance; the same
   verified state without successful repair activity stops after two recovery turns. Aborts,
   missing authority and research-only turns do not authorize automatic implementation.
+- For a selected missing reference board, Pi executes one bounded `ref advance` native acquisition
+  step when the current work pointer names search, public-list entry or observed-link navigation.
+  It recomputes the pointer from signed disk evidence before another owner turn. While an actionable
+  reference packet is outstanding, repeated `discover-plan`, board entry checks, stage-next and
+  completion diagnostics are refused without a source write. The reference work digest, not an
+  unrelated global write revision, identifies progress. Manual image selection and board publication
+  remain Scout-owned; verified source exhaustion reports its native receipts rather than a generic stall.
 - Pi keeps automatic work visible at meaningful phase boundaries without narrating every tool call.
   Before each queued route, stage or completion repair, the visible assistant message names the
   current state, next owner/action and following validation command. The follow-up instruction repeats

@@ -14,7 +14,7 @@ export function isPreproductionReadCommand(command: unknown): boolean {
 }
 
 const OMD_MUTATING_ROOTS = /^(?:frame|domain|route|ref|copy|type|composition|slop|lifecycle|finalize|complete)$/;
-const OMD_READ_ACTIONS = /^(?:show|check|validate|list|handoff|discover-plan|research-check|apply-plan|apply-check|apply-review-plan|apply-review-check|review-check|review-input)$/;
+const OMD_READ_ACTIONS = /^(?:show|check|validate|list|handoff|discover-plan|work-next|research-check|apply-plan|apply-check|apply-review-plan|apply-review-check|review-check|review-input)$/;
 const OMD_MUTATING_PAIRS = new Set([
   'stage deliver', 'grain set', 'acquisition set', 'candidate select', 'judgment publish', 'benchmark record',
 ]);

@@ -12,6 +12,7 @@ import { inferredKoreanReferenceMarket, marketDomainQueries, marketSearchLabels 
 export const REFERENCE_DISCOVERY_PLAN_SCHEMA = 'reference-discovery-plan-v2' as const;
 export type DiscoveryLane = 'domain-reference' | 'design-reference' | 'motion';
 type DomainSearchInput = Readonly<{ lane: 'domain'; query: string; url: string; queryParam: 'q' }>;
+type DomainEntryInput = Readonly<{ lane: 'domain'; entry: 'public-directory'; url: string }>;
 
 /** Read-only acquisition input, not a search receipt or a design prescription. */
 export type ReferenceDiscoveryPlan = Readonly<{
@@ -35,6 +36,7 @@ export type ReferenceDiscoveryPlan = Readonly<{
     audience: string | null;
     targetMarketCoverage: 'required-in-domain-and-design' | 'not-required';
     domainSearchInputs: readonly DomainSearchInput[];
+    domainEntryInputs: readonly DomainEntryInput[];
     fallback: 'global-equivalent-only-after-documented-target-market-gap' | 'ordinary-reference-discovery';
     styleInference: 'forbidden';
   }>;
@@ -116,7 +118,10 @@ export function buildReferenceDiscoveryPlan(root: string, route: RouteRecord): R
   const comparableLeads = marketRegion === 'KR' && /복지|혜택|welfare|benefits?/iu.test(domain)
     ? ['복지로 맞춤형급여안내', '정부24 혜택알리미', '서울복지포털 맞춤검색', '웰로 맞춤형 정책 추천'] : [];
   const baseDesignQuery = [...queries.component, ...queries.mood][0] ?? (marketing ? 'typography' : 'app interface');
-  const designSubject = marketRegion === null ? baseDesignQuery : `${domain} ${baseDesignQuery}`;
+  const compactDesignQuery = baseDesignQuery.trim().split(/\s+/u).slice(0, 4).join(' ');
+  const designSubject = marketRegion === 'KR' && comparableLeads.length > 0
+    ? marketing ? '복지 웹사이트 디자인' : '복지 앱 UI 디자인'
+    : compactDesignQuery;
   const designQueries = searchLabels.map(label => `${label} ${designSubject}`);
   const designQuery = designQueries[0] ?? baseDesignQuery;
   const domainSearchInputs: DomainSearchInput[] = [];
@@ -127,6 +132,13 @@ export function buildReferenceDiscoveryPlan(root: string, route: RouteRecord): R
     const input = Object.freeze({ lane: 'domain' as const, query, url: url.href, queryParam: 'q' as const });
     domainSearchInputs.push(input);
   }
+  const domainEntryInputs: DomainEntryInput[] = marketRegion === 'KR' && /복지|혜택|welfare|benefits?/iu.test(domain)
+    ? [
+      'https://www.bokjiro.go.kr/ssis-tbu/',
+      'https://plus.gov.kr/portal/benefitV2/',
+      'https://wis.seoul.go.kr/',
+      'https://www.welfarehello.com/recommend-policy/situation/main/ALL',
+    ].map(url => ({ lane: 'domain', entry: 'public-directory', url })) : [];
   // Restrained work still needs a visual reference. Gallery names are leads, never quality proof
   // or a promise that a provider's entire catalogue/API is free.
   const galleryCandidates = !discovering ? [] : marketing ? [
@@ -197,6 +209,7 @@ export function buildReferenceDiscoveryPlan(root: string, route: RouteRecord): R
       audience: marketLabel === null ? null : locale?.context.audience ?? domainResearch.audience,
       targetMarketCoverage: marketLabel === null ? 'not-required' : 'required-in-domain-and-design',
       domainSearchInputs: Object.freeze(domainSearchInputs),
+      domainEntryInputs: Object.freeze(domainEntryInputs),
       fallback: marketLabel === null ? 'ordinary-reference-discovery' : 'global-equivalent-only-after-documented-target-market-gap',
       styleInference: 'forbidden',
     }),

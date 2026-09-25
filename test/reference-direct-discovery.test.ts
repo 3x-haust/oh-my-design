@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { connect } from 'node:net';
 import { PassThrough } from 'node:stream';
 import { once } from 'node:events';
-import { captureReferenceNavigation } from '../core/ref/navigation-capture.ts';
+import { captureReferenceNavigation, readReferenceDiscoveryAttempt, ReferenceNavigationError } from '../core/ref/navigation-capture.ts';
 import { readCurrentDirectDiscoveryEntry, readDirectDiscoveryEntry, readStrictDiscoveryNavigation,
   type DirectDiscoveryEntry } from '../core/ref/discovery-record.ts';
 import { designDiscoveryDirectoryProvider } from '../core/ref/design-discovery-sources.ts';
@@ -220,9 +221,21 @@ for (const row of unavailable) {
     const root = discoveryFixture(t);
     await withBrowser(async browser => {
       const observed = discoveryBrowser(browser, row.scenario);
-      await assert.rejects(captureReferenceNavigation(observed.browser, row.scenario.url, 'design', createTestProjectWriteAdapter(root), 'free-gallery'), row.error);
+      let failure: unknown;
+      try {
+        await captureReferenceNavigation(observed.browser, row.scenario.url, 'design', createTestProjectWriteAdapter(root), 'free-gallery');
+      } catch (error) { failure = error; }
+      assert.ok(failure instanceof ReferenceNavigationError);
+      assert.match(failure.message, row.error);
+      assert.ok(failure.attempt, 'a real failed public-list visit should leave a diagnostic receipt');
+      const attempt = readReferenceDiscoveryAttempt(root, failure.attempt);
+      assert.equal(attempt.source, row.scenario.url);
+      assert.equal(attempt.researchLane, 'design');
+      assert.equal(attempt.entry, 'free-gallery');
+      assert.equal(attempt.outcome, 'unavailable');
+      assert.equal(attempt.httpStatus, row.scenario.status ?? 200);
       assert.equal(observed.closed(), 1);
-      assert.equal(existsSync(join(root, '.omd/discovery')), false);
+      assert.equal(existsSync(join(root, '.omd/refs')), false);
     });
   });
 }
@@ -238,9 +251,63 @@ test('snapshot changes are recaptured once and a second change leaves no image',
       afterCapture: async (page, count) => {
         await page.evaluate(count => { const anchor = document.querySelector('a'); if (anchor) anchor.href = `https://www.siteinspire.com/website/${count}-changed`; }, count);
       } });
-    await assert.rejects(captureReferenceNavigation(observed.browser, GALLERY_DIRECTORY, 'design', createTestProjectWriteAdapter(root), 'free-gallery'), /both bounded captures/);
+    let failure: unknown;
+    try {
+      await captureReferenceNavigation(observed.browser, GALLERY_DIRECTORY, 'design', createTestProjectWriteAdapter(root), 'free-gallery');
+    } catch (error) { failure = error; }
+    assert.ok(failure instanceof ReferenceNavigationError);
+    assert.match(failure.message, /both bounded captures/);
+    assert.ok(failure.attempt);
+    assert.equal(readReferenceDiscoveryAttempt(root, failure.attempt).reason, 'unstable-render');
     assert.equal(observed.captures.length, 2);
-    assert.equal(existsSync(join(root, '.omd/discovery')), false);
+    assert.equal(existsSync(join(root, '.omd/discovery/design/entries')), false);
+  });
+});
+
+test('failed navigation receipts are diagnostic-only, signed, and bound to their exact bytes', async t => {
+  const root = discoveryFixture(t);
+  await withBrowser(async browser => {
+    const observed = discoveryBrowser(browser, { url: GALLERY_DIRECTORY, status: 403, html: directoryHtml(GALLERY_ITEM) });
+    let failure: unknown;
+    try {
+      await captureReferenceNavigation(observed.browser, GALLERY_DIRECTORY, 'design', createTestProjectWriteAdapter(root), 'free-gallery');
+    } catch (error) { failure = error; }
+    assert.ok(failure instanceof ReferenceNavigationError);
+    assert.ok(failure.attempt);
+    const receipt = failure.attempt;
+    const attempt = readReferenceDiscoveryAttempt(root, receipt);
+    assert.equal(attempt.httpStatus, 403);
+    assert.equal(attempt.reason, 'http-failure');
+    assert.ok(receipt.path.startsWith('.omd/discovery/design/attempts/'));
+    assert.equal(existsSync(join(root, '.omd/reference-board.json')), false);
+    assert.equal(loadRefs(root, { includeDomain: true }).length, 0);
+    const path = join(root, receipt.path);
+    const bytes = readFileSync(path, 'utf8');
+    writeFileSync(path, bytes.replace('http-failure', 'challenge-page'));
+    assert.throws(() => readReferenceDiscoveryAttempt(root, receipt), /changed|signature|digest/);
+    const forgedBytes = bytes.replace('http-failure', 'challenge-page');
+    const forgedSha256 = createHash('sha256').update(forgedBytes).digest('hex');
+    const forged = { path: `.omd/discovery/design/attempts/${forgedSha256}.json`, sha256: forgedSha256 };
+    writeFileSync(join(root, forged.path), forgedBytes);
+    assert.throws(() => readReferenceDiscoveryAttempt(root, forged), /signature/);
+  });
+});
+
+test('failed ordinary navigation is an attempt, not a retained reference', async t => {
+  const root = discoveryFixture(t);
+  await withBrowser(async browser => {
+    const observed = discoveryBrowser(browser, { url: PUBLIC_DIRECTORY, status: 403, html: directoryHtml(DOMAIN_ITEM) });
+    let failure: unknown;
+    try {
+      await captureReferenceNavigation(observed.browser, PUBLIC_DIRECTORY, 'domain', createTestProjectWriteAdapter(root));
+    } catch (error) { failure = error; }
+    assert.ok(failure instanceof ReferenceNavigationError);
+    assert.ok(failure.attempt);
+    const attempt = readReferenceDiscoveryAttempt(root, failure.attempt);
+    assert.equal(attempt.method, 'navigation');
+    assert.equal(attempt.entry, null);
+    assert.equal(attempt.researchLane, 'domain');
+    assert.equal(existsSync(join(root, '.omd/refs')), false);
   });
 });
 

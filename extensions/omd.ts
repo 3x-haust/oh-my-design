@@ -9,7 +9,7 @@ import { classifyPiWrite, hasPiRoute, isMutatingOmdCommand, isPreproductionReadC
 import { routeValidationArgs, type RouteBootstrap } from './omd-route-bootstrap.ts';
 import { RepairLoop } from './omd-repair-progress.ts';
 import { StageWork, checkNativeStageEntry, nativeEntryStage, nativeOwnedStage } from './omd-stage-work.ts';
-import { handleOmdMessageEnd } from './omd-message-end.ts';
+import { handleOmdMessageEnd, type ReferenceWork } from './omd-message-end.ts';
 
 export const OMD_TOOL_NAME = 'omd_cli';
 
@@ -19,6 +19,7 @@ export default function omdExtension(pi: PortablePiApi): void {
   const touched = new Set<string>();
   const productionAttempted = new Set<string>();
   const repairLoop = new RepairLoop();
+  const pendingReferenceWork = new Map<string, ReferenceWork>();
   const revisions = new Map<string, number>();
   type PendingMutation = { path: string; before: string; production: boolean };
   type PendingMutationGroup = { entries: PendingMutation[]; baseline: string; production: boolean; failed: boolean };
@@ -73,11 +74,12 @@ export default function omdExtension(pi: PortablePiApi): void {
   const on = typeof hook === 'function' ? hook.bind(pi) : undefined;
   const hooksAvailable = on !== undefined;
   if (on !== undefined) {
-    on('session_start', async () => { epochs.clear(); repairLoop.clear(); revisions.clear(); pendingMutations.clear(); ownedWork.clear(); managed.clear(); touched.clear(); productionAttempted.clear(); authoredInputs.clear(); bootstraps.clear(); freshRoutes.clear(); workflowStarted.clear(); });
+    on('session_start', async () => { epochs.clear(); repairLoop.clear(); pendingReferenceWork.clear(); revisions.clear(); pendingMutations.clear(); ownedWork.clear(); managed.clear(); touched.clear(); productionAttempted.clear(); authoredInputs.clear(); bootstraps.clear(); freshRoutes.clear(); workflowStarted.clear(); });
     on('input', async (event, context) => {
       if (event.source === 'interactive' || event.source === 'rpc') {
         epochs.delete(context.cwd);
         repairLoop.delete(context.cwd);
+        pendingReferenceWork.delete(context.cwd);
         revisions.delete(context.cwd);
         pendingMutations.delete(context.cwd);
         ownedWork.delete(context.cwd);
@@ -98,6 +100,19 @@ export default function omdExtension(pi: PortablePiApi): void {
     on('tool_call', async (event, context) => {
       if (event.toolName === OMD_TOOL_NAME) {
         const args = event.input?.args;
+        const pending = pendingReferenceWork.get(context.cwd);
+        if (pending !== undefined && pending.status !== 'exhausted' && Array.isArray(args)
+          && args.every((arg): arg is string => typeof arg === 'string')) {
+          const [root, sub] = args;
+          const diagnostic = (root === 'stage' && sub === 'next')
+            || (root === 'ref' && ['discover-plan', 'work-next', 'check', 'research-check', 'apply-check'].includes(sub ?? ''))
+            || (root === 'brief' && sub === 'reference-board' && args.includes('--check'))
+            || (root === 'guard' && sub === 'completion');
+          if (diagnostic) return { block: true, reason: `OMD_OWNED_WORK_REQUIRED: ${pending.action?.reason ?? 'Publish the reference board from retained evidence.'}\n${pending.action?.args.join(' ') ?? 'omd schema reference-board --json, then omd ref board --input <candidate-assemblies.json>'}\nRead-only checks cannot replace this action.` };
+          if (root === 'ref' && ['advance', 'search', 'navigate', 'add', 'add-batch', 'import-image', 'exclude', 'board'].includes(sub ?? '')) {
+            pendingReferenceWork.delete(context.cwd);
+          }
+        }
         if (Array.isArray(args) && args[0] === 'route' && args[1] === 'classify') managed.add(context.cwd);
         const frameHelp = Array.isArray(args) && args[0] === 'frame' && (args[1] === 'help' || args.includes('--help') || args.includes('-h'));
         if (guarded(context.cwd) && Array.isArray(args) && !frameHelp
@@ -171,7 +186,11 @@ export default function omdExtension(pi: PortablePiApi): void {
         run, interrupted, ...(bootstrap === undefined ? {} : { bootstrap }), hasRoute: hasPiRoute(context.cwd),
         workflowStarted: workflowStarted.has(context.cwd), ownedWorkStarted: ownedWork.started(context.cwd),
         productionAttempted: productionAttempted.has(context.cwd), revision: revision(context.cwd),
-        routeRevision: fileRevision(context.cwd, '.omd/route.json'), repairLoop, pi });
+        routeRevision: fileRevision(context.cwd, '.omd/route.json'), repairLoop, pi,
+        onReferenceWork: work => {
+          if (work === null) pendingReferenceWork.delete(context.cwd);
+          else pendingReferenceWork.set(context.cwd, work);
+        } });
     });
   }
   pi.registerTool({

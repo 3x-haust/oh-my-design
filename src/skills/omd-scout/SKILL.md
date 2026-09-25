@@ -59,7 +59,21 @@ it contains useful, non-duplicate evidence for every applicable category:
 
 ### Collecting a visual direction
 
-Run `omd ref discover-plan --json` and follow its free-access design-source policy. For apps and
+When a selected reference board is missing, run `omd ref work-next --json` for the current
+evidence-derived action. Use `omd ref advance --json` for a named native search, public gallery
+entry or observed-link visit, then recompute work-next. Each call advances only one source attempt;
+a signed unavailable attempt redirects to the next public lead, not to another copy of the plan.
+When the pointer names `retain-reference`, inspect the actual visited page or UI image, capture a
+useful scoped source with `ref add`, and recompute. If the inspected item is unsuitable, record a
+specific quality or relevance reason with `omd ref exclude <observed-item-url> --lane design|domain
+--reason "<observed reason>"`; this decision is bound to the current native visit and permits a
+different lead. An exclusion is not evidence that a provider is unavailable. When it names `publish-board`, use
+`omd schema reference-board`, author the assembly from retained evidence, and publish with
+`omd ref board --input`. A receipt-backed exhausted state is a precise external gap, not permission
+to substitute a gallery category, domain-service screenshot or empty board. Do not loop on
+`discover-plan`, `brief --check` or `stage next` while the same owned action is outstanding.
+
+`omd ref discover-plan --json` remains the full catalogue and free-access policy. For apps and
 product interfaces start with free public Pinterest pins, Dribbble shots, Behance case studies or UI Bowl
 entries; for website/marketing direction start with website galleries such as Siteinspire and
 Pinterest. These are replaceable discovery channels, not mandatory winners or guarantees of free

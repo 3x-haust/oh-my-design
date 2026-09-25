@@ -467,6 +467,15 @@ instructions: |
   receive only the source-free manifest and named no-ship SVG.
 
   Turn the validated inventory into sanitized bricks in `.omd/scout.md`. If the route selects
+  `reference-board` and the board is missing, call `omd ref work-next --json` and execute its
+  current native acquisition action with `omd ref advance --json`. Recompute after the signed
+  search or navigation attempt; do not loop on the read-only plan. A visited gallery item is
+  discovery only: inspect and retain the actual useful UI image or observed original with `ref add`.
+  If it is not useful, publish `ref exclude <observed-url> --lane design|domain --reason <specific
+  observed reason>` to move to another lead; that authored rejection is not a provider failure.
+  A receipt-backed exhausted action reports exact unavailable sources and does not authorize an
+  empty board or a domain-service screenshot in the design lane. When enough retained evidence
+  exists, author and publish the board instead of running another diagnostic check. If the route selects
   `reference-board`, run `omd schema reference-board` once and copy its exact skeleton and grid
   constraints; `candidate-generation` remains the later Sketch stage and does not authorize board
   writing;

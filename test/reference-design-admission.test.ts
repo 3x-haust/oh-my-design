@@ -221,6 +221,16 @@ test('selected discovery refuses a copied domain image with a gallery source dec
   }, createTestProjectRunInvocation(root)), /FRAGMENT_SOURCE/);
 });
 
+test('discovery PNG refusal names the gallery-item image capture recovery path', t => {
+  const { root } = designAdmissionFixture(t);
+  assert.throws(() => persistImageFragment(root, {
+    inputPath: '.omd/discovery/design/navigation/item.png',
+    provenance: { sourcePage: 'https://www.pinterest.com/pin/987654321/', captureRegion: 'App UI',
+      licenseStatus: 'unknown', rightsNotes: 'Study only', capturedAt: '2026-09-21T00:00:00.000Z' },
+    transfer: { visualRole: 'Layout', principles: ['Retain the real UI image.'] },
+  }, createTestProjectRunInvocation(root)), /ref add.*--selector.*UI image/);
+});
+
 test('selected discovery keeps legacy captures archival and excludes them from actionable briefs and boards', t => {
   const { root, source, domain, research, writer, board, refreshBoard } = designAdmissionFixture(t);
   const legacy = { ...source.ref, source: domain.source, component: 'legacy-domain', imagePath: domain.evidence.path };

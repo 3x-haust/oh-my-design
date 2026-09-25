@@ -140,10 +140,10 @@ test('a missing reference board points to discovery work instead of repeating en
 
   const work = nextStageWork(root, pack, invocation);
   assert.equal(work.stage, 'reference-board');
-  assert.equal(work.action, 'author-output');
-  assert.equal(work.next, 'omd ref discover-plan --json');
-  assert.match(work.instruction, /multiple real domain-service flows/);
-  assert.match(work.instruction, /Run checks only after the owned board artifact changes/);
+  assert.equal(work.action, 'acquire-reference');
+  assert.equal(work.next, 'omd ref advance --json');
+  assert.equal(work.referenceWork?.status, 'action');
+  assert.match(work.referenceWork?.workSha256 ?? '', /^[a-f0-9]{64}$/);
 });
 
 test('board work repairs research before application and returns to research when a retained receipt changes', t => {

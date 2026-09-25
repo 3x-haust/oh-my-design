@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -11,6 +11,7 @@ function harness(t: { after(fn: () => void): void }) {
   t.after(() => rmSync(cwd, { recursive: true, force: true }));
   const hooks = new Map<string, PortablePiHook>();
   const sent: unknown[] = [];
+  const calls: string[][] = [];
   let tool: PortablePiTool | undefined;
   let duringDiagnosis: (() => Promise<unknown>) | undefined;
   const work = { schema: 'stage-next-v1', stage: 'copy', owner: 'omd-writer', action: 'repair-output',
@@ -22,6 +23,7 @@ function harness(t: { after(fn: () => void): void }) {
     on: (name, handler) => { hooks.set(name, handler); }, registerCommand() {}, registerTool: value => { tool = value; },
     sendMessage: message => { sent.push(message); },
     async exec(_command, args) {
+      calls.push([...args]);
       if (args[1] === 'route' && args[2] === 'classify') writeFileSync(join(cwd, '.omd/route.json'), '{}');
       if (args[1] === 'stage') await duringDiagnosis?.();
       return { stdout: args[1] === 'stage' ? JSON.stringify(work) : '{}', stderr: '', code: 0, killed: false };
@@ -38,11 +40,56 @@ function harness(t: { after(fn: () => void): void }) {
     await tool.execute('route', { args: ['route', 'classify', '--input', '.omd/.cache/route.json'] }, undefined, undefined, { cwd });
     await tool.execute('brief', { args: ['brief', 'domain', '--check'] }, undefined, undefined, { cwd });
   }
-  return { work, sent, emit, start, run: (args: string[]) => {
+  return { cwd, work, sent, calls, emit, start, run: (args: string[]) => {
     assert.ok(tool); return tool.execute(args.join('-'), { args }, undefined, undefined, { cwd });
   }, end: () => emit('message_end', { message: final }),
     interruptDuringDiagnosis: () => { duringDiagnosis = () => emit('input', { source: 'interactive' }); } };
 }
+
+test('missing reference board advances a native discovery action instead of only retrying checks', async t => {
+  const h = harness(t); await h.start();
+  Object.assign(h.work, {
+    stage: 'reference-board', owner: 'omd-scout', action: 'author-output', next: 'omd ref work-next --json',
+    referenceWork: { schema: 'reference-discovery-work-v1', status: 'action', workSha256: 'b'.repeat(64),
+      action: { kind: 'direct-entry', args: ['ref', 'navigate', 'https://mobbin.com/explore/screens', '--lane', 'design', '--entry', 'free-gallery', '--json'], reason: 'Inspect a free public gallery list.' } },
+  });
+  await h.end();
+  assert.ok(h.calls.some(args => args[1] === 'ref' && args[2] === 'advance'),
+    'Pi must execute an owned native acquisition step before another diagnostic turn');
+});
+
+test('an outstanding reference action refuses repeated diagnostics without publishing a board', async t => {
+  const h = harness(t); await h.start();
+  Object.assign(h.work, {
+    stage: 'reference-board', owner: 'omd-scout', action: 'acquire-reference', next: 'omd ref advance --json',
+    referenceWork: { schema: 'reference-discovery-work-v1', status: 'action', workSha256: 'c'.repeat(64),
+      action: { kind: 'direct-entry', args: ['ref', 'advance', '--json'], reason: 'Inspect a public gallery list.' } },
+  });
+  await h.end();
+  const before = h.calls.length;
+  const refusal = await h.emit('tool_call', { toolName: 'omd_cli', input: { args: ['ref', 'discover-plan', '--json'] } }) as { block: boolean; reason: string };
+  assert.equal(refusal.block, true);
+  assert.match(refusal.reason, /OMD_OWNED_WORK_REQUIRED/);
+  assert.equal(h.calls.length, before, 'refused diagnostics must not execute the CLI');
+  assert.equal(existsSync(join(h.cwd, '.omd/reference-board.json')), false);
+});
+
+test('exhausted reference discovery reports signed attempted sources without a generic stall', async t => {
+  const h = harness(t); await h.start();
+  Object.assign(h.work, {
+    stage: 'reference-board', owner: 'omd-scout', action: 'resolve-external-blocker', next: 'REFERENCE_DISCOVERY_EXHAUSTED',
+    referenceWork: { schema: 'reference-discovery-work-v1', status: 'exhausted', workSha256: 'd'.repeat(64),
+      code: 'REFERENCE_DISCOVERY_EXHAUSTED', action: null,
+      attempts: [{ lane: 'design', url: 'https://example-gallery.test/', reason: 'login wall',
+        receipt: { path: '.omd/discovery/design/attempts/receipt.json', sha256: 'e'.repeat(64) } }] },
+  });
+  const held = await h.end() as { message: { content: Array<{ type: string; text: string }> } };
+  const text = held.message.content.find(part => part.type === 'text')?.text ?? '';
+  assert.match(text, /REFERENCE_DISCOVERY_EXHAUSTED/);
+  assert.match(text, /https:\/\/example-gallery\.test\//);
+  assert.doesNotMatch(text, /같은 상태에서 검사만 반복/);
+  assert.equal(h.sent.length, 0);
+});
 
 test('distinct advancing work pointers continue beyond the former two-pass ceiling', async t => {
   const h = harness(t); await h.start();

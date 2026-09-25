@@ -2411,6 +2411,39 @@ async function cmdRefDiscoveryPlan(opts: Opts): Promise<never> {
   process.exit(0);
 }
 
+async function cmdRefDiscoveryWork(mode: 'next' | 'advance', opts: Opts): Promise<never> {
+  const command = mode === 'next' ? 'omd ref work-next' : 'omd ref advance';
+  if (opts._.length !== 0 || opts.input !== undefined) throw new Error(`usage: ${command} [--json] [--activation <host-issued-invocation.json>]`);
+  const route = readPersistedRoute(process.cwd(), invocationFromActivation(opts, command));
+  if (route.references.decision !== 'discover') throw new Error('REFERENCE_DISCOVERY_NOT_SELECTED');
+  const result = mode === 'next'
+    ? (await import('../core/ref/discovery-work.ts')).referenceDiscoveryWork(process.cwd(), route)
+    : await (await import('../core/ref/discovery-advance.ts')).advanceReferenceDiscoveryWork(
+      process.cwd(), route, projectWriterFromActivation(opts, command));
+  process.stdout.write(`${JSON.stringify(result, null, opts.json ? undefined : 2)}\n`);
+  process.exit(0);
+}
+
+async function cmdRefDiscoveryExclude(opts: Opts): Promise<never> {
+  const source = opts._[0];
+  const allowed = new Set(['_', 'lane', 'reason', 'json', 'activation']);
+  if (opts._.length !== 1 || !source || !opts.reason || (opts.lane !== 'domain' && opts.lane !== 'design')
+    || Object.keys(opts).some(key => !allowed.has(key))) {
+    throw new Error('usage: omd ref exclude <observed-url> --lane domain|design --reason <specific-quality-judgment> [--json]');
+  }
+  const command = 'omd ref exclude';
+  const route = readPersistedRoute(process.cwd(), invocationFromActivation(opts, command));
+  if (route.references.decision !== 'discover') throw new Error('REFERENCE_DISCOVERY_NOT_SELECTED');
+  const { publishReferenceDiscoveryExclusion } = await import('../core/ref/discovery-exclusion.ts');
+  const receipt = publishReferenceDiscoveryExclusion(process.cwd(), route.sourceContractSha256,
+    opts.lane, source, opts.reason, projectWriterFromActivation(opts, command));
+  const { referenceDiscoveryWork } = await import('../core/ref/discovery-work.ts');
+  const result = { schema: 'reference-discovery-exclusion-publication-v1', receipt,
+    work: referenceDiscoveryWork(process.cwd(), route) };
+  process.stdout.write(`${JSON.stringify(result, null, opts.json ? undefined : 2)}\n`);
+  process.exit(0);
+}
+
 async function cmdRefResearch(mode: 'set' | 'check', opts: Opts): Promise<never> {
   const usage = mode === 'set'
     ? 'usage: omd ref research-set --input <reference-research.json> [--activation <host-issued-invocation.json>] [--json]'
@@ -5074,6 +5107,9 @@ function usage(): never {
     + '  ref add ... --no-energy --preparation <json>  prepare explicit disclosure clicks and verify visibility before capture\n'
     + '  ref add-batch <manifest.json>               capture zone-bound references in parallel over one browser\n'
     + '  ref discover-plan [--json]                  derive automatic search lanes from the current task; no user URLs required\n'
+    + '  ref work-next [--json]                     show the next evidence-bound acquisition or board action\n'
+    + '  ref advance [--json]                       execute one bounded native reference acquisition attempt\n'
+    + '  ref exclude <observed-url> --lane ...     record a judged-unusable captured item and continue discovery\n'
     + '  ref research-set --input research.json     bind separate domain/design lane evidence to current outputs\n'
     + '  ref research-check                         require both lanes and re-hash their evidence and outputs\n'
     + '  ref search --input <json>                  execute a public query GET and record actual links/capture or failure\n'
@@ -5430,6 +5466,9 @@ async function main(): Promise<never> {
     if (sub === 'tidy') return cmdRefTidy(opts);
     if (sub === 'navigate') return cmdRefNavigate(opts);
     if (sub === 'discover-plan') return cmdRefDiscoveryPlan(opts);
+    if (sub === 'work-next') return cmdRefDiscoveryWork('next', opts);
+    if (sub === 'advance') return cmdRefDiscoveryWork('advance', opts);
+    if (sub === 'exclude') return cmdRefDiscoveryExclude(opts);
     if (sub === 'research-set') return cmdRefResearch('set', opts);
     if (sub === 'research-check') return cmdRefResearch('check', opts);
     if (sub === 'search') return cmdRefSearch(opts);
