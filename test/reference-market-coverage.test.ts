@@ -154,6 +154,35 @@ test('explicit-market v7 binds local sources and fallback to executed market evi
       sources: [{ ...input.domainReference.sources[0], url: govKr.source,
         evidence: govKr.evidence, capture: govKr.capture }, ...input.domainReference.sources.slice(1)] },
   }), options));
+  const genericReceipt = testSearchReceipt(fixture.root, 'domain', domainQueries[0]!,
+    [fixture.domain.source], false, new Date().toISOString(), '바로가기');
+  const genericCoverage = structuredClone(documented);
+  genericCoverage.domain.localSources[0]!.provenanceReceiptSha256 = genericReceipt.sha256;
+  genericCoverage.domain.localSources.slice(1).forEach(source => {
+    source.provenanceReceiptSha256 = input.domainReference.searches[1]!.sha256;
+  });
+  genericCoverage.domain.globalFallback!.provenance.forEach(binding => {
+    binding.provenanceReceiptSha256 = input.domainReference.searches[1]!.sha256;
+  });
+  const genericSearches = [genericReceipt, ...input.domainReference.searches.slice(1)];
+  const genericInput = { ...input, marketCoverage: genericCoverage,
+    domainReference: { ...input.domainReference, searches: genericSearches } };
+  assert.throws(() => validateReferenceResearch(fixture.root,
+    parseReferenceResearch(genericInput), options), /MARKET_DOMAIN_LOCAL_RESULT_SCOPE/);
+  const koreanCapturePath = join(fixture.root, fixture.domain.capture.path);
+  const originalCapture = readFileSync(koreanCapturePath);
+  try {
+    const captured = JSON.parse(originalCapture.toString('utf8'));
+    const koreanCapture = Buffer.from(JSON.stringify({ ...captured, visibleKoreanText: true }));
+    writeFileSync(koreanCapturePath, koreanCapture);
+    const observedInput = { ...genericInput,
+      domainReference: { ...genericInput.domainReference,
+        sources: [{ ...input.domainReference.sources[0],
+          capture: { ...fixture.domain.capture, sha256: admissionHash(koreanCapture) } },
+        ...input.domainReference.sources.slice(1)] } };
+    assert.doesNotThrow(() => validateReferenceResearch(fixture.root,
+      parseReferenceResearch(observedInput), options));
+  } finally { writeFileSync(koreanCapturePath, originalCapture); }
   for (const label of [
     'South Korea benefits service with unsupported browser notices',
     'Not only South Korea residents use this benefits service',
@@ -325,4 +354,45 @@ test('explicit-market v7 binds local sources and fallback to executed market evi
   writeFileSync(join(fixture.root, fixture.domain.evidence.path), 'tampered screenshot');
   assert.throws(() => foreign(0, 'https://www.usa.gov/benefits', 'Find government benefits'),
     /REFERENCE_MARKET_LOCAL_FIRST/, 'stale local source bytes revoke foreign capture admission');
+});
+
+test('frame-less new-marketing route accepts its exact Korean welfare design queries', t => {
+  const fixture = designAdmissionFixture(t);
+  const secondVisual = fixture.addSecondDesignDirection();
+  writeFileSync(join(fixture.root, '.omd/locale-design-context.json'), JSON.stringify(context));
+  const request = '한국 복지 서비스를 소개하는 랜딩 페이지를 구현해줘.';
+  writeFileSync(join(fixture.root, '.omd/domain-brief.json'), JSON.stringify({ ...domainBrief, request }));
+  const routeInput = inputSkeleton('product-route-input').skeleton as Record<string, unknown>;
+  routeInput.request = request;
+  routeInput.referenceDiscovery = { ...routeInput.referenceDiscovery as Record<string, unknown>, taskNeed: 'new-marketing' };
+  const invocation = publishTestAdaptiveRoute(fixture.root, routeInput);
+  const route = readPersistedRoute(fixture.root, invocation);
+  const domainQueries = ['복지로', '정부24 혜택알리미', '서울복지포털', '웰로'];
+  const marketingQueries = ['대한민국 복지 웹사이트 디자인', '한국 복지 웹사이트 디자인', 'South Korea 복지 웹사이트 디자인'];
+  const domainFour = fixture.capture('https://domain-four.example/task', 'domain', 'domain', 6);
+  const domainFourSource = { id: 'domain-4', url: domainFour.source, observedAt: new Date().toISOString().slice(0, 10),
+    decision: 'Task order', finding: 'Review before submission', evidence: domainFour.evidence, capture: domainFour.capture };
+  const domainSearches = domainQueries.map(query => testSearchReceipt(fixture.root, 'domain', query,
+    [fixture.domain.source, fixture.domainTwo.source, fixture.domainThree.source, domainFour.source]));
+  const designSearches = marketingQueries.map(query => testSearchReceipt(fixture.root, 'design', query,
+    [fixture.gallery.source, secondVisual.gallery.source]));
+  const research = parseReferenceResearch({ ...fixture.research, schema: REFERENCE_RESEARCH_SCHEMA,
+    sourceContractSha256: route.sourceContractSha256,
+    marketCoverage: { marketRegion: 'KR',
+      domain: { localSources: [fixture.domain, fixture.domainTwo, fixture.domainThree].map((source, index) =>
+        localSearchSource(`domain-${index + 1}`, source.evidence.sha256, 'service', domainSearches[0]!.sha256)),
+        globalFallback: fallbackCoverage(['domain-4'], domainSearches[0]!.sha256, fallbackGap(domainQueries)) },
+      design: { localSources: [
+        localSearchSource('visual', fixture.source.evidence.sha256, 'product', designSearches[0]!.sha256),
+        localSearchSource(secondVisual.sourceId, secondVisual.source.evidence.sha256, 'product', designSearches[0]!.sha256),
+      ], globalFallback: null } },
+    domainReference: { ...fixture.research.domainReference, queries: domainQueries, searches: domainSearches,
+      sources: [...fixture.research.domainReference.sources, domainFourSource] },
+    designReference: { ...fixture.research.designReference, queries: marketingQueries, searches: designSearches } });
+  const routeOptions = { ...options, expectedRequest: request, expectedSourceContractSha256: route.sourceContractSha256 };
+  assert.doesNotThrow(() => validateReferenceResearch(fixture.root, research, routeOptions));
+  const wrongQueries = parseReferenceResearch({ ...research,
+    designReference: { ...research.designReference,
+      queries: ['대한민국 복지 앱 UI 디자인', '한국 복지 앱 UI 디자인', 'South Korea 복지 앱 UI 디자인'] } });
+  assert.throws(() => validateReferenceResearch(fixture.root, wrongQueries, routeOptions), /MARKET_DESIGN_SEARCH_REQUIRED/);
 });

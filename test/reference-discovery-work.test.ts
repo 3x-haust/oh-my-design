@@ -184,6 +184,33 @@ test('domain discovery does not recurse into unrelated footer or pagination chai
   assert.equal(work.action?.url, taskUrl);
 });
 
+test('a signed public directory can lead to a different service family', t => {
+  const root = fixture(t);
+  const route = routeAdaptiveFlow(routeInput());
+  const service = 'https://www.welfarehello.com/recommend-policy/';
+  directRootAt(root, 'domain', 'https://directory.example/', [service]);
+  const work = referenceDiscoveryWork(root, route);
+  assert.equal(work.action?.kind, 'follow-link');
+  assert.equal(work.action?.url, service);
+});
+
+test('a visited gallery item can expose an original without recursively following its footer', t => {
+  const root = fixture(t);
+  const route = routeAdaptiveFlow(routeInput());
+  for (const hostname of ['www.bokjiro.go.kr', 'www.gov.kr', 'wis.seoul.go.kr']) retainDomain(root, hostname);
+  const item = 'https://www.siteinspire.com/websites/123456-task-screen';
+  const original = 'https://quality-product.example/app';
+  directRootAt(root, 'design', 'https://www.siteinspire.com/', [item]);
+  visitedItem(root, item, 'design', [original]);
+  const first = referenceDiscoveryWork(root, route);
+  assert.equal(first.action?.kind, 'follow-link');
+  assert.equal(first.action?.url, original);
+  visitedItem(root, original, 'design', ['https://unrelated-footer.example/']);
+  const second = referenceDiscoveryWork(root, route);
+  assert.equal(second.action?.kind, 'retain-reference');
+  assert.equal(second.action?.url, original);
+});
+
 test('work-next resumes after a signed unavailable search instead of repeating that query', t => {
   const root = fixture(t);
   const route = routeAdaptiveFlow(routeInput());

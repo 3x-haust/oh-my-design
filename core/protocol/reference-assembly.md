@@ -211,8 +211,12 @@ historical v6 remains readable with its original search-or-direct-root requireme
 `{lane, query, url, queryParam}`. The URL submits the exact query; a fresh browser records observed
 links, a 1280×900 screenshot and HTTP/error outcome, without reusing login state or clicking controls.
 Current signed search records also bind each retained visible result label to its observed link.
-For explicit-market local coverage, that link-associated text must name the market and relevant
-service/product scope; market terms in the query alone do not qualify a source as local.
+For explicit-market coverage, execute `ref discover-plan`'s exact target-market domain and design
+queries before global searches. Other unscoped query seeds are adaptable; do not rewrite the exact
+market inputs. A local result's link-associated text normally names the market and relevant
+service/product scope. A generic domain-service link label such as `바로가기` qualifies only when
+the separately retained, current native site capture records visibly Korean text. Neither a
+market term in the query nor a generic label alone establishes local provenance.
 Current v7 market provenance and its retained source observation must both be no more than seven days old.
 Inspect the page: HTTP 200 alone does not prove useful results or free access. All queries require
 execution receipts; every non-user retained domain source/design entry must occur in observed links
@@ -245,7 +249,8 @@ The executor accepts Google/Bing `/search`, DuckDuckGo root/HTML/lite `q` endpoi
 `/search?w=tot&q=` for free Korean web search,
 plus design-only Pinterest `/search/pins/?q=`, Dribbble `/search/<query-slug>` (`queryParam: path`),
 and Siteinspire `/search?query=` (`queryParam: query`). `ref discover-plan` supplies ready-to-run
-`designSourcePolicy.nativeSearchInputs`; adapt its short task/pattern terms and matching URL together.
+`designSourcePolicy.nativeSearchInputs`; adapt unscoped short task/pattern terms and their matching
+URLs together, while preserving the exact explicit-market inputs above.
 Use native gallery search when general search is blocked. HTTP 200 and actual same-provider item links
 are required; login walls, empty results and challenge responses remain failed attempts. Retain only
 an item actually observed in those results, never guessed shot IDs. Siteinspire now uses numeric

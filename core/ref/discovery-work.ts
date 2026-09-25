@@ -46,6 +46,10 @@ function publicCandidate(value: string): boolean {
   try { return publicDiscoveryUrl(value) === value; }
   catch (error) { if (error instanceof Error) return false; throw error; }
 }
+function domainCandidate(value: string): boolean {
+  return publicCandidate(value) && !/^(?:www\.)?(?:facebook\.com|instagram\.com|youtube\.com|linkedin\.com|twitter\.com|x\.com)$/u
+    .test(new URL(value).hostname.toLowerCase());
+}
 function domainSearchResults(search: SearchExecution): readonly string[] {
   const labels = new Map(search.results?.map(result => [result.url, result.text]) ?? []);
   return observedSearchTargets(search).filter(url => {
@@ -75,21 +79,31 @@ function nextLaneAction(lane: Lane, plan: ReferenceDiscoveryPlan, evidence: Lane
   const failedUrls = new Set(evidence.unavailable.map(item => item.source));
   const visited = new Set([...evidence.visits, ...evidence.entries].flatMap(item =>
     [item.observation.url, item.observation.finalUrl]));
-  const targets = [...new Set([...evidence.searches.filter(searchObserved).flatMap(search => lane === 'domain'
+  const rootTargets = [...new Set([...evidence.searches.filter(searchObserved).flatMap(search => lane === 'domain'
     ? domainSearchResults(search) : observedSearchTargets(search).filter(publicCandidate)),
-    ...evidence.entries.flatMap(item => item.observation.links.filter(url => publicCandidate(url)
-      && referenceServiceFamily(url) === referenceServiceFamily(item.observation.url)))])]
+    ...evidence.entries.flatMap(item => item.observation.links.filter(url => lane === 'domain'
+      ? domainCandidate(url) : publicCandidate(url) && designDiscoveryProvider(url) !== null))])];
+  const rootSet = new Set(rootTargets);
+  const descendantTargets = evidence.visits.filter(item => rootSet.has(item.observation.url))
+    .flatMap(item => item.observation.links.filter(url => lane === 'domain'
+      ? domainCandidate(url) && referenceServiceFamily(url) !== referenceServiceFamily(item.observation.url)
+      : publicCandidate(url) && designDiscoveryProvider(item.observation.url) !== null
+        && referenceServiceFamily(url) !== referenceServiceFamily(item.observation.url)));
+  const originals = new Set(lane === 'design' ? descendantTargets : []);
+  const descendants = new Set(descendantTargets);
+  const targets = [...new Set([...rootTargets, ...descendantTargets])]
     .filter(url => {
       try {
         if (excludedUrls.has(url) || !publicCandidate(url)) return false;
         const family = referenceServiceFamily(url);
-        return lane === 'design' ? designDiscoveryProvider(url) !== null
+        return lane === 'design' ? designDiscoveryProvider(url) !== null || originals.has(url)
           : !retainedFamilies.has(family) && designDiscoveryProvider(url) === null;
       } catch { return false; }
     });
-  const inspected = [...evidence.visits].reverse().find(item => targets.includes(item.observation.url)
+  const inspectedVisits = [...evidence.visits].reverse().filter(item => targets.includes(item.observation.url)
     && !excludedUrls.has(item.observation.url)
     && !retainedFamilies.has(referenceServiceFamily(item.observation.url)));
+  const inspected = inspectedVisits.find(item => descendants.has(item.observation.url)) ?? inspectedVisits[0];
   const freshTarget = targets.find(url => !visited.has(url) && !failedUrls.has(url));
   if (freshTarget !== undefined && (inspected === undefined || evidence.visits.length < 2)) {
     return nativeAction('follow-link', lane, 'Inspect an observed concrete source before retaining it.', { url: freshTarget });

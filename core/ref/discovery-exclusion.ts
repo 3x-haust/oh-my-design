@@ -19,6 +19,15 @@ function entries(root: string, path: string): readonly string[] {
   if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error(`REFERENCE_DISCOVERY_EXCLUSION: unsafe directory ${path}`);
   return readdirSync(directory).filter(name => /^[a-f0-9]{64}\.json$/u.test(name)).sort();
 }
+const MAX_DISCOVERY_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+function currentObservationAfter(root: string): number {
+  const ageFloor = Date.now() - MAX_DISCOVERY_AGE_MS;
+  const pointer = join(root, '.omd/route.json');
+  if (!existsSync(pointer)) return ageFloor;
+  const stat = lstatSync(pointer);
+  if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('REFERENCE_DISCOVERY_EXCLUSION: unsafe route pointer');
+  return Math.max(ageFloor, stat.mtimeMs);
+}
 function read(root: string, path: string): Buffer {
   return readStableProjectFile({ root: resolve(root), path: resolve(root, path), label: path,
     fs: nodeStableProjectFileSystem() });
@@ -27,7 +36,7 @@ function object(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
     && Object.getPrototypeOf(value) === Object.prototype;
 }
-function visitObservation(root: string, lane: DiscoveryLane, receipt: Receipt): string | null {
+function visitObservation(root: string, lane: DiscoveryLane, receipt: Receipt, after: number): string | null {
   if (!new RegExp(`^\\.omd/discovery/${lane}/navigation/[a-f0-9]{64}\\.json$`, 'u').test(receipt.path)
     || !receipt.path.endsWith(`${receipt.sha256}.json`)) return null;
   try {
@@ -35,17 +44,19 @@ function visitObservation(root: string, lane: DiscoveryLane, receipt: Receipt): 
     if (sha256(bytes) !== receipt.sha256) return null;
     const raw: unknown = JSON.parse(bytes.toString('utf8'));
     if (!object(raw) || typeof raw.source !== 'string' || typeof raw.imagePath !== 'string'
+      || typeof raw.capturedAt !== 'string' || !Number.isFinite(Date.parse(raw.capturedAt))
+      || Date.parse(raw.capturedAt) < after
       || !object(raw.acquisition) || typeof raw.acquisition.imageSha256 !== 'string') return null;
     const observation = readStrictDiscoveryNavigation(root, { url: raw.source,
       evidence: { path: raw.imagePath, sha256: raw.acquisition.imageSha256 }, capture: receipt });
     return observation.url;
   } catch (error) { if (error instanceof Error) return null; throw error; }
 }
-function observedVisit(root: string, lane: DiscoveryLane, source: string): Receipt | null {
+function observedVisit(root: string, lane: DiscoveryLane, source: string, after: number): Receipt | null {
   const directory = `.omd/discovery/${lane}/navigation`;
   for (const name of entries(root, directory)) {
     const receipt = { path: `${directory}/${name}`, sha256: name.slice(0, -5) };
-    if (visitObservation(root, lane, receipt) === source) return receipt;
+    if (visitObservation(root, lane, receipt, after) === source) return receipt;
   }
   return null;
 }
@@ -56,7 +67,7 @@ export function publishReferenceDiscoveryExclusion(root: string, sourceContractS
   const canonicalSource = publicDiscoveryUrl(source);
   const judgment = reason.trim();
   if (judgment.length < 20 || judgment.length > 500) throw new Error('REFERENCE_DISCOVERY_EXCLUSION: give a specific 20-500 character reason');
-  const visit = observedVisit(root, lane, canonicalSource);
+  const visit = observedVisit(root, lane, canonicalSource, currentObservationAfter(root));
   if (visit === null) throw new Error('REFERENCE_DISCOVERY_EXCLUSION: visit and capture this exact source before excluding it');
   const decision: ReferenceDiscoveryExclusion = {
     schema: 'reference-discovery-exclusion-v1', sourceContractSha256,
@@ -72,6 +83,7 @@ export function publishReferenceDiscoveryExclusion(root: string, sourceContractS
 export function readReferenceDiscoveryExclusions(root: string,
   sourceContractSha256: string): readonly ReferenceDiscoveryExclusionRecord[] {
   const rows: ReferenceDiscoveryExclusionRecord[] = [];
+  const after = currentObservationAfter(root);
   for (const lane of ['domain', 'design'] as const) {
     const directory = `.omd/discovery/${lane}/excluded`;
     for (const name of entries(root, directory)) {
@@ -88,7 +100,7 @@ export function readReferenceDiscoveryExclusions(root: string,
           || typeof raw.visit.path !== 'string' || typeof raw.visit.sha256 !== 'string'
           || Object.keys(raw).length !== 6 || Object.keys(raw.visit).length !== 2) continue;
         const visit = { path: raw.visit.path, sha256: raw.visit.sha256 };
-        if (visitObservation(root, lane, visit) !== raw.source) continue;
+        if (visitObservation(root, lane, visit, after) !== raw.source) continue;
         rows.push({ decision: { schema: raw.schema, sourceContractSha256,
           researchLane: lane, source: raw.source, reason: raw.reason, visit }, receipt });
       } catch (error) { if (!(error instanceof Error)) throw error; }
