@@ -1,9 +1,9 @@
-import { existsSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { resolve } from 'node:path';
 import type { RouteRecord } from '../route/index.ts';
 import { nodeStableProjectFileSystem, readStableProjectFile } from '../runtime/stable-project-file.ts';
 import { canonicalJson, sha256 } from './board-artifacts.ts';
 import { inspectDesignReferenceAdmission } from './design-admission.ts';
+import { publicDiscoveryUrl } from './discovery-record.ts';
 import { readCurrentReferenceDiscoveryEvidence, type DiscoveryAttempt, type LaneEvidence } from './discovery-evidence.ts';
 import { readReferenceDiscoveryExclusions, type ReferenceDiscoveryExclusionRecord } from './discovery-exclusion.ts';
 import { designDiscoveryProvider, referenceServiceFamily } from './design-discovery-sources.ts';
@@ -42,30 +42,46 @@ function nativeAction(kind: 'search' | 'direct-entry' | 'follow-link', lane: Lan
     entry?: 'free-gallery' | 'public-directory' }>): ReferenceDiscoveryAction {
   return { kind, lane, args: ['ref', 'advance', '--json'], reason, ...details };
 }
-function domainSearchResults(search: SearchExecution, marketRegion: string | null): readonly string[] {
-  const query = search.query.toLocaleLowerCase('und');
-  return search.results?.flatMap(result => observedSearchTargets({ links: [result.url] })
-    .filter(url => {
-      const host = new URL(url).hostname.toLowerCase();
-      if (host === search.provider || host.endsWith(`.${search.provider}`)
-        || /^(?:search\.daum\.net|logins\.daum\.net|www\.google\.com|www\.bing\.com|duckduckgo\.com|map\.kakao\.com)$/u.test(host)) return false;
-      const label = result.text.toLocaleLowerCase('und');
-      return (marketRegion !== 'KR' || /[가-힣]/u.test(label) || host.endsWith('.kr'))
-        && (label.includes(query) || query.split(/\s+/u).some(term => term.length > 2 && label.includes(term)));
-    })) ?? [];
+function publicCandidate(value: string): boolean {
+  try { return publicDiscoveryUrl(value) === value; }
+  catch (error) { if (error instanceof Error) return false; throw error; }
+}
+function domainSearchResults(search: SearchExecution): readonly string[] {
+  const labels = new Map(search.results?.map(result => [result.url, result.text]) ?? []);
+  return observedSearchTargets(search).filter(url => {
+    if (!publicCandidate(url)) return false;
+    const host = new URL(url).hostname.toLowerCase();
+    return host !== search.provider && !host.endsWith(`.${search.provider}`)
+      && !/^(?:search\.daum\.net|logins\.daum\.net|www\.google\.com|www\.bing\.com|duckduckgo\.com|map\.kakao\.com)$/u.test(host);
+  }).sort((left, right) => {
+    const score = (url: string) => Number(new URL(url).hostname.endsWith('.kr')) * 2
+      + Number(/[가-힣]/u.test(labels.get(url) ?? ''));
+    return score(right) - score(left);
+  });
+}
+function pendingMarketSearch(lane: Lane, plan: ReferenceDiscoveryPlan, evidence: LaneEvidence): SearchInput | undefined {
+  if (plan.marketReferencePolicy.marketRegion === null || (evidence.searches.length === 0 && evidence.entries.length > 0)) return undefined;
+  const inputs = lane === 'domain' ? plan.marketReferencePolicy.domainSearchInputs
+    : plan.designSourcePolicy.nativeSearchInputs;
+  return inputs.find(input => !evidence.searches.some(search => search.query === input.query));
 }
 function nextLaneAction(lane: Lane, plan: ReferenceDiscoveryPlan, evidence: LaneEvidence,
-  retainedFamilies: ReadonlySet<string>, excludedUrls: ReadonlySet<string>): ReferenceDiscoveryAction | null {
+  retainedFamilies: ReadonlySet<string>, excludedUrls: ReadonlySet<string>,
+  requiredSearch: SearchInput | undefined): ReferenceDiscoveryAction | null {
+  if (requiredSearch !== undefined && retainedFamilies.size >= (lane === 'domain' ? 3 : 2)) {
+    return nativeAction('search', lane, 'Complete the exact target-market searches already required by this research lane.',
+      { input: requiredSearch });
+  }
   const failedUrls = new Set(evidence.unavailable.map(item => item.source));
   const visited = new Set([...evidence.visits, ...evidence.entries].flatMap(item =>
     [item.observation.url, item.observation.finalUrl]));
   const targets = [...new Set([...evidence.searches.filter(searchObserved).flatMap(search => lane === 'domain'
-    ? domainSearchResults(search, plan.marketReferencePolicy.marketRegion) : observedSearchTargets(search)),
-    ...evidence.entries.flatMap(item => item.observation.links),
-    ...evidence.visits.flatMap(item => item.observation.links)])]
+    ? domainSearchResults(search) : observedSearchTargets(search).filter(publicCandidate)),
+    ...evidence.entries.flatMap(item => item.observation.links.filter(url => publicCandidate(url)
+      && referenceServiceFamily(url) === referenceServiceFamily(item.observation.url)))])]
     .filter(url => {
       try {
-        if (excludedUrls.has(url)) return false;
+        if (excludedUrls.has(url) || !publicCandidate(url)) return false;
         const family = referenceServiceFamily(url);
         return lane === 'design' ? designDiscoveryProvider(url) !== null
           : !retainedFamilies.has(family) && designDiscoveryProvider(url) === null;
@@ -126,12 +142,16 @@ export function referenceDiscoveryWork(root: string, route: RouteRecord): Refere
     && inspectDesignReferenceAdmission(root, ref, { references: allRefs }).eligible);
   const domainFamilies = new Set(admittedDomain.map(ref => referenceServiceFamily(ref.source)));
   const designFamilies = new Set(admittedDesign.map(ref => referenceServiceFamily(ref.source)));
-  const lane = domainFamilies.size < 3 ? 'domain' : designFamilies.size < 2 ? 'design' : null;
+  const domainSearch = pendingMarketSearch('domain', plan, domain);
+  const designSearch = pendingMarketSearch('design', plan, design);
+  const lane = domainFamilies.size < 3 || domainSearch !== undefined ? 'domain'
+    : designFamilies.size < 2 || designSearch !== undefined ? 'design' : null;
   const action = lane === null ? { kind: 'publish-board', lane: null, args: [],
     reason: 'Interpret retained domain flows and design UI parts, then publish the candidate assembly with omd ref board.' } as const
     : nextLaneAction(lane, plan, lane === 'domain' ? domain : design,
       lane === 'domain' ? domainFamilies : designFamilies,
-      new Set(exclusions.filter(item => item.decision.researchLane === lane).map(item => item.decision.source)));
+      new Set(exclusions.filter(item => item.decision.researchLane === lane).map(item => item.decision.source)),
+      lane === 'domain' ? domainSearch : designSearch);
   const status = lane === null ? 'ready' : action === null ? 'exhausted' : 'action';
   const progress = { domainFamilies: domainFamilies.size, designFamilies: designFamilies.size,
     searches: domain.searches.length + design.searches.length, entries: domain.entries.length + design.entries.length,

@@ -85,7 +85,7 @@ test('real isolated browser execution records actual DOM links and pixels, and p
   }
 });
 
-test('late search inspection failure records the diagnostic without an orphan screenshot', async t => {
+test('late search inspection failure preserves a trailing newline in its signed diagnostic', async t => {
   const root = fixture(t);
   const writer = createTestProjectWriteAdapter(root);
   let screenshotObserved = false;
@@ -104,7 +104,7 @@ test('late search inspection failure records the diagnostic without an orphan sc
           page.screenshot = async options => { const bytes = await screenshot(options); screenshotObserved = true; return bytes; };
           const locate = page.locator.bind(page);
           page.locator = (...locatorArgs: Parameters<typeof page.locator>) => {
-            if (locatorArgs[0] === 'body' && screenshotObserved) throw new Error('test-owned link inspection failure');
+            if (locatorArgs[0] === 'body' && screenshotObserved) throw new Error('test-owned link inspection failure\n');
             return locate(...locatorArgs);
           };
           return page;
@@ -116,7 +116,7 @@ test('late search inspection failure records the diagnostic without an orphan sc
     const execution = readSearchExecution(root, receipt, 'design');
     assert.equal(screenshotObserved, true);
     assert.equal(execution.status, 'navigation-error');
-    assert.equal(execution.error, 'test-owned link inspection failure');
+    assert.equal(execution.error, 'test-owned link inspection failure\n');
     assert.equal(execution.capture, null);
     assert.deepEqual(readdirSync(join(root, '.omd/discovery/design')), [receipt.path.split('/').at(-1)]);
     assert.equal(existsSync(join(root, '.omd/refs')), false);
@@ -151,6 +151,26 @@ test('a self-hashed search receipt without the native execution signature is ref
   mkdirSync(join(root, '.omd/discovery/design'), { recursive: true });
   writeFileSync(join(root, path), bytes);
   assert.throws(() => readSearchExecution(root, { path, sha256 }, 'design'), /signature invalid/);
+});
+
+test('a changed signed failure reason is refused even with a new receipt hash, and invalid reasons stay invalid', t => {
+  const root = fixture(t);
+  const receipt = testSearchReceipt(root, 'design', input.query, [], true);
+  const record = JSON.parse(readFileSync(join(root, receipt.path), 'utf8'));
+  assert.equal(readSearchExecution(root, receipt, 'design').error, 'HTTP 403');
+  for (const [error, expected] of [
+    ['HTTP 404\n', /signature invalid/],
+    [' \n ', /missing\/oversized text/],
+    ['x'.repeat(4097), /missing\/oversized text/],
+  ] as const) {
+    record.error = error;
+    const bytes = Buffer.from(`${JSON.stringify(record, null, 2)}\n`);
+    const sha256 = createHash('sha256').update(bytes).digest('hex');
+    const path = `.omd/discovery/design/search-${sha256}.json`;
+    mkdirSync(join(root, '.omd/discovery/design'), { recursive: true });
+    writeFileSync(join(root, path), bytes);
+    assert.throws(() => readSearchExecution(root, { path, sha256 }, 'design'), expected);
+  }
 });
 
 test('challenge detection rejects strong challenge text without treating ordinary bot-related search content as blocked', () => {

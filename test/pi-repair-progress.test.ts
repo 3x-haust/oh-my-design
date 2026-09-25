@@ -14,6 +14,8 @@ function harness(t: { after(fn: () => void): void }) {
   const calls: string[][] = [];
   let tool: PortablePiTool | undefined;
   let duringDiagnosis: (() => Promise<unknown>) | undefined;
+  let referenceMutation: ((args: readonly string[]) => number) | undefined;
+  let diagnosisFails = false;
   const work = { schema: 'stage-next-v1', stage: 'copy', owner: 'omd-writer', action: 'repair-output',
     next: 'omd brief copy --check --json',
     instruction: 'Repair the copy deck, publish its current review, then run the named check.',
@@ -25,8 +27,12 @@ function harness(t: { after(fn: () => void): void }) {
     async exec(_command, args) {
       calls.push([...args]);
       if (args[1] === 'route' && args[2] === 'classify') writeFileSync(join(cwd, '.omd/route.json'), '{}');
-      if (args[1] === 'stage') await duringDiagnosis?.();
-      return { stdout: args[1] === 'stage' ? JSON.stringify(work) : '{}', stderr: '', code: 0, killed: false };
+      if (args[1] === 'stage') {
+        await duringDiagnosis?.();
+        if (diagnosisFails) return { stdout: '', stderr: 'stage diagnosis unavailable', code: 1, killed: false };
+      }
+      const code = args[1] === 'ref' ? referenceMutation?.(args) ?? 0 : 0;
+      return { stdout: args[1] === 'stage' ? JSON.stringify(work) : '{}', stderr: '', code, killed: false };
     },
   });
   async function emit(name: string, event: Parameters<PortablePiHook>[0]) {
@@ -43,7 +49,9 @@ function harness(t: { after(fn: () => void): void }) {
   return { cwd, work, sent, calls, emit, start, run: (args: string[]) => {
     assert.ok(tool); return tool.execute(args.join('-'), { args }, undefined, undefined, { cwd });
   }, end: () => emit('message_end', { message: final }),
-    interruptDuringDiagnosis: () => { duringDiagnosis = () => emit('input', { source: 'interactive' }); } };
+    interruptDuringDiagnosis: () => { duringDiagnosis = () => emit('input', { source: 'interactive' }); },
+    failDiagnosis: () => { diagnosisFails = true; },
+    onReferenceMutation: (callback: (args: readonly string[]) => number) => { referenceMutation = callback; } };
 }
 
 test('missing reference board advances a native discovery action instead of only retrying checks', async t => {
@@ -72,6 +80,104 @@ test('an outstanding reference action refuses repeated diagnostics without publi
   assert.match(refusal.reason, /OMD_OWNED_WORK_REQUIRED/);
   assert.equal(h.calls.length, before, 'refused diagnostics must not execute the CLI');
   assert.equal(existsSync(join(h.cwd, '.omd/reference-board.json')), false);
+});
+
+test('Scout can inspect ref work-next while reference work is pending', async t => {
+  const h = harness(t); await h.start();
+  Object.assign(h.work, { stage: 'reference-board', referenceWork: {
+    schema: 'reference-discovery-work-v1', status: 'action', workSha256: 'c'.repeat(64),
+    action: { kind: 'direct-entry', args: ['ref', 'navigate', 'https://example.test/', '--json'], reason: 'Inspect source.' },
+  } });
+  await h.end();
+  const inspection = await h.emit('tool_call', { toolName: 'omd_cli', input: { args: ['ref', 'work-next', '--json'] } });
+  assert.equal(inspection, undefined);
+});
+
+test('failed or unchanged reference mutations keep the pending-work refusal', async t => {
+  const h = harness(t); await h.start();
+  Object.assign(h.work, { stage: 'reference-board', referenceWork: {
+    schema: 'reference-discovery-work-v1', status: 'action', workSha256: 'c'.repeat(64),
+    action: { kind: 'direct-entry', args: ['ref', 'navigate', 'https://example.test/', '--json'], reason: 'Inspect source.' },
+  } });
+  await h.end();
+  h.onReferenceMutation(args => args[2] === 'navigate' ? 1 : 0);
+  await h.emit('tool_call', { toolName: 'omd_cli', input: { args: ['ref', 'navigate', 'https://example.test/', '--json'] } });
+  await assert.rejects(h.run(['ref', 'navigate', 'https://example.test/', '--json']));
+  const afterFailure = await h.emit('tool_call', { toolName: 'omd_cli', input: { args: ['stage', 'next', '--json'] } }) as { block: boolean };
+  assert.equal(afterFailure.block, true);
+  h.onReferenceMutation(() => 0);
+  await h.emit('tool_call', { toolName: 'omd_cli', input: { args: ['ref', 'add', '--input', 'unrelated.json'] } });
+  await h.run(['ref', 'add', '--input', 'unrelated.json']);
+  const afterUnchanged = await h.emit('tool_call', { toolName: 'omd_cli', input: { args: ['stage', 'next', '--json'] } }) as { block: boolean };
+  assert.equal(afterUnchanged.block, true);
+});
+
+test('successful reference mutation clears pending refusal when work digest advances', async t => {
+  const h = harness(t); await h.start();
+  Object.assign(h.work, { stage: 'reference-board', referenceWork: {
+    schema: 'reference-discovery-work-v1', status: 'action', workSha256: 'c'.repeat(64),
+    action: { kind: 'direct-entry', args: ['ref', 'navigate', 'https://example.test/', '--json'], reason: 'Inspect source.' },
+  } });
+  await h.end();
+  h.onReferenceMutation(args => {
+    if (args[2] === 'navigate') Object.assign(h.work, { referenceWork: {
+      schema: 'reference-discovery-work-v1', status: 'action', workSha256: 'd'.repeat(64),
+      action: { kind: 'direct-entry', args: ['ref', 'navigate', 'https://example.test/', '--json'], reason: 'Inspect source.' },
+    } });
+    return 0;
+  });
+  await h.emit('tool_call', { toolName: 'omd_cli', input: { args: ['ref', 'navigate', 'https://example.test/', '--json'] } });
+  const beforeResult = await h.emit('tool_call', { toolName: 'omd_cli', input: { args: ['stage', 'next', '--json'] } }) as { block: boolean };
+  assert.equal(beforeResult.block, true, 'a planned mutation is not evidence of completed work');
+  await h.run(['ref', 'navigate', 'https://example.test/', '--json']);
+  const next = await h.emit('tool_call', { toolName: 'omd_cli', input: { args: ['stage', 'next', '--json'] } });
+  assert.equal(next, undefined);
+});
+
+test('reference board publication clears pending refusal when the board changes', async t => {
+  const h = harness(t); await h.start();
+  Object.assign(h.work, { stage: 'reference-board', referenceWork: {
+    schema: 'reference-discovery-work-v1', status: 'ready', workSha256: 'c'.repeat(64),
+    action: { kind: 'board', args: ['ref', 'board', '--input', 'board.json'], reason: 'Publish assembled references.' },
+  } });
+  await h.end();
+  h.onReferenceMutation(args => {
+    if (args[2] === 'board') writeFileSync(join(h.cwd, '.omd/reference-board.json'), '{"published":true}');
+    return 0;
+  });
+  await h.emit('tool_call', { toolName: 'omd_cli', input: { args: ['ref', 'board', '--input', 'board.json'] } });
+  await h.run(['ref', 'board', '--input', 'board.json']);
+  const next = await h.emit('tool_call', { toolName: 'omd_cli', input: { args: ['stage', 'next', '--json'] } });
+  assert.equal(next, undefined);
+});
+
+test('successful reference mutation preserves its result when progress diagnosis fails', async t => {
+  const h = harness(t); await h.start();
+  Object.assign(h.work, { stage: 'reference-board', referenceWork: {
+    schema: 'reference-discovery-work-v1', status: 'action', workSha256: 'c'.repeat(64),
+    action: { kind: 'direct-entry', args: ['ref', 'navigate', 'https://example.test/', '--json'], reason: 'Inspect source.' },
+  } });
+  await h.end();
+  h.failDiagnosis();
+  await h.emit('tool_call', { toolName: 'omd_cli', input: { args: ['ref', 'navigate', 'https://example.test/', '--json'] } });
+  const result = await h.run(['ref', 'navigate', 'https://example.test/', '--json']);
+  assert.equal(result.details.code, 0);
+  assert.equal(result.content[0]?.text, '{}');
+  const next = await h.emit('tool_call', { toolName: 'omd_cli', input: { args: ['stage', 'next', '--json'] } }) as { block: boolean };
+  assert.equal(next.block, true, 'unknown work state must remain pending until message-end recovery');
+});
+
+test('failed internal stage diagnosis releases stale pending refusal for recovery', async t => {
+  const h = harness(t); await h.start();
+  Object.assign(h.work, { stage: 'reference-board', referenceWork: {
+    schema: 'reference-discovery-work-v1', status: 'action', workSha256: 'c'.repeat(64),
+    action: { kind: 'direct-entry', args: ['ref', 'navigate', 'https://example.test/', '--json'], reason: 'Inspect source.' },
+  } });
+  await h.end();
+  h.failDiagnosis();
+  await h.end();
+  const next = await h.emit('tool_call', { toolName: 'omd_cli', input: { args: ['stage', 'next', '--json'] } });
+  assert.equal(next, undefined);
 });
 
 test('exhausted reference discovery reports signed attempted sources without a generic stall', async t => {

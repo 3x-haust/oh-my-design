@@ -29,6 +29,15 @@ export function marketDomainQueries(marketRegion: string, surfaceLocale: string,
   return Object.freeze(labels.map((label, index) => `${label} ${domain}${label === english ? ' service' : index === 0 ? '' : ' 서비스'}`));
 }
 
+export function marketDesignQueries(marketRegion: string, surfaceLocale: string, domain: string,
+  base: string, marketing: boolean): readonly string[] {
+  const labels = marketSearchLabels(marketRegion, surfaceLocale);
+  const subject = marketRegion === 'KR' && /복지|혜택|welfare|benefits?|public benefits?/iu.test(domain)
+    ? marketing ? '복지 웹사이트 디자인' : '복지 앱 UI 디자인'
+    : `${domain} ${base}`;
+  return Object.freeze(labels.map(label => `${label} ${subject}`));
+}
+
 export function isMarketQualifiedQuery(query: string, labels: readonly string[]): boolean {
   return labels.some(label => query === label || query.startsWith(`${label} `))
     || (labels.includes('한국') && KOREAN_WELFARE_SERVICE_QUERIES.includes(query));

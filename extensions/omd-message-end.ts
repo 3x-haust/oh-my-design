@@ -125,6 +125,12 @@ function parseStageWork(text: string): StageWorkPointer | null {
   };
 }
 
+export function referenceWorkAdvanced(text: string, previous: ReferenceWork): boolean {
+  const work = parseStageWork(text);
+  return work !== null && (work.stage !== 'reference-board'
+    || (work.referenceWork !== null && work.referenceWork.workSha256 !== previous.workSha256));
+}
+
 function actionPacket(work: StageWorkPointer): string {
   const issues = [...work.problems, ...work.entryBlockers];
   return [
@@ -222,6 +228,7 @@ export async function handleOmdMessageEnd(task: MessageEndTask): Promise<unknown
       task.onReferenceWork?.(null);
     } catch (error) {
       if (interrupted()) return;
+      task.onReferenceWork?.(null);
       return { message: { ...message, content: [...(message.content ?? []).filter(part => part.type !== 'text'),
         { type: 'text', text: `OMD stage diagnosis failed; completion is unverified.\n${error instanceof Error ? error.message : String(error)}` }] } };
     }

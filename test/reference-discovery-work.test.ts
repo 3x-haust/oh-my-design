@@ -38,6 +38,7 @@ function retainDomain(root: string, hostname: string): void {
     acquisition: { requestedUrl: source, finalUrl: source, httpStatus: 200, links: [], imageSha256: sha256(image) },
     visibleKoreanText: true,
   }));
+  directRootAt(root, 'domain', source, [`${source}benefits`]);
 }
 function mislabeledDesign(root: string, hostname: string): void {
   const directory = join(root, '.omd/refs/design');
@@ -65,6 +66,24 @@ function unavailableSearch(root: string, input: { readonly lane: 'domain' | 'des
   mkdirSync(directory, { recursive: true });
   writeFileSync(join(directory, `search-${sha256(bytes)}.json`), bytes);
 }
+function observedSearch(root: string, input: { readonly lane: 'domain' | 'design'; readonly query: string;
+  readonly url: string; readonly queryParam: string }, results: readonly { readonly url: string; readonly text: string }[]): void {
+  const image = testPng();
+  const directory = join(root, `.omd/discovery/${input.lane}`);
+  mkdirSync(directory, { recursive: true });
+  const imageSha256 = sha256(image);
+  const imagePath = `.omd/discovery/${input.lane}/search-${imageSha256}.png`;
+  writeFileSync(join(root, imagePath), image);
+  const unsigned = { schema: 'reference-search-execution-v2', lane: input.lane, query: input.query,
+    queryParam: input.queryParam, requestedUrl: input.url, finalUrl: input.url,
+    provider: new URL(input.url).hostname, observedAt: new Date().toISOString(),
+    status: 'page-observed', httpStatus: 200, links: results.map(result => result.url), results,
+    capture: { path: imagePath, sha256: imageSha256 }, error: null,
+    limitations: 'observed-links-not-ranked-results; no-clicks; no-authentication; not-provider-attested' };
+  const record = { ...unsigned, signature: signNativeObservation(root, unsigned.schema, sha256(canonicalJson(unsigned))) };
+  const bytes = `${JSON.stringify(record, null, 2)}\n`;
+  writeFileSync(join(directory, `search-${sha256(bytes)}.json`), bytes);
+}
 function unavailableEntry(root: string, lane: 'domain' | 'design', url: string): void {
   const unsigned = { schema: 'reference-discovery-attempt-v1', source: url, researchLane: lane,
     method: 'direct-public', entry: lane === 'domain' ? 'public-directory' : 'free-gallery', capturedAt: new Date().toISOString(),
@@ -75,16 +94,16 @@ function unavailableEntry(root: string, lane: 'domain' | 'design', url: string):
   mkdirSync(directory, { recursive: true });
   writeFileSync(join(directory, `${sha256(bytes)}.json`), bytes);
 }
-function visitedItem(root: string, url: string): void {
-  const directory = '.omd/discovery/design/navigation';
+function visitedItem(root: string, url: string, lane: 'domain' | 'design' = 'design', links: readonly string[] = []): void {
+  const directory = `.omd/discovery/${lane}/navigation`;
   mkdirSync(join(root, directory), { recursive: true });
   const image = testPng();
   const imageSha256 = sha256(image);
   const imagePath = `${directory}/${imageSha256}.png`;
   writeFileSync(join(root, imagePath), image);
-  const record = { schema: 'reference-navigation-capture-v2', source: url, researchLane: 'design', kind: 'page',
+  const record = { schema: 'reference-navigation-capture-v2', source: url, researchLane: lane, kind: 'page',
     capturedAt: new Date().toISOString(), imagePath,
-    acquisition: { requestedUrl: url, finalUrl: url, httpStatus: 200, links: [], imageSha256 },
+    acquisition: { requestedUrl: url, finalUrl: url, httpStatus: 200, links, imageSha256 },
     limitations: 'native-public-get; stable-rendered-viewport-links; no-authentication; no-interaction-probes; not-provider-attested' };
   const bytes = `${JSON.stringify(record, null, 2)}\n`;
   const receipt = { url, evidence: { path: imagePath, sha256: imageSha256 },
@@ -121,6 +140,48 @@ test('work-next moves to Korean design discovery once three distinct local domai
   assert.equal(work.action?.kind, 'search');
   assert.equal(work.action?.input?.lane, 'design');
   assert.equal(existsSync(join(root, '.omd/reference-board.json')), false);
+});
+
+test('retained families do not skip remaining required market searches after a search was used', t => {
+  const root = fixture(t);
+  const route = routeAdaptiveFlow(routeInput());
+  for (const hostname of ['www.bokjiro.go.kr', 'www.gov.kr', 'wis.seoul.go.kr']) retainDomain(root, hostname);
+  const first = referenceDiscoveryWork(root, route);
+  assert.equal(first.action?.lane, 'design');
+  const searchUrl = new URL('https://search.daum.net/search');
+  searchUrl.searchParams.set('w', 'tot');
+  searchUrl.searchParams.set('q', '복지로');
+  unavailableSearch(root, { lane: 'domain', query: '복지로', url: searchUrl.href, queryParam: 'q' });
+  const after = referenceDiscoveryWork(root, route);
+  assert.equal(after.action?.lane, 'domain');
+  assert.equal(after.action?.kind, 'search');
+  assert.equal(after.action?.input?.query, '정부24 혜택알리미');
+});
+
+test('observed generic-label service links remain eligible while private links are skipped', t => {
+  const root = fixture(t);
+  const route = routeAdaptiveFlow(routeInput());
+  const input = referenceDiscoveryWork(root, route).action?.input;
+  assert.ok(input);
+  observedSearch(root, input, [
+    { url: 'https://127.0.0.1/private', text: `${input.query} local service` },
+    { url: 'https://www.welfarehello.com/recommend-policy/', text: '바로가기' },
+  ]);
+  const work = referenceDiscoveryWork(root, route);
+  assert.equal(work.action?.kind, 'follow-link');
+  assert.equal(work.action?.url, 'https://www.welfarehello.com/recommend-policy/');
+});
+
+test('domain discovery does not recurse into unrelated footer or pagination chains', t => {
+  const root = fixture(t);
+  const route = routeAdaptiveFlow(routeInput());
+  const rootUrl = 'https://www.bokjiro.go.kr/';
+  const taskUrl = `${rootUrl}benefits`;
+  directRootAt(root, 'domain', rootUrl, [taskUrl, 'https://www.facebook.com/bokjiro']);
+  visitedItem(root, taskUrl, 'domain', [`${taskUrl}?page=2`]);
+  const work = referenceDiscoveryWork(root, route);
+  assert.equal(work.action?.kind, 'retain-reference');
+  assert.equal(work.action?.url, taskUrl);
 });
 
 test('work-next resumes after a signed unavailable search instead of repeating that query', t => {

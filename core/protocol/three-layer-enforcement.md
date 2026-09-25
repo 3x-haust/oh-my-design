@@ -204,8 +204,11 @@ inspection and research repair remain available while production is blocked.
   step when the current work pointer names search, public-list entry or observed-link navigation.
   It recomputes the pointer from signed disk evidence before another owner turn. While an actionable
   reference packet is outstanding, repeated `discover-plan`, board entry checks, stage-next and
-  completion diagnostics are refused without a source write. The reference work digest, not an
-  unrelated global write revision, identifies progress. Manual image selection and board publication
+  completion diagnostics are refused without verified reference progress. `ref work-next` stays
+  available for inspection, but it does not count as progress. A failed or unchanged reference
+  mutation cannot clear the refusal; only a successful changed work digest, stage, or published
+  board can. The reference work digest, not an unrelated global write revision, identifies progress.
+  Manual image selection and board publication
   remain Scout-owned; verified source exhaustion reports its native receipts rather than a generic stall.
 - Pi keeps automatic work visible at meaningful phase boundaries without narrating every tool call.
   Before each queued route, stage or completion repair, the visible assistant message names the

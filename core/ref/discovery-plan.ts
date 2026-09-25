@@ -7,7 +7,7 @@ import type { RouteRecord } from '../route/index.ts';
 import type { CraftRefSignal } from './craft-usage.ts';
 import { querySeeds } from './reference-query.ts';
 import { gallerySearchInputs, type GallerySearchInput } from './gallery-search.ts';
-import { inferredKoreanReferenceMarket, marketDomainQueries, marketSearchLabels } from './market-reference.ts';
+import { inferredKoreanReferenceMarket, marketDesignQueries, marketDomainQueries, marketSearchLabels } from './market-reference.ts';
 
 export const REFERENCE_DISCOVERY_PLAN_SCHEMA = 'reference-discovery-plan-v2' as const;
 export type DiscoveryLane = 'domain-reference' | 'design-reference' | 'motion';
@@ -118,11 +118,7 @@ export function buildReferenceDiscoveryPlan(root: string, route: RouteRecord): R
   const comparableLeads = marketRegion === 'KR' && /복지|혜택|welfare|benefits?/iu.test(domain)
     ? ['복지로 맞춤형급여안내', '정부24 혜택알리미', '서울복지포털 맞춤검색', '웰로 맞춤형 정책 추천'] : [];
   const baseDesignQuery = [...queries.component, ...queries.mood][0] ?? (marketing ? 'typography' : 'app interface');
-  const compactDesignQuery = baseDesignQuery.trim().split(/\s+/u).slice(0, 4).join(' ');
-  const designSubject = marketRegion === 'KR' && comparableLeads.length > 0
-    ? marketing ? '복지 웹사이트 디자인' : '복지 앱 UI 디자인'
-    : compactDesignQuery;
-  const designQueries = searchLabels.map(label => `${label} ${designSubject}`);
+  const designQueries = marketRegion === null ? [] : marketDesignQueries(marketRegion, surfaceLocale, domain, baseDesignQuery, marketing);
   const designQuery = designQueries[0] ?? baseDesignQuery;
   const domainSearchInputs: DomainSearchInput[] = [];
   for (const query of domainQueries) {

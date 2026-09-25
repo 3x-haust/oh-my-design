@@ -39,6 +39,7 @@ function object(value: unknown, keys: readonly string[]) {
   return value as Record<string, unknown>;
 }
 function text(value: unknown): string { return typeof value === 'string' && value.trim() && value.length <= 4096 ? value.trim() : fail('missing/oversized text'); }
+function reason(value: unknown): string { return typeof value === 'string' && value.trim() && value.length <= 4096 ? value : fail('missing/oversized text'); }
 function url(value: unknown): string {
   const result = text(value);
   let parsed: URL;
@@ -104,7 +105,7 @@ function parseExecution(value: unknown): SearchExecution {
     finalUrl: row.finalUrl === null ? null : url(row.finalUrl), observedAt: row.observedAt,
     status: row.status as SearchExecution['status'], httpStatus: row.httpStatus as number | null, links,
     capture: row.capture === null ? null : parseReceipt(row.capture, input.lane, 'png'),
-    error: row.error === null ? null : text(row.error), limitations: LIMITATIONS };
+    error: row.error === null ? null : reason(row.error), limitations: LIMITATIONS };
   return current ? { ...parsed, results: results ?? [], signature: text(row.signature) } : parsed;
 }
 

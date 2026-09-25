@@ -3,9 +3,10 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { parseLocaleDesignContext } from '../locale/design-context.ts';
 import { validateDomainBrief } from '../domain/domain-brief.ts';
+import { readFrame } from '../frame/index.ts';
 import { nodeStableProjectFileSystem, readStableProjectFile } from '../runtime/stable-project-file.ts';
 import type { ReferenceResearch } from './reference-research-types.ts';
-import { inferredKoreanReferenceMarket, isMarketQualifiedQuery, marketDomainQueries, marketSearchLabels } from './market-reference.ts';
+import { inferredKoreanReferenceMarket, isMarketQualifiedQuery, marketDesignQueries, marketDomainQueries, marketSearchLabels } from './market-reference.ts';
 import { readCurrentDirectDiscoveryEntry } from './discovery-record.ts';
 import { negatesMarketScope } from './market-scope-negation.ts';
 import { readSearchExecution, SEARCH_EXECUTION_SCHEMA } from './search-execution.ts';
@@ -115,7 +116,8 @@ export function validateMarketReferenceCoverage(root: string, research: Referenc
   ];
   const base = [...brief.referenceQueries.component, ...brief.referenceQueries.mood][0];
   if (base === undefined) return marketReject('REFERENCE_RESEARCH_MARKET_DESIGN_PLAN_REQUIRED: current domain queries are empty');
-  const designQueries = labels.map(label => `${label} ${domain} ${base}`);
+  const designQueries = marketDesignQueries(marketRegion, surfaceLocale, domain, base,
+    readFrame(root)?.uxSurface === 'marketing');
   const designSearchRequired = laneNeedsMarketSearch(research.marketCoverage.design,
     research.designReference.discoveryRoots ?? [], research.designReference.searches);
   if (designSearchRequired && (designQueries.some((query, index) => research.designReference.queries[index] !== query)

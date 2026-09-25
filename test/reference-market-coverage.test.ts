@@ -44,7 +44,7 @@ test('explicit-market v7 binds local sources and fallback to executed market evi
   const domainFourSource = { id: 'domain-4', url: domainFour.source, observedAt: new Date().toISOString().slice(0, 10),
     decision: 'Task order', finding: 'Review before submission', evidence: domainFour.evidence, capture: domainFour.capture };
   const domainQueries = ['복지로', '정부24 혜택알리미', '서울복지포털', '웰로'];
-  const designQueries = ['대한민국 public benefits benefit card', '한국 public benefits benefit card', 'South Korea public benefits benefit card'];
+  const designQueries = ['대한민국 복지 앱 UI 디자인', '한국 복지 앱 UI 디자인', 'South Korea 복지 앱 UI 디자인'];
   const input = { ...fixture.research, schema: REFERENCE_RESEARCH_SCHEMA, marketCoverage: null,
     domainReference: { ...fixture.research.domainReference, queries: domainQueries,
       searches: domainQueries.map(query => testSearchReceipt(fixture.root, 'domain', query,

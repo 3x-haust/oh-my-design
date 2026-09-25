@@ -9,7 +9,7 @@ import { classifyPiWrite, hasPiRoute, isMutatingOmdCommand, isPreproductionReadC
 import { routeValidationArgs, type RouteBootstrap } from './omd-route-bootstrap.ts';
 import { RepairLoop } from './omd-repair-progress.ts';
 import { StageWork, checkNativeStageEntry, nativeEntryStage, nativeOwnedStage } from './omd-stage-work.ts';
-import { handleOmdMessageEnd, type ReferenceWork } from './omd-message-end.ts';
+import { handleOmdMessageEnd, referenceWorkAdvanced, type ReferenceWork } from './omd-message-end.ts';
 
 export const OMD_TOOL_NAME = 'omd_cli';
 
@@ -105,13 +105,10 @@ export default function omdExtension(pi: PortablePiApi): void {
           && args.every((arg): arg is string => typeof arg === 'string')) {
           const [root, sub] = args;
           const diagnostic = (root === 'stage' && sub === 'next')
-            || (root === 'ref' && ['discover-plan', 'work-next', 'check', 'research-check', 'apply-check'].includes(sub ?? ''))
+            || (root === 'ref' && ['discover-plan', 'check', 'research-check', 'apply-check'].includes(sub ?? ''))
             || (root === 'brief' && sub === 'reference-board' && args.includes('--check'))
             || (root === 'guard' && sub === 'completion');
           if (diagnostic) return { block: true, reason: `OMD_OWNED_WORK_REQUIRED: ${pending.action?.reason ?? 'Publish the reference board from retained evidence.'}\n${pending.action?.args.join(' ') ?? 'omd schema reference-board --json, then omd ref board --input <candidate-assemblies.json>'}\nRead-only checks cannot replace this action.` };
-          if (root === 'ref' && ['advance', 'search', 'navigate', 'add', 'add-batch', 'import-image', 'exclude', 'board'].includes(sub ?? '')) {
-            pendingReferenceWork.delete(context.cwd);
-          }
         }
         if (Array.isArray(args) && args[0] === 'route' && args[1] === 'classify') managed.add(context.cwd);
         const frameHelp = Array.isArray(args) && args[0] === 'frame' && (args[1] === 'help' || args.includes('--help') || args.includes('-h'));
@@ -207,6 +204,10 @@ export default function omdExtension(pi: PortablePiApi): void {
       if (!Array.isArray(params.args) || params.args.length === 0 || params.args.some((arg) => typeof arg !== 'string')) {
         throw new Error('OMD_CLI_ARGS_INVALID: args must be a non-empty string array');
       }
+      const pendingReference = pendingReferenceWork.get(context.cwd);
+      const referenceMutation = params.args[0] === 'ref'
+        && ['advance', 'search', 'navigate', 'add', 'add-batch', 'import-image', 'exclude', 'board'].includes(params.args[1] ?? '');
+      const boardBefore = pendingReference !== undefined && referenceMutation ? fileRevision(context.cwd, '.omd/reference-board.json') : undefined;
       if (params.args[0] === 'route' && params.args[1] === 'classify') managed.add(context.cwd);
       const candidate = routeValidationArgs(params.args);
       const previousBootstrap = bootstraps.get(context.cwd);
@@ -233,6 +234,21 @@ export default function omdExtension(pi: PortablePiApi): void {
       try {
         result = await run(params.args, context.cwd, signal);
         if (signal?.aborted || epochs.get(context.cwd) !== taskEpoch) return { content: [{ type: 'text', text: result.text }], details: result.details };
+        if (pendingReference !== undefined && referenceMutation) {
+          const boardAfter = fileRevision(context.cwd, '.omd/reference-board.json');
+          const boardPublished = params.args[1] === 'board' && /^[a-f0-9]{64}$/.test(boardAfter) && boardAfter !== boardBefore;
+          let advanced = boardPublished;
+          if (!advanced) {
+            try {
+              advanced = referenceWorkAdvanced((await run(['stage', 'next', '--json'], context.cwd, signal)).text, pendingReference);
+            } catch (error) {
+              if (!(error instanceof Error)) throw error;
+              // The reference command succeeded; leave progress unverified for message_end to diagnose.
+            }
+          }
+          if (signal?.aborted || epochs.get(context.cwd) !== taskEpoch) return { content: [{ type: 'text', text: result.text }], details: result.details };
+          if (advanced && pendingReferenceWork.get(context.cwd) === pendingReference) pendingReferenceWork.delete(context.cwd);
+        }
         if (isMutatingOmdCommand(params.args)) bumpRevision(context.cwd);
         if (hasPiRoute(context.cwd) && ownedWork.commandSucceeded(context.cwd, { args: params.args, token: workToken })) touched.add(context.cwd);
         if (params.args[0] === 'recipe' && params.args[1] === 'add') productionAttempted.add(context.cwd);
