@@ -45,8 +45,13 @@ async function coveringLayers(page: Page): Promise<{ selector: string; name: str
       const appRoot = /^(?:app|root|__next|application)$/i.test(element.id) || element.getAttribute('role') === 'application';
       const mains = [...document.querySelectorAll('main')];
       const soleMain = element.matches('main') && mains.length === 1;
-      const navigationLinks = element.querySelectorAll('nav a[href], [role="navigation"] a[href]');
-      const structuredApp = appRoot && mains.every(main => element.contains(main))
+      const navigationLinks = [...element.querySelectorAll('nav a[href], [role="navigation"] a[href]')].filter(link => {
+        const box = link.getBoundingClientRect();
+        if (box.width <= 0 || box.height <= 0) return false;
+        const top = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+        return top === link || (top !== null && link.contains(top));
+      });
+      const structuredApp = appRoot && mains.length === 1 && element.contains(mains[0]!)
         && navigationLinks.length >= 2 && element.querySelector('main,section,article') !== null;
       const background = style.backgroundColor.match(/^rgba?\((\d+)[,\s]+(\d+)[,\s]+(\d+)(?:[,\s/]+([\d.]+))?\)$/);
       if (!namedOverlay && (!background || Number(background[4] ?? 1) < 0.15) && style.backgroundImage === 'none' && style.backdropFilter === 'none') return false;
