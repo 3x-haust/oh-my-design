@@ -63,7 +63,10 @@ not infer cultural fit from conversation language, surface locale, script or lik
 Publish v7 `marketCoverage` for target-market-first work. Classify every lane source exactly once
 with `sourceId`, the retained image's exact `evidenceSha256`, a lane-valid `scope`, `basis`, and
 `provenanceReceiptSha256`. `market-search-result` must bind the exact signed market-search receipt whose
-visible result text for the retained source or design-discovery link names the market and relevant scope.
+visible result text for the retained source or design-discovery link normally names the market and relevant scope.
+A generic Korean domain-service label such as `바로가기` is usable only with a current signed
+direct-public entry for that exact service whose visible text proves Korean service context,
+plus its current retained Korean-language capture; it never qualifies a design item or foreign service.
 `market-direct-result` must bind the exact signed direct-public root receipt whose visible label for
 the retained source or design-discovery link names the market and relevant scope. URL tokens, localized
 queries, country-code hostnames, page-wide headings, and freeform reasons prove neither.
@@ -97,8 +100,8 @@ transports for Pinterest plus Dribbble on product routes or Siteinspire on marke
 not preset reference winners.
 Open an item actually returned in observed links; never guess numeric shot/pin IDs. If a provider
 returns a login wall, challenge, empty search or HTTP error, preserve the failure and try the next
-public gallery. No credential/payment/CAPTCHA workaround. Query terms may be refined to the actual
-task, but update the URL with them. Direct roots must expose actual same-gallery item links;
+public gallery. No credential/payment/CAPTCHA workaround. Refine unscoped query terms to the actual
+task and update the URL with them; keep explicit-market native search inputs exact. Direct roots must expose actual same-gallery item links;
 follow only observed links via strict native navigation, then visit the concrete gallery item
 with `omd ref navigate <item-url> --lane design --json`. The list and gallery wrapper are not
 retained design evidence. Search, direct-entry and navigation records live in
@@ -158,7 +161,9 @@ return any blocked provider, missing lane or stale application instead of declar
 These project-signed native records provide tamper-evident acquisition provenance. They are not
 provider-attested truth and do not prove visual quality, market fit or authority by themselves.
 For explicit-market search provenance, the signed visible result text associated with the retained
-link must itself name the market and relevant service/product scope; a localized query alone is not local evidence.
+link normally names the market and relevant service/product scope; a localized query alone is not local evidence.
+The narrow generic Korean domain-service exception requires a current signed direct-public entry
+for that exact service and a current retained Korean-language capture; see reference-assembly.md.
 Reacquire every explicit-market search/direct attempt and its retained source when either is more
 than seven days old; fallback attempts are not exempt.
 After research-check, run `omd ref apply-plan --json` and fill its input from actual image

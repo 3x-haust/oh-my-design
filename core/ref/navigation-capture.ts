@@ -169,14 +169,12 @@ export async function captureReferenceNavigation(browser: Browser, source: strin
       acquisition: { requestedUrl: url, finalUrl, httpStatus: status, links, imageSha256 },
       limitations: DISCOVERY_LIMITATIONS,
     } as const;
-    const record: DiscoveryCaptureRecord = entry === undefined
-      ? { schema: 'reference-navigation-capture-v2', ...common }
-      : (() => {
-        const unsigned = { schema: 'reference-discovery-entry-v3' as const, method: 'direct-public' as const, entry,
-          ...common, observedText: observation.visibleText, linkLabels: observation.results };
-        return { ...unsigned, signature: signNativeObservation(writer.projectRoot, unsigned.schema,
-          discoveryDigest(canonicalJson(unsigned))) };
-      })();
+    const unsigned = entry === undefined
+      ? { schema: 'reference-navigation-capture-v3' as const, ...common }
+      : { schema: 'reference-discovery-entry-v3' as const, method: 'direct-public' as const, entry,
+        ...common, observedText: observation.visibleText, linkLabels: observation.results };
+    const record: DiscoveryCaptureRecord = { ...unsigned, signature: signNativeObservation(writer.projectRoot,
+      unsigned.schema, discoveryDigest(canonicalJson(unsigned))) };
     const bytes = `${JSON.stringify(record, null, 2)}\n`;
     const sha256 = discoveryDigest(bytes);
     const capture = { path: `${directory}/${sha256}.json`, sha256 };

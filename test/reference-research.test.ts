@@ -6,7 +6,7 @@ import { crc32, deflateSync } from 'node:zlib';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import test from 'node:test';
-import { sha256 } from '../core/ref/board-artifacts.ts';
+import { canonicalJson, sha256 } from '../core/ref/board-artifacts.ts';
 import { refIdentity } from '../core/ref/identity.ts';
 import {
   parseReferenceResearch,
@@ -29,7 +29,8 @@ import { readPersistedRoute } from '../core/route/adaptive-route-persistence.ts'
 import { selectReferenceCandidateV2 } from '../core/ref/reference-selection.ts';
 import { writeReferenceHandoffReceipt } from '../core/ref/reference-handoff.ts';
 import { readSelectedReferenceHandoff } from '../core/ref/selected-handoff.ts';
-import { testSearchReceipt } from './helpers/search-execution.ts';
+import { testPng, testSearchReceipt } from './helpers/search-execution.ts';
+import { signNativeObservation } from '../core/runtime/self-signed-activation.ts';
 import { designAdmissionFixture } from './helpers/design-admission.ts';
 import { validateSourceSeal, writeSourceSeal } from '../core/source-seal/index.ts';
 import { servedProjectTreeSha256 } from '../core/render/serve.ts';
@@ -194,24 +195,32 @@ test('gallery similarity hops require native current captures rooted in a real s
   const writer = createTestProjectWriteAdapter(root);
   const retained = research.designReference.sources[0]!.discovery;
   const start = 'https://www.pinterest.com/pin/111111111/';
-  const metadata = JSON.parse(readFileSync(join(root, retained.capture.path), 'utf8'));
-  const directory = join(root, '.omd/refs/design/navigation');
+  const directory = join(root, '.omd/discovery/design/navigation');
   mkdirSync(directory, { recursive: true });
-  const png = join(directory, 'gallery-hop.png');
-  writeFileSync(png, PNG);
-  const capture = writer.write('.omd/refs/design/navigation/gallery-hop.json', JSON.stringify({
-    schema: 'reference-navigation-capture-v1', source: start, researchLane: 'design', kind: 'page',
-    capturedAt: metadata.capturedAt, imagePath: relative(root, png),
-    acquisition: { requestedUrl: start, finalUrl: start, httpStatus: 200, links: [retained.url], imageSha256: digest(PNG) },
-  }));
-  const hop = { url: start, evidence: { path: relative(root, png), sha256: digest(PNG) }, capture: { path: relative(root, capture), sha256: digest(readFileSync(capture)) } };
+  const png = testPng();
+  const imageSha256 = sha256(png);
+  const imagePath = `.omd/discovery/design/navigation/${imageSha256}.png`;
+  writer.write(imagePath, png);
+  const unsigned = {
+    schema: 'reference-navigation-capture-v3', source: start, researchLane: 'design', kind: 'page',
+    capturedAt: new Date().toISOString(), imagePath,
+    acquisition: { requestedUrl: start, finalUrl: start, httpStatus: 200, links: [retained.url], imageSha256 },
+    limitations: 'native-public-get; stable-rendered-viewport-links; no-authentication; no-interaction-probes; not-provider-attested',
+  };
+  const bytes = JSON.stringify({ ...unsigned,
+    signature: signNativeObservation(root, unsigned.schema, sha256(canonicalJson(unsigned))) });
+  const captureSha256 = sha256(bytes);
+  const capturePath = `.omd/discovery/design/navigation/${captureSha256}.json`;
+  writer.write(capturePath, bytes);
+  const hop = { url: start, evidence: { path: imagePath, sha256: imageSha256 },
+    capture: { path: capturePath, sha256: captureSha256 } };
   const input = { ...research, designReference: { ...research.designReference, searches: [testSearchReceipt(root, 'design', research.designReference.queries[0]!, [start])], navigation: [hop] } };
   const options = { expectedSourceContractSha256: SOURCE_SHA, benchmarkRequired: false };
   assert.doesNotThrow(() => validateReferenceResearch(root, parseReferenceResearch(input), options));
   assert.throws(() => validateReferenceResearch(root, parseReferenceResearch({ ...input, designReference: { ...input.designReference, navigation: [] } }), options), /not an observed search link/);
-  assert.throws(() => validateReferenceResearch(root, parseReferenceResearch({ ...input, designReference: { ...input.designReference, navigation: [{ ...hop, capture: { ...hop.capture, sha256: '0'.repeat(64) } }] } }), options), /EVIDENCE_STALE/);
+  assert.throws(() => validateReferenceResearch(root, parseReferenceResearch({ ...input, designReference: { ...input.designReference, navigation: [{ ...hop, capture: { ...hop.capture, sha256: '0'.repeat(64) } }] } }), options), /content-addressed/);
   const wrongLane = { ...input, designReference: { ...input.designReference, navigation: [{ ...hop, evidence: research.domainReference.sources[0]!.evidence }] } };
-  assert.throws(() => validateReferenceResearch(root, parseReferenceResearch(wrongLane), options), /LANE_PATH_REQUIRED/);
+  assert.throws(() => validateReferenceResearch(root, parseReferenceResearch(wrongLane), options), /NAVIGATION_NATIVE_REQUIRED/);
 });
 
 test('one capture cannot stand in for both domain and design research', t => {

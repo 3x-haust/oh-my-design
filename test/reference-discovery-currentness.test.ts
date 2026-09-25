@@ -61,12 +61,11 @@ function visitedItem(root: string, source: string, at: number): void {
   const image = testPng();
   const imageSha256 = sha256(image);
   writeFileSync(join(root, directory, `${imageSha256}.png`), image);
-  const record = { schema: 'reference-navigation-capture-v2', source, researchLane: 'domain', kind: 'page',
+  const record = { schema: 'reference-navigation-capture-v3', source, researchLane: 'domain', kind: 'page',
     capturedAt: new Date(at).toISOString(), imagePath: `${directory}/${imageSha256}.png`,
     acquisition: { requestedUrl: source, finalUrl: source, httpStatus: 200, links: [], imageSha256 },
     limitations: 'native-public-get; stable-rendered-viewport-links; no-authentication; no-interaction-probes; not-provider-attested' };
-  const bytes = `${JSON.stringify(record, null, 2)}\n`;
-  writeFileSync(join(root, directory, `${sha256(bytes)}.json`), bytes);
+  signedRecord(root, directory, '', record);
 }
 function observedSearch(root: string, request: { lane: 'domain' | 'design'; query: string; url: string; queryParam: string },
   source: string, at: number): void {

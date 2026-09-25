@@ -25,7 +25,7 @@ function fixture(t: { after(fn: () => void): void }): string {
   t.after(() => rmSync(root, { recursive: true, force: true }));
   return root;
 }
-function retainDomain(root: string, hostname: string): void {
+function retainDomain(root: string, hostname: string, capturedAt = new Date().toISOString()): void {
   const directory = join(root, '.omd/refs/domain');
   mkdirSync(directory, { recursive: true });
   const imagePath = `.omd/refs/domain/${hostname}.png`;
@@ -34,7 +34,7 @@ function retainDomain(root: string, hostname: string): void {
   const source = `https://${hostname}/`;
   writeFileSync(join(directory, `${hostname}.json`), JSON.stringify({
     source, component: 'home', researchLane: 'domain', kind: 'page',
-    capturedAt: '2026-09-25T00:00:00Z', imagePath, principles: ['Observe task structure'], invariants: null,
+    capturedAt, imagePath, principles: ['Observe task structure'], invariants: null,
     acquisition: { requestedUrl: source, finalUrl: source, httpStatus: 200, links: [], imageSha256: sha256(image) },
     visibleKoreanText: true,
   }));
@@ -101,10 +101,11 @@ function visitedItem(root: string, url: string, lane: 'domain' | 'design' = 'des
   const imageSha256 = sha256(image);
   const imagePath = `${directory}/${imageSha256}.png`;
   writeFileSync(join(root, imagePath), image);
-  const record = { schema: 'reference-navigation-capture-v2', source: url, researchLane: lane, kind: 'page',
+  const unsigned = { schema: 'reference-navigation-capture-v3', source: url, researchLane: lane, kind: 'page',
     capturedAt: new Date().toISOString(), imagePath,
     acquisition: { requestedUrl: url, finalUrl: url, httpStatus: 200, links, imageSha256 },
     limitations: 'native-public-get; stable-rendered-viewport-links; no-authentication; no-interaction-probes; not-provider-attested' };
+  const record = { ...unsigned, signature: signNativeObservation(root, unsigned.schema, sha256(canonicalJson(unsigned))) };
   const bytes = `${JSON.stringify(record, null, 2)}\n`;
   const receipt = { url, evidence: { path: imagePath, sha256: imageSha256 },
     capture: { path: `${directory}/${sha256(bytes)}.json`, sha256: sha256(bytes) } };
@@ -209,6 +210,53 @@ test('a visited gallery item can expose an original without recursively followin
   const second = referenceDiscoveryWork(root, route);
   assert.equal(second.action?.kind, 'retain-reference');
   assert.equal(second.action?.url, original);
+});
+
+test('a second visited gallery item still exposes its original before wrapper retention', t => {
+  const root = fixture(t);
+  const route = routeAdaptiveFlow(routeInput());
+  for (const hostname of ['www.bokjiro.go.kr', 'www.gov.kr', 'wis.seoul.go.kr']) retainDomain(root, hostname);
+  const firstItem = 'https://www.siteinspire.com/websites/123456-first-task';
+  const secondItem = 'https://www.siteinspire.com/websites/234567-second-task';
+  const original = 'https://quality-product.example/application';
+  directRootAt(root, 'design', 'https://www.siteinspire.com/', [firstItem, secondItem]);
+  visitedItem(root, firstItem);
+  visitedItem(root, secondItem, 'design', [original]);
+  const work = referenceDiscoveryWork(root, route);
+  assert.equal(work.action?.kind, 'follow-link');
+  assert.equal(work.action?.url, original);
+});
+
+test('a gallery item original takes priority over another unvisited gallery sibling', t => {
+  const root = fixture(t);
+  const route = routeAdaptiveFlow(routeInput());
+  for (const hostname of ['www.bokjiro.go.kr', 'www.gov.kr', 'wis.seoul.go.kr']) retainDomain(root, hostname);
+  const item = 'https://www.siteinspire.com/websites/123456-task-screen';
+  const sibling = 'https://www.siteinspire.com/websites/234567-other-screen';
+  const original = 'https://quality-product.example/app';
+  directRootAt(root, 'design', 'https://www.siteinspire.com/', [item, sibling]);
+  visitedItem(root, item, 'design', [original]);
+  const work = referenceDiscoveryWork(root, route);
+  assert.equal(work.action?.kind, 'follow-link');
+  assert.equal(work.action?.url, original);
+});
+
+test('old or pre-route retained families cannot make a fresh route board-ready', t => {
+  const root = fixture(t);
+  const route = routeAdaptiveFlow(routeInput());
+  const old = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString();
+  for (const hostname of ['www.bokjiro.go.kr', 'www.gov.kr', 'wis.seoul.go.kr']) retainDomain(root, hostname, old);
+  const aged = referenceDiscoveryWork(root, route);
+  assert.equal(aged.progress.domainFamilies, 0);
+  assert.equal(aged.action?.lane, 'domain');
+  const freshRoot = fixture(t);
+  for (const hostname of ['www.bokjiro.go.kr', 'www.gov.kr', 'wis.seoul.go.kr']) {
+    retainDomain(freshRoot, hostname, new Date(Date.now() - 60_000).toISOString());
+  }
+  writeFileSync(join(freshRoot, '.omd/route.json'), '{}');
+  const republished = referenceDiscoveryWork(freshRoot, route);
+  assert.equal(republished.progress.domainFamilies, 0);
+  assert.equal(republished.action?.lane, 'domain');
 });
 
 test('work-next resumes after a signed unavailable search instead of repeating that query', t => {

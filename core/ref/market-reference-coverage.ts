@@ -6,7 +6,7 @@ import { validateDomainBrief } from '../domain/domain-brief.ts';
 import { readFrame } from '../frame/index.ts';
 import { nodeStableProjectFileSystem, readStableProjectFile } from '../runtime/stable-project-file.ts';
 import type { ReferenceResearch, ResearchSource } from './reference-research-types.ts';
-import { inferredKoreanReferenceMarket, isMarketQualifiedQuery, marketDesignQueries, marketDomainQueries, marketSearchLabels } from './market-reference.ts';
+import { inferredKoreanReferenceMarket, isKoreanLanguageServiceText, isMarketQualifiedQuery, marketDesignQueries, marketDomainQueries, marketSearchLabels } from './market-reference.ts';
 import { readCurrentDirectDiscoveryEntry } from './discovery-record.ts';
 import { negatesMarketScope } from './market-scope-negation.ts';
 import { readSearchExecution, SEARCH_EXECUTION_SCHEMA } from './search-execution.ts';
@@ -32,6 +32,7 @@ const MAX_PROVENANCE_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const GENERIC_LINK_LABEL = /^(?:바로가기|사이트\s*바로가기|홈페이지\s*바로가기|방문하기)$/u;
+const KOREAN_SERVICE_TERMS = /서비스|혜택|지원|복지|신청|플랫폼/u;
 
 export function assertCurrentMarketCapture(value: unknown, lane: 'DOMAIN' | 'DESIGN'): void {
   const capturedAt = typeof value === 'string' ? Date.parse(value) : Number.NaN;
@@ -85,14 +86,24 @@ function persistedTaskNeed(root: string, sourceContractSha256: string, request: 
   return marketText(marketObject(source.referenceDiscovery, code).taskNeed, code);
 }
 
-function capturedKoreanService(root: string, source: ResearchSource): boolean {
+function capturedKoreanService(root: string, source: ResearchSource,
+  discoveryRoots: ReferenceResearch['domainReference']['discoveryRoots'], marketLabels: readonly string[]): boolean {
   const { capture } = source;
   if (!capture.path.startsWith('.omd/refs/domain/')) return false;
   const bytes = readStableProjectFile({ root: resolve(root), path: resolve(root, capture.path),
     label: capture.path, fs: nodeStableProjectFileSystem() });
   if (createHash('sha256').update(bytes).digest('hex') !== capture.sha256) return false;
   const record = marketObject(JSON.parse(bytes.toString('utf8')), 'REFERENCE_RESEARCH_MARKET_DOMAIN_LOCAL_RESULT_SCOPE');
-  return record.source === source.url && record.researchLane === 'domain' && record.visibleKoreanText === true;
+  if (record.source !== source.url || record.researchLane !== 'domain' || record.visibleKoreanText !== true) return false;
+  const entry = discoveryRoots?.find(candidate => candidate.url === source.url);
+  if (entry === undefined) return false;
+  const { reason: _reason, ...receipt } = entry;
+  const observed = readCurrentDirectDiscoveryEntry(root, receipt);
+  const text = observed.observedText ?? '';
+  return observed.url === source.url && observed.finalUrl === source.url
+    && isKoreanLanguageServiceText(text) && KOREAN_SERVICE_TERMS.test(text)
+    && inferredKoreanReferenceMarket(text) === 'KR'
+    && !negatesMarketScope(text, marketLabels);
 }
 
 export function validateMarketReferenceCoverage(root: string, research: ReferenceResearch, expectedRequest?: string): void {
@@ -179,7 +190,7 @@ function laneNeedsMarketSearch(coverage: MarketLaneCoverage, roots: readonly unk
 function validateLaneProvenance(
   root: string, lane: 'DOMAIN' | 'DESIGN', marketRegion: string, marketLabels: readonly string[], coverage: MarketLaneCoverage,
   sources: readonly ResearchSource[], executions: readonly MarketExecution[],
-  roots: readonly Readonly<{ url: string }>[],
+  roots: NonNullable<ReferenceResearch['domainReference']['discoveryRoots']>,
 ): void {
   for (const execution of executions) assertCurrentExecution(execution,
     `REFERENCE_RESEARCH_MARKET_${lane}_ATTEMPT_STALE`);
@@ -206,7 +217,7 @@ function validateLaneProvenance(
         || (marketRegion === 'KR' && inferredKoreanReferenceMarket(result.text) === 'KR'));
     const capturedGeneric = result !== undefined && lane === 'DOMAIN' && marketRegion === 'KR'
       && local.scope === 'service' && GENERIC_LINK_LABEL.test(result.text.trim())
-      && capturedKoreanService(root, source);
+      && capturedKoreanService(root, source, roots, marketLabels);
     if (result === undefined || negatesMarketScope(result.text, marketLabels)
       || (!scopedResult && !capturedGeneric)) {
       marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_LOCAL_RESULT_SCOPE`);

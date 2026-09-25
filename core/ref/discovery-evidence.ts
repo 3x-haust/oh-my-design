@@ -2,7 +2,9 @@ import { existsSync, lstatSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { nodeStableProjectFileSystem, readStableProjectFile } from '../runtime/stable-project-file.ts';
 import { canonicalJson, sha256 } from './board-artifacts.ts';
-import { readCurrentDirectDiscoveryEntry, readStrictDiscoveryNavigation, type DiscoveryObservation } from './discovery-record.ts';
+import { currentReferenceEvidenceAfter, readCurrentDirectDiscoveryEntry, readCurrentDiscoveryNavigation,
+  type DiscoveryObservation } from './discovery-record.ts';
+export { currentReferenceEvidenceAfter } from './discovery-record.ts';
 import { readReferenceDiscoveryAttempt, type ReferenceDiscoveryAttempt } from './navigation-capture.ts';
 import { readSearchExecution, SEARCH_EXECUTION_SCHEMA, searchObserved, type SearchExecution } from './search-execution.ts';
 
@@ -13,16 +15,6 @@ export type DiscoveryAttempt = Readonly<{ lane: Lane; url: string; reason: strin
 export type LaneEvidence = Readonly<{ searches: readonly SearchExecution[]; entries: readonly DiscoveryCapture[];
   visits: readonly DiscoveryCapture[]; unavailable: readonly ReferenceDiscoveryAttempt[];
   failures: readonly DiscoveryAttempt[]; digests: readonly string[]; ignored: number }>;
-const MAX_DISCOVERY_AGE_MS = 7 * 24 * 60 * 60 * 1000;
-
-function currentEvidenceAfter(root: string): number {
-  const ageFloor = Date.now() - MAX_DISCOVERY_AGE_MS;
-  const pointer = join(root, '.omd/route.json');
-  if (!existsSync(pointer)) return ageFloor;
-  const stat = lstatSync(pointer);
-  if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('REFERENCE_DISCOVERY_WORK: unsafe route pointer');
-  return Math.max(ageFloor, stat.mtimeMs);
-}
 function records(root: string, directory: string, pattern: RegExp): readonly Receipt[] {
   const absolute = join(root, directory);
   if (!existsSync(absolute)) return [];
@@ -53,7 +45,7 @@ function capture(root: string, receipt: Receipt, lane: Lane,
     const observation = purpose === 'entries'
       ? readCurrentDirectDiscoveryEntry(root, { method: 'direct-public',
         entry: lane === 'domain' ? 'public-directory' : 'free-gallery', ...common })
-      : readStrictDiscoveryNavigation(root, common);
+      : readCurrentDiscoveryNavigation(root, common);
     return { observation, sha256: receipt.sha256 };
   } catch (error) { if (error instanceof Error) return null; throw error; }
 }
@@ -94,6 +86,6 @@ function laneEvidence(root: string, lane: Lane, after: number): LaneEvidence {
 }
 
 export function readCurrentReferenceDiscoveryEvidence(root: string): Readonly<{ domain: LaneEvidence; design: LaneEvidence }> {
-  const after = currentEvidenceAfter(root);
+  const after = currentReferenceEvidenceAfter(root);
   return { domain: laneEvidence(root, 'domain', after), design: laneEvidence(root, 'design', after) };
 }

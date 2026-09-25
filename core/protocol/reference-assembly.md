@@ -215,8 +215,9 @@ For explicit-market coverage, execute `ref discover-plan`'s exact target-market 
 queries before global searches. Other unscoped query seeds are adaptable; do not rewrite the exact
 market inputs. A local result's link-associated text normally names the market and relevant
 service/product scope. A generic domain-service link label such as `바로가기` qualifies only when
-the separately retained, current native site capture records visibly Korean text. Neither a
-market term in the query nor a generic label alone establishes local provenance.
+the separately retained, current site capture records visibly Korean text and a current signed
+native direct-entry v3 for that exact service URL observes Korean-language service content.
+Neither a market term in the query nor a generic label alone establishes local provenance.
 Current v7 market provenance and its retained source observation must both be no more than seven days old.
 Inspect the page: HTTP 200 alone does not prove useful results or free access. All queries require
 execution receipts; every non-user retained domain source/design entry must occur in observed links
@@ -298,8 +299,10 @@ plan's exact market domain inputs and market-plus-domain design searches before 
 direct-public root may replace search transport, but never the per-lane local evidence or fallback gap.
 Each local classification binds `sourceId`, the exact retained `evidenceSha256`, a lane-valid `scope`,
 a closed `basis`, and the exact native `provenanceReceiptSha256`. `market-search-result` binds a signed
-market-search execution whose visible result text for that link names the explicit market and relevant
-service/product scope. `market-direct-result` binds a signed direct-public root whose visible label for
+market-search execution whose visible result text for that link normally names the explicit market and relevant
+service/product scope. A generic Korean domain-service label requires a current signed direct-public
+entry for that exact service with visible Korean service text, plus its current retained Korean-language
+capture; design and foreign-service sources do not get this exception. `market-direct-result` binds a signed direct-public root whose visible label for
 that retained link names the explicit market and relevant scope. URL tokens, localized queries,
 country-code hostnames, page-wide headings, and freeform reasons are never source-specific market proof.
 Search and direct bases may coexist in a lane. Every declared search and direct attempt must be current.

@@ -94,8 +94,11 @@ conversation language or surface locale.
 For target-market-first work, publish research v7 with `marketCoverage`. Each lane must classify every
 source id exactly once with `sourceId`, the retained image's exact `evidenceSha256`, a lane-valid `scope`,
 `basis`, and `provenanceReceiptSha256`. `market-search-result` must bind the exact signed market-search
-receipt whose visible result text for the retained source or design-discovery link names the market and
-relevant scope. `market-direct-result` must bind the exact signed direct-public root receipt whose visible
+receipt whose visible result text for the retained source or design-discovery link normally names the market and
+relevant scope. A generic Korean domain-service label such as `바로가기` qualifies only with a current
+signed direct-public entry for that exact service whose visible text proves Korean service context,
+plus its current retained Korean-language capture; it never qualifies design or foreign services.
+`market-direct-result` must bind the exact signed direct-public root receipt whose visible
 label for the retained source or design-discovery link names the market and relevant scope. URL tokens,
 localized queries, country-code hostnames, page-wide headings, and freeform reasons prove neither.
 Search and direct bases may coexist in a lane. Every declared search and direct attempt must be current. A fallback records
@@ -104,8 +107,8 @@ availability/access/coverage kind, and every attempted query and root used by th
 cannot prove local provenance or a fallback attempt. `research-check` rejects missing coverage, market drift, global-only lanes, and
 unqualified search order; repair the evidence instead of removing the policy.
 For native search use the plan's `designSourcePolicy.nativeSearchInputs` with `ref search`.
-They bind real free-gallery queries for Pinterest, Dribbble and Siteinspire. Refine the short
-task/pattern query and URL together, then open an item actually returned in observed links; never
+They bind real free-gallery queries for Pinterest, Dribbble and Siteinspire. Refine only unscoped
+task/pattern queries and URLs together; keep explicit-market native inputs exact. Then open an item actually returned in observed links; never
 guess pin/shot IDs. Login walls, challenges and empty results remain failures, not design references.
 The next public gallery is the fallback, not domain-service documentation or a paid MCP.
 For direct discovery use `designSourcePolicy.nativeEntryInputs` with

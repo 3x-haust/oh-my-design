@@ -15,7 +15,7 @@ import { inputSkeleton } from '../core/schema/inputs.ts';
 import { readPersistedRoute } from '../core/route/index.ts';
 import { publishTestAdaptiveRoute } from './helpers/project-write.ts';
 import { fallbackCoverage, fallbackGap, localSearchSource, marketContext as context,
-  marketDomainBrief as domainBrief, marketOptions as options } from './helpers/market-reference.ts';
+  marketDomainBrief as domainBrief, marketOptions as options, directRootAt } from './helpers/market-reference.ts';
 
 const DAY_FOR_TEST = 24 * 60 * 60 * 1000;
 
@@ -180,8 +180,36 @@ test('explicit-market v7 binds local sources and fallback to executed market evi
         sources: [{ ...input.domainReference.sources[0],
           capture: { ...fixture.domain.capture, sha256: admissionHash(koreanCapture) } },
         ...input.domainReference.sources.slice(1)] } };
+    assert.throws(() => validateReferenceResearch(fixture.root,
+      parseReferenceResearch(observedInput), options), /MARKET_DOMAIN_LOCAL_RESULT_SCOPE/);
+    const nativeEntry = directRootAt(fixture.root, 'domain', fixture.domain.source,
+      [fixture.domainTwo.source], '복지 혜택 신청을 돕는 한국어 서비스 안내와 지원 정보입니다.');
+    const signedCoverage = structuredClone(genericCoverage);
+    signedCoverage.domain.globalFallback.gap.attemptedRoots = [nativeEntry.url];
+    const signedInput = { ...observedInput, marketCoverage: signedCoverage,
+      domainReference: { ...observedInput.domainReference, discoveryRoots: [nativeEntry] } };
     assert.doesNotThrow(() => validateReferenceResearch(fixture.root,
-      parseReferenceResearch(observedInput), options));
+      parseReferenceResearch(signedInput), options));
+    assert.doesNotThrow(() => publishReferenceResearch(fixture.root, signedInput, options, fixture.writer));
+    const wrongUrlEntry = directRootAt(fixture.root, 'domain', fixture.domainTwo.source,
+      [fixture.domain.source], '복지 혜택 신청을 돕는 한국어 서비스 안내와 지원 정보입니다.');
+    const wrongUrlCoverage = structuredClone(signedCoverage);
+    wrongUrlCoverage.domain.globalFallback.gap.attemptedRoots = [wrongUrlEntry.url];
+    assert.throws(() => validateReferenceResearch(fixture.root, parseReferenceResearch({
+      ...signedInput, marketCoverage: wrongUrlCoverage,
+      domainReference: { ...signedInput.domainReference, discoveryRoots: [wrongUrlEntry] },
+    }), options), /MARKET_DOMAIN_LOCAL_RESULT_SCOPE/);
+    const foreignEntry = directRootAt(fixture.root, 'domain', fixture.domain.source,
+      [fixture.domainTwo.source], '캐나다 주민을 위한 복지 혜택 신청 서비스입니다. 캐나다 지원 안내를 제공합니다.');
+    assert.throws(() => validateReferenceResearch(fixture.root, parseReferenceResearch({
+      ...signedInput, domainReference: { ...signedInput.domainReference, discoveryRoots: [foreignEntry] },
+    }), options), /MARKET_DOMAIN_LOCAL_RESULT_SCOPE/);
+    const staleEntry = directRootAt(fixture.root, 'domain', fixture.domain.source,
+      [fixture.domainTwo.source], '복지 혜택 신청을 돕는 한국어 서비스 안내와 지원 정보입니다.',
+      new Date(Date.now() - 8 * DAY_FOR_TEST).toISOString());
+    assert.throws(() => validateReferenceResearch(fixture.root, parseReferenceResearch({
+      ...signedInput, domainReference: { ...signedInput.domainReference, discoveryRoots: [staleEntry] },
+    }), options), /MARKET_DOMAIN_ATTEMPT_STALE/);
   } finally { writeFileSync(koreanCapturePath, originalCapture); }
   for (const label of [
     'South Korea benefits service with unsupported browser notices',

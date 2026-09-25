@@ -28,7 +28,7 @@ test('new navigation binds only rendered links to its captured viewport', async 
     const record = JSON.parse(readFileSync(join(root, receipt.capture.path), 'utf8'));
     // Then hidden DOM anchors cannot become discovery edges.
     assert.deepEqual(record.acquisition.links, [DOMAIN_ITEM]);
-    assert.equal(record.schema, 'reference-navigation-capture-v2');
+    assert.equal(record.schema, 'reference-navigation-capture-v3');
     assert.deepEqual(readStrictDiscoveryNavigation(root, receipt), { url: PUBLIC_DIRECTORY, finalUrl: PUBLIC_DIRECTORY, links: [DOMAIN_ITEM] });
     assert.throws(() => readDirectDiscoveryEntry(root, { method: 'direct-public', entry: 'public-directory', ...receipt }), /purpose path/);
   });

@@ -4,7 +4,7 @@ import { nodeStableProjectFileSystem, readStableProjectFile } from '../runtime/s
 import { canonicalJson, sha256 } from './board-artifacts.ts';
 import { inspectDesignReferenceAdmission } from './design-admission.ts';
 import { publicDiscoveryUrl } from './discovery-record.ts';
-import { readCurrentReferenceDiscoveryEvidence, type DiscoveryAttempt, type LaneEvidence } from './discovery-evidence.ts';
+import { currentReferenceEvidenceAfter, readCurrentReferenceDiscoveryEvidence, type DiscoveryAttempt, type LaneEvidence } from './discovery-evidence.ts';
 import { readReferenceDiscoveryExclusions, type ReferenceDiscoveryExclusionRecord } from './discovery-exclusion.ts';
 import { designDiscoveryProvider, referenceServiceFamily } from './design-discovery-sources.ts';
 import { buildReferenceDiscoveryPlan, type ReferenceDiscoveryPlan } from './discovery-plan.ts';
@@ -87,7 +87,7 @@ function nextLaneAction(lane: Lane, plan: ReferenceDiscoveryPlan, evidence: Lane
   const descendantTargets = evidence.visits.filter(item => rootSet.has(item.observation.url))
     .flatMap(item => item.observation.links.filter(url => lane === 'domain'
       ? domainCandidate(url) && referenceServiceFamily(url) !== referenceServiceFamily(item.observation.url)
-      : publicCandidate(url) && designDiscoveryProvider(item.observation.url) !== null
+      : domainCandidate(url) && designDiscoveryProvider(item.observation.url) !== null
         && referenceServiceFamily(url) !== referenceServiceFamily(item.observation.url)));
   const originals = new Set(lane === 'design' ? descendantTargets : []);
   const descendants = new Set(descendantTargets);
@@ -103,7 +103,13 @@ function nextLaneAction(lane: Lane, plan: ReferenceDiscoveryPlan, evidence: Lane
   const inspectedVisits = [...evidence.visits].reverse().filter(item => targets.includes(item.observation.url)
     && !excludedUrls.has(item.observation.url)
     && !retainedFamilies.has(referenceServiceFamily(item.observation.url)));
-  const inspected = inspectedVisits.find(item => descendants.has(item.observation.url)) ?? inspectedVisits[0];
+  const inspectedDescendant = inspectedVisits.find(item => descendants.has(item.observation.url));
+  const inspected = inspectedDescendant ?? inspectedVisits[0];
+  const freshDescendant = descendantTargets.find(url => targets.includes(url) && !visited.has(url) && !failedUrls.has(url));
+  if (freshDescendant !== undefined && inspectedDescendant === undefined) {
+    return nativeAction('follow-link', lane, 'Inspect the original observed from a captured reference item before retaining its wrapper.',
+      { url: freshDescendant });
+  }
   const freshTarget = targets.find(url => !visited.has(url) && !failedUrls.has(url));
   if (freshTarget !== undefined && (inspected === undefined || evidence.visits.length < 2)) {
     return nativeAction('follow-link', lane, 'Inspect an observed concrete source before retaining it.', { url: freshTarget });
@@ -138,10 +144,13 @@ function nextLaneAction(lane: Lane, plan: ReferenceDiscoveryPlan, evidence: Lane
 export function referenceDiscoveryWork(root: string, route: RouteRecord): ReferenceDiscoveryWork {
   const plan = buildReferenceDiscoveryPlan(root, route);
   const { domain, design } = readCurrentReferenceDiscoveryEvidence(root);
+  const evidenceAfter = currentReferenceEvidenceAfter(root);
   const exclusions = readReferenceDiscoveryExclusions(root, route.sourceContractSha256);
   const allRefs = loadRefs(root, { includeDomain: true });
   const refs = allRefs.filter(ref => {
-    if (!ref.imagePath || !ref.acquisition || ref.acquisition.requestedUrl !== ref.source
+    const capturedAt = Date.parse(ref.capturedAt);
+    if (!Number.isFinite(capturedAt) || capturedAt < evidenceAfter || capturedAt > Date.now() + 5 * 60 * 1000
+      || !ref.imagePath || !ref.acquisition || ref.acquisition.requestedUrl !== ref.source
       || ref.acquisition.httpStatus !== 200 || !ref.acquisition.imageSha256) return false;
     try {
       const image = readStableProjectFile({ root: resolve(root), path: resolve(root, ref.imagePath),

@@ -2,7 +2,8 @@ import { readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { nodeStableProjectFileSystem, readStableProjectFile } from '../runtime/stable-project-file.ts';
 import { designDiscoveryItemIdentity } from './design-discovery-sources.ts';
-import { readStrictDiscoveryNavigation, type DiscoveryNavigationReceipt } from './discovery-record.ts';
+import { currentReferenceEvidenceAfter, readCurrentDiscoveryNavigation,
+  type DiscoveryNavigationReceipt } from './discovery-record.ts';
 
 export type ObservedGalleryItem = Readonly<{
   url: string;
@@ -12,6 +13,7 @@ export type ObservedGalleryItem = Readonly<{
 
 export function observedGalleryItems(root: string): readonly ObservedGalleryItem[] {
   const directory = '.omd/discovery/design/navigation';
+  const after = currentReferenceEvidenceAfter(root);
   let files: string[];
   try { files = readdirSync(join(root, directory)); }
   catch { return []; }
@@ -36,7 +38,8 @@ export function observedGalleryItems(root: string): readonly ObservedGalleryItem
         evidence: { path: `${directory}/${sha256}.png`, sha256 },
         capture: { path: `${directory}/${file}`, sha256: file.slice(0, -5) },
       };
-      const observation = readStrictDiscoveryNavigation(root, receipt);
+      const observation = readCurrentDiscoveryNavigation(root, receipt);
+      if (observation.capturedAt === undefined || Date.parse(observation.capturedAt) < after) continue;
       if (designDiscoveryItemIdentity(observation.finalUrl) !== item) continue;
       items.push({ url: observation.url, links: observation.links, imagePath: receipt.evidence.path });
     } catch { continue; }

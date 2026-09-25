@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import test from 'node:test';
 import { parseReferenceResearch, publishReferenceResearch, validateReferenceResearch } from '../core/ref/reference-research.ts';
@@ -289,18 +289,16 @@ test('research binds the retained component identity on the same source page', t
   assert.throws(() => validateReferenceResearch(root, parseReferenceResearch(research), options), /BOARD_SOURCE_COVERAGE/);
 });
 
-test('research accepts native navigation diagnostics in the discovery namespace', t => {
-  const { root, gallery, research, receipt } = designAdmissionFixture(t);
+test('research accepts signed native navigation diagnostics in the discovery namespace', async t => {
+  const { root, gallery, research, writer } = designAdmissionFixture(t);
   const start = 'https://www.pinterest.com/pin/987654321/';
-  const directory = '.omd/discovery/design/navigation'; mkdirSync(join(root, directory), { recursive: true });
-  const imagePath = `${directory}/hop.png`; copyFileSync(join(root, gallery.evidence.path), join(root, imagePath));
-  const capturePath = join(root, directory, 'hop.json');
-  writeFileSync(capturePath, JSON.stringify({ schema: 'reference-navigation-capture-v1', source: start, researchLane: 'design', kind: 'page',
-    capturedAt: '2026-09-21T00:00:00.000Z', imagePath,
-    acquisition: { requestedUrl: start, finalUrl: start, httpStatus: 200, links: [gallery.source], imageSha256: gallery.evidence.sha256 } }));
+  const visit = await withBrowser(async browser => captureReferenceNavigation(
+    discoveryBrowser(browser, { url: start, html: directoryHtml(gallery.source) }).browser,
+    start, 'design', writer,
+  ));
   const input = { ...research, designReference: { ...research.designReference,
     searches: [testSearchReceipt(root, 'design', 'visual task', [start])],
-    navigation: [{ url: start, evidence: receipt(join(root, imagePath)), capture: receipt(capturePath) }],
+    navigation: [visit],
   } };
   assert.doesNotThrow(() => validateReferenceResearch(root, parseReferenceResearch(input), options));
 });
