@@ -133,7 +133,7 @@ test('a prepared feature refuses an unrelated consent modal instead of saving ob
 });
 
 test('reference capture refuses unknown popups and covering layers but clears a notice backdrop', async t => {
-  for (const mode of ['custom', 'orphaned-backdrop', 'white-mask', 'embedded-overlay', 'service-error', 'structured-error', 'korean-maintenance', 'hidden-main-error'] as const) {
+  for (const mode of ['custom', 'orphaned-backdrop', 'white-mask', 'embedded-overlay', 'service-error', 'structured-error', 'korean-maintenance', 'hidden-main-error', 'nested-main-error', 'app-root-error'] as const) {
     const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-visual-overlay-')));
     t.after(() => rmSync(root, { recursive: true, force: true }));
     const popup = mode === 'custom'
@@ -148,13 +148,17 @@ test('reference capture refuses unknown popups and covering layers but clears a 
         ? '<div id="message-panel"><header>서비스 점검 중</header><section>잠시 후 다시 이용해 주세요</section></div>'
         : mode === 'hidden-main-error'
         ? '<div id="message-panel"><header>Temporarily unavailable</header><section>Please try again later</section></div>'
+        : mode === 'nested-main-error'
+        ? '<div id="message-panel"><main><header>Temporarily unavailable</header><section>Please try again later</section></main></div>'
+        : mode === 'app-root-error'
+        ? '<div id="app"><header>Temporarily unavailable</header><section>Please try again later</section></div>'
         : mode === 'white-mask'
         ? '<div id="mask"></div><div role="dialog" aria-modal="true" aria-label="Service notice"><button type="button" aria-label="Close">Close</button></div>'
         : '<div class="modal-backdrop"></div><div role="dialog" aria-modal="true" aria-label="Service notice"><button type="button" aria-label="Close">Close</button></div>';
     const server = createServer((_request, response) => {
       response.setHeader('content-type', 'text/html');
-      response.end(`<!doctype html><title>Public benefits</title><style>body{margin:0;background:white}main{padding:40px}${mode === 'hidden-main-error' ? 'main{display:none}' : ''}
-        #backdrop,.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.7)}#mask,#service-error,#message-panel{position:fixed;inset:0;background:white}
+      response.end(`<!doctype html><title>Public benefits</title><style>body{margin:0;background:white}main{padding:40px}${mode === 'hidden-main-error' || mode === 'app-root-error' ? 'body > main{display:none}' : ''}
+        #backdrop,.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.7)}#mask,#service-error,#message-panel,#app{position:fixed;inset:0;background:white}
         .cl-overlay{position:fixed;inset:0;background:transparent}#embedded-message{position:absolute;left:30%;top:30%;background:white;padding:20px}
         #service-popup,[role=dialog]{position:fixed;left:35%;top:25%;width:30%;height:40%;background:white}</style>
         <main><h1>Benefits</h1><p>${'Compare current benefits and application requirements. '.repeat(12)}</p></main>${popup}`);
@@ -164,7 +168,7 @@ test('reference capture refuses unknown popups and covering layers but clears a 
     const address = server.address(); assert.ok(address && typeof address !== 'string');
     const writer = createTestProjectWriteAdapter(root); writer.mkdir('.omd/refs/domain');
     const shotOut = join(root, `.omd/refs/domain/${mode}.png`);
-    if (mode === 'custom' || mode === 'white-mask' || mode === 'embedded-overlay' || mode === 'service-error' || mode === 'structured-error' || mode === 'korean-maintenance' || mode === 'hidden-main-error') {
+    if (mode === 'custom' || mode === 'white-mask' || mode === 'embedded-overlay' || mode === 'service-error' || mode === 'structured-error' || mode === 'korean-maintenance' || mode === 'hidden-main-error' || mode === 'nested-main-error' || mode === 'app-root-error') {
       await assert.rejects(withBrowser(browser => capturePageForRef(browser, `http://127.0.0.1:${address.port}`,
         { width: 800, height: 600 }, { shotOut, adapter: writer })), /REFERENCE_CAPTURE_VISUAL_OBSTRUCTION/);
       assert.equal(existsSync(shotOut), false);

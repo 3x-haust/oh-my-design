@@ -41,13 +41,16 @@ async function coveringLayers(page: Page): Promise<{ selector: string; name: str
       if (!['fixed', 'absolute'].includes(style.position) || style.display === 'none' || style.visibility !== 'visible' || Number(style.opacity) < 0.2 || Number(style.zIndex) < 0) return false;
       const namedOverlay = /overlay|backdrop|shade|dimmer|scrim/i.test(`${element.id} ${element.className}`);
       const errorLayer = /error|unavailable|failure|blocked|오류|장애|접속불가/i.test(`${element.id} ${element.className}`)
-        || /^(?:service unavailable|서비스 (?:오류|이용 불가|접속 불가)|접속 (?:오류|불가)|페이지를 표시할 수 없)/i.test((element.querySelector('h1,h2,h3,header')?.textContent ?? '').trim());
+        || /\b(?:unavailable|temporarily|maintenance|outage|interruption|server error|not found|try again later)\b|(?:서비스|시스템|서버).{0,8}(?:점검|중단|오류|장애|이용 불가)|점검 중|접속 불가|잠시 후 다시/i.test((element.querySelector('h1,h2,h3,header')?.textContent ?? '').trim());
       const appRoot = /^(?:app|root|__next|application)$/i.test(element.id) || element.getAttribute('role') === 'application';
+      const mains = [...document.querySelectorAll('main')];
+      const soleMain = element.matches('main') && mains.length === 1;
+      const structuredApp = appRoot && mains.every(main => element.contains(main))
+        && (element.querySelector('main') !== null
+          || (element.querySelector('header,nav') !== null && element.querySelector('section,article') !== null));
       const background = style.backgroundColor.match(/^rgba?\((\d+)[,\s]+(\d+)[,\s]+(\d+)(?:[,\s/]+([\d.]+))?\)$/);
       if (!namedOverlay && (!background || Number(background[4] ?? 1) < 0.15) && style.backgroundImage === 'none' && style.backdropFilter === 'none') return false;
-      if (!namedOverlay && !errorLayer
-        && (element.matches('main') || element.querySelector('main') !== null
-          || (appRoot && element.querySelector('header,nav') !== null && element.querySelector('section,article') !== null))) return false;
+      if (!namedOverlay && !errorLayer && (soleMain || structuredApp)) return false;
       const box = element.getBoundingClientRect();
       if (box.width * box.height < width * height * 0.6) return false;
       return onTop(element, 0.5, 0.5) && points.filter(([x, y]) => onTop(element, x!, y!)).length >= 2;
