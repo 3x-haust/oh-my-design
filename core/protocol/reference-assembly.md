@@ -450,8 +450,9 @@ notices, then visually suppress only visible informational announcement dialogs 
 or remove DOM nodes: a browser-owned DevTools stylesheet visually hides the notice and a named
 covering backdrop for research pixels only, in a fresh browser context. An unnamed covering layer
 refuses capture. Network requests during the bounded style change are aborted, and any attempted
-request or cookie/storage change refuses the capture; ordinary feature resources are not blocked
-after that bound. Retained reference navigation also blocks non-GET/HEAD requests, service workers,
+request or cookie/storage change refuses the capture; requests from that suppressed document remain
+blocked, while a safe new document may load ordinary feature resources after navigation. Retained
+reference navigation also blocks non-GET/HEAD requests, service workers,
 and WebSockets. This is not proof that a real user dismissal or service-side transition succeeded.
 The URL must remain unchanged and no dim backdrop may remain; the title, control, visual-only method,
 and backdrop count are retained in the private capture/flow receipt.

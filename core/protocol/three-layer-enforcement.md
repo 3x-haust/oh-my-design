@@ -11,7 +11,7 @@ stage is mandatory; an explicit route skip remains a skip. Repetition alone is n
 | Market authority | Never infer a country from language or locale. An explicit market context names a confirmed `evidenceClaims.userFacts` claim with actual user evidence for that market, and the same locale context is bound to validation and classification. | Locale-context parser; `LOCALE_DESIGN_MARKET_AUTHORITY_REQUIRED`; route replay/currentness checks |
 | Selected stages | Preserve the approved scope and dependency groups; never relabel product UX to evade an error. | `omd brief <stage> --check --json`; `omd guard production --json` |
 | Separate research | When selected, domain task/feature evidence and design craft evidence remain distinct, with current per-screen application decisions. New domain research inspects at least three independent operator families after redirects. Current design research compares at least two independent visual-direction source families, distinct gallery items and distinct PNG evidence, and carries both into the board. Repeated pages, crops, aliases or captures from one product count once. A failed search is a gap, not a fabricated reference. | `omd ref research-check --json`; `omd ref apply-check --json`; production/completion gates |
-| Reference capture quality | Every declared public feature screen is captured in a signed native flow at a viewport that visibly contains its asserted state. Informational notices are safely closed before retained pixels; consent, unknown, or unclosable obstructions are gaps, not visual evidence. Interaction probes cannot change the saved initial-state image. | `omd benchmark record`/`check`; `ref add`/`add-batch` capture refusal; current v3 evidence validation |
+| Reference capture quality | Every declared public feature screen is captured in a signed native flow at a viewport that visibly contains its asserted state. Informational notices are visually suppressed without invoking their close controls before retained pixels; consent, unknown, or unclosable obstructions are gaps, not visual evidence. Interaction probes cannot change the saved initial-state image. | `omd benchmark record`/`check`; `ref add`/`add-batch` capture refusal; current v3 evidence validation |
 | Korean reference scope | A Korean-language task brief starts Korean-service reference discovery without asserting a Korean cultural style. Predominantly Korean-language source UI can qualify regardless of domain suffix. Foreign-only domain captures require validated published local-domain research; editable captures and `--from-user` alone do not unlock fallback. Design-gallery pixels remain judged by the research provenance gate. A blocked Korean provider redirects discovery to another Korean operator and public transport. | `omd ref discover-plan --json`; `ref add`/`add-batch` market admission; v7 market coverage |
 | Executed discovery | Query prose is not acquisition evidence. Retained non-user entries trace to actual observed links and separately captured visits. | `omd ref search --input <json>` or `omd ref navigate`; current v7 research publication/currentness checks |
 | Rendered reference use | Every screen criterion has current desktop/mobile capture judgments; unresolved or stale results cannot complete. | Source seal binds the application; `omd ref apply-review-check --json`; terminal preflight |
@@ -170,10 +170,11 @@ inspection and research repair remain available while production is blocked.
   visually suppresses only informational notices through a browser-owned stylesheet without
   clicking their page-owned controls or mutating DOM nodes, records that method and hidden backdrop
   count, and refuses an unclosable/consent/unknown modal, unnamed covering layer, or request/storage
-  change during the bounded suppression. It suspends page scripts in that document and marks
-  interaction, motion, and energy as unmeasured rather than asserting scripted behavior,
-  roleless unsafe popup or remaining dim backdrop before writing
-  a PNG, including prepared states; its screenshot precedes
+  change during the bounded suppression. Requests from the suppressed document remain blocked;
+  only an exact safe main-frame navigation may load the next document. It suspends page scripts in
+  the suppressed document and marks interaction, motion, and energy as unmeasured rather than
+  asserting scripted behavior. A roleless unsafe popup or remaining dim backdrop also refuses a
+  PNG, including prepared states; the screenshot precedes
   hover/focus probes that could open a menu or alter the captured state.
 - First-render checking captures a local build natively and binds the retained report to the
   hypothesis, source, build, capture and exact interpreted projection. Terminal validation recomputes

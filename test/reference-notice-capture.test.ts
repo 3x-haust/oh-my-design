@@ -176,7 +176,7 @@ test('a safe feature link still loads its stylesheet after visual-only notice su
     requests.push(request.url ?? '');
     if (request.url === '/detail.css') { response.setHeader('content-type', 'text/css'); response.end('#feature{background:rgb(1, 2, 3)}'); return; }
     response.setHeader('content-type', 'text/html');
-    response.end(request.url === '/detail' ? '<link rel="stylesheet" href="/detail.css"><h1 id="feature">Feature detail</h1><script>document.querySelector("#feature").dataset.hydrated="yes"</script>' : `<!doctype html><h1>Benefits</h1><a id="detail" href="/detail">Details</a>
+    response.end(request.url === '/detail' ? '<link rel="stylesheet" href="/detail.css"><h1 id="feature">Feature detail</h1><script>document.querySelector("#feature").dataset.hydrated="yes"</script>' : `<!doctype html><h1>Benefits</h1><a id="detail" href="/detail#feature">Details</a>
       <div role="dialog" aria-modal="true" aria-label="Service notice"><button type="button" aria-label="Close"
       onclick="this.closest('[role=dialog]').remove()">Close</button></div>`);
   });
@@ -189,9 +189,10 @@ test('a safe feature link still loads its stylesheet after visual-only notice su
     try {
       await page.goto(base);
       assert.equal((await clearReferenceNotices(page)).length, 1);
-      prepareSuppressedReferenceLink(page, `${base}/detail`);
+      prepareSuppressedReferenceLink(page, `${base}/detail#feature`);
       await page.locator('#detail').click();
       await resumeScriptsOnNewReferenceDocument(page);
+      assert.equal(new URL(page.url()).hash, '#feature');
       assert.equal(await page.locator('h1').textContent(), 'Feature detail');
       assert.equal(await page.locator('#feature').evaluate(element => getComputedStyle(element).backgroundColor), 'rgb(1, 2, 3)');
       assert.equal(await page.locator('#feature').getAttribute('data-hydrated'), 'yes');
@@ -219,6 +220,32 @@ test('a hash target cannot fetch a stateful resource after notice suppression', 
       await page.goto(`http://127.0.0.1:${address.port}`);
       assert.equal((await clearReferenceNotices(page)).length, 1);
       await page.locator('#jump').click();
+      await assert.rejects(clearReferenceNotices(page, [], 300), /REFERENCE_CAPTURE_VISUAL_OBSTRUCTION: suppressed document attempted a request/);
+      assert.deepEqual(requests, []);
+    } finally { await page.close(); }
+  });
+});
+
+test('a whitelisted link cannot navigate an iframe instead of the main page', async t => {
+  const requests: string[] = [];
+  const server = createServer((request, response) => {
+    if (request.url === '/mutate') { requests.push(request.method ?? ''); response.end('unexpected'); return; }
+    response.setHeader('content-type', 'text/html');
+    response.end(`<!doctype html><title>Public benefits</title><main><h1>Benefits</h1><p>${'Browse public benefits and requirements. '.repeat(12)}</p>
+      <a id="frame-link" href="/mutate" target="sink">Open details</a><iframe name="sink"></iframe></main>
+      <div role="dialog" aria-modal="true" aria-label="Service notice"><button type="button" aria-label="Close">Close</button></div>`);
+  });
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())));
+  const address = server.address(); assert.ok(address && typeof address !== 'string');
+  const base = `http://127.0.0.1:${address.port}`;
+  await withBrowser(async browser => {
+    const page = await browser.newPage({ serviceWorkers: 'block' });
+    try {
+      await page.goto(base);
+      assert.equal((await clearReferenceNotices(page)).length, 1);
+      prepareSuppressedReferenceLink(page, `${base}/mutate`);
+      await page.locator('#frame-link').click();
       await assert.rejects(clearReferenceNotices(page, [], 300), /REFERENCE_CAPTURE_VISUAL_OBSTRUCTION: suppressed document attempted a request/);
       assert.deepEqual(requests, []);
     } finally { await page.close(); }

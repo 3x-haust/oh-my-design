@@ -59,11 +59,14 @@ async function safeClick(page: Page, selector: string, origin: string): Promise<
   const control = page.locator(selector);
   await control.waitFor({ state: 'visible', timeout: 3000 });
   if (await control.count() !== 1) return fail('ambiguous click target');
-  const info = await control.evaluate(node => ({ tag: node.tagName, type: node.getAttribute('type'), role: node.getAttribute('role'), href: node.getAttribute('href'), expanded: node.getAttribute('aria-expanded'), controls: node.getAttribute('aria-controls'), label: [node.textContent, node.getAttribute('aria-label'), node.getAttribute('title')].filter(Boolean).join(' ') }));
+  const info = await control.evaluate(node => ({ tag: node.tagName, type: node.getAttribute('type'), role: node.getAttribute('role'), href: node.getAttribute('href'), target: node.getAttribute('target'), download: node.hasAttribute('download'), expanded: node.getAttribute('aria-expanded'), controls: node.getAttribute('aria-controls'), label: [node.textContent, node.getAttribute('aria-label'), node.getAttribute('title')].filter(Boolean).join(' ') }));
   // Read-only public navigation only. No submit/login/payment/delete actions, even if a site uses GET.
   if (/log\s*(?:in|out)|sign\s*(?:in|out|up)|purchase|pay\b|checkout|delete|remove|unsubscribe|submit|apply\s+now|로그인|로그아웃|가입|결제|구매|삭제|탈퇴|제출|신청하기/i.test(`${info.label} ${info.href ?? ''}`)) return fail('sensitive action is excluded; record an authentication/payment/destructive-action gap');
   const link = info.tag === 'A' && info.href !== null;
-  if (link) { if (new URL(publicUrl(new URL(info.href!, page.url()).href)).origin !== origin) return fail('cross-service navigation requires a separate flow'); }
+  if (link) {
+    if ((info.target && info.target.toLowerCase() !== '_self') || info.download) return fail('new-window, frame-targeted and download links are excluded from reference clicks');
+    if (new URL(publicUrl(new URL(info.href!, page.url()).href)).origin !== origin) return fail('cross-service navigation requires a separate flow');
+  }
   else if (!(info.tag === 'SUMMARY' || (info.tag === 'BUTTON' && info.type === 'button' && ((info.controls && info.expanded !== null) || info.role === 'tab')))) return fail('only links, disclosure buttons, summary and tabs are safe reference clicks');
   if (info.tag === 'BUTTON' && hasSuspendedReferenceScripts(page)) return fail('same-document scripted action is unavailable after visual-only notice suppression; record a bounded gap or inspect another public source');
   const previousUrl = page.url();

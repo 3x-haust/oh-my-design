@@ -76,7 +76,8 @@ async function guardSuppressedDocumentRequests(page: Page): Promise<void> {
   if (!sheet || sheet.requestGuard) return;
   const guard = async (route: Route) => {
     const request = route.request();
-    if (sheet.allowedNavigationUrl === request.url() && request.isNavigationRequest() && request.method() === 'GET')
+    if (sheet.allowedNavigationUrl === request.url() && request.isNavigationRequest()
+      && request.frame() === page.mainFrame() && request.method() === 'GET')
       return route.continue();
     if (sheet.blockedRequests.length < 5) sheet.blockedRequests.push(`${request.method()}:${request.resourceType()}`);
     return route.abort();
@@ -89,7 +90,9 @@ export function prepareSuppressedReferenceLink(page: Page, destination: string):
   const sheet = sheets.get(page);
   if (!sheet) return;
   if (sheet.blockedRequests.length) obstruction(`suppressed document attempted a request (${sheet.blockedRequests.join(', ')})`);
-  sheet.allowedNavigationUrl = destination;
+  const networkUrl = new URL(destination);
+  networkUrl.hash = '';
+  sheet.allowedNavigationUrl = networkUrl.href;
 }
 
 export async function resumeScriptsOnNewReferenceDocument(page: Page, previousUrl?: string): Promise<void> {

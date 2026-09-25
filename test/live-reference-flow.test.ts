@@ -17,7 +17,7 @@ const input = { schema: 'reference-flow-input-v1', sourceId: 'service-a', flowId
   { screenId: 'detail', state: 'details', clicks: ['#detail-link'], assertions: [{ selector: 'h1', state: 'visible', text: 'Detail' }] },
   { screenId: 'expanded', state: 'requirements-expanded', clicks: ['#expand'], assertions: [{ selector: '#requirements', state: 'visible' }] },
 ] };
-const body = (detail = false) => `<html><head><title>Service information</title></head><body><h1>${detail ? 'Detail' : 'Service'}</h1><p>${'Public service information and preparation guidance. '.repeat(8)}</p><a id="detail-link" href="/detail">Inspect details</a><a id="hash-link" href="#hash-target">Jump to details</a><section id="hash-target">Hash detail</section><button id="expand" type="button" aria-controls="requirements" aria-expanded="false" onclick="this.setAttribute('aria-expanded','true');document.getElementById('requirements').hidden=false">Requirements</button>${detail ? '<div style="height:1200px"></div>' : ''}<div hidden id="requirements" style="background:blue;height:200px">Bring identification</div><a id="delete" href="/delete">Delete account</a>${detail ? '' : '<div id="shade" style="position:fixed;inset:0;background:#777"></div><div role="dialog" aria-modal="true" aria-label="Service notice" style="position:fixed;left:30%;top:20%;width:40%;height:40%;background:white"><button type="button" aria-label="Close" onclick="document.querySelector(\'[role=dialog]\').remove();document.querySelector(\'#shade\').remove()">Close</button></div>'}</body></html>`;
+const body = (detail = false) => `<html><head><title>Service information</title></head><body><h1>${detail ? 'Detail' : 'Service'}</h1><p>${'Public service information and preparation guidance. '.repeat(8)}</p><a id="detail-link" href="/detail">Inspect details</a><a id="hash-link" href="#hash-target">Jump to details</a><section id="hash-target">Hash detail</section><a id="frame-link" href="/mutate" target="sink">Open details</a><iframe name="sink"></iframe><button id="expand" type="button" aria-controls="requirements" aria-expanded="false" onclick="this.setAttribute('aria-expanded','true');document.getElementById('requirements').hidden=false">Requirements</button>${detail ? '<div style="height:1200px"></div>' : ''}<div hidden id="requirements" style="background:blue;height:200px">Bring identification</div><a id="delete" href="/delete">Delete account</a>${detail ? '' : '<div id="shade" style="position:fixed;inset:0;background:#777"></div><div role="dialog" aria-modal="true" aria-label="Service notice" style="position:fixed;left:30%;top:20%;width:40%;height:40%;background:white"><button type="button" aria-label="Close" onclick="document.querySelector(\'[role=dialog]\').remove();document.querySelector(\'#shade\').remove()">Close</button></div>'}</body></html>`;
 
 test('native recorder executes one real navigation/disclosure chain and refuses tampered or different-project receipts', async t => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-live-reference-')));
@@ -98,6 +98,12 @@ test('native recorder executes one real navigation/disclosure chain and refuses 
     ] }, writer);
     assert.equal(nativeHash.status, 'completed', nativeHash.limitation ?? '');
     assert.equal(new URL(nativeHash.steps[1]!.url).hash, '#hash-target');
+    const frameTarget = await recordLiveReferenceFlow(proxy, root, { ...input, flowId: 'frame-target', steps: [
+      input.steps[0], { screenId: 'frame-detail', state: 'details-in-frame', clicks: ['#frame-link'], assertions: [{ selector: '#hash-target', state: 'visible' }] },
+    ] }, writer);
+    assert.equal(frameTarget.status, 'blocked');
+    assert.match(frameTarget.limitation ?? '', /frame-targeted/);
+    assert.ok(!requests.some(request => request.endsWith('/mutate')));
     const saved = JSON.parse(readFileSync(join(root, result.execution.path), 'utf8'));
     saved.steps[1].action = 'forged';
     const bytes = JSON.stringify(saved), digest = createHash('sha256').update(bytes).digest('hex');
