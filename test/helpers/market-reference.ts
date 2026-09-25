@@ -42,18 +42,20 @@ export function rootEnvelope(lane: 'domain' | 'design') {
 export function directRootAt(root: string, lane: 'domain' | 'design', url: string, links: readonly string[],
   observedText = `South Korea ${lane === 'domain' ? 'service directory for residents' : 'design gallery products'}.`,
   capturedAt = new Date().toISOString(),
-  linkText = `South Korea ${lane === 'domain' ? 'service for residents' : 'design product gallery'}`) {
-  const image = testPng(1280, 900, Number.parseInt(admissionHash(url).slice(0, 2), 16));
+  linkText = `South Korea ${lane === 'domain' ? 'service for residents' : 'design product gallery'}`,
+  pixelOffset = 0, taskText: string | null = observedText) {
+  const image = testPng(1280, 900, (Number.parseInt(admissionHash(url).slice(0, 2), 16) + pixelOffset) % 256);
   const imageSha256 = admissionHash(image);
   const imagePath = `.omd/discovery/${lane}/entries/${imageSha256}.png`;
   mkdirSync(join(root, `.omd/discovery/${lane}/entries`), { recursive: true });
   writeFileSync(join(root, imagePath), image);
-  const unsigned = { schema: 'reference-discovery-entry-v3', method: 'direct-public',
+  const unsigned = { schema: 'reference-discovery-entry-v4', method: 'direct-public',
     entry: lane === 'domain' ? 'public-directory' : 'free-gallery', source: url, researchLane: lane,
     kind: 'page', capturedAt, imagePath,
     acquisition: { requestedUrl: url, finalUrl: url, httpStatus: 200, links, imageSha256 },
     limitations: 'native-public-get; stable-rendered-viewport-links; no-authentication; no-interaction-probes; not-provider-attested',
-    observedText, linkLabels: links.map(url => ({ url, text: linkText })) };
+    observedText, ...(taskText === null ? {} : { taskText }),
+    linkLabels: links.map(url => ({ url, text: linkText })) };
   const record = { ...unsigned, signature: signNativeObservation(root, unsigned.schema,
     admissionHash(canonicalJson(unsigned))) };
   const bytes = `${JSON.stringify(record, null, 2)}\n`;

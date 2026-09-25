@@ -207,12 +207,27 @@ active research owner. Unknown files and valid references remain untouched.
 `omd ref research-set` is the sole publisher of both files and writes `.omd/reference-research.json`
 last as their consistency receipt. `research-check` and downstream gates require all three current
 records. New research uses v7. Historical v5 remains readable with its search-only requirements;
-historical v6 remains readable with its original search-or-direct-root requirements. Each lane can use `searches` from `omd ref search --input <json>` with
+historical v6 remains parseable, but current publication rechecks any direct roots with signed v4
+evidence after the current route; migrate older roots through a fresh native visit. Each lane can use `searches` from `omd ref search --input <json>` with
 `{lane, query, url, queryParam}`. The URL submits the exact query; a fresh browser records observed
 links, a 1280×900 screenshot and HTTP/error outcome, without reusing login state or clicking controls.
-Current signed search records also bind each retained visible result label to its observed link.
-For explicit-market local coverage, that link-associated text must name the market and relevant
-service/product scope; market terms in the query alone do not qualify a source as local.
+Current signed search v3 records bind each retained visible result label to its observed link and
+exclude browser-observed header, navigation, footer, and consent chrome from actionable links.
+Older signed v2 records remain readable as history but require recapture for current research.
+Visible search chrome (help, navigation tabs, settings, pagination) is not a task result: follow
+only task-related service links or concrete gallery items. An observed search page with no such
+lead advances to another public search or direct entry, not to a header/footer link.
+For an unscoped task, a substantive non-editorial result without exact query words may be inspected
+as a provisional service candidate, then retained only after task relevance is judged from its
+visited UI. Explicit-market searches do not use that broad fallback; search help remains chrome
+unless help is the task itself.
+For explicit-market coverage, execute `ref discover-plan`'s exact target-market domain and design
+queries before global searches. Other unscoped query seeds are adaptable; do not rewrite the exact
+market inputs. A local result's link-associated text normally names the market and relevant
+service/product scope. A generic domain-service link label such as `바로가기` qualifies only when
+the separately retained, current site capture records visibly Korean text and a current signed
+native direct-entry v4 for that exact service URL observes Korean-language service content.
+Neither a market term in the query nor a generic label alone establishes local provenance.
 Current v7 market provenance and its retained source observation must both be no more than seven days old.
 Inspect the page: HTTP 200 alone does not prove useful results or free access. All queries require
 execution receipts; every non-user retained domain source/design entry must occur in observed links
@@ -229,13 +244,20 @@ Queries/searches remain required arrays and may both be empty only with valid no
 Every declared query still needs an exact execution, including failed attempts alongside direct roots.
 The native entry publisher uses a DNS-pinned fresh GET/HEAD-only context, blocks service workers/downloads,
 performs no click/hover probes, and captures stable visible links with the matching viewport PNG.
-Only actual outbound links seed reachability: the root URL itself is not retained-source evidence.
-Intermediate edges in direct v6/v7 chains require strict navigation-v2 captures. Hidden all-DOM links
+An exact current signed v4 root URL may itself be a retained comparable-service source when its
+captured page has a useful task surface and at least one content or task-contextual primary-navigation link.
+For this self-root exception, the current capture must additionally sign non-link, non-header/navigation/footer/dialog
+task text that names the same task; a related link label or whole-page text alone is not a service claim.
+Older signed v4 entries without that field remain usable as discovery roots but cannot prove the self-root exception.
+An explicit denial of the task disqualifies the claim; an eligibility limit for a different audience does not.
+Generic global navigation, notices and footer links are excluded. Page-content links take priority over
+task-contextual primary-navigation links; its observed links
+also seed descendants. Intermediate edges in direct v6/v7 chains require strict navigation-v4 captures. Hidden all-DOM links
 from retained captures and historical navigation-v1 cannot shortcut a missing observed transition.
 Design roots must remain supported public lists after redirects, exposing visible same-gallery item
 links; login walls, blocked pages, selected items and arbitrary service pages are refused.
-New signed entry-v3 records stay under `.omd/discovery/<lane>/entries/`, never retained `.omd/refs/`.
-Historical entry-v1/v2 records remain readable, but only entry-v3 link-label evidence can satisfy
+New signed entry-v4 records stay under `.omd/discovery/<lane>/entries/`, never retained `.omd/refs/`.
+Historical entry-v1/v2/v3 records remain readable, but only entry-v4 content-link evidence can satisfy
 current explicit-market provenance.
 Do not hand-author roots, promote old captures, infer official authority from a directory, or present
 this provenance check as a quality judgment. Follow observed items and qualify/capture each retained
@@ -245,7 +267,8 @@ The executor accepts Google/Bing `/search`, DuckDuckGo root/HTML/lite `q` endpoi
 `/search?w=tot&q=` for free Korean web search,
 plus design-only Pinterest `/search/pins/?q=`, Dribbble `/search/<query-slug>` (`queryParam: path`),
 and Siteinspire `/search?query=` (`queryParam: query`). `ref discover-plan` supplies ready-to-run
-`designSourcePolicy.nativeSearchInputs`; adapt its short task/pattern terms and matching URL together.
+`designSourcePolicy.nativeSearchInputs`; adapt unscoped short task/pattern terms and their matching
+URLs together, while preserving the exact explicit-market inputs above.
 Use native gallery search when general search is blocked. HTTP 200 and actual same-provider item links
 are required; login walls, empty results and challenge responses remain failed attempts. Retain only
 an item actually observed in those results, never guessed shot IDs. Siteinspire now uses numeric
@@ -293,8 +316,10 @@ plan's exact market domain inputs and market-plus-domain design searches before 
 direct-public root may replace search transport, but never the per-lane local evidence or fallback gap.
 Each local classification binds `sourceId`, the exact retained `evidenceSha256`, a lane-valid `scope`,
 a closed `basis`, and the exact native `provenanceReceiptSha256`. `market-search-result` binds a signed
-market-search execution whose visible result text for that link names the explicit market and relevant
-service/product scope. `market-direct-result` binds a signed direct-public root whose visible label for
+market-search execution whose visible result text for that link normally names the explicit market and relevant
+service/product scope. A generic Korean domain-service label requires a current signed direct-public
+entry for that exact service with visible Korean service text, plus its current retained Korean-language
+capture; design and foreign-service sources do not get this exception. `market-direct-result` binds a signed direct-public root whose visible label for
 that retained link names the explicit market and relevant scope. URL tokens, localized queries,
 country-code hostnames, page-wide headings, and freeform reasons are never source-specific market proof.
 Search and direct bases may coexist in a lane. Every declared search and direct attempt must be current.

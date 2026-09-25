@@ -36,6 +36,7 @@ export function designAdmissionFixture(t: TestContext) {
     const image = refImagePath(root, { source, component, researchLane: lane });
     const ref: Reference = {
       source, component, researchLane: lane, kind: 'component', selector: '#hero', capturedAt,
+      ...(lane === 'domain' ? { visibleKoreanText: true as const } : {}),
       acquisition: { requestedUrl: source, finalUrl: source, httpStatus: 200, links, imageSha256: admissionHash(png) },
       imagePath: relative(root, image), principles: ['Use measured hierarchy.'],
       invariants: { spacingLadder: [8], radiusLadder: [4], elevationLevels: 0, centeredRatio: 0, tokenCoverage: 1, paddingWeight: 8, typeScale: [], fontFamilies: [], weightLadder: [], motionDurations: [], easingVocab: [], animatedShare: 0, hoverCoverage: 0, focusCoverage: 0, animatedProperties: [], hasReducedMotion: false, scrollChoreography: [] },

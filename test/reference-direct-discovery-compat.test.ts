@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { canonicalJson } from '../core/ref/board-artifacts.ts';
@@ -29,7 +29,7 @@ function storeRecord(root: string, receipt: Awaited<ReturnType<typeof currentCap
 test('historical signed direct-entry v2 records remain readable but cannot satisfy current market proof', async t => {
   const { root, receipt } = await currentCapture(t);
   const current = JSON.parse(readFileSync(join(root, receipt.capture.path), 'utf8'));
-  const { observedText, linkLabels, signature: _signature, ...common } = current;
+  const { observedText, taskText: _taskText, linkLabels, signature: _signature, ...common } = current;
   for (const unsigned of [
     { ...common, schema: 'reference-discovery-entry-v2' },
     { ...common, schema: 'reference-discovery-entry-v2', observedText },
@@ -51,4 +51,36 @@ test('current direct-entry link labels are covered by the native signature', asy
   record.linkLabels[0].text = 'South Korea forged service label';
   const tampered = storeRecord(root, receipt, record);
   assert.throws(() => readCurrentDirectDiscoveryEntry(root, tampered), /native direct discovery signature invalid/);
+});
+
+test('current direct-entry task text is covered by the native signature', async t => {
+  const { root, receipt } = await currentCapture(t);
+  const record = JSON.parse(readFileSync(join(root, receipt.capture.path), 'utf8'));
+  record.taskText = 'Forged welfare benefits service';
+  const tampered = storeRecord(root, receipt, record);
+  assert.throws(() => readCurrentDirectDiscoveryEntry(root, tampered), /native direct discovery signature invalid/);
+});
+
+test('a previously signed v3 entry is archival until recaptured with content-only links', async t => {
+  const { root, receipt } = await currentCapture(t);
+  const record = JSON.parse(readFileSync(join(root, receipt.capture.path), 'utf8')) as Record<string, unknown>;
+  const { signature: _signature, taskText: _taskText, ...fields } = record;
+  const unsigned = { ...fields, schema: 'reference-discovery-entry-v3' };
+  const legacy = { ...unsigned, signature: signNativeObservation(root, unsigned.schema,
+    discoveryDigest(canonicalJson(unsigned))) };
+  const oldReceipt = storeRecord(root, receipt, legacy);
+  assert.equal(readDirectDiscoveryEntry(root, oldReceipt).url, PUBLIC_DIRECTORY);
+  assert.throws(() => readCurrentDirectDiscoveryEntry(root, oldReceipt), /current direct discovery signature required/);
+});
+
+test('a signed direct entry older than route publication cannot authorize current research', async t => {
+  const { root, receipt } = await currentCapture(t);
+  const routePath = join(root, '.omd/route.json');
+  writeFileSync(routePath, '{}');
+  const later = new Date(Date.now() + 1000);
+  utimesSync(routePath, later, later);
+  assert.deepEqual(readDirectDiscoveryEntry(root, receipt), {
+    url: PUBLIC_DIRECTORY, finalUrl: PUBLIC_DIRECTORY, links: [DOMAIN_ITEM],
+  });
+  assert.throws(() => readCurrentDirectDiscoveryEntry(root, receipt), /stale for the current route/);
 });

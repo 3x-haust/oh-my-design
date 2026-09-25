@@ -11,17 +11,20 @@ import { captureSearchObservation } from './reference-capture-observation.ts';
 import { observeDocumentResponses, type DocumentObserver } from './document-observation.ts';
 import { createPublicNetworkProxy } from './public-network.ts';
 import { disableUnproxiedRealtimeTransports } from './browser-security.ts';
-import { observedSearchTargets, type ObservedSearchResult } from './search-result.ts';
+import { actionableSearchTargets, observedSearchTargets, type ObservedSearchResult } from './search-result.ts';
+import { currentReferenceEvidenceAfter } from './discovery-record.ts';
 
 export { observedSearchTargets } from './search-result.ts';
 
-export const SEARCH_EXECUTION_SCHEMA = 'reference-search-execution-v2';
+export const SEARCH_EXECUTION_SCHEMA = 'reference-search-execution-v3';
+const HISTORICAL_SIGNED_SEARCH_EXECUTION_SCHEMA = 'reference-search-execution-v2';
 const HISTORICAL_SEARCH_EXECUTION_SCHEMA = 'reference-search-execution-v1';
 type Lane = 'domain' | 'design';
 type Receipt = Readonly<{ path: string; sha256: string }>;
 type SearchInput = Readonly<{ lane: Lane; query: string; url: string; queryParam: string }>;
 export type SearchExecution = Readonly<{
-  schema: typeof SEARCH_EXECUTION_SCHEMA | typeof HISTORICAL_SEARCH_EXECUTION_SCHEMA; lane: Lane; query: string; queryParam: string;
+  schema: typeof SEARCH_EXECUTION_SCHEMA | typeof HISTORICAL_SIGNED_SEARCH_EXECUTION_SCHEMA | typeof HISTORICAL_SEARCH_EXECUTION_SCHEMA;
+  lane: Lane; query: string; queryParam: string;
   requestedUrl: string; finalUrl: string | null; provider: string;
   observedAt: string; status: 'page-observed' | 'gallery-observed' | 'empty-observation' | 'blocked' | 'http-error' | 'navigation-error'; httpStatus: number | null;
   links: readonly string[]; capture: Receipt | null; error: string | null;
@@ -39,6 +42,7 @@ function object(value: unknown, keys: readonly string[]) {
   return value as Record<string, unknown>;
 }
 function text(value: unknown): string { return typeof value === 'string' && value.trim() && value.length <= 4096 ? value.trim() : fail('missing/oversized text'); }
+function reason(value: unknown): string { return typeof value === 'string' && value.trim() && value.length <= 4096 ? value : fail('missing/oversized text'); }
 function url(value: unknown): string {
   const result = text(value);
   let parsed: URL;
@@ -76,10 +80,11 @@ function parseExecution(value: unknown): SearchExecution {
   const schema = typeof value === 'object' && value !== null
     ? Object.getOwnPropertyDescriptor(value, 'schema') : undefined;
   const current = schema !== undefined && 'value' in schema && schema.value === SEARCH_EXECUTION_SCHEMA;
+  const signed = current || (schema !== undefined && 'value' in schema && schema.value === HISTORICAL_SIGNED_SEARCH_EXECUTION_SCHEMA);
   const keys = ['schema', 'lane', 'query', 'queryParam', 'requestedUrl', 'finalUrl', 'provider', 'observedAt', 'status', 'httpStatus', 'links', 'capture', 'error', 'limitations'];
-  const row = object(value, current ? [...keys, 'results', 'signature'] : keys);
+  const row = object(value, signed ? [...keys, 'results', 'signature'] : keys);
   const input = parseSearchInput({ lane: row.lane, query: row.query, queryParam: row.queryParam, url: row.requestedUrl });
-  if (![SEARCH_EXECUTION_SCHEMA, HISTORICAL_SEARCH_EXECUTION_SCHEMA].includes(row.schema as string)
+  if (![SEARCH_EXECUTION_SCHEMA, HISTORICAL_SIGNED_SEARCH_EXECUTION_SCHEMA, HISTORICAL_SEARCH_EXECUTION_SCHEMA].includes(row.schema as string)
     || row.limitations !== LIMITATIONS || row.provider !== new URL(input.url).hostname
     || !['page-observed', 'gallery-observed', 'empty-observation', 'blocked', 'http-error', 'navigation-error'].includes(row.status as string)
     || typeof row.observedAt !== 'string' || !Number.isFinite(Date.parse(row.observedAt))) return fail('invalid execution record');
@@ -87,7 +92,7 @@ function parseExecution(value: unknown): SearchExecution {
   if (!Array.isArray(row.links) || row.links.length > 2000 || Object.keys(row.links).length !== row.links.length) return fail('invalid observed links');
   const links = row.links.map(url);
   if (new Set(links).size !== links.length) return fail('duplicate links');
-  const results = current ? parseResults(row.results, links) : undefined;
+  const results = signed ? parseResults(row.results, links) : undefined;
   if (row.status === 'page-observed' && (row.httpStatus !== 200 || row.capture === null || row.finalUrl === null || row.error !== null)) return fail('observed page needs HTTP 200 and capture');
   if (row.status === 'gallery-observed' && (row.httpStatus !== 200
     || row.capture === null || row.finalUrl === null || row.error !== null || !gallerySearchHasItems(input, links))) return fail('observed gallery needs successful HTTP, capture and actual gallery-item links');
@@ -104,8 +109,8 @@ function parseExecution(value: unknown): SearchExecution {
     finalUrl: row.finalUrl === null ? null : url(row.finalUrl), observedAt: row.observedAt,
     status: row.status as SearchExecution['status'], httpStatus: row.httpStatus as number | null, links,
     capture: row.capture === null ? null : parseReceipt(row.capture, input.lane, 'png'),
-    error: row.error === null ? null : text(row.error), limitations: LIMITATIONS };
-  return current ? { ...parsed, results: results ?? [], signature: text(row.signature) } : parsed;
+    error: row.error === null ? null : reason(row.error), limitations: LIMITATIONS };
+  return signed ? { ...parsed, results: results ?? [], signature: text(row.signature) } : parsed;
 }
 
 function parseResults(value: unknown, links: readonly string[]): readonly ObservedSearchResult[] {
@@ -204,9 +209,9 @@ export function readSearchExecution(root: string, value: unknown, lane: Lane): S
   };
   const execution = parseExecution(JSON.parse(read(receipt).toString('utf8')));
   if (execution.lane !== lane) return fail('wrong research lane');
-  if (execution.schema === SEARCH_EXECUTION_SCHEMA) {
+  if (execution.schema === SEARCH_EXECUTION_SCHEMA || execution.schema === HISTORICAL_SIGNED_SEARCH_EXECUTION_SCHEMA) {
     const { signature, ...unsigned } = execution;
-    if (signature === undefined || !verifyNativeObservation(root, SEARCH_EXECUTION_SCHEMA,
+    if (signature === undefined || !verifyNativeObservation(root, execution.schema,
       hash(canonicalJson(unsigned)), signature)) return fail('native search execution signature invalid');
   }
   if (execution.capture) {
@@ -229,18 +234,25 @@ function hasSearchDestination(input: SearchInput, links: readonly string[]): boo
   });
 }
 /** navigation is derived only from separately hash/image/lane-validated native captures. */
-export function validateSearchCoverage(root: string, lane: Lane, queries: readonly string[], receipts: readonly Receipt[], sourceUrls: readonly string[], navigation: readonly ObservedNavigation[] = []) {
-  const search = readSearchCoverage(root, { lane, queries, receipts });
+export function validateSearchCoverage(root: string, lane: Lane, queries: readonly string[], receipts: readonly Receipt[], sourceUrls: readonly string[], navigation: readonly ObservedNavigation[] = [], allowUnmatched = true) {
+  const search = readSearchCoverage(root, { lane, queries, receipts, allowUnmatched });
   const reached = observedNavigationTargets(search.targets, navigation);
   for (const source of sourceUrls) if (!reached.has(source)) return fail(`retained source was not an observed search link or captured navigation descendant: ${source}; capture every hop from a usable public search result`);
   return search.summary;
 }
 
-export function readSearchCoverage(root: string, input: Readonly<{ lane: Lane; queries: readonly string[]; receipts: readonly Receipt[] }>) {
+export function readSearchCoverage(root: string, input: Readonly<{ lane: Lane; queries: readonly string[]; receipts: readonly Receipt[];
+  allowUnmatched?: boolean | undefined }>) {
   const records = input.receipts.map(item => readSearchExecution(root, item, input.lane));
   if (new Set(input.receipts.map(item => item.sha256)).size !== input.receipts.length) return fail('duplicate search receipts');
   if (input.queries.some(query => !records.some(item => item.query === query)) || records.some(item => !input.queries.includes(item.query))) return fail('declared queries do not match executed queries');
-  return { targets: records.filter(searchObserved).flatMap(observedSearchTargets),
+  const after = currentReferenceEvidenceAfter(root);
+  if (records.some(record => record.schema !== SEARCH_EXECUTION_SCHEMA
+    || Date.parse(record.observedAt) < after || Date.parse(record.observedAt) > Date.now() + 5 * 60 * 1000)) {
+    return fail('current signed search execution after the route publication is required');
+  }
+  return { targets: records.filter(searchObserved).flatMap(record => actionableSearchTargets({ ...record,
+    allowUnmatched: input.allowUnmatched })),
     summary: { executed: records.length, failed: records.filter(item => !searchObserved(item)).length, searchQuality: 'not-automatically-judged' as const } };
 }
 

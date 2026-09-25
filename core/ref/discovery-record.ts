@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
-import { resolve } from 'node:path';
+import { existsSync, lstatSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { decodePng } from '../motion/energy.ts';
 import { nodeStableProjectFileSystem, readStableProjectFile } from '../runtime/stable-project-file.ts';
 import { verifyNativeObservation } from '../runtime/self-signed-activation.ts';
@@ -14,10 +15,19 @@ export type DiscoveryEvidence = Readonly<{ path: string; sha256: string }>;
 export type DiscoveryNavigationReceipt = Readonly<{ url: string; evidence: DiscoveryEvidence; capture: DiscoveryEvidence }>;
 export type DirectDiscoveryReceipt = DiscoveryNavigationReceipt & Readonly<{ method: 'direct-public'; entry: DirectDiscoveryEntry }>;
 export type DiscoveryObservation = Readonly<{
-  url: string; finalUrl: string; links: readonly string[]; observedText?: string; capturedAt?: string;
+  url: string; finalUrl: string; links: readonly string[]; observedText?: string; taskText?: string; capturedAt?: string;
   linkLabels?: readonly ObservedSearchResult[];
 }>;
 export const DISCOVERY_LIMITATIONS = 'native-public-get; stable-rendered-viewport-links; no-authentication; no-interaction-probes; not-provider-attested' as const;
+const MAX_DISCOVERY_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+export function currentReferenceEvidenceAfter(root: string): number {
+  const ageFloor = Date.now() - MAX_DISCOVERY_AGE_MS;
+  const pointer = join(root, '.omd/route.json');
+  if (!existsSync(pointer)) return ageFloor;
+  const stat = lstatSync(pointer);
+  if (!stat.isFile() || stat.isSymbolicLink()) throw new ReferenceDiscoveryError('unsafe route pointer');
+  return Math.max(ageFloor, stat.mtimeMs);
+}
 type DiscoveryCaptureFields = Readonly<{
   source: string; researchLane: DiscoveryLane; kind: 'page'; capturedAt: string; imagePath: string;
   acquisition: Readonly<{ requestedUrl: string; finalUrl: string; httpStatus: number; links: readonly string[]; imageSha256: string }>;
@@ -25,9 +35,13 @@ type DiscoveryCaptureFields = Readonly<{
 }>;
 export type DiscoveryCaptureRecord = DiscoveryCaptureFields & (
   Readonly<{ schema: 'reference-navigation-capture-v2' }>
+  | Readonly<{ schema: 'reference-navigation-capture-v3'; signature: string }>
+  | Readonly<{ schema: 'reference-navigation-capture-v4'; signature: string }>
   | Readonly<{ schema: 'reference-discovery-entry-v1'; method: 'direct-public'; entry: DirectDiscoveryEntry }>
   | Readonly<{ schema: 'reference-discovery-entry-v3'; method: 'direct-public'; entry: DirectDiscoveryEntry;
     observedText: string; linkLabels: readonly ObservedSearchResult[]; signature: string }>
+  | Readonly<{ schema: 'reference-discovery-entry-v4'; method: 'direct-public'; entry: DirectDiscoveryEntry;
+    observedText: string; taskText?: string; linkLabels: readonly ObservedSearchResult[]; signature: string }>
 );
 
 export class ReferenceDiscoveryError extends Error {
@@ -100,26 +114,42 @@ function readDiscovery(root: string, value: unknown, direct: boolean, requireCur
   if (direct && receipt.method !== 'direct-public') return fail('direct method is required');
   const keys = ['schema', 'source', 'researchLane', 'kind', 'capturedAt', 'imagePath', 'acquisition', 'limitations'];
   const decoded = JSON.parse(read(root, capture).toString('utf8')) as Record<string, unknown>;
-  if (direct ? !['reference-discovery-entry-v1', 'reference-discovery-entry-v2', 'reference-discovery-entry-v3'].includes(decoded.schema as string)
-    : decoded.schema !== 'reference-navigation-capture-v2') return fail('native capture purpose/source/lane binding differs');
-  const current = direct && decoded.schema === 'reference-discovery-entry-v3';
+  if (direct ? !['reference-discovery-entry-v1', 'reference-discovery-entry-v2', 'reference-discovery-entry-v3', 'reference-discovery-entry-v4'].includes(decoded.schema as string)
+    : !['reference-navigation-capture-v2', 'reference-navigation-capture-v3', 'reference-navigation-capture-v4'].includes(decoded.schema as string)) return fail('native capture purpose/source/lane binding differs');
+  const currentDirect = direct && decoded.schema === 'reference-discovery-entry-v4';
+  const currentNavigation = !direct && decoded.schema === 'reference-navigation-capture-v4';
+  const previousDirect = direct && decoded.schema === 'reference-discovery-entry-v3';
+  const previousNavigation = !direct && decoded.schema === 'reference-navigation-capture-v3';
+  const signedDirect = currentDirect || previousDirect;
+  const current = currentDirect || currentNavigation;
   const legacySigned = direct && decoded.schema === 'reference-discovery-entry-v2';
   const legacyObserved = legacySigned && Object.hasOwn(decoded, 'observedText');
   const legacyLabels = legacyObserved && Object.hasOwn(decoded, 'linkLabels');
+  const currentTaskText = currentDirect && Object.hasOwn(decoded, 'taskText');
   const row = object(decoded, direct ? [...keys, 'method', 'entry',
-    ...(current ? ['observedText', 'linkLabels', 'signature'] : legacySigned
-      ? [...(legacyObserved ? ['observedText'] : []), ...(legacyLabels ? ['linkLabels'] : []), 'signature'] : [])] : keys);
+    ...(signedDirect ? ['observedText', ...(currentTaskText ? ['taskText'] : []), 'linkLabels', 'signature'] : legacySigned
+      ? [...(legacyObserved ? ['observedText'] : []), ...(legacyLabels ? ['linkLabels'] : []), 'signature'] : [])]
+    : [...keys, ...(currentNavigation || previousNavigation ? ['signature'] : [])]);
   if (row.source !== url || row.researchLane !== lane || row.kind !== 'page' || row.imagePath !== image.path
     || row.limitations !== DISCOVERY_LIMITATIONS || !Number.isFinite(Date.parse(text(row.capturedAt)))
     || (direct && (row.method !== 'direct-public' || row.entry !== entry))) return fail('native capture purpose/source/lane binding differs');
-  if (requireCurrent && !current) return fail('current direct discovery signature required');
-  if (current || legacySigned) {
+  if (requireCurrent && !current) return fail(direct
+    ? 'current direct discovery signature required' : 'current native discovery signature required');
+  if (requireCurrent && (Date.parse(row.capturedAt as string) < currentReferenceEvidenceAfter(root)
+    || Date.parse(row.capturedAt as string) > Date.now() + 5 * 60 * 1000)) return fail('native discovery capture is stale for the current route');
+  if (current || previousDirect || previousNavigation || legacySigned) {
     const { signature, ...unsigned } = row;
-    const schema = current ? 'reference-discovery-entry-v3' : 'reference-discovery-entry-v2';
+    const schema = currentDirect ? 'reference-discovery-entry-v4'
+      : currentNavigation ? 'reference-navigation-capture-v4'
+        : previousDirect ? 'reference-discovery-entry-v3'
+          : previousNavigation ? 'reference-navigation-capture-v3' : 'reference-discovery-entry-v2';
     if (typeof signature !== 'string' || !verifyNativeObservation(root, schema,
-      discoveryDigest(canonicalJson(unsigned)), signature)) return fail('native direct discovery signature invalid');
+      discoveryDigest(canonicalJson(unsigned)), signature)) return fail(direct
+        ? 'native direct discovery signature invalid' : 'native discovery signature invalid');
   }
-  const observedText = current ? text(row.observedText) : undefined;
+  const observedText = signedDirect ? text(row.observedText) : undefined;
+  const taskText = currentTaskText ? row.taskText : undefined;
+  if (taskText !== undefined && (typeof taskText !== 'string' || taskText.length > 4096)) return fail('invalid task claim text');
   const acquisition = object(row.acquisition, ['requestedUrl', 'finalUrl', 'httpStatus', 'links', 'imageSha256']);
   if (acquisition.requestedUrl !== url || acquisition.imageSha256 !== image.sha256
     || typeof acquisition.httpStatus !== 'number' || !Number.isInteger(acquisition.httpStatus)
@@ -128,14 +158,15 @@ function readDiscovery(root: string, value: unknown, direct: boolean, requireCur
     || Object.keys(acquisition.links).length !== acquisition.links.length) return fail('invalid observed links');
   const links = acquisition.links.map(publicDiscoveryUrl);
   if (new Set(links).size !== links.length) return fail('duplicate observed links');
-  const linkLabels = current ? observedLinkLabels(row.linkLabels, links) : undefined;
+  const linkLabels = signedDirect ? observedLinkLabels(row.linkLabels, links) : undefined;
   const observation = { url, finalUrl: publicDiscoveryUrl(acquisition.finalUrl), links };
   if (entry !== undefined) validateDirectDiscoveryLinks(entry, observation);
   const png = decodePng(read(root, image));
   if (png.width !== 1280 || png.height !== 900) return fail('discovery capture viewport differs');
-  return requireCurrent && observedText !== undefined
-    ? { ...observation, observedText, capturedAt: text(row.capturedAt), linkLabels: linkLabels ?? [] }
-    : observation;
+  if (!requireCurrent) return observation;
+  return observedText === undefined ? { ...observation, capturedAt: text(row.capturedAt) }
+    : { ...observation, observedText, ...(taskText === undefined ? {} : { taskText }),
+      capturedAt: text(row.capturedAt), linkLabels: linkLabels ?? [] };
 }
 function observedLinkLabels(value: unknown, links: readonly string[]): readonly ObservedSearchResult[] {
   if (!Array.isArray(value) || value.length > 2000 || Object.keys(value).length !== value.length) return fail('invalid observed link labels');
@@ -156,4 +187,7 @@ export function readCurrentDirectDiscoveryEntry(root: string, receipt: unknown):
 }
 export function readStrictDiscoveryNavigation(root: string, receipt: unknown): DiscoveryObservation {
   return readDiscovery(root, receipt, false);
+}
+export function readCurrentDiscoveryNavigation(root: string, receipt: unknown): DiscoveryObservation {
+  return readDiscovery(root, receipt, false, true);
 }

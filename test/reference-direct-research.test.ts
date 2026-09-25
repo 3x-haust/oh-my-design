@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { withBrowser } from '../core/render/index.ts';
 import { captureReferenceNavigation } from '../core/ref/navigation-capture.ts';
+import { canonicalJson } from '../core/ref/board-artifacts.ts';
 import { parseReferenceResearch, publishReferenceResearch, readPublishedReferenceResearch,
   validateReferenceResearch } from '../core/ref/reference-research.ts';
+import { signNativeObservation } from '../core/runtime/self-signed-activation.ts';
 import { ADMISSION_SOURCE_SHA, admissionHash, designAdmissionFixture } from './helpers/design-admission.ts';
 import { discoveryBrowser, directoryHtml } from './helpers/discovery-capture.ts';
 import { directResearch } from './helpers/direct-research.ts';
@@ -111,6 +113,100 @@ test('direct reachability refuses a legacy navigation record even at a current c
     fixture.writer.write(path, bytes);
     const input = { ...research, domainReference: { ...research.domainReference, navigation: [{ ...hop, capture: { path, sha256 } }] } };
     assert.throws(() => validateReferenceResearch(fixture.root, parseReferenceResearch(input), options), /REFERENCE_DISCOVERY/);
+  });
+});
+
+test('current research refuses an unsigned v2 navigation hop that reaches a direct root', async t => {
+  const fixture = designAdmissionFixture(t);
+  await withBrowser(async browser => {
+    const hopUrl = 'https://intermediate.example/tasks';
+    const research = await directResearch(browser, fixture, hopUrl);
+    const observed = discoveryBrowser(browser, { url: hopUrl, html: directoryHtml(fixture.domain.source) });
+    const hop = await captureReferenceNavigation(observed.browser, hopUrl, 'domain', fixture.writer);
+    const record = JSON.parse(readFileSync(join(fixture.root, hop.capture.path), 'utf8'));
+    const { signature: _signature, ...unsigned } = record;
+    const bytes = JSON.stringify({ ...unsigned, schema: 'reference-navigation-capture-v2' });
+    const sha256 = admissionHash(bytes);
+    const path = `.omd/discovery/domain/navigation/${sha256}.json`;
+    fixture.writer.write(path, bytes);
+    const input = { ...research, domainReference: { ...research.domainReference,
+      navigation: [{ ...hop, capture: { path, sha256 } }] } };
+    assert.throws(() => validateReferenceResearch(fixture.root, parseReferenceResearch(input), options),
+      /current native discovery signature required/);
+  });
+});
+
+test('current research refuses a signed navigation hop older than seven days', async t => {
+  const fixture = designAdmissionFixture(t);
+  await withBrowser(async browser => {
+    const hopUrl = 'https://intermediate.example/tasks';
+    const research = await directResearch(browser, fixture, hopUrl);
+    const observed = discoveryBrowser(browser, { url: hopUrl, html: directoryHtml(fixture.domain.source) });
+    const hop = await captureReferenceNavigation(observed.browser, hopUrl, 'domain', fixture.writer);
+    const record = JSON.parse(readFileSync(join(fixture.root, hop.capture.path), 'utf8'));
+    const { signature: _signature, ...unsigned } = record;
+    const stale = { ...unsigned, capturedAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString() };
+    const bytes = JSON.stringify({ ...stale,
+      signature: signNativeObservation(fixture.root, stale.schema, admissionHash(canonicalJson(stale))) });
+    const sha256 = admissionHash(bytes);
+    const path = `.omd/discovery/domain/navigation/${sha256}.json`;
+    fixture.writer.write(path, bytes);
+    const input = { ...research, domainReference: { ...research.domainReference,
+      navigation: [{ ...hop, capture: { path, sha256 } }] } };
+    assert.throws(() => validateReferenceResearch(fixture.root, parseReferenceResearch(input), options),
+      /REFERENCE_RESEARCH_NAVIGATION_STALE/);
+  });
+});
+
+test('current research refuses a signed navigation hop from before route publication', async t => {
+  const fixture = designAdmissionFixture(t);
+  await withBrowser(async browser => {
+    const hopUrl = 'https://intermediate.example/tasks';
+    const research = await directResearch(browser, fixture, hopUrl);
+    const observed = discoveryBrowser(browser, { url: hopUrl, html: directoryHtml(fixture.domain.source) });
+    const hop = await captureReferenceNavigation(observed.browser, hopUrl, 'domain', fixture.writer);
+    const record = JSON.parse(readFileSync(join(fixture.root, hop.capture.path), 'utf8'));
+    const { signature: _signature, ...unsigned } = record;
+    const capturedAt = Date.now() - 60_000;
+    const earlier = { ...unsigned, capturedAt: new Date(capturedAt).toISOString() };
+    const bytes = JSON.stringify({ ...earlier,
+      signature: signNativeObservation(fixture.root, earlier.schema, admissionHash(canonicalJson(earlier))) });
+    const sha256 = admissionHash(bytes);
+    const path = `.omd/discovery/domain/navigation/${sha256}.json`;
+    fixture.writer.write(path, bytes);
+    const pointer = join(fixture.root, '.omd/route.json');
+    writeFileSync(pointer, '{}');
+    utimesSync(pointer, new Date(capturedAt + 30_000), new Date(capturedAt + 30_000));
+    const input = { ...research, domainReference: { ...research.domainReference,
+      navigation: [{ ...hop, capture: { path, sha256 } }] } };
+    assert.throws(() => validateReferenceResearch(fixture.root, parseReferenceResearch(input), options),
+      /REFERENCE_RESEARCH_NAVIGATION_STALE/);
+  });
+});
+
+test('current research accepts a signed gallery visit and refuses the same visit forged as v2', async t => {
+  const fixture = designAdmissionFixture(t);
+  await withBrowser(async browser => {
+    const research = await directResearch(browser, fixture);
+    const galleryUrl = fixture.gallery.source;
+    const observed = discoveryBrowser(browser, { url: galleryUrl, html: directoryHtml(fixture.source.source) });
+    const visit = await captureReferenceNavigation(observed.browser, galleryUrl, 'design', fixture.writer);
+    const source = research.designReference.sources[0];
+    assert.ok(source);
+    const current = { ...research, designReference: { ...research.designReference,
+      sources: [{ ...source, discovery: { ...source.discovery, ...visit } }] } };
+    assert.doesNotThrow(() => validateReferenceResearch(fixture.root, parseReferenceResearch(current), options));
+
+    const record = JSON.parse(readFileSync(join(fixture.root, visit.capture.path), 'utf8'));
+    const { signature: _signature, ...unsigned } = record;
+    const bytes = JSON.stringify({ ...unsigned, schema: 'reference-navigation-capture-v2' });
+    const sha256 = admissionHash(bytes);
+    const path = `.omd/discovery/design/navigation/${sha256}.json`;
+    fixture.writer.write(path, bytes);
+    const forged = { ...current, designReference: { ...current.designReference,
+      sources: [{ ...source, discovery: { ...source.discovery, ...visit, capture: { path, sha256 } } }] } };
+    assert.throws(() => validateReferenceResearch(fixture.root, parseReferenceResearch(forged), options),
+      /current native discovery signature required/);
   });
 });
 

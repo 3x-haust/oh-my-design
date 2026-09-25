@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
-import { captureReferenceNavigation } from '../core/ref/navigation-capture.ts';
+import { captureReferenceNavigation, readReferenceDiscoveryAttempt } from '../core/ref/navigation-capture.ts';
 import { executeReferenceSearch, readSearchExecution } from '../core/ref/search-execution.ts';
 import { withBrowser } from '../core/render/index.ts';
 import { observeDocumentResponses } from '../core/ref/document-observation.ts';
@@ -13,6 +13,20 @@ const searchUrl = 'https://www.google.com/search?q=task';
 const directoryUrl = 'https://directory.example/tasks';
 const destination = 'https://final-item.example/';
 const unreachable = (value: never): never => assert.fail(`Unexpected scenario: ${String(value)}`);
+
+function assertOnlyFailedDirectAttempt(root: string): void {
+  const directory = join(root, '.omd/discovery/domain');
+  assert.deepEqual(readdirSync(directory), ['attempts'], 'failed navigation must retain no image, entry, or visit');
+  const names = readdirSync(join(directory, 'attempts'));
+  assert.equal(names.length, 1);
+  const name = names[0]; assert.ok(name);
+  assert.match(name, /^[a-f0-9]{64}\.json$/);
+  const attempt = readReferenceDiscoveryAttempt(root, {
+    path: `.omd/discovery/domain/attempts/${name}`, sha256: name.slice(0, -5),
+  });
+  assert.equal(attempt.outcome, 'unavailable');
+  assert.equal(attempt.researchLane, 'domain');
+}
 
 for (const route of ['direct', 'search'] as const) for (const sameUrl of [false, true]) for (const finalStatus of [200, 403]) {
   test(`${route} binds final HTTP ${finalStatus} after ${sameUrl ? 'same' : 'different'}-URL document replacement`, async t => {
@@ -33,7 +47,7 @@ for (const route of ['direct', 'search'] as const) for (const sameUrl of [false,
           const capture = captureReferenceNavigation(scenario.browser, initialUrl, 'domain', writer, 'public-directory');
           if (finalStatus === 403) {
             await assert.rejects(capture, /successful native HTTP/);
-            assert.equal(existsSync(join(root, '.omd/discovery')), false);
+            assertOnlyFailedDirectAttempt(root);
           } else {
             const receipt = await capture;
             const native = JSON.parse(readFileSync(join(root, receipt.capture.path), 'utf8'));
@@ -71,7 +85,7 @@ for (const route of ['direct', 'search'] as const) {
         case 'direct':
           await assert.rejects(captureReferenceNavigation(scenario.browser, url, 'domain', writer, 'public-directory'), /successful native HTTP/);
           assert.equal(scenario.captures.length, 0);
-          assert.equal(existsSync(join(root, '.omd/discovery')), false);
+          assertOnlyFailedDirectAttempt(root);
           break;
         case 'search': {
           const receipt = await executeReferenceSearch(scenario.browser, { lane: 'domain', query: 'task', url, queryParam: 'q' }, writer);
@@ -142,7 +156,7 @@ for (const route of ['direct', 'search'] as const) {
       switch (route) {
         case 'direct':
           await assert.rejects(captureReferenceNavigation(scenario.browser, url, 'domain', writer, 'public-directory'), /both bounded captures/);
-          assert.equal(existsSync(join(root, '.omd/discovery')), false);
+          assertOnlyFailedDirectAttempt(root);
           break;
         case 'search': {
           const receipt = await executeReferenceSearch(scenario.browser, { lane: 'domain', query: 'task', url, queryParam: 'q' }, writer);

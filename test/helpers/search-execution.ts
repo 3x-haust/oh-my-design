@@ -28,7 +28,7 @@ export function testSearchReceipt(root: string, lane: 'domain' | 'design', query
     return { path, sha256 };
   };
   const url = new URL('https://www.google.com/search'); url.searchParams.set('q', query);
-  const unsigned = { schema: 'reference-search-execution-v2', lane, query, queryParam: 'q', requestedUrl: url.href, finalUrl: url.href,
+  const unsigned = { schema: 'reference-search-execution-v3', lane, query, queryParam: 'q', requestedUrl: url.href, finalUrl: url.href,
     provider: url.hostname, observedAt, status: failed ? 'http-error' : 'page-observed', httpStatus: failed ? 403 : 200,
     links, results: links.map(url => ({ url, text: resultText })), capture: save(testPng(), 'png'), error: failed ? 'HTTP 403' : null,
     limitations: 'observed-links-not-ranked-results; no-clicks; no-authentication; not-provider-attested' };

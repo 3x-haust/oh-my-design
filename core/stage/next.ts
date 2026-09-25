@@ -7,6 +7,7 @@ import { unconfirmedPlanningStatements, validateDomainBrief } from '../domain/do
 import { resolveRunState } from './contract.ts';
 import { stageArtifactProblems } from './output.ts';
 import { referenceInterpretationWork, referenceResearchWork } from './reference-work.ts';
+import { referenceDiscoveryWork } from '../ref/discovery-work.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 
 /** Fresh and interrupted runs use the same current-disk work pointer. No artifacts are fabricated. */
@@ -44,28 +45,33 @@ export function nextStageWork(root: string, packRoot: string, invocation: Projec
       benchmarkRequired: route.gates.includes('greenfield-task-flow-benchmark'), expectedRequest: route.request }) : null;
   const missingReferenceBoard = stage === 'reference-board' && incomplete?.present === false
     && entry?.blockers.length === 0 && route.references.decision === 'discover';
+  const discoveryWork = missingReferenceBoard ? referenceDiscoveryWork(root, route) : null;
   return {
     schema: 'stage-next-v1', meaning: 'next-work-not-completion', deliveryMode: route.deliveryMode ?? 'implementation',
     stage, owner: brief?.owner ?? null,
-    progress: { routeSha256: adaptiveRouteRecordSha256(route), validatedStages: outputs
+    progress: { routeSha256: adaptiveRouteRecordSha256(route), workSha256: discoveryWork?.workSha256 ?? null, validatedStages: outputs
       .filter(s => ['domain', 'frame', 'reference-board', 'copy', 'composition'].includes(s.stage)
         && s.problems.length === 0 && !(s.stage === 'domain' && planningBlocksProduction)
         && s.entry.blockers.length === 0)
       .map(s => s.stage) },
-    action: planningBlocksProduction ? 'resolve-planning-evidence' : stage === null ? 'validate-selected-gates' : incomplete?.present ? 'repair-output' : 'author-output',
+    action: planningBlocksProduction ? 'resolve-planning-evidence' : stage === null ? 'validate-selected-gates'
+      : discoveryWork?.status === 'action' ? 'acquire-reference'
+        : discoveryWork?.status === 'exhausted' ? 'resolve-external-blocker'
+          : incomplete?.present ? 'repair-output' : 'author-output',
     problems: stage === null ? [] : stageArtifactProblems(root, stage, invocation),
     entryBlockers: entry?.blockers ?? [], planning,
-    next: missingReferenceBoard
-      ? 'omd ref discover-plan --json'
+    next: discoveryWork !== null
+      ? discoveryWork.next
       : stage === null
       ? route.deliveryMode === 'design-only' ? 'omd completion design-check --input .omd/design-handoff.json --json' : 'omd guard production --json'
       : `omd brief ${stage} --check --json`,
     schemas: brief?.schemas ?? [], contracts: brief?.contracts ?? [], judgedBy: brief?.judgedBy ?? [],
     instruction: planningBlocksProduction
       ? 'Check each statement against the original user request/artifacts. Attach exact userEvidence only where genuinely supported. If not supplied, ask the user one concrete question quoting these statements. Do not infer confirmation, silently narrow scope, or replace the question with completion diagnostics.'
-      : missingReferenceBoard
-        ? 'Execute the discovery plan instead of repeating brief or reference checks. Capture multiple real domain-service flows and separate design-quality gallery references, retain only evidence with useful observations, then use omd schema reference-board and publish the board with omd ref board --input <candidate-assemblies.json>. Run checks only after the owned board artifact changes, then recompute stage next.'
+      : discoveryWork !== null
+        ? discoveryWork.instruction
         : 'Read and deliver this stage\'s contracts, satisfy entry, execute the owned work, then its applicable output checks. Recompute stage next after changes. Remaining output quality, reference currentness, candidates, rendered evidence and independent review still require their own gates; this pointer never certifies completion.',
+    referenceWork: discoveryWork,
     ...(research ?? interpretation ?? {}),
   };
 }

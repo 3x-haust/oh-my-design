@@ -2,8 +2,8 @@ import type { Page } from 'playwright';
 import { captureFrozenSearchText } from './search-frozen-capture.ts';
 import { finalizeSearchRenderedState, type RawSearchRenderedState, type SearchPixelSample } from './search-pixel-contrast.ts';
 
-export async function inspectRenderedState(page: Page): Promise<RawSearchRenderedState> {
-  const rendered = await page.locator('body').evaluate(body => {
+export async function inspectRenderedState(page: Page, purpose: 'search' | 'discovery' = 'search'): Promise<RawSearchRenderedState> {
+  const rendered = await page.locator('body').evaluate((body, purpose) => {
     const pointerlessOverlays = Array.from(document.querySelectorAll<HTMLElement>('*')).flatMap(element => {
       const style = getComputedStyle(element);
       if (style.pointerEvents !== 'none' || !['absolute', 'fixed', 'sticky'].includes(style.position)
@@ -48,7 +48,8 @@ export async function inspectRenderedState(page: Page): Promise<RawSearchRendere
       anchors.set(element, { href: parsed.href, text: [], left: box.left, right: box.right, top: box.top, bottom: box.bottom });
     }
 
-    const visibleText: Array<{ id: number; value: string }> = [];
+    const visibleText: Array<{ id: number; value: string; taskClaim: boolean }> = [];
+    const mainContext: string[] = [];
     const uncertain: SearchPixelSample[] = [];
     const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT);
     for (let node = walker.nextNode(); node; node = walker.nextNode()) {
@@ -232,20 +233,52 @@ export async function inspectRenderedState(page: Page): Promise<RawSearchRendere
       range.detach();
       if (!textVisible) continue;
       const anchor = parent.closest<HTMLAnchorElement>('a[href]'); const record = anchor ? anchors.get(anchor) : undefined;
-      const id = visibleText.length; visibleText.push({ id, value });
+      const id = visibleText.length;
+      let chromeText = Boolean(parent.closest('header, nav, footer, [role="navigation"], [role="banner"], [role="contentinfo"], [role="dialog"], [aria-modal="true"]'));
+      for (let ancestor: HTMLElement | null = parent; ancestor && ancestor !== body; ancestor = ancestor.parentElement) {
+        chromeText ||= /(?:^|[-_\s])(?:cookie|consent|privacy|accessib\w*|toolbar|breadcrumb|skip)(?:$|[-_\s])/iu
+          .test(ancestor.id + ' ' + ancestor.className);
+      }
+      const taskClaim = !anchor && !chromeText;
+      visibleText.push({ id, value, taskClaim });
+      if (!anchor && parent.closest('main') && !parent.closest('footer, [role="contentinfo"], [role="dialog"]')
+        && mainContext.join(' ').length < 800) mainContext.push(value);
       if (unknownBackground) uncertain.push({ id, href: record?.href ?? null,
         minimumChangedPixels: Math.min(256, Math.max(12, [...value].filter(character => !/\s/u.test(character)).length * 4)),
         rects: rects.map(rect => ({ left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom })) });
       if (record) record.text.push(value);
     }
+    const taskContext = mainContext.join(' ').toLowerCase();
     return {
       anchors: [...anchors.entries()].flatMap(([element, anchor]) => {
-        if (anchor.text.length > 0) return [{ ...anchor, text: anchor.text.join(' ').slice(0, 4096) }];
+        if (anchor.text.length > 0) {
+          const label = anchor.text.join(' ').slice(0, 4096);
+          const navigationRegion = Boolean(element.closest('header, nav, [role="navigation"], [role="banner"]'));
+          const chromeLabel = /\b(?:home|all|images|videos|maps|news|about|contact|careers|company|settings|cookie|privacy|accessibility|terms|feedback|account|sign in|log in)\b|홈|전체|이미지|동영상|지도|뉴스|소개|문의|채용|쿠키|접근성|개인정보|설정|약관|로그인|공지/u.test(label.toLowerCase());
+          const taskTerms = (label.toLowerCase().match(/[가-힣]{2,}|[a-z]{4,}/gu) ?? [])
+            .filter(term => !/^(?:service|services|health|living|more|menu|portal|general|nhs|about|contact|company|home|all)$/u.test(term));
+          const taskNavigation = taskTerms.some(term => {
+            if (/[가-힣]/u.test(term)) return taskContext.includes(term) || taskContext.includes(term.slice(0, 2));
+            const stem = term.replace(/(?:es|s)$/u, '');
+            return stem.length >= 4 && (taskContext.match(/[a-z]{4,}/gu) ?? [])
+              .some(contextTerm => contextTerm === stem || contextTerm.startsWith(term)
+                || term === 'apply' && contextTerm.startsWith('applicat'));
+          });
+          let chrome = Boolean(element.closest('footer, [role="contentinfo"], [role="dialog"], [aria-modal="true"]'))
+            || (purpose === 'search'
+              ? navigationRegion
+              : navigationRegion && (chromeLabel || !taskNavigation));
+          for (let ancestor: Element | null = element; ancestor && ancestor !== body; ancestor = ancestor.parentElement) {
+            chrome ||= /(?:^|[-_\s])(?:cookie|consent|privacy|accessib\w*|toolbar|breadcrumb|skip)(?:$|[-_\s])/iu
+              .test(`${ancestor.id} ${ancestor.className}`);
+          }
+          return [{ ...anchor, text: label, chrome, navigation: navigationRegion }];
+        }
         return [];
       }).slice(0, 2000),
       visibleText, uncertain, viewport: { width: innerWidth, height: innerHeight },
     };
-  });
+  }, purpose);
   return { anchors: rendered.anchors, body: await page.locator('body').innerText(), visibleText: rendered.visibleText, uncertain: rendered.uncertain, viewport: rendered.viewport, url: page.url() };
 }
 

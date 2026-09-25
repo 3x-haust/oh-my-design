@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -8,6 +8,8 @@ import { executeReferenceSearch, observedSearchTargets, parseSearchInput, readSe
 import { withBrowser } from '../core/render/index.ts';
 import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
 import { testSearchReceipt } from './helpers/search-execution.ts';
+import { canonicalJson } from '../core/ref/board-artifacts.ts';
+import { signNativeObservation } from '../core/runtime/self-signed-activation.ts';
 
 const input = { lane: 'design', query: 'task panels', url: 'https://www.google.com/search?q=task+panels', queryParam: 'q' };
 function fixture(t: { after(fn: () => void): void }) {
@@ -85,7 +87,7 @@ test('real isolated browser execution records actual DOM links and pixels, and p
   }
 });
 
-test('late search inspection failure records the diagnostic without an orphan screenshot', async t => {
+test('late search inspection failure preserves a trailing newline in its signed diagnostic', async t => {
   const root = fixture(t);
   const writer = createTestProjectWriteAdapter(root);
   let screenshotObserved = false;
@@ -104,7 +106,7 @@ test('late search inspection failure records the diagnostic without an orphan sc
           page.screenshot = async options => { const bytes = await screenshot(options); screenshotObserved = true; return bytes; };
           const locate = page.locator.bind(page);
           page.locator = (...locatorArgs: Parameters<typeof page.locator>) => {
-            if (locatorArgs[0] === 'body' && screenshotObserved) throw new Error('test-owned link inspection failure');
+            if (locatorArgs[0] === 'body' && screenshotObserved) throw new Error('test-owned link inspection failure\n');
             return locate(...locatorArgs);
           };
           return page;
@@ -116,7 +118,7 @@ test('late search inspection failure records the diagnostic without an orphan sc
     const execution = readSearchExecution(root, receipt, 'design');
     assert.equal(screenshotObserved, true);
     assert.equal(execution.status, 'navigation-error');
-    assert.equal(execution.error, 'test-owned link inspection failure');
+    assert.equal(execution.error, 'test-owned link inspection failure\n');
     assert.equal(execution.capture, null);
     assert.deepEqual(readdirSync(join(root, '.omd/discovery/design')), [receipt.path.split('/').at(-1)]);
     assert.equal(existsSync(join(root, '.omd/refs')), false);
@@ -140,6 +142,24 @@ test('historical and current exact receipt identities read the same unmodified e
   assert.throws(() => readSearchExecution(root, current, 'design'), /changed/);
 });
 
+test('a signed v2 search stays readable but cannot establish current result provenance', t => {
+  const root = fixture(t);
+  const source = 'https://service.example/task';
+  const latest = testSearchReceipt(root, 'domain', 'service task', [source]);
+  const current = JSON.parse(readFileSync(join(root, latest.path), 'utf8')) as Record<string, unknown>;
+  const { signature: _signature, ...fields } = current;
+  const unsigned = { ...fields, schema: 'reference-search-execution-v2' };
+  const legacy = { ...unsigned, signature: signNativeObservation(root, unsigned.schema,
+    createHash('sha256').update(canonicalJson(unsigned)).digest('hex')) };
+  const bytes = `${JSON.stringify(legacy, null, 2)}\n`;
+  const sha256 = createHash('sha256').update(bytes).digest('hex');
+  const receipt = { path: `.omd/discovery/domain/search-${sha256}.json`, sha256 };
+  mkdirSync(join(root, '.omd/discovery/domain'), { recursive: true });
+  writeFileSync(join(root, receipt.path), bytes);
+  assert.equal(readSearchExecution(root, receipt, 'domain').schema, 'reference-search-execution-v2');
+  assert.throws(() => validateSearchCoverage(root, 'domain', ['service task'], [receipt], [source]), /current signed search execution/);
+});
+
 test('a self-hashed search receipt without the native execution signature is refused', t => {
   const root = fixture(t);
   const receipt = testSearchReceipt(root, 'design', input.query, ['https://www.pinterest.com/pin/123/']);
@@ -151,6 +171,26 @@ test('a self-hashed search receipt without the native execution signature is ref
   mkdirSync(join(root, '.omd/discovery/design'), { recursive: true });
   writeFileSync(join(root, path), bytes);
   assert.throws(() => readSearchExecution(root, { path, sha256 }, 'design'), /signature invalid/);
+});
+
+test('a changed signed failure reason is refused even with a new receipt hash, and invalid reasons stay invalid', t => {
+  const root = fixture(t);
+  const receipt = testSearchReceipt(root, 'design', input.query, [], true);
+  const record = JSON.parse(readFileSync(join(root, receipt.path), 'utf8'));
+  assert.equal(readSearchExecution(root, receipt, 'design').error, 'HTTP 403');
+  for (const [error, expected] of [
+    ['HTTP 404\n', /signature invalid/],
+    [' \n ', /missing\/oversized text/],
+    ['x'.repeat(4097), /missing\/oversized text/],
+  ] as const) {
+    record.error = error;
+    const bytes = Buffer.from(`${JSON.stringify(record, null, 2)}\n`);
+    const sha256 = createHash('sha256').update(bytes).digest('hex');
+    const path = `.omd/discovery/design/search-${sha256}.json`;
+    mkdirSync(join(root, '.omd/discovery/design'), { recursive: true });
+    writeFileSync(join(root, path), bytes);
+    assert.throws(() => readSearchExecution(root, { path, sha256 }, 'design'), expected);
+  }
 });
 
 test('challenge detection rejects strong challenge text without treating ordinary bot-related search content as blocked', () => {
@@ -177,6 +217,76 @@ test('similarity navigation remains rooted in a successful search, never an unro
   assert.throws(() => validateSearchCoverage(root, 'design', [input.query], [receipt], [c], [{ url: b, finalUrl: b, links: [c] }, { url: c, finalUrl: c, links: [b] }]), /not an observed/);
   const failed = testSearchReceipt(root, 'design', input.query, [a], true);
   assert.throws(() => validateSearchCoverage(root, 'design', [input.query], [failed], [c], hops), /not an observed/);
+});
+
+test('a visible but unrelated search header link cannot establish research reachability', t => {
+  const root = fixture(t);
+  const target = 'https://support.microsoft.com/topic/accessibility-in-bing';
+  const receipt = testSearchReceipt(root, 'domain', 'medication order', [target], false,
+    new Date().toISOString(), 'Accessibility help');
+  assert.throws(() => validateSearchCoverage(root, 'domain', ['medication order'], [receipt], [target]), /not an observed search link/);
+});
+
+test('short Korean service names and task synonyms remain valid search results', t => {
+  const root = fixture(t);
+  for (const row of [
+    { query: '웰로', url: 'https://www.welfarehello.com/recommend-policy/', label: '웰로 맞춤형 정책 추천' },
+    { query: 'medication order', url: 'https://www.walgreens.com/topic/pharmacy/prescription-refills.jsp',
+      label: 'Walgreens Prescription Refills' },
+  ]) {
+    const receipt = testSearchReceipt(root, 'domain', row.query, [row.url], false, new Date().toISOString(), row.label);
+    assert.equal(validateSearchCoverage(root, 'domain', [row.query], [receipt], [row.url]).executed, 1);
+  }
+});
+
+test('an unrelated long news title does not become a welfare service result', t => {
+  const root = fixture(t);
+  const source = 'https://news.example/story';
+  const receipt = testSearchReceipt(root, 'domain', '복지로', [source], false,
+    new Date().toISOString(), 'Trending News Today');
+  assert.throws(() => validateSearchCoverage(root, 'domain', ['복지로'], [receipt], [source]), /not an observed search link/);
+});
+
+test('explicit-market reachability rejects an unrelated substantive title', t => {
+  const root = fixture(t);
+  const source = 'https://weather.example/forecast';
+  const receipt = testSearchReceipt(root, 'domain', '복지로', [source], false,
+    new Date().toISOString(), 'Weather Forecast Tomorrow');
+  assert.throws(() => validateSearchCoverage(root, 'domain', ['복지로'], [receipt], [source], [], false),
+    /not an observed search link/);
+});
+
+test('unscoped tasks can follow useful service titles without exact query words', t => {
+  for (const [query, label] of [
+    ['flight booking', 'Airline Ticket Reservations'],
+    ['appointment scheduling', 'Zocdoc Book a Doctor'],
+    ['customer support', 'Customer Support Portal'],
+  ] as const) {
+    const root = fixture(t);
+    const source = 'https://service.example/task';
+    const receipt = testSearchReceipt(root, 'domain', query, [source], false, new Date().toISOString(), label);
+    assert.doesNotThrow(() => validateSearchCoverage(root, 'domain', [query], [receipt], [source]));
+  }
+});
+
+test('a search help page is not a flight-booking service candidate', t => {
+  const root = fixture(t);
+  const source = 'https://support.microsoft.com/topic/bing-search';
+  const receipt = testSearchReceipt(root, 'domain', 'flight booking', [source], false,
+    new Date().toISOString(), 'Bing Search Help Center');
+  assert.throws(() => validateSearchCoverage(root, 'domain', ['flight booking'], [receipt], [source]), /not an observed search link/);
+});
+
+test('a signed search from before route publication cannot satisfy current research', t => {
+  const root = fixture(t);
+  const source = 'https://service.example/task';
+  const receipt = testSearchReceipt(root, 'domain', 'service task', [source]);
+  mkdirSync(join(root, '.omd'), { recursive: true });
+  const routePath = join(root, '.omd/route.json');
+  writeFileSync(routePath, '{}');
+  const later = new Date(Date.now() + 1000);
+  utimesSync(routePath, later, later);
+  assert.throws(() => validateSearchCoverage(root, 'domain', ['service task'], [receipt], [source]), /after the route publication is required/);
 });
 test('written query lists, wrong-lane receipts, unobserved entries, stale bytes and symlinks fail closed', t => {
   const root = fixture(t);

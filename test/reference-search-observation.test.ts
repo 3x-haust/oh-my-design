@@ -67,12 +67,30 @@ test('hidden result anchors cannot turn a navbar-only capture into observed disc
     <section style="opacity:0"><a href="${redirect}">Transparent result</a></section>
     <section style="display:none"><a href="https://hidden.example/">Removed result</a></section>
     <a style="visibility:hidden" href="https://invisible.example/">Invisible result</a>` });
-  assert.deepEqual(h.execution.links, ['https://www.bing.com/images']);
-  assert.deepEqual(h.execution.results, [{ url: 'https://www.bing.com/images', text: 'Images' }]);
+  assert.deepEqual(h.execution.links, []);
+  assert.deepEqual(h.execution.results, []);
   assert.equal(h.execution.status, 'empty-observation');
   assert.equal(searchObserved(h.execution), false);
   assert.ok(h.execution.capture);
   assert.throws(() => validateSearchCoverage(h.root, 'domain', [input.query], [h.receipt], [target]), /not an observed/);
+});
+
+test('a task-word header help link is not a captured search result', async t => {
+  const help = 'https://support.microsoft.com/topic/accessibility-in-bing';
+  const request = { lane: 'domain' as const, query: 'medication order',
+    url: 'https://www.bing.com/search?q=medication+order', queryParam: 'q' };
+  const h = await observe(t, { input: request,
+    html: `<header><a href="${help}">Medication order help</a></header><main><h1>No task results</h1></main>` });
+  assert.deepEqual(h.execution.links, []);
+  assert.equal(h.execution.status, 'empty-observation');
+  assert.throws(() => validateSearchCoverage(h.root, 'domain', [request.query], [h.receipt], [help]), /not an observed/);
+});
+
+test('search navigation tabs stay chrome even when nested inside main', async t => {
+  const target = 'https://www.gov.uk/browse/benefits';
+  const h = await observe(t, { html: `<main><nav><a href="${target}">Benefits result tab</a></nav><h1>No task results</h1></main>` });
+  assert.deepEqual(h.execution.links, []);
+  assert.equal(h.execution.status, 'empty-observation');
 });
 
 test('only canonical visible HTTPS links are retained', async t => {
@@ -88,7 +106,7 @@ test('only canonical visible HTTPS links are retained', async t => {
     <a href="https://clipped.example/service" style="clip-path:circle(0)">Clipped away</a>
     <a href="https://contrast.example/service" style="color:white;background:white">No contrast</a>
   </main>` });
-  assert.deepEqual(h.execution.links, ['https://www.bing.com/images', valid]);
+  assert.deepEqual(h.execution.links, [valid]);
   assert.deepEqual(h.execution.results?.find(result => result.url === valid),
     { url: valid, text: 'Visible service' });
 });

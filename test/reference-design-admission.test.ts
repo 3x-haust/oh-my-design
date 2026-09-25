@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import test from 'node:test';
 import { parseReferenceResearch, publishReferenceResearch, validateReferenceResearch } from '../core/ref/reference-research.ts';
@@ -24,6 +24,13 @@ import { decodePng } from '../core/motion/energy.ts';
 import { referenceGrade } from '../core/ref/board-granularity.ts';
 
 const options = { expectedSourceContractSha256: ADMISSION_SOURCE_SHA, benchmarkRequired: false };
+
+function refreshSearchesAfterRoute(root: string, research: ReturnType<typeof designAdmissionFixture>['research']): void {
+  research.domainReference.searches = research.domainReference.queries.map(query =>
+    testSearchReceipt(root, 'domain', query, research.domainReference.sources.map(source => source.url)));
+  research.designReference.searches = research.designReference.queries.map(query =>
+    testSearchReceipt(root, 'design', query, research.designReference.sources.map(source => source.discovery.url)));
+}
 
 test('research publication rejects an extra legacy domain visual while preserving the existing board', t => {
   const fixture = designAdmissionFixture(t);
@@ -82,6 +89,7 @@ test('native gallery discovery keeps wrapper pixels outside refs/design and admi
   const { root, source, gallery, research, writer } = designAdmissionFixture(t);
   rmSync(gallery.path); rmSync(join(root, gallery.evidence.path));
   const invocation = publishTestAdaptiveRoute(root, inputSkeleton('product-route-input').skeleton);
+  refreshSearchesAfterRoute(root, research);
   const visit = await withBrowser(async browser => captureReferenceNavigation(
     discoveryBrowser(browser, { url: gallery.source, html: directoryHtml(source.source) }).browser,
     gallery.source, 'design', writer,
@@ -98,6 +106,7 @@ test('native gallery discovery keeps wrapper pixels outside refs/design and admi
 test('a visited gallery may retain only its actual UI image element without cropping', async t => {
   const { root, gallery, writer, research, board, receipt, refreshBoard } = designAdmissionFixture(t);
   const invocation = publishTestAdaptiveRoute(root, inputSkeleton('product-route-input').skeleton);
+  refreshSearchesAfterRoute(root, research);
   const source = gallery.source;
   const image = testPng(320, 200, 22);
   const html = `${directoryHtml('https://visual.example/task')}<img class="actual-ui" src="data:image/png;base64,${image.toString('base64')}" alt="Application screen">`;
@@ -221,6 +230,16 @@ test('selected discovery refuses a copied domain image with a gallery source dec
   }, createTestProjectRunInvocation(root)), /FRAGMENT_SOURCE/);
 });
 
+test('discovery PNG refusal names the gallery-item image capture recovery path', t => {
+  const { root } = designAdmissionFixture(t);
+  assert.throws(() => persistImageFragment(root, {
+    inputPath: '.omd/discovery/design/navigation/item.png',
+    provenance: { sourcePage: 'https://www.pinterest.com/pin/987654321/', captureRegion: 'App UI',
+      licenseStatus: 'unknown', rightsNotes: 'Study only', capturedAt: '2026-09-21T00:00:00.000Z' },
+    transfer: { visualRole: 'Layout', principles: ['Retain the real UI image.'] },
+  }, createTestProjectRunInvocation(root)), /ref add.*--selector.*UI image/);
+});
+
 test('selected discovery keeps legacy captures archival and excludes them from actionable briefs and boards', t => {
   const { root, source, domain, research, writer, board, refreshBoard } = designAdmissionFixture(t);
   const legacy = { ...source.ref, source: domain.source, component: 'legacy-domain', imagePath: domain.evidence.path };
@@ -279,18 +298,16 @@ test('research binds the retained component identity on the same source page', t
   assert.throws(() => validateReferenceResearch(root, parseReferenceResearch(research), options), /BOARD_SOURCE_COVERAGE/);
 });
 
-test('research accepts native navigation diagnostics in the discovery namespace', t => {
-  const { root, gallery, research, receipt } = designAdmissionFixture(t);
+test('research accepts signed native navigation diagnostics in the discovery namespace', async t => {
+  const { root, gallery, research, writer } = designAdmissionFixture(t);
   const start = 'https://www.pinterest.com/pin/987654321/';
-  const directory = '.omd/discovery/design/navigation'; mkdirSync(join(root, directory), { recursive: true });
-  const imagePath = `${directory}/hop.png`; copyFileSync(join(root, gallery.evidence.path), join(root, imagePath));
-  const capturePath = join(root, directory, 'hop.json');
-  writeFileSync(capturePath, JSON.stringify({ schema: 'reference-navigation-capture-v1', source: start, researchLane: 'design', kind: 'page',
-    capturedAt: '2026-09-21T00:00:00.000Z', imagePath,
-    acquisition: { requestedUrl: start, finalUrl: start, httpStatus: 200, links: [gallery.source], imageSha256: gallery.evidence.sha256 } }));
+  const visit = await withBrowser(async browser => captureReferenceNavigation(
+    discoveryBrowser(browser, { url: start, html: directoryHtml(gallery.source) }).browser,
+    start, 'design', writer,
+  ));
   const input = { ...research, designReference: { ...research.designReference,
     searches: [testSearchReceipt(root, 'design', 'visual task', [start])],
-    navigation: [{ url: start, evidence: receipt(join(root, imagePath)), capture: receipt(capturePath) }],
+    navigation: [visit],
   } };
   assert.doesNotThrow(() => validateReferenceResearch(root, parseReferenceResearch(input), options));
 });

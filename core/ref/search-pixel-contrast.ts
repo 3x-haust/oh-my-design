@@ -12,9 +12,10 @@ export type SearchPixelSample = Readonly<{
 }>;
 
 export type RawSearchRenderedState = Readonly<{
-  anchors: readonly Readonly<{ href: string; text: string; left: number; right: number; top: number; bottom: number }>[];
+  anchors: readonly Readonly<{ href: string; text: string; left: number; right: number; top: number; bottom: number; chrome: boolean;
+    navigation: boolean }>[];
   body: string;
-  visibleText: readonly Readonly<{ id: number; value: string }>[];
+  visibleText: readonly Readonly<{ id: number; value: string; taskClaim: boolean }>[];
   uncertain: readonly Readonly<SearchPixelSample & { href: string | null }>[];
   viewport: Readonly<{ width: number; height: number }>;
   url: string;
@@ -63,5 +64,7 @@ export function finalizeSearchRenderedState(raw: RawSearchRenderedState, bytes: 
   const rejectedHrefs = new Set(raw.uncertain.filter(sample => rejected.has(sample.id) && sample.href !== null)
     .map(sample => sample.href));
   return { anchors: raw.anchors.filter(anchor => !rejectedHrefs.has(anchor.href)), body: raw.body,
-    visibleText: raw.visibleText.filter(entry => !rejected.has(entry.id)).map(entry => entry.value).join('\n'), url: raw.url };
+    visibleText: raw.visibleText.filter(entry => !rejected.has(entry.id)).map(entry => entry.value).join('\n'),
+    taskText: raw.visibleText.filter(entry => entry.taskClaim && !rejected.has(entry.id)).map(entry => entry.value).join('\n'),
+    url: raw.url };
 }

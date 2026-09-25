@@ -93,6 +93,7 @@ export async function createPublicNetworkProxy(options: Readonly<{
     const closeUpstream = () => { clientClosed = true; upstream?.destroy(); };
     client.once('end', closeUpstream);
     client.once('close', closeUpstream);
+    client.on('error', closeUpstream);
     void (async () => {
       try {
         const destination = target(request.url);
@@ -102,7 +103,7 @@ export async function createPublicNetworkProxy(options: Readonly<{
         upstream = connected;
         sockets.add(connected);
         connected.once('close', () => sockets.delete(connected));
-        connected.once('error', () => client.destroy());
+        connected.on('error', () => client.destroy());
         connected.once('connect', () => {
           if (clientClosed || client.destroyed) { connected.destroy(); return; }
           client.write('HTTP/1.1 200 Connection Established\r\n\r\n');

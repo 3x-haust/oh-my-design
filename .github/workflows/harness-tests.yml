@@ -56,6 +56,7 @@ jobs:
           node --test --test-concurrency=1
           test/benchmark-native-publish.test.ts test/benchmark-dependency-snapshot.test.ts
           test/browser-rs-doctor-runtime.test.ts test/harness-v2-cli.test.ts
+          test/browser-rs-temporary.test.ts
           test/discovery-http-binding.test.ts test/cold-start-workflow.test.ts
           test/human-design-loop.test.ts test/static-direction-evidence.test.ts
       - name: Complete harness suite (including native Darwin publication)
@@ -68,7 +69,7 @@ jobs:
           suite_files=()
           for suite_file in test/*.test.ts; do
             # Already executed in full in the isolated step, not skipped or retried.
-            if [[ "$suite_file" != "test/harness-v2-cli.test.ts" && "$suite_file" != "test/discovery-http-binding.test.ts" && "$suite_file" != "test/cold-start-workflow.test.ts" && "$suite_file" != "test/human-design-loop.test.ts" && "$suite_file" != "test/static-direction-evidence.test.ts" ]]; then
+            if [[ "$suite_file" != "test/benchmark-native-publish.test.ts" && "$suite_file" != "test/benchmark-dependency-snapshot.test.ts" && "$suite_file" != "test/browser-rs-doctor-runtime.test.ts" && "$suite_file" != "test/browser-rs-temporary.test.ts" && "$suite_file" != "test/harness-v2-cli.test.ts" && "$suite_file" != "test/discovery-http-binding.test.ts" && "$suite_file" != "test/cold-start-workflow.test.ts" && "$suite_file" != "test/human-design-loop.test.ts" && "$suite_file" != "test/static-direction-evidence.test.ts" ]]; then
               suite_files+=("$suite_file")
             fi
           done

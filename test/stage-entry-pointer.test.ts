@@ -14,6 +14,7 @@ import { designJudgmentInput } from '../core/design/current-judgment.ts';
 import { readPersistedRoute } from '../core/route/index.ts';
 import { publishReferenceResearch } from '../core/ref/reference-research.ts';
 import { publishReferenceApplication, referenceApplicationPlan } from '../core/ref/reference-application.ts';
+import { testSearchReceipt } from './helpers/search-execution.ts';
 
 const pack = fileURLToPath(new URL('../core', import.meta.url));
 const deck = `# Copy deck
@@ -140,10 +141,10 @@ test('a missing reference board points to discovery work instead of repeating en
 
   const work = nextStageWork(root, pack, invocation);
   assert.equal(work.stage, 'reference-board');
-  assert.equal(work.action, 'author-output');
-  assert.equal(work.next, 'omd ref discover-plan --json');
-  assert.match(work.instruction, /multiple real domain-service flows/);
-  assert.match(work.instruction, /Run checks only after the owned board artifact changes/);
+  assert.equal(work.action, 'acquire-reference');
+  assert.equal(work.next, 'omd ref advance --json');
+  assert.equal(work.referenceWork?.status, 'action');
+  assert.match(work.referenceWork?.workSha256 ?? '', /^[a-f0-9]{64}$/);
 });
 
 test('board work repairs research before application and returns to research when a retained receipt changes', t => {
@@ -155,6 +156,10 @@ test('board work repairs research before application and returns to research whe
   input.strategyDecision.methods.push('reference-discovery', 'parallel-reference-acquisition');
   input.strategyDecision.skips = input.strategyDecision.skips.filter((skip: { id: string }) => !['scout', 'reference-board', 'reference-discovery'].includes(skip.id));
   const invocation = copyProject(f.root, input), route = readPersistedRoute(f.root, invocation);
+  f.research.domainReference.searches = f.research.domainReference.queries.map(query =>
+    testSearchReceipt(f.root, 'domain', query, f.research.domainReference.sources.map(source => source.url)));
+  f.research.designReference.searches = f.research.designReference.queries.map(query =>
+    testSearchReceipt(f.root, 'design', query, f.research.designReference.sources.map(source => source.discovery.url)));
   const options = { expectedSourceContractSha256: route.sourceContractSha256, benchmarkRequired: false, expectedRequest: route.request };
   const writer = createTestProjectWriteAdapter(f.root, invocation);
   writeFileSync(join(f.root, '.omd/scout.md'), '# Scoped reference observations\n');

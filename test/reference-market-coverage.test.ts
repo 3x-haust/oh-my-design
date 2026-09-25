@@ -15,7 +15,7 @@ import { inputSkeleton } from '../core/schema/inputs.ts';
 import { readPersistedRoute } from '../core/route/index.ts';
 import { publishTestAdaptiveRoute } from './helpers/project-write.ts';
 import { fallbackCoverage, fallbackGap, localSearchSource, marketContext as context,
-  marketDomainBrief as domainBrief, marketOptions as options } from './helpers/market-reference.ts';
+  marketDomainBrief as domainBrief, marketOptions as options, directRootAt } from './helpers/market-reference.ts';
 
 const DAY_FOR_TEST = 24 * 60 * 60 * 1000;
 
@@ -44,7 +44,7 @@ test('explicit-market v7 binds local sources and fallback to executed market evi
   const domainFourSource = { id: 'domain-4', url: domainFour.source, observedAt: new Date().toISOString().slice(0, 10),
     decision: 'Task order', finding: 'Review before submission', evidence: domainFour.evidence, capture: domainFour.capture };
   const domainQueries = ['복지로', '정부24 혜택알리미', '서울복지포털', '웰로'];
-  const designQueries = ['대한민국 public benefits benefit card', '한국 public benefits benefit card', 'South Korea public benefits benefit card'];
+  const designQueries = ['대한민국 복지 앱 UI 디자인', '한국 복지 앱 UI 디자인', 'South Korea 복지 앱 UI 디자인'];
   const input = { ...fixture.research, schema: REFERENCE_RESEARCH_SCHEMA, marketCoverage: null,
     domainReference: { ...fixture.research.domainReference, queries: domainQueries,
       searches: domainQueries.map(query => testSearchReceipt(fixture.root, 'domain', query,
@@ -74,6 +74,21 @@ test('explicit-market v7 binds local sources and fallback to executed market evi
     ], globalFallback: null } };
   const parsed = parseReferenceResearch({ ...input, marketCoverage: documented });
   assert.doesNotThrow(() => validateReferenceResearch(fixture.root, parsed, options));
+  const localCapturePath = join(fixture.root, fixture.domain.capture.path);
+  const localCaptureBytes = readFileSync(localCapturePath);
+  const englishOnly = JSON.parse(localCaptureBytes.toString('utf8')) as Record<string, unknown>;
+  delete englishOnly.visibleKoreanText;
+  const englishBytes = Buffer.from(JSON.stringify(englishOnly));
+  writeFileSync(localCapturePath, englishBytes);
+  try {
+    const englishSource = { ...input.domainReference.sources[0]!,
+      capture: { ...fixture.domain.capture, sha256: admissionHash(englishBytes) } };
+    assert.throws(() => validateReferenceResearch(fixture.root, parseReferenceResearch({
+      ...input, marketCoverage: documented,
+      domainReference: { ...input.domainReference,
+        sources: [englishSource, ...input.domainReference.sources.slice(1)] },
+    }), options), /MARKET_DOMAIN_LOCAL_RESULT_SCOPE/);
+  } finally { writeFileSync(localCapturePath, localCaptureBytes); }
   const firstLocal = documented.domain.localSources[0]; assert.ok(firstLocal);
   const oneLocal = { marketRegion: 'KR',
     domain: { localSources: [firstLocal],
@@ -154,6 +169,63 @@ test('explicit-market v7 binds local sources and fallback to executed market evi
       sources: [{ ...input.domainReference.sources[0], url: govKr.source,
         evidence: govKr.evidence, capture: govKr.capture }, ...input.domainReference.sources.slice(1)] },
   }), options));
+  const genericReceipt = testSearchReceipt(fixture.root, 'domain', domainQueries[0]!,
+    [fixture.domain.source], false, new Date().toISOString(), '바로가기');
+  const genericCoverage = structuredClone(documented);
+  genericCoverage.domain.localSources[0]!.provenanceReceiptSha256 = genericReceipt.sha256;
+  genericCoverage.domain.localSources.slice(1).forEach(source => {
+    source.provenanceReceiptSha256 = input.domainReference.searches[1]!.sha256;
+  });
+  genericCoverage.domain.globalFallback!.provenance.forEach(binding => {
+    binding.provenanceReceiptSha256 = input.domainReference.searches[1]!.sha256;
+  });
+  const genericSearches = [genericReceipt, ...input.domainReference.searches.slice(1)];
+  const genericInput = { ...input, marketCoverage: genericCoverage,
+    domainReference: { ...input.domainReference, searches: genericSearches } };
+  assert.throws(() => validateReferenceResearch(fixture.root,
+    parseReferenceResearch(genericInput), options), /MARKET_DOMAIN_LOCAL_RESULT_SCOPE/);
+  const koreanCapturePath = join(fixture.root, fixture.domain.capture.path);
+  const originalCapture = readFileSync(koreanCapturePath);
+  try {
+    const captured = JSON.parse(originalCapture.toString('utf8'));
+    const koreanCapture = Buffer.from(JSON.stringify({ ...captured, visibleKoreanText: true }));
+    writeFileSync(koreanCapturePath, koreanCapture);
+    const observedInput = { ...genericInput,
+      domainReference: { ...genericInput.domainReference,
+        sources: [{ ...input.domainReference.sources[0],
+          capture: { ...fixture.domain.capture, sha256: admissionHash(koreanCapture) } },
+        ...input.domainReference.sources.slice(1)] } };
+    assert.throws(() => validateReferenceResearch(fixture.root,
+      parseReferenceResearch(observedInput), options), /MARKET_DOMAIN_LOCAL_RESULT_SCOPE/);
+    const nativeEntry = directRootAt(fixture.root, 'domain', fixture.domain.source,
+      [fixture.domainTwo.source], '복지 혜택 신청을 돕는 한국어 서비스 안내와 지원 정보입니다.');
+    const signedCoverage = structuredClone(genericCoverage);
+    signedCoverage.domain.globalFallback.gap.attemptedRoots = [nativeEntry.url];
+    const signedInput = { ...observedInput, marketCoverage: signedCoverage,
+      domainReference: { ...observedInput.domainReference, discoveryRoots: [nativeEntry] } };
+    assert.doesNotThrow(() => validateReferenceResearch(fixture.root,
+      parseReferenceResearch(signedInput), options));
+    assert.doesNotThrow(() => publishReferenceResearch(fixture.root, signedInput, options, fixture.writer));
+    const wrongUrlEntry = directRootAt(fixture.root, 'domain', fixture.domainTwo.source,
+      [fixture.domain.source], '복지 혜택 신청을 돕는 한국어 서비스 안내와 지원 정보입니다.');
+    const wrongUrlCoverage = structuredClone(signedCoverage);
+    wrongUrlCoverage.domain.globalFallback.gap.attemptedRoots = [wrongUrlEntry.url];
+    assert.throws(() => validateReferenceResearch(fixture.root, parseReferenceResearch({
+      ...signedInput, marketCoverage: wrongUrlCoverage,
+      domainReference: { ...signedInput.domainReference, discoveryRoots: [wrongUrlEntry] },
+    }), options), /MARKET_DOMAIN_LOCAL_RESULT_SCOPE/);
+    const foreignEntry = directRootAt(fixture.root, 'domain', fixture.domain.source,
+      [fixture.domainTwo.source], '캐나다 주민을 위한 복지 혜택 신청 서비스입니다. 캐나다 지원 안내를 제공합니다.');
+    assert.throws(() => validateReferenceResearch(fixture.root, parseReferenceResearch({
+      ...signedInput, domainReference: { ...signedInput.domainReference, discoveryRoots: [foreignEntry] },
+    }), options), /MARKET_DOMAIN_LOCAL_RESULT_SCOPE/);
+    const staleEntry = directRootAt(fixture.root, 'domain', fixture.domain.source,
+      [fixture.domainTwo.source], '복지 혜택 신청을 돕는 한국어 서비스 안내와 지원 정보입니다.',
+      new Date(Date.now() - 8 * DAY_FOR_TEST).toISOString());
+    assert.throws(() => validateReferenceResearch(fixture.root, parseReferenceResearch({
+      ...signedInput, domainReference: { ...signedInput.domainReference, discoveryRoots: [staleEntry] },
+    }), options), /MARKET_DOMAIN_ATTEMPT_STALE|native discovery capture is stale/);
+  } finally { writeFileSync(koreanCapturePath, originalCapture); }
   for (const label of [
     'South Korea benefits service with unsupported browser notices',
     'Not only South Korea residents use this benefits service',
@@ -315,7 +387,17 @@ test('explicit-market v7 binds local sources and fallback to executed market evi
   const invocation = publishTestAdaptiveRoute(fixture.root, routeInput);
   const route = readPersistedRoute(fixture.root, invocation);
   writeFileSync(join(fixture.root, '.omd/domain-brief.json'), JSON.stringify({ ...domainBrief, request }));
-  const current = { ...input, sourceContractSha256: route.sourceContractSha256, marketCoverage: documented };
+  const currentDomainSearches = domainQueries.map(query => testSearchReceipt(fixture.root, 'domain', query,
+    [fixture.domain.source, fixture.domainTwo.source, fixture.domainThree.source, domainFour.source]));
+  const currentDesignSearches = designQueries.map(query => testSearchReceipt(fixture.root, 'design', query,
+    [fixture.gallery.source, secondVisual.gallery.source]));
+  const currentCoverage = structuredClone(documented);
+  currentCoverage.domain.localSources.forEach(source => { source.provenanceReceiptSha256 = currentDomainSearches[0]!.sha256; });
+  currentCoverage.domain.globalFallback!.provenance.forEach(binding => { binding.provenanceReceiptSha256 = currentDomainSearches[0]!.sha256; });
+  currentCoverage.design.localSources.forEach(source => { source.provenanceReceiptSha256 = currentDesignSearches[0]!.sha256; });
+  const current = { ...input, sourceContractSha256: route.sourceContractSha256, marketCoverage: currentCoverage,
+    domainReference: { ...input.domainReference, searches: currentDomainSearches },
+    designReference: { ...input.designReference, searches: currentDesignSearches } };
   publishReferenceResearch(fixture.root, current, {
     ...options, expectedSourceContractSha256: route.sourceContractSha256, expectedRequest: request,
   }, fixture.writer);
@@ -325,4 +407,45 @@ test('explicit-market v7 binds local sources and fallback to executed market evi
   writeFileSync(join(fixture.root, fixture.domain.evidence.path), 'tampered screenshot');
   assert.throws(() => foreign(0, 'https://www.usa.gov/benefits', 'Find government benefits'),
     /REFERENCE_MARKET_LOCAL_FIRST/, 'stale local source bytes revoke foreign capture admission');
+});
+
+test('frame-less new-marketing route accepts its exact Korean welfare design queries', t => {
+  const fixture = designAdmissionFixture(t);
+  const secondVisual = fixture.addSecondDesignDirection();
+  writeFileSync(join(fixture.root, '.omd/locale-design-context.json'), JSON.stringify(context));
+  const request = '한국 복지 서비스를 소개하는 랜딩 페이지를 구현해줘.';
+  writeFileSync(join(fixture.root, '.omd/domain-brief.json'), JSON.stringify({ ...domainBrief, request }));
+  const routeInput = inputSkeleton('product-route-input').skeleton as Record<string, unknown>;
+  routeInput.request = request;
+  routeInput.referenceDiscovery = { ...routeInput.referenceDiscovery as Record<string, unknown>, taskNeed: 'new-marketing' };
+  const invocation = publishTestAdaptiveRoute(fixture.root, routeInput);
+  const route = readPersistedRoute(fixture.root, invocation);
+  const domainQueries = ['복지로', '정부24 혜택알리미', '서울복지포털', '웰로'];
+  const marketingQueries = ['대한민국 복지 웹사이트 디자인', '한국 복지 웹사이트 디자인', 'South Korea 복지 웹사이트 디자인'];
+  const domainFour = fixture.capture('https://domain-four.example/task', 'domain', 'domain', 6);
+  const domainFourSource = { id: 'domain-4', url: domainFour.source, observedAt: new Date().toISOString().slice(0, 10),
+    decision: 'Task order', finding: 'Review before submission', evidence: domainFour.evidence, capture: domainFour.capture };
+  const domainSearches = domainQueries.map(query => testSearchReceipt(fixture.root, 'domain', query,
+    [fixture.domain.source, fixture.domainTwo.source, fixture.domainThree.source, domainFour.source]));
+  const designSearches = marketingQueries.map(query => testSearchReceipt(fixture.root, 'design', query,
+    [fixture.gallery.source, secondVisual.gallery.source]));
+  const research = parseReferenceResearch({ ...fixture.research, schema: REFERENCE_RESEARCH_SCHEMA,
+    sourceContractSha256: route.sourceContractSha256,
+    marketCoverage: { marketRegion: 'KR',
+      domain: { localSources: [fixture.domain, fixture.domainTwo, fixture.domainThree].map((source, index) =>
+        localSearchSource(`domain-${index + 1}`, source.evidence.sha256, 'service', domainSearches[0]!.sha256)),
+        globalFallback: fallbackCoverage(['domain-4'], domainSearches[0]!.sha256, fallbackGap(domainQueries)) },
+      design: { localSources: [
+        localSearchSource('visual', fixture.source.evidence.sha256, 'product', designSearches[0]!.sha256),
+        localSearchSource(secondVisual.sourceId, secondVisual.source.evidence.sha256, 'product', designSearches[0]!.sha256),
+      ], globalFallback: null } },
+    domainReference: { ...fixture.research.domainReference, queries: domainQueries, searches: domainSearches,
+      sources: [...fixture.research.domainReference.sources, domainFourSource] },
+    designReference: { ...fixture.research.designReference, queries: marketingQueries, searches: designSearches } });
+  const routeOptions = { ...options, expectedRequest: request, expectedSourceContractSha256: route.sourceContractSha256 };
+  assert.doesNotThrow(() => validateReferenceResearch(fixture.root, research, routeOptions));
+  const wrongQueries = parseReferenceResearch({ ...research,
+    designReference: { ...research.designReference,
+      queries: ['대한민국 복지 앱 UI 디자인', '한국 복지 앱 UI 디자인', 'South Korea 복지 앱 UI 디자인'] } });
+  assert.throws(() => validateReferenceResearch(fixture.root, wrongQueries, routeOptions), /MARKET_DESIGN_SEARCH_REQUIRED/);
 });

@@ -38,6 +38,8 @@ test('a Korean brief refuses foreign-only domain captures before writing, but ac
     english.repeat(100) + ' 한국어 도움말과 접근성 안내를 확인하세요'), /REFERENCE_MARKET_LOCAL_FIRST/);
   const koreanGuard = captureFinalUrlGuard(cwd, [{ source: 'https://wello.info/benefits', lane: 'domain' }], invocation);
   assert.doesNotThrow(() => koreanGuard(0, 'https://wello.info/benefits', korean));
+  const englishKr = captureFinalUrlGuard(cwd, [{ source: 'https://unrelated.kr/benefits', lane: 'domain' }], invocation);
+  assert.throws(() => englishKr(0, 'https://unrelated.kr/benefits', english), /REFERENCE_MARKET_LOCAL_FIRST/);
   assert.equal(existsSync(join(cwd, '.omd/refs')), false);
   mkdirSync(join(cwd, '.omd/refs/domain'), { recursive: true });
   for (const [index, source] of ['https://welfarehello.com/benefits', 'https://plus.gov.kr/portal/benefitV2',

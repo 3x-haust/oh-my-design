@@ -5,7 +5,10 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { parseReferenceResearch, validateReferenceResearch } from '../core/ref/reference-research.ts';
+import { captureReferenceNavigation } from '../core/ref/navigation-capture.ts';
+import { withBrowser } from '../core/render/index.ts';
 import { saveRef } from '../core/ref/store.ts';
+import { discoveryBrowser, directoryHtml } from './helpers/discovery-capture.ts';
 import { ADMISSION_SOURCE_SHA, admissionPng, designAdmissionFixture } from './helpers/design-admission.ts';
 
 const repo = fileURLToPath(new URL('..', import.meta.url));
@@ -46,10 +49,14 @@ for (const lane of ['domainReference', 'designReference'] as const) {
   }
 }
 
-test('native retained discovery remains valid with a separately declared navigation capture', t => {
-  const { root, research, gallery, receipt } = designAdmissionFixture(t);
+test('native retained discovery remains valid with a separately declared navigation capture', async t => {
+  const { root, research, gallery, source, writer } = designAdmissionFixture(t);
+  const navigation = await withBrowser(async browser => {
+    const observed = discoveryBrowser(browser, { url: gallery.source, html: directoryHtml(source.source) });
+    return captureReferenceNavigation(observed.browser, gallery.source, 'design', writer);
+  });
   const input = { ...research, designReference: { ...research.designReference, navigation: [{
-    url: gallery.source, evidence: gallery.evidence, capture: receipt(gallery.path),
+    url: gallery.source, evidence: navigation.evidence, capture: navigation.capture,
   }] } };
   const parsed = parseReferenceResearch(input);
   assert.doesNotThrow(() => validateReferenceResearch(root, parsed, {
@@ -64,7 +71,7 @@ test('native retained discovery remains valid with a separately declared navigat
   assert.equal(diagnosticParsed.designReference.navigation?.[0]?.evidence.path, '.omd/discovery/design/navigation/gallery.png');
   assert.throws(() => validateReferenceResearch(root, diagnosticParsed, {
     expectedSourceContractSha256: ADMISSION_SOURCE_SHA, benchmarkRequired: false,
-  }), /REFERENCE_RESEARCH_EVIDENCE_MISSING/);
+  }), /capture requires its exact content-addressed lane\/purpose path/);
 });
 
 for (const receipt of ['evidence', 'capture'] as const) {

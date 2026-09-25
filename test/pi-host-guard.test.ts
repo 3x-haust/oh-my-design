@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import omdExtension, { type PortablePiApi, type PortablePiHook, type PortablePiTool } from '../extensions/omd.ts';
-import { classifyPiWrite, isPreproductionReadCommand } from '../extensions/omd-guard.ts';
+import { classifyPiWrite, isMutatingOmdCommand, isPreproductionReadCommand } from '../extensions/omd-guard.ts';
 
 function harness(exec?: PortablePiApi['exec'], sendMessage?: PortablePiApi['sendMessage']) {
   const hooks = new Map<string, PortablePiHook>();
@@ -25,6 +25,11 @@ function harness(exec?: PortablePiApi['exec'], sendMessage?: PortablePiApi['send
 }
 const final = { role: 'assistant', stopReason: 'stop', content: [{ type: 'text', text: '구현했습니다.' }] };
 const blocked = (value: unknown) => (value as { block?: boolean } | undefined)?.block === true;
+
+test('reference work-next is inspection and advance is an owned mutation', () => {
+  assert.equal(isMutatingOmdCommand(['ref', 'work-next', '--json']), false);
+  assert.equal(isMutatingOmdCommand(['ref', 'advance', '--json']), true);
+});
 
 test('test-011 bypass: selected-stage failure blocks native write, edit and script-based bash', async () => {
   const h = harness();

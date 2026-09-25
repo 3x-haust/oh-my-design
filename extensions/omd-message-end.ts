@@ -4,6 +4,14 @@ import type { RouteBootstrap } from './omd-route-bootstrap.ts';
 import { guardFailure, type OmdRunResult, type PortablePiApi, type PortablePiEvent } from './omd-runtime.ts';
 
 type StagePlanning = Readonly<{ field: string; text: string }>;
+export type ReferenceWork = Readonly<{
+  status: 'action' | 'ready' | 'exhausted';
+  workSha256: string;
+  action: Readonly<{ kind: string; args: readonly string[]; reason: string }> | null;
+  code: string | null;
+  attempts: readonly Readonly<{ lane: string; url: string; reason: string; receipt: string }> [];
+  exclusions: readonly Readonly<{ lane: string; url: string; reason: string; receipt: string }> [];
+}>;
 type StageWorkPointer = Readonly<{
   stage: string;
   owner: string;
@@ -15,6 +23,7 @@ type StageWorkPointer = Readonly<{
   planning: readonly StagePlanning[];
   routeSha256: string | null;
   validatedStages: readonly string[];
+  referenceWork: ReferenceWork | null;
 }>;
 
 type MessageEndTask = Readonly<{
@@ -32,6 +41,7 @@ type MessageEndTask = Readonly<{
   routeRevision: string;
   repairLoop: RepairLoop;
   pi: PortablePiApi;
+  onReferenceWork?(work: ReferenceWork | null): void;
 }>;
 
 const stringList = (value: unknown): readonly string[] => Array.isArray(value)
@@ -45,6 +55,47 @@ function planningList(value: unknown): readonly StagePlanning[] {
     const text = Reflect.get(item, 'text');
     return typeof field === 'string' && typeof text === 'string' ? [{ field, text }] : [];
   });
+}
+
+function referenceWork(value: unknown): ReferenceWork | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const status = Reflect.get(value, 'status');
+  const workSha256 = Reflect.get(value, 'workSha256');
+  if (!['action', 'ready', 'exhausted'].includes(status) || typeof workSha256 !== 'string'
+    || !/^[a-f0-9]{64}$/.test(workSha256)) return null;
+  const rawAction = Reflect.get(value, 'action');
+  const kind = typeof rawAction === 'object' && rawAction !== null ? Reflect.get(rawAction, 'kind') : null;
+  const args = typeof rawAction === 'object' && rawAction !== null ? Reflect.get(rawAction, 'args') : null;
+  const reason = typeof rawAction === 'object' && rawAction !== null ? Reflect.get(rawAction, 'reason') : null;
+  const action = typeof kind === 'string' && Array.isArray(args) && args.every((arg): arg is string => typeof arg === 'string')
+    && typeof reason === 'string' ? { kind, args, reason } : null;
+  const attempts = Reflect.get(value, 'attempts');
+  const parsedAttempts = Array.isArray(attempts) ? attempts.flatMap(item => {
+    if (typeof item !== 'object' || item === null) return [];
+    const lane = Reflect.get(item, 'lane');
+    const url = Reflect.get(item, 'url');
+    const failure = Reflect.get(item, 'reason');
+    const receipt = Reflect.get(item, 'receipt');
+    const path = typeof receipt === 'object' && receipt !== null ? Reflect.get(receipt, 'path') : null;
+    return typeof lane === 'string' && typeof url === 'string' && typeof failure === 'string' && typeof path === 'string'
+      ? [{ lane, url, reason: failure, receipt: path }] : [];
+  }) : [];
+  const code = Reflect.get(value, 'code');
+  const exclusions = Reflect.get(value, 'exclusions');
+  const parsedExclusions = Array.isArray(exclusions) ? exclusions.flatMap(item => {
+    if (typeof item !== 'object' || item === null) return [];
+    const decision = Reflect.get(item, 'decision');
+    const receipt = Reflect.get(item, 'receipt');
+    if (typeof decision !== 'object' || decision === null || typeof receipt !== 'object' || receipt === null) return [];
+    const lane = Reflect.get(decision, 'researchLane');
+    const url = Reflect.get(decision, 'source');
+    const reason = Reflect.get(decision, 'reason');
+    const path = Reflect.get(receipt, 'path');
+    return typeof lane === 'string' && typeof url === 'string' && typeof reason === 'string' && typeof path === 'string'
+      ? [{ lane, url, reason, receipt: path }] : [];
+  }) : [];
+  return { status, workSha256, action, code: typeof code === 'string' ? code : null,
+    attempts: parsedAttempts, exclusions: parsedExclusions };
 }
 
 function parseStageWork(text: string): StageWorkPointer | null {
@@ -70,7 +121,14 @@ function parseStageWork(text: string): StageWorkPointer | null {
     planning: planningList(Reflect.get(value, 'planning')),
     routeSha256: typeof routeSha256 === 'string' && /^[a-f0-9]{64}$/.test(routeSha256) ? routeSha256 : null,
     validatedStages,
+    referenceWork: referenceWork(Reflect.get(value, 'referenceWork')),
   };
+}
+
+export function referenceWorkAdvanced(text: string, previous: ReferenceWork): boolean {
+  const work = parseStageWork(text);
+  return work !== null && (work.stage !== 'reference-board'
+    || (work.referenceWork !== null && work.referenceWork.workSha256 !== previous.workSha256));
 }
 
 function actionPacket(work: StageWorkPointer): string {
@@ -79,6 +137,17 @@ function actionPacket(work: StageWorkPointer): string {
     `Owner: ${work.owner}`,
     `Required action: ${work.action}`,
     `Start/check: ${work.next}`,
+    ...(work.referenceWork?.action === null || work.referenceWork === null ? [] : [
+      `Reference action: ${work.referenceWork.action.args.length > 0 ? `omd ${work.referenceWork.action.args.join(' ')}` : work.next}`,
+      `Reference reason: ${work.referenceWork.action.reason}`,
+    ]),
+    ...(work.referenceWork?.status === 'exhausted' ? [
+      work.referenceWork.code ?? 'REFERENCE_DISCOVERY_EXHAUSTED',
+      ...work.referenceWork.attempts.slice(-12).map(attempt => `- ${attempt.lane}: ${attempt.url}: ${attempt.reason} (${attempt.receipt})`),
+      ...(work.referenceWork.attempts.length > 12 ? [`(+${work.referenceWork.attempts.length - 12} earlier attempts)`] : []),
+      ...work.referenceWork.exclusions.slice(-12).map(exclusion => `- excluded ${exclusion.lane}: ${exclusion.url}: ${exclusion.reason} (${exclusion.receipt})`),
+      ...(work.referenceWork.exclusions.length > 12 ? [`(+${work.referenceWork.exclusions.length - 12} earlier exclusions)`] : []),
+    ] : []),
     `Procedure: ${work.instruction}`,
     ...(issues.length ? ['Current blockers:', ...issues.map(issue => `- ${issue}`)] : []),
     'Do the required action before rerunning stage next. Repeating checks without changing owned evidence is not progress.',
@@ -97,8 +166,39 @@ export async function handleOmdMessageEnd(task: MessageEndTask): Promise<unknown
     try {
       const result = await run(['stage', 'next', '--json'], cwd, signal);
       if (interrupted()) return;
-      const work = parseStageWork(result.text);
+      let work = parseStageWork(result.text);
+      const nativeReferenceAction = work?.stage === 'reference-board' && work.referenceWork?.status === 'action'
+        && ['search', 'direct-entry', 'follow-link'].includes(work.referenceWork.action?.kind ?? '');
+      if (nativeReferenceAction && work !== null) {
+        let advanceError: unknown;
+        try {
+          await run(['ref', 'advance', '--json'], cwd, signal);
+        } catch (error) {
+          if (interrupted()) return;
+          advanceError = error;
+        }
+        if (interrupted()) return;
+        const afterAdvance = await run(['stage', 'next', '--json'], cwd, signal);
+        const revised = parseStageWork(afterAdvance.text);
+        if (advanceError !== undefined && revised?.referenceWork?.workSha256 === work.referenceWork?.workSha256) {
+          const detail = advanceError instanceof Error ? advanceError.message : String(advanceError);
+          return { message: { ...message, content: [...(message.content ?? []).filter(part => part.type !== 'text'),
+            { type: 'text', text: `OMD reference acquisition failed without a changed evidence state. ${detail}\n\n${actionPacket(work)}` }] } };
+        }
+        work = revised;
+      }
       if (work !== null) {
+        task.onReferenceWork?.(work.referenceWork);
+        if (work.referenceWork?.status === 'exhausted') {
+          const rejected = work.referenceWork.code === 'REFERENCE_DISCOVERY_NO_ACCEPTED_SOURCE';
+          const status = koreanMessage(message)
+            ? rejected ? 'OMD가 방문한 후보 중 채택 가능한 레퍼런스가 남지 않았습니다. 아래 제외 판단과 실패 기록을 확인해야 합니다.'
+              : 'OMD 레퍼런스 수집이 실제 공개 출처 시도에서 막혔습니다. 아래 주소와 실패 기록을 확인해야 합니다.'
+            : rejected ? 'OMD has no accepted reference among the inspected public candidates.'
+              : 'OMD reference discovery is blocked by verified public-source attempts.';
+          return { message: { ...message, content: [...(message.content ?? []).filter(part => part.type !== 'text'),
+            { type: 'text', text: `${status}\n\n${actionPacket(work)}` }] } };
+        }
         const askingForPlanning = work.action === 'resolve-planning-evidence' && work.planning.length > 0
           && message.content?.some(part => part.type === 'text'
             && /[?？]|확인.*(?:필요|부탁)|알려.*(?:주세요|주실)|(?:please|could|can).*(?:confirm|clarify)/i.test(part.text ?? ''));
@@ -107,7 +207,8 @@ export async function handleOmdMessageEnd(task: MessageEndTask): Promise<unknown
           : repairLoop.next(cwd, 'stage', work.routeSha256, {
             stage: work.stage, action: work.action, problems: work.problems,
             entryBlockers: work.entryBlockers, next: work.next, validatedStages: work.validatedStages,
-          }, revision);
+            workSha256: work.referenceWork?.workSha256 ?? null,
+          }, work.referenceWork === null ? revision : 0);
         const retry = !askingForPlanning && decision.retry && typeof pi.sendMessage === 'function';
         const packet = actionPacket(work);
         if (retry) {
@@ -119,13 +220,15 @@ export async function handleOmdMessageEnd(task: MessageEndTask): Promise<unknown
           ? work.planning.map(item => `- ${item.field}: ${item.text}`).join('\n') : '';
         const korean = koreanMessage(message);
         const status = korean
-          ? `OMD는 ${work.stage} 단계가 아직 미완료입니다. ${retry ? `이제 ${work.owner}가 ${work.action} 작업을 수행하고 ${work.next}로 검증합니다.` : questions ? '아래 기획 내용의 사용자 근거 확인이 필요합니다.' : decision.stalled ? '같은 상태에서 검사만 반복되어 루프를 멈췄습니다.' : '현재 단계 입력을 해결해야 합니다.'}`
-          : `OMD is incomplete at ${work.stage}. ${retry ? `Next, ${work.owner} performs ${work.action}, then validates with ${work.next}.` : questions ? 'User evidence is required for the planning statements below.' : decision.stalled ? 'Checks repeated without owned-artifact progress, so the loop stopped.' : 'Resolve the current stage inputs.'}`;
+          ? `OMD는 ${work.stage} 단계가 아직 미완료입니다. ${retry ? `이제 ${work.owner}가 ${work.action} 작업을 수행하고 ${work.next}로 검증합니다.` : questions ? '아래 기획 내용의 사용자 근거 확인이 필요합니다.' : decision.stalled && work.referenceWork !== null ? '수집된 실제 화면을 판단하고 아래 소유 작업을 완료해야 합니다.' : decision.stalled ? '같은 상태에서 검사만 반복되어 루프를 멈췄습니다.' : '현재 단계 입력을 해결해야 합니다.'}`
+          : `OMD is incomplete at ${work.stage}. ${retry ? `Next, ${work.owner} performs ${work.action}, then validates with ${work.next}.` : questions ? 'User evidence is required for the planning statements below.' : decision.stalled && work.referenceWork !== null ? 'Inspect the acquired screen and complete the owned action below.' : decision.stalled ? 'Checks repeated without owned-artifact progress, so the loop stopped.' : 'Resolve the current stage inputs.'}`;
         return { message: { ...message, content: [...(message.content ?? []).filter(part => part.type !== 'text'),
           { type: 'text', text: `${status}\n\n${questions || packet}` }] } };
       }
+      task.onReferenceWork?.(null);
     } catch (error) {
       if (interrupted()) return;
+      task.onReferenceWork?.(null);
       return { message: { ...message, content: [...(message.content ?? []).filter(part => part.type !== 'text'),
         { type: 'text', text: `OMD stage diagnosis failed; completion is unverified.\n${error instanceof Error ? error.message : String(error)}` }] } };
     }

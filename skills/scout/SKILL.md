@@ -59,7 +59,29 @@ it contains useful, non-duplicate evidence for every applicable category:
 
 ### Collecting a visual direction
 
-Run `omd ref discover-plan --json` and follow its free-access design-source policy. For apps and
+When a selected reference board is missing, run `omd ref work-next --json` for the current
+evidence-derived action. Use `omd ref advance --json` for a named native search, public gallery
+entry or observed-link visit, then recompute work-next. Each call advances only one source attempt;
+a signed unavailable attempt redirects to the next public lead, not to another copy of the plan.
+Treat search navigation, help and settings links as page chrome, not candidate services or visual
+references; a search with no task-related lead should advance to the next public source.
+For an unscoped task, an observed substantive service title may be inspected despite different
+query wording; it is only a candidate and must be judged against the actual task before retention.
+Explicit-market searches do not promote unrelated titles as leads.
+On a directly visited service, prefer observed links within the task content. A primary-navigation
+link is usable only when the captured main task text supports that same function; generic global
+menus and footer links do not qualify a service root.
+When the pointer names `retain-reference`, inspect the actual visited page or UI image, capture a
+useful scoped source with `ref add`, and recompute. If the inspected item is unsuitable, record a
+specific quality or relevance reason with `omd ref exclude <observed-item-url> --lane design|domain
+--reason "<observed reason>"`; this decision is bound to the current native visit and permits a
+different lead. An exclusion is not evidence that a provider is unavailable. When it names `publish-board`, use
+`omd schema reference-board`, author the assembly from retained evidence, and publish with
+`omd ref board --input`. A receipt-backed exhausted state is a precise external gap, not permission
+to substitute a gallery category, domain-service screenshot or empty board. Do not loop on
+`discover-plan`, `brief --check` or `stage next` while the same owned action is outstanding.
+
+`omd ref discover-plan --json` remains the full catalogue and free-access policy. For apps and
 product interfaces start with free public Pinterest pins, Dribbble shots, Behance case studies or UI Bowl
 entries; for website/marketing direction start with website galleries such as Siteinspire and
 Pinterest. These are replaceable discovery channels, not mandatory winners or guarantees of free
@@ -80,8 +102,11 @@ conversation language or surface locale.
 For target-market-first work, publish research v7 with `marketCoverage`. Each lane must classify every
 source id exactly once with `sourceId`, the retained image's exact `evidenceSha256`, a lane-valid `scope`,
 `basis`, and `provenanceReceiptSha256`. `market-search-result` must bind the exact signed market-search
-receipt whose visible result text for the retained source or design-discovery link names the market and
-relevant scope. `market-direct-result` must bind the exact signed direct-public root receipt whose visible
+receipt whose visible result text for the retained source or design-discovery link normally names the market and
+relevant scope. A generic Korean domain-service label such as `바로가기` qualifies only with a current
+signed direct-public entry for that exact service whose visible text proves Korean service context,
+plus its current retained Korean-language capture; it never qualifies design or foreign services.
+`market-direct-result` must bind the exact signed direct-public root receipt whose visible
 label for the retained source or design-discovery link names the market and relevant scope. URL tokens,
 localized queries, country-code hostnames, page-wide headings, and freeform reasons prove neither.
 Search and direct bases may coexist in a lane. Every declared search and direct attempt must be current. A fallback records
@@ -89,9 +114,12 @@ Search and direct bases may coexist in a lane. Every declared search and direct 
 availability/access/coverage kind, and every attempted query and root used by that lane. Every chosen retained capture must also be current. Freeform prose
 cannot prove local provenance or a fallback attempt. `research-check` rejects missing coverage, market drift, global-only lanes, and
 unqualified search order; repair the evidence instead of removing the policy.
+When a direct root is also the retained service URL, inspect its signed non-link task text and actual task link.
+A related/footer link or whole-page mention is not proof that the service performs the task; recapture older roots
+whose signed entry lacks the task-text field. A restriction for another audience is not a denial of the service.
 For native search use the plan's `designSourcePolicy.nativeSearchInputs` with `ref search`.
-They bind real free-gallery queries for Pinterest, Dribbble and Siteinspire. Refine the short
-task/pattern query and URL together, then open an item actually returned in observed links; never
+They bind real free-gallery queries for Pinterest, Dribbble and Siteinspire. Refine only unscoped
+task/pattern queries and URLs together; keep explicit-market native inputs exact. Then open an item actually returned in observed links; never
 guess pin/shot IDs. Login walls, challenges and empty results remain failures, not design references.
 The next public gallery is the fallback, not domain-service documentation or a paid MCP.
 For direct discovery use `designSourcePolicy.nativeEntryInputs` with
@@ -178,7 +206,7 @@ Search the PART, in English, across many sites — the way a designer builds a b
   Keep its returned native receipts in that lane's optional `navigation` array, each with
   `url`, PNG `evidence`, and JSON `capture` receipts. The checker follows observed outbound links from
   successful search results or direct-entry links through those captures. Direct v6/v7 chains require
-  new strict navigation-v2 captures, never all-DOM links from retained component captures. A disconnected chain, prose link, stale image,
+  new strict navigation-v4 captures, never all-DOM links from retained component captures. A disconnected chain, prose link, stale image,
   blocked visit or user-supplied screenshot cannot manufacture a browser navigation edge.
 - Keep the whole page when the felt direction is the point, and a scoped part when anatomy is. A
   moodboard is whole-page and visual-only by construction (`protocol/moodboard.md`).

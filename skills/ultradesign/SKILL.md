@@ -112,6 +112,15 @@ read-only visit is not successful owner work. Never
 reclassify a fresh route merely to evade the user's stopping boundary.
 Recompute `stage next --json` after each owned publication or repair, not only at final reporting.
 For `reference-board`, follow the returned action instead of repeating a passing entry check:
+`acquire-reference` uses `ref work-next --json` and executes the current exact native step with
+`ref advance --json`; a signed unavailable source changes the next lead. Inspect a visited concrete
+gallery item and retain only its actual useful UI image/original. An unsuitable visited item is
+excluded with `ref exclude <observed-url> --lane design|domain
+--reason "<specific observed reason>"` so Scout can inspect a different lead; this is not a native
+unavailable receipt. When the pointer is board-ready,
+Scout authors and publishes `ref board --input` from retained evidence. `resolve-external-blocker`
+reports the current signed failures and never fabricates a board or silently substitutes domain
+screens as visual direction. Repeated read-only checks are not a step.
 `author-research` supplies the research schema and requires current dual-lane publication;
 `apply-references` starts with `ref apply-plan --json` only after research passes. These are Scout
 subtasks inside the selected board stage, not new route stages. A board file alone is not research.

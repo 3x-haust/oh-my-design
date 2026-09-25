@@ -3,17 +3,19 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { parseLocaleDesignContext } from '../locale/design-context.ts';
 import { validateDomainBrief } from '../domain/domain-brief.ts';
+import { readFrame } from '../frame/index.ts';
 import { nodeStableProjectFileSystem, readStableProjectFile } from '../runtime/stable-project-file.ts';
-import type { ReferenceResearch } from './reference-research-types.ts';
-import { inferredKoreanReferenceMarket, isMarketQualifiedQuery, marketDomainQueries, marketSearchLabels } from './market-reference.ts';
+import type { ReferenceResearch, ResearchSource } from './reference-research-types.ts';
+import { inferredKoreanReferenceMarket, isKoreanLanguageServiceText, isMarketQualifiedQuery, marketDesignQueries, marketDomainQueries, marketSearchLabels } from './market-reference.ts';
 import { readCurrentDirectDiscoveryEntry } from './discovery-record.ts';
 import { negatesMarketScope } from './market-scope-negation.ts';
 import { readSearchExecution, SEARCH_EXECUTION_SCHEMA } from './search-execution.ts';
-import { resultReaches, type ObservedSearchResult } from './search-result.ts';
+import { actionableSearchTargets, resultReaches, type ObservedSearchResult } from './search-result.ts';
 import { referenceServiceFamily, referenceServiceHost } from './design-discovery-sources.ts';
+import { selfRootTaskClaim } from './market-task-claim.ts';
 import {
   marketObject, marketReject, marketText, marketTexts,
-  type MarketLaneCoverage, type MarketSourceIdentity,
+  type MarketLaneCoverage,
 } from './market-reference-coverage-contract.ts';
 
 export { parseMarketReferenceCoverage } from './market-reference-coverage-contract.ts';
@@ -30,6 +32,8 @@ const SCOPE_TERMS = {
 const MAX_PROVENANCE_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
+const GENERIC_LINK_LABEL = /^(?:바로가기|사이트\s*바로가기|홈페이지\s*바로가기|방문하기)$/u;
+const KOREAN_SERVICE_TERMS = /서비스|혜택|지원|복지|신청|플랫폼/u;
 
 export function assertCurrentMarketCapture(value: unknown, lane: 'DOMAIN' | 'DESIGN'): void {
   const capturedAt = typeof value === 'string' ? Date.parse(value) : Number.NaN;
@@ -63,6 +67,50 @@ function containsMarketToken(reason: string, tokens: readonly string[]): boolean
 function directRootReason(value: unknown, marketTokens: readonly string[], code: string): void {
   const reason = explanation(value, code);
   if (negatesMarketScope(reason, marketTokens) || !DIRECT_SCOPE.test(reason) || !containsMarketToken(reason, marketTokens)) marketReject(code);
+}
+
+function persistedTaskNeed(root: string, sourceContractSha256: string, request: string): string | null {
+  const pointerPath = resolve(root, '.omd/route-source.json');
+  if (!existsSync(pointerPath)) return null;
+  const fs = nodeStableProjectFileSystem();
+  const code = 'REFERENCE_RESEARCH_MARKET_DESIGN_PLAN_STALE';
+  const pointer = marketObject(JSON.parse(readStableProjectFile({ root: resolve(root), path: pointerPath,
+    label: '.omd/route-source.json', fs }).toString('utf8')), code);
+  const record = `route-sources/sha256-${sourceContractSha256}.json`;
+  if (pointer.schema !== 'adaptive-route-source-pointer-v1' || pointer.record !== record
+    || pointer.sha256 !== sourceContractSha256) return marketReject(code);
+  const bytes = readStableProjectFile({ root: resolve(root), path: resolve(root, '.omd', record),
+    label: record, fs });
+  if (createHash('sha256').update(bytes).digest('hex') !== sourceContractSha256) return marketReject(code);
+  const source = marketObject(JSON.parse(bytes.toString('utf8')), code);
+  if (source.request !== request.trim()) return marketReject(code);
+  return marketText(marketObject(source.referenceDiscovery, code).taskNeed, code);
+}
+
+function retainedKoreanService(root: string, source: ResearchSource): boolean {
+  const { capture } = source;
+  if (!capture.path.startsWith('.omd/refs/domain/')) return false;
+  const bytes = readStableProjectFile({ root: resolve(root), path: resolve(root, capture.path),
+    label: capture.path, fs: nodeStableProjectFileSystem() });
+  if (createHash('sha256').update(bytes).digest('hex') !== capture.sha256) return false;
+  const record = marketObject(JSON.parse(bytes.toString('utf8')), 'REFERENCE_RESEARCH_MARKET_DOMAIN_LOCAL_RESULT_SCOPE');
+  return record.source === source.url && record.researchLane === 'domain' && record.visibleKoreanText === true;
+}
+
+function capturedKoreanService(root: string, source: ResearchSource,
+  discoveryRoots: ReferenceResearch['domainReference']['discoveryRoots'], marketLabels: readonly string[],
+  exactReceiptSha256?: string): boolean {
+  if (!retainedKoreanService(root, source)) return false;
+  const entry = discoveryRoots?.find(candidate => candidate.url === source.url
+    && (exactReceiptSha256 === undefined || candidate.capture.sha256 === exactReceiptSha256));
+  if (entry === undefined) return false;
+  const { reason: _reason, ...receipt } = entry;
+  const observed = readCurrentDirectDiscoveryEntry(root, receipt);
+  const text = observed.observedText ?? '';
+  return observed.url === source.url && observed.finalUrl === source.url
+    && isKoreanLanguageServiceText(text) && KOREAN_SERVICE_TERMS.test(text)
+    && inferredKoreanReferenceMarket(text) === 'KR'
+    && !negatesMarketScope(text, marketLabels);
 }
 
 export function validateMarketReferenceCoverage(root: string, research: ReferenceResearch, expectedRequest?: string): void {
@@ -115,7 +163,9 @@ export function validateMarketReferenceCoverage(root: string, research: Referenc
   ];
   const base = [...brief.referenceQueries.component, ...brief.referenceQueries.mood][0];
   if (base === undefined) return marketReject('REFERENCE_RESEARCH_MARKET_DESIGN_PLAN_REQUIRED: current domain queries are empty');
-  const designQueries = labels.map(label => `${label} ${domain} ${base}`);
+  const designQueries = marketDesignQueries(marketRegion, surfaceLocale, domain, base,
+    readFrame(root)?.uxSurface === 'marketing'
+      || persistedTaskNeed(root, research.sourceContractSha256, expectedRequest) === 'new-marketing');
   const designSearchRequired = laneNeedsMarketSearch(research.marketCoverage.design,
     research.designReference.discoveryRoots ?? [], research.designReference.searches);
   if (designSearchRequired && (designQueries.some((query, index) => research.designReference.queries[index] !== query)
@@ -126,10 +176,10 @@ export function validateMarketReferenceCoverage(root: string, research: Referenc
     ...(designSearchRequired ? validateExecutionOrder(root, research.designReference.searches, designQueries, labels, 'DESIGN') : []),
     ...validateDirectExecutions(root, research.designReference.discoveryRoots ?? [], 'DESIGN'),
   ];
-  validateLaneProvenance('DOMAIN', marketRegion, labels, research.marketCoverage.domain,
-    research.domainReference.sources, domainExecutions, research.domainReference.discoveryRoots ?? []);
-  validateLaneProvenance('DESIGN', marketRegion, labels, research.marketCoverage.design,
-    research.designReference.sources, designExecutions, research.designReference.discoveryRoots ?? []);
+  validateLaneProvenance(root, 'DOMAIN', marketRegion, labels, research.marketCoverage.domain,
+    research.domainReference.sources, domainExecutions, research.domainReference.discoveryRoots ?? [], domain);
+  validateLaneProvenance(root, 'DESIGN', marketRegion, labels, research.marketCoverage.design,
+    research.designReference.sources, designExecutions, research.designReference.discoveryRoots ?? [], domain);
 }
 
 type MarketExecution = Readonly<{
@@ -139,21 +189,26 @@ type MarketExecution = Readonly<{
   links: readonly string[];
   results: readonly ObservedSearchResult[];
   usable: boolean;
+  directRoot?: Readonly<{ url: string; observedText: string; taskText: string }>;
 }>;
 function laneNeedsMarketSearch(coverage: MarketLaneCoverage, roots: readonly unknown[], searches: readonly unknown[]): boolean {
   return searches.length > 0 || !roots.length || coverage.localSources.some(source => source.basis === 'market-search-result')
     || (coverage.globalFallback?.gap.attemptedQueries.length ?? 0) > 0;
 }
 function validateLaneProvenance(
-  lane: 'DOMAIN' | 'DESIGN', marketRegion: string, marketLabels: readonly string[], coverage: MarketLaneCoverage,
-  sources: readonly MarketSourceIdentity[], executions: readonly MarketExecution[],
-  roots: readonly Readonly<{ url: string }>[],
+  root: string, lane: 'DOMAIN' | 'DESIGN', marketRegion: string, marketLabels: readonly string[], coverage: MarketLaneCoverage,
+  sources: readonly ResearchSource[], executions: readonly MarketExecution[],
+  roots: NonNullable<ReferenceResearch['domainReference']['discoveryRoots']>,
+  taskCategory: string,
 ): void {
   for (const execution of executions) assertCurrentExecution(execution,
     `REFERENCE_RESEARCH_MARKET_${lane}_ATTEMPT_STALE`);
   for (const local of coverage.localSources) {
     const source = sources.find(candidate => candidate.id === local.sourceId)
       ?? marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_LOCAL_PROVENANCE`);
+    if (marketRegion === 'KR' && lane === 'DOMAIN' && !retainedKoreanService(root, source)) {
+      marketReject('REFERENCE_RESEARCH_MARKET_DOMAIN_LOCAL_RESULT_SCOPE');
+    }
     const serviceHost = referenceServiceHost(source.url);
     if (marketRegion === 'KR' && lane === 'DOMAIN'
       && /(?:^|\.)(?:gov|nhs)(?:\.[a-z]{2})?$/u.test(serviceHost)
@@ -167,11 +222,24 @@ function validateLaneProvenance(
       marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_LOCAL_PROVENANCE`);
     }
     if (!execution.usable) marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_LOCAL_PROVENANCE`);
-    const result = execution.results.find(candidate => resultReaches(candidate, urls));
-    if (result === undefined || negatesMarketScope(result.text, marketLabels) || !DIRECT_SCOPE.test(result.text)
-      || !SCOPE_TERMS[local.scope].test(result.text)
-      || !(containsMarketToken(result.text, marketLabels)
-        || (marketRegion === 'KR' && inferredKoreanReferenceMarket(result.text) === 'KR'))) {
+    const rootIsSource = execution.query === null && execution.directRoot?.url === source.url;
+    const result = rootIsSource ? undefined : execution.results.find(candidate => resultReaches(candidate, urls));
+    const selfRoot = lane === 'DOMAIN' && execution.query === null
+      && execution.directRoot?.url === source.url && execution.directRoot.taskText;
+    const scopedSelfRoot = selfRoot && DIRECT_SCOPE.test(selfRoot) && SCOPE_TERMS[local.scope].test(selfRoot)
+      && selfRootTaskClaim(taskCategory, selfRoot)
+      && (marketRegion === 'KR' ? capturedKoreanService(root, source, roots, marketLabels, execution.sha256)
+        : containsMarketToken(selfRoot, marketLabels)) && !negatesMarketScope(selfRoot, marketLabels);
+    const scopedResult = result !== undefined && DIRECT_SCOPE.test(result.text)
+      && SCOPE_TERMS[local.scope].test(result.text)
+      && (containsMarketToken(result.text, marketLabels)
+        || (marketRegion === 'KR' && inferredKoreanReferenceMarket(result.text) === 'KR'));
+    const capturedGeneric = result !== undefined && lane === 'DOMAIN' && marketRegion === 'KR'
+      && local.scope === 'service' && GENERIC_LINK_LABEL.test(result.text.trim())
+      && capturedKoreanService(root, source, roots, marketLabels,
+        execution.query === null ? execution.sha256 : undefined);
+    if (!scopedSelfRoot && (result === undefined || negatesMarketScope(result.text, marketLabels)
+      || (!scopedResult && !capturedGeneric))) {
       marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_LOCAL_RESULT_SCOPE`);
     }
     assertCurrentSourceObservation(source.observedAt, execution.observedAt,
@@ -186,7 +254,15 @@ function validateLaneProvenance(
     const urls = [source.url, ...(source.discovery === undefined ? [] : [source.discovery.url])];
     const execution = executions.find(candidate => candidate.sha256 === binding.provenanceReceiptSha256)
       ?? marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_FALLBACK_PROVENANCE`);
-    if (!execution.usable || !execution.results.some(result => resultReaches(result, urls))) {
+    const selfRoot = lane === 'DOMAIN' && execution.query === null
+      && execution.directRoot?.url === source.url && execution.directRoot.taskText;
+    const usefulSelfRoot = selfRoot && DIRECT_SCOPE.test(selfRoot) && SCOPE_TERMS.service.test(selfRoot)
+      && selfRootTaskClaim(taskCategory, selfRoot);
+    const rootIsSource = execution.query === null && execution.directRoot?.url === source.url;
+    if (!execution.usable || !usefulSelfRoot && (rootIsSource || !execution.results.some(result => resultReaches(result, urls)
+      && (execution.query === null || actionableSearchTargets({ lane: lane.toLowerCase() as 'domain' | 'design',
+        query: execution.query, provider: '', results: [result], allowUnmatched: false })
+        .some(target => urls.includes(target)))))) {
       marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_FALLBACK_PROVENANCE`);
     }
     assertCurrentSourceObservation(source.observedAt, execution.observedAt,
@@ -249,9 +325,18 @@ function validateDirectExecutions(
 ): readonly MarketExecution[] {
   return Object.freeze(roots.map(receipt => {
     const { reason: _reason, ...nativeReceipt } = receipt;
-    const observation = readCurrentDirectDiscoveryEntry(root, nativeReceipt);
+    let observation: ReturnType<typeof readCurrentDirectDiscoveryEntry>;
+    try { observation = readCurrentDirectDiscoveryEntry(root, nativeReceipt); }
+    catch (error) {
+      if (error instanceof Error && /native discovery capture is stale/u.test(error.message)) {
+        marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_ATTEMPT_STALE`);
+      }
+      throw error;
+    }
     return Object.freeze({ sha256: receipt.capture.sha256, query: null,
       observedAt: Date.parse(observation.capturedAt ?? ''),
-      links: observation.links, results: observation.linkLabels ?? [], usable: true });
+      links: observation.links, results: observation.linkLabels ?? [], usable: true,
+      directRoot: { url: observation.url, observedText: observation.observedText ?? '',
+        taskText: observation.taskText ?? '' } });
   }));
 }
