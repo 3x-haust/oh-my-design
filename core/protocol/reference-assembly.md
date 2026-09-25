@@ -154,6 +154,16 @@ Discovery always saves two separate ledgers:
   selected product benchmarks require `liveFlowVerified: true`. Legacy artifacts without executions
   remain readable but unverified. Login, payment, destructive or unsupported actions are explicit
   exclusions, never inferred successes. Verification covers only the recorded scope, not all controls.
+
+  Before recording, inventory the public controls in each declared feature area and name the reachable
+  screen/state for each one. A branch from the entry screen needs its own native flow execution; do
+  not replace several features with a single homepage screenshot. Every feature's `screenIds` must
+  resolve to screenshots from signed browser-executed steps in the current v3 benchmark. If a target
+  cannot be safely reached, put it in `excludedTargets` with the observed reason rather than calling
+  coverage complete. A full-page image is context, not proof that its links, tabs, disclosures, or
+  later states were inspected. Each native step frames its last visible assertion in the fixed
+  viewport and refuses a screenshot when its asserted feature states cannot fit together; split
+  those observations into separate steps instead of claiming one off-screen image covers both.
 - **design reference** (`.omd/refs/design/research.json`) asks how the destination should feel and be composed. It uses the measured
   board, mood, typography, component, and craft evidence already defined by this protocol. Domain
   research is not visual direction merely because the comparable product looks polished.
@@ -433,6 +443,16 @@ nothing; a board of whole-page captures can only be traced, and tracing a whole 
 derivative failure the transfer boundary forbids.
 
 ## Capturing an existing state or open disclosure
+
+Retained reference captures and native flow steps first allow a brief bounded settle for late
+notices, then close only visible informational announcement dialogs with an unambiguous `닫기`/`Close`
+control. The close action must leave the page URL unchanged and the dialog hidden; its label and
+control are retained in the private capture/flow receipt. An unknown, consent, login, payment, or
+unclosable modal is a visual-obstruction refusal, never a screenshot to publish. Inspect that
+refusal and reacquire from a safe public state or record a bounded gap. An explicitly prepared
+modal state remains an intentional capture and is not auto-dismissed. After capturing, recheck for
+a late notice and recapture the clean state if it appeared. Do not use `--no-shot`, a renamed PNG,
+or a source URL alone as a substitute for the clean state-specific image.
 
 When a required source state is an open menu or disclosure, print `omd schema reference-capture-preparation`.
 Pass its closed JSON object through `omd ref add … --preparation <json> --no-energy`, or embed it as

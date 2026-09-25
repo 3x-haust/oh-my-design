@@ -8,6 +8,7 @@ import { signNativeObservation, verifyNativeObservation } from '../runtime/self-
 import { requireProjectWriteAdapter, type ProjectWriteAdapter } from '../runtime/project-write.ts';
 import { readStableProjectFile, nodeStableProjectFileSystem } from '../runtime/stable-project-file.ts';
 import { decodePng } from '../motion/energy.ts';
+import { clearReferenceNotices, type NoticeDismissal } from './notice-overlay.ts';
 
 type Receipt = { path: string; sha256: string };
 type StepInput = { screenId: string; state: string; clicks: string[]; assertions: ViewAssertion[] };
@@ -36,6 +37,22 @@ export function parseLiveFlowInput(value: unknown): Input {
 const actionLabel = (step: StepInput) => step.clicks.length ? step.clicks.map(selector => `click: ${selector}`).join(' → ') : 'observe current screen';
 const resultLabel = (step: StepInput) => step.assertions.map(item => `${item.state}: ${item.selector}${item.text === undefined ? '' : ` contains ${item.text}`}`).join('; ');
 
+async function frameVisibleAssertions(page: Page, assertions: readonly ViewAssertion[]): Promise<void> {
+  const visible = assertions.filter(assertion => assertion.state === 'visible');
+  if (!visible.length) return;
+  await page.locator(visible.at(-1)!.selector).scrollIntoViewIfNeeded({ timeout: 3000 });
+  const viewport = page.viewportSize();
+  if (!viewport) return fail('missing capture viewport');
+  for (const assertion of visible) {
+    const box = await page.locator(assertion.selector).boundingBox();
+    if (!box) return fail(`visible assertion has no capture box: ${assertion.selector}`);
+    const width = Math.max(0, Math.min(box.x + box.width, viewport.width) - Math.max(box.x, 0));
+    const height = Math.max(0, Math.min(box.y + box.height, viewport.height) - Math.max(box.y, 0));
+    const requiredArea = Math.min(box.width * box.height, viewport.width * viewport.height) * 0.25;
+    if (width * height < requiredArea) return fail(`asserted feature is outside the captured viewport; split this step into separately captured states: ${assertion.selector}`);
+  }
+}
+
 async function safeClick(page: Page, selector: string, origin: string): Promise<void> {
   const control = page.locator(selector);
   await control.waitFor({ state: 'visible', timeout: 3000 });
@@ -58,7 +75,7 @@ export async function recordLiveReferenceFlow(browser: Browser, rootInput: strin
     writer.writeContentAddressed(path, bytes); return { path, sha256 };
   };
   const startedAt = new Date().toISOString();
-  const steps: { order: number; screenId: string; state: string; url: string; action: string; result: string; evidence: Receipt; capture: Receipt }[] = [];
+  const steps: { order: number; screenId: string; state: string; url: string; action: string; result: string; evidence: Receipt; capture: Receipt; noticeDismissals: NoticeDismissal[] }[] = [];
   const blocked: string[] = [];
   let limitation: string | null = null;
   try {
@@ -76,24 +93,31 @@ export async function recordLiveReferenceFlow(browser: Browser, rootInput: strin
     context.on('page', other => { if (other !== page) { blocked.push('popup excluded'); void other.close(); } });
     let response = await page.goto(input.url, { waitUntil: 'domcontentloaded', timeout: 15000 });
     page.on('response', r => { if (r.request().isNavigationRequest() && r.frame() === page.mainFrame()) response = r; });
+    const initialDismissals = await clearReferenceNotices(page, [], 1000);
     for (const [index, step] of input.steps.entries()) {
       const beforeUrl = page.url();
       for (const selector of step.clicks) await safeClick(page, selector, origin);
+      const allowedStateSelectors = step.assertions.filter(assertion => assertion.state === 'visible').map(assertion => assertion.selector);
+      const noticeDismissals = [...(index === 0 ? initialDismissals : []), ...await clearReferenceNotices(page, allowedStateSelectors, index === 0 ? 0 : 400)];
       await assertViewState(page, step.assertions);
       await waitForDocumentFonts(page);
       const reason = detectBlockReason(await page.title(), (await page.locator('body').innerText()).trim().length, response?.status() ?? null);
       if (reason) return fail(reason);
       if (blocked.length || new URL(page.url()).origin !== origin) return fail(blocked[0] ?? 'left reference service');
+      await frameVisibleAssertions(page, step.assertions);
       const capturedUrl = page.url();
-      const png = await page.screenshot({ timeout: 5000 });
+      let png = await page.screenshot({ timeout: 5000 });
+      const lateDismissals = await clearReferenceNotices(page, allowedStateSelectors);
+      noticeDismissals.push(...lateDismissals);
+      if (lateDismissals.length) png = await page.screenshot({ timeout: 5000 });
       await assertViewState(page, step.assertions);
       if (blocked.length || page.url() !== capturedUrl) return fail(blocked[0] ?? 'state navigated during capture');
       const capture = save('captures', png, 'png');
       const observed = { schema: 'reference-flow-step-v1', sourceId: input.sourceId, flowId: input.flowId, order: index + 1,
-        screenId: step.screenId, state: step.state, beforeUrl, url: page.url(), action: actionLabel(step), result: resultLabel(step), assertions: step.assertions, capture,
+        screenId: step.screenId, state: step.state, beforeUrl, url: page.url(), action: actionLabel(step), result: resultLabel(step), assertions: step.assertions, capture, noticeDismissals,
         predecessorSha256: steps.at(-1)?.evidence.sha256 ?? null };
       const evidence = save('steps', `${canonicalJson(observed)}\n`, 'json');
-      steps.push({ order: index + 1, screenId: step.screenId, state: step.state, url: page.url(), action: observed.action, result: observed.result, evidence, capture });
+      steps.push({ order: index + 1, screenId: step.screenId, state: step.state, url: page.url(), action: observed.action, result: observed.result, evidence, capture, noticeDismissals });
     }
     }, 120000);
   } catch (error) { limitation = (error instanceof Error ? error.message : String(error)).slice(0, 2000); }
@@ -121,9 +145,10 @@ export function readLiveReferenceFlow(rootInput: string, receipt: Receipt) {
     const planned = input.steps[index]!;
     if (step.order !== index + 1 || step.screenId !== planned.screenId || step.state !== planned.state || step.action !== actionLabel(planned) || step.result !== resultLabel(planned)
       || evidence.predecessorSha256 !== (record.steps[index - 1]?.evidence.sha256 ?? null)
-      || evidence.capture.sha256 !== step.capture.sha256 || evidence.url !== step.url) return fail('native transition chain differs');
+      || evidence.capture.sha256 !== step.capture.sha256 || evidence.url !== step.url
+      || JSON.stringify(evidence.noticeDismissals) !== JSON.stringify(step.noticeDismissals)) return fail('native transition chain differs');
     const png = decodePng(read(step.capture, 'captures', 'png'));
     if (png.width !== input.viewport.width || png.height !== input.viewport.height) return fail('native capture viewport differs');
   }
-  return record as { schema: string; input: Input; status: 'completed' | 'blocked'; limitation: string | null; steps: { order: number; screenId: string; state: string; url: string; action: string; result: string; evidence: Receipt; capture: Receipt }[] };
+  return record as { schema: string; input: Input; status: 'completed' | 'blocked'; limitation: string | null; steps: { order: number; screenId: string; state: string; url: string; action: string; result: string; evidence: Receipt; capture: Receipt; noticeDismissals?: NoticeDismissal[] }[] };
 }

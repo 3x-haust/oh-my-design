@@ -218,6 +218,18 @@ only by prose or unbound screenshots. Record login/payment/destructive or unsupp
 bounded exclusions, not successful tests. This proves only declared visited states, never every
 control in an entire service. Free public references remain the only requirement.
 
+Inspect each public feature area and its safe controls before claiming coverage. Record a separate
+native flow for each branch from an entry screen, capture each reachable route/tab/disclosure state,
+and bind every feature screen to its actual signed step screenshot. A homepage or whole-page image
+does not stand in for unopened features. Keep the feature-to-screen-to-flow mapping and explicit
+unreachable exclusions in the benchmark. Before accepting any retained image, inspect its pixels:
+informational notices should be closed in the same browser context before capture, while consent,
+login, and unknown modals must be recorded as access gaps rather than saved under a dim overlay.
+If a late notice contaminated a capture, reacquire that state and use only its clean current receipt.
+Put the feature-specific visible assertion last for each native step so its control/content is
+framed in the screenshot. If several visible assertions cannot fit in one viewport, split the
+feature states into separate steps; an off-screen DOM assertion is not screenshot evidence.
+
 For an applicable product task-flow benchmark, do not stop at the landing page or first useful
 screen. Declare the safe inspection scope, open at least three independent same-domain service
 families at their real entry points, and
