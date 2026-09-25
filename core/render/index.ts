@@ -9,7 +9,7 @@ import type { EnergyCurve, MotionMeasurement, RawIr } from '../types.ts';
 import { PREPARED_MEASUREMENT_COVERAGE } from '../ref/measurement-coverage.ts';
 import { designDiscoveryProvider } from '../ref/design-discovery-sources.ts';
 import { parseCapturePreparation, prepareReferenceCapture, observeCapturePreparation, type CapturePreparation, type CapturePreparationReceipt } from '../ref/capture-preparation.ts';
-import { blockedNoticeRequests, clearReferenceNotices, type NoticeDismissal } from '../ref/notice-overlay.ts';
+import { clearReferenceNotices, type NoticeDismissal } from '../ref/notice-overlay.ts';
 import { type ProjectWriteAdapter, requireProjectWriteAdapter } from '../runtime/project-write.ts';
 import type { RenderedBeat, RenderedBeatProof } from '../copy/index.ts';
 import { requireMotionResultAuthorization, requireRenderedBeatResultAuthorization, type ProjectRunInvocation } from '../runtime/invocation.ts';
@@ -847,7 +847,7 @@ export async function capturePageForRef(
     }
     return { raw, shotSaved, visibleText, acquisition: { requestedUrl: target, finalUrl, httpStatus, links,
       imageSha256: shotBytes ? createHash('sha256').update(shotBytes).digest('hex') : null,
-      ...(noticeDismissals.length ? { noticeDismissals: noticeDismissals.map(dismissal => ({ ...dismissal, blockedRequests: [...blockedNoticeRequests(page)] })) } : {}),
+      ...(noticeDismissals.length ? { noticeDismissals } : {}),
     }, ...(shotBytes ? { shotBytes } : {}), ...(shotError ? { shotError } : {}), ...(capturePreparation ? { capturePreparation } : {}) };
   }, REFERENCE_CAPTURE_TIMEOUT_MS, true);
 }

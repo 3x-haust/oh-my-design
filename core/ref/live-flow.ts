@@ -8,7 +8,7 @@ import { signNativeObservation, verifyNativeObservation } from '../runtime/self-
 import { requireProjectWriteAdapter, type ProjectWriteAdapter } from '../runtime/project-write.ts';
 import { readStableProjectFile, nodeStableProjectFileSystem } from '../runtime/stable-project-file.ts';
 import { decodePng } from '../motion/energy.ts';
-import { blockedNoticeRequests, clearReferenceNotices, withReadOnlyNoticeNavigation, type NoticeDismissal } from './notice-overlay.ts';
+import { clearReferenceNotices, type NoticeDismissal } from './notice-overlay.ts';
 
 type Receipt = { path: string; sha256: string };
 type StepInput = { screenId: string; state: string; clicks: string[]; assertions: ViewAssertion[] };
@@ -65,9 +65,7 @@ async function safeClick(page: Page, selector: string, origin: string): Promise<
   const link = info.tag === 'A' && info.href !== null;
   if (link) { if (new URL(publicUrl(new URL(info.href!, page.url()).href)).origin !== origin) return fail('cross-service navigation requires a separate flow'); }
   else if (!(info.tag === 'SUMMARY' || (info.tag === 'BUTTON' && info.type === 'button' && ((info.controls && info.expanded !== null) || info.role === 'tab')))) return fail('only links, disclosure buttons, summary and tabs are safe reference clicks');
-  if (link) await withReadOnlyNoticeNavigation(page, new URL(info.href!, page.url()).href,
-    () => control.click({ timeout: 3000, noWaitAfter: false }));
-  else await control.click({ timeout: 3000, noWaitAfter: false });
+  await control.click({ timeout: 3000, noWaitAfter: false });
 }
 
 /** One fresh browser context preserves the actual step-to-step state; no authored receipt input. */
@@ -116,14 +114,12 @@ export async function recordLiveReferenceFlow(browser: Browser, rootInput: strin
       if (lateDismissals.length) png = await page.screenshot({ timeout: 5000 });
       await assertViewState(page, step.assertions);
       if (blocked.length || page.url() !== capturedUrl) return fail(blocked[0] ?? 'state navigated during capture');
-      const allBlockedRequests = [...blockedNoticeRequests(page)];
-      const auditedDismissals = noticeDismissals.map(dismissal => ({ ...dismissal, blockedRequests: allBlockedRequests }));
       const capture = save('captures', png, 'png');
       const observed = { schema: 'reference-flow-step-v1', sourceId: input.sourceId, flowId: input.flowId, order: index + 1,
-        screenId: step.screenId, state: step.state, beforeUrl, url: page.url(), action: actionLabel(step), result: resultLabel(step), assertions: step.assertions, capture, noticeDismissals: auditedDismissals,
+        screenId: step.screenId, state: step.state, beforeUrl, url: page.url(), action: actionLabel(step), result: resultLabel(step), assertions: step.assertions, capture, noticeDismissals,
         predecessorSha256: steps.at(-1)?.evidence.sha256 ?? null };
       const evidence = save('steps', `${canonicalJson(observed)}\n`, 'json');
-      steps.push({ order: index + 1, screenId: step.screenId, state: step.state, url: page.url(), action: observed.action, result: observed.result, evidence, capture, noticeDismissals: auditedDismissals });
+      steps.push({ order: index + 1, screenId: step.screenId, state: step.state, url: page.url(), action: observed.action, result: observed.result, evidence, capture, noticeDismissals });
     }
     }, 120000);
   } catch (error) { limitation = (error instanceof Error ? error.message : String(error)).slice(0, 2000); }

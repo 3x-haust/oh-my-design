@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { decodePng } from '../core/motion/energy.ts';
 import { capturePageForRef, withBrowser } from '../core/render/index.ts';
-import { clearReferenceNotices, withReadOnlyNoticeNavigation } from '../core/ref/notice-overlay.ts';
+import { clearReferenceNotices } from '../core/ref/notice-overlay.ts';
 import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
 
 const content = (mode: 'notice' | 'consent' | 'unclosable') => `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>복지 서비스</title>
@@ -76,7 +76,7 @@ test('reference pixels are taken before hover probes reveal a persistent mega-me
   assert.deepEqual([...pixels.slice(sample, sample + 3)], [255, 255, 255], 'a probe-opened menu must not replace the initial reference state');
 });
 
-test('a deceptive close control cannot send a request but can retain clean pixels with blocked-request provenance', async t => {
+test('a deceptive close control is not clicked, so it cannot send a request while clean pixels are retained', async t => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-notice-side-effect-')));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const requests: string[] = [];
@@ -85,7 +85,7 @@ test('a deceptive close control cannot send a request but can retain clean pixel
     response.setHeader('content-type', 'text/html');
     response.end(`<!doctype html><title>Public service</title><main><h1>Benefits</h1><p>${'Compare available public service details and eligibility. '.repeat(12)}</p></main>
       <div role="dialog" aria-modal="true" aria-label="Service notice"><button type="button" aria-label="Close"
-      onclick="fetch('/mutate',{method:'POST'});this.closest('[role=dialog]').remove()">Close</button></div>`);
+      onclick="document.cookie='consent=yes';localStorage.setItem('consent','yes');fetch('/mutate',{method:'POST'});this.closest('[role=dialog]').remove()">Close</button></div>`);
   });
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
   t.after(() => new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())));
@@ -96,7 +96,16 @@ test('a deceptive close control cannot send a request but can retain clean pixel
     { width: 800, height: 600 }, { shotOut, adapter: writer }));
   assert.deepEqual(requests, []);
   assert.equal(existsSync(shotOut), true);
-  assert.ok(result.acquisition.noticeDismissals?.[0]?.blockedRequests.includes('POST:fetch'));
+  assert.equal(result.acquisition.noticeDismissals?.[0]?.method, 'visual-only');
+  await withBrowser(async browser => {
+    const page = await browser.newPage();
+    try {
+      await page.goto(`http://127.0.0.1:${address.port}`);
+      await clearReferenceNotices(page);
+      assert.equal(await page.evaluate(() => document.cookie), '');
+      assert.equal(await page.evaluate(() => localStorage.getItem('consent')), null);
+    } finally { await page.close(); }
+  });
 });
 
 test('a prepared feature refuses an unrelated consent modal instead of saving obscured pixels', async t => {
@@ -120,7 +129,7 @@ test('a prepared feature refuses an unrelated consent modal instead of saving ob
   assert.equal(existsSync(shotOut), false);
 });
 
-test('reference capture refuses a roleless fixed popup and an orphaned dim backdrop', async t => {
+test('reference capture refuses an unknown roleless popup and clears a notice backdrop', async t => {
   for (const mode of ['custom', 'orphaned-backdrop'] as const) {
     const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-visual-overlay-')));
     t.after(() => rmSync(root, { recursive: true, force: true }));
@@ -138,16 +147,27 @@ test('reference capture refuses a roleless fixed popup and an orphaned dim backd
     const address = server.address(); assert.ok(address && typeof address !== 'string');
     const writer = createTestProjectWriteAdapter(root); writer.mkdir('.omd/refs/domain');
     const shotOut = join(root, `.omd/refs/domain/${mode}.png`);
-    await assert.rejects(withBrowser(browser => capturePageForRef(browser, `http://127.0.0.1:${address.port}`,
-      { width: 800, height: 600 }, { shotOut, adapter: writer })), /REFERENCE_CAPTURE_VISUAL_OBSTRUCTION/);
-    assert.equal(existsSync(shotOut), false);
+    if (mode === 'custom') {
+      await assert.rejects(withBrowser(browser => capturePageForRef(browser, `http://127.0.0.1:${address.port}`,
+        { width: 800, height: 600 }, { shotOut, adapter: writer })), /REFERENCE_CAPTURE_VISUAL_OBSTRUCTION/);
+      assert.equal(existsSync(shotOut), false);
+    } else {
+      const result = await withBrowser(browser => capturePageForRef(browser, `http://127.0.0.1:${address.port}`,
+        { width: 800, height: 600 }, { shotOut, adapter: writer }));
+      assert.ok(result.acquisition.noticeDismissals?.[0]?.suppressedBackdrops);
+      const { pixels, width, channels } = decodePng(readFileSync(shotOut));
+      assert.deepEqual([...pixels.slice((20 * width + 20) * channels, (20 * width + 20) * channels + 3)], [255, 255, 255]);
+    }
   }
 });
 
-test('an explicit same-page flow link still navigates after a guarded notice dismissal', async t => {
+test('a safe feature link still loads its stylesheet after visual-only notice suppression', async t => {
+  const requests: string[] = [];
   const server = createServer((request, response) => {
+    requests.push(request.url ?? '');
+    if (request.url === '/detail.css') { response.setHeader('content-type', 'text/css'); response.end('#feature{background:rgb(1, 2, 3)}'); return; }
     response.setHeader('content-type', 'text/html');
-    response.end(request.url === '/detail' ? '<h1>Feature detail</h1>' : `<!doctype html><h1>Benefits</h1><a id="detail" href="/detail">Details</a>
+    response.end(request.url === '/detail' ? '<link rel="stylesheet" href="/detail.css"><h1 id="feature">Feature detail</h1>' : `<!doctype html><h1>Benefits</h1><a id="detail" href="/detail">Details</a>
       <div role="dialog" aria-modal="true" aria-label="Service notice"><button type="button" aria-label="Close"
       onclick="this.closest('[role=dialog]').remove()">Close</button></div>`);
   });
@@ -160,8 +180,29 @@ test('an explicit same-page flow link still navigates after a guarded notice dis
     try {
       await page.goto(base);
       assert.equal((await clearReferenceNotices(page)).length, 1);
-      await withReadOnlyNoticeNavigation(page, `${base}/detail`, () => page.locator('#detail').click());
+      await page.locator('#detail').click();
       assert.equal(await page.locator('h1').textContent(), 'Feature detail');
+      assert.equal(await page.locator('#feature').evaluate(element => getComputedStyle(element).backgroundColor), 'rgb(1, 2, 3)');
+      assert.ok(requests.includes('/detail.css'));
     } finally { await page.close(); }
   });
+});
+
+test('a consent dialog cannot masquerade as an informational notice through aria-label', async t => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-spoofed-consent-')));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const server = createServer((_request, response) => {
+    response.setHeader('content-type', 'text/html');
+    response.end(`<!doctype html><title>Public benefits</title><main><h1>Benefits</h1><p>${'Browse public information. '.repeat(12)}</p></main>
+      <div role="dialog" aria-modal="true" aria-label="Service notice"><p>Cookie consent is required</p>
+      <button type="button" aria-label="Close" onclick="document.cookie='consent=yes';this.closest('[role=dialog]').remove()">Close</button></div>`);
+  });
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())));
+  const address = server.address(); assert.ok(address && typeof address !== 'string');
+  const writer = createTestProjectWriteAdapter(root); writer.mkdir('.omd/refs/domain');
+  const shotOut = join(root, '.omd/refs/domain/spoofed.png');
+  await assert.rejects(withBrowser(browser => capturePageForRef(browser, `http://127.0.0.1:${address.port}`,
+    { width: 800, height: 600 }, { shotOut, adapter: writer })), /REFERENCE_CAPTURE_VISUAL_OBSTRUCTION/);
+  assert.equal(existsSync(shotOut), false);
 });

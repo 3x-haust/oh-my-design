@@ -445,11 +445,12 @@ derivative failure the transfer boundary forbids.
 ## Capturing an existing state or open disclosure
 
 Retained reference captures and native flow steps first allow a brief bounded settle for late
-notices, then close only visible informational announcement dialogs with an unambiguous `닫기`/`Close`
-control. The close action runs in a fresh, service-worker-disabled context: any request it causes
-or any later request not explicitly authorized as a safe main-frame flow navigation is blocked and
-recorded in the capture receipt; no intercepted request reaches the service. The URL must remain unchanged, the dialog must be hidden, and no dim fixed
-backdrop may remain; its label and control are retained in the private capture/flow receipt.
+notices, then visually suppress only visible informational announcement dialogs with an unambiguous
+`닫기`/`Close` control. The browser does **not** click the page-owned control or run its handlers:
+it removes the notice and its visible dim backdrop for research pixels only, in a fresh browser
+context. This is not proof that a real user dismissal or service-side transition succeeded. The
+URL must remain unchanged and no dim backdrop may remain; the title, control, visual-only method,
+and backdrop count are retained in the private capture/flow receipt.
 Roleless popup containers and visible modal-like overlays also require clearance or refusal. An
 unknown, consent, login, payment, or unclosable notice is a visual-obstruction
 refusal, never a screenshot to publish. Inspect that
