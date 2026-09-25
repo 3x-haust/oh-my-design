@@ -214,7 +214,7 @@ test('progress distinguishes invocations without deriving IDs from private input
   const updates: string[] = [];
   const args = ['ref', 'discover-batch', '--input', '/private/secret-a.json', '--json'];
   const stopFirst = monitorOmdProgress(args, 'queued', undefined, update => { updates.push(update.content[0]?.text ?? ''); });
-  const stopSecond = monitorOmdProgress(args.slice(), 'queued', undefined, update => { updates.push(update.content[0]?.text ?? ''); });
+  const stopSecond = monitorOmdProgress(args, 'queued', undefined, update => { updates.push(update.content[0]?.text ?? ''); });
   stopFirst();
   stopSecond();
   const [first, second] = updates;
@@ -251,6 +251,10 @@ test('a queued omd_cli command reports that it has not started, then reports exe
     await Promise.all([first, second]);
   }
   assert.match(updates.at(-1) ?? '', /실행 중/);
+  const queuedId = /페이지 #([a-f0-9]+)/.exec(updates[0] ?? '')?.[1];
+  const runningId = /페이지 #([a-f0-9]+)/.exec(updates.at(-1) ?? '')?.[1];
+  assert.ok(queuedId);
+  assert.equal(runningId, queuedId);
 });
 
 test('an interrupted queued command settles promptly without allowing later commands to overtake the running command', async () => {

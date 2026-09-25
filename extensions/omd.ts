@@ -2,7 +2,7 @@ import { Type } from 'typebox';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { runOmd, monitorOmdProgress, registerDoctorCommand, structuredToolDiagnostic, OmdCancelledError, type PortablePiApi } from './omd-runtime.ts';
+import { runOmd, monitorOmdProgress, createOmdProgressId, registerDoctorCommand, structuredToolDiagnostic, OmdCancelledError, type PortablePiApi } from './omd-runtime.ts';
 export { OMD_COMMAND_NAME } from './omd-runtime.ts';
 export type { PortablePiApi, PortablePiCommand, PortablePiEvent, PortablePiHook, PortablePiTool } from './omd-runtime.ts';
 import { classifyPiWrite, hasPiRoute, isMutatingOmdCommand, isPreproductionReadCommand } from './omd-guard.ts';
@@ -61,12 +61,13 @@ export default function omdExtension(pi: PortablePiApi): void {
   // legitimate publishers cannot collide with OMD's project mutation lock.
   const run = (args: readonly string[], cwd: string, signal?: AbortSignal, onUpdate?: Parameters<typeof runOmd>[4]) => {
     const queued = queues.get(cwd);
-    const stopWaiting = queued === undefined ? () => undefined : monitorOmdProgress(args, 'queued', signal, onUpdate);
+    const progressId = createOmdProgressId();
+    const stopWaiting = queued === undefined ? () => undefined : monitorOmdProgress(args, 'queued', signal, onUpdate, progressId);
     const previous = queued ?? Promise.resolve();
     const next = previous.catch(() => undefined).then(() => {
       stopWaiting();
       if (signal?.aborted) throw new OmdCancelledError();
-      return runOmd(pi, args, cwd, signal, onUpdate);
+      return runOmd(pi, args, cwd, signal, onUpdate, progressId);
     });
     queues.set(cwd, next);
     void next.finally(() => { if (queues.get(cwd) === next) queues.delete(cwd); }).catch(() => undefined);

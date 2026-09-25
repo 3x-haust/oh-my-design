@@ -55,7 +55,7 @@ function optionValue(args: readonly string[], name: string): string | undefined 
   return index < 0 ? undefined : args[index + 1];
 }
 
-const progressIds = new WeakMap<readonly string[], string>();
+export const createOmdProgressId = (): string => randomBytes(6).toString('hex');
 
 function displayTarget(value: string | undefined, targetId: string | undefined): string | undefined {
   if (value === undefined) return undefined;
@@ -93,17 +93,13 @@ export function formatOmdProgress(args: readonly string[], status: 'queued' | 'r
 
 export function monitorOmdProgress(
   args: readonly string[], status: 'queued' | 'running', signal: AbortSignal | undefined, onUpdate: OmdProgressCallback | undefined,
+  progressId = createOmdProgressId(),
 ): () => void {
   if (onUpdate === undefined) return () => undefined;
   const started = Date.now();
-  let targetId = progressIds.get(args);
-  if (targetId === undefined) {
-    targetId = randomBytes(6).toString('hex');
-    progressIds.set(args, targetId);
-  }
   const update = (): void => {
     const elapsedSeconds = Math.floor((Date.now() - started) / 1000);
-    onUpdate({ content: [{ type: 'text', text: formatOmdProgress(args, status, elapsedSeconds, targetId) }], details: { status, elapsedSeconds } });
+    onUpdate({ content: [{ type: 'text', text: formatOmdProgress(args, status, elapsedSeconds, progressId) }], details: { status, elapsedSeconds } });
   };
   update();
   const interval = setInterval(() => { if (!signal?.aborted) update(); }, 15_000);
@@ -222,9 +218,10 @@ export async function runOmd(
   cwd: string,
   signal?: AbortSignal,
   onUpdate?: OmdProgressCallback,
+  progressId?: string,
 ): Promise<OmdRunResult> {
   if (signal?.aborted) throw new OmdCancelledError();
-  const stopProgress = monitorOmdProgress(args, 'running', signal, onUpdate);
+  const stopProgress = monitorOmdProgress(args, 'running', signal, onUpdate, progressId);
   try {
     let result: ExecResult;
     try { result = await pi.exec('node', [runtimeSnapshot.entryPath, ...args], signal === undefined ? { cwd } : { cwd, signal }); }
