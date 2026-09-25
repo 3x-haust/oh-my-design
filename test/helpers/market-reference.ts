@@ -42,8 +42,9 @@ export function rootEnvelope(lane: 'domain' | 'design') {
 export function directRootAt(root: string, lane: 'domain' | 'design', url: string, links: readonly string[],
   observedText = `South Korea ${lane === 'domain' ? 'service directory for residents' : 'design gallery products'}.`,
   capturedAt = new Date().toISOString(),
-  linkText = `South Korea ${lane === 'domain' ? 'service for residents' : 'design product gallery'}`) {
-  const image = testPng(1280, 900, Number.parseInt(admissionHash(url).slice(0, 2), 16));
+  linkText = `South Korea ${lane === 'domain' ? 'service for residents' : 'design product gallery'}`,
+  pixelOffset = 0) {
+  const image = testPng(1280, 900, (Number.parseInt(admissionHash(url).slice(0, 2), 16) + pixelOffset) % 256);
   const imageSha256 = admissionHash(image);
   const imagePath = `.omd/discovery/${lane}/entries/${imageSha256}.png`;
   mkdirSync(join(root, `.omd/discovery/${lane}/entries`), { recursive: true });

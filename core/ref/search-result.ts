@@ -9,16 +9,20 @@ const RELATED_TASK_TERMS = [
   { query: /medication|medicine|dosage|prescription|pharmacy|refill|처방|약품|투약/iu,
     result: /medication|medicine|dosage|prescription|pharmacy|refill|처방|약품|투약/iu },
 ] as const;
+export function taskRelatedText(query: string, label: string): boolean {
+  const tokens = [...new Set((query.toLowerCase().match(/[가-힣]{2,}|[a-z0-9]{3,}/gu) ?? [])
+    .filter(token => !SEARCH_STOP_WORDS.has(token)))];
+  const lower = label.toLowerCase();
+  return tokens.some(token => lower.includes(token))
+    || RELATED_TASK_TERMS.some(group => group.query.test(query) && group.result.test(lower));
+}
 export function actionableSearchTargets(execution: Readonly<{ lane: 'domain' | 'design'; query: string; provider: string;
   results?: readonly ObservedSearchResult[]; allowUnmatched?: boolean | undefined }>): readonly string[] {
-  const tokens = [...new Set((execution.query.toLowerCase().match(/[가-힣]{2,}|[a-z0-9]{3,}/gu) ?? [])
-    .filter(token => !SEARCH_STOP_WORDS.has(token)))];
   const relatedTargets = new Set<string>();
   const otherServiceTargets = new Set<string>();
   for (const result of execution.results ?? []) {
     const label = result.text.toLowerCase();
-    const related = tokens.some(token => label.includes(token));
-    const relatedTask = RELATED_TASK_TERMS.some(group => group.query.test(execution.query) && group.result.test(label));
+    const related = taskRelatedText(execution.query, label);
     const editorial = /\b(?:trending|news|article|blog|press release|opinion|story)\b|뉴스|기사|보도자료|블로그/iu.test(label);
     const editorialTask = /\b(?:news|media|article|blog|journalism)\b|뉴스|기사|언론|블로그/iu.test(execution.query);
     const genericChrome = /\b(?:settings|cookie|privacy|accessibility|terms|feedback)\b|쿠키|접근성|개인정보|설정|약관/iu.test(label);
@@ -32,7 +36,7 @@ export function actionableSearchTargets(execution: Readonly<{ lane: 'domain' | '
       if (execution.lane === 'domain' && (host === execution.provider || host.endsWith(`.${execution.provider}`))) continue;
       if (execution.lane === 'design') {
         if (designDiscoveryProvider(target) !== null) relatedTargets.add(target);
-      } else if (related || relatedTask) relatedTargets.add(target);
+      } else if (related) relatedTargets.add(target);
       else if (execution.allowUnmatched !== false && substantive) otherServiceTargets.add(target);
     }
   }

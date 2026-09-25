@@ -10,7 +10,7 @@ import { inferredKoreanReferenceMarket, isKoreanLanguageServiceText, isMarketQua
 import { readCurrentDirectDiscoveryEntry } from './discovery-record.ts';
 import { negatesMarketScope } from './market-scope-negation.ts';
 import { readSearchExecution, SEARCH_EXECUTION_SCHEMA } from './search-execution.ts';
-import { actionableSearchTargets, resultReaches, type ObservedSearchResult } from './search-result.ts';
+import { actionableSearchTargets, resultReaches, taskRelatedText, type ObservedSearchResult } from './search-result.ts';
 import { referenceServiceFamily, referenceServiceHost } from './design-discovery-sources.ts';
 import {
   marketObject, marketReject, marketText, marketTexts,
@@ -97,9 +97,11 @@ function retainedKoreanService(root: string, source: ResearchSource): boolean {
 }
 
 function capturedKoreanService(root: string, source: ResearchSource,
-  discoveryRoots: ReferenceResearch['domainReference']['discoveryRoots'], marketLabels: readonly string[]): boolean {
+  discoveryRoots: ReferenceResearch['domainReference']['discoveryRoots'], marketLabels: readonly string[],
+  exactReceiptSha256?: string): boolean {
   if (!retainedKoreanService(root, source)) return false;
-  const entry = discoveryRoots?.find(candidate => candidate.url === source.url);
+  const entry = discoveryRoots?.find(candidate => candidate.url === source.url
+    && (exactReceiptSha256 === undefined || candidate.capture.sha256 === exactReceiptSha256));
   if (entry === undefined) return false;
   const { reason: _reason, ...receipt } = entry;
   const observed = readCurrentDirectDiscoveryEntry(root, receipt);
@@ -174,9 +176,9 @@ export function validateMarketReferenceCoverage(root: string, research: Referenc
     ...validateDirectExecutions(root, research.designReference.discoveryRoots ?? [], 'DESIGN'),
   ];
   validateLaneProvenance(root, 'DOMAIN', marketRegion, labels, research.marketCoverage.domain,
-    research.domainReference.sources, domainExecutions, research.domainReference.discoveryRoots ?? []);
+    research.domainReference.sources, domainExecutions, research.domainReference.discoveryRoots ?? [], domain);
   validateLaneProvenance(root, 'DESIGN', marketRegion, labels, research.marketCoverage.design,
-    research.designReference.sources, designExecutions, research.designReference.discoveryRoots ?? []);
+    research.designReference.sources, designExecutions, research.designReference.discoveryRoots ?? [], domain);
 }
 
 type MarketExecution = Readonly<{
@@ -196,6 +198,7 @@ function validateLaneProvenance(
   root: string, lane: 'DOMAIN' | 'DESIGN', marketRegion: string, marketLabels: readonly string[], coverage: MarketLaneCoverage,
   sources: readonly ResearchSource[], executions: readonly MarketExecution[],
   roots: NonNullable<ReferenceResearch['domainReference']['discoveryRoots']>,
+  taskCategory: string,
 ): void {
   for (const execution of executions) assertCurrentExecution(execution,
     `REFERENCE_RESEARCH_MARKET_${lane}_ATTEMPT_STALE`);
@@ -222,7 +225,8 @@ function validateLaneProvenance(
     const selfRoot = lane === 'DOMAIN' && execution.query === null
       && execution.directRoot?.url === source.url && execution.directRoot.observedText;
     const scopedSelfRoot = selfRoot && DIRECT_SCOPE.test(selfRoot) && SCOPE_TERMS[local.scope].test(selfRoot)
-      && (marketRegion === 'KR' ? capturedKoreanService(root, source, roots, marketLabels)
+      && taskRelatedText(taskCategory, selfRoot.slice(0, 1000))
+      && (marketRegion === 'KR' ? capturedKoreanService(root, source, roots, marketLabels, execution.sha256)
         : containsMarketToken(selfRoot, marketLabels)) && !negatesMarketScope(selfRoot, marketLabels);
     const scopedResult = result !== undefined && DIRECT_SCOPE.test(result.text)
       && SCOPE_TERMS[local.scope].test(result.text)
@@ -230,7 +234,8 @@ function validateLaneProvenance(
         || (marketRegion === 'KR' && inferredKoreanReferenceMarket(result.text) === 'KR'));
     const capturedGeneric = result !== undefined && lane === 'DOMAIN' && marketRegion === 'KR'
       && local.scope === 'service' && GENERIC_LINK_LABEL.test(result.text.trim())
-      && capturedKoreanService(root, source, roots, marketLabels);
+      && capturedKoreanService(root, source, roots, marketLabels,
+        execution.query === null ? execution.sha256 : undefined);
     if (!scopedSelfRoot && (result === undefined || negatesMarketScope(result.text, marketLabels)
       || (!scopedResult && !capturedGeneric))) {
       marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_LOCAL_RESULT_SCOPE`);
@@ -249,7 +254,8 @@ function validateLaneProvenance(
       ?? marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_FALLBACK_PROVENANCE`);
     const selfRoot = lane === 'DOMAIN' && execution.query === null
       && execution.directRoot?.url === source.url && execution.directRoot.observedText;
-    const usefulSelfRoot = selfRoot && DIRECT_SCOPE.test(selfRoot) && SCOPE_TERMS.service.test(selfRoot);
+    const usefulSelfRoot = selfRoot && DIRECT_SCOPE.test(selfRoot) && SCOPE_TERMS.service.test(selfRoot)
+      && taskRelatedText(taskCategory, selfRoot.slice(0, 1000));
     if (!execution.usable || !usefulSelfRoot && !execution.results.some(result => resultReaches(result, urls)
       && (execution.query === null || actionableSearchTargets({ lane: lane.toLowerCase() as 'domain' | 'design',
         query: execution.query, provider: '', results: [result], allowUnmatched: false })
