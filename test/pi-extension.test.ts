@@ -201,12 +201,22 @@ test('Given a running browser command When omd_cli starts Then Pi receives a vis
 test('long-running progress names the command, target, elapsed time, and unknown internal state', () => {
   const message = formatOmdProgress(['ref', 'add', 'https://example.test/private?token=secret', '--lane', 'design'], 'running', 130);
   assert.match(message, /디자인 레퍼런스/);
+  assert.match(message, /명령: omd ref add/);
   assert.match(message, /example\.test/);
   assert.match(message, /2분 10초/);
   assert.match(message, /아직 결과/);
   assert.match(message, /ESC/);
   assert.doesNotMatch(message, /token=secret/);
   assert.doesNotMatch(message, /private/);
+});
+
+test('progress distinguishes input manifests without exposing their paths', () => {
+  const first = formatOmdProgress(['ref', 'discover-batch', '--input', '/private/secret-a.json', '--json'], 'running', 15);
+  const second = formatOmdProgress(['ref', 'discover-batch', '--input', '/private/secret-b.json', '--json'], 'running', 15);
+  assert.match(first, /명령: omd ref discover-batch/);
+  assert.match(first, /대상: 입력 파일 #[a-f0-9]{8}/);
+  assert.notEqual(first, second);
+  assert.doesNotMatch(first, /private|secret-a/);
 });
 
 test('a queued omd_cli command reports that it has not started, then reports execution', async () => {

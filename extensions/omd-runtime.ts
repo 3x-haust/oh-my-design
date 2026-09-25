@@ -1,4 +1,5 @@
 import { createRequire } from 'node:module';
+import { createHash } from 'node:crypto';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createOmdRuntimeSnapshot, runtimeDependencyRoot } from './omd-runtime-snapshot.ts';
@@ -56,10 +57,11 @@ function optionValue(args: readonly string[], name: string): string | undefined 
 
 function displayTarget(value: string | undefined): string | undefined {
   if (value === undefined) return undefined;
+  const id = createHash('sha256').update(value).digest('hex').slice(0, 8);
   try {
     const url = new URL(value);
-    return url.protocol === 'https:' || url.protocol === 'http:' ? url.host : '입력 파일';
-  } catch { return '입력 파일'; }
+    return url.protocol === 'https:' || url.protocol === 'http:' ? `${url.host} · 페이지 #${id}` : `입력 파일 #${id}`;
+  } catch { return `입력 파일 #${id}`; }
 }
 
 export function formatOmdProgress(args: readonly string[], status: 'queued' | 'running', elapsedSeconds: number): string {
@@ -74,6 +76,7 @@ export function formatOmdProgress(args: readonly string[], status: 'queued' | 'r
           : [root, action].filter(Boolean).join(' ') || 'OMD 명령';
   const target = displayTarget(root === 'ref' && ['navigate', 'add'].includes(action ?? '') ? args[2]
     : optionValue(args, '--input') ?? (root === 'ref' && action === 'add-batch' ? args[2] : undefined));
+  const command = [root, action].filter(part => part !== undefined && /^[a-z][a-z0-9-]*$/.test(part)).join(' ');
   const elapsed = `${Math.floor(elapsedSeconds / 60)}분 ${elapsedSeconds % 60}초`;
   const heading = status === 'queued' ? 'OMD 대기 중' : 'OMD 실행 중';
   const state = status === 'queued' ? '앞선 OMD 명령이 끝나기를 기다리는 중입니다. 이 명령은 아직 시작되지 않았습니다.'
@@ -81,7 +84,7 @@ export function formatOmdProgress(args: readonly string[], status: 'queued' | 'r
   const note = elapsedSeconds >= 120 && status === 'running'
     ? '\n2분 이상 결과가 없습니다. 사이트·브라우저 응답이 느리거나 멈췄을 수 있습니다. 원하면 ESC로 중단할 수 있습니다.'
     : root === 'ref' && status === 'running' ? '\n외부 사이트 응답이나 브라우저 캡처에는 시간이 걸릴 수 있습니다.' : '';
-  return `${heading} · ${elapsed}\n작업: ${task}${target ? `\n대상: ${target}` : ''}\n상태: ${state}${note}`;
+  return `${heading} · ${elapsed}\n작업: ${task}\n명령: omd ${command || '명령'}${target ? `\n대상: ${target}` : ''}\n상태: ${state}${note}`;
 }
 
 export function monitorOmdProgress(
