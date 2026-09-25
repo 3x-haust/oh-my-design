@@ -211,7 +211,8 @@ test('unsigned legacy direct roots cannot authorize research reachability', t =>
   const fixture = designAdmissionFixture(t);
   const signed = directRootAt(fixture.root, 'domain', fixture.domain.source, [fixture.domainTwo.source]);
   const record = JSON.parse(readFileSync(join(fixture.root, signed.capture.path), 'utf8')) as Record<string, unknown>;
-  const { signature: _signature, observedText: _observedText, linkLabels: _linkLabels, ...legacy } = record;
+  const { signature: _signature, observedText: _observedText, taskText: _taskText,
+    linkLabels: _linkLabels, ...legacy } = record;
   const bytes = `${JSON.stringify({ ...legacy, schema: 'reference-discovery-entry-v1' }, null, 2)}\n`;
   const sha256 = admissionHash(bytes);
   const capture = { path: `.omd/discovery/domain/entries/${sha256}.json`, sha256 };

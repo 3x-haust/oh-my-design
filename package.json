@@ -44,7 +44,7 @@
     "node": ">=22.19"
   },
   "scripts": {
-    "test": "node --test --test-concurrency=2 'test/*.test.ts'",
+    "test": "bash scripts/test-all.sh",
     "test:obligations": "node --test test/obligations-v2.test.ts",
     "test:completion": "node --test test/completeness.test.ts test/completion-regression.test.ts test/adaptive-final-v2.test.ts",
     "test:harness-v2": "node --test test/obligations-v2.test.ts test/reference-handoff-v2.test.ts test/final-evidence-v2.test.ts test/harness-v2-cli.test.ts test/static-direction-evidence.test.ts test/runtime-isolation.test.ts test/harness-v2-quality.test.ts",
