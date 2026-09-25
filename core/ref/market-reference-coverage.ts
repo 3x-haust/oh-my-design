@@ -10,7 +10,7 @@ import { inferredKoreanReferenceMarket, isKoreanLanguageServiceText, isMarketQua
 import { readCurrentDirectDiscoveryEntry } from './discovery-record.ts';
 import { negatesMarketScope } from './market-scope-negation.ts';
 import { readSearchExecution, SEARCH_EXECUTION_SCHEMA } from './search-execution.ts';
-import { actionableSearchTargets, resultReaches, taskRelatedText, type ObservedSearchResult } from './search-result.ts';
+import { actionableSearchTargets, resultReaches, type ObservedSearchResult } from './search-result.ts';
 import { referenceServiceFamily, referenceServiceHost } from './design-discovery-sources.ts';
 import {
   marketObject, marketReject, marketText, marketTexts,
@@ -33,6 +33,21 @@ const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const GENERIC_LINK_LABEL = /^(?:바로가기|사이트\s*바로가기|홈페이지\s*바로가기|방문하기)$/u;
 const KOREAN_SERVICE_TERMS = /서비스|혜택|지원|복지|신청|플랫폼/u;
+
+function selfRootTaskClaim(taskCategory: string, observedText: string): boolean {
+  const claim = (observedText.split(/[.!?。！？\n]/u, 1)[0] ?? '').slice(0, 600).toLowerCase();
+  if (/welfare|benefits?|복지|혜택/iu.test(taskCategory)) {
+    if (/\b(?:no|without|not)\b.{0,40}\b(?:welfare|benefits?)\b|(?:복지|혜택).{0,16}(?:없|미제공|제공하지)/iu.test(claim)) return false;
+    return /\b(?:welfare|benefits?)\b(?:\s+\w+){0,1}\s+\b(?:service|program|portal|directory|application|support|finder|checker)\b|\b(?:service|program|portal|directory|application|support)\b.{0,18}\b(?:welfare|benefits?)\b|(?:복지|혜택|지원).{0,12}(?:서비스|신청|정책|포털|안내|찾기|검색)/iu.test(claim);
+  }
+  if (/flight|airline|항공|비행/iu.test(taskCategory) && /booking|reservation|ticket|예약|예매/iu.test(taskCategory)) {
+    return /\b(?:flight|airline)\b.{0,20}\b(?:booking|reservation|ticket)\b|\b(?:book|reserve)\b.{0,12}\b(?:flight|airline)\b|(?:항공|비행).{0,12}(?:예약|예매)/iu.test(claim);
+  }
+  const terms = (taskCategory.toLowerCase().match(/[가-힣]{2,}|[a-z]{4,}/gu) ?? [])
+    .filter(term => !/^(?:public|global|local|service|services|product|platform|application|website|design)$/u.test(term));
+  return terms.length > 0 && terms.every(term => /[가-힣]/u.test(term) ? claim.includes(term)
+    : new RegExp(`\\b${term}\\b`, 'u').test(claim));
+}
 
 export function assertCurrentMarketCapture(value: unknown, lane: 'DOMAIN' | 'DESIGN'): void {
   const capturedAt = typeof value === 'string' ? Date.parse(value) : Number.NaN;
@@ -225,7 +240,7 @@ function validateLaneProvenance(
     const selfRoot = lane === 'DOMAIN' && execution.query === null
       && execution.directRoot?.url === source.url && execution.directRoot.observedText;
     const scopedSelfRoot = selfRoot && DIRECT_SCOPE.test(selfRoot) && SCOPE_TERMS[local.scope].test(selfRoot)
-      && taskRelatedText(taskCategory, selfRoot.slice(0, 1000))
+      && selfRootTaskClaim(taskCategory, selfRoot)
       && (marketRegion === 'KR' ? capturedKoreanService(root, source, roots, marketLabels, execution.sha256)
         : containsMarketToken(selfRoot, marketLabels)) && !negatesMarketScope(selfRoot, marketLabels);
     const scopedResult = result !== undefined && DIRECT_SCOPE.test(result.text)
@@ -255,7 +270,7 @@ function validateLaneProvenance(
     const selfRoot = lane === 'DOMAIN' && execution.query === null
       && execution.directRoot?.url === source.url && execution.directRoot.observedText;
     const usefulSelfRoot = selfRoot && DIRECT_SCOPE.test(selfRoot) && SCOPE_TERMS.service.test(selfRoot)
-      && taskRelatedText(taskCategory, selfRoot.slice(0, 1000));
+      && selfRootTaskClaim(taskCategory, selfRoot);
     if (!execution.usable || !usefulSelfRoot && !execution.results.some(result => resultReaches(result, urls)
       && (execution.query === null || actionableSearchTargets({ lane: lane.toLowerCase() as 'domain' | 'design',
         query: execution.query, provider: '', results: [result], allowUnmatched: false })

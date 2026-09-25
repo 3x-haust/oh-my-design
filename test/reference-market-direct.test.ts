@@ -94,20 +94,27 @@ test('market search and direct provenance refuse malformed scope, attempts, root
         url: globalSource.source, evidence: globalSource.evidence, capture: globalSource.capture }],
       discoveryRoots: [domainRoot, fallbackRoot] },
   }), options.expectedRequest));
-  const musicRoot = directRootAt(fixture.root, 'domain', globalSource.source,
-    [`${globalSource.source}/listen`], 'Global music streaming service for residents.');
-  const unrelatedFallback = { ...selfFallbackCoverage, domain: {
-    ...selfFallbackCoverage.domain,
-    globalFallback: fallbackCoverage(['domain-4'], musicRoot.capture.sha256,
-      fallbackGap([], [domainRoot.url, musicRoot.url])),
-  } };
-  assert.throws(() => validateMarketReferenceCoverage(fixture.root, parseReferenceResearch({
-    ...scoped, marketCoverage: unrelatedFallback,
-    domainReference: { ...scoped.domainReference,
-      sources: [...scoped.domainReference.sources, { ...scoped.domainReference.sources[0]!, id: 'domain-4',
-        url: globalSource.source, evidence: globalSource.evidence, capture: globalSource.capture }],
-      discoveryRoots: [domainRoot, musicRoot] },
-  }), options.expectedRequest), /MARKET_DOMAIN_FALLBACK_PROVENANCE/);
+  for (const text of [
+    'Global music streaming service for residents.',
+    'Global public restaurant service for residents.',
+    'Global benefits of music streaming service for residents.',
+    'Global music streaming service for residents. No welfare benefits are offered.',
+  ]) {
+    const unrelatedRoot = directRootAt(fixture.root, 'domain', globalSource.source,
+      [`${globalSource.source}/listen`], text);
+    const unrelatedFallback = { ...selfFallbackCoverage, domain: {
+      ...selfFallbackCoverage.domain,
+      globalFallback: fallbackCoverage(['domain-4'], unrelatedRoot.capture.sha256,
+        fallbackGap([], [domainRoot.url, unrelatedRoot.url])),
+    } };
+    assert.throws(() => validateMarketReferenceCoverage(fixture.root, parseReferenceResearch({
+      ...scoped, marketCoverage: unrelatedFallback,
+      domainReference: { ...scoped.domainReference,
+        sources: [...scoped.domainReference.sources, { ...scoped.domainReference.sources[0]!, id: 'domain-4',
+          url: globalSource.source, evidence: globalSource.evidence, capture: globalSource.capture }],
+        discoveryRoots: [domainRoot, unrelatedRoot] },
+    }), options.expectedRequest), /MARKET_DOMAIN_FALLBACK_PROVENANCE/, text);
+  }
   const staleCoexistingSearch = testSearchReceipt(fixture.root, 'domain', domainQueries[0]!,
     [fixture.domain.source], false, oldObservedAt);
   const currentCoexistingSearches = domainQueries.slice(1).map(query => testSearchReceipt(fixture.root, 'domain', query,
