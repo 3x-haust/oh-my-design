@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { canonicalJson } from '../core/ref/board-artifacts.ts';
@@ -51,4 +51,16 @@ test('current direct-entry link labels are covered by the native signature', asy
   record.linkLabels[0].text = 'South Korea forged service label';
   const tampered = storeRecord(root, receipt, record);
   assert.throws(() => readCurrentDirectDiscoveryEntry(root, tampered), /native direct discovery signature invalid/);
+});
+
+test('a signed direct entry older than route publication cannot authorize current research', async t => {
+  const { root, receipt } = await currentCapture(t);
+  const routePath = join(root, '.omd/route.json');
+  writeFileSync(routePath, '{}');
+  const later = new Date(Date.now() + 1000);
+  utimesSync(routePath, later, later);
+  assert.deepEqual(readDirectDiscoveryEntry(root, receipt), {
+    url: PUBLIC_DIRECTORY, finalUrl: PUBLIC_DIRECTORY, links: [DOMAIN_ITEM],
+  });
+  assert.throws(() => readCurrentDirectDiscoveryEntry(root, receipt), /stale for the current route/);
 });

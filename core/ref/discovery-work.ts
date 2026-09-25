@@ -9,7 +9,7 @@ import { readReferenceDiscoveryExclusions, type ReferenceDiscoveryExclusionRecor
 import { designDiscoveryProvider, referenceServiceFamily } from './design-discovery-sources.ts';
 import { buildReferenceDiscoveryPlan, type ReferenceDiscoveryPlan } from './discovery-plan.ts';
 import { searchObserved, type SearchExecution } from './search-execution.ts';
-import { observedSearchTargets } from './search-result.ts';
+import { actionableSearchTargets, observedSearchTargets } from './search-result.ts';
 import { loadRefs } from './store.ts';
 
 type Lane = 'domain' | 'design';
@@ -50,9 +50,11 @@ function domainCandidate(value: string): boolean {
   return publicCandidate(value) && !/^(?:www\.)?(?:facebook\.com|instagram\.com|youtube\.com|linkedin\.com|twitter\.com|x\.com)$/u
     .test(new URL(value).hostname.toLowerCase());
 }
-function domainSearchResults(search: SearchExecution): readonly string[] {
-  const labels = new Map(search.results?.map(result => [result.url, result.text]) ?? []);
-  return observedSearchTargets(search).filter(url => {
+function domainSearchResults(search: SearchExecution, plan: ReferenceDiscoveryPlan): readonly string[] {
+  const labels = new Map((search.results ?? []).flatMap(result =>
+    observedSearchTargets({ links: [result.url] }).map(url => [url, result.text] as const)));
+  const knownFamilies = new Set(plan.marketReferencePolicy.domainEntryInputs.map(item => referenceServiceFamily(item.url)));
+  return actionableSearchTargets(search, knownFamilies).filter(url => {
     if (!publicCandidate(url)) return false;
     const host = new URL(url).hostname.toLowerCase();
     return host !== search.provider && !host.endsWith(`.${search.provider}`)
@@ -80,7 +82,7 @@ function nextLaneAction(lane: Lane, plan: ReferenceDiscoveryPlan, evidence: Lane
   const visited = new Set([...evidence.visits, ...evidence.entries].flatMap(item =>
     [item.observation.url, item.observation.finalUrl]));
   const rootTargets = [...new Set([...evidence.searches.filter(searchObserved).flatMap(search => lane === 'domain'
-    ? domainSearchResults(search) : observedSearchTargets(search).filter(publicCandidate)),
+    ? domainSearchResults(search, plan) : actionableSearchTargets(search).filter(publicCandidate)),
     ...evidence.entries.flatMap(item => item.observation.links.filter(url => lane === 'domain'
       ? domainCandidate(url) : publicCandidate(url) && designDiscoveryProvider(url) !== null))])];
   const rootSet = new Set(rootTargets);
@@ -160,9 +162,9 @@ export function referenceDiscoveryWork(root: string, route: RouteRecord): Refere
   });
   const korean = plan.marketReferencePolicy.marketRegion === 'KR';
   const admittedDomain = refs.filter(ref => ref.researchLane === 'domain'
-    && (!korean || ref.visibleKoreanText === true || new URL(ref.source).hostname.endsWith('.kr')));
+    && (!korean || ref.visibleKoreanText === true));
   const admittedDesign = refs.filter(ref => ref.researchLane === 'design'
-    && inspectDesignReferenceAdmission(root, ref, { references: allRefs }).eligible);
+    && inspectDesignReferenceAdmission(root, ref, { references: refs }).eligible);
   const domainFamilies = new Set(admittedDomain.map(ref => referenceServiceFamily(ref.source)));
   const designFamilies = new Set(admittedDesign.map(ref => referenceServiceFamily(ref.source)));
   const domainSearch = pendingMarketSearch('domain', plan, domain);

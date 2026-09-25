@@ -69,7 +69,8 @@ function nativeCapture(root: string, reference: Reference): DesignReferenceAdmis
   }
   try {
     const raw: unknown = JSON.parse(readContainedRegularFile(root, path, 'retained design capture').toString('utf8'));
-    if (!object(raw) || raw.schema === 'reference-navigation-capture-v1'
+    if (!object(raw) || ['reference-navigation-capture-v1', 'reference-navigation-capture-v2', 'reference-navigation-capture-v3',
+      'reference-discovery-entry-v1', 'reference-discovery-entry-v2', 'reference-discovery-entry-v3'].includes(raw.schema as string)
       || raw.schema === 'reference-search-execution-v1' || raw.schema === 'reference-search-execution-v2') {
       return rejected('purpose', 'Navigation and search records are discovery diagnostics.');
     }

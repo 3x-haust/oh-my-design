@@ -86,15 +86,19 @@ function persistedTaskNeed(root: string, sourceContractSha256: string, request: 
   return marketText(marketObject(source.referenceDiscovery, code).taskNeed, code);
 }
 
-function capturedKoreanService(root: string, source: ResearchSource,
-  discoveryRoots: ReferenceResearch['domainReference']['discoveryRoots'], marketLabels: readonly string[]): boolean {
+function retainedKoreanService(root: string, source: ResearchSource): boolean {
   const { capture } = source;
   if (!capture.path.startsWith('.omd/refs/domain/')) return false;
   const bytes = readStableProjectFile({ root: resolve(root), path: resolve(root, capture.path),
     label: capture.path, fs: nodeStableProjectFileSystem() });
   if (createHash('sha256').update(bytes).digest('hex') !== capture.sha256) return false;
   const record = marketObject(JSON.parse(bytes.toString('utf8')), 'REFERENCE_RESEARCH_MARKET_DOMAIN_LOCAL_RESULT_SCOPE');
-  if (record.source !== source.url || record.researchLane !== 'domain' || record.visibleKoreanText !== true) return false;
+  return record.source === source.url && record.researchLane === 'domain' && record.visibleKoreanText === true;
+}
+
+function capturedKoreanService(root: string, source: ResearchSource,
+  discoveryRoots: ReferenceResearch['domainReference']['discoveryRoots'], marketLabels: readonly string[]): boolean {
+  if (!retainedKoreanService(root, source)) return false;
   const entry = discoveryRoots?.find(candidate => candidate.url === source.url);
   if (entry === undefined) return false;
   const { reason: _reason, ...receipt } = entry;
@@ -197,6 +201,9 @@ function validateLaneProvenance(
   for (const local of coverage.localSources) {
     const source = sources.find(candidate => candidate.id === local.sourceId)
       ?? marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_LOCAL_PROVENANCE`);
+    if (marketRegion === 'KR' && lane === 'DOMAIN' && !retainedKoreanService(root, source)) {
+      marketReject('REFERENCE_RESEARCH_MARKET_DOMAIN_LOCAL_RESULT_SCOPE');
+    }
     const serviceHost = referenceServiceHost(source.url);
     if (marketRegion === 'KR' && lane === 'DOMAIN'
       && /(?:^|\.)(?:gov|nhs)(?:\.[a-z]{2})?$/u.test(serviceHost)

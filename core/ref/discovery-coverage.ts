@@ -1,4 +1,4 @@
-import { readDirectDiscoveryEntry } from './discovery-record.ts';
+import { readCurrentDirectDiscoveryEntry } from './discovery-record.ts';
 import { observedNavigationTargets, readSearchCoverage, type ObservedNavigation } from './search-execution.ts';
 import { fail, type ReferenceResearch, type ResearchEvidence } from './reference-research-contract.ts';
 
@@ -10,7 +10,7 @@ type DiscoveryCoverage = Readonly<{
 }>;
 
 export function readResearchDiscoveryRoots(root: string, lane: Pick<ReferenceResearch['domainReference'], 'discoveryRoots'>): readonly ObservedNavigation[] {
-  return (lane.discoveryRoots ?? []).map(({ reason: _reason, ...receipt }) => readDirectDiscoveryEntry(root, receipt));
+  return (lane.discoveryRoots ?? []).map(({ reason: _reason, ...receipt }) => readCurrentDirectDiscoveryEntry(root, receipt));
 }
 
 function targets(origin: DiscoveryRoot): readonly string[] {

@@ -74,6 +74,21 @@ test('explicit-market v7 binds local sources and fallback to executed market evi
     ], globalFallback: null } };
   const parsed = parseReferenceResearch({ ...input, marketCoverage: documented });
   assert.doesNotThrow(() => validateReferenceResearch(fixture.root, parsed, options));
+  const localCapturePath = join(fixture.root, fixture.domain.capture.path);
+  const localCaptureBytes = readFileSync(localCapturePath);
+  const englishOnly = JSON.parse(localCaptureBytes.toString('utf8')) as Record<string, unknown>;
+  delete englishOnly.visibleKoreanText;
+  const englishBytes = Buffer.from(JSON.stringify(englishOnly));
+  writeFileSync(localCapturePath, englishBytes);
+  try {
+    const englishSource = { ...input.domainReference.sources[0]!,
+      capture: { ...fixture.domain.capture, sha256: admissionHash(englishBytes) } };
+    assert.throws(() => validateReferenceResearch(fixture.root, parseReferenceResearch({
+      ...input, marketCoverage: documented,
+      domainReference: { ...input.domainReference,
+        sources: [englishSource, ...input.domainReference.sources.slice(1)] },
+    }), options), /MARKET_DOMAIN_LOCAL_RESULT_SCOPE/);
+  } finally { writeFileSync(localCapturePath, localCaptureBytes); }
   const firstLocal = documented.domain.localSources[0]; assert.ok(firstLocal);
   const oneLocal = { marketRegion: 'KR',
     domain: { localSources: [firstLocal],
@@ -209,7 +224,7 @@ test('explicit-market v7 binds local sources and fallback to executed market evi
       new Date(Date.now() - 8 * DAY_FOR_TEST).toISOString());
     assert.throws(() => validateReferenceResearch(fixture.root, parseReferenceResearch({
       ...signedInput, domainReference: { ...signedInput.domainReference, discoveryRoots: [staleEntry] },
-    }), options), /MARKET_DOMAIN_ATTEMPT_STALE/);
+    }), options), /MARKET_DOMAIN_ATTEMPT_STALE|native discovery capture is stale/);
   } finally { writeFileSync(koreanCapturePath, originalCapture); }
   for (const label of [
     'South Korea benefits service with unsupported browser notices',

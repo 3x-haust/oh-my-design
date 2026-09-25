@@ -3,8 +3,10 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { parseReferenceResearch, publishReferenceResearch, readPublishedReferenceResearch,
-  referenceResearchArtifacts } from '../core/ref/reference-research.ts';
+  referenceResearchArtifacts, validateReferenceResearch } from '../core/ref/reference-research.ts';
+import { readResearchDiscoveryRoots } from '../core/ref/discovery-coverage.ts';
 import { ADMISSION_SOURCE_SHA, admissionHash, designAdmissionFixture } from './helpers/design-admission.ts';
+import { directRootAt } from './helpers/market-reference.ts';
 
 const options = { expectedSourceContractSha256: ADMISSION_SOURCE_SHA, benchmarkRequired: false,
   expectedRequest: 'Study Korean public benefits' };
@@ -194,7 +196,8 @@ test('new diagnostic schemas cannot be relabeled into retained research and refu
   const before = paths.map(path => readFileSync(path));
   const path = join(fixture.root, fixture.domain.capture.path);
   const captured = JSON.parse(readFileSync(path, 'utf8'));
-  for (const schema of ['reference-navigation-capture-v2', 'reference-discovery-entry-v1', 'reference-discovery-entry-v2', 'reference-discovery-entry-v3']) {
+  for (const schema of ['reference-navigation-capture-v2', 'reference-navigation-capture-v3',
+    'reference-discovery-entry-v1', 'reference-discovery-entry-v2', 'reference-discovery-entry-v3']) {
     const bytes = JSON.stringify({ ...captured, schema });
     writeFileSync(path, bytes);
     const input = { ...fixture.research, domainReference: { ...fixture.research.domainReference,
@@ -202,4 +205,23 @@ test('new diagnostic schemas cannot be relabeled into retained research and refu
     assert.throws(() => publishReferenceResearch(fixture.root, input, options, fixture.writer), /CAPTURE_PURPOSE/);
     assert.deepEqual(paths.map(path => readFileSync(path)), before);
   }
+});
+
+test('unsigned legacy direct roots cannot authorize research reachability', t => {
+  const fixture = designAdmissionFixture(t);
+  const signed = directRootAt(fixture.root, 'domain', fixture.domain.source, [fixture.domainTwo.source]);
+  const record = JSON.parse(readFileSync(join(fixture.root, signed.capture.path), 'utf8')) as Record<string, unknown>;
+  const { signature: _signature, observedText: _observedText, linkLabels: _linkLabels, ...legacy } = record;
+  const bytes = `${JSON.stringify({ ...legacy, schema: 'reference-discovery-entry-v1' }, null, 2)}\n`;
+  const sha256 = admissionHash(bytes);
+  const capture = { path: `.omd/discovery/domain/entries/${sha256}.json`, sha256 };
+  writeFileSync(join(fixture.root, capture.path), bytes);
+  const unsigned = { ...signed, method: 'direct-public' as const, entry: 'public-directory' as const,
+    capture, reason: 'This root exposes a task link.' };
+  assert.throws(() => readResearchDiscoveryRoots(fixture.root, { discoveryRoots: [unsigned] }), /current direct discovery signature required/);
+  const research = parseReferenceResearch({ ...fixture.research, schema: 'reference-research-v6',
+    domainReference: { ...fixture.research.domainReference, discoveryRoots: [unsigned] },
+    designReference: { ...fixture.research.designReference, discoveryRoots: [] } });
+  assert.throws(() => validateReferenceResearch(fixture.root, research, options), /current direct discovery signature required/);
+  assert.equal(readFileSync(fixture.boardPath, 'utf8'), JSON.stringify(fixture.board));
 });

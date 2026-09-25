@@ -198,6 +198,14 @@ test('similarity navigation remains rooted in a successful search, never an unro
   const failed = testSearchReceipt(root, 'design', input.query, [a], true);
   assert.throws(() => validateSearchCoverage(root, 'design', [input.query], [failed], [c], hops), /not an observed/);
 });
+
+test('a visible but unrelated search header link cannot establish research reachability', t => {
+  const root = fixture(t);
+  const target = 'https://support.microsoft.com/topic/accessibility-in-bing';
+  const receipt = testSearchReceipt(root, 'domain', 'medication order', [target], false,
+    new Date().toISOString(), 'Accessibility help');
+  assert.throws(() => validateSearchCoverage(root, 'domain', ['medication order'], [receipt], [target]), /not an observed search link/);
+});
 test('written query lists, wrong-lane receipts, unobserved entries, stale bytes and symlinks fail closed', t => {
   const root = fixture(t);
   const links = ['https://www.pinterest.com/pin/123/'];

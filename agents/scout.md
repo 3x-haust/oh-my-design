@@ -12,6 +12,8 @@ url and queryParam; keep the actual receipt in searches. For direct browsing run
 `--lane design --entry free-gallery --json`; put its returned object plus an authored reason
 in discoveryRoots. Empty queries/searches require valid direct roots. Every declared query still
 needs an execution. Never invent metadata or promote old navigation captures into roots.
+Search page help, tabs, settings and footer links are not task results; after an empty search,
+advance to another public transport or direct entry rather than following page chrome.
 `omd schema reference-search` gives the exact input. Use `omd ref navigate <url> --lane domain|design`
 for intermediate directory/category hops; retain its returned receipts under navigation, not as
 design-board components. Visit a concrete gallery item under discovery, then retain only its

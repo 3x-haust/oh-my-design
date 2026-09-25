@@ -173,6 +173,21 @@ test('observed generic-label service links remain eligible while private links a
   assert.equal(work.action?.url, 'https://www.welfarehello.com/recommend-policy/');
 });
 
+test('a search header help link is not a domain task result or a next visit', t => {
+  const root = fixture(t);
+  const route = routeAdaptiveFlow(routeInput());
+  const input = referenceDiscoveryWork(root, route).action?.input;
+  assert.ok(input);
+  observedSearch(root, input, [
+    { url: 'https://support.microsoft.com/topic/accessibility-in-bing', text: '접근성 도움말' },
+    { url: 'https://www.bing.com/images', text: '이미지' },
+  ]);
+  const work = referenceDiscoveryWork(root, route);
+  assert.equal(work.action?.kind, 'search');
+  assert.notEqual(work.action?.input?.url, input.url);
+  assert.equal(work.progress.visits, 0);
+});
+
 test('domain discovery does not recurse into unrelated footer or pagination chains', t => {
   const root = fixture(t);
   const route = routeAdaptiveFlow(routeInput());
@@ -257,6 +272,33 @@ test('old or pre-route retained families cannot make a fresh route board-ready',
   const republished = referenceDiscoveryWork(freshRoot, route);
   assert.equal(republished.progress.domainFamilies, 0);
   assert.equal(republished.action?.lane, 'domain');
+});
+
+test('an English-only dot-kr capture does not satisfy Korean local domain coverage', t => {
+  const root = fixture(t);
+  const route = routeAdaptiveFlow(routeInput());
+  for (const hostname of ['www.bokjiro.go.kr', 'www.gov.kr']) retainDomain(root, hostname);
+  const englishHost = 'english-only.example.kr';
+  retainDomain(root, englishHost);
+  const path = join(root, `.omd/refs/domain/${englishHost}.json`);
+  const record = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>;
+  delete record.visibleKoreanText;
+  writeFileSync(path, JSON.stringify(record));
+  const work = referenceDiscoveryWork(root, route);
+  assert.equal(work.progress.domainFamilies, 2);
+  assert.equal(work.action?.lane, 'domain');
+});
+
+test('an old gallery wrapper cannot turn a fresh original into current design coverage', t => {
+  const value = designAdmissionFixture(t);
+  value.addSecondDesignDirection();
+  const oldGallery = JSON.parse(readFileSync(value.gallery.path, 'utf8')) as Record<string, unknown>;
+  oldGallery.capturedAt = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString();
+  writeFileSync(value.gallery.path, JSON.stringify(oldGallery));
+  const input = JSON.parse(readFileSync(new URL('fixtures/adaptive-flow/medical-new-product.json', import.meta.url), 'utf8'));
+  const work = referenceDiscoveryWork(value.root, routeAdaptiveFlow(input));
+  assert.equal(work.progress.designFamilies, 1);
+  assert.equal(work.action?.lane, 'design');
 });
 
 test('work-next resumes after a signed unavailable search instead of repeating that query', t => {

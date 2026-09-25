@@ -211,6 +211,9 @@ historical v6 remains readable with its original search-or-direct-root requireme
 `{lane, query, url, queryParam}`. The URL submits the exact query; a fresh browser records observed
 links, a 1280×900 screenshot and HTTP/error outcome, without reusing login state or clicking controls.
 Current signed search records also bind each retained visible result label to its observed link.
+Visible search chrome (help, navigation tabs, settings, pagination) is not a task result: follow
+only task-related service links or concrete gallery items. An observed search page with no such
+lead advances to another public search or direct entry, not to a header/footer link.
 For explicit-market coverage, execute `ref discover-plan`'s exact target-market domain and design
 queries before global searches. Other unscoped query seeds are adaptable; do not rewrite the exact
 market inputs. A local result's link-associated text normally names the market and relevant

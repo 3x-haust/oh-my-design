@@ -11,7 +11,7 @@ import { captureSearchObservation } from './reference-capture-observation.ts';
 import { observeDocumentResponses, type DocumentObserver } from './document-observation.ts';
 import { createPublicNetworkProxy } from './public-network.ts';
 import { disableUnproxiedRealtimeTransports } from './browser-security.ts';
-import { observedSearchTargets, type ObservedSearchResult } from './search-result.ts';
+import { actionableSearchTargets, observedSearchTargets, type ObservedSearchResult } from './search-result.ts';
 
 export { observedSearchTargets } from './search-result.ts';
 
@@ -241,7 +241,7 @@ export function readSearchCoverage(root: string, input: Readonly<{ lane: Lane; q
   const records = input.receipts.map(item => readSearchExecution(root, item, input.lane));
   if (new Set(input.receipts.map(item => item.sha256)).size !== input.receipts.length) return fail('duplicate search receipts');
   if (input.queries.some(query => !records.some(item => item.query === query)) || records.some(item => !input.queries.includes(item.query))) return fail('declared queries do not match executed queries');
-  return { targets: records.filter(searchObserved).flatMap(observedSearchTargets),
+  return { targets: records.filter(searchObserved).flatMap(record => actionableSearchTargets(record)),
     summary: { executed: records.length, failed: records.filter(item => !searchObserved(item)).length, searchQuality: 'not-automatically-judged' as const } };
 }
 

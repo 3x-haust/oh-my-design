@@ -126,13 +126,17 @@ function readDiscovery(root: string, value: unknown, direct: boolean, requireCur
   if (row.source !== url || row.researchLane !== lane || row.kind !== 'page' || row.imagePath !== image.path
     || row.limitations !== DISCOVERY_LIMITATIONS || !Number.isFinite(Date.parse(text(row.capturedAt)))
     || (direct && (row.method !== 'direct-public' || row.entry !== entry))) return fail('native capture purpose/source/lane binding differs');
-  if (requireCurrent && !current) return fail('current native discovery signature required');
+  if (requireCurrent && !current) return fail(direct
+    ? 'current direct discovery signature required' : 'current native discovery signature required');
+  if (requireCurrent && (Date.parse(row.capturedAt as string) < currentReferenceEvidenceAfter(root)
+    || Date.parse(row.capturedAt as string) > Date.now() + 5 * 60 * 1000)) return fail('native discovery capture is stale for the current route');
   if (current || legacySigned) {
     const { signature, ...unsigned } = row;
     const schema = currentDirect ? 'reference-discovery-entry-v3'
       : currentNavigation ? 'reference-navigation-capture-v3' : 'reference-discovery-entry-v2';
     if (typeof signature !== 'string' || !verifyNativeObservation(root, schema,
-      discoveryDigest(canonicalJson(unsigned)), signature)) return fail('native discovery signature invalid');
+      discoveryDigest(canonicalJson(unsigned)), signature)) return fail(direct
+        ? 'native direct discovery signature invalid' : 'native discovery signature invalid');
   }
   const observedText = currentDirect ? text(row.observedText) : undefined;
   const acquisition = object(row.acquisition, ['requestedUrl', 'finalUrl', 'httpStatus', 'links', 'imageSha256']);

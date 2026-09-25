@@ -44,8 +44,7 @@ export function captureFinalUrlGuard(root: string, specs: readonly CaptureIntent
     const lane = researchLane(spec.lane);
     if (koreanReferences && lane === 'domain' && !localDomainResearchReady()) {
       const visibleKorean = isKoreanLanguageServiceText(visibleText ?? '');
-      const koreanHost = new URL(finalUrl).hostname.endsWith('.kr');
-      if (!visibleKorean && !koreanHost) throw new ReferenceIntakeError('REFERENCE_MARKET_LOCAL_FIRST: this Korean-language brief needs Korean-service evidence before foreign fallback. A visibly Korean-language service counts even on a .com domain; inspect local results or use another accessible Korean source.');
+      if (!visibleKorean) throw new ReferenceIntakeError('REFERENCE_MARKET_LOCAL_FIRST: this Korean-language brief needs visibly Korean-language service evidence before foreign fallback. A .kr hostname alone is insufficient; inspect local results or use another accessible Korean source.');
     }
     const service = host(finalUrl);
     const overlap = service !== null && (specs.some((other, otherIndex) => otherIndex !== index && other.lane !== lane
