@@ -10,7 +10,7 @@ import omdExtension, {
   type PortablePiCommand,
   type PortablePiTool,
 } from '../extensions/omd.ts';
-import { formatOmdProgress } from '../extensions/omd-runtime.ts';
+import { formatOmdProgress, monitorOmdProgress } from '../extensions/omd-runtime.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 
@@ -210,13 +210,21 @@ test('long-running progress names the command, target, elapsed time, and unknown
   assert.doesNotMatch(message, /private/);
 });
 
-test('progress distinguishes input manifests without exposing their paths', () => {
-  const first = formatOmdProgress(['ref', 'discover-batch', '--input', '/private/secret-a.json', '--json'], 'running', 15);
-  const second = formatOmdProgress(['ref', 'discover-batch', '--input', '/private/secret-b.json', '--json'], 'running', 15);
+test('progress distinguishes invocations without deriving IDs from private input paths', () => {
+  const updates: string[] = [];
+  const args = ['ref', 'discover-batch', '--input', '/private/secret-a.json', '--json'];
+  const stopFirst = monitorOmdProgress(args, 'queued', undefined, update => { updates.push(update.content[0]?.text ?? ''); });
+  const stopSecond = monitorOmdProgress(args.slice(), 'queued', undefined, update => { updates.push(update.content[0]?.text ?? ''); });
+  stopFirst();
+  stopSecond();
+  const [first, second] = updates;
+  assert.ok(first);
+  assert.ok(second);
   assert.match(first, /명령: omd ref discover-batch/);
-  assert.match(first, /대상: 입력 파일 #[a-f0-9]{8}/);
+  assert.match(first, /대상: 입력 파일 #[a-z0-9]+/);
   assert.notEqual(first, second);
   assert.doesNotMatch(first, /private|secret-a/);
+  assert.doesNotMatch(formatOmdProgress(['ref', '--token=secret'], 'running', 0), /token=secret/);
 });
 
 test('a queued omd_cli command reports that it has not started, then reports execution', async () => {

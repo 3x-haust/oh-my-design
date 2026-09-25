@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module';
-import { createHash } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createOmdRuntimeSnapshot, runtimeDependencyRoot } from './omd-runtime-snapshot.ts';
@@ -55,16 +55,20 @@ function optionValue(args: readonly string[], name: string): string | undefined 
   return index < 0 ? undefined : args[index + 1];
 }
 
-function displayTarget(value: string | undefined): string | undefined {
+const progressIds = new WeakMap<readonly string[], string>();
+
+function displayTarget(value: string | undefined, targetId: string | undefined): string | undefined {
   if (value === undefined) return undefined;
-  const id = createHash('sha256').update(value).digest('hex').slice(0, 8);
   try {
     const url = new URL(value);
-    return url.protocol === 'https:' || url.protocol === 'http:' ? `${url.host} · 페이지 #${id}` : `입력 파일 #${id}`;
-  } catch { return `입력 파일 #${id}`; }
+    return url.protocol === 'https:' || url.protocol === 'http:'
+      ? `${url.host}${targetId === undefined ? '' : ` · 페이지 #${targetId}`}`
+      : `입력 파일${targetId === undefined ? '' : ` #${targetId}`}`;
+  } catch { return `입력 파일${targetId === undefined ? '' : ` #${targetId}`}`; }
 }
 
-export function formatOmdProgress(args: readonly string[], status: 'queued' | 'running', elapsedSeconds: number): string {
+export function formatOmdProgress(args: readonly string[], status: 'queued' | 'running', elapsedSeconds: number,
+  targetId?: string): string {
   const [root, action] = args;
   const lane = optionValue(args, '--lane');
   const prefix = lane === 'design' ? '디자인 ' : lane === 'domain' ? '도메인 ' : '';
@@ -73,9 +77,9 @@ export function formatOmdProgress(args: readonly string[], status: 'queued' | 'r
       : root === 'ref' && action === 'search' ? '레퍼런스 검색 결과 확인'
         : root === 'ref' && action === 'discover-batch' ? '레퍼런스 검색·사이트 방문 병렬 수집'
         : root === 'ref' && action === 'add-batch' ? '레퍼런스 여러 화면 캡처'
-          : [root, action].filter(Boolean).join(' ') || 'OMD 명령';
+          : 'OMD 명령';
   const target = displayTarget(root === 'ref' && ['navigate', 'add'].includes(action ?? '') ? args[2]
-    : optionValue(args, '--input') ?? (root === 'ref' && action === 'add-batch' ? args[2] : undefined));
+    : optionValue(args, '--input') ?? (root === 'ref' && action === 'add-batch' ? args[2] : undefined), targetId);
   const command = [root, action].filter(part => part !== undefined && /^[a-z][a-z0-9-]*$/.test(part)).join(' ');
   const elapsed = `${Math.floor(elapsedSeconds / 60)}분 ${elapsedSeconds % 60}초`;
   const heading = status === 'queued' ? 'OMD 대기 중' : 'OMD 실행 중';
@@ -92,9 +96,14 @@ export function monitorOmdProgress(
 ): () => void {
   if (onUpdate === undefined) return () => undefined;
   const started = Date.now();
+  let targetId = progressIds.get(args);
+  if (targetId === undefined) {
+    targetId = randomBytes(6).toString('hex');
+    progressIds.set(args, targetId);
+  }
   const update = (): void => {
     const elapsedSeconds = Math.floor((Date.now() - started) / 1000);
-    onUpdate({ content: [{ type: 'text', text: formatOmdProgress(args, status, elapsedSeconds) }], details: { status, elapsedSeconds } });
+    onUpdate({ content: [{ type: 'text', text: formatOmdProgress(args, status, elapsedSeconds, targetId) }], details: { status, elapsedSeconds } });
   };
   update();
   const interval = setInterval(() => { if (!signal?.aborted) update(); }, 15_000);
