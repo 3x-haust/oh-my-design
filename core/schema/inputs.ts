@@ -1293,6 +1293,22 @@ export const INPUT_SKELETONS: readonly InputSkeleton[] = [
     skeleton: { lane: 'design', query: 'dashboard interface design', url: 'https://www.google.com/search?q=dashboard%20interface%20design', queryParam: 'q' },
   },
   {
+    name: 'reference-discovery-batch', path: '.omd/.cache/reference-discovery-batch.json',
+    command: 'omd ref discover-batch --input .omd/.cache/reference-discovery-batch.json --json',
+    keys: ['kind', 'input', 'source', 'lane', 'entry'],
+    constraints: [
+      'Replace every example with 1–16 independent current-task operations. A search item contains kind and the exact reference-search input; a navigate item contains kind, source, lane and optional entry.',
+      'Group only independent queries or already-known public URLs. Follow-up item URLs must first appear in an observed parent result; never guess a gallery item or use a search result as a retained reference.',
+      'For target-market-first plans, run required market-qualified domain/design searches in market-only batches and wait for their outcomes before any separate unqualified-global batch. Input order inside one concurrent batch does not establish search order.',
+      'The command uses one browser with up to four concurrent isolated contexts. Inspect every ordered outcome: partial failures remain gaps and their successful neighbors remain usable signed evidence.',
+    ],
+    skeleton: [
+      { kind: 'search', input: { lane: 'domain', query: '<task-specific local-service query>',
+        url: 'https://www.google.com/search?q=%3Ctask-specific+local-service+query%3E', queryParam: 'q' } },
+      { kind: 'navigate', source: 'https://www.example.com/', lane: 'design' },
+    ],
+  },
+  {
     name: 'first-render-surface', path: '.omd/.cache/first-render-surface.json',
     command: 'omd first-render check --page <local-build.html> --input .omd/.cache/first-render-surface.json --json',
     keys: ['heading', 'landmarks', 'repeatedObjects', 'trustSignals', 'visibleText', 'dominantAreaShare'],

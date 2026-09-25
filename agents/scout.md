@@ -18,6 +18,16 @@ advance to another public transport or direct entry rather than following page c
 for intermediate directory/category hops; retain its returned receipts under navigation, not as
 design-board components. Visit a concrete gallery item under discovery, then retain only its
 observed original screen or actual UI image in the design lane.
+When two or more independent queries or already-known public lists are ready, use
+`omd schema reference-discovery-batch` and `omd ref discover-batch --input <json> --json`:
+up to four isolated visits run concurrently in one browser. Inspect every ordered outcome;
+successful receipts remain evidence even when another item fails. Do not batch a follow-up
+URL before its parent capture actually exposes that link. A batch outcome is discovery,
+never a retained domain or design board reference.
+With target-market-first policy, put all required market-qualified domain/design searches in
+market-only batches and wait for their outcomes before starting any unqualified global search
+batch. Never mix market-qualified and global searches in one concurrent batch: research-check
+verifies the signed observation times, not the manifest order.
 Blocked/free-access gaps require a public alternative, not a paid MCP or a relabelled domain page.
 The v3 benchmark checker reports artifact-only evidence strength, not verified live actions. Historical v2 records remain readable under their original admission.
 Preserve that limitation in the synthesis; do not claim every flow/control was tested.
@@ -231,7 +241,8 @@ source, another `.omd/` artifact, or ask another agent to write the scout artifa
 Keep acquisition bounded and use the supported CLI path. Never start `browser-rs` yourself,
 handcraft or `curl` its MCP protocol, inspect its implementation to debug transport, or launch
 extra ports/providers. Run exactly `oh-my-design browser doctor --json` once; never run the
-unsupported `browser-rs doctor` form. Then execute independent searches or native public-list entries concurrently, write
+unsupported `browser-rs doctor` form. Then group independent searches or native public-list entries with
+`omd ref discover-batch --input <json> --json`, inspect each outcome, and write
 one compact initial batch manifest, and run the initial `omd ref add-batch` once. Every
 entry includes a tight component selector and the framer-owned `slot` it covers. The batch command
 persists that zone binding. After each batch invocation, wait until its tool process reports
@@ -436,7 +447,7 @@ only the missing categories rather than rebuilding it), and capture references i
 `omd ref add-batch <manifest.json>` — one browser for the whole batch instead of one launch per
 reference. Capture a motion study (the default energy pass) only where motion matters; for
 typography, layout, colour, and voice references set `noEnergy` (or `omd ref add --no-energy`) to
-skip the second browser launch — it does not affect a non-motion reference's usefulness.
+skip the additional page and motion sampling — it does not affect a non-motion reference's usefulness.
 After capture, run `omd ref audit`: it reads the recorded capture times and fails when several
 references were captured one at a time (a separate browser launch each) instead of batched. A serial
 research pass is the defect to avoid — capture the known set in one `omd ref add-batch` so it parallelises.
@@ -460,8 +471,9 @@ You do not author that selected visual packet. After selection, the coordinator 
 receive only the source-free manifest and named no-ship SVG.
 
 Turn the validated inventory into sanitized bricks in `.omd/scout.md`. If the route selects
-`reference-board` and the board is missing, call `omd ref work-next --json` and execute its
-current native acquisition action with `omd ref advance --json`. Recompute after the signed
+`reference-board` and the board is missing, batch independent plan-derived searches and public
+lists first, then call `omd ref work-next --json` and execute dependent or remaining single
+acquisition actions with `omd ref advance --json`. Recompute after the signed
 search or navigation attempt; do not loop on the read-only plan. A visited gallery item is
 discovery only: inspect and retain the actual useful UI image or observed original with `ref add`.
 For a directly visited service, follow task-content links before a primary-navigation link; the

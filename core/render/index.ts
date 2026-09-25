@@ -709,12 +709,12 @@ export async function renderFilmstrip(
  */
 export async function captureEnergy(
   target: string,
-  opts: { viewport: Viewport; frames?: number; interval?: number },
+  opts: { viewport: Viewport; frames?: number; interval?: number; browser?: Browser },
 ): Promise<EnergyCurve | null> {
   const frameCount = Math.min(Math.max(opts.frames ?? 4, 2), 6);
   const interval = opts.interval ?? 300;
   try {
-    return await withPage(target, opts.viewport, async (page) => {
+    const sample = (browser: Browser) => onPage(browser, target, opts.viewport, async (page) => {
       const buffers: Buffer[] = [];
       for (let i = 0; i < frameCount; i++) {
         if (i > 0) await new Promise<void>((r) => setTimeout(r, interval));
@@ -722,6 +722,7 @@ export async function captureEnergy(
       }
       return computeEnergy(buffers);
     }, REFERENCE_ENERGY_TIMEOUT_MS);
+    return await (opts.browser === undefined ? withBrowser(sample) : sample(opts.browser));
   } catch {
     return null;
   }

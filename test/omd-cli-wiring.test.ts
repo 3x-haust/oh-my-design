@@ -184,13 +184,15 @@ test('printed input skeletons carry exactly the keys their validators accept', a
   assert.match(directionHelp, /both approvedMotionRecipe and approvedMotionRecipeReceipt/);
   assert.match(directionHelp, /exact receipt-bound evaluatorAssessment and evaluatorResult payload serialization/);
   assert.match(directionHelp, /not permission to reconstruct unseen judgments/);
-  assert.equal(INPUT_SKELETONS.length, 37);
+  assert.equal(INPUT_SKELETONS.length, 38);
   for (const name of ['design-judgment', 'candidate-selection']) {
     const input = inputSkeleton(name);
     assert.deepEqual(Object.keys(input.skeleton as object), [...input.keys]);
   }
   const { parseSearchInput } = await import('../core/ref/search-execution.ts');
   assert.doesNotThrow(() => parseSearchInput(inputSkeleton('reference-search').skeleton));
+  const { parseDiscoveryBatchInput } = await import('../core/ref/discovery-batch.ts');
+  assert.doesNotThrow(() => parseDiscoveryBatchInput(inputSkeleton('reference-discovery-batch').skeleton));
   for (const name of ['route-input', 'product-route-input', 'design-route-input']) {
     const route = inputSkeleton(name);
     assert.deepEqual(Object.keys(route.skeleton as object).sort(), [...route.keys].sort());
@@ -274,7 +276,7 @@ test('printed input skeletons carry exactly the keys their validators accept', a
   assert.match(printedBoard.stdout, /every piece grid contains exactly column, span, order/);
   assert.match(printedBoard.stdout, /"grid": \{\s+"column": 1,\s+"span": 12,\s+"order": 0/s);
   const listed = run(['schema', 'list', '--json'], dir);
-  assert.deepEqual(JSON.parse(listed.stdout).map((entry: { name: string }) => entry.name), ['design-judgment', 'candidate-selection', 'reference-search', 'first-render-surface', 'slop-scope', 'route-input', 'design-route-input', 'product-route-input', 'design-handoff', 'route-ai-asset', 'reality-ledger', 'domain-brief', 'depth-input', 'content-grain', 'acquisition-plan', 'reference-board', 'reference-image-fragment', 'reference-feature-measurements', 'reference-capture-preparation', 'reference-locale-binding', 'task-flow-benchmark', 'reference-research', 'art-direction-check', 'token-commit', 'responsive-token-commit', 'locale-contract', 'locale-design-context', 'cultural-design-profile', 'functional-requirements', 'frame', 'decision-graph', 'entry-surface-contract', 'final-render-reviewer-packet', 'trusted-lifecycle-manifest', 'design-quality-observation-projection', 'reference-flow-input', 'runtime-design-inventory-input']);
+  assert.deepEqual(JSON.parse(listed.stdout).map((entry: { name: string }) => entry.name), ['design-judgment', 'candidate-selection', 'reference-search', 'reference-discovery-batch', 'first-render-surface', 'slop-scope', 'route-input', 'design-route-input', 'product-route-input', 'design-handoff', 'route-ai-asset', 'reality-ledger', 'domain-brief', 'depth-input', 'content-grain', 'acquisition-plan', 'reference-board', 'reference-image-fragment', 'reference-feature-measurements', 'reference-capture-preparation', 'reference-locale-binding', 'task-flow-benchmark', 'reference-research', 'art-direction-check', 'token-commit', 'responsive-token-commit', 'locale-contract', 'locale-design-context', 'cultural-design-profile', 'functional-requirements', 'frame', 'decision-graph', 'entry-surface-contract', 'final-render-reviewer-packet', 'trusted-lifecycle-manifest', 'design-quality-observation-projection', 'reference-flow-input', 'runtime-design-inventory-input']);
 });
 
 test('reality-ledger schema exposes its closed category vocabulary', async () => {

@@ -1,4 +1,5 @@
 import { createRequire } from 'node:module';
+import { randomBytes } from 'node:crypto';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createOmdRuntimeSnapshot, runtimeDependencyRoot } from './omd-runtime-snapshot.ts';
@@ -43,6 +44,74 @@ export type OmdRunResult = Readonly<{
   text: string;
   details: { code: number; killed: boolean };
 }>;
+
+export type OmdProgressCallback = (update: Readonly<{
+  content: Array<{ type: 'text'; text: string }>;
+  details: Readonly<{ status: 'queued' | 'running'; elapsedSeconds: number }>;
+}>) => void;
+
+function optionValue(args: readonly string[], name: string): string | undefined {
+  const index = args.indexOf(name);
+  return index < 0 ? undefined : args[index + 1];
+}
+
+export const createOmdProgressId = (): string => randomBytes(6).toString('hex');
+
+function displayTarget(value: string | undefined, targetId: string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' || url.protocol === 'http:'
+      ? `${url.host}${targetId === undefined ? '' : ` · 페이지 #${targetId}`}`
+      : `입력 파일${targetId === undefined ? '' : ` #${targetId}`}`;
+  } catch { return `입력 파일${targetId === undefined ? '' : ` #${targetId}`}`; }
+}
+
+export function formatOmdProgress(args: readonly string[], status: 'queued' | 'running', elapsedSeconds: number,
+  targetId?: string): string {
+  const [root, action] = args;
+  const lane = optionValue(args, '--lane');
+  const prefix = lane === 'design' ? '디자인 ' : lane === 'domain' ? '도메인 ' : '';
+  const task = root === 'ref' && action === 'navigate' ? `${prefix}레퍼런스 사이트 방문·관찰`
+    : root === 'ref' && action === 'add' ? `${prefix}레퍼런스 화면 캡처·측정`
+      : root === 'ref' && action === 'search' ? '레퍼런스 검색 결과 확인'
+        : root === 'ref' && action === 'discover-batch' ? '레퍼런스 검색·사이트 방문 병렬 수집'
+        : root === 'ref' && action === 'add-batch' ? '레퍼런스 여러 화면 캡처'
+          : 'OMD 명령';
+  const target = displayTarget(root === 'ref' && ['navigate', 'add'].includes(action ?? '') ? args[2]
+    : optionValue(args, '--input') ?? (root === 'ref' && action === 'add-batch' ? args[2] : undefined), targetId);
+  const command = [root, action].filter(part => part !== undefined && /^[a-z][a-z0-9-]*$/.test(part)).join(' ');
+  const elapsed = `${Math.floor(elapsedSeconds / 60)}분 ${elapsedSeconds % 60}초`;
+  const heading = status === 'queued' ? 'OMD 대기 중' : 'OMD 실행 중';
+  const state = status === 'queued' ? '앞선 OMD 명령이 끝나기를 기다리는 중입니다. 이 명령은 아직 시작되지 않았습니다.'
+    : 'CLI 프로세스가 실행 중입니다. 아직 결과가 돌아오지 않아 내부 세부 단계와 완료 여부는 확인되지 않았습니다.';
+  const note = elapsedSeconds >= 120 && status === 'running'
+    ? '\n2분 이상 결과가 없습니다. 사이트·브라우저 응답이 느리거나 멈췄을 수 있습니다. 원하면 ESC로 중단할 수 있습니다.'
+    : root === 'ref' && status === 'running' ? '\n외부 사이트 응답이나 브라우저 캡처에는 시간이 걸릴 수 있습니다.' : '';
+  return `${heading} · ${elapsed}\n작업: ${task}\n명령: omd ${command || '명령'}${target ? `\n대상: ${target}` : ''}\n상태: ${state}${note}`;
+}
+
+export function monitorOmdProgress(
+  args: readonly string[], status: 'queued' | 'running', signal: AbortSignal | undefined, onUpdate: OmdProgressCallback | undefined,
+  progressId = createOmdProgressId(),
+): () => void {
+  if (onUpdate === undefined) return () => undefined;
+  const started = Date.now();
+  const update = (): void => {
+    const elapsedSeconds = Math.floor((Date.now() - started) / 1000);
+    onUpdate({ content: [{ type: 'text', text: formatOmdProgress(args, status, elapsedSeconds, progressId) }], details: { status, elapsedSeconds } });
+  };
+  update();
+  const interval = setInterval(() => { if (!signal?.aborted) update(); }, 15_000);
+  const stop = (): void => { clearInterval(interval); signal?.removeEventListener('abort', stop); };
+  signal?.addEventListener('abort', stop, { once: true });
+  return stop;
+}
+
+export class OmdCancelledError extends Error {
+  override readonly name = 'OmdCancelledError';
+  constructor() { super('OMD_CLI_CANCELLED: 요청이 중단되어 이 명령은 완료되지 않았습니다.'); }
+}
 
 export class OmdCommandError extends Error {
   override readonly name = 'OmdCommandError';
@@ -97,7 +166,7 @@ export type PortablePiTool = Readonly<{
     toolCallId: string,
     params: { args: string[] },
     signal: AbortSignal | undefined,
-    onUpdate: unknown,
+    onUpdate: OmdProgressCallback | undefined,
     context: PortablePiContext,
   ): Promise<{
     content: Array<{ type: 'text'; text: string }>;
@@ -148,28 +217,42 @@ export async function runOmd(
   args: readonly string[],
   cwd: string,
   signal?: AbortSignal,
+  onUpdate?: OmdProgressCallback,
+  progressId?: string,
 ): Promise<OmdRunResult> {
-  const result = await pi.exec('node', [runtimeSnapshot.entryPath, ...args], signal === undefined ? { cwd } : { cwd, signal });
-  const text = boundedOutput(result);
-  if (result.code !== 0 || result.killed) {
-    throw new OmdCommandError(text, result.stdout, result.stderr, result.code, result.killed);
+  if (signal?.aborted) throw new OmdCancelledError();
+  const stopProgress = monitorOmdProgress(args, 'running', signal, onUpdate, progressId);
+  try {
+    let result: ExecResult;
+    try { result = await pi.exec('node', [runtimeSnapshot.entryPath, ...args], signal === undefined ? { cwd } : { cwd, signal }); }
+    catch (error) {
+      if (signal?.aborted) throw new OmdCancelledError();
+      throw error;
+    }
+    if (signal?.aborted) throw new OmdCancelledError();
+    const text = boundedOutput(result);
+    if (result.code !== 0 || result.killed) {
+      throw new OmdCommandError(text, result.stdout, result.stderr, result.code, result.killed);
+    }
+    return { text: text || 'OMD completed successfully.', details: { code: result.code, killed: result.killed } };
+  } finally {
+    stopProgress();
   }
-  return {
-    text: text || 'OMD completed successfully.',
-    details: { code: result.code, killed: result.killed },
-  };
 }
 
 export function structuredToolDiagnostic(error: unknown, args: readonly string[]): OmdRunResult | null {
   const [root, action] = args;
   const expectedCheck = root === 'guard' || (root === 'route' && action === 'validate')
     || (root === 'brief' && args.includes('--check'))
-    || /^(?:check|validate|research-check|apply-check|apply-review-check|review-check)$/.test(action ?? '');
+    || /^(?:check|validate|research-check|apply-check|apply-review-check|review-check|discover-batch)$/.test(action ?? '');
   if (!(error instanceof OmdCommandError) || error.code !== 1 || error.killed || !expectedCheck || !args.includes('--json')
     || error.stderr.trim() !== '' || error.stdout.trim() === '') return null;
   try {
     const parsed: unknown = JSON.parse(error.stdout);
     if (typeof parsed !== 'object' || parsed === null) return null;
+    if (root === 'ref' && action === 'discover-batch'
+      && (!('ok' in parsed) || parsed.ok !== false
+        || !('outcomes' in parsed) || !Array.isArray(parsed.outcomes))) return null;
   } catch (parseError) {
     if (parseError instanceof SyntaxError) return null;
     throw parseError;
