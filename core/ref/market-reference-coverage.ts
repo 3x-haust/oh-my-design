@@ -10,7 +10,7 @@ import { inferredKoreanReferenceMarket, isKoreanLanguageServiceText, isMarketQua
 import { readCurrentDirectDiscoveryEntry } from './discovery-record.ts';
 import { negatesMarketScope } from './market-scope-negation.ts';
 import { readSearchExecution, SEARCH_EXECUTION_SCHEMA } from './search-execution.ts';
-import { resultReaches, type ObservedSearchResult } from './search-result.ts';
+import { actionableSearchTargets, resultReaches, type ObservedSearchResult } from './search-result.ts';
 import { referenceServiceFamily, referenceServiceHost } from './design-discovery-sources.ts';
 import {
   marketObject, marketReject, marketText, marketTexts,
@@ -241,7 +241,10 @@ function validateLaneProvenance(
     const urls = [source.url, ...(source.discovery === undefined ? [] : [source.discovery.url])];
     const execution = executions.find(candidate => candidate.sha256 === binding.provenanceReceiptSha256)
       ?? marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_FALLBACK_PROVENANCE`);
-    if (!execution.usable || !execution.results.some(result => resultReaches(result, urls))) {
+    if (!execution.usable || !execution.results.some(result => resultReaches(result, urls)
+      && (execution.query === null || actionableSearchTargets({ lane: lane.toLowerCase() as 'domain' | 'design',
+        query: execution.query, provider: '', results: [result], allowUnmatched: false })
+        .some(target => urls.includes(target))))) {
       marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_FALLBACK_PROVENANCE`);
     }
     assertCurrentSourceObservation(source.observedAt, execution.observedAt,

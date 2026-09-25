@@ -253,7 +253,8 @@ export async function inspectRenderedState(page: Page, purpose: 'search' | 'disc
           const taskNavigation = taskTerms.some(term => {
             if (/[가-힣]/u.test(term)) return taskContext.includes(term) || taskContext.includes(term.slice(0, 2));
             const stem = term.replace(/(?:es|s)$/u, '');
-            return stem.length >= 4 && taskContext.includes(stem);
+            return stem.length >= 4 && (taskContext.match(/[a-z]{4,}/gu) ?? [])
+              .some(contextTerm => contextTerm.startsWith(stem.slice(0, 4)));
           });
           let chrome = Boolean(element.closest('footer, [role="contentinfo"], [role="dialog"], [aria-modal="true"]'))
             || (purpose === 'search'

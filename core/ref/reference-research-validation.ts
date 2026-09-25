@@ -190,8 +190,9 @@ export function validateReferenceResearch(root: string, research: ReferenceResea
     const entry = research[lane === 'domain' ? 'domainReference' : 'designReference'];
     const sourceUrls = lane === 'domain' ? entry.sources.map(item => item.url)
       : entry.sources.filter(item => item.discovery?.kind !== 'user-provided').map(item => requiredDiscovery(item).url);
-    if (directRoots[lane].length) validateDiscoveryCoverage(root, { lane, queries: entry.queries, searches: entry.searches, sourceUrls, navigation: navigation[lane], directRoots: directRoots[lane] });
-    else validateSearchCoverage(root, lane, entry.queries, entry.searches, sourceUrls, navigation[lane]);
+    const allowUnmatched = research.schema !== 'reference-research-v7' || marketCoverage?.marketRegion == null;
+    if (directRoots[lane].length) validateDiscoveryCoverage(root, { lane, queries: entry.queries, searches: entry.searches, sourceUrls, navigation: navigation[lane], directRoots: directRoots[lane], allowUnmatched });
+    else validateSearchCoverage(root, lane, entry.queries, entry.searches, sourceUrls, navigation[lane], allowUnmatched);
   }
   const boardBytes = readReferenceResearchFileBytes(root, '.omd/reference-board.json', 'REFERENCE_RESEARCH_BOARD_MISSING');
   if (createHash('sha256').update(boardBytes).digest('hex') !== research.designReference.boardSha256) fail('REFERENCE_RESEARCH_BOARD_STALE');

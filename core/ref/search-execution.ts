@@ -234,14 +234,15 @@ function hasSearchDestination(input: SearchInput, links: readonly string[]): boo
   });
 }
 /** navigation is derived only from separately hash/image/lane-validated native captures. */
-export function validateSearchCoverage(root: string, lane: Lane, queries: readonly string[], receipts: readonly Receipt[], sourceUrls: readonly string[], navigation: readonly ObservedNavigation[] = []) {
-  const search = readSearchCoverage(root, { lane, queries, receipts });
+export function validateSearchCoverage(root: string, lane: Lane, queries: readonly string[], receipts: readonly Receipt[], sourceUrls: readonly string[], navigation: readonly ObservedNavigation[] = [], allowUnmatched = true) {
+  const search = readSearchCoverage(root, { lane, queries, receipts, allowUnmatched });
   const reached = observedNavigationTargets(search.targets, navigation);
   for (const source of sourceUrls) if (!reached.has(source)) return fail(`retained source was not an observed search link or captured navigation descendant: ${source}; capture every hop from a usable public search result`);
   return search.summary;
 }
 
-export function readSearchCoverage(root: string, input: Readonly<{ lane: Lane; queries: readonly string[]; receipts: readonly Receipt[] }>) {
+export function readSearchCoverage(root: string, input: Readonly<{ lane: Lane; queries: readonly string[]; receipts: readonly Receipt[];
+  allowUnmatched?: boolean | undefined }>) {
   const records = input.receipts.map(item => readSearchExecution(root, item, input.lane));
   if (new Set(input.receipts.map(item => item.sha256)).size !== input.receipts.length) return fail('duplicate search receipts');
   if (input.queries.some(query => !records.some(item => item.query === query)) || records.some(item => !input.queries.includes(item.query))) return fail('declared queries do not match executed queries');
@@ -250,7 +251,8 @@ export function readSearchCoverage(root: string, input: Readonly<{ lane: Lane; q
     || Date.parse(record.observedAt) < after || Date.parse(record.observedAt) > Date.now() + 5 * 60 * 1000)) {
     return fail('current signed search execution after the route publication is required');
   }
-  return { targets: records.filter(searchObserved).flatMap(record => actionableSearchTargets(record)),
+  return { targets: records.filter(searchObserved).flatMap(record => actionableSearchTargets({ ...record,
+    allowUnmatched: input.allowUnmatched })),
     summary: { executed: records.length, failed: records.filter(item => !searchObserved(item)).length, searchQuality: 'not-automatically-judged' as const } };
 }
 

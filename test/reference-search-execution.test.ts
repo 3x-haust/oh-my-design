@@ -247,6 +247,15 @@ test('an unrelated long news title does not become a welfare service result', t 
   assert.throws(() => validateSearchCoverage(root, 'domain', ['복지로'], [receipt], [source]), /not an observed search link/);
 });
 
+test('explicit-market reachability rejects an unrelated substantive title', t => {
+  const root = fixture(t);
+  const source = 'https://weather.example/forecast';
+  const receipt = testSearchReceipt(root, 'domain', '복지로', [source], false,
+    new Date().toISOString(), 'Weather Forecast Tomorrow');
+  assert.throws(() => validateSearchCoverage(root, 'domain', ['복지로'], [receipt], [source], [], false),
+    /not an observed search link/);
+});
+
 test('unscoped tasks can follow useful service titles without exact query words', t => {
   for (const [query, label] of [
     ['flight booking', 'Airline Ticket Reservations'],

@@ -10,7 +10,7 @@ const RELATED_TASK_TERMS = [
     result: /medication|medicine|dosage|prescription|pharmacy|refill|처방|약품|투약/iu },
 ] as const;
 export function actionableSearchTargets(execution: Readonly<{ lane: 'domain' | 'design'; query: string; provider: string;
-  results?: readonly ObservedSearchResult[]; allowUnmatched?: boolean }>): readonly string[] {
+  results?: readonly ObservedSearchResult[]; allowUnmatched?: boolean | undefined }>): readonly string[] {
   const tokens = [...new Set((execution.query.toLowerCase().match(/[가-힣]{2,}|[a-z0-9]{3,}/gu) ?? [])
     .filter(token => !SEARCH_STOP_WORDS.has(token)))];
   const relatedTargets = new Set<string>();

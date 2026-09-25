@@ -303,6 +303,14 @@ test('a support task described in main keeps its primary-navigation path', async
   assert.deepEqual(readCurrentDirectDiscoveryEntry(result.root, result.receipt).links, [support]);
 });
 
+test('an Apply action can match the application task described in main', async t => {
+  const apply = 'https://service.example/benefits/apply';
+  const html = `<header><nav><a href="${apply}">Apply</a></nav></header>
+    <main><h1>Benefit applications</h1><p>Start your application, review eligibility requirements, and prepare the documents needed before submitting your benefit request.</p></main>`;
+  const result = await capture(t, { url: PUBLIC_DIRECTORY, html }, 'public-directory');
+  assert.deepEqual(readCurrentDirectDiscoveryEntry(result.root, result.receipt).links, [apply]);
+});
+
 test('page-content task links precede a contextual primary-navigation link', async t => {
   const first = 'https://service.example/apply';
   const html = `<header><nav><a href="${DOMAIN_ITEM}">Benefits</a></nav></header>
