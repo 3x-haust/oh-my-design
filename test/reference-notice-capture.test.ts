@@ -133,7 +133,7 @@ test('a prepared feature refuses an unrelated consent modal instead of saving ob
 });
 
 test('reference capture refuses unknown popups and covering layers but clears a notice backdrop', async t => {
-  for (const mode of ['custom', 'orphaned-backdrop', 'white-mask', 'embedded-overlay', 'service-error', 'structured-error', 'korean-maintenance', 'hidden-main-error', 'nested-main-error', 'app-root-error', 'app-root-korean-error', 'app-root-hidden-nav-error', 'app-root-visible-nav-error'] as const) {
+  for (const mode of ['custom', 'orphaned-backdrop', 'white-mask', 'embedded-overlay', 'service-error', 'structured-error', 'korean-maintenance', 'hidden-main-error', 'nested-main-error', 'app-root-error', 'app-root-korean-error', 'app-root-hidden-nav-error', 'app-root-visible-nav-error', 'app-root-opacity-nav-error', 'app-root-hidden-content-error', 'app-root-featureless-error'] as const) {
     const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-visual-overlay-')));
     t.after(() => rmSync(root, { recursive: true, force: true }));
     const popup = mode === 'custom'
@@ -158,6 +158,12 @@ test('reference capture refuses unknown popups and covering layers but clears a 
         ? '<div id="app"><header>현재 시스템 작업으로 서비스를 제공하지 않습니다</header><nav hidden><a href="#home">홈</a><a href="#help">도움말</a></nav><section>잠시 후 다시 이용해 주세요</section></div>'
         : mode === 'app-root-visible-nav-error'
         ? '<div id="app"><header>현재 서비스 연결이 원활하지 않습니다</header><nav><a href="#home">홈</a><a href="#help">도움말</a></nav><section>잠시 후 다시 이용해 주세요</section></div>'
+        : mode === 'app-root-opacity-nav-error'
+        ? '<div id="app"><header>현재 서비스 연결이 원활하지 않습니다</header><nav style="opacity:0"><a href="#home">홈</a><a href="#help">도움말</a></nav><main><a href="/benefit-a">Benefit A</a><a href="/benefit-b">Benefit B</a></main></div>'
+        : mode === 'app-root-hidden-content-error'
+        ? '<div id="app"><header>현재 서비스 연결이 원활하지 않습니다</header><nav><a href="#home">홈</a><a href="#help">도움말</a></nav><main hidden><a href="/benefit-a">Benefit A</a><a href="/benefit-b">Benefit B</a></main><section>잠시 후 다시 이용해 주세요</section></div>'
+        : mode === 'app-root-featureless-error'
+        ? '<div id="app"><header>현재 서비스 연결이 원활하지 않습니다</header><nav><a href="#home">홈</a><a href="#help">도움말</a></nav><main><section>잠시 후 다시 이용해 주세요</section></main></div>'
         : mode === 'white-mask'
         ? '<div id="mask"></div><div role="dialog" aria-modal="true" aria-label="Service notice"><button type="button" aria-label="Close">Close</button></div>'
         : '<div class="modal-backdrop"></div><div role="dialog" aria-modal="true" aria-label="Service notice"><button type="button" aria-label="Close">Close</button></div>';
@@ -167,14 +173,14 @@ test('reference capture refuses unknown popups and covering layers but clears a 
         #backdrop,.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.7)}#mask,#service-error,#message-panel,#app{position:fixed;inset:0;background:white}
         .cl-overlay{position:fixed;inset:0;background:transparent}#embedded-message{position:absolute;left:30%;top:30%;background:white;padding:20px}
         #service-popup,[role=dialog]{position:fixed;left:35%;top:25%;width:30%;height:40%;background:white}</style>
-        ${mode === 'app-root-korean-error' || mode === 'app-root-hidden-nav-error' || mode === 'app-root-visible-nav-error' ? '' : `<main><h1>Benefits</h1><p>${'Compare current benefits and application requirements. '.repeat(12)}</p></main>`}${popup}`);
+        ${mode === 'app-root-korean-error' || mode === 'app-root-hidden-nav-error' || mode === 'app-root-visible-nav-error' || mode === 'app-root-opacity-nav-error' || mode === 'app-root-hidden-content-error' || mode === 'app-root-featureless-error' ? '' : `<main><h1>Benefits</h1><p>${'Compare current benefits and application requirements. '.repeat(12)}</p></main>`}${popup}`);
     });
     await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
     t.after(() => new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())));
     const address = server.address(); assert.ok(address && typeof address !== 'string');
     const writer = createTestProjectWriteAdapter(root); writer.mkdir('.omd/refs/domain');
     const shotOut = join(root, `.omd/refs/domain/${mode}.png`);
-    if (mode === 'custom' || mode === 'white-mask' || mode === 'embedded-overlay' || mode === 'service-error' || mode === 'structured-error' || mode === 'korean-maintenance' || mode === 'hidden-main-error' || mode === 'nested-main-error' || mode === 'app-root-error' || mode === 'app-root-korean-error' || mode === 'app-root-hidden-nav-error' || mode === 'app-root-visible-nav-error') {
+    if (mode !== 'orphaned-backdrop') {
       await assert.rejects(withBrowser(browser => capturePageForRef(browser, `http://127.0.0.1:${address.port}`,
         { width: 800, height: 600 }, { shotOut, adapter: writer })), /REFERENCE_CAPTURE_VISUAL_OBSTRUCTION/);
       assert.equal(existsSync(shotOut), false);
@@ -315,7 +321,8 @@ test('a fixed div app shell with header and content is not treated as an obstruc
     response.setHeader('content-type', 'text/html');
     response.end(`<!doctype html><title>Public service</title><div id="app" style="position:fixed;inset:0;background:white;overflow:auto;z-index:10">
       <header><h1>Benefits workspace</h1><nav><a href="#benefits">Benefits</a><a href="#applications">Applications</a></nav></header>
-      <main><section id="benefits"><p>${'Inspect public benefits and requirements. '.repeat(12)}</p></section><section id="applications">Application steps</section></main></div>
+      <main><section id="benefits"><p>${'Inspect public benefits and requirements. '.repeat(12)}</p><a href="/benefit-a">Benefit A</a></section>
+      <section id="applications">Application steps <a href="/application">Continue application</a></section></main></div>
       <footer style="position:absolute;inset:0;z-index:0">Background footer content</footer>`);
   });
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));

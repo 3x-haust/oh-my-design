@@ -36,6 +36,16 @@ async function coveringLayers(page: Page): Promise<{ selector: string; name: str
       }
       return `html > ${parts.join(' > ')}`;
     };
+    const exposed = (node: Element) => {
+      const box = node.getBoundingClientRect();
+      if (box.width <= 0 || box.height <= 0) return false;
+      for (let current: Element | null = node; current; current = current.parentElement) {
+        const style = getComputedStyle(current);
+        if (style.display === 'none' || style.visibility !== 'visible' || Number(style.opacity) < 0.2) return false;
+      }
+      const top = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+      return top === node || (top !== null && node.contains(top));
+    };
     return [...document.querySelectorAll('body *')].filter(element => {
       const style = getComputedStyle(element);
       if (!['fixed', 'absolute'].includes(style.position) || style.display === 'none' || style.visibility !== 'visible' || Number(style.opacity) < 0.2 || Number(style.zIndex) < 0) return false;
@@ -45,14 +55,11 @@ async function coveringLayers(page: Page): Promise<{ selector: string; name: str
       const appRoot = /^(?:app|root|__next|application)$/i.test(element.id) || element.getAttribute('role') === 'application';
       const mains = [...document.querySelectorAll('main')];
       const soleMain = element.matches('main') && mains.length === 1;
-      const navigationLinks = [...element.querySelectorAll('nav a[href], [role="navigation"] a[href]')].filter(link => {
-        const box = link.getBoundingClientRect();
-        if (box.width <= 0 || box.height <= 0) return false;
-        const top = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
-        return top === link || (top !== null && link.contains(top));
-      });
-      const structuredApp = appRoot && mains.length === 1 && element.contains(mains[0]!)
-        && navigationLinks.length >= 2 && element.querySelector('main,section,article') !== null;
+      const navigationLinks = [...element.querySelectorAll('nav a[href], [role="navigation"] a[href]')].filter(exposed);
+      const ownedMain = mains.length === 1 && element.contains(mains[0]!) ? mains[0]! : null;
+      const featureLinks = ownedMain ? [...ownedMain.querySelectorAll('a[href],button,[role="button"]')].filter(exposed) : [];
+      const structuredApp = appRoot && ownedMain !== null && exposed(ownedMain)
+        && navigationLinks.length >= 2 && featureLinks.length >= 2;
       const background = style.backgroundColor.match(/^rgba?\((\d+)[,\s]+(\d+)[,\s]+(\d+)(?:[,\s/]+([\d.]+))?\)$/);
       if (!namedOverlay && (!background || Number(background[4] ?? 1) < 0.15) && style.backgroundImage === 'none' && style.backdropFilter === 'none') return false;
       if (!namedOverlay && !errorLayer && (soleMain || structuredApp)) return false;
