@@ -68,7 +68,7 @@ jobs:
           suite_files=()
           for suite_file in test/*.test.ts; do
             # Already executed in full in the isolated step, not skipped or retried.
-            if [[ "$suite_file" != "test/harness-v2-cli.test.ts" && "$suite_file" != "test/discovery-http-binding.test.ts" && "$suite_file" != "test/cold-start-workflow.test.ts" && "$suite_file" != "test/human-design-loop.test.ts" && "$suite_file" != "test/static-direction-evidence.test.ts" ]]; then
+            if [[ "$suite_file" != "test/benchmark-native-publish.test.ts" && "$suite_file" != "test/benchmark-dependency-snapshot.test.ts" && "$suite_file" != "test/browser-rs-doctor-runtime.test.ts" && "$suite_file" != "test/harness-v2-cli.test.ts" && "$suite_file" != "test/discovery-http-binding.test.ts" && "$suite_file" != "test/cold-start-workflow.test.ts" && "$suite_file" != "test/human-design-loop.test.ts" && "$suite_file" != "test/static-direction-evidence.test.ts" ]]; then
               suite_files+=("$suite_file")
             fi
           done
