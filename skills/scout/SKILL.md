@@ -368,11 +368,15 @@ what cannot be rendered. A blueprint is allowed only for an explicitly requested
 component transplant or a structurally equivalent component problem. Structure may
 transfer; skin and pixels do not.
 
-For Pinterest-like or gallery sources, use browser-rs to capture only the user-selected local
-region, then pass that PNG, its HTTP(S) source-page provenance, capture-region description,
-rights status/notes, visual role, and principles to `omd ref import-image` using
-`omd schema reference-image-fragment`. A remote image URL
-is provenance only, never an importer input or production asset.
+For Pinterest-like or gallery sources, visit a concrete item and capture its actual UI image,
+not the surrounding gallery page. Keep the complete image when its composition or overall feel
+is the evidence; record the specific feature and what to take or avoid without requiring a crop.
+When one region needs closer inspection, browser-rs may capture an exact local region of that
+native image. Pass the complete PNG or its declared exact crop, HTTP(S) source-page provenance,
+capture-region description, rights status/notes, visual role, and principles to
+`omd ref import-image` using `omd schema reference-image-fragment`. A visual-only image does
+not prove component measurements or interaction. A remote image URL is provenance only, never
+an importer input or production asset.
 
 After analysis, write the internal candidate record, run `omd ref check`, then paste the exact
 `omd ref candidates` Markdown table directly into the host chat. It is the selection
