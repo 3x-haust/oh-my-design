@@ -22,6 +22,13 @@ test('a query plan is not evidence; exact query URL binding rejects ambiguous, c
   }
   assert.throws(() => parseSearchInput({ ...input, visited: true }));
 });
+test('Korean public Daum search is accepted only with its exact web-search query', () => {
+  const daum = { lane: 'domain', query: '한국 복지 서비스',
+    url: 'https://search.daum.net/search?w=tot&q=%ED%95%9C%EA%B5%AD+%EB%B3%B5%EC%A7%80+%EC%84%9C%EB%B9%84%EC%8A%A4', queryParam: 'q' };
+  assert.equal(parseSearchInput(daum).query, daum.query);
+  assert.throws(() => parseSearchInput({ ...daum, url: daum.url.replace('w=tot', 'w=img') }));
+  assert.throws(() => parseSearchInput({ ...daum, url: `${daum.url}&q=extra` }));
+});
 test('real isolated browser execution records actual DOM links and pixels, and preserves an HTTP failure', async t => {
   const root = fixture(t); const writer = createTestProjectWriteAdapter(root);
   const contextOptions: unknown[] = [];

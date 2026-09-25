@@ -91,6 +91,8 @@ During a source-writing turn, repairable terminal failures keep triggering repai
 while the named work pointer or authored evidence changes. Two consecutive unchanged failure states
 stop the loop; authority failures and user aborts do not retry. Message replacement semantics are verified against Pi
 0.85.1; forks must support that public event behavior, not merely expose an `on` function.
+An explicit full-build request with the packaged skill also continues a checked selected stage on
+an existing route after a failed publisher; research-only or stop-at-stage requests do not.
 Run `/omd` after `/reload`; hook-less compatible hosts explicitly report that only CLI checks exist.
 Hooks are workflow gates, not an OS sandbox or proof of design quality. External processes/custom
 mutation tools are outside this hook boundary, and streamed draft text may precede final validation.
@@ -115,7 +117,12 @@ folders with `ref add --lane domain|design` or `lane` on each add-batch entry. I
 Current v7 research binds source and gallery-entry PNGs to native capture JSON, keeps domain and
 design lanes separate, and records source-specific market coverage when a market is explicit or a
 Korean-language user brief starts Korean-first reference research. That default never dictates a
-country aesthetic. A homepage is not an inspected
+country aesthetic. Korean welfare discovery now starts with actual service-name searches on the
+public Daum web endpoint; Korean-language `.com` products can qualify, while English foreign
+government domain captures are refused until current local-domain research validates the local
+coverage and any global fallback. Locally authored capture files or `--from-user` alone do not
+unlock that fallback. Selector-scoped captures check the full page's visible-language balance.
+A homepage is not an inspected
 entry, and a different original source must appear in the gallery's observed outbound links.
 Historical v5 remains readable with search-only requirements; v6 retains its search-or-direct-root
 contract. Reuse valid captured evidence only when current validators permit, then publish through v7

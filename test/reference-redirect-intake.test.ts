@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFile, spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -12,9 +13,65 @@ import { loadRefs } from '../core/ref/store.ts';
 import { captureFinalUrlGuard, captureLane } from '../core/ref/capture-intake.ts';
 import { publishTestAdaptiveRoute } from './helpers/project-write.ts';
 import { designAdmissionFixture } from './helpers/design-admission.ts';
+import { capturePageForRef, withBrowser } from '../core/render/index.ts';
 
 const cli = fileURLToPath(new URL('../bin/omd.mjs', import.meta.url));
 const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('OMD_') && key !== 'NODE_TEST_CONTEXT'));
+test('a Korean brief refuses foreign-only domain captures before writing, but accepts Korean-language services regardless of TLD', t => {
+  const cwd = mkdtempSync(join(tmpdir(), 'omd-korean-intake-'));
+  t.after(() => rmSync(cwd, { recursive: true, force: true }));
+  const input = { ...(inputSkeleton('product-route-input').skeleton as Record<string, unknown>),
+    request: '한국어로 복지 혜택을 찾고 신청하는 데스크톱 서비스를 구현해줘.' };
+  const invocation = publishTestAdaptiveRoute(cwd, input);
+  const english = 'Find government benefits and financial help';
+  const korean = '나에게 맞는 복지 혜택을 찾고 신청 준비를 시작하세요';
+  const guard = captureFinalUrlGuard(cwd, [{ source: 'https://www.usa.gov/benefits', lane: 'domain' }], invocation);
+  assert.throws(() => guard(0, 'https://www.usa.gov/benefits', english), /REFERENCE_MARKET_LOCAL_FIRST/);
+  assert.throws(() => captureLane(cwd, { source: 'https://www.usa.gov/benefits', lane: 'domain', image: true }, invocation),
+    /REFERENCE_MARKET_LOCAL_FIRST/);
+  assert.throws(() => captureLane(cwd, { source: 'https://www.usa.gov/benefits', lane: 'domain', image: true,
+    fromUser: true }, invocation), /REFERENCE_MARKET_LOCAL_FIRST/);
+  const allegedUser = captureFinalUrlGuard(cwd, [{ source: 'https://www.usa.gov/benefits', lane: 'domain',
+    fromUser: true }], invocation);
+  assert.throws(() => allegedUser(0, 'https://www.usa.gov/benefits', english), /REFERENCE_MARKET_LOCAL_FIRST/);
+  assert.throws(() => guard(0, 'https://www.usa.gov/benefits',
+    english.repeat(100) + ' 한국어 도움말과 접근성 안내를 확인하세요'), /REFERENCE_MARKET_LOCAL_FIRST/);
+  const koreanGuard = captureFinalUrlGuard(cwd, [{ source: 'https://wello.info/benefits', lane: 'domain' }], invocation);
+  assert.doesNotThrow(() => koreanGuard(0, 'https://wello.info/benefits', korean));
+  assert.equal(existsSync(join(cwd, '.omd/refs')), false);
+  mkdirSync(join(cwd, '.omd/refs/domain'), { recursive: true });
+  for (const [index, source] of ['https://welfarehello.com/benefits', 'https://plus.gov.kr/portal/benefitV2',
+    'https://wis.seoul.go.kr/'].entries()) {
+    const imagePath = `.omd/refs/domain/local-${index}.png`;
+    const image = Buffer.from(`observed local image ${index}`);
+    writeFileSync(join(cwd, imagePath), image);
+    writeFileSync(join(cwd, `.omd/refs/domain/local-${index}.json`), JSON.stringify({
+      source, component: `local-${index}`, researchLane: 'domain', kind: 'page',
+      capturedAt: new Date().toISOString(), visibleKoreanText: true,
+      acquisition: { requestedUrl: source, finalUrl: source, httpStatus: 200, links: [],
+        imageSha256: createHash('sha256').update(image).digest('hex') },
+      imagePath, invariants: null, principles: [],
+    }));
+  }
+  assert.throws(() => guard(0, 'https://www.usa.gov/benefits', english), /REFERENCE_MARKET_LOCAL_FIRST/,
+    'locally authored JSON and image bytes cannot authorize foreign fallback before research publication');
+});
+
+test('selector-scoped capture still checks visible language on the full source page', async t => {
+  const server = createServer((_request, response) => {
+    response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+    response.end('<main><p>' + 'A'.repeat(12001) + '</p><h1>'
+      + '나에게 맞는 복지 혜택을 찾아 신청을 준비하세요'.repeat(400) + '</h1><div id="icon">OK</div></main>');
+  });
+  await new Promise<void>(resolve => server.listen(0, resolve));
+  t.after(() => new Promise<void>(resolve => server.close(() => resolve())));
+  const address = server.address(); assert.ok(address && typeof address !== 'string');
+  let pageText = '';
+  await withBrowser(browser => capturePageForRef(browser, `http://127.0.0.1:${address.port}/`,
+    { width: 1280, height: 900 }, { selector: '#icon', validateFinalUrl: (_url, text) => { pageText = text; } }));
+  assert.match(pageText, /나에게 맞는 복지 혜택/u);
+  assert.ok(pageText.length > 12000);
+});
 test('a gallery capture must remain the exact requested item regardless of user origin', t => {
   const cwd = mkdtempSync(join(tmpdir(), 'omd-gallery-redirect-'));
   t.after(() => rmSync(cwd, { recursive: true, force: true }));

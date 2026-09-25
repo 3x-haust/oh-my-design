@@ -11,6 +11,7 @@ stage is mandatory; an explicit route skip remains a skip. Repetition alone is n
 | Market authority | Never infer a country from language or locale. An explicit market context names a confirmed `evidenceClaims.userFacts` claim with actual user evidence for that market, and the same locale context is bound to validation and classification. | Locale-context parser; `LOCALE_DESIGN_MARKET_AUTHORITY_REQUIRED`; route replay/currentness checks |
 | Selected stages | Preserve the approved scope and dependency groups; never relabel product UX to evade an error. | `omd brief <stage> --check --json`; `omd guard production --json` |
 | Separate research | When selected, domain task/feature evidence and design craft evidence remain distinct, with current per-screen application decisions. New domain research inspects at least three independent operator families after redirects. Current design research compares at least two independent visual-direction source families, distinct gallery items and distinct PNG evidence, and carries both into the board. Repeated pages, crops, aliases or captures from one product count once. A failed search is a gap, not a fabricated reference. | `omd ref research-check --json`; `omd ref apply-check --json`; production/completion gates |
+| Korean reference scope | A Korean-language task brief starts Korean-service reference discovery without asserting a Korean cultural style. Predominantly Korean-language source UI can qualify regardless of domain suffix. Foreign-only domain captures require validated published local-domain research; editable captures and `--from-user` alone do not unlock fallback. Design-gallery pixels remain judged by the research provenance gate. A blocked Korean provider redirects discovery to another Korean operator and public transport. | `omd ref discover-plan --json`; `ref add`/`add-batch` market admission; v7 market coverage |
 | Executed discovery | Query prose is not acquisition evidence. Retained non-user entries trace to actual observed links and separately captured visits. | `omd ref search --input <json>` or `omd ref navigate`; current v7 research publication/currentness checks |
 | Rendered reference use | Every screen criterion has current desktop/mobile capture judgments; unresolved or stale results cannot complete. | Source seal binds the application; `omd ref apply-review-check --json`; terminal preflight |
 | Current copy and design inputs | Selected copy, current copy review, type proof, composition and candidate selection must exist and satisfy their applicable checks before source work. A PRD or stub is not their replacement. | Production readiness and its current-artifact validators |
@@ -49,6 +50,10 @@ directs `apply-references` to `ref apply-plan --json` for current per-surface de
 the pointer after native publication. Do not repeatedly run a passing board entry check or author
 application decisions before their research exists. These actions do not add route stages or
 validated-progress credits; stale research takes precedence over a missing application file.
+For a Korean welfare task, run the discovery plan's exact service-name searches on a public Korean
+search transport and follow current observed links. Korean copy on a `.com` service may qualify;
+an English foreign government page does not become a Korean reference by saving it under `domain`.
+If one Korean site is blocked, inspect another local operator before claiming a market gap.
 
 When `stage next` returns `reference-interpretation`, the coordinator owns that prerequisite work;
 it is not a new adaptive stage and must not be added to route input. Read `judgment input --json`
@@ -120,6 +125,11 @@ inspection and research repair remain available while production is blocked.
   Final URL checks run before PNG publication; redirected hosts and simultaneous batch captures
   cannot enter opposite lanes under different starting URLs. A gallery redirect must still be a
   qualified item, unless the reference was genuinely supplied by the user.
+  Korean-first domain work refuses foreign captures, even with `--from-user`, until published
+  local-domain research passes the full current source, market and image-byte checks. A scoped
+  selector does not hide the full page's visible-language balance; predominantly Korean UI or a
+  Korean host can qualify for local capture. A `.com` host is not a disqualifier. Korean-first
+  domain `--image` never substitutes for a live observed service page, including when user-supplied.
   Research reachability extends from
   search pages and separately validated native navigation captures. Each optional lane `navigation`
   item binds its URL, PNG evidence and JSON capture; only observed outbound links extend reachability.
@@ -167,10 +177,11 @@ inspection and research repair remain available while production is blocked.
   correction turns while successful owned mutations or a genuinely new current work pointer prove
   progress. The same state can receive two recovery turns before the host stops a no-progress cycle;
   route replacement cannot manufacture progress. An existing route can also enroll when this
-  user turn invokes the full omd-ultradesign skill alone, with no additional user prose, passes a
-  selected entry check and successfully publishes or writes that owner's work. The skill name inside
-  a longer request does not grant unrestricted automatic continuation: the prose may impose a
-  narrower scope or stop. This conservative rule is not a natural-language intent classifier.
+  user turn invokes the full omd-ultradesign skill alone and successfully publishes or writes
+  checked owner work. An exact skill invocation with an explicit full-product/React build request
+  also enrolls after a selected entry check, so a failed publisher receives `stage next` repair.
+  A scoped research/inspection/stop request or arbitrary skill mention grants no continuation;
+  this conservative check does not infer permission from a generic status question.
   Requested work and explicit validation remain available. A failed write or publisher help is not work.
   Existing-route inspection, research-only work, route-only classification, new user input and aborts
   do not authorize this continuation. Selected native Scout/Copy/Type/Composition writes recheck

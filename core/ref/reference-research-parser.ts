@@ -23,10 +23,16 @@ export function record(value: unknown, code: string): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-function exactKeys(value: Record<string, unknown>, keys: readonly string[], code: string): void {
+function exactKeys(value: Record<string, unknown>, keys: readonly string[], code: string, fieldPath?: string): void {
   const actual = Object.keys(value).sort();
   const expected = [...keys].sort();
-  if (actual.length !== expected.length || actual.some((key, index) => key !== expected[index])) fail(code);
+  if (actual.length !== expected.length || actual.some((key, index) => key !== expected[index])) {
+    if (fieldPath === undefined) fail(code);
+    const missing = expected.filter(key => !actual.includes(key));
+    const extra = actual.filter(key => !expected.includes(key));
+    const safeExtra = extra.slice(0, 8).map(key => /^[A-Za-z0-9_-]{1,64}$/u.test(key) ? key : '<unsafe-key>');
+    fail(`${code}: ${fieldPath} missing=[${missing.join(',')}] extra=[${safeExtra.join(',')}]${extra.length > 8 ? ` (+${extra.length - 8} more)` : ''}`);
+  }
 }
 
 function text(value: unknown, code: string): string {
@@ -64,8 +70,8 @@ export function httpsUrl(value: unknown): string {
 }
 
 function evidence(value: unknown, diagnostic: boolean | 'gallery-visit' = false, fieldPath?: string): ResearchEvidence {
-  const input = record(value, 'REFERENCE_RESEARCH_EVIDENCE_INVALID');
-  exactKeys(input, REFERENCE_RESEARCH_EVIDENCE_KEYS, 'REFERENCE_RESEARCH_EVIDENCE_KEYS');
+  const input = record(value, fieldPath === undefined ? 'REFERENCE_RESEARCH_EVIDENCE_INVALID' : `REFERENCE_RESEARCH_EVIDENCE_INVALID: ${fieldPath}`);
+  exactKeys(input, REFERENCE_RESEARCH_EVIDENCE_KEYS, 'REFERENCE_RESEARCH_EVIDENCE_KEYS', fieldPath);
   const pathError = fieldPath === undefined ? 'REFERENCE_RESEARCH_EVIDENCE_PATH'
     : `REFERENCE_RESEARCH_EVIDENCE_PATH: ${fieldPath}.path must be a project-relative retained reference path under .omd/refs/ or an exact content-addressed design gallery visit under .omd/discovery/design/navigation/`;
   const path = text(input.path, pathError);
@@ -73,13 +79,15 @@ function evidence(value: unknown, diagnostic: boolean | 'gallery-visit' = false,
     : diagnostic === 'gallery-visit' && /^\.omd\/discovery\/design\/navigation\/[a-f0-9]{64}\.(?:png|json)$/.test(path);
   if (isAbsolute(path) || path.includes('\\') || path.split('/').includes('..')
     || !(path.startsWith('.omd/refs/') || allowedDiscovery)) fail(pathError);
-  return Object.freeze({ path, sha256: digest(input.sha256, 'REFERENCE_RESEARCH_EVIDENCE_SHA') });
+  const shaError = fieldPath === undefined ? 'REFERENCE_RESEARCH_EVIDENCE_SHA'
+    : `REFERENCE_RESEARCH_EVIDENCE_SHA: ${fieldPath}.sha256 must be 64 lowercase hexadecimal characters`;
+  return Object.freeze({ path, sha256: digest(input.sha256, shaError) });
 }
 
 function source(value: unknown, design: boolean, index: number): ResearchSource {
   const fieldPath = `${design ? 'designReference' : 'domainReference'}.sources[${index}]`;
-  const input = record(value, 'REFERENCE_RESEARCH_SOURCE_INVALID');
-  exactKeys(input, design ? [...REFERENCE_RESEARCH_SOURCE_KEYS, 'discovery', 'visualRole', 'visualAssessment'] : REFERENCE_RESEARCH_SOURCE_KEYS, 'REFERENCE_RESEARCH_SOURCE_KEYS');
+  const input = record(value, `REFERENCE_RESEARCH_SOURCE_INVALID: ${fieldPath}`);
+  exactKeys(input, design ? [...REFERENCE_RESEARCH_SOURCE_KEYS, 'discovery', 'visualRole', 'visualAssessment'] : REFERENCE_RESEARCH_SOURCE_KEYS, 'REFERENCE_RESEARCH_SOURCE_KEYS', fieldPath);
   const observedAt = text(input.observedAt, 'REFERENCE_RESEARCH_OBSERVED_AT');
   if (!DATE.test(observedAt)) fail('REFERENCE_RESEARCH_OBSERVED_AT');
   let discovery: ResearchSource['discovery'];
@@ -143,16 +151,20 @@ function discoveryRoots(value: unknown, design: boolean): readonly ResearchDisco
   const code = 'REFERENCE_RESEARCH_DISCOVERY_ROOT';
   if (!Array.isArray(value) || value.length > 100 || Object.keys(value).length !== value.length) fail(code);
   const lane = design ? 'design' : 'domain';
-  const roots = value.map(value => {
+  const roots = value.map((value, index) => {
+    const fieldPath = `${lane}Reference.discoveryRoots[${index}]`;
     const input = record(value, code);
-    exactKeys(input, ['method', 'entry', 'url', 'reason', 'evidence', 'capture'], `${code}_KEYS`);
+    exactKeys(input, ['method', 'entry', 'url', 'reason', 'evidence', 'capture'], `${code}_KEYS`, fieldPath);
     const entry = design ? 'free-gallery' : 'public-directory';
     if (input.method !== 'direct-public' || input.entry !== entry) fail(`${code}_PURPOSE`);
     const url = new URL(httpsUrl(input.url));
     if (url.href !== input.url || url.username || url.password || url.hash) fail(`${code}_URL`);
-    const image = evidence(input.evidence, true), capture = evidence(input.capture, true);
-    if (image.path !== `.omd/discovery/${lane}/entries/${image.sha256}.png`
-      || capture.path !== `.omd/discovery/${lane}/entries/${capture.sha256}.json`) fail(`${code}_PATH`);
+    const image = evidence(input.evidence, true, `${fieldPath}.evidence`);
+    const capture = evidence(input.capture, true, `${fieldPath}.capture`);
+    const expectedImage = `.omd/discovery/${lane}/entries/${image.sha256}.png`;
+    const expectedCapture = `.omd/discovery/${lane}/entries/${capture.sha256}.json`;
+    if (image.path !== expectedImage) fail(`${code}_PATH: ${fieldPath}.evidence.path must equal ${expectedImage}`);
+    if (capture.path !== expectedCapture) fail(`${code}_PATH: ${fieldPath}.capture.path must equal ${expectedCapture}`);
     return Object.freeze({ method: 'direct-public' as const, entry, url: url.href,
       reason: boundedText(input.reason, `${code}_REASON`), evidence: image, capture });
   });

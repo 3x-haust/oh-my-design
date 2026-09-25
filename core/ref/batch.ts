@@ -12,6 +12,7 @@ import { captureFinalUrlGuard, validateCaptureBatch } from './capture-intake.ts'
 import { parseCapturePreparation, type CapturePreparation } from './capture-preparation.ts';
 import { commitCapturedReference } from './capture-commit.ts';
 import { designDiscoveryProvider } from './design-discovery-sources.ts';
+import { isKoreanLanguageServiceText } from './market-reference.ts';
 
 /**
  * One reference to capture in a batch. Same shape as an `omd ref add --selector … --blueprint --shot`
@@ -83,10 +84,10 @@ export async function addRefsBatch(
             ? refImagePath(adapter.projectRoot, { source: spec.source, component: spec.as, ...(lane ? { researchLane: lane } : {}) })
             : undefined;
           const viewport = parseViewport(spec.viewport ?? REFERENCE_VIEWPORT);
-          const { raw, shotBytes, capturePreparation, acquisition } = await capturePageForRef(browser, spec.source, viewport, {
+          const { raw, shotBytes, capturePreparation, acquisition, visibleText } = await capturePageForRef(browser, spec.source, viewport, {
             selector: spec.selector ?? null,
             requireImageElement: galleryImage,
-            validateFinalUrl: url => validateFinalUrl(i, url),
+            validateFinalUrl: (url, visibleText) => validateFinalUrl(i, url, visibleText),
             ...(preparation ? { preparation } : {}),
             ...(shotOut ? { shotOut, adapter, deferShotWrite: true } : {}),
           });
@@ -101,6 +102,7 @@ export async function addRefsBatch(
           commitCapturedReference(adapter, shotOut, shotBytes, imagePath => saveRef(cwd, {
             ...(lane ? { researchLane: lane } : {}),
             acquisition,
+            ...(isKoreanLanguageServiceText(visibleText) ? { visibleKoreanText: true as const } : {}),
             source: spec.source,
             component: spec.as,
             kind: galleryImage ? 'image' : spec.selector ? 'component' : 'page',

@@ -5,10 +5,12 @@ import { readPersistedRoute } from '../route/index.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import { designDiscoveryItemIdentity, referenceServiceHost } from './design-discovery-sources.ts';
 import { observedGalleryItems } from './gallery-evidence.ts';
+import { inferredKoreanReferenceMarket, isKoreanLanguageServiceText } from './market-reference.ts';
 import { readContainedRegularFile } from './reference-selection.ts';
+import { readPublishedReferenceResearch, validateReferenceResearch } from './reference-research.ts';
 import { assertReferenceLaneSeparation, loadRefs, researchLane } from './store.ts';
 
-type CaptureIntent = Readonly<{ source: string; lane?: string; fromUser?: boolean; selector?: string; shot?: boolean }>;
+type CaptureIntent = Readonly<{ source: string; lane?: string; fromUser?: boolean; selector?: string; shot?: boolean; image?: boolean }>;
 export class ReferenceIntakeError extends Error {
   override readonly name = 'ReferenceIntakeError';
 }
@@ -19,13 +21,32 @@ function host(url: string): string | null {
   try { return referenceServiceHost(url) || null; } catch { return null; }
 }
 export function captureFinalUrlGuard(root: string, specs: readonly CaptureIntent[], invocation?: ProjectRunInvocation) {
-  if (!existsSync(join(root, '.omd/route.json'))) return (_index: number, _finalUrl: string): void => {};
+  if (!existsSync(join(root, '.omd/route.json'))) return (_index: number, _finalUrl: string, _visibleText?: string): void => {};
   if (!invocation) throw new ReferenceIntakeError('REFERENCE_INTAKE_AUTHORITY_REQUIRED');
-  if (readPersistedRoute(root, invocation).references.decision !== 'discover') return (_index: number, _finalUrl: string): void => {};
+  const route = readPersistedRoute(root, invocation);
+  if (route.references.decision !== 'discover') return (_index: number, _finalUrl: string, _visibleText?: string): void => {};
+  const koreanReferences = (route.sourceContract.localeDesign?.context.marketRegion ?? inferredKoreanReferenceMarket(route.request)) === 'KR';
+  const localDomainResearchReady = (): boolean => {
+    if (!existsSync(join(root, '.omd/reference-research.json'))) return false;
+    try {
+      const research = readPublishedReferenceResearch(root);
+      validateReferenceResearch(root, research, {
+        expectedSourceContractSha256: route.sourceContractSha256,
+        benchmarkRequired: route.gates.includes('greenfield-task-flow-benchmark'),
+        expectedRequest: route.request,
+      });
+      return (research.marketCoverage?.domain.localSources.length ?? 0) >= 3;
+    } catch { return false; }
+  };
   const observed = new Map<number, string>();
-  return (index: number, finalUrl: string): void => {
+  return (index: number, finalUrl: string, visibleText?: string): void => {
     const spec = specs[index]!;
     const lane = researchLane(spec.lane);
+    if (koreanReferences && lane === 'domain' && !localDomainResearchReady()) {
+      const visibleKorean = isKoreanLanguageServiceText(visibleText ?? '');
+      const koreanHost = new URL(finalUrl).hostname.endsWith('.kr');
+      if (!visibleKorean && !koreanHost) throw new ReferenceIntakeError('REFERENCE_MARKET_LOCAL_FIRST: this Korean-language brief needs Korean-service evidence before foreign fallback. A visibly Korean-language service counts even on a .com domain; inspect local results or use another accessible Korean source.');
+    }
     const service = host(finalUrl);
     const overlap = service !== null && (specs.some((other, otherIndex) => otherIndex !== index && other.lane !== lane
       && [host(other.source), host(observed.get(otherIndex) ?? '')].includes(service))
@@ -69,6 +90,13 @@ export function captureLane(root: string, spec: CaptureIntent, invocation?: Proj
     }
   }
   if (!selected) return lane;
+  if (lane === 'domain' && spec.image) {
+    if (invocation === undefined) throw new ReferenceIntakeError('REFERENCE_INTAKE_AUTHORITY_REQUIRED');
+    const route = readPersistedRoute(root, invocation);
+    if ((route.sourceContract.localeDesign?.context.marketRegion ?? inferredKoreanReferenceMarket(route.request)) === 'KR') {
+      throw new ReferenceIntakeError('REFERENCE_MARKET_LOCAL_FIRST: Korean-first domain research requires a live observed service page; an unvisited image URL cannot establish its language or task.');
+    }
+  }
   assertReferenceLaneSeparation(root, { source: spec.source, researchLane: lane });
   const refs = loadRefs(root, { includeDomain: true });
   const service = host(spec.source);

@@ -10,6 +10,10 @@ import { admissionHash, designAdmissionFixture } from './helpers/design-admissio
 import { testSearchReceipt } from './helpers/search-execution.ts';
 import { signNativeObservation } from '../core/runtime/self-signed-activation.ts';
 import { canonicalJson } from '../core/ref/board-artifacts.ts';
+import { captureFinalUrlGuard } from '../core/ref/capture-intake.ts';
+import { inputSkeleton } from '../core/schema/inputs.ts';
+import { readPersistedRoute } from '../core/route/index.ts';
+import { publishTestAdaptiveRoute } from './helpers/project-write.ts';
 import { fallbackCoverage, fallbackGap, localSearchSource, marketContext as context,
   marketDomainBrief as domainBrief, marketOptions as options } from './helpers/market-reference.ts';
 
@@ -39,7 +43,7 @@ test('explicit-market v7 binds local sources and fallback to executed market evi
   const domainFour = fixture.capture('https://domain-four.example/task', 'domain', 'domain', 6);
   const domainFourSource = { id: 'domain-4', url: domainFour.source, observedAt: new Date().toISOString().slice(0, 10),
     decision: 'Task order', finding: 'Review before submission', evidence: domainFour.evidence, capture: domainFour.capture };
-  const domainQueries = ['대한민국 public benefits', '한국 public benefits 서비스', 'South Korea public benefits service'];
+  const domainQueries = ['복지로', '정부24 혜택알리미', '서울복지포털', '웰로'];
   const designQueries = ['대한민국 public benefits benefit card', '한국 public benefits benefit card', 'South Korea public benefits benefit card'];
   const input = { ...fixture.research, schema: REFERENCE_RESEARCH_SCHEMA, marketCoverage: null,
     domainReference: { ...fixture.research.domainReference, queries: domainQueries,
@@ -104,6 +108,18 @@ test('explicit-market v7 binds local sources and fallback to executed market evi
     domainReference: { ...input.domainReference,
       searches: [koreanReceipt, ...input.domainReference.searches.slice(1)] },
   }), options));
+  for (const label of ['복지로', '정부24 혜택알리미', '서울복지포털']) {
+    const receipt = testSearchReceipt(fixture.root, 'domain', domainQueries[0]!,
+      [fixture.domain.source, fixture.domainTwo.source, fixture.domainThree.source, domainFour.source],
+      false, new Date().toISOString(), label);
+    const local = structuredClone(documented);
+    local.domain.localSources.forEach(source => { source.provenanceReceiptSha256 = receipt.sha256; });
+    local.domain.globalFallback!.provenance.forEach(binding => { binding.provenanceReceiptSha256 = receipt.sha256; });
+    assert.doesNotThrow(() => validateReferenceResearch(fixture.root, parseReferenceResearch({
+      ...input, marketCoverage: local,
+      domainReference: { ...input.domainReference, searches: [receipt, ...input.domainReference.searches.slice(1)] },
+    }), options), label);
+  }
   const uk = fixture.capture('https://www.gov.uk/benefits', 'uk-benefits', 'domain', 7);
   const ukReceipt = testSearchReceipt(fixture.root, 'domain', domainQueries[0]!,
     [uk.source, fixture.domainTwo.source, fixture.domainThree.source, domainFour.source], false,
@@ -292,4 +308,21 @@ test('explicit-market v7 binds local sources and fallback to executed market evi
       searches: [...input.domainReference.searches, futureGlobal] } };
   assert.throws(() => validateReferenceResearch(fixture.root,
     parseReferenceResearch(futureGlobalInput), options), /MARKET_DOMAIN_ATTEMPT_STALE/);
+  const routeInput = inputSkeleton('product-route-input').skeleton as Record<string, unknown>;
+  const request = '복지 혜택을 찾고 신청하는 서비스를 구현해줘.';
+  routeInput.projectMode = 'existing';
+  routeInput.request = request;
+  const invocation = publishTestAdaptiveRoute(fixture.root, routeInput);
+  const route = readPersistedRoute(fixture.root, invocation);
+  writeFileSync(join(fixture.root, '.omd/domain-brief.json'), JSON.stringify({ ...domainBrief, request }));
+  const current = { ...input, sourceContractSha256: route.sourceContractSha256, marketCoverage: documented };
+  publishReferenceResearch(fixture.root, current, {
+    ...options, expectedSourceContractSha256: route.sourceContractSha256, expectedRequest: request,
+  }, fixture.writer);
+  const foreign = captureFinalUrlGuard(fixture.root, [{ source: 'https://www.usa.gov/benefits', lane: 'domain' }], invocation);
+  assert.doesNotThrow(() => foreign(0, 'https://www.usa.gov/benefits', 'Find government benefits'),
+    'fully validated published local research may permit a documented foreign fallback');
+  writeFileSync(join(fixture.root, fixture.domain.evidence.path), 'tampered screenshot');
+  assert.throws(() => foreign(0, 'https://www.usa.gov/benefits', 'Find government benefits'),
+    /REFERENCE_MARKET_LOCAL_FIRST/, 'stale local source bytes revoke foreign capture admission');
 });

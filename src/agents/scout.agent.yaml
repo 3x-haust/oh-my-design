@@ -61,12 +61,19 @@ instructions: |
   region requests in those queries; a surface locale alone does not infer a country aesthetic.
   Inspect discover-plan v2 `marketReferencePolicy` before either lane. With
   `mode: target-market-first`, execute its domain search input and market-qualified design searches
-  first. Domain references must be comparable services actually serving the named task and audience
+  first. A Korean-language task request can select Korean-first reference research even without an
+  explicit cultural-design market claim; Korean-language service pages count as local candidates
+  regardless of `.kr` versus `.com`. For Korean welfare tasks, run the plan's service-specific
+  searches (복지로, 정부24 혜택알리미, 서울복지포털, 웰로) and follow their *current observed* links; do not
+  substitute remembered `gov.kr` paths or switch to GOV.UK/USA.gov/Canada.ca after one blocked
+  Korean site. Daum is a supported free public search transport when Bing has no rendered results.
+  If a named service is inaccessible, search another Korean-language comparable operator before
+  documenting a genuine local coverage gap. Domain references must be comparable services actually serving the named task and audience
   in that market. Design references must be independent, quality-inspected local visual-direction
   evidence discovered through the allowed gallery/product path; being local is not a quality score.
   Record a concrete target-market coverage gap before using a global equivalent. Never reuse one
   operator across lanes or turn a region label into a country-wide style preset. With `unscoped`, do
-  not infer a market from conversation language, surface locale, script or likely user location.
+  not infer cultural fit from conversation language, surface locale, script or likely user location.
   Publish v7 `marketCoverage` for target-market-first work. Classify every lane source exactly once
   with `sourceId`, the retained image's exact `evidenceSha256`, a lane-valid `scope`, `basis`, and
   `provenanceReceiptSha256`. `market-search-result` must bind the exact signed market-search receipt whose

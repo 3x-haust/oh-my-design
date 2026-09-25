@@ -20,7 +20,7 @@ export { parseMarketReferenceCoverage } from './market-reference-coverage-contra
 export type { MarketLaneCoverage, MarketReferenceCoverage } from './market-reference-coverage-contract.ts';
 
 const INVISIBLE = /[\p{Cc}\p{Default_Ignorable_Code_Point}\p{White_Space}\u2800\u3164\uffa0]/gu;
-const DIRECT_SCOPE = /\b(?:serves?|serving|available|operat(?:e|es|ed|ing)|based|local(?:ized)?|market|residents?|users?|audience|directory|gallery|service|product|interface)\b|대상|제공|운영|거주|사용자|시장|서비스|디렉터리|갤러리|제품|인터페이스|앱|웹사이트/iu;
+const DIRECT_SCOPE = /\b(?:serves?|serving|available|operat(?:e|es|ed|ing)|based|local(?:ized)?|market|residents?|users?|audience|directory|gallery|service|product|interface)\b|대상|제공|운영|거주|사용자|시장|서비스|디렉터리|갤러리|제품|인터페이스|앱|웹사이트|복지|혜택|신청|포털|안내/iu;
 const SCOPE_TERMS = {
   service: /\b(?:services?|benefits?|support|welfare|applications?|platform)\b|서비스|혜택|지원|복지|신청|플랫폼/iu,
   product: /\b(?:products?|apps?|applications?|interfaces?|websites?|sites?|ui)\b|제품|프로덕트|앱|애플리케이션|인터페이스|웹사이트|사이트|UI/iu,

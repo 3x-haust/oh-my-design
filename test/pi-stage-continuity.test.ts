@@ -84,6 +84,94 @@ test('failed publisher and native write outcomes do not establish owned work', a
   assert.deepEqual(native.sent, []);
 });
 
+test('an existing route keeps repairing a checked stage for an explicit full React build brief', async t => {
+  const h = harness(t);
+  await h.activate(`${expandedSkillOnly()}\n\n# 복지 신청 서비스 기획서\n홈, 혜택 탐색, 신청 준비를 포함한 데스크톱 제품입니다.\n리액트로 구현해줘`);
+  await h.run(['route', 'classify', '--input', '.omd/.cache/existing.json']);
+  await h.run(['brief', 'scout', '--check', '--json']);
+  h.failPublication();
+  await assert.rejects(h.run(['ref', 'research-set', '--input', '.omd/.cache/research.json']));
+
+  await h.end();
+  assert.deepEqual(h.commands.at(-1), ['stage', 'next', '--json']);
+  assert.deepEqual(h.sent, ['omd-stage-repair']);
+});
+
+test('a packaged skill with a scoped research-only request does not resume an existing route', async t => {
+  const h = harness(t);
+  await h.activate(`${expandedSkillOnly()}\n\n# 복지 서비스\n레퍼런스만 조사해줘`);
+  await h.run(['route', 'classify', '--input', '.omd/.cache/existing.json']);
+  await h.run(['brief', 'scout', '--check', '--json']);
+  h.failPublication();
+  await assert.rejects(h.run(['ref', 'research-set', '--input', '.omd/.cache/research.json']));
+  await h.end();
+  assert.equal(h.commands.some(args => args[0] === 'stage' && args[1] === 'next'), false);
+  assert.deepEqual(h.sent, []);
+});
+
+test('an earlier stop instruction cannot be overridden by a quoted build example', async t => {
+  const h = harness(t);
+  await h.activate(`${expandedSkillOnly()}\n\n레퍼런스만 조사해줘. 구현은 하지 마.\n\n> 리액트로 구현해줘`);
+  await h.run(['route', 'classify', '--input', '.omd/.cache/existing.json']);
+  await h.run(['brief', 'scout', '--check', '--json']);
+  await h.end();
+  assert.equal(h.commands.some(args => args[0] === 'stage' && args[1] === 'next'), false);
+  assert.deepEqual(h.sent, []);
+});
+
+test('a full build directive before later requirements still resumes selected-stage repair', async t => {
+  const h = harness(t);
+  await h.activate(`${expandedSkillOnly()}\n\nReact로 복지 서비스를 구현해 주세요.\n\n# 요구사항\n추천 이유와 신청 상태를 분리한다.`);
+  await h.run(['route', 'classify', '--input', '.omd/.cache/existing.json']);
+  await h.run(['brief', 'scout', '--check', '--json']);
+  h.failPublication();
+  await assert.rejects(h.run(['ref', 'research-set', '--input', '.omd/.cache/research.json']));
+  await h.end();
+  assert.deepEqual(h.commands.at(-1), ['stage', 'next', '--json']);
+  assert.deepEqual(h.sent, ['omd-stage-repair']);
+});
+
+test('natural full-build wording across product and landing surfaces grants continuation', async t => {
+  for (const request of ['복지 서비스를 만들어줘', '복지 서비스를 구현 해줘', '복지 서비스 구현 부탁해요',
+    'Build the complete app.\nVerify the flows.', 'Build a dashboard', '한국어 랜딩페이지를 구현해 주세요',
+    '참고 자료만 조사한 뒤 React 앱을 구현해줘', 'Only inspect references first, then build a dashboard',
+    'Only review the references first; then implement the app', 'Build a "website"',
+    'Build a \x60\x60website\x60\x60', 'Analyze this \x60foo and build a website',
+    'Build a website; explain the label \x60research only\x60',
+    'Build a dashboard with a button labelled "Research only"',
+    'Build a dashboard. The label is "Only inspect references"',
+    'Build a dashboard. The warning label is "Do not build"',
+    '복지 "서비스"를 구현해줘']) {
+    const h = harness(t);
+    await h.activate(`${expandedSkillOnly()}\n\n${request}`);
+    await h.run(['route', 'classify', '--input', '.omd/.cache/existing.json']);
+    await h.run(['brief', 'scout', '--check', '--json']);
+    await h.end();
+    assert.deepEqual(h.commands.at(-1), ['stage', 'next', '--json'], request);
+  }
+});
+
+test('inline quoted build wording is not an instruction to continue production', async t => {
+  for (const request of ['인용문 "복지 서비스를 만들어줘"의 어투를 분석해줘',
+    '다음 예문을 분석해줘: \x60복지 서비스를 만들어줘\x60',
+    '다음 예문을 분석해줘: \x60\x60복지 서비스를 만들어줘\x60\x60',
+    'Analyze this: \x60\x60some \x60\x60\x60 Build a website \x60\x60\x60 snippet\x60\x60',
+    'Analyze this code span: \x60\x60first line\nBuild a website\nlast line\x60\x60',
+    'Analyze this snippet:\n\x60\x60\x60\nconst marker = "\x60\x60\x60";\nBuild a website\n\x60\x60\x60',
+    '인용문 “복지 서비스를 구현하세요”의 문체를 분석해줘',
+    '인용문 “한국어 랜딩페이지를 완성하세요”의 문체를 분석해줘',
+    'Build a dashboard, but do not build it yet',
+    'Build a dashboard, but only inspect references for now']) {
+    const h = harness(t);
+    await h.activate(expandedSkillOnly() + '\n\n' + request);
+    await h.run(['route', 'classify', '--input', '.omd/.cache/existing.json']);
+    await h.run(['brief', 'scout', '--check', '--json']);
+    await h.end();
+    assert.equal(h.commands.some(args => args[0] === 'stage' && args[1] === 'next'), false, request);
+    assert.deepEqual(h.sent, [], request);
+  }
+});
+
 test('a checked different stage does not authorize a successful publisher as owned work', async t => {
   const h = harness(t); await h.activate();
   await h.run(['brief', 'frame', '--check', '--json']);

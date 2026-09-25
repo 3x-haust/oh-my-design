@@ -114,14 +114,15 @@ export function buildReferenceDiscoveryPlan(root: string, route: RouteRecord): R
   const domain = locale?.context.domain ?? domainResearch.domain ?? route.sourceContract.taskOutcome.goal;
   const domainQueries = marketRegion === null ? [] : [...marketDomainQueries(marketRegion, surfaceLocale, domain)];
   const comparableLeads = marketRegion === 'KR' && /복지|혜택|welfare|benefits?/iu.test(domain)
-    ? ['복지로 맞춤형급여안내', '정부24 혜택알리미', '서울복지포털 맞춤검색'] : [];
+    ? ['복지로 맞춤형급여안내', '정부24 혜택알리미', '서울복지포털 맞춤검색', '웰로 맞춤형 정책 추천'] : [];
   const baseDesignQuery = [...queries.component, ...queries.mood][0] ?? (marketing ? 'typography' : 'app interface');
   const designSubject = marketRegion === null ? baseDesignQuery : `${domain} ${baseDesignQuery}`;
   const designQueries = searchLabels.map(label => `${label} ${designSubject}`);
   const designQuery = designQueries[0] ?? baseDesignQuery;
   const domainSearchInputs: DomainSearchInput[] = [];
   for (const query of domainQueries) {
-    const url = new URL('https://www.bing.com/search');
+    const url = new URL(marketRegion === 'KR' ? 'https://search.daum.net/search' : 'https://www.bing.com/search');
+    if (marketRegion === 'KR') url.searchParams.set('w', 'tot');
     url.searchParams.set('q', query);
     const input = Object.freeze({ lane: 'domain' as const, query, url: url.href, queryParam: 'q' as const });
     domainSearchInputs.push(input);

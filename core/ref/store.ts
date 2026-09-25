@@ -132,6 +132,7 @@ export function loadRefs(cwd: string, options: { includeDomain?: boolean } = {})
         refs.push({
           ...(parsed.researchLane !== undefined ? { researchLane: researchLane(parsed.researchLane) } : {}),
           ...(parsed.acquisition !== undefined ? { acquisition: parsed.acquisition } : {}),
+          ...(parsed.visibleKoreanText === true ? { visibleKoreanText: true as const } : {}),
           source: parsed.source,
           component: parsed.component,
           kind: parsed.kind ?? 'page',

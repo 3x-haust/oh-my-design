@@ -1006,9 +1006,10 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
   if (opts.preparation && (opts.image || !opts.noEnergy)) throw new Error('--preparation requires a rendered reference and --no-energy');
   const { saveRef } = await import('../core/ref/store.ts');
   const { captureLane, captureFinalUrlGuard } = await import('../core/ref/capture-intake.ts');
+  const { isKoreanLanguageServiceText } = await import('../core/ref/market-reference.ts');
   const invocation = invocationFromActivation(opts, 'omd ref add');
   const intent = { source: target, ...(opts.lane ? { lane: opts.lane } : {}), ...(opts.fromUser ? { fromUser: true } : {}),
-    ...(opts.selector ? { selector: opts.selector } : {}), shot: !opts.noShot && !opts.image };
+    ...(opts.selector ? { selector: opts.selector } : {}), shot: !opts.noShot && !opts.image, image: !!opts.image };
   const lane = captureLane(process.cwd(), intent, invocation);
   const validateFinalUrl = captureFinalUrlGuard(process.cwd(), [{ ...intent, lane }], invocation);
   const adapter = projectWriterFromActivation(opts, 'omd ref add');
@@ -1050,10 +1051,10 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
   const absShot = opts.noShot
     ? undefined
     : refImagePath(adapter.projectRoot, { source: target, component: opts.as, researchLane: lane });
-  const { raw, shotBytes, shotError, capturePreparation, acquisition } = await withBrowser(browser => capturePageForRef(browser, target, captureViewport, {
+  const { raw, shotBytes, shotError, capturePreparation, acquisition, visibleText } = await withBrowser(browser => capturePageForRef(browser, target, captureViewport, {
     selector: opts.selector ?? null,
     requireImageElement: galleryImage,
-    validateFinalUrl: url => validateFinalUrl(0, url),
+    validateFinalUrl: (url, visibleText) => validateFinalUrl(0, url, visibleText),
     ...(absShot ? { shotOut: absShot, adapter, deferShotWrite: true } : {}),
     ...(preparation ? { preparation } : {}),
     bestEffortShot: preparation === undefined && !galleryImage,
@@ -1089,6 +1090,7 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
     return saveRef(process.cwd(), {
       researchLane: lane,
       acquisition,
+      ...(isKoreanLanguageServiceText(visibleText) ? { visibleKoreanText: true as const } : {}),
       source: target,
       component,
       kind: galleryImage ? 'image' : opts.selector ? 'component' : 'page',

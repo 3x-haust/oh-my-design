@@ -102,10 +102,13 @@ continue unfinished selected-stage authoring before source exists. It recomputes
 terminal completion. A concrete planning question stops for the user's answer; existing-route
 inspection and route-only classification do not opt into this continuation.
 For an existing route, automatic continuation requires a standalone full-workflow skill invocation
-without additional user prose, followed by a selected entry check and successful owner publication/write.
-A skill name inside a longer request is not an unrestricted continuation grant: that request may
-limit the scope or require a stop. Execute its requested work normally, but do not auto-resume the
-rest of an existing route. A failed write, help call or read-only visit is also insufficient. Never
+and successful checked owner work, or an explicit full-build request (app, product, dashboard, website
+or landing page) accompanying the exact skill
+invocation and a checked selected-stage entry. In the latter case a failed owner publisher still
+returns to `stage next` for a bounded repair turn instead of falling straight to terminal completion.
+Research-only, inspection-only and explicit stop requests never gain that grant. A skill name inside
+an arbitrary longer request is not an unrestricted continuation grant. A failed write, help call or
+read-only visit is not successful owner work. Never
 reclassify a fresh route merely to evade the user's stopping boundary.
 Recompute `stage next --json` after each owned publication or repair, not only at final reporting.
 For `reference-board`, follow the returned action instead of repeating a passing entry check:
