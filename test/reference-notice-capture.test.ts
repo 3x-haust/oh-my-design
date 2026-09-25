@@ -159,13 +159,13 @@ test('reference capture refuses unknown popups and covering layers but clears a 
         : mode === 'app-root-visible-nav-error'
         ? '<div id="app"><header>현재 서비스 연결이 원활하지 않습니다</header><nav><a href="#home">홈</a><a href="#help">도움말</a></nav><section>잠시 후 다시 이용해 주세요</section></div>'
         : mode === 'app-root-opacity-nav-error'
-        ? '<div id="app"><header>현재 서비스 연결이 원활하지 않습니다</header><nav style="opacity:0"><a href="#home">홈</a><a href="#help">도움말</a></nav><main><a href="/benefit-a">Benefit A</a><a href="/benefit-b">Benefit B</a></main></div>'
+        ? '<div id="app"><header>현재 서비스 연결이 원활하지 않습니다</header><nav style="opacity:0"><a href="#home">홈</a><a href="#help">도움말</a></nav><main><section id="benefits" style="opacity:0;width:300px;height:300px">Stale benefit</section></main></div>'
         : mode === 'app-root-hidden-content-error'
         ? '<div id="app"><header>현재 서비스 연결이 원활하지 않습니다</header><nav><a href="#home">홈</a><a href="#help">도움말</a></nav><main hidden><a href="/benefit-a">Benefit A</a><a href="/benefit-b">Benefit B</a></main><section>잠시 후 다시 이용해 주세요</section></div>'
         : mode === 'app-root-featureless-error'
         ? '<div id="app"><header>현재 서비스 연결이 원활하지 않습니다</header><nav><a href="#home">홈</a><a href="#help">도움말</a></nav><main><section>잠시 후 다시 이용해 주세요</section></main></div>'
         : mode === 'app-root-recovery-error'
-        ? '<div id="app"><header>현재 서비스 연결이 원활하지 않습니다</header><nav><a href="#home">홈</a><a href="#help">도움말</a></nav><main><section>잠시 후 다시 이용해 주세요 <a href="/">홈으로 돌아가기</a><a href="/help">고객센터</a></section></main></div>'
+        ? '<div id="app"><header>현재 서비스 연결이 원활하지 않습니다</header><nav><a href="#home">홈</a><a href="#help">도움말</a></nav><main><section>잠시 후 다시 이용해 주세요 <a id="recovery" href="/">홈으로 돌아가기</a><a href="/help">고객센터</a></section></main></div>'
         : mode === 'white-mask'
         ? '<div id="mask"></div><div role="dialog" aria-modal="true" aria-label="Service notice"><button type="button" aria-label="Close">Close</button></div>'
         : '<div class="modal-backdrop"></div><div role="dialog" aria-modal="true" aria-label="Service notice"><button type="button" aria-label="Close">Close</button></div>';
@@ -186,6 +186,12 @@ test('reference capture refuses unknown popups and covering layers but clears a 
       await assert.rejects(withBrowser(browser => capturePageForRef(browser, `http://127.0.0.1:${address.port}`,
         { width: 800, height: 600 }, { shotOut, adapter: writer })), /REFERENCE_CAPTURE_VISUAL_OBSTRUCTION/);
       assert.equal(existsSync(shotOut), false);
+      if (mode === 'app-root-recovery-error' || mode === 'app-root-opacity-nav-error') {
+        await assert.rejects(withBrowser(browser => capturePageForRef(browser, `http://127.0.0.1:${address.port}`,
+          { width: 800, height: 600 }, { shotOut, adapter: writer, selector: mode === 'app-root-recovery-error' ? '#recovery' : '#benefits' })),
+        /REFERENCE_CAPTURE_VISUAL_OBSTRUCTION/);
+        assert.equal(existsSync(shotOut), false);
+      }
     } else {
       const result = await withBrowser(browser => capturePageForRef(browser, `http://127.0.0.1:${address.port}`,
         { width: 800, height: 600 }, { shotOut, adapter: writer }));
@@ -295,6 +301,9 @@ test('a consent dialog cannot masquerade as an informational notice through aria
   await assert.rejects(withBrowser(browser => capturePageForRef(browser, `http://127.0.0.1:${address.port}`,
     { width: 800, height: 600 }, { shotOut, adapter: writer })), /REFERENCE_CAPTURE_VISUAL_OBSTRUCTION/);
   assert.equal(existsSync(shotOut), false);
+  await assert.rejects(withBrowser(browser => capturePageForRef(browser, `http://127.0.0.1:${address.port}`,
+    { width: 800, height: 600 }, { shotOut, adapter: writer, selector: '[role="dialog"]' })), /REFERENCE_CAPTURE_VISUAL_OBSTRUCTION/);
+  assert.equal(existsSync(shotOut), false);
 });
 
 test('a legitimate full-viewport app shell is not mistaken for a popup', async t => {
@@ -335,6 +344,11 @@ test('a fixed div app shell requires a selected visible feature instead of autom
   await assert.rejects(withBrowser(browser => capturePageForRef(browser, `http://127.0.0.1:${address.port}`,
     { width: 800, height: 600 }, { shotOut, adapter: writer })), /REFERENCE_CAPTURE_VISUAL_OBSTRUCTION/);
   assert.equal(existsSync(shotOut), false);
+  for (const selector of ['main', '#app']) {
+    await assert.rejects(withBrowser(browser => capturePageForRef(browser, `http://127.0.0.1:${address.port}`,
+      { width: 800, height: 600 }, { shotOut, adapter: writer, selector })), /REFERENCE_CAPTURE_VISUAL_OBSTRUCTION/);
+    assert.equal(existsSync(shotOut), false);
+  }
   const result = await withBrowser(browser => capturePageForRef(browser, `http://127.0.0.1:${address.port}`,
     { width: 800, height: 600 }, { shotOut, adapter: writer, selector: '#benefits' }));
   assert.equal(result.acquisition.noticeDismissals, undefined);

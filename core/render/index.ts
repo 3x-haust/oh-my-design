@@ -786,16 +786,14 @@ export async function capturePageForRef(
       });
       if (!eligible) throw new Error('DESIGN_GALLERY_IMAGE_REQUIRED: selector must identify one loaded, visible UI image element, not gallery chrome');
     }
-    const allowedStateSelectors = [
-      ...(opts.selector ? [opts.selector] : []),
-      ...(preparation?.assertions.filter(assertion => assertion.state === 'visible').map(assertion => assertion.selector) ?? []),
-    ];
-    const noticeDismissals = await clearReferenceNotices(page, allowedStateSelectors, 1000);
+    const allowedStateSelectors = preparation?.assertions.filter(assertion => assertion.state === 'visible').map(assertion => assertion.selector) ?? [];
+    const selectedContentSelectors = [...(opts.selector ? [opts.selector] : []), ...allowedStateSelectors];
+    const noticeDismissals = await clearReferenceNotices(page, allowedStateSelectors, 1000, selectedContentSelectors);
     const executedActions = preparation ? await prepareReferenceCapture(page, preparation) : undefined;
     let raw = await extractIrCore(page, httpStatus, resolvedUrl, opts.selector ?? null, false);
     if (preparation) await observeCapturePreparation(page, preparation);
     await assertNotBlocked(page, httpStatus, resolvedUrl, opts.selector ?? null);
-    const laterDismissals = await clearReferenceNotices(page, allowedStateSelectors);
+    const laterDismissals = await clearReferenceNotices(page, allowedStateSelectors, 0, selectedContentSelectors);
     noticeDismissals.push(...laterDismissals);
     if (laterDismissals.length) raw = await extractIrCore(page, httpStatus, resolvedUrl, opts.selector ?? null, false);
     const resumeScripts = await suspendReferenceScriptsForShot(page);
@@ -817,7 +815,7 @@ export async function capturePageForRef(
       if (!opts.adapter) throw new Error('reference screenshot requires a project-write adapter');
       shotBytes = await page.screenshot({ fullPage: true });
     }
-    const lateDismissals = await clearReferenceNotices(page, allowedStateSelectors);
+    const lateDismissals = await clearReferenceNotices(page, allowedStateSelectors, 0, selectedContentSelectors);
     noticeDismissals.push(...lateDismissals);
     if (lateDismissals.length && shotBytes) shotBytes = opts.selector
       ? await page.locator(opts.selector).screenshot()
