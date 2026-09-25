@@ -254,7 +254,8 @@ export async function inspectRenderedState(page: Page, purpose: 'search' | 'disc
             if (/[가-힣]/u.test(term)) return taskContext.includes(term) || taskContext.includes(term.slice(0, 2));
             const stem = term.replace(/(?:es|s)$/u, '');
             return stem.length >= 4 && (taskContext.match(/[a-z]{4,}/gu) ?? [])
-              .some(contextTerm => contextTerm.startsWith(stem.slice(0, 4)));
+              .some(contextTerm => contextTerm === stem || contextTerm.startsWith(term)
+                || term === 'apply' && contextTerm.startsWith('applicat'));
           });
           let chrome = Boolean(element.closest('footer, [role="contentinfo"], [role="dialog"], [aria-modal="true"]'))
             || (purpose === 'search'

@@ -186,6 +186,7 @@ type MarketExecution = Readonly<{
   links: readonly string[];
   results: readonly ObservedSearchResult[];
   usable: boolean;
+  directRoot?: Readonly<{ url: string; observedText: string }>;
 }>;
 function laneNeedsMarketSearch(coverage: MarketLaneCoverage, roots: readonly unknown[], searches: readonly unknown[]): boolean {
   return searches.length > 0 || !roots.length || coverage.localSources.some(source => source.basis === 'market-search-result')
@@ -218,6 +219,11 @@ function validateLaneProvenance(
     }
     if (!execution.usable) marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_LOCAL_PROVENANCE`);
     const result = execution.results.find(candidate => resultReaches(candidate, urls));
+    const selfRoot = lane === 'DOMAIN' && execution.query === null
+      && execution.directRoot?.url === source.url && execution.directRoot.observedText;
+    const scopedSelfRoot = selfRoot && DIRECT_SCOPE.test(selfRoot) && SCOPE_TERMS[local.scope].test(selfRoot)
+      && (marketRegion === 'KR' ? capturedKoreanService(root, source, roots, marketLabels)
+        : containsMarketToken(selfRoot, marketLabels)) && !negatesMarketScope(selfRoot, marketLabels);
     const scopedResult = result !== undefined && DIRECT_SCOPE.test(result.text)
       && SCOPE_TERMS[local.scope].test(result.text)
       && (containsMarketToken(result.text, marketLabels)
@@ -225,8 +231,8 @@ function validateLaneProvenance(
     const capturedGeneric = result !== undefined && lane === 'DOMAIN' && marketRegion === 'KR'
       && local.scope === 'service' && GENERIC_LINK_LABEL.test(result.text.trim())
       && capturedKoreanService(root, source, roots, marketLabels);
-    if (result === undefined || negatesMarketScope(result.text, marketLabels)
-      || (!scopedResult && !capturedGeneric)) {
+    if (!scopedSelfRoot && (result === undefined || negatesMarketScope(result.text, marketLabels)
+      || (!scopedResult && !capturedGeneric))) {
       marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_LOCAL_RESULT_SCOPE`);
     }
     assertCurrentSourceObservation(source.observedAt, execution.observedAt,
@@ -241,7 +247,10 @@ function validateLaneProvenance(
     const urls = [source.url, ...(source.discovery === undefined ? [] : [source.discovery.url])];
     const execution = executions.find(candidate => candidate.sha256 === binding.provenanceReceiptSha256)
       ?? marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_FALLBACK_PROVENANCE`);
-    if (!execution.usable || !execution.results.some(result => resultReaches(result, urls)
+    const selfRoot = lane === 'DOMAIN' && execution.query === null
+      && execution.directRoot?.url === source.url && execution.directRoot.observedText;
+    const usefulSelfRoot = selfRoot && DIRECT_SCOPE.test(selfRoot) && SCOPE_TERMS.service.test(selfRoot);
+    if (!execution.usable || !usefulSelfRoot && !execution.results.some(result => resultReaches(result, urls)
       && (execution.query === null || actionableSearchTargets({ lane: lane.toLowerCase() as 'domain' | 'design',
         query: execution.query, provider: '', results: [result], allowUnmatched: false })
         .some(target => urls.includes(target))))) {
@@ -317,6 +326,7 @@ function validateDirectExecutions(
     }
     return Object.freeze({ sha256: receipt.capture.sha256, query: null,
       observedAt: Date.parse(observation.capturedAt ?? ''),
-      links: observation.links, results: observation.linkLabels ?? [], usable: true });
+      links: observation.links, results: observation.linkLabels ?? [], usable: true,
+      directRoot: { url: observation.url, observedText: observation.observedText ?? '' } });
   }));
 }

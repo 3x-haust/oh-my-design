@@ -311,6 +311,12 @@ test('an Apply action can match the application task described in main', async t
   assert.deepEqual(readCurrentDirectDiscoveryEntry(result.root, result.receipt).links, [apply]);
 });
 
+test('an Apply navigation label cannot borrow context from apple recipes', async t => {
+  const html = `<header><nav><a href="https://recipes.example/apply">Apply</a></nav></header>
+    <main><h1>Apple pie recipes</h1><p>Choose fresh apples, prepare the pastry, bake the filling, and compare several dessert recipes for a family gathering. Serve each slice warm with a spoonful of cream. Keep the remaining slices in a cool container until tomorrow.</p></main>`;
+  await assert.rejects(capture(t, { url: PUBLIC_DIRECTORY, html }, 'public-directory'), /visible followable/);
+});
+
 test('page-content task links precede a contextual primary-navigation link', async t => {
   const first = 'https://service.example/apply';
   const html = `<header><nav><a href="${DOMAIN_ITEM}">Benefits</a></nav></header>
