@@ -218,6 +218,31 @@ only by prose or unbound screenshots. Record login/payment/destructive or unsupp
 bounded exclusions, not successful tests. This proves only declared visited states, never every
 control in an entire service. Free public references remain the only requirement.
 
+Inspect each public feature area and its safe controls before claiming coverage. Record a separate
+native flow for each branch from an entry screen, capture each reachable route/tab/disclosure state,
+and bind every feature screen to its actual signed step screenshot. A homepage or whole-page image
+does not stand in for unopened features. Keep the feature-to-screen-to-flow mapping and explicit
+unreachable exclusions in the benchmark. Before accepting any retained image, inspect its pixels:
+informational notices should be visually suppressed in the same browser context before capture, while consent,
+login, unknown or unclosable modals and orphaned dim backdrops must be recorded as access gaps
+rather than saved as evidence. A prepared feature state is not exempt from unrelated obstructions.
+For a fixed full-viewport app container, select a specific visible feature or assert it in the
+native flow. Navigation or recovery controls alone do not prove the app is available; if the
+feature cannot be inspected, record a bounded gap instead of keeping a possible error screen.
+Informational notices are visually suppressed by a browser-owned stylesheet without clicking the
+site's control, executing its handler, or removing DOM nodes. The receipt says `visual-only`; do
+not claim that the site's real dismissal or
+service-side transition was tested.
+The bounded style change must not cause an outgoing request or cookie/storage change; treat either
+as an obstruction gap, not as successful clean evidence.
+After visual-only suppression, scripts stay suspended on that document. Do not report motion or
+JavaScript interaction measurements for it; a safe full-document link may reload the next page,
+while an inaccessible same-document state is a bounded gap.
+If a late notice contaminated a capture, reacquire that state and use only its clean current receipt.
+Put the feature-specific visible assertion last for each native step so its control/content is
+framed in the screenshot. If several visible assertions cannot fit in one viewport, split the
+feature states into separate steps; an off-screen DOM assertion is not screenshot evidence.
+
 For an applicable product task-flow benchmark, do not stop at the landing page or first useful
 screen. Declare the safe inspection scope, open at least three independent same-domain service
 families at their real entry points, and

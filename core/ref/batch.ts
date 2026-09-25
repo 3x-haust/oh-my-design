@@ -94,7 +94,7 @@ export async function addRefsBatch(
           // Motion is evidence, not decoration: a board captured without it cannot answer what a
           // reference does on scroll, and every craft query in the brief goes unanswered while the
           // record still looks complete. One extra pass per capture, skipped only on request.
-          const energyCurve = spec.energy === false || galleryImage ? null : await captureEnergy(spec.source, { viewport });
+          const energyCurve = spec.energy === false || galleryImage || acquisition.noticeDismissals?.length ? null : await captureEnergy(spec.source, { viewport });
           const ir = normalize(raw);
           const invariants = extractInvariants(ir);
           const slopCount = check(ir, rules, { categories: ['slop'] }).length;

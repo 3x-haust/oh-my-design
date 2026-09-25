@@ -1071,7 +1071,7 @@ async function cmdRefAdd(opts: Opts): Promise<never> {
   // Sees ALL motion including GSAP/rAF — closing the getAnimations() blind spot.
   // Failure is silently ignored: a blocked page or unsupported format must not prevent
   // the reference from being saved.
-  const energyCurve = opts.noEnergy || galleryImage ? null : await captureEnergy(target, { viewport: captureViewport });
+  const energyCurve = opts.noEnergy || galleryImage || acquisition.noticeDismissals?.length ? null : await captureEnergy(target, { viewport: captureViewport });
 
   // Blueprint: full-resolution structural snapshot with skin abstracted to color roles.
   // Only captured when --blueprint is passed together with --selector.

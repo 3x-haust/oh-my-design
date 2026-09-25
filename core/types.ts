@@ -581,7 +581,7 @@ export interface Blueprint {
 export interface Reference {
   /** Separate task/domain evidence from visual design evidence. Absent only on legacy records. */
   researchLane?: 'domain' | 'design';
-  acquisition?: { requestedUrl: string; finalUrl: string; httpStatus: number | null; links: string[]; imageSha256: string | null };
+  acquisition?: { requestedUrl: string; finalUrl: string; httpStatus: number | null; links: string[]; imageSha256: string | null; noticeDismissals?: import('./ref/notice-overlay.ts').NoticeDismissal[] };
   visibleKoreanText?: true;
   source: string;
   component: string;

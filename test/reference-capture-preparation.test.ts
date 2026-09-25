@@ -115,8 +115,9 @@ test('observe-only preparation preserves actual initial focus without granting a
       assert.ok(bluePixels(shotOut) > 100, 'saved PNG itself must show the focused blue border');
       console.log(`INITIAL FOCUS TEST FIXTURE ONLY: ${shotOut}`);
       const probedShot = join(root, 'probed.png');
-      await withBrowser(browser => capturePageForRef(browser, url, viewport, { selector: '#fixture', shotOut: probedShot, adapter }));
-      assert.equal(bluePixels(probedShot), 0, 'ordinary probes reproduce loss of the initial focus border');
+      const probed = await withBrowser(browser => capturePageForRef(browser, url, viewport, { selector: '#fixture', shotOut: probedShot, adapter }));
+      assert.ok(probed.raw.meta?.interaction, 'ordinary captures still measure interaction after retaining the initial state');
+      assert.ok(bluePixels(probedShot) > 100, 'ordinary captures now preserve the focused initial-state pixels before probing');
       await assert.rejects(withBrowser(browser => capturePageForRef(browser, url, viewport, {
         selector: '#fixture', preparation: { ...prep, assertions: [{ selector: 'button:focus', state: 'visible' }] },
       })), /must identify exactly one existing element/);

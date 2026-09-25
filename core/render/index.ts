@@ -9,6 +9,7 @@ import type { EnergyCurve, MotionMeasurement, RawIr } from '../types.ts';
 import { PREPARED_MEASUREMENT_COVERAGE } from '../ref/measurement-coverage.ts';
 import { designDiscoveryProvider } from '../ref/design-discovery-sources.ts';
 import { parseCapturePreparation, prepareReferenceCapture, observeCapturePreparation, type CapturePreparation, type CapturePreparationReceipt } from '../ref/capture-preparation.ts';
+import { clearReferenceNotices, suspendReferenceScriptsForShot, type NoticeDismissal } from '../ref/notice-overlay.ts';
 import { type ProjectWriteAdapter, requireProjectWriteAdapter } from '../runtime/project-write.ts';
 import type { RenderedBeat, RenderedBeatProof } from '../copy/index.ts';
 import { requireMotionResultAuthorization, requireRenderedBeatResultAuthorization, type ProjectRunInvocation } from '../runtime/invocation.ts';
@@ -294,8 +295,13 @@ export async function onPage<T>(
   viewport: Viewport,
   fn: (page: import('playwright').Page, httpStatus: number | null, resolvedUrl: string, loadTimestampMs: number) => Promise<T>,
   deadlineMs?: number,
+  referenceSafety = false,
 ): Promise<T> {
-  const page = await browser.newPage({ viewport });
+  const page = await browser.newPage({ viewport, ...(referenceSafety ? { serviceWorkers: 'block' as const } : {}) });
+  if (referenceSafety) {
+    await page.context().routeWebSocket('**/*', socket => socket.close());
+    await page.context().route('**/*', route => ['GET', 'HEAD'].includes(route.request().method()) ? route.continue() : route.abort());
+  }
   let resolved: Awaited<ReturnType<typeof resolveTarget>> | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let expired = false;
@@ -764,7 +770,7 @@ export async function capturePageForRef(
   target: string,
   viewport: Viewport,
   opts: { selector?: string | null; shotOut?: string; adapter?: ProjectWriteAdapter; preparation?: CapturePreparation; bestEffortShot?: boolean; deferShotWrite?: boolean; validateFinalUrl?: (url: string, visibleText: string) => void; requireImageElement?: boolean },
-): Promise<{ raw: RawIr; shotSaved: boolean; shotBytes?: Buffer; shotError?: string; visibleText: string; capturePreparation?: CapturePreparationReceipt; acquisition: { requestedUrl: string; finalUrl: string; httpStatus: number | null; links: string[]; imageSha256: string | null } }> {
+): Promise<{ raw: RawIr; shotSaved: boolean; shotBytes?: Buffer; shotError?: string; visibleText: string; capturePreparation?: CapturePreparationReceipt; acquisition: { requestedUrl: string; finalUrl: string; httpStatus: number | null; links: string[]; imageSha256: string | null; noticeDismissals?: NoticeDismissal[] } }> {
   const preparation = opts.preparation === undefined ? undefined : parseCapturePreparation(opts.preparation);
   return onPage(browser, target, viewport, async (page, httpStatus, resolvedUrl) => {
     if (opts.requireImageElement) {
@@ -780,11 +786,17 @@ export async function capturePageForRef(
       });
       if (!eligible) throw new Error('DESIGN_GALLERY_IMAGE_REQUIRED: selector must identify one loaded, visible UI image element, not gallery chrome');
     }
+    const allowedStateSelectors = preparation?.assertions.filter(assertion => assertion.state === 'visible').map(assertion => assertion.selector) ?? [];
+    const selectedContentSelectors = [...(opts.selector ? [opts.selector] : []), ...allowedStateSelectors];
+    const noticeDismissals = await clearReferenceNotices(page, allowedStateSelectors, 1000, selectedContentSelectors);
     const executedActions = preparation ? await prepareReferenceCapture(page, preparation) : undefined;
-    // Hover/tab probes can close disclosures or move initial focus; null means not measured.
-    const raw = await extractIrCore(page, httpStatus, resolvedUrl, opts.selector ?? null, preparation === undefined);
+    let raw = await extractIrCore(page, httpStatus, resolvedUrl, opts.selector ?? null, false);
     if (preparation) await observeCapturePreparation(page, preparation);
     await assertNotBlocked(page, httpStatus, resolvedUrl, opts.selector ?? null);
+    const laterDismissals = await clearReferenceNotices(page, allowedStateSelectors, 0, selectedContentSelectors);
+    noticeDismissals.push(...laterDismissals);
+    if (laterDismissals.length) raw = await extractIrCore(page, httpStatus, resolvedUrl, opts.selector ?? null, false);
+    const resumeScripts = await suspendReferenceScriptsForShot(page);
     let shotSaved = false;
     let shotBytes: Buffer | undefined;
     let shotError: string | undefined;
@@ -803,6 +815,12 @@ export async function capturePageForRef(
       if (!opts.adapter) throw new Error('reference screenshot requires a project-write adapter');
       shotBytes = await page.screenshot({ fullPage: true });
     }
+    const lateDismissals = await clearReferenceNotices(page, allowedStateSelectors, 0, selectedContentSelectors);
+    noticeDismissals.push(...lateDismissals);
+    if (lateDismissals.length && shotBytes) shotBytes = opts.selector
+      ? await page.locator(opts.selector).screenshot()
+      : await page.screenshot({ fullPage: true });
+    await resumeScripts();
     let capturePreparation: CapturePreparationReceipt | undefined;
     if (preparation) {
       const observations = await observeCapturePreparation(page, preparation);
@@ -818,6 +836,11 @@ export async function capturePageForRef(
     const links = await page.locator('a[href]').evaluateAll(elements => [...new Set(elements.map(el => (el as HTMLAnchorElement).href).filter(url => /^https?:\/\//.test(url)))]);
     const visibleText = await page.evaluate(() => document.body?.innerText ?? '');
     opts.validateFinalUrl?.(finalUrl, visibleText);
+    if (!preparation && noticeDismissals.length === 0) {
+      if (raw.meta) delete raw.meta.measurementCoverage;
+      const motion = await probeMotion(page);
+      raw.meta = { ...(raw.meta ?? {}), interaction: await probeInteraction(page), motion };
+    }
     // Keep bytes private until all observations have passed, including after the screenshot.
     if (shotBytes && opts.shotOut && opts.adapter && !opts.deferShotWrite) {
       try {
@@ -830,8 +853,9 @@ export async function capturePageForRef(
     }
     return { raw, shotSaved, visibleText, acquisition: { requestedUrl: target, finalUrl, httpStatus, links,
       imageSha256: shotBytes ? createHash('sha256').update(shotBytes).digest('hex') : null,
+      ...(noticeDismissals.length ? { noticeDismissals } : {}),
     }, ...(shotBytes ? { shotBytes } : {}), ...(shotError ? { shotError } : {}), ...(capturePreparation ? { capturePreparation } : {}) };
-  }, REFERENCE_CAPTURE_TIMEOUT_MS);
+  }, REFERENCE_CAPTURE_TIMEOUT_MS, true);
 }
 /**
  * Captures the load-only canonical motion scene and saves selector-local screenshots

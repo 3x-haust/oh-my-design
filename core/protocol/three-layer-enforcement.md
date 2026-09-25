@@ -11,6 +11,7 @@ stage is mandatory; an explicit route skip remains a skip. Repetition alone is n
 | Market authority | Never infer a country from language or locale. An explicit market context names a confirmed `evidenceClaims.userFacts` claim with actual user evidence for that market, and the same locale context is bound to validation and classification. | Locale-context parser; `LOCALE_DESIGN_MARKET_AUTHORITY_REQUIRED`; route replay/currentness checks |
 | Selected stages | Preserve the approved scope and dependency groups; never relabel product UX to evade an error. | `omd brief <stage> --check --json`; `omd guard production --json` |
 | Separate research | When selected, domain task/feature evidence and design craft evidence remain distinct, with current per-screen application decisions. New domain research inspects at least three independent operator families after redirects. Current design research compares at least two independent visual-direction source families, distinct gallery items and distinct PNG evidence, and carries both into the board. Repeated pages, crops, aliases or captures from one product count once. A failed search is a gap, not a fabricated reference. | `omd ref research-check --json`; `omd ref apply-check --json`; production/completion gates |
+| Reference capture quality | Every declared public feature screen is captured in a signed native flow at a viewport that visibly contains its asserted state. A fixed full-viewport app container needs a selected visible feature, not inferred safety from its navigation or recovery controls. Informational notices are visually suppressed without invoking their close controls before retained pixels; consent, unknown, or unclosable obstructions are gaps, not visual evidence. Interaction probes cannot change the saved initial-state image. | `omd benchmark record`/`check`; `ref add`/`add-batch` capture refusal; current v3 evidence validation |
 | Korean reference scope | A Korean-language task brief starts Korean-service reference discovery without asserting a Korean cultural style. Predominantly Korean-language source UI can qualify regardless of domain suffix. Foreign-only domain captures require validated published local-domain research; editable captures and `--from-user` alone do not unlock fallback. Design-gallery pixels remain judged by the research provenance gate. A blocked Korean provider redirects discovery to another Korean operator and public transport. | `omd ref discover-plan --json`; `ref add`/`add-batch` market admission; v7 market coverage |
 | Executed discovery | Query prose is not acquisition evidence. Retained non-user entries trace to actual observed links and separately captured visits. | `omd ref search --input <json>` or `omd ref navigate`; current v7 research publication/currentness checks |
 | Rendered reference use | Every screen criterion has current desktop/mobile capture judgments; unresolved or stale results cannot complete. | Source seal binds the application; `omd ref apply-review-check --json`; terminal preflight |
@@ -54,6 +55,13 @@ For a Korean welfare task, run the discovery plan's exact service-name searches 
 search transport and follow current observed links. Korean copy on a `.com` service may qualify;
 an English foreign government page does not become a Korean reference by saving it under `domain`.
 If one Korean site is blocked, inspect another local operator before claiming a market gap.
+When `greenfield-task-flow-benchmark` is selected, inventory each comparable service's public feature controls and
+capture each safe reachable route, tab, or disclosure state with a native flow step. Branching
+features need separate executions from their real entry paths; excluded controls need observed
+reasons. Put the feature-specific visible assertion last so the saved viewport contains it. If
+two asserted states cannot fit one viewport, split the step. Inspect the retained image itself:
+close only a safe informational notice control, refuse consent or unknown overlays, and reacquire
+any image polluted by a late notice or probe-opened menu before publication.
 
 When `stage next` returns `reference-interpretation`, the coordinator owns that prerequisite work;
 it is not a new adaptive stage and must not be added to route input. Read `judgment input --json`
@@ -155,6 +163,19 @@ inspection and research repair remain available while production is blocked.
   final graph, not a caller-selected substitute graph. Review history remains content-addressed.
   Application v2 fixes each screen's destination-relative route and state before production; a home
   capture cannot satisfy a different screen just because its pixel hash is current.
+- Current v3 product benchmarks refuse feature or screen rows whose images are not tied to signed
+  native browser steps when a native execution is claimed. Each step scrolls its visible-state
+  anchor into the captured viewport and refuses off-screen asserted states that require separate
+  captures; a hidden-only assertion cannot claim a feature screenshot. Retained reference capture
+  visually suppresses only informational notices through a browser-owned stylesheet without
+  clicking their page-owned controls or mutating DOM nodes, records that method and hidden backdrop
+  count, and refuses an unclosable/consent/unknown modal, unnamed covering layer, or request/storage
+  change during the bounded suppression. Requests from the suppressed document remain blocked;
+  only an exact safe main-frame navigation may load the next document. It suspends page scripts in
+  the suppressed document and marks interaction, motion, and energy as unmeasured rather than
+  asserting scripted behavior. A roleless unsafe popup or remaining dim backdrop also refuses a
+  PNG, including prepared states; the screenshot precedes
+  hover/focus probes that could open a menu or alter the captured state.
 - First-render checking captures a local build natively and binds the retained report to the
   hypothesis, source, build, capture and exact interpreted projection. Terminal validation recomputes
   the report and input identities. Advisory findings stay advisory; comparison applies only when the
@@ -205,11 +226,12 @@ These checks do not attest taste, observation honesty or operating-system isolat
 without Pi hooks has explicit CLI gates only; arbitrary external file-writing processes remain
 outside that boundary. Final reviewer authorization is retained, never simulated.
 
-The v2 task-flow benchmark's prose and artifact hashes alone still do **not** attest multi-screen
-actions. `benchmark record` executes declared public link/disclosure chains and signs step/capture
-receipts. Selected product benchmarks require those receipts for every declared completed flow;
-blocked/excluded controls remain explicit gaps. `liveFlowVerified` applies only to those completed
-flows, never every control in the service or authenticated transactions.
+The historical v2 task-flow benchmark's prose and artifact hashes alone still do **not** attest
+multi-screen actions. `benchmark record` executes declared public link/disclosure chains and signs
+step/capture receipts. Current v3 product benchmarks bind every declared feature and inspected
+screen to native step pixels whenever they claim a live execution; selected research still requires
+`liveFlowVerified` for completed flows. Blocked/excluded controls remain explicit gaps. No recorded
+scope proves every control in a service or an authenticated transaction.
 
 Stateful slop scope records `name/startRoute/route/actions/assertions` per view. Capture preserves
 the opened state; final linked states need matching route/state/viewport and exact viewport pixels

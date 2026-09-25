@@ -154,6 +154,16 @@ Discovery always saves two separate ledgers:
   selected product benchmarks require `liveFlowVerified: true`. Legacy artifacts without executions
   remain readable but unverified. Login, payment, destructive or unsupported actions are explicit
   exclusions, never inferred successes. Verification covers only the recorded scope, not all controls.
+
+  Before recording, inventory the public controls in each declared feature area and name the reachable
+  screen/state for each one. A branch from the entry screen needs its own native flow execution; do
+  not replace several features with a single homepage screenshot. Every feature's `screenIds` must
+  resolve to screenshots from signed browser-executed steps in the current v3 benchmark. If a target
+  cannot be safely reached, put it in `excludedTargets` with the observed reason rather than calling
+  coverage complete. A full-page image is context, not proof that its links, tabs, disclosures, or
+  later states were inspected. Each native step frames its last visible assertion in the fixed
+  viewport and refuses a screenshot when its asserted feature states cannot fit together; split
+  those observations into separate steps instead of claiming one off-screen image covers both.
 - **design reference** (`.omd/refs/design/research.json`) asks how the destination should feel and be composed. It uses the measured
   board, mood, typography, component, and craft evidence already defined by this protocol. Domain
   research is not visual direction merely because the comparable product looks polished.
@@ -433,6 +443,39 @@ nothing; a board of whole-page captures can only be traced, and tracing a whole 
 derivative failure the transfer boundary forbids.
 
 ## Capturing an existing state or open disclosure
+
+Retained reference captures and native flow steps first allow a brief bounded settle for late
+notices, then visually suppress only visible informational announcement dialogs with an unambiguous
+`닫기`/`Close` control. The browser does **not** click the page-owned control, run its handlers,
+or remove DOM nodes: a browser-owned DevTools stylesheet visually hides the notice and a named
+covering backdrop for research pixels only, in a fresh browser context. An unnamed covering layer
+refuses capture. Network requests during the bounded style change are aborted, and any attempted
+request or cookie/storage change refuses the capture; requests from that suppressed document remain
+blocked, while a safe new document may load ordinary feature resources after navigation. Retained
+reference navigation also blocks non-GET/HEAD requests, service workers,
+and WebSockets. This is not proof that a real user dismissal or service-side transition succeeded.
+The URL must remain unchanged and no dim backdrop may remain; the title, control, visual-only method,
+and backdrop count are retained in the private capture/flow receipt.
+Page scripts remain suspended for that document after suppression. CSS/DOM and pixels remain
+inspectable, but interaction, motion, and second-pass energy measurements are marked unmeasured;
+a full-document safe link navigation may reload the new document to resume scripts. Subsequent
+requests from the suppressed document are aborted and attempted requests refuse its evidence,
+including CSS resources activated by a fragment target. A browser-native same-document fragment
+link may be inspected only when it remains request-free with scripts still suspended; a JavaScript-only state
+that cannot be reached safely is an explicit coverage gap, not a captured feature claim.
+Roleless popup containers and visible modal-like overlays also require clearance or refusal. An
+unknown, consent, login, payment, or unclosable notice is a visual-obstruction
+refusal, never a screenshot to publish. Inspect that
+refusal and reacquire from a safe public state or record a bounded gap. An explicitly prepared
+modal state remains an intentional capture and is not auto-dismissed, but other overlays on that
+prepared state are still refused. After capturing, recheck for
+a late notice and recapture the clean state if it appeared. Do not use `--no-shot`, a renamed PNG,
+or a source URL alone as a substitute for the clean state-specific image.
+An ambiguous fixed full-viewport app container is not accepted from its shape, navigation links,
+or recovery controls alone. Select a specific visible feature inside it (or assert that feature in
+a native flow) before capturing; without that scoped evidence, record a bounded gap rather than
+retain a possible error screen. A sole semantic main remains inspectable unless an error or other
+covering state is detected.
 
 When a required source state is an open menu or disclosure, print `omd schema reference-capture-preparation`.
 Pass its closed JSON object through `omd ref add … --preparation <json> --no-energy`, or embed it as

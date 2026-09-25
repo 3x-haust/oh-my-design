@@ -691,21 +691,36 @@ export function validateTaskFlowBenchmarkEvidence(
     if (digest !== evidence.sha256) fail('TASK_FLOW_BENCHMARK_EVIDENCE_STALE');
     observations.push({ ...evidence, grade: 'artifact-only', actionVerified: false });
   }
-  const flows = benchmark.sources.flatMap(source => source.flows.map(flow => {
-    if (!flow.execution) return { sourceId: source.id, flowId: flow.id, verified: false, status: flow.status };
-    const executed = readLiveReferenceFlow(root, flow.execution);
-    if (executed.input.sourceId !== source.id || executed.input.flowId !== flow.id || executed.input.url !== source.url
-      || executed.status !== flow.status || executed.steps.length !== flow.steps.length) fail('TASK_FLOW_BENCHMARK_NATIVE_FLOW_MISMATCH');
-    for (const [index, step] of flow.steps.entries()) {
-      const actual = executed.steps[index]!;
-      const screen = source.screens.find(screen => screen.id === step.screenId);
-      if (actual.screenId !== step.screenId || actual.action !== step.action || actual.result !== step.result
-        || actual.evidence.path !== step.evidence.path || actual.evidence.sha256 !== step.evidence.sha256
-        || screen?.url !== actual.url || screen?.state !== actual.state
-        || screen.evidence.path !== actual.capture.path || screen.evidence.sha256 !== actual.capture.sha256) fail('TASK_FLOW_BENCHMARK_NATIVE_STEP_MISMATCH');
+  const flows = benchmark.sources.flatMap(source => {
+    const nativeScreens = new Set<string>();
+    const results = source.flows.map(flow => {
+      if (!flow.execution) return { sourceId: source.id, flowId: flow.id, verified: false, status: flow.status };
+      const executed = readLiveReferenceFlow(root, flow.execution);
+      if (executed.input.sourceId !== source.id || executed.input.flowId !== flow.id || executed.input.url !== source.url
+        || executed.status !== flow.status || executed.steps.length !== flow.steps.length) fail('TASK_FLOW_BENCHMARK_NATIVE_FLOW_MISMATCH');
+      for (const [index, step] of flow.steps.entries()) {
+        const actual = executed.steps[index]!;
+        const screen = source.screens.find(screen => screen.id === step.screenId);
+        if (actual.screenId !== step.screenId || actual.action !== step.action || actual.result !== step.result
+          || actual.evidence.path !== step.evidence.path || actual.evidence.sha256 !== step.evidence.sha256
+          || screen?.url !== actual.url || screen?.state !== actual.state
+          || screen.evidence.path !== actual.capture.path || screen.evidence.sha256 !== actual.capture.sha256) fail('TASK_FLOW_BENCHMARK_NATIVE_STEP_MISMATCH');
+        nativeScreens.add(step.screenId);
+      }
+      return { sourceId: source.id, flowId: flow.id, verified: executed.status === 'completed', status: flow.status };
+    });
+    if (benchmark.schema === TASK_FLOW_BENCHMARK_SCHEMA && source.kind !== 'authoritative-guidance'
+      && source.flows.some(flow => flow.execution !== undefined)
+      && source.features.some(feature => feature.screenIds.some(id => !nativeScreens.has(id)))) {
+      fail('TASK_FLOW_BENCHMARK_FEATURE_NATIVE_COVERAGE');
     }
-    return { sourceId: source.id, flowId: flow.id, verified: executed.status === 'completed', status: flow.status };
-  }));
+    if (benchmark.schema === TASK_FLOW_BENCHMARK_SCHEMA && source.kind !== 'authoritative-guidance'
+      && source.flows.some(flow => flow.execution !== undefined)
+      && source.screens.some(screen => !nativeScreens.has(screen.id))) {
+      fail('TASK_FLOW_BENCHMARK_SCREEN_NATIVE_COVERAGE');
+    }
+    return results;
+  });
   const completed = flows.filter(flow => flow.status === 'completed');
   return { schema: 'task-flow-evidence-strength-v1' as const, benchmarkSha256: taskFlowBenchmarkSha256(benchmark),
     observations, flows, liveFlowVerified: completed.length > 0 && completed.every(flow => flow.verified),
