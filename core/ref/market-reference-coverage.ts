@@ -227,7 +227,7 @@ function validateLaneProvenance(
     const selfRoot = lane === 'DOMAIN' && execution.query === null
       && execution.directRoot?.url === source.url && execution.directRoot.taskText;
     const scopedSelfRoot = selfRoot && DIRECT_SCOPE.test(selfRoot) && SCOPE_TERMS[local.scope].test(selfRoot)
-      && selfRootTaskClaim(taskCategory, selfRoot, execution.results)
+      && selfRootTaskClaim(taskCategory, selfRoot)
       && (marketRegion === 'KR' ? capturedKoreanService(root, source, roots, marketLabels, execution.sha256)
         : containsMarketToken(selfRoot, marketLabels)) && !negatesMarketScope(selfRoot, marketLabels);
     const scopedResult = result !== undefined && DIRECT_SCOPE.test(result.text)
@@ -257,7 +257,7 @@ function validateLaneProvenance(
     const selfRoot = lane === 'DOMAIN' && execution.query === null
       && execution.directRoot?.url === source.url && execution.directRoot.taskText;
     const usefulSelfRoot = selfRoot && DIRECT_SCOPE.test(selfRoot) && SCOPE_TERMS.service.test(selfRoot)
-      && selfRootTaskClaim(taskCategory, selfRoot, execution.results);
+      && selfRootTaskClaim(taskCategory, selfRoot);
     const rootIsSource = execution.query === null && execution.directRoot?.url === source.url;
     if (!execution.usable || !usefulSelfRoot && (rootIsSource || !execution.results.some(result => resultReaches(result, urls)
       && (execution.query === null || actionableSearchTargets({ lane: lane.toLowerCase() as 'domain' | 'design',

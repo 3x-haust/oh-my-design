@@ -116,7 +116,7 @@ test('direct-entry visible text excludes copy covered by an opaque child overlay
 
 test('signed direct task text excludes footer and linked navigation claims', async t => {
   const result = await capture(t, { url: PUBLIC_DIRECTORY,
-    html: `<header><a href="https://global.example/benefits">Benefits service</a></header><main><h1>Restaurant service for residents</h1><a href="${DOMAIN_ITEM}">Inspect service</a></main><footer><p>Related links: benefits service</p></footer>` },
+    html: `<div class="nhsuk-cookie-banner">Benefits service cookie notice</div><header><a href="https://global.example/benefits">Benefits service</a></header><main><h1>Restaurant service for residents</h1><a href="${DOMAIN_ITEM}">Inspect service</a></main><footer><p>Related links: benefits service</p></footer>` },
   'public-directory');
   const observed = readCurrentDirectDiscoveryEntry(result.root, result.receipt);
   assert.match(observed.observedText ?? '', /benefits service/i);

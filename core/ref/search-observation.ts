@@ -234,7 +234,12 @@ export async function inspectRenderedState(page: Page, purpose: 'search' | 'disc
       if (!textVisible) continue;
       const anchor = parent.closest<HTMLAnchorElement>('a[href]'); const record = anchor ? anchors.get(anchor) : undefined;
       const id = visibleText.length;
-      const taskClaim = !anchor && !parent.closest('header, nav, footer, [role="navigation"], [role="banner"], [role="contentinfo"], [role="dialog"], [aria-modal="true"]');
+      let chromeText = Boolean(parent.closest('header, nav, footer, [role="navigation"], [role="banner"], [role="contentinfo"], [role="dialog"], [aria-modal="true"]'));
+      for (let ancestor: HTMLElement | null = parent; ancestor && ancestor !== body; ancestor = ancestor.parentElement) {
+        chromeText ||= /(?:^|[-_\s])(?:cookie|consent|privacy|accessib\w*|toolbar|breadcrumb|skip)(?:$|[-_\s])/iu
+          .test(ancestor.id + ' ' + ancestor.className);
+      }
+      const taskClaim = !anchor && !chromeText;
       visibleText.push({ id, value, taskClaim });
       if (!anchor && parent.closest('main') && !parent.closest('footer, [role="contentinfo"], [role="dialog"]')
         && mainContext.join(' ').length < 800) mainContext.push(value);

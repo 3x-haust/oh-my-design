@@ -1,25 +1,19 @@
-import type { ObservedSearchResult } from './search-result.ts';
-
-function pageText(observedText: string, links: readonly ObservedSearchResult[]): string {
-  let text = observedText;
-  for (const link of links) {
-    const index = text.toLocaleLowerCase('und').lastIndexOf(link.text.toLocaleLowerCase('und'));
-    if (index >= 0) text = text.slice(0, index) + text.slice(index + link.text.length);
-  }
-  return text.split('\n').filter(line => !/^\s*(?:related links?|further reading|see also|관련 링크|관련 서비스)\s*[:：]/iu.test(line))
+function pageText(taskText: string): string {
+  return taskText.split('\n').filter(line => !/^\s*(?:related links?|further reading|see also|관련 링크|관련 서비스)\s*[:：]/iu.test(line))
     .join(' ').slice(0, 1200).toLocaleLowerCase('und').replace(/\s+/gu, ' ');
 }
 
 function deniesTask(claim: string, task: RegExp, verb: RegExp, korean: RegExp): boolean {
   return claim.split(/[.!?。！？]/u).some(sentence => {
-    if (/\b(?:for|to)\s+(?:non[- ]?residents?|visitors?|tourists?)\b|비거주자|방문객/iu.test(sentence)) return false;
+    const otherAudience = /\b(?:for|to)\s+(?:non[- ]?residents?|visitors?|tourists?)\b|비거주자|방문객/iu.test(sentence);
+    const targetAudience = /\b(?:residents?|citizens?|users?)\b|주민|거주자/iu.test(sentence);
+    if (otherAudience && !targetAudience) return false;
     return task.test(sentence) && (verb.test(sentence) || korean.test(sentence));
   });
 }
 
-export function selfRootTaskClaim(taskCategory: string, observedText: string,
-  links: readonly ObservedSearchResult[]): boolean {
-  const claim = pageText(observedText, links);
+export function selfRootTaskClaim(taskCategory: string, taskText: string): boolean {
+  const claim = pageText(taskText);
   if (/welfare|benefits?|복지|혜택/iu.test(taskCategory)) {
     const denied = deniesTask(claim, /\b(?:welfare|benefits?)\b|복지|혜택/iu,
       /\b(?:no|without)\s+(?:\w+\s+){0,2}(?:welfare|benefits?)\b|\b(?:do(?:es)?\s+not|don['’]t|doesn['’]t)\s+(?:\w+\s+){0,2}(?:offer|provide|support|include)\s+(?:\w+\s+){0,2}(?:welfare|benefits?)\b|\b(?:welfare|benefits?)\b.{0,40}\b(?:not offered|not available|not provided|unavailable)\b/iu,

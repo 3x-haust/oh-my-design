@@ -81,7 +81,8 @@ test('market search and direct provenance refuse malformed scope, attempts, root
   }), options.expectedRequest), /MARKET_DOMAIN_LOCAL_RESULT_SCOPE/);
   const globalSource = fixture.capture('https://global.example/benefits', 'global', 'domain', 7);
   const fallbackRoot = directRootAt(fixture.root, 'domain', globalSource.source,
-    [`${globalSource.source}/eligibility`], 'Home\nGlobal benefits service for residents.');
+    [`${globalSource.source}/eligibility`], 'Home\nGlobal benefits service for residents.',
+    undefined, 'Global benefits service');
   const selfFallbackCoverage = { ...directCoverage, domain: {
     localSources: directCoverage.domain.localSources,
     globalFallback: fallbackCoverage(['domain-4'], fallbackRoot.capture.sha256,
