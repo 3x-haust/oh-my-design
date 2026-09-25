@@ -172,7 +172,8 @@ export async function captureReferenceNavigation(browser: Browser, source: strin
     const unsigned = entry === undefined
       ? { schema: 'reference-navigation-capture-v4' as const, ...common }
       : { schema: 'reference-discovery-entry-v4' as const, method: 'direct-public' as const, entry,
-        ...common, observedText: observation.visibleText, linkLabels: observation.results };
+        ...common, observedText: observation.visibleText, taskText: observation.taskText,
+        linkLabels: observation.results };
     const record: DiscoveryCaptureRecord = { ...unsigned, signature: signNativeObservation(writer.projectRoot,
       unsigned.schema, discoveryDigest(canonicalJson(unsigned))) };
     const bytes = `${JSON.stringify(record, null, 2)}\n`;

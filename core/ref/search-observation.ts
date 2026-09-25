@@ -48,7 +48,7 @@ export async function inspectRenderedState(page: Page, purpose: 'search' | 'disc
       anchors.set(element, { href: parsed.href, text: [], left: box.left, right: box.right, top: box.top, bottom: box.bottom });
     }
 
-    const visibleText: Array<{ id: number; value: string }> = [];
+    const visibleText: Array<{ id: number; value: string; taskClaim: boolean }> = [];
     const mainContext: string[] = [];
     const uncertain: SearchPixelSample[] = [];
     const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT);
@@ -233,7 +233,9 @@ export async function inspectRenderedState(page: Page, purpose: 'search' | 'disc
       range.detach();
       if (!textVisible) continue;
       const anchor = parent.closest<HTMLAnchorElement>('a[href]'); const record = anchor ? anchors.get(anchor) : undefined;
-      const id = visibleText.length; visibleText.push({ id, value });
+      const id = visibleText.length;
+      const taskClaim = !anchor && !parent.closest('header, nav, footer, [role="navigation"], [role="banner"], [role="contentinfo"], [role="dialog"], [aria-modal="true"]');
+      visibleText.push({ id, value, taskClaim });
       if (!anchor && parent.closest('main') && !parent.closest('footer, [role="contentinfo"], [role="dialog"]')
         && mainContext.join(' ').length < 800) mainContext.push(value);
       if (unknownBackground) uncertain.push({ id, href: record?.href ?? null,

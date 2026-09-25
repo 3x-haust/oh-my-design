@@ -66,6 +66,7 @@ for (const entry of ['public-directory', 'free-gallery'] as const) {
     assert.equal(value.receipt.entry, entry);
     assert.deepEqual(readDirectDiscoveryEntry(value.root, value.receipt), { url, finalUrl: url, links: [target] });
     assert.match(readCurrentDirectDiscoveryEntry(value.root, value.receipt).observedText ?? '', /Public directory/);
+    assert.match(readCurrentDirectDiscoveryEntry(value.root, value.receipt).taskText ?? '', /Public directory/);
     assert.deepEqual(readFileSync(join(value.root, value.receipt.evidence.path)), value.observed.captures[0]);
     assert.equal(value.observed.contextOptions.length, 1);
     const contextOptions = value.observed.contextOptions[0]!;
@@ -111,6 +112,16 @@ test('direct-entry visible text excludes copy covered by an opaque child overlay
   const observation = readCurrentDirectDiscoveryEntry(result.root, result.receipt);
   assert.match(observation.observedText ?? '', /Global catalogue/);
   assert.doesNotMatch(observation.observedText ?? '', /South Korea/);
+});
+
+test('signed direct task text excludes footer and linked navigation claims', async t => {
+  const result = await capture(t, { url: PUBLIC_DIRECTORY,
+    html: `<header><a href="https://global.example/benefits">Benefits service</a></header><main><h1>Restaurant service for residents</h1><a href="${DOMAIN_ITEM}">Inspect service</a></main><footer><p>Related links: benefits service</p></footer>` },
+  'public-directory');
+  const observed = readCurrentDirectDiscoveryEntry(result.root, result.receipt);
+  assert.match(observed.observedText ?? '', /benefits service/i);
+  assert.match(observed.taskText ?? '', /Restaurant service/);
+  assert.doesNotMatch(observed.taskText ?? '', /benefits service/i);
 });
 
 test('the observed Siteinspire category-list route supports direct entry when item links are visible', async t => {

@@ -29,7 +29,7 @@ function storeRecord(root: string, receipt: Awaited<ReturnType<typeof currentCap
 test('historical signed direct-entry v2 records remain readable but cannot satisfy current market proof', async t => {
   const { root, receipt } = await currentCapture(t);
   const current = JSON.parse(readFileSync(join(root, receipt.capture.path), 'utf8'));
-  const { observedText, linkLabels, signature: _signature, ...common } = current;
+  const { observedText, taskText: _taskText, linkLabels, signature: _signature, ...common } = current;
   for (const unsigned of [
     { ...common, schema: 'reference-discovery-entry-v2' },
     { ...common, schema: 'reference-discovery-entry-v2', observedText },
@@ -53,10 +53,18 @@ test('current direct-entry link labels are covered by the native signature', asy
   assert.throws(() => readCurrentDirectDiscoveryEntry(root, tampered), /native direct discovery signature invalid/);
 });
 
+test('current direct-entry task text is covered by the native signature', async t => {
+  const { root, receipt } = await currentCapture(t);
+  const record = JSON.parse(readFileSync(join(root, receipt.capture.path), 'utf8'));
+  record.taskText = 'Forged welfare benefits service';
+  const tampered = storeRecord(root, receipt, record);
+  assert.throws(() => readCurrentDirectDiscoveryEntry(root, tampered), /native direct discovery signature invalid/);
+});
+
 test('a previously signed v3 entry is archival until recaptured with content-only links', async t => {
   const { root, receipt } = await currentCapture(t);
   const record = JSON.parse(readFileSync(join(root, receipt.capture.path), 'utf8')) as Record<string, unknown>;
-  const { signature: _signature, ...fields } = record;
+  const { signature: _signature, taskText: _taskText, ...fields } = record;
   const unsigned = { ...fields, schema: 'reference-discovery-entry-v3' };
   const legacy = { ...unsigned, signature: signNativeObservation(root, unsigned.schema,
     discoveryDigest(canonicalJson(unsigned))) };

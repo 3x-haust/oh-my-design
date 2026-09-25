@@ -100,6 +100,8 @@ test('market search and direct provenance refuse malformed scope, attempts, root
     'Global benefits of music streaming service for residents.',
     'Global music streaming service for residents. No welfare benefits are offered.',
     'Global welfare benefits service for residents. No welfare benefits are offered.',
+    'Global public restaurant service for residents.\nRelated links: benefits service.',
+    'Global welfare benefits service for residents. We do not provide welfare benefits.',
   ]) {
     const unrelatedRoot = directRootAt(fixture.root, 'domain', globalSource.source,
       [`${globalSource.source}/listen`], text);
@@ -116,6 +118,21 @@ test('market search and direct provenance refuse malformed scope, attempts, root
         discoveryRoots: [domainRoot, unrelatedRoot] },
     }), options.expectedRequest), /MARKET_DOMAIN_FALLBACK_PROVENANCE/, text);
   }
+  const oldSelfRoot = directRootAt(fixture.root, 'domain', globalSource.source,
+    [globalSource.source, globalSource.source + '/eligibility'],
+    'Global benefits service for residents.', undefined, 'Benefits service', 0, null);
+  const oldSelfFallback = { ...selfFallbackCoverage, domain: {
+    ...selfFallbackCoverage.domain,
+    globalFallback: fallbackCoverage(['domain-4'], oldSelfRoot.capture.sha256,
+      fallbackGap([], [domainRoot.url, oldSelfRoot.url])),
+  } };
+  assert.throws(() => validateMarketReferenceCoverage(fixture.root, parseReferenceResearch({
+    ...scoped, marketCoverage: oldSelfFallback,
+    domainReference: { ...scoped.domainReference,
+      sources: [...scoped.domainReference.sources, { ...scoped.domainReference.sources[0]!, id: 'domain-4',
+        url: globalSource.source, evidence: globalSource.evidence, capture: globalSource.capture }],
+      discoveryRoots: [domainRoot, oldSelfRoot] },
+  }), options.expectedRequest), /MARKET_DOMAIN_FALLBACK_PROVENANCE/);
   const staleCoexistingSearch = testSearchReceipt(fixture.root, 'domain', domainQueries[0]!,
     [fixture.domain.source], false, oldObservedAt);
   const currentCoexistingSearches = domainQueries.slice(1).map(query => testSearchReceipt(fixture.root, 'domain', query,

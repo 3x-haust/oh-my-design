@@ -114,6 +114,9 @@ Search and direct bases may coexist in a lane. Every declared search and direct 
 availability/access/coverage kind, and every attempted query and root used by that lane. Every chosen retained capture must also be current. Freeform prose
 cannot prove local provenance or a fallback attempt. `research-check` rejects missing coverage, market drift, global-only lanes, and
 unqualified search order; repair the evidence instead of removing the policy.
+When a direct root is also the retained service URL, inspect its signed non-link task text and actual task link.
+A related/footer link or whole-page mention is not proof that the service performs the task; recapture older roots
+whose signed entry lacks the task-text field. A restriction for another audience is not a denial of the service.
 For native search use the plan's `designSourcePolicy.nativeSearchInputs` with `ref search`.
 They bind real free-gallery queries for Pinterest, Dribbble and Siteinspire. Refine only unscoped
 task/pattern queries and URLs together; keep explicit-market native inputs exact. Then open an item actually returned in observed links; never

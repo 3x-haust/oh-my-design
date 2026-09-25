@@ -12,6 +12,7 @@ import { negatesMarketScope } from './market-scope-negation.ts';
 import { readSearchExecution, SEARCH_EXECUTION_SCHEMA } from './search-execution.ts';
 import { actionableSearchTargets, resultReaches, type ObservedSearchResult } from './search-result.ts';
 import { referenceServiceFamily, referenceServiceHost } from './design-discovery-sources.ts';
+import { selfRootTaskClaim } from './market-task-claim.ts';
 import {
   marketObject, marketReject, marketText, marketTexts,
   type MarketLaneCoverage,
@@ -33,22 +34,6 @@ const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const GENERIC_LINK_LABEL = /^(?:바로가기|사이트\s*바로가기|홈페이지\s*바로가기|방문하기)$/u;
 const KOREAN_SERVICE_TERMS = /서비스|혜택|지원|복지|신청|플랫폼/u;
-
-function selfRootTaskClaim(taskCategory: string, observedText: string): boolean {
-  const claim = observedText.slice(0, 1200).toLowerCase().replace(/\s+/gu, ' ');
-  if (/welfare|benefits?|복지|혜택/iu.test(taskCategory)) {
-    if (/\b(?:no|without)\s+(?:\w+\s+){0,2}(?:welfare|benefits?)\b|\b(?:welfare|benefits?)\b.{0,40}\b(?:not offered|not available|not provided|unavailable)\b|(?:복지|혜택).{0,16}(?:없|미제공|제공하지)/iu.test(claim)) return false;
-    return /\b(?:welfare|benefits?)\b(?:\s+\w+){0,1}\s+\b(?:service|program|portal|directory|application|support|finder|checker)\b|\b(?:service|program|portal|directory|application|support)\b.{0,18}\b(?:welfare|benefits?)\b|(?:복지|혜택|지원).{0,12}(?:서비스|신청|정책|포털|안내|찾기|검색)/iu.test(claim);
-  }
-  if (/flight|airline|항공|비행/iu.test(taskCategory) && /booking|reservation|ticket|예약|예매/iu.test(taskCategory)) {
-    if (/\b(?:no|without)\s+(?:flight|airline)\s+(?:booking|reservation|tickets?)\b|\b(?:flight|airline)\b.{0,25}\b(?:booking|reservation|tickets?)\b.{0,30}\b(?:unavailable|not offered|not provided)\b|(?:항공|비행).{0,12}(?:예약|예매).{0,12}(?:불가|미지원|제공하지)/iu.test(claim)) return false;
-    return /\b(?:flight|airline)\b.{0,20}\b(?:booking|reservation|ticket)\b|\b(?:book|reserve)\b.{0,12}\b(?:flight|airline)\b|(?:항공|비행).{0,12}(?:예약|예매)/iu.test(claim);
-  }
-  const terms = (taskCategory.toLowerCase().match(/[가-힣]{2,}|[a-z]{4,}/gu) ?? [])
-    .filter(term => !/^(?:public|global|local|service|services|product|platform|application|website|design)$/u.test(term));
-  return terms.length > 0 && terms.every(term => /[가-힣]/u.test(term) ? claim.includes(term)
-    : new RegExp(`\\b${term}\\b`, 'u').test(claim));
-}
 
 export function assertCurrentMarketCapture(value: unknown, lane: 'DOMAIN' | 'DESIGN'): void {
   const capturedAt = typeof value === 'string' ? Date.parse(value) : Number.NaN;
@@ -204,7 +189,7 @@ type MarketExecution = Readonly<{
   links: readonly string[];
   results: readonly ObservedSearchResult[];
   usable: boolean;
-  directRoot?: Readonly<{ url: string; observedText: string }>;
+  directRoot?: Readonly<{ url: string; observedText: string; taskText: string }>;
 }>;
 function laneNeedsMarketSearch(coverage: MarketLaneCoverage, roots: readonly unknown[], searches: readonly unknown[]): boolean {
   return searches.length > 0 || !roots.length || coverage.localSources.some(source => source.basis === 'market-search-result')
@@ -237,11 +222,12 @@ function validateLaneProvenance(
       marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_LOCAL_PROVENANCE`);
     }
     if (!execution.usable) marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_LOCAL_PROVENANCE`);
-    const result = execution.results.find(candidate => resultReaches(candidate, urls));
+    const rootIsSource = execution.query === null && execution.directRoot?.url === source.url;
+    const result = rootIsSource ? undefined : execution.results.find(candidate => resultReaches(candidate, urls));
     const selfRoot = lane === 'DOMAIN' && execution.query === null
-      && execution.directRoot?.url === source.url && execution.directRoot.observedText;
+      && execution.directRoot?.url === source.url && execution.directRoot.taskText;
     const scopedSelfRoot = selfRoot && DIRECT_SCOPE.test(selfRoot) && SCOPE_TERMS[local.scope].test(selfRoot)
-      && selfRootTaskClaim(taskCategory, selfRoot)
+      && selfRootTaskClaim(taskCategory, selfRoot, execution.results)
       && (marketRegion === 'KR' ? capturedKoreanService(root, source, roots, marketLabels, execution.sha256)
         : containsMarketToken(selfRoot, marketLabels)) && !negatesMarketScope(selfRoot, marketLabels);
     const scopedResult = result !== undefined && DIRECT_SCOPE.test(result.text)
@@ -269,13 +255,14 @@ function validateLaneProvenance(
     const execution = executions.find(candidate => candidate.sha256 === binding.provenanceReceiptSha256)
       ?? marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_FALLBACK_PROVENANCE`);
     const selfRoot = lane === 'DOMAIN' && execution.query === null
-      && execution.directRoot?.url === source.url && execution.directRoot.observedText;
+      && execution.directRoot?.url === source.url && execution.directRoot.taskText;
     const usefulSelfRoot = selfRoot && DIRECT_SCOPE.test(selfRoot) && SCOPE_TERMS.service.test(selfRoot)
-      && selfRootTaskClaim(taskCategory, selfRoot);
-    if (!execution.usable || !usefulSelfRoot && !execution.results.some(result => resultReaches(result, urls)
+      && selfRootTaskClaim(taskCategory, selfRoot, execution.results);
+    const rootIsSource = execution.query === null && execution.directRoot?.url === source.url;
+    if (!execution.usable || !usefulSelfRoot && (rootIsSource || !execution.results.some(result => resultReaches(result, urls)
       && (execution.query === null || actionableSearchTargets({ lane: lane.toLowerCase() as 'domain' | 'design',
         query: execution.query, provider: '', results: [result], allowUnmatched: false })
-        .some(target => urls.includes(target))))) {
+        .some(target => urls.includes(target)))))) {
       marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_FALLBACK_PROVENANCE`);
     }
     assertCurrentSourceObservation(source.observedAt, execution.observedAt,
@@ -349,6 +336,7 @@ function validateDirectExecutions(
     return Object.freeze({ sha256: receipt.capture.sha256, query: null,
       observedAt: Date.parse(observation.capturedAt ?? ''),
       links: observation.links, results: observation.linkLabels ?? [], usable: true,
-      directRoot: { url: observation.url, observedText: observation.observedText ?? '' } });
+      directRoot: { url: observation.url, observedText: observation.observedText ?? '',
+        taskText: observation.taskText ?? '' } });
   }));
 }

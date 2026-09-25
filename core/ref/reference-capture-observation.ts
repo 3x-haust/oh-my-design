@@ -26,7 +26,7 @@ export async function captureDiscoveryObservation(page: Page, documents: Documen
       return { bytes, links: [...new Set(contentAnchors.map(anchor => anchor.href))],
         results: contentAnchors.map(anchor => ({ url: anchor.href, text: anchor.text.replace(/\s+/g, ' ').trim() }))
           .filter((result, index, all) => result.text && all.findIndex(candidate => candidate.url === result.url) === index),
-        body: observed.body, visibleText: observed.visibleText, url: observed.url,
+        body: observed.body, visibleText: observed.visibleText, taskText: observed.taskText, url: observed.url,
         httpStatus: afterDocument.httpStatus };
     }
   }
