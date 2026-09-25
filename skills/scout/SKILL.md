@@ -226,9 +226,12 @@ unreachable exclusions in the benchmark. Before accepting any retained image, in
 informational notices should be closed in the same browser context before capture, while consent,
 login, unknown or unclosable modals and orphaned dim backdrops must be recorded as access gaps
 rather than saved as evidence. A prepared feature state is not exempt from unrelated obstructions.
-Informational notices are visually suppressed without clicking the site's control or executing
-its handler. The receipt says `visual-only`; do not claim that the site's real dismissal or
+Informational notices are visually suppressed by a browser-owned stylesheet without clicking the
+site's control, executing its handler, or removing DOM nodes. The receipt says `visual-only`; do
+not claim that the site's real dismissal or
 service-side transition was tested.
+The bounded style change must not cause an outgoing request or cookie/storage change; treat either
+as an obstruction gap, not as successful clean evidence.
 If a late notice contaminated a capture, reacquire that state and use only its clean current receipt.
 Put the feature-specific visible assertion last for each native step so its control/content is
 framed in the screenshot. If several visible assertions cannot fit in one viewport, split the

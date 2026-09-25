@@ -446,9 +446,12 @@ derivative failure the transfer boundary forbids.
 
 Retained reference captures and native flow steps first allow a brief bounded settle for late
 notices, then visually suppress only visible informational announcement dialogs with an unambiguous
-`닫기`/`Close` control. The browser does **not** click the page-owned control or run its handlers:
-it removes the notice and its visible dim backdrop for research pixels only, in a fresh browser
-context. This is not proof that a real user dismissal or service-side transition succeeded. The
+`닫기`/`Close` control. The browser does **not** click the page-owned control, run its handlers,
+or remove DOM nodes: a browser-owned DevTools stylesheet visually hides the notice and a named
+covering backdrop for research pixels only, in a fresh browser context. An unnamed covering layer
+refuses capture. Network requests during the bounded style change are aborted, and any attempted
+request or cookie/storage change refuses the capture; ordinary feature resources are not blocked
+after that bound. This is not proof that a real user dismissal or service-side transition succeeded. The
 URL must remain unchanged and no dim backdrop may remain; the title, control, visual-only method,
 and backdrop count are retained in the private capture/flow receipt.
 Roleless popup containers and visible modal-like overlays also require clearance or refusal. An

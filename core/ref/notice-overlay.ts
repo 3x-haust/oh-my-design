@@ -1,4 +1,4 @@
-import type { Page } from 'playwright';
+import type { CDPSession, Page, Route } from 'playwright';
 
 export type NoticeDismissal = Readonly<{ dialog: string; control: string; method: 'visual-only'; suppressedBackdrops: number }>;
 
@@ -7,34 +7,88 @@ const NOTICE = /공지|안내|알림|notice|announcement/i;
 const SENSITIVE = /쿠키|cookie|consent|동의|privacy|개인정보|로그인|sign\s?in|결제|payment/i;
 const SENSITIVE_BODY = /쿠키|cookie|consent|동의|privacy|개인정보|결제|payment|로그인(?:해|하기|하세요|후)|sign\s?in|log\s?in/i;
 const CLOSE = /^(?:close(?:\s+(?:dialog|popup|window))?|dismiss|닫기|(?:창|팝업)\s*닫기|[×✕x])$/i;
+const BACKDROP_NAME = /overlay|backdrop|shade|dimmer|scrim/i;
+const sheets = new WeakMap<Page, { session: CDPSession; id: string; selectors: string[] }>();
 
 function obstruction(message: string): never {
   throw new Error(`REFERENCE_CAPTURE_VISUAL_OBSTRUCTION: ${message}`);
 }
 
-async function dimBackdrops(page: Page, suppress: boolean): Promise<number> {
-  return page.evaluate(shouldSuppress => {
+async function coveringLayers(page: Page): Promise<{ selector: string; name: string }[]> {
+  return page.evaluate(() => {
     const width = innerWidth, height = innerHeight;
     const points = [[0.1, 0.1], [0.9, 0.1], [0.1, 0.9], [0.9, 0.9]];
-    const matches = [...document.querySelectorAll('body *')].filter(element => {
+    const onTop = (element: Element, x: number, y: number) => {
+      const top = document.elementFromPoint(width * x, height * y);
+      return top === element || (top !== null && element.contains(top));
+    };
+    const path = (element: Element) => {
+      const parts: string[] = [];
+      let current: Element | null = element;
+      while (current && current !== document.documentElement) {
+        const parent: Element | null = current.parentElement;
+        if (!parent) return '';
+        parts.unshift(`${current.tagName.toLowerCase()}:nth-child(${[...parent.children].indexOf(current) + 1})`);
+        current = parent;
+      }
+      return `html > ${parts.join(' > ')}`;
+    };
+    return [...document.querySelectorAll('body *')].filter(element => {
       const style = getComputedStyle(element);
       if (!['fixed', 'absolute'].includes(style.position) || style.display === 'none' || style.visibility !== 'visible' || Number(style.opacity) < 0.2 || Number(style.zIndex) < 0) return false;
       const box = element.getBoundingClientRect();
       if (box.width * box.height < width * height * 0.6) return false;
-      const rgba = style.backgroundColor.match(/^rgba?\((\d+)[,\s]+(\d+)[,\s]+(\d+)(?:[,\s/]+([\d.]+))?\)$/);
-      if (!rgba || Math.max(Number(rgba[1]), Number(rgba[2]), Number(rgba[3])) > 180 || Number(rgba[4] ?? 1) < 0.2) return false;
-      return points.some(([x, y]) => {
-        const top = document.elementFromPoint(width * x!, height * y!);
-        return top === element || (top !== null && element.contains(top));
-      });
-    });
-    if (shouldSuppress) {
-      const named = matches.filter(element => /overlay|backdrop|shade|dimmer|scrim/i.test(`${element.id} ${element.className}`));
-      for (const element of named) element.remove();
-      return named.length;
-    }
-    return matches.length;
-  }, suppress);
+      return onTop(element, 0.5, 0.5) && points.filter(([x, y]) => onTop(element, x!, y!)).length >= 2;
+    }).map(element => ({ selector: path(element), name: `${element.id} ${element.className}` }))
+      .filter(item => item.selector);
+  });
+}
+
+async function suppressByBrowserStyle(page: Page, selectors: readonly string[]): Promise<void> {
+  let sheet = sheets.get(page);
+  if (!sheet) {
+    const session = await page.context().newCDPSession(page);
+    await session.send('DOM.enable');
+    await session.send('CSS.enable');
+    const tree = await session.send('Page.getFrameTree');
+    const created = await session.send('CSS.createStyleSheet', { frameId: tree.frameTree.frame.id });
+    sheet = { session, id: created.styleSheetId, selectors: [] };
+    sheets.set(page, sheet);
+    page.once('framenavigated', frame => { if (frame === page.mainFrame()) sheets.delete(page); });
+  }
+  sheet.selectors.push(...selectors);
+  await sheet.session.send('CSS.setStyleSheetText', {
+    styleSheetId: sheet.id,
+    text: `${sheet.selectors.join(', ')} { display: none !important; visibility: hidden !important; }`,
+  });
+}
+
+async function browserState(page: Page): Promise<string> {
+  const storage = await page.evaluate(() => {
+    const entries = (item: Storage) => Array.from({ length: item.length }, (_, index) => {
+      const key = item.key(index)!;
+      return [key, item.getItem(key)];
+    }).sort(([left], [right]) => left!.localeCompare(right!));
+    return { cookie: document.cookie, local: entries(localStorage), session: entries(sessionStorage) };
+  });
+  const cookies = (await page.context().cookies()).sort((left, right) => `${left.domain}/${left.path}/${left.name}`.localeCompare(`${right.domain}/${right.path}/${right.name}`));
+  return JSON.stringify({ storage, cookies });
+}
+
+async function guardedVisualSuppression<T>(page: Page, work: () => Promise<T>): Promise<T> {
+  const before = await browserState(page);
+  const blocked: string[] = [];
+  const handler = (route: Route) => {
+    if (blocked.length < 5) blocked.push(`${route.request().method()}:${route.request().resourceType()}`);
+    return route.abort();
+  };
+  await page.context().route('**/*', handler);
+  try {
+    const result = await work();
+    await page.waitForTimeout(250);
+    if (blocked.length || await browserState(page) !== before) obstruction(`notice visual suppression caused request or browser-state change (${blocked.join(', ')})`);
+    return result;
+  } finally { await page.context().unroute('**/*', handler); }
 }
 
 export async function clearReferenceNotices(page: Page, allowedStateSelectors: readonly string[] = [], settleMs = 0): Promise<NoticeDismissal[]> {
@@ -50,6 +104,8 @@ export async function clearReferenceNotices(page: Page, allowedStateSelectors: r
       const plausiblePopup = await dialog.evaluate(element => element.matches('[role="dialog"], [role="alertdialog"], dialog[open]')
         || ['fixed', 'absolute'].includes(getComputedStyle(element).position));
       if (!plausiblePopup) continue;
+      const backdrop = await dialog.evaluate(element => /overlay|backdrop|shade|dimmer|scrim/i.test(`${element.id} ${element.className}`));
+      if (backdrop) continue;
       const box = await dialog.boundingBox();
       const viewport = page.viewportSize();
       if (!box || !viewport || box.x >= viewport.width || box.y >= viewport.height
@@ -63,7 +119,7 @@ export async function clearReferenceNotices(page: Page, allowedStateSelectors: r
       break;
     }
     if (visibleIndex < 0) {
-      if (!intentionalModal && await dimBackdrops(page, false)) obstruction('a dim backdrop still covers the reference viewport');
+      if (!intentionalModal && (await coveringLayers(page)).length) obstruction('a covering layer still obscures the reference viewport');
       return dismissals;
     }
     const dialog = dialogs.nth(visibleIndex);
@@ -93,9 +149,26 @@ export async function clearReferenceNotices(page: Page, allowedStateSelectors: r
     }
     if (closeIndex < 0) obstruction(`notice has no safe close control: ${title}`);
     const beforeUrl = page.url();
-    await dialog.evaluate(element => element.remove());
-    const suppressedBackdrops = await dimBackdrops(page, true);
-    if (page.url() !== beforeUrl || await dimBackdrops(page, false)) obstruction(`notice visual suppression did not clear the viewport: ${title}`);
+    const selector = await dialog.evaluate(element => {
+      const parts: string[] = [];
+      let current: Element | null = element;
+      while (current && current !== document.documentElement) {
+        const parent: Element | null = current.parentElement;
+        if (!parent) return '';
+        parts.unshift(`${current.tagName.toLowerCase()}:nth-child(${[...parent.children].indexOf(current) + 1})`);
+        current = parent;
+      }
+      return `html > ${parts.join(' > ')}`;
+    });
+    if (!selector) obstruction(`notice cannot be isolated for visual suppression: ${title}`);
+    const suppressedBackdrops = await guardedVisualSuppression(page, async () => {
+      await suppressByBrowserStyle(page, [selector]);
+      const layers = await coveringLayers(page);
+      const backdrops = layers.filter(layer => BACKDROP_NAME.test(layer.name));
+      if (backdrops.length) await suppressByBrowserStyle(page, backdrops.map(layer => layer.selector));
+      if (page.url() !== beforeUrl || (await coveringLayers(page)).length) obstruction(`notice visual suppression did not clear the viewport: ${title}`);
+      return backdrops.length;
+    });
     dismissals.push({ dialog: title, control: closeName, method: 'visual-only', suppressedBackdrops });
   }
   obstruction('too many stacked notices');

@@ -167,8 +167,10 @@ inspection and research repair remain available while production is blocked.
   native browser steps when a native execution is claimed. Each step scrolls its visible-state
   anchor into the captured viewport and refuses off-screen asserted states that require separate
   captures; a hidden-only assertion cannot claim a feature screenshot. Retained reference capture
-  visually suppresses only informational notices without clicking their page-owned controls,
-  records that method and any removed backdrop, and refuses an unclosable/consent/unknown modal,
+  visually suppresses only informational notices through a browser-owned stylesheet without
+  clicking their page-owned controls or mutating DOM nodes, records that method and hidden backdrop
+  count, and refuses an unclosable/consent/unknown modal, unnamed covering layer, or request/storage
+  change during the bounded suppression,
   roleless unsafe popup or remaining dim backdrop before writing
   a PNG, including prepared states; its screenshot precedes
   hover/focus probes that could open a menu or alter the captured state.

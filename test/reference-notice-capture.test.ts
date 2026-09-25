@@ -85,7 +85,9 @@ test('a deceptive close control is not clicked, so it cannot send a request whil
     response.setHeader('content-type', 'text/html');
     response.end(`<!doctype html><title>Public service</title><main><h1>Benefits</h1><p>${'Compare available public service details and eligibility. '.repeat(12)}</p></main>
       <div role="dialog" aria-modal="true" aria-label="Service notice"><button type="button" aria-label="Close"
-      onclick="document.cookie='consent=yes';localStorage.setItem('consent','yes');fetch('/mutate',{method:'POST'});this.closest('[role=dialog]').remove()">Close</button></div>`);
+      onclick="document.cookie='consent=yes';localStorage.setItem('consent','yes');fetch('/mutate',{method:'POST'});this.closest('[role=dialog]').remove()">Close</button>
+      </div><script>new MutationObserver(()=>{document.cookie='consent=yes';localStorage.setItem('consent','yes');fetch('/mutate',{method:'POST'})})
+      .observe(document.body,{childList:true,subtree:true,attributes:true})</script>`);
   });
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
   t.after(() => new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())));
@@ -129,17 +131,20 @@ test('a prepared feature refuses an unrelated consent modal instead of saving ob
   assert.equal(existsSync(shotOut), false);
 });
 
-test('reference capture refuses an unknown roleless popup and clears a notice backdrop', async t => {
-  for (const mode of ['custom', 'orphaned-backdrop'] as const) {
+test('reference capture refuses unknown popups and white masks but clears a notice backdrop', async t => {
+  for (const mode of ['custom', 'orphaned-backdrop', 'white-mask'] as const) {
     const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-visual-overlay-')));
     t.after(() => rmSync(root, { recursive: true, force: true }));
     const popup = mode === 'custom'
       ? '<div id="backdrop"></div><div id="service-popup"><h2>Unknown popup</h2><button type="button">Close</button></div>'
-      : '<div id="backdrop"></div><div role="dialog" aria-modal="true" aria-label="Service notice"><button type="button" aria-label="Close" onclick="this.closest(\'[role=dialog]\').remove()">Close</button></div>';
+      : mode === 'white-mask'
+        ? '<div id="mask"></div><div role="dialog" aria-modal="true" aria-label="Service notice"><button type="button" aria-label="Close">Close</button></div>'
+        : '<div class="modal-backdrop"></div><div role="dialog" aria-modal="true" aria-label="Service notice"><button type="button" aria-label="Close">Close</button></div>';
     const server = createServer((_request, response) => {
       response.setHeader('content-type', 'text/html');
       response.end(`<!doctype html><title>Public benefits</title><style>body{margin:0;background:white}main{padding:40px}
-        #backdrop{position:fixed;inset:0;background:rgba(0,0,0,.7)}#service-popup,[role=dialog]{position:fixed;left:35%;top:25%;width:30%;height:40%;background:white}</style>
+        #backdrop,.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.7)}#mask{position:fixed;inset:0;background:white}
+        #service-popup,[role=dialog]{position:fixed;left:35%;top:25%;width:30%;height:40%;background:white}</style>
         <main><h1>Benefits</h1><p>${'Compare current benefits and application requirements. '.repeat(12)}</p></main>${popup}`);
     });
     await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
@@ -147,7 +152,7 @@ test('reference capture refuses an unknown roleless popup and clears a notice ba
     const address = server.address(); assert.ok(address && typeof address !== 'string');
     const writer = createTestProjectWriteAdapter(root); writer.mkdir('.omd/refs/domain');
     const shotOut = join(root, `.omd/refs/domain/${mode}.png`);
-    if (mode === 'custom') {
+    if (mode === 'custom' || mode === 'white-mask') {
       await assert.rejects(withBrowser(browser => capturePageForRef(browser, `http://127.0.0.1:${address.port}`,
         { width: 800, height: 600 }, { shotOut, adapter: writer })), /REFERENCE_CAPTURE_VISUAL_OBSTRUCTION/);
       assert.equal(existsSync(shotOut), false);
@@ -204,5 +209,29 @@ test('a consent dialog cannot masquerade as an informational notice through aria
   const shotOut = join(root, '.omd/refs/domain/spoofed.png');
   await assert.rejects(withBrowser(browser => capturePageForRef(browser, `http://127.0.0.1:${address.port}`,
     { width: 800, height: 600 }, { shotOut, adapter: writer })), /REFERENCE_CAPTURE_VISUAL_OBSTRUCTION/);
+  assert.equal(existsSync(shotOut), false);
+});
+
+test('a style-observing page cannot turn visual suppression into an accepted stateful capture', async t => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-style-observer-')));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const mutations: string[] = [];
+  const server = createServer((request, response) => {
+    if (request.url === '/mutate') { mutations.push(request.method ?? ''); response.end('ok'); return; }
+    response.setHeader('content-type', 'text/html');
+    response.end(`<!doctype html><title>Public benefits</title><style>[role=dialog]{position:fixed;top:20%;left:20%;width:300px;height:300px;background:white}</style>
+      <main><h1>Benefits</h1><p>${'Browse public benefits and requirements. '.repeat(12)}</p></main>
+      <div role="dialog" aria-modal="true" aria-label="Service notice"><button type="button" aria-label="Close">Close</button></div>
+      <script>let primed=false;new ResizeObserver(()=>{if(!primed){primed=true;return}document.cookie='consent=yes';fetch('/mutate',{method:'POST'})})
+      .observe(document.querySelector('[role=dialog]'))</script>`);
+  });
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())));
+  const address = server.address(); assert.ok(address && typeof address !== 'string');
+  const writer = createTestProjectWriteAdapter(root); writer.mkdir('.omd/refs/domain');
+  const shotOut = join(root, '.omd/refs/domain/style-observer.png');
+  await assert.rejects(withBrowser(browser => capturePageForRef(browser, `http://127.0.0.1:${address.port}`,
+    { width: 800, height: 600 }, { shotOut, adapter: writer })), /REFERENCE_CAPTURE_VISUAL_OBSTRUCTION/);
+  assert.deepEqual(mutations, []);
   assert.equal(existsSync(shotOut), false);
 });
