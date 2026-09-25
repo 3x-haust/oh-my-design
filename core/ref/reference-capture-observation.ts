@@ -21,7 +21,8 @@ export async function captureDiscoveryObservation(page: Page, documents: Documen
       && JSON.stringify(before) === JSON.stringify(after)) {
       const observed = finalizeSearchRenderedState(before, capture?.visibleText ?? Buffer.alloc(0),
         capture?.hiddenText ?? Buffer.alloc(0), capture?.confirmedVisibleText ?? Buffer.alloc(0));
-      const contentAnchors = observed.anchors.filter(anchor => !anchor.chrome);
+      const contentAnchors = observed.anchors.filter(anchor => !anchor.chrome)
+        .sort((left, right) => Number(left.navigation) - Number(right.navigation));
       return { bytes, links: [...new Set(contentAnchors.map(anchor => anchor.href))],
         results: contentAnchors.map(anchor => ({ url: anchor.href, text: anchor.text.replace(/\s+/g, ' ').trim() }))
           .filter((result, index, all) => result.text && all.findIndex(candidate => candidate.url === result.url) === index),

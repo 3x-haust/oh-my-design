@@ -241,7 +241,9 @@ Every declared query still needs an exact execution, including failed attempts a
 The native entry publisher uses a DNS-pinned fresh GET/HEAD-only context, blocks service workers/downloads,
 performs no click/hover probes, and captures stable visible links with the matching viewport PNG.
 An exact current signed v4 root URL may itself be a retained comparable-service source when its
-captured page has a useful task surface and at least one content link; its observed content links
+captured page has a useful task surface and at least one content or task-contextual primary-navigation link;
+generic global navigation, notices and footer links are excluded. Page-content links take priority over
+task-contextual primary-navigation links; its observed links
 also seed descendants. Intermediate edges in direct v6/v7 chains require strict navigation-v4 captures. Hidden all-DOM links
 from retained captures and historical navigation-v1 cannot shortcut a missing observed transition.
 Design roots must remain supported public lists after redirects, exposing visible same-gallery item

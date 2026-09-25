@@ -247,6 +247,19 @@ test('an unrelated long news title does not become a welfare service result', t 
   assert.throws(() => validateSearchCoverage(root, 'domain', ['복지로'], [receipt], [source]), /not an observed search link/);
 });
 
+test('unscoped tasks can follow useful service titles without exact query words', t => {
+  for (const [query, label] of [
+    ['flight booking', 'Airline Ticket Reservations'],
+    ['appointment scheduling', 'Zocdoc Book a Doctor'],
+    ['customer support', 'Customer Support Portal'],
+  ] as const) {
+    const root = fixture(t);
+    const source = 'https://service.example/task';
+    const receipt = testSearchReceipt(root, 'domain', query, [source], false, new Date().toISOString(), label);
+    assert.doesNotThrow(() => validateSearchCoverage(root, 'domain', [query], [receipt], [source]));
+  }
+});
+
 test('a signed search from before route publication cannot satisfy current research', t => {
   const root = fixture(t);
   const source = 'https://service.example/task';

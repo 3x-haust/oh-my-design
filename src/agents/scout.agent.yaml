@@ -478,6 +478,8 @@ instructions: |
   current native acquisition action with `omd ref advance --json`. Recompute after the signed
   search or navigation attempt; do not loop on the read-only plan. A visited gallery item is
   discovery only: inspect and retain the actual useful UI image or observed original with `ref add`.
+  For a directly visited service, follow task-content links before a primary-navigation link; the
+  latter counts only when the captured main task text supports it, never for a generic global menu.
   If it is not useful, publish `ref exclude <observed-url> --lane design|domain --reason <specific
   observed reason>` to move to another lead; that authored rejection is not a provider failure.
   A receipt-backed exhausted action reports exact unavailable sources and does not authorize an

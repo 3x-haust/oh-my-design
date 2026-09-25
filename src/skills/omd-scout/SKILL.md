@@ -65,6 +65,9 @@ entry or observed-link visit, then recompute work-next. Each call advances only 
 a signed unavailable attempt redirects to the next public lead, not to another copy of the plan.
 Treat search navigation, help and settings links as page chrome, not candidate services or visual
 references; a search with no task-related lead should advance to the next public source.
+On a directly visited service, prefer observed links within the task content. A primary-navigation
+link is usable only when the captured main task text supports that same function; generic global
+menus and footer links do not qualify a service root.
 When the pointer names `retain-reference`, inspect the actual visited page or UI image, capture a
 useful scoped source with `ref add`, and recompute. If the inspected item is unsuitable, record a
 specific quality or relevance reason with `omd ref exclude <observed-item-url> --lane design|domain

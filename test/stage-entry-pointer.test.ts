@@ -14,6 +14,7 @@ import { designJudgmentInput } from '../core/design/current-judgment.ts';
 import { readPersistedRoute } from '../core/route/index.ts';
 import { publishReferenceResearch } from '../core/ref/reference-research.ts';
 import { publishReferenceApplication, referenceApplicationPlan } from '../core/ref/reference-application.ts';
+import { testSearchReceipt } from './helpers/search-execution.ts';
 
 const pack = fileURLToPath(new URL('../core', import.meta.url));
 const deck = `# Copy deck
@@ -155,6 +156,10 @@ test('board work repairs research before application and returns to research whe
   input.strategyDecision.methods.push('reference-discovery', 'parallel-reference-acquisition');
   input.strategyDecision.skips = input.strategyDecision.skips.filter((skip: { id: string }) => !['scout', 'reference-board', 'reference-discovery'].includes(skip.id));
   const invocation = copyProject(f.root, input), route = readPersistedRoute(f.root, invocation);
+  f.research.domainReference.searches = f.research.domainReference.queries.map(query =>
+    testSearchReceipt(f.root, 'domain', query, f.research.domainReference.sources.map(source => source.url)));
+  f.research.designReference.searches = f.research.designReference.queries.map(query =>
+    testSearchReceipt(f.root, 'design', query, f.research.designReference.sources.map(source => source.discovery.url)));
   const options = { expectedSourceContractSha256: route.sourceContractSha256, benchmarkRequired: false, expectedRequest: route.request };
   const writer = createTestProjectWriteAdapter(f.root, invocation);
   writeFileSync(join(f.root, '.omd/scout.md'), '# Scoped reference observations\n');

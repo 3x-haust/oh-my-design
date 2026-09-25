@@ -12,7 +12,8 @@ export type SearchPixelSample = Readonly<{
 }>;
 
 export type RawSearchRenderedState = Readonly<{
-  anchors: readonly Readonly<{ href: string; text: string; left: number; right: number; top: number; bottom: number; chrome: boolean }>[];
+  anchors: readonly Readonly<{ href: string; text: string; left: number; right: number; top: number; bottom: number; chrome: boolean;
+    navigation: boolean }>[];
   body: string;
   visibleText: readonly Readonly<{ id: number; value: string }>[];
   uncertain: readonly Readonly<SearchPixelSample & { href: string | null }>[];

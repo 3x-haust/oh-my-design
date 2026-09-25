@@ -13,21 +13,28 @@ export function actionableSearchTargets(execution: Readonly<{ lane: 'domain' | '
   results?: readonly ObservedSearchResult[] }>): readonly string[] {
   const tokens = [...new Set((execution.query.toLowerCase().match(/[가-힣]{2,}|[a-z0-9]{3,}/gu) ?? [])
     .filter(token => !SEARCH_STOP_WORDS.has(token)))];
-  const targets = new Set<string>();
+  const relatedTargets = new Set<string>();
+  const otherServiceTargets = new Set<string>();
   for (const result of execution.results ?? []) {
     const label = result.text.toLowerCase();
     const related = tokens.some(token => label.includes(token));
     const relatedTask = RELATED_TASK_TERMS.some(group => group.query.test(execution.query) && group.result.test(label));
-    if (/\b(?:help|support|settings|cookie|privacy|accessibility|terms|feedback)\b|도움말|쿠키|접근성|개인정보|설정|약관/iu.test(label)) continue;
+    const editorial = /\b(?:trending|news|article|blog|press release|opinion|story)\b|뉴스|기사|보도자료|블로그/iu.test(label);
+    const editorialTask = /\b(?:news|media|article|blog|journalism)\b|뉴스|기사|언론|블로그/iu.test(execution.query);
+    const genericChrome = /\b(?:settings|cookie|privacy|accessibility|terms|feedback)\b|쿠키|접근성|개인정보|설정|약관/iu.test(label);
+    if (genericChrome || editorial && !editorialTask) continue;
+    const substantive = (label.match(/[\p{L}\p{N}]{2,}/gu)?.length ?? 0) >= 2 && [...label].length >= 10;
     for (const target of observedSearchTargets({ links: [result.url] })) {
       let host: string;
       try { host = new URL(target).hostname.toLowerCase(); } catch { continue; }
       if (execution.lane === 'domain' && (host === execution.provider || host.endsWith(`.${execution.provider}`))) continue;
-      if (execution.lane === 'design' ? designDiscoveryProvider(target) !== null
-        : related || relatedTask) targets.add(target);
+      if (execution.lane === 'design') {
+        if (designDiscoveryProvider(target) !== null) relatedTargets.add(target);
+      } else if (related || relatedTask) relatedTargets.add(target);
+      else if (substantive) otherServiceTargets.add(target);
     }
   }
-  return [...targets];
+  return [...relatedTargets, ...[...otherServiceTargets].filter(target => !relatedTargets.has(target))];
 }
 
 function canonicalUrl(value: string): string | null {

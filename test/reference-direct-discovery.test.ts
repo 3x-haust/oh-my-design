@@ -281,6 +281,23 @@ test('a task-specific primary navigation link remains a valid observed service p
   assert.deepEqual(readCurrentDirectDiscoveryEntry(result.root, result.receipt).links, [DOMAIN_ITEM]);
 });
 
+test('global navigation alone cannot qualify a public service directory', async t => {
+  const html = `<header><nav><a href="https://service.example/about">About Us</a>
+    <a href="https://service.example/health-a-to-z">Health A to Z</a>
+    <a href="https://service.example/nhs-services">NHS services</a></nav></header>
+    <main><h1>Medicines A to Z</h1><p>Browse medicines and prescription information, compare dosage instructions, and prepare questions for your clinician before placing an order. Review the details carefully with your care team.</p></main>`;
+  await assert.rejects(capture(t, { url: PUBLIC_DIRECTORY, html }, 'public-directory'), /visible followable/);
+});
+
+test('page-content task links precede a contextual primary-navigation link', async t => {
+  const first = 'https://service.example/apply';
+  const html = `<header><nav><a href="${DOMAIN_ITEM}">Benefits</a></nav></header>
+    <main><h1>Benefit directory</h1><p>Compare support and prepare an application.</p>
+    <a href="${first}">Apply for a benefit</a></main>`;
+  const result = await capture(t, { url: PUBLIC_DIRECTORY, html }, 'public-directory');
+  assert.deepEqual(readCurrentDirectDiscoveryEntry(result.root, result.receipt).links, [first, DOMAIN_ITEM]);
+});
+
 test('a current signed task-bearing direct root can itself be the comparable service', async t => {
   const result = await capture(t, { url: PUBLIC_DIRECTORY, html: directoryHtml(DOMAIN_ITEM) }, 'public-directory');
   const observation = readCurrentDirectDiscoveryEntry(result.root, result.receipt);
