@@ -40,9 +40,11 @@ async function coveringLayers(page: Page): Promise<{ selector: string; name: str
       const style = getComputedStyle(element);
       if (!['fixed', 'absolute'].includes(style.position) || style.display === 'none' || style.visibility !== 'visible' || Number(style.opacity) < 0.2 || Number(style.zIndex) < 0) return false;
       const namedOverlay = /overlay|backdrop|shade|dimmer|scrim/i.test(`${element.id} ${element.className}`);
+      const errorLayer = /error|unavailable|failure|blocked|오류|장애|접속불가/i.test(`${element.id} ${element.className}`)
+        || /^(?:service unavailable|서비스 (?:오류|이용 불가|접속 불가)|접속 (?:오류|불가)|페이지를 표시할 수 없)/i.test((element.querySelector('h1,h2,h3,header')?.textContent ?? '').trim());
       const background = style.backgroundColor.match(/^rgba?\((\d+)[,\s]+(\d+)[,\s]+(\d+)(?:[,\s/]+([\d.]+))?\)$/);
       if (!namedOverlay && (!background || Number(background[4] ?? 1) < 0.15) && style.backgroundImage === 'none' && style.backdropFilter === 'none') return false;
-      if (!namedOverlay
+      if (!namedOverlay && !errorLayer
         && (element.matches('main') || element.querySelector('main') !== null
           || (element.querySelector('header,nav') !== null && element.querySelector('section,article') !== null))) return false;
       const box = element.getBoundingClientRect();
