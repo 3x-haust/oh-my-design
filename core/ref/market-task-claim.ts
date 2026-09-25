@@ -6,7 +6,8 @@ function pageText(taskText: string): string {
 function deniesTask(claim: string, task: RegExp, verb: RegExp, korean: RegExp): boolean {
   return claim.split(/[.!?。！？]/u).some(sentence => {
     const otherAudience = /\b(?:for|to)\s+(?:non[- ]?residents?|visitors?|tourists?)\b|비거주자|방문객/iu.test(sentence);
-    const targetAudience = /\b(?:residents?|citizens?|users?)\b|주민|거주자/iu.test(sentence);
+    const targetAudience = /\b(?:residents?|citizens?|users?)\b|주민|거주자/iu
+      .test(sentence.replace(/비(?:거주자|주민)/gu, ''));
     if (otherAudience && !targetAudience) return false;
     return task.test(sentence) && (verb.test(sentence) || korean.test(sentence));
   });

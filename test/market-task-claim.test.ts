@@ -13,6 +13,7 @@ test('task denial excludes the named service without rejecting other-audience li
   assert.equal(selfRootTaskClaim('public benefits', 'Global welfare benefits service for residents. We do not provide welfare benefits.'), false);
   assert.equal(selfRootTaskClaim('public benefits', 'Global welfare benefits service for residents. No benefits are offered to nonresidents.'), true);
   assert.equal(selfRootTaskClaim('public benefits', 'Global welfare benefits service for residents. No welfare benefits are available to visitors and residents.'), false);
+  assert.equal(selfRootTaskClaim('public benefits', '한국 주민을 위한 복지 혜택 서비스입니다. 비거주자에게 복지 혜택을 제공하지 않습니다.'), true);
   assert.equal(selfRootTaskClaim('flight booking', 'Global flight booking service for residents. We do not offer flight booking; only tracking is available.'), false);
   assert.equal(selfRootTaskClaim('flight booking', 'Global flight booking service for residents. No flight booking for visitors.'), true);
 });
