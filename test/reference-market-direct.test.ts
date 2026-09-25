@@ -63,7 +63,7 @@ test('market search and direct provenance refuse malformed scope, attempts, root
         discovery: { ...source.discovery, url: designItems[index]! } })), discoveryRoots: [designRoot] } };
   assert.doesNotThrow(() => validateMarketReferenceCoverage(fixture.root, parseReferenceResearch(scoped), options.expectedRequest));
   const selfRoot = directRootAt(fixture.root, 'domain', fixture.domain.source,
-    [`${fixture.domain.source}/benefits`], '복지 혜택 서비스를 찾고 신청을 준비하는 한국 주민을 위한 안내입니다.');
+    [`${fixture.domain.source}/benefits`], '복지로\n복지 혜택 서비스를 찾고 신청을 준비하는 한국 주민을 위한 안내입니다.');
   const selfCoverage = structuredClone(directCoverage);
   selfCoverage.domain.localSources[0]!.provenanceReceiptSha256 = selfRoot.capture.sha256;
   const selfScoped = { ...scoped, marketCoverage: selfCoverage,
@@ -81,7 +81,7 @@ test('market search and direct provenance refuse malformed scope, attempts, root
   }), options.expectedRequest), /MARKET_DOMAIN_LOCAL_RESULT_SCOPE/);
   const globalSource = fixture.capture('https://global.example/benefits', 'global', 'domain', 7);
   const fallbackRoot = directRootAt(fixture.root, 'domain', globalSource.source,
-    [`${globalSource.source}/eligibility`], 'Global benefits service for residents.');
+    [`${globalSource.source}/eligibility`], 'Home\nGlobal benefits service for residents.');
   const selfFallbackCoverage = { ...directCoverage, domain: {
     localSources: directCoverage.domain.localSources,
     globalFallback: fallbackCoverage(['domain-4'], fallbackRoot.capture.sha256,
@@ -99,6 +99,7 @@ test('market search and direct provenance refuse malformed scope, attempts, root
     'Global public restaurant service for residents.',
     'Global benefits of music streaming service for residents.',
     'Global music streaming service for residents. No welfare benefits are offered.',
+    'Global welfare benefits service for residents. No welfare benefits are offered.',
   ]) {
     const unrelatedRoot = directRootAt(fixture.root, 'domain', globalSource.source,
       [`${globalSource.source}/listen`], text);

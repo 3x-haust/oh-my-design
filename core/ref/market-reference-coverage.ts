@@ -35,12 +35,13 @@ const GENERIC_LINK_LABEL = /^(?:바로가기|사이트\s*바로가기|홈페이�
 const KOREAN_SERVICE_TERMS = /서비스|혜택|지원|복지|신청|플랫폼/u;
 
 function selfRootTaskClaim(taskCategory: string, observedText: string): boolean {
-  const claim = (observedText.split(/[.!?。！？\n]/u, 1)[0] ?? '').slice(0, 600).toLowerCase();
+  const claim = observedText.slice(0, 1200).toLowerCase().replace(/\s+/gu, ' ');
   if (/welfare|benefits?|복지|혜택/iu.test(taskCategory)) {
-    if (/\b(?:no|without|not)\b.{0,40}\b(?:welfare|benefits?)\b|(?:복지|혜택).{0,16}(?:없|미제공|제공하지)/iu.test(claim)) return false;
+    if (/\b(?:no|without)\s+(?:\w+\s+){0,2}(?:welfare|benefits?)\b|\b(?:welfare|benefits?)\b.{0,40}\b(?:not offered|not available|not provided|unavailable)\b|(?:복지|혜택).{0,16}(?:없|미제공|제공하지)/iu.test(claim)) return false;
     return /\b(?:welfare|benefits?)\b(?:\s+\w+){0,1}\s+\b(?:service|program|portal|directory|application|support|finder|checker)\b|\b(?:service|program|portal|directory|application|support)\b.{0,18}\b(?:welfare|benefits?)\b|(?:복지|혜택|지원).{0,12}(?:서비스|신청|정책|포털|안내|찾기|검색)/iu.test(claim);
   }
   if (/flight|airline|항공|비행/iu.test(taskCategory) && /booking|reservation|ticket|예약|예매/iu.test(taskCategory)) {
+    if (/\b(?:no|without)\s+(?:flight|airline)\s+(?:booking|reservation|tickets?)\b|\b(?:flight|airline)\b.{0,25}\b(?:booking|reservation|tickets?)\b.{0,30}\b(?:unavailable|not offered|not provided)\b|(?:항공|비행).{0,12}(?:예약|예매).{0,12}(?:불가|미지원|제공하지)/iu.test(claim)) return false;
     return /\b(?:flight|airline)\b.{0,20}\b(?:booking|reservation|ticket)\b|\b(?:book|reserve)\b.{0,12}\b(?:flight|airline)\b|(?:항공|비행).{0,12}(?:예약|예매)/iu.test(claim);
   }
   const terms = (taskCategory.toLowerCase().match(/[가-힣]{2,}|[a-z]{4,}/gu) ?? [])
