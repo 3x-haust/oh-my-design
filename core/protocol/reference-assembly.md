@@ -451,9 +451,15 @@ or remove DOM nodes: a browser-owned DevTools stylesheet visually hides the noti
 covering backdrop for research pixels only, in a fresh browser context. An unnamed covering layer
 refuses capture. Network requests during the bounded style change are aborted, and any attempted
 request or cookie/storage change refuses the capture; ordinary feature resources are not blocked
-after that bound. This is not proof that a real user dismissal or service-side transition succeeded. The
-URL must remain unchanged and no dim backdrop may remain; the title, control, visual-only method,
+after that bound. Retained reference navigation also blocks non-GET/HEAD requests, service workers,
+and WebSockets. This is not proof that a real user dismissal or service-side transition succeeded.
+The URL must remain unchanged and no dim backdrop may remain; the title, control, visual-only method,
 and backdrop count are retained in the private capture/flow receipt.
+Page scripts remain suspended for that document after suppression. CSS/DOM and pixels remain
+inspectable, but interaction, motion, and second-pass energy measurements are marked unmeasured;
+a full-document safe link navigation may reload the new document to resume scripts. A same-document
+JavaScript-only state that cannot be reached safely is an explicit coverage gap, not a captured
+feature claim.
 Roleless popup containers and visible modal-like overlays also require clearance or refusal. An
 unknown, consent, login, payment, or unclosable notice is a visual-obstruction
 refusal, never a screenshot to publish. Inspect that

@@ -88,6 +88,11 @@ test('native recorder executes one real navigation/disclosure chain and refuses 
     assert.equal(blocked.status, 'blocked');
     assert.equal(blocked.steps.length, 1);
     assert.ok(!requests.some(request => request.endsWith('/delete')));
+    const suppressedAction = await recordLiveReferenceFlow(proxy, root, { ...input, flowId: 'suppressed-action', steps: [
+      input.steps[0], { screenId: 'same-document', state: 'requirements', clicks: ['#expand'], assertions: [{ selector: '#requirements', state: 'visible' }] },
+    ] }, writer);
+    assert.equal(suppressedAction.status, 'blocked');
+    assert.match(suppressedAction.limitation ?? '', /same-document scripted action is unavailable/);
     const saved = JSON.parse(readFileSync(join(root, result.execution.path), 'utf8'));
     saved.steps[1].action = 'forged';
     const bytes = JSON.stringify(saved), digest = createHash('sha256').update(bytes).digest('hex');

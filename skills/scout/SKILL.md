@@ -232,6 +232,9 @@ not claim that the site's real dismissal or
 service-side transition was tested.
 The bounded style change must not cause an outgoing request or cookie/storage change; treat either
 as an obstruction gap, not as successful clean evidence.
+After visual-only suppression, scripts stay suspended on that document. Do not report motion or
+JavaScript interaction measurements for it; a safe full-document link may reload the next page,
+while an inaccessible same-document state is a bounded gap.
 If a late notice contaminated a capture, reacquire that state and use only its clean current receipt.
 Put the feature-specific visible assertion last for each native step so its control/content is
 framed in the screenshot. If several visible assertions cannot fit in one viewport, split the

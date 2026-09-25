@@ -8,7 +8,7 @@ import { signNativeObservation, verifyNativeObservation } from '../runtime/self-
 import { requireProjectWriteAdapter, type ProjectWriteAdapter } from '../runtime/project-write.ts';
 import { readStableProjectFile, nodeStableProjectFileSystem } from '../runtime/stable-project-file.ts';
 import { decodePng } from '../motion/energy.ts';
-import { clearReferenceNotices, type NoticeDismissal } from './notice-overlay.ts';
+import { clearReferenceNotices, hasSuspendedReferenceScripts, resumeScriptsOnNewReferenceDocument, type NoticeDismissal } from './notice-overlay.ts';
 
 type Receipt = { path: string; sha256: string };
 type StepInput = { screenId: string; state: string; clicks: string[]; assertions: ViewAssertion[] };
@@ -65,7 +65,9 @@ async function safeClick(page: Page, selector: string, origin: string): Promise<
   const link = info.tag === 'A' && info.href !== null;
   if (link) { if (new URL(publicUrl(new URL(info.href!, page.url()).href)).origin !== origin) return fail('cross-service navigation requires a separate flow'); }
   else if (!(info.tag === 'SUMMARY' || (info.tag === 'BUTTON' && info.type === 'button' && ((info.controls && info.expanded !== null) || info.role === 'tab')))) return fail('only links, disclosure buttons, summary and tabs are safe reference clicks');
+  if (info.tag === 'BUTTON' && hasSuspendedReferenceScripts(page)) return fail('same-document scripted action is unavailable after visual-only notice suppression; record a bounded gap or inspect another public source');
   await control.click({ timeout: 3000, noWaitAfter: false });
+  if (link) await resumeScriptsOnNewReferenceDocument(page);
 }
 
 /** One fresh browser context preserves the actual step-to-step state; no authored receipt input. */

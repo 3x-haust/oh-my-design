@@ -8,14 +8,15 @@ const SENSITIVE = /쿠키|cookie|consent|동의|privacy|개인정보|로그인|s
 const SENSITIVE_BODY = /쿠키|cookie|consent|동의|privacy|개인정보|결제|payment|로그인(?:해|하기|하세요|후)|sign\s?in|log\s?in/i;
 const CLOSE = /^(?:close(?:\s+(?:dialog|popup|window))?|dismiss|닫기|(?:창|팝업)\s*닫기|[×✕x])$/i;
 const BACKDROP_NAME = /overlay|backdrop|shade|dimmer|scrim/i;
-const sheets = new WeakMap<Page, { session: CDPSession; id: string; selectors: string[] }>();
+const sheets = new WeakMap<Page, { session: CDPSession; id: string; loaderId: string; selectors: string[] }>();
+const browserExpression = (source: string) => `(() => { const __name = (callback) => callback; return (${source})(); })()`;
 
 function obstruction(message: string): never {
   throw new Error(`REFERENCE_CAPTURE_VISUAL_OBSTRUCTION: ${message}`);
 }
 
 async function coveringLayers(page: Page): Promise<{ selector: string; name: string }[]> {
-  return page.evaluate(() => {
+  return page.evaluate(browserExpression((() => {
     const width = innerWidth, height = innerHeight;
     const points = [[0.1, 0.1], [0.9, 0.1], [0.1, 0.9], [0.9, 0.9]];
     const onTop = (element: Element, x: number, y: number) => {
@@ -36,12 +37,17 @@ async function coveringLayers(page: Page): Promise<{ selector: string; name: str
     return [...document.querySelectorAll('body *')].filter(element => {
       const style = getComputedStyle(element);
       if (!['fixed', 'absolute'].includes(style.position) || style.display === 'none' || style.visibility !== 'visible' || Number(style.opacity) < 0.2 || Number(style.zIndex) < 0) return false;
+      const namedOverlay = /overlay|backdrop|shade|dimmer|scrim/i.test(`${element.id} ${element.className}`);
+      const background = style.backgroundColor.match(/^rgba?\((\d+)[,\s]+(\d+)[,\s]+(\d+)(?:[,\s/]+([\d.]+))?\)$/);
+      if (!namedOverlay && (!background || Number(background[4] ?? 1) < 0.15) && style.backgroundImage === 'none' && style.backdropFilter === 'none') return false;
+      if (!namedOverlay
+        && element.querySelector('main,header,nav,footer') !== null && (element.textContent?.trim().length ?? 0) > 200) return false;
       const box = element.getBoundingClientRect();
       if (box.width * box.height < width * height * 0.6) return false;
       return onTop(element, 0.5, 0.5) && points.filter(([x, y]) => onTop(element, x!, y!)).length >= 2;
     }).map(element => ({ selector: path(element), name: `${element.id} ${element.className}` }))
       .filter(item => item.selector);
-  });
+  }).toString())) as Promise<{ selector: string; name: string }[]>;
 }
 
 async function suppressByBrowserStyle(page: Page, selectors: readonly string[]): Promise<void> {
@@ -52,9 +58,9 @@ async function suppressByBrowserStyle(page: Page, selectors: readonly string[]):
     await session.send('CSS.enable');
     const tree = await session.send('Page.getFrameTree');
     const created = await session.send('CSS.createStyleSheet', { frameId: tree.frameTree.frame.id });
-    sheet = { session, id: created.styleSheetId, selectors: [] };
+    await session.send('Emulation.setScriptExecutionDisabled', { value: true });
+    sheet = { session, id: created.styleSheetId, loaderId: tree.frameTree.frame.loaderId, selectors: [] };
     sheets.set(page, sheet);
-    page.once('framenavigated', frame => { if (frame === page.mainFrame()) sheets.delete(page); });
   }
   sheet.selectors.push(...selectors);
   await sheet.session.send('CSS.setStyleSheetText', {
@@ -63,14 +69,36 @@ async function suppressByBrowserStyle(page: Page, selectors: readonly string[]):
   });
 }
 
+export async function resumeScriptsOnNewReferenceDocument(page: Page): Promise<void> {
+  const sheet = sheets.get(page);
+  if (!sheet) return;
+  const tree = await sheet.session.send('Page.getFrameTree');
+  if (tree.frameTree.frame.loaderId === sheet.loaderId) obstruction('same-document navigation cannot safely resume page scripts after notice suppression');
+  await sheet.session.send('Emulation.setScriptExecutionDisabled', { value: false });
+  sheets.delete(page);
+  await page.reload({ waitUntil: 'domcontentloaded', timeout: 15000 });
+}
+
+export function hasSuspendedReferenceScripts(page: Page): boolean { return sheets.has(page); }
+
+export async function suspendReferenceScriptsForShot(page: Page): Promise<() => Promise<void>> {
+  if (sheets.has(page)) return async () => {};
+  const session = await page.context().newCDPSession(page);
+  await session.send('Emulation.setScriptExecutionDisabled', { value: true });
+  return async () => {
+    if (!sheets.has(page)) await session.send('Emulation.setScriptExecutionDisabled', { value: false });
+    await session.detach();
+  };
+}
+
 async function browserState(page: Page): Promise<string> {
-  const storage = await page.evaluate(() => {
+  const storage = await page.evaluate(browserExpression((() => {
     const entries = (item: Storage) => Array.from({ length: item.length }, (_, index) => {
       const key = item.key(index)!;
       return [key, item.getItem(key)];
     }).sort(([left], [right]) => left!.localeCompare(right!));
     return { cookie: document.cookie, local: entries(localStorage), session: entries(sessionStorage) };
-  });
+  }).toString()));
   const cookies = (await page.context().cookies()).sort((left, right) => `${left.domain}/${left.path}/${left.name}`.localeCompare(`${right.domain}/${right.path}/${right.name}`));
   return JSON.stringify({ storage, cookies });
 }
@@ -110,16 +138,20 @@ export async function clearReferenceNotices(page: Page, allowedStateSelectors: r
       const viewport = page.viewportSize();
       if (!box || !viewport || box.x >= viewport.width || box.y >= viewport.height
         || box.x + box.width <= 0 || box.y + box.height <= 0) continue;
-      const intentional = await dialog.evaluate((element, selectors) => selectors.some(selector => {
-        try { return element.matches(selector) || element.querySelector(selector) !== null; }
-        catch { return false; }
-      }), allowedStateSelectors);
+      const intentional = await dialog.evaluate((element, selectors) => {
+        for (const selector of selectors) {
+          try { if (element.matches(selector) || element.querySelector(selector) !== null) return true; }
+          catch { continue; }
+        }
+        return false;
+      }, allowedStateSelectors);
       if (intentional) { intentionalModal = true; continue; }
       visibleIndex = index;
       break;
     }
     if (visibleIndex < 0) {
-      if (!intentionalModal && (await coveringLayers(page)).length) obstruction('a covering layer still obscures the reference viewport');
+      if (!intentionalModal && (await coveringLayers(page)).some(layer => sheets.has(page) || BACKDROP_NAME.test(layer.name)))
+        obstruction('a covering layer still obscures the reference viewport');
       return dismissals;
     }
     const dialog = dialogs.nth(visibleIndex);

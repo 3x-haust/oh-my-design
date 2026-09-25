@@ -9,7 +9,7 @@ import type { EnergyCurve, MotionMeasurement, RawIr } from '../types.ts';
 import { PREPARED_MEASUREMENT_COVERAGE } from '../ref/measurement-coverage.ts';
 import { designDiscoveryProvider } from '../ref/design-discovery-sources.ts';
 import { parseCapturePreparation, prepareReferenceCapture, observeCapturePreparation, type CapturePreparation, type CapturePreparationReceipt } from '../ref/capture-preparation.ts';
-import { clearReferenceNotices, type NoticeDismissal } from '../ref/notice-overlay.ts';
+import { clearReferenceNotices, suspendReferenceScriptsForShot, type NoticeDismissal } from '../ref/notice-overlay.ts';
 import { type ProjectWriteAdapter, requireProjectWriteAdapter } from '../runtime/project-write.ts';
 import type { RenderedBeat, RenderedBeatProof } from '../copy/index.ts';
 import { requireMotionResultAuthorization, requireRenderedBeatResultAuthorization, type ProjectRunInvocation } from '../runtime/invocation.ts';
@@ -298,7 +298,10 @@ export async function onPage<T>(
   referenceSafety = false,
 ): Promise<T> {
   const page = await browser.newPage({ viewport, ...(referenceSafety ? { serviceWorkers: 'block' as const } : {}) });
-  if (referenceSafety) await page.context().routeWebSocket('**/*', socket => socket.close());
+  if (referenceSafety) {
+    await page.context().routeWebSocket('**/*', socket => socket.close());
+    await page.context().route('**/*', route => ['GET', 'HEAD'].includes(route.request().method()) ? route.continue() : route.abort());
+  }
   let resolved: Awaited<ReturnType<typeof resolveTarget>> | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let expired = false;
@@ -792,6 +795,7 @@ export async function capturePageForRef(
     const laterDismissals = await clearReferenceNotices(page, allowedStateSelectors);
     noticeDismissals.push(...laterDismissals);
     if (laterDismissals.length) raw = await extractIrCore(page, httpStatus, resolvedUrl, opts.selector ?? null, false);
+    const resumeScripts = await suspendReferenceScriptsForShot(page);
     let shotSaved = false;
     let shotBytes: Buffer | undefined;
     let shotError: string | undefined;
@@ -815,6 +819,7 @@ export async function capturePageForRef(
     if (lateDismissals.length && shotBytes) shotBytes = opts.selector
       ? await page.locator(opts.selector).screenshot()
       : await page.screenshot({ fullPage: true });
+    await resumeScripts();
     let capturePreparation: CapturePreparationReceipt | undefined;
     if (preparation) {
       const observations = await observeCapturePreparation(page, preparation);
@@ -830,7 +835,7 @@ export async function capturePageForRef(
     const links = await page.locator('a[href]').evaluateAll(elements => [...new Set(elements.map(el => (el as HTMLAnchorElement).href).filter(url => /^https?:\/\//.test(url)))]);
     const visibleText = await page.evaluate(() => document.body?.innerText ?? '');
     opts.validateFinalUrl?.(finalUrl, visibleText);
-    if (!preparation) {
+    if (!preparation && noticeDismissals.length === 0) {
       if (raw.meta) delete raw.meta.measurementCoverage;
       const motion = await probeMotion(page);
       raw.meta = { ...(raw.meta ?? {}), interaction: await probeInteraction(page), motion };

@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { decodePng } from '../core/motion/energy.ts';
 import { capturePageForRef, withBrowser } from '../core/render/index.ts';
-import { clearReferenceNotices } from '../core/ref/notice-overlay.ts';
+import { clearReferenceNotices, resumeScriptsOnNewReferenceDocument } from '../core/ref/notice-overlay.ts';
 import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
 
 const content = (mode: 'notice' | 'consent' | 'unclosable') => `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>복지 서비스</title>
@@ -31,6 +31,7 @@ test('reference capture closes an informational notice before retaining page pix
   const result = await withBrowser(browser => capturePageForRef(browser, `http://127.0.0.1:${address.port}`, { width: 800, height: 600 },
     { shotOut, adapter: writer }));
   assert.equal(result.acquisition.noticeDismissals?.length, 1);
+  assert.deepEqual(result.raw.meta?.measurementCoverage, { interactionProbe: 'not-measured', motionProbe: 'not-measured', energyCurve: 'not-measured' });
   const { pixels, width, channels } = decodePng(readFileSync(shotOut));
   const corner = (20 * width + 20) * channels;
   assert.deepEqual([...pixels.slice(corner, corner + 3)], [255, 255, 255], 'backdrop must not darken retained page pixels');
@@ -131,19 +132,22 @@ test('a prepared feature refuses an unrelated consent modal instead of saving ob
   assert.equal(existsSync(shotOut), false);
 });
 
-test('reference capture refuses unknown popups and white masks but clears a notice backdrop', async t => {
-  for (const mode of ['custom', 'orphaned-backdrop', 'white-mask'] as const) {
+test('reference capture refuses unknown popups and covering layers but clears a notice backdrop', async t => {
+  for (const mode of ['custom', 'orphaned-backdrop', 'white-mask', 'embedded-overlay'] as const) {
     const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-visual-overlay-')));
     t.after(() => rmSync(root, { recursive: true, force: true }));
     const popup = mode === 'custom'
       ? '<div id="backdrop"></div><div id="service-popup"><h2>Unknown popup</h2><button type="button">Close</button></div>'
-      : mode === 'white-mask'
+      : mode === 'embedded-overlay'
+        ? '<div class="cl-overlay"><div id="embedded-message">Message popup: service unavailable</div></div>'
+        : mode === 'white-mask'
         ? '<div id="mask"></div><div role="dialog" aria-modal="true" aria-label="Service notice"><button type="button" aria-label="Close">Close</button></div>'
         : '<div class="modal-backdrop"></div><div role="dialog" aria-modal="true" aria-label="Service notice"><button type="button" aria-label="Close">Close</button></div>';
     const server = createServer((_request, response) => {
       response.setHeader('content-type', 'text/html');
       response.end(`<!doctype html><title>Public benefits</title><style>body{margin:0;background:white}main{padding:40px}
         #backdrop,.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.7)}#mask{position:fixed;inset:0;background:white}
+        .cl-overlay{position:fixed;inset:0;background:transparent}#embedded-message{position:absolute;left:30%;top:30%;background:white;padding:20px}
         #service-popup,[role=dialog]{position:fixed;left:35%;top:25%;width:30%;height:40%;background:white}</style>
         <main><h1>Benefits</h1><p>${'Compare current benefits and application requirements. '.repeat(12)}</p></main>${popup}`);
     });
@@ -152,7 +156,7 @@ test('reference capture refuses unknown popups and white masks but clears a noti
     const address = server.address(); assert.ok(address && typeof address !== 'string');
     const writer = createTestProjectWriteAdapter(root); writer.mkdir('.omd/refs/domain');
     const shotOut = join(root, `.omd/refs/domain/${mode}.png`);
-    if (mode === 'custom' || mode === 'white-mask') {
+    if (mode === 'custom' || mode === 'white-mask' || mode === 'embedded-overlay') {
       await assert.rejects(withBrowser(browser => capturePageForRef(browser, `http://127.0.0.1:${address.port}`,
         { width: 800, height: 600 }, { shotOut, adapter: writer })), /REFERENCE_CAPTURE_VISUAL_OBSTRUCTION/);
       assert.equal(existsSync(shotOut), false);
@@ -172,7 +176,7 @@ test('a safe feature link still loads its stylesheet after visual-only notice su
     requests.push(request.url ?? '');
     if (request.url === '/detail.css') { response.setHeader('content-type', 'text/css'); response.end('#feature{background:rgb(1, 2, 3)}'); return; }
     response.setHeader('content-type', 'text/html');
-    response.end(request.url === '/detail' ? '<link rel="stylesheet" href="/detail.css"><h1 id="feature">Feature detail</h1>' : `<!doctype html><h1>Benefits</h1><a id="detail" href="/detail">Details</a>
+    response.end(request.url === '/detail' ? '<link rel="stylesheet" href="/detail.css"><h1 id="feature">Feature detail</h1><script>document.querySelector("#feature").dataset.hydrated="yes"</script>' : `<!doctype html><h1>Benefits</h1><a id="detail" href="/detail">Details</a>
       <div role="dialog" aria-modal="true" aria-label="Service notice"><button type="button" aria-label="Close"
       onclick="this.closest('[role=dialog]').remove()">Close</button></div>`);
   });
@@ -186,8 +190,10 @@ test('a safe feature link still loads its stylesheet after visual-only notice su
       await page.goto(base);
       assert.equal((await clearReferenceNotices(page)).length, 1);
       await page.locator('#detail').click();
+      await resumeScriptsOnNewReferenceDocument(page);
       assert.equal(await page.locator('h1').textContent(), 'Feature detail');
       assert.equal(await page.locator('#feature').evaluate(element => getComputedStyle(element).backgroundColor), 'rgb(1, 2, 3)');
+      assert.equal(await page.locator('#feature').getAttribute('data-hydrated'), 'yes');
       assert.ok(requests.includes('/detail.css'));
     } finally { await page.close(); }
   });
@@ -212,7 +218,26 @@ test('a consent dialog cannot masquerade as an informational notice through aria
   assert.equal(existsSync(shotOut), false);
 });
 
-test('a style-observing page cannot turn visual suppression into an accepted stateful capture', async t => {
+test('a legitimate full-viewport app shell is not mistaken for a popup', async t => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-fixed-app-shell-')));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const server = createServer((_request, response) => {
+    response.setHeader('content-type', 'text/html');
+    response.end(`<!doctype html><title>Public service</title><main id="app" style="position:fixed;inset:0;background:white;overflow:auto">
+      <h1>Benefits workspace</h1><p>${'Inspect public benefits and requirements. '.repeat(12)}</p></main>`);
+  });
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve())));
+  const address = server.address(); assert.ok(address && typeof address !== 'string');
+  const writer = createTestProjectWriteAdapter(root); writer.mkdir('.omd/refs/domain');
+  const shotOut = join(root, '.omd/refs/domain/app.png');
+  const result = await withBrowser(browser => capturePageForRef(browser, `http://127.0.0.1:${address.port}`,
+    { width: 800, height: 600 }, { shotOut, adapter: writer }));
+  assert.equal(result.acquisition.noticeDismissals, undefined);
+  assert.equal(existsSync(shotOut), true);
+});
+
+test('site scripts stay disabled after suppression so delayed style observers cannot mutate state', async t => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-style-observer-')));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const mutations: string[] = [];
@@ -222,7 +247,7 @@ test('a style-observing page cannot turn visual suppression into an accepted sta
     response.end(`<!doctype html><title>Public benefits</title><style>[role=dialog]{position:fixed;top:20%;left:20%;width:300px;height:300px;background:white}</style>
       <main><h1>Benefits</h1><p>${'Browse public benefits and requirements. '.repeat(12)}</p></main>
       <div role="dialog" aria-modal="true" aria-label="Service notice"><button type="button" aria-label="Close">Close</button></div>
-      <script>let primed=false;new ResizeObserver(()=>{if(!primed){primed=true;return}document.cookie='consent=yes';fetch('/mutate',{method:'POST'})})
+      <script>let primed=false;new ResizeObserver(()=>{if(!primed){primed=true;return}setTimeout(()=>{document.cookie='consent=yes';fetch('/mutate',{method:'POST'})},650)})
       .observe(document.querySelector('[role=dialog]'))</script>`);
   });
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
@@ -230,8 +255,19 @@ test('a style-observing page cannot turn visual suppression into an accepted sta
   const address = server.address(); assert.ok(address && typeof address !== 'string');
   const writer = createTestProjectWriteAdapter(root); writer.mkdir('.omd/refs/domain');
   const shotOut = join(root, '.omd/refs/domain/style-observer.png');
-  await assert.rejects(withBrowser(browser => capturePageForRef(browser, `http://127.0.0.1:${address.port}`,
-    { width: 800, height: 600 }, { shotOut, adapter: writer })), /REFERENCE_CAPTURE_VISUAL_OBSTRUCTION/);
+  const captured = await withBrowser(browser => capturePageForRef(browser, `http://127.0.0.1:${address.port}`,
+    { width: 800, height: 600 }, { shotOut, adapter: writer }));
+  assert.equal(captured.acquisition.noticeDismissals?.[0]?.method, 'visual-only');
+  assert.equal(existsSync(shotOut), true);
   assert.deepEqual(mutations, []);
-  assert.equal(existsSync(shotOut), false);
+  await withBrowser(async browser => {
+    const page = await browser.newPage();
+    try {
+      await page.goto(`http://127.0.0.1:${address.port}`);
+      await clearReferenceNotices(page, [], 100);
+      await page.waitForTimeout(1000);
+      assert.equal(await page.evaluate(() => document.cookie), '');
+    } finally { await page.close(); }
+  });
+  assert.deepEqual(mutations, []);
 });

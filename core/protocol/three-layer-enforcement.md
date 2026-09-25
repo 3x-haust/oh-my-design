@@ -170,7 +170,8 @@ inspection and research repair remain available while production is blocked.
   visually suppresses only informational notices through a browser-owned stylesheet without
   clicking their page-owned controls or mutating DOM nodes, records that method and hidden backdrop
   count, and refuses an unclosable/consent/unknown modal, unnamed covering layer, or request/storage
-  change during the bounded suppression,
+  change during the bounded suppression. It suspends page scripts in that document and marks
+  interaction, motion, and energy as unmeasured rather than asserting scripted behavior,
   roleless unsafe popup or remaining dim backdrop before writing
   a PNG, including prepared states; its screenshot precedes
   hover/focus probes that could open a menu or alter the captured state.
