@@ -9,7 +9,7 @@ import type { EnergyCurve, MotionMeasurement, RawIr } from '../types.ts';
 import { PREPARED_MEASUREMENT_COVERAGE } from '../ref/measurement-coverage.ts';
 import { designDiscoveryProvider } from '../ref/design-discovery-sources.ts';
 import { parseCapturePreparation, prepareReferenceCapture, observeCapturePreparation, type CapturePreparation, type CapturePreparationReceipt } from '../ref/capture-preparation.ts';
-import { clearReferenceNotices, type NoticeDismissal } from '../ref/notice-overlay.ts';
+import { blockedNoticeRequests, clearReferenceNotices, type NoticeDismissal } from '../ref/notice-overlay.ts';
 import { type ProjectWriteAdapter, requireProjectWriteAdapter } from '../runtime/project-write.ts';
 import type { RenderedBeat, RenderedBeatProof } from '../copy/index.ts';
 import { requireMotionResultAuthorization, requireRenderedBeatResultAuthorization, type ProjectRunInvocation } from '../runtime/invocation.ts';
@@ -295,8 +295,10 @@ export async function onPage<T>(
   viewport: Viewport,
   fn: (page: import('playwright').Page, httpStatus: number | null, resolvedUrl: string, loadTimestampMs: number) => Promise<T>,
   deadlineMs?: number,
+  referenceSafety = false,
 ): Promise<T> {
-  const page = await browser.newPage({ viewport });
+  const page = await browser.newPage({ viewport, ...(referenceSafety ? { serviceWorkers: 'block' as const } : {}) });
+  if (referenceSafety) await page.context().routeWebSocket('**/*', socket => socket.close());
   let resolved: Awaited<ReturnType<typeof resolveTarget>> | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let expired = false;
@@ -781,16 +783,15 @@ export async function capturePageForRef(
       });
       if (!eligible) throw new Error('DESIGN_GALLERY_IMAGE_REQUIRED: selector must identify one loaded, visible UI image element, not gallery chrome');
     }
-    const noticeDismissals = preparation ? [] : await clearReferenceNotices(page, [], 1000);
+    const allowedStateSelectors = preparation?.assertions.filter(assertion => assertion.state === 'visible').map(assertion => assertion.selector) ?? [];
+    const noticeDismissals = await clearReferenceNotices(page, allowedStateSelectors, 1000);
     const executedActions = preparation ? await prepareReferenceCapture(page, preparation) : undefined;
     let raw = await extractIrCore(page, httpStatus, resolvedUrl, opts.selector ?? null, false);
     if (preparation) await observeCapturePreparation(page, preparation);
     await assertNotBlocked(page, httpStatus, resolvedUrl, opts.selector ?? null);
-    if (!preparation) {
-      const laterDismissals = await clearReferenceNotices(page);
-      noticeDismissals.push(...laterDismissals);
-      if (laterDismissals.length) raw = await extractIrCore(page, httpStatus, resolvedUrl, opts.selector ?? null, false);
-    }
+    const laterDismissals = await clearReferenceNotices(page, allowedStateSelectors);
+    noticeDismissals.push(...laterDismissals);
+    if (laterDismissals.length) raw = await extractIrCore(page, httpStatus, resolvedUrl, opts.selector ?? null, false);
     let shotSaved = false;
     let shotBytes: Buffer | undefined;
     let shotError: string | undefined;
@@ -809,13 +810,11 @@ export async function capturePageForRef(
       if (!opts.adapter) throw new Error('reference screenshot requires a project-write adapter');
       shotBytes = await page.screenshot({ fullPage: true });
     }
-    if (!preparation) {
-      const lateDismissals = await clearReferenceNotices(page);
-      noticeDismissals.push(...lateDismissals);
-      if (lateDismissals.length && shotBytes) shotBytes = opts.selector
-        ? await page.locator(opts.selector).screenshot()
-        : await page.screenshot({ fullPage: true });
-    }
+    const lateDismissals = await clearReferenceNotices(page, allowedStateSelectors);
+    noticeDismissals.push(...lateDismissals);
+    if (lateDismissals.length && shotBytes) shotBytes = opts.selector
+      ? await page.locator(opts.selector).screenshot()
+      : await page.screenshot({ fullPage: true });
     let capturePreparation: CapturePreparationReceipt | undefined;
     if (preparation) {
       const observations = await observeCapturePreparation(page, preparation);
@@ -848,9 +847,9 @@ export async function capturePageForRef(
     }
     return { raw, shotSaved, visibleText, acquisition: { requestedUrl: target, finalUrl, httpStatus, links,
       imageSha256: shotBytes ? createHash('sha256').update(shotBytes).digest('hex') : null,
-      ...(noticeDismissals.length ? { noticeDismissals } : {}),
+      ...(noticeDismissals.length ? { noticeDismissals: noticeDismissals.map(dismissal => ({ ...dismissal, blockedRequests: [...blockedNoticeRequests(page)] })) } : {}),
     }, ...(shotBytes ? { shotBytes } : {}), ...(shotError ? { shotError } : {}), ...(capturePreparation ? { capturePreparation } : {}) };
-  }, REFERENCE_CAPTURE_TIMEOUT_MS);
+  }, REFERENCE_CAPTURE_TIMEOUT_MS, true);
 }
 /**
  * Captures the load-only canonical motion scene and saves selector-local screenshots

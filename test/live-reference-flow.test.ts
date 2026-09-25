@@ -102,4 +102,5 @@ test('native recorder executes one real navigation/disclosure chain and refuses 
 test('reference flow intake cannot request local services, form writes or credential-bearing URLs', () => {
   for (const rejected of ['http://reference.example/', 'https://localhost/', 'https://127.0.0.1/', 'https://user:password@reference.example/']) assert.throws(() => parseLiveFlowInput({ ...input, url: rejected }));
   assert.throws(() => parseLiveFlowInput({ ...input, steps: [{ ...input.steps[0], fill: { password: 'secret' } }] }));
+  assert.throws(() => parseLiveFlowInput({ ...input, steps: [{ ...input.steps[0], assertions: [{ selector: '#feature', state: 'hidden' }] }] }), /visible/);
 });

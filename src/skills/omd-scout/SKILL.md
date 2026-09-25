@@ -224,7 +224,10 @@ and bind every feature screen to its actual signed step screenshot. A homepage o
 does not stand in for unopened features. Keep the feature-to-screen-to-flow mapping and explicit
 unreachable exclusions in the benchmark. Before accepting any retained image, inspect its pixels:
 informational notices should be closed in the same browser context before capture, while consent,
-login, and unknown modals must be recorded as access gaps rather than saved under a dim overlay.
+login, unknown or unclosable modals and orphaned dim backdrops must be recorded as access gaps
+rather than saved as evidence. A prepared feature state is not exempt from unrelated obstructions.
+Informational close requests are blocked in the fresh read-only browser and the blocked methods/types
+are retained as provenance, never sent to the service.
 If a late notice contaminated a capture, reacquire that state and use only its clean current receipt.
 Put the feature-specific visible assertion last for each native step so its control/content is
 framed in the screenshot. If several visible assertions cannot fit in one viewport, split the
