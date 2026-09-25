@@ -260,6 +260,14 @@ test('unscoped tasks can follow useful service titles without exact query words'
   }
 });
 
+test('a search help page is not a flight-booking service candidate', t => {
+  const root = fixture(t);
+  const source = 'https://support.microsoft.com/topic/bing-search';
+  const receipt = testSearchReceipt(root, 'domain', 'flight booking', [source], false,
+    new Date().toISOString(), 'Bing Search Help Center');
+  assert.throws(() => validateSearchCoverage(root, 'domain', ['flight booking'], [receipt], [source]), /not an observed search link/);
+});
+
 test('a signed search from before route publication cannot satisfy current research', t => {
   const root = fixture(t);
   const source = 'https://service.example/task';

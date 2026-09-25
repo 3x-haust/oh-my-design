@@ -246,9 +246,8 @@ export async function inspectRenderedState(page: Page, purpose: 'search' | 'disc
       anchors: [...anchors.entries()].flatMap(([element, anchor]) => {
         if (anchor.text.length > 0) {
           const label = anchor.text.join(' ').slice(0, 4096);
-          const globalRegion = Boolean(element.closest('header, nav, [role="navigation"], [role="banner"]'))
-            && !element.closest('main');
-          const chromeLabel = /\b(?:home|all|images|videos|maps|news|about|contact|careers|company|help|support|settings|cookie|privacy|accessibility|terms|feedback|account|sign in|log in)\b|홈|전체|이미지|동영상|지도|뉴스|소개|문의|채용|도움말|쿠키|접근성|개인정보|설정|약관|로그인|공지/u.test(label.toLowerCase());
+          const navigationRegion = Boolean(element.closest('header, nav, [role="navigation"], [role="banner"]'));
+          const chromeLabel = /\b(?:home|all|images|videos|maps|news|about|contact|careers|company|settings|cookie|privacy|accessibility|terms|feedback|account|sign in|log in)\b|홈|전체|이미지|동영상|지도|뉴스|소개|문의|채용|쿠키|접근성|개인정보|설정|약관|로그인|공지/u.test(label.toLowerCase());
           const taskTerms = (label.toLowerCase().match(/[가-힣]{2,}|[a-z]{4,}/gu) ?? [])
             .filter(term => !/^(?:service|services|health|living|more|menu|portal|general|nhs|about|contact|company|home|all)$/u.test(term));
           const taskNavigation = taskTerms.some(term => {
@@ -258,13 +257,13 @@ export async function inspectRenderedState(page: Page, purpose: 'search' | 'disc
           });
           let chrome = Boolean(element.closest('footer, [role="contentinfo"], [role="dialog"], [aria-modal="true"]'))
             || (purpose === 'search'
-              ? Boolean(element.closest('header, nav, [role="navigation"], [role="banner"]'))
-              : globalRegion && (chromeLabel || !taskNavigation));
+              ? navigationRegion
+              : navigationRegion && (chromeLabel || !taskNavigation));
           for (let ancestor: Element | null = element; ancestor && ancestor !== body; ancestor = ancestor.parentElement) {
             chrome ||= /(?:^|[-_\s])(?:cookie|consent|privacy|accessib\w*|toolbar|breadcrumb|skip)(?:$|[-_\s])/iu
               .test(`${ancestor.id} ${ancestor.className}`);
           }
-          return [{ ...anchor, text: label, chrome, navigation: globalRegion }];
+          return [{ ...anchor, text: label, chrome, navigation: navigationRegion }];
         }
         return [];
       }).slice(0, 2000),

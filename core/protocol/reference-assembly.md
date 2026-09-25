@@ -217,6 +217,10 @@ Older signed v2 records remain readable as history but require recapture for cur
 Visible search chrome (help, navigation tabs, settings, pagination) is not a task result: follow
 only task-related service links or concrete gallery items. An observed search page with no such
 lead advances to another public search or direct entry, not to a header/footer link.
+For an unscoped task, a substantive non-editorial result without exact query words may be inspected
+as a provisional service candidate, then retained only after task relevance is judged from its
+visited UI. Explicit-market searches do not use that broad fallback; search help remains chrome
+unless help is the task itself.
 For explicit-market coverage, execute `ref discover-plan`'s exact target-market domain and design
 queries before global searches. Other unscoped query seeds are adaptable; do not rewrite the exact
 market inputs. A local result's link-associated text normally names the market and relevant

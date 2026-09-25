@@ -65,6 +65,9 @@ entry or observed-link visit, then recompute work-next. Each call advances only 
 a signed unavailable attempt redirects to the next public lead, not to another copy of the plan.
 Treat search navigation, help and settings links as page chrome, not candidate services or visual
 references; a search with no task-related lead should advance to the next public source.
+For an unscoped task, an observed substantive service title may be inspected despite different
+query wording; it is only a candidate and must be judged against the actual task before retention.
+Explicit-market searches do not promote unrelated titles as leads.
 On a directly visited service, prefer observed links within the task content. A primary-navigation
 link is usable only when the captured main task text supports that same function; generic global
 menus and footer links do not qualify a service root.

@@ -173,6 +173,17 @@ test('generic search labels and private links do not become candidate services w
   assert.notEqual(work.action?.input?.url, input.url);
 });
 
+test('explicit Korean-market discovery does not follow an unrelated substantive search title', t => {
+  const root = fixture(t);
+  const route = routeAdaptiveFlow(routeInput());
+  const input = referenceDiscoveryWork(root, route).action?.input;
+  assert.ok(input);
+  observedSearch(root, input, [{ url: 'https://weather.example/forecast', text: 'Weather Forecast Tomorrow' }]);
+  const work = referenceDiscoveryWork(root, route);
+  assert.equal(work.action?.kind, 'search');
+  assert.notEqual(work.action?.input?.url, input.url);
+});
+
 test('a search header help link is not a domain task result or a next visit', t => {
   const root = fixture(t);
   const route = routeAdaptiveFlow(routeInput());

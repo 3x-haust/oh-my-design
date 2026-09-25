@@ -289,6 +289,20 @@ test('global navigation alone cannot qualify a public service directory', async 
   await assert.rejects(capture(t, { url: PUBLIC_DIRECTORY, html }, 'public-directory'), /visible followable/);
 });
 
+test('generic navigation nested in main remains chrome', async t => {
+  const html = `<main><nav><a href="https://service.example/about">About Us</a></nav>
+    <h1>Medicines A to Z</h1><p>Browse medicines and prescription information, compare dosage instructions, and prepare questions for your clinician before placing an order. Review the details carefully with your care team.</p></main>`;
+  await assert.rejects(capture(t, { url: PUBLIC_DIRECTORY, html }, 'public-directory'), /visible followable/);
+});
+
+test('a support task described in main keeps its primary-navigation path', async t => {
+  const support = 'https://service.example/support/request';
+  const html = `<header><nav><a href="${support}">Support</a></nav></header>
+    <main><h1>Customer support requests</h1><p>Get customer support for your order, submit a support request, and follow its status from this service workspace.</p></main>`;
+  const result = await capture(t, { url: PUBLIC_DIRECTORY, html }, 'public-directory');
+  assert.deepEqual(readCurrentDirectDiscoveryEntry(result.root, result.receipt).links, [support]);
+});
+
 test('page-content task links precede a contextual primary-navigation link', async t => {
   const first = 'https://service.example/apply';
   const html = `<header><nav><a href="${DOMAIN_ITEM}">Benefits</a></nav></header>
