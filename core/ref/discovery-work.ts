@@ -8,6 +8,7 @@ import { currentReferenceEvidenceAfter, readCurrentReferenceDiscoveryEvidence, t
 import { readReferenceDiscoveryExclusions, type ReferenceDiscoveryExclusionRecord } from './discovery-exclusion.ts';
 import { designDiscoveryProvider, referenceServiceFamily } from './design-discovery-sources.ts';
 import { buildReferenceDiscoveryPlan, type ReferenceDiscoveryPlan } from './discovery-plan.ts';
+import { expandedDiscoveryInputs } from './discovery-recovery.ts';
 import { searchObserved, type SearchExecution } from './search-execution.ts';
 import { actionableSearchTargets, observedSearchTargets } from './search-result.ts';
 import { loadRefs } from './store.ts';
@@ -16,7 +17,7 @@ type Lane = 'domain' | 'design';
 type SearchInput = ReferenceDiscoveryPlan['marketReferencePolicy']['domainSearchInputs'][number]
   | ReferenceDiscoveryPlan['designSourcePolicy']['nativeSearchInputs'][number];
 export type ReferenceDiscoveryAction = Readonly<{
-  kind: 'search' | 'direct-entry' | 'follow-link' | 'retain-reference' | 'publish-board';
+  kind: 'search' | 'direct-entry' | 'follow-link' | 'retain-reference' | 'publish-board' | 'replan-discovery';
   lane: Lane | null;
   args: readonly string[];
   reason: string;
@@ -169,30 +170,45 @@ export function referenceDiscoveryWork(root: string, route: RouteRecord): Refere
   const designFamilies = new Set(admittedDesign.map(ref => referenceServiceFamily(ref.source)));
   const domainSearch = pendingMarketSearch('domain', plan, domain);
   const designSearch = pendingMarketSearch('design', plan, design);
-  const lane = domainFamilies.size < 3 || domainSearch !== undefined ? 'domain'
-    : designFamilies.size < 2 || designSearch !== undefined ? 'design' : null;
-  const action = lane === null ? { kind: 'publish-board', lane: null, args: [],
-    reason: 'Interpret retained domain flows and design UI parts, then publish the candidate assembly with omd ref board.' } as const
-    : nextLaneAction(lane, plan, lane === 'domain' ? domain : design,
+  const pending: Lane[] = [];
+  if (domainFamilies.size < 3 || domainSearch !== undefined) pending.push('domain');
+  if (designFamilies.size < 2 || designSearch !== undefined) pending.push('design');
+  let action: ReferenceDiscoveryAction | null = null;
+  for (const lane of pending) {
+    action = nextLaneAction(lane, plan, lane === 'domain' ? domain : design,
       lane === 'domain' ? domainFamilies : designFamilies,
       new Set(exclusions.filter(item => item.decision.researchLane === lane).map(item => item.decision.source)),
       lane === 'domain' ? domainSearch : designSearch);
-  const status = lane === null ? 'ready' : action === null ? 'exhausted' : 'action';
+    if (action !== null) break;
+  }
+  if (action === null) for (const lane of pending) {
+    const evidence = lane === 'domain' ? domain : design;
+    const input = expandedDiscoveryInputs(plan, lane).find(input =>
+      !evidence.searches.some(search => search.requestedUrl === input.url));
+    if (input !== undefined) {
+      action = nativeAction('search', lane,
+        'Expand the current task or UI-pattern query on another free public search surface; keep target-market scope and inspect actual destinations.', { input });
+      break;
+    }
+  }
+  const status = pending.length === 0 ? 'ready' : 'action';
+  action ??= status === 'ready' ? { kind: 'publish-board', lane: null, args: [],
+    reason: 'Interpret retained domain flows and design UI parts, then publish the candidate assembly with omd ref board.' }
+    : { kind: 'replan-discovery', lane: pending[0] ?? null,
+      args: ['ref', 'discover-batch', '--input', '.omd/.cache/reference-recovery-batch.json', '--recovery', '--json'],
+      reason: `The initial leads are depleted, not all public evidence. Scout must author a fresh reference-discovery-batch for ${pending.join(' and ')} from the current task, missing flows/patterns, attempts and exclusions, then execute it. Use new service names, task/component queries, another free provider or newly observed deep links. Empty results need a different query; blocked galleries need another public source; a slow homepage needs an observed task entry. Preserve market scope and lane separation. Do not repeat failed requests, invent links/evidence, lower admission rules or publish an empty board. Inspect new outcomes and recompute work-next; escalation requires a concrete missing permission, user fact or unavailable runtime, not catalogue exhaustion.` };
   const progress = { domainFamilies: domainFamilies.size, designFamilies: designFamilies.size,
     searches: domain.searches.length + design.searches.length, entries: domain.entries.length + design.entries.length,
     visits: domain.visits.length + design.visits.length, unavailable: domain.unavailable.length + design.unavailable.length,
     ignored: domain.ignored + design.ignored };
   const attempts = [...domain.failures, ...design.failures];
-  const next = status === 'ready' ? 'omd ref board --input <candidate-assemblies.json>' : status === 'exhausted'
-    ? exclusions.length > 0 ? 'REFERENCE_DISCOVERY_NO_ACCEPTED_SOURCE' : 'REFERENCE_DISCOVERY_EXHAUSTED'
-    : action?.args.length ? `omd ${action.args.join(' ')}`
-      : `omd ref add ${action?.url ?? '<observed-source>'} --lane ${lane ?? 'design'} --selector <observed-ui-selector> --shot OR omd ref exclude ${action?.url ?? '<observed-source>'} --lane ${lane ?? 'design'} --reason <specific-quality-judgment>`;
+  const next = status === 'ready' ? 'omd ref board --input <candidate-assemblies.json>'
+    : action.args.length ? `omd ${action.args.join(' ')}`
+      : `omd ref add ${action.url ?? '<observed-source>'} --lane ${action.lane ?? 'design'} --selector <observed-ui-selector> --shot OR omd ref exclude ${action.url ?? '<observed-source>'} --lane ${action.lane ?? 'design'} --reason <specific-quality-judgment>`;
   const instruction = status === 'ready' ? 'Read omd schema reference-board once, author the board from useful retained evidence, then publish it with the named CLI publisher.'
-    : status === 'exhausted' ? 'No plan-derived public acquisition lead remains. Inspect work.attempts for native outcomes and work.exclusions for authored quality decisions; add a reachable qualified source before board publication.'
-      : action?.reason ?? '';
+    : action.reason;
   return { schema: 'reference-discovery-work-v1', status, action, next, instruction,
-    code: status === 'exhausted' ? exclusions.length > 0
-      ? 'REFERENCE_DISCOVERY_NO_ACCEPTED_SOURCE' : 'REFERENCE_DISCOVERY_EXHAUSTED' : null,
+    code: null,
     attempts, exclusions,
     workSha256: sha256(canonicalJson({ sourceContractSha256: route.sourceContractSha256, status, action,
       evidence: [...domain.digests, ...design.digests],

@@ -494,7 +494,13 @@ instructions: |
   latter counts only when the captured main task text supports it, never for a generic global menu.
   If it is not useful, publish `ref exclude <observed-url> --lane design|domain --reason <specific
   observed reason>` to move to another lead; that authored rejection is not a provider failure.
-  A receipt-backed exhausted action reports exact unavailable sources and does not authorize an
+  A depleted initial catalogue requires `replan-discovery`, not terminal completion. Inspect the
+  signed attempts and exclusions, author `.omd/.cache/reference-recovery-batch.json` from
+  `schema reference-discovery-batch`, then run `ref discover-batch --input
+  .omd/.cache/reference-recovery-batch.json --recovery --json`. Every request must be novel:
+  reformulate empty-result queries around the user job or UI pattern, change a blocked public
+  provider, or follow a newly observed deep task link. Keep market scope and lane separation.
+  Repeated requests are refused before capture. Never invent links/evidence or substitute an
   empty board or a domain-service screenshot in the design lane. When enough retained evidence
   exists, author and publish the board instead of running another diagnostic check. If the route selects
   `reference-board`, run `omd schema reference-board` once and copy its exact skeleton and grid

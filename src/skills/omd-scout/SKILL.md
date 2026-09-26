@@ -133,6 +133,16 @@ retain successful signed receipts even when another item fails. Follow-up item U
 their parent's observed links; do not invent or pre-batch them. Batch outputs stay in discovery,
 not in the retained design/domain reference inventory.
 The next public gallery is the fallback, not domain-service documentation or a paid MCP.
+If planned leads are depleted, execute `replan-discovery`: inspect current attempts/exclusions,
+author `.omd/.cache/reference-recovery-batch.json` from `schema reference-discovery-batch`, and run
+`omd ref discover-batch --input .omd/.cache/reference-recovery-batch.json --recovery --json`.
+Every operation must introduce a new task/pattern query, provider or observed destination; unchanged
+retries are refused. Domain research follows comparable user jobs and actual service flows. Design
+research broadens to useful UI patterns and craft, not only the exact domain name. Preserve the
+target market and separate lanes. Empty results need another query; a blocked gallery needs another
+public source; an unusable homepage needs an observed deep task link. Inspect new outcomes and
+continue to retain, interpret and publish; a finite catalogue is not all public evidence. Missing
+permission/user facts or an unavailable runtime may require intervention, never fabricated evidence.
 For direct discovery use `designSourcePolicy.nativeEntryInputs` with
 `omd ref navigate <public-gallery-list-url> --lane design --entry free-gallery --json`.
 For comparable-service discovery use `--lane domain --entry public-directory`. In v6/v7 put the

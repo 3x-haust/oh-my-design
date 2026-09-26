@@ -55,7 +55,8 @@ export function nextStageWork(root: string, packRoot: string, invocation: Projec
         && s.entry.blockers.length === 0)
       .map(s => s.stage) },
     action: planningBlocksProduction ? 'resolve-planning-evidence' : stage === null ? 'validate-selected-gates'
-      : discoveryWork?.status === 'action' ? 'acquire-reference'
+      : discoveryWork?.action?.kind === 'replan-discovery' ? 'replan-reference-discovery'
+        : discoveryWork?.status === 'action' ? 'acquire-reference'
         : discoveryWork?.status === 'exhausted' ? 'resolve-external-blocker'
           : incomplete?.present ? 'repair-output' : 'author-output',
     problems: stage === null ? [] : stageArtifactProblems(root, stage, invocation),

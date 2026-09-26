@@ -110,6 +110,11 @@ Research-only, inspection-only and explicit stop requests never gain that grant.
 an arbitrary longer request is not an unrestricted continuation grant. A failed write, help call or
 read-only visit is not successful owner work. Never
 reclassify a fresh route merely to evade the user's stopping boundary.
+An explicit “계속해”/“continue” resumes the same previously authorized route after interactive
+input resets per-turn state. Inspection stays read-only; cancellation revokes that grant and a
+changed route cannot inherit it. After host restart, request continuation of the OMD build/repair
+explicitly or invoke the full workflow again. The host queues the owner to author recovery inputs;
+it does not execute a missing batch or treat a generic status question as build permission.
 Recompute `stage next --json` after each owned publication or repair, not only at final reporting.
 For `reference-board`, follow the returned action instead of repeating a passing entry check:
 `acquire-reference` uses `ref work-next --json` and executes the current exact native step with
@@ -118,9 +123,15 @@ gallery item and retain only its actual useful UI image/original. An unsuitable 
 excluded with `ref exclude <observed-url> --lane design|domain
 --reason "<specific observed reason>"` so Scout can inspect a different lead; this is not a native
 unavailable receipt. When the pointer is board-ready,
-Scout authors and publishes `ref board --input` from retained evidence. `resolve-external-blocker`
-reports the current signed failures and never fabricates a board or silently substitutes domain
-screens as visual direction. Repeated read-only checks are not a step.
+Scout authors and publishes `ref board --input` from retained evidence. `replan-reference-discovery`
+requires Scout to inspect failed attempts/exclusions, author a novel `reference-discovery-batch`
+at `.omd/.cache/reference-recovery-batch.json`, then execute it with `ref discover-batch --input
+.omd/.cache/reference-recovery-batch.json --recovery --json`. Change the task/pattern query,
+provider or observed destination; the executable gate refuses repeated requests. An initial
+catalogue running out is not terminal exhaustion. Keep market scope, retain only qualifying
+evidence, and never substitute domain screens as visual direction. Repeated read-only checks
+are not a step. A genuine missing permission, user fact or unavailable runtime still needs an
+accurate blocker report; no fallback grants new authority or proves unavailable evidence.
 `author-research` supplies the research schema and requires current dual-lane publication;
 `apply-references` starts with `ref apply-plan --json` only after research passes. These are Scout
 subtasks inside the selected board stage, not new route stages. A board file alone is not research.

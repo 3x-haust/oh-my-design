@@ -48,6 +48,7 @@ export async function advanceReferenceDiscoveryWork(root: string, route: RouteRe
     }
     case 'retain-reference':
     case 'publish-board':
+    case 'replan-discovery':
       throw new Error('REFERENCE_DISCOVERY_ADVANCE: visual judgment or board authorship is required; native acquisition cannot publish a reference');
     default: return assertNever(action.kind);
   }

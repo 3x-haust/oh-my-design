@@ -109,19 +109,26 @@ function parseStageWork(text: string): StageWorkPointer | null {
   const owner = Reflect.get(value, 'owner');
   const action = Reflect.get(value, 'action');
   const next = Reflect.get(value, 'next');
-  const instruction = Reflect.get(value, 'instruction');
+  const observed = referenceWork(Reflect.get(value, 'referenceWork'));
+  const recovering = observed?.status === 'exhausted';
+  const recoveryArgs = ['ref', 'discover-batch', '--input', '.omd/.cache/reference-recovery-batch.json', '--recovery', '--json'];
+  const instruction = recovering
+    ? 'Read omd schema reference-discovery-batch. Author the recovery batch with new qualified sources or materially changed acquisition strategies justified by the signed failures and exclusions. Preserve both research lanes and evidence requirements; unchanged failed commands are not recovery. Publish it with the named command, inspect captured sources, then recompute stage next.'
+    : Reflect.get(value, 'instruction');
   return {
     stage,
     owner: typeof owner === 'string' ? owner : `${stage} owner`,
-    action: typeof action === 'string' ? action : 'repair-output',
-    next: typeof next === 'string' ? next : `omd brief ${stage} --check --json`,
+    action: recovering ? 'replan-discovery' : typeof action === 'string' ? action : 'repair-output',
+    next: recovering ? `omd ${recoveryArgs.join(' ')}` : typeof next === 'string' ? next : `omd brief ${stage} --check --json`,
     instruction: typeof instruction === 'string' ? instruction : 'Perform the owned work, then recompute stage next.',
     problems: stringList(Reflect.get(value, 'problems')),
     entryBlockers: stringList(Reflect.get(value, 'entryBlockers')),
     planning: planningList(Reflect.get(value, 'planning')),
     routeSha256: typeof routeSha256 === 'string' && /^[a-f0-9]{64}$/.test(routeSha256) ? routeSha256 : null,
     validatedStages,
-    referenceWork: referenceWork(Reflect.get(value, 'referenceWork')),
+    referenceWork: recovering ? { ...observed, status: 'action', action: {
+      kind: 'replan-discovery', args: recoveryArgs, reason: instruction,
+    } } : observed,
   };
 }
 
@@ -141,8 +148,8 @@ function actionPacket(work: StageWorkPointer): string {
       `Reference action: ${work.referenceWork.action.args.length > 0 ? `omd ${work.referenceWork.action.args.join(' ')}` : work.next}`,
       `Reference reason: ${work.referenceWork.action.reason}`,
     ]),
-    ...(work.referenceWork?.status === 'exhausted' ? [
-      work.referenceWork.code ?? 'REFERENCE_DISCOVERY_EXHAUSTED',
+    ...(work.referenceWork?.action?.kind === 'replan-discovery' ? [
+      ...(work.referenceWork.code === null ? [] : [work.referenceWork.code]),
       ...work.referenceWork.attempts.slice(-12).map(attempt => `- ${attempt.lane}: ${attempt.url}: ${attempt.reason} (${attempt.receipt})`),
       ...(work.referenceWork.attempts.length > 12 ? [`(+${work.referenceWork.attempts.length - 12} earlier attempts)`] : []),
       ...work.referenceWork.exclusions.slice(-12).map(exclusion => `- excluded ${exclusion.lane}: ${exclusion.url}: ${exclusion.reason} (${exclusion.receipt})`),
@@ -189,16 +196,6 @@ export async function handleOmdMessageEnd(task: MessageEndTask): Promise<unknown
       }
       if (work !== null) {
         task.onReferenceWork?.(work.referenceWork);
-        if (work.referenceWork?.status === 'exhausted') {
-          const rejected = work.referenceWork.code === 'REFERENCE_DISCOVERY_NO_ACCEPTED_SOURCE';
-          const status = koreanMessage(message)
-            ? rejected ? 'OMD가 방문한 후보 중 채택 가능한 레퍼런스가 남지 않았습니다. 아래 제외 판단과 실패 기록을 확인해야 합니다.'
-              : 'OMD 레퍼런스 수집이 실제 공개 출처 시도에서 막혔습니다. 아래 주소와 실패 기록을 확인해야 합니다.'
-            : rejected ? 'OMD has no accepted reference among the inspected public candidates.'
-              : 'OMD reference discovery is blocked by verified public-source attempts.';
-          return { message: { ...message, content: [...(message.content ?? []).filter(part => part.type !== 'text'),
-            { type: 'text', text: `${status}\n\n${actionPacket(work)}` }] } };
-        }
         const askingForPlanning = work.action === 'resolve-planning-evidence' && work.planning.length > 0
           && message.content?.some(part => part.type === 'text'
             && /[?？]|확인.*(?:필요|부탁)|알려.*(?:주세요|주실)|(?:please|could|can).*(?:confirm|clarify)/i.test(part.text ?? ''));

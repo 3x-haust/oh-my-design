@@ -243,7 +243,7 @@ test('the CONNECT proxy does not create an upstream after its client closes duri
 
 const unavailable: readonly Readonly<{ name: string; scenario: DiscoveryScenario; error: RegExp }>[] = [
   { name: 'hidden item', scenario: { url: GALLERY_DIRECTORY, html: `<p>${'Public list '.repeat(30)}</p><a style="display:none" href="${GALLERY_ITEM}">Hidden</a>` }, error: /visible followable/ },
-  { name: 'offscreen item', scenario: { url: GALLERY_DIRECTORY, html: `<p>${'Public list '.repeat(30)}</p><a style="position:absolute;top:1600px" href="${GALLERY_ITEM}">Below fold</a>` }, error: /visible followable/ },
+  { name: 'item beyond scroll budget', scenario: { url: GALLERY_DIRECTORY, html: `<p>${'Public list '.repeat(30)}</p><a style="position:absolute;top:4000px" href="${GALLERY_ITEM}">Beyond exploration</a>` }, error: /visible followable/ },
   { name: 'login overlay', scenario: { url: GALLERY_DIRECTORY, html: `${directoryHtml(GALLERY_ITEM)}<form style="position:fixed;inset:0;background:white"><input type="password"></form>` }, error: /login form/ },
   { name: 'challenge', scenario: { url: GALLERY_DIRECTORY, html: `<title>Just a moment</title>${directoryHtml(GALLERY_ITEM)}` }, error: /challenge page/ },
   { name: 'HTTP failure', scenario: { url: GALLERY_DIRECTORY, status: 403, html: directoryHtml(GALLERY_ITEM) }, error: /successful native HTTP/ },

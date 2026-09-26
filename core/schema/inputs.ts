@@ -1301,6 +1301,7 @@ export const INPUT_SKELETONS: readonly InputSkeleton[] = [
       'Group only independent queries or already-known public URLs. Follow-up item URLs must first appear in an observed parent result; never guess a gallery item or use a search result as a retained reference.',
       'For target-market-first plans, run required market-qualified domain/design searches in market-only batches and wait for their outcomes before any separate unqualified-global batch. Input order inside one concurrent batch does not establish search order.',
       'The command uses one browser with up to four concurrent isolated contexts. Inspect every ordered outcome: partial failures remain gaps and their successful neighbors remain usable signed evidence.',
+      'For replan-discovery, author .omd/.cache/reference-recovery-batch.json and execute with --recovery. Every item must be a new query/provider or destination relative to current signed attempts; repeated requests, encoding changes and relabeled entries are refused before browser work. Use attempts/exclusions to change strategy, not to fabricate availability or weaken reference admission.',
     ],
     skeleton: [
       { kind: 'search', input: { lane: 'domain', query: '<task-specific local-service query>',
