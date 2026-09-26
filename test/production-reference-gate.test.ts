@@ -5,12 +5,17 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { spawnSync } from 'node:child_process';
-import { checkProductionReadiness } from '../core/brief/production-readiness.ts';
+import { checkProductionReadiness } from '../core/runtime/production-reference-gate.ts';
+import { checkProductionReadiness as briefReadiness } from '../core/brief/production-readiness.ts';
 import { checkBriefEntry } from '../core/brief/entry.ts';
 import { buildBrief, formatBrief } from '../core/brief/index.ts';
 import { contractSha256, deliveryReceipt } from '../core/stage/contract.ts';
 import { copyDeckSha256 } from '../core/copy/index.ts';
 import { createTestProjectRunInvocation, publishTestAdaptiveRoute } from './helpers/project-write.ts';
+
+test('legacy runtime and brief entry share exactly one production readiness policy', () => {
+  assert.equal(checkProductionReadiness, briefReadiness);
+});
 
 const repo = fileURLToPath(new URL('..', import.meta.url));
 const pack = join(repo, 'core');

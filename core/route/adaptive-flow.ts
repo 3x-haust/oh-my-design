@@ -29,6 +29,7 @@ import { validateAdaptiveAiAssetSelection } from './adaptive-ai-assets.ts';
 import { requiredAttributionCategories, validateAttributionCoverage } from './adaptive-attribution.ts';
 import { parseLocaleDesignRoute, type LocaleDesignRoute } from '../locale/design-context.ts';
 import { hasLocaleMarketAuthority } from './locale-market-authority.ts';
+import { publishedRouteLearning } from './adaptive-learning.ts';
 
 function validateRecommendation(strategy: AdaptiveStrategyDecision, value: RecommendedMethodDecision): void {
   const skipped = strategy.skips.some((entry) => entry.id === value.id);
@@ -147,11 +148,8 @@ function validateContextMethods(input: ValidatedAdaptiveRouteInput): void {
   required.push(input.deliveryMode === 'design-only' ? 'design-handoff-review' : input.browserDecisionContext.status === 'pending'
     ? 'decision-linked-browser-observation'
     : 'reuse-linked-browser-evidence');
-  if (input.validatedLearningContext.status === 'promoted') {
-    for (const learningId of input.validatedLearningContext.learningIds) required.push(`validated-learning:${learningId}`);
-  }
   const missing = required.filter(id => !strategy.methods.includes(id));
-  if (missing.length) return failAdaptiveRoute('REQUIRED_METHOD_MISSING', `strategyDecision.methods must include ${missing.join(', ')}; these follow from the current claims, delivery mode, browser and learning contexts`);
+  if (missing.length) return failAdaptiveRoute('REQUIRED_METHOD_MISSING', `strategyDecision.methods must include ${missing.join(', ')}; these follow from the current claims, delivery mode and browser context; learned rules are advisory`);
 }
 
 function requiresTaskFlowBenchmark(
@@ -321,6 +319,7 @@ export function routeAdaptiveFlow(
   value: unknown,
   authority?: Readonly<{ root: string; invocation: ProjectRunInvocation }>,
   localeDesign?: LocaleDesignRoute,
+  options: Readonly<{ replay?: boolean }> = {},
 ): AdaptiveRouteRecord {
   const input = validated(value, localeDesign);
   const strategy = input.strategyDecision;
@@ -356,7 +355,8 @@ export function routeAdaptiveFlow(
     references: Object.freeze({ decision: input.referenceDiscovery.decision, ...input.referenceDiscovery.references }),
     claims: Object.freeze({ userFacts: input.evidenceClaims.userFacts, workingContext: input.evidenceClaims.workingContext }),
     browserDecisions: input.browserDecisionContext,
-    validatedLearning: input.validatedLearningContext,
+    validatedLearning: authority !== undefined && !options.replay
+      ? publishedRouteLearning(authority.root, input.sourceContract.learningScope) : input.validatedLearningContext,
     gates: Object.freeze([...(input.deliveryMode === 'design-only'
       ? [...MANDATORY_ADAPTIVE_GATES.filter((gate) => gate !== 'source-seal' && gate !== 'final-evidence-v2'), 'design-handoff']
       : MANDATORY_ADAPTIVE_GATES), ...policyGates]),

@@ -90,7 +90,7 @@ function sourceRouteInput(value: unknown): Readonly<{ input: unknown; localeDesi
   const baseKeys = hasOwn(value, 'projectMode') ? SOURCE_KEYS : legacyKeys;
   const modeKeys = hasOwn(value, 'deliveryMode') ? [...baseKeys, 'deliveryMode'] : baseKeys;
   const expectedKeys = hasOwn(value, 'localeDesign') ? [...modeKeys, 'localeDesign'] : modeKeys;
-  const source = fields(value, expectedKeys);
+  const source = fields(value, hasOwn(value, 'learningScope') ? [...expectedKeys, 'learningScope'] : expectedKeys);
   if (source.get('schema') !== ADAPTIVE_SOURCE_CONTRACT_SCHEMA) return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE');
   const input = {
     schema: ADAPTIVE_ROUTE_INPUT_SCHEMA,
@@ -107,6 +107,7 @@ function sourceRouteInput(value: unknown): Readonly<{ input: unknown; localeDesi
     modelCapability: source.get('modelCapability'),
     browserDecisionContext: source.get('browserDecisionContext'),
     validatedLearningContext: source.get('validatedLearningContext'),
+    ...(source.has('learningScope') ? { learningScope: source.get('learningScope') } : {}),
     strategyDecision: source.get('strategyDecision'),
   };
   const localeDesign = source.get('localeDesign');
@@ -128,9 +129,14 @@ function parse(
     return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE');
   }
   const persistedSourceContract = item.get('sourceContract');
-  const legacySourceContract = !hasOwn(persistedSourceContract, 'projectMode');
+  const legacyLearning = !hasOwn(persistedSourceContract, 'learningScope');
+  const legacySourceContract = !hasOwn(persistedSourceContract, 'projectMode') || legacyLearning;
   const replay = sourceRouteInput(persistedSourceContract);
-  const expected = routeAdaptiveFlow(replay.input, authority, replay.localeDesign);
+  const classified = routeAdaptiveFlow(replay.input, authority, replay.localeDesign, { replay: true });
+  const snapshot = parseAdaptiveLearningContext(item.get('validatedLearning'));
+  // The immutable, authority-bound record owns the publication snapshot. Changing the advisory
+  // store must not change route identity on replay. Legacy caller IDs are discarded, not promoted.
+  const expected = Object.freeze({ ...classified, validatedLearning: legacyLearning ? classified.validatedLearning : snapshot });
   const normalizedSourceSha256 = adaptiveSourceContractSha256(expected.sourceContract);
   const persistedExpectedSha256 = legacySourceContract
     ? createHash('sha256').update(`${canonicalRouteJson(persistedSourceContract)}\n`).digest('hex')
@@ -166,7 +172,7 @@ function parse(
     references: Object.freeze({ decision, intended: text(references.get('intended')), actual: actualReference(references.get('actual')) }),
     claims: Object.freeze({ userFacts: strings(claims.get('userFacts'), true), workingContext: strings(claims.get('workingContext'), true) }),
     browserDecisions: parseAdaptiveBrowserContext(item.get('browserDecisions')),
-    validatedLearning: parseAdaptiveLearningContext(item.get('validatedLearning')),
+    validatedLearning: expected.validatedLearning,
     gates: strings(item.get('gates')),
     namedDependencies: strings(item.get('namedDependencies'), true),
     allowedPaths: strings(item.get('allowedPaths')),

@@ -187,7 +187,8 @@ export function readPersistedRoute(root: string, invocation: ProjectRunInvocatio
       const legacyRecord = typeof persistedRecord === 'object'
         && persistedRecord !== null
         && !Array.isArray(persistedRecord)
-        && !Object.hasOwn(persistedRecord, 'projectMode');
+        && (!Object.hasOwn(persistedRecord, 'projectMode')
+          || !Object.hasOwn(Reflect.get(persistedRecord, 'sourceContract') ?? {}, 'learningScope'));
       const record = parseRouteRecord(persistedRecord, { root, invocation });
       if (record.sourceContract.localeDesign !== undefined) {
         requireCurrentLocaleDesignContext(root, record.sourceContract.localeDesign);

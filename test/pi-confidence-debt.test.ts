@@ -3,6 +3,8 @@ import { test } from 'node:test';
 import { handleOmdMessageEnd } from '../extensions/omd-message-end.ts';
 import { RepairLoop } from '../extensions/omd-repair-progress.ts';
 import { confidenceDebt } from '../core/brief/confidence-debt.ts';
+import { hostCapabilityMatrix } from '../core/host-capability.ts';
+import { formatCompletionHostCapabilities } from '../core/completion/host-capabilities.ts';
 
 const debt = confidenceDebt('reference-board', 'Research sources were unavailable.');
 function task(result: unknown, failed = false) {
@@ -39,7 +41,14 @@ test('debt does not authorize a completion report when the actual terminal guard
   assert.ok(result.message.content.some(part => part.text.includes('SLOP_REVIEW_REQUIRED')));
 });
 
-test('debt-free successful completion leaves the authorized message unchanged', async () => {
+test('successful completion appends the exact host enforcement report even without design debt', async () => {
+  const hostCapabilities = hostCapabilityMatrix({ host: 'pi', piHooksPresent: true });
+  const { input } = task({ limitations: [], hostCapabilities });
+  const result = await handleOmdMessageEnd(input) as { message: { content: { text: string }[] } };
+  assert.equal(result.message.content[1]!.text, formatCompletionHostCapabilities(hostCapabilities));
+});
+
+test('legacy debt-free completion without a matrix leaves the authorized message unchanged', async () => {
   const { input } = task({ limitations: [] });
   const before = structuredClone(input.message);
   assert.equal(await handleOmdMessageEnd(input), undefined);

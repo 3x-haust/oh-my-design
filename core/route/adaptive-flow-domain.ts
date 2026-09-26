@@ -138,6 +138,7 @@ export type AdaptiveLearningContext = Readonly<{
 export type ModelCapabilityRouteInput = Readonly<{ now: number; routingInput: unknown }>;
 export type AdaptiveRouteInput = Readonly<{
   deliveryMode?: 'design-only';
+  learningScope?: import('./adaptive-learning.ts').RouteLearningScope;
   schema: typeof ADAPTIVE_ROUTE_INPUT_SCHEMA;
   request: string;
   projectMode: 'greenfield' | 'existing';
@@ -155,6 +156,7 @@ export type AdaptiveRouteInput = Readonly<{
 }>;
 export type AdaptiveSourceContract = Readonly<{
   deliveryMode?: 'design-only';
+  learningScope: import('./adaptive-learning.ts').RouteLearningScope;
   schema: typeof ADAPTIVE_SOURCE_CONTRACT_SCHEMA;
   request: string;
   projectMode: 'greenfield' | 'existing';

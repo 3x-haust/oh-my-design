@@ -34,6 +34,25 @@ These are entry requirements, not a full-composition approval. Full composition 
 No references, candidate renders, type proof or final review authority are needed for first entry.
 High-risk safety/recovery still requires valid copy and its current CLEAN review.
 
+A preliminary source seal may bind absent selected art-direction, copy or type-proof artifacts to
+current, same-stage confidence-debt IDs and the exact ledger digest. The stage stays `selected`,
+with empty `artifacts` and a `confidenceDebt` binding whose claim is `not-verified`; it is not a
+route skip or terminal approval. An existing artifact always takes normal integrity/currentness
+checks, even if old debt exists. Missing composition, missing debt, mismatched scope, malformed
+records and unsafe files refuse sealing before mutation. New artifacts or changed ledger bytes
+invalidate the preliminary seal. Source-bound proofs that exist still need their production
+revision binding. The coordinator uses `source --seal`/`source --check`; debt does not grant write scope.
+
+Route input may specify `learningScope: { surface }`. Without it, new-product/new-marketing use
+`product`/`marketing`; other work uses `unspecified`, never an inferred audience or market.
+Legacy `validatedLearningContext` descriptors are readable but their IDs/status confer no authority.
+Publication selects applicable rules from the local user/project store and snapshots advisory IDs in
+`validatedLearning`; replay retains that snapshot and does not reload the mutable store. Learned rules
+never add required methods or gates. An unavailable advisory index is reported, not a route blocker.
+Completion and design handoffs include `hostCapabilities`. Only a native Pi invocation attests Pi
+hooks; local CLI and prose-only restrictions never become host-wide enforcement. Both text reports
+and the Pi final-message boundary disclose the matrix, including unenforced guarantees.
+
 The coordinator records bounded evidence reconsiderations in `.omd/discovery/stage-budget.json`.
 `stage next` shares one reference budget across Scout, acquisition, board, selection, moodboard and
 interpretation; other evidence stages receive their own budget. Budget exhaustion records origin,

@@ -1,4 +1,5 @@
 import { resumeRouteInput } from './omd-bootstrap-repair.ts';
+import { formatCompletionHostCapabilities } from '../core/completion/host-capabilities.ts';
 import type { RepairLoop } from './omd-repair-progress.ts';
 import type { RouteBootstrap } from './omd-route-bootstrap.ts';
 import { guardFailure, type OmdRunResult, type PortablePiApi, type PortablePiEvent } from './omd-runtime.ts';
@@ -241,10 +242,11 @@ export async function handleOmdMessageEnd(task: MessageEndTask): Promise<unknown
   }
   try {
     const result = await run(['guard', 'completion', '--json'], cwd, signal);
-    const limitations = result.text.trim().startsWith('{')
-      ? limitationList(Reflect.get(JSON.parse(result.text), 'limitations')) : [];
-    if (limitations.length) return { message: { ...message, content: [...(message.content ?? []),
-      { type: 'text', text: `Limitations (not verified):\n${limitations.map(item => `- ${item}`).join('\n')}` }] } };
+    const output = result.text.trim().startsWith('{') ? JSON.parse(result.text) : {};
+    const limitations = limitationList(Reflect.get(output, 'limitations'));
+    const hostCapabilities = formatCompletionHostCapabilities(Reflect.get(output, 'hostCapabilities'));
+    if (limitations.length || hostCapabilities) return { message: { ...message, content: [...(message.content ?? []),
+      { type: 'text', text: [limitations.length ? `Limitations (not verified):\n${limitations.map(item => `- ${item}`).join('\n')}` : '', hostCapabilities].filter(Boolean).join('\n\n') }] } };
   } catch (error) {
     if (interrupted()) return;
     if (!(error instanceof Error)) throw error;

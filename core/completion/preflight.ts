@@ -13,6 +13,8 @@ import {
   type CompletionTypographyBinding,
 } from './publication.ts';
 import { completionLimitations } from './limitations.ts';
+import { completionHostCapabilities } from './host-capabilities.ts';
+import type { HostCapabilityMatrix } from '../host-capability.ts';
 import type { ConfidenceDebt } from '../brief/confidence-debt.ts';
 import { checkReferenceApplicationReview, referenceApplicationReviewContext } from '../ref/reference-application-review.ts';
 import { checkSlopFinalGraph } from '../slop/review.ts';
@@ -23,6 +25,7 @@ export type { CompletionPublicationResult, CompletionTypographyBinding } from '.
 export type CompletionPreflightResult = Readonly<{
   final: FinalEvidenceV2ManifestVariant;
   limitations: readonly ConfidenceDebt[];
+  hostCapabilities: HostCapabilityMatrix;
   completeness?: CompletionPublicationResult['completeness'];
   typography: CompletionTypographyBinding;
   executionRequirements?: Readonly<{
@@ -59,6 +62,7 @@ export function checkTerminalCompletion(root: string, invocation: ProjectRunInvo
   // pixels into a final review packet is late and expensive.
   try { checkFirstRenderEvidence(root); }
   catch (error) { throw new CompletionPreflightError(`first-render gestalt critic: ${error instanceof Error ? error.message : String(error)}`); }
+  const hostCapabilities = completionHostCapabilities(invocation);
   const requirements = route?.sourceContract.taskOutcome.executionRequirements;
   if (route !== undefined && requirements !== undefined) {
     for (const { enforcedBy } of requirements) {
@@ -69,6 +73,7 @@ export function checkTerminalCompletion(root: string, invocation: ProjectRunInvo
     return Object.freeze({
       final,
       limitations,
+      hostCapabilities,
       ...prerequisites,
       executionRequirements: Object.freeze({
         schema: 'execution-requirement-check-v1',
@@ -78,5 +83,5 @@ export function checkTerminalCompletion(root: string, invocation: ProjectRunInvo
       }),
     });
   }
-  return Object.freeze({ final, limitations, ...prerequisites });
+  return Object.freeze({ final, limitations, hostCapabilities, ...prerequisites });
 }

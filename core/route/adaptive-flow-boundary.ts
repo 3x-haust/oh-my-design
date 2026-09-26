@@ -13,6 +13,7 @@ import {
   type ModelCapabilityRouteInput,
 } from './adaptive-flow-domain.ts';
 import { parseAdaptiveExecutionWaves } from './adaptive-execution-wave-boundary.ts';
+import { UNSELECTED_LEARNING, type RouteLearningScope } from './adaptive-learning.ts';
 import { parseAdaptiveAiAssets } from './adaptive-ai-assets.ts';
 import { ADAPTIVE_ATTRIBUTION_CATEGORIES, type AdaptiveAttributionCategory } from './adaptive-attribution.ts';
 const INVISIBLE_TEXT = /[\p{Cc}\p{Default_Ignorable_Code_Point}\p{White_Space}\u2800\u3164\uffa0]/gu;
@@ -174,6 +175,11 @@ export function parseAdaptiveLearningContext(value: unknown): AdaptiveLearningCo
   return Object.freeze({ schema: ADAPTIVE_LEARNING_CONTEXT_SCHEMA, status, learningIds, reason: text(item.get('reason'), true) });
 }
 
+function learningScope(value: unknown): RouteLearningScope {
+  const item = fields(value, ['surface']);
+  return Object.freeze({ surface: text(item.get('surface')) });
+}
+
 function modelCapability(value: unknown): ModelCapabilityRouteInput {
   const item = fields(value, MODEL_KEYS);
   const now = item.get('now');
@@ -188,9 +194,13 @@ export function parseAdaptiveRouteInput(value: unknown): AdaptiveRouteInput {
       && value !== null
       && !Array.isArray(value)
       && Object.hasOwn(value, 'projectMode');
-    const baseKeys = hasProjectMode ? ADAPTIVE_ROUTE_INPUT_KEYS : legacyKeys;
+    const hasLearning = typeof value === 'object' && value !== null && Object.hasOwn(value, 'validatedLearningContext');
+    const baseKeys = (hasProjectMode ? ADAPTIVE_ROUTE_INPUT_KEYS : legacyKeys).filter(key => key !== 'validatedLearningContext' || hasLearning);
     const hasMode = typeof value === 'object' && value !== null && Object.hasOwn(value, 'deliveryMode');
-    const item = fields(value, hasMode ? [...baseKeys, 'deliveryMode'] : baseKeys, true);
+    const hasScope = typeof value === 'object' && value !== null && Object.hasOwn(value, 'learningScope');
+    const item = fields(value, [...baseKeys, ...(hasMode ? ['deliveryMode'] : []), ...(hasScope ? ['learningScope'] : [])], true);
+    // Legacy descriptors remain readable, but neither their status nor their IDs select learning.
+    if (hasLearning) parseAdaptiveLearningContext(item.get('validatedLearningContext'));
     if (hasMode && item.get('deliveryMode') !== 'design-only') return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE', 'deliveryMode must be design-only, or omitted for implementation');
     if (item.get('schema') !== ADAPTIVE_ROUTE_INPUT_SCHEMA) return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE');
     return Object.freeze({
@@ -209,7 +219,8 @@ export function parseAdaptiveRouteInput(value: unknown): AdaptiveRouteInput {
       referenceDiscovery: plainData(item.get('referenceDiscovery')), designAxes: plainData(item.get('designAxes')),
       modelCapability: modelCapability(item.get('modelCapability')),
       browserDecisionContext: parseAdaptiveBrowserContext(item.get('browserDecisionContext')),
-      validatedLearningContext: parseAdaptiveLearningContext(item.get('validatedLearningContext')),
+      validatedLearningContext: UNSELECTED_LEARNING,
+      ...(hasScope ? { learningScope: learningScope(item.get('learningScope')) } : {}),
       strategyDecision: parseAdaptiveStrategyDecision(item.get('strategyDecision')),
     });
   } catch (error) {
