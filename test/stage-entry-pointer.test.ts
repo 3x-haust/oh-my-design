@@ -196,7 +196,7 @@ test('a missing reference board points to discovery work instead of repeating en
   assert.match(work.referenceWork?.workSha256 ?? '', /^[a-f0-9]{64}$/);
 });
 
-test('board work repairs research before application and returns to research when a retained receipt changes', t => {
+test('board work orders research before application, then discloses stale evidence after its budget', t => {
   const f = designAdmissionFixture(t), input = routeInput();
   input.referenceDiscovery = { ...input.referenceDiscovery, uncertainty: 'unresolved', existingEvidence: 'none', existingEvidenceUse: null, skipReason: null };
   input.strategyDecision.stages.splice(1, 0, 'scout', 'reference-board');
@@ -234,15 +234,16 @@ test('board work repairs research before application and returns to research whe
     application: 'Anchor the confirmation record.', doNotTransfer: 'Source branding and claims.', reason: 'Readers need their current record first.' });
   publishReferenceApplication(f.root, { ...plan, screens: plan.screens.map(row => ({ ...row,
     target: { route: '/confirmation', state: 'initial' }, domain: lane('domain-1'), design: lane('visual'), checks: ['Record heading is visible.'] })) }, options, writer);
-  assert.equal(nextStageWork(f.root, pack, invocation).action, 'interpret-references');
+  // Phase 1: three bounded reconsiderations yield instead of making reference work an infinite gate.
+  assert.equal(nextStageWork(f.root, pack, invocation).action, 'validate-selected-gates');
   const applicationBefore = readFileSync(join(f.root, '.omd/reference-application.json'));
   const captureBefore = readFileSync(f.source.path);
   writeFileSync(f.source.path, Buffer.concat([captureBefore, Buffer.from('\n')]));
   const stale = nextStageWork(f.root, pack, invocation);
-  assert.equal(stale.action, 'author-research');
-  assert.match(stale.problems.join('\n'), /REFERENCE_RESEARCH_EVIDENCE_STALE/);
+  assert.equal(stale.action, 'validate-selected-gates');
+  assert.match(stale.confidenceDebt.map(item => item.reason).join('\n'), /REFERENCE_RESEARCH_EVIDENCE_STALE/);
   assert.ok(!stale.progress.validatedStages.includes('reference-board'));
   assert.deepEqual(readFileSync(join(f.root, '.omd/reference-application.json')), applicationBefore);
   writeFileSync(f.source.path, captureBefore);
-  assert.equal(nextStageWork(f.root, pack, invocation).action, 'interpret-references');
+  assert.equal(nextStageWork(f.root, pack, invocation).action, 'validate-selected-gates');
 });

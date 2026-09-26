@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { spawnSync } from 'node:child_process';
-import { checkProductionReadiness } from '../core/runtime/production-reference-gate.ts';
+import { checkProductionReadiness } from '../core/brief/production-readiness.ts';
 import { checkBriefEntry } from '../core/brief/entry.ts';
 import { buildBrief, formatBrief } from '../core/brief/index.ts';
 import { contractSha256, deliveryReceipt } from '../core/stage/contract.ts';
@@ -222,7 +222,7 @@ test('file presence cannot substitute for copy validation, current CLEAN review 
   assert.match(checkProductionReadiness(root, invocation, pack).blockers.join('\n'), /contract not delivered/);
 });
 
-test('new-product editorial relabel, unresolved board, missing copy/composition and candidate stub all remain blocked', () => {
+test('new-product frame and safety remain hard while unresolved board and candidate stub are debt', () => {
   const root = project();
   const invocation = publishTestAdaptiveRoute(root, fixture('medical-new-product'));
   mkdirSync(join(root, '.omd/.cache/sketches/fake-selected'), { recursive: true });
@@ -232,7 +232,10 @@ test('new-product editorial relabel, unresolved board, missing copy/composition 
   const result = checkProductionReadiness(root, invocation, pack);
   assert.equal(result.ok, false);
   const reasons = result.blockers.join('\n');
-  for (const pattern of [/product\/mixed/, /reference board\/judgment:/, /copy-deck/, /composition/, /current candidate selection/]) assert.match(reasons, pattern);
+  // Phase 1 preserves safety and real task framing, not acquisition as an infinite source gate.
+  for (const pattern of [/product\/mixed/, /copy-deck/, /composition/]) assert.match(reasons, pattern);
+  assert.ok(result.confidenceDebt.some(item => item.stage === 'reference-board'));
+  assert.ok(result.confidenceDebt.some(item => item.stage === 'candidate-generation'));
 });
 
 test('real local CLI transport rejects missing inputs and design-only source writes without asking for activation', () => {

@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { checkTerminalCompletion } from '../completion/preflight.ts';
 import { checkFinalEvidenceV2 } from '../evidence/final-v2.ts';
 import { readFrame } from '../frame/index.ts';
-import { checkReferenceApplication } from '../ref/reference-application.ts';
+import { completionLimitations } from '../completion/limitations.ts';
 import { checkReferenceApplicationReview, referenceApplicationReviewContext } from '../ref/reference-application-review.ts';
 import { readContainedRegularFile } from '../ref/reference-selection.ts';
 import { readPersistedRoute } from '../route/adaptive-route-persistence.ts';
@@ -63,15 +63,13 @@ export function nativeCompletionWork(root: string, invocation: ProjectRunInvocat
   let final: ReturnType<typeof checkFinalEvidenceV2>;
   try { final = checkFinalEvidenceV2(root, invocation); }
   catch (error) { return { ...WORK.finalize, problems: [reason(error)] }; }
-  if (route.references.decision === 'discover') {
-    try {
-      const application = checkReferenceApplication(root, { expectedSourceContractSha256: route.sourceContractSha256,
-        benchmarkRequired: route.gates.includes('greenfield-task-flow-benchmark'), expectedRequest: route.request });
-      checkReferenceApplicationReview(root, referenceApplicationReviewContext(root, application, final.graph));
-    } catch (error) { return { ...WORK.application, problems: [reason(error)] }; }
+  const { application, limitations } = completionLimitations(root, route);
+  if (application) {
+    try { checkReferenceApplicationReview(root, referenceApplicationReviewContext(root, application, final.graph)); }
+    catch (error) { return { ...WORK.application, problems: [reason(error)], limitations }; }
   }
   try { checkTerminalCompletion(root, invocation); }
   catch (error) { return { ...WORK.completion, problems: [reason(error)] }; }
   return { stage: null, owner: 'coordinator', action: 'validate-selected-gates', next: 'omd guard completion --json',
-    instruction: 'Current terminal evidence passed read-only validation. Use the completion guard for the final handoff.', problems: [] };
+    instruction: 'Current terminal evidence passed read-only validation. Include every limitation in the final handoff; no reference-grounding or cultural-fit claim is implied.', problems: [], limitations };
 }

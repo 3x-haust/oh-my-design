@@ -24,6 +24,7 @@ type StageWorkPointer = Readonly<{
   routeSha256: string | null;
   validatedStages: readonly string[];
   referenceWork: ReferenceWork | null;
+  limitations: readonly string[];
 }>;
 
 type MessageEndTask = Readonly<{
@@ -46,6 +47,12 @@ type MessageEndTask = Readonly<{
 
 const stringList = (value: unknown): readonly string[] => Array.isArray(value)
   ? value.filter((item): item is string => typeof item === 'string') : [];
+
+function limitationList(value: unknown): readonly string[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap(item => typeof item?.stage === 'string' && typeof item?.reason === 'string'
+    ? [`${item.stage}: ${item.reason}`] : []);
+}
 
 function planningList(value: unknown): readonly StagePlanning[] {
   if (!Array.isArray(value)) return [];
@@ -126,6 +133,7 @@ function parseStageWork(text: string): StageWorkPointer | null {
     planning: planningList(Reflect.get(value, 'planning')),
     routeSha256: typeof routeSha256 === 'string' && /^[a-f0-9]{64}$/.test(routeSha256) ? routeSha256 : null,
     validatedStages,
+    limitations: limitationList(Reflect.get(value, 'confidenceDebt')),
     referenceWork: recovering ? { ...observed, status: 'action', action: {
       kind: 'replan-discovery', args: recoveryArgs, reason: instruction,
     } } : observed,
@@ -156,6 +164,7 @@ function actionPacket(work: StageWorkPointer): string {
       ...(work.referenceWork.exclusions.length > 12 ? [`(+${work.referenceWork.exclusions.length - 12} earlier exclusions)`] : []),
     ] : []),
     `Procedure: ${work.instruction}`,
+    ...(work.limitations.length ? ['Confidence debt (not verified):', ...work.limitations.map(item => `- ${item}`)] : []),
     ...(issues.length ? ['Current blockers:', ...issues.map(issue => `- ${issue}`)] : []),
     'Do the required action before rerunning stage next. Repeating checks without changing owned evidence is not progress.',
   ].join('\n');
@@ -231,7 +240,11 @@ export async function handleOmdMessageEnd(task: MessageEndTask): Promise<unknown
     }
   }
   try {
-    await run(['guard', 'completion', '--json'], cwd, signal);
+    const result = await run(['guard', 'completion', '--json'], cwd, signal);
+    const limitations = result.text.trim().startsWith('{')
+      ? limitationList(Reflect.get(JSON.parse(result.text), 'limitations')) : [];
+    if (limitations.length) return { message: { ...message, content: [...(message.content ?? []),
+      { type: 'text', text: `Limitations (not verified):\n${limitations.map(item => `- ${item}`).join('\n')}` }] } };
   } catch (error) {
     if (interrupted()) return;
     if (!(error instanceof Error)) throw error;

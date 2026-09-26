@@ -1,4 +1,5 @@
 import { join } from 'node:path';
+import { existsSync } from 'node:fs';
 import { readContainedRegularFile } from '../ref/reference-selection.ts';
 import { validateDomainBrief } from '../domain/domain-brief.ts';
 import { validateFrameUxBytes } from '../frame/check-ux.ts';
@@ -7,7 +8,7 @@ import { readFrame } from '../frame/index.ts';
 import { readPersistedRoute } from '../route/index.ts';
 import { readReferenceBoardArtifacts } from '../ref/board-artifacts.ts';
 import { checkReferenceApplication } from '../ref/reference-application.ts';
-import { validateCurrentCompositionContract } from '../composition-contract/index.ts';
+import { compositionEntry } from '../brief/minimal-composition.ts';
 import { resolveCandidateSelection, validateCandidateSelectionPointer } from '../brief/candidate-selection.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import { stageDefinition, type StageId } from './contract.ts';
@@ -40,7 +41,8 @@ export function stageArtifactProblems(root: string, stage: StageId, invocation?:
     }
     if (stage === 'copy') {
       const problems = validateCopyDeck(bytes.toString('utf8')).map(f => f.message);
-      if (invocation && readPersistedRoute(root, invocation).behavior.active.copyRepairWorkflow.status === 'selected') {
+      if (invocation && readPersistedRoute(root, invocation).behavior.active.copyRepairWorkflow.status === 'selected'
+        && (existsSync(join(root, '.omd/.cache/copy-eye.md')) || readPersistedRoute(root, invocation).strategy.stages.includes('safety-validation'))) {
         try {
           const review = readContainedRegularFile(root, join(root, '.omd/.cache/copy-eye.md'), 'current copy review');
           problems.push(...validateCurrentCopyReview(review.toString('utf8'), bytes).map(f => f.message));
@@ -62,7 +64,7 @@ export function stageArtifactProblems(root: string, stage: StageId, invocation?:
         }
       }
     }
-    if (stage === 'composition' && invocation) return validateCurrentCompositionContract(root, invocation).map(f => f.message);
+    if (stage === 'composition' && invocation) return compositionEntry(root, invocation).blockers;
     return [];
   } catch (error) { return [error instanceof Error ? error.message : String(error)]; }
 }
