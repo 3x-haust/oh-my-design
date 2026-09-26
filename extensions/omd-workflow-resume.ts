@@ -1,6 +1,6 @@
 const resumeRequest = /^(?:please\s+)?(?:continue|resume|keep going|계속\s*(?:해|해줘|해주세요|진행해|진행해줘|진행해주세요)|이어서\s*(?:해|해줘|진행해))[.!。]?$/iu;
 const explicitBuildResume = /^(?:(?:please\s+)?(?:continue|resume)\s+(?:the\s+)?(?:OMD\s+)?(?:build|implementation|repair)(?:\s+(?:workflow|task|work))?|(?:OMD\s*)?(?:구현|개발|빌드|수정|복구)(?:\s*(?:작업|을))?\s*(?:계속|이어서)\s*(?:해|해줘|해주세요|진행해|진행해줘|진행해주세요))[.!。]?$/iu;
-const cancellation = /^(?:(?:please\s+)?(?:stop|cancel|pause)(?:\s+(?:the\s+)?(?:OMD\s+)?(?:work|task|workflow))?|(?:작업\s*)?(?:멈춰|중단해|취소해|그만해|멈춰줘|중단해줘|취소해줘))[.!。]?$/iu;
+const cancellation = /^(?:(?:please\s+)?(?:stop|cancel|pause)(?:\s+(?:the\s+)?(?:OMD\s+)?(?:work|task|workflow|build|implementation|repair|discovery|research))?(?:\s+please)?|(?:OMD\s*)?(?:(?:작업|구현|개발|빌드|수정|복구|조사|수집)(?:\s*작업)?(?:을|를)?\s*)?(?:멈춰|중단해|취소해|그만해)(?:\s*(?:줘|주세요))?)[.!。]?$/iu;
 
 export class WorkflowResume {
   private readonly routes = new Map<string, string>();

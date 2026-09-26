@@ -52,6 +52,19 @@ test('an explicit stop request revokes the suspended workflow before a bare resu
   assert.deepEqual(h.sent, []);
 });
 
+for (const prompt of ['Stop the build.', 'Cancel the OMD build.', 'Pause implementation please.',
+  '작업 중단해 주세요', 'OMD 개발을 취소해 주세요', '복구 작업 멈춰줘']) {
+  test(`explicit stop phrase revokes the suspended workflow: ${prompt}`, async t => {
+    const h = await authorizedWorkflow(t);
+    await h.emit('input', { source: 'interactive' });
+    await h.activate(prompt);
+    await h.emit('input', { source: 'interactive' });
+    await h.activate('continue');
+    await h.end();
+    assert.deepEqual(h.sent, []);
+  });
+}
+
 test('Escape ends the current turn without repair but a later explicit resume can continue it', async t => {
   const h = await authorizedWorkflow(t);
   const before = h.commands.length;
