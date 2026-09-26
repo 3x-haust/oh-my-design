@@ -14,9 +14,10 @@ const base = {
   altText: 'A ceramicist shaping a bowl on a wheel, warm side light',
 };
 
-test('a non-attribution licence (Unsplash/CC0) validates with source, page, path, and alt text', () => {
+test('a legacy content photo defaults semanticRole to content and keeps descriptive alt text', () => {
   const ok = validatePhotoProvenance(base);
   assert.equal(ok.license, 'Unsplash');
+  assert.equal(ok.semanticRole, 'content');
   assert.equal(ok.altText, base.altText);
   assert.equal(ok.attribution, undefined);
   assert.deepEqual(validatePhotoProvenance({ ...base, source: 'Openverse', license: 'CC0', sourcePage: 'https://openverse.org/image/x' }).license, 'CC0');
@@ -36,13 +37,31 @@ test('an unpermitted or unknown licence never ships', () => {
   }
 });
 
+test('decorative photos require empty alt while functional photos describe their action', () => {
+  const decorative = validatePhotoProvenance({ ...base, semanticRole: 'decorative', altText: '' });
+  assert.equal(decorative.altText, '');
+  assert.throws(() => validatePhotoProvenance({ ...base, semanticRole: 'decorative' }), /decorative photos require altText=""/);
+
+  const functional = validatePhotoProvenance({ ...base, semanticRole: 'functional', altText: 'Open full-size studio photo' });
+  assert.equal(functional.semanticRole, 'functional');
+  assert.throws(
+    () => validatePhotoProvenance({ ...base, semanticRole: 'functional', altText: 'A ceramicist in a studio' }),
+    /describe the action/,
+  );
+});
+
+test('content photos reject empty alt and unknown semantic roles', () => {
+  assert.throws(() => validatePhotoProvenance({ ...base, semanticRole: 'content', altText: '' }), /content photo altText/);
+  assert.throws(() => validatePhotoProvenance({ ...base, semanticRole: 'ambient' }), /semanticRole must be one of/);
+});
+
 test('a shipped photo needs a real source page, a safe local path, and descriptive alt text', () => {
   assert.throws(() => validatePhotoProvenance({ ...base, sourcePage: 'not-a-url' }), /sourcePage/);
   assert.throws(() => validatePhotoProvenance({ ...base, sourcePage: 'http://unsplash.com/x' }), /https/);
   assert.throws(() => validatePhotoProvenance({ ...base, localPath: '/etc/passwd' }), /project-relative/);
   assert.throws(() => validatePhotoProvenance({ ...base, localPath: '../secret.jpg' }), /project-relative/);
-  assert.throws(() => validatePhotoProvenance({ ...base, altText: '' }), /altText is required/);
-  assert.throws(() => validatePhotoProvenance({ ...base, altText: 'hero-portrait.jpg' }), /describe the image, not be a filename/);
+  assert.throws(() => validatePhotoProvenance({ ...base, altText: '' }), /content photo altText must describe the image/);
+  assert.throws(() => validatePhotoProvenance({ ...base, altText: 'hero-portrait.jpg' }), /describe the image or action, not be a filename/);
   assert.throws(() => validatePhotoProvenance({ ...base, extra: 1 }), /unknown field/);
 });
 
@@ -55,6 +74,10 @@ test('the sourcing protocol documents permitted libraries, the CC-BY attribution
   assert.match(md, /CC-BY family requires attribution/i);
   assert.match(md, /Pinterest[\s\S]*studied for mood only/i);
   assert.match(md, /never fetches, scrapes, hotlinks, or downloads/i);
+  assert.match(md, /`content` requires descriptive `altText`/i);
+  assert.match(md, /`decorative` requires exactly `altText: ""`/i);
+  assert.match(md, /`functional` requires `altText` that names the action/i);
+  assert.match(md, /default to `content`/i);
 });
 test('the loop protocol wires shipped-photo provenance to validatePhotoProvenance', () => {
   const root = join(dirname(fileURLToPath(import.meta.url)), '..');

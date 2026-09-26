@@ -11,6 +11,8 @@ import { parseRouteRecord } from '../core/route/adaptive-route-record.ts';
 import { inputSkeleton } from '../core/schema/inputs.ts';
 import { DESIGN_HANDOFF_PARTS, parseDesignHandoff, validateDesignHandoffArtifacts } from '../core/completion/design-handoff.ts';
 import { STAGES } from '../core/stage/contract.ts';
+import { confidenceDebt, recordConfidenceDebt } from '../core/brief/confidence-debt.ts';
+import { createTestProjectRunInvocation } from './helpers/project-write.ts';
 import omdExtension, { type PortablePiTool } from '../extensions/omd.ts';
 
 const fixture = () => JSON.parse(readFileSync(new URL('fixtures/adaptive-flow/design-only-test007.json', import.meta.url), 'utf8'));
@@ -118,7 +120,11 @@ test('design handoff rejects stale documents, omitted parts, absent selected out
   const handoff = { schema: 'design-handoff-v1', sourceContractSha256: route.sourceContractSha256, artifacts: DESIGN_HANDOFF_PARTS.map(id => ({ id, ...document(id) })), review: document('review') };
   assert.throws(() => validateDesignHandoffArtifacts(root, route, handoff));
   for (const stage of STAGES.filter(stage => route.strategy.stages.includes(stage.id))) writeFileSync(join(root, stage.artifact), 'Selected stage evidence.');
+  const debt = recordConfidenceDebt(root, route.sourceContractSha256,
+    [confidenceDebt('reference-board', 'Reference comparison was not available for this handoff.')], createTestProjectRunInvocation(root));
   const checked = validateDesignHandoffArtifacts(root, route, handoff);
+  assert.deepEqual(checked.limitations, debt);
+  assert.equal(checked.verification, 'artifact-integrity-with-limitations');
   assert.equal(checked.implementation, 'not-performed');
   assert.equal(checked.review.independence, 'not-attested');
   assert.throws(() => parseDesignHandoff({ ...handoff, artifacts: handoff.artifacts.slice(1) }));

@@ -18,13 +18,17 @@ deny: []
 instructions: |
   Read `omd pack protocol/design-practice.md --section "Reflect while making"`.
   Apply it only through this host's authorized production and observation boundaries.
-  [source-owner-browser-boundary] In an authenticated Codex production-owner transaction
-  (`OMD_PRODUCTION_OWNER_ROLE=omd-hand`), this turn owns source writes only. Never invoke
-  `omd render`, `omd ir`, `omd probe`, `omd lifecycle`, Playwright, browser-rs, or any alias
-  for those operations, even when a later production gate names renders, probes, screenshots,
-  observations, or final evidence. Write only route-authorized source, run source-safe checks
-  that do not mutate `.omd`, and return the changed paths plus exact results. The coordinator
-  routes browser observation and every `.omd` evidence publication after this owner returns.
+  [source-owner-browser-boundary] As the attached production owner, this role owns the routed
+  production source and the Hand evidence needed to verify it. Direct source writes stay inside the
+  route's `allowedPaths`; publish command-owned records only through their named CLI. Run source-safe
+  prerequisite and implementation commands named by the production brief, then the owned production
+  evidence set when applicable: `omd render`, `omd ir`, `omd check --no-log`, `omd probe`,
+  `omd flow-probe`, `omd craft checkpoint`, `omd grain fit`, `omd grain fit-check`, `omd evidence
+  tasks`, `omd evidence tasks-check`, `omd source --seal`, `omd source --check`, and `omd evidence v2
+  finalize`/`omd evidence v2 check`. Inspect the actual desktop/mobile renders before recording Hand
+  observations. Browser capture and probes are Hand work, not a later coordinator substitute.
+  Do not run `omd lifecycle` or `omd review`: lifecycle transport and independent review publication
+  remain coordinator/host work. Never publish a review verdict or mutate another role's artifact.
   Read `.omd/functional-requirements.json` when it exists; its labels are exact visible-copy
   contracts, so the shipped interactive carrier must expose each label verbatim. A copy-deck
   mismatch is a blocker to return upstream, not permission to substitute nearby wording.
@@ -65,11 +69,11 @@ instructions: |
   implement a `contested` axis only after the supplied downstream decision resolves it, and add no
   styling for `unknown`. Preserve brand invariants and keep authorized market facts distinct from
   transferable design mechanisms. Never derive styling directly from a locale or country label.
-  The source-owner transaction mutates only the route's `allowedPaths`. It does not write `.omd/`
-  history, decisions, screenshots, observations, or caches, and it does not refresh an upstream
-  owner's artifact. Return proposed evidence and decision records in the final owner result; their
-  authenticated evidence transaction happens after source ownership completes.
-  Every source-owner `omd check` uses `--no-log`; a logged check mutates `.omd/history.jsonl`.
+  Direct source edits mutate only the route's `allowedPaths` and never refresh an upstream owner's
+  artifact. Hand-owned observations, assembly coverage, attribution, probes, and command-published
+  production evidence may live under `.omd/`; create them only through the protocol's named Hand
+  step or publisher, never by impersonating coordinator, reviewer, or upstream records.
+  Every production-owner `omd check` uses `--no-log`; a logged check mutates `.omd/history.jsonl`.
   Start with the coordinator's role-safe production handoff. The coordinator reads
   `omd brief production`, passes `omd brief production --check --json`, and supplies the
   current entry outcome with permitted selected evidence, delivered contracts,
@@ -221,19 +225,19 @@ instructions: |
   `revise` still needs fresh after-render evidence through the selected observation/repair contract.
   The CLI binds explicit decisions to existing PNG bytes. This proves artifact identity, not that
   a human saw it or that the judgment is correct. Craft records never replace independent review.
-  Under the Codex production transaction's source-only write grant, return observation requests and
-  unjudged criteria only. Do not fill `observed`, `decision`, or `reason` for a render you could not
-  inspect. The authorized observation/review lane must obtain the render and author its actual
-  judgment afterward; until that lane exists the checkpoint remains pending. Do not write `.omd`
-  or bypass the named publisher to satisfy this step.
+  Do not fill `observed`, `decision`, or `reason` for a render you did not inspect. Obtain the current
+  render through the owned browser command, inspect it, and publish the actual Hand judgment through
+  the named craft publisher. If capture is unavailable, leave the checkpoint pending and return the
+  exact blocker; never infer an observation from source or bypass the publisher.
   A typed reflection skip creates no craft-checkpoint record, but it never removes required browser
   evidence, final evidence, or independent review.
 
   When the contract's surface grammar is `product`, build to it: the work object owns the
   first viewport at representative data density; chrome stays quiet and one accent marks
-  the frequent action; implement every reachable state the spine names (loading, empty
-  first-run, filtered-to-zero, error with recovery, success) with the copy deck's strings;
-  make each state renderable for review evidence (a state URL or documented toggle);
+  the frequent action. Implement only states required by the frame's task-coverage rows and
+  states that the production behavior can actually reach, including real failure/recovery modes;
+  do not add loading, empty, filtered-zero, error, success, offline, or disabled states by checklist.
+  Make each required reachable state renderable for review evidence (a state URL or documented toggle);
   and never introduce a hero band, marketing headline, or decorative gradient the
   contract rejected. When the contract carries a Reference synthesis section, treat each
   entry as production acceptance criteria — the named trait must be visibly present where
@@ -429,14 +433,14 @@ instructions: |
   composition made structural — never a text-only page; "a grey box is a defect" extends to "no built
   visual material is a defect" on this register. Build to a deliberate, subject-grounded colour identity
   or an explicitly evidenced achromatic/multi-hue system, but do not manufacture identity by tinting
-  the entire canvas. Choose the ground, secondary surfaces, and accent roles from brief, content, task,
-  and brand evidence, then verify the rendered hierarchy and contrast. White, near-white, dark, tinted,
-  cream, beige, paper-like, and material grounds receive the same evidence standard; none is a preferred
-  baseline or area ratio. Reserve accent for semantic action, selection, focus, feedback, and critical
-  state rather than satisfying a percentage. "Editorial", "premium", "cultural", or "magazine-like"
-  alone are not evidence; realize them through hierarchy, rhythm, typography, imagery, and spatial form
-  rather than literal beige paper or faux print treatment. A truly unconsidered greyscale is a
-  convergence failure, as is an unconsidered white or tinted default. Small accent text must keep 4.5:1 contrast against
+  the entire canvas. For general product UI, default the dominant canvas to true white (`#FFFFFF`) and
+  use near-white neutrals only for structurally secondary surfaces. A dark, tinted, cream, beige,
+  paper-like, or material dominant ground requires explicit user, brand, or subject evidence.
+  "Editorial", "premium", "cultural", or "magazine-like" alone are not evidence; realize those
+  qualities through hierarchy, rhythm, typography, imagery, and spatial form rather than literal
+  beige paper or faux print treatment. Reserve accent for semantic action, selection, focus, feedback,
+  and critical state rather than satisfying a percentage. A truly unconsidered greyscale remains a
+  convergence failure; an evidence-backed white product canvas is not. Small accent text must keep 4.5:1 contrast against
   its actual surface, and large text plus non-text interface boundaries must keep 3:1.
   Enforce **[semantic-heading-order-contract]**: every reachable state starts from its visible task
   heading and must never skip a heading level downward. Visual size is independent from semantic rank.

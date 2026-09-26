@@ -21,6 +21,7 @@ export const PERMITTED_PHOTO_LICENSES = {
 } as const;
 
 export type PhotoLicense = keyof typeof PERMITTED_PHOTO_LICENSES;
+export type PhotoSemanticRole = 'content' | 'decorative' | 'functional';
 
 export type PhotoProvenance = {
   /** The free-licence library or origin: Unsplash, Pexels, Openverse, Wikimedia Commons, or the user. */
@@ -34,7 +35,9 @@ export type PhotoProvenance = {
   readonly attribution?: string;
   /** Project-relative path to the locally stored, lawfully obtained image. */
   readonly localPath: string;
-  /** Alt text — a shipped photograph is content and needs an accessible description. */
+  /** Defaults to content for backward compatibility with records written before semantic roles. */
+  readonly semanticRole: PhotoSemanticRole;
+  /** Content describes the image, decorative is exactly empty, functional names the action. */
   readonly altText: string;
 };
 
@@ -71,15 +74,16 @@ function projectRelativePath(value: unknown, reason: string): string {
 /**
  * Validates a shipped-photo provenance record. Throws `PhotoLicenseError` on any violation.
  * A record is valid only when it names a real source and https source page, a permitted free licence,
- * a local project-relative image path, and non-empty alt text — and, when the licence requires
+ * a local project-relative image path, and role-correct alt text — and, when the licence requires
  * attribution (the CC-BY family), a non-empty photographer credit and rendered attribution string.
+ * Records without semanticRole remain valid and default to content.
  * A factual carrier (a real team photo, product screenshot, real person, or logo) is out of scope here:
  * those come from the user, never a stock library, and are never AI-generated.
  */
 export function validatePhotoProvenance(value: unknown): PhotoProvenance {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) fail('record must be an object');
   const record = value as Record<string, unknown>;
-  const allowed = ['source', 'sourcePage', 'license', 'photographer', 'attribution', 'localPath', 'altText'];
+  const allowed = ['source', 'sourcePage', 'license', 'photographer', 'attribution', 'localPath', 'semanticRole', 'altText'];
   for (const key of Object.keys(record)) {
     if (!allowed.includes(key)) fail(`unknown field: ${key}`);
   }
@@ -87,8 +91,26 @@ export function validatePhotoProvenance(value: unknown): PhotoProvenance {
   const source = nonEmpty(record.source, 'source is required');
   const sourcePage = httpsUrl(record.sourcePage, 'sourcePage is required');
   const localPath = projectRelativePath(record.localPath, 'localPath is required');
-  const altText = nonEmpty(record.altText, 'altText is required — a shipped photograph needs an accessible description');
-  if (/\.(png|jpe?g|webp|gif|avif|svg)$/i.test(altText)) fail('altText must describe the image, not be a filename');
+  const semanticRoleValue = record.semanticRole === undefined ? 'content' : record.semanticRole;
+  if (semanticRoleValue !== 'content' && semanticRoleValue !== 'decorative' && semanticRoleValue !== 'functional') {
+    fail('semanticRole must be one of content, decorative, functional');
+  }
+  const semanticRole = semanticRoleValue as PhotoSemanticRole;
+  if (typeof record.altText !== 'string') fail('altText is required');
+  let altText: string;
+  if (semanticRole === 'decorative') {
+    if (record.altText !== '') fail('decorative photos require altText="" so assistive technology ignores them');
+    altText = '';
+  } else {
+    altText = nonEmpty(record.altText, semanticRole === 'functional'
+      ? 'functional photo altText must describe the action'
+      : 'content photo altText must describe the image');
+    if (/\.(png|jpe?g|webp|gif|avif|svg)$/i.test(altText)) fail('altText must describe the image or action, not be a filename');
+    if (semanticRole === 'functional'
+      && !/^(?:open|view|show|play|pause|download|upload|zoom|close|go to|visit|select|choose|save|share|print|copy|delete|remove|add|start|stop|toggle|expand|collapse)\b|(?:열기|보기|재생|정지|다운로드|확대|닫기|선택|저장|공유|삭제|추가)$/iu.test(altText)) {
+      fail('functional photo altText must describe the action rather than the image');
+    }
+  }
 
   const license = record.license;
   if (typeof license !== 'string' || !(license in PERMITTED_PHOTO_LICENSES)) {
@@ -96,7 +118,7 @@ export function validatePhotoProvenance(value: unknown): PhotoProvenance {
   }
   const licenseKey = license as PhotoLicense;
 
-  const result: PhotoProvenance = { source, sourcePage, license: licenseKey, localPath, altText };
+  const result: PhotoProvenance = { source, sourcePage, license: licenseKey, localPath, semanticRole, altText };
   if (PERMITTED_PHOTO_LICENSES[licenseKey].requiresAttribution) {
     const photographer = nonEmpty(record.photographer, `${license} legally requires attribution — photographer credit is required`);
     const attribution = nonEmpty(record.attribution, `${license} legally requires attribution — a rendered attribution string is required`);

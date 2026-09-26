@@ -185,69 +185,45 @@ reduced to zero duration under `prefers-reduced-motion`.
 
 ---
 
-## 60fps-safe properties
+## Animation property choice
 
-Not all CSS properties are created equal for animation. The browser rendering pipeline
-processes properties in three stages: layout (positioning, sizing), paint (colour,
-background, shadow), and composite (transform, opacity). Only composite-stage properties
-can be offloaded to the GPU and animated without touching the layout or paint pipeline.
+The browser rendering pipeline includes layout, paint, and composite work. Prefer `transform`
+and `opacity` for continuous or large-area motion because they usually avoid layout and paint,
+but do not treat them as a frame-rate guarantee. Layer size, rasterization, memory pressure,
+and concurrent work still matter.
 
-**Safe for animation** (composite only — 60fps on all reasonable hardware):
-- `transform: translate()`, `rotate()`, `scale()`
-- `opacity`
-
-**Unsafe for animation** (trigger layout or paint — cause jank on mid-range devices):
-- `width`, `height`, `top`, `left`, `bottom`, `right`
-- `padding`, `margin`
-- `border-width`
-- `background-color` (triggers paint, not layout — less severe but not free)
-- `box-shadow` (triggers paint on every frame)
-
-The practical constraint for design: if the visual effect requires animating a property
-not on the safe list, re-examine whether the effect can be achieved through transform and
-opacity instead. A "growing border" on hover can be achieved with a `box-shadow` inset of
-0 opacity transitioning to opacity 1 — or better, with a `transform: scaleX()` on a
-pseudo-element. A "sliding in from the side" panel should use `transform: translateX()`,
-not `left: -100%` to `left: 0`. The design constraints are the engineering constraints.
+Short transitions on color, background color, border color, or a restrained shadow can clarify
+hover, focus, selection, elevation, or status. Keep their affected area small, avoid continuous
+paint animation, and measure repeated or consequential motion on representative hardware. Layout
+properties remain the last choice; use FLIP or another transform-based technique when it preserves
+the intended spatial relationship. Acceptance comes from observed frame timing, stable layout, and
+responsive input, not from a property allowlist.
 
 ---
 
-## The "design is boring" checklist
+## Diagnose an unresolved design by cause
 
-When a design feels flat or unresolved and you do not know what to change, this checklist
-provides the diagnostic. Each item identifies a specific deficiency and its correction.
+"Boring" is not a useful diagnosis. Name the failed relationship before changing style.
 
-**1. Contrast scale is too narrow.** All text is at similar sizes. The solution is to make
-the most important element dramatically larger — not 20% larger, but 2–3× larger. Dramatic
-scale contrast reads as intentional hierarchy; mild scale difference reads as inconsistency.
+**Priority.** If the first-read is unclear, identify the decision or object that should lead.
+Adjust size, weight, position, contrast, or surrounding space until that priority is visible in
+the actual composition. No fixed 2–3x ratio is required.
 
-**2. Everything is centred.** Centring is emphasis. When everything is centred, emphasis
-is absent. Left-align body content, reserve centring for single-line headlines and
-isolated call-out elements.
+**Grouping.** If related controls or facts feel disconnected, tighten their spacing, align them,
+or add one boundary whose role is clear. If unrelated regions merge, increase separation or change
+the grouping structure. Each repair names which content relationship it joins or separates.
 
-**3. The colour palette has no accent.** All colours are muted or neutral — there is
-nothing with visual energy. Add one high-saturation or high-contrast element in the accent
-role, even briefly, and the composition becomes legible.
+**Information scent.** If users cannot predict a destination or action, repair its label,
+placement, context, or visible consequence. Decoration and novelty do not repair a weak cue.
 
-**4. Alignment axes are too consistent.** When every element aligns on the same left edge
-and the same grid column, the design reads as orderly but static. One intentional
-misalignment — a large decorative element that bleeds past the grid, a pull quote indented
-from the main measure — creates movement. But only one: two misalignments become chaos.
+**Density.** If scanning is slow, remove redundant support copy, expose the comparison fields,
+and choose compact or comfortable spacing from task frequency and input method. If comprehension
+is strained, add separation where decisions change. Never double padding by reflex.
 
-**5. Weight ladder is too flat.** Text throughout the design uses the same weight. The
-hierarchy exists only through size. Add weight contrast: the primary content at
-`font-weight: 600`, secondary at 400, tertiary at 400 and reduced opacity. The weight
-ladder is the cheapest hierarchy tool available.
-
-**6. There is no breathing room.** Padding and margins are too conservative. The
-conventional instinct is to pack content because packed content "shows more value." Empty
-space reads as confidence; packed space reads as uncertainty. Double the padding on the
-most important element and observe whether it reads as more important, not less.
-
-**7. No element is unexpected.** Everything is where the user expects it to be, at the
-scale they expect it. Introduce one element that is larger, different, or placed
-differently than its role would suggest. This is the Von Restorff mechanism: the
-unexpected element is what gets remembered.
+**Brand behavior.** If the surface feels anonymous, apply an evidenced brand invariant to a real
+role: type behavior, image treatment, action color, voice, or interaction response. Do not add an
+unexpected element merely to be memorable. A restrained, true-white, conventionally aligned page
+is correct when its priority, grouping, scent, density, and brand behavior all serve the task.
 
 ---
 

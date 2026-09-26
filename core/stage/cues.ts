@@ -24,15 +24,17 @@ export type CueRule = {
 export const CUE_RULES: readonly CueRule[] = Object.freeze([
   { source: 'path', match: '**/landing/**', contracts: ['theory/craft.md', 'protocol/copy-deck.md'], reason: 'a landing surface is judged on persuasion craft and copy, not component correctness' },
   { source: 'path', match: '**/dashboard/**', contracts: ['theory/ux.md'], reason: 'a dashboard is a product surface whose risk is task completion' },
-  { source: 'path', match: '**/*.stories.*', contracts: ['theory/components.md'], reason: 'a story file states component states that must match the component contract' },
-  { source: 'symbol', match: 'Dialog', contracts: ['theory/components.md', 'theory/ux.md'], reason: 'a dialog owns focus, escape, and return-focus behaviour' },
-  { source: 'symbol', match: 'form', contracts: ['theory/ux.md'], reason: 'a form owns validation, error, and recovery states' },
+  { source: 'path', match: '**/*.stories.*', contracts: ['theory/components.md', 'theory/accessibility.md'], reason: 'a story file states component states and their applicable accessibility checks' },
+  { source: 'symbol', match: 'Dialog', contracts: ['theory/components.md', 'theory/ux.md', 'theory/accessibility.md'], reason: 'a dialog owns focus, escape, and return-focus behaviour' },
+  { source: 'symbol', match: 'form', contracts: ['theory/ux.md', 'theory/forms.md', 'theory/accessibility.md'], reason: 'a form owns validation timing, error recovery, field semantics, and focus management' },
   { source: 'symbol', match: 'canvas', contracts: ['theory/motion.md'], reason: 'canvas work carries motion and performance obligations' },
   { source: 'field', match: 'surface:marketing', contracts: ['theory/craft.md'], reason: 'a marketing surface must earn a signature moment' },
   { source: 'field', match: 'surface:product', contracts: ['theory/ux.md'], reason: 'a product surface is judged on task completion' },
   { source: 'field', match: 'motionDecision:one', contracts: ['theory/motion.md'], reason: 'a selected motion carries the reduced-motion and trigger contract' },
   { source: 'field', match: 'motionDecision:none', contracts: ['theory/layout.md'], reason: 'a static direction still owes a designed template departure' },
   { source: 'field', match: 'localization:multi-locale', contracts: ['protocol/locale-contract.md'], reason: 'more than one locale changes copy, layout width, and control state' },
+  { source: 'field', match: 'surfaceLocale:ko', contracts: ['theory/typography-korean.md'], reason: 'Korean surface text needs Hangul-aware type mechanics, not inferred market aesthetics' },
+  { source: 'field', match: 'surfaceLocale:ko-KR', contracts: ['theory/typography-korean.md'], reason: 'Korean surface text needs Hangul-aware type mechanics, not inferred market aesthetics' },
 ].map((rule) => Object.freeze({ ...rule, contracts: Object.freeze(rule.contracts) })) as CueRule[]);
 
 export type CueInput = {

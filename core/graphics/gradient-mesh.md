@@ -20,7 +20,8 @@ addresses it at the texture level.
 
 Condition against: pages where the brand palette is already active and saturated — adding
 a mesh to a high-saturation layout creates a chromatic argument between the mesh and the
-content. Any dark section where the mesh's colour pools compete with text legibility;
+content. Beige, cream, sepia, and warm-paper grounds are not unearned premium defaults; use
+true white or a neutral base unless brand, subject, or user evidence supports a tint. Any dark section where the mesh's colour pools compete with text legibility;
 verify 4.5:1 contrast between every text element and the mesh behind it at every mesh
 position, not just the average. And for AI-generated-looking aesthetics: see the linter
 notes below — specific hue combinations trigger `SLOP-GRADIENT` because they are the
@@ -54,7 +55,7 @@ statistical mean of AI design output, not a brand decision.
   /* Base fill colour: what shows where the gradients do not reach.
      Should be the lightest or darkest value in the palette, never a mid-tone.
      Mid-tone bases with mid-tone gradients produce uniform murk. */
-  --mesh-base: #f0f0ee;
+  --mesh-base: #FFFFFF;
 }
 ```
 

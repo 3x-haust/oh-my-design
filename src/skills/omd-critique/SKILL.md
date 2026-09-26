@@ -16,15 +16,19 @@ criticise the draft and then, in a fresh step, act on that criticism.
 
 ## Procedure
 
-**1. Measure with the tool, never with your eyes.**
+**1. Inspect the current desktop and mobile renders, then run the deterministic check.**
+
+Open the current fixed desktop and mobile render artifacts and judge the visible hierarchy,
+responsive behavior, state, and composition in both. Then run:
 
 ```bash
 omd check --json
 ```
 
-Contrast ratios, padding values, hit areas, and token coverage come back computed and
-correct. Do not estimate any of them. If a number appears in your report that you did not
-read from this output, you have made it up, and the designer will find it.
+Contrast ratios, padding values, hit areas, and token coverage come back computed; do not
+estimate them from pixels. Visual critique still requires the renders because a linter cannot
+judge the actual first read, balance, or responsive composition. If a numeric claim is not in
+the check output or another named measurement, omit it.
 
 **2. Find the one cause.**
 
@@ -54,8 +58,8 @@ For each finding say what it costs the user, in one sentence.
 
 ## Constraints
 
-- **Never propose a patch.** Repair belongs to the `refactor` skill. If the fix is obvious,
-  name it in one line and stop: `→ omd apply --fix normalize-spacing --dry-run`.
+- **Never propose or apply a patch.** Name the repair target and user consequence, then hand the
+  finding to Hand for implementation and fresh rendered verification.
 - **Never cite your own taste as evidence.** Professional designers agree with each other
   at Krippendorff's α = 0.248 on pairwise UI preference; more than a quarter of comparisons
   split them almost completely. Your preference is not a finding. Layer 3 lives in

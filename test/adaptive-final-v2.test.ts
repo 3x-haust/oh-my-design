@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { checkFinalEvidenceV2, publishFinalEvidenceV2 } from '../core/evidence/final-v2.ts';
 import { checkTerminalCompletion } from '../core/completion/preflight.ts';
+import { confidenceDebt, recordConfidenceDebt } from '../core/brief/confidence-debt.ts';
 import { captureSlopCheckpoint, publishSlopReview } from '../core/slop/review.ts';
 import { canonicalFinalEvidenceV2Graph, validateFinalEvidenceV2GraphFiles } from '../core/evidence/final-v2-graph.ts';
 import { servedProjectTreeSha256 } from '../core/render/serve.ts';
@@ -490,7 +491,10 @@ test('execution requirements are reported only after real final publication and 
     publishSlopReview(value.root, { ...slop.reviewInput, summary: 'Synthetic final copy fixture: the approved sentence is visible in both native viewport captures.',
       decisions: slop.reviewInput.decisions.map(d => ({ ...d, status: 'dismissed', reason: 'The synthetic text-only fixture deliberately has no additional visual treatment.', viewIds: ['desktop', 'mobile'] })),
     }, createTestProjectWriteAdapter(value.root, value.invocation));
+    const debt = recordConfidenceDebt(value.root, readPersistedRoute(value.root, value.invocation).sourceContractSha256,
+      [confidenceDebt('reference-board', 'No reference comparison was available at first entry.')], value.invocation);
     const result = checkTerminalCompletion(value.root, value.invocation);
+    assert.deepEqual(result.limitations, debt, 'terminal success must disclose durable entry debt');
     assert.deepEqual(result.executionRequirements, {
       schema: 'execution-requirement-check-v1',
       sourceContractSha256: readPersistedRoute(value.root, value.invocation).sourceContractSha256,

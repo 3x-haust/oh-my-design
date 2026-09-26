@@ -11,11 +11,10 @@ description: >-
 
 # OMD-figma
 
-When Figma exists, the design is already decided. The frame/concept/reference steps
-of the design loop are not needed — someone made those choices, and they are visible
-in the file. The job here is different: read what was designed, build it faithfully,
-systematize it so the implementation can be maintained, and tell the user honestly
-how close the build got.
+Figma is authoritative only for the visual properties its supplied frames represent. Build those
+properties faithfully and systematize them for maintenance, but still frame and verify task outcomes,
+reachable states, accessibility, and responsive gaps that the file does not represent. Do not treat an
+absent state, breakpoint, behavior, or safety requirement as a design decision.
 
 Read `protocol/reference-assembly.md` under `omd pack dir` to preserve its boundary:
 the Figma structural-bypass route is not a substitute reference assembly. Figma snapshot
@@ -144,11 +143,13 @@ divergence is, not just how much.
 spacing token, missing border, wrong font weight. Fix the specific region the diff
 named; do not guess.
 
-**4. Re-diff** — repeat until `score ≥ 0.97` or the iteration ceiling is reached.
+**4. Re-diff** — repeat until `score ≥ 0.97` or four iterations trigger escalation.
 
-**Ceiling: 4 iterations per frame.** After 4, record the final score and move on.
-A frame that reaches the ceiling with score < 0.97 is not a failure of the loop —
-it is honest data. The fidelity report will show it.
+**Escalation threshold: 4 iterations per frame.** Four attempts are not acceptance. Because
+`omd figma diff` exits nonzero below `0.97` and Hand requires a passing diff before ship, a frame
+still below threshold must carry either an explicit fidelity exception or a reasoned repair plan.
+Record the measured mismatch and escalate it; never label the frame accepted or quietly move on.
+A fidelity exception reports the limitation honestly and does not turn the failed diff into a pass.
 
 Record each frame's final score:
 
@@ -171,8 +172,9 @@ For frames in `responsive.unmatched` (no Figma-side viewport partner):
 - Apply the dual-viewport rule: build once, render at 1280px and 375px, check both,
   record that the responsive pairing was a **fallback** (no Figma reference for the
   missing viewport).
-- The fallback is not a gap in the implementation — it is an honest statement that
-  the design did not specify a mobile layout, and the build interpolated one.
+- Treat the missing Figma viewport as a responsive design gap. Frame the required outcome and
+  accessibility constraints, implement a reasoned interpolation, and verify it in the real render;
+  never imply that Figma authorized properties it did not represent.
 
 ```bash
 omd decision "Contact page: no mobile variant in Figma — dual-viewport fallback applied" \
@@ -238,22 +240,23 @@ should record which Figma frame each token group was extracted from:
 | Button component      | component set "Button"     | variant matrix from system step  |
 ```
 
-Everything lands in `.omd/figma/` and `.omd/attribution.md`, committed with the repo.
+Everything lands in `.omd/figma/` and `.omd/attribution.md`, written within the routed paths.
 
 ---
 
 ## Relationship to omd-ultradesign
 
-When a Figma file is in the brief, the design decisions — concept, colour, type,
-layout — were made in Figma. The ultradesign loop's frame/concept/reference steps
-(steps 1–3) are not needed and should not run. Hand off here.
+When a Figma file is in the brief, its represented concept, colour, type, and layout properties
+remain authoritative. Frame task outcomes, states, accessibility, and responsive gaps outside those
+frames instead of inventing authority for them. External reference exploration is unnecessary unless
+the user separately requests it. Hand the represented visual contract and the framed gaps to production.
 
 The discipline of the ultradesign loop that *does* carry over:
 - The slop linter runs. If the original design fires findings, report them honestly.
 - Attribution is tracked. Frame IDs are the source entries.
 - Motion: if the Figma file includes motion prototyping, read it and record a
-  `.omd/motion-spec.md`; if not, the motion decision falls to the implementer and
-  must be recorded.
+  `.omd/motion-spec.md`; if motion is absent, route the missing decision to art direction.
+  Hand must not invent motion.
 
 ---
 

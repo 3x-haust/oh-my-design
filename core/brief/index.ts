@@ -45,6 +45,8 @@ import { loadRefs, refRecordPath } from '../ref/store.ts';
 import { inspectDesignReferenceAdmission, requiresDesignReferenceAdmission } from '../ref/design-admission.ts';
 import { isNativePiInvocation } from '../runtime/native-pi-run.ts';
 import { nativeCompletionBrief, type NativeCompletionProcedure } from '../stage/native-completion-brief.ts';
+import { briefDebtStage, confidenceDebt, mergeConfidenceDebt, readConfidenceDebt, type ConfidenceDebt } from './confidence-debt.ts';
+import { parseReferenceApplication } from '../ref/reference-application.ts';
 
 export {
   EVIDENCE_CLAIM_PUBLICATION_SCHEMA,
@@ -165,6 +167,9 @@ export type Brief = {
     motionEvidenceRequired: boolean;
   }> | null;
   readonly references: readonly BriefReference[];
+  readonly referencePages: readonly (readonly BriefReference[])[];
+  readonly referenceTruncation: string | null;
+  readonly confidenceDebt: readonly ConfidenceDebt[];
   /** Coordinator export command; the raw inventory above is not the role-facing payload. */
   readonly referenceHandoff: Readonly<{
     command: string;
@@ -305,6 +310,28 @@ export function briefReferences(root: string): readonly BriefReference[] {
   })).sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
 }
 
+/** One relevant decision per covered surface before cross-cutting evidence; overflow is explicit. */
+export function allocateBriefReferences(gathered: readonly BriefReference[], coverage: readonly { surface: string; paths: readonly string[] }[]) {
+  const selected = new Map<string, BriefReference>();
+  const usable = [...gathered].sort((a, b) => Number(b.take.length > 0) - Number(a.take.length > 0));
+  for (const surface of coverage) {
+    const reference = usable.find(ref => surface.paths.includes(ref.path));
+    if (reference) selected.set(reference.path, reference);
+  }
+  const minimum = Math.max(MAX_BRIEF_REFERENCES, selected.size);
+  for (const reference of usable) {
+    if (selected.size >= minimum) break;
+    selected.set(reference.path, reference);
+  }
+  const entries = [...selected.values()];
+  const pages: BriefReference[][] = [];
+  for (let index = 0; index < entries.length; index += MAX_BRIEF_REFERENCES) pages.push(entries.slice(index, index + MAX_BRIEF_REFERENCES));
+  const omitted = gathered.length - entries.length;
+  return { pages, omitted, truncation: omitted > 0
+    ? `${omitted} captures omitted after per-surface allocation; omd ref list shows the complete inventory.`
+    : pages.length > 1 ? `Surface coverage spans ${pages.length} referencePages; no covered surface was dropped.` : null };
+}
+
 function selectedCandidateEvidence(root: string): readonly string[] {
   const sketches = join(root, '.omd', '.cache', 'sketches');
   const pointerPath = join(root, CANDIDATE_SELECTION_POINTER_PATH);
@@ -396,11 +423,8 @@ export function buildBrief(
     ? route.behavior.active.designQuality
     : null;
   const shell: AppShell = detectAppShell(root);
-  const routeReferenceLimit = MAX_BRIEF_REFERENCES;
   const gathered = briefReferences(root);
-  // A capture that recorded a measured principle is usable evidence; one that did not is a file path.
-  const ranked = [...gathered].sort((left, right) => right.take.length - left.take.length);
-  const references = ranked.slice(0, routeReferenceLimit);
+  const coverage: Array<{ surface: string; paths: string[] }> = [];
   const contracts = definition === undefined
     ? []
     : (() => {
@@ -457,7 +481,7 @@ export function buildBrief(
       if (!contract.delivered) blockers.push(`contract not delivered: omd stage deliver --stage ${definition.id} --contract ${contract.path}`);
     }
   }
-  if (stage === 'production' && route?.references.decision === 'discover' && references.length === 0) {
+  if (stage === 'production' && route?.references.decision === 'discover' && gathered.length === 0) {
     blockers.push('selected reference discovery has no gathered evidence');
   }
   const selectedInputs = (stage === 'candidate-generation' || stage === 'production') && route !== null
@@ -484,6 +508,12 @@ export function buildBrief(
         expectedSourceContractSha256: route.sourceContractSha256,
         benchmarkRequired: route.gates.includes('greenfield-task-flow-benchmark'), expectedRequest: route.request,
       });
+      const application = parseReferenceApplication(JSON.parse(readFileSync(join(root, '.omd/reference-application.json'), 'utf8')));
+      const refs = loadRefs(root);
+      for (const screen of application.screens) {
+        const urls = research.designReference.sources.filter(source => screen.design.referenceIds.includes(source.id)).map(source => source.url);
+        coverage.push({ surface: screen.surface, paths: refs.filter(ref => urls.includes(ref.source)).map(ref => relative(root, refRecordPath(root, ref))) });
+      }
     } catch (error) {
       blockers.push(`selected ${stage} input missing or stale: reference research/application — run omd ref research-check and omd ref apply-check; both lanes and every destination surface need current decisions (${error instanceof Error ? error.message : String(error)})`);
     }
@@ -501,7 +531,7 @@ export function buildBrief(
     blockers.push(`selected ${stage} input missing: ${judgmentPath} — interpret the observations before applying them`);
   }
   if (judgmentPresent) {
-    try { blockers.push(...checkCurrentDesignJudgment(root).findings); }
+    try { blockers.push(...checkCurrentDesignJudgment(root).findings.map(finding => `reference interpretation: ${finding}`)); }
     catch (error) { blockers.push(`reference interpretation: ${error instanceof Error ? error.message : String(error)}`); }
   }
   const copyReviewPath = '.omd/.cache/copy-eye.md';
@@ -614,6 +644,18 @@ export function buildBrief(
     schemaNames.push('reference-search', 'reference-research');
     if (route.gates.includes('greenfield-task-flow-benchmark')) schemaNames.push('reference-flow-input', 'task-flow-benchmark');
   }
+  const debt: ConfidenceDebt[] = [];
+  const entryBlockers = blockers.filter(reason => {
+    // Debt changes entry policy only under authenticated route authority, not ad-hoc handoffs.
+    if (route === null) return true;
+    const origin = briefDebtStage(reason)
+      ?? (route?.projectMode === 'greenfield' && !route.strategy.stages.includes('safety-validation')
+        && reason.endsWith('.omd/copy-deck.md') ? 'copy' : undefined);
+    if (origin === undefined || (origin === 'copy' && route?.strategy.stages.includes('safety-validation'))) return true;
+    debt.push(confidenceDebt(origin, reason));
+    return false;
+  });
+  const allocated = allocateBriefReferences(gathered, coverage);
   return {
     stage,
     entryGate: {
@@ -647,9 +689,12 @@ export function buildBrief(
       userUrlsRequired: false,
       motionEvidenceRequired: discoveryPlan.motionEvidenceRequired,
     },
-    references,
+    references: allocated.pages[0] ?? [],
+    referencePages: allocated.pages,
+    referenceTruncation: allocated.truncation,
+    confidenceDebt: mergeConfidenceDebt(route === null ? [] : readConfidenceDebt(root, route.sourceContractSha256), debt),
     referenceHandoff,
-    referencesOmitted: gathered.length - references.length,
+    referencesOmitted: allocated.omitted,
     contracts,
     schemas: schemaNames.map((name) => ({ name, command: `omd schema ${name}` })),
     shell: shell.kind === 'browser' ? null : { kind: shell.kind, target: renderTargetHint(shell) },
@@ -668,7 +713,7 @@ export function buildBrief(
       ...(localeDesign?.referenceBinding === null || localeDesign === null ? [] : [localeDesign.referenceBinding.path]),
       ...(copyReviewPresent ? [copyReviewPath] : []),
     ]),
-    blockers,
+    blockers: entryBlockers,
   };
 }
 

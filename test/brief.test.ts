@@ -62,18 +62,20 @@ test('an adaptive route supplies bounded measured evidence without a route quota
   assert.match(brief.route?.references ?? '', /^skip/);
 });
 
-test('greenfield composition blocks a run with captures but no visual reference evidence', () => {
+test('greenfield composition records debt for captures without visual reference evidence', () => {
   const dir = project();
   const input = JSON.parse(read('test/fixtures/adaptive-flow/medical-new-product.json'));
   const invocation = publishTestAdaptiveRoute(dir, input);
   mkdirSync(join(dir, '.omd', 'captures'), { recursive: true });
   writeFileSync(join(dir, '.omd', 'captures', 'home.png'), 'capture only\n');
   const brief = buildBrief(dir, 'composition', undefined, invocation);
-  assert.ok(brief.blockers.some((blocker) => blocker.includes('visual reference evidence')));
+  // Phase 1: missing research is debt, not permission to fabricate reference evidence.
+  assert.ok(brief.confidenceDebt.some(item => item.reason.includes('visual reference evidence')));
+  assert.equal(brief.blockers.some(blocker => blocker.includes('visual reference evidence')), false);
 });
 
 // A capture with a measured principle is usable evidence; one without it is a file path.
-test('selected content grain reaches downstream briefs and stale bytes block them', () => {
+test('selected content grain reaches downstream briefs and stale bytes become explicit debt', () => {
   const dir = project();
   const content = '{"services":[{"description":"짧음"},{"description":"대표 설명"},{"description":"보호해야 할 긴 예외 설명"}]}';
   mkdirSync(join(dir, 'content'), { recursive: true });
@@ -117,7 +119,8 @@ test('selected content grain reaches downstream briefs and stale bytes block the
   writeFileSync(join(dir, 'content', 'catalog.json'), '{"services":[]}');
   const stale = buildBrief(dir, 'composition', undefined, invocation);
   assert.equal(stale.contentGrain, null);
-  assert.ok(stale.blockers.some((entry) => entry.includes('STALE_CONTENT_GRAIN_SOURCE')));
+  // A stale evidence projection is withheld; it no longer prevents first implementation.
+  assert.ok(stale.confidenceDebt.some(item => item.reason.includes('STALE_CONTENT_GRAIN_SOURCE')));
 });
 
 test('skipped content grain is omitted from downstream judgedBy checks', () => {
@@ -181,9 +184,8 @@ test('production brief blocks missing selected inputs and supplies every present
   assert.ok(missing.blockers.some((blocker) =>
     blocker === 'selected production input missing: .omd/composition.md'
   ));
-  assert.ok(missing.blockers.some((blocker) =>
-    blocker === 'selected production input missing: candidate-generation'
-  ));
+  // Candidate evidence stays selected but may yield to first render.
+  assert.ok(missing.confidenceDebt.some(item => item.stage === 'candidate-generation'));
   assert.ok(missing.blockers.some((blocker) =>
     blocker === 'selected production input missing: .omd/.cache/copy-eye.md'
   ));

@@ -42,17 +42,16 @@ test('loadRules rejects a rule with a duplicate id', () => {
 test('check finds exactly the seeded violations', () => {
   const v = check(ir, builtin);
   const ids = v.map((x) => x.id).sort();
-  assert.deepEqual(ids, ['CONTRAST-001', 'SPACING-001', 'TOKEN-003', 'TOKEN-003', 'TOKEN-004', 'TOKEN-004', 'TOKEN-004', 'TOKEN-004']);
+  assert.deepEqual(ids, ['CONTRAST-001', 'TOKEN-003', 'TOKEN-003', 'TOKEN-004', 'TOKEN-004', 'TOKEN-004', 'TOKEN-004']);
 });
 
 test('violations carry nodeId, path, value and an interpolated message', () => {
   const v = check(ir, builtin);
-  const spacing = must(v.find((x) => x.id === 'SPACING-001'), 'spacing violation');
-  assert.equal(spacing.nodeId, '1:20');
-  assert.equal(spacing.path, 'Screen/List/CardOffGrid');
-  assert.deepEqual(spacing.value, [16, 16, 14, 16]);
-  assert.equal(spacing.severity, 'warn');
-  assert.ok(!spacing.message.includes('{'), 'message must be fully interpolated');
+  const contrast = must(v.find((x) => x.id === 'CONTRAST-001'), 'contrast violation');
+  assert.equal(contrast.nodeId, '1:30');
+  assert.equal(contrast.path, 'Screen/Checkout/PayNow');
+  assert.equal(contrast.severity, 'warn');
+  assert.ok(!contrast.message.includes('{'), 'message must be fully interpolated');
 });
 
 test('check output is deterministic — sorted by path then id', () => {
@@ -64,7 +63,7 @@ test('check output is deterministic — sorted by path then id', () => {
 
 test('layer filter selects rules by layer', () => {
   assert.equal(check(ir, builtin, { layers: [2] }).length, 0);
-  assert.equal(check(ir, builtin, { layers: [1] }).length, 8);
+  assert.equal(check(ir, builtin, { layers: [1] }).length, 7);
 });
 
 test('category filter selects rules by category', () => {
@@ -150,14 +149,14 @@ test('SLOP-GRADIENT does not treat one violet gradient as a genericity signature
   assert.ok(!v.some((x) => x.id === 'SLOP-GRADIENT'));
 });
 
-test('SLOP-GRADIENT exempts repeated gradients with explicit semantic roles', () => {
+test('SLOP-GRADIENT does not accept data-omd-gradient-role attributes as a waiver', () => {
   const synthetic = normalize({ nodes: [
     accentRoot(['g1', 'g2']),
     gradientNode('g1', 'hero-atmosphere'),
     gradientNode('g2', 'data-intensity'),
   ] });
   const v = check(synthetic, builtin, { categories: ['slop'] });
-  assert.ok(!v.some((x) => x.id === 'SLOP-GRADIENT'));
+  assert.ok(v.some((x) => x.id === 'SLOP-GRADIENT'));
 });
 
 const accentRoot = (children: string[]): RawNode => ({
@@ -719,24 +718,25 @@ test('SLOP-GRADIENT-TEXT does not fire when clipText is absent', () => {
 
 // ── SLOP-FAKE-STAT ────────────────────────────────────────────────────────────
 
-test('SLOP-FAKE-STAT fires when two or more heroic stat patterns appear on the page', () => {
+test('SLOP-FAKE-STAT fires when three heroic stat patterns form a cluster', () => {
   const nodes: RawNode[] = [
     makeRootNode({ children: ['n1', 'n2', 'n3'] }),
     makeChildNode('root', { id: 'n1', type: 'TEXT', text: '10k+ users worldwide', box: { x: 0, y: 0, w: 200, h: 40 } }, 1),
     makeChildNode('root', { id: 'n2', type: 'TEXT', text: '24/7 support included', box: { x: 200, y: 0, w: 200, h: 40 } }, 2),
-    makeChildNode('root', { id: 'n3', type: 'TEXT', text: 'Ships in 48h', box: { x: 400, y: 0, w: 200, h: 40 } }, 3),
+    makeChildNode('root', { id: 'n3', type: 'TEXT', text: '99.9% uptime', box: { x: 400, y: 0, w: 200, h: 40 } }, 3),
   ];
   const v = check(normalize({ nodes }), builtin, { categories: ['slop'] });
-  assert.ok(v.some((x) => x.id === 'SLOP-FAKE-STAT'), 'expected SLOP-FAKE-STAT for two+ stat patterns');
+  assert.ok(v.some((x) => x.id === 'SLOP-FAKE-STAT'), 'expected SLOP-FAKE-STAT for a three-item cluster');
 });
 
-test('SLOP-FAKE-STAT does not fire when only one stat pattern is present', () => {
+test('SLOP-FAKE-STAT does not fire on one or two isolated facts', () => {
   const nodes: RawNode[] = [
-    makeRootNode({ children: ['n1'] }),
+    makeRootNode({ children: ['n1', 'n2'] }),
     makeChildNode('root', { id: 'n1', type: 'TEXT', text: '99.9% uptime SLA', box: { x: 0, y: 0, w: 200, h: 40 } }, 1),
+    makeChildNode('root', { id: 'n2', type: 'TEXT', text: '24/7 incident support', box: { x: 0, y: 50, w: 200, h: 40 } }, 2),
   ];
   const v = check(normalize({ nodes }), builtin, { categories: ['slop'] });
-  assert.ok(!v.some((x) => x.id === 'SLOP-FAKE-STAT'), 'unexpected SLOP-FAKE-STAT for single stat');
+  assert.ok(!v.some((x) => x.id === 'SLOP-FAKE-STAT'), 'two isolated facts must not imply a fake stat row');
 });
 
 test('SLOP-FAKE-STAT does not fire on ordinary numeric copy', () => {
@@ -976,16 +976,19 @@ test('SLOP-GLASSMORPHISM does not fire when backdropFilter is present but not bl
 
 // ── SLOP-BADGE-SPAM ───────────────────────────────────────────────────────────
 
-test('SLOP-BADGE-SPAM fires on small nodes whose text is solely a badge term', () => {
-  const badgeTexts = ['New', 'Beta', '🔥 Hot', 'Popular', 'trending', 'Pro', 'Soon'];
-  for (const text of badgeTexts) {
-    const node: RawNode = {
-      id: 'badge1', name: 'Badge', type: 'TEXT', path: 'Screen/Badge',
-      parent: null, box: { x: 0, y: 0, w: 60, h: 24 }, children: [], text,
-    };
-    const v = check(normalize({ nodes: [node] }), builtin, { categories: ['slop'] });
-    assert.ok(v.some((x) => x.id === 'SLOP-BADGE-SPAM'), `expected SLOP-BADGE-SPAM for: ${text}`);
-  }
+test('SLOP-BADGE-SPAM fires at three status badges or one unsupported promotional status', () => {
+  const badges = ['New', 'Beta', 'Soon'].map((text, index): RawNode => ({
+    id: `badge${index}`, name: 'Badge', type: 'TEXT', path: `Screen/Badge${index}`,
+    parent: 'root', box: { x: index * 70, y: 0, w: 60, h: 24 }, children: [], text,
+  }));
+  assert.ok(runSlop([makeRootNode({ children: badges.map((node) => node.id) }), ...badges]).some((x) => x.id === 'SLOP-BADGE-SPAM'));
+  const hot = richText('hot', { text: 'Popular', box: { x: 0, y: 0, w: 60, h: 24 } });
+  assert.ok(runSlop([accentRoot(['hot']), hot]).some((x) => x.id === 'SLOP-BADGE-SPAM'));
+});
+
+test('SLOP-BADGE-SPAM does not fire on a single genuine Beta status', () => {
+  const beta = richText('beta', { text: 'Beta', box: { x: 0, y: 0, w: 60, h: 24 } });
+  assert.ok(!runSlop([accentRoot(['beta']), beta]).some((x) => x.id === 'SLOP-BADGE-SPAM'));
 });
 
 test('SLOP-BADGE-SPAM does not fire on regular navigation or content text', () => {
@@ -1155,4 +1158,163 @@ test('SLOP-DIVIDER-SPAM does not fire on a few dividers or on non-divider siblin
   assert.ok(!runSlop([makeRootNode({ children: three.map((r) => r.id) }), ...three]).some((x) => x.id === 'SLOP-DIVIDER-SPAM'), 'three dividers are not spam');
   const plain = Array.from({ length: 6 }, (_u, i) => makeChildNode('root', { id: `c${i}` }, i));
   assert.ok(!runSlop([makeRootNode({ children: plain.map((c) => c.id) }), ...plain]).some((x) => x.id === 'SLOP-DIVIDER-SPAM'), 'siblings with no rule are not spam');
+});
+
+// ── overhaul calibration rules ───────────────────────────────────────────────
+
+function contrastNodes(fontSize: number, fontWeight: number): RawNode[] {
+  return [
+    makeRootNode({ children: ['copy'], fill: { value: '#FFFFFF', token: 'surface' } }),
+    makeChildNode('root', {
+      id: 'copy', type: 'TEXT', text: 'Readable label', color: '#777777', fontSize, fontWeight,
+      box: { x: 0, y: 0, w: 200, h: 30 },
+    }),
+  ];
+}
+
+test('CONTRAST-001 accepts 3:1 for 24px or 18.66px bold large text', () => {
+  const rule = must(builtin.find((candidate) => candidate.id === 'CONTRAST-001'));
+  for (const [size, weight] of [[24, 400], [18.66, 700]] as const) {
+    assert.ok(!check(normalize({ nodes: contrastNodes(size, weight) }), [rule]).some((x) => x.id === 'CONTRAST-001'));
+  }
+});
+
+test('CONTRAST-001 requires 4.5:1 below the large-text thresholds', () => {
+  const rule = must(builtin.find((candidate) => candidate.id === 'CONTRAST-001'));
+  for (const [size, weight] of [[23, 400], [18.65, 700]] as const) {
+    assert.ok(check(normalize({ nodes: contrastNodes(size, weight) }), [rule]).some((x) => x.id === 'CONTRAST-001'));
+  }
+});
+
+test('FOCUS-001 reports one missing indicator when focus coverage is not 100%', () => {
+  const rule = must(builtin.find((candidate) => candidate.id === 'FOCUS-001'));
+  const value = normalize({ meta: { interaction: { tabStops: 4, focusVisible: 3 } }, nodes: [makeRootNode()] });
+  const findings = check(value, [rule]);
+  assert.equal(findings[0]?.value, 1);
+});
+
+test('FOCUS-001 stays clear only when every measured tab stop has visible focus', () => {
+  const rule = must(builtin.find((candidate) => candidate.id === 'FOCUS-001'));
+  const value = normalize({ meta: { interaction: { tabStops: 4, focusVisible: 4 } }, nodes: [makeRootNode()] });
+  assert.deepEqual(check(value, [rule]), []);
+});
+
+test('SPACING-001 accepts the permissive fallback scale and has no snapping fix', () => {
+  const rule = must(builtin.find((candidate) => candidate.id === 'SPACING-001'));
+  const spaced = makeRootNode({ layout: { mode: 'VERTICAL', gap: 10, padding: [2, 10, 14, 28] } });
+  assert.deepEqual(check(normalize({ nodes: [spaced] }), [rule]), []);
+  assert.equal(rule.fix, undefined);
+});
+
+test('SPACING-001 warns on arbitrary fallback values but honors committed spacing tokens', () => {
+  const rule = must(builtin.find((candidate) => candidate.id === 'SPACING-001'));
+  const arbitrary = makeRootNode({ layout: { mode: 'VERTICAL', gap: 0, padding: [12, 13, 16, 20] } });
+  assert.ok(check(normalize({ nodes: [arbitrary] }), [rule]).some((x) => x.id === 'SPACING-001'));
+  const committed = normalize({
+    tokens: { 'spacing-optical': '13px', 'spacing-md': '16px' },
+    nodes: [makeRootNode({ layout: { mode: 'VERTICAL', gap: 0, padding: [0, 13, 16, 13] } })],
+  });
+  assert.deepEqual(check(committed, [rule]), []);
+});
+
+test('SLOP-TINTED-CANVAS flags a dominant unbranded paper tint', () => {
+  const root = makeRootNode({ fill: { value: '#F6F4EF', token: 'surface-canvas', authored: true } });
+  assert.ok(runSlop([root]).some((x) => x.id === 'SLOP-TINTED-CANVAS'));
+});
+
+test('SLOP-TINTED-CANVAS allows true white and explicit brand grounds', () => {
+  const white = makeRootNode({ fill: { value: '#FFFFFF', token: 'surface-canvas', authored: true } });
+  const branded = makeRootNode({ fill: { value: '#F5F7F3', token: 'brand-canvas', authored: true } });
+  assert.ok(!runSlop([white]).some((x) => x.id === 'SLOP-TINTED-CANVAS'));
+  assert.ok(!runSlop([branded]).some((x) => x.id === 'SLOP-TINTED-CANVAS'));
+});
+
+test('SLOP-MICRO-LABELS reports a cluster with short-label examples', () => {
+  const labels = ['Plan', 'Status', 'Owner'].map((text, index) => richText(`m${index}`, { text, fontSize: 10 }));
+  assert.ok(runSlop([accentRoot(labels.map((item) => item.id)), ...labels]).some((x) => x.id === 'SLOP-MICRO-LABELS'));
+});
+
+test('SLOP-MICRO-LABELS ignores one isolated compact datum', () => {
+  const label = richText('m0', { text: 'Page 1', fontSize: 10 });
+  assert.ok(!runSlop([accentRoot([label.id]), label]).some((x) => x.id === 'SLOP-MICRO-LABELS'));
+});
+
+test('SLOP-DECORATIVE-MONOSPACE flags a local monospace kicker', () => {
+  const kicker = richText('mono', { text: 'FEATURED WORK', fontFamily: 'dm mono', path: 'Root/section/span.kicker' });
+  assert.ok(runSlop([accentRoot([kicker.id]), kicker]).some((x) => x.id === 'SLOP-DECORATIVE-MONOSPACE'));
+});
+
+test('SLOP-DECORATIVE-MONOSPACE exempts code and tabular numeric data', () => {
+  const code = richText('code', { text: 'npm run check', fontFamily: 'jetbrains mono', name: 'code', path: 'Root/pre/code' });
+  const data = richText('data', { text: '1,024.50', fontFamily: 'dm mono', name: 'td.data-tabular', path: 'Root/table/td.data-tabular' });
+  const findings = runSlop([accentRoot([code.id, data.id]), code, data]);
+  assert.ok(!findings.some((x) => x.id === 'SLOP-DECORATIVE-MONOSPACE'));
+});
+
+test('SLOP-EMPTY-CANVAS flags a first viewport with very little content area', () => {
+  const root = makeRootNode({ box: { x: 0, y: 0, w: 1000, h: 800 }, children: ['a', 'b'] });
+  const a = richText('a', { box: { x: 40, y: 40, w: 100, h: 30 } });
+  const b = richText('b', { box: { x: 40, y: 90, w: 100, h: 30 } });
+  const value = normalize({ meta: { viewportHeight: 800 }, nodes: [root, a, b] });
+  assert.ok(check(value, builtin, { categories: ['slop'] }).some((x) => x.id === 'SLOP-EMPTY-CANVAS'));
+});
+
+test('SLOP-EMPTY-CANVAS allows a first viewport occupied by meaningful content', () => {
+  const root = makeRootNode({ box: { x: 0, y: 0, w: 1000, h: 800 }, children: ['a', 'b'] });
+  const a = richText('a', { box: { x: 0, y: 0, w: 500, h: 400 } });
+  const b = richText('b', { box: { x: 500, y: 400, w: 500, h: 400 } });
+  const value = normalize({ meta: { viewportHeight: 800 }, nodes: [root, a, b] });
+  assert.ok(!check(value, builtin, { categories: ['slop'] }).some((x) => x.id === 'SLOP-EMPTY-CANVAS'));
+});
+
+function headingSupportNodes(count: number): RawNode[] {
+  const root = makeRootNode({ children: Array.from({ length: count }, (_, i) => `section${i}`) });
+  const nodes: RawNode[] = [root];
+  for (let index = 0; index < count; index++) {
+    nodes.push(makeChildNode('root', { id: `section${index}`, name: 'section', children: [`h${index}`, `p${index}`] }, index));
+    nodes.push(makeChildNode(`section${index}`, { id: `h${index}`, name: 'h2', type: 'TEXT', heading: 2, text: `Title ${index}` }, index));
+    nodes.push(makeChildNode(`section${index}`, { id: `p${index}`, name: 'p.support', type: 'TEXT', text: `Automatic supporting paragraph ${index}` }, index));
+  }
+  return nodes;
+}
+
+test('SLOP-HEADING-SUPPORT-FORMULA fires at three repeated heading-paragraph pairs', () => {
+  assert.ok(runSlop(headingSupportNodes(3)).some((x) => x.id === 'SLOP-HEADING-SUPPORT-FORMULA'));
+});
+
+test('SLOP-HEADING-SUPPORT-FORMULA stays clear below three repetitions', () => {
+  assert.ok(!runSlop(headingSupportNodes(2)).some((x) => x.id === 'SLOP-HEADING-SUPPORT-FORMULA'));
+});
+
+function uniformCardNodes(count: number, varied = false): RawNode[] {
+  const cards: RawNode[] = [];
+  const texts: RawNode[] = [];
+  for (let index = 0; index < count; index++) {
+    cards.push(makeChildNode('root', {
+      id: `card-u${index}`, name: 'article.card', children: [`card-text${index}`],
+      radius: { value: varied ? 4 + index * 2 : 12, token: null },
+      paintColors: [{ property: 'border', value: '#DDDDDD', token: null, semanticRole: null }],
+    }, index));
+    texts.push(makeChildNode(`card-u${index}`, { id: `card-text${index}`, name: 'p', type: 'TEXT', text: `Card content ${index}` }, index));
+  }
+  return [makeRootNode({ children: cards.map((card) => card.id) }), ...cards, ...texts];
+}
+
+test('SLOP-CARD-UNIFORMITY flags mostly same-radius bordered content wrappers', () => {
+  assert.ok(runSlop(uniformCardNodes(4)).some((x) => x.id === 'SLOP-CARD-UNIFORMITY'));
+});
+
+test('SLOP-CARD-UNIFORMITY allows varied containers that do not impose one radius', () => {
+  assert.ok(!runSlop(uniformCardNodes(4, true)).some((x) => x.id === 'SLOP-CARD-UNIFORMITY'));
+});
+
+test('SLOP-EVERYTHING-CENTERED flags long centered body copy', () => {
+  const copy = richText('long', { text: 'A long centered paragraph must make readers reacquire the beginning of every line, which slows sustained reading across this content block.', textAlign: 'center' });
+  assert.ok(runSlop([accentRoot([copy.id]), copy]).some((x) => x.id === 'SLOP-EVERYTHING-CENTERED'));
+});
+
+test('SLOP-EVERYTHING-CENTERED allows compact centered emphasis and left-aligned prose', () => {
+  const short = richText('short', { text: 'A compact centered statement', textAlign: 'center' });
+  const long = richText('long', { text: 'A long paragraph can carry substantial context without becoming difficult to scan when every line returns to a stable left edge.', textAlign: 'left' });
+  assert.ok(!runSlop([accentRoot([short.id, long.id]), short, long]).some((x) => x.id === 'SLOP-EVERYTHING-CENTERED'));
 });

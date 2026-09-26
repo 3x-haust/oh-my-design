@@ -142,8 +142,9 @@ load and battery cost for motion they asked not to see.
 
 The renderer is lazy-initialised via IntersectionObserver and torn down when the surface leaves
 the viewport; it is never constructed at page load and never runs while off-screen. The pixel
-ratio is hard-capped (`maxDpr`) because a 3x device buffer quadruples fragment-shader cost for no
-perceptible gain. Prefer WebGL2, degrade quality (particle count, buffer resolution) before
+ratio is hard-capped (`maxDpr`) because a DPR 3 buffer contains about nine times the pixels of
+DPR 1, and about 2.25 times the pixels of DPR 2, for the same CSS area. Actual GPU cost need not
+scale exactly with pixel count; measure render time and visible benefit before raising the cap. Prefer WebGL2, degrade quality (particle count, buffer resolution) before
 dropping below the FPS target, and account for renderer initialisation cost, per-frame render
 cost, and total JS payload against the declared performance budget — none of it is free, and none
 of it is justified when a CSS/SVG lane already carries the concept.

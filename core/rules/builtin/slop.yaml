@@ -18,32 +18,30 @@
 # Whole-page rules fire once, on the root node, and read ir.stats.
 
 # A single gradient is neutral. This warning requires at least two rendered regions whose
-# saturated stops sit in the 230–300° band and whose markup names no semantic gradient role.
-# `data-omd-gradient-role` records an observable job such as hero atmosphere or data intensity;
-# it is not a global exemption, and two other unassigned gradients still form the compound.
+# saturated stops sit in the 230–300° band. `data-omd-gradient-role` is retained as review
+# context but is not proof that the treatment is earned: an attribute alone cannot waive an
+# observable repeated treatment.
 - id: SLOP-GRADIENT
   layer: 1
   category: slop
   severity: warn
   when: "node.parent === null"
-  value: "(() => { const inBand = g => (g.match(/#[0-9a-f]{6}/gi) ?? []).map(x => { const r = parseInt(x.slice(1,3),16)/255, gr = parseInt(x.slice(3,5),16)/255, b = parseInt(x.slice(5,7),16)/255; const mx = Math.max(r,gr,b), mn = Math.min(r,gr,b), d = mx - mn; if (d === 0 || mx === 0 || d/mx < 0.35) return -1; let h = mx === r ? ((gr-b)/d) % 6 : mx === gr ? (b-r)/d + 2 : (r-gr)/d + 4; h *= 60; return h < 0 ? h + 360 : h; }).filter(h => h >= 230 && h <= 300).length >= 2; return ir.nodes.filter(n => n.gradient && !n.gradientRole && inBand(n.gradient)).map(n => n.path); })()"
+  value: "(() => { const inBand = g => (g.match(/#[0-9a-f]{6}/gi) ?? []).map(x => { const r = parseInt(x.slice(1,3),16)/255, gr = parseInt(x.slice(3,5),16)/255, b = parseInt(x.slice(5,7),16)/255; const mx = Math.max(r,gr,b), mn = Math.min(r,gr,b), d = mx - mn; if (d === 0 || mx === 0 || d/mx < 0.35) return -1; let h = mx === r ? ((gr-b)/d) % 6 : mx === gr ? (b-r)/d + 2 : (r-gr)/d + 4; h *= 60; return h < 0 ? h + 360 : h; }).filter(h => h >= 230 && h <= 300).length >= 2; return ir.nodes.filter(n => n.gradient && inBand(n.gradient)).map(n => n.path); })()"
   assert: "value.length < 2"
-  message: "Repeated unassigned indigo-to-violet gradients: {value}. The same atmospheric treatment spans multiple regions without a named job, so section purpose and hierarchy blur together. Keep one focal use, name distinct semantic roles with data-omd-gradient-role, or remove decoration that carries no task or brand consequence."
+  message: "Repeated indigo-to-violet gradients: {value}. The same atmospheric treatment spans multiple regions, so section purpose and hierarchy blur together. Keep one focal use or show task/brand evidence for each repeated use; data-omd-gradient-role is review context, not a waiver."
 
-# colorHistogram counts fills only (not borders or text), so this catches a rainbow of
-# background accents, not a diffuse border accent — the eye owns the 60-30-10 verdict on the
-# rendered page. Neutrals (low saturation, near-black/white) and the two status hue bands
-# (red ~0/360, green ~95-150) are excluded; what remains are decorative accent hues. Three or
-# more distinct accent hue families as fills is the "six categorical colours" chaos from
-# theory/color.md — no single reserved accent, so nothing ranks.
+# Role collision, not palette arithmetic: three or more non-semantic saturated fill hue
+# families occupy comparable painted area. Similar area gives unlike hues equal salience, so
+# the fills compete for the same visual job. 60-30-10 remains a composition heuristic, not a
+# reading law; category-coded data and explicit success/error paint are excluded.
 - id: SLOP-DIFFUSE-ACCENT
   layer: 1
   category: slop
   severity: warn
   when: "node.parent === null"
-  value: "(() => { const fam = {}; const computed = ir.stats.computedColorHistogram || {}; const semanticAware = Object.keys(computed).length > 0; const paints = semanticAware ? computed : (ir.stats.colorHistogram || {}); for (const hex of Object.keys(paints)) { const m = /^#?([0-9a-fA-F]{6})$/.exec(hex); if (!m) continue; const n = m[1]; const r = parseInt(n.slice(0,2),16)/255, g = parseInt(n.slice(2,4),16)/255, b = parseInt(n.slice(4,6),16)/255; const mx = Math.max(r,g,b), mn = Math.min(r,g,b), d = mx - mn; if (d === 0) continue; const l = (mx+mn)/2; const s = d/(1-Math.abs(2*l-1)); if (s < 0.3 || l < 0.15 || l > 0.9) continue; let h = mx===r ? ((g-b)/d)%6 : mx===g ? (b-r)/d+2 : (r-g)/d+4; h*=60; if (h<0) h+=360; if (!semanticAware && (h<=12 || h>=348 || (h>=95 && h<=150))) continue; const bucket = Math.round(h/25); if (!(bucket in fam)) fam[bucket] = '#'+n; } return Object.values(fam); })()"
-  assert: "value.length < 3"
-  message: "Diffuse accent: {value} are distinct saturated hues used as fills, with no single reserved accent. 60-30-10 is a reading law — one dominant ground, one secondary, and ~10% accent held for the primary action and critical state (theory/color.md). Several categorical accent colours make everything read as equally important, so nothing does. Keep one hue family plus one semantic accent; category-coded data-viz is the deliberate exception."
+  value: "(() => { const fam = {}; const semanticAware = ir.nodes.some(n => Array.isArray(n.paintColors) && n.paintColors.length > 0); for (const n of ir.nodes) { if (!n.fill || n.fill.inherited) continue; if ((n.paintColors || []).some(p => p.property === 'background' && p.semanticRole)) continue; const m = /^#?([0-9a-fA-F]{6})$/.exec(String(n.fill.value)); if (!m) continue; const q=m[1], r=parseInt(q.slice(0,2),16)/255,g=parseInt(q.slice(2,4),16)/255,b=parseInt(q.slice(4,6),16)/255,mx=Math.max(r,g,b),mn=Math.min(r,g,b),d=mx-mn; if (!d) continue; const l=(mx+mn)/2,s=d/(1-Math.abs(2*l-1)); if (s<0.35||l<0.15||l>0.88) continue; let h=mx===r?((g-b)/d)%6:mx===g?(b-r)/d+2:(r-g)/d+4; h*=60;if(h<0)h+=360; if (!semanticAware && (h<=12||h>=348||(h>=95&&h<=150))) continue; const key=Math.round(h/25), area=Math.max(0,n.box.w*n.box.h); fam[key]=fam[key]||{color:'#'+q,area:0,count:0}; fam[key].area+=area;fam[key].count++; } const groups=Object.values(fam).filter(x=>x.area>0).sort((a,b)=>b.area-a.area); if(groups.length<3)return null; const peers=groups.filter(x=>x.area>=groups[0].area/2); return peers.length>=3?peers.map(x=>({color:x.color,area:x.area,count:x.count})):null; })()"
+  assert: "value === null"
+  message: "Saturated fill role collision: {value}. Several hue families occupy comparable area and therefore carry equal salience. 60-30-10 is only a composition heuristic, not a reading law; resolve the actual collision by assigning distinct roles or reducing competing fill area. Semantic status and category-coded data remain valid exceptions."
 
 # The colourless page — the palette counterpart to SLOP-DIFFUSE-ACCENT (which catches too MANY accent
 # hues). This catches the opposite, under-commitment failure: a real multi-tone page whose entire fill
@@ -83,14 +81,17 @@
   assert: "value.length === 0"
   message: "One shadow repeated: {value}. A shadow means elevation. If everything floats at the same height, nothing floats."
 
+# Centring is costly when readers must reacquire the start of several long lines. Page-wide
+# percentages misclassify short labels, navigation, and compact hero headings, so this rule
+# targets the actual long body block instead.
 - id: SLOP-EVERYTHING-CENTERED
   layer: 1
   category: slop
   severity: warn
-  when: "node.parent === null && ir.stats.centeredTextRatio > 0"
-  value: "Math.round(ir.stats.centeredTextRatio * 100)"
-  assert: "value < 60"
-  message: "{value}% of text blocks are centred. Centring is emphasis, not a default. Emphasise everything and you emphasise nothing — and only a left-aligned paragraph gives the eye somewhere to return to on each line."
+  when: "node.type === 'TEXT' && !node.heading && Boolean(node.text) && node.text.length >= 100"
+  value: "node.textAlign"
+  assert: "value !== 'center'"
+  message: "Long body copy is centred. Repeated line starts move on every line, slowing sustained reading. Keep centring for compact emphasis and align long prose to a stable reading edge."
 
 # Widened from headings-only to also cover interactive nodes (buttons,
 # links). A CTA that opens with 🚀 borrows excitement it has not earned as much as a heading
@@ -291,6 +292,83 @@
   assert: "!/아래는\\s+.{0,30}(?:기록|내용|목록|정리)|다음은\\s+.{0,30}(?:입니다|이에요)/u.test(value)"
   message: "Document-structure narration copy: \"{value}\". '아래는 … 기록/내용/목록' and '다음은 … 입니다/이에요' introduce the document's structure in essay cadence. On a product page, write what the product does — not that we will now look at what the product does. Delete the announcing sentence and replace it with the specific fact or action it was narrating."
 
+# Unearned tinted canvas: the dominant first-viewport surface is a near-white tint rather
+# than true white/neutral, and its token carries no brand role. This catches warm paper,
+# cream, sepia, and the equally generic green-tinted off-white default without banning a
+# brand-authored ground.
+- id: SLOP-TINTED-CANVAS
+  layer: 1
+  category: slop
+  severity: warn
+  when: "node.parent === null"
+  value: "(() => { const vh=Number(ir.meta&&ir.meta.viewportHeight)||node.box.h; const surfaces=ir.nodes.filter(n=>n.type==='FRAME'&&n.fill&&n.box.w>0&&n.box.h>0&&n.box.y<vh).map(n=>({n,area:n.box.w*Math.max(0,Math.min(n.box.y+n.box.h,vh)-Math.max(0,n.box.y))})).sort((a,b)=>b.area-a.area); const top=surfaces[0]; if(!top||top.area<node.box.w*vh*0.6||/brand/i.test(String(top.n.fill.token||'')))return null; const m=/^#?([0-9a-f]{6})$/i.exec(String(top.n.fill.value)); if(!m)return null; const q=m[1],c=[parseInt(q.slice(0,2),16),parseInt(q.slice(2,4),16),parseInt(q.slice(4,6),16)],mx=Math.max(...c),mn=Math.min(...c); return mn>=235&&mx>=243&&mx-mn>=3?{color:'#'+q.toUpperCase(),path:top.n.path,coverage:Math.round(top.area/(node.box.w*vh)*100)}:null; })()"
+  assert: "value === null"
+  message: "Dominant tinted light canvas without brand evidence: {value}. Near-white cream, paper, sepia, or green tint is not an automatic premium/editorial ground. Use true white/neutral or bind the tint to a documented brand or subject role."
+
+# Micro-labels include short labels: prose-length gates miss the 9–11px kicker, metadata,
+# tab, and button labels that create the visual fingerprint. Require a cluster of three so
+# one compact datum does not become a page-level verdict.
+- id: SLOP-MICRO-LABELS
+  layer: 1
+  category: slop
+  severity: warn
+  when: "node.parent === null"
+  value: "(() => { const hits=ir.nodes.filter(n=>n.type==='TEXT'&&n.text&&typeof n.fontSize==='number'&&n.fontSize<12).map(n=>({size:n.fontSize,text:n.text.slice(0,24),path:n.path})); return hits.length>=3?{count:hits.length,examples:hits.slice(0,3)}:null; })()"
+  assert: "value === null"
+  message: "Micro-label cluster: {value}. Multiple text roles render below 12px, including short labels that prose-only checks miss. Raise secondary roles to a readable size instead of manufacturing hierarchy through tiny type."
+
+# Monospace is contextual, not a global-family count. Flag each local decorative use while
+# exempting code/pre/kbd/samp, table/tabular paths, and numeric data whose glyph alignment is
+# the actual job.
+- id: SLOP-DECORATIVE-MONOSPACE
+  layer: 1
+  category: slop
+  severity: warn
+  when: "node.type === 'TEXT' && Boolean(node.text) && Boolean(node.fontFamily)"
+  value: "node.fontFamily"
+  assert: "!/(?:mono|menlo|monaco|consolas|courier|fira code|jetbrains)/i.test(value) || /(?:^|\\/)(?:code|pre|kbd|samp|table|thead|tbody|tfoot|tr|td|th)(?:[./]|$)|data[-_.]?tabular|tabular[-_.]?data/i.test(node.path + '/' + node.name) || /^[\\s\\d.,%+:/#$€£¥₩()-]+$/u.test(node.text)"
+  message: "Decorative monospace on non-code text uses {value}. Keep monospace for code, keyboard input, samples, or tabular data; a local kicker or label needs a semantic typographic reason rather than terminal/editorial chrome."
+
+# First-viewport emptiness uses actual content geometry, not section height. Text, controls,
+# media, and canvas boxes are clipped to the viewport and summed conservatively; two content
+# objects are required so loading/blank states do not masquerade as compositions.
+- id: SLOP-EMPTY-CANVAS
+  layer: 1
+  category: slop
+  severity: warn
+  when: "node.parent === null"
+  value: "(() => { const vh=Number(ir.meta&&ir.meta.viewportHeight)||node.box.h,vw=node.box.w; if(!(vh>0&&vw>=800&&vw*vh>=500000))return null; const content=ir.nodes.filter(n=>n.parent!==null&&n.box.y<vh&&(n.text||n.computed.isInteractive||/^(?:img|picture|video|canvas|svg)(?:[.-]|$)/i.test(n.name))); if(content.length<2)return null; const occupied=content.reduce((s,n)=>s+Math.max(0,Math.min(n.box.x+n.box.w,vw)-Math.max(0,n.box.x))*Math.max(0,Math.min(n.box.y+n.box.h,vh)-Math.max(0,n.box.y)),0); const ratio=Math.min(1,occupied/(vw*vh)); return ratio<=0.22?{emptyPercent:Math.round((1-ratio)*100),contentBoxes:content.length,viewport:{w:vw,h:vh}}:null; })()"
+  assert: "value === null"
+  message: "Sparse first viewport: {value}. Content occupies too little of the available canvas, leaving scale without a task or subject. Recompose around the real work/content rather than preserving a large empty stage."
+
+# Detect the repeated section-writing formula from rendered sibling order: heading followed
+# immediately by a paragraph in at least three separate parent regions.
+- id: SLOP-HEADING-SUPPORT-FORMULA
+  layer: 1
+  category: slop
+  severity: warn
+  when: "node.parent === null"
+  value: "(() => { const groups={}; for(const p of ir.nodes){ const children=(p.children||[]).map(id=>ir.nodes.find(n=>n.id===id)).filter(Boolean); for(let i=0;i<children.length-1;i++){ const a=children[i],b=children[i+1]; if(a.heading&&b.type==='TEXT'&&/^p(?:[.-]|$)/i.test(b.name)&&b.text){const key=p.name+'|h'+a.heading+'|'+b.name;(groups[key]=groups[key]||[]).push({parent:p.path,heading:a.text||a.path,support:b.text.slice(0,32)});break;} } } const repeated=Object.values(groups).filter(items=>items.length>=3).sort((a,b)=>b.length-a.length)[0]; return repeated?{count:repeated.length,examples:repeated.slice(0,3)}:null; })()"
+  assert: "value === null"
+  message: "Repeated heading-plus-support formula: {value}. Three or more sections use the same title then automatic subtitle structure. Keep support only where it adds context the heading, work object, or state cannot carry."
+
+# Card uniformity is a page-level compound: at least four bordered, rounded content boxes,
+# one radius used by 75%+, and 70%+ of meaningful text enclosed by those boxes.
+- id: SLOP-CARD-UNIFORMITY
+  layer: 1
+  category: slop
+  severity: warn
+  when: "node.parent === null"
+  value: "(() => { const cards=ir.nodes.filter(n=>n.type==='FRAME'&&n.radius&&(n.paintColors||[]).some(p=>p.property==='border')&&n.children.length>0); if(cards.length<4)return null; const counts={};for(const c of cards){const r=String(c.radius.value);counts[r]=(counts[r]||0)+1;}const top=Object.entries(counts).sort((a,b)=>b[1]-a[1])[0];if(!top||top[1]/cards.length<0.75)return null;const text=ir.nodes.filter(n=>n.text&&n.parent!==null);if(text.length<4)return null;const inside=text.filter(t=>cards.some(c=>{let p=t.parent;while(p){if(p===c.id)return true;p=ir.nodes.find(n=>n.id===p)?.parent||null;}return false;})).length;return inside/text.length>=0.7?{cards:cards.length,radius:top[0],uniformPercent:Math.round(top[1]/cards.length*100),wrappedTextPercent:Math.round(inside/text.length*100)}:null; })()"
+  assert: "value === null"
+  message: "Uniform card wrapper system: {value}. Most content is enclosed in the same-radius bordered box, flattening unlike roles into ornamental chrome. Keep containers only where boundaries carry grouping or interaction meaning."
+
+# Candidate studied and dropped: exact 1px hairline density. RawIr records whether an
+# element is a divider but not the rendered border width, so it cannot distinguish a 1px
+# hairline from a heavier structural rule or calculate the requested density safely. Keep
+# SLOP-DIVIDER-SPAM for repeated sibling separators; add a border-width measurement in IR
+# before promoting the area-density candidate.
+
 # ── the machine-default aesthetic, measured ────────────────────────────────────────────
 #
 # These rules remain only where rendered IR supports a narrow, repeatable warning. Source
@@ -311,19 +389,16 @@
   assert: "false"
   message: "Gradient-clipped text on this node. background-clip:text makes letter contrast vary across the word, weakening fast reading and hierarchy. Prefer size, weight, and position with one legible text colour; a tested brand display treatment with verified contrast is the contextual exception."
 
-# Invented stat row: round heroic numbers (10k+, 99.9%, 24/7) clustered on a page.
-# Real metrics are odd and specific — "847 teams migrated in Q1" carries more weight than
-# any 10× claim because nobody lies that specifically. The rule fires when two or more
-# text nodes each independently match an invented-stat pattern.
-# The invented stat row.
+# Round heroic numbers become a pattern only as a three-item stat cluster. One or two facts
+# such as a real 99.9% SLA or 24/7 support statement are not evidence of a manufactured row.
 - id: SLOP-FAKE-STAT
   layer: 1
   category: slop
   severity: warn
   when: "node.parent === null"
-  value: "(() => { const p = [/\\b\\d+[kK]\\+/, /\\b9[89](?:\\.\\d)?%/, /\\b24\\/7\\b/]; const hits = ir.nodes.filter(n => n.text && p.some(r => r.test(n.text))).map(n => n.text.slice(0, 40)); return hits.length >= 2 ? hits : null; })()"
+  value: "(() => { const p = [/\\b\\d+[kK]\\+/, /\\b9[89](?:\\.\\d)?%/, /\\b24\\/7\\b/]; const hits = ir.nodes.filter(n => n.text && p.some(r => r.test(n.text))).map(n => n.text.slice(0, 40)); return hits.length >= 3 ? hits : null; })()"
   assert: "value === null"
-  message: "Invented stat row: {value}. Round heroic numbers (10k+, 99.9%, 24/7) on a new product are decoration — the user has no reason to believe them. Write odd, specific, sourced numbers ('847 teams migrated in Q1') or nothing."
+  message: "Heroic stat cluster: {value}. Three or more round claims read as a manufactured proof row. Replace unsupported claims with sourced, specific facts; isolated SLA or availability facts are not flagged."
 
 # Oversized drop shadow: shadow blur ≥40px on a node whose smaller dimension is less than
 # or equal to the blur. A shadow that large maps to no real surface — it is fog. Elevation
@@ -397,19 +472,17 @@
   assert: "value < 3"
   message: "{value} nodes use backdrop-filter:blur (glassmorphism). A single frosted-glass surface is a deliberate choice; {value} of them is a pattern from 2021 Dribbble. Replace repeated blur surfaces with opaque ones — one material, defined. Use omd decision to record why multiple blur surfaces are required."
 
-# Manufactured status badges: small text nodes whose entire content is a badge-like term
-# (New / Beta / Hot / Popular / Trending / Soon / Pro) with optional leading emoji.
-# Real badges carry time-bounded or count-backed information; decoration badges erode
-# trust by the third one. Gated to short text (≤30 chars) on small nodes (height ≤36px).
-# Badge and pill spam.
+# Badge repetition is the observable pattern. A single Beta/New/Pro/Soon can carry real
+# product status and stays clear. Three badge-like labels form chrome; unsupported promotional
+# statuses (Hot/Popular/Trending) remain reviewable even once because the UI supplies no basis.
 - id: SLOP-BADGE-SPAM
   layer: 1
   category: slop
   severity: warn
-  when: "Boolean(node.text) && node.text.length <= 30 && node.box.h <= 36"
-  value: "node.text"
-  assert: "!/^[\\s\\u{1F300}-\\u{1FAFF}\\u{2600}-\\u{27BF}]*\\b(?:new|beta|hot|popular|trending|pro|soon)\\b[\\s!]*$/iu.test(value)"
-  message: "Manufactured badge: \"{value}\". New / Beta / Hot / Popular tags manufacture buzz. Use badge treatments only for genuine, time-bounded status: a feature launched this week, an actual version number, a real availability flag. Decoration badges erode trust by the third one."
+  when: "node.parent === null"
+  value: "(() => { const badge=/^[\\s\\u{1F300}-\\u{1FAFF}\\u{2600}-\\u{27BF}]*\\b(?:new|beta|hot|popular|trending|pro|soon)\\b[\\s!]*$/iu; const unsupported=/\\b(?:hot|popular|trending)\\b/iu; const hits=ir.nodes.filter(n=>n.text&&n.text.length<=30&&n.box.h<=36&&badge.test(n.text)).map(n=>n.text); return hits.length>=3||hits.some(x=>unsupported.test(x))?hits:null; })()"
+  assert: "value === null"
+  message: "Badge chrome or unsupported promotional status: {value}. Three repeated badges manufacture hierarchy, while Hot/Popular/Trending need evidence even in isolation. A single genuine Beta, New, Pro, or Soon status remains valid."
 
 # Flat type hierarchy: when three or more distinct font sizes cluster between 13–19px, or
 # adjacent steps differ by less than 1.15×, size stops carrying hierarchy. The eye cannot

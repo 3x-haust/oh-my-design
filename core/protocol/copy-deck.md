@@ -36,7 +36,7 @@ terminology, and words to avoid:
 - **Language**: target language code, such as `ko`
 - **Register**: the chosen register, such as `해요체`
 
-For Korean, choose one register, read every line aloud, and keep one breath per sentence.
+For Korean, choose one register and read every line aloud. Give each compact UI string one primary job. Longer explanations, legal text, and linked conditions may use more than one breath when splitting them would hide the relationship. Use `theory/microcopy.md` for Korean/English component and state patterns.
 
 ## Truth contract
 
@@ -53,15 +53,18 @@ outcome never upgrades the current boundary.
 
 ## Surface copy
 
-Give every page or surface its own H3 block with exactly one `Main message`, `Supporting fact`,
-`Next action`, and `Claim refs` field. `Supporting fact` is `none` or
-`none — <omission reason>` when the state, progress, work object, field, or main message already
-supplies orientation; otherwise it is one
-distinct fact, consequence, constraint, or recovery cue. It is an optional role with an explicit
-omission value, never a slot to fill. Include real title, body, label, CTA, and representative data.
-Do not repeat the same proposition across title/body/CTA. A CTA predicts what happens immediately
-after activation. `Claim refs` is exactly `none` or a comma-separated explicit ID list such as
-`F-001, F-004`; commentary or garbage suffixes are invalid.
+Give every page or surface its own H3 block. The parser currently requires exactly one `Main message`,
+`Supporting fact`, `Next action`, and `Claim refs` metadata field, but the corresponding visible roles
+are conditional on the surface job. Use `none — <omission reason>` for `Main message` when the work
+object or state already provides orientation, for a supporting fact that adds no constraint,
+consequence, evidence, or recovery cue, and for `Next action` when no meaningful move exists. Do not
+manufacture a title-plus-subtitle pair, CTA, or terminal action to fill the schema. When present,
+`Main message` may be a work-object label, state, or compact orientation rather than a slogan.
+
+Include the real titles, body, labels, actions, and representative data that the surface actually
+needs. Do not repeat the same proposition across title, body, and action. When an action exists, its
+label predicts the immediate result. `Claim refs` is exactly `none` or a comma-separated explicit ID
+list such as `F-001, F-004`; commentary or garbage suffixes are invalid.
 
 Those four fields summarize the page's message; they are not a content budget. Under that page's H3,
 use H4 subheadings for the actual copy of every frame-owned region, including its titles, explanation,

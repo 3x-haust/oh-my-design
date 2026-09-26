@@ -126,8 +126,10 @@ test('adaptive stage require follows producer dependencies, not route order, for
   const dependentInvocation = publishTestAdaptiveRoute(dependent, synth);
   write(dependent, '.omd/domain-brief.json', '{}');
   const typeProof = requireStage(dependent, PACK, 'type-proof', dependentInvocation);
-  assert.ok(typeProof.missingArtifacts.includes('.omd/copy-deck.md'), 'Type proof still waits for its Copy producer');
-  assert.ok(typeProof.missingArtifacts.includes('.omd/scout.md'), 'transitive reference producers remain blocking for Copy');
+  // Phase 1: low-risk greenfield evidence work may yield; the frame remains entry-hard.
+  assert.equal(typeProof.missingArtifacts.includes('.omd/copy-deck.md'), false);
+  assert.equal(typeProof.missingArtifacts.includes('.omd/scout.md'), false);
+  assert.ok(typeProof.missingArtifacts.includes('.omd/frame.md'));
 });
 
 test('production refuses to start while planning is still a hypothesis', () => {
@@ -278,7 +280,9 @@ test('cues resolve from paths, symbols, and typed fields, and widen a stage obli
   assert.deepEqual(cueContracts(landing), ['protocol/copy-deck.md', 'theory/craft.md']);
   assert.deepEqual(resolveCues({ paths: ['src/components/Hero.tsx'] }), []);
 
-  assert.deepEqual(cueContracts(resolveCues({ symbols: ['Dialog'] })), ['theory/components.md', 'theory/ux.md']);
+  // Dialog and story states now consume the applicable accessibility matrix too.
+  assert.deepEqual(cueContracts(resolveCues({ symbols: ['Dialog'] })), ['theory/accessibility.md', 'theory/components.md', 'theory/ux.md']);
+  assert.deepEqual(cueContracts(resolveCues({ paths: ['src/Dialog.stories.tsx'] })), ['theory/accessibility.md', 'theory/components.md']);
   assert.deepEqual(resolveCues({ symbols: ['DialogTrigger'] }), [], 'symbol cues match exactly, never by substring');
 
   const multi = resolveCues({ fields: { localization: 'multi-locale', motionDecision: 'none' } });
@@ -289,12 +293,24 @@ test('cues resolve from paths, symbols, and typed fields, and widen a stage obli
   assert.deepEqual(widened, ['protocol/copy-deck.md', 'protocol/locale-contract.md', 'theory/layout.md', 'theory/voice.md']);
 });
 
+test('exact form and Korean-locale cues deliver their scoped packs without inferring from prose', async () => {
+  const { resolveCues, cueContracts, stageContractsWithCues } = await import('../core/stage/cues.ts');
+  const input = { symbols: ['form'] }, before = structuredClone(input);
+  const cues = resolveCues(input);
+  assert.deepEqual(cueContracts(cues), ['theory/accessibility.md', 'theory/forms.md', 'theory/ux.md']);
+  assert.ok(stageContractsWithCues('composition', cues).includes('theory/forms.md'));
+  assert.deepEqual(resolveCues({ symbols: ['FormControl', 'platform'] }), []);
+  assert.deepEqual(input, before);
+  for (const surfaceLocale of ['ko', 'ko-KR']) assert.deepEqual(cueContracts(resolveCues({ fields: { surfaceLocale } })), ['theory/typography-korean.md']);
+  assert.deepEqual(resolveCues({ fields: { surfaceLocale: 'en', conversationLanguage: 'ko' } }), []);
+});
+
 test('the cue CLI reports the bound contracts and their reasons', () => {
   const dir = project();
   const resolved = run(['cue', '--path', 'app/dashboard/page.tsx', '--symbol', 'form', '--json'], dir);
   assert.equal(resolved.status, 0, resolved.stderr);
   const result = JSON.parse(resolved.stdout);
-  assert.deepEqual(result.contracts, ['theory/ux.md']);
+  assert.deepEqual(result.contracts, ['theory/accessibility.md', 'theory/forms.md', 'theory/ux.md']);
   assert.equal(result.cues.length, 2);
   assert.ok(result.cues.every((cue: { reason: string }) => cue.reason.length > 0));
 

@@ -61,10 +61,15 @@ instructions: |
   hard-coded `로/으로`, `은/는`, `이/가`, and `을/를` after a variable noun unless production uses
   a tested 받침-aware selector; a label/value or colon construction is the safer default.
 
-  Give each page or surface one main message, one new supporting fact, and one immediate next
-  action. Do not repeat a proposition across title, body, and CTA. Every CTA predicts the
-  result immediately after activation. Write error, empty, and recovery copy separately only
-  where those states apply; never fabricate state UI for a navigation-only or static surface.
+  Choose copy roles from the surface's actual job; do not force every page or state into one main
+  message plus one supporting fact plus one next action. A next action exists only when the user has
+  a meaningful move. Supporting copy may be `none — <reason>` when a visible work object, state,
+  progress indicator, field, or other element already orients the user. A main-message slot may also
+  be `none — <reason>` when the surface does not need authored lead copy. Never fall into the automatic
+  title + explanatory subtitle formula; put guidance beside the decision it changes. Do not repeat a
+  proposition across title, body, and CTA. Every CTA that exists predicts the result immediately after
+  activation. Write error, empty, and recovery copy separately only where those states apply; never
+  fabricate state UI for a navigation-only or static surface.
 
   For Korean, choose one register, keep one message per breath, and read every line aloud.
   Choose the register from this subject's audience and the authority its value claim needs — a
@@ -76,10 +81,13 @@ instructions: |
   deck a Truth contract with exactly one typed Result boundary and Storage boundary from
   `protocol/copy-deck.md`; every action, confirmation, status, and summary line stays within
   those boundaries. Give every
-  surface its own H3 block and exactly one Main message, Supporting fact, Next action, and
-  Claim refs field. Use `Supporting fact: none` or `Supporting fact: none — <omission reason>`
-  when the state, progress, work object, field, or Main message already orients the user. Otherwise the support line adds one distinct
-  fact, consequence, constraint, or recovery cue; never fill it by narrating visible structure.
+  surface its own H3 block. For compatibility with the current copy parser, declare exactly one
+  Main message, Supporting fact, Next action, and Claim refs field, but treat those as schema slots,
+  not mandatory visible carriers. Use `none — <omission reason>` for an inapplicable Main message or
+  Next action, and `Supporting fact: none` or `Supporting fact: none — <omission reason>` when the
+  state, progress, work object, field, or Main message already orients the user. Omission markers do
+  not render. Otherwise the support line adds one distinct fact, consequence, constraint, or recovery
+  cue; never fill it by narrating visible structure.
   Preserve audience terminology and emotional context. Portfolio and landing heroes state
   value or evidence; remove document-structure narration such as “과정을 남깁니다” and
   “순서대로 씁니다.” Record the final fact, scan, repetition, CTA, terminology,

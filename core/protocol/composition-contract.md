@@ -4,18 +4,17 @@
 sketches. `omd-composer` owns it. The artifact records composition decisions; it does not
 copy a reference page or prescribe one visual answer.
 
-The composer receives a sanitized frame/concept, clean copy deck, sanitized approved type
-contract, and the scout's distilled transferable principles/invariants with source trust.
-It composes section by section: each section is assigned the single best-fit reference part for that
-section's job, and different sections may draw from different references, so the page is a deliberate
-composition of parts — not one reference reproduced whole. The hand builds each section from the
-assigned source-free reference projection's measured anatomy, geometry, and treatment with measured-part
-fidelity; when explicitly selected, the no-ship visual packet may add neutral box proportion, grouping,
-nesting, and whitespace evidence. Hand never inspects Scout-owned source pixels or private packet
-evidence. Tracing one reference's entire page layout and section order wholesale is a derivative
-failure, not fidelity. It still writes the product's own copy
-and uses its own real assets rather than lifting the source's literal text or photographs. Read `theory/layout.md` and
-`theory/ux.md` exactly before writing.
+The composer receives a sanitized frame/concept, clean copy deck, approved type contract, and
+applicable reference evidence. Compose the destination system first: grid, type relationships,
+density, component anatomy, task order, states, and responsive behavior. Use a selected reference
+part only for a relationship that remains unresolved and only at the granularity the evidence supports.
+A section-by-section reference collage is optional, never the default plan.
+
+When the validated handoff provides a selected rights-safe crop, Composer and Hand may inspect that
+crop alongside its provenance and no-ship constraint. Unselected or rights-unclear pixels and private
+Scout evidence remain unavailable, and blind reviewers never receive source crops. Build with the
+product's own copy, assets, and tokens. Tracing a source's whole layout or identity remains a
+derivative failure. Read `theory/layout.md` and `theory/ux.md` exactly before writing.
 
 Use these H2 sections exactly and keep each non-empty. `## Colour roles` is the additive
 current-authoring boundary: historical composition artifacts without it remain readable and retain
@@ -150,18 +149,17 @@ action, selected state, or critical state rather than decoration.
 
 ## Transfer boundary
 
-The boundary is drawn around the source's identity, not its structure. Permitted transfer:
-attributed relationships, measured invariants, principles abstracted from trusted evidence, and —
-at section granularity — an assigned reference part's layout, composition, and treatment, rebuilt
-faithfully with the destination's own copy, assets, and tokens. This per-section fidelity is the
-point (see `reference-assembly.md`): reproducing the assigned section's layout is expected, and
-`omd ref distance`'s high per-part closeness is the intended outcome, not a warning. Forbidden
-transfer is the source's identity and its whole-page gestalt: its brand/wordmark, copy, photographs
-and assets, literal token values, unique interaction and motion, and — across the entire page — its
-full section order and overall silhouette. Faithfully rebuilding one assigned section is lawful;
-tracing a whole reference page section-by-section into your whole page is the derivative failure.
-An exact whole-page or identity transplant is allowed only when the user explicitly requested that
-specific transplant; record the request and attribution.
+The boundary protects source identity and keeps evidence subordinate to the destination system.
+Permitted transfer is an attributed relationship or measured invariant needed to resolve a named
+composition problem, rebuilt with the destination's copy, assets, tokens, accessibility, and task
+constraints. A selected rights-safe crop may be inspected by Composer and Hand only through the
+validated no-ship handoff. Similarity scores are diagnostics, not minimum design targets; acceptance
+comes from preserving the promised relationship without importing identity.
+
+Forbidden transfer includes the source's brand or wordmark, copy, unlicensed photography or assets,
+literal token values, distinctive interaction, full section order, and overall silhouette. A whole-page
+or identity transplant is lawful only when the user explicitly requests that exact transplant and
+rights and attribution are recorded.
 
 ## Reference synthesis
 

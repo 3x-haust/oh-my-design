@@ -53,11 +53,19 @@ Every shipped photograph carries a validated record (`validatePhotoProvenance`) 
   "photographer": "Jane Doe",
   "attribution": "Photo by Jane Doe on Unsplash",
   "localPath": "assets/hero-portrait.jpg",
+  "semanticRole": "content",
   "altText": "A ceramicist shaping a bowl on a wheel, warm side light"
 }
 ```
 
-`sourcePage` is an https URL; `localPath` is a safe project-relative path to the locally stored image;
-`altText` describes the image (never a filename) because a shipped photograph is content and needs an
-accessible description. When the licence requires attribution, `photographer` and `attribution` are
-mandatory. Record it alongside the run's other provenance (`omd decision` and `.omd/attribution.md`).
+`sourcePage` is an https URL; `localPath` is a safe project-relative path to the locally stored image.
+`semanticRole` determines the alt contract:
+
+- `content` requires descriptive `altText` that communicates what the image contributes;
+- `decorative` requires exactly `altText: ""` so assistive technology ignores it; and
+- `functional` requires `altText` that names the action (for example, `"Open full-size studio photo"`),
+  not a description of the pixels.
+
+Records created before `semanticRole` was introduced remain valid and default to `content`. Alt text is
+never a filename. When the licence requires attribution, `photographer` and `attribution` are mandatory.
+Record it alongside the run's other provenance (`omd decision` and `.omd/attribution.md`).

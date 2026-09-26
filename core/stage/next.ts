@@ -11,6 +11,8 @@ import { referenceDiscoveryWork } from '../ref/discovery-work.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import { isNativePiInvocation } from '../runtime/native-pi-run.ts';
 import { nativeCompletionWork } from './native-completion.ts';
+import { canDeferMissingCopy, confidenceDebt, DEBT_CAPABLE_STAGES, readConfidenceDebt, recordConfidenceDebt } from '../brief/confidence-debt.ts';
+import { evidenceBudget } from './evidence-budget.ts';
 
 /** Fresh and interrupted runs use the same current-disk work pointer. No artifacts are fabricated. */
 export function nextStageWork(root: string, packRoot: string, invocation: ProjectRunInvocation) {
@@ -30,7 +32,19 @@ export function nextStageWork(root: string, packRoot: string, invocation: Projec
   }
   const outputs = state.stages.map(s => ({ ...s, problems: stageArtifactProblems(root, s.stage, invocation),
     entry: checkBriefEntry(root, s.stage, packRoot, invocation) }));
-  const incomplete = outputs.find(s => s.problems.length > 0 || s.entry.blockers.length > 0);
+  let incomplete: typeof outputs[number] | undefined;
+  const deferredStages: string[] = [];
+  for (const output of outputs) {
+    if (!output.problems.length && !output.entry.blockers.length) continue;
+    const debtCapable = DEBT_CAPABLE_STAGES.has(output.stage)
+      || (output.stage === 'copy' && !output.present && canDeferMissingCopy(route));
+    if (!debtCapable || planning.length > 0) { incomplete = output; break; }
+    const budget = evidenceBudget(root, route.sourceContractSha256, output.stage, invocation);
+    if (!budget.exhausted) { incomplete = output; break; }
+    recordConfidenceDebt(root, route.sourceContractSha256,
+      [confidenceDebt(output.stage, `${budget.reason} ${[...output.problems, ...output.entry.blockers].join('; ')}`, 'budget-exhausted')], invocation);
+    deferredStages.push(output.stage);
+  }
   // Resolve planning provenance early, not only at the eventual source boundary. The agent must
   // check the original brief first; absent evidence requires a question, never automatic confirmation.
   // Design-only handoffs may deliberately retain open planning questions. Do not turn a
@@ -39,9 +53,18 @@ export function nextStageWork(root: string, packRoot: string, invocation: Projec
   const stage = planningBlocksProduction ? 'domain' : incomplete?.stage ?? null;
   const brief = stage === null ? null : buildBrief(root, stage, packRoot, invocation);
   const entry = stage === null ? null : checkBriefEntry(root, stage, packRoot, invocation);
-  const interpretation = route.strategy.stages.includes('reference-board')
+  let interpretation = !deferredStages.includes('reference-board') && route.strategy.stages.includes('reference-board')
     && (stage === null || ['art-direction', 'composition', 'candidate-generation'].includes(stage))
     ? referenceInterpretationWork(root) : null;
+  if (interpretation && !planningBlocksProduction) {
+    const budget = evidenceBudget(root, route.sourceContractSha256, 'reference-interpretation', invocation);
+    if (budget.exhausted) {
+      recordConfidenceDebt(root, route.sourceContractSha256,
+        [confidenceDebt('reference-interpretation', budget.reason, 'budget-exhausted')], invocation);
+      interpretation = null;
+      deferredStages.push('reference-interpretation');
+    }
+  }
   const research = stage === 'reference-board' && entry?.blockers.length === 0 && route.references.decision === 'discover'
     ? referenceResearchWork(root, { expectedSourceContractSha256: route.sourceContractSha256,
       benchmarkRequired: route.gates.includes('greenfield-task-flow-benchmark'), expectedRequest: route.request }) : null;
@@ -54,6 +77,7 @@ export function nextStageWork(root: string, packRoot: string, invocation: Projec
   return {
     schema: 'stage-next-v1', meaning: 'next-work-not-completion', deliveryMode: route.deliveryMode ?? 'implementation',
     stage, owner: brief?.owner ?? null,
+    confidenceDebt: readConfidenceDebt(root, route.sourceContractSha256), deferredStages,
     progress: { routeSha256: adaptiveRouteRecordSha256(route), workSha256: discoveryWork?.workSha256 ?? null, validatedStages: outputs
       .filter(s => ['domain', 'frame', 'reference-board', 'copy', 'composition'].includes(s.stage)
         && s.problems.length === 0 && !(s.stage === 'domain' && planningBlocksProduction)

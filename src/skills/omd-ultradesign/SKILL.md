@@ -22,31 +22,27 @@ drift. Never invent an override or replace host settings to match a preferred mo
 
 When the host supports delegation, give each owner its brief, contracts, path and task; retain its real child/process handle, wait and gate completion.
 A missing selected owner is a visible blocker; ownership never transfers. Freeze route/source/locale
-until owners return (State boundary). Run non-production Codex roles:
+until owners return (State boundary). Use the attached host's native delegation: Codex launches a named
+`agent_type` with `spawn_agent` and omits `model`, Claude launches the packaged agent with
+`model: inherit`, and Pi uses native delegation when available. On Pi without native delegation,
+execute explicit sequential role passes in the current session while preserving every role's inputs
+and owned paths. Use the packaged `omd` CLI for workflow commands (`omd_cli` on Pi); there is no
+separate OMD role or owner launcher.
 
-```text
-omd-codex role run --agent <selected-role> --input <task.md> --json
-```
-
-Run production only through its stricter owner transaction:
-
-```text
-omd-codex owner run --agent omd-hand --input <task.md> --json
-```
-
-The transaction authenticates host authority and permits one pre-mutation retry. For the initial production pass, do not launch or resume a second Hand owner outside this transaction; do not use native `spawn_agent` or let the coordinator write production. After a successful initial owner and fresh trusted observation, the authorized repair
-transaction may launch the dedicated `omd-hand` repair owner once against its external private mirror;
-it is not a second initial Hand and cannot write production or `.omd`. Only lifecycle repair may publish
-its one-file mirror change.
-
-On Codex, `omd ...` means `"$OMD_NODE_EXECUTABLE" "$OMD_CLI_PATH" ...` and `omd-codex ...` means
-`"$OMD_NODE_EXECUTABLE" "$OMD_CODEX_CLI_PATH" ...`; use host paths, never bare commands/aliases.
+Launch exactly one initial `omd-hand` production owner through that host-native path; the coordinator
+never writes production. After that owner succeeds and fresh trusted observation identifies an
+authorized repair, create the private repair mirror with `omd owner mirror --out <private-parent>`.
+Launch the dedicated repair Hand through host-native delegation against only that mirror and preserve
+the exact host-issued owner receipt. The repair Hand is not a second initial Hand and cannot write the
+project or `.omd`. Only `omd lifecycle repair --project <project> --activation <activation.json>
+--review <review.json> --mirror <mirror-root> --owner-receipt <owner-receipt.json>` may publish its
+one-file mirror change.
 
 ## Adaptive route
 
-On Codex use `omd-codex exec -C <project> ...` (or `oh-my-design codex exec ...`) with opaque read-only
-`OMD_ACTIVATION_PATH` when the current host actually supplies that launcher. Never manufacture or reuse Codex activation.
-Pi and the local CLI use `omd_cli`/`omd` without `--activation`. The Pi extension binds the original
+The attached Codex and Claude hosts use the packaged `omd` CLI and any opaque read-only activation
+the host supplies; never manufacture or reuse activation. Pi and the local CLI use `omd_cli`/`omd`
+without external `--activation`. The Pi extension binds the original
 request, observed model, runtime and per-command identity; a standalone local CLI is not independent
 review authority. For Pi implementation completion read `omd pack protocol/native-pi-completion.md`.
 An absent external activation file is not a Pi setup error. Do not ask the user to supply one.
@@ -55,7 +51,6 @@ together to the reviewer, then preserve and publish its report. Other local evid
 use `omd hash <.omd/artifact-path> --json`. Neither command grants a verdict; never guess hashes
 or replace an old review's hash after a writer revision. The report format belongs to
 `protocol/human-design-loop.md`.
-The Codex role/owner commands above apply only when that broker is available, never to Pi.
 Pi uses available native delegation with the user's model. Its `review run` transport launches
 isolated native Pi reviewers with that observed model; a launch failure is not a same-session review.
 On Pi without a delegation tool, execute the selected design roles as explicit, sequential role passes
@@ -378,7 +373,7 @@ Use `.omd/route.json` as the machine-consumed strategy. Do not substitute a reme
   `protocol/human-design-loop.md`; external references stay sanitized and rendered hypotheses win.
 - Safety work and required outcomes are mandatory; a high-risk route without its safety rail,
   rigorous task/accessibility validation, and recovery evidence is invalid. Production remains owned by
-  `omd-hand`, launched on Codex only through `omd-codex owner run`, with allowed paths and named deps.
+  `omd-hand`, launched through the attached host's native delegation, with allowed paths and named deps.
 - If selected, the coordinator alone may run `omd ref visual-packet --slot <used-slot>` and pass only
   its source-free, no-ship geometry manifest/SVG to Composer and Hand; raw packet evidence and refs stay
   isolated. Require `omd ref visual-packet-check --production <changed-files>` before production; the
@@ -425,10 +420,10 @@ On a brokered Codex host, before either initial final blind Eye runs, print `omd
 input with the exact aggregate observation-v2 chain intended for the lane, and run
 `omd review final-packet --input <input> --activation "$OMD_ACTIVATION_PATH" --json`. It validates
 current lineage and fixed desktop/mobile production PNGs, publishing a content-addressed source-free packet.
-Launch two fresh Eyes separately with `omd-codex role run --agent omd-eye --reviewer-packet
-<exact-packet-path> --json`; do not add `--input`. Both Eyes receive the same host-owned neutral task,
-packet, and configuration through a one-use evidence tool, never caller review prose or the other
-Eye's result. Each Eye inspects every anonymous production image block and copies the aggregate hash
+Launch two fresh Eyes separately through the attached host's native delegation; do not add caller
+review prose or substitute a local same-session pass. Both Eyes receive the same host-owned neutral
+task, exact packet, and configuration through a one-use evidence tool, never the other Eye's result.
+Each Eye inspects every anonymous production image block and copies the aggregate hash
 and exact viewport/state from a projected row into every design-quality evidence item. A nested
 browser-observation ID, friendly state alias, raw capture path, URL, reference pixel, rationale, or
 provenance is invalid input.

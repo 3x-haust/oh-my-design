@@ -3,6 +3,8 @@
 > Candidate hypothesis only. Revalidate its condition, values, and responsive transition
 > against the current composition contract; do not transfer this page recipe unchanged.
 
+Marketing/showpiece only. Do not use this recipe on a product work surface, operational dashboard, settings screen, admin flow, checkout, or repeated task loop. If the surface exists to help a user finish work, choose a product composition recipe instead.
+
 A horizontal scroll gallery lays a set of peer panels in a single row and moves the reading
 axis sideways: the user scrolls (or drags, or arrows) through items along the x-axis instead
 of the y-axis. It is a showpiece/marketing move — a portfolio index, a campaign lookbook, a

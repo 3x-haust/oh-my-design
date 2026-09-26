@@ -75,8 +75,12 @@ Visible tofu, style jumps, mismatched punctuation, or a fallback-shaped substrin
 failure even when the API reports loaded.
 
 Hangul line breaking is a contextual author choice. W3C KLREQ describes both word-based and
-character-based practices. Test the chosen `word-break` and wrapping policy with actual copy
-at the intended container widths; do not enforce one policy for every Korean interface.
+character-based practices. Use `keep-all` for display and readable prose when the container can
+accommodate real words; use normal character breaking in narrow dynamic cells when overflow is the
+worse failure. Judge rendered clipping, overflow, broken control labels, and one-syllable final lines
+rather than requiring one CSS declaration everywhere. Test actual copy at intermediate widths.
+`typography-korean.md` supplies the Korean stacks, role ranges, mixed-script specimens, and surface-
+specific wrapping policy; this file remains the language-neutral proof contract.
 
 ## Visible anatomy and voice
 

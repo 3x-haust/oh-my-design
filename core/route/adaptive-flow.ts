@@ -167,6 +167,9 @@ function validateTaskFlowBenchmarkRoute(
   input: ValidatedAdaptiveRouteInput,
 ): void {
   if (!requiresTaskFlowBenchmark(input)) return;
+  // Selection assigns owners, not an infinite acquisition prerequisite. Entry keeps a current
+  // minimal composition; Scout/selection/candidate evidence can yield as typed confidence debt.
+  // Terminal product/browser/review gates remain selected and cannot be paid with that debt.
   for (const stage of [
     'scout',
     'reference-board',
