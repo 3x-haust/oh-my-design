@@ -67,3 +67,22 @@ test('recovery cannot relabel a visited entry as navigation to count it again', 
   ])));
   assert.equal(existsSync(join(root, '.omd/reference-board.json')), false);
 });
+
+test('recovery refuses unreserved pathname encoding variants without conflating reserved path separators', t => {
+  const root = fixture(t);
+  directRootAt(root, 'design', 'https://www.siteinspire.com/websites', ['https://www.siteinspire.com/websites/123-task-ui']);
+  assert.throws(() => requireNovelRecoveryBatch(root, parseDiscoveryBatchInput([
+    { kind: 'navigate', source: 'https://www.siteinspire.com/%77ebsites', lane: 'design' },
+  ])), /REFERENCE_RECOVERY_REPEATED_REQUEST/);
+  assert.doesNotThrow(() => requireNovelRecoveryBatch(root, parseDiscoveryBatchInput([
+    { kind: 'navigate', source: 'https://www.siteinspire.com/websites%2F123-task-ui', lane: 'design' },
+  ])));
+  assert.throws(() => requireNovelRecoveryBatch(root, parseDiscoveryBatchInput([
+    { kind: 'navigate', source: 'https://www.siteinspire.com/new-item', lane: 'design' },
+    { kind: 'navigate', source: 'https://www.siteinspire.com/%6eew-item', lane: 'design' },
+  ])), /REFERENCE_RECOVERY_REPEATED_REQUEST/);
+  assert.throws(() => requireNovelRecoveryBatch(root, parseDiscoveryBatchInput([
+    { kind: 'navigate', source: 'https://www.siteinspire.com/a%2fb', lane: 'design' },
+    { kind: 'navigate', source: 'https://www.siteinspire.com/a%2Fb', lane: 'design' },
+  ])), /REFERENCE_RECOVERY_REPEATED_REQUEST/);
+});

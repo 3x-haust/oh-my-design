@@ -40,7 +40,7 @@ test('status inspection keeps the suspended workflow read-only', async t => {
   assert.deepEqual(h.sent, []);
 });
 
-test('cancellation revokes the suspended workflow before a bare resume', async t => {
+test('an explicit stop request revokes the suspended workflow before a bare resume', async t => {
   const h = await authorizedWorkflow(t);
   await h.emit('input', { source: 'interactive' });
   await h.activate('멈춰');
@@ -50,6 +50,18 @@ test('cancellation revokes the suspended workflow before a bare resume', async t
   await h.end();
   assert.equal(h.commands.length, before);
   assert.deepEqual(h.sent, []);
+});
+
+test('Escape ends the current turn without repair but a later explicit resume can continue it', async t => {
+  const h = await authorizedWorkflow(t);
+  const before = h.commands.length;
+  await h.emit('message_end', { message: { role: 'assistant', stopReason: 'aborted', content: [] } });
+  assert.equal(h.commands.length, before);
+  assert.deepEqual(h.sent, []);
+  await h.emit('input', { source: 'interactive' });
+  await h.activate('계속해');
+  await h.end();
+  assert.deepEqual(h.sent, ['omd-stage-repair']);
 });
 
 test('a changed route cannot inherit an earlier workflow resume', async t => {

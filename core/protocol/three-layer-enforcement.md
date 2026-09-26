@@ -231,7 +231,9 @@ inspection and research repair remain available while production is blocked.
   this conservative check does not infer permission from a generic status question.
   Explicit resume of the same previously authorized route (such as “계속해” or “continue”)
   restores selected-stage continuation after per-turn state resets. Inspection remains read-only;
-  cancellation revokes the remembered grant, and a changed route cannot inherit it. After host
+  an explicit stop/cancel request revokes the remembered grant, and a changed route cannot inherit it.
+  Escape aborts the current turn without scheduling repair; a later explicit resume may continue
+  the same previously authorized workflow. After host
   restart a bare resume has no grant: an explicit OMD build/repair continuation request or the
   existing full-workflow invocation is required. The host queues the owner, never executes an
   unauthored recovery batch.

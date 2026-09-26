@@ -31,6 +31,10 @@ function searchIdentity(input: Pick<SearchExecution, 'query' | 'requestedUrl'>):
 }
 function navigationIdentity(source: string): string {
   const url = new URL(source);
+  url.pathname = url.pathname.replace(/%[0-9a-f]{2}/giu, escape => {
+    const character = String.fromCharCode(Number.parseInt(escape.slice(1), 16));
+    return /^[a-z0-9._~-]$/iu.test(character) ? character : escape.toUpperCase();
+  });
   for (const key of [...url.searchParams.keys()]) if (/^(?:utm_|gclid$|fbclid$)/u.test(key)) url.searchParams.delete(key);
   url.searchParams.sort();
   return url.href;

@@ -111,8 +111,9 @@ an arbitrary longer request is not an unrestricted continuation grant. A failed 
 read-only visit is not successful owner work. Never
 reclassify a fresh route merely to evade the user's stopping boundary.
 An explicit “계속해”/“continue” resumes the same previously authorized route after interactive
-input resets per-turn state. Inspection stays read-only; cancellation revokes that grant and a
-changed route cannot inherit it. After host restart, request continuation of the OMD build/repair
+input resets per-turn state. Inspection stays read-only; an explicit stop/cancel request revokes
+that grant and a changed route cannot inherit it. Escape ends the current turn without scheduling
+repair; a later explicit resume may continue that authorized workflow. After host restart, request continuation of the OMD build/repair
 explicitly or invoke the full workflow again. The host queues the owner to author recovery inputs;
 it does not execute a missing batch or treat a generic status question as build permission.
 Recompute `stage next --json` after each owned publication or repair, not only at final reporting.
