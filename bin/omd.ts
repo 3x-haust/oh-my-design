@@ -79,6 +79,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 interface Opts {
   _: string[];
   refresh?: boolean;
+  recovery?: boolean;
   json?: boolean;
   ir?: string;
   layer?: string;
@@ -231,7 +232,7 @@ interface Opts {
   publish?: boolean;
 }
 
-const FLAGS = new Set(['json', 'no-log', 'no-energy', 'no-shot', 'image', 'filmstrip', 'squint', 'full-page', 'from-user', 'all', 'blueprint', 'shot', 'proofs', 'fresh', 'check', 'refresh', 'review-check', 'apply', 'dry-run', 'cache', 'stale-records', 'files', 'selected', 'gate', 'publish']);
+const FLAGS = new Set(['json', 'no-log', 'no-energy', 'no-shot', 'image', 'filmstrip', 'squint', 'full-page', 'from-user', 'all', 'blueprint', 'shot', 'proofs', 'fresh', 'check', 'refresh', 'recovery', 'review-check', 'apply', 'dry-run', 'cache', 'stale-records', 'files', 'selected', 'gate', 'publish']);
 const ALIASES: Record<string, keyof Opts> = {
   o: 'out',
   'no-log': 'noLog',
@@ -2579,10 +2580,14 @@ async function cmdRefNavigate(opts: Opts): Promise<never> {
 }
 
 async function cmdRefDiscoveryBatch(opts: Opts): Promise<never> {
-  if (opts._.length || !opts.input) throw new Error('usage: omd ref discover-batch --input <operations.json> [--json]');
+  if (opts._.length || !opts.input) throw new Error('usage: omd ref discover-batch --input <operations.json> [--recovery] [--json]');
   const { parseDiscoveryBatchInput, runDiscoveryBatch } = await import('../core/ref/discovery-batch.ts');
   const { withBrowser } = await import('../core/render/index.ts');
   const items = parseDiscoveryBatchInput(inputJson(opts.input, 'omd ref discover-batch'));
+  if (opts.recovery) {
+    const { requireNovelRecoveryBatch } = await import('../core/ref/discovery-recovery.ts');
+    requireNovelRecoveryBatch(process.cwd(), items);
+  }
   const writer = projectWriterFromActivation(opts, 'omd ref discover-batch');
   const result = await withBrowser(browser => runDiscoveryBatch(browser, process.cwd(), items, writer));
   process.stdout.write(`${JSON.stringify({ ok: result.outcomes.every(outcome => outcome.ok), ...result }, null, opts.json ? undefined : 2)}\n`);
@@ -5122,7 +5127,7 @@ function usage(): never {
     + '  ref research-set --input research.json     bind separate domain/design lane evidence to current outputs\n'
     + '  ref research-check                         require both lanes and re-hash their evidence and outputs\n'
     + '  ref search --input <json>                  execute a public query GET and record actual links/capture or failure\n'
-    + '  ref discover-batch --input <json>          run independent search/navigation requests concurrently in one browser\n'
+    + '  ref discover-batch --input <json> [--recovery] run independent visits; recovery refuses previously attempted requests\n'
     + '  ref tidy [--apply] [--json]                preview clutter; --apply archives exact bytes before guarded removal\n'
     + '  ref apply-plan --json                      draft screen-by-screen use from current research/domain brief\n'
     + '  ref apply-set --input application.json      publish interpreted domain/design decisions for every screen\n'

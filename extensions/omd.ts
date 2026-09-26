@@ -10,6 +10,7 @@ import { routeValidationArgs, type RouteBootstrap } from './omd-route-bootstrap.
 import { RepairLoop } from './omd-repair-progress.ts';
 import { StageWork, checkNativeStageEntry, nativeEntryStage, nativeOwnedStage } from './omd-stage-work.ts';
 import { handleOmdMessageEnd, referenceWorkAdvanced, type ReferenceWork } from './omd-message-end.ts';
+import { WorkflowResume } from './omd-workflow-resume.ts';
 
 export const OMD_TOOL_NAME = 'omd_cli';
 
@@ -57,6 +58,8 @@ export default function omdExtension(pi: PortablePiApi): void {
   const bootstraps = new Map<string, RouteBootstrap>();
   const freshRoutes = new Set<string>();
   const workflowStarted = new Set<string>();
+  const workflowResume = new WorkflowResume();
+  const rememberWorkflow = (cwd: string) => workflowResume.remember(cwd, fileRevision(cwd, '.omd/route.json'));
   // Pi may execute sibling tools concurrently. Serialize OMD commands per project so two
   // legitimate publishers cannot collide with OMD's project mutation lock.
   const run = (args: readonly string[], cwd: string, signal?: AbortSignal, onUpdate?: Parameters<typeof runOmd>[4]) => {
@@ -91,7 +94,7 @@ export default function omdExtension(pi: PortablePiApi): void {
   const on = typeof hook === 'function' ? hook.bind(pi) : undefined;
   const hooksAvailable = on !== undefined;
   if (on !== undefined) {
-    on('session_start', async () => { epochs.clear(); repairLoop.clear(); pendingReferenceWork.clear(); revisions.clear(); pendingMutations.clear(); ownedWork.clear(); managed.clear(); touched.clear(); productionAttempted.clear(); authoredInputs.clear(); bootstraps.clear(); freshRoutes.clear(); workflowStarted.clear(); });
+    on('session_start', async () => { epochs.clear(); repairLoop.clear(); pendingReferenceWork.clear(); revisions.clear(); pendingMutations.clear(); ownedWork.clear(); managed.clear(); touched.clear(); productionAttempted.clear(); authoredInputs.clear(); bootstraps.clear(); freshRoutes.clear(); workflowStarted.clear(); workflowResume.clear(); });
     on('input', async (event, context) => {
       if (event.source === 'interactive' || event.source === 'rpc') {
         epochs.delete(context.cwd);
@@ -109,6 +112,9 @@ export default function omdExtension(pi: PortablePiApi): void {
       }
     });
     on('before_agent_start', async (event, context) => {
+      if (workflowResume.accepts({ cwd: context.cwd, routeSha256: fileRevision(context.cwd, '.omd/route.json'), prompt: event.prompt ?? '' })) {
+        workflowStarted.add(context.cwd); touched.add(context.cwd);
+      }
       ownedWork.activate(context.cwd, event.prompt ?? '');
       if (/omd-ultradesign|skill:omd-/i.test(event.prompt ?? '')) managed.add(context.cwd);
       if (!guarded(context.cwd)) return;
@@ -185,6 +191,7 @@ export default function omdExtension(pi: PortablePiApi): void {
       if (mutation && settled && !group.failed && group.baseline !== fileRevision(context.cwd, mutation.path)) {
         bumpRevision(context.cwd);
         if (group.production) productionAttempted.add(context.cwd);
+        if (ownedWork.started(context.cwd)) rememberWorkflow(context.cwd);
       }
     });
     on('message_end', async (event, context) => {
@@ -267,11 +274,16 @@ export default function omdExtension(pi: PortablePiApi): void {
           if (advanced && pendingReferenceWork.get(context.cwd) === pendingReference) pendingReferenceWork.delete(context.cwd);
         }
         if (isMutatingOmdCommand(params.args)) bumpRevision(context.cwd);
-        if (hasPiRoute(context.cwd) && ownedWork.commandSucceeded(context.cwd, { args: params.args, token: workToken })) touched.add(context.cwd);
+        if (hasPiRoute(context.cwd) && ownedWork.commandSucceeded(context.cwd, { args: params.args, token: workToken })) {
+          touched.add(context.cwd);
+          if (ownedWork.started(context.cwd)) rememberWorkflow(context.cwd);
+        }
         if (params.args[0] === 'recipe' && params.args[1] === 'add') productionAttempted.add(context.cwd);
         if (params.args[0] === 'route' && params.args[1] === 'classify' && commandBootstrap
           && authoredInputs.get(context.cwd)?.has(classifyPiWrite(context.cwd, commandBootstrap.inputPath).path)) freshRoutes.add(context.cwd);
-        if (freshRoutes.has(context.cwd) && ownedWork.token(context.cwd) !== undefined && params.args[0] === 'brief' && params.args.includes('--check')) workflowStarted.add(context.cwd);
+        if (freshRoutes.has(context.cwd) && ownedWork.token(context.cwd) !== undefined && params.args[0] === 'brief' && params.args.includes('--check')) {
+          workflowStarted.add(context.cwd); rememberWorkflow(context.cwd);
+        }
         if (params.args[0] === 'route' && params.args[1] === 'classify' && bootstraps.get(context.cwd) === commandBootstrap) bootstraps.delete(context.cwd);
       } catch (error) {
         const bootstrap = bootstraps.get(context.cwd);

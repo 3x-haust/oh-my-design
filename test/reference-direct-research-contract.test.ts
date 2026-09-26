@@ -197,7 +197,7 @@ test('new diagnostic schemas cannot be relabeled into retained research and refu
   const path = join(fixture.root, fixture.domain.capture.path);
   const captured = JSON.parse(readFileSync(path, 'utf8'));
   for (const schema of ['reference-navigation-capture-v2', 'reference-navigation-capture-v3', 'reference-navigation-capture-v4',
-    'reference-discovery-entry-v1', 'reference-discovery-entry-v2', 'reference-discovery-entry-v3', 'reference-discovery-entry-v4']) {
+    'reference-discovery-entry-v1', 'reference-discovery-entry-v2', 'reference-discovery-entry-v3', 'reference-discovery-entry-v4', 'reference-discovery-entry-v5']) {
     const bytes = JSON.stringify({ ...captured, schema });
     writeFileSync(path, bytes);
     const input = { ...fixture.research, domainReference: { ...fixture.research.domainReference,

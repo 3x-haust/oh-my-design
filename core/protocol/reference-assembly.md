@@ -138,6 +138,27 @@ For `target-market-first`, finish the required market-qualified domain and desig
 before launching a separate unqualified-global batch. Do not mix them in one concurrent batch:
 research validation compares signed execution times, so manifest order cannot prove market-first.
 
+Initial lead exhaustion is an acquisition-planning problem, not a terminal external blocker.
+`ref work-next` tries the other unfinished lane, then unused task-derived searches on alternative
+public providers. Its `replan-discovery` action requires Scout to inspect attempts and exclusions,
+write `.omd/.cache/reference-recovery-batch.json` using `schema reference-discovery-batch`, and run
+`ref discover-batch --input .omd/.cache/reference-recovery-batch.json --recovery --json`.
+The recovery command refuses previously attempted requests before browser work. For empty results,
+change the query; for a blocked gallery, choose another public provider; for an unusable homepage,
+find a real task entry through observed links. Search domain services by comparable user jobs and
+design references by screen pattern, hierarchy and interaction, not only the narrow product category.
+Keep market-qualified research in both lanes; broaden visual patterns without assuming a country
+style. Record gaps honestly, inspect and retain useful new evidence, then recompute the action.
+Do not invent item URLs, substitute government pages as visual direction, or lower the board gate.
+Only a concrete missing authority, user fact or unavailable runtime calls for user intervention;
+depleting the initial source catalogue does not.
+
+For a successful public-list entry with no usable links in its first viewport, native discovery
+may scroll the same document at most three times. It captures only the final stable viewport and
+signs the actual offsets/steps in a v5 entry receipt; earlier offscreen links are not merged into
+the capture. Login/challenge/HTTP failures, document changes and unstable pixels remain failures.
+This is discovery evidence, never a retained reference or proof of a completed interactive flow.
+
 Scout turns each selected lane into current search or direct-public discovery: subject identity, task/component anatomy,
 visual craft beyond the product category, and the plan's motion investigation. New marketing may
 investigate a motion candidate without selecting it for production; selected `motion-one` additionally

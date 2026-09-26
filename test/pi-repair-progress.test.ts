@@ -180,7 +180,7 @@ test('failed internal stage diagnosis releases stale pending refusal for recover
   assert.equal(next, undefined);
 });
 
-test('exhausted reference discovery reports signed attempted sources without a generic stall', async t => {
+test('legacy exhausted reference discovery queues bounded recovery without executing unauthored inputs', async t => {
   const h = harness(t); await h.start();
   Object.assign(h.work, {
     stage: 'reference-board', owner: 'omd-scout', action: 'resolve-external-blocker', next: 'REFERENCE_DISCOVERY_EXHAUSTED',
@@ -193,8 +193,24 @@ test('exhausted reference discovery reports signed attempted sources without a g
   const text = held.message.content.find(part => part.type === 'text')?.text ?? '';
   assert.match(text, /REFERENCE_DISCOVERY_EXHAUSTED/);
   assert.match(text, /https:\/\/example-gallery\.test\//);
-  assert.doesNotMatch(text, /같은 상태에서 검사만 반복/);
-  assert.equal(h.sent.length, 0);
+  assert.equal(h.sent.length, 1);
+  assert.equal(h.calls.some(args => args[1] === 'ref'), false);
+  await h.end(); await h.end(); await h.end();
+  assert.equal(h.sent.length, 3, 'unchanged recovery evidence must eventually stop automatic retries');
+});
+
+test('replanning reference discovery queues its owner without running the unauthored batch', async t => {
+  const h = harness(t); await h.start();
+  Object.assign(h.work, {
+    stage: 'reference-board', owner: 'omd-scout', action: 'replan-discovery',
+    next: 'omd ref discover-batch --input .omd/.cache/reference-recovery-batch.json --recovery --json',
+    referenceWork: { schema: 'reference-discovery-work-v1', status: 'action', workSha256: 'e'.repeat(64),
+      action: { kind: 'replan-discovery', args: ['ref', 'discover-batch', '--input', '.omd/.cache/reference-recovery-batch.json', '--recovery', '--json'],
+        reason: 'Author fresh qualified acquisition work from current failure evidence.' } },
+  });
+  await h.end();
+  assert.equal(h.sent.length, 1);
+  assert.equal(h.calls.some(args => args[1] === 'ref'), false);
 });
 
 test('distinct advancing work pointers continue beyond the former two-pass ceiling', async t => {

@@ -7,11 +7,12 @@ import { nodeStableProjectFileSystem, readStableProjectFile } from '../runtime/s
 import { canonicalJson } from './board-artifacts.ts';
 import { designDiscoveryDirectoryProvider } from './design-discovery-sources.ts';
 import { captureDiscoveryObservation } from './reference-capture-observation.ts';
+import { recoverDirectDiscoveryScroll, type DiscoveryScroll } from './discovery-entry-scroll.ts';
 import { observeDocumentResponses, type DocumentObserver } from './document-observation.ts';
 import { createPublicNetworkProxy } from './public-network.ts';
 import { disableUnproxiedRealtimeTransports } from './browser-security.ts';
 import { searchChallengeReason } from './search-execution.ts';
-import { DISCOVERY_LIMITATIONS, ReferenceDiscoveryError, directDiscoveryEntry, discoveryDigest, discoveryLane, publicDiscoveryUrl, validateDirectDiscoveryLinks,
+import { DISCOVERY_LIMITATIONS, DISCOVERY_SCROLL_LIMITATIONS, DirectDiscoveryLinksError, ReferenceDiscoveryError, directDiscoveryEntry, discoveryDigest, discoveryLane, publicDiscoveryUrl, validateDirectDiscoveryLinks,
   type DirectDiscoveryEntry, type DirectDiscoveryReceipt, type DiscoveryCaptureRecord, type DiscoveryLane, type DiscoveryNavigationReceipt } from './discovery-record.ts';
 
 const ATTEMPT_SCHEMA = 'reference-discovery-attempt-v1' as const;
@@ -138,24 +139,40 @@ export async function captureReferenceNavigation(browser: Browser, source: strin
     let observation: Awaited<ReturnType<typeof captureDiscoveryObservation>>;
     let finalUrl: string;
     let links: string[];
+    let scroll: DiscoveryScroll | undefined;
     try {
       const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20000 });
       status = response?.status() ?? null;
       if (!response?.ok()) throw new ReferenceNavigationError('a successful native HTTP capture is required');
       if (lane === 'design' && await loginOccludes(page)) throw new ReferenceNavigationError('login form obscures the public discovery list');
-      observation = await captureDiscoveryObservation(page, documents);
+      const observer = documents;
+      const observe = async () => {
+        const captured = await captureDiscoveryObservation(page, observer);
+        status = captured.httpStatus;
+        if (status < 200 || status >= 300) throw new ReferenceNavigationError('a successful native HTTP capture is required');
+        const capturedUrl = publicDiscoveryUrl(captured.url);
+        const capturedLinks = captured.links.filter(link => {
+          try { publicDiscoveryUrl(link); return true; }
+          catch (error) { if (error instanceof ReferenceDiscoveryError) return false; throw error; }
+        });
+        const blocked = searchChallengeReason(captured.body)
+          ?? detectBlockReason(await page.title(), captured.body.trim().length, status, capturedLinks.length > 0);
+        if (blocked) throw new ReferenceNavigationError(blocked);
+        if (lane === 'design' && await loginOccludes(page)) throw new ReferenceNavigationError('login form obscures the public discovery list');
+        if (entry !== undefined) validateDirectDiscoveryLinks(entry, { url, finalUrl: capturedUrl, links: capturedLinks });
+        return { ...captured, url: capturedUrl, links: capturedLinks };
+      };
+      try { observation = await observe(); }
+      catch (error) {
+        if (entry === undefined || !(error instanceof DirectDiscoveryLinksError)) throw error;
+        const recovered = await recoverDirectDiscoveryScroll({ page, documents: observer, observe });
+        if (recovered === null) throw error;
+        observation = recovered.observation;
+        scroll = recovered.scroll;
+      }
       status = observation.httpStatus;
-      if (status < 200 || status >= 300) throw new ReferenceNavigationError('a successful native HTTP capture is required');
-      finalUrl = publicDiscoveryUrl(observation.url);
-      links = observation.links.filter(link => {
-        try { publicDiscoveryUrl(link); return true; }
-        catch (error) { if (error instanceof ReferenceDiscoveryError) return false; throw error; }
-      });
-      const blocked = searchChallengeReason(observation.body)
-        ?? detectBlockReason(await page.title(), observation.body.trim().length, status, links.length > 0);
-      if (blocked) throw new ReferenceNavigationError(blocked);
-      if (lane === 'design' && await loginOccludes(page)) throw new ReferenceNavigationError('login form obscures the public discovery list');
-      if (entry !== undefined) validateDirectDiscoveryLinks(entry, { url, finalUrl, links });
+      finalUrl = observation.url;
+      links = observation.links;
     } catch (error) {
       const attempt = publishFailedAttempt(writer, url, lane, entry, status, error);
       const message = error instanceof Error ? error.message.replace(/^REFERENCE_DISCOVERY: /, '') : 'native navigation failed';
@@ -167,11 +184,12 @@ export async function captureReferenceNavigation(browser: Browser, source: strin
     const common = {
       source: url, researchLane: lane, kind: 'page', capturedAt: new Date().toISOString(), imagePath,
       acquisition: { requestedUrl: url, finalUrl, httpStatus: status, links, imageSha256 },
-      limitations: DISCOVERY_LIMITATIONS,
+      limitations: scroll === undefined ? DISCOVERY_LIMITATIONS : DISCOVERY_SCROLL_LIMITATIONS,
     } as const;
     const unsigned = entry === undefined
       ? { schema: 'reference-navigation-capture-v4' as const, ...common }
-      : { schema: 'reference-discovery-entry-v4' as const, method: 'direct-public' as const, entry,
+      : { ...(scroll === undefined ? { schema: 'reference-discovery-entry-v4' as const }
+        : { schema: 'reference-discovery-entry-v5' as const, scroll }), method: 'direct-public' as const, entry,
         ...common, observedText: observation.visibleText, taskText: observation.taskText,
         linkLabels: observation.results };
     const record: DiscoveryCaptureRecord = { ...unsigned, signature: signNativeObservation(writer.projectRoot,
