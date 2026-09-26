@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import { canonicalJson } from '../ref/board-artifacts.ts';
 import { withBrowser } from '../render/index.ts';
 import { withLocalView, stateObject, stateText } from '../render/stateful.ts';
+import { MAX_INSPECTION_VIEWS } from '../render/view-capacity.ts';
 import { parseSlopScope } from '../slop/review.ts';
 import { servedProjectTreeSha256 } from '../render/serve.ts';
 import { listProductionSourceFiles } from '../source-seal/index.ts';
@@ -22,7 +23,7 @@ const fail = (message: string): never => { throw new Error(`RUNTIME_DESIGN_INVEN
 
 export function parseRuntimeInventoryInput(value: unknown) {
   const input = stateObject(value, ['schema', 'views']);
-  if (input.schema !== 'runtime-design-inventory-input-v1' || !Array.isArray(input.views) || !input.views.length || input.views.length > 24) return fail('schema/views invalid');
+  if (input.schema !== 'runtime-design-inventory-input-v1' || !Array.isArray(input.views) || !input.views.length || input.views.length > MAX_INSPECTION_VIEWS) return fail('schema/views invalid');
   const views = input.views.map(value => {
     const row = stateObject(value, ['id', 'page', 'viewport', 'selectors', ...(value && Object.hasOwn(value, 'state') ? ['state'] : [])]);
     if (!Array.isArray(row.selectors) || !row.selectors.length || row.selectors.length > 32) return fail('selectors need 1–32 named component targets');

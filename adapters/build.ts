@@ -1,96 +1,15 @@
 #!/usr/bin/env node
-import { createHash } from 'node:crypto';
 import { mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync, rmSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { parse } from 'yaml';
 import { emitCodex } from './codex.ts';
 import { emitClaude, emitClaudePlugin, pluginizeSkill } from './claude.ts';
 import { substituter } from './tokens.ts';
 import type { AbstractAgent, Emitted, Host } from '../core/types.ts';
+import { createBuildIdentity, packageVersion, readBuildAgents, readSkills, type BuildIdentity, type Skill } from './build-identity.ts';
+export { BUILD_IDENTITY_SCHEMA_VERSION, canonicalSkillSourceBytes, createBuildIdentity, createBuildIdentityFromSource, type BuildIdentity, type Skill } from './build-identity.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-
-function readAll<T>(sourceRoot: string, dir: string, ext: string, parseOne: (text: string) => T): T[] {
-  const path = join(sourceRoot, dir);
-  if (!existsSync(path)) return [];
-  return readdirSync(path)
-    .filter((f) => f.endsWith(ext))
-    .map((f) => parseOne(readFileSync(join(path, f), 'utf8')));
-}
-
-export interface Skill {
-  name: string;
-  description: string;
-  source: string;
-}
-export const BUILD_IDENTITY_SCHEMA_VERSION = 'omd-build-identity-v1' as const;
-
-export type BuildIdentity = {
-  readonly schemaVersion: typeof BUILD_IDENTITY_SCHEMA_VERSION;
-  readonly packageVersion: string;
-  readonly buildSha256: string;
-  readonly sourceSkillSha256: string;
-};
-
-export function canonicalSkillSourceBytes(skills: readonly Pick<Skill, 'name' | 'source'>[]): string {
-  return JSON.stringify(
-    [...skills]
-      .sort((left, right) => left.name.localeCompare(right.name))
-      .map(({ name, source }) => ({ name, source })),
-  );
-}
-
-const sha256 = (value: string): string => createHash('sha256').update(value).digest('hex');
-
-export function createBuildIdentity(
-  packageVersion: string,
-  agents: readonly AbstractAgent[],
-  skills: readonly Skill[],
-): BuildIdentity {
-  const sourceSkillSha256 = sha256(canonicalSkillSourceBytes(skills));
-  const buildSha256 = sha256(JSON.stringify({
-    packageVersion,
-    agents: [...agents]
-      .sort((left, right) => left.name.localeCompare(right.name))
-      .map((agent) => ({
-        name: agent.name,
-        description: agent.description,
-        reasoning: agent.reasoning,
-        deny: agent.deny ?? [],
-        instructions: agent.instructions,
-      })),
-    sourceSkillSha256,
-  }));
-  return { schemaVersion: BUILD_IDENTITY_SCHEMA_VERSION, packageVersion, buildSha256, sourceSkillSha256 };
-}
-
-function readSkills(sourceRoot: string): Skill[] {
-  const dir = join(sourceRoot, 'src', 'skills');
-  if (!existsSync(dir)) return [];
-  const skills: Skill[] = [];
-  for (const name of readdirSync(dir)) {
-    const file = join(dir, name, 'SKILL.md');
-    if (!existsSync(file)) continue;
-    const source = readFileSync(file, 'utf8');
-    const match = /^---\n([\s\S]*?)\n---/.exec(source);
-    const frontmatter = (match?.[1] ? parse(match[1]) : {}) as { name?: string; description?: string };
-    skills.push({ name: frontmatter.name ?? name, description: frontmatter.description ?? '', source });
-  }
-  return skills;
-}
-
-function packageVersion(sourceRoot: string): string {
-  return (JSON.parse(readFileSync(join(sourceRoot, 'package.json'), 'utf8')) as { version: string }).version;
-}
-
-export function createBuildIdentityFromSource(sourceRoot: string): BuildIdentity {
-  return createBuildIdentity(
-    packageVersion(sourceRoot),
-    readAll<AbstractAgent>(sourceRoot, 'src/agents', '.agent.yaml', (t) => parse(t) as AbstractAgent),
-    readSkills(sourceRoot),
-  );
-}
 
 const firstSentence = (s: string): string => (/^[^.。]*[.。]?/.exec(s.trim())?.[0] ?? '').trim();
 const titleCase = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
@@ -114,7 +33,7 @@ export function build(): void {
   // hooks/ directory left here is a gate that quietly comes back to life.
   rmSync(join(root, 'dist'), { recursive: true, force: true });
 
-  const agents = readAll<AbstractAgent>(root, 'src/agents', '.agent.yaml', (t) => parse(t) as AbstractAgent);
+  const agents = readBuildAgents(root);
   const skills = readSkills(root);
 
   const pkg = { version: packageVersion(root) };

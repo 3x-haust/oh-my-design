@@ -116,7 +116,9 @@ export function deriveTrustedEvaluationPlan(input: Readonly<{
     input.entrySurface.prerequisiteTaskId,
   );
   let prerequisiteTriggered = false;
-  const scripts = input.entrySurface.outcomeWitnesses.map((witness) => {
+  const witnesses = (['initial', 'after-prerequisite'] as const)
+    .flatMap(phase => input.entrySurface.outcomeWitnesses.filter(witness => witness.phase === phase));
+  const scripts = witnesses.map((witness) => {
     const assertion: TrustedEvaluationAssertion = Object.freeze({
       kind: witness.assertion,
       selector: selectorFor(witness.target, input.entrySurface),

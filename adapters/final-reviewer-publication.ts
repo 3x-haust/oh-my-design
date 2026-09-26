@@ -25,6 +25,9 @@ import {
 import type { ProjectRunInvocation } from '../core/runtime/invocation.ts';
 import { nodeStableProjectFileSystem } from '../core/runtime/stable-project-file.ts';
 import type { CodexRoleAuthorityReceipt } from '../core/runtime/role-receipt.ts';
+import { PI_ROLE_RESULT_SCHEMA, verifySignedPiEyeRoleResult, type PiRoleAuthorityReceipt } from '../core/runtime/pi-role-receipt.ts';
+import { getNativePiRun } from '../core/runtime/native-pi-run.ts';
+import { nativeFinalLanePacket, nativeFinalLaneTask } from '../core/runtime/native-final-packet.ts';
 const SHA256 = /^[a-f0-9]{64}$/;
 const LANE_CONTRACTS = {
   'blind-review-v2': {
@@ -66,6 +69,16 @@ const LANE_CONTRACTS = {
     requiresDesignQuality: false,
     handbackSchema: 'adaptive-final-reviewer-handback-v1',
     executionSchema: 'adaptive-final-reviewer-execution-v1',
+  },
+  'fidelity-review-v1': {
+    lane: 'fidelityLane', verdicts: ['referenceFidelity', 'renderFidelity'],
+    floors: ['desktop', 'mobile'], requiresDesignQuality: false,
+    handbackSchema: 'adaptive-final-reviewer-handback-v1', executionSchema: 'final-reviewer-execution-v1',
+  },
+  'protocol-review-v1': {
+    lane: 'protocolLane', verdicts: ['evidenceIntegrity', 'publicationProtocol'],
+    floors: ['authority', 'currentness'], requiresDesignQuality: false,
+    handbackSchema: 'adaptive-final-reviewer-handback-v1', executionSchema: 'final-reviewer-execution-v1',
   },
 } as const;
 
@@ -160,11 +173,13 @@ function currentArtDirectionSha256(projectRoot: string): string {
   }
 }
 
-export function verifySignedEyeRoleResult(value: unknown, projectRoot: string, publicKeyPath: string): Readonly<{
-  receipt: CodexRoleAuthorityReceipt;
+export function verifySignedEyeRoleResult(value: unknown, projectRoot: string, publicKeyPath?: string): Readonly<{
+  receipt: CodexRoleAuthorityReceipt | PiRoleAuthorityReceipt;
   finalMessage: string;
 }> {
   const result = record(value, 'role result');
+  if (result.schema === PI_ROLE_RESULT_SCHEMA) return verifySignedPiEyeRoleResult(value, projectRoot);
+  if (publicKeyPath === undefined) return fail('FINAL_REVIEW_ROLE_AUTHORITY_REJECTED');
   const authority = record(result.authority, 'role authority');
   const receipt = record(authority.receipt, 'role receipt');
   const signature = text(authority.signature, 'role signature');
@@ -250,7 +265,7 @@ export function buildFinalReviewerPublication(
     projectRoot: string;
     buildSha256: string;
     briefSha256: string;
-    publicKeyPath: string;
+    publicKeyPath?: string;
     invocation: ProjectRunInvocation;
   }>,
 ): FinalReviewerPublication {
@@ -276,9 +291,12 @@ export function buildFinalReviewerPublication(
       ? LANE_CONTRACTS[laneSchema]
       : laneSchema === 'adaptive-protocol-review-v1'
         ? LANE_CONTRACTS[laneSchema]
+        : laneSchema === 'fidelity-review-v1' || laneSchema === 'protocol-review-v1'
+          ? LANE_CONTRACTS[laneSchema]
         : undefined;
   if (contract === undefined) return fail('FINAL_REVIEW_PUBLICATION_INVALID:laneSchema');
   const artDirectionBinding = laneSchema === 'blind-review-v2'
+    || laneSchema === 'fidelity-review-v1' || laneSchema === 'protocol-review-v1'
     ? currentArtDirectionSha256(context.projectRoot)
     : undefined;
   if (!Array.isArray(publication.roleResults) || publication.roleResults.length !== 2) {
@@ -286,6 +304,19 @@ export function buildFinalReviewerPublication(
   }
   const roles = publication.roleResults.map((value) =>
     verifySignedEyeRoleResult(value, context.projectRoot, context.publicKeyPath));
+  const piRoles = roles.filter(({ receipt }) => receipt.schema === 'omd-pi-role-exec-result-v1');
+  if (roles.some(({ receipt }) => receipt.buildSha256 !== context.buildSha256
+    || receipt.briefSha256 !== context.briefSha256)) fail('FINAL_REVIEW_ROLE_AUTHORITY_REJECTED:stale run');
+  if (piRoles.length > 0) {
+    if (piRoles.length !== roles.length) fail('FINAL_REVIEW_ROLE_AUTHORITY_REJECTED:mixed hosts');
+    const run = getNativePiRun(context.invocation, context.projectRoot);
+    for (const { receipt } of piRoles) {
+      if (receipt.schema !== 'omd-pi-role-exec-result-v1'
+        || receipt.provider !== run.host.provider
+        || receipt.model !== run.host.model || receipt.nodeSha256 !== run.host.nodeSha256
+        || receipt.cliSha256 !== run.host.cliSha256) fail('FINAL_REVIEW_ROLE_AUTHORITY_REJECTED:Pi host identity');
+    }
+  }
   const identities = roles.map((role) => ({
     processPid: role.receipt.processPid,
     sessionId: role.receipt.sessionId,
@@ -339,6 +370,7 @@ export function buildFinalReviewerPublication(
     let reviewerFields: readonly string[] = [
       'schema', 'lane', 'verdicts', 'criticalFloors', 'observationSha256s',
       'routeSha256', 'buildSha256', 'briefSha256', 'browserSha256',
+      ...(artDirectionBinding === undefined ? [] : ['artDirectionSha256']),
       'evidenceSha256', ...(handback.findings === undefined ? [] : ['findings']),
     ];
     let fixed = record({
@@ -348,7 +380,20 @@ export function buildFinalReviewerPublication(
       briefSha256: handback.briefSha256,
       browserSha256: handback.browserSha256,
       evidenceSha256: handback.evidenceSha256,
+      ...(artDirectionBinding === undefined ? {} : { artDirectionSha256: artDirectionBinding }),
     }, `handback[${index}].fixedBindings`);
+    if (role.receipt.schema === 'omd-pi-role-exec-result-v1' && !contract.requiresDesignQuality) {
+      const currentPacket = nativeFinalLanePacket({ root: context.projectRoot, invocation: context.invocation,
+        observationSha256s: boundObservationSha256s, lane: contract.lane });
+      const proof = role.receipt.reviewerEvidence;
+      const packet = record(JSON.parse(currentPacket.toString('utf8')), 'native lane packet');
+      const output = record(packet.outputContract, 'native lane output');
+      fixed = record(output.fixedBindings, 'native lane bindings');
+      reviewerFields = keyList(output.reviewerFields, 'native lane reviewer fields');
+      if (proof.packetSha256 !== hash(currentPacket) || proof.evidenceSha256 !== packet.evidenceSha256
+        || role.receipt.taskSha256 !== hash(nativeFinalLaneTask(contract.lane))
+        || output.laneSchema !== laneSchema) return fail('FINAL_REVIEW_ROLE_AUTHORITY_REJECTED:native lane packet');
+    }
     if (contract.requiresDesignQuality) {
       const currentPacket = finalRenderReviewerPacket({
         root: context.projectRoot,
@@ -421,7 +466,7 @@ export function buildFinalReviewerPublication(
       || handback.briefSha256 !== fixed.briefSha256
       || handback.browserSha256 !== fixed.browserSha256
       || handback.evidenceSha256 !== fixed.evidenceSha256
-      || (laneSchema === 'blind-review-v2'
+      || (artDirectionBinding !== undefined
         && handback.artDirectionSha256 !== fixed.artDirectionSha256)
       || canonicalJson(boundObservationSha256s) !== canonicalJson(fixed.observationSha256s)) {
       return fail(`FINAL_REVIEW_PUBLICATION_INVALID:handback[${index}] binding`);

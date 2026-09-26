@@ -8,6 +8,7 @@ stage is mandatory; an explicit route skip remains a skip. Repetition alone is n
 | Rule | Required outcome | Executable boundary |
 | --- | --- | --- |
 | Route setup | Use the task-appropriate starter; preserve user facts, risk, scope and selected work while repairing input errors. Input validity is not publication or task completion. | `omd route validate --input <json> --json`; `route classify`; Pi setup recovery |
+| Original request | Bind the complete host intake, not a model summary, to route validation/publication. Preserve all requested screens and tasks through domain authoring. A source digest does not prove semantic coverage. | Pi native request binding; authenticated route source; `omd domain set`; current domain request equality |
 | Market authority | Never infer a country from language or locale. An explicit market context names a confirmed `evidenceClaims.userFacts` claim with actual user evidence for that market, and the same locale context is bound to validation and classification. | Locale-context parser; `LOCALE_DESIGN_MARKET_AUTHORITY_REQUIRED`; route replay/currentness checks |
 | Selected stages | Preserve the approved scope and dependency groups; never relabel product UX to evade an error. | `omd brief <stage> --check --json`; `omd guard production --json` |
 | Separate research | When selected, domain task/feature evidence and design craft evidence remain distinct, with current per-screen application decisions. New domain research inspects at least three independent operator families after redirects. Current design research compares at least two independent visual-direction source families, distinct gallery items and distinct PNG evidence, and carries both into the board. Repeated pages, crops, aliases or captures from one product count once. A failed search is a gap, not a fabricated reference. | `omd ref research-check --json`; `omd ref apply-check --json`; production/completion gates |
@@ -39,6 +40,9 @@ Use `schema frame` and `frame set --input` for atomic framing, then `frame check
 requirements use their own `complete set` publisher and cannot substitute for the task matrix.
 The domain brief's request must preserve the current route request verbatim. A shortened or
 different request stays with the domain owner and earns no validated-stage progress.
+Use `omd domain set --input .omd/.cache/domain-input.json --json` to bind the original request
+without repeated model transcription. The publisher validates checked domain entry and authored
+fields before writing; failed entry or malformed fields leave the existing brief unchanged.
 Use `copy review-input --json` to send exact copy content and digest together to the reviewer.
 Preserve its returned report in a separate input file and use `copy review-publish`; never guess
 the hash or repair only the hash on an old verdict. Every writer edit requires a fresh review.

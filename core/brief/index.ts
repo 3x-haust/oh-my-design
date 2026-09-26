@@ -43,6 +43,8 @@ import { designInventoryStatus, DESIGN_INVENTORY_DOC_PATH } from '../tokens/inve
 import { runtimeInventoryStatus, RUNTIME_INVENTORY_DOC } from '../tokens/runtime-inventory.ts';
 import { loadRefs, refRecordPath } from '../ref/store.ts';
 import { inspectDesignReferenceAdmission, requiresDesignReferenceAdmission } from '../ref/design-admission.ts';
+import { isNativePiInvocation } from '../runtime/native-pi-run.ts';
+import { nativeCompletionBrief, type NativeCompletionProcedure } from '../stage/native-completion-brief.ts';
 
 export {
   EVIDENCE_CLAIM_PUBLICATION_SCHEMA,
@@ -176,6 +178,7 @@ export type Brief = {
   readonly schemas: readonly { readonly name: string; readonly command: string }[];
   readonly shell: { readonly kind: string; readonly target: string } | null;
   readonly judgedBy: readonly BriefCheck[];
+  readonly procedure?: NativeCompletionProcedure;
   readonly prior: readonly string[];
   /** Missing inputs this stage cannot start without. */
   readonly blockers: readonly string[];
@@ -572,9 +575,11 @@ export function buildBrief(
   const projectedReality = projectRealityForBrief(root, stage, route?.projectMode ?? 'existing');
   if (projectedReality.blocker !== null) blockers.push(projectedReality.blocker);
   const designReview = route?.deliveryMode === 'design-only' && ['independent-review', 'review'].includes(stage);
+  const native = invocation !== undefined && isNativePiInvocation(invocation) && !designReview
+    ? nativeCompletionBrief(stage, route?.references.decision === 'discover') : undefined;
   const judgedBy = (designReview
     ? [{ command: 'omd completion design-check --input .omd/design-handoff.json --json', fails: 'design artifacts, reference evidence or write scope are missing or stale; this check does not attest review independence or application behavior' }]
-    : JUDGED_BY[stage] ?? []).filter((check) =>
+    : native?.judgedBy ?? JUDGED_BY[stage] ?? []).filter((check) =>
     (
       check.command !== 'omd grain check --json'
       || route === null
@@ -620,8 +625,9 @@ export function buildBrief(
     referenceApplication,
     existingDesignSystem,
     ...(runtimeDesignSystem === null ? {} : { runtimeDesignSystem }),
-    owner: definition?.owner ?? OWNER[stage] ?? 'coordinator',
-    owns: designReview ? ['.omd/design/review.md'] : definition === undefined || stage === 'candidate-generation' ? OWNS[stage] ?? [] : [definition.artifact],
+    owner: native?.owner ?? definition?.owner ?? OWNER[stage] ?? 'coordinator',
+    owns: native?.owns ?? (designReview ? ['.omd/design/review.md'] : definition === undefined || stage === 'candidate-generation' ? OWNS[stage] ?? [] : [definition.artifact]),
+    ...(native === undefined ? {} : { procedure: native.procedure }),
     route: route === null ? null : {
       name: route.route,
       ...(route.deliveryMode === undefined ? {} : { deliveryMode: route.deliveryMode }),

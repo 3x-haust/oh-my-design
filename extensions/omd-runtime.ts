@@ -3,6 +3,9 @@ import { randomBytes } from 'node:crypto';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createOmdRuntimeSnapshot, runtimeDependencyRoot } from './omd-runtime-snapshot.ts';
+import type { PiRequestBindingInfo } from './omd-request-binding.ts';
+import { compactPiRouteOutput } from './omd-route-output.ts';
+import type { PiHostContext, PiNativeRuns } from './omd-native-run.ts';
 
 const MAX_OUTPUT_CHARS = 50_000;
 const require = createRequire(import.meta.url);
@@ -42,7 +45,7 @@ type ExecResult = Readonly<{
 
 export type OmdRunResult = Readonly<{
   text: string;
-  details: { code: number; killed: boolean };
+  details: { code: number; killed: boolean; requestBinding?: PiRequestBindingInfo };
 }>;
 
 export type OmdProgressCallback = (update: Readonly<{
@@ -141,11 +144,11 @@ type ExecOptions = Readonly<{
   signal?: AbortSignal;
 }>;
 
-export type PortablePiContext = Readonly<{ cwd: string; signal?: AbortSignal }>;
+export type PortablePiContext = PiHostContext & Readonly<{ signal?: AbortSignal }>;
 
 export type PortablePiEvent = {
   toolCallId?: string; isError?: boolean;
-  prompt?: string; systemPrompt?: string; toolName?: string; input?: Record<string, unknown>; source?: string;
+  prompt?: string; systemPrompt?: string; toolName?: string; input?: Record<string, unknown>; source?: string; text?: string; images?: readonly unknown[];
   message?: { role: string; content?: Array<{ type: string; text?: string; [key: string]: unknown }>; stopReason?: string; [key: string]: unknown };
 };
 export type PortablePiHook = (event: PortablePiEvent, context: PortablePiContext) => Promise<unknown>;
@@ -170,7 +173,7 @@ export type PortablePiTool = Readonly<{
     context: PortablePiContext,
   ): Promise<{
     content: Array<{ type: 'text'; text: string }>;
-    details: { code: number; killed: boolean };
+    details: { code: number; killed: boolean; requestBinding?: PiRequestBindingInfo };
   }>;
 }>;
 
@@ -183,13 +186,17 @@ export type PortablePiApi = Readonly<{
   registerTool(definition: PortablePiTool): void;
   registerCommand(name: string, definition: PortablePiCommand): void;
   exec(command: string, args: readonly string[], options: ExecOptions): Promise<ExecResult>;
-  on?(event: 'before_agent_start' | 'tool_call' | 'tool_result' | 'message_end' | 'session_start' | 'input', handler: PortablePiHook): void;
+  on?(event: 'before_agent_start' | 'tool_call' | 'tool_result' | 'message_start' | 'message_end' | 'session_start' | 'input', handler: PortablePiHook): void;
   sendMessage?(message: { customType: string; content: string; display: boolean }, options: { triggerTurn: boolean; deliverAs: 'followUp' }): void;
 }>;
 
-function boundedOutput(result: ExecResult): string {
+function boundedOutput(result: ExecResult, args: readonly string[]): string {
   const combined = [result.stdout.trim(), result.stderr.trim()].filter(Boolean).join('\n');
   if (combined.length <= MAX_OUTPUT_CHARS) return combined;
+  if (result.code === 0 && !result.killed) {
+    const route = compactPiRouteOutput(result.stdout, args);
+    if (route !== undefined) return route;
+  }
   return `${combined.slice(0, MAX_OUTPUT_CHARS)}\n[OMD output truncated]`;
 }
 
@@ -219,23 +226,27 @@ export async function runOmd(
   signal?: AbortSignal,
   onUpdate?: OmdProgressCallback,
   progressId?: string,
+  nativeRuns?: PiNativeRuns,
 ): Promise<OmdRunResult> {
   if (signal?.aborted) throw new OmdCancelledError();
   const stopProgress = monitorOmdProgress(args, 'running', signal, onUpdate, progressId);
+  let prepared: Readonly<{ args: readonly string[]; dispose(): void }> | undefined;
   try {
+    prepared = nativeRuns?.prepare(cwd, args, runtimeSnapshot.root);
     let result: ExecResult;
-    try { result = await pi.exec('node', [runtimeSnapshot.entryPath, ...args], signal === undefined ? { cwd } : { cwd, signal }); }
+    try { result = await pi.exec(process.execPath, [runtimeSnapshot.entryPath, ...(prepared?.args ?? args)], signal === undefined ? { cwd } : { cwd, signal }); }
     catch (error) {
       if (signal?.aborted) throw new OmdCancelledError();
       throw error;
     }
     if (signal?.aborted) throw new OmdCancelledError();
-    const text = boundedOutput(result);
+    const text = boundedOutput(result, args);
     if (result.code !== 0 || result.killed) {
       throw new OmdCommandError(text, result.stdout, result.stderr, result.code, result.killed);
     }
     return { text: text || 'OMD completed successfully.', details: { code: result.code, killed: result.killed } };
   } finally {
+    prepared?.dispose();
     stopProgress();
   }
 }

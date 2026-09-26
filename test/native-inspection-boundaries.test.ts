@@ -5,6 +5,7 @@ import { parseRuntimeInventoryInput } from '../core/tokens/runtime-inventory.ts'
 import { parseSlopScope } from '../core/slop/review.ts';
 import { browserDeadline, inspectionDeadline } from '../core/render/stateful.ts';
 import { withBrowser } from '../core/render/index.ts';
+import { MAX_INSPECTION_VIEWS } from '../core/render/view-capacity.ts';
 
 const view = { id: 'entry', page: 'dist/index.html', viewport: { width: 240, height: 2560 } };
 const step = { screenId: 'entry', state: 'entry', clicks: [], assertions: [{ selector: 'h1', state: 'visible' }] };
@@ -21,12 +22,14 @@ test('new inspection schemas reject empty, wrong-type and oversized inputs and a
   }
   for (const size of [0, 25]) {
     assert.throws(() => parseLiveFlowInput({ ...flow, steps: Array.from({ length: size }, (_, i) => ({ ...step, screenId: `s${i}` })) }));
+  }
+  for (const size of [0, MAX_INSPECTION_VIEWS + 1]) {
     assert.throws(() => parseSlopScope({ ...slop, views: Array.from({ length: size }, (_, i) => ({ ...view, id: `v${i}` })) }));
     assert.throws(() => parseRuntimeInventoryInput({ ...runtime, views: Array.from({ length: size }, (_, i) => ({ ...runtime.views[0], id: `v${i}` })) }));
   }
   assert.equal(parseLiveFlowInput({ ...flow, steps: Array.from({ length: 24 }, (_, i) => ({ ...step, screenId: `s${i}`, clicks: Array(8).fill('summary') })) }).steps.length, 24);
-  assert.equal(parseSlopScope({ ...slop, views: Array.from({ length: 24 }, (_, i) => ({ ...view, id: `v${i}` })) }).length, 24);
-  assert.equal(parseRuntimeInventoryInput({ ...runtime, views: Array.from({ length: 24 }, (_, i) => ({ ...runtime.views[0], id: `v${i}`, selectors: Array.from({ length: 32 }, (_, n) => ({ id: `c${n}`, selector: 'h1' })) })) }).views.length, 24);
+  assert.equal(parseSlopScope({ ...slop, views: Array.from({ length: MAX_INSPECTION_VIEWS }, (_, i) => ({ ...view, id: `v${i}` })) }).length, MAX_INSPECTION_VIEWS);
+  assert.equal(parseRuntimeInventoryInput({ ...runtime, views: Array.from({ length: MAX_INSPECTION_VIEWS }, (_, i) => ({ ...runtime.views[0], id: `v${i}`, selectors: Array.from({ length: 32 }, (_, n) => ({ id: `c${n}`, selector: 'h1' })) })) }).views.length, MAX_INSPECTION_VIEWS);
   for (const clicks of ['h1', [null], Array(9).fill('summary')]) assert.throws(() => parseLiveFlowInput({ ...flow, steps: [{ ...step, clicks }] }));
   for (const selectors of [[], 'h1', [null], Array(33).fill({ id: 'a', selector: 'h1' }), [{ id: 'a', selector: 'h1' }, { id: 'a', selector: 'h2' }]]) assert.throws(() => parseRuntimeInventoryInput({ ...runtime, views: [{ ...runtime.views[0], selectors }] }));
   for (const state of [{}, { name: 'open', route: '/', startRoute: '/', actions: Array(25).fill({ kind: 'click', selector: 'h1' }), assertions: step.assertions }, { name: 'open', route: '/', startRoute: '/', actions: [{ kind: 'press', selector: 'body', value: 'Meta+Q' }], assertions: step.assertions }]) assert.throws(() => parseSlopScope({ ...slop, views: [{ ...view, state }] }));

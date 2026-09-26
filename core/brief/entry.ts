@@ -4,6 +4,8 @@ import { checkProductionReadiness } from '../runtime/production-reference-gate.t
 import { adaptivePrerequisiteStages, requireStage, STAGES } from '../stage/contract.ts';
 import { stageArtifactProblems } from '../stage/output.ts';
 import type { AdaptiveStageId } from '../route/adaptive-stage-graph.ts';
+import { isNativePiInvocation } from '../runtime/native-pi-run.ts';
+import { checkNativeBrowserEvidence } from '../stage/native-completion.ts';
 
 /** Explicit coordinator entry check. Ordinary brief inspection remains available when blocked. */
 export function checkBriefEntry(root: string, stage: BriefStage, packRoot: string, invocation: ProjectRunInvocation): Brief {
@@ -23,6 +25,13 @@ export function checkBriefEntry(root: string, stage: BriefStage, packRoot: strin
       }
     }
   }
-  if (stage === 'production') blockers.push(...checkProductionReadiness(root, invocation, packRoot).blockers);
+  if (stage === 'production' || (stage === 'browser-evidence' && isNativePiInvocation(invocation))) {
+    blockers.push(...checkProductionReadiness(root, invocation, packRoot).blockers);
+  }
+  if ((stage === 'independent-review' || stage === 'review') && isNativePiInvocation(invocation)
+    && brief.route?.deliveryMode !== 'design-only') {
+    try { checkNativeBrowserEvidence(root, invocation); }
+    catch (error) { blockers.push(error instanceof Error ? error.message : String(error)); }
+  }
   return { ...brief, blockers: [...new Set(blockers)] };
 }

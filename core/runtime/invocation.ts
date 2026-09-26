@@ -12,6 +12,7 @@ import {
   requireReviewerLaunchReceipt,
   type ReviewerLaunchReceipt,
 } from '../../adapters/reviewer-mcp.ts';
+import { getNativePiRun, isNativePiInvocation, nativePiProjectRoot } from './native-pi-run.ts';
 export { createLocalCliInvocation } from './activation.ts';
 
 export type CurrentRunIdentity = {
@@ -68,7 +69,11 @@ export function validateCurrentProjectRun(invocation: ProjectRunInvocation): Act
 export function requireProjectWriteInvocation(invocation: ProjectRunInvocation): ActivationContext {
   const activation = validateCurrentProjectRun(invocation);
   const { host } = activation.hostCapability;
-  if (host === 'local') {
+  if (host === 'pi') {
+    const root = nativePiProjectRoot(invocation);
+    if (!isNativePiInvocation(invocation) || root === undefined) throw new InvocationValidationError('native Pi authority must be derived by its authenticated command transport');
+    getNativePiRun(invocation, root);
+  } else if (host === 'local') {
     if (!isHostDerivedLocalCliInvocation(invocation)) {
       throw new InvocationValidationError('local project-write capability must be derived by the running CLI');
     }
@@ -296,9 +301,10 @@ export function requireReviewerIsolationInvocation(
 ): ActivationContext {
   const activation = validateCurrentProjectRun(invocation);
   const { host } = activation.hostCapability;
-  if (host !== 'claude' && host !== 'codex') {
+  if (host !== 'claude' && host !== 'codex' && host !== 'pi') {
     throw new InvocationValidationError('local and benchmark hosts cannot launch v2 reviewers');
   }
+  if (host === 'pi') requireProjectWriteInvocation(invocation);
   try {
     requireReviewerLaunchReceipt(reviewerLaunch, {
       host,

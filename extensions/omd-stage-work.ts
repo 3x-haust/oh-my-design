@@ -1,96 +1,12 @@
 import type { PortablePiEvent } from './omd-runtime.ts';
-import { readFileSync } from 'node:fs';
-import { dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-const SKILL_PATH = fileURLToPath(new URL('../src/skills/omd-ultradesign/SKILL.md', import.meta.url));
-
-function withoutFencedCode(request: string): string {
-  let fence: { marker: string; length: number } | null = null;
-  return request.split(/\r?\n/).flatMap(raw => {
-    const line = raw.trim();
-    const delimiter = /^(\x60{3,}|~{3,})(.*)$/u.exec(line);
-    if (fence) {
-      if (delimiter && delimiter[1]![0] === fence.marker
-        && delimiter[1]!.length >= fence.length && delimiter[2]!.trim() === '') fence = null;
-      return [];
-    }
-    if (delimiter && (delimiter[1]![0] === '~' || !delimiter[2]!.includes('\x60'))) {
-      fence = { marker: delimiter[1]![0]!, length: delimiter[1]!.length };
-      return [];
-    }
-    return [raw];
-  }).join('\n');
-}
-
-function withoutInlineCode(request: string, quotedInstruction: RegExp): string {
-  const runs = [...request.matchAll(/\x60+/gu)];
-  let result = '';
-  let cursor = 0;
-  for (let index = 0; index < runs.length;) {
-    const opening = runs[index]!;
-    const start = opening.index;
-    const closeIndex = runs.findIndex((run, candidate) => candidate > index && run[0].length === opening[0].length);
-    result += request.slice(cursor, start);
-    if (closeIndex < 0) return result + request.slice(start);
-    const closing = runs[closeIndex]!;
-    const contents = request.slice(start + opening[0].length, closing.index);
-    if (!quotedInstruction.test(contents)) result += contents;
-    cursor = closing.index + closing[0].length;
-    index = closeIndex + 1;
-  }
-  return result + request.slice(cursor);
-}
-
-function fullBuildRequest(request: string): boolean {
-  const quotedInstruction = /구현|개발|제작|완성|빌드|만들|(?:레퍼런스|참고|리서치|조사).{0,18}(?:만|까지만)|\b(?:build|implement|develop|create|research only|inspect only|stop after|do not continue|do not implement|do not build|don't build|never build|(?:only|just)\s+(?:inspect|research|review|analyze))\b/iu;
-  const lines = withoutInlineCode(withoutFencedCode(request), quotedInstruction).split(/\r?\n/).flatMap(raw => {
-    const line = raw.trim();
-    if (!line || /^(?:>|\|)/u.test(line) || /^(?:예시|인용|example|quote)\s*[:：]/iu.test(line)) return [];
-    return [line.replace(/^[-*]\s+/u, '')
-      .replace(/"[^"\n]*"|'[^'\n]*'|“[^”\n]*”|‘[^’\n]*’|「[^」\n]*」/gu,
-        quoted => quotedInstruction.test(quoted) ? '' : quoted.slice(1, -1))];
-  });
-  if (/(?:구현|개발|제작|코딩).{0,18}하지\s*(?:마|말)|\b(?:stop after|do not continue|do not implement|do not build|don't build|never build)\b/iu.test(lines.join('\n'))) return false;
-  let decision: boolean | null = null;
-  for (const line of lines) {
-    const matches = [
-      ...[...line.matchAll(/(?:레퍼런스|참고|리서치|조사|검사|확인|보고|분석).{0,18}(?:만|까지만).{0,18}(?:해\s*줘|해\s*주세요|하자|진행)|\b(?:research only|inspect only)\b|\b(?:only|just)\s+(?:inspect|research|review|analyze)\b/giu)]
-        .map(match => ({ index: match.index, build: false })),
-      ...[...line.matchAll(/(?:서비스|제품|앱|리액트|React|랜딩(?:페이지)?|웹사이트|화면|대시보드).{0,80}?(?:(?:구현|개발|제작|완성|빌드)\s*(?:해\s*(?:줘|주세요|줘요)|하세요|해라|부탁(?:해요|드립니다)?)|만들(?:어\s*(?:줘|주세요|줘요)|어라|세요))|\b(?:build|implement|develop|create)\b.{0,120}\b(?:app|product|service|website|landing page|dashboard)\b/giu)]
-        .map(match => ({ index: match.index, build: true })),
-    ].sort((a, b) => a.index - b.index);
-    for (const match of matches) decision = match.build;
-  }
-  return decision === true;
-}
-
-function persistedRouteGrant(prompt: string): 'skill-only' | 'full-build' | null {
-  const request = prompt.trim();
-  if (/^(?:\/skill:|\$)?omd-ultradesign$/i.test(request)) return 'skill-only';
-  const direct = /^(?:\/skill:|\$)omd-ultradesign\s+([\s\S]+)$/i.exec(request);
-  if (direct !== null) return fullBuildRequest(direct[1] ?? '') ? 'full-build' : null;
-  const header = `<skill name="omd-ultradesign" location="${SKILL_PATH}">`;
-  if (!request.startsWith(`${header}\n`)) return null;
-  try {
-    const source = readFileSync(SKILL_PATH, 'utf8').replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
-    const delimiter = source.startsWith('---') ? source.indexOf('\n---', 3) : -1;
-    const body = (delimiter < 0 ? source : source.slice(delimiter + 4)).trim();
-    const expansion = `${header}\nReferences are relative to ${dirname(SKILL_PATH)}.\n\n${body}\n</skill>`;
-    if (request === expansion) return 'skill-only';
-    return request.startsWith(`${expansion}\n\n`) && fullBuildRequest(request.slice(expansion.length).trim()) ? 'full-build' : null;
-  } catch (error) {
-    if (error instanceof Error) return null;
-    throw error;
-  }
-}
+import { parseOmdWorkflowPrompt } from './omd-request-prompt.ts';
 
 const NATIVE_STAGES: Readonly<Record<string, string>> = {
   '.omd/domain-brief.json': 'domain', '.omd/scout.md': 'scout', '.omd/copy-deck.md': 'copy',
   '.omd/type-proof.md': 'type-proof', '.omd/composition.md': 'composition',
 };
 const PUBLISHER_STAGES: Readonly<Record<string, string>> = {
-  'frame set': 'frame', 'ref board': 'reference-board',
+  'domain set': 'domain', 'frame set': 'frame', 'ref board': 'reference-board',
   'ref research-set': 'reference-board', 'ref apply-set': 'reference-board',
   'grain set': 'content-grain', 'acquisition set': 'acquisition', 'candidate select': 'candidate-generation',
 };
@@ -114,8 +30,8 @@ export class StageWork {
   delete(cwd: string): void { this.tasks.delete(cwd); }
   activate(cwd: string, prompt: string): void {
     if (!/(?:^|\s)(?:\/skill:|\$)?omd-ultradesign(?:\s|$)|<skill\s+name=["']omd-ultradesign["']/i.test(prompt) || this.tasks.has(cwd)) return;
-    const grant = persistedRouteGrant(prompt);
-    this.tasks.set(cwd, { token: Symbol(), resumeGranted: grant !== null, entryContinues: grant === 'full-build', checked: new Set(), pending: new Map(), started: false });
+    const grant = parseOmdWorkflowPrompt(prompt);
+    this.tasks.set(cwd, { token: Symbol(), resumeGranted: grant !== null, entryContinues: grant?.kind === 'full-build', checked: new Set(), pending: new Map(), started: false });
   }
   token(cwd: string): symbol | undefined { return this.tasks.get(cwd)?.token; }
   started(cwd: string): boolean { const task = this.tasks.get(cwd); return task !== undefined && task.resumeGranted && (task.started || (task.entryContinues && task.checked.size > 0)); }

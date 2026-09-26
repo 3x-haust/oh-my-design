@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { claimNonce, mintSelfSignedReceipt, verifySelfSignedReceipt, type SelfSignedReceipt } from './self-signed-activation.ts';
 import type { ProjectRunInvocation } from './invocation.ts';
 import type { CodexBrowserRole } from './codex-browser-operation.ts';
+import { authorizeNativePiPayload, getNativePiRun, isNativePiInvocation, nativePiProjectRoot, requireNativePiPayload } from './native-pi-run.ts';
 
 export const ACTIVATION_CONTEXT_SCHEMA_VERSION = 'activation-context-v2' as const;
 const HOST_PROJECT_WRITE_RECEIPT_SCHEMA = 'omd-host-project-write-receipt-v3' as const;
@@ -32,7 +33,7 @@ export const HOST_PAYLOAD_AUTHORIZATION_PURPOSES = [
 ] as const;
 export type HostPayloadAuthorizationPurpose = (typeof HOST_PAYLOAD_AUTHORIZATION_PURPOSES)[number];
 
-export type HostCapability = { readonly host: 'claude' | 'codex' | 'local' | 'benchmark'; };
+export type HostCapability = { readonly host: 'claude' | 'codex' | 'pi' | 'local' | 'benchmark'; };
 export type ActivationContext = {
   readonly schemaVersion: typeof ACTIVATION_CONTEXT_SCHEMA_VERSION;
   readonly buildSha256: string;
@@ -126,7 +127,7 @@ export function validateActivationContext(value: unknown): ActivationContext {
   if (!isRecord(value) || !hasExactKeys(value, ['schemaVersion', 'buildSha256', 'loadedSkillSha256', 'briefSha256', 'hostCapability'])) throw new ActivationContextValidationError('context must contain exactly schemaVersion, buildSha256, loadedSkillSha256, briefSha256, and hostCapability');
   if (value.schemaVersion !== ACTIVATION_CONTEXT_SCHEMA_VERSION) throw new ActivationContextValidationError(`schemaVersion must be ${ACTIVATION_CONTEXT_SCHEMA_VERSION}`);
   requireSha256(value.buildSha256, 'buildSha256'); requireSha256(value.loadedSkillSha256, 'loadedSkillSha256'); requireSha256(value.briefSha256, 'briefSha256');
-  if (!isRecord(value.hostCapability) || !hasExactKeys(value.hostCapability, ['host']) || !['claude', 'codex', 'local', 'benchmark'].includes(String(value.hostCapability.host))) throw new ActivationContextValidationError('hostCapability has invalid shape or values');
+  if (!isRecord(value.hostCapability) || !hasExactKeys(value.hostCapability, ['host']) || !['claude', 'codex', 'pi', 'local', 'benchmark'].includes(String(value.hostCapability.host))) throw new ActivationContextValidationError('hostCapability has invalid shape or values');
   return value as ActivationContext;
 }
 export function requireSameBuildActivation(context: ActivationContext, buildSha256: string, loadedSkillSha256: string, briefSha256: string): void { validateActivationContext(context); if (context.buildSha256 !== buildSha256 || context.loadedSkillSha256 !== loadedSkillSha256 || context.briefSha256 !== briefSha256) throw new ActivationContextValidationError('activation receipt does not match the current build, loaded skill, and brief'); }
@@ -280,6 +281,10 @@ export function authorizeDerivedPayload(
   payload: Uint8Array,
 ): void {
   requireImmutableInvocationIdentity(invocation);
+  if (isNativePiInvocation(invocation)) {
+    authorizeNativePiPayload(invocation, projectRoot, purpose, payload);
+    return;
+  }
   if (localCliInvocations.has(invocation)) {
     const canonicalRoot = canonicalProjectRoot(projectRoot);
     if (localCliProjectRoots.get(invocation) !== canonicalRoot) {
@@ -380,6 +385,10 @@ export function requireHostPayloadAuthorization(invocation: ProjectRunInvocation
   if (!(payload instanceof Uint8Array)) throw new ActivationContextValidationError('authorized payload must be exact bytes');
   requireImmutableInvocationIdentity(invocation);
   const canonicalRoot = canonicalProjectRoot(projectRoot);
+  if (invocation.activation.hostCapability.host === 'pi') {
+    requireNativePiPayload(invocation, canonicalRoot, purpose, payload);
+    return;
+  }
   if (purpose === 'ai-asset-decision' && hasCodexHostAiDecision(invocation, canonicalRoot, payloadSha256(payload))) return;
   const testAuthorization = testPayloadAuthorizations.get(invocation);
   if (testAuthorization?.projectRoot === canonicalRoot && testAuthorization.authorizations.has(payloadAuthorizationKey(purpose, payload))) return;
@@ -408,8 +417,13 @@ export function isHostDerivedLocalCliInvocation(invocation: object): boolean { r
  */
 export function hasHostBoundLocalProjectWriteAuthority(invocation: object, projectRoot: string): boolean {
   try {
+    if (isNativePiInvocation(invocation)) {
+      getNativePiRun(invocation, projectRoot);
+      return true;
+    }
     requireImmutableInvocationIdentity(invocation as ProjectRunInvocation);
     const context = validateActivationContext((invocation as ProjectRunInvocation).activation);
+    if (context.hostCapability.host === 'pi') return false;
     const canonicalRoot = canonicalProjectRoot(projectRoot);
     // Two lawful sources of the same authority, both re-verified below:
     //   - a locally issued invocation, which minted its receipt in this process;
@@ -443,7 +457,7 @@ export function hasHostBoundLocalProjectWriteAuthority(invocation: object, proje
     return true;
   } catch { return false; }
 }
-export function hostBoundLocalProjectRoot(invocation: object): string | undefined { return localCliProjectRoots.get(invocation); }
+export function hostBoundLocalProjectRoot(invocation: object): string | undefined { return nativePiProjectRoot(invocation) ?? localCliProjectRoots.get(invocation); }
 const signatureFor = (invocation: object): Buffer => localCliSignatures.get(invocation) ?? Buffer.alloc(0);
 export function hostProjectWriteAuthorityFailure(invocation: object): string | undefined {
   return hostProjectWriteFailures.get(invocation);

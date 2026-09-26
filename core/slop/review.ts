@@ -14,6 +14,7 @@ import { decodePng } from '../motion/energy.ts';
 import { scanSlopSource } from './index.ts';
 import type { RawIr } from '../types.ts';
 import { parseViewState, withLocalView, statefulIr, type ViewState } from '../render/stateful.ts';
+import { MAX_INSPECTION_VIEWS } from '../render/view-capacity.ts';
 import { signNativeObservation, verifyNativeObservation } from '../runtime/self-signed-activation.ts';
 
 export const SLOP_REVIEW_POINTER = '.omd/slop/latest.json';
@@ -78,7 +79,7 @@ function rulesSha(): string {
 }
 export function parseSlopScope(value: unknown): View[] {
   const input = obj(value, ['schema', 'views'], 'scope');
-  if (input.schema !== 'slop-scope-v1' || !Array.isArray(input.views) || !input.views.length || input.views.length > 24) return fail('scope needs 1–24 views');
+  if (input.schema !== 'slop-scope-v1' || !Array.isArray(input.views) || !input.views.length || input.views.length > MAX_INSPECTION_VIEWS) return fail(`scope needs 1–${MAX_INSPECTION_VIEWS} views`);
   const views = input.views.map(raw => {
     const view = obj(raw, ['id', 'page', 'viewport', ...(raw && Object.hasOwn(raw, 'state') ? ['state'] : [])], 'view');
     const page = text(view.page, 'page');

@@ -87,7 +87,7 @@ function currentDomainResearch(root: string, request: string): Readonly<{ querie
   const path = join(root, '.omd/domain-brief.json');
   if (!existsSync(path)) return { queries: { component: [], craft: [], mood: [] }, domain: null, audience: null };
   const brief = validateDomainBrief(JSON.parse(readFileSync(path, 'utf8')));
-  if (brief.request !== request.trim()) {
+  if (brief.request !== request) {
     throw new Error('reference discovery domain queries describe an earlier request; refresh the selected domain record');
   }
   return { queries: brief.referenceQueries, domain: brief.domain, audience: brief.audience.description };
@@ -116,14 +116,14 @@ export function buildReferenceDiscoveryPlan(root: string, route: RouteRecord): R
   const domain = locale?.context.domain ?? domainResearch.domain ?? route.sourceContract.taskOutcome.goal;
   const domainQueries = marketRegion === null ? [] : [...marketDomainQueries(marketRegion, surfaceLocale, domain)];
   const comparableLeads = marketRegion === 'KR' && /복지|혜택|welfare|benefits?/iu.test(domain)
-    ? ['복지로 맞춤형급여안내', '정부24 혜택알리미', '서울복지포털 맞춤검색', '웰로 맞춤형 정책 추천'] : [];
+    ? ['복지로 맞춤형급여안내', '정부24 혜택알리미', '서울복지포털 맞춤검색', '웰로 맞춤형 정책 추천',
+      '청년노트 복지 혜택 찾기', '청년정책신문 정책맵'] : [];
   const baseDesignQuery = [...queries.component, ...queries.mood][0] ?? (marketing ? 'typography' : 'app interface');
   const designQueries = marketRegion === null ? [] : marketDesignQueries(marketRegion, surfaceLocale, domain, baseDesignQuery, marketing);
   const designQuery = designQueries[0] ?? baseDesignQuery;
   const domainSearchInputs: DomainSearchInput[] = [];
   for (const query of domainQueries) {
-    const url = new URL(marketRegion === 'KR' ? 'https://search.daum.net/search' : 'https://www.bing.com/search');
-    if (marketRegion === 'KR') url.searchParams.set('w', 'tot');
+    const url = new URL('https://www.google.com/search');
     url.searchParams.set('q', query);
     const input = Object.freeze({ lane: 'domain' as const, query, url: url.href, queryParam: 'q' as const });
     domainSearchInputs.push(input);
@@ -134,6 +134,8 @@ export function buildReferenceDiscoveryPlan(root: string, route: RouteRecord): R
       'https://plus.gov.kr/portal/benefitV2/',
       'https://wis.seoul.go.kr/',
       'https://www.welfarehello.com/recommend-policy/situation/main/ALL',
+      'https://www.ynote.kr/',
+      'https://youthpolicy.co.kr/policy-map',
     ].map(url => ({ lane: 'domain', entry: 'public-directory', url })) : [];
   // Restrained work still needs a visual reference. Gallery names are leads, never quality proof
   // or a promise that a provider's entire catalogue/API is free.
@@ -141,6 +143,8 @@ export function buildReferenceDiscoveryPlan(root: string, route: RouteRecord): R
     { name: 'Siteinspire', url: 'https://www.siteinspire.com/', purpose: 'Website composition, typography, rhythm; follow the entry to the live site.' },
     { name: 'Pinterest', url: 'https://www.pinterest.com/', purpose: 'Visual-direction discovery; open the pin and trace its original, not just a thumbnail.' },
   ] : [
+    { name: 'WWIT', url: 'https://wwit.design/', purpose: 'Public Korean app-screen archive; open one named app and select its real UI screen image, not the archive wrapper.' },
+    { name: 'SaaSUI', url: 'https://www.saasui.design/pattern/dashboard', purpose: 'Free public screenshots from shipped product interfaces; inspect a specific application screen, never the category wrapper.' },
     { name: 'Mobbin', url: 'https://mobbin.com/explore/screens', purpose: 'Public product-screen examples by task and pattern; retain a concrete screen, not the directory.' },
     { name: 'Page Flows', url: 'https://pageflows.com/screens/', purpose: 'Public product screens and flow steps; retain a concrete screen and inspect surrounding flow context.' },
     { name: 'Pinterest', url: 'https://www.pinterest.com/', purpose: 'App UI/component discovery; verify screen provenance and target viewport before retaining.' },

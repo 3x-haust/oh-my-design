@@ -75,6 +75,8 @@ import { publishDesignJudgment, readDesignJudgment, DESIGN_JUDGMENT_PATH } from 
 import { checkCurrentDesignJudgment, designJudgmentInput } from '../core/design/current-judgment.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+let nativePiInvocation: ProjectRunInvocation | undefined;
+let nativePiProjectRoot: string | undefined;
 
 interface Opts {
   _: string[];
@@ -423,6 +425,12 @@ function activationInputPath(opts: Opts): string | undefined {
 
 function invocationFromActivation(opts: Opts, command: string, projectRoot = process.cwd()): ProjectRunInvocation {
   const activationPath = activationInputPath(opts);
+  if (nativePiInvocation !== undefined) {
+    if (activationPath !== undefined || realpathSync(projectRoot) !== nativePiProjectRoot) {
+      throw new Error('NATIVE_PI_AUTHORITY: external activation or another project cannot replace this command identity');
+    }
+    return nativePiInvocation;
+  }
   return activationPath !== undefined
     ? validateProjectRunInvocation(inputJson(activationPath, command))
     : createLocalCliInvocation({
@@ -2040,6 +2048,15 @@ async function cmdCopy(opts: Opts): Promise<never> {
 }
 
 async function cmdReview(mode: string | undefined, opts: Opts): Promise<never> {
+  if (mode === 'run') {
+    if (opts.input || opts._.length > 0) throw new Error('usage: omd review run [--json]');
+    const invocation = invocationFromActivation(opts, 'omd review run');
+    const { runNativeFinalReview } = await import('../core/runtime/native-final-publication.ts');
+    const { withNativeCommandSignal } = await import('./native-command-signal.ts');
+    const result = await withNativeCommandSignal(signal => runNativeFinalReview({ root: process.cwd(), invocation, signal }));
+    await new Promise<void>(done => process.stdout.write(`${JSON.stringify(result)}\n`, () => done()));
+    process.exit(0);
+  }
   if (mode === 'evidence-projection') {
     if (!opts.input || opts._.length > 0) {
       throw new Error('usage: omd review evidence-projection --input <observation-projection-input.json> [--json]');
@@ -2245,8 +2262,21 @@ function cmdProof(mode: string | undefined, opts: Opts): never {
 }
 
 /** Schema lint of the domain-analysis artifact; advisory-adjacent — exits 1 on an invalid brief. */
-function cmdDomain(mode: string | undefined, opts: Opts): never {
-  if (mode !== 'check') throw new Error('usage: omd domain check [--input <domain-brief.json>] [--json]');
+async function cmdDomain(mode: string | undefined, opts: Opts): Promise<never> {
+  if (mode === 'set') {
+    if (!opts.input || opts._.length > 0) throw new Error('usage: omd domain set --input <domain-input.json> [--json]');
+    const { publishDomainBrief } = await import('../core/domain/publication.ts');
+    const authored = inputJson(opts.input, 'omd domain set');
+    const invocation = invocationFromActivation(opts, 'omd domain set');
+    const brief = publishDomainBrief(process.cwd(), authored, join(root, 'core'), projectWriter(invocation), invocation);
+    const result = { path: '.omd/domain-brief.json', surfaces: brief.surfaces.length,
+      requestSha256: createHash('sha256').update(brief.request).digest('hex'),
+      unconfirmedPlanning: unconfirmedPlanningStatements(brief.planning) };
+    if (opts.json) process.stdout.write(JSON.stringify(result));
+    else console.log(result.path);
+    process.exit(0);
+  }
+  if (mode !== 'check') throw new Error('usage: omd domain set --input <domain-input.json> [--json] | domain check [--input <domain-brief.json>] [--json]');
   const file = opts.input ?? join(process.cwd(), '.omd', 'domain-brief.json');
   let planning: readonly string[] = [];
   try {
@@ -4066,8 +4096,8 @@ async function cmdCompletion(mode: string | undefined, opts: Opts): Promise<neve
   }
   if (mode === 'typography-applicability') {
     const activationPath = activationInputPath(opts);
-    if (!opts.ir || activationPath === undefined || opts._.length > 0) throw new Error('usage: omd completion typography-applicability --ir <rendered-ir.json> --activation <host-issued-invocation.json> [--json]');
-    const invocation = validateProjectRunInvocation(inputJson(activationPath, 'omd completion typography applicability activation'));
+    if (!opts.ir || (activationPath === undefined && nativePiInvocation === undefined) || opts._.length > 0) throw new Error('usage: omd completion typography-applicability --ir <rendered-ir.json> [--activation <host-issued-invocation.json>] [--json]');
+    const invocation = invocationFromActivation(opts, 'omd completion typography-applicability');
     const { publishTypographyApplicability } = await import('../core/completion/evidence.ts');
     const receipt = publishTypographyApplicability(process.cwd(), inputJson(opts.ir, 'omd completion typography applicability rendered IR'), invocation);
     if (opts.json) process.stdout.write(JSON.stringify(receipt)); else console.log(receipt.path);
@@ -4078,6 +4108,10 @@ async function cmdCompletion(mode: string | undefined, opts: Opts): Promise<neve
   const invocation = invocationFromActivation(opts, 'omd completion preflight');
   const pointerPath = join(process.cwd(), '.omd', 'final-evidence-v2.json');
   if (!existsSync(pointerPath)) throw new Error('FINAL_EVIDENCE_REQUIRED: .omd/final-evidence-v2.json is missing; build/captures are not terminal completion evidence');
+  if (invocation.activation.hostCapability.host === 'pi') {
+    const { checkNativeFinalReview } = await import('../core/runtime/native-final-review-state.ts');
+    checkNativeFinalReview({ root: process.cwd(), invocation });
+  }
   const pointerBytes = readFileSync(pointerPath);
   requireFinalReviewerLaneAuthorization(invocation, process.cwd(), pointerBytes);
   const pointer = JSON.parse(pointerBytes.toString('utf8')) as unknown;
@@ -4187,9 +4221,13 @@ async function cmdEvidence(mode: string | undefined, opts: Opts): Promise<never>
   }
   if (mode === 'v2-check') {
     const activationPath = activationInputPath(opts);
-    if (activationPath === undefined || opts._.length > 0) throw new Error('usage: omd evidence v2 check --activation <host-issued-invocation.json> [--json]');
+    if ((activationPath === undefined && nativePiInvocation === undefined) || opts._.length > 0) throw new Error('usage: omd evidence v2 check [--activation <host-issued-invocation.json>] [--json]');
     const { checkFinalEvidenceV2 } = await import('../core/evidence/final-v2.ts');
-    const invocation = validateProjectRunInvocation(inputJson(activationPath, 'omd evidence v2 check activation'));
+    const invocation = invocationFromActivation(opts, 'omd evidence v2 check');
+    if (invocation.activation.hostCapability.host === 'pi') {
+      const { checkNativeFinalReview } = await import('../core/runtime/native-final-review-state.ts');
+      checkNativeFinalReview({ root: process.cwd(), invocation });
+    }
     const pointerPath = join(process.cwd(), '.omd', 'final-evidence-v2.json');
     const pointerBytes = readFileSync(pointerPath);
     requireFinalReviewerLaneAuthorization(invocation, process.cwd(), pointerBytes);
@@ -4701,7 +4739,9 @@ async function cmdRoute(mode: string | undefined, opts: Opts): Promise<never> {
     }
     const record = published.record;
     const path = published.pointerPath;
-    if (opts.json) process.stdout.write(JSON.stringify(record));
+    if (opts.json) await new Promise<void>((done, reject) => {
+      process.stdout.write(JSON.stringify(record), error => error ? reject(error) : done());
+    });
     else {
       console.log(`route: ${record.route} -> ${path}`);
       console.log(`  rationale: ${record.strategy.rationale}`);
@@ -4717,7 +4757,9 @@ async function cmdRoute(mode: string | undefined, opts: Opts): Promise<never> {
     if (opts._.length > 0) throw new Error('usage: omd route show [--activation <host-issued-invocation.json>] [--json]');
     if (!existsSync(recordPath)) throw new Error('ROUTE_UNCLASSIFIED: run `omd route classify --input <route-input.json>` first');
     const record = readPersistedRoute(process.cwd(), invocationFromActivation(opts, 'omd route show'));
-    if (opts.json) process.stdout.write(JSON.stringify(record));
+    if (opts.json) await new Promise<void>((done, reject) => {
+      process.stdout.write(JSON.stringify(record), error => error ? reject(error) : done());
+    });
     else {
       console.log(`route: ${record.route}`);
       console.log(`  request: ${record.request}`);
@@ -5257,7 +5299,22 @@ function usage(): never {
 }
 
 async function main(): Promise<never> {
-  const args = process.argv.slice(2);
+  let args = process.argv.slice(2);
+  const nativeFlags = args.flatMap((arg, index) => arg === '--pi-command' || arg.startsWith('--pi-command=') ? [index] : []);
+  if (nativeFlags.length > 0) {
+    const index = nativeFlags[0];
+    const descriptorPath = index === undefined ? undefined : args[index + 1];
+    if (nativeFlags.length !== 1 || index === undefined || index !== args.length - 2
+      || args[index] !== '--pi-command' || !descriptorPath || descriptorPath.startsWith('--')
+      || args.includes('--activation') || process.env.OMD_ACTIVATION_PATH !== undefined) {
+      throw new Error('NATIVE_PI_AUTHORITY: expected one native command descriptor and no external activation');
+    }
+    const { createNativePiInvocation } = await import('../core/runtime/native-pi-run.ts');
+    nativePiProjectRoot = realpathSync(process.cwd());
+    nativePiInvocation = createNativePiInvocation({ projectRoot: nativePiProjectRoot,
+      descriptorPath, cliPath: fileURLToPath(import.meta.url), argv: process.argv });
+    args = args.slice(0, index);
+  }
   const [cmd, sub] = args;
 
   if (cmd === '--version') {
@@ -5269,22 +5326,22 @@ async function main(): Promise<never> {
   if (cmd === 'lifecycle' && (sub === '--help' || sub === 'help')) {
     console.log([
       'Usage:',
-      '  omd lifecycle plan --project <dir> [--output .omd/.cache/trusted-lifecycle-manifest.json] --activation <json>',
-      '  omd lifecycle run|evaluate --project <dir> --manifest <json> [--activation <json>]',
+      '  omd lifecycle plan [--project <dir>] [--output .omd/.cache/trusted-lifecycle-manifest.json] [--activation <json>]',
+      '  omd lifecycle evaluate [--project <dir>] [--manifest <json>] [--json] (native Pi; derives the fixed plan)',
+      '  omd review run [--json] (native Pi; isolated current-model review lanes)',
       '  omd lifecycle repair --project <dir> --activation <json> --review <json> --mirror <dir> --owner-receipt <json>',
       '  omd lifecycle refinement-evidence --project <dir> --activation <json> --json',
       '  omd lifecycle refine --project <dir> --activation <json> --review <content-addressed-review>',
       '  omd lifecycle refinement-rollback --project <dir> --activation <json> --review <content-addressed-review>',
-      '  omd lifecycle finalize --project <dir> --activation <json> --input <final-v2.json>',
+      '  omd lifecycle finalize [--project <dir>] [--json] (native Pi; derives the final manifest)',
+      '  omd lifecycle finalize --project <dir> --activation <json> --input <final-v2.json> (brokered host)',
     ].join('\n'));
     process.exit(0);
   }
   if (cmd === 'lifecycle' && sub === 'plan') {
     const opts = parseArgs(args.slice(2));
-    if (!opts.project) {
-      throw new Error('usage: omd lifecycle plan --project <dir> [--output .omd/.cache/trusted-lifecycle-manifest.json] [--activation <host-issued-invocation.json>]');
-    }
-    const project = realpathSync(resolve(opts.project));
+    if (opts._.length > 0) throw new Error('usage: omd lifecycle plan [--project <dir>] [--output .omd/.cache/trusted-lifecycle-manifest.json] [--activation <host-issued-invocation.json>]');
+    const project = realpathSync(resolve(opts.project ?? process.cwd()));
     const canonicalOutput = '.omd/.cache/trusted-lifecycle-manifest.json';
     const output = relative(project, resolve(project, opts.output ?? canonicalOutput));
     if (output !== canonicalOutput) throw new Error('TRUSTED_EVALUATION_PLAN_OUTPUT_FORBIDDEN');
@@ -5300,7 +5357,15 @@ async function main(): Promise<never> {
   }
   if (cmd === 'ir') return cmdIr(parseArgs(args.slice(1)));
   if (cmd === 'lifecycle' && (sub === 'run' || sub === 'evaluate')) {
-    throw new Error('omd lifecycle run/evaluate was removed with the host launcher. Run the evaluation from the host session (see `omd lifecycle --help`).');
+    const opts = parseArgs(args.slice(2));
+    if (opts._.length > 0) throw new Error('usage: omd lifecycle evaluate [--project <dir>] [--manifest <json>] [--json]');
+    const project = realpathSync(resolve(opts.project ?? process.cwd()));
+    const invocation = invocationFromActivation(opts, 'omd lifecycle evaluate', project);
+    const { runNativeEvaluation } = await import('../core/runtime/native-evaluation.ts');
+    const result = await runNativeEvaluation({ root: project, packRoot: join(root, 'core'), invocation,
+      ...(opts.manifest === undefined ? {} : { manifest: inputJson(resolve(project, opts.manifest), 'native evaluator manifest') }) });
+    await new Promise<void>(done => process.stdout.write(`${JSON.stringify(result)}\n`, () => done()));
+    process.exit(result.ok ? 0 : 1);
   }
   if (cmd === 'lifecycle' && sub === 'repair') {
     const opts = parseArgs(args.slice(2));
@@ -5393,6 +5458,15 @@ async function main(): Promise<never> {
   }
   if (cmd === 'lifecycle' && sub === 'finalize') {
     const opts = parseArgs(args.slice(2));
+    if (nativePiInvocation !== undefined) {
+      if (opts.input !== undefined || opts._.length > 0) throw new Error('usage: omd lifecycle finalize [--project <dir>] [--json]; native Pi derives the current final manifest');
+      const project = realpathSync(resolve(opts.project ?? process.cwd()));
+      const invocation = invocationFromActivation(opts, 'omd lifecycle finalize', project);
+      const { finalizeNativeEvidence } = await import('../core/runtime/native-final-publication.ts');
+      const result = await finalizeNativeEvidence({ root: project, invocation });
+      await new Promise<void>(done => process.stdout.write(`${JSON.stringify(result)}\n`, () => done()));
+      process.exit(0);
+    }
     if (!opts.project || !opts.activation || !opts.input) return usage();
     process.chdir(realpathSync(resolve(opts.project)));
     return cmdEvidence('v2-finalize', opts);

@@ -10,7 +10,7 @@ import {
   failAdaptiveRoute,
   type AdaptiveRouteRecord,
 } from './adaptive-flow-domain.ts';
-import { parseAdaptiveBrowserContext, parseAdaptiveLearningContext, parseAdaptiveStrategyDecision } from './adaptive-flow-boundary.ts';
+import { parseAdaptiveBrowserContext, parseAdaptiveLearningContext, parseAdaptiveStrategyDecision, parseAdaptiveRequest } from './adaptive-flow-boundary.ts';
 import { routeAdaptiveFlow, validateAdaptiveStrategyRails } from './adaptive-flow.ts';
 import { adaptiveSourceContractSha256, canonicalRouteJson } from './adaptive-source-contract.ts';
 import { validatePersistedAdaptiveBehavior } from './adaptive-behavior-record.ts';
@@ -153,7 +153,7 @@ function parse(
     schema: ADAPTIVE_ROUTE_RECORD_SCHEMA,
     ...(item.has('deliveryMode') ? { deliveryMode: 'design-only' as const } : {}),
     route: 'adaptive',
-    request: text(item.get('request')),
+    request: parseAdaptiveRequest(item.get('request')),
     projectMode: item.get('projectMode') === 'greenfield' ? 'greenfield' : 'existing',
     requiredOutcomes: strings(item.get('requiredOutcomes')),
     prohibitedOutcomes: strings(item.get('prohibitedOutcomes')),

@@ -18,6 +18,7 @@ export type RouteBootstrap = {
   inputPath: string;
   validationArgs: string[];
   classificationAttempted: boolean;
+  classificationAuthorized: boolean;
   classificationFailure?: string;
 };
 

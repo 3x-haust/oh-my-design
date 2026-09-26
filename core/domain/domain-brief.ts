@@ -21,7 +21,7 @@ export const DOMAIN_BRIEF_SCHEMA = 'domain-brief-v1' as const;
 
 /** A domain has at least one canonical surface and never an unbounded page count. */
 export const MIN_SURFACES = 1;
-export const MAX_SURFACES = 12;
+export const MAX_SURFACES = 64;
 /** The real entities the domain manipulates (an ERP's purchase-order, invoice, stock item, …). */
 export const MAX_CORE_OBJECTS = 24;
 /** Per-role reference queries stay a focused acquisition list, never an unbounded crawl. */
@@ -96,7 +96,7 @@ export type DomainPlanning = {
 
 export type DomainBrief = {
   readonly schema: typeof DOMAIN_BRIEF_SCHEMA;
-  /** The raw request, normalized and trimmed — what the user actually asked. */
+  /** The complete request bytes — what the user actually asked. */
   readonly request: string;
   /** The identified domain in a few words ("ERP", "developer-tool marketing landing"). */
   readonly domain: string;
@@ -305,7 +305,8 @@ export function validateDomainBrief(value: unknown): DomainBrief {
     'brief has unknown or missing keys',
   );
   if (record.schema !== DOMAIN_BRIEF_SCHEMA) fail(`schema must be ${DOMAIN_BRIEF_SCHEMA}`);
-  const request = asNonEmptyString(record.request, 'request must be a non-empty string');
+  const request = typeof record.request === 'string' && record.request.trim() !== ''
+    ? record.request : fail('request must be a non-empty string');
   const domain = asNonEmptyString(record.domain, 'domain must be a non-empty string');
   const summary = asNonEmptyString(record.summary, 'summary must be a non-empty string');
 

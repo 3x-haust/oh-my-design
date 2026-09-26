@@ -6,6 +6,8 @@ description: Design interfaces from outcomes, evidence, renders, and independent
 # Ultradesign
 
 The user-selected model owns role/stage order and optional methods. Read `omd pack protocol/design-practice.md`.
+On Pi, `/ultradesign` is a native input alias for `/skill:omd-ultradesign`; both load this
+packaged skill. A quoted command or an inline mention is not a workflow invocation.
 
 ## Runtime ownership
 
@@ -44,7 +46,9 @@ On Codex, `omd ...` means `"$OMD_NODE_EXECUTABLE" "$OMD_CLI_PATH" ...` and `omd-
 
 On Codex use `omd-codex exec -C <project> ...` (or `oh-my-design codex exec ...`) with opaque read-only
 `OMD_ACTIVATION_PATH` when the current host actually supplies that launcher. Never manufacture or reuse Codex activation.
-Pi and the local CLI use `omd_cli`/`omd` without `--activation`; local command authority is created by the CLI.
+Pi and the local CLI use `omd_cli`/`omd` without `--activation`. The Pi extension binds the original
+request, observed model, runtime and per-command identity; a standalone local CLI is not independent
+review authority. For Pi implementation completion read `omd pack protocol/native-pi-completion.md`.
 An absent external activation file is not a Pi setup error. Do not ask the user to supply one.
 For copy review, send the exact `content` and `sha256` from `omd copy review-input --json`
 together to the reviewer, then preserve and publish its report. Other local evidence fingerprints
@@ -52,8 +56,8 @@ use `omd hash <.omd/artifact-path> --json`. Neither command grants a verdict; ne
 or replace an old review's hash after a writer revision. The report format belongs to
 `protocol/human-design-loop.md`.
 The Codex role/owner commands above apply only when that broker is available, never to Pi.
-Pi uses available native delegation with the user's model; if independent review is unavailable,
-record that limitation rather than claiming an isolated review or blocking reference collection.
+Pi uses available native delegation with the user's model. Its `review run` transport launches
+isolated native Pi reviewers with that observed model; a launch failure is not a same-session review.
 On Pi without a delegation tool, execute the selected design roles as explicit, sequential role passes
 in the current session, respecting each role's inputs and owned paths. Execution waves still express
 dependency groups; do not simulate child handles or concurrent processes. This host fallback does not
@@ -72,8 +76,12 @@ be recorded honestly and cannot stand in for independent final review. A PRD is 
 deck; a post-hoc composition note is not the pre-production contract. Never lower risk or relabel
 product UX as editorial to escape a validation error: repair the task matrix/input instead.
 
-The Pi extension serializes OMD commands per project. Use `omd_cli`, not shell-wrapped OMD calls;
-prepare directly owned documents and publisher inputs under `.omd/.cache/`, then use the specified
+The Pi extension serializes OMD commands per project. Use `omd_cli`, not shell-wrapped OMD calls.
+For a fresh full-workflow request the host binds the original user text to route validation and
+publication. A shortened input `request` never replaces that native source. Keep every user-requested
+screen, behavior and recovery path in the authored outcomes; exact text preservation alone is not
+semantic coverage. Do not edit host request records or copy skill instructions into the product brief.
+Prepare directly owned documents and publisher inputs under `.omd/.cache/`, then use the specified
 publisher. Never hand-write route authorities, reference receipts, check history or final evidence.
 During blocked pre-production work use `read`, standalone `pwd` or `rg --files --hidden`, and native browsing tools;
 arbitrary shell commands are held because scripts can write application source. A hook-less host
@@ -93,9 +101,10 @@ Keep the user oriented during long work without narrating every tool call. At ea
 boundary and before an automatic repair continuation, publish one concise visible progress note that
 states what was just verified, which owner/action runs next, and which check follows. A queued hidden
 instruction or a bare “continuing” sentence is not a progress update.
-Before a route exists, Pi may also retry an already-authored route input using current structured
-diagnostics. This repairs setup only, not missing deliverables. A failed classification retains its real
-cause; authority errors do not retry. Input-only work does not authorize publishing or implementation.
+Before a route exists, a delivered full-build request authorizes writing its route input, repairing
+current structured diagnostics, then classifying the same validated input and continuing selected work.
+Schema inspection is not setup completion. An input-validation-only request does not authorize
+classification or implementation. A failed classification retains its real cause; authority errors do not retry.
 Pause/abort and missing user facts/authority never authorize an automatic retry or a scope change.
 After a fresh authored route enters a checked stage, Pi can use the same progress-driven loop to
 continue unfinished selected-stage authoring before source exists. It recomputes `stage next`, not
@@ -260,6 +269,12 @@ not certify output quality or completion. `domain check` is structural: inspect 
 reread the original request, and attach exact excerpts to supported statements. Only genuinely missing
 facts require a question. Never invent a prototype-only exclusion for a request to build a full product.
 
+For domain authoring, use `omd schema domain-brief` → author `.omd/.cache/domain-input.json` →
+`omd domain set --input .omd/.cache/domain-input.json --json` → `omd domain check --json`.
+The publisher binds the current route's complete request, so omit `request` in the input rather
+than retyping a long PRD. Enumerate explicitly requested screens independently and retain their
+important states; a preferred small page count must not compress away the user's scope.
+
 For Framer, use `omd schema frame` → author `.omd/.cache/frame-input.json` →
 `omd frame set --input .omd/.cache/frame-input.json` → `omd frame check --json`.
 Publish UX anchors, the product task matrix and the greenfield reality ledger together.
@@ -400,7 +415,13 @@ Observe task states, viewports, interactions, reduced motion and recovery requir
 Link observations to the decisions they validate. Do not add states, motion, references, candidates,
 or research merely to repeat an older sequence.
 
-Before either initial final blind Eye runs, print `omd schema final-render-reviewer-packet`, write its
+On Pi, after production and its required checks, follow `protocol/native-pi-completion.md`:
+`lifecycle evaluate` gathers real current browser evidence, `review run` performs the isolated final
+reviews, `lifecycle finalize` derives and publishes the authenticated final graph, then `guard completion`
+rechecks it. Repair real failures with the responsible owner and repeat affected evidence; never author
+review verdicts, activation, or a final manifest to stand in for this transport.
+
+On a brokered Codex host, before either initial final blind Eye runs, print `omd schema final-render-reviewer-packet`, write its
 input with the exact aggregate observation-v2 chain intended for the lane, and run
 `omd review final-packet --input <input> --activation "$OMD_ACTIVATION_PATH" --json`. It validates
 current lineage and fixed desktop/mobile production PNGs, publishing a content-addressed source-free packet.
@@ -431,7 +452,9 @@ When refinement is selected or a required gate remains RED, read and apply the c
 
 ## Ship
 
-Benchmark products run `omd lifecycle plan`. Run selected checks, build/typecheck,
+Benchmark products run `omd lifecycle plan`. Pi uses the native completion procedure above without
+external activation; the explicit host activation examples below belong to brokered hosts.
+Run selected checks, build/typecheck,
 `omd route check --activation "$OMD_ACTIVATION_PATH"`, and renderer inspection. After inputs/source
 settle, use trusted project-write, seal/recheck, collect applicable checks/probes/renders, and finalize
 final-v2 through the host. When dual research applies, run `omd ref apply-review-plan --json` next.

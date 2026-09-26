@@ -51,7 +51,7 @@ test('adaptive routing delegates selected requirements to stage briefs instead o
   const brief = read('core/brief/index.ts');
   assert.match(brief, /frame: \['frame', 'functional-requirements', 'reality-ledger'\]/);
   assert.match(brief, /omd complete check <page>/);
-  assert.match(brief, /owner: definition\?\.owner/);
+  assert.match(brief, /owner: native\?\.owner \?\? definition\?\.owner/);
 });
 
 test('product recipes remain conditional hypotheses', () => {

@@ -252,6 +252,7 @@ export async function waitForDocumentFonts(
 ): Promise<void> {
   const outcome = await page.evaluate(async (limit) => {
     if (!document.fonts?.ready) return 'unsupported';
+    if (document.fonts.size === 0) return 'ready';
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       return await Promise.race([
@@ -311,7 +312,7 @@ export async function onPage<T>(
     const work = async (): Promise<T> => {
       const observedLoad = deadlineMs === undefined ? page.waitForEvent('load') : null;
       const response = await page.goto(targetUrl, deadlineMs === undefined
-        ? { waitUntil: 'domcontentloaded' } : { waitUntil: 'load', timeout: 20_000 });
+        ? { waitUntil: 'domcontentloaded' } : { waitUntil: 'domcontentloaded', timeout: 20_000 });
       if (observedLoad !== null) await observedLoad;
       const loadTimestampMs = Date.now();
       await waitForDocumentFonts(page);
