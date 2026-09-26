@@ -118,6 +118,14 @@ function parseProposition(value: unknown): LearningProposition {
   if (UNSAFE_AUTHORITY.test(statement)) fail('UNSAFE_PROPOSITION', 'learning propositions cannot claim model, safety-rail, or user-fact authority');
   return Object.freeze({ id: id(item.get('id'), 'proposition.id'), statement, scope: parseScope(item.get('scope')) });
 }
+
+/** Canonical proposition parser shared by prediction capture and promotion. */
+export function validateLearningProposition(value: unknown): LearningProposition {
+  try { return parseProposition(value); } catch (error) {
+    if (error instanceof LearningPromotionError) throw error;
+    return fail('MALFORMED_INPUT', 'learning proposition could not be inspected safely');
+  }
+}
 function parseValidation(value: unknown, index: number): LearningValidation {
   const label = `validations[${index}]`;
   const item = ownFields(value, ['runId', 'contextId', 'outcome', 'observedAt', 'decisionGraphPath', 'browserEvidence'], label);
