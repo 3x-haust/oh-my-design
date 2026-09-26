@@ -3,6 +3,7 @@ import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { harness } from './helpers/pi-stage-continuity.ts';
+import { WorkflowResume } from '../extensions/omd-workflow-resume.ts';
 
 async function authorizedWorkflow(t: { after(fn: () => void): void }) {
   const h = harness(t);
@@ -53,7 +54,8 @@ test('an explicit stop request revokes the suspended workflow before a bare resu
 });
 
 for (const prompt of ['Stop the build.', 'Cancel the OMD build.', 'Pause implementation please.',
-  '작업 중단해 주세요', 'OMD 개발을 취소해 주세요', '복구 작업 멈춰줘']) {
+  '작업 중단해 주세요', 'OMD 개발을 취소해 주세요', '복구 작업 멈춰줘',
+  'Stop the build workflow.', 'Cancel the OMD repair task.', 'Pause implementation work please.']) {
   test(`explicit stop phrase revokes the suspended workflow: ${prompt}`, async t => {
     const h = await authorizedWorkflow(t);
     await h.emit('input', { source: 'interactive' });
@@ -64,6 +66,19 @@ for (const prompt of ['Stop the build.', 'Cancel the OMD build.', 'Pause impleme
     assert.deepEqual(h.sent, []);
   });
 }
+
+test('every explicit English build-resume object has the same stop grammar', () => {
+  const identity = { cwd: '/test', routeSha256: 'a'.repeat(64) };
+  for (const subject of ['build', 'implementation', 'repair']) for (const suffix of ['', ' workflow', ' task', ' work']) {
+    for (const prefix of ['', 'the ', 'OMD ', 'the OMD ']) for (const verb of ['Stop', 'Cancel', 'Pause']) {
+      const workflow = new WorkflowResume();
+      const object = `${prefix}${subject}${suffix}`;
+      assert.equal(workflow.accepts({ ...identity, prompt: `Continue ${object}.` }), true);
+      assert.equal(workflow.accepts({ ...identity, prompt: `${verb} ${object}.` }), false);
+      assert.equal(workflow.accepts({ ...identity, prompt: 'continue' }), false, object);
+    }
+  }
+});
 
 test('Escape ends the current turn without repair but a later explicit resume can continue it', async t => {
   const h = await authorizedWorkflow(t);
