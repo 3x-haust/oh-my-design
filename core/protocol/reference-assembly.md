@@ -649,8 +649,11 @@ Markdown table directly into the Codex or Claude conversation. That table is the
 candidate presentation surface and names, per component slot, the source site/page, exact
 captured UI or image region, the local part-image capture path, proposed target, take, avoid,
 and adaptation. The local capture column lets the human inspect the exact per-component part image
-while selecting. Raw captures remain Scout provenance and do not become Composer or Hand inputs by
-mere filesystem presence. Component-level and whole-surface fidelity are both allowed;
+while selecting. Raw captures remain Scout provenance and do not become role inputs by mere filesystem
+presence. After selection, Composer and Hand may inspect only the exact selected crop when its licence
+or permission allows design-reference use and the validated handoff marks it `noShip`. Rights-unclear,
+unselected, and private-evidence pixels remain unavailable. Blind Eyes never receive reference crops.
+Component-level and whole-surface fidelity are both allowed;
 bare `omd ref distance <page>` remains advisory. After current usage and build observation exist,
 `omd ref distance <page> --selected --gate --json` measures each used component-capture slot at its
 assigned destination selector. Every comparison must score at least `0.6`; a failed, missing,
@@ -665,11 +668,13 @@ another axis cannot compensate for it.
 The coordinator selects the strongest candidate itself and records the canonical v2 selection with `omd ref select`; it produces `.omd/reference-selection-v2.json` and the art-direction receipt, then `omd ref check` verifies currentness. Before composition and production, resolve every pending lawful positive-motion slot into the hash-addressed `.omd/motion-resolutions/sha256-<digest>.json` projection. The art-direction decision writes the composer and hand receipts under `.omd/reference-handoffs/`; both must bind that same decision, capture, assembly, projection, selection, and positive-motion dispositions. Disclose the selection and reason in `.omd/decisions.md`; do not pause to ask the user to pick a candidate. A candidate the user explicitly named still wins.
 
 `omd ref handoff <art-direction|composer|hand> --json` exports the actual current selected
-source-free feature content. This read-only command validates the persisted role receipt,
-selection, capture, assembly, and projection before returning measured transfers and their evidence
-axes. `art-direction` also includes available lawful motion marked `pending-motion-review` for
-the evaluator to decide. Composer and Hand receive only settled `used` pieces after genuine art
-direction publication. Unselected candidates and rejected or unlawful pieces are omitted. The
+feature content. This read-only command validates the persisted role receipt, selection, capture,
+assembly, rights status, and projection before returning measured transfers and their evidence axes.
+`art-direction` also includes available lawful motion marked `pending-motion-review` for the evaluator
+to decide. Composer and Hand receive only settled `used` pieces after genuine art-direction publication.
+For a rights-safe selected crop, their export also names the exact project-contained crop path and digest
+and marks it `noShip`; otherwise the handoff remains source-free. Unselected, rejected, rights-unclear,
+or unlawful pieces are omitted. The
 export's `sha256` binds its content; `referenceHandoffSha256` binds the existing lineage receipt.
 The receipt's older `payloadSha256` is a receipt digest, not a feature payload. Supply the complete
 export unchanged with the permitted owner inputs. `omd brief` remains coordinator intake; its raw
@@ -685,18 +690,18 @@ private evidence. Every candidate needs a positive native-category component. A 
 equivalent may supplement it; a counterexample may only bind an anti-reference. Composer and Hand
 receive the public projection only and apply each mechanism only to its named reference slot.
 
-Never direct a user to open a board UI, standalone HTML, PNG, showcase, or `omd-board`.
-Local screenshots may help a scout and may be attached to a conversation when useful, but
-they never become composition, implementation, or shipped inputs unless a later contract supplies
-an explicit selected, transformed, no-ship visual projection bound to the current assembly and
-selection. `omd ref visual-packet` is that optional route for component captures: it deterministically
-renders only the selected sanitized blueprint as anonymous rectangles, preserves box proportion,
-grouping, nesting, and whitespace, and drops source colour, copy, identity, imagery, and typeface.
-The role-facing packet and SVG contain no raw source path, URL, reference ID, or pixel carrier. Raw
-capture hashes remain only in the private packet evidence. Composer and Hand may inspect the exact
-packet manifest and named SVG only when the adaptive brief selects this route; neither may inspect its
-private evidence. The SVG is reference-only and `noShip`; `omd ref visual-packet-check --production`
-fails if its bytes, path, or digest appear in named production files. Pinterest-like
+Never direct a user to open a board UI, standalone HTML, showcase, or `omd-board`. Local screenshots
+remain Scout evidence until selection and rights validation. Composer and Hand may inspect an exact
+selected rights-safe crop only through their validated handoff; the crop remains reference-only and
+`noShip`. Blind selectors and final reviewers receive no crop, source identity, or authorship signal.
+
+`omd ref visual-packet` remains the optional source-free route: it renders the selected sanitized
+blueprint as anonymous rectangles, preserving box proportion, grouping, nesting, and whitespace while
+dropping source colour, copy, identity, imagery, and typeface. The role-facing packet and SVG contain
+no raw source path, URL, reference ID, or pixel carrier. Raw capture hashes and rights evidence remain
+private. Composer and Hand may inspect the exact packet manifest and named SVG when the adaptive brief
+selects this route; neither may inspect private evidence. Both a selected crop and the SVG are `noShip`;
+production validation fails if their bytes, paths, or digests appear in shipped files. Pinterest-like
 and other gallery regions are user-directed browser captures with source-page provenance,
 rights status/notes, and a local imported PNG only; OMD neither fetches a remote source image
 for import nor hotlinks or ships its bytes.
@@ -757,13 +762,12 @@ Reference assembly alone does not select image-first exploration; an explicitly 
 retains its recorded skip reason and creates no draft obligation. Board-v3 makes each influence
 a unique slot bound to an acquisition zone, decision, primary axis, source state/viewport, target
 viewports, responsive consequence, optional reconciled conflict, and falsifier. Several influences may
-shape one destination zone; downstream roles resolve their commitments into one system and verify each
-promised axis separately. The page is composed from parts, and different sections may draw parts from
-different references; tracing one reference's whole page layout and
-section order wholesale is a derivative failure, not fidelity — study the whole reference, take only the
-part each section needs. `omd ref distance` measures how close each section is to its assigned part;
-high per-part closeness is the intended outcome, not a warning. The selected production gate is
-slot-scoped and does not authorize whole-page cloning. Every used reference is
+shape one destination zone; downstream roles resolve their commitments into one destination system and
+verify each promised relationship separately. References are used only where that system has an unresolved
+relationship; a section-by-section collage is optional, not a quota. Tracing one reference's whole page
+layout and section order remains a derivative failure. `omd ref distance` is a diagnostic of declared
+transfer, not a design-quality target. The selected production gate is slot-scoped and does not authorize
+whole-page cloning. Every used reference is
 recorded with attribution in `.omd/attribution.md`, and the product's own copy is written rather than
 lifting the source's words. The eye and selector still score renders against the composition contract
 without seeing authorship — that blindness is about unbiased scoring, not about hiding the reference

@@ -108,15 +108,18 @@ content asset unintentionally.
 
 ### Default ground and evidence threshold
 
-There is no universal white-canvas default. When evidence is sparse, begin with the least
-committal plausible candidates rather than silently encoding a house style: for example, one light
-neutral and one dark or tinted alternative when both fit the task. Render them with the actual
-brand mark, imagery, dense content, controls, and states. Select the candidate that best supports
-the brief and record why.
+General product UI defaults to true white, `#FFFFFF`. Use a tinted, cream, dark, or material
+ground only when the user, brand, subject, existing system, working conditions, or measured reference
+evidence supports it. Beige, cream, sepia, and warm-paper styling is not an unearned premium default.
+Test the chosen ground with real dense content, controls, states, imagery, and contrast pairs.
+`tokens.md` defines the shared canvas, surface, text, border, focus, selection, and status roles; this
+file owns the color judgment behind those mappings.
 
-An explicit brand system or user preference is authority. Locale research may influence a ground
-only through the evidence-bearing locale profile; a locale, script, market label, or metaphor such
-as "editorial" or "premium" does not itself authorize beige, white, black, or any other ground.
+Marketing and editorial surfaces may choose another ground from their concept and evidence. An
+explicit brand system or user preference is authority. Locale research may influence a ground only
+through the evidence-bearing locale profile; a locale, script, market label, or metaphor such as
+"editorial" or "premium" does not itself authorize a tint or dark theme. The 60-30-10 guidance
+above remains a heuristic, never a law or acceptance threshold.
 
 ---
 

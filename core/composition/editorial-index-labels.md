@@ -3,6 +3,8 @@
 > Candidate hypothesis only. Revalidate its condition, values, and responsive transition
 > against the current composition contract; do not transfer this page recipe unchanged.
 
+Marketing/showpiece only. Do not use this recipe on a product work surface, operational dashboard, settings screen, admin flow, checkout, or repeated task loop. If the surface exists to help a user finish work, choose a product composition recipe instead.
+
 A large ordinal number — set at display scale, typically 10–15% opacity — anchors each
 section to its position in a sequence. The number reads as background field before it
 reads as a numeral; it reinforces order and creates depth without competing with the

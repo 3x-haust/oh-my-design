@@ -7,6 +7,10 @@ in an unexamined domain with the statistical mean of "a web page". This step exa
 first, so every downstream step (framing, reference acquisition, composition) is grounded in what the
 thing actually is.
 
+`theory/domain-playbooks.md` is optional hypothesis material for common operating models. It can
+suggest objects, loops, states, and risks to investigate, but its fictional examples and unverified
+patterns never count as observed domain evidence.
+
 This step is **mandatory**: `domain` is a declared mandatory stage, so a route cannot select it
 away or excuse it with a one-line skip reason (`DOMAIN_ANALYSIS_REQUIRED`).
 

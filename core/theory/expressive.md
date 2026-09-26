@@ -8,17 +8,19 @@ This file is decision material for the register axis. It is not a catalogue of c
 
 ## The register decision
 
-Every brief implies a register. The register is not the visual style — it is the intensity of the directed experience. Three positions on the axis:
+Every brief implies a register. The register is not the visual style — it is the intensity of the directed experience. Four positions on the axis:
 
 **quiet**: The interface recedes. The user's work or content is the event. Dashboards, documentation, tools, reading-first products. Motion is near-zero. Typography is functional. Restraint is not timidity; it is the correct reading of what the user came to do.
 
-**confident**: A position is visible but the interface does not perform. Brand sites, editorial products, most portfolio work. One thing is done well — a considered type scale, a deliberate palette — and nothing else competes. This is where most good work lives.
+**content-led**: The message, evidence, and real material lead a marketing surface. True white, readable density, direct typography, and ordinary flow are valid. No display-scale moment, decorative carrier, or built visual is mandatory. This register suits launches, services, and institutional pages whose credibility comes from clarity and specifics.
+
+**confident**: A position is visible but the interface does not perform. Brand sites, editorial products, most portfolio work. One thing is done well — a considered type scale, a deliberate palette — and nothing else competes.
 
 **showpiece**: The interface is the event. Brand campaign microsites, agency portfolios, product launches with a single CTA, experiential landing pages. The user came partly to experience being here. Awwwards SOTD, FWA, GDWEB — these are showpiece contexts. The register commits to one signature moment and builds everything toward it.
 
-The error is applying showpiece technique to quiet or confident contexts. A dashboard with split-text entrances is not ambitious; it is misread. The thirty-percent Usability weight does not become a thirty-percent weight only when the judges disagree with your taste — it applies regardless of intent. Usability 30% is the reason showpiece technique must still serve navigation and clarity, not just aesthetic ambition.
+The error is applying showpiece technique outside its conditions. A dashboard with split-text entrances is not ambitious; it is misread. The thirty-percent Usability weight does not become a thirty-percent weight only when the judges disagree with your taste — it applies regardless of intent. Usability 30% is the reason showpiece technique must still serve navigation and clarity, not just aesthetic ambition.
 
-On a `marketing` surface, ambition defaults to at least the confident register rather than waiting for the user to request an upgrade. A selected showpiece register raises expressive intensity on any surface, but never replaces that surface's grammar: marketing earns a signature visual or structural moment, while product earns its distinction through the work object, task states, and interaction. Motion is not implied: `motionDecision: one` arises only from explicit current-user policy or selected evidence. A competent, evenly-weighted, inoffensive marketing result with no visible priority or subject-specific consequence is a MISS, not a neutral outcome. This never licenses an effects catalogue (see The restraint clause): the ceiling is one bold concept committed fully, never a pile of techniques.
+On a `marketing` surface, choose `content-led`, `confident`, or `showpiece` from the brief, material, audience, and evidence; `confident` is not the silent default. A competent restrained page is not a MISS when it establishes clear priority, readable density, specific content, and a meaningful next move where one exists. A selected showpiece register raises expressive intensity but never replaces the surface grammar. Motion is not implied: `motionDecision: one` arises only from explicit current-user policy or selected evidence. No register licenses an effects catalogue (see The restraint clause).
 
 ---
 
@@ -110,7 +112,7 @@ Each entry names the condition under which the technique earns its place and the
 
 ### CSS scroll-driven animations / IntersectionObserver reveals
 
-**Condition for use**: The content is a scroll narrative — sections have a sequential logic, and the reveal of each section reinforces the sequence. The animation is `transform` and `opacity` only; nothing that touches layout.
+**Condition for use**: The content is a scroll narrative — sections have a sequential logic, and the reveal of each section reinforces the sequence. Prefer `transform` and `opacity`; use measured small-area paint transitions only when they communicate state more clearly.
 
 **Condition against**: Product UI that the user came to operate. Navigation elements. Any element the user needs to see immediately on scroll — a reveal that delays reading is a usability failure regardless of how well-timed it is.
 
@@ -201,7 +203,7 @@ The techniques above are a catalogue, not a checklist. A showpiece site uses two
 
 The selection discipline: before adding any technique, ask whether the concept — the governing metaphor — would do this. A concept framed as "a deep-sea research vessel" would animate precisely, with technical legibility, and would never distort images playfully. The same concept would not use a pastel grain texture. If the technique does not follow from the concept, it is decoration.
 
-**Performance is not a category below craft** — it is part of Usability, which is 30% of the score. Animating only `transform` and `opacity`, honouring `prefers-reduced-motion`, and staying within 60fps on mid-range hardware are not concessions to accessibility; they are the conditions under which the expressive register earns its score. An animation that causes layout jank has failed the Usability criterion. A motion that does not honour `prefers-reduced-motion: reduce` has failed both Usability and Accessibility.
+**Performance is not a category below craft** — it is part of Usability, which is 30% of the score. Prefer `transform` and `opacity`, measure justified exceptions, honour `prefers-reduced-motion`, and verify frame behavior on representative hardware. These are not concessions to accessibility; they are conditions under which expressive motion earns its place. Layout instability or sustained main-thread blockage fails the Usability criterion. A motion that does not honour `prefers-reduced-motion: reduce` has failed both Usability and Accessibility.
 
 ---
 
@@ -241,5 +243,5 @@ is documented in `core/graphics/placeholder-policy.md`.
 - Awwwards, "Customize your mouse cursor" (awwwards.com/customize-your-mouse-cursor) — cursor as brand vocabulary on award-winning sites; pointer-fine scoping requirement
 - GDWEB Design Awards, About (gdweb.co.kr/sub/about.asp) — Korean award context, judge composition, selection categories dominated by agency and campaign microsites
 - FWA (thefwa.com/awards) — Site/App of the Day bias toward technical and interactive ambition (WebGL, generative systems, bespoke interaction); the interactive/technical ceiling reference, distinct from Awwwards' usability-weighted and GDWEB's campaign-craft criteria
-- Motion theory cross-reference: see `core/theory/motion.md` — duration windows, reduced-motion requirement, transform/opacity constraint, and the attention budget argument all apply in the showpiece register without exception
+- Motion theory cross-reference: see `core/theory/motion.md` — role-based duration ranges, reduced-motion requirements, measured property choices, and the attention-budget argument apply in the showpiece register
 - Motion cookbook: working implementations of every technique catalogued above (split-text, scroll-reveal, sticky scene, section inversion, marquee, magnetic hover, and more) are in `core/motion/recipes/`; easing token vocabulary is in `core/motion/easing.md`. The gated WebGL/shader escalation pack — the safe scene scaffold (lazy-init, DPR cap, context-loss recovery, reduced-motion, non-canvas DOM fallback) plus a shader gradient field and a GPU particle field — is in `core/interaction/recipes/` (`webgl-scene-scaffold.md`, `shader-gradient-field.md`, `webgl-particle-field.md`), reaching the FWA WebGL/generative ceiling without shipping an inaccessible canvas as the default.
