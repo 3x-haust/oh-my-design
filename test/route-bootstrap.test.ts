@@ -270,6 +270,116 @@ test('a repaired valid input can resume an already-attempted classification with
   assert.equal(h.calls.filter(args => args[1] === 'classify').length, 1); // the extension never publishes by itself
 });
 
+test('a real full-build input continues from failed validation through repair to same-input classification', async t => {
+  const cwd = mkdtempSync(join(tmpdir(), 'omd-full-build-bootstrap-'));
+  t.after(() => rmSync(cwd, { recursive: true, force: true }));
+  const h = harness(cwd);
+  const prompt = '/skill:omd-ultradesign Build a React product.';
+  await h.emit('input', { source: 'interactive', text: prompt });
+  await h.emit('before_agent_start', { prompt });
+  const input = fixture(); input.taskOutcome.executionRequirements = []; await h.author(input);
+  assert.equal((await h.run(['route', 'validate', '--input', inputPath, '--json'])).details.code, 1);
+  await h.end();
+  assert.equal(h.sent.length, 1);
+  await h.emit('input', { source: 'extension' });
+  repair(input); await h.author(input);
+  assert.equal((await h.run(['route', 'validate', '--input', inputPath, '--json'])).details.code, 0);
+  await h.end();
+  assert.equal(h.sent.length, 2, 'validated full build must continue rather than finalize');
+  const next = h.sent.at(-1)?.[0];
+  assert.equal(next?.customType, 'omd-route-classify');
+  const command = /^Next OMD command: (.+)$/mu.exec(next?.content ?? '')?.[1];
+  assert.ok(command);
+  const args = JSON.parse(command);
+  assert.deepEqual(args, ['route', 'classify', '--input', inputPath, '--json']);
+  const route = JSON.parse((await h.run(args)).content[0]?.text ?? 'null');
+  assert.equal(route.request, 'Build a React product.');
+  assert.deepEqual(route.allowedPaths, input.allowedPaths);
+  assert.deepEqual(route.sourceContract.taskOutcome, input.taskOutcome);
+  const stage = JSON.parse((await h.run(['stage', 'resume', '--json'])).content[0]?.text ?? 'null');
+  assert.equal(stage.current, 'domain');
+});
+
+test('a real full build that ends after schema inspection gets one authoring action and reaches real classification', async t => {
+  const cwd = mkdtempSync(join(tmpdir(), 'omd-route-entry-'));
+  t.after(() => rmSync(cwd, { recursive: true, force: true }));
+  const h = harness(cwd), prompt = '/skill:omd-ultradesign Build a React product.';
+  await h.emit('input', { source: 'rpc', text: prompt });
+  await h.emit('before_agent_start', { prompt });
+  await h.run(['schema', 'product-route-input', '--json']);
+  const callsBeforeEntry = h.calls.length;
+  await h.end();
+  assert.equal(h.sent.length, 1);
+  assert.equal(h.sent[0]?.[0].customType, 'omd-route-entry');
+  const packetText = /^Action packet: (.+)$/mu.exec(h.sent[0]?.[0].content ?? '')?.[1];
+  assert.ok(packetText);
+  const packet = JSON.parse(packetText);
+  assert.equal(packet.action, 'author-route-input');
+  assert.equal(packet.inputPath, inputPath);
+  assert.equal(h.calls.length, callsBeforeEntry, 'entry must request authored work, not repeat checks');
+  assert.equal(existsSync(join(cwd, inputPath)), false);
+  assert.equal(existsSync(join(cwd, '.omd/route.json')), false);
+  await h.end();
+  assert.equal(h.sent.length, 1, 'unchanged entry must not loop');
+
+  const input = fixture(); repair(input); await h.author(input);
+  await h.end();
+  assert.equal(h.sent.at(-1)?.[0].customType, 'omd-route-classify');
+  const nextCommand = /^Next OMD command: (.+)$/mu.exec(h.sent.at(-1)?.[0].content ?? '')?.[1];
+  assert.ok(nextCommand);
+  const route = JSON.parse((await h.run(JSON.parse(nextCommand))).content[0]?.text ?? 'null');
+  assert.deepEqual(route.allowedPaths, input.allowedPaths);
+  assert.equal(route.request, 'Build a React product.');
+  assert.equal(JSON.parse((await h.run(['stage', 'resume', '--json'])).content[0]?.text ?? 'null').current, 'domain');
+});
+
+test('new user input revokes an untouched old turn before its delayed final message', async t => {
+  const cwd = mkdtempSync(join(tmpdir(), 'omd-entry-interrupt-'));
+  t.after(() => rmSync(cwd, { recursive: true, force: true }));
+  const h = harness(cwd), prompt = '/skill:omd-ultradesign Build a React product.';
+  await h.emit('input', { source: 'interactive', text: prompt });
+  await h.emit('before_agent_start', { prompt });
+  await h.run(['schema', 'product-route-input', '--json']);
+  await h.emit('input', { source: 'interactive', text: 'Stop.' });
+  assert.equal(await h.end(), undefined);
+  assert.equal(h.sent.length, 0);
+});
+
+test('missing bound source refuses initial authoring continuation', async t => {
+  const cwd = mkdtempSync(join(tmpdir(), 'omd-entry-source-'));
+  t.after(() => rmSync(cwd, { recursive: true, force: true }));
+  const h = harness(cwd), prompt = '/skill:omd-ultradesign Build a React product.';
+  await h.emit('input', { source: 'interactive', text: prompt });
+  await h.emit('before_agent_start', { prompt });
+  writeFileSync(join(cwd, '.omd/request-source.json'), '{}');
+  const result = await h.end();
+  assert.match(result.message.content[0]?.text ?? '', /OMD_REQUEST_BINDING/);
+  assert.equal(h.sent.length, 0);
+});
+
+for (const scenario of [
+  { source: 'interactive', prompt: '/skill:omd-ultradesign' },
+  { source: 'interactive', prompt: '/skill:omd-ultradesign Research only; do not build.' },
+  { source: 'interactive', prompt: 'Only report status of omd-ultradesign.' },
+  { source: 'extension', prompt: '/skill:omd-ultradesign Build a React product.' },
+]) {
+  test(`valid input cannot grant classification from ${scenario.source}: ${scenario.prompt}`, async t => {
+    const cwd = mkdtempSync(join(tmpdir(), 'omd-bootstrap-no-grant-'));
+    t.after(() => rmSync(cwd, { recursive: true, force: true }));
+    const h = harness(cwd, async () => ({ stdout: successReport, stderr: '', code: 0, killed: false }));
+    await h.emit('input', { source: scenario.source, text: scenario.prompt });
+    await h.emit('before_agent_start', { prompt: scenario.prompt });
+    await h.run(['schema', 'product-route-input', '--json']);
+    assert.equal(await h.end(), undefined);
+    assert.equal(h.sent.length, 0);
+    await h.author();
+    await h.run(['route', 'validate', '--input', inputPath, '--json']);
+    await h.end();
+    assert.equal(h.sent.length, 0);
+    assert.equal(existsSync(join(cwd, '.omd/route.json')), false);
+  });
+}
+
 test('real design-only bootstrap recovery preserves the non-implementation delivery mode', async t => {
   const cwd = mkdtempSync(join(tmpdir(), 'omd-bootstrap-design-'));
   t.after(() => rmSync(cwd, { recursive: true, force: true }));

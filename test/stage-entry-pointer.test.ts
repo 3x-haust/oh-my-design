@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -15,6 +15,9 @@ import { readPersistedRoute } from '../core/route/index.ts';
 import { publishReferenceResearch } from '../core/ref/reference-research.ts';
 import { publishReferenceApplication, referenceApplicationPlan } from '../core/ref/reference-application.ts';
 import { testSearchReceipt } from './helpers/search-execution.ts';
+import { buildBrief, formatBrief } from '../core/brief/index.ts';
+import { createTestNativePiInvocation } from '../core/runtime/native-pi-run.ts';
+import { createHash } from 'node:crypto';
 
 const pack = fileURLToPath(new URL('../core', import.meta.url));
 const deck = `# Copy deck
@@ -66,6 +69,52 @@ function copyProject(root: string, input = routeInput()) {
   writeFileSync(join(root, '.omd/.cache/copy-eye.md'), `Mode: copy-editor\nReview time: 2026-09-21T00:00:00Z\nReviewed copy-deck SHA-256: ${copyDeckSha256(Buffer.from(deck))}\nVerdict: CLEAN\nFindings: Same-session fixture, no independent attestation.\n`);
   return invocation;
 }
+
+test('native Pi briefs route browser evidence and independent review through their actual publishers', t => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-native-stage-brief-')));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const local = copyProject(root);
+  const cliPath = fileURLToPath(new URL('../bin/omd.mjs', import.meta.url));
+  const sha = (path: string) => createHash('sha256').update(readFileSync(path)).digest('hex');
+  const invocation = createTestNativePiInvocation({ root, current: local.current, host: {
+    nodePath: process.execPath, nodeSha256: sha(process.execPath), cliPath, cliSha256: sha(cliPath),
+    provider: 'fixture-provider', model: 'fixture-model', thinkingLevel: 'medium', parentSessionId: 'stage-fixture',
+  } });
+  assert.deepEqual(buildBrief(root, 'browser-evidence', pack, invocation).judgedBy.map(check => check.command),
+    ['omd lifecycle evaluate --json', 'omd slop review-check --json']);
+  const review = buildBrief(root, 'independent-review', pack, invocation);
+  assert.equal(review.judgedBy[0]?.command, 'omd review run --json');
+  assert.equal(review.procedure?.read, 'omd pack protocol/native-pi-completion.md');
+  assert.deepEqual(review.procedure?.steps, ['omd review run --json', 'omd lifecycle finalize --json', 'omd guard completion --json']);
+  assert.ok(formatBrief(review).includes('omd pack protocol/native-pi-completion.md'));
+  assert.equal(buildBrief(root, 'browser-evidence', pack, local).judgedBy[0]?.command, 'omd completion preflight --json');
+});
+
+test('native Pi next work keeps production and browser output work after authored stages pass', t => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-native-stage-next-')));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const local = copyProject(root);
+  const receipts = (['domain', 'copy'] as const).flatMap(stage => stageDefinition(stage).requiredContracts.map(contract =>
+    deliveryReceipt(stage, contract, contractSha256(pack, contract), '2026-09-21T00:00:00Z')));
+  writeFileSync(join(root, '.omd/delivery.jsonl'), receipts.map(receipt => JSON.stringify(receipt)).join('\n') + '\n');
+  const cliPath = fileURLToPath(new URL('../bin/omd.mjs', import.meta.url));
+  const sha = (path: string) => createHash('sha256').update(readFileSync(path)).digest('hex');
+  const invocation = createTestNativePiInvocation({ root, current: local.current, host: {
+    nodePath: process.execPath, nodeSha256: sha(process.execPath), cliPath, cliSha256: sha(cliPath),
+    provider: 'fixture-provider', model: 'fixture-model', thinkingLevel: 'medium', parentSessionId: 'stage-fixture',
+  } });
+  const before = readFileSync(join(root, '.omd/copy-deck.md'));
+  const work = nextStageWork(root, pack, invocation);
+  assert.equal(work.stage, 'production');
+  assert.equal(work.next, 'omd brief production --check --json');
+  assert.deepEqual(readFileSync(join(root, '.omd/copy-deck.md')), before);
+  assert.equal(nextStageWork(root, pack, local).stage, null);
+  writeFileSync(join(root, '.omd/observation-v2.json'), '{}');
+  const forged = nextStageWork(root, pack, invocation);
+  assert.equal(forged.stage, 'browser-evidence');
+  assert.equal(forged.next, 'omd lifecycle evaluate --json');
+  assert.ok(forged.problems.length > 0);
+});
 
 test('next work repairs missing entry receipts even when every selected output is valid', t => {
   const root = mkdtempSync(join(tmpdir(), 'omd-stage-entry-pointer-'));

@@ -97,6 +97,7 @@ export function formatBrief(brief: Brief): string {
   section('inputs', brief.schemas.map((entry) => `${entry.name}: ${entry.command}`));
   if (brief.shell !== null) section('shell', [`${brief.shell.kind} — ${brief.shell.target}`]);
   section('judged by', brief.judgedBy.map((entry) => `${entry.command}  →  fails when ${entry.fails}`));
+  if (brief.procedure !== undefined) section('procedure', [brief.procedure.read, ...brief.procedure.steps, brief.procedure.limits]);
   section('prior', brief.prior);
   section('blockers', brief.blockers);
   return `${lines.join('\n')}\n`;

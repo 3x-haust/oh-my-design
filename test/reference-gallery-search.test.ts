@@ -46,12 +46,20 @@ test('installed CLI flushes the complete discovery plan for automation consumers
   const discovered = run(['ref', 'discover-plan', '--json']);
   assert.equal(discovered.status, 0, discovered.stderr);
   const plan = JSON.parse(discovered.stdout);
-  assert.deepEqual(plan.galleryDirectories, ['Mobbin', 'Page Flows', 'Pinterest', 'Dribbble', 'Behance', 'UI Bowl']);
+  assert.deepEqual(plan.galleryDirectories, ['WWIT', 'SaaSUI', 'Mobbin', 'Page Flows', 'Pinterest', 'Dribbble', 'Behance', 'UI Bowl']);
 });
 
 test('product-screen providers accept concrete screens but reject their directory pages', () => {
   assert.equal(designDiscoveryProvider('https://mobbin.com/explore/screens/7b35b6c7-f954-4dcb-b320-3ad873339477'), 'Mobbin');
   assert.equal(designDiscoveryProvider('https://pageflows.com/screens/6753bc45-9853-4b61-a78e-c95827d347e5/'), 'Page Flows');
+  assert.equal(designDiscoveryProvider('https://www.saasui.design/application/arrows'), 'SaaSUI');
+  assert.equal(designDiscoveryProvider('https://www.saasui.design/pattern/dashboard/arrows'), 'SaaSUI');
+  assert.equal(designDiscoveryProvider('https://wwit.design/2025/02/15/npay/'), 'WWIT');
+  assert.equal(designDiscoveryDirectoryProvider('https://wwit.design/'), 'WWIT');
+  assert.equal(designDiscoveryProvider('https://wwit.design/'), null);
+  assert.equal(designDiscoveryDirectoryProvider('https://www.saasui.design/pattern/dashboard'), 'SaaSUI');
+  assert.equal(designDiscoveryProvider('https://www.saasui.design/pattern/dashboard'), null);
+  assert.equal(designDiscoveryProvider('https://www.saasui.design/blog'), null);
   for (const url of ['https://mobbin.com/explore/screens', 'https://pageflows.com/screens/']) {
     assert.equal(designDiscoveryProvider(url), null);
   }

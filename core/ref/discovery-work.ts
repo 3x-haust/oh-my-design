@@ -57,6 +57,10 @@ function domainSearchResults(search: SearchExecution, allowUnmatched: boolean): 
   return actionableSearchTargets({ ...search, allowUnmatched }).filter(url => {
     if (!publicCandidate(url)) return false;
     const host = new URL(url).hostname.toLowerCase();
+    const label = labels.get(url) ?? '';
+    if (/(?:^|\.)(?:namu\.wiki|wikipedia\.org)$/u.test(host)
+      || /나무위키|위키|조회 방법|신청 방법|정책정보|공지사항/iu.test(label)
+      || /\/gvrnPolicy\//iu.test(new URL(url).pathname)) return false;
     return host !== search.provider && !host.endsWith(`.${search.provider}`)
       && !/^(?:search\.daum\.net|logins\.daum\.net|www\.google\.com|www\.bing\.com|duckduckgo\.com|map\.kakao\.com)$/u.test(host);
   }).sort((left, right) => {
@@ -79,6 +83,13 @@ function nextLaneAction(lane: Lane, plan: ReferenceDiscoveryPlan, evidence: Lane
       { input: requiredSearch });
   }
   const failedUrls = new Set(evidence.unavailable.map(item => item.source));
+  const excludedFamilies = new Map<string, Set<string>>();
+  for (const url of excludedUrls) {
+    const family = referenceServiceFamily(url);
+    const urls = excludedFamilies.get(family) ?? new Set<string>();
+    urls.add(url);
+    excludedFamilies.set(family, urls);
+  }
   const visited = new Set([...evidence.visits, ...evidence.entries].flatMap(item =>
     [item.observation.url, item.observation.finalUrl]));
   const rootTargets = [...new Set([...evidence.searches.filter(searchObserved).flatMap(search => lane === 'domain'
@@ -86,7 +97,8 @@ function nextLaneAction(lane: Lane, plan: ReferenceDiscoveryPlan, evidence: Lane
     : actionableSearchTargets(search).filter(publicCandidate)),
     ...evidence.entries.flatMap(item => item.observation.links.filter(url => lane === 'domain'
       ? domainCandidate(url) : publicCandidate(url) && designDiscoveryProvider(url) !== null))])];
-  const rootSet = new Set(rootTargets);
+  const rootSet = new Set(lane === 'domain'
+    ? evidence.entries.map(item => item.observation.url) : rootTargets);
   const descendantTargets = evidence.visits.filter(item => rootSet.has(item.observation.url))
     .flatMap(item => item.observation.links.filter(url => lane === 'domain'
       ? domainCandidate(url) && referenceServiceFamily(url) !== referenceServiceFamily(item.observation.url)
@@ -99,6 +111,7 @@ function nextLaneAction(lane: Lane, plan: ReferenceDiscoveryPlan, evidence: Lane
       try {
         if (excludedUrls.has(url) || !publicCandidate(url)) return false;
         const family = referenceServiceFamily(url);
+        if (lane === 'domain' && (excludedFamilies.get(family)?.size ?? 0) >= 2) return false;
         return lane === 'design' ? designDiscoveryProvider(url) !== null || originals.has(url)
           : !retainedFamilies.has(family) && designDiscoveryProvider(url) === null;
       } catch { return false; }
@@ -123,7 +136,7 @@ function nextLaneAction(lane: Lane, plan: ReferenceDiscoveryPlan, evidence: Lane
     ? plan.marketReferencePolicy.domainSearchInputs
     : ((plan.lanes.find(item => item.id === 'domain-reference')?.querySeeds.length ?? 0) > 0
       ? plan.lanes.find(item => item.id === 'domain-reference')?.querySeeds ?? [] : [plan.task]).slice(0, 4)
-      .flatMap(query => ['https://www.bing.com/search', 'https://duckduckgo.com/', 'https://www.google.com/search'].map(endpoint => {
+      .flatMap(query => ['https://www.google.com/search', 'https://www.bing.com/search', 'https://duckduckgo.com/'].map(endpoint => {
         const url = new URL(endpoint);
         url.searchParams.set('q', query);
         return { lane: 'domain' as const, query, url: url.href, queryParam: 'q' as const };
@@ -204,7 +217,7 @@ export function referenceDiscoveryWork(root: string, route: RouteRecord): Refere
   const attempts = [...domain.failures, ...design.failures];
   const next = status === 'ready' ? 'omd ref board --input <candidate-assemblies.json>'
     : action.args.length ? `omd ${action.args.join(' ')}`
-      : `omd ref add ${action.url ?? '<observed-source>'} --lane ${action.lane ?? 'design'} --selector <observed-ui-selector> --shot OR omd ref exclude ${action.url ?? '<observed-source>'} --lane ${action.lane ?? 'design'} --reason <specific-quality-judgment>`;
+      : `Inspect the captured DOM for a real selector, then omd ref add ${action.url ?? '<observed-source>'} --as <component-name> --lane ${action.lane ?? 'design'} --selector <observed-ui-selector> --shot OR omd ref exclude ${action.url ?? '<observed-source>'} --lane ${action.lane ?? 'design'} --reason <specific-quality-judgment>`;
   const instruction = status === 'ready' ? 'Read omd schema reference-board once, author the board from useful retained evidence, then publish it with the named CLI publisher.'
     : action.reason;
   return { schema: 'reference-discovery-work-v1', status, action, next, instruction,

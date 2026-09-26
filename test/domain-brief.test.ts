@@ -93,6 +93,20 @@ test('validateDomainBrief accepts a well-formed brief and trims/normalizes', () 
   assert.equal(brief.coreObjects[0]?.name, 'stock item');
 });
 
+test('domain brief preserves the complete request bytes including boundary whitespace', () => {
+  const request = '\n  # Full request\r\n' + 'Required screen and recovery behavior.\n'.repeat(600) + '\n';
+  const brief = validateDomainBrief({ ...baseBrief(), request });
+  assert.equal(brief.request, request);
+});
+
+test('domain brief can represent all seventeen requested product screens independently', () => {
+  const surfaces = Array.from({ length: 17 }, (_, index) => ({
+    name: `Screen ${index + 1}`, purpose: `Complete task ${index + 1}`, evidence: [userProvided],
+  }));
+  const brief = validateDomainBrief({ ...baseBrief(), surfaces });
+  assert.deepEqual(brief.surfaces, surfaces);
+});
+
 test('validateDomainBrief rejects a wrong schema', () => {
   assert.throws(() => validateDomainBrief({ ...baseBrief(), schema: 'domain-brief-v2' }), DomainBriefError);
 });

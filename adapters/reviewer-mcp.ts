@@ -7,6 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { createServer, connect, type Server } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { createInterface } from 'node:readline';
+import { observedProcessExecutableSha256 } from '../core/runtime/process-executable.ts';
 import {
   createReviewerEvidenceProxy,
   type ReviewerEvidenceReceipt,
@@ -15,7 +16,7 @@ import {
 
 export const REVIEWER_LAUNCH_RECEIPT_SCHEMA_VERSION = 'reviewer-launch-receipt-v1' as const;
 
-export type ReviewerHost = 'claude' | 'codex' | 'benchmark';
+export type ReviewerHost = 'claude' | 'codex' | 'pi' | 'benchmark';
 export type ProductionReviewerHost = Exclude<ReviewerHost, 'benchmark'>;
 
 export type ReviewerLaunchRequest = {
@@ -135,10 +136,12 @@ function processInfo(pid: number): ProcessInfo {
   const match = result.status === 0 ? result.stdout.trim().match(/^(\d+)\s+(\d+)\s+(.*)$/) : undefined;
   if (!match) throw new ReviewerLaunchError('reviewer process cannot be observed');
   const command = Object.freeze(match[3]!.trim().split(/\s+/));
+  const observedExecutable = observedProcessExecutableSha256(pid);
+  if (observedExecutable === undefined) throw new ReviewerLaunchError('reviewer process executable cannot be observed');
   return Object.freeze({
     pid: Number(match[1]),
     parentPid: Number(match[2]),
-    executableSha256: executableSha256(command[0]!),
+    executableSha256: observedExecutable,
     command,
   });
 }
@@ -864,7 +867,7 @@ export async function runReviewerEvidenceProxyStdio(argv: readonly string[]): Pr
     && argv[6] === '--runner-id' && argv[7]!
     && argv[8] === '--session-id' && argv[9]!
     && argv[10] === '--nonce' && argv[11]!
-    && argv[12] === '--host' && (argv[13] === 'codex' || argv[13] === 'claude' || argv[13] === 'benchmark')
+    && argv[12] === '--host' && (argv[13] === 'codex' || argv[13] === 'claude' || argv[13] === 'pi' || argv[13] === 'benchmark')
     && argv[14] === '--reviewer-pid' && /^[1-9]\d*$/.test(argv[15]!)
     && argv[16] === '--proxy-target' && argv[17] === reviewerProxyTarget
     && argv[18] === '--proxy-sha256' && argv[19] === executableSha256(reviewerProxyTarget);

@@ -83,7 +83,7 @@ function persistedTaskNeed(root: string, sourceContractSha256: string, request: 
     label: record, fs });
   if (createHash('sha256').update(bytes).digest('hex') !== sourceContractSha256) return marketReject(code);
   const source = marketObject(JSON.parse(bytes.toString('utf8')), code);
-  if (source.request !== request.trim()) return marketReject(code);
+  if (source.request !== request) return marketReject(code);
   return marketText(marketObject(source.referenceDiscovery, code).taskNeed, code);
 }
 
@@ -140,7 +140,7 @@ export function validateMarketReferenceCoverage(root: string, research: Referenc
   if (!existsSync(briefPath)) return marketReject('REFERENCE_RESEARCH_MARKET_DESIGN_PLAN_REQUIRED: current domain queries are missing');
   const briefBytes = readStableProjectFile({ root: resolve(root), path: briefPath, label: '.omd/domain-brief.json', fs: nodeStableProjectFileSystem() });
   const brief = validateDomainBrief(JSON.parse(briefBytes.toString('utf8')));
-  if (expectedRequest === undefined || brief.request !== expectedRequest.trim()) {
+  if (expectedRequest === undefined || brief.request !== expectedRequest) {
     return marketReject('REFERENCE_RESEARCH_MARKET_DESIGN_PLAN_STALE: current domain queries describe another request');
   }
   const domain = context?.domain ?? brief.domain;

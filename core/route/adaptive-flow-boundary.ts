@@ -75,6 +75,12 @@ function text(value: unknown, skipReason = false): string {
   return normalized;
 }
 
+export function parseAdaptiveRequest(value: unknown): string {
+  if (typeof value !== 'string') return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE');
+  text(value);
+  return value;
+}
+
 function id(value: unknown): string {
   const parsed = text(value);
   return ID.test(parsed) ? parsed : failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE');
@@ -190,7 +196,7 @@ export function parseAdaptiveRouteInput(value: unknown): AdaptiveRouteInput {
     return Object.freeze({
       schema: ADAPTIVE_ROUTE_INPUT_SCHEMA,
       ...(hasMode ? { deliveryMode: 'design-only' as const } : {}),
-      request: text(item.get('request')),
+      request: parseAdaptiveRequest(item.get('request')),
       projectMode: item.get('projectMode') === undefined
         ? 'existing'
         : item.get('projectMode') === 'greenfield' || item.get('projectMode') === 'existing'

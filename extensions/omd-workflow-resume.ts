@@ -3,6 +3,8 @@ const buildObject = String.raw`(?:the\s+)?(?:OMD\s+)?(?:build|implementation|rep
 const explicitBuildResume = new RegExp(String.raw`^(?:(?:please\s+)?(?:continue|resume)\s+${buildObject}|(?:OMD\s*)?(?:구현|개발|빌드|수정|복구)(?:\s*(?:작업|을))?\s*(?:계속|이어서)\s*(?:해|해줘|해주세요|진행해|진행해줘|진행해주세요))[.!。]?$`, 'iu');
 const cancellation = new RegExp(String.raw`^(?:(?:please\s+)?(?:stop|cancel|pause)(?:\s+(?:${buildObject}|(?:the\s+)?(?:OMD\s+)?(?:work|task|workflow|discovery|research)))?(?:\s+please)?|(?:OMD\s*)?(?:(?:작업|구현|개발|빌드|수정|복구|조사|수집)(?:\s*작업)?(?:을|를)?\s*)?(?:멈춰|중단해|취소해|그만해)(?:\s*(?:줘|주세요))?)[.!。]?$`, 'iu');
 
+export const isWorkflowResumePrompt = (prompt: string): boolean => resumeRequest.test(prompt.trim()) || explicitBuildResume.test(prompt.trim());
+
 export class WorkflowResume {
   private readonly routes = new Map<string, string>();
   clear(): void { this.routes.clear(); }

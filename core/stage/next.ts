@@ -9,6 +9,8 @@ import { stageArtifactProblems } from './output.ts';
 import { referenceInterpretationWork, referenceResearchWork } from './reference-work.ts';
 import { referenceDiscoveryWork } from '../ref/discovery-work.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
+import { isNativePiInvocation } from '../runtime/native-pi-run.ts';
+import { nativeCompletionWork } from './native-completion.ts';
 
 /** Fresh and interrupted runs use the same current-disk work pointer. No artifacts are fabricated. */
 export function nextStageWork(root: string, packRoot: string, invocation: ProjectRunInvocation) {
@@ -46,6 +48,9 @@ export function nextStageWork(root: string, packRoot: string, invocation: Projec
   const missingReferenceBoard = stage === 'reference-board' && incomplete?.present === false
     && entry?.blockers.length === 0 && route.references.decision === 'discover';
   const discoveryWork = missingReferenceBoard ? referenceDiscoveryWork(root, route) : null;
+  const native = stage === null && interpretation === null && route.deliveryMode !== 'design-only'
+    && isNativePiInvocation(invocation) ? nativeCompletionWork(root, invocation) : null;
+  const nativeBrief = native?.stage ? checkBriefEntry(root, native.stage, packRoot, invocation) : null;
   return {
     schema: 'stage-next-v1', meaning: 'next-work-not-completion', deliveryMode: route.deliveryMode ?? 'implementation',
     stage, owner: brief?.owner ?? null,
@@ -74,5 +79,8 @@ export function nextStageWork(root: string, packRoot: string, invocation: Projec
         : 'Read and deliver this stage\'s contracts, satisfy entry, execute the owned work, then its applicable output checks. Recompute stage next after changes. Remaining output quality, reference currentness, candidates, rendered evidence and independent review still require their own gates; this pointer never certifies completion.',
     referenceWork: discoveryWork,
     ...(research ?? interpretation ?? {}),
+    ...(native === null ? {} : { ...native, entryBlockers: nativeBrief?.blockers ?? [],
+      schemas: nativeBrief?.schemas ?? [], contracts: nativeBrief?.contracts ?? [], judgedBy: nativeBrief?.judgedBy ?? [],
+      ...(nativeBrief?.procedure === undefined ? {} : { procedure: nativeBrief.procedure }) }),
   };
 }

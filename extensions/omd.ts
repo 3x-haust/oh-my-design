@@ -11,6 +11,10 @@ import { RepairLoop } from './omd-repair-progress.ts';
 import { StageWork, checkNativeStageEntry, nativeEntryStage, nativeOwnedStage } from './omd-stage-work.ts';
 import { handleOmdMessageEnd, referenceWorkAdvanced, type ReferenceWork } from './omd-message-end.ts';
 import { WorkflowResume } from './omd-workflow-resume.ts';
+import { PiRequestBindings } from './omd-request-binding.ts';
+import { normalizeOmdAlias } from './omd-request-prompt.ts';
+import { PiNativeRuns } from './omd-native-run.ts';
+import { RouteEntryContinuation, ROUTE_ENTRY_INPUT, ROUTE_ENTRY_VALIDATION } from './omd-bootstrap-entry.ts';
 
 export const OMD_TOOL_NAME = 'omd_cli';
 
@@ -59,18 +63,28 @@ export default function omdExtension(pi: PortablePiApi): void {
   const freshRoutes = new Set<string>();
   const workflowStarted = new Set<string>();
   const workflowResume = new WorkflowResume();
+  const requests = new PiRequestBindings();
+  const nativeRuns = new PiNativeRuns();
+  const routeEntry = new RouteEntryContinuation();
   const rememberWorkflow = (cwd: string) => workflowResume.remember(cwd, fileRevision(cwd, '.omd/route.json'));
   // Pi may execute sibling tools concurrently. Serialize OMD commands per project so two
   // legitimate publishers cannot collide with OMD's project mutation lock.
   const run = (args: readonly string[], cwd: string, signal?: AbortSignal, onUpdate?: Parameters<typeof runOmd>[4]) => {
+    const requestSource = requests.pin(cwd, args);
     const queued = queues.get(cwd);
     const progressId = createOmdProgressId();
     const stopWaiting = queued === undefined ? () => undefined : monitorOmdProgress(args, 'queued', signal, onUpdate, progressId);
     const previous = queued ?? Promise.resolve();
-    const next = previous.catch(() => undefined).then(() => {
+    const next = previous.catch(() => undefined).then(async () => {
       stopWaiting();
       if (signal?.aborted) throw new OmdCancelledError();
-      return runOmd(pi, args, cwd, signal, onUpdate, progressId);
+      await requests.verifyRestored(cwd, requestSource, () => runOmd(pi, ['route', 'show', '--json'], cwd, signal, undefined, undefined, nativeRuns));
+      if (signal?.aborted) throw new OmdCancelledError();
+      const effective = requests.materialize(cwd, args, requestSource);
+      try {
+        const result = await runOmd(pi, effective.args, cwd, signal, onUpdate, progressId, nativeRuns);
+        return effective.info === undefined ? result : { ...result, details: { ...result.details, requestBinding: effective.info } };
+      } finally { effective.dispose(); }
     });
     queues.set(cwd, next);
     void next.finally(() => { if (queues.get(cwd) === next) queues.delete(cwd); }).catch(() => undefined);
@@ -94,8 +108,11 @@ export default function omdExtension(pi: PortablePiApi): void {
   const on = typeof hook === 'function' ? hook.bind(pi) : undefined;
   const hooksAvailable = on !== undefined;
   if (on !== undefined) {
-    on('session_start', async () => { epochs.clear(); repairLoop.clear(); pendingReferenceWork.clear(); revisions.clear(); pendingMutations.clear(); ownedWork.clear(); managed.clear(); touched.clear(); productionAttempted.clear(); authoredInputs.clear(); bootstraps.clear(); freshRoutes.clear(); workflowStarted.clear(); workflowResume.clear(); });
+    on('session_start', async () => { epochs.clear(); repairLoop.clear(); pendingReferenceWork.clear(); revisions.clear(); pendingMutations.clear(); ownedWork.clear(); managed.clear(); touched.clear(); productionAttempted.clear(); authoredInputs.clear(); bootstraps.clear(); freshRoutes.clear(); workflowStarted.clear(); workflowResume.clear(); requests.clear(); nativeRuns.clear(); routeEntry.clear(); });
     on('input', async (event, context) => {
+      const alias = (event.source === 'interactive' || event.source === 'rpc') && typeof event.text === 'string'
+        ? normalizeOmdAlias(event.text) : undefined;
+      requests.receive(context.cwd, alias === undefined ? event : { ...event, text: alias });
       if (event.source === 'interactive' || event.source === 'rpc') {
         epochs.delete(context.cwd);
         repairLoop.delete(context.cwd);
@@ -110,8 +127,11 @@ export default function omdExtension(pi: PortablePiApi): void {
         freshRoutes.delete(context.cwd);
         workflowStarted.delete(context.cwd);
       }
+      if (alias !== undefined) return { action: 'transform', text: alias, ...(event.images === undefined ? {} : { images: event.images }) };
     });
     on('before_agent_start', async (event, context) => {
+      nativeRuns.observe(context);
+      requests.activate(context.cwd, event.prompt ?? '');
       if (workflowResume.accepts({ cwd: context.cwd, routeSha256: fileRevision(context.cwd, '.omd/route.json'), prompt: event.prompt ?? '' })) {
         workflowStarted.add(context.cwd); touched.add(context.cwd);
       }
@@ -119,6 +139,15 @@ export default function omdExtension(pi: PortablePiApi): void {
       if (/omd-ultradesign|skill:omd-/i.test(event.prompt ?? '')) managed.add(context.cwd);
       if (!guarded(context.cwd)) return;
       return { systemPrompt: `${event.systemPrompt ?? ''}\nOMD host gates are active: declaration → procedure → automatic refusal (protocol/three-layer-enforcement.md). Use omd_cli for OMD commands. Before initial publication use the task-appropriate route starter and route validate --json; repair the grouped input diagnostics, then classify and stage next --json. The current work pointer names real missing/malformed inputs; it never certifies completion. For framing use schema frame, frame set --input, then frame check. Inspect domain check unconfirmedPlanning early; cite actual user excerpts or ask about missing facts. Do not use guard completion to diagnose an unclassified route. The coordinator inspects each selected stage brief, delivers contracts, then runs brief <stage> --check --json before its owner starts. Plain brief inspection is not permission. Before application writes run guard production; repair each selected-stage blocker, never replace CLI-owned records or relabel product UX to skip checks. Use read and standalone inventory commands during research. After completing the selected owned work and its checks, run guard completion before a completion report; do not use a terminal missing-output list as the next-stage procedure. Build/captures alone are not completion; report blocked/partial work accurately. At each meaningful phase boundary and before an automatic repair continuation, give the user one concise visible progress note: what was just verified, what owner/action runs next, and which check will follow. Do not narrate every tool call or expose hidden reasoning. Research/document authoring remains available.` };
+    });
+    on('message_start', async (event, context) => {
+      if (event.message?.role !== 'user') return;
+      nativeRuns.observe(context);
+      const text = event.message.content?.filter(part => part.type === 'text').map(part => part.text ?? '').join('');
+      if (text !== undefined) {
+        requests.activate(context.cwd, text);
+        if (requests.classificationGranted(context.cwd)) ownedWork.activate(context.cwd, text);
+      }
     });
     on('tool_call', async (event, context) => {
       if (event.toolName === OMD_TOOL_NAME) {
@@ -196,13 +225,25 @@ export default function omdExtension(pi: PortablePiApi): void {
     });
     on('message_end', async (event, context) => {
       const message = event.message;
-      if (!touched.has(context.cwd) || message?.role !== 'assistant' || message.stopReason !== 'stop'
+      const entryAuthorized = !hasPiRoute(context.cwd) && requests.classificationGranted(context.cwd) && ownedWork.token(context.cwd) !== undefined;
+      if ((!touched.has(context.cwd) && !entryAuthorized) || message?.role !== 'assistant' || message.stopReason !== 'stop'
         || message.content?.some(part => part.type === 'toolCall')) return;
       pendingMutations.delete(context.cwd);
       if (context.signal?.aborted) return;
       const taskEpoch = epoch(context.cwd);
       const interrupted = () => context.signal?.aborted || epochs.get(context.cwd) !== taskEpoch;
-      const bootstrap = bootstraps.get(context.cwd);
+      const bootstrap = bootstraps.get(context.cwd) ?? (entryAuthorized && authoredInputs.get(context.cwd)?.has(ROUTE_ENTRY_INPUT)
+        ? { inputPath: ROUTE_ENTRY_INPUT, validationArgs: [...ROUTE_ENTRY_VALIDATION], classificationAttempted: false, classificationAuthorized: true }
+        : undefined);
+      if (entryAuthorized && bootstrap === undefined) {
+        try {
+          const source = requests.pin(context.cwd, ROUTE_ENTRY_VALIDATION);
+          if (source !== undefined) return routeEntry.resume({ cwd: context.cwd, sourceSha256: source.recordSha256, message, pi });
+        } catch (error) {
+          if (!(error instanceof Error)) throw error;
+          return { message: { ...message, content: [{ type: 'text', text: `OMD route entry is blocked; the current request cannot be verified.\n${error.message}` }] } };
+        }
+      }
       return handleOmdMessageEnd({ cwd: context.cwd, ...(context.signal === undefined ? {} : { signal: context.signal }), message,
         run, interrupted, ...(bootstrap === undefined ? {} : { bootstrap }), hasRoute: hasPiRoute(context.cwd),
         workflowStarted: workflowStarted.has(context.cwd), ownedWorkStarted: ownedWork.started(context.cwd),
@@ -223,6 +264,7 @@ export default function omdExtension(pi: PortablePiApi): void {
       args: Type.Array(Type.String(), { minItems: 1 }),
     }, { additionalProperties: false }),
     async execute(_toolCallId, params, signal, onUpdate, context) {
+      nativeRuns.observe(context);
       const workToken = ownedWork.token(context.cwd);
       const taskEpoch = epoch(context.cwd);
       if (!Array.isArray(params.args) || params.args.length === 0 || params.args.some((arg) => typeof arg !== 'string')) {
@@ -244,6 +286,7 @@ export default function omdExtension(pi: PortablePiApi): void {
           && (classificationAttempted || authoredInputs.get(context.cwd)?.has(target.path))) {
           commandBootstrap = { ...candidate,
             classificationAttempted: classificationAttempted || (previousBootstrap?.inputPath === candidate.inputPath && previousBootstrap.classificationAttempted),
+            classificationAuthorized: requests.classificationGranted(context.cwd),
             ...(previousBootstrap?.inputPath === candidate.inputPath && previousBootstrap.classificationFailure !== undefined ? { classificationFailure: previousBootstrap.classificationFailure } : {}),
           };
           bootstraps.set(context.cwd, commandBootstrap);
@@ -295,7 +338,8 @@ export default function omdExtension(pi: PortablePiApi): void {
         throw error;
       }
       return {
-        content: [{ type: 'text', text: result.text }],
+        content: [{ type: 'text', text: result.text }, ...(result.details.requestBinding === undefined ? [] : [{ type: 'text' as const,
+          text: `OMD used the captured original user request (${result.details.requestBinding.characters} characters; sha256 ${result.details.requestBinding.sha256}). The authored request field cannot replace it. Publish domain input with domain set --input; it inherits the complete current route request.` }])],
         details: result.details,
       };
     },

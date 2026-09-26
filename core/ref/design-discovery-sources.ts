@@ -31,6 +31,9 @@ export function designDiscoveryProvider(url: string): string | null {
   if (host === 'godly.website' && /^\/website\/[^/]+\/?$/.test(path)) return 'Godly';
   if (host === 'mobbin.com' && MOBBIN_SCREEN.test(path)) return 'Mobbin';
   if (host === 'pageflows.com' && PAGE_FLOWS_SCREEN.test(path)) return 'Page Flows';
+  if (host === 'wwit.design' && /^\/20\d{2}\/\d{2}\/\d{2}\/[a-z0-9][a-z0-9-]*\/?$/.test(path)) return 'WWIT';
+  if (host === 'saasui.design' && (/^\/application\/[a-z0-9][a-z0-9-]*\/?$/.test(path)
+    || /^\/pattern\/[a-z][a-z0-9-]*\/[a-z0-9][a-z0-9-]*\/?$/.test(path))) return 'SaaSUI';
   // UI Bowl public access is not its paid MCP. Only a real item path is accepted.
   if (host === 'uibowl.io' && /^\/(?:screens?|apps?|patterns?|components?)\/[^/]+(?:\/[^/]+)*\/?$/.test(path)) return 'UI Bowl';
   return null;
@@ -95,6 +98,8 @@ export function designDiscoveryDirectoryProvider(url: string): string | null {
   if (host === 'uibowl.io' && ['/', '/screens', '/apps', '/patterns', '/components'].includes(path)) return 'UI Bowl';
   if (host === 'mobbin.com' && path === '/explore/screens') return 'Mobbin';
   if (host === 'pageflows.com' && path === '/screens') return 'Page Flows';
+  if (host === 'wwit.design' && (path === '/' || /^\/(?:pattern|category)\/[a-z][a-z0-9-]*$/.test(path))) return 'WWIT';
+  if (host === 'saasui.design' && (path === '/' || /^\/pattern\/[a-z][a-z0-9-]*$/.test(path))) return 'SaaSUI';
   return null;
 }
 import { getDomain } from 'tldts';

@@ -85,7 +85,7 @@ test('omd_cli preserves structured argv and the Pi project cwd without a shell',
   );
 
   assert.equal(calls.length, 1);
-  assert.equal(calls[0]!.command, 'node');
+  assert.equal(calls[0]!.command, process.execPath);
   assert.equal(isAbsolute(calls[0]!.args[0]!), true);
   assert.match(calls[0]!.args[0]!, /bin[/\\]omd\.mjs$/);
   assert.deepEqual(calls[0]!.args.slice(1), ['check', 'a path/page.html', '--json', '$(not-a-shell)']);

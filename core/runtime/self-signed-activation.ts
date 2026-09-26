@@ -32,6 +32,7 @@ export const ACTIVATION_KEY_DIRECTORY = '.omd/activation';
 const PRIVATE_KEY_PATH = `${ACTIVATION_KEY_DIRECTORY}/project.key`;
 const PUBLIC_KEY_PATH = `${ACTIVATION_KEY_DIRECTORY}/project.pub`;
 const NONCE_JOURNAL_PATH = `${ACTIVATION_KEY_DIRECTORY}/consumed-nonces.jsonl`;
+const NONCE_CLAIMS_DIRECTORY = `${ACTIVATION_KEY_DIRECTORY}/consumed-nonces`;
 
 /** Receipts are short-lived: long enough for one command, short enough that a leak ages out. */
 export const SELF_SIGNED_RECEIPT_TTL_MS = 15 * 60 * 1000;
@@ -60,7 +61,10 @@ export class SelfSignedActivationError extends Error {
 
 const fail = (reason: string): never => { throw new SelfSignedActivationError(reason); };
 const sha256Hex = (value: string | Uint8Array): string => createHash('sha256').update(value).digest('hex');
-const canonical = (value: unknown): string => JSON.stringify(value, Object.keys(value as object).sort());
+const canonical = (value: unknown): string => JSON.stringify(value, (_key: string, entry: unknown): unknown =>
+  typeof entry === 'object' && entry !== null && !Array.isArray(entry)
+    ? Object.fromEntries(Object.entries(entry).sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0))
+    : entry);
 
 /**
  * Reads the project keypair, creating it once. The private key is 0600 and the directory 0700; a
@@ -213,8 +217,8 @@ export function verifySelfSignedReceipt(input: VerifyReceiptInput): VerifyReceip
 }
 
 /**
- * Claims a nonce exactly once, journalling the claim before returning. A receipt replayed in a later
- * process is refused here, which is why this reads from disk rather than from a process-local set.
+ * Exclusive claim files arbitrate concurrent consumers; the journal also preserves legacy claims.
+ * A successful claim is never removed, even if its later audit append fails.
  */
 export function claimNonce(projectRoot: string, nonce: string): boolean {
   const path = join(projectRoot, NONCE_JOURNAL_PATH);
@@ -223,11 +227,20 @@ export function claimNonce(projectRoot: string, nonce: string): boolean {
     if (lstatSync(path).isSymbolicLink()) fail(`${NONCE_JOURNAL_PATH} must not be a symlink`);
     const claimed = new Set(readFileSync(path, 'utf8').split('\n').filter(Boolean));
     if (claimed.has(nonce)) return false;
-    const fd = openSync(path, fsConstants.O_WRONLY | fsConstants.O_APPEND);
-    try { writeSync(fd, `${nonce}\n`); fsyncSync(fd); } finally { closeSync(fd); }
-    return true;
   }
-  writeFileSync(path, `${nonce}\n`, { mode: 0o600 });
+  const claims = join(projectRoot, NONCE_CLAIMS_DIRECTORY);
+  mkdirSync(claims, { recursive: true, mode: 0o700 });
+  if (lstatSync(claims).isSymbolicLink()) fail(`${NONCE_CLAIMS_DIRECTORY} must not be a symlink`);
+  let claim: number;
+  try {
+    claim = openSync(join(claims, sha256Hex(nonce)), fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_NOFOLLOW, 0o600);
+  } catch (error) {
+    if (error instanceof Error && Reflect.get(error, 'code') === 'EEXIST') return false;
+    throw error;
+  }
+  try { fsyncSync(claim); } finally { closeSync(claim); }
+  const fd = openSync(path, fsConstants.O_WRONLY | fsConstants.O_APPEND | fsConstants.O_CREAT | fsConstants.O_NOFOLLOW, 0o600);
+  try { writeSync(fd, `${nonce}\n`); fsyncSync(fd); } finally { closeSync(fd); }
   return true;
 }
 

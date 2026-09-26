@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
-import { validateDomainBrief } from '../domain/domain-brief.ts';
+import { MAX_SURFACES, validateDomainBrief } from '../domain/domain-brief.ts';
 import { nodeStableProjectFileSystem, readStableProjectFile } from '../runtime/stable-project-file.ts';
 import type { ProjectWriteAdapter } from '../runtime/project-write.ts';
 import { readPublishedReferenceResearch, validateReferenceResearch, REFERENCE_RESEARCH_PATH } from './reference-research.ts';
@@ -79,8 +79,8 @@ function lane(value: unknown, label: string): ApplicationLane {
 export function parseReferenceApplication(value: unknown): ReferenceApplication {
   const item = object(value, ['schema', 'sourceContractSha256', 'researchSha256', 'domainBriefSha256', 'screens'], 'application');
   if (item.schema !== REFERENCE_APPLICATION_SCHEMA) return fail('schema requires v2 destination route/state bindings; inspect apply-plan and republish, do not relabel old evidence');
-  if (!Array.isArray(item.screens) || !item.screens.length || item.screens.length > 12
-    || Object.keys(item.screens).length !== item.screens.length) return fail('screens must contain 1–12 surface decisions');
+  if (!Array.isArray(item.screens) || !item.screens.length || item.screens.length > MAX_SURFACES
+    || Object.keys(item.screens).length !== item.screens.length) return fail(`screens must contain 1–${MAX_SURFACES} surface decisions`);
   const screens = item.screens.map(value => {
     const row = object(value, ['surface', 'target', 'domain', 'design', 'checks'], 'screen');
     const target = object(row.target, ['route', 'state'], 'screen.target');
@@ -103,7 +103,7 @@ function inputs(root: string, options: Options) {
   if (!researchBytes.equals(read(root, REFERENCE_RESEARCH_PATH))) return fail('research changed while reading');
   const domainBytes = read(root, DOMAIN_PATH);
   const domain = validateDomainBrief(JSON.parse(domainBytes.toString('utf8')));
-  if (options.expectedRequest !== undefined && domain.request !== options.expectedRequest.trim()) return fail('domain brief describes another request');
+  if (options.expectedRequest !== undefined && domain.request !== options.expectedRequest) return fail('domain brief describes another request');
   return { research, domain, researchSha256: hash(researchBytes), domainBriefSha256: hash(domainBytes) };
 }
 

@@ -14,6 +14,15 @@ away or excuse it with a one-line skip reason (`DOMAIN_ANALYSIS_REQUIRED`).
 
 A single validated artifact, `.omd/domain-brief.json` (`domain-brief-v1`, `omd domain check`):
 
+Read the complete current request, not an intake summary. Author the fields in
+`.omd/.cache/domain-input.json`, then run `omd domain set --input .omd/.cache/domain-input.json --json`
+after checked domain entry. This publisher copies the authenticated route's exact request bytes;
+the input may omit `request`. It does not invent surfaces, confirm planning, or approve scope.
+Directly writing the final brief remains supported but must preserve that same complete request.
+Every screen and consequential task explicitly listed by the user must remain represented; grouping
+navigation is not permission to drop a screen, state, recovery path or interaction. The bounded
+inventory supports up to 64 surfaces, not a target or a default count.
+
 - **domain** — the identified domain in a few words (`ERP`, `developer-tool marketing landing`).
 - **summary** — one plain line: what this domain/product is and does.
 - **surfaces** — the canonical pages / screens / reachable states this domain needs, each with the
@@ -25,7 +34,7 @@ A single validated artifact, `.omd/domain-brief.json` (`domain-brief-v1`, `omd d
 - **audience** — who the work is for, whose task the design serves, as `{ description, evidence }`.
 - **referenceQueries** — the concrete search queries the scout will run, split by the two reference
   roles (see `protocol/reference-assembly.md`):
-  - **component** — role ①: one query per PART, in English
+  - **component** — role ①: one query per PART, in the relevant index language
     ("data table inline actions", "approval status pill", "contextual sidebar").
   - **craft** — role ②: motion, scroll animation, and sculptural/visual craft to source from
     top-tier galleries ("dashboard scroll reveal", "data viz motion").
@@ -35,9 +44,10 @@ A single validated artifact, `.omd/domain-brief.json` (`domain-brief-v1`, `omd d
 
 Rules learned from how these sites and working designers actually behave:
 
-1. **English, always.** The material is indexed in English even when the product is not. A Korean
-   query returns Korean-language results about the topic rather than the interface patterns, which
-   is a different and much smaller pool.
+1. **Use the research lane and market policy.** Domain discovery starts with real comparable
+   services in the requested market; a Korean brief defaults to Korean services and Korean service-name
+   queries. For visual patterns, use Korean queries for local examples and English pattern terms where
+   the gallery indexes them. English-only search never waives the local-first policy or proves a gap.
 2. **One part per query, never a whole concept.** A phrase like "AI desktop assistant" retrieves
    almost nothing, because no real screen is named that. The screens that DO exist are the parts:
    `task management`, `side panel`, `contextual sidebar`, `command palette`, `empty state`. Search

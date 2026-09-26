@@ -114,8 +114,7 @@ test('retained families do not skip remaining required market searches after a s
   for (const hostname of ['www.bokjiro.go.kr', 'www.gov.kr', 'wis.seoul.go.kr']) retainDomain(root, hostname);
   const first = referenceDiscoveryWork(root, route);
   assert.equal(first.action?.lane, 'design');
-  const searchUrl = new URL('https://search.daum.net/search');
-  searchUrl.searchParams.set('w', 'tot');
+  const searchUrl = new URL('https://www.google.com/search');
   searchUrl.searchParams.set('q', '복지로');
   unavailableSearch(root, { lane: 'domain', query: '복지로', url: searchUrl.href, queryParam: 'q' });
   const after = referenceDiscoveryWork(root, route);
@@ -149,6 +148,44 @@ test('explicit Korean-market discovery does not follow an unrelated substantive 
   assert.notEqual(work.action?.input?.url, input.url);
 });
 
+test('domain search does not promote explanatory articles or policy news as service screens', t => {
+  const root = fixture(t);
+  const route = routeAdaptiveFlow(routeInput());
+  const input = referenceDiscoveryWork(root, route).action?.input;
+  assert.ok(input);
+  observedSearch(root, input, [
+    { url: 'https://namu.wiki/w/%EB%B3%B5%EC%A7%80', text: '복지로 - 나무위키' },
+    { url: 'https://bangulnote.com/325', text: '복지로 조회 방법' },
+    { url: 'https://www.gov.kr/portal/gvrnPolicy/listAll', text: '정부 정책정보' },
+  ]);
+  const work = referenceDiscoveryWork(root, route);
+  assert.equal(work.action?.kind, 'search');
+  assert.notEqual(work.action?.input?.url, input.url);
+});
+
+test('two unusable screens from one operator move discovery to another service family', t => {
+  const root = fixture(t);
+  const route = routeAdaptiveFlow(routeInput());
+  const input = referenceDiscoveryWork(root, route).action?.input;
+  assert.ok(input);
+  const homepage = 'https://www.bokjiro.go.kr/';
+  const search = 'https://www.bokjiro.go.kr/search';
+  observedSearch(root, input, [
+    { url: homepage, text: '복지로 공식 혜택 서비스' },
+    { url: search, text: '복지로 서비스 검색' },
+    { url: 'https://www.bokjiro.go.kr/apply', text: '복지로 온라인 신청' },
+    { url: 'https://www.ynote.kr/', text: '복지로와 청년노트 복지 혜택 찾기 서비스' },
+  ]);
+  for (const url of [homepage, search]) {
+    visitedItem(root, url, 'domain');
+    publishReferenceDiscoveryExclusion(root, route.sourceContractSha256, 'domain', url,
+      'The observed service screen is obscured by a blocking server error popup.', createTestProjectWriteAdapter(root));
+  }
+  const work = referenceDiscoveryWork(root, route);
+  assert.equal(work.action?.kind, 'follow-link');
+  assert.equal(work.action?.url, 'https://www.ynote.kr/');
+});
+
 test('a search header help link is not a domain task result or a next visit', t => {
   const root = fixture(t);
   const route = routeAdaptiveFlow(routeInput());
@@ -174,6 +211,19 @@ test('domain discovery does not recurse into unrelated footer or pagination chai
   const work = referenceDiscoveryWork(root, route);
   assert.equal(work.action?.kind, 'retain-reference');
   assert.equal(work.action?.url, taskUrl);
+});
+
+test('a searched service homepage does not promote an unrelated footer operator as a comparable service', t => {
+  const root = fixture(t);
+  const route = routeAdaptiveFlow(routeInput());
+  const input = referenceDiscoveryWork(root, route).action?.input;
+  assert.ok(input);
+  const service = 'https://www.bokjiro.go.kr/';
+  observedSearch(root, input, [{ url: service, text: '복지로 맞춤형급여안내' }]);
+  visitedItem(root, service, 'domain', ['https://www.ftc.go.kr/bizCommPop.do?wrkr_no=1234567890']);
+  const work = referenceDiscoveryWork(root, route);
+  assert.equal(work.action?.kind, 'retain-reference');
+  assert.equal(work.action?.url, service);
 });
 
 test('a signed public directory can lead to a different service family', t => {
@@ -304,12 +354,12 @@ test('work-next exhausts free design search then moves across signed failed gall
   }
   const direct = referenceDiscoveryWork(root, route);
   assert.equal(direct.action?.kind, 'direct-entry');
-  assert.equal(direct.action?.url, 'https://mobbin.com/explore/screens');
+  assert.equal(direct.action?.url, 'https://wwit.design/');
   assert.ok(direct.action.url);
   unavailableEntry(root, 'design', direct.action.url);
   const next = referenceDiscoveryWork(root, route);
   assert.equal(next.action?.kind, 'direct-entry');
-  assert.equal(next.action?.url, 'https://pageflows.com/screens/');
+  assert.equal(next.action?.url, 'https://www.saasui.design/pattern/dashboard');
   assert.ok(next.attempts.some(item => item.url === direct.action?.url && item.reason === 'network-failure'));
 });
 
@@ -341,7 +391,7 @@ test('unscoped route still begins a plan-derived public domain search', t => {
   assert.equal(work.status, 'action');
   assert.equal(work.action?.kind, 'search');
   assert.equal(work.action?.lane, 'domain');
-  assert.match(work.action?.input?.url ?? '', /^https:\/\/www\.bing\.com\/search\?q=/u);
+  assert.match(work.action?.input?.url ?? '', /^https:\/\/www\.google\.com\/search\?q=/u);
 });
 
 test('first-party pages merely mislabeled design never mark the board ready', t => {

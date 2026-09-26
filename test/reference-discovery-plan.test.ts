@@ -33,8 +33,9 @@ test('Korean product brief starts both research lanes in Korea without asserting
   assert.deepEqual(plan.marketReferencePolicy.domainSearchInputs.map(input => input.query),
     ['복지로', '정부24 혜택알리미', '서울복지포털', '웰로']);
   assert.deepEqual(plan.marketReferencePolicy.domainEntryInputs.map(input => new URL(input.url).hostname),
-    ['www.bokjiro.go.kr', 'plus.gov.kr', 'wis.seoul.go.kr', 'www.welfarehello.com']);
-  for (const lead of ['복지로 맞춤형급여안내', '정부24 혜택알리미', '서울복지포털 맞춤검색', '웰로 맞춤형 정책 추천']) {
+    ['www.bokjiro.go.kr', 'plus.gov.kr', 'wis.seoul.go.kr', 'www.welfarehello.com', 'www.ynote.kr', 'youthpolicy.co.kr']);
+  for (const lead of ['복지로 맞춤형급여안내', '정부24 혜택알리미', '서울복지포털 맞춤검색', '웰로 맞춤형 정책 추천',
+    '청년노트 복지 혜택 찾기', '청년정책신문 정책맵']) {
     assert.ok(plan.lanes.find(lane => lane.id === 'domain-reference')?.querySeeds.includes(lead));
   }
   assert.ok(plan.designSourcePolicy.nativeSearchInputs.some(candidate => candidate.query.startsWith('한국 ')));
@@ -121,19 +122,21 @@ test('an explicit Korean market makes both reference lanes target-market-first w
     audience: 'Korean residents comparing public benefits', targetMarketCoverage: 'required-in-domain-and-design',
     domainSearchInputs: [
       { lane: 'domain', query: '복지로',
-        url: 'https://search.daum.net/search?w=tot&q=%EB%B3%B5%EC%A7%80%EB%A1%9C', queryParam: 'q' },
+        url: 'https://www.google.com/search?q=%EB%B3%B5%EC%A7%80%EB%A1%9C', queryParam: 'q' },
       { lane: 'domain', query: '정부24 혜택알리미',
-        url: 'https://search.daum.net/search?w=tot&q=%EC%A0%95%EB%B6%8024+%ED%98%9C%ED%83%9D%EC%95%8C%EB%A6%AC%EB%AF%B8', queryParam: 'q' },
+        url: 'https://www.google.com/search?q=%EC%A0%95%EB%B6%8024+%ED%98%9C%ED%83%9D%EC%95%8C%EB%A6%AC%EB%AF%B8', queryParam: 'q' },
       { lane: 'domain', query: '서울복지포털',
-        url: 'https://search.daum.net/search?w=tot&q=%EC%84%9C%EC%9A%B8%EB%B3%B5%EC%A7%80%ED%8F%AC%ED%84%B8', queryParam: 'q' },
+        url: 'https://www.google.com/search?q=%EC%84%9C%EC%9A%B8%EB%B3%B5%EC%A7%80%ED%8F%AC%ED%84%B8', queryParam: 'q' },
       { lane: 'domain', query: '웰로',
-        url: 'https://search.daum.net/search?w=tot&q=%EC%9B%B0%EB%A1%9C', queryParam: 'q' },
+        url: 'https://www.google.com/search?q=%EC%9B%B0%EB%A1%9C', queryParam: 'q' },
     ],
     domainEntryInputs: [
       { lane: 'domain', entry: 'public-directory', url: 'https://www.bokjiro.go.kr/ssis-tbu/' },
       { lane: 'domain', entry: 'public-directory', url: 'https://plus.gov.kr/portal/benefitV2/' },
       { lane: 'domain', entry: 'public-directory', url: 'https://wis.seoul.go.kr/' },
       { lane: 'domain', entry: 'public-directory', url: 'https://www.welfarehello.com/recommend-policy/situation/main/ALL' },
+      { lane: 'domain', entry: 'public-directory', url: 'https://www.ynote.kr/' },
+      { lane: 'domain', entry: 'public-directory', url: 'https://youthpolicy.co.kr/policy-map' },
     ],
     fallback: 'global-equivalent-only-after-documented-target-market-gap', styleInference: 'forbidden',
   });
@@ -212,7 +215,7 @@ test('restrained discovery and sufficient existing evidence do not manufacture a
   restrainedRoute.designAxes.expressiveDesignNeed = 'restrained';
   const restrainedPlan = buildReferenceDiscoveryPlan(root, routeAdaptiveFlow(restrainedRoute));
   assert.equal(restrainedPlan.lanes.some(lane => lane.id === 'design-reference'), true, 'design reference is the second required lane');
-  assert.deepEqual(restrainedPlan.galleryDirectories, ['Mobbin', 'Page Flows', 'Pinterest', 'Dribbble', 'Behance', 'UI Bowl']);
+  assert.deepEqual(restrainedPlan.galleryDirectories, ['WWIT', 'SaaSUI', 'Mobbin', 'Page Flows', 'Pinterest', 'Dribbble', 'Behance', 'UI Bowl']);
   assert.equal(restrainedPlan.designSourcePolicy.searchQueries.some(query => query.includes('site:siteinspire.com/')), false,
     'product UI discovery must not fall back to a marketing-gallery search');
   assert.ok(restrainedPlan.designSourcePolicy.searchQueries.some(query => query.includes('site:mobbin.com/explore/screens/')));
@@ -255,6 +258,10 @@ test('stale domain queries cannot steer the current request', t => {
   // The visual lane searches PART keywords — the felt-direction queries plus the component names —
   // because a designer finds a direction by searching the parts, not by naming the product.
   assert.deepEqual(plan.lanes.find(lane => lane.id === 'design-reference')?.querySeeds, [...domain.referenceQueries.mood, ...domain.referenceQueries.component]);
+  const exactRequest = `\n${input.request}\n`;
+  writeFileSync(join(root, '.omd/domain-brief.json'), JSON.stringify({ ...domain, request: exactRequest }));
+  assert.equal(buildReferenceDiscoveryPlan(root, routeAdaptiveFlow({ ...input, request: exactRequest })).request, exactRequest,
+    'a current request remains current even when its original bytes contain surrounding whitespace');
   writeFileSync(join(root, '.omd/domain-brief.json'), JSON.stringify({ ...domain, request: 'An earlier unrelated project.' }));
   assert.throws(() => buildReferenceDiscoveryPlan(root, routeAdaptiveFlow(input)), /earlier request/);
 });

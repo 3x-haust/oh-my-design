@@ -24,6 +24,7 @@ import {
   SyntaxKind,
 } from 'typescript/unstable/ast';
 import { API } from 'typescript/unstable/sync';
+import { nativePiWriterException } from './project-write-native-inventory.ts';
 
 export type ProjectRunMutationClassification = 'guarded' | 'external-exception' | 'unclassified';
 
@@ -82,7 +83,7 @@ const FINAL_EVIDENCE_STABLE_DESCRIPTOR_EXCEPTION = 'final-evidence-v2 stable des
 const FIGMA_AUTHORITY_STORE_ADAPTER = 'core/figma/artifact-authority-store.ts';
 const FIGMA_AUTHORITY_STORE_EXCEPTION = 'external host-owned Figma artifact authority store (audited exact-identity adapter)';
 const ACTIVATION_KEY_STORE = 'core/runtime/self-signed-activation.ts';
-const ACTIVATION_KEY_STORE_EXCEPTION = 'project activation key store (audited: 0600 keys, 0700 directory, fsync before rename, no unlink or rmdir)';
+const ACTIVATION_KEY_STORE_EXCEPTION = 'project activation key and atomic nonce store (audited private fixed paths and exclusive claims)';
 const GUARD_ENTRYPOINTS = [
   'writeExternalObservationFile',
   'createExternalObservationDirectory',
@@ -188,8 +189,8 @@ function activationKeyStoreAdapter(
   // The exact operation list is asserted from what the inventory sees, so adding another direct
   // write to this module fails the audit rather than silently widening the exception.
   return filePath === ACTIVATION_KEY_STORE
-    && operations === 'chmodSync,chmodSync,mkdirSync,mkdirSync,openSync,renameSync,writeFileSync,writeFileSync,writeFileSync,writeSync'
-    && directMutations.length === 10
+    && operations === 'chmodSync,chmodSync,mkdirSync,mkdirSync,mkdirSync,openSync,openSync,renameSync,writeFileSync,writeFileSync,writeSync'
+    && directMutations.length === 11
     && source.includes("mkdirSync(directory, { recursive: true, mode: 0o700 })")
     && source.includes("as string, { mode: 0o600 }")
     && source.includes('fsyncSync(fd)')
@@ -197,6 +198,12 @@ function activationKeyStoreAdapter(
     && source.includes('chmodSync(privatePath, 0o600)')
     && source.includes('if (!stat.isFile() || stat.isSymbolicLink()) fail(')
     && source.includes('if (lstatSync(path).isSymbolicLink()) fail(')
+    && source.includes("const NONCE_CLAIMS_DIRECTORY = `${ACTIVATION_KEY_DIRECTORY}/consumed-nonces`;")
+    && source.includes('if (lstatSync(claims).isSymbolicLink()) fail(')
+    && directMutations.filter(mutation => mutation.operation === 'openSync').map(mutation => mutation.sourceLine.trim()).join('\n') === [
+      'claim = openSync(join(claims, sha256Hex(nonce)), fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_NOFOLLOW, 0o600);',
+      'const fd = openSync(path, fsConstants.O_WRONLY | fsConstants.O_APPEND | fsConstants.O_CREAT | fsConstants.O_NOFOLLOW, 0o600);',
+    ].join('\n')
     && !source.includes('rmSync(')
     && !source.includes('unlinkSync(')
     && !source.includes('rmdirSync(');
@@ -575,6 +582,7 @@ export function inventoryProjectRunMutations(
     const finalEvidenceDescriptorAdapter = finalEvidenceStableDescriptorAdapter(filePath, source, directMutations);
     const figmaAuthorityAdapter = figmaAuthorityStoreAdapter(filePath, source, directMutations);
     const activationKeyAdapter = activationKeyStoreAdapter(filePath, source, directMutations);
+    const nativePiAdapterException = nativePiWriterException(filePath, source, directMutations);
     const hasExternalObservationWrapper = filePath === GUARD_BOUNDARY
       && source.includes('export function writeExternalObservationFile')
       && source.includes('export function createExternalObservationDirectory');
@@ -584,7 +592,7 @@ export function inventoryProjectRunMutations(
       ? 'guarded'
       : reviewerLiveSocketException
         ? 'external-exception'
-        : finalEvidenceDescriptorAdapter || figmaAuthorityAdapter || activationKeyAdapter
+        : finalEvidenceDescriptorAdapter || figmaAuthorityAdapter || activationKeyAdapter || nativePiAdapterException !== undefined
           ? 'external-exception'
           : 'unclassified';
     const exception = hasExternalObservationWrapper
@@ -597,7 +605,7 @@ export function inventoryProjectRunMutations(
             ? FIGMA_AUTHORITY_STORE_EXCEPTION
             : activationKeyAdapter
               ? ACTIVATION_KEY_STORE_EXCEPTION
-              : undefined;
+              : nativePiAdapterException;
     owners.push({
       filePath,
       classification,

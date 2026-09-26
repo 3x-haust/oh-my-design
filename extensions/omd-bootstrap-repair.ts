@@ -17,10 +17,11 @@ export async function resumeRouteInput(bootstrap: RouteBootstrap, task: Bootstra
   let summary: string;
   let repairable = false;
   let inputValid = false;
+  const classificationGranted = bootstrap.classificationAttempted || bootstrap.classificationAuthorized;
   try {
     const validation = await run(bootstrap.validationArgs, cwd, signal);
     inputValid = isRouteValidationSuccess(validation.text);
-    repairable = inputValid && bootstrap.classificationAttempted && classificationAllowsInputRepair(bootstrap.classificationFailure);
+    repairable = inputValid && classificationGranted && classificationAllowsInputRepair(bootstrap.classificationFailure);
     summary = inputValid
       ? `Route input is valid but not published. ${!classificationAllowsInputRepair(bootstrap.classificationFailure)
         ? `Classification is still blocked: ${bootstrap.classificationFailure}`
@@ -36,10 +37,16 @@ export async function resumeRouteInput(bootstrap: RouteBootstrap, task: Bootstra
   const decision = repairLoop.next(cwd, 'route-input', bootstrap.inputPath, summary, revision);
   const retry = repairable && decision.retry && 'sendMessage' in pi && typeof pi.sendMessage === 'function';
   if (retry) {
-    pi.sendMessage!({ customType: 'omd-route-repair', display: true,
-      content: `OMD route-input repair pass ${decision.pass}. Start this turn with one concise user-visible progress note naming the input being repaired and the next validation command. Repair the named fields together in the already-authored input ${JSON.stringify(bootstrap.inputPath)} and rerun omd_cli with args ${JSON.stringify(bootstrap.validationArgs)}. Continue while the input bytes or structured diagnostics make progress; do not stop because of a fixed retry count. This is input repair, not application implementation or completed research. Preserve the original user request, facts, delivery mode, risk, scope and required stages. Do not invent evidence, authority or an optional skip to bypass a check. Stop only for repeated no-progress, a missing user fact/authority, or user pause. ${bootstrap.classificationAttempted
+    const nextArgs = inputValid ? bootstrap.validationArgs.map((arg, index) => index === 1 ? 'classify' : arg) : bootstrap.validationArgs;
+    const action = inputValid
+      ? 'The current input already passed validation. Publish that same input with the same locale context, then run stage resume and continue the originally authorized workflow.'
+      : `Repair the named fields together in the already-authored input ${JSON.stringify(bootstrap.inputPath)}, then validate it. Continue while the input bytes or structured diagnostics make progress; do not stop because of a fixed retry count.`;
+    pi.sendMessage!({ customType: inputValid ? 'omd-route-classify' : 'omd-route-repair', display: true,
+      content: `OMD route-input continuation pass ${decision.pass}. Start this turn with one concise user-visible progress note naming the current input and next command. ${action} Preserve the original user request, facts, delivery mode, risk, scope and required stages. Do not invent evidence, authority or an optional skip to bypass a check. Stop only for repeated no-progress, a missing user fact/authority, or user pause. ${bootstrap.classificationAttempted
         ? 'Classification was already attempted in this task: after validation passes, retry that authorized classification with the same input/context, then stage resume and continue only the original user-authorized workflow.'
-        : 'Classification has not been attempted: this repair authorizes input editing and validation only; do not publish a route or start downstream work from this follow-up.'}\n${summary}` },
+        : bootstrap.classificationAuthorized
+          ? 'The current real user input authorized the full workflow. After validation passes, classify this input and continue through stage resume; this repair does not narrow the original request to validation only.'
+          : 'Classification has not been attempted: this repair authorizes input editing and validation only; do not publish a route or start downstream work from this follow-up.'}\nNext OMD command: ${JSON.stringify(nextArgs)}\n${summary}` },
     { triggerTurn: true, deliverAs: 'followUp' });
   }
   const korean = message.content?.some(part => part.type === 'text' && /[가-힣]/.test(part.text ?? ''));

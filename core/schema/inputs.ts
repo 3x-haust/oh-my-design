@@ -266,13 +266,17 @@ const FRAME_INPUT: InputSkeleton = {
 
 const DOMAIN_BRIEF: InputSkeleton = {
   name: 'domain-brief',
-  path: '.omd/domain-brief.json',
-  command: 'omd domain check --input .omd/domain-brief.json --json',
+  path: '.omd/.cache/domain-input.json',
+  command: 'omd domain set --input .omd/.cache/domain-input.json --json',
   keys: ['schema', 'request', 'domain', 'summary', 'surfaces', 'coreObjects', 'audience', 'referenceQueries', 'planning'],
-  constraints: ['domain check validates structure, not planning confirmation. Each planning statement needs its own genuine userEvidence before production. Check the original request first; ask only for facts it does not supply. Do not silently invent prototype-only non-goals or copy the placeholders as evidence.'],
+  constraints: [
+    'Author domain fields and publish with domain set after checked domain entry. The publisher binds request from the authenticated current route; omit request in the publisher input instead of retyping or summarizing a long brief. Directly authored final briefs still require the exact route request.',
+    'Preserve every explicitly requested screen and task. A short summary or a preferred screen count never removes user scope; enumerate up to 64 canonical surfaces and their meaningful states.',
+    'domain check validates structure, not planning confirmation. Each planning statement needs its own genuine userEvidence before production. Check the original request first; ask only for facts it does not supply. Do not silently invent prototype-only non-goals or copy the placeholders as evidence.',
+  ],
   skeleton: {
     schema: DOMAIN_BRIEF_SCHEMA,
-    request: '<the raw request, normalized>',
+    request: '<domain set binds the exact current route request; may be omitted in this input>',
     domain: '<the domain in a few words>',
     summary: '<one line: what this domain is and does>',
     surfaces: [{
@@ -416,9 +420,10 @@ const ACQUISITION_PLAN: InputSkeleton = {
 const REALITY_LEDGER: InputSkeleton = {
   name: 'reality-ledger',
   path: '.omd/.cache/reality-ledger.json',
-  command: 'omd frame set ... --reality .omd/.cache/reality-ledger.json',
+  command: 'omd frame set --input .omd/.cache/frame-input.json (embed this ledger in frame-input.reality)',
   keys: ['schema', 'mode', 'facts'],
   constraints: [
+    'frame set --input cannot be mixed with --reality; embed this object in frame-input.reality or use inline frame fields with --reality',
     'facts contains 1..12 bounded entries',
     `category is one of: ${REALITY_CATEGORY_VALUES.join(', ')}`,
     `status is one of: ${REALITY_STATUS_VALUES.join(', ')}`,
