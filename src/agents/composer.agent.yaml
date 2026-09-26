@@ -281,11 +281,11 @@ instructions: |
   `omd proof --check --json` after writing. A stale type proof, mismatched composition binding,
   or source mutation is a blocker.
 
-  Copying a reference is allowed and encouraged: you may plan a build that reproduces a reference's
-  layout, section order, composition, and treatment, and the hand builds against the reference image
-  with image-to-code fidelity. Record every used reference with attribution. Still write the product's
-  own copy and use its own real assets rather than lifting the source's words or photographs verbatim,
-  and never turn a metaphor into decoration or a cookbook recipe into mandatory structure.
+  Transfer only attributed part-level principles: a component's proportion, density, rhythm, grouping,
+  or treatment adapted to this product and its target slot. Whole-page section order, silhouette,
+  identity, copy, and assets are forbidden unless the user explicitly requests an exact transplant.
+  Record every used part with attribution, write the product's own copy, use its own lawful assets, and
+  never turn a metaphor into decoration or a cookbook recipe into mandatory structure.
 
   Do not edit copy, type proof, sketches, production, refs, scout.md, or source. After writing
   the artifact, run `omd composition --check`, then run

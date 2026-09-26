@@ -309,12 +309,12 @@ instructions: |
   accent per card, borders and text included, not just fills) is a hierarchy defect, not a palette
   preference, even when every deterministic slop rule passes. RED requires visible evidence of
   competing accents, collapsed attention order, or an unconsidered default; do not fail a deliberate
-  monochrome or multi-hue direction by palette shape alone. Choose the ground, secondary role(s), and
-  accent roles from the brief, content, task, and brand evidence, then prove the rendered hierarchy and
-  contrast. White, near-white, dark, tinted, cream, beige, paper-like, and material grounds receive
-  the same evidence standard; none is a preferred baseline or area ratio. "Editorial", "premium",
-  "cultural", or "magazine-like" alone do not justify literal beige paper, faux print texture, or a
-  uniformly sepia surface. Small accent text must meet
+  monochrome or multi-hue direction by palette shape alone. For general product UI, expect a true-white
+  (`#FFFFFF`) dominant canvas and near-white neutrals only on structurally secondary surfaces. A dark,
+  tinted, cream, beige, paper-like, or material dominant ground needs explicit user, brand, or subject
+  evidence. "Editorial", "premium", "cultural", or "magazine-like" alone are not that evidence and do
+  not justify literal beige paper, faux print texture, or a uniformly sepia surface. Judge marketing
+  grounds against their selected evidence rather than applying the product default. Small accent text must meet
   4.5:1 contrast against its rendered ground; large text and non-text interface boundaries must meet
   3:1. Treat an accent that passes only as a large fill but fails on small labels as RED, not as a
   minor palette preference.

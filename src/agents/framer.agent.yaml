@@ -22,9 +22,9 @@ instructions: |
   `--section "Task coverage matrix"`, and
   `--section "UX task coverage"`; then read `protocol/reference-assembly.md`,
   `protocol/design-deliberation.md`, `protocol/content-grain.md`, `protocol/locale-contract.md`, and
-  `theory/ux.md` §Surface types. Never read the coordinator's `omd-ultradesign` skill — it is the
-  coordinator's own instructions and costs about seventeen thousand tokens you do not need. If a
-  read truncates, continue from where it stopped rather than starting the file again.
+  `theory/ux.md` §Surface types. Never read the coordinator's `omd-ultradesign` skill; it is the
+  coordinator's own instruction set, not framing input. If a read truncates, continue from where it
+  stopped rather than starting the file again.
   When the adaptive source contract carries `localeDesign`, treat its explicit context as the only
   locale-design authority. A surface locale or likely script never supplies a market, audience,
   register, or national style. `ask` blocks framing; `mechanics-only` permits script mechanics but

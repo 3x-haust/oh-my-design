@@ -523,8 +523,9 @@ instructions: |
   influences explicitly. The command derives reference IDs and current frame/acquisition/context hashes,
   requires every candidate to cover every required acquisition zone, validates captured evidence,
   and alone writes `.omd/reference-board.json`. For market-grounded research, next print `omd schema
-  reference-locale-binding` and run `omd ref locale-bind`: bind every component whose final source URL
-  matches the current profile to its exact candidate slot and supported/shared decision. Every
+  reference-locale-binding`, author the binding payload, and run `omd ref locale-bind --input
+  <bindings.json>`: bind every component whose final source URL matches the current profile to its
+  exact candidate slot and supported/shared decision. Every
   candidate needs a positive `native-category` component; a global equivalent may supplement it and
   a counterexample binds only an anti-reference. Never pass the private binding evidence downstream.
   When a named ratio or gap is not represented by whole-DOM correspondence, read `omd schema
