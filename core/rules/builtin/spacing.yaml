@@ -1,9 +1,14 @@
+# Validate authored padding against the project's rendered CSS spacing tokens when they
+# are available in IR. A token name containing space/spacing/gap/inset contributes its px
+# value to the committed scale. Without such tokens, use the permissive 4-based fallback
+# scale plus its 2px optical half-steps. Values below 2px are allowed for optical alignment;
+# zero is always structural. There is intentionally no auto-fix: snapping to 8px can erase
+# a project's own rhythm or a documented optical adjustment.
 id: SPACING-001
 layer: 1
 category: system
 severity: warn
 when: "Boolean(node.layout && node.layout.padding)"
 value: "node.layout.padding"
-assert: "value.every((v) => v % 8 === 0 || v === 4)"
-message: "Padding {value} is off the 8pt grid (4 excepted)"
-fix: normalize-spacing
+assert: "(() => { const fallback = new Set([0,2,4,6,8,10,12,14,16,20,24,28,32,40,48,56,64]); const tokenValues = Object.entries(ir.tokens || {}).filter(([name]) => /(?:^|[-_/])(space|spacing|gap|inset)(?:[-_/]|$)/i.test(name)).map(([,raw]) => { const m = /^(-?\\d+(?:\\.\\d+)?)px$/i.exec(String(raw).trim()); return m ? Number(m[1]) : null; }).filter(v => v !== null); const allowed = tokenValues.length > 0 ? new Set([0, ...tokenValues]) : fallback; return value.every(v => Math.abs(v) < 2 || allowed.has(v)); })()"
+message: "Padding {value} is outside the project's committed spacing tokens (or the permissive 2/4-based fallback scale when no spacing tokens are present). Keep intentional optical values below 2px; document larger exceptions in the token scale."

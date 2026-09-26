@@ -22,8 +22,8 @@ test('a tokenised, on-grid, accessible card produces no findings', () => {
   assert.deepEqual(at('div.card-good'), []);
 });
 
-test('a hardcoded fill and an off-grid padding are both caught', () => {
-  assert.deepEqual(at('div.card-bad').map((v) => v.id).sort(), ['SPACING-001', 'TOKEN-003']);
+test('a hardcoded fill is caught while 14px remains on the permissive spacing scale', () => {
+  assert.deepEqual(at('div.card-bad').map((v) => v.id).sort(), ['TOKEN-003']);
 });
 
 test('grey-on-grey and a sub-24px button are both caught', () => {
@@ -79,8 +79,8 @@ test('slop.html fires every slop heuristic', () => {
     [
       'SLOP-COPY',
       'SLOP-EMOJI-HEADING',
-      'SLOP-EVERYTHING-CENTERED',
       'SLOP-GRADIENT',
+      'SLOP-HEADING-SUPPORT-FORMULA',
       'SLOP-NESTED-RADIUS',
       'SLOP-RADIUS-MONOCULTURE',
       'SLOP-SHADOW-MONOCULTURE',

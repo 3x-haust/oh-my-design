@@ -1,71 +1,21 @@
 # UX rules — task-first structural correctness.
 #
-# These rules target measurable UX violations detectable from the IR alone.
-# They do NOT require viewport height, motion probes, or any runtime state
-# beyond the static IR snapshot.
-#
-# Category 'slop' is used here because UX convergence-to-the-mean (two identical
-# primary buttons, no exits from error states) is in the same family as visual
-# convergence-to-the-mean — correct and competent but weakly fitted to the task. Each rule
-# is a warning; a deliberate choice can be overridden with an omd decision record.
+# These rules target measurable UX violations detectable from the IR alone. Each is a
+# warning because a deliberate custom interaction can carry evidence the static IR lacks.
 #
 # Candidate studied and dropped:
-#   UX-ACTION-BELOW-FOLD — the IR records node.box.y but does NOT store the
-#   viewport height at check time (ir.meta has motion and interaction probe data
-#   but no viewport dimensions). Without a reliable viewport-height anchor the
-#   threshold is undefined and the false-positive rate is unacceptable. The
-#   eye agent's task-first UX pass walks this check visually instead.
+#   UX-ACTION-BELOW-FOLD — viewportHeight is available, but the frame/composition's
+#   committed frequent-action locator is not carried into RawIr/meta and no rendered node
+#   identifies itself as that action. Treating any nav link as the frequent action hid the
+#   actual defect. Do not infer this from colour, tag, or DOM order. Restore the rule only
+#   when IR binds the committed locator to a node id; its value/message must then report the
+#   measured viewportHeight plus that action's x/y/w/h geometry.
 #
 # Candidate retained:
-#   UX-TWO-PRIMARIES — two or more sibling interactive buttons sharing the same
-#   authored fill colour in the same parent container. This pattern cancels the
-#   hierarchy signal: the user cannot determine which action the design recommends.
-#   Measurable because: node.computed.isInteractive (set by the DOM reader),
-#   node.fill.authored (explicitly set by the author, not inherited), node.fill.value
-#   (computed hex), node.box.h >= 36 (button-sized, excludes icon buttons and inline
-#   links), node.parent (sibling grouping — only fires when the competing buttons
-#   share a container, not when the same colour CTA repeats across different sections).
+#   UX-TWO-PRIMARIES — two or more sibling interactive buttons sharing the same authored
+#   fill colour in the same parent container. This pattern cancels the hierarchy signal.
 #
 # Theory basis: theory/ux.md §Task-first framing; theory/components.md §Buttons.
-# Material Design and Carbon Design System both specify single primary-per-view as an
-# explicit constraint, not a preference.
-
-# UX-ACTION-BELOW-FOLD
-#
-# Fires on the root node when the page has interactive controls but NONE of them are
-# within the first viewport at mobile dimensions. "Within the first viewport" means the
-# element's top edge (box.y) is less than viewportHeight — at least the top of the
-# control is visible without scrolling.
-#
-# Revived from the candidate-dropped list now that dom.ts captures scrollHeight and
-# viewportHeight in ir.meta. The earlier drop reason ("viewport height undefined,
-# threshold unanchored") is eliminated: viewportHeight is the actual window height
-# measured at capture time, so the fold is the real browser fold, not an assumed constant.
-#
-# False-positive guard: "long content pages legitimately push a CTA down."
-# The rule fires ONLY when there is NO interactive element within the first viewport.
-# A page with a nav link at y=20 and a CTA at y=1200 does not fire (nav is interactive
-# and within fold). Only a page where every control — including nav items — is below
-# the fold triggers the rule. That condition is never a deliberate choice; it is always
-# a layout bug or a missed mobile viewport regression.
-#
-# Positive test:  one interactive element at box.y=900 with viewportHeight=812 → fires
-# Negative tests:
-#   — interactive element at box.y=100 (within fold at 812) → silent
-#   — no interactive elements at all                         → silent (when guard)
-#   — interactive at y=900 AND nav at y=0 (two elements)    → silent (nav is in fold)
-#
-# The rule reads ir.meta.viewportHeight (set by dom.ts). On IRs captured without it
-# (before dom.ts was updated) the when condition is false and the rule is silent —
-# backward compatible.
-- id: UX-ACTION-BELOW-FOLD
-  layer: 1
-  category: ux
-  severity: warn
-  when: "node.parent === null && typeof (ir.meta && ir.meta.viewportHeight) === 'number' && ir.nodes.some(n => n.computed.isInteractive)"
-  value: "(() => { const vh = Number(ir.meta.viewportHeight); return ir.nodes.filter(n => n.computed.isInteractive && n.box.y < vh).length; })()"
-  assert: "value > 0"
-  message: "No interactive element is visible within the first viewport (viewportHeight={value}px measured at capture). The primary action is entirely below the fold. Place at least one interactive control — a primary button, a nav item, or a search field — within the first screen of content. See theory/ux.md §Task-first framing."
 
 # UX-NO-KEYBOARD-PATH
 #

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { normalize } from '../core/ir/normalize.ts';
 import { loadRules, check } from '../core/rules/engine.ts';
-import type { RawIr, RawNode, Ir } from '../core/types.ts';
+import type { RawIr, RawNode } from '../core/types.ts';
 
 const BUILTIN_DIR = fileURLToPath(new URL('../core/rules/builtin/', import.meta.url)).replace(/\/$/, '');
 
@@ -135,78 +135,8 @@ test('UX-TWO-PRIMARIES does not fire when one button has no fill (text/ghost but
   assert.ok(!v.some((x) => x.id === 'UX-TWO-PRIMARIES'), 'a ghost button (no fill) alongside a primary should not fire');
 });
 
-// ── UX-ACTION-BELOW-FOLD ──────────────────────────────────────────────────────
-
-/** Build a normalised IR with viewportHeight in meta and given node list. */
-function makeIrWithViewport(viewportHeight: number, nodes: Partial<RawNode>[]): Ir {
-  const full = nodes.map((n, i) => ({
-    id: `n${i}`,
-    name: 'div',
-    type: 'FRAME' as const,
-    path: `body/div${i}`,
-    parent: null as string | null,
-    box: { x: 0, y: 0, w: 100, h: 50 },
-    children: [] as string[],
-    ...n,
-  }));
-  const raw: RawIr = {
-    meta: { source: 'dom', url: 'http://test', scrollHeight: viewportHeight * 2, viewportHeight },
-    nodes: full,
-  };
-  return normalize(raw);
-}
-
-test('UX-ACTION-BELOW-FOLD fires when the only interactive element is entirely below the fold', () => {
-  // root (n0) + one button at y=900, viewportHeight=812
-  const ir = makeIrWithViewport(812, [
-    { parent: null },
-    { interactive: true, box: { x: 0, y: 900, w: 120, h: 44 } },
-  ]);
-  const v = check(ir, uxRules);
-  assert.ok(v.some((x) => x.id === 'UX-ACTION-BELOW-FOLD'), 'expected UX-ACTION-BELOW-FOLD to fire');
-});
-
-test('UX-ACTION-BELOW-FOLD does not fire when an interactive element is within the fold', () => {
-  // button at y=100 is within the 812px viewport
-  const ir = makeIrWithViewport(812, [
-    { parent: null },
-    { interactive: true, box: { x: 0, y: 100, w: 120, h: 44 } },
-  ]);
-  const v = check(ir, uxRules);
-  assert.ok(!v.some((x) => x.id === 'UX-ACTION-BELOW-FOLD'), 'should not fire when button is above fold');
-});
-
-test('UX-ACTION-BELOW-FOLD does not fire when there are no interactive elements', () => {
-  // pure content page — no buttons, no links
-  const ir = makeIrWithViewport(812, [
-    { parent: null },
-    { type: 'TEXT', text: 'Hello world' },
-  ]);
-  const v = check(ir, uxRules);
-  assert.ok(!v.some((x) => x.id === 'UX-ACTION-BELOW-FOLD'), 'should not fire when no interactive elements exist');
-});
-
-test('UX-ACTION-BELOW-FOLD does not fire when ir.meta.viewportHeight is absent', () => {
-  // IR without viewportHeight — the when condition must be false (backward compat)
-  const full = [
-    { id: 'n0', name: 'div', type: 'FRAME' as const, path: 'body/div0', parent: null, box: { x: 0, y: 900, w: 100, h: 50 }, children: [] },
-    { id: 'n1', name: 'button', type: 'FRAME' as const, path: 'body/button', parent: null, box: { x: 0, y: 900, w: 120, h: 44 }, children: [], interactive: true },
-  ];
-  const raw: RawIr = { nodes: full }; // no meta.viewportHeight
-  const ir = normalize(raw);
-  const v = check(ir, uxRules);
-  assert.ok(!v.some((x) => x.id === 'UX-ACTION-BELOW-FOLD'), 'should not fire when viewportHeight is not in meta (old IR)');
-});
-
-test('UX-ACTION-BELOW-FOLD does not fire when one CTA is below fold but nav is within fold', () => {
-  // nav link at y=20 (within fold), CTA button at y=1200 (below fold)
-  const ir = makeIrWithViewport(812, [
-    { parent: null },
-    { interactive: true, box: { x: 0, y: 20, w: 80, h: 40 } },   // nav link
-    { interactive: true, box: { x: 0, y: 1200, w: 120, h: 44 } }, // CTA below fold
-  ]);
-  const v = check(ir, uxRules);
-  assert.ok(!v.some((x) => x.id === 'UX-ACTION-BELOW-FOLD'), 'nav within fold should suppress the rule');
+test('UX-ACTION-BELOW-FOLD is absent until IR binds the committed frequent-action locator', () => {
+  assert.ok(!uxRules.some((rule) => rule.id === 'UX-ACTION-BELOW-FOLD'));
 });
 
 // ── UX-NO-KEYBOARD-PATH ──────────────────────────────────────��────────────────
