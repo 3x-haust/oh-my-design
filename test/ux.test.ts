@@ -87,6 +87,32 @@ test('UX-TWO-PRIMARIES does not fire when same-fill buttons are under different 
   assert.ok(!v.some((x) => x.id === 'UX-TWO-PRIMARIES'), 'same-fill CTAs in different sections should not trigger UX-TWO-PRIMARIES');
 });
 
+test('UX-TWO-PRIMARIES does not fire for equal-choice buttons inside a dialog or toolbar', () => {
+  const ir = makeIr([
+    { parent: null },                                  // n0: root
+    { parent: 'n0', role: 'alertdialog' },             // n1: equal-choice dialog
+    { parent: 'n1' },                                  // n2: dialog action row
+    primaryBtn('n2', '#3B82F6'),
+    primaryBtn('n2', '#3B82F6'),
+    { parent: 'n0', role: 'toolbar' },                 // n5: peer tools
+    primaryBtn('n5', '#111827'),
+    primaryBtn('n5', '#111827'),
+  ]);
+  const v = check(ir, uxRules);
+  assert.ok(!v.some((x) => x.id === 'UX-TWO-PRIMARIES'), 'declared peer contexts are exempt');
+});
+
+test('UX-TWO-PRIMARIES still fires for same-fill siblings outside a peer context', () => {
+  const ir = makeIr([
+    { parent: null },                                  // n0: root
+    { parent: 'n0', role: 'region' },                  // n1: ordinary region
+    primaryBtn('n1', '#3B82F6'),
+    primaryBtn('n1', '#3B82F6'),
+  ]);
+  const v = check(ir, uxRules);
+  assert.ok(v.some((x) => x.id === 'UX-TWO-PRIMARIES'), 'a plain region is not a peer context');
+});
+
 test('UX-TWO-PRIMARIES does not fire when buttons are too small (h < 36, icon buttons)', () => {
   const ir = makeIr([
     { parent: null },
