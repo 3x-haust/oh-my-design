@@ -382,9 +382,13 @@ test('explicit-market v7 binds local sources and fallback to executed market evi
   assert.throws(() => validateReferenceResearch(fixture.root,
     parseReferenceResearch({ ...input, marketCoverage: wrongGap }), options), /MARKET_DOMAIN_FALLBACK_MARKET/);
   const globalQuery = 'global public benefits examples';
+  const firstMarketSearch = JSON.parse(readFileSync(join(fixture.root, input.domainReference.searches[0]!.path), 'utf8'));
+  assert.equal(typeof firstMarketSearch.observedAt, 'string');
   const globalReceipt = searchReceiptAt(fixture.root, 'domain', testSearchReceipt(
-    fixture.root, 'domain', globalQuery, [fixture.domain.source]), new Date(Date.now() - 60_000).toISOString());
-  const wrongOrder = { ...input, marketCoverage: documented, domainReference: { ...input.domainReference,
+    fixture.root, 'domain', globalQuery, [fixture.domain.source]), firstMarketSearch.observedAt);
+  const wrongOrderCoverage = structuredClone(documented);
+  wrongOrderCoverage.domain.globalFallback!.gap.attemptedQueries = [...domainQueries, globalQuery];
+  const wrongOrder = { ...input, marketCoverage: wrongOrderCoverage, domainReference: { ...input.domainReference,
     queries: [...domainQueries, globalQuery], searches: [...input.domainReference.searches, globalReceipt] } };
   assert.throws(() => validateReferenceResearch(fixture.root, parseReferenceResearch(wrongOrder), options), /SEARCH_ORDER/);
   const futureGlobal = testSearchReceipt(fixture.root, 'domain', globalQuery,
