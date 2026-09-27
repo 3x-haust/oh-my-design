@@ -46,6 +46,13 @@
   },
   "scripts": {
     "test": "bash scripts/test-all.sh",
+    "test:unit": "node scripts/test/run.ts --tier unit",
+    "test:integration": "node scripts/test/run.ts --tier integration",
+    "test:browser": "node scripts/test/run.ts --tier browser",
+    "test:native": "node scripts/test/run.ts --tier native",
+    "test:packaging": "node scripts/test/run.ts --tier packaging",
+    "test:changed": "node scripts/test/run.ts --changed",
+    "test:coverage": "node scripts/test/run.ts --tier unit,integration --coverage --reporter spec --reporter lcov:coverage/lcov.info",
     "test:obligations": "node --test test/obligations-v2.test.ts",
     "test:completion": "node --test test/completeness.test.ts test/completion-regression.test.ts test/adaptive-final-v2.test.ts",
     "test:harness-v2": "node --test test/obligations-v2.test.ts test/reference-handoff-v2.test.ts test/final-evidence-v2.test.ts test/harness-v2-cli.test.ts test/static-direction-evidence.test.ts test/runtime-isolation.test.ts test/harness-v2-quality.test.ts",

@@ -1,6 +1,21 @@
 version: 2
 updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    labels: [dependencies, area/ci]
+    groups:
+      npm-minor-patch:
+        update-types: [minor, patch]
+
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+      day: monday
+    labels: [dependencies, area/ci]
+    groups:
+      actions-minor-patch:
+        update-types: [minor, patch]

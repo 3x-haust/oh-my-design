@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions and support
+    url: https://github.com/3x-haust/oh-my-design/discussions
+    about: Ask usage questions and discuss ideas before filing an issue.
+  - name: Security vulnerability
+    url: https://github.com/3x-haust/oh-my-design/security
+    about: Report vulnerabilities privately. Do not disclose sensitive details in an issue.

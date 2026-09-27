@@ -1,5 +1,9 @@
 # Oh My Design
 
+[![CI](https://github.com/3x-haust/oh-my-design/actions/workflows/ci.yml/badge.svg)](https://github.com/3x-haust/oh-my-design/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/%403xhaust%2Foh-my-design)](https://www.npmjs.com/package/@3xhaust/oh-my-design)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 **AI that designs like a human.** OMD turns a design request into questions, evidence, alternatives,
 real material, and rendered tests. The model chooses useful methods, then revises, retains, or
 reframes its choices according to what it observes.
@@ -593,7 +597,7 @@ omd figma pull <file-url>  |  omd figma system  |  omd figma diff <frame-id> <pa
 omd target set <image-path-or-url> --as <name>  |  omd target list  |  omd target diff <page> [--target <name>] [--viewport WxH] [--threshold N] [--json]
 ```
 
-## Architecture and contributing
+## Architecture
 
 Prompt source of truth:
 
@@ -606,15 +610,20 @@ Generated outputs — **do not edit directly**; `npm run build` regenerates them
 
 Edited directly: `core/`, `bin/`, `adapters/`, `test/`, `evals/`, `scripts/`, `README.md`, `README.ko.md`, and the theory and recipe packs under `core/`.
 
-Before submitting a change:
+## Testing
+
+Tests are classified as unit, integration, browser, native, or packaging. `npm test` builds stale generated output when needed and runs every tier with safe concurrency; use `npm run test:unit` or another `test:<tier>` command for focused work. Coverage uses the deterministic unit and integration tiers.
 
 ```bash
 npm test
-npx tsc --noEmit
+npm run test:coverage
+npm run typecheck
 npm run build
 ```
 
-New linter rules must remain narrow, include positive and negative tests, and always use warning severity.
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, test classification, three-layer enforcement, generated artifacts, and the branch-to-PR workflow. New linter rules must remain narrow, include positive and negative tests, and always use warning severity.
 
 ## Limits and trust
 

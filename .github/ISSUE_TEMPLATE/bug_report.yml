@@ -1,0 +1,49 @@
+name: Bug report
+description: Report a reproducible defect in OMD
+title: 'bug: '
+labels: [type/bug, status/needs-triage]
+body:
+  - type: markdown
+    attributes:
+      value: Search existing issues first. Report vulnerabilities through the Security page, not here.
+  - type: input
+    id: version
+    attributes:
+      label: OMD version or commit
+      placeholder: 0.20.0 or commit SHA
+    validations: { required: true }
+  - type: dropdown
+    id: host
+    attributes:
+      label: Host
+      options: [Codex, Claude Code, Pi-compatible host, CLI only, Other]
+    validations: { required: true }
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, architecture, Node version, and package manager version
+    validations: { required: true }
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Include exact commands and synthetic inputs. Remove credentials and private design data.
+    validations: { required: true }
+  - type: textarea
+    id: expected
+    attributes: { label: Expected behavior }
+    validations: { required: true }
+  - type: textarea
+    id: actual
+    attributes: { label: Actual behavior and logs }
+    validations: { required: true }
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues.
+          required: true
+        - label: This report contains no credentials or private project data.
+          required: true

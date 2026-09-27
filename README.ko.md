@@ -1,5 +1,9 @@
 # Oh My Design
 
+[![CI](https://github.com/3x-haust/oh-my-design/actions/workflows/ci.yml/badge.svg)](https://github.com/3x-haust/oh-my-design/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/%403xhaust%2Foh-my-design)](https://www.npmjs.com/package/@3xhaust/oh-my-design)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 **사람처럼 디자인하는 AI.** OMD는 디자인 요청을 질문, 근거, 대안, 실제 콘텐츠와 렌더 실험으로
 이어갑니다. 모델은 필요한 방법을 선택하고, 관찰한 결과에 따라 기존 선택을 수정하거나
 유지하거나 문제부터 다시 정의합니다.
@@ -573,7 +577,7 @@ omd figma pull <file-url>  |  omd figma system  |  omd figma diff <frame-id> <pa
 omd target set <image-path-or-url> --as <name>  |  omd target list  |  omd target diff <page> [--target <name>] [--viewport WxH] [--threshold N] [--json]
 ```
 
-## 아키텍처와 기여
+## 아키텍처
 
 프롬프트 원본:
 
@@ -586,15 +590,20 @@ omd target set <image-path-or-url> --as <name>  |  omd target list  |  omd targe
 
 직접 편집하는 경로: `core/`, `bin/`, `adapters/`, `test/`, `evals/`, `scripts/`, `README.md`, `README.ko.md`, 그리고 `core/` 아래 이론·레시피 팩.
 
-변경을 제출하기 전에:
+## 테스트
+
+테스트는 unit, integration, browser, native, packaging 티어로 분류됩니다. `npm test`는 필요할 때 오래된 생성 산출물을 먼저 빌드하고 안전한 동시성으로 모든 티어를 실행합니다. 집중 실행에는 `npm run test:unit` 같은 `test:<tier>` 명령을 사용하세요. 커버리지는 결정적인 unit 및 integration 티어를 사용합니다.
 
 ```bash
 npm test
-npx tsc --noEmit
+npm run test:coverage
+npm run typecheck
 npm run build
 ```
 
-새 린터 규칙은 좁게 유지하고, 양성·음성 테스트를 포함하며, 항상 경고 심각도를 사용합니다.
+## 기여
+
+설정, 테스트 분류, 3-Layer 실행 계약, 생성 산출물, branch-to-PR 흐름은 [CONTRIBUTING.md](CONTRIBUTING.md)를 참고하세요. 새 린터 규칙은 좁게 유지하고, 양성·음성 테스트를 포함하며, 항상 경고 심각도를 사용합니다.
 
 ## 한계와 신뢰
 

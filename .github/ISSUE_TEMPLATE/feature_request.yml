@@ -1,0 +1,29 @@
+name: Feature request
+description: Propose an outcome or capability for OMD
+title: 'feat: '
+labels: [type/feature, status/needs-triage]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or unmet outcome
+      description: Describe the user and task before proposing implementation.
+    validations: { required: true }
+  - type: textarea
+    id: proposal
+    attributes: { label: Proposed behavior }
+    validations: { required: true }
+  - type: textarea
+    id: alternatives
+    attributes: { label: Alternatives considered }
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence and examples
+      description: Link public examples or attach sanitized records.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options: [Prompts, References, Measurement, Runtime, Pi, Codex, Claude, Documentation, CI, Knowledge packs, Other]
+    validations: { required: true }

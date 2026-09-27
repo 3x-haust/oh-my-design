@@ -1,0 +1,274 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  merge_group:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  TZ: UTC
+  LANG: C.UTF-8
+
+jobs:
+  changes:
+    name: Detect code changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: filter
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        with:
+          filters: |
+            code:
+              - '**'
+              - '!**/*.md'
+              - '!docs/**'
+              - '!.github/ISSUE_TEMPLATE/**'
+              - '!.github/PULL_REQUEST_TEMPLATE.md'
+              - '!.github/release.yml'
+              - '!.github/labels.yml'
+
+  typecheck:
+    name: Typecheck
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with: { node-version: '24.11.0', cache: npm }
+      - run: npm ci
+      - run: npm run typecheck
+
+  build-drift:
+    name: Generated artifacts
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with: { node-version: '24.11.0', cache: npm }
+      - run: npm ci
+      - run: npm run build
+      - name: Generated prompts and distributions must match source
+        run: git diff --exit-code -- agents skills dist
+
+  unit:
+    name: Unit (Node ${{ matrix.node }})
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix: { node: ['22.23.2', '24.11.0'] }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with: { node-version: '${{ matrix.node }}', cache: npm }
+      - run: npm ci
+      - id: tests
+        run: mkdir -p reports && npm run test:unit -- --reporter spec --reporter junit:reports/unit.xml 2>&1 | tee reports/test-output.txt
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with: { name: 'junit-unit-node-${{ matrix.node }}', path: reports, if-no-files-found: ignore }
+
+  integration:
+    name: Integration (shard ${{ matrix.shard }}/3)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix: { shard: [1, 2, 3] }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with: { node-version: '24.11.0', cache: npm }
+      - run: npm ci
+      - id: tests
+        run: mkdir -p reports && npm run test:integration -- --shard ${{ matrix.shard }}/3 --reporter spec --reporter junit:reports/integration-${{ matrix.shard }}.xml 2>&1 | tee reports/test-output.txt
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with: { name: 'junit-integration-${{ matrix.shard }}', path: reports, if-no-files-found: ignore }
+
+  browser:
+    name: Browser (Chromium)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with: { node-version: '24.11.0', cache: npm }
+      - run: npm ci
+      - id: playwright
+        run: echo "version=$(node -p "require('./node_modules/playwright/package.json').version")" >> "$GITHUB_OUTPUT"
+      - id: browser-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-chromium
+      - name: Install Chromium system dependencies
+        run: npx playwright install-deps chromium
+      - if: steps.browser-cache.outputs.cache-hit != 'true'
+        name: Install Chromium binary
+        run: npx playwright install chromium
+      - id: tests
+        run: mkdir -p reports && npm run test:browser -- --reporter spec --reporter junit:reports/browser.xml 2>&1 | tee reports/test-output.txt
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with: { name: junit-browser, path: reports, if-no-files-found: ignore }
+
+  native:
+    name: Native lifecycle (macOS, Node ${{ matrix.node }})
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: macos-26
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix: { node: ['22.23.2', '24.11.0'] }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with: { node-version: '${{ matrix.node }}', cache: npm }
+      - run: npm ci
+      - run: npx playwright install chromium
+      - id: tests
+        # These files exercise native publication and strict browser lifecycle deadlines. Keep
+        # concurrency at one; never retry compositor failures or weaken the 100ms VM gates.
+        run: mkdir -p reports && npm run test:native -- --concurrency 1 --reporter spec --reporter junit:reports/native.xml 2>&1 | tee reports/test-output.txt
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with: { name: 'junit-native-node-${{ matrix.node }}', path: reports, if-no-files-found: ignore }
+
+  packaging:
+    name: Package and installed runtime
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with: { node-version: '24.11.0', cache: npm }
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm pack --dry-run
+      - id: tests
+        run: mkdir -p reports && npm run test:packaging -- --reporter spec --reporter junit:reports/packaging.xml 2>&1 | tee reports/test-output.txt
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with: { name: junit-packaging, path: reports, if-no-files-found: ignore }
+
+  portable-pi:
+    name: Portable Pi boundary
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with: { node-version: '24.11.0', cache: npm }
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - id: tests
+        run: >-
+          mkdir -p reports &&
+          node --test --test-concurrency=4
+          --test-reporter=spec --test-reporter-destination=stdout
+          --test-reporter=junit --test-reporter-destination=reports/portable-pi.xml
+          test/pi-extension.test.ts test/pi-host-guard.test.ts
+          test/pi-stage-continuity.test.ts test/pi-repair-progress.test.ts
+          test/route-bootstrap.test.ts test/adaptive-route-diagnostics.test.ts
+          test/cold-start-workflow.test.ts test/production-reference-gate.test.ts
+          test/first-render-critic.test.ts test/copy.test.ts test/slop-review.test.ts
+          test/stateful-design-inspection.test.ts test/live-reference-flow.test.ts
+          test/first-render-evidence.test.ts test/native-inspection-boundaries.test.ts
+          2>&1 | tee reports/test-output.txt
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with: { name: junit-portable-pi, path: reports, if-no-files-found: ignore }
+
+  coverage:
+    name: Coverage
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with: { node-version: '24.11.0', cache: npm }
+      - run: npm ci
+      - id: tests
+        run: npm run test:coverage
+      - name: Publish coverage totals
+        if: always() && hashFiles('coverage/lcov.info') != ''
+        run: |
+          awk 'BEGIN{lf=lh=bf=bh=ff=fh=0} /^LF:/{lf+=substr($0,4)} /^LH:/{lh+=substr($0,4)} /^BRF:/{bf+=substr($0,5)} /^BRH:/{bh+=substr($0,5)} /^FNF:/{ff+=substr($0,5)} /^FNH:/{fh+=substr($0,5)} END{printf "## Coverage\n\n| Metric | Covered | Total | Percent |\n|---|---:|---:|---:|\n| Lines | %d | %d | %.2f%% |\n| Branches | %d | %d | %.2f%% |\n| Functions | %d | %d | %.2f%% |\n",lh,lf,100*lh/lf,bh,bf,100*bh/bf,fh,ff,100*fh/ff}' coverage/lcov.info >> "$GITHUB_STEP_SUMMARY"
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with: { name: coverage-lcov, path: coverage/lcov.info, if-no-files-found: warn }
+
+  ci-ok:
+    name: CI OK
+    if: always()
+    needs: [changes, typecheck, build-drift, unit, integration, browser, native, packaging, portable-pi, coverage]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every applicable CI job
+        env:
+          CODE: ${{ needs.changes.outputs.code }}
+          CHANGES: ${{ needs.changes.result }}
+          TYPECHECK: ${{ needs.typecheck.result }}
+          BUILD_DRIFT: ${{ needs.build-drift.result }}
+          UNIT: ${{ needs.unit.result }}
+          INTEGRATION: ${{ needs.integration.result }}
+          BROWSER: ${{ needs.browser.result }}
+          NATIVE: ${{ needs.native.result }}
+          PACKAGING: ${{ needs.packaging.result }}
+          PORTABLE_PI: ${{ needs.portable-pi.result }}
+          COVERAGE: ${{ needs.coverage.result }}
+        run: |
+          echo "Code changes: $CODE"
+          echo "changes=$CHANGES typecheck=$TYPECHECK build-drift=$BUILD_DRIFT unit=$UNIT integration=$INTEGRATION browser=$BROWSER native=$NATIVE packaging=$PACKAGING portable-pi=$PORTABLE_PI coverage=$COVERAGE"
+          [[ "$CHANGES" == "success" ]] || exit 1
+          case "$CODE" in
+            true) expected=success ;;
+            false) expected=skipped ;;
+            *) exit 1 ;;
+          esac
+          for result in "$TYPECHECK" "$BUILD_DRIFT" "$UNIT" "$INTEGRATION" "$BROWSER" "$NATIVE" "$PACKAGING" "$PORTABLE_PI" "$COVERAGE"; do
+            [[ "$result" == "$expected" ]] || exit 1
+          done
