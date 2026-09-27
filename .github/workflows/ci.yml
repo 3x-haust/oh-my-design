@@ -114,11 +114,14 @@ jobs:
         with: { name: 'junit-integration-${{ matrix.shard }}', path: reports, if-no-files-found: ignore }
 
   browser:
-    name: Browser (Chromium)
+    name: Browser (Chromium, shard ${{ matrix.shard }}/2)
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix: { shard: [1, 2] }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
@@ -138,10 +141,10 @@ jobs:
         name: Install Chromium binary
         run: npx playwright install chromium
       - id: tests
-        run: mkdir -p reports && npm run test:browser -- --reporter spec --reporter junit:reports/browser.xml 2>&1 | tee reports/test-output.txt
+        run: mkdir -p reports && npm run test:browser -- --shard ${{ matrix.shard }}/2 --reporter spec --reporter junit:reports/browser-${{ matrix.shard }}.xml 2>&1 | tee reports/test-output.txt
       - if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with: { name: junit-browser, path: reports, if-no-files-found: ignore }
+        with: { name: 'junit-browser-${{ matrix.shard }}', path: reports, if-no-files-found: ignore }
 
   native:
     name: Native lifecycle (macOS, Node ${{ matrix.node }})
@@ -231,14 +234,14 @@ jobs:
         with: { node-version: '24.11.0', cache: npm }
       - run: npm ci
       - id: tests
-        run: npm run test:coverage
+        run: npm run test:coverage -- --reporter junit:coverage/junit.xml
       - name: Publish coverage totals
         if: always() && hashFiles('coverage/lcov.info') != ''
         run: |
           awk 'BEGIN{lf=lh=bf=bh=ff=fh=0} /^LF:/{lf+=substr($0,4)} /^LH:/{lh+=substr($0,4)} /^BRF:/{bf+=substr($0,5)} /^BRH:/{bh+=substr($0,5)} /^FNF:/{ff+=substr($0,5)} /^FNH:/{fh+=substr($0,5)} END{printf "## Coverage\n\n| Metric | Covered | Total | Percent |\n|---|---:|---:|---:|\n| Lines | %d | %d | %.2f%% |\n| Branches | %d | %d | %.2f%% |\n| Functions | %d | %d | %.2f%% |\n",lh,lf,100*lh/lf,bh,bf,100*bh/bf,fh,ff,100*fh/ff}' coverage/lcov.info >> "$GITHUB_STEP_SUMMARY"
       - if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with: { name: coverage-lcov, path: coverage/lcov.info, if-no-files-found: warn }
+        with: { name: coverage-results, path: coverage/, if-no-files-found: warn }
 
   ci-ok:
     name: CI OK
