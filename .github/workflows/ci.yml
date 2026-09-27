@@ -226,13 +226,25 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with: { node-version: '24.11.0', cache: npm }
       - run: npm ci
+      - id: playwright
+        run: echo "version=$(node -p "require('./node_modules/playwright/package.json').version")" >> "$GITHUB_OUTPUT"
+      - id: browser-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-chromium
+      - name: Install Chromium system dependencies
+        run: npx playwright install-deps chromium
+      - if: steps.browser-cache.outputs.cache-hit != 'true'
+        name: Install Chromium binary
+        run: npx playwright install chromium
       - id: tests
         run: npm run test:coverage -- --reporter junit:coverage/junit.xml
       - name: Publish coverage totals
