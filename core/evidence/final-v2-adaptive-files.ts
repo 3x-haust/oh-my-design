@@ -10,6 +10,8 @@ import { validateSourceSeal, validateSourceSealArtifact } from '../source-seal/i
 import { validateFinalBrowserObservations } from './final-v2-browser-observations.ts';
 import { validateTrustedOutcomeEvidence } from './final-v2-outcome-gate.ts';
 import { validateFinalV2ContentFitCurrentness } from './final-v2-content-fit.ts';
+import { validateFinalConfidenceDebt } from './final-v2-confidence-debt.ts';
+import { validateMeasuredTerminal } from './final-v2-measured-terminal.ts';
 import {
   aggregateDesignQualityContracts,
   assertDesignQualityGreen,
@@ -291,6 +293,14 @@ export function validateAdaptiveFinalEvidenceV2GraphFiles(
   fs: AdaptiveEvidenceGraphFs,
   invocation: ProjectRunInvocation,
 ): Readonly<{ graph: AdaptiveFinalEvidenceV2Graph; rootHash: string; bindings: AdaptiveFinalEvidenceV2Bindings }> {
+  return validateAdaptiveGraphFiles(root, graphInput, fs, invocation, false);
+}
+export function validateAdaptiveFinalProductionFiles(root: string, graphInput: unknown, fs: AdaptiveEvidenceGraphFs, invocation: ProjectRunInvocation) {
+  const graph = validateAdaptiveFinalEvidenceV2Graph(graphInput);
+  if (!graph.measuredTerminal) fail('production-only validation requires the measured graph wrapper');
+  return validateAdaptiveGraphFiles(root, graph, fs, invocation, true);
+}
+function validateAdaptiveGraphFiles(root: string, graphInput: unknown, fs: AdaptiveEvidenceGraphFs, invocation: ProjectRunInvocation, productionOnly: boolean): Readonly<{ graph: AdaptiveFinalEvidenceV2Graph; rootHash: string; bindings: AdaptiveFinalEvidenceV2Bindings }> {
   const graph = validateAdaptiveFinalEvidenceV2Graph(graphInput);
   const routeRecordBytes = read(root, fs, graph.route.record.path, 'routeRecord');
   if (hash(routeRecordBytes) !== graph.route.record.sha256) fail('route record bytes changed');
@@ -301,8 +311,13 @@ export function validateAdaptiveFinalEvidenceV2GraphFiles(
     routeRecordValue,
     { root, invocation },
   );
+  const deferred = graph.omissions.filter(o => o.status === 'selected-with-debt');
+  const limitations = validateFinalConfidenceDebt(root, record, graph.confidenceDebt, deferred,
+    [graph.copy, graph.sourceSeal, graph.buildIdentity, ...[graph.blindLane, graph.fidelityLane, graph.protocolLane].flatMap(r => r ? [r] : []), ...graph.observations,
+      ...graph.route.stages.flatMap(stage => stage.status === 'selected' ? stage.artifacts : [])]);
   const expectedOmissions = adaptiveFinalOmissionMappings().filter(([, routeSkipId]) =>
-    record.strategy.skips.some(({ id }) => id === routeSkipId));
+    record.strategy.skips.some(({ id }) => id === routeSkipId)
+    || record.strategy.stages.includes(routeSkipId) && limitations.some(d => d.stage === routeSkipId));
   if (graph.omissions.length !== expectedOmissions.length) {
     fail('omissions do not match the selected and skipped stages in the current route');
   }
@@ -310,9 +325,10 @@ export function validateAdaptiveFinalEvidenceV2GraphFiles(
     const omission = graph.omissions[index];
     const skip = record.strategy.skips.find((entry) => entry.id === mapping[1]);
     if (omission === undefined || omission.id !== mapping[0]
-      || omission.routeSkipId !== mapping[1] || skip === undefined
-      || omission.reason !== skip.reason) {
-      fail(`${mapping[0]} omission does not bind the exact current route skip`);
+      || omission.routeSkipId !== mapping[1]
+      || (omission.status === 'skipped' ? skip === undefined || omission.reason !== skip.reason
+        : skip !== undefined || !record.strategy.stages.includes(mapping[1]))) {
+      fail(`${mapping[0]} binding does not preserve the exact current route skip or selected debt`);
     }
   }
   const activationLoaded = load(root, fs, graph.activation, 'activation'); const activation = validateActivationContext(activationLoaded.value);
@@ -366,8 +382,12 @@ export function validateAdaptiveFinalEvidenceV2GraphFiles(
   });
   const browserSha256 = hash(read(root, fs, '.omd/decision-graph.json', 'decision graph'));
   const completed = new Set<string>();
+  if (graph.measuredTerminal) {
+    if (!productionOnly) validateMeasuredTerminal(root, graph, invocation);
+  } else {
   validateLane(root, fs, invocation, 'blindLane', record.projectMode, benchmarkRequired, graph.blindLane, graph.route.record.sha256, activation.buildSha256, activation.briefSha256, observationHashes, observationBindings, browserSha256, completed);
   validateLane(root, fs, invocation, 'fidelityLane', record.projectMode, benchmarkRequired, graph.fidelityLane, graph.route.record.sha256, activation.buildSha256, activation.briefSha256, observationHashes, observationBindings, browserSha256, completed);
   validateLane(root, fs, invocation, 'protocolLane', record.projectMode, benchmarkRequired, graph.protocolLane, graph.route.record.sha256, activation.buildSha256, activation.briefSha256, observationHashes, observationBindings, browserSha256, completed);
-  return Object.freeze({ graph, rootHash: adaptiveFinalEvidenceV2RootHash(graph), bindings: Object.freeze({ branch: 'adaptive-omission', activation, buildSha256: activation.buildSha256, routeSha256: graph.route.record.sha256, claimPublication: record.sourceContract.evidenceClaims }) });
+  }
+  return Object.freeze({ graph, rootHash: adaptiveFinalEvidenceV2RootHash(graph), bindings: Object.freeze({ branch: 'adaptive-omission', activation, buildSha256: activation.buildSha256, routeSha256: graph.route.record.sha256, claimPublication: record.sourceContract.evidenceClaims, ...(limitations.length ? { limitations } : {}) }) });
 }

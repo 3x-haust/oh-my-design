@@ -641,7 +641,9 @@ test('production briefs require the current application and deliver decisions wi
   refreshSearchesAfterRoute(f.root, f.research);
   publishReferenceResearch(f.root, f.research, options, writer);
   writeFileSync(join(f.root, '.omd/domain-brief.json'), JSON.stringify(domainBrief(route.request)));
-  assert.ok(buildBrief(f.root, 'composition', undefined, invocation).blockers.some(blocker => blocker.includes('apply-check')));
+  const beforeApplication = buildBrief(f.root, 'composition', undefined, invocation);
+  assert.ok(!beforeApplication.blockers.some(blocker => blocker.includes('apply-check')));
+  assert.ok(beforeApplication.confidenceDebt.some(item => item.reason.includes('apply-check')));
   publishReferenceApplication(f.root, filledApplication(f.root, options), options, writer);
   for (const stage of ['composition', 'candidate-generation', 'production'] as const) {
     const brief = buildBrief(f.root, stage, undefined, invocation);

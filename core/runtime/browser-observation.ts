@@ -2,8 +2,10 @@ import { createHash } from 'node:crypto';
 import { decodePng } from '../motion/energy.ts';
 import { canonicalJson } from '../ref/board-artifacts.ts';
 import { validateDecisionGraph, type DesignDecision } from '../deliberation/contracts.ts';
+import { parseTrustedCaptureMeasurement, type TrustedCaptureMeasurement } from './trusted-browser-receipt.ts';
 
 export const BROWSER_OBSERVATION_SCHEMA = 'browser-observation-v1';
+export const MEASURED_BROWSER_OBSERVATION_SCHEMA = 'browser-observation-v2';
 export const BROWSER_OBSERVATION_SET_SCHEMA = 'browser-observation-set-v1';
 const SHA256 = /^[a-f0-9]{64}$/;
 const STATE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -25,7 +27,8 @@ export class BrowserObservationDecisionLinkError extends Error {
 }
 export type BrowserObservationDecisionRef = Readonly<{ decisionId: string; decisionSha256: string }>;
 export type BrowserObservationCore = Readonly<{
-  schema: typeof BROWSER_OBSERVATION_SCHEMA;
+  schema: typeof BROWSER_OBSERVATION_SCHEMA | typeof MEASURED_BROWSER_OBSERVATION_SCHEMA;
+  measurement?: TrustedCaptureMeasurement;
   testedUrl: string;
   testedState: string;
   viewport: Readonly<{ width: number; height: number }>;
@@ -100,8 +103,10 @@ function parseRef(value: unknown, label: string): BrowserObservationDecisionRef 
 }
 function parseObservation(value: unknown, index: number): BrowserObservation {
   const label = `browserObservations.observations[${index}]`;
-  const item = fields(value, ['schema', 'testedUrl', 'testedState', 'viewport', 'observableResult', 'decisionRefs', 'observationSha256'], label);
-  if (item.get('schema') !== BROWSER_OBSERVATION_SCHEMA) fail('MALFORMED_BROWSER_OBSERVATION', `${label}.schema is invalid`);
+  const measuredVersion = typeof value === 'object' && value !== null && Reflect.get(value, 'schema') === MEASURED_BROWSER_OBSERVATION_SCHEMA;
+  const item = fields(value, ['schema', 'testedUrl', 'testedState', 'viewport', 'observableResult', 'decisionRefs', 'observationSha256', ...(measuredVersion ? ['measurement'] : [])], label);
+  if (!measuredVersion && item.get('schema') !== BROWSER_OBSERVATION_SCHEMA) fail('MALFORMED_BROWSER_OBSERVATION', `${label}.schema is invalid`);
+  const measurement = measuredVersion ? parseTrustedCaptureMeasurement(item.get('measurement')) : undefined;
   const viewport = fields(item.get('viewport'), ['width', 'height'], `${label}.viewport`);
   const result = fields(item.get('observableResult'), ['kind', 'capture', 'result'], `${label}.observableResult`);
   if (result.get('kind') !== 'screenshot') fail('MALFORMED_BROWSER_OBSERVATION', `${label}.observableResult.kind is invalid`);
@@ -112,11 +117,13 @@ function parseObservation(value: unknown, index: number): BrowserObservation {
   if (refs.length === 0 || new Set(refs.map((ref) => ref.decisionId)).size !== refs.length) fail('MALFORMED_BROWSER_OBSERVATION', `${label}.decisionRefs must be non-empty and duplicate-free`);
   const normalizedViewport = Object.freeze({ width: dimension(viewport.get('width'), `${label}.viewport.width`), height: dimension(viewport.get('height'), `${label}.viewport.height`) });
   const normalizedMeasurement: BrowserObservationCore['observableResult']['result'] = Object.freeze({ measurement: 'viewport-pixels', width: dimension(measured.get('width'), `${label}.observableResult.result.width`), height: dimension(measured.get('height'), `${label}.observableResult.result.height`) });
-  if (normalizedMeasurement.width !== normalizedViewport.width || normalizedMeasurement.height !== normalizedViewport.height) fail('MALFORMED_BROWSER_OBSERVATION', `${label}.observableResult.result must measure the tested viewport`);
+  if (measurement === undefined && (normalizedMeasurement.width !== normalizedViewport.width || normalizedMeasurement.height !== normalizedViewport.height)) fail('MALFORMED_BROWSER_OBSERVATION', `${label}.observableResult.result must measure the tested viewport`);
+  if (measurement && (measurement.state !== item.get('testedState') || canonicalJson(measurement.layoutViewport) !== canonicalJson(normalizedViewport))) fail('MALFORMED_BROWSER_OBSERVATION', `${label} measured state/layout mismatch`);
   const core: BrowserObservationCore = Object.freeze({
-    schema: BROWSER_OBSERVATION_SCHEMA,
+    schema: measuredVersion ? MEASURED_BROWSER_OBSERVATION_SCHEMA : BROWSER_OBSERVATION_SCHEMA,
+    ...(measurement ? { measurement } : {}),
     testedUrl: testedUrl(item.get('testedUrl')),
-    testedState: text(item.get('testedState'), `${label}.testedState`, STATE),
+    testedState: text(item.get('testedState'), `${label}.testedState`, measuredVersion ? undefined : STATE),
     viewport: normalizedViewport,
     observableResult: Object.freeze({ kind: 'screenshot', capture: Object.freeze({ path: safePath(capture.get('path'), `${label}.observableResult.capture.path`), sha256: digest(capture.get('sha256'), `${label}.observableResult.capture.sha256`) }), result: normalizedMeasurement }),
     decisionRefs: Object.freeze(refs),
@@ -127,7 +134,7 @@ function parseObservation(value: unknown, index: number): BrowserObservation {
 }
 export function designDecisionSha256(value: DesignDecision): string { return hash(canonicalJson(value)); }
 export function browserObservationSha256(value: BrowserObservationCore): string {
-  return hash(canonicalJson({ schema: value.schema, testedUrl: value.testedUrl, testedState: value.testedState, viewport: value.viewport, observableResult: value.observableResult, decisionRefs: value.decisionRefs }));
+  return hash(canonicalJson({ schema: value.schema, testedUrl: value.testedUrl, testedState: value.testedState, viewport: value.viewport, observableResult: value.observableResult, decisionRefs: value.decisionRefs, ...(value.measurement ? { measurement: value.measurement } : {}) }));
 }
 function validate(value: unknown, decisionGraphBytes: Uint8Array, required: boolean): BrowserObservationSet | undefined {
   const evidence = fields(value, [], 'observation.evidence', false);
@@ -163,7 +170,7 @@ export function validateBrowserObservationArtifacts(set: BrowserObservationSet, 
     if (verifyPng) {
       let image: ReturnType<typeof decodePng>;
       try { image = decodePng(bytes); } catch { return fail('INVALID_OBSERVATION_ARTIFACT', 'browser observation capture is not a measured PNG'); }
-      if (image.width !== observation.viewport.width || image.height !== observation.viewport.height) fail('INVALID_OBSERVATION_ARTIFACT', 'browser observation viewport does not match capture pixels');
+      if (image.width !== observation.observableResult.result.width || image.height !== observation.observableResult.result.height) fail('INVALID_OBSERVATION_ARTIFACT', 'browser observation image dimensions do not match capture pixels');
     }
   }
 }

@@ -1,6 +1,7 @@
 export const CODEX_BROWSER_ROLES = [
   'omd-scout',
   'omd-typesetter',
+  'omd-sketch',
   'omd-eye',
   'omd-glance',
   'omd-hand',
@@ -16,6 +17,7 @@ const SCOUT_OPERATIONS = [
   ['craft-capture'],
   ['ref', 'search'],
   ['ref', 'navigate'],
+  ['ref', 'browse'],
 ] as const;
 
 // Typesetter needs the same brokered Chromium path as Scout for isolated typography specimens,
@@ -23,6 +25,7 @@ const SCOUT_OPERATIONS = [
 const TYPESETTER_OPERATIONS = [
   ['ir'],
   ['render'],
+  ['measure'],
 ] as const;
 
 const REVIEW_OPERATIONS = [
@@ -47,24 +50,27 @@ function beginsWith(operation: readonly string[], prefix: readonly string[]): bo
   return prefix.every((part, index) => operation[index] === part);
 }
 
-function operationPrefixes(role: string): readonly (readonly string[])[] {
+function operationPrefixes(role: string, roleMode?: string): readonly (readonly string[])[] {
   if (!CODEX_BROWSER_ROLES.includes(role as CodexBrowserRole)) return [];
+  if (role === 'omd-hand' && roleMode !== undefined && roleMode !== 'observer') return [];
+  if (role === 'omd-sketch' && roleMode !== 'structural' && roleMode !== 'visual-study') return [];
   return role === 'omd-scout' ? SCOUT_OPERATIONS
-    : role === 'omd-typesetter' ? TYPESETTER_OPERATIONS
-      : role === 'omd-hand' ? [...REVIEW_OPERATIONS, ['slop', 'checkpoint']] : REVIEW_OPERATIONS;
+    : role === 'omd-typesetter' || role === 'omd-sketch' ? TYPESETTER_OPERATIONS
+      : role === 'omd-hand' ? [...REVIEW_OPERATIONS, ['measure'], ['first-render', 'check'], ['slop', 'checkpoint']] : REVIEW_OPERATIONS;
 }
 
 /** Public capability prose is derived from the same allowlist as the broker, not a second grant. */
-export function brokeredBrowserOperationNames(role: string): readonly string[] {
-  return Object.freeze(operationPrefixes(role).map((prefix) => prefix.join(' ')));
+export function brokeredBrowserOperationNames(role: string, roleMode?: string): readonly string[] {
+  return Object.freeze(operationPrefixes(role, roleMode).map((prefix) => prefix.join(' ')));
 }
 
 export function isBrokeredBrowserCliOperation(
   role: string,
   operation: readonly string[],
+  roleMode?: string,
 ): role is CodexBrowserRole {
   if (!CODEX_BROWSER_ROLES.includes(role as CodexBrowserRole)) return false;
-  return operationPrefixes(role).some((prefix) => beginsWith(operation, prefix));
+  return operationPrefixes(role, roleMode).some((prefix) => beginsWith(operation, prefix));
 }
 
 export function codexBrowserRoleFromEnvironment(

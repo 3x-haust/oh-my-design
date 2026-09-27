@@ -71,13 +71,19 @@ export default function omdExtension(pi: PortablePiApi): void {
   // legitimate publishers cannot collide with OMD's project mutation lock.
   const run = (args: readonly string[], cwd: string, signal?: AbortSignal, onUpdate?: Parameters<typeof runOmd>[4]) => {
     const requestSource = requests.pin(cwd, args);
+    const commandEpoch = epoch(cwd);
     const queued = queues.get(cwd);
     const progressId = createOmdProgressId();
     const stopWaiting = queued === undefined ? () => undefined : monitorOmdProgress(args, 'queued', signal, onUpdate, progressId);
     const previous = queued ?? Promise.resolve();
     const next = previous.catch(() => undefined).then(async () => {
       stopWaiting();
-      if (signal?.aborted) throw new OmdCancelledError();
+      if (signal?.aborted || (isMutatingOmdCommand(args) && epochs.get(cwd) !== commandEpoch)) throw new OmdCancelledError();
+      const commitsDirection = args[0] === 'guard' && ['production', 'completion'].includes(args[1] ?? '')
+        || args[0] === 'brief' && args.includes('--check') && ['art-direction', 'type-proof', 'composition', 'production', 'independent-review'].includes(args[1] ?? '')
+        || ['recipe', 'finalize', 'complete', 'refine'].includes(args[0] ?? '')
+        || args[0] === 'ref' && isMutatingOmdCommand(args);
+      if (commitsDirection && requests.directions.isPending(cwd)) throw new Error('NEEDS_USER_DIRECTION: expansion/completion waits for actual direction input; representative rendering and inspection remain available');
       await requests.verifyRestored(cwd, requestSource, () => runOmd(pi, ['route', 'show', '--json'], cwd, signal, undefined, undefined, nativeRuns));
       if (signal?.aborted) throw new OmdCancelledError();
       const effective = requests.materialize(cwd, args, requestSource);
@@ -131,7 +137,8 @@ export default function omdExtension(pi: PortablePiApi): void {
     });
     on('before_agent_start', async (event, context) => {
       nativeRuns.observe(context);
-      requests.activate(context.cwd, event.prompt ?? '');
+      const directionAnswered = requests.activate(context.cwd, event.prompt ?? '');
+      if (directionAnswered) { workflowStarted.add(context.cwd); touched.add(context.cwd); rememberWorkflow(context.cwd); }
       if (workflowResume.accepts({ cwd: context.cwd, routeSha256: fileRevision(context.cwd, '.omd/route.json'), prompt: event.prompt ?? '' })) {
         workflowStarted.add(context.cwd); touched.add(context.cwd);
       }
@@ -145,7 +152,7 @@ export default function omdExtension(pi: PortablePiApi): void {
       nativeRuns.observe(context);
       const text = event.message.content?.filter(part => part.type === 'text').map(part => part.text ?? '').join('');
       if (text !== undefined) {
-        requests.activate(context.cwd, text);
+        if (requests.activate(context.cwd, text)) { workflowStarted.add(context.cwd); touched.add(context.cwd); rememberWorkflow(context.cwd); }
         if (requests.classificationGranted(context.cwd)) ownedWork.activate(context.cwd, text);
       }
     });
@@ -183,6 +190,12 @@ export default function omdExtension(pi: PortablePiApi): void {
             const taskEpoch = epoch(context.cwd);
             try {
               const selected = await checkNativeStageEntry(stage, args => run(args, context.cwd, context.signal));
+              if (selected && stage === 'candidate-generation') {
+                const { directionRoute } = await import('../core/brief/candidate-choice.ts');
+                const { requireCandidateSourcePlan } = await import('../core/brief/candidate-plan.ts');
+                const route = directionRoute(context.cwd);
+                if (route.processPolicy) requireCandidateSourcePlan(context.cwd, classification.path, route.sourceContractSha256);
+              }
               if (context.signal?.aborted || epochs.get(context.cwd) !== taskEpoch) return { block: true, reason: 'OMD_STAGE_ENTRY_INTERRUPTED' };
               if (selected) ownedWork.checked(context.cwd, stage); else ownedWork.unselected(context.cwd, stage);
             } catch (error) {
@@ -249,6 +262,10 @@ export default function omdExtension(pi: PortablePiApi): void {
         workflowStarted: workflowStarted.has(context.cwd), ownedWorkStarted: ownedWork.started(context.cwd),
         productionAttempted: productionAttempted.has(context.cwd), revision: revision(context.cwd),
         routeRevision: fileRevision(context.cwd, '.omd/route.json'), repairLoop, pi,
+        onAwaitUser: pending => {
+          epochs.delete(context.cwd); repairLoop.delete(context.cwd); pendingReferenceWork.delete(context.cwd);
+          return requests.directions.present(context.cwd, pending);
+        },
         onReferenceWork: work => {
           if (work === null) pendingReferenceWork.delete(context.cwd);
           else pendingReferenceWork.set(context.cwd, work);

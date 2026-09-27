@@ -201,6 +201,13 @@ test('pluginizeSkill preserves executable production-owner agent arguments', () 
   assert.doesNotMatch(source, /--agent oh-my-design:hand\b/);
 });
 
+test('plugin flavor preserves executable role identifiers in brief commands', () => {
+  const command = 'omd brief typography --role omd-typesetter --json';
+  const { source } = pluginizeSkill(`---\nname: omd-ultradesign\n---\n\n${command}\n`);
+  assert.match(source, /--role omd-typesetter\b/);
+  assert.doesNotMatch(source, /--role oh-my-design:typesetter\b/);
+});
+
 test('plugin flavor preserves machine-consumed owner and moderator identities', () => {
   const source = [
     'Emit `owner: omd-hand`.',

@@ -4,8 +4,9 @@ import { PiReviewerError, piDigest, piHash, piInteger, piRecord, piText } from '
 
 export const PI_ROLE_RESULT_SCHEMA = 'omd-pi-role-result-v1';
 export const PI_ROLE_EXEC_RESULT_SCHEMA = 'omd-pi-role-exec-result-v1';
+export const MEASURED_PI_ROLE_EXEC_RESULT_SCHEMA = 'omd-pi-role-exec-result-v2';
 export type PiRoleAuthorityReceipt = Readonly<{
-  schema: typeof PI_ROLE_EXEC_RESULT_SCHEMA; host: 'pi'; role: 'omd-eye'; projectRoot: string;
+  schema: typeof PI_ROLE_EXEC_RESULT_SCHEMA | typeof MEASURED_PI_ROLE_EXEC_RESULT_SCHEMA; host: 'pi'; role: 'omd-eye'; projectRoot: string;
   status: 'completed'; exitCode: 0; signal: null; eventCount: number; finalMessage: string;
   processPid: number; roleNonce: string; sessionId: string; parentSessionId: string;
   taskSha256: string; configurationSha256: string; buildSha256: string; briefSha256: string;
@@ -40,13 +41,19 @@ export function verifySignedPiEyeRoleResult(value: unknown, projectRoot: string)
     'bridgeSha256', 'systemPromptSha256', 'transcriptSha256', 'reviewerEvidence']);
   const proof = piRecord(receipt.reviewerEvidence, 'role-evidence');
   exact(proof, ['schema', 'evidenceSha256', 'packetSha256', 'taskSha256', 'childPid', 'sessionId', 'nonce']);
+  const measured = receipt.schema === MEASURED_PI_ROLE_EXEC_RESULT_SCHEMA;
+  const schema = measured ? MEASURED_PI_ROLE_EXEC_RESULT_SCHEMA : PI_ROLE_EXEC_RESULT_SCHEMA;
+  // Historical v1 binds the broker to the role session; v2 requires separate broker identities.
+  const invalidEvidenceIdentity = measured
+    ? proof.sessionId === receipt.sessionId || proof.nonce === receipt.roleNonce
+    : proof.sessionId !== receipt.sessionId || proof.nonce !== receipt.roleNonce;
   if (result.schema !== PI_ROLE_RESULT_SCHEMA || result.agent !== 'omd-eye' || result.result !== 'completed'
     || result.projectRoot !== projectRoot || receipt.projectRoot !== projectRoot
-    || receipt.schema !== PI_ROLE_EXEC_RESULT_SCHEMA || receipt.host !== 'pi' || receipt.role !== 'omd-eye'
+    || receipt.schema !== schema || receipt.host !== 'pi' || receipt.role !== 'omd-eye'
     || receipt.status !== 'completed' || receipt.exitCode !== 0 || receipt.signal !== null
     || receipt.modelSelection !== 'inherited-pi-host' || proof.schema !== 'omd-reviewer-evidence-consumption-v1'
     || result.finalMessage !== receipt.finalMessage || receipt.sessionId === receipt.parentSessionId
-    || proof.sessionId !== receipt.sessionId || proof.nonce !== receipt.roleNonce
+    || invalidEvidenceIdentity
     || proof.taskSha256 !== receipt.taskSha256 || proof.childPid === receipt.processPid
     || !/^(off|minimal|low|medium|high|xhigh)$/.test(String(receipt.modelReasoningEffort))) {
     throw new PiReviewerError('role-authority');
@@ -56,7 +63,7 @@ export function verifySignedPiEyeRoleResult(value: unknown, projectRoot: string)
   const eventCount = piInteger(receipt.eventCount, 'role-events');
   if (processPid === 0 || childPid === 0 || eventCount === 0) throw new PiReviewerError('role-execution');
   const parsed: PiRoleAuthorityReceipt = Object.freeze({
-    schema: PI_ROLE_EXEC_RESULT_SCHEMA, host: 'pi', role: 'omd-eye', projectRoot, status: 'completed', exitCode: 0, signal: null,
+    schema, host: 'pi', role: 'omd-eye', projectRoot, status: 'completed', exitCode: 0, signal: null,
     eventCount, processPid, finalMessage: piText(receipt.finalMessage, 'role-final'),
     roleNonce: piText(receipt.roleNonce, 'role-nonce'), sessionId: piText(receipt.sessionId, 'role-session'),
     parentSessionId: piText(receipt.parentSessionId, 'role-parent-session'),
@@ -73,7 +80,7 @@ export function verifySignedPiEyeRoleResult(value: unknown, projectRoot: string)
       sessionId: piText(proof.sessionId, 'evidence-session'), nonce: piText(proof.nonce, 'evidence-nonce'),
     }),
   });
-  if (!verifyNativeObservation(projectRoot, PI_ROLE_EXEC_RESULT_SCHEMA, piRoleReceiptDigest(parsed),
+  if (!verifyNativeObservation(projectRoot, schema, piRoleReceiptDigest(parsed),
     piText(authority.signature, 'role-signature'))) throw new PiReviewerError('role-signature');
   return Object.freeze({ receipt: parsed, finalMessage: parsed.finalMessage });
 }

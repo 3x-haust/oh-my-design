@@ -18,11 +18,12 @@ test('a selected first-party concept keeps visual authority across the productio
     assert.match(source, /before (?:typography|type) or structure freezes/i);
     assert.match(source, /load-bearing (?:visible )?invariants/i);
   }
-  assert.match(skill, /Selected `content-grain`, art direction, concept formation, colour, and refinement methods follow their native protocols and stage briefs/i);
-  assert.match(skill, /For concept formation, follow `theory\/imagegen\.md` and `protocol\/human-design-loop\.md`/i);
+  assert.match(skill, /Frame \+ Scout\/Writer -> minimal seed and 2-3 real concepts of one representative surface -> ONE interactive direction choice/i);
+  assert.match(skill, /Visual owners receive the chosen contract; Writer receives only its copy-safe projection/i);
+  assert.match(skill, /Load only the active omd-scout, omd-concepts, omd-system, omd-expand or omd-audit step/i);
   assert.match(imagegen, /concept-making and production owners may receive the exact target/i);
-  assert.match(loop, /competitive and gallery sources remain scout-only and source-isolated/i);
-  assert.match(skill, /External references stay sanitized/i);
+  assert.match(loop, /raw evidence is scout-only/i);
+  assert.match(loop, /blind review remains source-isolated/i);
   for (const source of [imagegen, loop]) {
     assert.match(source, /blind (?:selectors and reviewers|selectors\/reviewers|reviewers)[\s\S]{0,100}(?:invariant|bound invariants)/i);
   }
@@ -44,7 +45,8 @@ test('ambition examples widen invention without becoming a style recipe', () => 
     assert.match(source, /concrete visible deficiency|observable criteria grounded in the actual brief/i);
     assert.match(source, /familiarity|“familiar”/i);
   }
-  assert.match(skill, /Selected `content-grain`, art direction, concept formation, colour, and refinement methods follow their native protocols and stage briefs[\s\S]*rendered hypotheses win/i);
+  assert.match(skill, /minimal seed and 2-3 real concepts of one representative surface[\s\S]*coordinator presents all actual previews and preserves authentic choice bytes/i);
+  assert.match(skill, /Load only the active omd-scout, omd-concepts, omd-system, omd-expand or omd-audit step/i);
 });
 
 test('concept inquiry begins from subject behavior instead of a preset composition menu', () => {

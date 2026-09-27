@@ -13,6 +13,7 @@ import { currentNativeFinalObservations } from '../runtime/native-final-manifest
 import { checkNativeFinalReview } from '../runtime/native-final-review-state.ts';
 import { getNativePiRun } from '../runtime/native-pi-run.ts';
 import { checkSlopFinalGraph } from '../slop/review.ts';
+import { refinementEscalation } from './refinement-work.ts';
 
 const reason = (error: unknown): string => error instanceof Error ? error.message : String(error);
 
@@ -46,6 +47,13 @@ const WORK = {
 export function nativeCompletionWork(root: string, invocation: ProjectRunInvocation) {
   getNativePiRun(invocation, root);
   const route = readPersistedRoute(root, invocation);
+  const escalation = route.sourceContract.processPolicy ? refinementEscalation(root, route.sourceContractSha256) : null;
+  if (escalation) {
+    const { defects, ...pending } = escalation;
+    return { schema: 'stage-next-v2', stage: 'production', owner: 'coordinator', action: 'await-user',
+      reason: 'repeated-defect', pending, escalationEvidence: defects, resumeAuthority: null, next: null, problems: [],
+      instruction: 'The same required defect survived three distinct repairs. Stop automatic recovery and await real human authority; do not waive the failed requirement.' } as const;
+  }
   const entry = readFrame(root)?.entrySurface?.entryPath;
   if (entry !== undefined) {
     try { readContainedRegularFile(root, join(root, entry), 'production entry'); }

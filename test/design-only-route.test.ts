@@ -124,6 +124,9 @@ test('design handoff rejects stale documents, omitted parts, absent selected out
     [confidenceDebt('reference-board', 'Reference comparison was not available for this handoff.')], createTestProjectRunInvocation(root));
   const checked = validateDesignHandoffArtifacts(root, route, handoff);
   assert.deepEqual(checked.limitations, debt);
+  assert.equal(checked.hostCapabilities.host, 'local');
+  assert.equal(checked.hostCapabilities.guarantees.writeBoundary.enforced, false);
+  assert.equal(checked.hostCapabilities.guarantees.completionHold.enforced, false);
   assert.equal(checked.verification, 'artifact-integrity-with-limitations');
   assert.equal(checked.implementation, 'not-performed');
   assert.equal(checked.review.independence, 'not-attested');

@@ -10,6 +10,10 @@
 // This is a contract, not a generator: it validates that a decision was made and that the decision
 // has enough range to carry hierarchy. It never invents values.
 
+import { validateMinimalTokens, minimalTokenScales, type MinimalTokenCommit } from './minimal.ts';
+export { MINIMAL_TOKEN_SCHEMA, validateMinimalTokens, validatePrimitiveOverrides, selectedBaseTokens, minimalTokenScales } from './minimal.ts';
+export type { MinimalTokenCommit, Primitive, TextStyle, TokenMaps } from './minimal.ts';
+
 export const TOKEN_COMMIT_SCHEMA = 'token-commit-v1' as const;
 export const RESPONSIVE_TOKEN_COMMIT_SCHEMA = 'token-commit-v2' as const;
 export const TOKEN_COMMIT_KEYS = ['schema', 'register', 'typeScale', 'spacingScale', 'colorRoles', 'fontRoles'] as const;
@@ -111,8 +115,9 @@ function asTypeScale(value: unknown, label: string, register: string): number[] 
 }
 
 /** Validates the closed commitment shape and every scale; never invents design values. */
-export function validateTokenCommit(value: unknown): TokenCommit {
+export function validateTokenCommit(value: unknown): TokenCommit | MinimalTokenCommit {
   const record = asRecord(value, 'commit must be an object');
+  if (record.schema === 'token-commit-v3') return validateMinimalTokens(value);
   const schema = record.schema;
   if (schema !== TOKEN_COMMIT_SCHEMA && schema !== RESPONSIVE_TOKEN_COMMIT_SCHEMA) fail(`schema must be ${TOKEN_COMMIT_SCHEMA} or ${RESPONSIVE_TOKEN_COMMIT_SCHEMA}`);
   exactKeys(record, schema === TOKEN_COMMIT_SCHEMA ? TOKEN_COMMIT_KEYS : RESPONSIVE_TOKEN_COMMIT_KEYS, 'commit has unknown or missing keys');
@@ -152,19 +157,20 @@ export type TokenDrift = {
  * observed value sits on a committed rung — the point of committing tokens is that the build lands
  * on them rather than inventing neighbours.
  */
-export function checkTokenDrift(commit: TokenCommit, observed: { readonly typeScale: readonly number[]; readonly spacingScale: readonly number[] }, viewportWidth?: number): TokenDrift | null {
-  let typeScale = commit.typeScale;
+export function checkTokenDrift(commit: TokenCommit | MinimalTokenCommit, observed: { readonly typeScale: readonly number[]; readonly spacingScale: readonly number[] }, viewportWidth?: number): TokenDrift | null {
+  const scales = commit.schema === 'token-commit-v3' ? minimalTokenScales(commit) : commit;
+  let typeScale = scales.typeScale;
   if (commit.schema === RESPONSIVE_TOKEN_COMMIT_SCHEMA) {
     const width = typeof viewportWidth === 'number' && Number.isFinite(viewportWidth) && viewportWidth > 0
       ? viewportWidth : fail('responsive drift requires a positive finite viewport width');
     typeScale = commit.responsiveTypeScales.find(entry => width <= entry.maxWidth)?.typeScale ?? commit.typeScale;
   }
   const offType = observed.typeScale.filter((size) => !typeScale.includes(size));
-  const offSpacing = observed.spacingScale.filter((step) => !commit.spacingScale.includes(step));
+  const offSpacing = observed.spacingScale.filter((step) => !scales.spacingScale.includes(step));
   if (offType.length === 0 && offSpacing.length === 0) return null;
   const parts: string[] = [];
   if (offType.length > 0) parts.push(`type sizes ${offType.join(', ')} are not on the committed scale [${typeScale.join(', ')}]`);
-  if (offSpacing.length > 0) parts.push(`spacing steps ${offSpacing.join(', ')} are not on the committed scale [${commit.spacingScale.join(', ')}]`);
+  if (offSpacing.length > 0) parts.push(`spacing steps ${offSpacing.join(', ')} are not on the committed scale [${scales.spacingScale.join(', ')}]`);
   return {
     id: 'TOKEN-DRIFT',
     message: `${parts.join('; ')}. Each off-ladder value is a component that invented its own number instead of landing on the system, which is how a scale collapses into a cluster of adjacent sizes.`,

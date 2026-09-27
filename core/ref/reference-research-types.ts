@@ -1,6 +1,8 @@
 import type { MarketReferenceCoverage } from './market-reference-coverage-contract.ts';
 
-export const REFERENCE_RESEARCH_SCHEMA = 'reference-research-v7' as const;
+export const REFERENCE_RESEARCH_SCHEMA = 'reference-research-v8' as const;
+export const supportsMarketCoverage = (schema: string): boolean => schema === 'reference-research-v7' || schema === 'reference-research-v8';
+export const supportsBrowseEvidence = (schema: string): boolean => schema === 'reference-research-v8';
 export const DOMAIN_REFERENCES_PATH = '.omd/refs/domain/research.json';
 export const DESIGN_REFERENCES_PATH = '.omd/refs/design/research.json';
 export const REFERENCE_RESEARCH_PATH = '.omd/reference-research.json';
@@ -20,7 +22,12 @@ export type ResearchDiscoveryRoot = Readonly<{
   method: 'direct-public'; entry: 'public-directory' | 'free-gallery'; url: string; reason: string;
   evidence: ResearchEvidence; capture: ResearchEvidence;
 }>;
+export type BrowseSourceProvenance = Readonly<{ kind: 'recorded-browse'; session: ResearchEvidence;
+  capture: import('./browse/contract.ts').EventRef; keep: import('./browse/contract.ts').EventRef }>;
+export type BrowseDesignDiscovery = Readonly<{ kind: 'recorded-browse'; url: string; access: 'public' | 'user-session';
+  qualityReason: string; session: ResearchEvidence; entry: import('./browse/contract.ts').EventRef }>;
 export type ResearchSource = Readonly<{
+  provenance?: BrowseSourceProvenance;
   id: string;
   url: string;
   observedAt: string;
@@ -30,7 +37,7 @@ export type ResearchSource = Readonly<{
   capture: ResearchEvidence;
   visualRole?: 'visual-direction' | 'component-support';
   visualAssessment?: Readonly<Record<'composition' | 'typography' | 'density' | 'imagery' | 'transfer' | 'avoid', string>>;
-  discovery?: Readonly<{
+  discovery?: BrowseDesignDiscovery | Readonly<{
     url: string;
     kind: 'app-gallery' | 'web-gallery' | 'visual-bookmark' | 'user-provided';
     access: 'free';
@@ -43,11 +50,12 @@ export type ResearchLane = Readonly<{
   queries: readonly string[];
   searches: readonly ResearchEvidence[];
   sources: readonly ResearchSource[];
+  browseSessions?: readonly ResearchEvidence[];
   navigation?: readonly Readonly<{ url: string; evidence: ResearchEvidence; capture: ResearchEvidence }>[];
   discoveryRoots?: readonly ResearchDiscoveryRoot[];
 }>;
 export type ReferenceResearch = Readonly<{
-  schema: typeof REFERENCE_RESEARCH_SCHEMA | 'reference-research-v6' | 'reference-research-v5';
+  schema: typeof REFERENCE_RESEARCH_SCHEMA | 'reference-research-v7' | 'reference-research-v6' | 'reference-research-v5';
   sourceContractSha256: string;
   marketCoverage?: MarketReferenceCoverage | null;
   domainReference: ResearchLane & Readonly<{ benchmarkSha256: string | null }>;

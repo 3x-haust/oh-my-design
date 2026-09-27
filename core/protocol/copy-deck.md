@@ -103,7 +103,7 @@ states. Never fabricate error or empty UI to satisfy a checklist.
 
 ## Art direction contract
 
-Include this section only when art direction is selected. Copy the selected register, motion
+For legacy v1/v2 art direction, include this section only when that branch is selected. Copy the selected register, motion
 decision, non-empty immutable Beat IDs and exact exception receipt from the coordinator's copy-safe
 projection. The coordinator assigns stable `B-<number>` IDs to the evidenced content regions before
 publishing art direction; Writer maps those supplied IDs to verified facts, not new IDs. An empty
@@ -135,6 +135,13 @@ host-authorized current-user exception, use exactly `Current-user exception: cur
 and bind its exact selected receipt. Neither a register
 choice nor an oversized content plan creates that authority. This section is analytical metadata;
 none of its field names, hashes or instructions are surface copy.
+
+For candidate-bound art-direction-v3, use one separate `## Selected direction` section containing
+exactly one JSON block equal to the publisher's selected-art-copy-v1 projection: schema, selectedId,
+candidateSelection receipt, register, motionDecision and beatIds. No private metaphor/rejection fields
+are admitted. This is a Writer metadata callback after choice, not another approval. Legacy Art direction
+contract/Beat-exception sections above retain their original semantics. Changing visible copy invalidates
+the selected content projection; adding only this metadata does not.
 
 ## Humanize audit
 

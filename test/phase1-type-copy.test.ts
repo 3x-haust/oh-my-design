@@ -1,43 +1,29 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { parseDynamicTypeCoverage } from '../core/brief/dynamic-type.ts';
+import { candidateCopyProjection } from '../core/brief/candidate-plan.ts';
+import { assertRoleDelivery } from './helpers/prompt-delivery.ts';
 
-const root = fileURLToPath(new URL('..', import.meta.url));
-const read = (path: string): string => readFileSync(join(root, path), 'utf8');
+const coverage = { locales: ['ko-KR'], scripts: ['Hangul', 'Latin'], sources: [{ roleId: 'body', kind: 'user-input', bounded: false }],
+  unicodeRanges: ['U+0020-007E', 'U+1100-11FF', 'U+3130-318F', 'U+AC00-D7A3'], requiredPunctuationAndSymbols: ['₩', '−'], normalization: 'preserve',
+  fallbackStack: ['sans-serif'], unknownScriptPolicy: 'fallback', subsets: [] };
 
-test('typesetter prompt names the four typography-expression fronts and Korean composition quality', () => {
-  const typesetter = read('src/agents/typesetter.agent.yaml');
-  assert.match(typesetter, /expressive or variable-font face/i);
-  assert.match(typesetter, /bold hierarchy with deliberate scale and contrast/i);
-  assert.match(typesetter, /experimental\s+typographic treatment for the one signature moment/i);
-  assert.match(typesetter, /Korean typesetting quality[\s\S]*syllable-block density, punctuation alignment, and mixed\s+Korean\/Latin\/numeral rhythm/i);
-  assert.match(typesetter, /Never trade Hangul composition quality for a display effect/);
+test('dynamic Hangul coverage rejects current-copy-only subsets and preserves full supported ranges', () => {
+  assert.throws(() => parseDynamicTypeCoverage({ ...coverage, unicodeRanges: ['U+AC00'] }));
+  assert.deepEqual(parseDynamicTypeCoverage(coverage).unicodeRanges, coverage.unicodeRanges);
+  assert.equal(parseDynamicTypeCoverage({ ...coverage, sources: [{ roleId: 'display', kind: 'fixed-copy', bounded: true }], unicodeRanges: ['U+AC00'] }).sources[0]!.kind, 'fixed-copy');
 });
 
-test('typesetter prompt sets a font performance budget aligned with the type-proof record', () => {
-  const typesetter = read('src/agents/typesetter.agent.yaml');
-  assert.match(typesetter, /subset each family to the scripts and glyphs/i);
-  assert.match(typesetter, /declare\s+`unicode-range`\s+per subset/);
-  assert.match(typesetter, /choose\s+`font-display`\s+from\s+the loading behaviour you tested/i);
-  assert.match(typesetter, /request only the variable axes the proof actually\s+exercises/i);
-  assert.match(typesetter, /unshipped weight the fast-loading type-proof record must justify or drop/i);
+test('font subset CSS ranges must match their declared asset coverage', () => {
+  assert.throws(() => parseDynamicTypeCoverage({ ...coverage, subsets: [{ familyId: 'body', ranges: ['U+AC00-D7A3'], asset: { path: 'font.woff2', sha256: 'a'.repeat(64) }, unicodeRange: 'U+AC00' }] }));
 });
 
-test('writer prompt names the three copy-sharpening fronts and keeps blind review as the gate', () => {
-  const writer = read('src/agents/writer.agent.yaml');
-  assert.match(writer, /Sharpen copy on three fronts/);
-  assert.match(writer, /sharp, concrete lines grounded in a verified fact or the\s+brief, not a generic claim/i);
-  assert.match(writer, /align every headline, label,\s+and CTA with the concept the visual carrier actually shows/i);
-  assert.match(writer, /remove interchangeable stock phrasing, hedges, and cliché per\s+`theory\/voice\.md`/i);
-  assert.match(writer, /Awareness of text-slop patterns is advisory context for your own drafting, never a\s+gate you self-certify/i);
-  assert.match(writer, /the blind copy review remains the enforcement point/);
+test('Writer metadata closure preserves candidate visible-content digest but actual copy changes invalidate it', () => {
+  const deck = '## Surface copy\n### Main\nExact text\n## Truth contract\nLocal only\n';
+  assert.equal(candidateCopyProjection(deck), candidateCopyProjection(deck + '## Selected direction\nMetadata only\n'));
+  assert.notEqual(candidateCopyProjection(deck), candidateCopyProjection(deck.replace('Exact text', 'Changed text')));
 });
 
-test('writer prompt preserves the pre-existing deck-ownership and fact-policy boundaries verbatim', () => {
-  const writer = read('src/agents/writer.agent.yaml');
-  assert.match(writer, /only `.omd\/copy-deck\.md`/);
-  assert.match(writer, /Never edit UI, code, components, styles, layout/);
-  assert.match(writer, /sole deck owner[\s\S]*repair the deck first[\s\S]*production\s+source to omd-hand/i);
+test('type and copy source instructions survive host emission under their exclusive role identities', () => {
+  assertRoleDelivery('typesetter'); assertRoleDelivery('writer');
 });

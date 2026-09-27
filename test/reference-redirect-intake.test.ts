@@ -11,7 +11,7 @@ import test from 'node:test';
 import { inputSkeleton } from '../core/schema/inputs.ts';
 import { loadRefs } from '../core/ref/store.ts';
 import { captureFinalUrlGuard, captureLane } from '../core/ref/capture-intake.ts';
-import { publishTestAdaptiveRoute } from './helpers/project-write.ts';
+import { publishTestAdaptiveRoute, withTestReviewPurposeAuthority } from './helpers/project-write.ts';
 import { designAdmissionFixture } from './helpers/design-admission.ts';
 import { capturePageForRef, withBrowser } from '../core/render/index.ts';
 
@@ -22,7 +22,7 @@ test('a Korean brief refuses foreign-only domain captures before writing, but ac
   t.after(() => rmSync(cwd, { recursive: true, force: true }));
   const input = { ...(inputSkeleton('product-route-input').skeleton as Record<string, unknown>),
     request: '한국어로 복지 혜택을 찾고 신청하는 데스크톱 서비스를 구현해줘.' };
-  const invocation = publishTestAdaptiveRoute(cwd, input);
+  const invocation = publishTestAdaptiveRoute(cwd, withTestReviewPurposeAuthority(cwd, input));
   const english = 'Find government benefits and financial help';
   const korean = '나에게 맞는 복지 혜택을 찾고 신청 준비를 시작하세요';
   const guard = captureFinalUrlGuard(cwd, [{ source: 'https://www.usa.gov/benefits', lane: 'domain' }], invocation);
@@ -77,7 +77,7 @@ test('selector-scoped capture still checks visible language on the full source p
 test('a gallery capture must remain the exact requested item regardless of user origin', t => {
   const cwd = mkdtempSync(join(tmpdir(), 'omd-gallery-redirect-'));
   t.after(() => rmSync(cwd, { recursive: true, force: true }));
-  const invocation = publishTestAdaptiveRoute(cwd, inputSkeleton('product-route-input').skeleton);
+  const invocation = publishTestAdaptiveRoute(cwd, withTestReviewPurposeAuthority(cwd, inputSkeleton('product-route-input').skeleton));
   const source = 'https://dribbble.com/shots/123-ui';
   const guard = captureFinalUrlGuard(cwd, [{ source, lane: 'design' }], invocation);
   assert.doesNotThrow(() => guard(0, source));
@@ -93,7 +93,7 @@ test('a gallery capture must remain the exact requested item regardless of user 
 
 test('a changed gallery item cannot authorize a later original-source capture', t => {
   const value = designAdmissionFixture(t);
-  const invocation = publishTestAdaptiveRoute(value.root, inputSkeleton('product-route-input').skeleton);
+  const invocation = publishTestAdaptiveRoute(value.root, withTestReviewPurposeAuthority(value.root, inputSkeleton('product-route-input').skeleton));
   assert.ok(value.gallery.ref.acquisition);
   value.gallery.ref.acquisition.finalUrl = 'https://www.pinterest.com/pin/987654321/';
   writeFileSync(value.gallery.path, JSON.stringify(value.gallery.ref));
@@ -115,7 +115,7 @@ test('redirect aliases cannot publish opposite-lane images in concurrent batches
   const cwd = mkdtempSync(join(tmpdir(), 'omd-redirect-intake-'));
   t.after(() => rmSync(cwd, { recursive: true, force: true }));
   mkdirSync(join(cwd, '.omd/.cache'), { recursive: true });
-  writeFileSync(join(cwd, '.omd/.cache/route.json'), JSON.stringify(inputSkeleton('product-route-input').skeleton));
+  writeFileSync(join(cwd, '.omd/.cache/route.json'), JSON.stringify(withTestReviewPurposeAuthority(cwd, inputSkeleton('product-route-input').skeleton)));
   const classified = spawnSync(process.execPath, [cli, 'route', 'classify', '--input', '.omd/.cache/route.json'], { cwd, env, encoding: 'utf8' });
   assert.equal(classified.status, 0, classified.stderr);
   const source = `http://127.0.0.1:${port}/redirect-domain`;

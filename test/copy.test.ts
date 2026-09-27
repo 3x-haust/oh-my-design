@@ -232,6 +232,13 @@ test('support copy can be omitted with a reason but rejects unmarked commentary'
   assert.ok(validateCopyDeck(ambiguous).some((violation) => violation.id === 'COPY-SUPPORT'));
 });
 
+test('schema fields permit explicit omission of inapplicable main message and next action', () => {
+  const omitted = deck()
+    .replace('Main message: 병목을 찾아 실제 성능을 바꿉니다.', 'Main message: none — work object already orients')
+    .replace('Next action: 첫 번째 프로젝트 보기', 'Next action: none — no meaningful move exists');
+  assert.deepEqual(validateCopyDeck(omitted), []);
+});
+
 test('missing and empty decks fail, and CLI missing file exits 1 with JSON', () => {
   assert.ok(validateCopyDeck('').some((v) => v.id === 'COPY-MISSING'));
   const dir = project();

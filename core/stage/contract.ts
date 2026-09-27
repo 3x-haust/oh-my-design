@@ -14,11 +14,12 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { readPersistedRoute } from '../route/index.ts';
 import { unconfirmedPlanningStatements, validateDomainBrief } from '../domain/domain-brief.ts';
-import { ADAPTIVE_STAGE_GRAPH, type AdaptiveStageId } from '../route/adaptive-stage-graph.ts';
+import { adaptiveStageGraph, adaptiveStageOwners, type AdaptiveStageId } from '../route/adaptive-stage-graph.ts';
 import { CANDIDATE_SELECTION_POINTER_PATH } from '../brief/candidate-selection.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import { consumedContractText } from './contract-sections.ts';
 import { canDeferMissingCopy, DEBT_CAPABLE_STAGES } from '../brief/confidence-debt.ts';
+import { directionCommitmentBlocker } from '../brief/candidate-choice.ts';
 
 export const DELIVERY_RECEIPT_SCHEMA = 'stage-delivery-v1' as const;
 export const DELIVERY_LOG = '.omd/delivery.jsonl';
@@ -48,11 +49,11 @@ export const STAGES: readonly StageDefinition[] = Object.freeze([
   { id: 'reference-board', owner: 'omd-scout', artifact: '.omd/reference-board.json', requiredContracts: ['protocol/reference-assembly.md'] },
   { id: 'moodboard', owner: 'omd-scout', artifact: '.omd/moodboard.json', requiredContracts: ['protocol/reference-assembly.md', 'protocol/moodboard.md'] },
   { id: 'reference-selection', owner: 'coordinator', artifact: '.omd/reference-pre-selection-v2.json', requiredContracts: ['protocol/reference-assembly.md'] },
-  { id: 'art-direction', owner: 'coordinator', artifact: '.omd/art-direction.json', requiredContracts: ['protocol/design-deliberation.md'] },
+  { id: 'art-direction', owner: 'omd-art-director', artifact: '.omd/art-direction.json', requiredContracts: ['protocol/design-deliberation.md'] },
   { id: 'copy', owner: 'omd-writer', artifact: '.omd/copy-deck.md', requiredContracts: ['protocol/copy-deck.md', 'theory/voice.md'] },
   { id: 'type-proof', owner: 'omd-typesetter', artifact: '.omd/type-proof.md', requiredContracts: ['theory/typography.md'] },
   { id: 'composition', owner: 'omd-composer', artifact: '.omd/composition.md', requiredContracts: ['protocol/composition-contract.md', 'theory/layout.md'] },
-  { id: 'candidate-generation', owner: 'omd-sketch', artifact: CANDIDATE_SELECTION_POINTER_PATH, requiredContracts: ['protocol/composition-contract.md', 'theory/layout.md'] },
+  { id: 'candidate-generation', owner: 'omd-art-director', artifact: CANDIDATE_SELECTION_POINTER_PATH, requiredContracts: ['protocol/composition-contract.md', 'theory/layout.md'] },
 ].map((stage) => Object.freeze({ ...stage, requiredContracts: Object.freeze(stage.requiredContracts) })) as StageDefinition[]);
 
 export type DeliveryReceipt = {
@@ -147,7 +148,7 @@ function routedStages(projectRoot: string, invocation?: ProjectRunInvocation): r
   const definitions = new Map<string, StageDefinition>(STAGES.map((stage) => [stage.id, stage]));
   return routed.strategy.stages.flatMap((stage) => {
     const definition = definitions.get(stage);
-    return definition === undefined ? [] : [definition];
+    return definition === undefined ? [] : [{ ...definition, owner: adaptiveStageOwners(routed.sourceContract.processPolicy !== undefined)[definition.id] }];
   });
 }
 
@@ -213,7 +214,7 @@ export function adaptivePrerequisiteStages(
   const selected = new Set(route.strategy.stages);
   const dependencies = new Set<AdaptiveStageId>();
   const visit = (current: AdaptiveStageId): void => {
-    const node = ADAPTIVE_STAGE_GRAPH[current];
+    const node = adaptiveStageGraph(route.sourceContract.processPolicy !== undefined)[current];
     // Greenfield copy consumes Framer's reality ledger even when Copy and Scout share a wave.
     // Keep this conditional: existing copy-only routes intentionally have no frame stage.
     const greenfieldCopyFrame = current === 'copy' && route.projectMode === 'greenfield' ? ['frame' as const] : [];
@@ -263,6 +264,10 @@ export function requireStage(
       .map((dependency) => state.stages.find((stage) => stage.stage === dependency))
       .filter((stage): stage is StageState => stage !== undefined && !stage.present && !DEBT_CAPABLE_STAGES.has(stage.stage) && !(stage.stage === 'copy' && provisionalCopy))
       .map((stage) => stage.artifact);
+  if (['art-direction', 'type-proof', 'composition'].includes(id)) {
+    const pending = directionCommitmentBlocker(projectRoot);
+    if (pending) missingArtifacts.push(pending);
+  }
   const undeliveredContracts = state.stages[index]!.undelivered;
   return { stage: definition.id, ok: missingArtifacts.length === 0 && undeliveredContracts.length === 0, missingArtifacts, undeliveredContracts };
 }

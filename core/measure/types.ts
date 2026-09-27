@@ -1,0 +1,70 @@
+import type { Box, RawIr } from '../types.ts';
+import type { ViewState } from '../render/stateful.ts';
+
+export type Receipt = { path: string; sha256: string };
+export type RGBA = [number, number, number, number];
+export type Coverage = { status: 'complete' | 'partial' | 'unsupported'; measured: number; eligible: number; excluded: { subjectId: string; reason: string }[] };
+export type ViewSpec = { id: string; route: string; state: string; stateRecipeSha256: string; viewport: { width: number; height: number }; browserZoom: 1 | 2 };
+export type ViewRequest = { id: string; viewport: { width: number; height: number }; browserZoom: 1 | 2; state?: ViewState };
+export const BASELINE_VIEWS: readonly ViewRequest[] = [{ id: 'desktop-1280x900@1', viewport: { width: 1280, height: 900 }, browserZoom: 1 }, { id: 'mobile-390x844@1', viewport: { width: 390, height: 844 }, browserZoom: 1 }];
+export type TextLine = { box: Box; graphemes: number; text: string };
+export type MeasureNode = {
+  id: string; locator: string; parent: string | null; rank: number; tag: string; role: string;
+  box: Box; visibleBox: Box | null; text: string; lines: TextLine[]; graphemes: number;
+  size: number; weight: number; families: string[]; leading: number | 'normal'; tracking: number;
+  direction: string; writingMode: string; language: string; textTransform: string;
+  foreground: RGBA; backgrounds: RGBA[]; background: RGBA; unsupported: string[];
+  control: string | null; interactive: boolean; disabled: boolean; position: string; tabIndex: number;
+  spacing: { property: string; value: number }[]; display: string; order: number;
+  scroll: { width: number; height: number; clientWidth: number; clientHeight: number };
+  clipped: { ancestor: string; sides: string[]; amount: number; scrollEscape: boolean }[];
+  tokens: { text: string; lines: number[]; split: boolean; oneSyllableTail: boolean }[];
+  assignments: string[]; media: boolean; semanticColorRole: string | null;
+  customProperties: { name: string; value: string }[];
+  contentId?: string | null; textStyleId?: string | null;
+};
+export type MeasurementDom = {
+  nodes: MeasureNode[];
+  viewport: { innerWidth: number; innerHeight: number; clientWidth: number; clientHeight: number; devicePixelRatio: number; visualViewportScale: number; scrollX: number; scrollY: number };
+  rootCanvas: RGBA; overflowX: number; eligibleNodes: number; excluded: { subjectId: string; reason: string }[];
+  fonts: { ready: boolean; failedFamilies: string[] };
+  paintSamples: { x: number; y: number; subjectId: string | null }[]; gridStep: number;
+};
+export type MeasuredIr = RawIr & { measurement: MeasurementDom };
+export type CaptureBinding = {
+  viewId: string; capture: Receipt; ir: Receipt; image: { width: number; height: number };
+  observedViewport: MeasurementDom['viewport']; fonts: MeasurementDom['fonts'];
+  stability: { status: 'stable' | 'unstable'; beforeProjectionSha256: string; afterProjectionSha256: string; beforePixelSha256: string; afterPixelSha256: string };
+};
+export type Subject = { id: string; viewId: string; irNodeId: string; locator: string; role: string; box: Box; visibleBox: Box | null; textExcerpt: string | null };
+export type MetricValues = {
+  'type-ladder': { clusters: { minSize: number; maxSize: number; weight: number; families: string[]; leading: (number | 'normal')[]; nodeCount: number; graphemes: number; textArea: number; viewportShare: number; roles: string[]; subjectIds: string[] }[] };
+  'text-minimum': { minimumByRole: { role: string; size: number }[]; total: number; under12: number; from12To14: number; under12Area: number; small: { subjectId: string; size: number; role: string; control: string | null; excerpt: string; box: Box }[] };
+  'line-lengths': { subjects: { subjectId: string; role: string; script: 'hangul' | 'latin' | 'mixed'; lineCount: number; graphemes: number[]; widths: number[]; em: number[]; p50: number; p95: number; max: number; lastLineShare: number | null }[] };
+  'spacing-clusters': { clusters: { value: number; count: number }[]; zeros: number; samples: { subjectId: string; property: string; value: number }[] };
+  'spacing-rhythm': { groups: { parentId: string; subjectIds: string[]; gaps: number[]; overlaps: number[]; status: 'measured' | 'insufficient-samples'; median: number | null; mad: number | null; coefficientOfVariation: number | null; offClusterCount: number | null; separationRatio: number | null }[] };
+  'contrast-pair': { pairs: { subjectId: string; foreground: RGBA; backdrop: RGBA | null; chain: RGBA[]; size: number; weight: number; ratio: number | null; threshold: number; result: 'pass' | 'fail' | 'unmeasured' | 'not-applicable'; reason: string | null }[] };
+  'salience-regions': { regions: { subjectId: string; score: number; share: number | null; areaShare: number; centroid: { x: number; y: number } }[]; regionCount: number; totalScore: number; remainderShare: number | null };
+  'first-viewport-density': { graphemesPer10000: number; textArea: number; controlCount: number; controlArea: number; mediaArea: number; contentArea: number; taskObjectCount: number | null; viewportArea: number };
+  'empty-canvas': { emptyRatio: number; canvasPaintShare: number; method: 'rectangle-union'; gridStep: number; samplingErrorBound: number };
+  'canvas-color': { root: RGBA; dominant: RGBA | null; exactShare: number; isTrueWhite: boolean; classification: 'neutral' | 'tinted'; largestPanel: RGBA | null };
+  'accent-distribution': { clusters: { hue: number; pixelShare: number; sampleCount: number; subjectIds: string[]; role: 'unassigned' | 'success' | 'error' | 'data-viz' }[]; gridStep: number; unattributedShare: number; samplingErrorBound: number };
+  'clipping-overflow': { documentOverflowX: number; subjects: { subjectId: string; control: boolean; position: string; scroll: MeasureNode['scroll']; clipped: MeasureNode['clipped']; visibleFraction: number }[] };
+  'control-word-wrap': { controls: { subjectId: string; tokens: MeasureNode['tokens'] }[]; splitCount: number };
+  'cross-viewport-order': { pairs: { fromView: string; toView: string; matched: number; inversions: [string, string][]; normalizedInversions: number; hidden: string[]; introduced: string[]; ambiguous: string[]; domOrder: string[]; visualOrder: string[]; tabOrder: string[] }[] };
+  'contract-conformance': { observations: { role: string; property: string; subjectIds: string[]; expected: string; actual: string[]; result: 'pass' | 'mismatch' | 'unmeasured' | 'not-applicable'; field: string }[]; applicability: 'selected' | 'missing' | 'route-authorized' };
+};
+export type MetricKind = keyof MetricValues;
+export type Measurement = { [K in MetricKind]: { id: string; kind: K; viewIds: string[]; subjectIds: string[]; coverage: Coverage; value: MetricValues[K] } }[MetricKind];
+export const FINDING_CODES = ['TYPE_ROLE_SIZE_MISMATCH', 'TYPE_ROLE_WEIGHT_MISMATCH', 'TYPE_ROLE_FAMILY_MISMATCH', 'TYPE_ROLE_UNASSIGNED', 'COLOR_ROLE_MISMATCH', 'CONTRACT_INPUT_CONFLICT', 'CONTRACT_UNMEASURABLE', 'REQUIRED_VIEW_MISSING', 'REQUIRED_CONTROL_CLIPPED', 'REQUIRED_CONTROL_WORD_SPLIT', 'TEXT_CONTRAST_FAIL', 'MEASUREMENT_INCOMPLETE', 'TEXT_UNDER_12', 'SPACING_ROLE_MISMATCH', 'TYPE_ROLE_LEADING_MISMATCH', 'TYPE_ROLE_TRACKING_MISMATCH', 'REQUIRED_OBJECT_MISSING', 'REQUIRED_ORDER_MISMATCH', 'ZOOM_UNSUPPORTED'] as const;
+export type FindingCode = typeof FINDING_CODES[number];
+export type Finding = { id: string; issueKey: string; code: FindingCode; axes: string[]; severity: 'blocking' | 'advisory'; basis: 'contract' | 'accessibility' | 'heuristic' | 'coverage'; viewIds: string[]; subjectIds: string[]; measurementIds: string[]; expected: { field: string; value: string } | null; observed: { value: string } | null };
+export type VisualMeasurement = {
+  schema: 'visual-measurement-v1';
+  method: { version: 'visual-metrics-v1'; implementationSha256: string; policySha256: string; browser: { name: 'chromium'; version: string; executableSha256: string } };
+  binding: { authority: 'native-local' | 'external-diagnostic'; projectIdentitySha256: string; routeSha256: string | null; sourceContractSha256: string | null; activationBuildSha256: string | null; sourceSha256: string | null; production: { entry: string; servedTreeSha256: string }[]; inputs: { kind: 'type-proof' | 'composition' | 'tokens' | 'frame' | 'hypothesis' | 'route-applicability' | 'selected-system'; receipt: Receipt; consumedContractSha256: string }[]; scopeSha256: string };
+  scope: ViewSpec[]; captures: CaptureBinding[]; subjects: Subject[]; measurements: Measurement[]; findings: Finding[];
+  summary: { deterministicVerdict: 'PASS' | 'RED' | 'UNMEASURED'; blockingFindingIds: string[]; advisoryFindingIds: string[] };
+  attestation: { kind: 'native-observation-v1' | 'diagnostic-only'; payloadSha256: string; signature: string | null };
+};
+export type MeasurementRef = { packetSha256: string; measurementId: string };

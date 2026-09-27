@@ -7,6 +7,10 @@ import { readPersistedRoute } from '../route/adaptive-route-persistence.ts';
 import { finalRenderReviewerPacket } from './final-render-review.ts';
 import type { ProjectRunInvocation } from './invocation.ts';
 import { nodeStableProjectFileSystem, readStableProjectFile } from './stable-project-file.ts';
+import { MEASURED_REVIEW_HANDBACK, MEASURED_REVIEW_TRANSPORT } from './trusted-measured-review.ts';
+import { loadContracts } from '../measure/inputs.ts';
+import { reviewProfileBinding } from './trusted-review-profile.ts';
+import { readSelectedArtDirection, selectedArtCopyProjection } from '../art-direction/selected.ts';
 
 type Lane = 'fidelityLane' | 'protocolLane';
 export const NATIVE_FINAL_LANE_TRANSPORT_SCHEMA = 'native-pi-final-lane-transport-v1';
@@ -61,6 +65,7 @@ export function nativeFinalLanePacket(input: Readonly<{
   const blindOutput = object(blind.outputContract);
   const fixed = object(blindOutput.fixedBindings);
   const artSelected = fixed.artDirectionSha256 !== undefined;
+  const measured = fixed.measurements !== undefined;
   const referenceSelected = route.strategy.stages.includes('reference-board')
     && !route.strategy.skips.some(({ id }) => id === 'reference-board');
   const documents = [
@@ -73,9 +78,20 @@ export function nativeFinalLanePacket(input: Readonly<{
   });
   const evidence = {
     schema: 'native-pi-final-lane-evidence-v1',
+    ...(measured ? { candidateAlias: blindEvidence.candidateAlias, measurementProjection: blindEvidence.measurementProjection, observationProjection: blindEvidence.observationProjection } : {}),
     context: { ...object(blindEvidence.context), selectedStages: route.strategy.stages, skips: route.strategy.skips },
     renders: blindEvidence.renders,
-    documents,
+    ...(measured && artSelected && route.sourceContract.processPolicy ? { selectedDirection: (() => {
+      const selected = readSelectedArtDirection(input.root, route.sourceContractSha256);
+      return { ...selectedArtCopyProjection(selected), relationship: selected.decision.relationship, staticContract: selected.decision.staticContract };
+    })() } : {}),
+    documents: measured ? documents.map(({ path: _path, text: _text, sha256 }) => ({ sha256 })) : documents,
+    ...(measured && input.lane === 'fidelityLane' ? { approvedContracts: (() => {
+      const { contracts } = loadContracts(input.root);
+      return { type: contracts.type ? { families: contracts.type.families, roles: contracts.type.roles, defaultTextRole: contracts.type.defaultTextRole } : null,
+        composition: contracts.composition ? { colors: contracts.composition.colors.map(({ role, property, value }) => ({ role, property, value })),
+          regions: contracts.composition.regions.map(({ role, minimumVisible }) => ({ role, minimumVisible })), spacingScale: contracts.composition.spacing?.scale ?? null } : null };
+    })() } : {}),
     referenceRenders: references(input.root, referenceSelected),
   };
   const evidenceSha256 = hash(canonicalJson(evidence));
@@ -83,13 +99,14 @@ export function nativeFinalLanePacket(input: Readonly<{
     ? { laneSchema: artSelected ? 'fidelity-review-v1' : 'adaptive-fidelity-review-v1', verdictKeys: ['referenceFidelity', 'renderFidelity'], criticalFloorKeys: ['desktop', 'mobile'] }
     : { laneSchema: artSelected ? 'protocol-review-v1' : 'adaptive-protocol-review-v1', verdictKeys: ['evidenceIntegrity', 'publicationProtocol'], criticalFloorKeys: ['authority', 'currentness'] };
   return Buffer.from(canonicalJson({
-    schema: NATIVE_FINAL_LANE_TRANSPORT_SCHEMA, evidenceSha256, evidence,
+    schema: measured ? MEASURED_REVIEW_TRANSPORT : NATIVE_FINAL_LANE_TRANSPORT_SCHEMA, evidenceSha256, evidence,
     outputContract: {
-      schema: 'adaptive-final-reviewer-handback-v1', lane: input.lane, ...contract,
+      schema: measured ? MEASURED_REVIEW_HANDBACK : 'adaptive-final-reviewer-handback-v1', lane: input.lane, ...contract,
+      ...(measured ? { laneSchema: input.lane === 'fidelityLane' ? 'measured-fidelity-review-v1' : 'measured-protocol-review-v1' } : {}),
       reviewerFields: ['schema', 'lane', 'verdicts', 'criticalFloors', 'observationSha256s', 'routeSha256',
         'buildSha256', 'briefSha256', 'browserSha256', 'evidenceSha256', 'findings',
-        ...(artSelected ? ['artDirectionSha256'] : [])],
-      fixedBindings: { ...fixed, evidenceSha256 },
+        ...(artSelected ? ['artDirectionSha256'] : []), ...(measured ? ['measurements', 'reviewPolicySha256', 'reviewProfile', ...(fixed.processBindingSha256 === undefined ? [] : ['processBindingSha256'])] : [])],
+      fixedBindings: { ...fixed, evidenceSha256, ...(measured ? { reviewProfile: reviewProfileBinding(input.lane) } : {}) },
     },
   }));
 }

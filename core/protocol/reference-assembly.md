@@ -13,7 +13,49 @@ predecessor rather than reconstructing it from a source page, screenshot, or ear
 The **finalizer** is the coordinator performing finalization; it is a responsibility, not a new agent,
 service, provider, or runtime.
 
+## Recorded whole-screen browsing
+
+Current research uses reference-research-v8 and the recorded `omd ref browse` interface documented
+in `core/ref/browse/README.md`. Scout chooses actions; the native driver records one live page.
+Start the domain/design lane, choose a real root or search, follow observed links/similarity, inspect
+actual whole-screen shots, and keep with a reason and rights/visibility context. `shot --selector img`
+retains the complete loaded image, not its wrapper or thumbnail. Crop is optional parent-linked
+detail, never the sole direction reference. Contact sheets are paginated; no middle screens vanish.
+
+Await command completion and use its native receipts. Do not poll inventory until it repeats, force
+parallel actions in one session, suppress overlays or infer an unvisited screen. Headless is default;
+profile/CDP require matching authenticated opt-in. Authentication, pricing and unsafe transitions
+retain the driver's exact consent/refusal semantics. A successful capture is not reference quality,
+license attestation or research completeness. End at coverage, saturation, budget or interruption;
+partial/unavailable seals become confidence debt without universally blocking first production.
+`ref advance` returns needs-model-action rather than selecting queries or navigating itself.
+
+After actual image inspection, Scout publishes `reference-analysis-v1` with browse analysis-set/check:
+whole-screen hierarchy, density, typography, components, patterns/exceptions and apply/do-not-apply.
+Every current surface has domain/design direct, partial or brief-derived decisions; missing coverage
+has a precise gap and decision. Publish applicable research and ref apply-set/check through their
+existing publishers. A plan is not proof of rendered application or user approval.
+
+Art Director/Sketch/Typesetter use `ref browse handoff --for concept`; Composer and Hand use composer
+and hand. The validated maker payload carries selected rights-allowed whole screens, actual analysis,
+per-surface application and source/rights/visibility. Optional details supplement whole screens.
+Study permission does not authorize shipped pixels, source copy, brand identity or unlicensed assets.
+Eye/Glance/fidelity and --blind receive only source-free coverage metadata, no reference images or
+maker rationale. Apply blind isolation to reviewers, not to authorized maker understanding.
+
+Reference selection is not the interactive direction checkpoint. The coordinator may select a
+reference assembly with a disclosed reason; only later representative Sketch previews ask the user
+which direction to develop. Never substitute a reference table or Eye preference for that choice.
+
+Historical v5/v6/v7/component-assembly APIs below retain their original evidence semantics. They are
+explicit legacy paths, not the default browse tutorial; do not relabel old crops as whole screens or
+retroactively replace route/behavior hashes. New v2 behavior is selected by authenticated reviewPurpose.
+
 ## Stage contract
+
+For current recorded browsing use the owner/procedure above. The following table describes the
+historical component-assembly publication family when explicitly selected, not a crop-only rule
+for new maker handoffs.
 
 | Stage | Sole owner | Validated input | Durable/cache output | Machine check, function, or command | Explicit fallback or stop |
 |---|---|---|---|---|---|
@@ -49,8 +91,8 @@ briefs and selected handoffs. No source URLs, hosts or capture paths belong in d
 The projection does not replace selected assembly, approved tokens, actual reference-usage evidence,
 or blind final review. It records what should be applied and checked, not what has already passed.
 Existing valid native captures remain usable only when current validators and schema migration permit.
-Publish current work as v7 without relabelling historical bytes; historical v5 remains search-only and
-historical v6 retains its original search-or-direct-root contract. Current execution binding, inspection
+Publish recorded browse work as v8 without relabelling historical bytes; historical v5 remains search-only,
+v6 retains its search-or-direct-root contract and v7 retains its original market provenance. Current execution binding, inspection
 and application are required before downstream composition/production and design-only/terminal completion. Changed research, domain
 brief or missing/edited derived outputs fails closed. Do not repair hashes to invent a review.
 
@@ -64,7 +106,8 @@ This agent-authored review is not human approval, independent reviewer attestati
 
 The workflow adapts Design Flow Harness's actual-image analysis → screen reference linkage →
 representative concept → expansion approach, while retaining OMD's independent research lanes,
-adaptive concept/selection policy and source-free production boundary.
+adaptive concept/selection policy and source-free blind-review boundary. Makers receive authorized
+whole-screen images and actual analysis; the source-free legacy projection remains a compatibility path.
 
 Every reference serves one of three roles, and the domain brief's `referenceQueries` seed all three:
 
@@ -436,7 +479,9 @@ publication ownership, evidence requirements or source-free boundary.
 
 ## Capture granularity
 
-A board is assembled from parts. Every measured reference is captured at the specific component it
+Recorded browsing keeps whole screens first and optional parent-linked details. This section's
+component granularity checks apply only to the historical measured-part API, never as a demand
+to crop away a current whole-screen direction. In that API every measured reference is captured at the specific component it
 studies (`omd ref add <url> --as <component> --selector "<css>" --blueprint --shot`); a capture
 scoped to a page root — `main`, `body`, `html`, `:root` — measures the whole document and yields a
 page average with no component anatomy, so section-granular composition has nothing to take from it.
@@ -501,7 +546,11 @@ derivative failure the transfer boundary forbids.
 
 ## Capturing an existing state or open disclosure
 
-Retained reference captures and native flow steps first allow a brief bounded settle for late
+The historical component/flow capture path below has different observation semantics from recorded
+browse. Current browse records obstructions and never visually suppresses overlays. Do not apply
+this legacy preparation procedure to a browse session.
+
+Historical retained reference captures and native flow steps first allow a brief bounded settle for late
 notices, then visually suppress only visible informational announcement dialogs with an unambiguous
 `닫기`/`Close` control. The browser does **not** click the page-owned control, run its handlers,
 or remove DOM nodes: a browser-owned DevTools stylesheet visually hides the notice and a named

@@ -1,13 +1,14 @@
 import { existsSync, realpathSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { brokeredBrowserOperationNames } from '../core/runtime/codex-browser-operation.ts';
+import { brokeredBrowserOperationNames } from './codex-browser-operation.ts';
+import { loadRoleProfile } from '../core/brief/profiles.ts';
 
 function shellWord(value: string): string {
   return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
 /** Bind command examples to the issuing package, independently of shell PATH. */
-export function codexCliContext(ownerCliPath: string, nodePath = process.execPath, role?: string): string {
+export function codexCliContext(ownerCliPath: string, nodePath = process.execPath, role?: string, roleMode?: string): string {
   const cli = realpathSync(join(dirname(ownerCliPath), 'omd.ts'));
   const command = `${shellWord(nodePath)} ${shellWord(cli)}`;
   const installer = join(dirname(cli), 'omd-install.ts');
@@ -17,12 +18,18 @@ export function codexCliContext(ownerCliPath: string, nodePath = process.execPat
     'Append the requested subcommand and arguments to this prefix. Do not use bare `omd`, npx, a PATH shim, another installation, or launch a second OMD host process.',
     'Keep the inherited OMD_ACTIVATION_PATH and role environment unchanged; the issuing CLI reads them directly. Changing the command prefix does not authorize additional operations.',
     'Each delegated role has its own activation path. Omit --activation or expand "$OMD_ACTIVATION_PATH" inside this role process; never substitute a coordinator or earlier role path from task prose.',
-    ...(role === 'omd-scout' || role === 'omd-typesetter' ? [
-      `Browser capability: this role uses the host-brokered OMD browser CLI. Allowed browser operations: ${brokeredBrowserOperationNames(role).join(', ')}.`,
+    ...(roleMode === undefined ? [] : (() => {
+      if (!role) throw new Error('role mode requires a role identity');
+      const profile = loadRoleProfile(role, roleMode);
+      return [`Role profile: ${profile.role}/${profile.mode}; sha256=${profile.sha256}. This text does not issue a role-mode grant.`, profile.source];
+    })()),
+    ...(role === 'omd-scout' || role === 'omd-typesetter' || role === 'omd-hand' || role === 'omd-sketch' ? [
+      `Browser capability: this role uses the host-brokered OMD browser CLI. Allowed browser operations: ${brokeredBrowserOperationNames(role, roleMode).join(', ') || 'none in this source mode'}.`,
       'The absence of an interactive browser MCP tool does not mean these commands are unavailable. Use the exact issuing CLI above; the host brokers browser execution with your live role authority. A healthy browser doctor is only an installation check: an actual command and saved capture must still succeed.',
       'This grants no install, provider launch, or authority changes. Preserve the exact command error when it fails; do not start a browser provider, import a session, or substitute another runtime.',
       ...(role === 'omd-scout' ? [
-        'Inspect a reachable source with ir/render, then capture its verified selector with ref add or ref add-batch. For an existing state or known disclosure, print `omd schema reference-capture-preparation` and use its supported capture path with energy disabled.',
+        'Use `omd ref browse` for the current recorded whole-screen research cycle. Its returned budget is cumulative for the route cycle: use the latest verified actions counter and never add counters from earlier sessions.',
+        'Legacy selector capture remains explicit: inspect a reachable source with ir/render, then capture its verified selector with ref add or ref add-batch. For an existing state or known disclosure, print `omd schema reference-capture-preparation` and use its supported capture path with energy disabled.',
         'That path permits only explicit disclosure clicks and visibility observations, not arbitrary typing, submission, navigation, or a logged-in session. If a reference cannot expose the required state, report the observed primitive and remaining gap to Framer; do not relabel it or relax the destination behavior.',
       ] : []),
     ] : []),

@@ -2,6 +2,12 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import test from 'node:test';
+import { spawnSync } from 'node:child_process';
+import { parse } from 'yaml';
+import { fixture, snapshot, write } from './helpers/phase6-process.ts';
+import { publishCandidatePlan } from '../core/brief/candidate-plan.ts';
+import { jsonBytes } from '../core/brief/candidate-data.ts';
+import { loadRoleProfile } from '../core/brief/profiles.ts';
 
 const root = new URL('..', import.meta.url).pathname;
 const cliPath = join(root, 'bin', 'omd.ts');
@@ -160,6 +166,60 @@ test('prompt OMD commands resolve through the live bin/omd.ts dispatcher', () =>
     }
   }
   assert.deepEqual([...new Set(unresolved)].sort(), []);
+});
+
+function roleCommandArgs(role: string): string[][] {
+  const agent = parse(readFileSync(join(root, 'src/agents', `${role}.agent.yaml`), 'utf8')) as { instructions: string };
+  return codeContexts(agent.instructions).map(context => context.replace(/\s+/g, ' ').trim())
+    .filter(context => context.startsWith('omd ')).map(context => context.split(' ').slice(1));
+}
+
+test('role projection commands cited by source prompts execute through the real CLI without granting entry or Eye evidence', t => {
+  const f = fixture(t), plan = publishCandidatePlan(f.root, f.plan, f.writer, f.invocation);
+  const sketchPath = '.omd/.cache/sketch-brief.json';
+  write(f.root, sketchPath, jsonBytes({ schema: 'sketch-brief-v1', mode: 'visual-study', plan,
+    candidateId: 'A', sourceDirectory: '.omd/.cache/sketches/A' }));
+  const before = snapshot(f.root);
+  const scopes = {
+    'art-director': ['candidate-generation', 'art-direction'], sketch: ['candidate-generation'],
+    eye: ['candidate-generation'], typesetter: ['type-proof'], composer: ['composition'], hand: ['production', 'browser-evidence'],
+  };
+  for (const [role, stages] of Object.entries(scopes)) {
+    const commands = roleCommandArgs(role).filter(args => args[0] === 'brief');
+    assert.equal(commands.length, stages.length, role);
+    for (const [index, command] of commands.entries()) {
+      const mode = role === 'eye' ? 'concept-selection' : 'visual-study';
+      const args = command.map(arg => arg === '<stage>' ? stages[index]! : arg === '<mode>' ? mode
+        : arg === '<sketch-brief.json>' ? sketchPath : arg);
+      assert.equal(args[1], stages[index]);
+      assert.equal(args[args.indexOf('--role') + 1], `omd-${role}`);
+      assert.equal(args.includes('--check'), false);
+      assert.equal(args.includes('--input'), role === 'sketch');
+      const result = spawnSync(process.execPath, [cliPath, ...args], { cwd: f.root, encoding: 'utf8', timeout: 30_000, maxBuffer: 4 * 1024 * 1024 });
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+      const brief = JSON.parse(result.stdout);
+      assert.equal(brief.schema, 'role-brief-v1'); assert.equal(brief.role, `omd-${role}`);
+      if (args.includes('--mode')) assert.equal(brief.profile.sha256, loadRoleProfile(`omd-${role}`, args[args.indexOf('--mode') + 1]!).sha256);
+      if (role === 'eye') {
+        assert.equal(brief.delivery, 'isolated-host-packet-required');
+        assert.deepEqual(brief.inputs, []); assert.deepEqual(brief.images, []);
+        assert.equal(Object.hasOwn(brief, 'references'), false);
+      }
+    }
+  }
+  assert.deepEqual(snapshot(f.root), before);
+});
+
+test('source publisher and study-check examples use the exact current command argument ABI', t => {
+  const director = roleCommandArgs('art-director'), sketch = roleCommandArgs('sketch');
+  assert.ok(director.some(args => JSON.stringify(args) === JSON.stringify(['art-direction', 'check-input', '--json'])));
+  assert.ok(director.some(args => JSON.stringify(args) === JSON.stringify(['art-direction', 'check', '--input', '<art-direction-input.json>', '--json'])));
+  assert.ok(sketch.some(args => JSON.stringify(args) === JSON.stringify(['candidate', 'study-check', '--input', '<study.json>', '--brief', '<sketch-brief.json>', '--json'])));
+  const schema = director.find(args => args[0] === 'schema' && args[1] === 'art-direction-input-v3');
+  assert.ok(schema);
+  const f = fixture(t), result = spawnSync(process.execPath, [cliPath, ...schema], { cwd: f.root, encoding: 'utf8', timeout: 30_000 });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(JSON.parse(result.stdout).skeleton.schema, 'art-direction-input-v3');
 });
 
 test('source prompts never reference the removed omd-codex launcher', () => {

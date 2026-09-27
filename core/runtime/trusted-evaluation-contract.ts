@@ -3,8 +3,11 @@ import type { EvidenceClaimPublication } from '../brief/evidence-claims.ts';
 import type { TaskOutcomeContract } from '../brief/task-outcome.ts';
 import type { DesignDecision } from '../deliberation/contracts.ts';
 import { canonicalJson } from '../ref/board-artifacts.ts';
+import { parseMeasureScope } from '../measure/schema.ts';
+import type { ViewRequest } from '../measure/types.ts';
 
 export const TRUSTED_LIFECYCLE_MANIFEST_SCHEMA = 'trusted-lifecycle-manifest-v1' as const;
+export const MEASURED_LIFECYCLE_MANIFEST_SCHEMA = 'trusted-lifecycle-manifest-v2' as const;
 
 export type TrustedEvaluationContractErrorCode =
   | 'MALFORMED_TRUSTED_LIFECYCLE_MANIFEST'
@@ -54,7 +57,8 @@ export type TrustedEntrySurface = Readonly<{
 }>;
 
 export type TrustedLifecycleManifest = Readonly<{
-  schema: typeof TRUSTED_LIFECYCLE_MANIFEST_SCHEMA;
+  schema: typeof TRUSTED_LIFECYCLE_MANIFEST_SCHEMA | typeof MEASURED_LIFECYCLE_MANIFEST_SCHEMA;
+  measurementViews?: readonly ViewRequest[];
   entryPath: string;
   scripts: readonly Readonly<{
     outcomeRef: string;
@@ -221,8 +225,9 @@ function parseEntrySurface(value: unknown): TrustedEntrySurface {
 export function parseTrustedLifecycleManifest(input: unknown): TrustedLifecycleManifest {
   const value = record(input);
   if (Object.hasOwn(value, 'authority')) return fail('LIFECYCLE_MANIFEST_AUTHORITY_FORBIDDEN');
-  exact(value, Object.hasOwn(value, 'entrySurface') ? ENTRY_MANIFEST_KEYS : MANIFEST_KEYS);
-  if (value.schema !== TRUSTED_LIFECYCLE_MANIFEST_SCHEMA) {
+  const measured = value.schema === MEASURED_LIFECYCLE_MANIFEST_SCHEMA;
+  exact(value, new Set([...(Object.hasOwn(value, 'entrySurface') ? ENTRY_MANIFEST_KEYS : MANIFEST_KEYS), ...(measured ? ['measurementViews'] : [])]));
+  if (value.schema !== TRUSTED_LIFECYCLE_MANIFEST_SCHEMA && !measured) {
     return fail('MALFORMED_TRUSTED_LIFECYCLE_MANIFEST');
   }
   const scripts = array(value.scripts).map((candidate) => {
@@ -279,7 +284,8 @@ export function parseTrustedLifecycleManifest(input: unknown): TrustedLifecycleM
     });
   });
   return Object.freeze({
-    schema: TRUSTED_LIFECYCLE_MANIFEST_SCHEMA,
+    schema: measured ? MEASURED_LIFECYCLE_MANIFEST_SCHEMA : TRUSTED_LIFECYCLE_MANIFEST_SCHEMA,
+    ...(measured ? { measurementViews: parseMeasureScope({ schema: 'visual-measurement-scope-v1', views: value.measurementViews }) } : {}),
     entryPath: text(value.entryPath),
     scripts: Object.freeze(scripts),
     ...(value.entrySurface === undefined ? {} : { entrySurface: parseEntrySurface(value.entrySurface) }),

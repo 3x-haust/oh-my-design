@@ -76,12 +76,20 @@ test('Given a fresh Pi reviewer lane When its children consume evidence Then two
     assert.equal(receipt.modelSelection, 'inherited-pi-host');
     assert.notEqual(receipt.processPid, process.pid);
     assert.notEqual(receipt.sessionId, 'fixture-parent');
+    assert.equal(receipt.reviewerEvidence.sessionId, receipt.sessionId);
+    assert.equal(receipt.reviewerEvidence.nonce, receipt.roleNonce);
     assert.equal(receipt.reviewerEvidence?.packetSha256, digest(input.packet));
     assert.equal(receipt.reviewerEvidence?.taskSha256, digest(FINAL_RENDER_REVIEWER_TASK));
   }
   const original = results[0];
   assert.ok(original);
   assert.throws(() => verifySignedPiEyeRoleResult({ ...original, finalMessage: '{}' }, input.root));
+  for (const key of ['sessionId', 'nonce'] as const) {
+    const changed = structuredClone(original);
+    const proof = { ...changed.authority.receipt.reviewerEvidence, [key]: `different-${key}` };
+    assert.throws(() => verifySignedPiEyeRoleResult({ ...changed, authority: { ...changed.authority, receipt: { ...changed.authority.receipt, reviewerEvidence: proof } } }, input.root),
+      error => error instanceof PiReviewerError && error.code === 'role-authority');
+  }
 });
 
 for (const [mode, code, stage] of [

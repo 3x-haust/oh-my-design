@@ -16,6 +16,8 @@ import { intentLedgerSha256, validateIntentCurrentPointer, validateIntentLedger 
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import { nodeStableProjectFileSystem, readStableProjectFile } from '../runtime/stable-project-file.ts';
 import { readCurrentCulturalDesignProfile } from '../locale/cultural-profile-files.ts';
+import { readSelectedArtDirection } from '../art-direction/selected.ts';
+import { currentSelectedSystem } from '../measure/selected-system.ts';
 import { checkReferenceApplication, REFERENCE_APPLICATION_PATH, REFERENCE_APPLICATION_PROJECTION_PATH } from '../ref/reference-application.ts';
 import {
   REFERENCE_LOCALE_BINDING_EVIDENCE_PATH,
@@ -67,8 +69,16 @@ function json(root: string, path: string, label: string): unknown {
   const value: unknown = JSON.parse(read(root, path, label).toString('utf8'));
   return value;
 }
-function currentArtDirection(root: string): readonly Receipt[] {
+function currentArtDirection(root: string, route: AdaptiveRouteRecord): readonly Receipt[] {
   const pointerPath = '.omd/art-direction.json';
+  if (route.sourceContract.processPolicy) {
+    const selected = readSelectedArtDirection(root, route.sourceContractSha256);
+    const pointer = json(root, pointerPath, 'selected art direction pointer') as { record: Receipt };
+    const system = currentSelectedSystem(root);
+    if (!system || system.tokens.baseTokensSha256 !== selected.decision.effectiveBaseTokensSha256) throw new Error('STALE_DIRECTION: selected token system is missing or changed');
+    return [receipt(root, pointerPath, 'selected art direction pointer'), receipt(root, pointer.record.path, 'selected art direction record'),
+      selected.decision.candidateSelection, ...system.receipts];
+  }
   let pointer;
   try { pointer = validateArtDirectionPointer(json(root, pointerPath, 'art-direction current pointer')); } catch {
     throw new Error('ART_DIRECTION_DECISION_REQUIRED: selected adaptive art-direction requires its exact current decision');
@@ -120,7 +130,7 @@ function stageBindings(
         if (confidenceDebt) return Object.freeze({ id, status: 'selected', artifacts: Object.freeze([]), confidenceDebt });
       }
       let artifacts = path === null
-        ? currentArtDirection(root)
+        ? currentArtDirection(root, record)
         : Object.freeze([receipt(root, path, `${id} approved input`)]);
       if (id === 'composition' && record.sourceContract.localeDesign?.decision === 'research') {
         const locale = readCurrentCulturalDesignProfile(root, invocation);

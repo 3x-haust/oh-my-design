@@ -12,12 +12,14 @@ import { expandedDiscoveryInputs } from './discovery-recovery.ts';
 import { searchObserved, type SearchExecution } from './search-execution.ts';
 import { actionableSearchTargets, observedSearchTargets } from './search-result.ts';
 import { loadRefs } from './store.ts';
+import { browseDiscoveryWork } from './browse/work.ts';
 
 type Lane = 'domain' | 'design';
 type SearchInput = ReferenceDiscoveryPlan['marketReferencePolicy']['domainSearchInputs'][number]
   | ReferenceDiscoveryPlan['designSourcePolicy']['nativeSearchInputs'][number];
 export type ReferenceDiscoveryAction = Readonly<{
-  kind: 'search' | 'direct-entry' | 'follow-link' | 'retain-reference' | 'publish-board' | 'replan-discovery';
+  kind: 'search' | 'direct-entry' | 'follow-link' | 'retain-reference' | 'publish-board' | 'replan-discovery'
+    | 'start-browse' | 'continue-browse' | 'narrow-tray' | 'end-browse';
   lane: Lane | null;
   args: readonly string[];
   reason: string;
@@ -26,8 +28,10 @@ export type ReferenceDiscoveryAction = Readonly<{
   entry?: 'free-gallery' | 'public-directory';
 }>;
 export type ReferenceDiscoveryWork = Readonly<{
-  schema: 'reference-discovery-work-v1';
-  status: 'action' | 'ready' | 'exhausted';
+  schema: 'reference-discovery-work-v1' | 'reference-discovery-work-v2';
+  status: 'action' | 'ready' | 'exhausted' | 'stopped-with-debt';
+  browse?: Readonly<{ head: string | null; budget: import('./browse/contract.ts').BrowseBudget | null; observation: import('./browse/contract.ts').BrowseObservation | null;
+    confidenceDebt: readonly import('./browse/contract.ts').ReferenceConfidenceDebt[] }>;
   action: ReferenceDiscoveryAction | null;
   next: string;
   instruction: string;
@@ -158,6 +162,11 @@ function nextLaneAction(lane: Lane, plan: ReferenceDiscoveryPlan, evidence: Lane
 }
 
 export function referenceDiscoveryWork(root: string, route: RouteRecord): ReferenceDiscoveryWork {
+  return browseDiscoveryWork(root, route);
+}
+
+/** Explicit legacy catalogue work remains readable/testable; it is no longer the default loop. */
+export function legacyReferenceDiscoveryWork(root: string, route: RouteRecord): ReferenceDiscoveryWork {
   const plan = buildReferenceDiscoveryPlan(root, route);
   const { domain, design } = readCurrentReferenceDiscoveryEvidence(root);
   const evidenceAfter = currentReferenceEvidenceAfter(root);

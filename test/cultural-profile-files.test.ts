@@ -95,7 +95,8 @@ test('published profile and projection bind fetched source receipts, current typ
   const beforeProfile = buildBrief(root, 'composition', PACK_ROOT, invocation);
   assert.equal(beforeProfile.localeDesign?.decision, 'research');
   assert.equal(beforeProfile.localeDesign?.projection, null);
-  assert.match(beforeProfile.blockers.join('\n'), /cultural design projection unavailable/);
+  assert.ok(beforeProfile.confidenceDebt.some(debt => debt.reason.includes('cultural design projection unavailable') && debt.claim === 'not-verified'));
+  assert.equal(beforeProfile.localeDesign?.projection, null, 'missing research cannot be delivered as approved cultural evidence');
   writeFileSync(join(root, '.omd', 'copy-deck.md'), 'copy-deck.md: approved\n');
   const typeProofBytes = 'type-proof.md: approved Japanese copy at both viewports\n';
   writeFileSync(join(root, '.omd', 'type-proof.md'), typeProofBytes);

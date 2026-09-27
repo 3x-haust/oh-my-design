@@ -26,6 +26,9 @@ import {
   type ProjectWriteAdapter,
 } from './project-write.ts';
 import { nodeStableProjectFileSystem, readStableProjectFile } from './stable-project-file.ts';
+import { measuredFinalRenderPacket } from './trusted-measured-review.ts';
+import { requiresMeasuredTerminal } from '../measure/review-policy.ts';
+import { readSelectedArtDirection } from '../art-direction/selected.ts';
 
 export const FINAL_RENDER_REVIEWER_PACKET_INPUT_SCHEMA =
   'adaptive-final-render-reviewer-packet-input-v1' as const;
@@ -37,7 +40,8 @@ export const FINAL_RENDER_REVIEWER_HANDBACK_SCHEMA =
 /** Host-owned and identical for both final Eyes. Caller prose is never appended. */
 export const FINAL_RENDER_REVIEWER_TASK = [
   'Judge the anonymous production render using only the supplied evidence and every supplied image.',
-  'Assess the required verdicts, critical floors, and six design-quality axes independently across desktop and mobile.',
+  'Assess every required verdict, critical floor, and independent design-quality axis across every supplied view and state.',
+  'For v2 axes cite packet SHA and relevant current measurement IDs. A score cannot overrule deterministic RED or incomplete coverage.',
   'Do not infer source identity, chronology, authorship, implementation details, or a desired verdict.',
   'Return exactly the embedded output contract.',
 ].join(' ');
@@ -55,6 +59,7 @@ export type FinalRenderReviewerPacketInput = Readonly<{
 }>;
 
 export type FinalRenderReviewerLaneSchema =
+  | 'measured-blind-review-v1'
   | 'blind-review-v2'
   | 'adaptive-blind-review-v2'
   | 'adaptive-blind-review-v3';
@@ -181,7 +186,10 @@ export function finalRenderReviewerPacket(input: Readonly<{
   const artSelected = route.strategy.stages.includes('art-direction')
     && !route.strategy.skips.some(({ id }) => id === 'art-direction');
   const artDirectionBinding = artSelected
-    ? currentArtDirectionSha256(root)
+    ? route.sourceContract.processPolicy ? (() => {
+      readSelectedArtDirection(root, route.sourceContractSha256);
+      return (JSON.parse(stableRead(root, '.omd/art-direction.json', 'selected-art-pointer').toString('utf8')) as { record: { sha256: string } }).record.sha256;
+    })() : currentArtDirectionSha256(root)
     : undefined;
   const benchmarkRequired = route.gates.includes('greenfield-task-flow-benchmark');
   validateTrustedOutcomeEvidence({
@@ -215,6 +223,7 @@ export function finalRenderReviewerPacket(input: Readonly<{
     loaded.map(({ value }) => value.evidence),
     parsed.observationSha256s,
   );
+  if (requiresMeasuredTerminal(route)) return measuredFinalRenderPacket(root, input.invocation, parsed.observationSha256s, artDirectionBinding);
   const rows = browser.observations.flatMap((item) => {
     const viewport = fixedViewport(item.viewport.width, item.viewport.height);
     if (viewport === undefined) return [];

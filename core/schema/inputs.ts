@@ -7,6 +7,7 @@
 import { DEPTH_INPUT_KEYS, DEPTH_INPUT_SCHEMA, DEPTH_SCOPES } from '../deliberation/depth.ts';
 import { DESIGN_JUDGMENT_INPUT } from './design-judgment.ts';
 import { CANDIDATE_SELECTION_INPUT } from './candidate-selection.ts';
+import { PROCESS_INPUTS, currentProcessRouteInput, currentFrameInput } from './candidate-selection.ts';
 import { TOKEN_COMMIT_SCHEMA, TOKEN_COMMIT_KEYS, RESPONSIVE_TOKEN_COMMIT_SCHEMA, RESPONSIVE_TOKEN_COMMIT_KEYS } from '../tokens/contract.ts';
 import { CAPTURE_PREPARATION_SCHEMA } from '../ref/capture-preparation.ts';
 import { EXECUTION_REQUIREMENT_GATES } from '../brief/execution-requirements.ts';
@@ -155,6 +156,36 @@ const ART_DIRECTION_CHECK: InputSkeleton = {
     implementationLane: '<how the selected direction is built>',
     fallbackPath: '<lawful css/svg/static or reduced-motion fallback that was tried>',
     performanceAccessibilityBudget: '<budget the build must hold>',
+  },
+};
+
+const SELECTED_ART_DIRECTION_INPUT: InputSkeleton = {
+  name: 'art-direction-input-v3',
+  path: '.omd/.cache/art-direction-input-v3.json',
+  command: 'omd art-direction check --input .omd/.cache/art-direction-input-v3.json --json',
+  keys: ['schema', 'candidateSelection', 'selectedId', 'register', 'relationship', 'staticContract',
+    'metaphorQualities', 'literalPropsToReject', 'motion', 'implementationLane', 'fallbackPath', 'performanceAccessibilityBudget', 'beatIds'],
+  constraints: [
+    'Current-process selected-candidate settlement only. Run omd art-direction check-input --json after the authenticated choice; it fills the current candidateSelection, selectedId, exact relationship and chosen static hypothesis. No second register tournament.',
+    'Every object is closed. Keep relationship exactly equal to the chosen plan relationship. Inspect the chosen previews via the Art Director role brief; the authored static contract preserves that choice, not a new candidate.',
+    'metaphorQualities and literalPropsToReject may be empty. beatIds may be empty for non-Beat content; otherwise use unique stable B-<number> IDs.',
+    'motion.decision is none or one. Static none can use three null receipts without fabricated legacy reference or motion hashes. Native settlement requires all three exact file-byte receipts; one always requires them.',
+    'Native evaluator assessment and result must have genuine independent host authorization and bind candidateSelection and selectedId. A model-authored suitability flag is not authority. Do not reserialize evaluator bytes or mint a signature.',
+  ],
+  skeleton: {
+    schema: 'art-direction-input-v3',
+    candidateSelection: { path: '<current immutable candidate selection path>', sha256: '<exact current file-byte SHA-256>' },
+    selectedId: '<authenticated selected candidate ID>',
+    register: '<quiet|content-led|confident|showpiece>',
+    relationship: '<exact selected plan relationship>',
+    staticContract: { hierarchy: '<chosen hierarchy>', density: '<chosen content density>', typography: '<chosen type treatment>',
+      preserve: ['<chosen invariant>'], falsifiers: ['<observable failure of the chosen relationship>'] },
+    metaphorQualities: [], literalPropsToReject: [],
+    motion: { decision: 'none', settlement: null, evaluatorAssessment: null, evaluatorResult: null },
+    implementationLane: '<how the selected direction is built>',
+    fallbackPath: '<lawful static or reduced-motion fallback>',
+    performanceAccessibilityBudget: '<performance and accessibility constraints>',
+    beatIds: [],
   },
 };
 
@@ -445,8 +476,10 @@ const ROUTE_INPUT: InputSkeleton = {
   name: 'route-input',
   path: '.omd/.cache/route-input.json',
   command: 'omd route validate --input .omd/.cache/route-input.json --json',
-  keys: ROUTE_INPUT_KEYS,
+  keys: [...ROUTE_INPUT_KEYS, 'reviewPurpose', 'reviewPurposeAuthority'],
   constraints: [
+    'reviewPurpose defaults to ordinary and reviewPurposeAuthority to null only in this authoring template. Current-process publication requires a genuine signed review-purpose-origin-v1 receipt bound to the exact request and project, including ordinary review. Pi supplies it from actual activated interactive/RPC input; other hosts must supply their genuine host origin receipt or report unavailable authority. No model-callable signer exists.',
+    'Only an explicit first-line Review purpose: benchmark or Review purpose: release selects that purpose at the Pi user-input boundary. Product benchmark research is not benchmark evaluation authority. Never silently add these fields to historical route inputs.',
     'Choose the starter by task: product-route-input for a new product implementation, design-route-input for design-only delivery, route-input for existing/bounded work. Starters are examples, not permission to change risk, facts, scope or optional-method decisions.',
     'task outcome, policy, claims, discovery, design axes, capability, browser, and learning contexts are all required',
     'taskOutcome.mustHave, mustNotHave, and completionEvidence contain product/surface outcomes with browser-observable evidence. Preserve execution-only requirements verbatim in taskOutcome.executionRequirements instead of asking page text to prove authorship, scope, independent review, or future finalization. Keep the full original request in request. This partition is made before route publication; do not remove or reclassify a failed product behavior to make a published run pass.',
@@ -475,6 +508,8 @@ const ROUTE_INPUT: InputSkeleton = {
   ],
   skeleton: {
     schema: ROUTE_INPUT_SCHEMA,
+    reviewPurpose: 'ordinary',
+    reviewPurposeAuthority: null,
     request: '<the user request, verbatim>',
     projectMode: '<greenfield|existing from omd stack>',
     namedDependencies: [],
@@ -843,12 +878,29 @@ const TASK_FLOW_BENCHMARK: InputSkeleton = {
   },
 };
 
+const REFERENCE_ANALYSIS: InputSkeleton = {
+  name: 'reference-analysis', path: '.omd/.cache/reference-analysis.json',
+  command: 'omd ref browse analysis-set --input .omd/.cache/reference-analysis.json --json',
+  keys: ['schema', 'sourceContractSha256', 'domainBriefSha256', 'references', 'selectedReferenceIds', 'patterns', 'screens'],
+  constraints: [
+    'Inspect every whole-screen image before authoring its screenType, mainTask, hierarchy, density, typography and components. Filenames/descriptions are not visual analysis.',
+    'references entries bind native refIdentity ids and exact retained capture/image receipts from browse end. Only whole real-app viewports or full item images are reference units; zoom details cannot be substituted.',
+    'patterns: [{pattern,referenceIds,decision:apply|do-not-apply,reason}]. Every referenceId must exist. selectedReferenceIds names the whole screens makers should see; unknown/restricted rights withhold pixels.',
+    'screens uses the existing ref apply-set v2 screen contract: surface,target:{route,state},domain/design:{referenceIds,coverage:direct|partial|brief-derived,gap,application,doNotTransfer,reason},checks. Cover every current domain surface; partial/brief-derived require a gap and decision. brief-derived has no reference ids.',
+    'browse handoff --for composer|hand|concept returns selected whole-screen paths/hashes and analysis; eye/glance/fidelity or --blind receive a source-free coverage summary only.',
+  ],
+  skeleton: { schema: 'reference-analysis-v1', sourceContractSha256: '0'.repeat(64), domainBriefSha256: '0'.repeat(64), references: [], selectedReferenceIds: [], patterns: [], screens: [] },
+};
+
 const REFERENCE_RESEARCH: InputSkeleton = {
   name: 'reference-research',
   path: '.omd/.cache/reference-research.json',
   command: 'omd ref research-set --input .omd/.cache/reference-research.json',
   keys: REFERENCE_RESEARCH_KEYS,
   constraints: [
+    'v8 adds recorded-browse evidence. Start with omd ref browse start --lane design; use shot for a whole real-app viewport or shot --selector <img> for the full loaded item image; keep --reason retains the whole screen. crop attaches a zoom detail to an existing keep only. end signs/promotes actual keeps and records nonblocking confidence debt.',
+    'v8 lane browseSessions contains exact native seal receipts. A browse source has provenance:{kind:recorded-browse,session:{path,sha256},capture:{seq,hash},keep:{seq,hash}}. Its design discovery is {kind:recorded-browse,url,access:public|user-session,qualityReason,session:{path,sha256},entry:{seq,hash}}. Empty queries/searches are allowed with verified browseSessions. Do not author trace/retention receipts.',
+    'Provider-catalogue and endpoint restrictions below apply only to legacy search/direct evidence (v5/v6/v7 remain readable unchanged). Trace-backed v8 sources use verified acquisition, not provider regex admission. Independent families, actual pixels, market claims, currentness and strict completion still apply.',
     'domainReference and designReference are both required and cannot substitute for one another',
     'new v7 domainReference.sources contains at least three independently inspected comparable services from three distinct service families; multiple GOV.UK pages/subdomains or any other single operator count as one family. Historical v5/v6 remain readable but cannot satisfy a current explicit-market route without v7 market coverage.',
     'current v7 designReference.sources contains at least two visual-direction sources from independent original service families and distinct inspected gallery items. Their retained PNG bytes must differ, and both visual directions must participate in the current board. Repeated pages, crops, aliases, or capture names from one product count once.',
@@ -1204,7 +1256,7 @@ const DESIGN_ROUTE_INPUT: InputSkeleton = {
   name: 'design-route-input',
   path: ROUTE_INPUT.path,
   command: ROUTE_INPUT.command,
-  keys: [...ROUTE_INPUT_KEYS, 'deliveryMode'],
+  keys: [...ROUTE_INPUT.keys, 'deliveryMode'],
   constraints: [...(ROUTE_INPUT.constraints ?? []),
     'Design-only ends after independent document/design review. Production, browser-evidence, source-seal, and final-evidence-v2 belong to implementation and are not selected. Finish with omd schema design-handoff and omd completion design-check.',
     'All output stays under .omd/**. Reference-site browsing and authorized disposable design studies are evidence, not application implementation. Do not scaffold React or add dependencies.',
@@ -1288,6 +1340,8 @@ const DESIGN_HANDOFF: InputSkeleton = {
 export const INPUT_SKELETONS: readonly InputSkeleton[] = [
   DESIGN_JUDGMENT_INPUT,
   CANDIDATE_SELECTION_INPUT,
+  ...PROCESS_INPUTS,
+  { ...FRAME_INPUT, name: 'frame-v1' },
   {
     name: 'reference-search', path: '.omd/.cache/reference-search.json', command: 'omd ref search --input .omd/.cache/reference-search.json --json',
     keys: ['lane', 'query', 'url', 'queryParam'],
@@ -1360,7 +1414,9 @@ export const INPUT_SKELETONS: readonly InputSkeleton[] = [
   REFERENCE_LOCALE_BINDING,
   TASK_FLOW_BENCHMARK,
   REFERENCE_RESEARCH,
+  REFERENCE_ANALYSIS,
   ART_DIRECTION_CHECK,
+  SELECTED_ART_DIRECTION_INPUT,
   TOKEN_COMMIT,
   RESPONSIVE_TOKEN_COMMIT,
   LOCALE_CONTRACT,
@@ -1390,7 +1446,8 @@ export const INPUT_SKELETONS: readonly InputSkeleton[] = [
       'Each selector identifies one visible element. Computed utility/CSS-in-JS values and inherited custom properties are observed, not approved semantic tokens. Approved tokens and decisions remain untouched. init --check verifies source/build/capture currentness; init --refresh reuses stored scope unless a new --input is supplied.'],
     skeleton: { schema: 'runtime-design-inventory-input-v1', views: [{ id: 'desktop-primary-action', page: 'dist/index.html', viewport: { width: 1280, height: 900 }, selectors: [{ id: 'primary-action', selector: '#primary-action' }] }] },
   },
-];
+].map(input => ['route-input', 'design-route-input', 'product-route-input'].includes(input.name)
+  ? currentProcessRouteInput(input) : input.name === 'frame' ? currentFrameInput(input) : input);
 
 export function inputSkeleton(name: string): InputSkeleton {
   const found = INPUT_SKELETONS.find((entry) => entry.name === name);

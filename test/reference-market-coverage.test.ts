@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import {
@@ -13,11 +13,25 @@ import { canonicalJson } from '../core/ref/board-artifacts.ts';
 import { captureFinalUrlGuard } from '../core/ref/capture-intake.ts';
 import { inputSkeleton } from '../core/schema/inputs.ts';
 import { readPersistedRoute } from '../core/route/index.ts';
+import { canonicalRouteJson } from '../core/route/adaptive-source-contract.ts';
 import { publishTestAdaptiveRoute } from './helpers/project-write.ts';
 import { fallbackCoverage, fallbackGap, localSearchSource, marketContext as context,
   marketDomainBrief as domainBrief, marketOptions as options, directRootAt } from './helpers/market-reference.ts';
 
 const DAY_FOR_TEST = 24 * 60 * 60 * 1000;
+
+function authorizeCurrentRoute(root: string, input: Record<string, unknown>): void {
+  const projectRoot = realpathSync(root), purpose = 'ordinary', request = input.request as string;
+  const payload = { schema: 'review-purpose-origin-v1' as const, projectRoot, purpose,
+    requestSha256: admissionHash(request), source: 'host-user-input' as const, observedAt: '2026-09-27T00:00:00.000Z' };
+  const origin = { ...payload,
+    signature: signNativeObservation(projectRoot, payload.schema, admissionHash(canonicalRouteJson(payload))) };
+  const bytes = Buffer.from(`${canonicalRouteJson(origin)}\n`), sha256 = admissionHash(bytes);
+  const authority = { path: `.omd/review-purpose-authorities/sha256-${sha256}.json`, sha256 };
+  mkdirSync(join(root, '.omd/review-purpose-authorities'), { recursive: true });
+  writeFileSync(join(root, authority.path), bytes);
+  input.reviewPurposeAuthority = authority;
+}
 
 function searchReceiptAt(root: string, lane: 'domain' | 'design', receipt: { path: string }, observedAt: string) {
   const record = JSON.parse(readFileSync(join(root, receipt.path), 'utf8'));
@@ -380,10 +394,11 @@ test('explicit-market v7 binds local sources and fallback to executed market evi
       searches: [...input.domainReference.searches, futureGlobal] } };
   assert.throws(() => validateReferenceResearch(fixture.root,
     parseReferenceResearch(futureGlobalInput), options), /MARKET_DOMAIN_ATTEMPT_STALE/);
-  const routeInput = inputSkeleton('product-route-input').skeleton as Record<string, unknown>;
+  const routeInput = structuredClone(inputSkeleton('product-route-input').skeleton) as Record<string, unknown>;
   const request = '복지 혜택을 찾고 신청하는 서비스를 구현해줘.';
   routeInput.projectMode = 'existing';
   routeInput.request = request;
+  authorizeCurrentRoute(fixture.root, routeInput);
   const invocation = publishTestAdaptiveRoute(fixture.root, routeInput);
   const route = readPersistedRoute(fixture.root, invocation);
   writeFileSync(join(fixture.root, '.omd/domain-brief.json'), JSON.stringify({ ...domainBrief, request }));
@@ -415,9 +430,10 @@ test('frame-less new-marketing route accepts its exact Korean welfare design que
   writeFileSync(join(fixture.root, '.omd/locale-design-context.json'), JSON.stringify(context));
   const request = '한국 복지 서비스를 소개하는 랜딩 페이지를 구현해줘.';
   writeFileSync(join(fixture.root, '.omd/domain-brief.json'), JSON.stringify({ ...domainBrief, request }));
-  const routeInput = inputSkeleton('product-route-input').skeleton as Record<string, unknown>;
+  const routeInput = structuredClone(inputSkeleton('product-route-input').skeleton) as Record<string, unknown>;
   routeInput.request = request;
   routeInput.referenceDiscovery = { ...routeInput.referenceDiscovery as Record<string, unknown>, taskNeed: 'new-marketing' };
+  authorizeCurrentRoute(fixture.root, routeInput);
   const invocation = publishTestAdaptiveRoute(fixture.root, routeInput);
   const route = readPersistedRoute(fixture.root, invocation);
   const domainQueries = ['복지로', '정부24 혜택알리미', '서울복지포털', '웰로'];

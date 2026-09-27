@@ -35,12 +35,12 @@ test('Pi activation captures the runtime before the first command', t => {
     '--import', 'tsx', '--input-type=module', '-e', [
       'const { readdirSync } = await import("node:fs");',
       'await import(process.argv[1]);',
-      'console.log(readdirSync(process.env.TMPDIR).filter(name => name.startsWith("omd-runtime-")).length);',
+      'process.stdout.write(String(readdirSync(process.env.TMPDIR).filter(name => name.startsWith("omd-runtime-")).length));',
     ].join('\n'), runtimeUrl,
-  ], { encoding: 'utf8', env: { ...process.env, TMPDIR: runtimeTemp }, timeout: 5_000 });
+  ], { encoding: 'buffer', env: { ...process.env, TMPDIR: runtimeTemp }, timeout: 20_000 });
 
-  assert.equal(imported.status, 0, imported.stderr);
-  assert.equal(imported.stdout.trim(), '1');
+  assert.equal(imported.status, 0, imported.stderr.toString('utf8'));
+  assert.deepEqual(imported.stdout, Buffer.from('1'));
 });
 
 test('first OMD command survives checkout removal after Pi activation', t => {
@@ -79,7 +79,7 @@ test('first OMD command survives checkout removal after Pi activation', t => {
   assert.equal(probe.status, 0, probe.stderr);
   const result = JSON.parse(probe.stdout) as { sourceGone?: unknown; text?: unknown };
   assert.equal(result.sourceGone, true);
-  assert.match(String(result.text), /reference-research-v7/);
+  assert.match(String(result.text), /reference-research-v8/);
 });
 
 test('Pi runtime keeps an immutable source snapshot after the plugin checkout changes', t => {

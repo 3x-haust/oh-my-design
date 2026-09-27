@@ -184,7 +184,7 @@ interaction, responsive behavior, or finish is materially weak.
 
 ## Feature-level reference research and transfer
 
-Reference synthesis starts from function, not mood. Field names, record shape, axis vocabulary, and validation belong exclusively to `protocol/composition-contract.md`. This protocol governs only when synthesis applies and how it flows: select **Branch A — explicit functions** when the user named detailed features, preserving each feature and deriving its interaction primitives directly; add only indispensable connective or recovery primitives, marked as inferred with an assumption. Select **Branch B — product goal only** only for `product` work and product screens of `mixed` work when detailed functions are absent; first record the smallest task-complete feature set and every assumption. Explicit details always win. An inferred addition needs a task-completion dependency and may not add optional analytics, AI, collaboration, personalization, admin, export, or adjacent capability. Pure `marketing`, `editorial`, and static work does not infer CRUD, state machinery, probes, or task evidence; it transfers only explicit applicable content or interaction primitives. User-origin references receive a concrete canonical synthesis record or an explicit decline individually; scout-found sources cannot satisfy an omitted user-reference mention. Source identity stays scout-side: downstream receives only stable source keys/labels, trust, uncertainty, and sanitized rules—not URLs, screenshots, pixels, or source-page descriptions. Synthesis records never issue `T#`, create probes, alter task coverage, or redefine task/final-evidence contracts.
+Reference synthesis starts from function, not mood. Field names, record shape, axis vocabulary, and validation belong exclusively to `protocol/composition-contract.md`. This protocol governs only when synthesis applies and how it flows: select **Branch A — explicit functions** when the user named detailed features, preserving each feature and deriving its interaction primitives directly; add only indispensable connective or recovery primitives, marked as inferred with an assumption. Select **Branch B — product goal only** only for `product` work and product screens of `mixed` work when detailed functions are absent; first record the smallest task-complete feature set and every assumption. Explicit details always win. An inferred addition needs a task-completion dependency and may not add optional analytics, AI, collaboration, personalization, admin, export, or adjacent capability. Pure `marketing`, `editorial`, and static work does not infer CRUD, state machinery, probes, or task evidence; it transfers only explicit applicable content or interaction primitives. User-origin references receive a concrete canonical synthesis record or an explicit decline individually; scout-found sources cannot satisfy an omitted user-reference mention. Source identity stays out of blind review. Current makers receive selected whole-screen images, actual analysis and rights/visibility context; legacy source-free synthesis remains the machine transfer ABI. Synthesis records never issue `T#`, create probes, alter task coverage, or redefine task/final-evidence contracts.
 ## Visual reference gallery and concept exploration
 
 **[short-request-quality-default]** A request naming a surface and first-party material is enough
@@ -217,7 +217,7 @@ a bounded edit from rejection of the overall decoration, typography or compositi
 reopens unaccepted choices and generation conditioning; it does not silently turn the rejected image
 into a target or infer a quiet register. Preserve facts and explicit invariants, not accidental style.
 
-When visual reference discovery is selected, the scout treats curated design galleries and inspiration sources — for example Pinterest, Dribbble, Mobbin, Behance, Land-book, Godly, Savee, and equivalent boards — as an admissible category alongside domain and competitor evidence. It gathers only enough high-craft evidence to settle the named visual decision, measures each retained item into the canonical multi-axis synthesis (macro layout, density, typography, spacing/rhythm, component anatomy, surface/material, colour role, motion), and keeps local captures under `.omd/refs/`. Composer and Hand consume the selected assembly's measured anatomy, geometry, treatment, and destination landing, plus an optional source-free packet or exact selected rights-safe `noShip` crop delivered by their validated handoff. They never inspect unselected, rights-unclear, or private Scout pixels, and blind reviewers receive no source crop. Build only the named relationships with the destination's own copy, assets, and tokens, and record attribution. Build for coverage, not counts, and report no capture quota.
+When visual reference discovery is selected, the scout treats curated design galleries and inspiration sources — for example Pinterest, Dribbble, Mobbin, Behance, Land-book, Godly, Savee, and equivalent boards — as an admissible category alongside domain and competitor evidence. It gathers only enough high-craft evidence to settle the named visual decision, measures each retained item into the canonical multi-axis synthesis (macro layout, density, typography, spacing/rhythm, component anatomy, surface/material, colour role, motion), and keeps local captures under `.omd/refs/`. Current makers inspect selected rights-allowed whole-screen images with actual analysis and per-surface application through the validated handoff; optional crops supplement their parent. Unselected/withheld pixels remain unavailable, and blind reviewers receive no external reference images or maker rationale. Legacy selected-assembly projections retain their historical semantics. Build only the named relationships with the destination's own copy, assets, and tokens, and record attribution. Build for coverage, not counts, and report no capture quota.
 Award showcases (Awwwards, FWA, GDWEB) and their case studies are part of this category, and are load-bearing for a `marketing` surface in the showpiece register: they show how high-craft structure, section rhythm, and signature motion are actually built, and the FWA/Awwwards case write-up (concept, stack, motion approach) is studied alongside the hero capture, not skipped for a screenshot. Study award work for principle and craft filtered through the subject's own identity anchor; never clone a famous showcase.
 
 When the brief names a real, existing subject, reference research begins by establishing what that subject actually is — a web search plus the linked repository/README and any wordmark or brand the source already ships — and fixes the subject's own identity anchor (its real palette and motif) before any gathering lane runs. That anchor governs the colour and motif of every enumerated direction and is never outvoted by category evidence: a palette or motif that is the product category's default (a dev tool rendered in terminal green) rather than the subject's own identity is the convergence-to-the-mean failure, even when every deterministic gate passes.
@@ -245,7 +245,8 @@ supplied concept study is never a `literalPropsToReject` entry; that field exclu
 A current-user-selected, project-owned concept image is a visual target, not an external reference.
 It follows the explicit-user evidence precedence above and may be passed exactly to the applicable
 concept-making and production owners; blind selectors/reviewers receive only the bound invariant and
-falsifier contract. Competitive and gallery sources remain scout-only and source-isolated. Before
+falsifier contract. Competitive/gallery images reach makers only through the selected rights-allowed whole-screen
+handoff with actual analysis and no-ship limits; blind review remains source-isolated. Before
 typography or structure freezes, the art-direction decision records only the
 target's visible load-bearing invariants and a falsifier for each: the relationships that create its
 identity, not every pixel or an imitation recipe. Typesetter tests real copy and actual fonts inside
@@ -257,7 +258,62 @@ The required command or frequent action remains usable and prominent enough for 
 not automatically replace the selected concept relationship as the page's visual identity.
 
 Commit the direction count and its evidence-based rationale before generation. Multiple directions must differ in their content generator and macro-composition, not merely their styling. Shared brand colours are lawful: a common palette can support genuinely different concepts, while new colours cannot rescue the same structure repeated cosmetically. One direction is lawful only when the brief and evidence already settle the direction; uncertainty or an ambitious exploration request requires alternatives. Judge the rendered concept, task, and craft after proving feasibility at the required viewports. Colour remains an intentional subject-grounded choice, never a variety quota or a silent default.
+## Current human-design process
+
+A human-design-process-v1 route uses Frame requested scope + Scout whole-screen analysis + Writer
+real copy, then a minimal token seed and 2-3 real concepts of ONE representative surface with the
+same content/state/view set. Art Director owns seed/plan/aggregate direction; independent Sketch
+calls own separate source directories. Commit the plan before source. Structural mode is optional
+diagnostic work; visual-study explores structure, density and provisional type together. No final
+beauty floor, full component library or late composition prerequisite gates these decision samples.
+
+Present all actual previews with IDs and concise tradeoffs. Interactive sessions ask ONE routine
+question: which direction should be developed? Preserve the actual user answer and displayed inputs.
+Only explicit signed autonomy permits a fresh isolated Eye concept-selection; child execution,
+missing tools, checkpoint:none or silence is not consent. Current selection is not asked again.
+Changed consumed content, seed/overrides or previews stale it and require the same checkpoint;
+additive downstream tokens or unaffected scope additions do not. Typed await-user stops retries and
+full expansion, while representative inspection/repair/rendering remains available.
+
+Typesetter proves chosen type in real/dynamic containers. Composer formalizes only needed components
+and full surface/state/view expansion, then Hand implements every requested surface. Resolve the
+immutable seed + selected overrides + disjoint extensions; never flatten over the base. Current
+role briefs deliver actual existing-system material and authorized whole-screen reference images,
+analysis and per-surface application to makers. Observed CSS is not approved tokens. Blind Eye and
+Glance receive no external references, source identities, rationale, prior scores or desired winner.
+
+Candidate-bound art-direction-v3 synthesizes the already authenticated choice, not a second register
+tournament. Content-led/no-metaphor/achromatic static work is lawful without fabricated slots or
+motion hashes. Native motion/evaluator lineage remains exact when selected. Writer receives only
+copy-safe selected metadata; a metadata-only callback does not change the visible content digest.
+A changed visible string invalidates affected candidate/type/source evidence.
+
+Required delivery is each surface's required states x its own declared views, plus every applicable
+content case x its stated states/views. Separate local fixtures and real captures test long text,
+many items and actual error/recovery risks. No task/AT claim follows from screenshots; no screenshot
+relabeling proves another state. All cells and stress images need current measured/reviewed evidence.
+Failed stress/access/task/contract evidence is a defect, not reference confidence debt.
+
+Missing exploratory/reference/settlement capability yields honest Phase 1 debt, never a universal
+first-render blocker or forged approval. Real facts/authority and invalid artifacts retain their
+refusals. A real ready interactive choice controls commitment. Additional questions are only actual
+blockers or the same defect after three failed post-repair observations, not routine type/component/
+reference approvals. Explicitly requested extra checkpoints remain user instructions.
+
+Refinement uses a finite route-bound ceiling (default four attempts, never four required rounds).
+Distinct authenticated failed repairs count by stable issueKey, not wording/capture hashes; initial
+discovery, duplicate reads and restart do not reset or inflate the chain. The third unresolved repeat
+asks the user/needs-human and stops. Regression rolls back through the trusted path and needs a
+fresh restored observation. Budget never waives missing evidence or required failures. Accept clean
+required criteria immediately; standard low/moderate-risk ordinary work may meet independent score-3
+floors only with zero unresolved defects. Stricter purpose/risk retains its bound floors. Native
+final consumers must support this policy before claiming release; prose is not acceptance authority.
+
 ## Harness-v2 art-direction decision
+
+The register-tournament procedure in this section is for explicit historical routes without
+human-design-process-v1. Current routes use the candidate-bound process above and never reinterpret
+multiple same-register concepts as invented register alternatives.
 
 [adaptive-art-direction:consumer] The authoritative adaptive route selects or explicitly skips
 art direction. Only an explicit art-direction skip with its typed skip receipt removes that stage's
@@ -284,7 +340,8 @@ invent a motion scene, or convert a user lock into a preference.
 
 For selected art direction, this decision is made before the composer receives inputs. Preserve the immutable decision, authorized evaluator evidence, settled motion, activation binding, settled selection, and all required downstream lineage. The composer sees only the selected, hash-bound decision, selected capture visibility, and applicable evidence bindings; it does not see rejected directions, their scores, or their authorship. Critical quality floors remain independent: a passing direction must satisfy the selected static or motion evidence contract, fixed-viewport quality floors, and separate blind-quality and fidelity reviewers in isolated lanes. Negative marketing copy stays a rejection condition or comparison fact, never literalized into shipped copy.
 
-No stage prompts the user for a choice that the evidence-bound coordinator can make. Human input is accepted only as explicit current-user direction; it is recorded as a lock and not reopened as an approval checkpoint.
+Historical register locks retain their original authority semantics. On current interactive routes,
+the authenticated representative direction belongs to the user; coordinator judgment cannot replace it.
 
 Visual-reference assembly is chat-first (no board UI). The scout records the candidates; the
 coordinator selects the strongest itself, disclosing its choice and reason — it does not ask the user
@@ -386,9 +443,9 @@ from current disk. The source-aware brief is not a role-safe packet: it can incl
 reference descriptions, source paths, previous renders and route rationale. Never append it
 unchanged to an isolated owner's task. Preserve ownership, schemas, checks, blockers and
 complete required evaluator lineage, but supply only that role's permitted projections and
-evidence. Composer, Sketch, Hand and isolated Eyes do not gain source identity, rejected
-alternatives or prior verdicts because those appeared in the brief. An inventory path is not
-a read grant. Source-free owners receive the projection; they do not reopen the raw brief.
+evidence. Makers receive the role-safe current system, selected whole-screen references and actual analysis;
+blind Eyes do not. No role gains sibling source, rejected directions or prior verdicts merely because
+a raw inventory listed them. An inventory path alone is not delivery. Use the explicit role projection.
 When the brief names `omd ref handoff <role> --json`, supply its complete current output as the
 selected reference projection. The read-only export contract is in `protocol/reference-assembly.md`;
 a digest receipt alone contains no feature content.
@@ -400,9 +457,13 @@ and let Writer revise the deck before affected type, composition or render work 
 Reuse unaffected acquisition evidence; never preserve obsolete wording just to keep an
 earlier layout, type proof or art-direction study valid.
 
-The composer owns only `.omd/composition.md`. After selected typography approval it receives the sanitized frame/concept, clean copy deck, approved type proof, and durable scout summary when selected. When image-first exploration is selected, it starts after the coordinator has chosen its image-first draft: it receives the current hash-bound sanitized selected assembly plus the coordinator-chosen draft when a draft was generated, or the selected assembly plus the CSS/SVG evidence path when the host has no image capability. An authoritative adaptive art-direction skip uses the typed skip receipt and selected frame/copy/type/scout/reference projection described above; it never fabricates absent direction lineage. A selected reference assembly still supplies its current sanitized projection even when image-first exploration is explicitly skipped. It never supplies a draft prompt or upstream art-direction direction, and never receives the internal raw evidence record. Reference transfer input is limited to stable source keys/labels, trust, uncertainty, and sanitized multi-axis feature/primitive rules, adaptations, token variation, conflicts, and destination criteria; it receives no raw screenshots, source files, pixel samples, URLs, source-page descriptions, candidate renders, rejected alternatives, or authorship. It turns evidence into a structural contract, records exact SHA-256 fingerprints for selected dependencies, and runs `omd composition --check` before divergence.
+For explicit historical routes, the composer owns only `.omd/composition.md`. After selected typography approval it receives the sanitized frame/concept, clean copy deck, approved type proof, and durable scout summary when selected. When image-first exploration is selected, it starts after the coordinator has chosen its image-first draft: it receives the current hash-bound sanitized selected assembly plus the coordinator-chosen draft when a draft was generated, or the selected assembly plus the CSS/SVG evidence path when the host has no image capability. An authoritative adaptive art-direction skip uses the typed skip receipt and selected frame/copy/type/scout/reference projection described above; it never fabricates absent direction lineage. A selected reference assembly still supplies its current sanitized projection even when image-first exploration is explicitly skipped. It never supplies a draft prompt or upstream art-direction direction, and never receives the internal raw evidence record. Reference transfer input is limited to stable source keys/labels, trust, uncertainty, and sanitized multi-axis feature/primitive rules, adaptations, token variation, conflicts, and destination criteria; it receives no raw screenshots, source files, pixel samples, URLs, source-page descriptions, candidate renders, rejected alternatives, or authorship. It turns evidence into a structural contract, records exact SHA-256 fingerprints for selected dependencies, and runs `omd composition --check` before divergence.
 
-Each sketch receives only a sanitized frame/concept, the copy deck, the approved typography
+The following pre-composition Sketch contract is historical-only. Current sketch-brief-v1 receives
+an explicit structural or visual-study mode, committed Art Director plan, shared real content,
+minimal seed/overrides, declared views and authorized whole-screen analysis, before full type/composition.
+
+Each historical sketch receives only a sanitized frame/concept, the copy deck, the approved typography
 contract derived from `.omd/type-proof.md`, the same sanitized `.omd/composition.md`, an
 anonymous candidate id, and one axis from its Candidate axes section. The contracts expose
 approved structural dependencies, roles, family, weight, size/measure, and wrapping
@@ -454,9 +515,10 @@ report, and reruns both `omd copy --check` and `omd copy --review-check`. Never 
 hash with a later deck hash or imply the eye reviewed bytes it never saw. Terminal
 `review-check` passes only a current `CLEAN` report.
 
-The typesetter owns `.omd/type-proof.md` and `.omd/.cache/type-proof/`. It sees the clean
-copy deck, typography theory, and scout typography evidence, but does not design composition,
-colour, graphics, motion, or rewrite copy. A fresh eye in typography-proof mode sees only
+The typesetter owns `.omd/type-proof.md` and `.omd/.cache/type-proof/`. On current routes it receives
+the chosen representative/container relationship, exact copy, effective tokens, actual existing system
+and dynamic-content script/range scope. Neutral specimens are supplemental, not permission to replace
+the selected composition. Legacy routes retain neutral pre-composition proof. It never rewrites copy. A fresh eye in typography-proof mode sees only
 desktop/mobile specimens plus sanitized copy and typography requirements. It never sees
 authorship, references, rationale, page structure, colour, or code and never edits.
 
@@ -468,7 +530,11 @@ selection do not establish final production approval, final-v2 evidence, complet
 isolation. Closed final and refinement reviews still require their host-issued one-use evidence tool
 and bound output contract; a provisional review or path-only handoff cannot replace them.
 
-The selector gets a fresh context and sees anonymous renders plus the sanitized frame, copy
+The following numeric selector and one-replacement-round procedure is historical-only. Current
+concept-selection uses the closed autonomous packet/profile without final beauty floors; interactive
+choice is the user's. A diagnostic study review never supplies final approval.
+
+The historical selector gets a fresh context and sees anonymous renders plus the sanitized frame, copy
 deck, typography contract, and the same sanitized composition contract. It scores exactly:
 task/CTA clarity, narrative dependency, composition rhythm, concept-specific form,
 responsive hierarchy, type/copy accommodation, interaction/form usability risk, and
@@ -573,7 +639,10 @@ The sharp eye receives only sanitized multi-axis observed rules, adaptations, an
 
 ## Divergence and checkpoints
 
-Structural divergence is conditional, not ceremonial: default to two independent sketches;
+Current-process divergence and its single direction checkpoint follow Current human-design process.
+The following four-proof structural ritual is retained only for explicit historical routes.
+
+Historical structural divergence is conditional, not ceremonial: default to two independent sketches;
 use three for showpiece work or high structural uncertainty/impact. Skip only when structure
 is already supplied (for example, a Figma frame or explicit visual target), and record why.
 Divergence is measured, not assumed: the candidate set must realize genuinely different macro-layout families — a different top-level spatial organization, or a different placement and orientation of the dominant anchor and reading path — never one stacked single-column flow reskinned with different margins, column width, type scale, or spacing. A candidate set that collapses to a single macro-layout family has not diverged; the blind selector, which sees every candidate render, treats it as a contract-level no-winner (the Candidate axes were not genuinely different) and returns it to a fresh composer to re-derive divergent axes, even when one candidate would otherwise pass.
@@ -595,8 +664,9 @@ neither kind is a final acceptance receipt. Actual revisions still need fresh af
 under the selected visual-observation or trusted repair contract. Reframing changes no scope or
 upstream artifact by itself, and never clears a failed gate. A typed reflection skip
 creates no craft-checkpoint artifact but never removes browser evidence, final evidence, or
-independent review. Human approval checkpoints are separate:
-`.omd/config.json` defaults to `checkpoint: none`; concept, structure, or both are opt-in.
+independent review. Legacy checkpoint none/concept/structure/both remains readable but does not
+authorize autonomous direction. New directionPolicy defaults interactive; only real user/host
+invocation authority can grant autonomous selection.
 When composition is selected, the hand receives its selected candidate and composition
 contract, runs `omd composition --check` before its first production write and again before
 ship, and records any deliberate deviation with visible evidence. A changed selected frame,
@@ -612,7 +682,11 @@ direction; Hand cannot waive it as an implementation deviation.
 The hand treats focal hierarchy and the lawful mechanism carrier or explicit alternate
 mental-model carrier as production acceptance, preserves them responsively, and records
 visible evidence or an evidence-backed deviation before the sharp eye judges them.
-The hand receives the accepted transfer criteria and builds from the source-free selected assembly's measured anatomy, geometry, treatment, and destination landing. When the brief explicitly selects the visual-packet experiment, it may also inspect only the named source-free, no-ship SVG study for box proportion, grouping, nesting, and whitespace; it never opens Scout-owned captures or private packet evidence. It implements each criterion at its destination screen/route and unique semantic reference-landing selector, or records an evidence-backed deviation; transfer records do not create tasks or probes. Host-side selected-distance and influence-proof gates may inspect the bound capture pixels independently; that pixel access is not Hand input.
+Current Hand receives the selected whole-screen maker references, analysis, per-surface decisions,
+chosen candidate and effective system. It implements each criterion at its declared destination and
+records evidenced departures. References are study-only, not production assets; private withheld
+pixels and unselected evidence remain unavailable. Historical neutral geometry/selected-distance
+paths keep their original measured correspondence checks. Neither path creates task rows or probes.
 
 ## Safe probe policy
 
@@ -791,7 +865,7 @@ applicable production run. The method-specific gates below apply when their meth
 - For multi-page output, run `omd check --site <dir>` and resolve cross-page drift.
 - Run a RED/GREEN refinement method when the adaptive route selects it or required evidence/review remains RED. A low-risk content-only change may ship after one clean evidenced pass with its recorded skip reason; no route manufactures rounds after every required gate is GREEN. Acceptance criteria written from the frame and `theory/expressive.md` § "Slop-free is not the same as distinctive" are surface-conditional.
 - Every surface has one clear first-read with no two competing primary masses; `omd slop scan` has zero confirmed candidates and `omd check --category slop` is clean; no reality-depth tell (a form that never submits, timing theatre standing in for real work, or self-referential in-page trust). An initial clean build is judged by its independent final quality review; only an actual repair/refinement pair requires the blind-choose after to beat before. Marketing additionally names the template it resembles, departs from it, and realizes its selected carrier. Product instead proves task specificity, representative content, semantic hierarchy, prerequisite order, state feedback, and responsive priority without requiring decorative departure.
-- Any unmet applicable criterion is RED. Each round leaves evidence (sharp renders under `.omd/.cache/rounds/round-<N>/`, measured gate results, and the blind-choose verdict) — a round with no evidence does not count. Before accepting a round, rerun every applicable declared task probe, accessibility check, and required-viewport task evidence; all must remain passing or the round rolls back. Blind-choose distinguishes visual quality only and cannot overrule those UX invariants. A round earns GREEN or RED from its current evidence; the round number itself never prejudges the result. There is no fixed round budget: for an authorized repair/refinement pair, a fresh independent after win improves and a before win rolls back. Reviewer disagreement or a tie with a remaining RED criterion returns to framing/composition; only a second chained tie on that same RED target is a genuine plateau, and remaining RED never completes. A unanimous tie with no remaining criterion records the repaired result as preserved and complete without claiming improvement. It is not a blind automatic retry — every round needs fresh evidence and no route manufactures a pairwise round for an initial clean review.
+- Any unmet applicable criterion is RED. Each round leaves evidence (sharp renders under `.omd/.cache/rounds/round-<N>/`, measured gate results, and the blind-choose verdict) — a round with no evidence does not count. Before accepting a round, rerun every applicable declared task probe, accessibility check, and required-viewport task evidence; all must remain passing or the round rolls back. Blind-choose distinguishes visual quality only and cannot overrule those UX invariants. A round earns GREEN or RED from its current evidence; the round number itself never prejudges the result. For explicit historical refinement only, there is no fixed round budget: for an authorized repair/refinement pair, a fresh independent after win improves and a before win rolls back. Reviewer disagreement or a tie with a remaining RED criterion returns to framing/composition; only a second chained tie on that same RED target is a genuine plateau, and remaining RED never completes. A unanimous tie with no remaining criterion records the repaired result as preserved and complete without claiming improvement. It is not a blind automatic retry — every round needs fresh evidence and no route manufactures a pairwise round for an initial clean review.
 - Once a production repair exists, final-v2 publication, currentness checking, and terminal preflight require the current refinement checkpoint to be complete and the final graph's terminal observation to be that exact after render. A continue, stop, rollback, disagreement, missing pointer, or stale repair/checkpoint chain blocks completion. A clean run with no repair has no checkpoint obligation.
 
 The native repair handoff keeps production closed until the owner receipt is consumed. Create the
@@ -824,7 +898,7 @@ writable, project-local, or replayed receipts fail closed.
 - Model ownership belongs to the user: by default every child inherits the concrete model selected for the host session, while OMD adjusts only the role's effort tier. Direct Codex child launches omit `model` and may pass only `reasoning_effort`; Claude agent metadata uses `model: inherit` and the role's `effort`. The sole Codex exception is the user's explicit outer-invocation `--omd-role-model` / `--omd-role-effort`: the host binds those overrides and the broker alone applies them. Its validated receipt may report `modelArgumentOmitted: false` without a policy violation. No coordinator, recommendation, benchmark, or role label may invent a concrete-model substitution or change host settings. Without that explicit invocation override, a user-selected Luna run remains Luna in every role and ad-hoc worker; the same invariant applies to any other selected model.
 - Artifact ownership is enforced whenever an artifact is selected: `.omd/frame.md` belongs to the framer, `.omd/scout.md` and `.omd/refs/*` to the scout, `.omd/copy-deck.md` to the writer, `.omd/type-proof.md` to the typesetter, `.omd/composition.md` to the composer, structural candidates to the sketch agent, every production source file to the hand, and every review verdict to a blind eye. The coordinator orchestrates, sanitizes, and gates; it never writes a selected owned artifact itself. Composition and divergence may be skipped only by the adaptive route with a reason. Production and independent review have no inline path or skippable condition.
 - A pack recipe is installed, not reimplemented. `omd recipe list` is the installable library and `omd recipe add <name> [--stack react|vanilla]` writes that recipe's real source — parameters, implementation, and reduced-motion branch — into the project. A selected motion technique is installed first and then bound to this project's tokens, content, and selectors; it must remain within the selected exact-one decision. The install is recorded with `omd decision` and verified with `omd craft-capture` before the technique is claimed.
-- Commit the approved design-system ladders before composition. `omd schema token-commit --json` prints the single-scale `token-commit-v1` contract; `omd schema responsive-token-commit --json` prints `token-commit-v2` for viewport-specific type. The authorized owner writes `.omd/tokens.json` and runs `omd tokens check --json`; this command validates only, and an `--input` file is never copied or published. Both contracts name the type scale, spacing scale, colour roles including `accent`, and font roles. Existing validator floors apply independently to every type scale: at least four positive ascending unique rungs, adjacent ratio at least 1.15, and total span at least 2.5 except for `quiet` and `product`. These are contract checks, not a visual-quality verdict. In v2, `responsiveTypeScales` supplies ascending unique positive finite `maxWidth` caps with their own `typeScale`; the first inclusive CSS viewport-width cap that matches wins, and the top-level scale applies above all caps. Take caps and values from the approved responsive proof, never union mutually exclusive sizes or alter approved type merely to pass a union check. Spacing, colour, and font roles remain shared. Run `omd tokens check --page <page> --viewport WxH --json` at every approved viewport: `TOKEN-DRIFT` checks rendered type against only that width's active scale and rendered spacing against the shared ladder.
+- Current token-commit-v3 uses minimal named primitives/semantic/text roles before concepts, then selected overrides and disjoint needed extensions. No fixed rung/display quotas apply. Dynamic font coverage follows actual scripts/ranges and fallback, not only current-copy glyphs. The following ladder checks apply only to historical token-commit-v1/v2: commit the approved design-system ladders before composition. `omd schema token-commit --json` prints the single-scale `token-commit-v1` contract; `omd schema responsive-token-commit --json` prints `token-commit-v2` for viewport-specific type. The authorized owner writes `.omd/tokens.json` and runs `omd tokens check --json`; this command validates only, and an `--input` file is never copied or published. Both contracts name the type scale, spacing scale, colour roles including `accent`, and font roles. Existing validator floors apply independently to every type scale: at least four positive ascending unique rungs, adjacent ratio at least 1.15, and total span at least 2.5 except for `quiet` and `product`. These are contract checks, not a visual-quality verdict. In v2, `responsiveTypeScales` supplies ascending unique positive finite `maxWidth` caps with their own `typeScale`; the first inclusive CSS viewport-width cap that matches wins, and the top-level scale applies above all caps. Take caps and values from the approved responsive proof, never union mutually exclusive sizes or alter approved type merely to pass a union check. Spacing, colour, and font roles remain shared. Run `omd tokens check --page <page> --viewport WxH --json` at every approved viewport: `TOKEN-DRIFT` checks rendered type against only that width's active scale and rendered spacing against the shared ladder.
 - The bar is the industry's, not an internal invention. `omd award score <page>` scores the page against the published Awwwards Developer Award rubric and its exact weights (WPO 0.20, RWD/mobile 0.20, markup/metadata 0.15, semantics/SEO 0.20, animations/transitions 0.15, accessibility 0.10) from evidence the run already collects, and reports coverage for any axis with no evidence rather than fabricating one. The main jury's Design/Usability/Creativity/Content split is a human judgement and stays with the blind eye — the harness does not fake a number for it. Scoring is conjunctive: an axis below its floor forces the verdict down however high the weighted mean is, so a page with clean markup and no motion never reports as award-worthy. An Honourable Mention is 6.5; the Developer Award is above 7.
 - Motion enhances content; it never gates it. Any surface that ships a reveal runs `omd no-js <page>`: it renders twice, with and without JavaScript, and counts the blocks that stay invisible *while in the viewport*. `NOJS-CONTENT-LOSS` is RED — a reveal whose default state is `opacity: 0` and whose only advance is an IntersectionObserver leaves a reader without JavaScript on an empty page, which fails the developer-award accessibility criterion "content accessible with no JS". A CSS scroll-driven reveal passes because the browser advances it without scripting; an observer-driven one passes only when the settled layout is the default and the observer animates from it. Below-fold content that has simply not been scrolled to yet is not a loss — only content that stays invisible once the reader reaches it.
 - After all production source and approved inputs stop changing, run `omd source --seal <root>` and then `omd source --check <root>` for byte-freshness evidence, where `<root>` is the project root that contains `.omd/`, not a nested output directory. Excluded hidden or non-source metadata links are ignored by the source collector. Never move, rename, or delete a project symlink to make sealing pass; a reported source-bearing symlink is a real source-boundary blocker. The seal does not claim semantic copy or source fidelity. Build and collect every final check, test, declared/applicable probe, fixed-viewport render, and applicable motion filmstrip from that sealed source; run `omd source --check <root>` again.

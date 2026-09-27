@@ -90,10 +90,20 @@ function sourceRouteInput(value: unknown): Readonly<{ input: unknown; localeDesi
   const baseKeys = hasOwn(value, 'projectMode') ? SOURCE_KEYS : legacyKeys;
   const modeKeys = hasOwn(value, 'deliveryMode') ? [...baseKeys, 'deliveryMode'] : baseKeys;
   const expectedKeys = hasOwn(value, 'localeDesign') ? [...modeKeys, 'localeDesign'] : modeKeys;
-  const source = fields(value, hasOwn(value, 'learningScope') ? [...expectedKeys, 'learningScope'] : expectedKeys);
+  const processKeys = hasOwn(value, 'processPolicy') ? [...expectedKeys, 'processPolicy'] : expectedKeys;
+  const hasReviewPurpose = hasOwn(value, 'reviewPurpose');
+  const hasReviewPurposeAuthority = hasOwn(value, 'reviewPurposeAuthority');
+  if (hasReviewPurpose !== hasReviewPurposeAuthority) return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE');
+  const reviewKeys = hasReviewPurpose ? [...processKeys, 'reviewPurpose', 'reviewPurposeAuthority'] : processKeys;
+  const source = fields(value, hasOwn(value, 'learningScope') ? [...reviewKeys, 'learningScope'] : reviewKeys);
   if (source.get('schema') !== ADAPTIVE_SOURCE_CONTRACT_SCHEMA) return failAdaptiveRoute('MALFORMED_ADAPTIVE_ROUTE');
   const input = {
     schema: ADAPTIVE_ROUTE_INPUT_SCHEMA,
+    ...(source.has('processPolicy') ? { processPolicy: source.get('processPolicy') } : {}),
+    ...(source.has('reviewPurpose') ? {
+      reviewPurpose: source.get('reviewPurpose'),
+      reviewPurposeAuthority: source.get('reviewPurposeAuthority'),
+    } : {}),
     ...(source.has('deliveryMode') ? { deliveryMode: source.get('deliveryMode') } : {}),
     request: source.get('request'),
     projectMode: source.get('projectMode') ?? 'existing',
@@ -178,7 +188,7 @@ function parse(
     allowedPaths: strings(item.get('allowedPaths')),
     forbiddenWithoutRequest: forbidden,
   });
-  validateAdaptiveStrategyRails(candidate.strategy, candidate.deliveryMode);
+  validateAdaptiveStrategyRails(candidate.strategy, candidate.deliveryMode, candidate.sourceContract.processPolicy !== undefined);
   if (canonicalRouteJson(candidate) !== canonicalRouteJson(expected)) return failAdaptiveRoute('SOURCE_CONTRACT_MISMATCH');
   return expected;
 }

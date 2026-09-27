@@ -89,7 +89,9 @@ test('selected discovery offers explicit direct public entry inputs while skippe
     assert.ok(plan.designSourcePolicy.candidates.some(candidate => candidate.url === entry.url));
     assert.equal(designDiscoveryProvider(entry.url), null, 'a directory lead is not an already selected gallery item');
   }
-  assert.equal(plan.sourcePolicy, 'current-search-or-direct-public-then-live-inspection');
+  // Browse is now the default; these catalogue builders remain explicit legacy transport/seeds.
+  assert.equal(plan.sourcePolicy, 'recorded-browse-or-legacy-native-discovery');
+  assert.equal(plan.browse.referenceUnit, 'whole-screen');
   assert.deepEqual(Reflect.get(makePlan('copy-only').designSourcePolicy, 'nativeEntryInputs'), []);
   assert.equal(Reflect.get(makePlan('copy-only').designSourcePolicy, 'domainEntryCommand'), null);
 });

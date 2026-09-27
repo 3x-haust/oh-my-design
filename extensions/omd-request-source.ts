@@ -11,7 +11,8 @@ const DIRECTORY = '.omd/request-sources';
 const SHA256 = /^[a-f0-9]{64}$/u;
 const fs = nodeStableProjectFileSystem();
 export const requestDigest = (text: string): string => createHash('sha256').update(text).digest('hex');
-export type PiRequestSource = Readonly<{ request: string; requestSha256: string; recordSha256: string }>;
+export type PiWorkflowControl = Readonly<{ status: 'active' | 'cancelled'; userMessage: string }>;
+export type PiRequestSource = Readonly<{ request: string; requestSha256: string; recordSha256: string; workflow?: PiWorkflowControl }>;
 
 export class PiRequestBindingError extends Error {
   override readonly name = 'PiRequestBindingError';
@@ -39,11 +40,11 @@ function directory(root: string, path: string): void {
 }
 
 /** A signed native input observation, never a review or permission receipt. */
-export function capturePiRequest(root: string, request: string): PiRequestSource {
+export function capturePiRequest(root: string, request: string, workflow?: PiWorkflowControl): PiRequestSource {
   const projectRoot = realpathSync(root);
   directory(projectRoot, DIRECTORY);
   directory(projectRoot, '.omd/activation');
-  const payload = { schema: 'pi-request-source-v1', projectRoot, request, requestSha256: requestDigest(request), nonce: randomBytes(16).toString('hex') };
+  const payload = { schema: 'pi-request-source-v1', projectRoot, request, requestSha256: requestDigest(request), nonce: randomBytes(16).toString('hex'), ...(workflow === undefined ? {} : { workflow }) };
   const signature = signNativeObservation(projectRoot, KIND, requestDigest(canonicalRouteJson(payload)));
   const bytes = `${canonicalRouteJson({ ...payload, signature })}\n`;
   const recordSha256 = requestDigest(bytes);
@@ -56,7 +57,7 @@ export function capturePiRequest(root: string, request: string): PiRequestSource
   } finally {
     if (existsSync(staging)) unlinkSync(staging);
   }
-  return Object.freeze({ request, requestSha256: payload.requestSha256, recordSha256 });
+  return Object.freeze({ request, requestSha256: payload.requestSha256, recordSha256, ...(workflow === undefined ? {} : { workflow }) });
 }
 
 export function readPiRequest(root: string): PiRequestSource | undefined {
@@ -73,14 +74,16 @@ export function readPiRequest(root: string): PiRequestSource | undefined {
     const bytes = read(projectRoot, `${DIRECTORY}/sha256-${pointer.sha256}.json`);
     if (requestDigest(bytes) !== pointer.sha256) throw new PiRequestBindingError('source digest changed');
     const record = object(JSON.parse(bytes));
-    if (Object.keys(record).sort().join(',') !== 'nonce,projectRoot,request,requestSha256,schema,signature'
+    const workflow = record.workflow === undefined ? undefined : object(record.workflow);
+    if (workflow && (Object.keys(workflow).sort().join(',') !== 'status,userMessage' || !['active', 'cancelled'].includes(String(workflow.status)) || typeof workflow.userMessage !== 'string' || !workflow.userMessage.trim())) throw new PiRequestBindingError('invalid workflow control observation');
+    if (Object.keys(record).sort().join(',') !== `nonce,projectRoot,request,requestSha256,schema,signature${workflow === undefined ? '' : ',workflow'}`
       || record.schema !== 'pi-request-source-v1' || record.projectRoot !== projectRoot
       || typeof record.request !== 'string' || !record.request.trim()
       || record.requestSha256 !== requestDigest(record.request) || typeof record.nonce !== 'string' || !/^[a-f0-9]{32}$/u.test(record.nonce)
       || typeof record.signature !== 'string') throw new PiRequestBindingError('source record is invalid');
     const { signature, ...payload } = record;
     if (!verifyNativeObservation(projectRoot, KIND, requestDigest(canonicalRouteJson(payload)), signature)) throw new PiRequestBindingError('source signature is invalid');
-    return Object.freeze({ request: record.request, requestSha256: requestDigest(record.request), recordSha256: pointer.sha256 });
+    return Object.freeze({ request: record.request, requestSha256: requestDigest(record.request), recordSha256: pointer.sha256, ...(workflow === undefined ? {} : { workflow: workflow as PiWorkflowControl }) });
   } catch (error) {
     if (error instanceof PiRequestBindingError) throw error;
     if (error instanceof Error) throw new PiRequestBindingError('captured source cannot be read or verified');

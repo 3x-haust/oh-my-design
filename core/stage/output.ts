@@ -12,6 +12,7 @@ import { compositionEntry } from '../brief/minimal-composition.ts';
 import { resolveCandidateSelection, validateCandidateSelectionPointer } from '../brief/candidate-selection.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import { stageDefinition, type StageId } from './contract.ts';
+import { selectedDirectionCopyClosureProblems } from '../art-direction/copy-closure.ts';
 
 /** Early structural checks, not render/review acceptance. Never equate a file with completed work. */
 export function stageArtifactProblems(root: string, stage: StageId, invocation?: ProjectRunInvocation): string[] {
@@ -24,6 +25,8 @@ export function stageArtifactProblems(root: string, stage: StageId, invocation?:
       return paths.filter(candidatePath => !readContainedRegularFile(root, join(root, candidatePath), candidatePath).toString('utf8').trim())
         .map(candidatePath => `${candidatePath} is empty`);
     }
+    if (stage === 'art-direction' && invocation && readPersistedRoute(root, invocation).sourceContract.processPolicy
+      && readPersistedRoute(root, invocation).strategy.methods.includes('concept-exploration')) return selectedDirectionCopyClosureProblems(root);
     if (stage === 'domain') {
       const domain = validateDomainBrief(JSON.parse(bytes.toString('utf8')));
       if (invocation && domain.request !== readPersistedRoute(root, invocation).request) {

@@ -17,6 +17,9 @@ import type { AdaptiveSourceSealRoute } from '../source-seal/adaptive-inputs.ts'
 import { validateAdaptiveFinalEvidenceV2Graph } from '../evidence/final-v2-adaptive-contract.ts';
 import { validateCurrentCompositionContract } from '../composition-contract/index.ts';
 import { checkAdaptiveWorkflow } from '../design-development/workflow-persistence.ts';
+import { requiresMeasuredTerminal, loadReviewPolicy } from '../measure/review-policy.ts';
+import { validateMeasuredTerminal } from '../evidence/final-v2-measured-terminal.ts';
+import { validateFinalEvidenceV2Graph } from '../evidence/final-v2-graph.ts';
 
 export type CompletionTypographyBinding = Readonly<
   | { id: 'type-proof'; status: 'selected'; path: string; sha256: string; applicability: TypographyApplicabilityEvidence }
@@ -126,12 +129,17 @@ export function checkCompletionPublicationPrerequisites(
   invocation: ProjectRunInvocation,
 ): CompletionPublicationResult {
   const graph = graphReceipts(manifest);
+  if (existsSync(resolve(root, '.omd/route.json')) && requiresMeasuredTerminal(readPersistedRoute(root, invocation))) {
+    loadReviewPolicy(root, invocation); // Revalidate the signed host/user purpose under every publication lock.
+    if (!graph.raw.measuredTerminal) fail('current implemented-UI completion requires immutable measured terminal graph evidence');
+    validateMeasuredTerminal(root, validateFinalEvidenceV2Graph(graph.raw), invocation);
+  }
   const continuationRoute = graph.schema === 'final-evidence-v2-adaptive-omission-graph'
     ? validateAdaptiveFinalEvidenceV2Graph(graph.raw).route
     : undefined;
   const hasWorkflow = existsSync(`${root}/.omd/workflow-plan.json`);
   if (hasWorkflow) {
-    if (graph.schema !== 'final-evidence-v2-workflow-graph-v1') fail('current workflow requires the additive workflow final graph');
+    if (graph.schema !== 'final-evidence-v2-workflow-graph-v1' && graph.schema !== 'final-evidence-v2-selected-direction-graph-v1') fail('current workflow requires the additive workflow final graph');
     const workflow = checkAdaptiveWorkflow(root, invocation).binding;
     if (canonicalJson(graph.workflow) !== canonicalJson(workflow)) fail('final graph does not bind the exact current workflow plan, artifacts, and reviews');
   } else if (graph.schema === 'final-evidence-v2-workflow-graph-v1') {

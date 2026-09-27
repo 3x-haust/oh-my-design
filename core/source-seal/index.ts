@@ -20,6 +20,8 @@ import {
   validateSourceBoundProofCurrentness,
 } from '../composition-contract/source-currentness.ts';
 import { FIXED_DERIVED_PROJECT_ROOTS } from '../runtime/derived-project-tree.ts';
+import { parseRouteRecord } from '../route/adaptive-route-record.ts';
+import { verifyReviewPurposeAuthority } from '../route/review-purpose-authority.ts';
 
 export const SOURCE_SEAL_SCHEMA_VERSION = 1;
 
@@ -285,11 +287,30 @@ function createContinuationSourceSeal(
     route.sourcePointer,
     route.sourceContract,
     route.authority,
+    ...(route.referenceApplication ?? []),
+    ...route.stages.flatMap(stage => stage.status === 'selected'
+      ? [...stage.artifacts, ...(stage.confidenceDebt ? [stage.confidenceDebt.record] : [])] : []),
   ]) {
     const bytes = readStableSourceFile(root, join(root, receipt.path));
     if (hashBytes(bytes) !== receipt.sha256) {
       throw new Error(`adaptive route receipt changed after source seal: ${receipt.path}`);
     }
+  }
+  // Continuation is read-only, but purpose origins remain live authority, not merely a hash
+  // embedded in previously sealed route/source bytes.
+  const record = parseRouteRecord(JSON.parse(readStableSourceFile(root, join(root, route.record.path)).toString('utf8')));
+  const purpose = record.sourceContract.reviewPurpose;
+  const authority = record.sourceContract.reviewPurposeAuthority;
+  if (purpose && authority) verifyReviewPurposeAuthority(root, authority, purpose, record.sourceContract.request);
+  for (const stage of route.stages) {
+    if (stage.status !== 'selected' || stage.confidenceDebt === undefined) continue;
+    const selectedPath = stage.id === 'art-direction' ? '.omd/art-direction.json'
+      : stage.id === 'copy' ? '.omd/copy-deck.md' : `.omd/${stage.id}.md`;
+    try { lstatSync(join(root, selectedPath)); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue; throw error; }
+    // lstat also catches dangling symlinks. New owned outputs need a fresh owner-bound seal;
+    // a continuation must not reuse the earlier absence/debt claim, even for invalid output.
+    throw new Error(`selected artifact materialized after confidence-debt source seal: ${selectedPath}`);
   }
   const proofPaths = ['.omd/type-proof.md', '.omd/composition.md']
     .filter((path) => existsSync(join(root, path))) as SourceBoundProofPath[];

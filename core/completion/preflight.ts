@@ -18,6 +18,7 @@ import type { HostCapabilityMatrix } from '../host-capability.ts';
 import type { ConfidenceDebt } from '../brief/confidence-debt.ts';
 import { checkReferenceApplicationReview, referenceApplicationReviewContext } from '../ref/reference-application-review.ts';
 import { checkSlopFinalGraph } from '../slop/review.ts';
+import { validateMeasuredTerminal } from '../evidence/final-v2-measured-terminal.ts';
 
 export { checkCompletionPublicationPrerequisites, CompletionPreflightError } from './publication.ts';
 export type { CompletionPublicationResult, CompletionTypographyBinding } from './publication.ts';
@@ -43,6 +44,7 @@ export function checkTerminalCompletion(root: string, invocation: ProjectRunInvo
   }
   const final = checkFinalEvidenceV2(root, invocation) as FinalEvidenceV2ManifestVariant;
   const prerequisites = checkCompletionPublicationPrerequisites(root, final, invocation);
+  if (final.graph.measuredTerminal) validateMeasuredTerminal(root, final.graph, invocation);
   checkSlopFinalGraph(root, final.graph);
   // Planning the user never confirmed is not a design decision to be repaired later; refuse here,
   // before any completion artifact publishes an invented business goal as delivered.

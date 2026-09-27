@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto';
 import { lstatSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { checkCandidateSelection, parseCandidatePointerV2, type CandidatePointerV2 } from './candidate-choice.ts';
+export { candidateDirectionState, publishCandidateSelection, readCurrentCandidateSelection } from './candidate-choice.ts';
 
 export const CANDIDATE_SELECTION_POINTER_SCHEMA = 'candidate-selection-pointer-v1' as const;
 export const CANDIDATE_SELECTION_POINTER_PATH = '.omd/.cache/sketches/current.json' as const;
@@ -11,12 +13,14 @@ export const CANDIDATE_EVIDENCE_FILES = Object.freeze([
   'ux-models.json',
 ] as const);
 
-export type CandidateSelectionPointer = Readonly<{
+export type LegacyCandidateSelectionPointer = Readonly<{
   schema: typeof CANDIDATE_SELECTION_POINTER_SCHEMA;
   directory: string;
   indexSha256: string;
   selectionSha256: string;
 }>;
+
+export type CandidateSelectionPointer = LegacyCandidateSelectionPointer | CandidatePointerV2;
 
 const KEYS = new Set(['schema', 'directory', 'indexSha256', 'selectionSha256']);
 const SHA256 = /^[a-f0-9]{64}$/;
@@ -27,6 +31,7 @@ export function validateCandidateSelectionPointer(input: unknown): CandidateSele
     throw new Error('CANDIDATE_SELECTION_POINTER_INVALID');
   }
   const value = input as Record<string, unknown>;
+  if (value.schema === 'candidate-selection-pointer-v2') return parseCandidatePointerV2(value);
   const keys = Reflect.ownKeys(value);
   if (
     keys.length !== KEYS.size
@@ -56,6 +61,11 @@ export function resolveCandidateSelection(
   projectRoot: string,
   pointer: CandidateSelectionPointer,
 ): readonly string[] {
+  if (pointer.schema === 'candidate-selection-pointer-v2') {
+    const selected = checkCandidateSelection(projectRoot, pointer);
+    return [pointer.selection.path, selected.candidateSet.path, selected.selectedSource.path,
+      ...selected.previews.flatMap(p => [p.png.path, p.capture.path])];
+  }
   const directory = join(projectRoot, '.omd', '.cache', 'sketches', pointer.directory);
   const directoryStat = lstatSync(directory);
   if (!directoryStat.isDirectory() || directoryStat.isSymbolicLink()) {

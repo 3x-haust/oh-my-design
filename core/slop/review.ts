@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { canonicalJson } from '../ref/board-artifacts.ts';
 import { readStableProjectFile, nodeStableProjectFileSystem } from '../runtime/stable-project-file.ts';
 import type { ProjectWriteAdapter } from '../runtime/project-write.ts';
+import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import { listProductionSourceFiles } from '../source-seal/index.ts';
 import { servedProjectTreeSha256 } from '../render/serve.ts';
 import { withBrowser } from '../render/index.ts';
@@ -16,6 +17,7 @@ import type { RawIr, Rule } from '../types.ts';
 import { parseViewState, withLocalView, statefulIr, type ViewState } from '../render/stateful.ts';
 import { MAX_INSPECTION_VIEWS } from '../render/view-capacity.ts';
 import { signNativeObservation, verifyNativeObservation } from '../runtime/self-signed-activation.ts';
+import { captureMeasuredSlopCheckpoint, publishMeasuredSlopReview, checkMeasuredSlopReview, hasMeasuredSlopReview } from './measured-review.ts';
 
 export const SLOP_REVIEW_POINTER = '.omd/slop/latest.json';
 type Receipt = { path: string; sha256: string };
@@ -152,7 +154,11 @@ function validateReview(root: string, input: unknown, checkpointReceipt: Receipt
 
 /** Native checkpoint: source scan + actual local-build render + existing slop IR linter.
  * Findings are advisory until a reviewer judges them. The two finding kinds stay distinct. */
-export async function captureSlopCheckpoint(root: string, scopeInput: unknown, writer: ProjectWriteAdapter): Promise<{ checkpoint: Receipt; reviewInput: Review; findings: Finding[] }> {
+export async function captureSlopCheckpoint(root: string, scopeInput: unknown, writer: ProjectWriteAdapter, invocation?: ProjectRunInvocation): Promise<{
+  checkpoint: Receipt; findings: Array<Finding | Awaited<ReturnType<typeof captureMeasuredSlopCheckpoint>>['findings'][number]>;
+  reviewInput: { schema: 'slop-review-v1' | 'slop-review-v2'; checkpointSha256: string; summary: string; decisions: Array<Decision | import('../measure/citations.ts').SlopMeasurementDecision>; resolved: Array<Resolution | import('../measure/citations.ts').SlopMeasurementDecision> };
+}> {
+  if (scopeInput && typeof scopeInput === 'object' && Reflect.get(scopeInput, 'schema') === 'slop-measured-scope-v2') return captureMeasuredSlopCheckpoint(root, scopeInput, writer, invocation ?? fail('measured checkpoint requires its current invocation'));
   const scope = parseSlopScope(scopeInput);
   const previous = pointer(root);
   let parent: Checkpoint['parent'] = null;
@@ -198,7 +204,8 @@ export async function captureSlopCheckpoint(root: string, scopeInput: unknown, w
     resolved: parent ? artifact<Review>(root, parent.review).decisions.filter(d => d.status === 'confirmed').map(d => ({ id: d.id, reason: '', viewIds: [] })) : [] } };
 }
 
-export function publishSlopReview(root: string, input: unknown, writer: ProjectWriteAdapter): Receipt {
+export function publishSlopReview(root: string, input: unknown, writer: ProjectWriteAdapter, invocation?: ProjectRunInvocation): Receipt {
+  if (input && typeof input === 'object' && Reflect.get(input, 'schema') === 'slop-review-v2') return publishMeasuredSlopReview(root, input, writer, invocation ?? fail('measured review requires its current invocation'));
   const latest = pointer(root) ?? fail('run slop checkpoint first');
   const checkpoint = artifact<Checkpoint>(root, latest.checkpoint);
   current(root, checkpoint);
@@ -224,6 +231,10 @@ function sameViewportPixels(root: string, native: Receipt, final: Receipt): bool
   return true;
 }
 export function checkSlopReview(root: string, expectedViews: readonly ExpectedView[] = []) {
+  if (hasMeasuredSlopReview(root)) {
+    if (expectedViews.length) fail('measured slop must join immutable packet receipts, not legacy view labels');
+    return checkMeasuredSlopReview(root);
+  }
   const latest = pointer(root) ?? fail('missing loop: run slop checkpoint, inspect renders, then slop review-set');
   if (!latest.review) fail('current checkpoint has no rendered review');
   const checkpoint = artifact<Checkpoint>(root, latest.checkpoint);
@@ -261,6 +272,11 @@ export function checkSlopReview(root: string, expectedViews: readonly ExpectedVi
 
 /** The already validated final graph supplies the production target, not a caller's narrower scope. */
 export function checkSlopFinalGraph(root: string, graph: unknown) {
+  if (graph && typeof graph === 'object' && Reflect.get(graph, 'measuredTerminal') !== undefined) {
+    const terminal = Reflect.get(graph, 'measuredTerminal') as import('../evidence/final-v2-measured-contract.ts').MeasuredTerminal;
+    const measurements = [...new Map([...terminal.measurements, ...terminal.process?.surface?.measurements ?? []].map(r => [r.sha256, r])).values()];
+    return checkMeasuredSlopReview(root, { measurements, slop: terminal.slop });
+  }
   const value = graph as { schema?: string; productionSchema?: string; observations?: Receipt[] };
   const expected: ExpectedView[] = [];
   type FinalView = { testedUrl: string; testedState: string; viewport: { width: number; height: number }; observableResult: { capture: Receipt } };

@@ -49,9 +49,10 @@ test('no-context routes retain canonical bytes without injecting locale context'
   // Re-snapshotted when `moodboard` joined the optional stages: every route now selects it or
   // records a skip reason, so each canonical record gained one skip entry.
   // Re-snapshotted when discovery routes gained the explicit dual-reference-research gate.
+  // Re-snapshotted when the source contract gained the explicit learning-scope projection.
   for (const [name, expectedHash, expectedBytes] of [
-    ['copy-only', 'd42ebf8debddf7528f9b0561473bea976ac12e60c8d8883cb9430e01ae303329', 16346],
-    ['synth-marketing', 'a3b8b62308c25b377a7e3512a20eda1f250192af3c2f8bbc5b5517c7608ce813', 16974],
+    ['copy-only', '4dc3c831da31cdbb15af56c3180bb77a87fd2c8e1bd55d70e6cc0ef0ee4ad9af', 16438],
+    ['synth-marketing', '8ace9df3da5a5f67beb3809bab7cfdeaf628dee2c2ff071b00dac172704040ec', 17054],
   ] as const) {
     const bytes = `${canonicalRouteJson(routeAdaptiveFlow(fixture(name)))}\n`;
     assert.equal(Buffer.byteLength(bytes), expectedBytes);

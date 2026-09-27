@@ -11,6 +11,7 @@ import { stageArtifactProblems } from '../stage/output.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import { confidenceDebt, DEBT_CAPABLE_STAGES, mergeConfidenceDebt, recordConfidenceDebt, type ConfidenceDebt } from './confidence-debt.ts';
 import { compositionEntry } from './minimal-composition.ts';
+import { directionCommitmentBlocker } from './candidate-choice.ts';
 
 export type ProductionReadiness = Readonly<{
   schema: 'production-readiness-v1'; ok: boolean; blockers: readonly string[]; confidenceDebt: readonly ConfidenceDebt[];
@@ -27,6 +28,8 @@ export function checkProductionReadiness(root: string, invocation: ProjectRunInv
   attempt('route', () => {
     const route = readPersistedRoute(root, invocation);
     sourceContractSha256 = route.sourceContractSha256;
+    const pendingDirection = directionCommitmentBlocker(root);
+    if (pendingDirection) blockers.push(pendingDirection);
     if (route.deliveryMode === 'design-only' || !route.strategy.stages.includes('production')) {
       blockers.push('production is not selected; finish the design handoff without application writes');
     }

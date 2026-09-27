@@ -6,6 +6,8 @@ import { hasAssemblyPayload } from './board-sanitization.ts';
 import { referenceMeasuredInvariants } from './measurement-coverage.ts';
 import { refIdentity } from './identity.ts';
 import { designDiscoveryProvider } from './design-discovery-sources.ts';
+import type { BrowseReference } from './browse/contract.ts';
+import { verifyBrowseRetention } from './browse/retention.ts';
 
 /** Backfills invariants written before typography/motion/interaction measurement existed. */
 function withInvariantDefaults(invariants: Invariants | null | undefined): Invariants | null {
@@ -52,8 +54,10 @@ function slugFor(ref: Pick<Reference, 'source' | 'component'>): string {
   return `${hostPart(ref.source)}.${ref.component}.${refIdentity(ref.source, ref.component)}`;
 }
 
-export function saveRef(cwd: string, ref: Reference, adapter: ProjectWriteAdapter): string {
-  if (ref.researchLane === 'design' && existsSync(join(cwd, '.omd/route.json'))) {
+export function saveRef(cwd: string, ref: BrowseReference, adapter: ProjectWriteAdapter): string {
+  requireProjectWriteAdapter(cwd, adapter);
+  if (ref.browse) verifyBrowseRetention(cwd, ref);
+  if (!ref.browse && ref.researchLane === 'design' && existsSync(join(cwd, '.omd/route.json'))) {
     try {
       if (designDiscoveryProvider(ref.source) !== null
         && (ref.kind !== 'image' || !ref.selector || !ref.imagePath)) {
@@ -99,7 +103,7 @@ export function assertReferenceLaneSeparation(cwd: string, ref: Pick<Reference, 
   }
 }
 
-function isReference(value: unknown): value is Partial<Reference> & Pick<Reference, 'source' | 'component'> {
+function isReference(value: unknown): value is Partial<BrowseReference> & Pick<Reference, 'source' | 'component'> {
   return (
     typeof value === 'object'
     && value !== null
@@ -108,7 +112,7 @@ function isReference(value: unknown): value is Partial<Reference> & Pick<Referen
   );
 }
 
-export function loadRefs(cwd: string, options: { includeDomain?: boolean } = {}): Reference[] {
+export function loadRefs(cwd: string, options: { includeDomain?: boolean } = {}): BrowseReference[] {
   const dir = refsDir(cwd);
   let files: string[];
   try {
@@ -123,7 +127,7 @@ export function loadRefs(cwd: string, options: { includeDomain?: boolean } = {})
     return [];
   }
 
-  const refs: Reference[] = [];
+  const refs: BrowseReference[] = [];
   for (const file of files.sort()) {
     try {
       const parsed: unknown = JSON.parse(readFileSync(join(dir, file), 'utf8'));
@@ -132,6 +136,11 @@ export function loadRefs(cwd: string, options: { includeDomain?: boolean } = {})
         refs.push({
           ...(parsed.researchLane !== undefined ? { researchLane: researchLane(parsed.researchLane) } : {}),
           ...(parsed.acquisition !== undefined ? { acquisition: parsed.acquisition } : {}),
+          ...(parsed.browse !== undefined ? { browse: parsed.browse } : {}),
+          ...(parsed.referenceUnit !== undefined ? { referenceUnit: parsed.referenceUnit } : {}),
+          ...(parsed.sourceApp !== undefined ? { sourceApp: parsed.sourceApp } : {}),
+          ...(parsed.sourceUrl !== undefined ? { sourceUrl: parsed.sourceUrl } : {}),
+          ...(parsed.zoomDetails !== undefined ? { zoomDetails: parsed.zoomDetails } : {}),
           ...(parsed.visibleKoreanText === true ? { visibleKoreanText: true as const } : {}),
           source: parsed.source,
           component: parsed.component,

@@ -11,11 +11,11 @@ export const CONSUMED_CONTRACT_SECTIONS: Readonly<Record<string, Readonly<Record
     'art-direction': ['Decision graph', 'L4 independent deliberation', 'Visual observation', 'Assembly coverage', 'Comparative evaluation'],
   },
   'protocol/reference-assembly.md': {
-    acquisition: ['Stage contract', 'Reference roles', 'Automatic discovery without supplied URLs', 'Capture granularity', 'Browser boundary'],
-    scout: ['Stage contract', 'Reference roles', 'Automatic discovery without supplied URLs', 'Capture granularity', 'Capturing an existing state or open disclosure', 'Subject anchor', 'Browser boundary'],
-    'reference-board': ['Stage contract', 'Reference roles', 'Capture granularity', 'Subject anchor', 'Chat-first presentation and selection', 'Browser boundary'],
-    moodboard: ['Stage contract', 'Reference roles', 'Subject anchor', 'Chat-first presentation and selection'],
-    'reference-selection': ['Stage contract', 'Reference roles', 'Chat-first presentation and selection', 'Executable, acyclic composition handoff'],
+    acquisition: ['Recorded whole-screen browsing', 'Stage contract', 'Reference roles', 'Automatic discovery without supplied URLs', 'Capture granularity', 'Browser boundary'],
+    scout: ['Recorded whole-screen browsing', 'Stage contract', 'Reference roles', 'Automatic discovery without supplied URLs', 'Capture granularity', 'Capturing an existing state or open disclosure', 'Subject anchor', 'Browser boundary'],
+    'reference-board': ['Recorded whole-screen browsing', 'Stage contract', 'Reference roles', 'Capture granularity', 'Subject anchor', 'Chat-first presentation and selection', 'Browser boundary'],
+    moodboard: ['Recorded whole-screen browsing', 'Stage contract', 'Reference roles', 'Subject anchor', 'Chat-first presentation and selection'],
+    'reference-selection': ['Recorded whole-screen browsing', 'Stage contract', 'Reference roles', 'Chat-first presentation and selection', 'Executable, acyclic composition handoff'],
   },
 };
 export function consumedContractText(text: string, contract: string, stage: string): string {

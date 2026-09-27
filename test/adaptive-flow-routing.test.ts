@@ -419,13 +419,14 @@ test('every graph edge accepts dependency order and rejects its inversion', () =
       }
       const valid = structuredClone(base);
       Reflect.set(valid, 'stages', ordered);
-      assert.doesNotThrow(() => validateAdaptiveStageOrder(valid), `${dependency} -> ${stage}`);
+      // ADAPTIVE_STAGE_GRAPH is the new process graph; legacy fixtures above still replay the legacy branch.
+      assert.doesNotThrow(() => validateAdaptiveStageOrder(valid, undefined, true), `${dependency} -> ${stage}`);
       const invertedOrder = ordered.filter((item) => item !== stage && item !== dependency);
       const dependencyIndex = ordered.indexOf(dependency);
       invertedOrder.splice(dependencyIndex, 0, stage, dependency);
       const inverted = structuredClone(base);
       Reflect.set(inverted, 'stages', invertedOrder);
-      routeError(() => validateAdaptiveStageOrder(inverted), 'ADAPTIVE_STAGE_ORDER_INVALID');
+      routeError(() => validateAdaptiveStageOrder(inverted, undefined, true), 'ADAPTIVE_STAGE_ORDER_INVALID');
     }
   }
 });
@@ -436,7 +437,7 @@ test('every required graph edge rejects its missing prerequisite', () => {
     for (const prerequisite of ADAPTIVE_STAGE_GRAPH[stage].prerequisites) {
       const missing = structuredClone(base);
       Reflect.set(missing, 'stages', [stage]);
-      routeError(() => validateAdaptiveStageOrder(missing), 'ADAPTIVE_STAGE_ORDER_INVALID');
+      routeError(() => validateAdaptiveStageOrder(missing, undefined, true), 'ADAPTIVE_STAGE_ORDER_INVALID');
       assert.notEqual(prerequisite, stage);
     }
   }

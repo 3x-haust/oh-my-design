@@ -75,6 +75,11 @@ export function adaptiveSourceContract(
   return Object.freeze({
     learningScope,
     schema: ADAPTIVE_SOURCE_CONTRACT_SCHEMA,
+    ...(input.processPolicy === undefined ? {} : { processPolicy: input.processPolicy }),
+    ...(input.reviewPurpose === undefined ? {} : {
+      reviewPurpose: input.reviewPurpose,
+      reviewPurposeAuthority: input.reviewPurposeAuthority ?? null,
+    }),
     ...(input.deliveryMode === undefined ? {} : { deliveryMode: input.deliveryMode }),
     request: input.request,
     projectMode: input.projectMode,
@@ -96,6 +101,11 @@ export function adaptiveSourceContract(
 export function sourceContractRouteInput(source: AdaptiveSourceContract): AdaptiveRouteInput {
   return Object.freeze({
     schema: ADAPTIVE_ROUTE_INPUT_SCHEMA,
+    ...(source.processPolicy === undefined ? {} : { processPolicy: source.processPolicy }),
+    ...(source.reviewPurpose === undefined ? {} : {
+      reviewPurpose: source.reviewPurpose,
+      reviewPurposeAuthority: source.reviewPurposeAuthority ?? null,
+    }),
     ...(source.deliveryMode === undefined ? {} : { deliveryMode: source.deliveryMode }),
     request: source.request,
     projectMode: source.projectMode,

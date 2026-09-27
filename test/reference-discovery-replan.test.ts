@@ -3,7 +3,8 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { buildReferenceDiscoveryPlan, type ReferenceDiscoveryPlan } from '../core/ref/discovery-plan.ts';
-import { referenceDiscoveryWork } from '../core/ref/discovery-work.ts';
+// Explicit legacy catalogue recovery remains supported; recorded browsing owns the default bounded loop.
+import { legacyReferenceDiscoveryWork as referenceDiscoveryWork } from '../core/ref/discovery-work.ts';
 import { isMarketQualifiedQuery } from '../core/ref/market-reference.ts';
 import { routeAdaptiveFlow } from '../core/route/index.ts';
 import { fixture, routeInput, unavailableEntry, unavailableSearch } from './helpers/discovery-work.ts';

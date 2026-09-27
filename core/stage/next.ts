@@ -13,10 +13,38 @@ import { isNativePiInvocation } from '../runtime/native-pi-run.ts';
 import { nativeCompletionWork } from './native-completion.ts';
 import { canDeferMissingCopy, confidenceDebt, DEBT_CAPABLE_STAGES, readConfidenceDebt, recordConfidenceDebt } from '../brief/confidence-debt.ts';
 import { evidenceBudget } from './evidence-budget.ts';
+import { candidateDirectionState, directionPresentation } from '../brief/candidate-choice.ts';
+import { refinementEscalation } from './refinement-work.ts';
 
 /** Fresh and interrupted runs use the same current-disk work pointer. No artifacts are fabricated. */
 export function nextStageWork(root: string, packRoot: string, invocation: ProjectRunInvocation) {
   const route = readPersistedRoute(root, invocation);
+  const escalation = route.sourceContract.processPolicy ? refinementEscalation(root, route.sourceContractSha256) : null;
+  if (escalation) {
+    const { defects, ...pending } = escalation;
+    return {
+    schema: 'stage-next-v2', meaning: 'next-work-not-completion', deliveryMode: route.deliveryMode ?? 'implementation',
+    action: 'await-user', stage: 'production', owner: 'coordinator', reason: 'repeated-defect',
+    pending, escalationEvidence: defects, resumeAuthority: null,
+    confidenceDebt: readConfidenceDebt(root, route.sourceContractSha256), deferredStages: [] as string[],
+    progress: { routeSha256: adaptiveRouteRecordSha256(route), workSha256: null, validatedStages: [] as string[] },
+    problems: [], entryBlockers: [], planning: [], schemas: [], contracts: [], judgedBy: [], referenceWork: null,
+    next: null, instruction: 'Stop automatic repairs and completion retries. Preserve the actual three fixes/results and wait for renewed human authority; budget cannot waive a required defect.',
+    };
+  }
+  const direction = route.sourceContract.processPolicy ? candidateDirectionState(root) : null;
+  if (direction?.pending) return {
+    schema: 'stage-next-v2', meaning: 'next-work-not-completion', deliveryMode: route.deliveryMode ?? 'implementation',
+    action: 'await-user', stage: 'candidate-generation', owner: 'coordinator',
+    reason: direction.selectionStatus === 'stale' ? 'stale-direction' : 'direction-choice',
+    pending: direction.pending, resumeAuthority: null, selectionStatus: direction.selectionStatus,
+    presentation: directionPresentation(root, direction.pending),
+    confidenceDebt: readConfidenceDebt(root, route.sourceContractSha256), deferredStages: [] as string[],
+    progress: { routeSha256: adaptiveRouteRecordSha256(route), workSha256: null, validatedStages: [] as string[] },
+    problems: [], entryBlockers: [], planning: [], schemas: [], contracts: [], judgedBy: [], referenceWork: null,
+    next: 'omd candidate select --input <selection-input.json> --json',
+    instruction: 'Present all actual previews and tradeoffs once, then wait for actual user input. No acquisition, repair or completion retry may cross this pause. Representative source repair and inspection remain available.',
+  };
   const state = resolveRunState(root, packRoot, invocation);
   const planning: Array<{ field: string; text: string }> = [];
   if (state.stages.some(s => s.stage === 'domain' && s.present) && !stageArtifactProblems(root, 'domain', invocation).length) {
@@ -32,6 +60,8 @@ export function nextStageWork(root: string, packRoot: string, invocation: Projec
   }
   const outputs = state.stages.map(s => ({ ...s, problems: stageArtifactProblems(root, s.stage, invocation),
     entry: checkBriefEntry(root, s.stage, packRoot, invocation) }));
+  const browseStop = route.sourceContract.reviewPurpose !== undefined && route.references.decision === 'discover'
+    ? referenceDiscoveryWork(root, route) : null;
   let incomplete: typeof outputs[number] | undefined;
   const deferredStages: string[] = [];
   for (const output of outputs) {
@@ -39,6 +69,12 @@ export function nextStageWork(root: string, packRoot: string, invocation: Projec
     const debtCapable = DEBT_CAPABLE_STAGES.has(output.stage)
       || (output.stage === 'copy' && !output.present && canDeferMissingCopy(route));
     if (!debtCapable || planning.length > 0) { incomplete = output; break; }
+    if (browseStop?.status === 'stopped-with-debt' && !output.present
+      && ['acquisition', 'scout', 'reference-board', 'reference-selection', 'moodboard'].includes(output.stage)) {
+      recordConfidenceDebt(root, route.sourceContractSha256,
+        [confidenceDebt(output.stage, `${browseStop.instruction} ${output.problems.join('; ')}`, 'evidence-gap')], invocation);
+      deferredStages.push(output.stage); continue;
+    }
     const budget = evidenceBudget(root, route.sourceContractSha256, output.stage, invocation);
     if (!budget.exhausted) { incomplete = output; break; }
     recordConfidenceDebt(root, route.sourceContractSha256,
@@ -55,7 +91,12 @@ export function nextStageWork(root: string, packRoot: string, invocation: Projec
   const entry = stage === null ? null : checkBriefEntry(root, stage, packRoot, invocation);
   let interpretation = !deferredStages.includes('reference-board') && route.strategy.stages.includes('reference-board')
     && (stage === null || ['art-direction', 'composition', 'candidate-generation'].includes(stage))
-    ? referenceInterpretationWork(root) : null;
+    ? referenceInterpretationWork(root, route.sourceContract.reviewPurpose === undefined ? undefined
+      : { sourceContractSha256: route.sourceContractSha256, request: route.request }) : null;
+  if (interpretation && !planningBlocksProduction && browseStop?.status === 'stopped-with-debt') {
+    recordConfidenceDebt(root, route.sourceContractSha256, [confidenceDebt('reference-interpretation', browseStop.instruction)], invocation);
+    interpretation = null; deferredStages.push('reference-interpretation');
+  }
   if (interpretation && !planningBlocksProduction) {
     const budget = evidenceBudget(root, route.sourceContractSha256, 'reference-interpretation', invocation);
     if (budget.exhausted) {
@@ -67,7 +108,8 @@ export function nextStageWork(root: string, packRoot: string, invocation: Projec
   }
   const research = stage === 'reference-board' && entry?.blockers.length === 0 && route.references.decision === 'discover'
     ? referenceResearchWork(root, { expectedSourceContractSha256: route.sourceContractSha256,
-      benchmarkRequired: route.gates.includes('greenfield-task-flow-benchmark'), expectedRequest: route.request }) : null;
+      benchmarkRequired: route.gates.includes('greenfield-task-flow-benchmark'), expectedRequest: route.request,
+      wholeScreen: route.sourceContract.reviewPurpose !== undefined }) : null;
   const missingReferenceBoard = stage === 'reference-board' && incomplete?.present === false
     && entry?.blockers.length === 0 && route.references.decision === 'discover';
   const discoveryWork = missingReferenceBoard ? referenceDiscoveryWork(root, route) : null;
@@ -75,7 +117,8 @@ export function nextStageWork(root: string, packRoot: string, invocation: Projec
     && isNativePiInvocation(invocation) ? nativeCompletionWork(root, invocation) : null;
   const nativeBrief = native?.stage ? checkBriefEntry(root, native.stage, packRoot, invocation) : null;
   return {
-    schema: 'stage-next-v1', meaning: 'next-work-not-completion', deliveryMode: route.deliveryMode ?? 'implementation',
+    schema: route.sourceContract.processPolicy ? 'stage-next-v2' : 'stage-next-v1', meaning: 'next-work-not-completion', deliveryMode: route.deliveryMode ?? 'implementation',
+    selectionStatus: direction?.selectionStatus ?? 'skipped',
     stage, owner: brief?.owner ?? null,
     confidenceDebt: readConfidenceDebt(root, route.sourceContractSha256), deferredStages,
     progress: { routeSha256: adaptiveRouteRecordSha256(route), workSha256: discoveryWork?.workSha256 ?? null, validatedStages: outputs

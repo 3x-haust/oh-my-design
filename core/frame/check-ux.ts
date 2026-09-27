@@ -1,5 +1,6 @@
 import { parse } from 'yaml';
 import type { Frame, Violation } from '../types.ts';
+import { validateFrameProcessPlans } from './process-plan.ts';
 import { readFrame } from './index.ts';
 
 export type UxSurface = 'marketing' | 'product' | 'editorial' | 'mixed';
@@ -136,6 +137,8 @@ export function validateFrameUxBytes(bytes: Uint8Array): Violation[] {
 function validateFrameUx(frame: Frame): Violation[] {
 
   const missing: string[] = [];
+  try { validateFrameProcessPlans(frame, frame.body); }
+  catch (error) { missing.push(`process plans: ${error instanceof Error ? error.message : String(error)}`); }
 
   if (!isNonEmptyString(frame.uxTask)) missing.push('uxTask (--task)');
   if (!isNonEmptyString(frame.uxFrequentAction)) {

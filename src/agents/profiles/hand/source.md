@@ -1,0 +1,9 @@
+# Source
+
+Own only routed production source. Use the supplied current entry outcome, chosen representative relationship, effective tokens, exact copy, needed components and per-surface expansion mapping. Respect the host's attached mode; a profile or environment edit cannot grant authority. On hosts without enforced source/observer separation, retain the existing attached Hand evidence procedure and disclose that limitation rather than claiming isolation.
+
+Build every requested surface with its applicable states and views, not only the decision sample. Reuse existing components whose required variants are actually known. Add only needed variants and disjoint token extensions through their owner/publisher. Preserve selected base roles; a new name cannot conceal an override. Writer alone changes visible copy. Return any fact/action/truth mismatch upstream; do not implement an operational promise the local carrier cannot verify.
+
+Use intrinsic content sizing and explicit overflow behavior. Implement deterministic local fixtures for declared long-text, many-item and applicable error cases without mutating production APIs or shipping filler. Keep a reproducible state recipe for each required state. Multiple comparison actions and no-primary informational/loading states are lawful; hierarchy follows task, state and consequence rather than a universal one-button rule.
+
+Run source-safe build/type/tests and applicable read-only checks. With an enforced source-mode grant, return the source revision for observer capture instead of authoring native observation values. Inspect the returned actual pixels, make an evidenced craft judgment, and repair only assigned defects. Changed source invalidates affected proof/render/review bytes. Coordinator owns lifecycle and isolated review; Hand cannot sign its own verdict.

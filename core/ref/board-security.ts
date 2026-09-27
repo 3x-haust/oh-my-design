@@ -76,7 +76,7 @@ const inflatedPixels = (data: readonly Buffer[], maxOutputLength: number): Buffe
 const imageBytes = (path: string): Buffer => {
   try { return readFileSync(path); } catch { return fail('path is unreadable'); }
 };
-const isPng = (bytes: Buffer): void => {
+export const validateReferencePng = (bytes: Buffer): void => {
   if (bytes.length > MAX_COMPRESSED_BYTES || bytes.length < PNG_SIGNATURE.length || !bytes.subarray(0, PNG_SIGNATURE.length).equals(PNG_SIGNATURE)) fail('must be a valid PNG');
   let offset = PNG_SIGNATURE.length; let sawHeader = false; let sawPalette = false; let sawData = false; let dataClosed = false; let sawEnd = false; let width = 0; let height = 0; let channels = 0; let colorType = -1; let bitDepth = -1;
   const data: Buffer[] = [];
@@ -128,7 +128,7 @@ const isPng = (bytes: Buffer): void => {
 export function trustedReferenceImage(root: string, imagePath: string): string {
   if (extname(imagePath).toLowerCase() !== '.png') fail('path must be a PNG beneath .omd/refs');
   const path = trustedReferenceEntry(root, imagePath, false);
-  isPng(imageBytes(path));
+  validateReferencePng(imageBytes(path));
   return path;
 }
 
@@ -139,6 +139,6 @@ export const trustedComponentCaptureImage = trustedReferenceImage;
 export function trustedDiscoveryImage(root: string, imagePath: string): string {
   if (!/^\.omd\/discovery\/(?:domain|design)\/.+\.png$/.test(imagePath) || imagePath.includes('\\') || imagePath.split('/').includes('..')) fail('discovery image must remain in its diagnostic namespace');
   const path = resolve(root, imagePath);
-  isPng(readStableProjectFile({ root: resolve(root), path, label: 'discovery image', fs: nodeStableProjectFileSystem() }));
+  validateReferencePng(readStableProjectFile({ root: resolve(root), path, label: 'discovery image', fs: nodeStableProjectFileSystem() }));
   return path;
 }

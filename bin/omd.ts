@@ -68,7 +68,7 @@ import { parseReferenceSelectionV2, projectRunInvocationSha256, readContainedReg
 import { referenceUsageV2Sha256, validateReferenceUsage } from '../core/ref/reference-usage.ts';
 import { canonicalJson, sha256 } from '../core/ref/board-artifacts.ts';
 import { commitAiAssetDecision } from '../core/asset-sourcing/ai-decision.ts';
-import { checkProductionReadiness } from '../core/runtime/production-reference-gate.ts';
+import { checkProductionReadiness } from '../core/brief/production-readiness.ts';
 import { readPersistedRoute } from '../core/route/index.ts';
 import { publishFirstRenderCheck } from '../core/design/first-render-evidence.ts';
 import { publishDesignJudgment, readDesignJudgment, DESIGN_JUDGMENT_PATH } from '../core/design/judgment-files.ts';
@@ -142,6 +142,9 @@ interface Opts {
   provider?: string;
   zones?: string;
   input?: string;
+  brief?: string;
+  role?: string;
+  mode?: string;
   sourceSha?: string;
   review?: string;
   mirror?: string;
@@ -210,6 +213,7 @@ interface Opts {
   reality?: string;
   entrySurface?: string;
   entry?: string;
+  scope?: string;
   /** Render desktop+mobile fixed and full-page proofs in one browser (`omd render <page> --proofs -o <prefix>`). */
   proofs?: boolean;
   /** Register override for `omd visual-richness --register quiet|confident|showpiece`. */
@@ -230,11 +234,12 @@ interface Opts {
   /** `omd status --files` — the storage view rather than the run view. */
   files?: boolean;
   selected?: boolean;
+  current?: boolean;
   gate?: boolean;
   publish?: boolean;
 }
 
-const FLAGS = new Set(['json', 'no-log', 'no-energy', 'no-shot', 'image', 'filmstrip', 'squint', 'full-page', 'from-user', 'all', 'blueprint', 'shot', 'proofs', 'fresh', 'check', 'refresh', 'recovery', 'review-check', 'apply', 'dry-run', 'cache', 'stale-records', 'files', 'selected', 'gate', 'publish']);
+const FLAGS = new Set(['current', 'json', 'no-log', 'no-energy', 'no-shot', 'image', 'filmstrip', 'squint', 'full-page', 'from-user', 'all', 'blueprint', 'shot', 'proofs', 'fresh', 'check', 'refresh', 'recovery', 'review-check', 'apply', 'dry-run', 'cache', 'stale-records', 'files', 'selected', 'gate', 'publish']);
 const ALIASES: Record<string, keyof Opts> = {
   o: 'out',
   'no-log': 'noLog',
@@ -610,7 +615,10 @@ async function cmdFlowProbe(opts: Opts): Promise<never> {
 }
 
 async function cmdConfig(sub: string | undefined, opts: Opts): Promise<never> {
-  const { readConfig, setCheckpoint } = await import('../core/config/index.ts');
+  const { readConfig, setCheckpoint, setDirectionPolicy } = await import('../core/config/index.ts');
+  if (sub === 'set' && opts._[0] === 'direction-policy' && opts._[1] && opts._.length === 2) {
+    console.log(setDirectionPolicy(process.cwd(), opts._[1], projectWriterFromActivation(opts, 'omd config set'))); process.exit(0);
+  }
   if (sub === 'show') {
     console.log(JSON.stringify(readConfig(process.cwd()), null, 2));
     process.exit(0);
@@ -905,6 +913,60 @@ function cmdCoach(): never {
     for (const o of report.overrules) console.log(`  ${o.rule}  x${o.count}`);
   }
 
+  process.exit(0);
+}
+
+async function cmdLearn(mode: string | undefined, opts: Opts): Promise<never> {
+  const learning = await import('../core/learning/index.ts');
+  if (mode === 'predict') {
+    if (!opts.input || opts._.length > 0) throw new Error('usage: omd learn predict --input <prediction.json> [--activation <host-issued-invocation.json>] [--json]');
+    const result = learning.recordLearningPrediction(process.cwd(), inputJson(opts.input, 'omd learn predict') as Parameters<typeof learning.recordLearningPrediction>[1], projectWriterFromActivation(opts, 'omd learn predict'));
+    if (opts.json) process.stdout.write(JSON.stringify(result)); else console.log(`prediction: ${result.proposition.id} — ${result.proposition.statement}`);
+    process.exit(0);
+  }
+  if (mode === 'observe') {
+    if (!opts.input || opts._.length > 0) throw new Error('usage: omd learn observe --input <observation.json> [--activation <host-issued-invocation.json>] [--json]');
+    const result = learning.recordLearningObservation(process.cwd(), inputJson(opts.input, 'omd learn observe') as Parameters<typeof learning.recordLearningObservation>[1], projectWriterFromActivation(opts, 'omd learn observe'));
+    if (opts.json) process.stdout.write(JSON.stringify(result)); else console.log(`observation: ${result.predictionId} ${result.outcome} (${result.runId})`);
+    process.exit(0);
+  }
+  if (mode === 'promote') {
+    if (opts.input || opts._.length > 0) throw new Error('usage: omd learn promote [--activation <host-issued-invocation.json>] [--json]');
+    const result = learning.promoteLearnings(process.cwd(), projectWriterFromActivation(opts, 'omd learn promote'));
+    if (opts.json) process.stdout.write(JSON.stringify(result));
+    else {
+      for (const item of result.results) console.log(`${item.proposition.id}: ${item.status}${item.blockers.length ? ` (${item.blockers.join(', ')})` : ''}`);
+      console.log(`calibration: ${result.calibration.hits}/${result.calibration.observations} predicted outcomes matched${result.calibration.hitRate === null ? '' : ` (${(result.calibration.hitRate * 100).toFixed(1)}%)`}`);
+      console.log(`index: ${result.index.location}${result.index.path ? ` — ${result.index.path}` : ''}`);
+    }
+    process.exit(0);
+  }
+  if (mode === 'rules') {
+    if (typeof opts.surface !== 'string' || opts.input || opts._.length > 0) throw new Error('usage: omd learn rules --surface <kind> [--route <path>] --json');
+    const rules = learning.applicableLearnedRules({ surface: opts.surface, ...(opts.route === undefined ? {} : { route: opts.route }) });
+    if (opts.json) process.stdout.write(JSON.stringify(rules)); else for (const rule of rules) console.log(`${rule.id}: ${rule.statement}`);
+    process.exit(0);
+  }
+  throw new Error('usage: omd learn predict|observe --input <json> | promote | rules --surface <kind> [--json]');
+}
+
+async function cmdHost(mode: string | undefined, opts: Opts): Promise<never> {
+  if (mode !== 'capabilities' || opts._.length > 0) throw new Error('usage: omd host capabilities [--activation <host-issued-invocation.json>] --json');
+  const invocation = invocationFromActivation(opts, 'omd host capabilities');
+  const { hostCapabilityMatrix } = await import('../core/host-capability.ts');
+  const host = invocation.activation.hostCapability.host;
+  const matrix = hostCapabilityMatrix({ host, ...(host === 'pi' ? { piHooksPresent: nativePiInvocation !== undefined } : {}),
+    ...(host === 'claude' ? { claudeDisallowedTools: true } : {}), ...(host === 'codex' ? { codexRestrictions: 'prose-only' as const } : {}) });
+  if (opts.json) process.stdout.write(JSON.stringify(matrix));
+  else for (const [name, value] of Object.entries(matrix.guarantees)) console.log(`${name}: ${value.enforced ? 'enforced' : 'not enforced'} — ${value.mechanism}`);
+  process.exit(0);
+}
+
+async function cmdMigration(mode: string | undefined, opts: Opts): Promise<never> {
+  if (mode !== 'verify-final-v1' || opts._.length > 0) throw new Error('usage: omd migration verify-final-v1 [--json]');
+  const { verifyLegacyFinalEvidenceV1 } = await import('../core/migration/verify-final-v1.ts');
+  const evidence = verifyLegacyFinalEvidenceV1(process.cwd());
+  if (opts.json) process.stdout.write(JSON.stringify(evidence)); else console.log('ok — legacy v1 final evidence matches current source seal, build target, and artifacts');
   process.exit(0);
 }
 
@@ -2430,6 +2492,16 @@ async function cmdRecipe(mode: string | undefined, opts: Opts): Promise<never> {
 }
 
 
+async function cmdRefBrowse(argv: readonly string[]): Promise<never> {
+  const { runBrowseCli } = await import('../core/ref/browse/cli.ts');
+  const { result, exitCode } = await runBrowseCli(argv, process.cwd(), (activation, command) =>
+    invocationFromActivation({ _: [], ...(activation === null ? {} : { activation }) }, command));
+  await new Promise<void>((done, reject) => {
+    process.stdout.write(`${JSON.stringify(result)}\n`, error => error ? reject(error) : done());
+  });
+  process.exit(exitCode);
+}
+
 async function cmdRefDiscoveryPlan(opts: Opts): Promise<never> {
   if (opts._.length !== 0) throw new Error('usage: omd ref discover-plan [--json] [--activation <host-issued-invocation.json>]');
   const { readPersistedRoute } = await import('../core/route/index.ts');
@@ -2946,6 +3018,12 @@ async function documentMarkupFacts(target: string, viewport: { width: number; he
 
 /** Validates the token commitment and, given a page, that the build landed on its ladders. */
 async function cmdTokens(mode: string | undefined, opts: Opts): Promise<never> {
+  if (mode === 'extend') {
+    if (!opts.input || opts._.length) throw new Error('usage: omd tokens extend --input <token-extensions.json> --json');
+    const { extendSelectedTokens } = await import('../core/tokens/resolve.ts');
+    const invocation = invocationFromActivation(opts, 'omd tokens extend');
+    console.log(JSON.stringify(extendSelectedTokens(process.cwd(), inputJson(opts.input, 'omd tokens extend'), projectWriter(invocation), invocation))); process.exit(0);
+  }
   if (mode !== 'check') throw new Error('usage: omd tokens check [--input <tokens.json>] [--page <page>] [--viewport WxH] [--json]');
   const { validateTokenCommit, checkTokenDrift } = await import('../core/tokens/contract.ts');
   const file = opts.input ?? join(process.cwd(), '.omd', 'tokens.json');
@@ -2959,6 +3037,11 @@ async function cmdTokens(mode: string | undefined, opts: Opts): Promise<never> {
     process.exit(1);
   }
 
+  let resolvedTokens;
+  if (commit.schema === 'token-commit-v3' && !opts.input && existsSync(join(process.cwd(), CANDIDATE_SELECTION_POINTER_PATH))) {
+    const { resolveSelectedTokens } = await import('../core/tokens/resolve.ts');
+    resolvedTokens = resolveSelectedTokens(process.cwd()); commit = resolvedTokens.effective;
+  }
   let drift = null;
   if (opts.page) {
     const { parseViewport, extractIr } = await import('../core/render/index.ts');
@@ -2970,6 +3053,9 @@ async function cmdTokens(mode: string | undefined, opts: Opts): Promise<never> {
     drift = checkTokenDrift(commit, { typeScale: invariants.typeScale, spacingScale: invariants.spacingLadder }, viewport.width);
   }
 
+  if (commit.schema === 'token-commit-v3') {
+    console.log(JSON.stringify({ ok: drift === null, commit, selectionStatus: resolvedTokens ? 'current' : 'provisional', ...(resolvedTokens ? { baseTokensSha256: resolvedTokens.baseTokensSha256, effectiveTokensSha256: resolvedTokens.effectiveTokensSha256, driftExpectations: resolvedTokens.driftExpectations } : {}), findings: drift ? [drift] : [] })); process.exit(drift ? 1 : 0);
+  }
   if (opts.json) process.stdout.write(JSON.stringify({ ok: drift === null, commit, findings: drift ? [drift] : [] }));
   else if (drift) console.error(`[error] ${drift.id}: ${drift.message}`);
   else console.log(`ok — tokens committed (${commit.typeScale.length} type rungs, ${commit.spacingScale.length} spacing rungs, accent ${commit.colorRoles.accent})${opts.page ? ' and the build lands on them' : ''}`);
@@ -3333,7 +3419,7 @@ async function cmdStage(mode: string | undefined, opts: Opts): Promise<never> {
     if (contract === undefined || stage === undefined || opts._.length > 0) {
       throw new Error('usage: omd stage deliver --stage <stage> --contract <pack-relative.md> [--json]');
     }
-    const receipt = deliveryReceipt(stageDefinition(stage).id, contract, contractSha256(packRoot, contract), new Date().toISOString());
+    const receipt = deliveryReceipt(stageDefinition(stage).id, contract, contractSha256(packRoot, contract, stageDefinition(stage).id), new Date().toISOString());
     const adapter = projectWriterFromActivation(opts, 'omd stage deliver');
     adapter.write(DELIVERY_LOG, serializeDeliveryLog([...readDeliveryReceipts(projectRoot), receipt]));
     if (opts.json) process.stdout.write(JSON.stringify(receipt));
@@ -3431,11 +3517,59 @@ async function cmdCue(opts: Opts): Promise<never> {
   process.exit(0);
 }
 
-function cmdCandidate(mode: string | undefined, opts: Opts): never {
+async function cmdCandidate(mode: string | undefined, opts: Opts): Promise<never> {
+  if (mode === 'help' || Object.hasOwn(opts, 'help') || Object.hasOwn(opts, 'h')) {
+    console.log('omd candidate content|plan|check|packet|select --input <json> --json\nomd candidate check --current --json\nomd candidate study-check --input <study.json> --brief <sketch-brief.json> --json\nSchemas: candidate-content, candidate-plan, candidate-set, candidate-selection-v2. Plan and packet are guarded publishers; content, check and study-check are read-only. Select records actual host user input or an explicitly authorized isolated Eye choice.'); process.exit(0);
+  }
+  if (mode === 'study-check') {
+    if (typeof opts.input !== 'string' || !opts.input || typeof opts.brief !== 'string' || !opts.brief || opts.current || opts._.length) {
+      throw new Error('usage: omd candidate study-check --input <study.json> --brief <sketch-brief.json> [--json]');
+    }
+    const { parseSketchBrief } = await import('../core/brief/candidate-study.ts');
+    const { checkRoleHandback } = await import('../core/brief/role.ts');
+    const sketch = parseSketchBrief(inputJson(opts.brief, 'omd candidate study-check --brief'));
+    const study = checkRoleHandback(process.cwd(), { role: 'omd-sketch', mode: sketch.mode, sketch },
+      inputJson(opts.input, 'omd candidate study-check'), invocationFromActivation(opts, 'omd candidate study-check'));
+    console.log(opts.json ? JSON.stringify({ ok: true, study }) : `ok - ${study.schema}: ${study.candidateId}`);
+    process.exit(0);
+  }
+  const { publishCandidatePlan, checkCandidateSet, parseCandidateContent, candidateContentProjection, checkCandidatePlan } = await import('../core/brief/candidate-plan.ts');
+  const { publishCandidatePacket, publishCandidateSelection, candidateDirectionState, directionRoute, readCurrentCandidateSelection } = await import('../core/brief/candidate-choice.ts');
+  if (opts._.length) throw new Error('candidate commands do not accept positional arguments');
+  if (mode === 'check' && opts.current && !opts.input) {
+    const state = candidateDirectionState(process.cwd());
+    if (state.selectionStatus === 'current') readCurrentCandidateSelection(process.cwd());
+    console.log(JSON.stringify(state)); process.exit(state.selectionStatus === 'current' ? 0 : 1);
+  }
+  const value = opts.input ? inputJson(opts.input, `omd candidate ${mode}`) : undefined;
+  if (mode === 'content' && value !== undefined && !opts.current) {
+    const content = parseCandidateContent(value);
+    console.log(JSON.stringify({ ok: true, projectionSha256: candidateContentProjection(process.cwd(), content), contentIds: content.units.map(u => u.id) })); process.exit(0);
+  }
+  if (mode === 'check' && value !== undefined && !opts.current) {
+    const result = checkCandidateSet(process.cwd(), value, directionRoute(process.cwd()).sourceContractSha256);
+    console.log(JSON.stringify({ ok: true, inputDigest: result.inputDigest, candidateIds: result.set.candidates.map(c => c.id) })); process.exit(0);
+  }
+  if (['plan', 'packet'].includes(mode ?? '') || mode === 'select' && isRecord(value) && value.schema === 'candidate-selection-input-v2') {
+    if (value === undefined || opts.current) throw new Error('usage: omd candidate plan|packet|select --input <json> --json');
+    const invocation = invocationFromActivation(opts, `omd candidate ${mode}`), writer = projectWriter(invocation);
+    const result = mode === 'plan' ? publishCandidatePlan(process.cwd(), value, writer, invocation)
+      : mode === 'packet' ? publishCandidatePacket(process.cwd(), value, writer, invocation)
+      : publishCandidateSelection(process.cwd(), value, writer, invocation);
+    if (mode === 'plan') {
+      const { selectedBaseTokens } = await import('../core/tokens/minimal.ts');
+      const { digest } = await import('../core/brief/candidate-data.ts');
+      const checked = checkCandidatePlan(process.cwd(), value, directionRoute(process.cwd()).sourceContractSha256);
+      console.log(JSON.stringify({ plan: result, candidateTokens: checked.plan.candidates.map(c => ({ id: c.id, effectiveTokensSha256: digest(selectedBaseTokens(checked.seed, c.primitiveOverrides)) })) })); process.exit(0);
+    }
+    console.log(JSON.stringify(result)); process.exit(0);
+  }
   if (mode !== 'select' || !opts.input || opts._.length > 0) {
     throw new Error('usage: omd candidate select --input <candidate-selection-pointer.json> [--json]');
   }
   const pointer = validateCandidateSelectionPointer(inputJson(opts.input, 'omd candidate select'));
+  if (pointer.schema !== 'candidate-selection-pointer-v1') throw new Error('v2 selection uses candidate-selection-input-v2, never a caller-authored current pointer');
+  if (existsSync(join(process.cwd(), '.omd/route-source.json')) && directionRoute(process.cwd()).processPolicy) throw new Error('current process routes require authenticated candidate-selection-input-v2; v1 cannot bypass direction choice');
   resolveCandidateSelection(process.cwd(), pointer);
   const writer = projectWriterFromActivation(opts, 'omd candidate select');
   writer.mkdir('.omd/.cache/sketches');
@@ -3676,9 +3810,22 @@ async function cmdArtDirection(mode: string | undefined, opts: Opts): Promise<ne
   if (mode === 'check-input') {
     if (opts._.length > 0) throw new Error('usage: omd art-direction check-input [--input <alternatives.json>] [--route /] [--json]');
     const { inputSkeleton } = await import('../core/schema/inputs.ts');
+    const projectRoot = process.cwd();
+    if (existsSync(join(projectRoot, '.omd/route.json'))
+      && readPersistedRoute(projectRoot, invocationFromActivation(opts, 'omd art-direction check-input')).sourceContract.processPolicy) {
+      if (opts.input !== undefined || opts.route !== undefined) throw new Error('ART_DIRECTION_SELECTED_INPUT: current-process settlement uses the authenticated candidate choice, not alternatives or a route override');
+      const { selectedArtDirectionInput } = await import('../core/art-direction/selected.ts');
+      const selected = selectedArtDirectionInput(projectRoot);
+      const skeleton = inputSkeleton('art-direction-input-v3').skeleton as Record<string, unknown>;
+      console.log(JSON.stringify({ ...skeleton, candidateSelection: selected.candidateSelection, selectedId: selected.selectedId,
+        relationship: selected.hypothesis.relationship,
+        staticContract: { hierarchy: selected.hypothesis.layoutStrategy, density: selected.hypothesis.densityStrategy,
+          typography: selected.hypothesis.typographyStrategy, preserve: [selected.hypothesis.relationship], falsifiers: [selected.hypothesis.falsifier] },
+      }, null, opts.json ? 0 : 2));
+      process.exit(0);
+    }
     const { readReferenceBoardArtifacts } = await import('../core/ref/board-artifacts.ts');
     const { createEmptyIntentLedger } = await import('../core/runtime/intent.ts');
-    const projectRoot = process.cwd();
     const selection = validatePreReferenceSelectionV2(projectRoot);
     const candidate = readReferenceBoardArtifacts(projectRoot).raw.candidates.find((entry) => entry.id === selection.candidateId);
     if (candidate === undefined) throw new Error('ART_DIRECTION_REFERENCE_CANDIDATE_REQUIRED: current selected candidate is missing');
@@ -3723,6 +3870,13 @@ async function cmdArtDirection(mode: string | undefined, opts: Opts): Promise<ne
   }
   const command = 'omd art-direction check';
   const payload = inputJson(opts.input, command);
+  if (isRecord(payload) && payload.schema === 'art-direction-input-v3') {
+    const { publishSelectedArtDirection } = await import('../core/art-direction/selected.ts');
+    const invocation = invocationFromActivation(opts, command);
+    const pointer = publishSelectedArtDirection(process.cwd(), payload, projectWriter(invocation), invocation);
+    console.log(opts.json ? JSON.stringify(pointer) : '.omd/art-direction.json');
+    process.exit(0);
+  }
   if (!isRecord(payload)) throw new Error(`${command} input must contain evaluator assessment and result payloads`);
   const allowed = new Set<string>(ART_DIRECTION_CHECK_INPUT_KEYS);
   if (Object.keys(payload).some((key) => !allowed.has(key))) throw new Error('ART_DIRECTION_CALLER_DECISION_FORBIDDEN: evaluator choices, scores, and motion sources must remain inside the evaluator bytes');
@@ -4086,12 +4240,18 @@ async function cmdDirectionEvidenceCheck(mode: 'static-check' | 'motion-check', 
 }
 
 async function cmdCompletion(mode: string | undefined, opts: Opts): Promise<never> {
+  if (mode === 'design-check' || mode === 'preflight') {
+    const { directionCommitmentBlocker } = await import('../core/brief/candidate-choice.ts');
+    const direction = directionCommitmentBlocker(process.cwd());
+    if (direction) throw new Error(direction);
+  }
+  const { formatCompletionHostCapabilities } = await import('../core/completion/host-capabilities.ts');
   if (mode === 'design-check') {
     if (!opts.input || opts._.length > 0) throw new Error('usage: omd completion design-check --input .omd/design-handoff.json [--json]');
     const { checkDesignHandoff } = await import('../core/completion/design-handoff.ts');
     const result = checkDesignHandoff(process.cwd(), inputJson(opts.input, 'omd completion design-check'), invocationFromActivation(opts, 'omd completion design-check'));
     if (opts.json) process.stdout.write(JSON.stringify(result));
-    else console.log('ok — design documents and reference evidence are current; review authorship is not attested and application implementation has not been validated');
+    else console.log(`ok — ${result.verification}; review authorship is not attested and implementation is not performed\n${result.limitations.map(item => `limitation (${item.stage}): ${item.reason}`).join('\n')}\n${formatCompletionHostCapabilities(result.hostCapabilities)}`);
     process.exit(0);
   }
   if (mode === 'typography-applicability') {
@@ -4135,7 +4295,7 @@ async function cmdCompletion(mode: string | undefined, opts: Opts): Promise<neve
   if (isRecord(record.staticEvidence) && typeof record.staticEvidence.path === 'string') requireStaticEvidenceResultAuthorization(invocation, process.cwd(), readFileSync(resolve(process.cwd(), record.staticEvidence.path)));
   const { checkTerminalCompletion } = await import('../core/completion/preflight.ts');
   const result = checkTerminalCompletion(process.cwd(), invocation);
-  if (opts.json) process.stdout.write(JSON.stringify(result)); else console.log('ok — terminal completion evidence is current');
+  if (opts.json) process.stdout.write(JSON.stringify(result)); else console.log(`ok — terminal completion evidence is current\n${result.limitations.map(item => `limitation (${item.stage}): ${item.reason}`).join('\n')}\n${formatCompletionHostCapabilities(result.hostCapabilities)}`);
   process.exit(0);
 }
 
@@ -4185,6 +4345,7 @@ async function cmdEvidence(mode: string | undefined, opts: Opts): Promise<never>
   }
   if (mode === 'check') {
     if (opts._.length > 0) throw new Error('usage: omd evidence check [--json]');
+    console.error('deprecated: `omd evidence check` is now `omd migration verify-final-v1`');
     const evidence = checkFinalEvidence(process.cwd());
     if (opts.json) process.stdout.write(JSON.stringify(evidence));
     else console.log('ok — final evidence matches current source seal, build target, and artifacts');
@@ -4358,7 +4519,7 @@ async function cmdDoctor(): Promise<never> {
   // FIGMA_TOKEN — optional. Figma integration is unavailable without it, but
   // absence is not a failure. Always report pass; note when not set.
   const figmaToken = process.env['FIGMA_TOKEN'];
-  const figmaTokenSet = figmaToken !== undefined && figmaToken.length > 0;
+  const figmaTokenSet = figmaToken !== undefined && figmaToken.trim().length > 0;
   report(
     'FIGMA_TOKEN',
     true,
@@ -4581,9 +4742,12 @@ async function cmdSlop(sub: string | undefined, opts: Opts): Promise<never> {
   if (sub === 'checkpoint' || sub === 'review-set' || sub === 'review-check') {
     const { captureSlopCheckpoint, publishSlopReview, checkSlopReview } = await import('../core/slop/review.ts');
     if (sub !== 'review-check' && !opts.input) throw new Error('slop checkpoint/review-set requires --input <json>');
-    const result = sub === 'review-check' ? checkSlopReview(process.cwd())
-      : sub === 'checkpoint' ? await captureSlopCheckpoint(process.cwd(), inputJson(opts.input!, 'omd slop checkpoint'), projectWriterFromActivation(opts, 'omd slop checkpoint'))
-      : publishSlopReview(process.cwd(), inputJson(opts.input!, 'omd slop review-set'), projectWriterFromActivation(opts, 'omd slop review-set'));
+    const result = sub === 'review-check' ? checkSlopReview(process.cwd()) : await (async () => {
+      const command = `omd slop ${sub}`, invocation = invocationFromActivation(opts, command), writer = projectWriter(invocation);
+      const input = inputJson(opts.input!, command);
+      return sub === 'checkpoint' ? captureSlopCheckpoint(process.cwd(), input, writer, invocation)
+        : publishSlopReview(process.cwd(), input, writer, invocation);
+    })();
     console.log(JSON.stringify(result, null, opts.json ? 0 : 2));
     process.exit(0);
   }
@@ -4714,6 +4878,9 @@ async function cmdRoute(mode: string | undefined, opts: Opts): Promise<never> {
   if (mode === 'classify') {
     if (!opts.input) throw new Error('usage: omd route classify --input <route-input.json> [--activation <host-issued-invocation.json>] [--json]');
     const input = validateRouteInput(inputJson(opts.input, 'omd route classify'));
+    if (input.processPolicy && (input.reviewPurpose === undefined || input.reviewPurposeAuthority == null)) {
+      throw new Error('ROUTE_AUTHORITY_REQUIRED: current-process routes require a genuine host review-purpose-origin-v1 receipt, including ordinary review; starter null is not publication authority');
+    }
     let localeDesign: import('../core/locale/design-context.ts').LocaleDesignRoute | undefined;
     if (opts.localeContext !== undefined) {
       const canonicalLocalePath = resolve(process.cwd(), '.omd', 'locale-design-context.json');
@@ -4818,9 +4985,26 @@ async function cmdBrief(stage: string | undefined, opts: Opts): Promise<never> {
   const { buildBrief, formatBrief, writeBrief, EXTRA_BRIEF_STAGES } = await import('../core/brief/index.ts');
   const { STAGES } = await import('../core/stage/contract.ts');
   if (stage === undefined || opts._.length > 0) {
-    throw new Error(`usage: omd brief <stage> [--check] [--json]  (stages: ${[...STAGES.map((s) => s.id), ...EXTRA_BRIEF_STAGES].join(', ')})`);
+    throw new Error(`usage: omd brief <stage> [--check | --role <role> [--mode <mode>] [--input <sketch-brief.json>]] [--json]  (stages: ${[...STAGES.map((s) => s.id), ...EXTRA_BRIEF_STAGES].join(', ')})`);
   }
+  for (const key of ['role', 'mode', 'input'] as const) {
+    if (Object.hasOwn(opts, key) && (typeof opts[key] !== 'string' || !opts[key]?.trim())) throw new Error(`ROLE_BRIEF: --${key} requires exactly one nonempty value`);
+  }
+  if (!opts.role && (opts.mode !== undefined || opts.input !== undefined)) throw new Error('ROLE_BRIEF: --mode and --input require --role');
   const invocation = invocationFromActivation(opts, 'omd brief');
+  if (opts.role) {
+    if (opts.check) throw new Error('ROLE_BRIEF: --check is coordinator stage entry, not a role projection or review grant');
+    if (opts.role === 'omd-sketch' ? !opts.input : opts.input !== undefined) throw new Error('ROLE_BRIEF: only Sketch requires --input with its exact sketch-brief-v1');
+    const { buildRoleBrief } = await import('../core/brief/role.ts');
+    const { parseSketchBrief } = await import('../core/brief/candidate-study.ts');
+    const brief = buildRoleBrief(process.cwd(), stage as Parameters<typeof buildRoleBrief>[1], {
+      role: opts.role, ...(opts.mode === undefined ? {} : { mode: opts.mode }),
+      ...(opts.input === undefined ? {} : { sketch: parseSketchBrief(inputJson(opts.input, 'omd brief --input')) }),
+    }, join(root, 'core'), invocation);
+    // This projection is read-only. In particular, never persist or forward a raw stage Brief to Eye.
+    console.log(JSON.stringify(brief, null, opts.json ? 0 : 2));
+    process.exit(0);
+  }
   const { checkBriefEntry } = await import('../core/brief/entry.ts');
   const brief = (opts.check ? checkBriefEntry : buildBrief)(
     process.cwd(),
@@ -4830,7 +5014,7 @@ async function cmdBrief(stage: string | undefined, opts: Opts): Promise<never> {
   );
   // Persist what the stage was handed. A brief that exists only for the length of one command
   // leaves no record of what an owner actually received, which is the question asked later.
-  writeBrief(process.cwd(), brief, projectWriter(invocation));
+  if (!opts.check || brief.blockers.length === 0) writeBrief(process.cwd(), brief, projectWriter(invocation));
   if (opts.json) process.stdout.write(JSON.stringify(brief));
   else process.stdout.write(formatBrief(brief));
   process.exit(opts.check && brief.blockers.length > 0 ? 1 : 0);
@@ -4969,17 +5153,17 @@ async function cmdJudgment(mode: string | undefined, opts: Opts): Promise<never>
   throw new Error('usage: omd judgment input|publish|check [--input <design-judgment.json>] [--json]');
 }
 
-/** `omd first-render check --page <local-build.html> --input <first-render-surface.json>` — current rendered gestalt. */
+/** Native measured first-viewport feedback; caller-authored surfaces cannot publish evidence. */
 async function cmdFirstRender(mode: string | undefined, opts: Opts): Promise<never> {
-  if (mode !== 'check' || opts.input === undefined || opts.page === undefined) {
-    throw new Error('usage: omd first-render check --page <local-build.html> --input <first-render-surface.json> [--json]');
+  if (mode !== 'check' || opts.input !== undefined || opts.page === undefined) {
+    throw new Error('usage: omd first-render check --page <local-build.html> [--json]; remove --input (agent-authored surfaces are no longer accepted)');
   }
   const hypothesis = readDesignJudgment(process.cwd());
   if (hypothesis === null) {
     throw new Error('DESIGN_JUDGMENT_REQUIRED: publish the composition hypothesis before checking a render');
   }
-  const writer = projectWriterFromActivation(opts, 'omd first-render check');
-  const checked = await publishFirstRenderCheck(process.cwd(), opts.page, inputJson(opts.input, 'omd first-render check'), writer);
+  const invocation = invocationFromActivation(opts, 'omd first-render check');
+  const checked = await publishFirstRenderCheck(process.cwd(), opts.page, undefined, projectWriter(invocation), invocation);
   const report = checked.report;
   if (opts.json) process.stdout.write(JSON.stringify(checked));
   else {
@@ -5208,7 +5392,14 @@ function usage(): never {
     + '  review final-packet --input <packet-input.json>  publish the current anonymous production-image packet for two isolated final Eyes\n'
     + '  review publish --input <publication.json>    persist two host-signed Eye results as one quorum lane\n'
     + '  review refinement-publish --input <publication.json>  persist two independent Eye comparison votes\n'
-    + '  candidate select --input <pointer.json>       bind production to one validated Sketch candidate\n'
+    + '  candidate select --input <pointer.json>       legacy candidate pointer (historical routes only)\n'
+    + '  candidate content|check --input <json> --json  validate shared content or the representative set\n'
+    + '  candidate plan|packet --input <json> --json    commit the plan before source, or present a rendered set\n'
+    + '  candidate select --input <selection-v2.json> --json  record the actual user/authorized isolated Eye choice\n'
+    + '  candidate check --current --json             inspect current/missing/awaiting-user/stale direction\n'
+    + '  candidate study-check --input <study.json> --brief <sketch-brief.json> --json  validate exact Sketch handback and native previews\n'
+    + '  tokens extend --input <extensions.json> --json add needed tokens without overwriting the selected base\n'
+    + '  config set direction-policy interactive|autonomous  preference only; autonomy still requires a run grant\n'
     + '  copy v2 check [--json]                      validate selected register and stable v2 Beat IDs\n'
     + '  composition --check [--activation <invocation>] [--json]  validate composition sections and input freshness\n'
     + '  capture --check --input <receipt.json> [--json]  validate fixed-viewport settlement and pixel coherence\n'
@@ -5218,6 +5409,7 @@ function usage(): never {
     + '  proof --check [--json]                      validate type/composition production revision bindings\n'
     + '  acquisition set --input <json-file|->        persist framer-owned v2 reference targets; - reads stdin\n'
     + '  brief <stage> [--check] [--json]            inspect a stage; --check refuses blocked/unselected entry\n'
+    + '  brief <stage> --role <role> [--mode <mode>] [--input <sketch-brief.json>] [--json]  read-only owner/profile projection; not review authority\n'
     + '  route validate --input route-input.json [--json]  read-only grouped input diagnostics before publication\n'
     + '  route classify --input route-input.json [--locale-context .omd/locale-design-context.json]  validate an adaptive contract-derived strategy and lock scope\n'
     + '  route show | route check [--json]           the chosen route, and writes outside its scope\n'
@@ -5245,7 +5437,7 @@ function usage(): never {
     + '\n'
     + '  art-direction check --input decision-check.json [--json]  persist a host-authorized direction\n'
     + '  art-direction alternatives-sha --input alternatives.json [--json]  canonical digest every perspective and receipt must bind\n'
-    + '  art-direction check-input [--route /] [--json]  emit the check payload skeleton with canonical references filled in\n'
+    + '  art-direction check-input [--json]          emit selected-candidate v3 input on current routes; legacy accepts --input <alternatives.json> and --route /\n'
     + '  schema list | schema <name> [--json]        print the exact skeleton for a hand-authored input\n'
     + '  stage list|status|resume [--json]           stage owners, artifacts, and where a resumed run continues\n'
     + '  stage deliver --stage <s> --contract <pack-relative.md>  record that a contract reached its stage\n'
@@ -5478,6 +5670,9 @@ async function main(): Promise<never> {
   if (cmd === 'slop') return cmdSlop(sub, parseArgs(args.slice(2)));
   if (cmd === 'lighthouse') return cmdLighthouse(parseArgs(args.slice(1)));
   if (cmd === 'coach') return cmdCoach();
+  if (cmd === 'learn') return cmdLearn(sub, parseArgs(args.slice(2)));
+  if (cmd === 'host') return cmdHost(sub, parseArgs(args.slice(2)));
+  if (cmd === 'migration') return cmdMigration(sub, parseArgs(args.slice(2)));
   if (cmd === 'usage') return cmdUsage(parseArgs(args.slice(1)));
   if (cmd === 'config') return cmdConfig(sub, parseArgs(args.slice(2)));
   if (cmd === 'craft') return cmdCraft(sub, parseArgs(args.slice(2)));
@@ -5547,6 +5742,7 @@ async function main(): Promise<never> {
   }
 
   if (cmd === 'ref') {
+    if (sub === 'browse') return cmdRefBrowse(args.slice(2));
     if (sub === 'tidy' && args.slice(2).some(arg => arg === '--help' || arg === '-h')) {
       console.log('omd ref tidy [--apply] [--json]\n  Preview recognized legacy search/navigation files and unqualified design records.\n  --apply archives exact bytes and a recovery manifest in .omd/archive/references before guarded removal.\n  Eligible design references, domain references and unknown files remain. Revalidate dependent research and boards afterward.');
       process.exit(0);
@@ -5664,6 +5860,14 @@ async function main(): Promise<never> {
   if (cmd === 'text-slop') return cmdTextSlop(parseArgs(args.slice(1)));
   if (cmd === 'copy-specificity') return cmdCopySpecificity(parseArgs(args.slice(1)));
   if (cmd === 'judgment') return cmdJudgment(sub, parseArgs(args.slice(2)));
+  if (cmd === 'measure') {
+    const opts = parseArgs(args.slice(1));
+    if (opts._.includes('--help') || args.includes('--help')) { console.log('omd measure --entry <local.html|URL> [--scope <scope.json>] [--json]'); process.exit(0); }
+    if (!opts.entry || opts.input !== undefined) throw new Error('omd measure requires --entry; --input is not an evidence import path');
+    const invocation = invocationFromActivation(opts, 'omd measure');
+    const { runMeasureCommand } = await import('./measure.ts');
+    process.exit(await runMeasureCommand(opts, process.cwd(), projectWriter(invocation), invocation));
+  }
   if (cmd === 'first-render') return cmdFirstRender(sub, parseArgs(args.slice(2)));
   if (cmd === 'visual-richness') return cmdVisualRichness(parseArgs(args.slice(1)));
   if (cmd === 'pack') return cmdPack(sub, ...args.slice(2));

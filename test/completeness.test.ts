@@ -126,8 +126,8 @@ test('the gate runs against a real page and separates satisfied from unsatisfied
 test('the frame owner persists functional requirements through the canonical stage brief', () => {
   const framer = readFileSync(fileURLToPath(new URL('../src/agents/framer.agent.yaml', import.meta.url)), 'utf8').replace(/\s+/g, ' ');
   assert.match(framer, /Bash\(omd complete:\*\)/);
-  assert.match(framer, /You also own `\.omd\/functional-requirements\.json` as `functional-requirements-v1`/);
-  assert.match(framer, /persist the visitor's declared affordances with `omd complete set --input <functional-requirements\.json>`/);
+  assert.match(framer, /omd complete set --input <input\.json>/);
+  assert.match(framer, /never hand-write command-owned records/i);
 
   const stages = readFileSync(fileURLToPath(new URL('../core/stage/contract.ts', import.meta.url)), 'utf8');
   assert.match(stages, /id: 'frame', owner: 'omd-framer', artifact: '\.omd\/frame\.md'/);
@@ -138,10 +138,9 @@ test('the frame owner persists functional requirements through the canonical sta
   assert.match(brief, /'\.omd\/functional-requirements\.json'/);
   assert.match(brief, /omd complete check <page>/);
 
-  const writer = readFileSync(fileURLToPath(new URL('../src/agents/writer.agent.yaml', import.meta.url)), 'utf8');
-  const hand = readFileSync(fileURLToPath(new URL('../src/agents/hand.agent.yaml', import.meta.url)), 'utf8');
-  assert.match(writer, /`\.omd\/functional-requirements\.json`/);
-  assert.match(hand, /`\.omd\/functional-requirements\.json`/);
+  const role = readFileSync(fileURLToPath(new URL('../core/brief/role.ts', import.meta.url)), 'utf8');
+  assert.match(role, /options\.role === 'omd-writer' \? \['\.omd\/copy-deck\.md', '\.omd\/functional-requirements\.json'\]/);
+  assert.match(role, /maker \? \['\.omd\/copy-deck\.md', '\.omd\/functional-requirements\.json'/);
 });
 
 test('complete set validates before persisting and rejects an invalid list', () => {

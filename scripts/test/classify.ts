@@ -32,7 +32,7 @@ const DIST_DEPENDENT = new Set([
 function classify(file: string, source: string): Tier {
   if (DIST_DEPENDENT.has(file) || /\bnpm\s*(?:,|\.)[^\n]{0,80}\bpack\b|\bpackOfflineWorkspaceDependencies\b|\bpacked-(?:runtime|playwright|prebuilt)\b/.test(source)) return 'packaging';
   if (NATIVE_LIFECYCLE.has(file) || /browser-rs/.test(file) || /benchmark-(?:lock|membership)\.test\.ts$/.test(file)) return 'native';
-  if (!file.endsWith('/headless-only.test.ts') && /\b(?:withBrowser|withLocalView|renderPage|measureProject|runTrustedBrowserEvaluation|extractIr|chromium\.launch|launchPersistentContext|captureMotionEvidenceV2|renderFilmstrip|captureRenderedBeatReceipt)\s*\(/.test(source)) return 'browser';
+  if (!file.endsWith('/headless-only.test.ts') && /\b(?:withBrowser|withLocalView|renderPage|measureProject|renderedSet|createGlancePacket|runTrustedBrowserEvaluation|extractIr|chromium\.launch|launchPersistentContext|captureMotionEvidenceV2|renderFilmstrip|captureRenderedBeatReceipt)\s*\(/.test(source)) return 'browser';
   if (/node:(?:fs|fs\/promises|child_process|http|https|net|tls|dgram|worker_threads)|\b(?:spawn|spawnSync|execFile|execFileSync|fork)\s*\(|\bmkdtemp(?:Sync)?\s*\(|\bcreateServer\s*\(/.test(source)) return 'integration';
   return 'unit';
 }

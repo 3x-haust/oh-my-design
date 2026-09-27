@@ -8,6 +8,10 @@ yield with confidence debt, not a fabricated success. Entry permission is not co
 
 | Rule | Required outcome | Executable boundary |
 | --- | --- | --- |
+| Direction authority | Current process uses one interactive representative direction checkpoint; autonomy requires actual signed user/host origin. A ready/stale choice pauses expansion, not representative inspection. | candidate plan/set/select currentness; stage-next-v2 await-user; Pi original-input binding |
+| Role delivery | Makers get current whole-screen images, actual analysis and system material; blind profiles get no raw brief or references. | buildRoleBrief; closed profile manifest/digest; native isolated packet transport |
+| Full scope | Every surface's own required states x views and every declared stress case needs actual capture/review. | requiredSurfaceCells; native surface/content coverage joins; final publisher integration |
+| Repeated defect | Three distinct failed repairs of one stable issue pause; initial discovery/rechecks do not count. Budget cannot waive failures. | signed refinement observation chain; stage-next-v2 repeated-defect |
 | Route setup | Use the task-appropriate starter; preserve user facts, risk, scope and selected work while repairing input errors. Input validity is not publication or task completion. | `omd route validate --input <json> --json`; `route classify`; Pi setup recovery |
 | Original request | Bind the complete host intake, not a model summary, to route validation/publication. Preserve all requested screens and tasks through domain authoring. A source digest does not prove semantic coverage. | Pi native request binding; authenticated route source; `omd domain set`; current domain request equality |
 | Market authority | Never infer a country from language or locale. An explicit market context names a confirmed `evidenceClaims.userFacts` claim with actual user evidence for that market, and the same locale context is bound to validation and classification. | Locale-context parser; `LOCALE_DESIGN_MARKET_AUTHORITY_REQUIRED`; route replay/currentness checks |
@@ -25,6 +29,23 @@ yield with confidence debt, not a fabricated success. Entry permission is not co
 | Truthful completion | Report only the verified delivery mode and every confidence-debt limitation. A design handoff is not an implemented app; same-session review is not independent review. Product/browser, rendered review, slop closure and known failed application criteria remain strict. | `omd guard completion --json`; Pi final-message boundary |
 
 ## Layer 2 — procedure
+
+For human-design-process-v1, Art Director commits minimal tokens and the representative candidate
+plan before Sketch source. Writer base copy precedes choice; type proof and full composition follow
+it. The coordinator presents every actual preview and records only genuine choice bytes. No second
+register tournament or routine reference/type/component approval. Missing exploratory evidence stays
+debt; pending user authority is not research debt. Config defaults interactive and cannot mint autonomy.
+
+Current browse uses the recorded whole-screen procedure in reference-assembly.md. Scout chooses the
+next action; ref advance returns needs-model-action. Await exact command completion, preserve actual
+keep/drop/session receipts, inspect images and publish analysis/application. Native stopped-with-debt
+advances missing reference work without fabricated completion. The catalogue/batch instructions below
+remain explicit historical API procedures, not the current default. Never apply their overlay
+suppression or crop-only handoff rules to recorded browse.
+
+Hand source and observer profiles are permissions only when a genuine host role-mode grant is attached.
+The project writer refuses observer production writes and candidate source without a committed plan.
+Unattached hosts retain coherent legacy capabilities and disclose the limitation; prose is not a sandbox.
 
 Before first source work, Composer may author a minimal `.omd/composition.md`: `Input fingerprint`
 contains current `Frame SHA-256` and `Source contract SHA-256`; substantive `Experience spine`,
@@ -109,8 +130,8 @@ directs `apply-references` to `ref apply-plan --json` for current per-surface de
 the pointer after native publication. Do not repeatedly run a passing board entry check or author
 application decisions before their research exists. These actions do not add route stages or
 validated-progress credits; stale research takes precedence over a missing application file.
-When the board itself is missing, use `omd ref work-next --json` to read the current evidence-derived
-action. `omd ref advance --json` executes exactly one native public search or navigation action and
+For the explicit historical catalogue path, when the board is missing, use its legacy work pointer.
+Historical `omd ref advance` consumers execute exactly one native public search or navigation action and
 records its outcome before the pointer is recomputed. A visited gallery item is still only discovery:
 Scout inspects its actual UI image or observed original, retains useful evidence with `ref add`, and
 authors the board with `ref board --input`. An unsuitable inspected item receives a CLI-owned
@@ -257,7 +278,7 @@ inspection and research repair remain available while production is blocked.
 - Pi checks native write/edit and non-allowlisted shell calls at the source boundary and checks
   final messages after OMD mutations. CLI-owned evidence cannot be directly authored. Failed
   completion triggers a progress-driven repair/recheck loop for an actual source-writing task. It has
-  no fixed total pass ceiling while owned artifacts or the current work pointer advance; the same
+  a finite current-process repair allowance and a typed third-repeat stop; explicit historical recovery used no fixed total pass ceiling while owned artifacts or the work pointer advanced. The same
   verified state without successful repair activity stops after two recovery turns. Aborts,
   missing authority and research-only turns do not authorize automatic implementation.
 - For a selected missing reference board, Pi executes one bounded `ref advance` native acquisition

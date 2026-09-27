@@ -144,11 +144,12 @@ test('legacy choices normalize to unknown and are not injected as user taste', (
   assert.match(run(['taste', 'profile', '--all'], dir).stdout, /\[unknown\] b over a/);
 });
 
-test('omd config defaults to no checkpoint and persists opt-in values', () => {
+test('omd config preserves legacy checkpoints without treating them as autonomous direction authority', () => {
   const dir = project();
-  assert.deepEqual(JSON.parse(run(['config', 'show'], dir).stdout), { checkpoint: 'none' });
+  // Phase 6 adds one interactive direction policy; legacy checkpoint:none is not consent.
+  assert.deepEqual(JSON.parse(run(['config', 'show'], dir).stdout), { checkpoint: 'none', directionPolicy: 'interactive' });
   assert.equal(run(['config', 'set', 'checkpoint', 'both'], dir).status, 0);
-  assert.deepEqual(JSON.parse(run(['config', 'show'], dir).stdout), { checkpoint: 'both' });
+  assert.deepEqual(JSON.parse(run(['config', 'show'], dir).stdout), { checkpoint: 'both', directionPolicy: 'interactive' });
   assert.notEqual(run(['config', 'set', 'checkpoint', 'always'], dir).status, 0);
 });
 

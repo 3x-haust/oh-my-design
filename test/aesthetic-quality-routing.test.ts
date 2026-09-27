@@ -10,6 +10,8 @@ import {
   ADAPTIVE_BEHAVIOR_POLICY,
   routeAdaptiveFlow,
 } from '../core/route/index.ts';
+import { reviewProfileBinding } from '../core/runtime/trusted-review-profile.ts';
+import { MEASURED_REVIEW_TRANSPORT, MEASURED_REVIEW_HANDBACK } from '../core/runtime/trusted-measured-review.ts';
 
 const fixturePath = (name: string): string =>
   fileURLToPath(
@@ -73,22 +75,12 @@ test('design quality cannot collapse into the existing review mean', () => {
   assert.ok(!Object.hasOwn(visual, 'overallDesignScore'));
 });
 
-test('final blind reviewers receive the trusted source-free observation projection', () => {
-  const eye = readFileSync(new URL('../src/agents/eye.agent.yaml', import.meta.url), 'utf8');
-  const coordinator = readFileSync(new URL('../src/skills/omd-ultradesign/SKILL.md', import.meta.url), 'utf8');
-  const protocol = readFileSync(new URL('../core/protocol/human-design-loop.md', import.meta.url), 'utf8');
-  for (const contract of [eye, protocol]) {
-    assert.match(contract, /design-quality-observation-projection-v1/);
-    assert.match(contract, /aggregate observation/i);
-    assert.match(contract, /viewport/);
-    assert.match(contract, /state/);
-  }
-  // The initial final packet now transports the trusted projection together with
-  // actual images; a separate metadata-only projection is not the launch path.
-  assert.match(coordinator, /omd schema final-render-reviewer-packet/);
-  assert.match(coordinator, /omd review final-packet/);
-  assert.match(coordinator, /aggregate observation-v2 chain/);
-  assert.match(coordinator, /exact viewport\/state from a projected row/);
-  assert.match(coordinator, /every anonymous production image block/);
-  assert.match(eye, /copy `viewport` and\s+`state` exactly/);
+test('final blind review binds one trusted profile to the measured transport', () => {
+  const profile = reviewProfileBinding('blindLane');
+  assert.deepEqual(Object.keys(profile).sort(), ['mode', 'role', 'sha256']);
+  assert.equal(profile.role, 'omd-eye');
+  assert.equal(profile.mode, 'production-visual');
+  assert.match(profile.sha256, /^[a-f0-9]{64}$/);
+  assert.equal(MEASURED_REVIEW_TRANSPORT, 'measured-final-reviewer-transport-v1');
+  assert.equal(MEASURED_REVIEW_HANDBACK, 'measured-final-reviewer-handback-v1');
 });

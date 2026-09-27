@@ -49,7 +49,11 @@ import {
 import {
   REALITY_FIT_PASS_VALUE,
   validateAdaptiveFinalEvidenceV2GraphFiles,
+  validateAdaptiveFinalProductionFiles,
 } from './final-v2-adaptive-files.ts';
+import { parseMeasuredTerminal, type GraphReviewBindings } from './final-v2-measured-contract.ts';
+import { validateMeasuredTerminal } from './final-v2-measured-terminal.ts';
+import { isSelectedDirectionGraph, parseSelectedDirectionGraph, validateSelectedDirectionGraphFiles, type SelectedDirectionGraph } from './final-v2-selected-direction.ts';
 
 export const FINAL_EVIDENCE_V2_GRAPH_SCHEMA = 'final-evidence-v2-graph' as const;
 export const FINAL_EVIDENCE_V2_WORKFLOW_GRAPH_SCHEMA = 'final-evidence-v2-workflow-graph-v1' as const;
@@ -102,13 +106,13 @@ export type ArtSelectedFinalEvidenceV2Graph = Readonly<{
   renderedBeats: ArtifactReceipt;
   sourceSeal: ArtifactReceipt;
   buildIdentity: ArtifactReceipt;
-  blindLane: ArtifactReceipt;
-  fidelityLane: ArtifactReceipt;
-  protocolLane: ArtifactReceipt;
+
   taskEvidence?: ArtifactReceipt;
   observations: readonly ArtifactReceipt[];
-}>;
-export type FinalEvidenceV2Graph = ArtSelectedFinalEvidenceV2Graph;
+} & GraphReviewBindings>;
+/** Historical public type retains mandatory legacy lanes; measured graphs are additive. */
+export type FinalEvidenceV2Graph = Extract<ArtSelectedFinalEvidenceV2Graph, { measuredTerminal?: never }>;
+export type MeasuredArtSelectedFinalEvidenceV2Graph = Extract<ArtSelectedFinalEvidenceV2Graph, { measuredTerminal: unknown }>;
 export type WorkflowArtSelectedFinalEvidenceV2Graph = Readonly<Omit<ArtSelectedFinalEvidenceV2Graph, 'schema' | 'sourceSeal'> & {
   schema: typeof FINAL_EVIDENCE_V2_WORKFLOW_GRAPH_SCHEMA;
   productionSchema: typeof FINAL_EVIDENCE_V2_GRAPH_SCHEMA;
@@ -122,7 +126,7 @@ export type WorkflowAdaptiveFinalEvidenceV2Graph = Readonly<Omit<AdaptiveFinalEv
   sourceSeal: ArtifactReceipt & Readonly<{ schema: 'source-seal-v2' }>;
 }>;
 export type WorkflowFinalEvidenceV2Graph = WorkflowArtSelectedFinalEvidenceV2Graph | WorkflowAdaptiveFinalEvidenceV2Graph;
-export type FinalEvidenceV2GraphVariant = FinalEvidenceV2Graph | AdaptiveFinalEvidenceV2Graph | WorkflowFinalEvidenceV2Graph;
+export type FinalEvidenceV2GraphVariant = ArtSelectedFinalEvidenceV2Graph | AdaptiveFinalEvidenceV2Graph | WorkflowFinalEvidenceV2Graph | SelectedDirectionGraph;
 export type ArtSelectedFinalEvidenceV2GraphBindings = Readonly<{
   readonly branch: 'art-selected';
   readonly activation: ActivationContext;
@@ -136,7 +140,7 @@ export type ArtSelectedFinalEvidenceV2GraphBindings = Readonly<{
   readonly motionTask?: Readonly<{ taskId: string; route: string; targets: readonly string[] }>;
 }>;
 export type FinalEvidenceV2GraphBindings = ArtSelectedFinalEvidenceV2GraphBindings;
-export type FinalEvidenceV2GraphBindingsVariant = FinalEvidenceV2GraphBindings | AdaptiveFinalEvidenceV2Bindings;
+export type FinalEvidenceV2GraphBindingsVariant = FinalEvidenceV2GraphBindings | AdaptiveFinalEvidenceV2Bindings | ReturnType<typeof validateSelectedDirectionGraphFiles>['bindings'];
 
 export interface EvidenceGraphFs extends StableProjectFileSystem {}
 
@@ -257,29 +261,32 @@ function validateWorkflowFinalEvidenceV2Graph(value: unknown): WorkflowFinalEvid
 }
 
 export function validateFinalEvidenceV2Graph(value: unknown): FinalEvidenceV2GraphVariant {
+  if (isSelectedDirectionGraph(value)) return parseSelectedDirectionGraph(value);
   if (isWorkflowFinalEvidenceV2Graph(value)) return validateWorkflowFinalEvidenceV2Graph(value);
   if (isAdaptiveFinalEvidenceV2Graph(value)) return validateAdaptiveFinalEvidenceV2Graph(value);
   const graph = object(value, 'graph');
-  const keys = ['schema', 'activation', 'intent', 'artDirection', 'board', 'selection', 'settledSelection', 'handoff', 'usage', 'referenceDistance', 'copy', 'renderedBeats', 'sourceSeal', 'buildIdentity', 'blindLane', 'fidelityLane', 'protocolLane', 'taskEvidence', 'observations'].filter((key) => key in graph);
+  const measured = Object.hasOwn(graph, 'measuredTerminal');
+  const keys = ['schema', 'activation', 'intent', 'artDirection', 'board', 'selection', 'settledSelection', 'handoff', 'usage', 'referenceDistance', 'copy', 'renderedBeats', 'sourceSeal', 'buildIdentity', ...(measured ? ['measuredTerminal'] : ['blindLane', 'fidelityLane', 'protocolLane']), 'taskEvidence', 'observations'].filter((key) => key in graph);
   exact(graph, keys, 'graph');
   if (graph.schema !== FINAL_EVIDENCE_V2_GRAPH_SCHEMA) fail('unsupported graph schema');
   const observations = array(graph.observations, 'graph.observations');
   if (observations.length === 0) fail('graph requires a non-empty observation chain');
-  const result = {
+  const result: ArtSelectedFinalEvidenceV2Graph = {
     schema: FINAL_EVIDENCE_V2_GRAPH_SCHEMA,
     activation: receipt(graph.activation, 'activation'), intent: receipt(graph.intent, 'intent'), artDirection: receipt(graph.artDirection, 'artDirection'),
     board: receipt(graph.board, 'board'), selection: receipt(graph.selection, 'selection'), settledSelection: receipt(graph.settledSelection, 'settledSelection'), handoff: receipt(graph.handoff, 'handoff'), usage: receipt(graph.usage, 'usage'),
     ...(graph.referenceDistance === undefined ? {} : { referenceDistance: receipt(graph.referenceDistance, 'referenceDistance') }),
     copy: receipt(graph.copy, 'copy'), renderedBeats: receipt(graph.renderedBeats, 'renderedBeats'), sourceSeal: receipt(graph.sourceSeal, 'sourceSeal'), buildIdentity: receipt(graph.buildIdentity, 'buildIdentity'),
-    blindLane: receipt(graph.blindLane, 'blindLane'), fidelityLane: receipt(graph.fidelityLane, 'fidelityLane'), protocolLane: receipt(graph.protocolLane, 'protocolLane'),
+    ...(measured ? { measuredTerminal: parseMeasuredTerminal(graph.measuredTerminal) } : {
+      blindLane: receipt(graph.blindLane, 'blindLane'), fidelityLane: receipt(graph.fidelityLane, 'fidelityLane'), protocolLane: receipt(graph.protocolLane, 'protocolLane') }),
     ...(graph.taskEvidence === undefined ? {} : { taskEvidence: receipt(graph.taskEvidence, 'taskEvidence') }),
     observations: observations.map((item: unknown, index: number) => receipt(item, 'observation')),
   } as const;
   const paths = [
     result.activation, result.intent, result.artDirection, result.board, result.selection, result.settledSelection, result.handoff, result.usage,
     ...(result.referenceDistance === undefined ? [] : [result.referenceDistance]),
-    result.copy, result.renderedBeats, result.sourceSeal, result.buildIdentity, result.blindLane, result.fidelityLane,
-    result.protocolLane, ...(result.taskEvidence === undefined ? [] : [result.taskEvidence]), ...result.observations,
+    result.copy, result.renderedBeats, result.sourceSeal, result.buildIdentity, ...[result.blindLane, result.fidelityLane, result.protocolLane].flatMap(r => r ? [r] : []),
+    ...(result.taskEvidence === undefined ? [] : [result.taskEvidence]), ...result.observations,
   ].map((item) => item.path);
   if (new Set(paths).size !== paths.length) fail('receipt paths must be unique');
   return result;
@@ -592,9 +599,19 @@ function validateCompletedReviewerExecutions(
 export function validateFinalEvidenceV2GraphFiles(root: string, graphInput: FinalEvidenceV2Graph, fs: EvidenceGraphFs, invocation: ProjectRunInvocation): { graph: FinalEvidenceV2Graph; rootHash: string; bindings: FinalEvidenceV2GraphBindings };
 export function validateFinalEvidenceV2GraphFiles(root: string, graphInput: unknown, fs: EvidenceGraphFs, invocation: ProjectRunInvocation): { graph: FinalEvidenceV2GraphVariant; rootHash: string; bindings: FinalEvidenceV2GraphBindingsVariant };
 export function validateFinalEvidenceV2GraphFiles(root: string, graphInput: unknown, fs: EvidenceGraphFs, invocation: ProjectRunInvocation): { graph: FinalEvidenceV2GraphVariant; rootHash: string; bindings: FinalEvidenceV2GraphBindingsVariant } {
+  return validateGraphFiles(root, graphInput, fs, invocation, false);
+}
+/** Native production validation deliberately does not claim subjective terminal approval. */
+export function validateFinalProductionEvidence(root: string, graphInput: unknown, fs: EvidenceGraphFs, invocation: ProjectRunInvocation) {
   const graph = validateFinalEvidenceV2Graph(graphInput);
+  if (!graph.measuredTerminal) fail('production-only validation requires the measured graph wrapper');
+  return validateGraphFiles(root, graph, fs, invocation, true);
+}
+function validateGraphFiles(root: string, graphInput: unknown, fs: EvidenceGraphFs, invocation: ProjectRunInvocation, productionOnly: boolean): { graph: FinalEvidenceV2GraphVariant; rootHash: string; bindings: FinalEvidenceV2GraphBindingsVariant } {
+  const graph = validateFinalEvidenceV2Graph(graphInput);
+  if (isSelectedDirectionGraph(graph)) return validateSelectedDirectionGraphFiles(root, graph, fs, invocation, productionOnly);
   if (isWorkflowFinalEvidenceV2Graph(graph)) {
-    const production = validateFinalEvidenceV2GraphFiles(root, workflowProductionGraph(graph), fs, invocation);
+    const production = validateGraphFiles(root, workflowProductionGraph(graph), fs, invocation, productionOnly);
     const currentWorkflow = createAdaptiveWorkflowSourceBinding(root, invocation);
     if (canonical(graph.workflow) !== canonical(currentWorkflow)) fail('workflow plan, route authority, selected proofs, reviews, or pointers are stale');
     const source = readReceipt(root, fs, graph.sourceSeal, 'sourceSeal');
@@ -604,13 +621,13 @@ export function validateFinalEvidenceV2GraphFiles(root: string, graphInput: unkn
     }
     return { graph, rootHash: createHash('sha256').update(canonical({ productionRootHash: production.rootHash, graph })).digest('hex'), bindings: production.bindings };
   }
-  if (graph.schema !== FINAL_EVIDENCE_V2_GRAPH_SCHEMA) return validateAdaptiveFinalEvidenceV2GraphFiles(root, graph, fs, invocation);
+  if (graph.schema !== FINAL_EVIDENCE_V2_GRAPH_SCHEMA) return productionOnly ? validateAdaptiveFinalProductionFiles(root, graph, fs, invocation) : validateAdaptiveFinalEvidenceV2GraphFiles(root, graph, fs, invocation);
   const entries: ReadonlyArray<readonly [string, ArtifactReceipt]> = [
     ['activation', graph.activation], ['intent', graph.intent], ['artDirection', graph.artDirection], ['board', graph.board],
     ['selection', graph.selection], ['settledSelection', graph.settledSelection], ['handoff', graph.handoff], ['usage', graph.usage], ['copy', graph.copy],
     ...(graph.referenceDistance === undefined ? [] : [['referenceDistance', graph.referenceDistance] as const]),
     ['renderedBeats', graph.renderedBeats], ['sourceSeal', graph.sourceSeal], ['buildIdentity', graph.buildIdentity],
-    ['blindLane', graph.blindLane], ['fidelityLane', graph.fidelityLane], ['protocolLane', graph.protocolLane],
+    ...(graph.measuredTerminal ? [] : [['blindLane', graph.blindLane], ['fidelityLane', graph.fidelityLane], ['protocolLane', graph.protocolLane]] as const),
     ...(graph.taskEvidence === undefined ? [] : [['taskEvidence', graph.taskEvidence] as const]),
     ...graph.observations.map((receipt, index): readonly [string, ArtifactReceipt] => [`observations[${index}]`, receipt]),
   ];
@@ -851,7 +868,7 @@ export function validateFinalEvidenceV2GraphFiles(root: string, graphInput: unkn
   const trustedOutcomeRoute = sourceSeal.route === undefined
     ? undefined
     : readPersistedRoute(root, invocation);
-  assertArtSelectedGreenfieldRealityFit(
+  if (!graph.measuredTerminal) assertArtSelectedGreenfieldRealityFit(
     trustedOutcomeRoute?.projectMode ?? 'existing',
     object(values.get('blindLane') ?? fail('blindLane receipt is missing'), 'blindLane').verdicts,
   );
@@ -886,7 +903,9 @@ export function validateFinalEvidenceV2GraphFiles(root: string, graphInput: unkn
   if (new Set(observationHashes).size !== observationHashes.length) fail('graph observations must be a duplicate-free exact set');
   const criticalReviewerIds = new Set<string>();
   const completedReviewerExecutions = new Set<string>();
-  for (const label of ['blindLane', 'fidelityLane', 'protocolLane'] as const) {
+  if (graph.measuredTerminal) {
+    if (!productionOnly) validateMeasuredTerminal(root, graph, invocation);
+  } else for (const label of ['blindLane', 'fidelityLane', 'protocolLane'] as const) {
     const lane = values.get(label) ?? fail(`${label} receipt is missing`);
     if (lane.artDirectionSha256 !== hashes.get('artDirection') || lane.buildSha256 !== buildSha256) fail(`${label} does not bind art direction and build`);
     const observedHashes = new Set(observationHashes);

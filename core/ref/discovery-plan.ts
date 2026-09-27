@@ -20,6 +20,8 @@ export type ReferenceDiscoveryPlan = Readonly<{
   decision: 'discover' | 'skip';
   sourceContractSha256: string;
   userUrlsRequired: false;
+  browse: Readonly<{ command: string; defaultMode: 'headless'; optInModes: readonly string[]; budgetActions: number; budgetMinutes: number;
+    referenceUnit: 'whole-screen'; cropUse: 'attached-zoom-only'; catalogueRole: 'legacy-transport-and-optional-seeds'; stop: 'confidence-debt-not-production-blocker' }>;
   request: string;
   task: string;
   surface: string | null;
@@ -67,9 +69,9 @@ export type ReferenceDiscoveryPlan = Readonly<{
     viewports: readonly Readonly<{ width: number; height: number }>[];
   }>[];
   motionEvidenceRequired: boolean;
-  sourcePolicy: 'current-search-or-direct-public-then-live-inspection';
+  sourcePolicy: 'recorded-browse-or-legacy-native-discovery';
   queryPolicy: 'derive-from-explicit-request-and-decisions-not-locale-stereotypes';
-  transferPolicy: 'measured-parts-and-motion-parameters-through-source-free-selection';
+  transferPolicy: 'selected-whole-screens-and-analysis-for-makers';
   skipReason: string | null;
 }>;
 
@@ -193,6 +195,9 @@ export function buildReferenceDiscoveryPlan(root: string, route: RouteRecord): R
     decision: route.references.decision,
     sourceContractSha256: route.sourceContractSha256,
     userUrlsRequired: false,
+    browse: { command: 'omd ref browse start --lane design --mode headless --json', defaultMode: 'headless' as const,
+      optInModes: ['profile', 'cdp'], budgetActions: 60, budgetMinutes: 10, referenceUnit: 'whole-screen' as const,
+      cropUse: 'attached-zoom-only' as const, catalogueRole: 'legacy-transport-and-optional-seeds' as const, stop: 'confidence-debt-not-production-blocker' as const },
     request: route.request,
     task: route.sourceContract.taskOutcome.goal,
     surface,
@@ -234,9 +239,9 @@ export function buildReferenceDiscoveryPlan(root: string, route: RouteRecord): R
     }),
     decisions: Object.freeze(decisions),
     motionEvidenceRequired,
-    sourcePolicy: 'current-search-or-direct-public-then-live-inspection',
+    sourcePolicy: 'recorded-browse-or-legacy-native-discovery',
     queryPolicy: 'derive-from-explicit-request-and-decisions-not-locale-stereotypes',
-    transferPolicy: 'measured-parts-and-motion-parameters-through-source-free-selection',
+    transferPolicy: 'selected-whole-screens-and-analysis-for-makers',
     skipReason: discovering ? null : route.sourceContract.referenceDiscovery.skipReason,
   });
 }

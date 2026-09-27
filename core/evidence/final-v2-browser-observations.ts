@@ -8,6 +8,49 @@ import {
 import { readStableProjectFile, StableProjectFileReadError, type StableProjectFileSystem } from '../runtime/stable-project-file.ts';
 import { observationV2Sha256, validateObservationV2 } from '../runtime/observation.ts';
 import type { DesignQualityObservationBinding } from './final-v2-design-quality.ts';
+import { parseTrustedBrowserReceipt, type TrustedCaptureMeasurement } from '../runtime/trusted-browser-receipt.ts';
+import type { ProjectRunInvocation } from '../runtime/invocation.ts';
+import { nodeStableProjectFileSystem } from '../runtime/stable-project-file.ts';
+import { readPersistedRoute, adaptiveRouteRecordSha256 } from '../route/adaptive-route-persistence.ts';
+import { validateTrustedOutcomeEvidence, parseTrustedOutcomeProjection } from './final-v2-outcome-gate.ts';
+import { digest } from '../measure/identity.ts';
+
+export type MeasuredObservationBinding = Readonly<{
+  observationSha256: string; browserObservationSha256: string; captureSha256: string;
+  measurement: TrustedCaptureMeasurement; state: string;
+}>;
+/** Exact v2 joins start at a host-authorized browser receipt, never a caller's screenshot hash. */
+export function loadMeasuredObservationBindings(root: string, invocation: ProjectRunInvocation, observationSha256s: readonly string[]): readonly MeasuredObservationBinding[] {
+  const fs = nodeStableProjectFileSystem();
+  if (!observationSha256s.length || new Set(observationSha256s).size !== observationSha256s.length) fail('INVALID_OBSERVATION_ARTIFACT', 'measured observation chain required');
+  const loaded = observationSha256s.map(sha256 => {
+    if (!/^[a-f0-9]{64}$/.test(sha256)) fail('INVALID_OBSERVATION_ARTIFACT', 'invalid observation digest');
+    const bytes = readBrowserProjectFile({ root, fs, code: 'INVALID_OBSERVATION_ARTIFACT', label: 'measured observation' }, fsPath(root, `.omd/observation-v2/sha256-${sha256}.json`));
+    const value = validateObservationV2(JSON.parse(bytes.toString('utf8')));
+    if (createHash('sha256').update(bytes).digest('hex') !== sha256 || observationV2Sha256(value) !== sha256) fail('STALE_OBSERVATION_ARTIFACT', 'measured observation changed');
+    return value;
+  });
+  const route = readPersistedRoute(root, invocation);
+  validateTrustedOutcomeEvidence({ root, invocation, branch: 'adaptive-omission', required: true, observations: loaded,
+    expected: { routeSha256: adaptiveRouteRecordSha256(route), sourceContractSha256: route.sourceContractSha256, sourceContract: route.sourceContract,
+      buildSha256: invocation.current.buildSha256, entrySurfaceRequired: route.gates.includes('greenfield-task-flow-benchmark') } });
+  const latest = loaded.at(-1)!, aggregate = observationSha256s.at(-1)!;
+  const outcome = parseTrustedOutcomeProjection((latest.evidence as Record<string, unknown>).trustedOutcome);
+  const receipt = parseTrustedBrowserReceipt(JSON.parse(readBrowserProjectFile({ root, fs, code: 'INVALID_OBSERVATION_ARTIFACT', label: 'measured trusted receipt' }, fsPath(root, `.omd/trusted-browser-receipt-sha256-${outcome.receiptSha256}.json`)).toString('utf8')));
+  if (receipt.schema !== 'trusted-browser-receipt-v2') fail('INVALID_OBSERVATION_ARTIFACT', 'legacy capture ABI cannot authorize measured review');
+  const graph = readBrowserProjectFile({ root, fs, code: 'STALE_DECISION_GRAPH', label: 'measured decision graph' }, fsPath(root, '.omd/decision-graph.json'));
+  const links = validateBrowserObservationDecisionLinks(latest.evidence, graph, true)!;
+  validateBrowserObservationArtifacts(links, path => readBrowserProjectFile({ root, fs, code: 'INVALID_OBSERVATION_ARTIFACT', label: 'measured capture' }, fsPath(root, path)), true);
+  const bindings = links.observations.map(observation => {
+    const measurement = observation.measurement;
+    const captures = receipt.captures.filter(c => c.path === observation.observableResult.capture.path && c.sha256 === observation.observableResult.capture.sha256
+      && c.testedUrl === observation.testedUrl && digest(c.measurement) === digest(measurement));
+    if (!measurement || captures.length !== 1) return fail('INVALID_OBSERVATION_ARTIFACT', 'measured observation is not the exact trusted capture');
+    return { observationSha256: aggregate, browserObservationSha256: observation.observationSha256, captureSha256: observation.observableResult.capture.sha256, state: observation.testedState, measurement };
+  });
+  if (bindings.length !== receipt.captures.length || new Set(bindings.map(b => b.measurement.viewId)).size !== bindings.length) fail('INVALID_OBSERVATION_ARTIFACT', 'measured observation inventory differs from trusted capture inventory');
+  return bindings;
+}
 
 export interface FinalBrowserObservationFs extends StableProjectFileSystem {}
 export const DESIGN_QUALITY_OBSERVATION_PROJECTION_INPUT_SCHEMA =
