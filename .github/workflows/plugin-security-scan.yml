@@ -16,7 +16,7 @@ jobs:
         with:
           persist-credentials: false
       # v3 scanner fixes task-* secret and RegExp.exec shell-injection false positives.
-      - uses: hashgraph-online/ai-plugin-scanner-action@1c7b18e191376dd17550d4bff41fd8c9f71e4ca8 # v1.2.691
+      - uses: hashgraph-online/ai-plugin-scanner-action@11ff35008c1dde7d7b0c2978b0cd4f6b495448e8 # v1.2.704
         with:
           plugin_dir: "."
           config: ".plugin-scanner.toml"
