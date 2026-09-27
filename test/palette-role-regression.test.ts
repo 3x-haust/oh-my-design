@@ -37,11 +37,26 @@ const painted = (
     children: [],
     paintColors: [{ property, value, token, semanticRole }],
   };
+  if (property === 'background') node.fill = { value, token };
   if (property === 'text') node.text = id;
   return node;
 };
 
-test('diffuse accent catches coral, lime, and blue across computed CSS-variable paints', () => {
+test('diffuse accent warns on three comparable computed CSS-variable fill families', () => {
+  const ir = normalize({
+    nodes: [
+      root(['coral', 'lime', 'blue']),
+      painted('coral', 'background', '#FF5B55', 'coral'),
+      painted('lime', 'background', '#D8FF45', 'lime'),
+      painted('blue', 'background', '#3E63DD', 'focus'),
+    ],
+  });
+  const finding = check(ir, builtin, { categories: ['slop'] })
+    .find((candidate) => candidate.id === 'SLOP-DIFFUSE-ACCENT');
+  assert.equal(finding?.severity, 'warn');
+});
+
+test('diffuse accent ignores border and text colours beside one saturated fill', () => {
   const ir = normalize({
     nodes: [
       root(['coral', 'lime', 'blue']),
@@ -51,7 +66,7 @@ test('diffuse accent catches coral, lime, and blue across computed CSS-variable 
     ],
   });
   const findings = check(ir, builtin, { categories: ['slop'] });
-  assert.ok(findings.some((finding) => finding.id === 'SLOP-DIFFUSE-ACCENT'));
+  assert.ok(!findings.some((finding) => finding.id === 'SLOP-DIFFUSE-ACCENT'));
 });
 
 test('browser IR retains resolved CSS-variable paints, properties, tokens, and explicit semantics', async () => {
