@@ -16,7 +16,7 @@ export function isPreproductionReadCommand(command: unknown): boolean {
 const OMD_MUTATING_ROOTS = /^(?:frame|domain|route|ref|copy|type|composition|slop|lifecycle|finalize|complete)$/;
 const OMD_READ_ACTIONS = /^(?:show|check|validate|list|handoff|discover-plan|work-next|research-check|apply-plan|apply-check|apply-review-plan|apply-review-check|review-check|review-input)$/;
 const OMD_MUTATING_PAIRS = new Set([
-  'stage deliver', 'grain set', 'acquisition set', 'candidate select', 'judgment publish', 'benchmark record',
+  'stage deliver', 'grain set', 'acquisition set', 'candidate select', 'candidate plan', 'candidate packet', 'tokens extend', 'judgment publish', 'benchmark record',
 ]);
 
 export function isMutatingOmdCommand(args: readonly string[]): boolean {
@@ -50,6 +50,9 @@ export function classifyPiWrite(root: string, input: unknown): WriteClassificati
     }
   }
   if (!path.startsWith('.omd/')) return { kind: 'production', path };
+  if (/^\.omd\/\.cache\/sketches\/(?:(?:current|plan|set)\.json$|(?:plans|sets|selections|presentations|packets|authority)\/)/.test(path)) {
+    return { kind: 'blocked', path, reason: 'CLI-owned candidate plan/set/choice/authority; use the candidate publisher' };
+  }
   // Inputs and directly authored documents only. CLI-owned pointers, authority, research receipts,
   // check history, final evidence, and locks cannot be hand-written to make a gate turn green.
   if (/^\.omd\/(?:\.cache\/|docs\/)/.test(path)

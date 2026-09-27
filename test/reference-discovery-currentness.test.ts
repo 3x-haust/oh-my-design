@@ -7,7 +7,8 @@ import { routeAdaptiveFlow } from '../core/route/index.ts';
 import { canonicalJson, sha256 } from '../core/ref/board-artifacts.ts';
 import { publishReferenceDiscoveryExclusion, readReferenceDiscoveryExclusions } from '../core/ref/discovery-exclusion.ts';
 import { buildReferenceDiscoveryPlan } from '../core/ref/discovery-plan.ts';
-import { referenceDiscoveryWork } from '../core/ref/discovery-work.ts';
+// Historical catalogue receipts retain their original freshness semantics; default work now uses recorded browsing.
+import { legacyReferenceDiscoveryWork as referenceDiscoveryWork } from '../core/ref/discovery-work.ts';
 import { signNativeObservation } from '../core/runtime/self-signed-activation.ts';
 import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
 import { testPng } from './helpers/search-execution.ts';

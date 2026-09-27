@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { addRefsBatch } from '../core/ref/batch.ts';
 import { createTestProjectWriteAdapter } from './helpers/project-write.ts';
 import { tmpdir } from 'node:os';
@@ -9,17 +10,33 @@ import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { inputSkeleton } from '../core/schema/inputs.ts';
 import { loadRefs } from '../core/ref/store.ts';
+import { signNativeObservation } from '../core/runtime/self-signed-activation.ts';
+import { canonicalRouteJson } from '../core/route/adaptive-source-contract.ts';
 
 const cli = fileURLToPath(new URL('../bin/omd.mjs', import.meta.url));
 const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('OMD_') && key !== 'NODE_TEST_CONTEXT'));
 const run = (cwd: string, args: string[]) => spawnSync(process.execPath, [cli, ...args], { cwd, env, encoding: 'utf8', timeout: 30000 });
+const sha256 = (value: string | Uint8Array) => createHash('sha256').update(value).digest('hex');
+function currentRouteInput(root: string): Record<string, unknown> {
+  const input = structuredClone(inputSkeleton('product-route-input').skeleton) as Record<string, unknown>;
+  const projectRoot = realpathSync(root), purpose = 'ordinary', request = input.request as string;
+  const payload = { schema: 'review-purpose-origin-v1' as const, projectRoot, purpose,
+    requestSha256: sha256(request), source: 'host-user-input' as const, observedAt: '2026-09-27T00:00:00.000Z' };
+  const origin = { ...payload, signature: signNativeObservation(projectRoot, payload.schema, sha256(canonicalRouteJson(payload))) };
+  const bytes = Buffer.from(`${canonicalRouteJson(origin)}\n`), digest = sha256(bytes);
+  const authority = { path: `.omd/review-purpose-authorities/sha256-${digest}.json`, sha256: digest };
+  mkdirSync(join(root, '.omd/review-purpose-authorities'), { recursive: true });
+  writeFileSync(join(root, authority.path), bytes);
+  input.reviewPurposeAuthority = authority;
+  return input;
+}
 function project(t: { after(fn: () => void): void }, route = true) {
   const cwd = mkdtempSync(join(tmpdir(), 'omd-ref-intake-'));
   t.after(() => rmSync(cwd, { recursive: true, force: true }));
   mkdirSync(join(cwd, '.omd/.cache'), { recursive: true });
   if (route) {
     const path = join(cwd, '.omd/.cache/route.json');
-    writeFileSync(path, JSON.stringify(inputSkeleton('product-route-input').skeleton));
+    writeFileSync(path, JSON.stringify(currentRouteInput(cwd)));
     const result = run(cwd, ['route', 'classify', '--input', path, '--json']);
     assert.equal(result.status, 0, result.stderr);
   }

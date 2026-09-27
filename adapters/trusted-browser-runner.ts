@@ -1,7 +1,9 @@
 import { createHash } from 'node:crypto';
+import { realpathSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { chromium, type Page } from 'playwright';
 import {
+  MEASURED_BROWSER_RECEIPT_SCHEMA,
   TRUSTED_BROWSER_RECEIPT_SCHEMA,
   trustedBrowserReceiptSha256,
   type TrustedBrowserCapture,
@@ -13,6 +15,16 @@ import type {
 } from '../core/runtime/trusted-evaluation-contract.ts';
 import { serveProjectEntry } from '../core/render/serve.ts';
 import { waitForDocumentFonts } from '../core/render/index.ts';
+import { withLocalView, pageRoute } from '../core/render/stateful.ts';
+import { withZoomedLocalView, ensureMeasuredLayoutZoom } from '../core/render/browser-zoom.ts';
+import { captureMeasuredView } from '../core/measure/capture.ts';
+import { loadContracts, methodIdentity, sourceDigest } from '../core/measure/inputs.ts';
+import { canonicalBytes, digest } from '../core/measure/identity.ts';
+import { measureCaptures, type RetainedCapture } from '../core/measure/engine.ts';
+import { sealNativeMeasurement } from '../core/measure/files.ts';
+import type { ViewRequest, ViewSpec, VisualMeasurement } from '../core/measure/types.ts';
+import { parseMeasureScope } from '../core/measure/schema.ts';
+import { BASELINE_VIEWS } from '../core/measure/types.ts';
 
 type Binding = Readonly<{
   runId: string;
@@ -48,11 +60,8 @@ export type TrustedBrowserArtifactSink = Readonly<{
   write(relativePath: string, bytes: Uint8Array): void;
 }>;
 
-const VIEWPORTS = Object.freeze([
-  Object.freeze({ id: '1280x900' as const, width: 1280, height: 900 }),
-  Object.freeze({ id: '390x844' as const, width: 390, height: 844 }),
-]);
-export const TRUSTED_BROWSER_EVALUATOR_REVISION = 'trusted-browser-evaluator-v6' as const;
+
+export const TRUSTED_BROWSER_EVALUATOR_REVISION = 'trusted-browser-evaluator-v7-measured' as const;
 
 const sha256 = (bytes: Buffer): string => createHash('sha256').update(bytes).digest('hex');
 
@@ -357,6 +366,21 @@ export async function runTrustedBrowserEvaluation(input: Readonly<{
   if (input.manifest.entryPath !== input.binding.productionPath) {
     throw new Error('TRUSTED_BROWSER_PRODUCTION_BINDING_MISMATCH');
   }
+  const loadedContracts = loadContracts(input.root);
+  // Historical un-routed evaluator consumers retain v1. Routed production always uses the
+  // measured ABI, and current-process terminal gates independently reject v1 observations.
+  const measuredMode = existsSync(join(input.root, '.omd/route.json'));
+  const sourceSha256 = measuredMode ? sourceDigest(input.root) : null;
+  const compositionReceipt = loadedContracts.inputs.find(item => item.kind === 'composition')?.receipt;
+  const captureContext = compositionReceipt ? { compositionReceipt } : {};
+  const requests: ViewRequest[] = [...BASELINE_VIEWS];
+  for (const request of measuredMode ? [...loadedContracts.contracts.type?.requiredViews ?? [], ...loadedContracts.contracts.composition?.requiredViews ?? []] : []) {
+    const previous = requests.find(item => item.id === request.id);
+    if (previous && digest(previous) !== digest(request)) throw new Error('TRUSTED_BROWSER_REQUIRED_VIEW_CONFLICT');
+    if (!previous) requests.push(request);
+  }
+  parseMeasureScope({ schema: 'visual-measurement-scope-v1', views: requests });
+  if (input.manifest.measurementViews !== undefined && digest(input.manifest.measurementViews) !== digest(requests)) throw new Error('TRUSTED_BROWSER_MEASUREMENT_PLAN_CHANGED');
   const served = await serveProjectEntry(input.root, input.binding.productionPath);
   try {
     if (served.productionRevisionSha256 !== input.binding.productionRevisionSha256) {
@@ -374,6 +398,25 @@ export async function runTrustedBrowserEvaluation(input: Readonly<{
   const transcript: string[] = [];
   const actionLog: string[] = [];
   const captures: TrustedBrowserCapture[] = [];
+  const measured: RetainedCapture[] = [];
+  const measurementMethod = measuredMode ? methodIdentity(browser.version()) : undefined;
+  const capture = async (page: Page, view: ViewSpec, outcomeRef?: string): Promise<void> => {
+    if (!measuredMode) {
+      const url = page.url(), bytes = await page.screenshot({ fullPage: false });
+      if (page.url() !== url) throw new Error('TRUSTED_BROWSER_CAPTURE_STATE_CHANGED');
+      const hash = sha256(bytes), path = join(output, `${String(captures.length).padStart(3, '0')}-sha256-${hash}.png`);
+      input.artifacts.write(path, bytes);
+      captures.push({ path, sha256: hash, ...view.viewport, ...(outcomeRef ? { outcomeRef } : {}), testedUrl: new URL(view.route, 'http://127.0.0.1').href });
+      return;
+    }
+    const retained = await captureMeasuredView(page, view, loadedContracts.contracts, captureContext);
+    measured.push(retained);
+    const path = join(output, `${String(measured.length).padStart(3, '0')}-sha256-${retained.binding.capture.sha256}.png`);
+    // This is the exact buffer whose pixels and DOM facts form the immutable measurement packet.
+    input.artifacts.write(path, retained.png);
+    captures.push({ path, sha256: retained.binding.capture.sha256, width: retained.binding.image.width, height: retained.binding.image.height,
+      ...(outcomeRef === undefined ? {} : { outcomeRef }), testedUrl: new URL(view.route, 'http://127.0.0.1').href });
+  };
   const behaviorByOutcome = new Map(
     input.binding.requiredOutcomeRefs.map((outcomeRef) => [outcomeRef, new Set<string>()]),
   );
@@ -385,20 +428,22 @@ export async function runTrustedBrowserEvaluation(input: Readonly<{
   const entrySurfaceFindings = new Set<string>();
   const safetyFindings = new Set<string>();
   try {
-    for (const viewport of VIEWPORTS) {
-      const context = await browser.newContext({ viewport });
-      const page = await context.newPage();
+    for (const request of requests.filter(item => item.state === undefined)) {
+      const viewport = { ...request.viewport, id: request.viewport.width <= 600 ? '390x844' as const : '1280x900' as const };
+      const inspect = async (page: Page): Promise<void> => {
       page.on('console', (message) => {
         if (message.type() === 'error') safetyFindings.add('browser-console-error');
       });
       page.on('pageerror', () => safetyFindings.add('browser-page-error'));
       page.on('requestfailed', () => safetyFindings.add('browser-request-failed'));
-      try {
-        const response = await page.goto(served.url, { waitUntil: 'load' });
+        const initialUrl = measuredMode ? page.url() : served.url;
+        const response = await page.goto(initialUrl, { waitUntil: 'load' });
+        if (request.browserZoom === 2) await ensureMeasuredLayoutZoom(page, request.viewport);
         if (response === null || !response.ok()) {
           safetyFindings.add('browser-navigation-failed');
           for (const findings of behaviorByOutcome.values()) findings.add('required-page-unavailable');
         }
+        if (measuredMode) await capture(page, { id: request.id, viewport: request.viewport, browserZoom: request.browserZoom, route: pageRoute(page), state: 'initial', stateRecipeSha256: digest({ state: 'initial' }) });
         if (input.manifest.entrySurface !== undefined) {
           await collectEntrySurfaceFindings(
             page,
@@ -408,7 +453,8 @@ export async function runTrustedBrowserEvaluation(input: Readonly<{
           );
           for (const finding of entrySurfaceFindings) accessFindings.add(finding);
           await collectInteractiveLabelFindings(page, viewport, accessFindings);
-          const reset = await page.goto(served.url, { waitUntil: 'load' });
+          const reset = await page.goto(initialUrl, { waitUntil: 'load' });
+          if (request.browserZoom === 2) await ensureMeasuredLayoutZoom(page, request.viewport);
           if (reset === null || !reset.ok()) safetyFindings.add('browser-navigation-failed');
         }
         await page.keyboard.press('Tab');
@@ -455,6 +501,7 @@ export async function runTrustedBrowserEvaluation(input: Readonly<{
             try {
               if (action.kind === 'click') await page.locator(action.selector).click({ timeout: 2_000 });
               else await page.locator(action.selector).fill(action.value, { timeout: 2_000 });
+              if (request.browserZoom === 2) await ensureMeasuredLayoutZoom(page, request.viewport);
             } catch {
               findings.add('required-action-unavailable');
             }
@@ -484,31 +531,27 @@ export async function runTrustedBrowserEvaluation(input: Readonly<{
           await collectInteractiveLabelFindings(page, viewport, accessFindings);
           await collectRenderedKoreanCopyFindings(page, viewport, accessFindings);
           const observedUrl = new URL(page.url());
-          if (observedUrl.origin !== new URL(served.url).origin) throw new Error('TRUSTED_BROWSER_CAPTURE_LEFT_PRODUCTION');
-          const captureBytes = await page.screenshot({ fullPage: false });
-          if (page.url() !== observedUrl.href) throw new Error('TRUSTED_BROWSER_CAPTURE_STATE_CHANGED');
-          const captureSha256 = sha256(captureBytes);
-          const capturePath = join(
-            output,
-            `${viewport.width}x${viewport.height}-${String(scriptIndex).padStart(2, '0')}-${sha256(Buffer.from(script.outcomeRef)).slice(0, 12)}-sha256-${captureSha256}.png`,
-          );
-          input.artifacts.write(capturePath, captureBytes);
-          captures.push(Object.freeze({
-            path: capturePath,
-            sha256: captureSha256,
-            width: viewport.width,
-            height: viewport.height,
-            outcomeRef: script.outcomeRef,
-            // The ephemeral server port is not state; the actual post-action route/query/hash is.
-            testedUrl: new URL(`${observedUrl.pathname}${observedUrl.search}${observedUrl.hash}`, 'http://127.0.0.1').href,
-          }));
+          if (observedUrl.origin !== new URL(initialUrl).origin) throw new Error('TRUSTED_BROWSER_CAPTURE_LEFT_PRODUCTION');
+          const state = `outcome-${sha256(Buffer.from(script.outcomeRef)).slice(0, 16)}`;
+          await capture(page, { id: `${request.id}:${state}`, viewport: request.viewport, browserZoom: request.browserZoom,
+            route: pageRoute(page), state, stateRecipeSha256: digest({ focusProbe: 'Tab', scripts: input.manifest.scripts.slice(0, scriptIndex + 1).map(s => ({ ...s, actions: s.actions.filter(a => a.viewports === undefined || a.viewports.includes(viewport.id)) })) }) }, script.outcomeRef);
         }
         const overflow = await page.evaluate(() =>
           document.documentElement.scrollWidth > document.documentElement.clientWidth);
         if (overflow) accessFindings.add(`horizontal-overflow:${viewport.width}x${viewport.height}`);
-      } finally {
-        await context.close();
-      }
+      };
+      if (!measuredMode) {
+        const context = await browser.newContext({ viewport: request.viewport });
+        try { await inspect(await context.newPage()); } finally { await context.close(); }
+      } else if (request.browserZoom === 2) await withZoomedLocalView(input.root, input.binding.productionPath, request.viewport, undefined, inspect);
+      else await withLocalView(browser, input.root, { page: input.binding.productionPath, viewport: request.viewport }, inspect);
+    }
+    for (const request of requests.filter(item => item.state !== undefined)) {
+      const state = request.state!;
+      const view: ViewSpec = { id: request.id, viewport: request.viewport, browserZoom: request.browserZoom, route: state.route, state: state.name, stateRecipeSha256: digest(state) };
+      const inspect = (page: Page) => capture(page, view);
+      if (request.browserZoom === 2) await withZoomedLocalView(input.root, input.binding.productionPath, request.viewport, state, inspect);
+      else await withLocalView(browser, input.root, { page: input.binding.productionPath, viewport: request.viewport, state }, inspect);
     }
     try {
       served.assertSourceCurrent();
@@ -534,8 +577,25 @@ export async function runTrustedBrowserEvaluation(input: Readonly<{
   // viewport and condition. A bare access/safety status cannot explain what must change.
   transcript.push(...[...accessFindings].sort().map((finding) => `access-finding:${finding}`));
   transcript.push(...[...safetyFindings].sort().map((finding) => `safety-finding:${finding}`));
+  const sealed = measuredMode ? (() => {
+  if (sourceDigest(input.root) !== sourceSha256 || digest(loadContracts(input.root).inputs) !== digest(loadedContracts.inputs)) throw new Error('TRUSTED_BROWSER_MEASUREMENT_INPUTS_CHANGED');
+  const method = measurementMethod!;
+  const scope = measured.map(c => c.view);
+  const packet: VisualMeasurement = { schema: 'visual-measurement-v1', method,
+    binding: { authority: 'native-local', projectIdentitySha256: digest(realpathSync(input.root)), routeSha256: input.binding.routeSha256,
+      sourceContractSha256: input.binding.sourceContractSha256, activationBuildSha256: input.binding.activationBuildSha256,
+      sourceSha256, production: [{ entry: input.binding.productionPath, servedTreeSha256: input.binding.productionRevisionSha256 }], inputs: loadedContracts.inputs, scopeSha256: digest(scope) },
+    scope, captures: measured.map(c => c.binding), ...measureCaptures(measured, scope, loadedContracts.contracts, method),
+    attestation: { kind: 'diagnostic-only', payloadSha256: '0'.repeat(64), signature: null } };
+  return sealNativeMeasurement(input.root, packet, measured);
+  })() : undefined;
+  for (const retained of measured) {
+    input.artifacts.write(retained.binding.capture.path, retained.png);
+    input.artifacts.write(retained.binding.ir.path, canonicalBytes(retained.raw));
+  }
+  if (sealed) input.artifacts.write(sealed.receipt.path, sealed.bytes);
   const receipt: TrustedBrowserReceipt = Object.freeze({
-    schema: TRUSTED_BROWSER_RECEIPT_SCHEMA,
+    schema: sealed ? MEASURED_BROWSER_RECEIPT_SCHEMA : TRUSTED_BROWSER_RECEIPT_SCHEMA,
     runId: input.binding.runId,
     routeSha256: input.binding.routeSha256,
     sourceContractSha256: input.binding.sourceContractSha256,
@@ -552,7 +612,13 @@ export async function runTrustedBrowserEvaluation(input: Readonly<{
       access: accessFindings.size === 0 ? 'pass' : 'fail',
       safety: safetyFindings.size === 0 ? 'pass' : 'fail',
     }),
-    captures: Object.freeze(captures),
+    captures: Object.freeze(captures.map((item, index) => {
+      if (!sealed) return Object.freeze(item);
+      const retained = measured[index]!;
+      return Object.freeze({ ...item, measurement: { packet: sealed.receipt, viewId: retained.view.id, browserZoom: retained.view.browserZoom,
+        state: retained.view.state, stateRecipeSha256: retained.view.stateRecipeSha256, viewport: retained.view.viewport,
+        layoutViewport: { width: retained.binding.observedViewport.innerWidth, height: retained.binding.observedViewport.innerHeight } } });
+    })),
     transcript: Object.freeze(transcript),
     ...(input.manifest.entrySurface === undefined
       ? {}

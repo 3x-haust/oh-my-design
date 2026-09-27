@@ -4,7 +4,7 @@ import {
   failAdaptiveRoute,
   type AdaptiveStrategyDecision,
 } from './adaptive-flow-domain.ts';
-import { ADAPTIVE_STAGE_GRAPH, ADAPTIVE_STAGE_OWNERS, type AdaptiveStageId } from './adaptive-stage-graph.ts';
+import { adaptiveStageGraph, adaptiveStageOwners, type AdaptiveStageId, type AdaptiveStageGraph } from './adaptive-stage-graph.ts';
 
 function knownRole(value: string): boolean {
   return ADAPTIVE_ROLE_IDS.some((role) => role === value);
@@ -14,13 +14,14 @@ function knownStage(value: string): value is AdaptiveStageId {
   return ADAPTIVE_STAGE_IDS.some((stage) => stage === value);
 }
 
-function selectedDependencies(stage: AdaptiveStageId, selected: ReadonlySet<string>): readonly AdaptiveStageId[] {
-  const node = ADAPTIVE_STAGE_GRAPH[stage];
+function selectedDependencies(stage: AdaptiveStageId, selected: ReadonlySet<string>, graph: AdaptiveStageGraph): readonly AdaptiveStageId[] {
+  const node = graph[stage];
   return [...node.prerequisites, ...node.afterIfSelected].filter((dependency) => selected.has(dependency));
 }
 
 /** Validates explicit concurrency groups against selected roles and the artifact DAG. */
-export function validateAdaptiveExecutionWaves(strategy: AdaptiveStrategyDecision, deliveryMode?: 'design-only'): void {
+export function validateAdaptiveExecutionWaves(strategy: AdaptiveStrategyDecision, deliveryMode?: 'design-only', currentProcess = false): void {
+  const graph = adaptiveStageGraph(currentProcess), owners = adaptiveStageOwners(currentProcess);
   const waveByRole = new Map<string, number>();
   for (const [waveIndex, wave] of strategy.executionWaves.entries()) {
     if (wave.roles.length === 0) return failAdaptiveRoute('ADAPTIVE_EXECUTION_WAVE_INVALID', `strategyDecision.executionWaves[${waveIndex}].roles must contain a selected role`);
@@ -45,15 +46,19 @@ export function validateAdaptiveExecutionWaves(strategy: AdaptiveStrategyDecisio
     }
   }
 
+  if (currentProcess && strategy.stages.includes('candidate-generation')
+    && (waveByRole.get('omd-art-director') === undefined || waveByRole.get('omd-art-director') !== waveByRole.get('omd-sketch'))) {
+    return failAdaptiveRoute('ADAPTIVE_EXECUTION_WAVE_INVALID', 'concept-exploration requires an Art Director/Sketch team wave; commit the plan before independent candidate source calls');
+  }
   const selected = new Set(strategy.stages);
   for (const stage of strategy.stages) {
     if (!knownStage(stage)) return failAdaptiveRoute('UNKNOWN_ADAPTIVE_STAGE');
-    const stageOwner = ADAPTIVE_STAGE_OWNERS[stage];
+    const stageOwner = owners[stage];
     if (!stageOwner.startsWith('omd-')) continue;
     const stageWave = waveByRole.get(stageOwner);
     if (stageWave === undefined) return failAdaptiveRoute('ADAPTIVE_EXECUTION_WAVE_INVALID', `stage ${stage} requires owner ${stageOwner} in an execution wave`);
-    for (const dependency of selectedDependencies(stage, selected)) {
-      const dependencyOwner = ADAPTIVE_STAGE_OWNERS[dependency];
+    for (const dependency of selectedDependencies(stage, selected, graph)) {
+      const dependencyOwner = owners[dependency];
       if (!dependencyOwner.startsWith('omd-') || dependencyOwner === stageOwner) continue;
       const dependencyWave = waveByRole.get(dependencyOwner);
       if (dependencyWave === undefined || dependencyWave >= stageWave) {

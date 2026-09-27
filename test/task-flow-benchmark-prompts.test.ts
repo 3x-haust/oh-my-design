@@ -1,44 +1,21 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
+import { readBuildAgents } from '../adapters/build-identity.ts';
+import { assertRoleDelivery, promptRoot } from './helpers/prompt-delivery.ts';
+import { parseSurfacePlan, requiredSurfaceCells } from '../core/frame/process-plan.ts';
+import { surfacePlan } from './helpers/phase6-process.ts';
 
-const read = (name: string) =>
-  readFileSync(new URL(`../src/agents/${name}.agent.yaml`, import.meta.url), 'utf8');
-
-test('selected roles carry the task-flow benchmark ABI', () => {
+test('selected roles preserve the machine task-flow benchmark ABI through host emission', () => {
+  const agents = readBuildAgents(promptRoot);
   for (const role of ['scout', 'composer', 'sketch', 'hand', 'eye']) {
-    assert.match(read(role), /TASK_FLOW_BENCHMARK_ABI_V2/, role);
+    assert.ok(agents.find(a => a.name === `omd-${role}`)!.instructions.includes('TASK_FLOW_BENCHMARK_ABI_V2'));
+    assertRoleDelivery(role);
   }
 });
 
-test('benchmark roles separate observed sources from destination authority', () => {
-  const scout = read('scout');
-  assert.match(scout, /omd schema task-flow-benchmark[\s\S]*omd benchmark set/);
-  assert.match(scout, /same destination domain[\s\S]*adjacent-domain sources/);
-  assert.match(scout, /omd benchmark set/);
-  assert.match(scout, /sanitized\s+projection/);
-
-  const hand = read('hand');
-  assert.match(hand, /generic wizard, dashboard shell, or label-swapped form/);
-  assert.match(hand, /never authority to copy source brands/);
-  assert.match(hand, /data-omd-task-id/);
-  assert.match(hand, /data-omd-consequence-for/);
-
-  const framer = read('framer');
-  assert.match(framer, /omd schema\s+entry-surface-contract/);
-  assert.match(framer, /Do not put CSS selectors, verdicts, source identities/);
-
-  const eye = read('eye');
-  assert.match(eye, /omd lifecycle plan/);
-});
-
-test('composer and eye bind structural alternatives to final comparison', () => {
-  const composer = read('composer');
-  assert.match(composer, /2–3 structurally distinct UX models/);
-  assert.match(composer, /unrelated-domain noun swap/);
-
-  const eye = read('eye');
-  assert.match(eye, /interactionBenchmarkFit/);
-  assert.match(eye, /domainSpecificity/);
-  assert.match(eye, /marketing\/showpiece policy/);
+test('marketing surfaces retain real view coverage without fabricated product task rows', () => {
+  const plan = parseSurfacePlan(surfacePlan);
+  assert.deepEqual(plan.surfaces.flatMap(s => s.taskIds), []);
+  assert.equal(requiredSurfaceCells(plan).length, 3);
+  assert.ok(requiredSurfaceCells(plan).some(c => c.surfaceId === 'details'));
 });

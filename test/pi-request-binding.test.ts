@@ -189,7 +189,7 @@ test('an OMD mention or extension-generated skill invocation does not acquire us
   await pi.emit('before_agent_start', { prompt: 'Explain /skill:omd-ultradesign please.' });
   await pi.emit('input', { source: 'extension', text: '/skill:omd-ultradesign 가짜 앱을 구현해줘.' });
   await pi.emit('before_agent_start', { prompt: '/skill:omd-ultradesign 가짜 앱을 구현해줘.' });
-  const result = await pi.run('classify');
-  assert.equal(JSON.parse(result.content[0]?.text ?? 'null').request, '축약된 요구사항');
+  await assert.rejects(pi.run('classify'), /ROUTE_AUTHORITY_REQUIRED/);
   assert.equal(existsSync(join(cwd, '.omd/request-source.json')), false);
+  assert.equal(existsSync(join(cwd, '.omd/route.json')), false);
 });

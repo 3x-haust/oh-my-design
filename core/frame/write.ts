@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { stringify } from 'yaml';
+import { validateFrameProcessPlans, type SurfacePlan, type ValidationPlan, type AccessibilityPlan } from './process-plan.ts';
 import { readFrame, type RealityLedger } from './index.ts';
 import { normalizeUxSurface, validateTaskCoverageMatrix } from './check-ux.ts';
 import type { Choice } from '../types.ts';
@@ -43,6 +44,9 @@ export function writeFrameRecord(cwd: string, opts: {
   taskCoverageMatrix?: unknown;
   reality?: RealityLedger;
   entrySurface?: EntrySurfaceContract;
+  surfacePlan?: SurfacePlan;
+  validationPlan?: ValidationPlan;
+  accessibilityPlan?: AccessibilityPlan;
 }, adapter?: ProjectWriteAdapter): string {
   if (!opts.why || opts.why.trim().length < 10) {
     throw new Error(
@@ -73,6 +77,7 @@ export function writeFrameRecord(cwd: string, opts: {
   if ((normalizedSurface === 'product' || normalizedSurface === 'mixed') && taskCoverageMatrix === undefined) {
     throw new Error('Product and mixed surfaces require a valid task coverage matrix. Run omd schema frame, author its input, then omd frame set --input <frame-input.json>. For inline input use --task-matrix "T1 | goal: … | start: … | actions: … | success: … | recovery: … | viewports: desktop,mobile | requirements: none". Functional requirements JSON and --entry-surface are separate inputs, not the task matrix.');
   }
+  validateFrameProcessPlans(opts, taskCoverageMatrix, cwd);
   const body = [
     '## The given problem', '', opts.problem.trim(), '',
     '## The reframing', '', opts.reframe.trim(), '',
@@ -86,6 +91,9 @@ export function writeFrameRecord(cwd: string, opts: {
   if (opts.uxCostliestError?.trim()) frontmatter['uxCostliestError'] = opts.uxCostliestError.trim();
   if (normalizedSurface) frontmatter['uxSurface'] = normalizedSurface;
   if (opts.reality !== undefined) frontmatter['reality'] = opts.reality;
+  if (opts.surfacePlan !== undefined) frontmatter['surfacePlan'] = opts.surfacePlan;
+  if (opts.validationPlan !== undefined) frontmatter['validationPlan'] = opts.validationPlan;
+  if (opts.accessibilityPlan !== undefined) frontmatter['accessibilityPlan'] = opts.accessibilityPlan;
   if (opts.entrySurface !== undefined) {
     frontmatter['entrySurface'] = parseEntrySurfaceContract(opts.entrySurface);
   }

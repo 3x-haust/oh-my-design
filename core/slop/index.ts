@@ -82,8 +82,8 @@ const REASONS: Record<SlopSourceCandidateId, Pick<SlopSourceCandidate, 'reason' 
     reviewQuestion: 'Is terminal language intrinsic to the product, or should monospace stay with code content?',
   },
   'fake-submit': {
-    reason: 'A form submit prevents default and fakes a success state on a timer, but the file makes no network call — the request never leaves the page.',
-    reviewQuestion: 'Does this submit actually deliver the request (API, form action, mailto, waitlist), or is it a success animation with no delivery? Wire it, or label it a UI-state demo.',
+    reason: 'A form submit handler prevents default and fakes a success state on a timer, but that handler makes no network call — the request never leaves the page.',
+    reviewQuestion: 'Does this handler actually deliver the request (API, form action, mailto, waitlist), or is it a success animation with no delivery? Wire it, or label it a UI-state demo.',
   },
 };
 
@@ -389,19 +389,61 @@ function detectTerminalChrome(source: string, path: string): SlopSourceCandidate
   return null;
 }
 
-function detectFakeSubmit(source: string, path: string): SlopSourceCandidate | null {
-  // A JS-handled form submit that fakes success on a timer and never touches the network.
+interface FunctionScope {
+  name: string;
+  start: number;
+  bodyStart: number;
+  end: number;
+}
+
+/** Find named function/arrow bodies with balanced braces; enough scope to avoid file-wide waivers. */
+function functionScopes(source: string): FunctionScope[] {
+  const starts = /function\s+([A-Za-z_$][\w$]*)\s*\([^)]*\)\s*\{|(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?\([^)]*\)\s*=>\s*\{/g;
+  const scopes: FunctionScope[] = [];
+  for (const match of source.matchAll(starts)) {
+    const bodyStart = match.index! + match[0].lastIndexOf('{');
+    let depth = 0;
+    let quote: '"' | "'" | '`' | null = null;
+    let escaped = false;
+    let end = source.length;
+    for (let index = bodyStart; index < source.length; index++) {
+      const char = source[index]!;
+      if (quote) {
+        if (escaped) escaped = false;
+        else if (char === '\\') escaped = true;
+        else if (char === quote) quote = null;
+        continue;
+      }
+      if (char === '"' || char === "'" || char === '`') { quote = char; continue; }
+      if (char === '{') depth++;
+      else if (char === '}' && --depth === 0) { end = index + 1; break; }
+    }
+    scopes.push({ name: match[1] ?? match[2]!, start: match.index!, bodyStart, end });
+  }
+  return scopes;
+}
+
+function detectFakeSubmit(source: string, path: string): SlopSourceCandidate[] {
+  // Scope delivery evidence to each submit handler. An unrelated fetch elsewhere in the
+  // component/file cannot waive a handler that only advances to success on a timer.
   const network = /\b(?:fetch|axios|XMLHttpRequest|useMutation|useSWRMutation|useActionState)\b|fetcher\.(?:submit|load|Form)|navigator\.sendBeacon|mailto:|method\s*=\s*['"]?post|(?:^|[\s{;(=])(?:form)?action\s*[:=]/mi;
-  if (network.test(source)) return null;
-  if (!/preventDefault\s*\(/.test(source)) return null;
   const success = /(['"`])(?:success|submitted|sent|done|complete)\1|set(?:Submitted|Success|Sent)\s*\(/i;
-  for (const match of source.matchAll(/setTimeout\s*\(/g)) {
-    const region = source.slice(match.index!, match.index! + 320);
-    if (success.test(region)) {
-      return candidate('fake-submit', path, source, match.index!, ['submit:preventDefault', 'transition:setTimeout->success', 'network:none']);
+  const findings: SlopSourceCandidate[] = [];
+  for (const scope of functionScopes(source)) {
+    const submitHandler = /submit/i.test(scope.name)
+      || new RegExp(`onSubmit\\s*=\\s*\\{\\s*${scope.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\}`).test(source);
+    if (!submitHandler) continue;
+    const body = source.slice(scope.bodyStart, scope.end);
+    if (!/preventDefault\s*\(/.test(body) || network.test(body)) continue;
+    for (const timer of body.matchAll(/setTimeout\s*\(/g)) {
+      const timerIndex = scope.bodyStart + timer.index!;
+      if (!success.test(source.slice(timerIndex, Math.min(scope.end, timerIndex + 320)))) continue;
+      findings.push(candidate('fake-submit', path, source, timerIndex, [
+        'submit:preventDefault', 'transition:setTimeout->success', 'network:none',
+      ]));
     }
   }
-  return null;
+  return findings;
 }
 
 function detectCandidates(source: string, path: string, extension: string): SlopSourceCandidate[] {
@@ -416,9 +458,8 @@ function detectCandidates(source: string, path: string, extension: string): Slop
     detectOrdinalRun(masked, path),
     detectFontPair(masked, path),
     detectTerminalChrome(masked, path),
-    detectFakeSubmit(masked, path),
-  ];
-  return candidates.filter((item): item is SlopSourceCandidate => item !== null);
+  ].filter((item): item is SlopSourceCandidate => item !== null);
+  return [...candidates, ...detectFakeSubmit(masked, path)];
 }
 
 function shouldSkipFile(name: string): boolean {

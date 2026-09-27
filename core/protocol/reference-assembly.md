@@ -13,7 +13,49 @@ predecessor rather than reconstructing it from a source page, screenshot, or ear
 The **finalizer** is the coordinator performing finalization; it is a responsibility, not a new agent,
 service, provider, or runtime.
 
+## Recorded whole-screen browsing
+
+Current research uses reference-research-v8 and the recorded `omd ref browse` interface documented
+in `core/ref/browse/README.md`. Scout chooses actions; the native driver records one live page.
+Start the domain/design lane, choose a real root or search, follow observed links/similarity, inspect
+actual whole-screen shots, and keep with a reason and rights/visibility context. `shot --selector img`
+retains the complete loaded image, not its wrapper or thumbnail. Crop is optional parent-linked
+detail, never the sole direction reference. Contact sheets are paginated; no middle screens vanish.
+
+Await command completion and use its native receipts. Do not poll inventory until it repeats, force
+parallel actions in one session, suppress overlays or infer an unvisited screen. Headless is default;
+profile/CDP require matching authenticated opt-in. Authentication, pricing and unsafe transitions
+retain the driver's exact consent/refusal semantics. A successful capture is not reference quality,
+license attestation or research completeness. End at coverage, saturation, budget or interruption;
+partial/unavailable seals become confidence debt without universally blocking first production.
+`ref advance` returns needs-model-action rather than selecting queries or navigating itself.
+
+After actual image inspection, Scout publishes `reference-analysis-v1` with browse analysis-set/check:
+whole-screen hierarchy, density, typography, components, patterns/exceptions and apply/do-not-apply.
+Every current surface has domain/design direct, partial or brief-derived decisions; missing coverage
+has a precise gap and decision. Publish applicable research and ref apply-set/check through their
+existing publishers. A plan is not proof of rendered application or user approval.
+
+Art Director/Sketch/Typesetter use `ref browse handoff --for concept`; Composer and Hand use composer
+and hand. The validated maker payload carries selected rights-allowed whole screens, actual analysis,
+per-surface application and source/rights/visibility. Optional details supplement whole screens.
+Study permission does not authorize shipped pixels, source copy, brand identity or unlicensed assets.
+Eye/Glance/fidelity and --blind receive only source-free coverage metadata, no reference images or
+maker rationale. Apply blind isolation to reviewers, not to authorized maker understanding.
+
+Reference selection is not the interactive direction checkpoint. The coordinator may select a
+reference assembly with a disclosed reason; only later representative Sketch previews ask the user
+which direction to develop. Never substitute a reference table or Eye preference for that choice.
+
+Historical v5/v6/v7/component-assembly APIs below retain their original evidence semantics. They are
+explicit legacy paths, not the default browse tutorial; do not relabel old crops as whole screens or
+retroactively replace route/behavior hashes. New v2 behavior is selected by authenticated reviewPurpose.
+
 ## Stage contract
+
+For current recorded browsing use the owner/procedure above. The following table describes the
+historical component-assembly publication family when explicitly selected, not a crop-only rule
+for new maker handoffs.
 
 | Stage | Sole owner | Validated input | Durable/cache output | Machine check, function, or command | Explicit fallback or stop |
 |---|---|---|---|---|---|
@@ -49,8 +91,8 @@ briefs and selected handoffs. No source URLs, hosts or capture paths belong in d
 The projection does not replace selected assembly, approved tokens, actual reference-usage evidence,
 or blind final review. It records what should be applied and checked, not what has already passed.
 Existing valid native captures remain usable only when current validators and schema migration permit.
-Publish current work as v7 without relabelling historical bytes; historical v5 remains search-only and
-historical v6 retains its original search-or-direct-root contract. Current execution binding, inspection
+Publish recorded browse work as v8 without relabelling historical bytes; historical v5 remains search-only,
+v6 retains its search-or-direct-root contract and v7 retains its original market provenance. Current execution binding, inspection
 and application are required before downstream composition/production and design-only/terminal completion. Changed research, domain
 brief or missing/edited derived outputs fails closed. Do not repair hashes to invent a review.
 
@@ -64,7 +106,8 @@ This agent-authored review is not human approval, independent reviewer attestati
 
 The workflow adapts Design Flow Harness's actual-image analysis → screen reference linkage →
 representative concept → expansion approach, while retaining OMD's independent research lanes,
-adaptive concept/selection policy and source-free production boundary.
+adaptive concept/selection policy and source-free blind-review boundary. Makers receive authorized
+whole-screen images and actual analysis; the source-free legacy projection remains a compatibility path.
 
 Every reference serves one of three roles, and the domain brief's `referenceQueries` seed all three:
 
@@ -436,7 +479,9 @@ publication ownership, evidence requirements or source-free boundary.
 
 ## Capture granularity
 
-A board is assembled from parts. Every measured reference is captured at the specific component it
+Recorded browsing keeps whole screens first and optional parent-linked details. This section's
+component granularity checks apply only to the historical measured-part API, never as a demand
+to crop away a current whole-screen direction. In that API every measured reference is captured at the specific component it
 studies (`omd ref add <url> --as <component> --selector "<css>" --blueprint --shot`); a capture
 scoped to a page root — `main`, `body`, `html`, `:root` — measures the whole document and yields a
 page average with no component anatomy, so section-granular composition has nothing to take from it.
@@ -501,7 +546,11 @@ derivative failure the transfer boundary forbids.
 
 ## Capturing an existing state or open disclosure
 
-Retained reference captures and native flow steps first allow a brief bounded settle for late
+The historical component/flow capture path below has different observation semantics from recorded
+browse. Current browse records obstructions and never visually suppresses overlays. Do not apply
+this legacy preparation procedure to a browse session.
+
+Historical retained reference captures and native flow steps first allow a brief bounded settle for late
 notices, then visually suppress only visible informational announcement dialogs with an unambiguous
 `닫기`/`Close` control. The browser does **not** click the page-owned control, run its handlers,
 or remove DOM nodes: a browser-owned DevTools stylesheet visually hides the notice and a named
@@ -649,8 +698,11 @@ Markdown table directly into the Codex or Claude conversation. That table is the
 candidate presentation surface and names, per component slot, the source site/page, exact
 captured UI or image region, the local part-image capture path, proposed target, take, avoid,
 and adaptation. The local capture column lets the human inspect the exact per-component part image
-while selecting. Raw captures remain Scout provenance and do not become Composer or Hand inputs by
-mere filesystem presence. Component-level and whole-surface fidelity are both allowed;
+while selecting. Raw captures remain Scout provenance and do not become role inputs by mere filesystem
+presence. After selection, Composer and Hand may inspect only the exact selected crop when its licence
+or permission allows design-reference use and the validated handoff marks it `noShip`. Rights-unclear,
+unselected, and private-evidence pixels remain unavailable. Blind Eyes never receive reference crops.
+Component-level and whole-surface fidelity are both allowed;
 bare `omd ref distance <page>` remains advisory. After current usage and build observation exist,
 `omd ref distance <page> --selected --gate --json` measures each used component-capture slot at its
 assigned destination selector. Every comparison must score at least `0.6`; a failed, missing,
@@ -665,11 +717,13 @@ another axis cannot compensate for it.
 The coordinator selects the strongest candidate itself and records the canonical v2 selection with `omd ref select`; it produces `.omd/reference-selection-v2.json` and the art-direction receipt, then `omd ref check` verifies currentness. Before composition and production, resolve every pending lawful positive-motion slot into the hash-addressed `.omd/motion-resolutions/sha256-<digest>.json` projection. The art-direction decision writes the composer and hand receipts under `.omd/reference-handoffs/`; both must bind that same decision, capture, assembly, projection, selection, and positive-motion dispositions. Disclose the selection and reason in `.omd/decisions.md`; do not pause to ask the user to pick a candidate. A candidate the user explicitly named still wins.
 
 `omd ref handoff <art-direction|composer|hand> --json` exports the actual current selected
-source-free feature content. This read-only command validates the persisted role receipt,
-selection, capture, assembly, and projection before returning measured transfers and their evidence
-axes. `art-direction` also includes available lawful motion marked `pending-motion-review` for
-the evaluator to decide. Composer and Hand receive only settled `used` pieces after genuine art
-direction publication. Unselected candidates and rejected or unlawful pieces are omitted. The
+feature content. This read-only command validates the persisted role receipt, selection, capture,
+assembly, rights status, and projection before returning measured transfers and their evidence axes.
+`art-direction` also includes available lawful motion marked `pending-motion-review` for the evaluator
+to decide. Composer and Hand receive only settled `used` pieces after genuine art-direction publication.
+For a rights-safe selected crop, their export also names the exact project-contained crop path and digest
+and marks it `noShip`; otherwise the handoff remains source-free. Unselected, rejected, rights-unclear,
+or unlawful pieces are omitted. The
 export's `sha256` binds its content; `referenceHandoffSha256` binds the existing lineage receipt.
 The receipt's older `payloadSha256` is a receipt digest, not a feature payload. Supply the complete
 export unchanged with the permitted owner inputs. `omd brief` remains coordinator intake; its raw
@@ -685,18 +739,18 @@ private evidence. Every candidate needs a positive native-category component. A 
 equivalent may supplement it; a counterexample may only bind an anti-reference. Composer and Hand
 receive the public projection only and apply each mechanism only to its named reference slot.
 
-Never direct a user to open a board UI, standalone HTML, PNG, showcase, or `omd-board`.
-Local screenshots may help a scout and may be attached to a conversation when useful, but
-they never become composition, implementation, or shipped inputs unless a later contract supplies
-an explicit selected, transformed, no-ship visual projection bound to the current assembly and
-selection. `omd ref visual-packet` is that optional route for component captures: it deterministically
-renders only the selected sanitized blueprint as anonymous rectangles, preserves box proportion,
-grouping, nesting, and whitespace, and drops source colour, copy, identity, imagery, and typeface.
-The role-facing packet and SVG contain no raw source path, URL, reference ID, or pixel carrier. Raw
-capture hashes remain only in the private packet evidence. Composer and Hand may inspect the exact
-packet manifest and named SVG only when the adaptive brief selects this route; neither may inspect its
-private evidence. The SVG is reference-only and `noShip`; `omd ref visual-packet-check --production`
-fails if its bytes, path, or digest appear in named production files. Pinterest-like
+Never direct a user to open a board UI, standalone HTML, showcase, or `omd-board`. Local screenshots
+remain Scout evidence until selection and rights validation. Composer and Hand may inspect an exact
+selected rights-safe crop only through their validated handoff; the crop remains reference-only and
+`noShip`. Blind selectors and final reviewers receive no crop, source identity, or authorship signal.
+
+`omd ref visual-packet` remains the optional source-free route: it renders the selected sanitized
+blueprint as anonymous rectangles, preserving box proportion, grouping, nesting, and whitespace while
+dropping source colour, copy, identity, imagery, and typeface. The role-facing packet and SVG contain
+no raw source path, URL, reference ID, or pixel carrier. Raw capture hashes and rights evidence remain
+private. Composer and Hand may inspect the exact packet manifest and named SVG when the adaptive brief
+selects this route; neither may inspect private evidence. Both a selected crop and the SVG are `noShip`;
+production validation fails if their bytes, paths, or digests appear in shipped files. Pinterest-like
 and other gallery regions are user-directed browser captures with source-page provenance,
 rights status/notes, and a local imported PNG only; OMD neither fetches a remote source image
 for import nor hotlinks or ships its bytes.
@@ -757,13 +811,12 @@ Reference assembly alone does not select image-first exploration; an explicitly 
 retains its recorded skip reason and creates no draft obligation. Board-v3 makes each influence
 a unique slot bound to an acquisition zone, decision, primary axis, source state/viewport, target
 viewports, responsive consequence, optional reconciled conflict, and falsifier. Several influences may
-shape one destination zone; downstream roles resolve their commitments into one system and verify each
-promised axis separately. The page is composed from parts, and different sections may draw parts from
-different references; tracing one reference's whole page layout and
-section order wholesale is a derivative failure, not fidelity — study the whole reference, take only the
-part each section needs. `omd ref distance` measures how close each section is to its assigned part;
-high per-part closeness is the intended outcome, not a warning. The selected production gate is
-slot-scoped and does not authorize whole-page cloning. Every used reference is
+shape one destination zone; downstream roles resolve their commitments into one destination system and
+verify each promised relationship separately. References are used only where that system has an unresolved
+relationship; a section-by-section collage is optional, not a quota. Tracing one reference's whole page
+layout and section order remains a derivative failure. `omd ref distance` is a diagnostic of declared
+transfer, not a design-quality target. The selected production gate is slot-scoped and does not authorize
+whole-page cloning. Every used reference is
 recorded with attribution in `.omd/attribution.md`, and the product's own copy is written rather than
 lifting the source's words. The eye and selector still score renders against the composition contract
 without seeing authorship — that blindness is about unbiased scoring, not about hiding the reference

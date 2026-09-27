@@ -47,8 +47,12 @@ The read-only scan below remains useful for early attention. Completion now requ
 2. `omd slop checkpoint --input .omd/.cache/slop-scope.json --json` captures those entries, runs the
    source scanner and existing rendered slop linter, and returns `reviewInput` and the checkpoint path.
    Open the checkpoint's `views[].image` files. Source candidates and render warnings remain distinct.
-3. Fill the returned reviewInput: summary and every finding's `confirmed|dismissed`, individual
-   rendered reason and actual viewIds. `omd slop review-set --input <review.json>` preserves it.
+3. Fill the returned versioned reviewInput: summary and every finding's `confirmed|dismissed`,
+   individual rendered reason and actual viewIds. In measured v2, also bind exact packet SHA and
+   measurement IDs, typed disposition and applicable owner contract evidence. Deterministic RED,
+   task/access failure and repair-required cannot be dismissed by prose or a high score. A verified
+   contextual exception applies only to its actual scoped native evidence. Historical v1 remains
+   historical evidence, not measured approval. `omd slop review-set --input <review.json>` preserves it.
    The initial template is deliberately incomplete, never an approval to bulk-confirm or dismiss.
 4. Confirmed findings require owner repair, rebuild, another same-scope checkpoint, then explicit
    after-render resolutions for the previous confirmed IDs. Judge every new finding as well.

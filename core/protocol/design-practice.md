@@ -4,8 +4,9 @@ OMD's motto is **AI that designs like a human**. Its operational meaning is to m
 design judgments against people, tasks, material, and rendered outcomes. A long process, a polished
 rationale, or a large number of artifacts is not evidence of a good design.
 
-This source-free contract applies within the selected route and existing ownership boundaries.
-It adds no universal stage, research quota, approval checkpoint, or artifact family. The specialized
+This method contract applies within the selected route and existing ownership boundaries.
+It adds no extra stage, research quota, approval checkpoint or artifact family beyond the current
+process's single representative-direction choice. The specialized
 protocols retain their schemas, publishers, isolation, and final gates. Record only bounded decisions
 and observations that another person can inspect, never hidden reasoning.
 
@@ -61,12 +62,17 @@ When the route selects alternatives, state what consequential relationship each 
 making it: what dominates, what is adjacent, how the reading or work path moves, and how the task
 fits on mobile. Colour or margin changes alone do not constitute structural alternatives.
 Keep candidate construction independent until the selected comparison; do not let an early polished
-example become every candidate's skeleton. Follow the concept protocol's evidence-based count.
+example become every candidate's skeleton. Art Director commits a minimal seed and 2-3 hypotheses
+for one representative surface before Sketch source, using identical real content/state/views.
+Interactive users choose once from actual previews; only explicit autonomous authority permits blind
+Eye choice. Typesetter and Composer develop the chosen relationship afterward, before full expansion.
 
 Study references for the named decision, including a conflicting example when it can resolve an
 uncertainty. An example supplies an observable mechanism and its conditions, not an instruction to
-copy its whole page. Composer translates only the allowed sanitized evidence into the destination's
-content-to-form relationship. Raw references and source identities never enter a blind review.
+copy its whole page. Current makers inspect selected rights-allowed whole-screen references with
+actual Scout analysis, then translate the relationship into the destination's own content and tokens.
+Detail crops supplement, not replace, those screens. Reference images, source identities and maker
+rationale never enter blind review.
 
 After comparison, useful principles from a rejected alternative may inform a new owner-authored
 candidate. This is a new, re-rendered hypothesis, not permission to average layouts or silently alter

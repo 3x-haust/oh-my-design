@@ -4,6 +4,11 @@ import { buildFinalReviewerPublication } from '../../adapters/final-reviewer-pub
 import { requireFinalReviewerLaneAuthorization, type ProjectRunInvocation } from './invocation.ts';
 import { getNativePiRun } from './native-pi-run.ts';
 import { nodeStableProjectFileSystem, readStableProjectFile } from './stable-project-file.ts';
+import { loadReviewPolicy, requiresMeasuredTerminal } from '../measure/review-policy.ts';
+import { readPersistedRoute } from '../route/adaptive-route-persistence.ts';
+import { parseMeasuredTerminal } from '../evidence/final-v2-measured-contract.ts';
+import { digest } from '../measure/identity.ts';
+import { policyLane } from '../../adapters/measured-reviewer-publication.ts';
 
 type Descriptor = Readonly<{ path: string; sha256: string }>;
 type Lane = 'blindLane' | 'fidelityLane' | 'protocolLane';
@@ -30,7 +35,7 @@ function descriptor(value: unknown): Descriptor {
 }
 
 export function checkNativeFinalReview(input: Readonly<{ root: string; invocation: ProjectRunInvocation }>): Readonly<{
-  ok: true; lanes: Readonly<Record<Lane, Descriptor>>; executions: readonly Descriptor[];
+  ok: true; lanes: Readonly<Partial<Record<Lane, Descriptor>>>; executions: readonly Descriptor[];
 }> {
   const run = getNativePiRun(input.invocation, input.root);
   const read = (path: string): Buffer => readStableProjectFile({ root: run.projectRoot, path: resolve(run.projectRoot, path),
@@ -43,8 +48,10 @@ export function checkNativeFinalReview(input: Readonly<{ root: string; invocatio
     const attempt = descriptor(pointer.attempt);
     throw new NativeFinalReviewStateError(`review in progress or rejected: ${String(pointer.reason)}; inspect ${attempt.path}`);
   }
-  exact(pointer, ['schema', 'runId', 'buildSha256', 'briefSha256', 'lanes', 'attempt']);
-  if (pointer.schema !== 'native-pi-final-review-v1' || pointer.runId !== run.runId
+  const measured = pointer.schema === 'native-pi-final-review-v2', policy = loadReviewPolicy(run.projectRoot, input.invocation);
+  if (!measured && requiresMeasuredTerminal(readPersistedRoute(run.projectRoot, input.invocation))) throw new NativeFinalReviewStateError('current process needs measured native review');
+  exact(pointer, ['schema', 'runId', 'buildSha256', 'briefSha256', measured ? 'measuredTerminal' : 'lanes', 'attempt']);
+  if ((!measured && pointer.schema !== 'native-pi-final-review-v1') || pointer.runId !== run.runId
     || pointer.buildSha256 !== run.buildSha256 || pointer.briefSha256 !== run.briefSha256) throw new NativeFinalReviewStateError('run binding');
   const load = (artifact: Descriptor): Buffer => {
     const bytes = read(artifact.path);
@@ -55,31 +62,40 @@ export function checkNativeFinalReview(input: Readonly<{ root: string; invocatio
   if (attemptDescriptor.path !== `.omd/final-review/attempts/sha256-${attemptDescriptor.sha256}.json`) throw new NativeFinalReviewStateError('attempt path');
   const attempt = object(JSON.parse(load(attemptDescriptor).toString('utf8')));
   exact(attempt, ['schema', 'runId', 'results', 'failures']);
+  const requiredLanes = (['blindLane', 'fidelityLane', 'protocolLane'] as const).filter(lane => !measured || policy.lanes[policyLane(lane)] > 0);
   if (attempt.schema !== 'native-pi-final-review-attempt-v1' || attempt.runId !== run.runId
     || !Array.isArray(attempt.failures) || attempt.failures.length !== 0
-    || !Array.isArray(attempt.results) || attempt.results.length !== 3) throw new NativeFinalReviewStateError('review attempt');
-  const rawLanes = object(pointer.lanes);
-  exact(rawLanes, ['blindLane', 'fidelityLane', 'protocolLane']);
-  const lanes = { blindLane: descriptor(rawLanes.blindLane), fidelityLane: descriptor(rawLanes.fidelityLane), protocolLane: descriptor(rawLanes.protocolLane) };
+    || !Array.isArray(attempt.results) || attempt.results.length !== requiredLanes.length) throw new NativeFinalReviewStateError('review attempt');
+  const terminal = measured ? parseMeasuredTerminal(pointer.measuredTerminal) : undefined;
+  if (terminal && digest(terminal.reviewPolicy) !== digest(policy)) throw new NativeFinalReviewStateError('measured review policy changed');
+  const rawLanes = object(terminal?.lanes ?? pointer.lanes);
+  exact(rawLanes, requiredLanes);
+  const lanes = Object.fromEntries(requiredLanes.map(lane => [lane, descriptor(rawLanes[lane])]));
   const results = attempt.results.map(object);
   const executions: Descriptor[] = [];
-  for (const name of ['blindLane', 'fidelityLane', 'protocolLane'] as const) {
+  for (const name of requiredLanes) {
     const matching = results.filter(result => result.lane === name);
     const result = matching[0];
     if (matching.length !== 1 || !result) throw new NativeFinalReviewStateError('lane results missing or reused');
     exact(result, ['lane', 'roleResults']);
-    const laneBytes = load(lanes[name]);
+    const laneDescriptor = lanes[name]!;
+    const laneBytes = load(laneDescriptor);
     requireFinalReviewerLaneAuthorization(input.invocation, run.projectRoot, laneBytes);
     const current = buildFinalReviewerPublication({ schema: 'adaptive-final-review-publication-v1',
       laneSchema: object(JSON.parse(laneBytes.toString('utf8'))).schema, roleResults: result.roleResults }, {
       projectRoot: run.projectRoot, invocation: input.invocation, buildSha256: run.buildSha256, briefSha256: run.briefSha256,
     });
-    if (current.lane.path !== lanes[name].path || !current.lane.bytes.equals(laneBytes)) throw new NativeFinalReviewStateError('lane no longer matches current review');
+    if (current.lane.path !== laneDescriptor.path || !current.lane.bytes.equals(laneBytes)) throw new NativeFinalReviewStateError('lane no longer matches current review');
     for (const execution of current.executions) {
       const bytes = load(execution);
       requireFinalReviewerLaneAuthorization(input.invocation, run.projectRoot, bytes);
       if (!bytes.equals(execution.bytes)) throw new NativeFinalReviewStateError('execution changed');
       executions.push({ path: execution.path, sha256: execution.sha256 });
+    }
+    for (const artifact of current.artifacts ?? []) {
+      const bytes = load(artifact);
+      requireFinalReviewerLaneAuthorization(input.invocation, run.projectRoot, bytes);
+      if (!bytes.equals(artifact.bytes)) throw new NativeFinalReviewStateError('surface review artifact changed');
     }
   }
   return { ok: true, lanes, executions };

@@ -9,7 +9,12 @@ import { canonicalJson } from '../ref/board-artifacts.ts';
 import { checkSlopFinalGraph } from '../slop/review.ts';
 import { FINAL_RENDER_REVIEWER_TASK, finalRenderReviewerPacket } from './final-render-review.ts';
 import type { ProjectRunInvocation } from './invocation.ts';
-import { buildNativeFinalManifest, currentNativeFinalObservations } from './native-final-manifest.ts';
+import { buildNativeFinalManifest, buildNativeMeasuredFinalDraft, currentNativeFinalObservations } from './native-final-manifest.ts';
+import { loadReviewPolicy, requiresMeasuredTerminal } from '../measure/review-policy.ts';
+import { readPersistedRoute } from '../route/adaptive-route-persistence.ts';
+import { policyLane } from '../../adapters/measured-reviewer-publication.ts';
+import { publishDeterministicProtocol, validateMeasuredTerminal } from '../evidence/final-v2-measured-terminal.ts';
+import { measuredReviewerTask } from './trusted-review-profile.ts';
 import { nativeFinalLanePacket, nativeFinalLaneTask } from './native-final-packet.ts';
 import { checkNativeFinalReview } from './native-final-review-state.ts';
 export { checkNativeFinalReview } from './native-final-review-state.ts';
@@ -37,19 +42,26 @@ function packetLaneSchema(bytes: Buffer): string {
 }
 
 export async function runNativeFinalReview(input: ReviewInput): Promise<Readonly<{
-  pointer: string; lanes: Readonly<Record<Lane, Descriptor>>; executions: readonly Descriptor[];
+  pointer: string; lanes: Readonly<Partial<Record<Lane, Descriptor>>>; executions: readonly Descriptor[];
 }>> {
   const run = getNativePiRun(input.invocation, input.root);
   const root = run.projectRoot;
   const observationSha256s = currentNativeFinalObservations(root).map(({ receipt }) => receipt.sha256);
+  const policy = loadReviewPolicy(root, input.invocation), measured = requiresMeasuredTerminal(readPersistedRoute(root, input.invocation));
+  const writer = createProjectWriteAdapter(root, input.invocation);
+  const draft = measured ? (() => {
+    const activation = Buffer.from(canonicalJson(input.invocation.activation)), path = `.omd/activation/sha256-${hash(activation)}.json`;
+    writer.writeContentAddressed(path, activation);
+    return buildNativeMeasuredFinalDraft(root, input.invocation, path);
+  })() : undefined;
+  const protocol = draft ? publishDeterministicProtocol(root, draft.graph, writer, input.invocation) : undefined;
   const packetFor = (lane: Lane): Buffer => lane === 'blindLane'
     ? finalRenderReviewerPacket({ root, invocation: input.invocation,
       packetInput: { schema: 'adaptive-final-render-reviewer-packet-input-v1', observationSha256s } })
     : nativeFinalLanePacket({ root, invocation: input.invocation, observationSha256s, lane });
-  const work = (['blindLane', 'fidelityLane', 'protocolLane'] as const).map((lane) => ({
-    lane, packet: packetFor(lane), task: lane === 'blindLane' ? FINAL_RENDER_REVIEWER_TASK : nativeFinalLaneTask(lane),
+  const work = (['blindLane', 'fidelityLane', 'protocolLane'] as const).filter(lane => !measured || policy.lanes[policyLane(lane)] > 0).map((lane) => ({
+    lane, packet: packetFor(lane), task: measured ? measuredReviewerTask(lane) : lane === 'blindLane' ? FINAL_RENDER_REVIEWER_TASK : nativeFinalLaneTask(lane),
   }));
-  const writer = createProjectWriteAdapter(root, input.invocation);
   const pointer = '.omd/final-review/native-current.json';
   const pending = Buffer.from(canonicalJson({ schema: 'native-pi-final-review-pending-v1', runId: run.runId, nonce: randomUUID() }));
   authorizeNativePiPayload(input.invocation, root, 'final-reviewer-lane', pending);
@@ -101,7 +113,7 @@ export async function runNativeFinalReview(input: ReviewInput): Promise<Readonly
       }
     });
     for (const { publication } of publications) {
-      for (const artifact of [...publication.executions, publication.lane]) {
+      for (const artifact of [...publication.executions, ...publication.artifacts ?? [], publication.lane]) {
         authorizeNativePiPayload(input.invocation, root, 'final-reviewer-lane', artifact.bytes);
         writer.writeContentAddressed(artifact.path, artifact.bytes);
       }
@@ -111,9 +123,11 @@ export async function runNativeFinalReview(input: ReviewInput): Promise<Readonly
       if (!item) throw new NativeFinalPublicationError('missing completed lane');
       return { path: item.path, sha256: item.sha256 };
     };
-    const lanes = { blindLane: descriptor('blindLane'), fidelityLane: descriptor('fidelityLane'), protocolLane: descriptor('protocolLane') };
-    const bytes = Buffer.from(canonicalJson({ schema: 'native-pi-final-review-v1', runId: run.runId,
-      buildSha256: run.buildSha256, briefSha256: run.briefSha256, lanes,
+    const lanes = Object.fromEntries(work.map(({ lane }) => [lane, descriptor(lane)]));
+    const measuredTerminal = draft?.graph.measuredTerminal && protocol ? { ...draft.graph.measuredTerminal, deterministicProtocol: protocol, lanes } : undefined;
+    if (draft && measuredTerminal) validateMeasuredTerminal(root, { ...draft.graph, measuredTerminal }, input.invocation);
+    const bytes = Buffer.from(canonicalJson({ schema: measuredTerminal ? 'native-pi-final-review-v2' : 'native-pi-final-review-v1', runId: run.runId,
+      buildSha256: run.buildSha256, briefSha256: run.briefSha256, ...(measuredTerminal ? { measuredTerminal } : { lanes }),
       attempt: { path: attemptPath, sha256: hash(attempt) } }));
     authorizeNativePiPayload(input.invocation, root, 'final-reviewer-lane', bytes);
     replaceProjectFileAtomically({ projectRoot: root, invocation: input.invocation, relativePath: pointer, content: bytes });

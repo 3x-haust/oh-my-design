@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { isAbsolute, resolve, sep } from 'node:path';
 import { nodeStableProjectFileSystem, readStableProjectFile } from '../runtime/stable-project-file.ts';
-import { readLiveReferenceFlow } from './live-flow.ts';
+import { readNativeReferenceFlow as readLiveReferenceFlow } from './browse/flow.ts';
 import { referenceServiceFamily } from './design-discovery-sources.ts';
 
 export const TASK_FLOW_BENCHMARK_SCHEMA =

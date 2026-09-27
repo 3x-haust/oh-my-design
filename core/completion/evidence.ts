@@ -27,6 +27,11 @@ import { validateBrowserObservationArtifacts, validateBrowserObservationDecision
 import { validateObservationV2 } from '../runtime/observation.ts';
 import { validateSourceSeal, validateSourceSealArtifact } from '../source-seal/index.ts';
 import type { AdaptiveSourceSealRoute } from '../source-seal/adaptive-inputs.ts';
+import { existsSync } from 'node:fs';
+import { readPersistedRoute } from '../route/adaptive-route-persistence.ts';
+import { requiresMeasuredTerminal } from '../measure/review-policy.ts';
+import { loadMeasuredObservationBindings } from '../evidence/final-v2-browser-observations.ts';
+import { assertMeasurementPacketsGreen, loadMeasuredQualityContext } from '../evidence/final-v2-measurement.ts';
 
 export const LEGACY_COMPLETENESS_RUN_INPUT_SCHEMA = 'functional-completeness-run-input-v1' as const;
 export const LEGACY_COMPLETENESS_RUN_SCHEMA = 'functional-completeness-run-v1' as const;
@@ -359,6 +364,7 @@ function validateObservationSet(root: string, descriptors: readonly CompletionAr
       ?? fail(`observation ${index} has no browser evidence`);
     validateBrowserObservationArtifacts(links, (path) => stableRead(root, path, `observation ${index} capture`), true);
     for (const observation of links.observations) {
+      if (observation.measurement && (observation.testedUrl !== url || observation.testedState !== state)) continue;
       if (observation.testedUrl !== url || observation.testedState !== state) fail(`observation ${index} URL or state is stale`);
       observed.add(`${observation.viewport.width}x${observation.viewport.height}`);
     }
@@ -417,6 +423,13 @@ function validateRun(
   const sealFindings = validateSourceSeal(root, invocation, continuationRoute);
   if (sealFindings.length !== 0) fail(`source seal is stale: ${sealFindings.map((finding) => finding.path).join(', ')}`);
   validateObservationSet(root, observationReceipts, url, state, testedViewports, observedBuild.buildSha256);
+  if (requireMeasured && existsSync(resolve(root, '.omd/route.json')) && requiresMeasuredTerminal(readPersistedRoute(root, invocation))) {
+    const hashes = observationReceipts.map(o => o.sha256);
+    const bindings = loadMeasuredObservationBindings(root, invocation, hashes);
+    const measurements = [...new Map(bindings.map(b => [b.measurement.packet.sha256, b.measurement.packet])).values()];
+    assertMeasurementPacketsGreen(root, measurements);
+    loadMeasuredQualityContext(root, invocation, measurements, hashes);
+  }
   return Object.freeze({
     schema: legacy ? LEGACY_COMPLETENESS_RUN_SCHEMA : workflow ? WORKFLOW_COMPLETENESS_RUN_SCHEMA : COMPLETENESS_RUN_SCHEMA,
     requirements,

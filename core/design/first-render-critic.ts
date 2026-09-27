@@ -91,7 +91,8 @@ const hypothesisSha256 = (hypothesis: DesignHypothesis): string => createHash('s
  * actionable: "card radius wrong" is not a gestalt diagnosis; "the dominant benefit object is absent"
  * is. Two-second communication is the anchor, not taste.
  */
-export function critiqueFirstRender(hypothesis: DesignHypothesis, surfaceInput: unknown): FirstRenderCriticReport {
+/** Historical inspection only. Caller-authored v1 surfaces cannot publish current evidence. */
+export function critiqueLegacyFirstRender(hypothesis: DesignHypothesis, surfaceInput: unknown): FirstRenderCriticReport {
   const surface = parseFirstRenderSurface(surfaceInput);
   const findings: FirstRenderCriticFinding[] = [];
   const headingWords = hypothesis.twoSecondRead.toLowerCase().split(/[^a-z0-9가-힣]+/).filter((word) => word.length > 2);
@@ -153,6 +154,8 @@ export function critiqueFirstRender(hypothesis: DesignHypothesis, surfaceInput: 
     verdict: findings.some(finding => finding.severity === 'critical') ? 'revise' : 'retain',
     findings: Object.freeze(findings), hypothesisSha256: hypothesisSha256(hypothesis) });
 }
+
+export { critiqueMeasuredFirstRender as critiqueFirstRender } from './first-render-measurement.ts';
 
 export function firstRenderCriticSha256(report: FirstRenderCriticReport): string {
   return createHash('sha256').update(JSON.stringify(report)).digest('hex');

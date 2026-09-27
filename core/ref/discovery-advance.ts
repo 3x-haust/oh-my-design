@@ -1,21 +1,29 @@
 import type { RouteRecord } from '../route/index.ts';
 import { withBrowser } from '../render/index.ts';
-import type { ProjectWriteAdapter } from '../runtime/project-write.ts';
-import { referenceDiscoveryWork, type ReferenceDiscoveryWork } from './discovery-work.ts';
+import { requireProjectWriteAdapter, type ProjectWriteAdapter } from '../runtime/project-write.ts';
+import { referenceDiscoveryWork, legacyReferenceDiscoveryWork, type ReferenceDiscoveryWork } from './discovery-work.ts';
 import { captureReferenceNavigation, readReferenceDiscoveryAttempt, ReferenceNavigationError } from './navigation-capture.ts';
 import { executeReferenceSearch, readSearchExecution, searchObserved } from './search-execution.ts';
 
 export type ReferenceDiscoveryAdvance = Readonly<{
-  schema: 'reference-discovery-advance-v1';
-  outcome: 'observed' | 'unavailable';
-  receipt: Readonly<{ path: string; sha256: string }>;
+  schema: 'reference-discovery-advance-v1' | 'reference-discovery-advance-v2';
+  outcome: 'observed' | 'unavailable' | 'needs-model-action' | 'stopped-with-debt';
+  receipt: Readonly<{ path: string; sha256: string }> | null;
   previousWorkSha256: string;
   work: ReferenceDiscoveryWork;
 }>;
 
 export async function advanceReferenceDiscoveryWork(root: string, route: RouteRecord,
   writer: ProjectWriteAdapter): Promise<ReferenceDiscoveryAdvance> {
-  const before = referenceDiscoveryWork(root, route);
+  requireProjectWriteAdapter(root, writer);
+  const work = referenceDiscoveryWork(root, route);
+  return { schema: 'reference-discovery-advance-v2', outcome: work.status === 'stopped-with-debt' ? 'stopped-with-debt' : 'needs-model-action',
+    receipt: null, previousWorkSha256: work.workSha256, work };
+}
+
+export async function advanceLegacyReferenceDiscoveryWork(root: string, route: RouteRecord,
+  writer: ProjectWriteAdapter): Promise<ReferenceDiscoveryAdvance> {
+  const before = legacyReferenceDiscoveryWork(root, route);
   const action = before.action;
   if (before.status !== 'action' || action === null || action.lane === null) {
     throw new Error('REFERENCE_DISCOVERY_ADVANCE: no native acquisition action is pending');
@@ -46,13 +54,17 @@ export async function advanceReferenceDiscoveryWork(root: string, route: RouteRe
       }
       break;
     }
+    case 'start-browse':
+    case 'continue-browse':
+    case 'narrow-tray':
+    case 'end-browse':
     case 'retain-reference':
     case 'publish-board':
     case 'replan-discovery':
       throw new Error('REFERENCE_DISCOVERY_ADVANCE: visual judgment or board authorship is required; native acquisition cannot publish a reference');
     default: return assertNever(action.kind);
   }
-  const work = referenceDiscoveryWork(root, route);
+  const work = legacyReferenceDiscoveryWork(root, route);
   if (work.workSha256 === before.workSha256) throw new Error('REFERENCE_DISCOVERY_ADVANCE: native evidence did not change the discovery pointer');
   return { schema: 'reference-discovery-advance-v1', outcome, receipt,
     previousWorkSha256: before.workSha256, work };

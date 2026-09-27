@@ -8,6 +8,23 @@ type WriterAudit = Readonly<{
 }>;
 
 const audits: ReadonlyMap<string, WriterAudit> = new Map([
+  ['extensions/omd-review-purpose.ts', {
+    exception: 'native Pi activated user-input review-purpose origin (signed original request, fixed immutable authority path)',
+    writes: [
+      ['mkdirSync', 'mkdirSync(directory, { recursive: true, mode: 0o700 });'],
+      ['writeFileSync', "writeFileSync(join(projectRoot, path), bytes, { flag: 'wx', mode: 0o600 });"],
+    ],
+    invariants: [
+      'const captured = readPiRequest(root);', '!captured || captured.request !== request',
+      "source: 'pi-interactive' | 'pi-rpc'", "schema: 'review-purpose-origin-v1' as const",
+      'requestSha256: v.hash(request)', 'signature: signNativeObservation(projectRoot, payload.schema, v.digest(payload))',
+      'path = `.omd/review-purpose-authorities/sha256-${sha256}.json`',
+      "const directory = join(projectRoot, '.omd/review-purpose-authorities');", 'realpathSync(directory) !== directory',
+    ],
+    sequences: [[ 'const captured = readPiRequest(root);', '!captured || captured.request !== request',
+      'const projectRoot = realpathSync(root)', 'signature: signNativeObservation(', 'mkdirSync(directory,',
+      'realpathSync(directory) !== directory', 'writeFileSync(join(projectRoot, path), bytes,' ]],
+  }],
   ['core/runtime/native-pi-run-record.ts', {
     exception: 'native Pi host bootstrap store (observed host and current request bound to a fixed signed run)',
     writes: [
@@ -86,12 +103,14 @@ const audits: ReadonlyMap<string, WriterAudit> = new Map([
     exception: 'native Pi reviewer private sandbox (current opaque invocation and fixed isolated child files)',
     writes: [
       ['mkdtempSync', "const directory = realpathSync(mkdtempSync(join(tmpdir(), 'omd-pi-reviewer-')));"],
-      ['writeFileSync', "writeFileSync(systemPath, SYSTEM, { mode: 0o600, flag: 'wx' });"],
+      ['writeFileSync', "writeFileSync(systemPath, system, { mode: 0o600, flag: 'wx' });"],
       ['writeFileSync', 'writeFileSync(configPath, JSON.stringify({ schema: PI_REVIEWER_BRIDGE_SCHEMA, nodePath: proxy.command, args: proxy.args,'],
       ['rmSync', '} finally { await rpc?.dispose(); adapter.dispose(); rmSync(directory, { recursive: true, force: true }); }'],
     ],
     invariants: [
       "const systemPath = join(directory, 'system.txt');", "const configPath = join(directory, 'bridge.json');",
+      'const profile = measured ? reviewProfileBinding(input.lane) : null;',
+      'const system = profile ? `${SYSTEM}\\nTrusted review profile: ${profile.role}/${profile.mode}; sha256=${profile.sha256}` : SYSTEM;',
       "'--no-context-files', '--no-approve', '--no-tools'", "'-e', bridgePath, '--tools', PI_REVIEWER_TOOL",
       "thinkingLevel: host.thinkingLevel }), { mode: 0o600, flag: 'wx' });",
       'validateCurrentProjectRun(input.invocation);',

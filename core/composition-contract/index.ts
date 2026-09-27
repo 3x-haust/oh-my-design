@@ -8,6 +8,12 @@ import { parseReferenceHandoffReceipt } from '../ref/reference-handoff.ts';
 import { motionResolutionProjectionSha256, parseReferenceSelectionV2, referenceSelectionV2Sha256, validateMotionResolutionProjection } from '../ref/reference-selection.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import { createAdaptiveSourceSealRoute } from '../source-seal/adaptive-inputs.ts';
+import { readPersistedRoute } from '../route/index.ts';
+import { readFrame } from '../frame/index.ts';
+import { readSelectedArtDirection } from '../art-direction/selected.ts';
+import { resolveSelectedTokens } from '../tokens/resolve.ts';
+import { fileReceipt, digest } from '../brief/candidate-data.ts';
+import { checkExpansionContract } from '../brief/expansion.ts';
 
 /** Historical unversioned Markdown ABI. Keep this list stable for persisted artifacts and source seals. */
 export const COMPOSITION_SECTIONS = [
@@ -25,7 +31,7 @@ export const CURRENT_COMPOSITION_SECTIONS = [
 // validator (task evidence owns `## UX task coverage`). The composition contract only
 // recognizes the heading so it can be authored as normal LF Markdown; it never restates
 // or revalidates that section's internal schema.
-export const AUXILIARY_SECTIONS = ['UX task coverage', 'Production revision binding'] as const;
+export const AUXILIARY_SECTIONS = ['UX task coverage', 'Production revision binding', 'Needed components', 'Expansion mapping', 'Measurement contract'] as const;
 
 export interface CompositionContractFinding {
   id: 'COMPOSITION-MISSING' | 'COMPOSITION-SECTION' | 'COMPOSITION-HASH' | 'COMPOSITION-STALE' | 'COMPOSITION-SCOUT' | 'COMPOSITION-SYNTHESIS';
@@ -101,7 +107,7 @@ function parseSections(markdown: string): ParsedSections {
   return { sections, findings };
 }
 
-type ArtDirectionFingerprintRequirement = 'selected' | 'skipped';
+type ArtDirectionFingerprintRequirement = 'selected' | 'skipped' | 'candidate-bound';
 
 function validateFingerprint(
   lines: string[],
@@ -112,7 +118,7 @@ function validateFingerprint(
   const values = new Map<string, string>();
   for (const line of lines) {
     if (line.trim() === '') continue;
-    const match = /^- (Frame SHA-256|Copy deck SHA-256|Type proof SHA-256|Scout SHA-256|Art direction record SHA-256|Motion resolution projection SHA-256|Settled selection SHA-256|Composer handoff SHA-256): (.+)$/.exec(line);
+    const match = /^- (Frame SHA-256|Copy deck SHA-256|Type proof SHA-256|Scout SHA-256|Art direction record SHA-256|Motion resolution projection SHA-256|Settled selection SHA-256|Composer handoff SHA-256|Candidate selection SHA-256|Effective tokens SHA-256): (.+)$/.exec(line);
     if (!match) { findings.push({ id: 'COMPOSITION-HASH', path: '.omd/composition.md#Input fingerprint', message: 'Input fingerprint contains an unknown or malformed line' }); continue; }
     const key = match[1]!;
     if (values.has(key)) findings.push({ id: 'COMPOSITION-HASH', path: '.omd/composition.md#Input fingerprint', message: `${key} must appear exactly once` });
@@ -128,6 +134,11 @@ function validateFingerprint(
     ['Composer handoff', 'reference-handoffs/composer.json', inputs.composerHandoff],
   ];
   if (artDirection === 'selected') required.push(...artDirectionInputs);
+  else if (artDirection === 'candidate-bound') {
+    required.push(['Art direction record', 'art-direction.json', inputs.artDirectionRecord],
+      ['Candidate selection', 'candidate selection', inputs.candidateSelection], ['Effective tokens', 'effective tokens', inputs.effectiveTokens]);
+    for (const [label] of artDirectionInputs.slice(1)) if (values.has(`${label} SHA-256`)) findings.push({ id: 'COMPOSITION-HASH', path: '.omd/composition.md#Input fingerprint', message: `${label} is legacy lineage, not a candidate-bound fingerprint` });
+  }
   else for (const [label] of artDirectionInputs) {
     if (values.has(`${label} SHA-256`)) findings.push({
       id: 'COMPOSITION-HASH', path: '.omd/composition.md#Input fingerprint',
@@ -258,6 +269,7 @@ function sha256(path: string): string { return createHash('sha256').update(readF
 export interface CompositionContractInputs {
   contract?: string; frame?: string; copyDeck?: string; typeProof?: string; scout?: string;
   artDirectionRecord?: string; motionResolutionProjection?: string; settledSelection?: string; composerHandoff?: string;
+  candidateSelection?: string; effectiveTokens?: string;
   /** Exact normalized Source ref identities for user-origin refs, not host labels. */
   userRefLabels?: string[];
 }
@@ -336,12 +348,27 @@ function validateCompositionContractWith(
     if (invocation === undefined) stale('route.json', 'adaptive route authority is required to validate composition');
     else {
       try {
+        const persisted = readPersistedRoute(root, invocation);
+        if (persisted.sourceContract.processPolicy && persisted.strategy.methods.includes('concept-exploration')) {
+          const selected = readSelectedArtDirection(root, persisted.sourceContractSha256);
+          const pointer = JSON.parse(readFileSync(join(omd, 'art-direction.json'), 'utf8')) as { record: { sha256: string } };
+          derived.artDirectionRecord = pointer.record.sha256;
+          derived.candidateSelection = selected.decision.candidateSelection.sha256;
+          const tokens = resolveSelectedTokens(root);
+          derived.effectiveTokens = tokens.effectiveTokensSha256;
+          artDirectionRequirement = 'candidate-bound';
+          const frame = readFrame(root);
+          if (!frame?.surfacePlan) throw new Error('current composition needs the full Frame surface plan');
+          checkExpansionContract(readFileSync(contractPath, 'utf8'), frame.surfacePlan,
+            [...Object.keys(tokens.effective.semantic), ...Object.keys(tokens.effective.textStyles)]);
+        } else {
         const route = createAdaptiveSourceSealRoute(root, invocation);
         const artDirection = route.stages.find((stage) => stage.id === 'art-direction');
         const composition = route.stages.find((stage) => stage.id === 'composition');
         if (artDirection === undefined || composition?.status !== 'selected') {
           stale('route.json', 'composition is not selected by the exact current adaptive route');
         } else if (artDirection.status === 'skipped') artDirectionRequirement = 'skipped';
+        }
       } catch (error) {
         stale('route.json', `adaptive route, source, or authority is stale: ${error instanceof Error ? error.message : String(error)}`);
       }

@@ -82,6 +82,8 @@ const FINAL_EVIDENCE_STABLE_DESCRIPTOR_ADAPTER = 'core/evidence/final-v2.ts';
 const FINAL_EVIDENCE_STABLE_DESCRIPTOR_EXCEPTION = 'final-evidence-v2 stable descriptor adapter (audited capability owner)';
 const FIGMA_AUTHORITY_STORE_ADAPTER = 'core/figma/artifact-authority-store.ts';
 const FIGMA_AUTHORITY_STORE_EXCEPTION = 'external host-owned Figma artifact authority store (audited exact-identity adapter)';
+const LEARNING_RULE_STORE_ADAPTER = 'core/learning/user-rule-store.ts';
+const LEARNING_RULE_STORE_EXCEPTION = 'external private user-level advisory learning store (audited fixed-path atomic adapter)';
 const ACTIVATION_KEY_STORE = 'core/runtime/self-signed-activation.ts';
 const ACTIVATION_KEY_STORE_EXCEPTION = 'project activation key and atomic nonce store (audited private fixed paths and exclusive claims)';
 const GUARD_ENTRYPOINTS = [
@@ -171,6 +173,25 @@ function figmaAuthorityStoreAdapter(
     && source.includes("if (directory === undefined || dirname(path) !== directory) throw new Error('Figma authority record escaped its project directory')")
     && !source.includes('rmSync(');
 }
+function learningRuleStoreAdapter(
+  filePath: string,
+  source: string,
+  directMutations: readonly UnguardedProjectMutation[],
+): boolean {
+  const operations = directMutations.map((mutation) => mutation.operation).sort().join(',');
+  return filePath === LEARNING_RULE_STORE_ADAPTER
+    && operations === 'mkdirSync,openSync,renameSync,unlinkSync,writeSync'
+    && directMutations.length === 5
+    && source.includes("const DIRECTORY_PARTS = ['oh-my-design', 'learning-v1'] as const")
+    && source.includes("if (!isAbsolute(configured)) throw new Error('XDG_STATE_HOME must be absolute')")
+    && source.includes("if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error('learning store path must contain only real directories')")
+    && source.includes("if (privateMode && (stat.mode & 0o077) !== 0) throw new Error('learning store must not be accessible to group or other users')")
+    && source.includes('constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600')
+    && source.includes("if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || dirname(realpathSync(target)) !== directory)")
+    && source.includes('renameSync(temporary, target)')
+    && source.includes('fsyncSync(directoryDescriptor)')
+    && !source.includes('rmSync(');
+}
 /**
  * The activation key store is the one writer that cannot go through the guard, because it must
  * exist before any invocation exists to carry authority. It is therefore audited on its own source
@@ -207,6 +228,15 @@ function activationKeyStoreAdapter(
     && !source.includes('rmSync(')
     && !source.includes('unlinkSync(')
     && !source.includes('rmdirSync(');
+}
+
+function zoomProfileException(filePath: string, source: string, mutations: readonly UnguardedProjectMutation[]): string | undefined {
+  if (filePath !== 'core/render/browser-zoom.ts'
+    || mutations.map(m => m.operation).sort().join(',') !== 'mkdtempSync,rmSync'
+    || !source.includes("const profile = mkdtempSync(join(tmpdir(), 'omd-measure-zoom-'));")
+    || !source.includes('chromium.launchPersistentContext(profile,')
+    || !source.includes('} finally { rmSync(profile, { recursive: true, force: true }); }')) return undefined;
+  return 'disposable native browser-zoom profile (fixed OS temp prefix; exact profile removed in finally)';
 }
 
 function sourcePath(repositoryRoot: string, absolutePath: string): string {
@@ -559,6 +589,8 @@ export function inventoryProjectRunMutations(
 ): ProjectWriteInventory {
   const root = resolve(repositoryRoot);
   const pending = [resolve(root, entrypoint)];
+  // The browse driver is forked by URL rather than imported; audit its graph alongside the CLI.
+  if (entrypoint === 'bin/omd.ts' && existsSync(resolve(root, 'core/ref/browse/daemon.ts'))) pending.push(resolve(root, 'core/ref/browse/daemon.ts'));
   const visited = new Set<string>();
   const owners: ProjectRunMutationOwner[] = [];
   const unguardedMutations: UnguardedProjectMutation[] = [];
@@ -581,8 +613,10 @@ export function inventoryProjectRunMutations(
     const reviewerLiveSocketException = reviewerLiveSocketCleanupException(filePath, source, directMutations);
     const finalEvidenceDescriptorAdapter = finalEvidenceStableDescriptorAdapter(filePath, source, directMutations);
     const figmaAuthorityAdapter = figmaAuthorityStoreAdapter(filePath, source, directMutations);
+    const learningRuleAdapter = learningRuleStoreAdapter(filePath, source, directMutations);
     const activationKeyAdapter = activationKeyStoreAdapter(filePath, source, directMutations);
-    const nativePiAdapterException = nativePiWriterException(filePath, source, directMutations);
+    const nativePiAdapterException = nativePiWriterException(filePath, source, directMutations)
+      ?? zoomProfileException(filePath, source, directMutations);
     const hasExternalObservationWrapper = filePath === GUARD_BOUNDARY
       && source.includes('export function writeExternalObservationFile')
       && source.includes('export function createExternalObservationDirectory');
@@ -592,7 +626,7 @@ export function inventoryProjectRunMutations(
       ? 'guarded'
       : reviewerLiveSocketException
         ? 'external-exception'
-        : finalEvidenceDescriptorAdapter || figmaAuthorityAdapter || activationKeyAdapter || nativePiAdapterException !== undefined
+        : finalEvidenceDescriptorAdapter || figmaAuthorityAdapter || learningRuleAdapter || activationKeyAdapter || nativePiAdapterException !== undefined
           ? 'external-exception'
           : 'unclassified';
     const exception = hasExternalObservationWrapper
@@ -603,9 +637,11 @@ export function inventoryProjectRunMutations(
           ? FINAL_EVIDENCE_STABLE_DESCRIPTOR_EXCEPTION
           : figmaAuthorityAdapter
             ? FIGMA_AUTHORITY_STORE_EXCEPTION
-            : activationKeyAdapter
-              ? ACTIVATION_KEY_STORE_EXCEPTION
-              : nativePiAdapterException;
+            : learningRuleAdapter
+              ? LEARNING_RULE_STORE_EXCEPTION
+              : activationKeyAdapter
+                ? ACTIVATION_KEY_STORE_EXCEPTION
+                : nativePiAdapterException;
     owners.push({
       filePath,
       classification,

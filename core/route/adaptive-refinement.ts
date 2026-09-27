@@ -27,13 +27,14 @@ export function adaptiveRefinementCheckpoint(
 
 /** Decides one evidence-driven refinement turn without imposing a remembered round count. */
 export function adaptiveRefinementDisposition(
-  strategy: AdaptiveStrategyDecision,
+  strategy: Pick<AdaptiveStrategyDecision, 'methods'>,
   requiredGateStatus: RequiredGateStatus,
+  currentProcess = false,
 ): AdaptiveRefinementDisposition {
   if (requiredGateStatus === 'red') {
     return { action: 'run', producer: 'omd-hand', reviewer: 'omd-eye', reason: 'required-gate-red' };
   }
-  if (strategy.methods.includes('evidence-driven-refinement')) {
+  if (!currentProcess && strategy.methods.includes('evidence-driven-refinement')) {
     return { action: 'run', producer: 'omd-hand', reviewer: 'omd-eye', reason: 'selected-method' };
   }
   return { action: 'stop', producer: 'omd-hand', reviewer: 'omd-eye', reason: 'required-gates-green' };

@@ -17,14 +17,14 @@ export { validateReferenceResearch } from './reference-research-validation.ts';
 
 export function referenceResearchArtifacts(research: ReferenceResearch) {
   const envelope = { sourceContractSha256: research.sourceContractSha256 };
-  const market = research.schema === 'reference-research-v7'
-    ? { marketRegion: research.marketCoverage?.marketRegion ?? null }
-    : {};
+  const current = research.schema === 'reference-research-v7' || research.schema === 'reference-research-v8';
+  const market = current ? { marketRegion: research.marketCoverage?.marketRegion ?? null } : {};
+  const version = research.schema === 'reference-research-v8' ? 'v3' : current ? 'v2' : 'v1';
   return {
-    [DOMAIN_REFERENCES_PATH]: { schema: research.schema === 'reference-research-v7' ? 'domain-references-v2' : 'domain-references-v1', ...envelope, ...market,
-      ...(research.schema === 'reference-research-v7' ? { marketCoverage: research.marketCoverage?.domain ?? null } : {}), ...research.domainReference },
-    [DESIGN_REFERENCES_PATH]: { schema: research.schema === 'reference-research-v7' ? 'design-references-v2' : 'design-references-v1', ...envelope, ...market,
-      ...(research.schema === 'reference-research-v7' ? { marketCoverage: research.marketCoverage?.design ?? null } : {}), ...research.designReference },
+    [DOMAIN_REFERENCES_PATH]: { schema: `domain-references-${version}`, ...envelope, ...market,
+      ...(current ? { marketCoverage: research.marketCoverage?.domain ?? null } : {}), ...research.domainReference },
+    [DESIGN_REFERENCES_PATH]: { schema: `design-references-${version}`, ...envelope, ...market,
+      ...(current ? { marketCoverage: research.marketCoverage?.design ?? null } : {}), ...research.designReference },
     [REFERENCE_RESEARCH_PATH]: research,
   };
 }
@@ -44,7 +44,8 @@ export function designResearchSummary(research: ReferenceResearch): string {
     ...research.designReference.sources.flatMap(item => [
       `## ${escape(item.id)} — ${item.visualRole}`, '',
       `Source: ${item.url}`, `Discovery: ${item.discovery!.url}`, '',
-      `![Captured reference](../../../${item.evidence.path})`, '',
+      item.discovery?.kind === 'recorded-browse' && item.discovery.access === 'user-session'
+        ? 'Private authenticated study capture: omitted from report export.' : `![Captured reference](../../../${item.evidence.path})`, '',
       ...Object.entries(item.visualAssessment!).map(([axis, finding]) => `- ${axis}: ${escape(finding)}`), '',
     ]),
   ].join('\n');

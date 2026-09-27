@@ -1,0 +1,3 @@
+interface:
+  display_name: "(omd) expand"
+  short_description: "Expand the selected sample into the complete requested surface, state and viewport scope."

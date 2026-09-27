@@ -19,7 +19,7 @@ const read = (root: string, path: string): Buffer => readStableProjectFile({
   root: resolve(root), path: resolve(root, path), label: path, fs: nodeStableProjectFileSystem(),
 });
 type Options = Readonly<{ expectedSourceContractSha256: string; benchmarkRequired: boolean; expectedRequest?: string }>;
-type ApplicationLane = Readonly<{
+export type ApplicationLane = Readonly<{
   referenceIds: readonly string[];
   coverage: 'direct' | 'partial' | 'brief-derived';
   gap: string | null;
@@ -79,9 +79,14 @@ function lane(value: unknown, label: string): ApplicationLane {
 export function parseReferenceApplication(value: unknown): ReferenceApplication {
   const item = object(value, ['schema', 'sourceContractSha256', 'researchSha256', 'domainBriefSha256', 'screens'], 'application');
   if (item.schema !== REFERENCE_APPLICATION_SCHEMA) return fail('schema requires v2 destination route/state bindings; inspect apply-plan and republish, do not relabel old evidence');
-  if (!Array.isArray(item.screens) || !item.screens.length || item.screens.length > MAX_SURFACES
-    || Object.keys(item.screens).length !== item.screens.length) return fail(`screens must contain 1–${MAX_SURFACES} surface decisions`);
-  const screens = item.screens.map(value => {
+  return Object.freeze({ schema: REFERENCE_APPLICATION_SCHEMA, sourceContractSha256: sha(item.sourceContractSha256, 'source contract'),
+    researchSha256: sha(item.researchSha256, 'research'), domainBriefSha256: sha(item.domainBriefSha256, 'domain brief'), screens: parseReferenceApplicationScreens(item.screens) });
+}
+/** Shared by pre-production whole-screen analysis and the strict research application publisher. */
+export function parseReferenceApplicationScreens(value: unknown): ReferenceApplication['screens'] {
+  if (!Array.isArray(value) || !value.length || value.length > MAX_SURFACES
+    || Object.keys(value).length !== value.length) return fail(`screens must contain 1–${MAX_SURFACES} surface decisions`);
+  const screens = value.map(value => {
     const row = object(value, ['surface', 'target', 'domain', 'design', 'checks'], 'screen');
     const target = object(row.target, ['route', 'state'], 'screen.target');
     const route = text(target.route, 'target.route');
@@ -92,8 +97,7 @@ export function parseReferenceApplication(value: unknown): ReferenceApplication 
   });
   if (new Set(screens.map(screen => screen.surface)).size !== screens.length) return fail('duplicate surface');
   if (new Set(screens.map(screen => JSON.stringify(screen.target))).size !== screens.length) return fail('distinct surfaces need distinct route/state targets');
-  return Object.freeze({ schema: REFERENCE_APPLICATION_SCHEMA, sourceContractSha256: sha(item.sourceContractSha256, 'source contract'),
-    researchSha256: sha(item.researchSha256, 'research'), domainBriefSha256: sha(item.domainBriefSha256, 'domain brief'), screens: Object.freeze(screens) });
+  return Object.freeze(screens);
 }
 
 function inputs(root: string, options: Options) {

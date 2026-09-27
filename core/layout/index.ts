@@ -49,6 +49,7 @@ export const ARTIFACT_FAMILIES: readonly ArtifactFamily[] = [
   family('requirements', 'functional-requirements.json', 'file', 'human', 'affordances the build owes the visitor'),
   family('reference-coverage', 'acquisition-plan.json', 'file', 'human', 'zones the references must cover'),
   family('reference-research', 'scout.md', 'file', 'human', 'sanitized reference synthesis'),
+  family('reference-analysis', 'reference-analysis.json', 'file', 'human', 'whole-screen reference analysis and selected patterns'),
   family('reference-board', 'reference-board.json', 'file', 'human', 'assembled candidate boards'),
   family('copy-deck', 'copy-deck.md', 'file', 'human', 'real copy, registers, and fact ledger'),
   family('type-proof', 'type-proof.md', 'file', 'human', 'typography proof verdict'),
@@ -71,11 +72,22 @@ export const ARTIFACT_FAMILIES: readonly ArtifactFamily[] = [
 
   // ── captured research ───────────────────────────────────────────────────
   family('refs', 'refs', 'directory', 'refs', 'captured reference records, blueprints, and images'),
+  family('reference-discovery', 'discovery', 'directory', 'refs', 'signed reference discovery traces, observations, and retained source pixels'),
   family('figma', 'figma', 'directory', 'refs', 'Figma snapshot and derived system'),
   family('target', 'target', 'directory', 'refs', 'registered visual targets'),
 
   // ── machine trust state ─────────────────────────────────────────────────
+  family('visual-measurement', 'visual-measurement.json', 'file', 'state', 'current native pixel measurement pointer'),
+  family('visual-measurements', 'visual-measurements', 'directory', 'state', 'immutable signed pixel measurement packets'),
+  family('visual-measurement-ir', 'visual-measurement-ir', 'directory', 'state', 'exact measured DOM and geometry records'),
+  family('visual-measurement-captures', 'visual-measurement-captures', 'directory', 'state', 'fixed viewport measurement PNGs'),
+  family('slop-review', 'slop', 'directory', 'state', 'retained slop checkpoints, captures and review decisions'),
+  family('surface-captures', 'surface-captures.json', 'file', 'state', 'current Frame surface and content-case capture inventory'),
+  family('selected-direction-evidence', 'selected-direction-evidence.json', 'file', 'state', 'current source-bound selected motion and Beat captures'),
+  family('selected-direction-captures', 'selected-direction-captures', 'directory', 'state', 'owned production motion and Beat capture records'),
+  family('refinement-policy', 'refinement', 'directory', 'state', 'signed native post-repair measurements and repeated-defect history'),
   family('route', 'route.json', 'file', 'state', 'selected run route and scope lock'),
+  family('review-purpose-authorities', 'review-purpose-authorities', 'directory', 'state', 'host-observed review-purpose origin receipts'),
   family('depth', 'depth.json', 'file', 'state', 'depth classifier input'),
   family('intent-pointer', 'intent-current.json', 'file', 'state', 'current intent pointer'),
   family('intent-records', 'intent-runs', 'directory', 'state', 'immutable intent ledgers'),

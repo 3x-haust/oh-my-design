@@ -4,6 +4,8 @@ Adapted for OMD from the image-direction discipline in lazycodex's `frontend` sk
 (`imagegen-frontend-web`, `image-to-code`; Apache-2.0, github.com/code-yeongyu/lazycodex). This is
 an OMD-native synthesis bound to OMD's evidence and anti-fabrication rules — not a copy.
 
+Use `art-direction.md` to define the communication job, shot/crop system, rights status, and final-asset plan before choosing generation.
+
 **A generated image is a design reference, never a shipped asset.** It plays the exact role a Figma
 export or a hand mockup plays: a visual contract the build implements against. You transfer its layout
 grammar, token relationships, and
@@ -40,12 +42,13 @@ taxonomy or technique quota, and a new concept may depart from every example.
 
 ## Native capability and default choice
 
-On Codex, inspect the current native tool inventory for image generation before choosing or skipping
-visual experiments. Codex is a reason to check first, not proof that a particular deployment exposes
-the tool. On any host with a callable image tool, unsettled confident/showpiece marketing defaults to
-image-first concept exploration. A one-sentence landing request does not need to ask for images.
-Use the built-in tool without requesting an API key or changing the user's model. Do not invent an
-image CLI, use a separately billed API, or choose a different image model as an automatic fallback.
+On Codex, inspect the current native tool inventory before an image study that the task actually
+needs. Codex is a reason to check capability, not proof that a deployment exposes the tool. Use
+image-first exploration only when imagery or spatial art direction is the real unresolved decision.
+A content-led marketing page, settled direction, or uncertainty about copy, behavior, or information
+architecture does not default to image generation. When image-first applies, use the built-in tool
+without requesting an API key or changing the user's model. Do not invent an image CLI, use a
+separately billed API, or choose a different image model as an automatic fallback.
 
 Native image generation is not an external design harness. An OMD-only run still uses its host's
 image tool, renderer and browser. Not shipping bitmaps, choosing HTML/CSS/SVG production, or lacking
@@ -228,12 +231,13 @@ or production authority; `omd-study` stays source-only and final blind review re
 
 ## When image-first applies
 
-Image-first is for confident/showpiece register work where the visual composition is a first-class
-deliverable — landing pages, marketing sites, portfolios, brand/editorial pages, redesigns where the
-look is the point. For a settled tool or document surface whose current uncertainty is behavioral,
-it may add nothing; skip it with that reason. A quiet register is not an exemption when the user requests
-image-to-code implementation or when unresolved visual craft is the task. Use the available image lane
-for that uncertainty, then apply the selected-image comparison above.
+Image-first applies when imagery, crop, subject treatment, or spatial visual direction is the real
+unresolved decision and a visible study can settle it. Typical cases include a campaign built around
+photography, illustration-system exploration, image-to-code work, or a redesign whose open question is
+composition rather than content structure. It does not follow from `marketing`, `confident`, or
+`showpiece` alone. Skip it when the direction is settled or the uncertainty is copy, behavior,
+information architecture, product density, or another non-image decision. A user-requested
+image-to-code target and unresolved visual craft still qualify.
 
 When the host provides an image-generation capability and image-first applies, the order is
 **mandatory**:

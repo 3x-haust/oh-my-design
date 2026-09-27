@@ -66,7 +66,7 @@ function fullBuildRequest(request: string): boolean {
     const matches = [
       ...[...line.matchAll(/(?:레퍼런스|참고|리서치|조사|검사|확인|보고|분석).{0,18}(?:만|까지만).{0,18}(?:해\s*줘|해\s*주세요|하자|진행)|\b(?:research only|inspect only)\b|\b(?:only|just)\s+(?:inspect|research|review|analyze)\b/giu)]
         .map(match => ({ index: match.index, build: false })),
-      ...[...line.matchAll(/(?:서비스|제품|앱|리액트|React|랜딩(?:페이지)?|웹사이트|화면|대시보드).{0,80}?(?:(?:구현|개발|제작|완성|빌드)\s*(?:해\s*(?:줘|주세요|줘요)|하세요|해라|부탁(?:해요|드립니다)?)|만들(?:어\s*(?:줘|주세요|줘요)|어라|세요))|\b(?:build|implement|develop|create)\b.{0,120}\b(?:app|product|service|website|landing page|dashboard)\b/giu)]
+      ...[...line.matchAll(/(?:서비스|제품|앱|리액트|React|랜딩(?:페이지)?|웹사이트|화면|대시보드).{0,80}?(?:(?:구현|개발|제작|완성|빌드)\s*(?:해\s*(?:줘|주세요|줘요)|하세요|해라|부탁(?:해요|드립니다)?)|만들(?:어\s*(?:줘|주세요|줘요)|어라|세요))|\b(?:build|implement|develop|create)\b.{0,120}\b(?:app|product|service|website|landing page|launch page|dashboard)\b/giu)]
         .map(match => ({ index: match.index, build: true })),
     ].sort((a, b) => a.index - b.index);
     for (const match of matches) decision = match.build;

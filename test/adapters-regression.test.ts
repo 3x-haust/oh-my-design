@@ -5,6 +5,7 @@ import { readFileSync, readdirSync, existsSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { spawn } from 'node:child_process';
+import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
 import { connect } from 'node:net';
 import { parse as parseToml } from 'smol-toml';
@@ -497,25 +498,19 @@ test('the correctly bound host invokes the real reviewer MCP proxy once without 
     loadedSkillReceipt: forgedAdapter.observeLoadedSkill('codex', loadedSkillReceipt, V2_BUILD.sourceSkillSha256),
     reviewerLaunchReceipt: forgedReceipt,
   });
-  const borrowerSource = `import { connect } from 'node:net'; const socket=connect(${JSON.stringify(reviewerSocketPath(forgedReceipt.launchId))}); socket.on('connect',()=>console.log(process.pid)); setTimeout(() => {}, 30000);`;
-  const launcherSource = `import { spawn } from 'node:child_process'; spawn(process.execPath,['--input-type=module','--eval',${JSON.stringify(borrowerSource)}],{stdio:['ignore','inherit','inherit'],shell:false}); setTimeout(() => {}, 30000);`;
+  const borrowerSource = `import { connect } from 'node:net'; const socket=connect(${JSON.stringify(reviewerSocketPath(forgedReceipt.launchId))}); socket.on('connect',()=>process.stdout.write(String(process.pid)+'\\n'));`;
+  const launcherSource = `import { spawn } from 'node:child_process'; spawn(process.execPath,['--input-type=module','--eval',${JSON.stringify(borrowerSource)}],{stdio:['ignore','inherit','inherit'],shell:false});`;
   const launcher = spawn(process.execPath, ['--input-type=module', '--eval', launcherSource], { shell: false });
-  const borrowedPid = await new Promise<number>((resolvePid, reject) => {
-    let output = '';
-    launcher.stdout.setEncoding('utf8');
-    launcher.stdout.on('data', chunk => {
-      output += chunk;
-      const value = Number(output.trim());
-      if (Number.isSafeInteger(value) && value > 0) resolvePid(value);
-    });
-    launcher.once('error', reject);
-  });
+  let borrowedPid: number | undefined;
   try {
+    const [pidBytes] = await once(launcher.stdout, 'data', { signal: AbortSignal.timeout(10_000) });
+    borrowedPid = Number(String(pidBytes).trim());
+    assert.ok(Number.isSafeInteger(borrowedPid) && borrowedPid > 0, 'borrower must publish its actual PID');
     const forged = await borrowedReviewerPidClaim(forgedReceipt, borrowedPid, launcher.pid!);
     assert.match(forged.error ?? '', /socket peer is not the claimed configured child/);
     assert.equal(forged.capability, undefined);
   } finally {
-    process.kill(borrowedPid, 'SIGTERM');
+    if (borrowedPid !== undefined) process.kill(borrowedPid, 'SIGTERM');
     launcher.kill();
     forgedAdapter.dispose();
   }

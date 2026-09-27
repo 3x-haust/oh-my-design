@@ -32,6 +32,7 @@ import {
   createTestProjectWriteAdapter,
 } from './helpers/project-write.ts';
 import { selfSignedReceiptEnv } from './helpers/self-signed-receipt.ts';
+import { signNativeObservation } from '../core/runtime/self-signed-activation.ts';
 
 const CLI = fileURLToPath(new URL('../bin/omd.ts', import.meta.url));
 const fixturePath = (name: string): string => fileURLToPath(new URL(`fixtures/adaptive-flow/${name}.json`, import.meta.url));
@@ -123,6 +124,45 @@ test('persisted records bind every source-derived safety and outcome projection'
     mutate(record);
     assert.throws(() => parseRouteRecord(record), AdaptiveRouteError, label);
   }
+});
+
+test('review purpose origin survives source hashing, route authority, publication, and replay', () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'omd-route-purpose-replay-')));
+  const input = fixture('copy-only') as Record<string, unknown>;
+  const request = input.request as string;
+  const payload = {
+    schema: 'review-purpose-origin-v1' as const,
+    projectRoot: root,
+    purpose: 'release' as const,
+    requestSha256: sha256(request),
+    source: 'host-launch' as const,
+    observedAt: '2026-09-27T00:00:00.000Z',
+  };
+  const signature = signNativeObservation(root, payload.schema, sha256(canonicalJson(payload)));
+  const bytes = Buffer.from(`${canonicalJson({ ...payload, signature })}\n`);
+  const authoritySha256 = sha256(bytes);
+  const purposeAuthority = { path: `.omd/review-purpose-authorities/sha256-${authoritySha256}.json`, sha256: authoritySha256 };
+  mkdirSync(join(root, '.omd/review-purpose-authorities'), { recursive: true });
+  writeFileSync(join(root, purposeAuthority.path), bytes);
+  input.reviewPurpose = 'release';
+  input.reviewPurposeAuthority = purposeAuthority;
+
+  const invocation = createTestProjectRunInvocation(root, 'review-purpose-replay');
+  const record = routeAdaptiveFlow(input, { root, invocation });
+  const routeSha256 = adaptiveRouteRecordSha256(record);
+  authorizeTestProjectRunPayloads(root, invocation, [{
+    purpose: 'adaptive-route-authority',
+    payload: adaptiveRouteAuthorityBytes(record, routeSha256, invocation),
+  }]);
+  publishAdaptiveRoute(root, input, createTestProjectWriteAdapter(root, invocation), invocation);
+  const replayed = readPersistedRoute(root, invocation);
+  assert.equal(replayed.sourceContract.reviewPurpose, 'release');
+  assert.deepEqual(replayed.sourceContract.reviewPurposeAuthority, purposeAuthority);
+  assert.equal(replayed.sourceContractSha256, record.sourceContractSha256);
+  assert.equal(replayed.behavior.schema, 'adaptive-behavior-contract-v2');
+
+  writeFileSync(join(root, purposeAuthority.path), Buffer.concat([bytes, Buffer.from('\n')]));
+  routeError(() => readPersistedRoute(root, invocation), 'ROUTE_AUTHORITY_REQUIRED');
 });
 
 test('route records persist the exact selected model and immutable source binding', () => {

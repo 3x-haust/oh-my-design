@@ -3,6 +3,8 @@
 > Candidate hypothesis only. Revalidate its condition, values, and responsive transition
 > against the current composition contract; do not transfer this page recipe unchanged.
 
+Marketing/showpiece only. Do not use this recipe on a product work surface, operational dashboard, settings screen, admin flow, checkout, or repeated task loop. If the surface exists to help a user finish work, choose a product composition recipe instead.
+
 A sticky sidebar remains anchored in view while the main content column scrolls past it.
 The sidebar holds content that gains from staying visible — navigation, a table of contents,
 a reference panel, a summary of options while the user reads detail. The main column holds

@@ -78,7 +78,7 @@ test('signature-lighting.md does not gate its reference against core/ref/distanc
   assert.doesNotMatch(content, /WEIGHTS/);
 });
 
-// ── Existing motion/composition recipe-count contracts stay untouched ──────
+// ── Motion and composition recipe-count contracts stay explicit ────────────
 
 test('core/interaction/recipes/ does not disturb the motion recipe count', () => {
   const motionRecipesDir = join(root, 'core', 'motion', 'recipes');
@@ -91,7 +91,7 @@ test('core/interaction/recipes/ does not disturb the composition recipe count', 
   const files = readdirSync(compositionDir).filter((f) => f.endsWith('.md'));
   assert.equal(
     files.length,
-    12,
-    `expected composition recipes to remain 12 (9 editorial + 3 product-surface), found ${files.length}`
+    26,
+    `expected 26 composition recipes (9 marketing/showpiece + 17 product-surface), found ${files.length}`
   );
 });

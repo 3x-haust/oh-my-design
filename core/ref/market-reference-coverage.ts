@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto';
+import { supportsMarketCoverage } from './reference-research-types.ts';
+import { readBrowseMarketExecutions, validateBrowseMarketLocal, validateBrowseMarketFallback } from './browse/market.ts';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { parseLocaleDesignContext } from '../locale/design-context.ts';
@@ -64,6 +66,10 @@ function containsMarketToken(reason: string, tokens: readonly string[]): boolean
     return false;
   });
 }
+export function marketClaimFits(text: string, scope: keyof typeof SCOPE_TERMS, marketRegion: string, labels: readonly string[]): boolean {
+  return DIRECT_SCOPE.test(text) && SCOPE_TERMS[scope].test(text) && !negatesMarketScope(text, labels)
+    && (containsMarketToken(text, labels) || (marketRegion === 'KR' && inferredKoreanReferenceMarket(text) === 'KR'));
+}
 function directRootReason(value: unknown, marketTokens: readonly string[], code: string): void {
   const reason = explanation(value, code);
   if (negatesMarketScope(reason, marketTokens) || !DIRECT_SCOPE.test(reason) || !containsMarketToken(reason, marketTokens)) marketReject(code);
@@ -122,10 +128,10 @@ export function validateMarketReferenceCoverage(root: string, research: Referenc
   const inferred = expectedRequest === undefined ? null : inferredKoreanReferenceMarket(expectedRequest);
   const marketRegion = context?.marketRegion ?? inferred;
   if (marketRegion === null) {
-    if (research.schema === 'reference-research-v7' && research.marketCoverage !== null) return marketReject('REFERENCE_RESEARCH_MARKET_COVERAGE_UNSCOPED');
+    if (supportsMarketCoverage(research.schema) && research.marketCoverage !== null) return marketReject('REFERENCE_RESEARCH_MARKET_COVERAGE_UNSCOPED');
     return;
   }
-  if (research.schema !== 'reference-research-v7' || research.marketCoverage === null || research.marketCoverage === undefined) {
+  if (!supportsMarketCoverage(research.schema) || research.marketCoverage === null || research.marketCoverage === undefined) {
     return marketReject('REFERENCE_RESEARCH_MARKET_COVERAGE_REQUIRED: publish v7 with source-specific local-market provenance for both lanes and a concrete gap for every global fallback');
   }
   if (research.marketCoverage.marketRegion !== marketRegion) return marketReject('REFERENCE_RESEARCH_MARKET_REGION_STALE');
@@ -152,7 +158,7 @@ export function validateMarketReferenceCoverage(root: string, research: Referenc
   ] as const) roots?.forEach(root => directRootReason(root.reason, marketTokens,
     `REFERENCE_RESEARCH_MARKET_${name}_DIRECT_ROOT_REQUIRED: explain how each direct root scopes discovery to the explicit market`));
   const domainSearchRequired = laneNeedsMarketSearch(research.marketCoverage.domain,
-    research.domainReference.discoveryRoots ?? [], research.domainReference.searches);
+    research.domainReference.discoveryRoots ?? [], research.domainReference.searches, research.domainReference.sources.every(source => source.provenance !== undefined));
   if (domainSearchRequired
     && domainQueries.some((query, index) => research.domainReference.queries[index] !== query)) {
     return marketReject('REFERENCE_RESEARCH_MARKET_DOMAIN_SEARCH_REQUIRED: execute the exact target-market domain inputs before global searches');
@@ -167,7 +173,7 @@ export function validateMarketReferenceCoverage(root: string, research: Referenc
     readFrame(root)?.uxSurface === 'marketing'
       || persistedTaskNeed(root, research.sourceContractSha256, expectedRequest) === 'new-marketing');
   const designSearchRequired = laneNeedsMarketSearch(research.marketCoverage.design,
-    research.designReference.discoveryRoots ?? [], research.designReference.searches);
+    research.designReference.discoveryRoots ?? [], research.designReference.searches, research.designReference.sources.every(source => source.provenance !== undefined));
   if (designSearchRequired && (designQueries.some((query, index) => research.designReference.queries[index] !== query)
     || research.designReference.queries.slice(0, labels.length).some(query => !isMarketQualifiedQuery(query, labels)))) {
     return marketReject('REFERENCE_RESEARCH_MARKET_DESIGN_SEARCH_REQUIRED: execute market-and-domain-qualified design searches before global searches');
@@ -177,9 +183,9 @@ export function validateMarketReferenceCoverage(root: string, research: Referenc
     ...validateDirectExecutions(root, research.designReference.discoveryRoots ?? [], 'DESIGN'),
   ];
   validateLaneProvenance(root, 'DOMAIN', marketRegion, labels, research.marketCoverage.domain,
-    research.domainReference.sources, domainExecutions, research.domainReference.discoveryRoots ?? [], domain);
+    research.domainReference.sources, domainExecutions, research.domainReference.discoveryRoots ?? [], domain, research.domainReference.browseSessions ?? []);
   validateLaneProvenance(root, 'DESIGN', marketRegion, labels, research.marketCoverage.design,
-    research.designReference.sources, designExecutions, research.designReference.discoveryRoots ?? [], domain);
+    research.designReference.sources, designExecutions, research.designReference.discoveryRoots ?? [], domain, research.designReference.browseSessions ?? []);
 }
 
 type MarketExecution = Readonly<{
@@ -191,21 +197,27 @@ type MarketExecution = Readonly<{
   usable: boolean;
   directRoot?: Readonly<{ url: string; observedText: string; taskText: string }>;
 }>;
-function laneNeedsMarketSearch(coverage: MarketLaneCoverage, roots: readonly unknown[], searches: readonly unknown[]): boolean {
-  return searches.length > 0 || !roots.length || coverage.localSources.some(source => source.basis === 'market-search-result')
-    || (coverage.globalFallback?.gap.attemptedQueries.length ?? 0) > 0;
+function laneNeedsMarketSearch(coverage: MarketLaneCoverage, roots: readonly unknown[], searches: readonly unknown[], browseOnly = false): boolean {
+  return searches.length > 0 || (!roots.length && !browseOnly) || coverage.localSources.some(source => source.basis === 'market-search-result')
+    || (!browseOnly && (coverage.globalFallback?.gap.attemptedQueries.length ?? 0) > 0);
 }
 function validateLaneProvenance(
   root: string, lane: 'DOMAIN' | 'DESIGN', marketRegion: string, marketLabels: readonly string[], coverage: MarketLaneCoverage,
   sources: readonly ResearchSource[], executions: readonly MarketExecution[],
   roots: NonNullable<ReferenceResearch['domainReference']['discoveryRoots']>,
   taskCategory: string,
+  browseSessions: readonly import('./reference-research-types.ts').ResearchEvidence[] = [],
 ): void {
   for (const execution of executions) assertCurrentExecution(execution,
     `REFERENCE_RESEARCH_MARKET_${lane}_ATTEMPT_STALE`);
   for (const local of coverage.localSources) {
     const source = sources.find(candidate => candidate.id === local.sourceId)
       ?? marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_LOCAL_PROVENANCE`);
+    if (local.basis === 'market-browse-observation') {
+      validateBrowseMarketLocal(root, source, local, lane, marketRegion, marketLabels, taskCategory);
+      continue;
+    }
+    if (source.provenance) marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_BROWSE_BASIS_REQUIRED`);
     if (marketRegion === 'KR' && lane === 'DOMAIN' && !retainedKoreanService(root, source)) {
       marketReject('REFERENCE_RESEARCH_MARKET_DOMAIN_LOCAL_RESULT_SCOPE');
     }
@@ -251,6 +263,10 @@ function validateLaneProvenance(
   for (const binding of fallback.provenance) {
     const source = sources.find(candidate => candidate.id === binding.sourceId)
       ?? marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_FALLBACK_PROVENANCE`);
+    if (source.provenance) {
+      validateBrowseMarketFallback(root, source, binding, browseSessions, marketLabels);
+      continue;
+    }
     const urls = [source.url, ...(source.discovery === undefined ? [] : [source.discovery.url])];
     const execution = executions.find(candidate => candidate.sha256 === binding.provenanceReceiptSha256)
       ?? marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_FALLBACK_PROVENANCE`);
@@ -268,8 +284,10 @@ function validateLaneProvenance(
     assertCurrentSourceObservation(source.observedAt, execution.observedAt,
       `REFERENCE_RESEARCH_MARKET_${lane}_FALLBACK_PROVENANCE_STALE`);
   }
-  const rootUrls = roots.map(root => root.url);
-  const attemptedQueries = executions.flatMap(execution => execution.query === null ? [] : [execution.query]);
+  const browseAttempts = readBrowseMarketExecutions(root, browseSessions);
+  const rootUrls = [...roots.map(root => root.url), ...browseAttempts.flatMap(item => item.event.action.verb === 'goto' ? [item.event.action.url] : [])];
+  const attemptedQueries = [...executions.flatMap(execution => execution.query === null ? [] : [execution.query]),
+    ...browseAttempts.flatMap(item => item.event.action.verb === 'search' ? [item.event.action.query] : [])];
   const expectedAttempts = same(fallback.gap.attemptedRoots, rootUrls)
     && same(fallback.gap.attemptedQueries, attemptedQueries);
   if (!expectedAttempts) marketReject(`REFERENCE_RESEARCH_MARKET_${lane}_FALLBACK_ATTEMPTS`);

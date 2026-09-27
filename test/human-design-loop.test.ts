@@ -189,7 +189,9 @@ test('adaptive process contracts preserve ownership, isolation, checkpoints, and
     'filmstrip-when-applicable', 'humanize-review', 'declared-probes', 'non-deterministic-craft-review',
   ]);
   assert.deepEqual(ADAPTIVE_STAGE_GRAPH.composition.prerequisites, ['frame', 'copy']);
-  assert.deepEqual(ADAPTIVE_STAGE_GRAPH['candidate-generation'].prerequisites, ['composition']);
+  assert.deepEqual(ADAPTIVE_STAGE_GRAPH['candidate-generation'].prerequisites, ['frame']);
+  assert.ok(ADAPTIVE_STAGE_GRAPH['type-proof'].afterIfSelected.includes('candidate-generation'));
+  assert.ok(ADAPTIVE_STAGE_GRAPH.composition.afterIfSelected.includes('candidate-generation'));
   assert.equal(ADAPTIVE_STAGE_OWNERS.production, 'omd-hand');
   assert.equal(ADAPTIVE_STAGE_OWNERS['independent-review'], 'omd-eye');
   assert.ok(route.strategy.skips.some((skip) => skip.id === 'composition' && skip.reason.trim() !== ''));
@@ -197,11 +199,15 @@ test('adaptive process contracts preserve ownership, isolation, checkpoints, and
     status: 'selected', steps: COPY_REPAIR_WORKFLOW,
   });
 
-  for (const role of ['framer', 'scout', 'sketch', 'hand', 'eye', 'writer', 'typesetter', 'composer']) {
+  for (const role of ['framer', 'scout', 'art-director', 'sketch', 'writer', 'typesetter', 'composer']) {
     const agent = parse(readFileSync(join(root, `src/agents/${role}.agent.yaml`), 'utf8'));
     const allow = Reflect.get(agent, 'allow');
     assert.ok(Array.isArray(allow) && allow.includes('Bash(omd pack:*)'), role);
   }
+  const hand = parse(readFileSync(join(root, 'src/agents/hand.agent.yaml'), 'utf8'));
+  assert.ok(Reflect.get(hand, 'allow').includes('Bash'));
+  const eye = parse(readFileSync(join(root, 'src/agents/eye.agent.yaml'), 'utf8'));
+  assert.deepEqual(Reflect.get(eye, 'allow'), ['Read']);
 
   const forged = structuredClone(route);
   Reflect.set(forged.behavior.policy.process, 'squintBeforeSharp', false);

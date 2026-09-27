@@ -1,0 +1,3 @@
+interface:
+  display_name: "(omd) system"
+  short_description: "Prove and formalize the chosen direction with only needed type roles and components."

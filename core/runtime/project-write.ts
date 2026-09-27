@@ -1,5 +1,6 @@
 import { chmodSync, constants as fsConstants, closeSync, fstatSync, fsyncSync, ftruncateSync, linkSync, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, realpathSync, renameSync, rmdirSync, rmSync, unlinkSync, writeSync } from 'node:fs';
 import type { Stats } from 'node:fs';
+import { enforceRoleModeWrite as assertRoleModeWrite } from './role-mode-boundary.ts';
 import { hostname } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import type { ProjectRunInvocation } from './invocation.ts';
@@ -399,6 +400,7 @@ export function createExternalPrivateMirror(request: ExternalPrivateMirrorReques
  * before resolving or creating any target, so stale/missing receipts cannot mutate.
  */
 export function writeProjectFile(request: ProjectWriteRequest): string {
+  assertRoleModeWrite(request.projectRoot, request.invocation, request.relativePath);
   return withProjectMutationLock(request.projectRoot, request.invocation, () => {
     requireGuardedProjectWrite(request.projectRoot, request.invocation);
     const target = resolveProjectPath(request.projectRoot, request.relativePath);
@@ -420,6 +422,7 @@ export function writeProjectFile(request: ProjectWriteRequest): string {
  * regular file is refused rather than followed.
  */
 export function removeProjectFile(request: Omit<ProjectWriteRequest, 'content'>): string {
+  assertRoleModeWrite(request.projectRoot, request.invocation, request.relativePath);
   return withProjectMutationLock(request.projectRoot, request.invocation, () => {
     requireGuardedProjectWrite(request.projectRoot, request.invocation);
     const target = resolveProjectPath(request.projectRoot, request.relativePath);
@@ -440,6 +443,7 @@ export function removeProjectFile(request: Omit<ProjectWriteRequest, 'content'>)
 }
 
 export function removeEmptyProjectDirectory(request: Omit<ProjectWriteRequest, 'content'>): string {
+  assertRoleModeWrite(request.projectRoot, request.invocation, request.relativePath, 'directory');
   return withProjectMutationLock(request.projectRoot, request.invocation, () => {
     requireGuardedProjectWrite(request.projectRoot, request.invocation);
     const target = resolveProjectPath(request.projectRoot, request.relativePath);
@@ -462,6 +466,7 @@ export function removeEmptyProjectDirectory(request: Omit<ProjectWriteRequest, '
 
 /** Persist immutable receipts without allowing a later writer to replace them. */
 export function writeImmutableProjectFile(request: ProjectWriteRequest): string {
+  assertRoleModeWrite(request.projectRoot, request.invocation, request.relativePath);
   return withProjectMutationLock(request.projectRoot, request.invocation, () => {
     requireGuardedProjectWrite(request.projectRoot, request.invocation);
     const target = resolveProjectPath(request.projectRoot, request.relativePath);
@@ -717,6 +722,7 @@ function withProjectMutationLock<T>(projectRoot: string, invocation: ProjectRunI
 
 /** Atomically replace a mutable pointer after its immutable target is durable. */
 export function replaceProjectFileAtomically(request: ProjectWriteRequest): string {
+  assertRoleModeWrite(request.projectRoot, request.invocation, request.relativePath);
   return withProjectMutationLock(request.projectRoot, request.invocation, () => {
     requireGuardedProjectWrite(request.projectRoot, request.invocation);
     const target = resolveProjectPath(request.projectRoot, request.relativePath);
@@ -754,6 +760,7 @@ export function createProjectDirectory(
   relativePath: string,
   invocation: ProjectRunInvocation,
 ): string {
+  assertRoleModeWrite(projectRoot, invocation, relativePath, 'directory');
   return withProjectMutationLock(projectRoot, invocation, () => {
     requireGuardedProjectWrite(projectRoot, invocation);
     const target = resolveProjectPath(projectRoot, relativePath);

@@ -10,6 +10,7 @@ const repository = fileURLToPath(new URL('..', import.meta.url));
 const writers = [
   { path: 'core/runtime/self-signed-activation.ts', guard: 'fsConstants.O_EXCL | fsConstants.O_NOFOLLOW', target: 'join(claims, sha256Hex(nonce))' },
   { path: 'extensions/omd-request-source.ts', guard: '!stat.isDirectory() || stat.isSymbolicLink()', target: 'join(projectRoot, record)' },
+  { path: 'extensions/omd-review-purpose.ts', guard: '!captured || captured.request !== request', target: 'join(projectRoot, path)' },
   { path: 'core/runtime/native-pi-run-record.ts', guard: 'previous.runId !== run.runId', target: "nativePiDirectory(run.projectRoot, '.omd/native-pi')" },
   { path: 'core/runtime/native-pi-run.ts', guard: '!issuedRuns.has(input.run)', target: "join(directory, 'command.json')" },
   { path: 'adapters/pi-reviewer-runtime.ts', guard: 'const run = getNativePiRun(input.invocation, input.root);', target: "join(directory, 'system.txt')" },

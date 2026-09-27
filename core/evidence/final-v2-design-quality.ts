@@ -1,3 +1,7 @@
+export function parseLegacyDesignQualityContract(input: unknown, options: DesignQualityParseOptions = {}): DesignQualityContract {
+  return parseDesignQualityContract(input, options);
+}
+
 export const DESIGN_QUALITY_CONTRACT_SCHEMA =
   'design-quality-contract-v1' as const;
 

@@ -3,6 +3,8 @@
 > Candidate hypothesis only. Revalidate its condition, values, and responsive transition
 > against the current composition contract; do not transfer this page recipe unchanged.
 
+Marketing/showpiece only. Do not use this recipe on a product work surface, operational dashboard, settings screen, admin flow, checkout, or repeated task loop. If the surface exists to help a user finish work, choose a product composition recipe instead.
+
 A bento grid divides a section into cells of intentionally different sizes, arranged as a
 mosaic. The cell size hierarchy communicates content hierarchy: the largest cell holds
 the most important content, and the eye reads that before anything else. The grid earns
@@ -10,6 +12,8 @@ its distinctiveness from non-uniformity — if all cells are the same size, it i
 grid, not a bento grid, regardless of what it is called.
 
 ## When it earns its place / When it does not
+
+Beige, cream, sepia, and warm-paper styling is not an unearned premium default. Start from true white or a neutral role unless the brand, subject, or user provides evidence for a tint.
 
 Condition: the section contains varied content types that benefit from non-uniform visual
 weight — a primary feature with more depth, supporting features with less, and perhaps a
@@ -113,7 +117,7 @@ desktop — which means the hierarchy is not in the content, it is in the layout
    Differentiation comes from content hierarchy, not from different styling. */
 .bento-cell {
   border-radius: var(--bento-radius);
-  background-color: var(--surface-subtle, #f5f5f3);
+  background-color: var(--surface-subtle, #F4F5F7);
   padding: var(--space-6, 1.5rem);
   overflow: hidden;
   /* Cells do not have individual box-shadows — the gap performs the separation. */
@@ -126,7 +130,7 @@ desktop — which means the hierarchy is not in the content, it is in the layout
   /* The primary cell may have a distinct background only if it is the section's
      anchor — not as generic differentiation. */
   background-color: var(--surface-emphasis, #0f0f0f);
-  color: var(--on-surface-emphasis, #f5f5f3);
+  color: var(--on-surface-emphasis, #FFFFFF);
 }
 
 .bento-cell--secondary {

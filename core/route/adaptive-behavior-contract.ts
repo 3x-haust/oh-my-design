@@ -6,8 +6,9 @@ import type { AdaptiveAttributionCategory } from './adaptive-attribution.ts';
 import { DESIGN_QUALITY_AXIS_FLOORS } from '../evidence/final-v2-design-quality.ts';
 
 export const ADAPTIVE_BEHAVIOR_SCHEMA = 'adaptive-behavior-contract-v1' as const;
+export const ADAPTIVE_BEHAVIOR_RECORDED_BROWSE_SCHEMA = 'adaptive-behavior-contract-v2' as const;
 
-const POLICY = {
+const LEGACY_POLICY = {
   process: {
     artifactOwners: {
       copyDeck: 'omd-writer', typeProof: 'omd-typesetter', composition: 'omd-composer',
@@ -125,6 +126,19 @@ const POLICY = {
   },
 } as const;
 
+const RECORDED_BROWSE_POLICY = {
+  ...LEGACY_POLICY,
+  references: {
+    ...LEGACY_POLICY.references,
+    acquisition: 'recorded-whole-screen-v1',
+    handoff: 'selected-whole-screens-and-analysis',
+    blindHandoff: 'sanitized-summary-only',
+    budget: 'verified-cycle-cumulative',
+    progress: 'verified-session-head',
+    debt: 'signed-session-confidence-debt',
+  },
+} as const;
+
 function deepFreeze(value: unknown): void {
   if (typeof value !== 'object' || value === null || Object.isFrozen(value)) return;
   for (const key of Reflect.ownKeys(value)) {
@@ -133,12 +147,14 @@ function deepFreeze(value: unknown): void {
   }
   Object.freeze(value);
 }
-deepFreeze(POLICY);
-export const ADAPTIVE_BEHAVIOR_POLICY = POLICY;
+deepFreeze(LEGACY_POLICY);
+deepFreeze(RECORDED_BROWSE_POLICY);
+export const ADAPTIVE_BEHAVIOR_POLICY = LEGACY_POLICY;
+export const ADAPTIVE_RECORDED_BROWSE_BEHAVIOR_POLICY = RECORDED_BROWSE_POLICY;
 
 export type AdaptiveBehaviorContract = Readonly<{
-  schema: typeof ADAPTIVE_BEHAVIOR_SCHEMA;
-  policy: typeof ADAPTIVE_BEHAVIOR_POLICY;
+  schema: typeof ADAPTIVE_BEHAVIOR_SCHEMA | typeof ADAPTIVE_BEHAVIOR_RECORDED_BROWSE_SCHEMA;
+  policy: typeof ADAPTIVE_BEHAVIOR_POLICY | typeof ADAPTIVE_RECORDED_BROWSE_BEHAVIOR_POLICY;
   active: Readonly<{
     imageGeneration: boolean;
     reflectionCheckpoints: boolean;
@@ -180,6 +196,7 @@ export type AdaptiveBehaviorContract = Readonly<{
 export function adaptiveBehaviorContract(
   strategy: AdaptiveStrategyDecision,
   expressiveDesignNeed: ExpressiveDesignNeed,
+  referenceBehavior: 'legacy' | 'recorded-browse' = 'legacy',
 ): AdaptiveBehaviorContract {
   const copyRepair = strategy.methods.includes('copy-repair-workflow')
     ? Object.freeze({ status: 'selected' as const, steps: COPY_REPAIR_WORKFLOW })
@@ -187,9 +204,14 @@ export function adaptiveBehaviorContract(
       status: 'skipped' as const,
       reason: strategy.skips.find((entry) => entry.id === 'copy-repair-workflow')?.reason ?? '',
     });
+  const policy = referenceBehavior === 'recorded-browse'
+    ? ADAPTIVE_RECORDED_BROWSE_BEHAVIOR_POLICY
+    : ADAPTIVE_BEHAVIOR_POLICY;
   return Object.freeze({
-    schema: ADAPTIVE_BEHAVIOR_SCHEMA,
-    policy: ADAPTIVE_BEHAVIOR_POLICY,
+    schema: referenceBehavior === 'recorded-browse'
+      ? ADAPTIVE_BEHAVIOR_RECORDED_BROWSE_SCHEMA
+      : ADAPTIVE_BEHAVIOR_SCHEMA,
+    policy,
     active: Object.freeze({
       imageGeneration: strategy.methods.includes('image-first-draft'),
       reflectionCheckpoints: strategy.methods.includes('reflection-in-action'),

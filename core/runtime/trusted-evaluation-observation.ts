@@ -5,6 +5,7 @@ import { servedProjectTreeSha256 } from '../render/serve.ts';
 import { validateDecisionGraph } from '../deliberation/contracts.ts';
 import {
   BROWSER_OBSERVATION_SCHEMA,
+  MEASURED_BROWSER_OBSERVATION_SCHEMA,
   BROWSER_OBSERVATION_SET_SCHEMA,
   browserObservationSha256,
   designDecisionSha256,
@@ -23,6 +24,9 @@ import {
 import { writeObservationV2, type ObservationV2 } from './observation.ts';
 import type { ProjectWriteAdapter } from './project-write.ts';
 import { nodeStableProjectFileSystem, readStableProjectFile } from './stable-project-file.ts';
+import { loadMeasurement } from '../measure/files.ts';
+import { digest } from '../measure/identity.ts';
+import { recordTrustedRefinementObservation } from './trusted-refinement.ts';
 
 export type TrustedEvaluationObservationErrorCode =
   | 'STALE_TRUSTED_BROWSER_CAPTURE'
@@ -96,6 +100,17 @@ export function writeTrustedEvaluationObservation(input: Readonly<{
     throw new TrustedEvaluationObservationError('STALE_TRUSTED_PRODUCTION_REVISION');
   }
   for (const capture of receipt.captures) verifyCapture(input.root, capture);
+  for (const capture of receipt.captures) if (capture.measurement) {
+    const m = capture.measurement, packet = loadMeasurement(input.root, m.packet);
+    const view = packet.scope.find(view => view.id === m.viewId), pixels = packet.captures.find(c => c.viewId === m.viewId);
+    if (!view || !pixels || packet.binding.activationBuildSha256 !== input.invocation.current.buildSha256
+      || packet.binding.routeSha256 !== receipt.routeSha256 || packet.binding.sourceContractSha256 !== receipt.sourceContractSha256
+      || pixels.capture.sha256 !== capture.sha256 || pixels.image.width !== capture.width || pixels.image.height !== capture.height
+      || view.state !== m.state || view.stateRecipeSha256 !== m.stateRecipeSha256 || view.browserZoom !== m.browserZoom
+      || digest(view.viewport) !== digest(m.viewport) || pixels.observedViewport.innerWidth !== m.layoutViewport.width || pixels.observedViewport.innerHeight !== m.layoutViewport.height) {
+      throw new TrustedEvaluationObservationError('STALE_TRUSTED_BROWSER_CAPTURE');
+    }
+  }
   const currentArtifactBytes = stableBytes(input.root, input.currentArtifactPath, 'trusted build artifact');
   const receiptSha256 = trustedBrowserReceiptSha256(receipt);
   input.writer.writeContentAddressed(
@@ -127,12 +142,13 @@ export function writeTrustedEvaluationObservation(input: Readonly<{
     }));
     const browserObservations = receipt.captures.map((capture) => {
       const core: BrowserObservationCore = {
-        schema: BROWSER_OBSERVATION_SCHEMA,
+        schema: capture.measurement ? MEASURED_BROWSER_OBSERVATION_SCHEMA : BROWSER_OBSERVATION_SCHEMA,
+        ...(capture.measurement ? { measurement: capture.measurement } : {}),
         testedUrl: capture.testedUrl ?? receipt.testedUrl,
-        testedState: capture.outcomeRef === undefined
+        testedState: capture.measurement?.state ?? (capture.outcomeRef === undefined
           ? 'trusted-evaluation'
-          : `outcome-${hash(Buffer.from(capture.outcomeRef)).slice(0, 16)}`,
-        viewport: { width: capture.width, height: capture.height },
+          : `outcome-${hash(Buffer.from(capture.outcomeRef)).slice(0, 16)}`),
+        viewport: capture.measurement?.layoutViewport ?? { width: capture.width, height: capture.height },
         observableResult: {
           kind: 'screenshot',
           capture: { path: capture.path, sha256: capture.sha256 },
@@ -156,7 +172,7 @@ export function writeTrustedEvaluationObservation(input: Readonly<{
   } catch (error) {
     if (input.requireDecisionGraph === true) throw error;
   }
-  return writeObservationV2(input.root, {
+  const observation = writeObservationV2(input.root, {
     currentArtifact: {
       path: input.currentArtifactPath,
       sha256: hash(currentArtifactBytes),
@@ -181,4 +197,7 @@ export function writeTrustedEvaluationObservation(input: Readonly<{
       ...browserEvidence,
     },
   }, input.writer, input.invocation);
+  if (receipt.schema === 'trusted-browser-receipt-v2') recordTrustedRefinementObservation(input.root, observation,
+    [...new Map(receipt.captures.map(c => [c.measurement!.packet.sha256, c.measurement!.packet])).values()], input.writer, input.invocation);
+  return observation;
 }

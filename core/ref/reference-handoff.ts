@@ -13,6 +13,8 @@ import {
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import type { ReferenceSelectionV2 } from './reference-selection.ts';
 import { artDirectionSha256, validateArtDirectionPointer, validateArtDirectionRecord } from '../art-direction/schema.ts';
+import { readReferenceAnalysis } from './reference-analysis.ts';
+import { projectReferenceApplication } from './reference-application.ts';
 
 export const REFERENCE_HANDOFF_SCHEMA_VERSION = 'reference-handoff-v2' as const;
 export const REFERENCE_HANDOFF_ROLES = ['art-direction', 'composer', 'hand'] as const;
@@ -389,4 +391,30 @@ export function validateDecisionBoundReferenceHandoffs(
     fail('current decision-bound handoffs changed while they were validated');
   }
   return { composer, hand };
+}
+
+/** Makers inspect selected whole screens with their authored analysis. Blind review never gets
+ * reference identities, pixels, source URLs, or maker rationale from this surface. */
+export function readWholeScreenReferenceHandoff(root: string, role: 'composer' | 'hand' | 'concept' | 'eye' | 'glance' | 'fidelity',
+  current: { sourceContractSha256: string; request?: string }, options: { blind?: boolean } = {}) {
+  const { analysis, references, receipt } = readReferenceAnalysis(root, current);
+  const maker = ['composer', 'hand', 'concept'].includes(role) && options.blind !== true;
+  const screens = projectReferenceApplication({ schema: 'reference-application-v2', sourceContractSha256: analysis.sourceContractSha256,
+    researchSha256: receipt.sha256, domainBriefSha256: analysis.domainBriefSha256, screens: analysis.screens }).screens;
+  if (!maker) {
+    const summary = { schema: 'reference-reviewer-summary-v1', role, sourceContractSha256: current.sourceContractSha256,
+      coverage: screens.map(screen => ({ surface: screen.surface, target: screen.target,
+        domain: screen.domain.coverage, design: screen.design.coverage })) };
+    return { ...summary, sha256: sha256(canonicalJson(summary)) };
+  }
+  const selected = references.filter(item => analysis.selectedReferenceIds.includes(item.item.referenceId));
+  const eligible = selected.filter(item => item.verified.keep.rights === 'allowed');
+  const payload = { schema: 'whole-screen-reference-handoff-v1', role, sourceContractSha256: current.sourceContractSha256,
+    analysis: { receipt, observations: eligible.map(({ item: { capture: _capture, image: _image, ...observation } }) => observation),
+      patterns: analysis.patterns, screens: analysis.screens },
+    images: eligible.map(({ item, verified }) => ({ referenceId: item.referenceId, path: item.image.path, sha256: item.image.sha256,
+      sourceApp: verified.keep.sourceApp, sourceUrl: verified.keep.sourceUrl, referenceUnit: 'whole-screen', visibility: verified.keep.visibility,
+      rights: verified.keep.rights, use: 'study-only-not-production-asset' })),
+    withheld: selected.filter(item => item.verified.keep.rights !== 'allowed').map(item => ({ referenceId: item.item.referenceId, reason: 'rights-not-allowed' })), screens };
+  return { ...payload, sha256: sha256(canonicalJson(payload)) };
 }

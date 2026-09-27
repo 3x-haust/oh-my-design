@@ -946,7 +946,8 @@ export async function runReviewerEvidenceProxyStdio(argv: readonly string[]): Pr
             const parsed = JSON.parse(Buffer.from(bytes).toString('utf8')) as unknown;
             if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
               && ((parsed as Record<string, unknown>).schema === 'adaptive-rendered-refinement-reviewer-transport-v1'
-                || (parsed as Record<string, unknown>).schema === 'adaptive-final-render-reviewer-transport-v1')) {
+                || (parsed as Record<string, unknown>).schema === 'adaptive-final-render-reviewer-transport-v1'
+                || (parsed as Record<string, unknown>).schema === 'measured-final-reviewer-transport-v1')) {
               visual = parsed as Record<string, unknown>;
             }
           } catch { /* generic evidence remains opaque */ }
@@ -968,7 +969,7 @@ export async function runReviewerEvidenceProxyStdio(argv: readonly string[]): Pr
             const evidenceRecord = evidence as Record<string, unknown>;
             const content: Array<Record<string, unknown>> = [{
               type: 'text',
-              text: JSON.stringify(visual.schema === 'adaptive-final-render-reviewer-transport-v1'
+              text: JSON.stringify(visual.schema !== 'adaptive-rendered-refinement-reviewer-transport-v1'
                 ? {
                   schema: visual.schema,
                   evidenceSha256: visual.evidenceSha256,
@@ -976,6 +977,12 @@ export async function runReviewerEvidenceProxyStdio(argv: readonly string[]): Pr
                   context: evidenceRecord.context,
                   observationProjection: evidenceRecord.observationProjection,
                   outputContract: visual.outputContract,
+                  measurementProjection: evidenceRecord.measurementProjection,
+                  approvedContracts: evidenceRecord.approvedContracts,
+                  selectedDirection: evidenceRecord.selectedDirection,
+                  surfaceReviewContract: evidenceRecord.surfaceReviewContract,
+                  surfaceContext: evidenceRecord.surfaceContext,
+                  documents: evidenceRecord.documents,
                 }
                 : {
                   schema: visual.schema,
@@ -1029,6 +1036,14 @@ export async function runReviewerEvidenceProxyStdio(argv: readonly string[]): Pr
                   alias: evidenceRecord.candidateAlias,
                   observationSha256: render.observationSha256,
                   browserObservationSha256: render.browserObservationSha256,
+                  packetSha256: render.packetSha256,
+                  viewId: render.viewId,
+                  browserZoom: render.browserZoom,
+                  layoutViewport: render.layoutViewport,
+                  surfaceId: render.surfaceId,
+                  stateId: render.stateId,
+                  caseId: render.caseId,
+                  measurementViewId: render.measurementViewId,
                   viewport: render.viewport,
                   state: render.state,
                   width: render.width,
@@ -1038,6 +1053,15 @@ export async function runReviewerEvidenceProxyStdio(argv: readonly string[]): Pr
                 metadata.push(label);
                 content.push({ type: 'text', text: JSON.stringify(label) });
                 content.push({ type: 'image', data: render.pngBase64, mimeType: 'image/png' });
+              }
+              if (evidenceRecord.referenceRenders !== undefined) {
+                if (!Array.isArray(evidenceRecord.referenceRenders)) throw new ReviewerLaunchError('Reference render inventory is malformed');
+                for (const raw of evidenceRecord.referenceRenders) {
+                  if (!raw || typeof raw !== 'object' || typeof raw.pngBase64 !== 'string') throw new ReviewerLaunchError('Reference render is malformed');
+                  const { pngBase64, ...label } = raw;
+                  content.push({ type: 'text', text: JSON.stringify({ reference: true, ...label }) });
+                  content.push({ type: 'image', data: pngBase64, mimeType: 'image/png' });
+                }
               }
             }
             process.stdout.write(`${jsonRpcResult(id, {
@@ -1053,6 +1077,7 @@ export async function runReviewerEvidenceProxyStdio(argv: readonly string[]): Pr
                     context: evidenceRecord.context,
                     observationProjection: evidenceRecord.observationProjection,
                     renders: metadata,
+                    measurementProjection: evidenceRecord.measurementProjection,
                   }),
                 byteLength: bytes.byteLength,
                 sha256: createHash('sha256').update(bytes).digest('hex'),

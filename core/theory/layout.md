@@ -57,7 +57,8 @@ readability, and adaptation rather than a single web grid.
 Choose a base interval that fits the existing system, platform, type metrics, target density,
 and device-pixel behavior. Optical corrections, borders, glyph geometry, and compact control
 anatomy can legitimately fall outside it. The useful rule is traceability: repeated values
-belong to a scale; deviations name the visible problem they solve.
+belong to a scale; deviations name the visible problem they solve. `tokens.md` defines the
+primitive → semantic → component layering, density aliases, and documented optical exceptions.
 
 An alignment break earns its cost when it reinforces the experience spine or concept. If
 several elements break different edges without a shared reason, the result usually weakens

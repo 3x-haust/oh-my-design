@@ -1,4 +1,5 @@
 import { loadRefs } from './store.ts';
+import { verifyBrowseRetention } from './browse/retention.ts';
 
 /**
  * Deterministic capture-parallelism audit.
@@ -91,7 +92,11 @@ export function auditCaptureTimes(capturedAt: readonly string[], now: number = D
 export function auditCaptureParallelism(cwd: string, now: number = Date.now()): CaptureAudit {
   // `ref add --image` publishes metadata without launching a capture browser. Its timestamp
   // cannot establish either a serial browser launch or a parallel capture, even near a real batch.
-  return auditCaptureRecords(loadRefs(cwd).filter((reference) => reference.kind !== 'image').map((reference) => ({
+  return auditCaptureRecords(loadRefs(cwd).filter((reference) => {
+    // A recorded interactive session is intentionally serial, not a fresh launch per screenshot.
+    if (reference.browse) { verifyBrowseRetention(cwd, reference); return false; }
+    return reference.kind !== 'image';
+  }).map((reference) => ({
     capturedAt: reference.capturedAt,
     ...(reference.captureBatchId === undefined ? {} : { captureBatchId: reference.captureBatchId }),
   })), now);

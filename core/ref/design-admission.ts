@@ -7,10 +7,11 @@ import { designDiscoveryItemIdentity, designDiscoveryProvider, referenceServiceH
 import { trustedReferenceImage } from './board-security.ts';
 import { loadRefs, refRecordPath } from './store.ts';
 import { observedGalleryItems } from './gallery-evidence.ts';
+import { browseRetentionOf, verifyBrowseRetention } from './browse/retention.ts';
 
 export type DesignReferenceAdmission = Readonly<{
   eligible: boolean;
-  code: 'gallery' | 'gallery-image' | 'observed-original' | 'user-provided' | 'lane' | 'purpose' | 'capture' | 'domain-reuse' | 'discovery';
+  code: 'recorded-browse' | 'gallery' | 'gallery-image' | 'observed-original' | 'user-provided' | 'lane' | 'purpose' | 'capture' | 'domain-reuse' | 'discovery';
   reason: string;
   discoverySource?: string;
 }>;
@@ -117,6 +118,12 @@ export function inspectDesignReferenceAdmission(root: string, reference: Referen
   const acquisition = reference.acquisition;
   if (!acquisition) return rejected('capture', 'Native acquisition is missing.');
   if (domainConflict(root, reference, references)) return rejected('domain-reuse', 'Domain source or image evidence cannot be retained as independent design evidence.');
+  const browse = browseRetentionOf(reference);
+  if (browse) {
+    try { verifyBrowseRetention(root, { ...reference, browse }); }
+    catch (error) { return rejected('capture', error instanceof Error ? error.message : 'Invalid browse retention'); }
+    return { eligible: true, code: 'recorded-browse', reason: 'Final native keep binds the exact source, state and pixels; provider identity is not admission authority.', discoverySource: reference.source };
+  }
   // The existing native --from-user contract is preserved; this marker is not independent proof of a conversation.
   const sourceProvider = provider(reference.source);
   const finalProvider = provider(acquisition.finalUrl);

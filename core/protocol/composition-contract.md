@@ -1,21 +1,20 @@
 # Composition contract protocol
 
-`.omd/composition.md` is the durable bridge between research and isolated structural
-sketches. `omd-composer` owns it. The artifact records composition decisions; it does not
-copy a reference page or prescribe one visual answer.
+`.omd/composition.md` is Composer's durable selected-system and expansion contract. Current
+human-design-process-v1 routes choose a representative direction before full type/composition.
+Historical routes keep their original pre-sketch composition ABI and dependency order.
 
-The composer receives a sanitized frame/concept, clean copy deck, sanitized approved type
-contract, and the scout's distilled transferable principles/invariants with source trust.
-It composes section by section: each section is assigned the single best-fit reference part for that
-section's job, and different sections may draw from different references, so the page is a deliberate
-composition of parts — not one reference reproduced whole. The hand builds each section from the
-assigned source-free reference projection's measured anatomy, geometry, and treatment with measured-part
-fidelity; when explicitly selected, the no-ship visual packet may add neutral box proportion, grouping,
-nesting, and whitespace evidence. Hand never inspects Scout-owned source pixels or private packet
-evidence. Tracing one reference's entire page layout and section order wholesale is a derivative
-failure, not fidelity. It still writes the product's own copy
-and uses its own real assets rather than lifting the source's literal text or photographs. Read `theory/layout.md` and
-`theory/ux.md` exactly before writing.
+The composer receives a sanitized frame/concept, clean copy deck, approved type contract, and
+applicable reference evidence. Compose the destination system first: grid, type relationships,
+density, component anatomy, task order, states, and responsive behavior. Use a selected reference
+part only for a relationship that remains unresolved and only at the granularity the evidence supports.
+A section-by-section reference collage is optional, never the default plan.
+
+The current maker handoff supplies selected rights-allowed whole-screen images, actual Scout
+analysis and per-surface application. Inspect hierarchy, density, type, patterns and exceptions.
+Optional crops supplement their parent, never replace whole-screen direction. Preserve source,
+rights and visibility context; do not ship source pixels/assets/copy without permission. Blind
+reviewers receive none of those images or maker rationale. Read only relevant layout/UX contracts.
 
 Use these H2 sections exactly and keep each non-empty. `## Colour roles` is the additive
 current-authoring boundary: historical composition artifacts without it remain readable and retain
@@ -124,7 +123,11 @@ production evidence still renders 1280x900 and 390x844.
 
 ## Candidate axes
 
-Define at least two structurally divergent candidate axes that can satisfy the same spine, copy,
+On current-process routes this compatibility heading records selected candidate lineage and any
+remaining bounded question. Do not generate a second routine concept set after selection/type proof.
+Art Director and Sketch already compared 2-3 representative concepts with identical content/views.
+
+For explicit historical routes, define at least two structurally divergent candidate axes that can satisfy the same spine, copy,
 type, and acceptance criteria. Genuine divergence is a different macro-layout family — the top-level
 spatial organization changes (single-column stack, asymmetric split, multi-column or modular grid,
 sidebar/rail, centered canvas, full-bleed alternating bands) or the dominant anchor's placement and
@@ -133,6 +136,27 @@ content truth. Two candidates that share one macro-layout family and differ only
 column width, type scale, or the vertical spacing of the same single-column stack — are one axis, not
 two, and are a divergence failure, not a candidate set. Name each axis's macro-layout family so the
 difference is legible before any sketch is built.
+
+## Needed components
+
+For current-process work, map actual component IDs to surface/state users, needed variants, token
+roles, content sizing/overflow and reuse/departure rationale. Reuse known variants first; a component
+path alone is not proof of a variant. Variable content sizes intrinsically unless a real constraint
+requires otherwise. No speculative component library. Token additions are disjoint and needed;
+changing an existing role/value or disguising it with a new name stales direction.
+
+## Expansion mapping
+
+Cover each Frame surface's required states x its own views, including noninteractive screens.
+Bind route/state recipes and actual view dimensions; map declared content fixtures to separate
+stress renders. Plans and author pass booleans are not proof. Native capture/measurement and review
+must cover every cell and case. Product task/semantic/access evidence remains separate.
+
+## Measurement contract
+
+Publish the closed composition-measurement-contract-v1 JSON block described by visual-measurement.md:
+actual colour consumers/tokens, regions, spacing/order, applicable frequent action and required
+views. Native measurements and owner contracts must agree; prose cannot waive RED.
 
 ## Colour roles
 
@@ -150,18 +174,17 @@ action, selected state, or critical state rather than decoration.
 
 ## Transfer boundary
 
-The boundary is drawn around the source's identity, not its structure. Permitted transfer:
-attributed relationships, measured invariants, principles abstracted from trusted evidence, and —
-at section granularity — an assigned reference part's layout, composition, and treatment, rebuilt
-faithfully with the destination's own copy, assets, and tokens. This per-section fidelity is the
-point (see `reference-assembly.md`): reproducing the assigned section's layout is expected, and
-`omd ref distance`'s high per-part closeness is the intended outcome, not a warning. Forbidden
-transfer is the source's identity and its whole-page gestalt: its brand/wordmark, copy, photographs
-and assets, literal token values, unique interaction and motion, and — across the entire page — its
-full section order and overall silhouette. Faithfully rebuilding one assigned section is lawful;
-tracing a whole reference page section-by-section into your whole page is the derivative failure.
-An exact whole-page or identity transplant is allowed only when the user explicitly requested that
-specific transplant; record the request and attribution.
+The boundary protects source identity and keeps evidence subordinate to the destination system.
+Permitted transfer is an attributed relationship or measured invariant needed to resolve a named
+composition problem, rebuilt with the destination's copy, assets, tokens, accessibility, and task
+constraints. Selected whole screens and analysis may be inspected by makers only through the validated
+study-only handoff; a crop is optional supplemental evidence. Similarity scores are diagnostics, not minimum design targets; acceptance
+comes from preserving the promised relationship without importing identity.
+
+Forbidden transfer includes the source's brand or wordmark, copy, unlicensed photography or assets,
+literal token values, distinctive interaction, full section order, and overall silhouette. A whole-page
+or identity transplant is lawful only when the user explicitly requests that exact transplant and
+rights and attribution are recorded.
 
 ## Reference synthesis
 

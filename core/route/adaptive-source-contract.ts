@@ -15,6 +15,7 @@ import {
 } from './adaptive-flow-domain.ts';
 import { routeReferenceDiscovery, type ReferenceDiscoveryInput } from '../ref/reference-discovery-routing.ts';
 import { parseLocaleDesignRoute, type LocaleDesignRoute } from '../locale/design-context.ts';
+import { UNSELECTED_LEARNING } from './adaptive-learning.ts';
 
 function canonicalObject(value: object): string {
   const entries: string[] = [];
@@ -68,8 +69,17 @@ export function adaptiveSourceContract(
   localeDesign?: LocaleDesignRoute,
 ): AdaptiveSourceContract {
   const parsedLocaleDesign = localeDesign === undefined ? undefined : parseLocaleDesignRoute(localeDesign);
+  const referenceDiscovery = referenceSource(input.referenceDiscovery);
+  const learningScope = input.learningScope ?? Object.freeze({ surface: referenceDiscovery.taskNeed === 'new-product'
+    ? 'product' : referenceDiscovery.taskNeed === 'new-marketing' ? 'marketing' : 'unspecified' });
   return Object.freeze({
+    learningScope,
     schema: ADAPTIVE_SOURCE_CONTRACT_SCHEMA,
+    ...(input.processPolicy === undefined ? {} : { processPolicy: input.processPolicy }),
+    ...(input.reviewPurpose === undefined ? {} : {
+      reviewPurpose: input.reviewPurpose,
+      reviewPurposeAuthority: input.reviewPurposeAuthority ?? null,
+    }),
     ...(input.deliveryMode === undefined ? {} : { deliveryMode: input.deliveryMode }),
     request: input.request,
     projectMode: input.projectMode,
@@ -78,11 +88,11 @@ export function adaptiveSourceContract(
     taskOutcome: parseTaskOutcomeContract(input.taskOutcome),
     uxPolicy: parseUxPolicy(input.uxPolicy),
     evidenceClaims: parseEvidenceClaimPublication(input.evidenceClaims),
-    referenceDiscovery: referenceSource(input.referenceDiscovery),
+    referenceDiscovery,
     designAxes: parseDesignAxisInput(input.designAxes),
     modelCapability: modelSource(input),
     browserDecisionContext: input.browserDecisionContext,
-    validatedLearningContext: input.validatedLearningContext,
+    validatedLearningContext: UNSELECTED_LEARNING,
     strategyDecision: input.strategyDecision,
     ...(parsedLocaleDesign === undefined ? {} : { localeDesign: parsedLocaleDesign }),
   });
@@ -91,6 +101,11 @@ export function adaptiveSourceContract(
 export function sourceContractRouteInput(source: AdaptiveSourceContract): AdaptiveRouteInput {
   return Object.freeze({
     schema: ADAPTIVE_ROUTE_INPUT_SCHEMA,
+    ...(source.processPolicy === undefined ? {} : { processPolicy: source.processPolicy }),
+    ...(source.reviewPurpose === undefined ? {} : {
+      reviewPurpose: source.reviewPurpose,
+      reviewPurposeAuthority: source.reviewPurposeAuthority ?? null,
+    }),
     ...(source.deliveryMode === undefined ? {} : { deliveryMode: source.deliveryMode }),
     request: source.request,
     projectMode: source.projectMode,
@@ -103,7 +118,8 @@ export function sourceContractRouteInput(source: AdaptiveSourceContract): Adapti
     designAxes: source.designAxes,
     modelCapability: source.modelCapability,
     browserDecisionContext: source.browserDecisionContext,
-    validatedLearningContext: source.validatedLearningContext,
+    validatedLearningContext: UNSELECTED_LEARNING,
+    learningScope: source.learningScope,
     strategyDecision: source.strategyDecision,
   });
 }

@@ -98,6 +98,158 @@ limits; and provide the underlying values in an associated table or accessible n
 screen-reader user reaches the same facts. WCAG 2.1 §1.4.1 (Use of Colour), §1.1.1 (Non-text
 Content).
 
+
+## Map the analytical task to the view
+
+Choose from the decision the reader must make, not from the fields available.
+
+| Analytical task | Default view | Use when | Avoid |
+| --- | --- | --- | --- |
+| Lookup an exact value | Table or key figure | Exact retrieval matters | Charting one value without a reference |
+| Rank categories | Sorted horizontal bars | Category order is the question | Unsorted bars, pie slices |
+| Compare to target | Bullet chart, bar with target line | One measure has a meaningful goal | Gauge without scale or history |
+| Change over time | Line or step line | Interval and continuity are real | Smoothed line that invents values |
+| Compare actual and forecast | Solid actual plus dashed forecast, shared scale | Forecast boundary is explicit | One continuous undifferentiated line |
+| Show distribution | Histogram, strip plot, box plot | Spread and outliers matter | Average alone |
+| Show relationship | Scatter plot | Two quantitative variables per observation | Trend line without method or sample size |
+| Show composition | Stacked bar | Parts share a meaningful whole | More than a few hard-to-compare layers |
+| Show flow | Sankey only for bounded, meaningful paths | Path volume is the question | Decorative flow lines or cycles that obscure totals |
+| Show geography | Map only when location drives the decision | Spatial adjacency matters | Map for state or province ranking |
+| Diagnose many entities over time | Small multiples or table with sparklines | Same measure and scale repeat | Spaghetti lines |
+
+If the task combines lookup and pattern detection, pair a chart with a table. Don't force one view to do both jobs.
+
+## Missing data is data
+
+Never silently connect across a missing interval. Use a gap for unknown values, a distinct mark for `0`, and a documented estimate style for imputed values. Tooltips and table fallback must say `데이터 없음`, `0`, or `추정값`, not collapse all three to a dash.
+
+- Record the missingness reason when known: delayed ingestion, not collected, suppressed for privacy, or not applicable.
+- If a whole series is missing, keep its label and explain the absence instead of removing it from the legend.
+- For aggregates, state whether missing records were excluded from the denominator.
+- Don't interpolate unless the analytical method permits it. Label the method and preserve original observations.
+
+## Uncertainty and confidence
+
+An estimate without uncertainty can look exact when it isn't. Show the interval when it changes the decision.
+
+- Use a confidence band around a line, interval whiskers for points or bars, or a range column in a table.
+- State the level and method, such as `95% confidence interval` or `forecast range, P10 to P90`.
+- Keep the estimate visually stronger than the interval. The band is context, not a second series.
+- Don't imply probability from a decorative blur. Boundaries, labels, and table values must remain available.
+- For small samples, show `n` near the view or in the tooltip. Don't hide unstable estimates behind excess decimals.
+
+## Forecast versus actual
+
+Use a visible temporal boundary. Actual values use a solid stroke or full-opacity mark. Forecasts use a dashed stroke or lighter fill with the same hue, plus a label at the first forecast point. Revised forecasts retain version or publication date when decisions depend on which forecast was known at the time.
+
+A variance view should state both amount and direction: `실적 ₩12.4억, 계획 대비 -₩0.8억 (-6.1%)`. If favorable and unfavorable depend on the metric, don't assume green always means positive arithmetic. Lower cost can be favorable while lower revenue isn't.
+
+## Thresholds, targets, and reference values
+
+A threshold is useful only when its source and consequence are known.
+
+- Draw a thin reference line behind marks and label it directly: `SLA 95%`, `예산 ₩5억`.
+- Distinguish a target from a hard limit and an alert threshold. They trigger different actions.
+- For bands, use neutral, warning, and critical treatments with text or pattern, never color alone.
+- Keep the reference stable across compared panels. A moving target can make unchanged performance appear to improve.
+- If a target changes over time, chart it as its own step line and record effective dates.
+
+## Tooltips and crosshair
+
+Tooltips add detail but cannot carry the chart's only labels, units, or conclusion.
+
+- Trigger by pointer hover, focus, and touch. Keep the focused mark visible.
+- Show series, exact x value, exact y value, unit, status, and provenance flags such as estimate or missing.
+- Use a crosshair for dense time series when aligning the same timestamp across series. Snap to real observations, not interpolated screen pixels.
+- A shared tooltip is useful for up to roughly 5 visible series. Beyond that, prioritize the focused series and expose the rest in the table.
+- Don't cover the selected mark or important nearby labels. Pin on click or keyboard activation when comparison needs persistence.
+
+## Cross-filtering, brushing, and zoom
+
+Selection must have visible scope and a reliable reset.
+
+- Cross-filtering updates related views only when the relationship is clear. State `서울, 모바일 필터 적용` above the affected region and update result counts.
+- Brushing selects a continuous range. Show start, end, count, and an accessible equivalent using inputs or a table selection.
+- Zoom is for dense time or spatial data, not a substitute for a readable default range. Preserve context with an overview, reset control, or breadcrumb of ranges.
+- Encode filter state in the URL when the view is shareable. Browser Back must restore the prior analytical state.
+- Announce result-count changes in a polite live region. Don't move keyboard focus after every filter.
+
+## Responsive chart transformations
+
+Responsive design can change the encoding when shrinking would destroy the task.
+
+| Desktop | Mobile transformation |
+| --- | --- |
+| Grouped vertical bars | Horizontal bars with 5 to 8 visible categories, then scroll or explicit expansion |
+| Multi-series line | Focused series plus selector, or small multiples stacked vertically |
+| Wide time series | Shorter default range with range control and same full-history access |
+| Heatmap | Scrollable matrix with sticky labels, or ranked list for lookup tasks |
+| Scatter plot | Full-width plot with fewer labels, then accessible table for exact points |
+| Dashboard grid | Priority stack: alert, key comparison, trend, detail table |
+| Dense table plus sparkline | Record summaries with value and trend, preserving sort and filters |
+
+Keep the same data meaning and filter state. Don't turn a comparison into isolated cards if the user can no longer compare. Test at 320 CSS px and at 200% zoom when claimed.
+
+## Korean numbers, dates, and units
+
+Use locale-aware formatting, then apply domain conventions deliberately.
+
+- Currency: `₩12,500` for compact product UI, or `12,500원` in Korean prose. Don't show decimal won values.
+- Large amounts: use `만` and `억` only when approximation is acceptable. `₩1.24억` is concise but mixed notation can be awkward; prefer `1억 2,400만원` in formal summaries or `1.24억원` in analytical labels. Provide the exact amount in a tooltip or table.
+- Counts: `12,430명`, `84건`, `1,205개`. Keep unit attached to the value.
+- Percent: `12.4%`. Percentage-point change is `+1.8%p`, not `+1.8%`. Relative change remains `%`.
+- Dates: `2026. 9. 26.` in formal Korean text, `2026.09.26` in dense tables, and `9월 26일` when year is clear. Use `14:30 KST` when timezone matters.
+- Periods: label comparisons explicitly, such as `전주 대비`, `전년 동기 대비`, or `2026년 8월 대비`.
+- Axes may abbreviate `0`, `5천`, `1만`, `1.5만`, but don't mix `K`, `M`, `만`, and `억` in one view.
+- Use tabular numerals in tables and changing counters. Keep minus signs, decimal precision, and units consistent down a column.
+
+## Live updates
+
+Real-time is a behavior contract, not a badge.
+
+- Show last successful update and connection state: `14:32:08 KST 기준`, `연결 끊김, 재연결 중`.
+- Preserve the reader's place. Don't reorder rows or shift axes while they are selecting, reading a tooltip, or using the keyboard.
+- Batch high-frequency updates into a stable cadence appropriate to the decision. A trading view and a support queue need different cadences.
+- Indicate changed values briefly without relying on motion or color alone. Reduced-motion users receive a static changed marker.
+- If data becomes stale, keep the last valid values, label them stale, and expose retry. Don't replace the whole dashboard with a spinner.
+
+## Dense dashboard composition
+
+A dashboard is a coordinated decision surface, not a gallery of cards.
+
+1. Put current exceptions and required actions first.
+2. Group views by one decision or shared filter scope, not by chart type.
+3. Use a common time range, timezone, and comparison basis unless a view declares its exception.
+4. Reserve key figures for metrics that can be interpreted with a target, prior period, or status.
+5. Align chart plot areas, not just outer card edges.
+6. Keep one dominant analytical view per region. Supporting figures and tables should explain it.
+7. Place data freshness, definitions, and filter scope where they can be checked without opening settings.
+8. Avoid card nesting, decorative atmosphere, and a unique color for every tile.
+
+A first viewport might contain 1 alert strip, 3 to 5 key figures with references, 1 dominant trend or comparison, and the start of an exception table. Treat that as a composition test, not a universal quota.
+
+## Export
+
+Export the user's current analytical state, not an unrelated default dataset.
+
+- Name format, row count, filters, timezone, unit, and whether hidden columns are included before large exports.
+- CSV preserves raw machine-readable values and UTF-8 Korean text. XLSX may preserve display formats. PNG and PDF need title, date range, filters, units, source, and generated timestamp.
+- Include missingness and estimate flags. Don't turn formatted `1.2억` into the raw string if the exact value is available.
+- For asynchronous export, provide progress, completion notification, expiry, retry, and permission checks at download time.
+- Protect sensitive exports with the same row and field permissions as the screen. An export endpoint isn't a permission bypass.
+
+## Accessible interaction
+
+Every chart needs an equivalent way to reach its facts.
+
+- Provide a nearby data table with caption, headers, units, and the same filter scope. It may be disclosed, but it must be keyboard and screen-reader reachable.
+- Give the chart an accessible name and short summary of the main finding. Don't duplicate every point in `aria-label` when the table already does that job.
+- Interactive marks enter a logical keyboard order. Arrow keys may move within a series, while Tab enters and exits the chart. Document the pattern in help text.
+- A focused mark gets a visible focus indicator and the same detail as pointer hover.
+- Selection, threshold, and missing states use text, shape, stroke, or pattern in addition to color.
+- Zoom, brush, and reset controls are real buttons or inputs with names and current values.
+- Respect reduced motion for animated transitions. Updating data must not continually steal focus or flood announcements.
+
 ## Sources
 
 - Cleveland, W. & McGill, R. (1984). "Graphical Perception: Theory, Experimentation, and

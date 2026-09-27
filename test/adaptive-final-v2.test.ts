@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { checkFinalEvidenceV2, publishFinalEvidenceV2 } from '../core/evidence/final-v2.ts';
 import { checkTerminalCompletion } from '../core/completion/preflight.ts';
+import { confidenceDebt, recordConfidenceDebt } from '../core/brief/confidence-debt.ts';
 import { captureSlopCheckpoint, publishSlopReview } from '../core/slop/review.ts';
 import { canonicalFinalEvidenceV2Graph, validateFinalEvidenceV2GraphFiles } from '../core/evidence/final-v2-graph.ts';
 import { servedProjectTreeSha256 } from '../core/render/serve.ts';
@@ -442,13 +443,13 @@ test('authorized copy-only adaptive omission publication reaches immutable final
   } finally { rmSync(value.root, { recursive: true, force: true }); }
 });
 
-test('execution requirements are reported only after real final publication and terminal checks', async () => {
+for (const withRequirements of [true, false]) test(`terminal reports host/debt after real gates (execution requirements: ${withRequirements})`, async () => {
   const routeInput = structuredClone(fixture());
   const requirements = [
     { requirement: 'Use the authorized production writer.', enforcedBy: ['project-write-boundary'] },
     { requirement: 'Pass independent review and final preflight.', enforcedBy: ['independent-review', 'completion-preflight'] },
   ];
-  Reflect.set(mutable(field(routeInput, 'taskOutcome')), 'executionRequirements', requirements);
+  if (withRequirements) Reflect.set(mutable(field(routeInput, 'taskOutcome')), 'executionRequirements', requirements);
   const renderRoot = project();
   const state = { name: 'approved-copy-visible', startRoute: '/', route: '/', actions: [], assertions: [{ selector: 'main', state: 'visible' as const, text: 'approved copy' }] };
   let captures: Buffer[];
@@ -474,7 +475,7 @@ test('execution requirements are reported only after real final publication and 
     }).toString('utf8'));
     assert.equal(Object.hasOwn(packet.evidence.context.taskOutcome, 'executionRequirements'), false);
     assert.deepEqual(packet.evidence.context.taskOutcome.mustHave, field(field(routeInput, 'taskOutcome'), 'mustHave'));
-    assert.deepEqual(readPersistedRoute(value.root, value.invocation).sourceContract.taskOutcome.executionRequirements, requirements);
+    assert.deepEqual(readPersistedRoute(value.root, value.invocation).sourceContract.taskOutcome.executionRequirements, withRequirements ? requirements : undefined);
     publishPrepared(value);
     const pointer = readFileSync(join(value.root, '.omd/final-evidence-v2.json'));
     const record = text(JSON.parse(pointer.toString('utf8')), 'record');
@@ -490,13 +491,19 @@ test('execution requirements are reported only after real final publication and 
     publishSlopReview(value.root, { ...slop.reviewInput, summary: 'Synthetic final copy fixture: the approved sentence is visible in both native viewport captures.',
       decisions: slop.reviewInput.decisions.map(d => ({ ...d, status: 'dismissed', reason: 'The synthetic text-only fixture deliberately has no additional visual treatment.', viewIds: ['desktop', 'mobile'] })),
     }, createTestProjectWriteAdapter(value.root, value.invocation));
+    const debt = recordConfidenceDebt(value.root, readPersistedRoute(value.root, value.invocation).sourceContractSha256,
+      [confidenceDebt('reference-board', 'No reference comparison was available at first entry.')], value.invocation);
     const result = checkTerminalCompletion(value.root, value.invocation);
-    assert.deepEqual(result.executionRequirements, {
+    assert.deepEqual(result.limitations, debt, 'terminal success must disclose durable entry debt');
+    assert.equal(result.hostCapabilities.host, value.invocation.activation.hostCapability.host);
+    assert.equal(result.hostCapabilities.guarantees.writeBoundary.enforced, false);
+    assert.equal(result.hostCapabilities.guarantees.completionHold.enforced, false);
+    assert.deepEqual(result.executionRequirements, withRequirements ? {
       schema: 'execution-requirement-check-v1',
       sourceContractSha256: readPersistedRoute(value.root, value.invocation).sourceContractSha256,
       checkedAt: 'terminal-preflight',
       requirements,
-    });
+    } : undefined);
     const lanePath = text(field(value.graph, 'blindLane'), 'path');
     writeFileSync(join(value.root, lanePath), '{"schema":"caller-claims-review-passed"}\n');
     assert.throws(() => checkTerminalCompletion(value.root, value.invocation));
@@ -685,6 +692,32 @@ test('adaptive omission publication rejects missing authority, changed skip, sel
     try { mutate(value); assert.throws(() => publishPrepared(value)); }
     finally { rmSync(value.root, { recursive: true, force: true }); }
   }
+});
+
+test('selected upstream evidence debt is disclosed by an authorized terminal graph and cannot impersonate evidence', () => {
+  const value = prepared(false, fixtureWithSelectedUpstreamStages());
+  try {
+    const route = readPersistedRoute(value.root, value.invocation);
+    const debt = recordConfidenceDebt(value.root, route.sourceContractSha256,
+      [confidenceDebt('reference-board', 'Selected reference comparison could not be verified.')], value.invocation);
+    const graphRoute = field(value.graph, 'route');
+    const deferred = { id: 'board', status: 'selected-with-debt', routeSkipId: 'reference-board', reason: debt[0]!.reason,
+      routeSha256: text(field(graphRoute, 'record'), 'sha256'), authoritySha256: text(field(graphRoute, 'authority'), 'sha256'), claim: 'not-verified', debtIds: debt.map(d => d.id) };
+    Reflect.set(mutable(value.graph), 'omissions', [deferred, ...list(value.graph, 'omissions')]);
+    const debtReceipt = receipt(value.root, '.omd/confidence-debt.json', 'confidence-debt-v1');
+    Reflect.set(mutable(value.graph), 'confidenceDebt', { schema: 'terminal-confidence-debt-v1', receipt: debtReceipt, limitations: debt });
+    authorizeGraph(value.root, value.invocation, value.graph);
+    const accepted = validateFinalEvidenceV2GraphFiles(value.root, value.graph, fs, value.invocation);
+    assert.deepEqual(Reflect.get(accepted.bindings, 'limitations'), debt);
+    const before = readFileSync(join(value.root, '.omd/confidence-debt.json'));
+    Reflect.set(deferred, 'claim', 'verified');
+    assert.throws(() => validateFinalEvidenceV2GraphFiles(value.root, value.graph, fs, value.invocation), /unverified debt|selected-with-debt/);
+    assert.deepEqual(readFileSync(join(value.root, '.omd/confidence-debt.json')), before);
+    Reflect.set(deferred, 'claim', 'not-verified');
+    Reflect.set(mutable(value.graph), 'copy', { ...debtReceipt, schema: 'copy-deck-v2' });
+    assert.throws(() => validateFinalEvidenceV2GraphFiles(value.root, value.graph, fs, value.invocation), /debt cannot be claimed as verified evidence/);
+    assert.deepEqual(readFileSync(join(value.root, '.omd/confidence-debt.json')), before);
+  } finally { rmSync(value.root, { recursive: true, force: true }); }
 });
 
 test('a selected-art route shape cannot use the adaptive omission branch', () => {

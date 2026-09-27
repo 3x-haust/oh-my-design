@@ -89,8 +89,8 @@ test('an explicit file path remains distinct from the stdin sentinel', t => {
 
 test('framer instructions expose stdin transport without permitting direct record writes', () => {
   const source = readFileSync(fileURLToPath(new URL('../src/agents/framer.agent.yaml', import.meta.url)), 'utf8');
-  assert.match(source, /For `omd acquisition set` and `omd complete set`, pass your JSON with `--input -`/);
-  assert.match(source, /Never use a patch or file-write/);
-  assert.match(source, /publisher still validates the schema and write authority/);
-  assert.match(source, /coordinator must not reconstruct or author your payload/);
+  assert.match(source, /omd acquisition set --input -/);
+  assert.match(source, /omd complete set --input -/);
+  assert.match(source, /publishers validate schemas and authority/);
+  assert.match(source, /never hand-write command-owned records/);
 });

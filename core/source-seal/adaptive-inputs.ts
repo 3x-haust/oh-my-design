@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
-import { existsSync } from 'node:fs';
+import { existsSync, lstatSync } from 'node:fs';
+import { CONFIDENCE_DEBT_PATH, readConfidenceDebt } from '../brief/confidence-debt.ts';
 import { resolve } from 'node:path';
 import { artDirectionSha256, validateArtDirectionPointer, validateArtDirectionRecord } from '../art-direction/schema.ts';
 import { parseReferenceHandoffReceipt, validateDecisionBoundReferenceHandoffs } from '../ref/reference-handoff.ts';
@@ -15,6 +16,8 @@ import { intentLedgerSha256, validateIntentCurrentPointer, validateIntentLedger 
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import { nodeStableProjectFileSystem, readStableProjectFile } from '../runtime/stable-project-file.ts';
 import { readCurrentCulturalDesignProfile } from '../locale/cultural-profile-files.ts';
+import { readSelectedArtDirection } from '../art-direction/selected.ts';
+import { currentSelectedSystem } from '../measure/selected-system.ts';
 import { checkReferenceApplication, REFERENCE_APPLICATION_PATH, REFERENCE_APPLICATION_PROJECTION_PATH } from '../ref/reference-application.ts';
 import {
   REFERENCE_LOCALE_BINDING_EVIDENCE_PATH,
@@ -32,8 +35,13 @@ const APPROVED_INPUTS = Object.freeze([
 ] as const);
 
 type Receipt = Readonly<{ path: string; sha256: string }>;
+export type SourceSealConfidenceDebt = Readonly<{
+  record: Receipt;
+  itemIds: readonly string[];
+  claim: 'not-verified';
+}>;
 type StageBinding = Readonly<
-  | { id: string; status: 'selected'; artifacts: readonly Receipt[] }
+  | { id: string; status: 'selected'; artifacts: readonly Receipt[]; confidenceDebt?: SourceSealConfidenceDebt }
   | { id: string; status: 'skipped'; reason: string; routeSha256: string; authoritySha256: string }
 >;
 export type AdaptiveSourceSealRoute = Readonly<{
@@ -61,8 +69,16 @@ function json(root: string, path: string, label: string): unknown {
   const value: unknown = JSON.parse(read(root, path, label).toString('utf8'));
   return value;
 }
-function currentArtDirection(root: string): readonly Receipt[] {
+function currentArtDirection(root: string, route: AdaptiveRouteRecord): readonly Receipt[] {
   const pointerPath = '.omd/art-direction.json';
+  if (route.sourceContract.processPolicy) {
+    const selected = readSelectedArtDirection(root, route.sourceContractSha256);
+    const pointer = json(root, pointerPath, 'selected art direction pointer') as { record: Receipt };
+    const system = currentSelectedSystem(root);
+    if (!system || system.tokens.baseTokensSha256 !== selected.decision.effectiveBaseTokensSha256) throw new Error('STALE_DIRECTION: selected token system is missing or changed');
+    return [receipt(root, pointerPath, 'selected art direction pointer'), receipt(root, pointer.record.path, 'selected art direction record'),
+      selected.decision.candidateSelection, ...system.receipts];
+  }
   let pointer;
   try { pointer = validateArtDirectionPointer(json(root, pointerPath, 'art-direction current pointer')); } catch {
     throw new Error('ART_DIRECTION_DECISION_REQUIRED: selected adaptive art-direction requires its exact current decision');
@@ -85,6 +101,19 @@ function currentArtDirection(root: string): readonly Receipt[] {
     receipt(root, '.omd/reference-handoffs/hand.json', 'hand reference handoff'),
   ]);
 }
+function absent(root: string, path: string): boolean {
+  try { lstatSync(resolve(root, path)); return false; }
+  catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return true; throw error; }
+}
+
+function stageDebt(root: string, record: AdaptiveRouteRecord, id: string): SourceSealConfidenceDebt | undefined {
+  if (absent(root, CONFIDENCE_DEBT_PATH)) return undefined;
+  const before = receipt(root, CONFIDENCE_DEBT_PATH, 'confidence debt');
+  const itemIds = readConfidenceDebt(root, record.sourceContractSha256).filter(item => item.stage === id).map(item => item.id).sort();
+  if (receipt(root, CONFIDENCE_DEBT_PATH, 'confidence debt').sha256 !== before.sha256) throw new Error('confidence debt changed while sealing');
+  return itemIds.length ? Object.freeze({ record: before, itemIds: Object.freeze([...new Set(itemIds)]), claim: 'not-verified' }) : undefined;
+}
+
 function stageBindings(
   root: string,
   record: AdaptiveRouteRecord,
@@ -94,8 +123,14 @@ function stageBindings(
 ): readonly StageBinding[] {
   return Object.freeze(APPROVED_INPUTS.map(([id, path]): StageBinding => {
     if (record.strategy.stages.includes(id)) {
+      // Absence alone is not a skip. Only current, stage-specific recorded debt permits a
+      // preliminary snapshot; existing files (including dangling symlinks) take the strict path.
+      if (id !== 'composition' && absent(root, path ?? '.omd/art-direction.json')) {
+        const confidenceDebt = stageDebt(root, record, id);
+        if (confidenceDebt) return Object.freeze({ id, status: 'selected', artifacts: Object.freeze([]), confidenceDebt });
+      }
       let artifacts = path === null
-        ? currentArtDirection(root)
+        ? currentArtDirection(root, record)
         : Object.freeze([receipt(root, path, `${id} approved input`)]);
       if (id === 'composition' && record.sourceContract.localeDesign?.decision === 'research') {
         const locale = readCurrentCulturalDesignProfile(root, invocation);
@@ -202,8 +237,19 @@ function isReceipt(value: unknown): value is Receipt {
 }
 function isStage(value: unknown): value is StageBinding {
   if (!object(value) || typeof value.id !== 'string') return false;
-  if (value.status === 'selected') return Object.keys(value).length === 3
-    && Array.isArray(value.artifacts) && value.artifacts.length > 0 && value.artifacts.every(isReceipt);
+  if (value.status === 'selected') {
+    if (!Array.isArray(value.artifacts)) return false;
+    if (Object.hasOwn(value, 'confidenceDebt')) {
+      const debt = value.confidenceDebt;
+      return ['art-direction', 'copy', 'type-proof'].includes(value.id) && Object.keys(value).length === 4
+        && value.artifacts.length === 0 && object(debt) && Object.keys(debt).length === 3
+        && debt.claim === 'not-verified' && isReceipt(debt.record) && debt.record.path === CONFIDENCE_DEBT_PATH
+        && Array.isArray(debt.itemIds) && debt.itemIds.length > 0
+        && debt.itemIds.every(id => typeof id === 'string' && SHA256.test(id))
+        && new Set(debt.itemIds).size === debt.itemIds.length;
+    }
+    return Object.keys(value).length === 3 && value.artifacts.length > 0 && value.artifacts.every(isReceipt);
+  }
   return value.status === 'skipped' && Object.keys(value).length === 5 && typeof value.reason === 'string'
     && value.reason.trim().length > 0 && typeof value.routeSha256 === 'string' && SHA256.test(value.routeSha256)
     && typeof value.authoritySha256 === 'string' && SHA256.test(value.authoritySha256);
@@ -213,6 +259,10 @@ export function adaptiveSourceSealInputHashes(route: AdaptiveSourceSealRoute): R
   if (route.referenceApplication) hashes.referenceApplicationSha256 = route.referenceApplication[0]!.sha256;
   for (const stage of route.stages) {
     if (stage.status !== 'selected') continue;
+    if (stage.confidenceDebt) {
+      hashes.confidenceDebtSha256 = stage.confidenceDebt.record.sha256;
+      continue;
+    }
     const artifact = stage.id === 'art-direction' ? stage.artifacts[1] : stage.artifacts[0];
     if (artifact === undefined) throw new Error(`cannot seal source: ${stage.id} selected artifact is missing`);
     const key = stage.id === 'art-direction' ? 'artDirectionSha256'
@@ -233,5 +283,7 @@ export function isAdaptiveSourceSealRoute(value: unknown): value is AdaptiveSour
   if (![value.pointer, value.record, value.sourcePointer, value.sourceContract, value.authority].every(isReceipt)) return false;
   if (!object(value.selectedModel) || !Array.isArray(value.stages) || value.stages.length !== APPROVED_INPUTS.length
     || !value.stages.every(isStage)) return false;
-  return canonicalRouteJson(value.stages.map((stage) => stage.id)) === canonicalRouteJson(APPROVED_INPUTS.map(([id]) => id));
+  const debtHashes = value.stages.flatMap(stage => stage.status === 'selected' && stage.confidenceDebt ? [stage.confidenceDebt.record.sha256] : []);
+  return new Set(debtHashes).size <= 1
+    && canonicalRouteJson(value.stages.map((stage) => stage.id)) === canonicalRouteJson(APPROVED_INPUTS.map(([id]) => id));
 }

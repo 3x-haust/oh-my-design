@@ -103,6 +103,8 @@ export {
 export {
   ADAPTIVE_BEHAVIOR_POLICY,
   ADAPTIVE_BEHAVIOR_SCHEMA,
+  ADAPTIVE_BEHAVIOR_RECORDED_BROWSE_SCHEMA,
+  ADAPTIVE_RECORDED_BROWSE_BEHAVIOR_POLICY,
   adaptiveBehaviorContract,
   type AdaptiveBehaviorContract,
 } from './adaptive-behavior-contract.ts';
@@ -147,12 +149,25 @@ export {
 export {
   ADAPTIVE_STAGE_GRAPH,
   ADAPTIVE_STAGE_OWNERS,
+  LEGACY_ADAPTIVE_STAGE_GRAPH,
+  LEGACY_ADAPTIVE_STAGE_OWNERS,
+  adaptiveStageGraph,
+  adaptiveStageOwners,
   validateAdaptiveStageGraph,
   validateAdaptiveStageOrder,
   type AdaptiveStageGraph,
   type AdaptiveStageId,
   type AdaptiveStageNode,
 } from './adaptive-stage-graph.ts';
+export { INTERACTIVE_PROCESS_POLICY, parseProcessPolicy, type ProcessPolicy } from './process-policy.ts';
+export {
+  parseReviewPurpose,
+  parseReviewPurposeAuthority,
+  verifyReviewPurposeAuthority,
+  type ReviewPurpose,
+  type ReviewPurposeAuthorityReceipt,
+  type ReviewPurposeOrigin,
+} from './review-purpose-authority.ts';
 export { parseRouteRecord, pathsOutsideScope } from './adaptive-route-record.ts';
 export {
   ADAPTIVE_ROUTE_SCOPE_EVIDENCE_SCHEMA,

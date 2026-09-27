@@ -29,6 +29,7 @@ import {
   type FinalEvidenceV2GraphBindings,
   type FinalEvidenceV2GraphBindingsVariant,
   type WorkflowArtSelectedFinalEvidenceV2Graph,
+  type MeasuredArtSelectedFinalEvidenceV2Graph,
   type WorkflowAdaptiveFinalEvidenceV2Graph,
   isWorkflowAdaptiveFinalEvidenceV2Graph,
   isWorkflowArtSelectedFinalEvidenceV2Graph,
@@ -46,6 +47,8 @@ import { acquireProjectMutationLock } from '../runtime/project-write.ts';
 import { validateCurrentRenderedRefinementCheckpoint } from '../runtime/rendered-refinement.ts';
 import { preflightFinalEvidenceGraph, revalidateFinalEvidenceGraph } from './final-v2-publication-preflight.ts';
 import { checkCompletionPublicationPrerequisites } from '../completion/publication.ts';
+import { isSelectedDirectionGraph, type SelectedDirectionGraph } from './final-v2-selected-direction.ts';
+import { validateSelectedDirectionCapture } from '../runtime/trusted-selected-direction-capture.ts';
 export const FINAL_EVIDENCE_V2_SCHEMA = 'final-evidence-v2';
 export const FINAL_EVIDENCE_V2_POINTER_SCHEMA = 'final-evidence-v2-pointer';
 export const FINAL_EVIDENCE_V2_LOCK_TTL_MS = 15 * 60 * 1000;
@@ -67,6 +70,9 @@ export interface FinalEvidenceV2Manifest {
 export interface WorkflowArtSelectedFinalEvidenceV2Manifest extends Omit<FinalEvidenceV2Manifest, 'graph'> {
   graph: WorkflowArtSelectedFinalEvidenceV2Graph;
 }
+export interface MeasuredArtSelectedFinalEvidenceV2Manifest extends Omit<FinalEvidenceV2Manifest, 'graph'> {
+  graph: MeasuredArtSelectedFinalEvidenceV2Graph;
+}
 export interface AdaptiveOmissionFinalEvidenceV2Manifest {
   schema: typeof FINAL_EVIDENCE_V2_SCHEMA;
   motionDecision: 'none';
@@ -76,9 +82,15 @@ export interface AdaptiveOmissionFinalEvidenceV2Manifest {
   motionEvidence?: never;
   staticEvidence?: never;
 }
-export type FinalEvidenceV2ManifestVariant = FinalEvidenceV2Manifest | WorkflowArtSelectedFinalEvidenceV2Manifest | AdaptiveOmissionFinalEvidenceV2Manifest;
+export interface SelectedDirectionFinalEvidenceV2Manifest extends Omit<FinalEvidenceV2Manifest, 'graph' | 'staticEvidence'> {
+  graph: SelectedDirectionGraph; staticEvidence?: never;
+}
+export type FinalEvidenceV2ManifestVariant = FinalEvidenceV2Manifest | MeasuredArtSelectedFinalEvidenceV2Manifest | WorkflowArtSelectedFinalEvidenceV2Manifest | AdaptiveOmissionFinalEvidenceV2Manifest | SelectedDirectionFinalEvidenceV2Manifest;
 function isAdaptiveFinalEvidenceV2Manifest(value: FinalEvidenceV2ManifestVariant): value is AdaptiveOmissionFinalEvidenceV2Manifest {
   return isAdaptiveFinalEvidenceV2Graph(value.graph) || isWorkflowAdaptiveFinalEvidenceV2Graph(value.graph);
+}
+function isSelectedDirectionManifest(value: FinalEvidenceV2ManifestVariant): value is SelectedDirectionFinalEvidenceV2Manifest {
+  return isSelectedDirectionGraph(value.graph);
 }
 
 export interface FinalEvidenceV2Pointer {
@@ -155,6 +167,11 @@ export function validateFinalEvidenceV2ManifestVariant(value: unknown): FinalEvi
   const claimPublication = parseEvidenceClaimPublication(manifest.claimPublication);
   const graph = validateFinalEvidenceV2Graph(manifest.graph);
   const graphRootHash = manifest.graphRootHash === undefined ? undefined : digest(manifest.graphRootHash, 'graphRootHash');
+  if (isSelectedDirectionGraph(graph)) {
+    if (manifest.staticEvidence !== undefined || (manifest.motionDecision === 'one' ? !graph.motionEvidence || canonical(manifest.motionEvidence) !== canonical(graph.motionEvidence) : manifest.motionEvidence !== undefined || graph.motionEvidence !== undefined)) fail('selected-direction motion evidence must bind the exact native graph receipt; no legacy static branch');
+    return { schema: FINAL_EVIDENCE_V2_SCHEMA, motionDecision: manifest.motionDecision, claimPublication, graph,
+      ...(graphRootHash ? { graphRootHash } : {}), ...(graph.motionEvidence ? { motionEvidence: { ...graph.motionEvidence, schema: 'motion-evidence-v2' } as MotionEvidenceV2Binding } : {}) };
+  }
   if (isAdaptiveFinalEvidenceV2Graph(graph) || isWorkflowAdaptiveFinalEvidenceV2Graph(graph)) {
     if (manifest.motionDecision !== 'none' || manifest.motionEvidence !== undefined || manifest.staticEvidence !== undefined) fail('adaptive omission manifests require motionDecision none and no art evidence branch');
     return { schema: FINAL_EVIDENCE_V2_SCHEMA, motionDecision: 'none', claimPublication, graph, ...(graphRootHash === undefined ? {} : { graphRootHash }) };
@@ -170,11 +187,13 @@ export function validateFinalEvidenceV2ManifestVariant(value: unknown): FinalEvi
     if (manifest.staticEvidence !== undefined || manifest.motionEvidence === undefined) fail('one requires exactly one motion evidence and no static evidence');
     const motionEvidence = receipt(manifest.motionEvidence, 'motionEvidence', 'motion-evidence-v2') as MotionEvidenceV2Binding;
     if (isWorkflowArtSelectedFinalEvidenceV2Graph(graph)) return { schema: FINAL_EVIDENCE_V2_SCHEMA, motionDecision: 'one', claimPublication, graph, ...(graphRootHash === undefined ? {} : { graphRootHash }), motionEvidence };
+    if (graph.measuredTerminal) return { schema: FINAL_EVIDENCE_V2_SCHEMA, motionDecision: 'one', claimPublication, graph, ...(graphRootHash === undefined ? {} : { graphRootHash }), motionEvidence };
     return { schema: FINAL_EVIDENCE_V2_SCHEMA, motionDecision: 'one', claimPublication, graph, ...(graphRootHash === undefined ? {} : { graphRootHash }), motionEvidence };
   }
   if (manifest.motionEvidence !== undefined || manifest.staticEvidence === undefined) fail('none requires exactly one static evidence and no motion evidence');
   const staticEvidence = receipt(manifest.staticEvidence, 'staticEvidence', 'static-direction-evidence-v1') as StaticDirectionEvidenceV1Binding;
   if (isWorkflowArtSelectedFinalEvidenceV2Graph(graph)) return { schema: FINAL_EVIDENCE_V2_SCHEMA, motionDecision: 'none', claimPublication, graph, ...(graphRootHash === undefined ? {} : { graphRootHash }), staticEvidence };
+  if (graph.measuredTerminal) return { schema: FINAL_EVIDENCE_V2_SCHEMA, motionDecision: 'none', claimPublication, graph, ...(graphRootHash === undefined ? {} : { graphRootHash }), staticEvidence };
   return { schema: FINAL_EVIDENCE_V2_SCHEMA, motionDecision: 'none', claimPublication, graph, ...(graphRootHash === undefined ? {} : { graphRootHash }), staticEvidence };
 }
 export function validateFinalEvidenceV2Manifest(value: unknown): FinalEvidenceV2Manifest;
@@ -299,19 +318,37 @@ function validateBackedManifest(root: string, fs: FinalEvidenceV2FileSystem, val
   const currentInvocation = invocation ?? fail('a fresh host invocation is required to validate final evidence');
   const graph = validateFinalEvidenceV2GraphFiles(root, manifest.graph, fs, currentInvocation);
   if (manifest.graphRootHash !== graph.rootHash) fail('graph root hash changed');
-  const refinement = validateCurrentRenderedRefinementCheckpoint({ root, invocation: currentInvocation });
-  if (refinement.required) {
+  const refinement = manifest.graph.measuredTerminal?.process ? null : validateCurrentRenderedRefinementCheckpoint({ root, invocation: currentInvocation });
+  if (refinement?.required) {
     const terminalObservation = manifest.graph.observations.at(-1)
       ?? fail('a completed refinement requires a terminal final observation');
     if (terminalObservation.sha256 !== refinement.checkpoint.afterObservationSha256) {
       fail('terminal final observation does not match the current completed refinement checkpoint');
     }
   }
+  if (graph.bindings.branch === 'selected-direction') {
+    if (!isSelectedDirectionGraph(manifest.graph) || canonical(manifest.claimPublication) !== canonical(graph.bindings.claimPublication) || manifest.motionDecision !== graph.bindings.motionDecision) fail('selected-direction manifest does not bind the chosen production contract');
+    const captured = manifest.graph.directionCapture ? validateSelectedDirectionCapture(root, currentInvocation, manifest.graph.directionCapture,
+      { direction: manifest.graph.selectedDirection, motion: manifest.graph.motionEvidence, beats: manifest.graph.renderedBeats }) : null;
+    if (consumeMotionAuthorizations && manifest.graph.motionEvidence) {
+      const bytes = readStableRegularFile(fs, resolve(root, manifest.graph.motionEvidence.path), 'selected motion before consumption');
+      requireMotionCollectorAuthorization(currentInvocation, root, bytes, true);
+      const motion = object(parseJsonBytes(bytes, 'selected motion'), 'selected motion');
+      validateMotionEvidenceV2(motion, { root, invocation: currentInvocation, motionDecision: 'one', buildHash: graph.bindings.buildSha256, artDirectionHash: graph.bindings.selectedDirectionSha256,
+        route: captured!.route, target: captured!.target, taskId: captured!.taskId, consumeResult: true });
+    }
+    if (consumeMotionAuthorizations && manifest.graph.renderedBeats) {
+      const beat = object(parseJsonBytes(readStableRegularFile(fs, resolve(root, manifest.graph.renderedBeats.path), 'selected Beats'), 'selected Beats'), 'selected Beats');
+      validateRenderedBeatResultAuthority(beat, { root, invocation: currentInvocation, buildSha256: graph.bindings.buildSha256, artDirectionHash: graph.bindings.selectedDirectionSha256,
+        route: captured!.route, target: captured!.target, taskId: captured!.taskId, consumeResult: true });
+    }
+    return manifest;
+  }
   if (graph.bindings.branch === 'adaptive-omission') {
     if ((!isAdaptiveFinalEvidenceV2Graph(manifest.graph) && !isWorkflowAdaptiveFinalEvidenceV2Graph(manifest.graph)) || canonical(manifest.claimPublication) !== canonical(graph.bindings.claimPublication)) fail('claim publication does not match the adaptive source contract');
     return manifest;
   }
-  if (isAdaptiveFinalEvidenceV2Manifest(manifest)) fail('adaptive graph bindings are inconsistent');
+  if (isAdaptiveFinalEvidenceV2Manifest(manifest) || isSelectedDirectionManifest(manifest)) fail('nonlegacy graph bindings are inconsistent');
   const artDirectionPath = resolve(root, manifest.graph.artDirection.path);
   requireRealAncestors(root, artDirectionPath, fs, 'art direction');
   const artDirection = validateArtDirectionRecord(readJson(fs, artDirectionPath, 'art direction'));
@@ -408,7 +445,7 @@ function validateBackedManifest(root: string, fs: FinalEvidenceV2FileSystem, val
 function consumeRenderedBeatAuthorization(
   root: string,
   fs: FinalEvidenceV2FileSystem,
-  manifest: FinalEvidenceV2Manifest | WorkflowArtSelectedFinalEvidenceV2Manifest,
+  manifest: FinalEvidenceV2Manifest | MeasuredArtSelectedFinalEvidenceV2Manifest | WorkflowArtSelectedFinalEvidenceV2Manifest,
   bindings: FinalEvidenceV2GraphBindings,
   invocation: ProjectRunInvocation,
 ): void {
@@ -489,8 +526,8 @@ function motionConsumption(root: string, fs: FinalEvidenceV2FileSystem, manifest
     manifestSha256,
   };
 }
-function renderedBeatConsumption(root: string, fs: FinalEvidenceV2FileSystem, manifest: FinalEvidenceV2Manifest | WorkflowArtSelectedFinalEvidenceV2Manifest, invocation: ProjectRunInvocation, manifestSha256: string): MotionConsumption {
-  const receipt = manifest.graph.renderedBeats;
+function renderedBeatConsumption(root: string, fs: FinalEvidenceV2FileSystem, manifest: FinalEvidenceV2Manifest | MeasuredArtSelectedFinalEvidenceV2Manifest | WorkflowArtSelectedFinalEvidenceV2Manifest | SelectedDirectionFinalEvidenceV2Manifest, invocation: ProjectRunInvocation, manifestSha256: string): MotionConsumption {
+  const receipt = manifest.graph.renderedBeats ?? fail('selected rendered Beat receipt is missing');
   const receiptPath = resolve(root, receipt.path);
   requireRealAncestors(root, receiptPath, fs, 'rendered Beat receipt');
   const receiptBytes = readStableRegularFile(fs, receiptPath, 'rendered Beat receipt');
@@ -508,6 +545,7 @@ function renderedBeatConsumption(root: string, fs: FinalEvidenceV2FileSystem, ma
 function requiredMotionConsumptions(root: string, fs: FinalEvidenceV2FileSystem, manifest: FinalEvidenceV2ManifestVariant, invocation: ProjectRunInvocation, manifestSha256: string): readonly MotionConsumption[] {
   if (isAdaptiveFinalEvidenceV2Manifest(manifest)) return [];
   const motion = motionConsumption(root, fs, manifest, invocation, manifestSha256);
+  if (isSelectedDirectionGraph(manifest.graph) && !manifest.graph.renderedBeats) return motion ? [motion] : [];
   return [renderedBeatConsumption(root, fs, manifest, invocation, manifestSha256), ...(motion === undefined ? [] : [motion])];
 }
 

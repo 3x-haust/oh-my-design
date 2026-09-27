@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test, { type TestContext } from 'node:test';
@@ -9,10 +9,12 @@ import { createBuildIdentityFromSource } from '../adapters/build.ts';
 import { parseEntrySurfaceContract } from '../core/frame/entry-surface-contract.ts';
 import { writeFrame } from '../core/frame/write.ts';
 import { publishAdaptiveRoute, readPersistedRoute } from '../core/route/adaptive-route-persistence.ts';
+import { canonicalRouteJson } from '../core/route/adaptive-source-contract.ts';
 import { inputSkeleton } from '../core/schema/inputs.ts';
 import { runNativeEvaluation } from '../core/runtime/native-evaluation.ts';
 import { createTestNativePiInvocation } from '../core/runtime/native-pi-run.ts';
 import { readCurrentObservationV2 } from '../core/runtime/observation.ts';
+import { signNativeObservation } from '../core/runtime/self-signed-activation.ts';
 import { parseTrustedBrowserReceipt } from '../core/runtime/trusted-browser-receipt.ts';
 import { deriveTrustedEvaluationIdentity } from '../core/runtime/trusted-evaluation-contract.ts';
 import { deriveTrustedEvaluationPlanFromProject } from '../core/runtime/trusted-evaluation-plan.ts';
@@ -40,7 +42,20 @@ function fixture(t: TestContext, options: Readonly<{ broken?: boolean; mixedPhas
   const writer = createTestProjectWriteAdapter(root, invocation);
   const skeleton = inputSkeleton('product-route-input').skeleton;
   assert.ok(typeof skeleton === 'object' && skeleton !== null && !Array.isArray(skeleton));
-  publishAdaptiveRoute(root, { ...skeleton, request,
+  const purposePayload = {
+    schema: 'review-purpose-origin-v1' as const, projectRoot: root, purpose: 'ordinary' as const,
+    requestSha256: hash(request), source: 'host-user-input' as const, observedAt: '2026-09-27T00:00:00.000Z',
+  };
+  const purposeOrigin = { ...purposePayload,
+    signature: signNativeObservation(root, purposePayload.schema, hash(canonicalRouteJson(purposePayload))) };
+  const purposeBytes = Buffer.from(`${canonicalRouteJson(purposeOrigin)}\n`);
+  const purposeSha256 = hash(purposeBytes);
+  const reviewPurposeAuthority = {
+    path: `.omd/review-purpose-authorities/sha256-${purposeSha256}.json`, sha256: purposeSha256,
+  };
+  mkdirSync(join(root, '.omd/review-purpose-authorities'), { recursive: true });
+  writeFileSync(join(root, reviewPurposeAuthority.path), purposeBytes);
+  publishAdaptiveRoute(root, { ...skeleton, request, reviewPurpose: 'ordinary', reviewPurposeAuthority,
     taskOutcome: { schema: 'task-outcome-contract-v1', goal: 'Review shipment evidence',
       mustHave: [options.mixedPhases ? 'Evidence reviewed' : 'Review shipment evidence'], mustNotHave: ['Invented approval'],
       completionEvidence: ['Evidence reviewed'], strategyFreedom: ['Choose a readable layout'] },
@@ -103,7 +118,9 @@ test('native evaluation executes the project-derived plan and publishes source-b
   assert.deepEqual(new Set(receipt.captures.map(row => `${row.width}x${row.height}`)), new Set(['1280x900', '390x844']));
   assert.ok(receipt.transcript.some(row => row.startsWith('action-click:')));
   assert.deepEqual(readCurrentObservationV2(value.root), result.observation);
-  assert.equal(nativeCompletionWork(value.root, value.invocation).action, 'review-rendered-findings');
+  const next = nativeCompletionWork(value.root, value.invocation);
+  assert.equal(next.action, 'evaluate-production');
+  assert.match(next.problems.join('\n'), /DIRECTION_CONTRACT: current process requires its authenticated selected direction/);
 });
 
 test('a serialized browser receipt cannot replace the observation after native evaluation', async t => {

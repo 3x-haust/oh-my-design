@@ -53,10 +53,13 @@ function harness(cwd: string) {
     }
   };
   const start = async (starter = 'product-route-input') => {
-    await emit('before_agent_start', { prompt: '/skill:omd-ultradesign Build the requested local product.' });
+    const request = domain().request;
+    const prompt = `/skill:omd-ultradesign ${request}`;
+    await emit('input', { source: 'interactive', text: prompt });
+    await emit('before_agent_start', { prompt });
     // Fixture request authorizes only local demo work; not a claim about a live client or service.
     const route = structuredClone(inputSkeleton(starter).skeleton) as Record<string, unknown>;
-    route.request = domain().request;
+    route.request = request;
     await author('.omd/.cache/route-input.json', route);
     await command(['route', 'validate', '--input', '.omd/.cache/route-input.json', '--json']);
     await command(['route', 'classify', '--input', '.omd/.cache/route-input.json', '--json']);
@@ -67,7 +70,7 @@ function harness(cwd: string) {
 const domain = () => {
   const evidence = [{ status: 'user-provided', reference: 'test request' }];
   const statement = (text: string) => ({ text, userEvidence: [{ kind: 'explicit-user-evidence', source: 'user-message', reference: 'test request', excerpt: text }] });
-  return { schema: 'domain-brief-v1', request: 'Build a local confirmation demo; no real submissions.', domain: 'Confirmation', summary: 'Inspect a confirmation in a labelled demo.',
+  return { schema: 'domain-brief-v1', request: 'Build a local confirmation demo product; no real submissions.', domain: 'Confirmation', summary: 'Inspect a confirmation in a labelled demo.',
     surfaces: [{ name: 'confirmation', purpose: 'Inspect confirmation', evidence }], coreObjects: [{ name: 'confirmation', evidence }],
     audience: { description: 'Demo evaluator', evidence }, referenceQueries: { component: ['confirmation detail'], craft: ['editorial type hierarchy'], mood: ['quiet reading'] },
     planning: { businessGoal: statement('Build a local confirmation demo'), successSignal: statement('Inspect confirmation'), nonGoals: [statement('No real submissions')] } };
@@ -112,7 +115,11 @@ test('cold start traverses real CLI framing, independent research/copy entry and
   assert.equal(help.status, 0, help.stderr); assert.match(help.stdout, /--task-matrix/);
   assert.deepEqual(readdirSync(cwd), []);
   await h.start();
-  assert.match(await h.enter('candidate-generation'), /upstream composition/);
+  const concepts = JSON.parse(await h.enter('candidate-generation'));
+  assert.equal(concepts.owner, 'omd-art-director');
+  assert.equal(concepts.conceptProcedure.planBeforeSource, true);
+  assert.ok(concepts.blockers.some((blocker: string) => blocker.includes('.omd/frame.md')));
+  assert.ok(!concepts.blockers.some((blocker: string) => blocker.includes('upstream composition')));
   await h.deliver('frame');
   assert.match(await h.enter('frame'), /upstream artifact missing.*domain-brief/);
   await h.author('.omd/domain-brief.json', {});
@@ -144,12 +151,14 @@ test('cold start traverses real CLI framing, independent research/copy entry and
   const published = readFileSync(join(cwd, '.omd/frame.md'), 'utf8');
   delete frame.taskCoverageMatrix;
   await h.author('.omd/.cache/frame-input.json', frame);
-  await assert.rejects(h.command(['frame', 'set', '--input', '.omd/.cache/frame-input.json']), /omd schema frame/);
+  await assert.rejects(h.command(['frame', 'set', '--input', '.omd/.cache/frame-input.json']), /DIRECTION_CONTRACT: unknown surface task reference/);
   assert.equal(readFileSync(join(cwd, '.omd/frame.md'), 'utf8'), published);
   for (const stage of ['scout', 'copy', 'type-proof']) await h.deliver(stage);
   await h.enter('scout');
   await h.enter('copy'); // Writer does NOT wait for Scout's output merely because of array order.
-  assert.match(await h.enter('type-proof'), /upstream artifact missing.*copy-deck/);
+  const provisionalType = JSON.parse(await h.enter('type-proof'));
+  assert.ok(provisionalType.confidenceDebt.some((debt: { stage: string; claim: string }) => debt.stage === 'copy' && debt.claim === 'not-verified'));
+  assert.equal(provisionalType.direction.selectionStatus, 'missing');
   const plan = JSON.parse(await h.command(['ref', 'discover-plan', '--json']));
   assert.equal(plan.lanes.length, 2);
   // Native captured fixtures exercise the research write path, not source writes or invented
@@ -163,7 +172,8 @@ test('cold start traverses real CLI framing, independent research/copy entry and
   assert.match(await h.enter('type-proof'), /upstream copy/);
   await h.author('.omd/copy-deck.md', deck);
   await h.command(['copy', '--check']);
-  assert.match(await h.enter('type-proof'), /upstream copy.*current copy review/);
+  const unreviewedType = JSON.parse(await h.enter('type-proof'));
+  assert.ok(unreviewedType.confidenceDebt.some((debt: { stage: string; claim: string }) => debt.stage === 'copy' && debt.claim === 'not-verified'));
   await h.author('.omd/.cache/copy-eye.md', `Mode: copy-editor\nReview time: 2026-09-21T00:00:00Z\nReviewed copy-deck SHA-256: ${copyDeckSha256(Buffer.from(deck))}\nVerdict: CLEAN\nFindings: Same-session test fixture; no independent review attestation.\n`);
   await h.enter('type-proof');
   await h.author('.omd/copy-deck.md', deck + '\nChanged after review.\n');

@@ -1,0 +1,19 @@
+{
+  "schema": "role-profile-manifest-v1",
+  "profiles": [
+    {"role":"omd-eye","mode":"concept-selection","file":"eye/concept-selection.md","budget":450},
+    {"role":"omd-eye","mode":"structural-selection","file":"eye/structural-selection.md","budget":500},
+    {"role":"omd-eye","mode":"visual-study","file":"eye/visual-study.md","budget":400},
+    {"role":"omd-eye","mode":"copy-editor","file":"eye/copy-editor.md","budget":450},
+    {"role":"omd-eye","mode":"typography-proof","file":"eye/typography-proof.md","budget":400},
+    {"role":"omd-eye","mode":"production-visual","file":"eye/production-visual.md","budget":500},
+    {"role":"omd-eye","mode":"fidelity","file":"eye/fidelity.md","budget":350},
+    {"role":"omd-eye","mode":"protocol","file":"eye/protocol.md","budget":250},
+    {"role":"omd-eye","mode":"perspective","file":"eye/perspective.md","budget":100},
+    {"role":"omd-eye","mode":"moderator","file":"eye/moderator.md","budget":100},
+    {"role":"omd-sketch","mode":"structural","file":"sketch/structural.md","budget":450},
+    {"role":"omd-sketch","mode":"visual-study","file":"sketch/visual-study.md","budget":550},
+    {"role":"omd-hand","mode":"source","file":"hand/source.md","budget":700},
+    {"role":"omd-hand","mode":"observer","file":"hand/observer.md","budget":800}
+  ]
+}

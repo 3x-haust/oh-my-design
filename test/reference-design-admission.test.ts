@@ -6,7 +6,7 @@ import { parseReferenceResearch, publishReferenceResearch, validateReferenceRese
 import { refIdentity } from '../core/ref/identity.ts';
 import { saveRef } from '../core/ref/store.ts';
 import { persistImageFragment } from '../core/ref/image-fragment.ts';
-import { createTestProjectRunInvocation, publishTestAdaptiveRoute } from './helpers/project-write.ts';
+import { createTestProjectRunInvocation, publishTestAdaptiveRoute, withTestReviewPurposeAuthority } from './helpers/project-write.ts';
 import { ADMISSION_SOURCE_SHA, admissionHash, designAdmissionFixture } from './helpers/design-admission.ts';
 import { briefReferences } from '../core/brief/index.ts';
 import { loadReferenceBoard } from '../core/ref/board.ts';
@@ -88,7 +88,7 @@ test('valid gallery and observed original retain research publication', t => {
 test('native gallery discovery keeps wrapper pixels outside refs/design and admits its observed original', async t => {
   const { root, source, gallery, research, writer } = designAdmissionFixture(t);
   rmSync(gallery.path); rmSync(join(root, gallery.evidence.path));
-  const invocation = publishTestAdaptiveRoute(root, inputSkeleton('product-route-input').skeleton);
+  const invocation = publishTestAdaptiveRoute(root, withTestReviewPurposeAuthority(root, inputSkeleton('product-route-input').skeleton));
   refreshSearchesAfterRoute(root, research);
   const visit = await withBrowser(async browser => captureReferenceNavigation(
     discoveryBrowser(browser, { url: gallery.source, html: directoryHtml(source.source) }).browser,
@@ -105,7 +105,7 @@ test('native gallery discovery keeps wrapper pixels outside refs/design and admi
 
 test('a visited gallery may retain only its actual UI image element without cropping', async t => {
   const { root, gallery, writer, research, board, receipt, refreshBoard } = designAdmissionFixture(t);
-  const invocation = publishTestAdaptiveRoute(root, inputSkeleton('product-route-input').skeleton);
+  const invocation = publishTestAdaptiveRoute(root, withTestReviewPurposeAuthority(root, inputSkeleton('product-route-input').skeleton));
   refreshSearchesAfterRoute(root, research);
   const source = gallery.source;
   const image = testPng(320, 200, 22);

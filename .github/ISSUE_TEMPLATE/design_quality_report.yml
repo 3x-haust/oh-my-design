@@ -1,0 +1,45 @@
+name: Design quality report
+description: Report generated UI that looks generic, AI-made, or visibly poor
+title: 'design quality: '
+labels: [type/design-quality, status/needs-triage]
+body:
+  - type: dropdown
+    id: host
+    attributes:
+      label: Host
+      options: [Codex, Claude Code, Pi-compatible host, Other]
+    validations: { required: true }
+  - type: input
+    id: model
+    attributes:
+      label: Model and reasoning/effort setting
+    validations: { required: true }
+  - type: textarea
+    id: prompt
+    attributes:
+      label: Original prompt
+      description: Remove private or identifying details.
+      render: text
+    validations: { required: true }
+  - type: textarea
+    id: problem
+    attributes:
+      label: What looks wrong, and where?
+      description: Name visible symptoms and affected viewport/state rather than only saying "bad."
+    validations: { required: true }
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots or public reproduction
+      description: Drag in desktop/mobile screenshots and, when possible, a public URL.
+    validations: { required: true }
+  - type: textarea
+    id: record
+    attributes:
+      label: Sanitized .omd record
+      description: Attach the relevant route, frame, references, decisions, and evidence. Remove secrets and private content.
+    validations: { required: true }
+  - type: input
+    id: version
+    attributes: { label: OMD version or commit }
+    validations: { required: true }

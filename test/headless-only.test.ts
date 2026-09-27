@@ -3,10 +3,11 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { API } from 'typescript/unstable/sync';
+import { isCallExpression, isPropertyAccessExpression, isIdentifier, isObjectLiteralExpression, isPropertyAssignment, SyntaxKind, type Node } from 'typescript/unstable/ast';
 
-// OMD never opens a visible browser window in any situation: every Playwright launch is headless.
-// This is a source guard so a future edit cannot introduce a headed (headless:false) or a bare
-// chromium.launch() that inherits a non-headless default.
+// Render/verification stay headless. Product policy now permits only the consent-bound browse
+// persistent profile launcher to be headed; reference-browse-modes tests its executable gate.
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 
@@ -38,6 +39,33 @@ test('every chromium.launch( in the codebase requests headless: true', () => {
 test('no source ever launches a headed browser (headless: false)', () => {
   for (const { f, text } of sources) {
     assert.doesNotMatch(text, /headless:\s*false/, `${f} must never set headless: false`);
+  }
+});
+
+test('persistent headed capability is confined to the opt-in reference browser', () => {
+  // Inspect calls, not inventory audit strings or comments that merely mention a launch.
+  const parser = new API();
+  for (const { f, text } of sources) {
+    if (!/chromium\.(launchServer|launchPersistentContext)\(/.test(text)) continue;
+    const snapshot = parser.updateSnapshot({ openFiles: [f] });
+    try {
+      const file = snapshot.getDefaultProjectForFile(f)?.program.getSourceFile(f); assert.ok(file);
+      const visit = (node: Node): void => {
+        if (isCallExpression(node) && isPropertyAccessExpression(node.expression) && isIdentifier(node.expression.expression)
+          && node.expression.expression.text === 'chromium' && ['launchServer', 'launchPersistentContext'].includes(node.expression.name.text)) {
+          const mode = node.expression.name.text;
+          const options = node.arguments[mode === 'launchPersistentContext' ? 1 : 0];
+          assert.ok(options && isObjectLiteralExpression(options), `${f}: explicit launch options required`);
+          const headless = options.properties.find(property => isPropertyAssignment(property) && isIdentifier(property.name) && property.name.text === 'headless');
+          assert.ok(headless && isPropertyAssignment(headless), `${f}: explicit headless option required`);
+          if (f === join(root, 'core/ref/browse/browser.ts') && mode === 'launchPersistentContext') {
+            assert.match(file.text.slice(headless.pos, headless.end), /headless:\s*!start\.headed/);
+          } else assert.equal(headless.initializer.kind, SyntaxKind.TrueKeyword, `${f}: non-browse launches stay headless`);
+        }
+        node.forEachChild(visit);
+      };
+      visit(file);
+    } finally { snapshot.dispose(); }
   }
 });
 

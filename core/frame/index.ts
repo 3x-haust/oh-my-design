@@ -12,6 +12,7 @@ import {
   REALITY_CATEGORY_VALUES,
   REALITY_STATUS_VALUES,
 } from '../types.ts';
+import { parseSurfacePlan, parseValidationPlan, parseAccessibilityPlan, validateFrameProcessPlans } from './process-plan.ts';
 import { parseEntrySurfaceContract } from './entry-surface-contract.ts';
 
 export type { RealityCategory, RealityFact, RealityLedger, RealityStatus } from '../types.ts';
@@ -102,5 +103,9 @@ export function readFrame(cwd: string): Frame | null {
   const rest = text.slice(closeIndex + 4);
   const body = rest.startsWith('\n') ? rest.slice(1) : rest;
 
+  if (frontmatter.surfacePlan !== undefined) frontmatter.surfacePlan = parseSurfacePlan(frontmatter.surfacePlan);
+  if (frontmatter.validationPlan !== undefined) frontmatter.validationPlan = parseValidationPlan(frontmatter.validationPlan);
+  if (frontmatter.accessibilityPlan !== undefined) frontmatter.accessibilityPlan = parseAccessibilityPlan(frontmatter.accessibilityPlan);
+  validateFrameProcessPlans(frontmatter, body, cwd);
   return { ...frontmatter, body };
 }

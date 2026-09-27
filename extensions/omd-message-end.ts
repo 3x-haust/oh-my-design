@@ -1,4 +1,7 @@
+import { directionPresentation, type PendingDirection } from '../core/brief/candidate-choice.ts';
+import * as directionData from '../core/brief/candidate-data.ts';
 import { resumeRouteInput } from './omd-bootstrap-repair.ts';
+import { formatCompletionHostCapabilities } from '../core/completion/host-capabilities.ts';
 import type { RepairLoop } from './omd-repair-progress.ts';
 import type { RouteBootstrap } from './omd-route-bootstrap.ts';
 import { guardFailure, type OmdRunResult, type PortablePiApi, type PortablePiEvent } from './omd-runtime.ts';
@@ -13,6 +16,7 @@ export type ReferenceWork = Readonly<{
   exclusions: readonly Readonly<{ lane: string; url: string; reason: string; receipt: string }> [];
 }>;
 type StageWorkPointer = Readonly<{
+  awaiting?: { reason: string; pending: PendingDirection };
   stage: string;
   owner: string;
   action: string;
@@ -24,6 +28,7 @@ type StageWorkPointer = Readonly<{
   routeSha256: string | null;
   validatedStages: readonly string[];
   referenceWork: ReferenceWork | null;
+  limitations: readonly string[];
 }>;
 
 type MessageEndTask = Readonly<{
@@ -42,10 +47,17 @@ type MessageEndTask = Readonly<{
   repairLoop: RepairLoop;
   pi: PortablePiApi;
   onReferenceWork?(work: ReferenceWork | null): void;
+  onAwaitUser?(pending: PendingDirection): boolean;
 }>;
 
 const stringList = (value: unknown): readonly string[] => Array.isArray(value)
   ? value.filter((item): item is string => typeof item === 'string') : [];
+
+function limitationList(value: unknown): readonly string[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap(item => typeof item?.stage === 'string' && typeof item?.reason === 'string'
+    ? [`${item.stage}: ${item.reason}`] : []);
+}
 
 function planningList(value: unknown): readonly StagePlanning[] {
   if (!Array.isArray(value)) return [];
@@ -98,9 +110,17 @@ function referenceWork(value: unknown): ReferenceWork | null {
     attempts: parsedAttempts, exclusions: parsedExclusions };
 }
 
-function parseStageWork(text: string): StageWorkPointer | null {
+export function parseStageWork(text: string): StageWorkPointer | null {
   const value: unknown = JSON.parse(text);
-  if (typeof value !== 'object' || value === null || Reflect.get(value, 'schema') !== 'stage-next-v1') return null;
+  if (typeof value !== 'object' || value === null || !['stage-next-v1', 'stage-next-v2'].includes(Reflect.get(value, 'schema'))) return null;
+  // Typed waits outrank reference recovery rewriting, retry budgets and terminal diagnosis.
+  if (Reflect.get(value, 'schema') === 'stage-next-v2' && Reflect.get(value, 'action') === 'await-user') {
+    const p = directionData.object(Reflect.get(value, 'pending'), ['id', 'inputDigest', 'presentedSet', 'question', 'optionIds', 'decisionId']);
+    const pending: PendingDirection = { id: directionData.sha(p.id), inputDigest: directionData.sha(p.inputDigest), presentedSet: directionData.nullableReceipt(p.presentedSet), question: directionData.text(p.question), optionIds: directionData.ids(p.optionIds), decisionId: directionData.id(p.decisionId) };
+    const reason = directionData.enumeration(Reflect.get(value, 'reason'), ['direction-choice', 'stale-direction', 'repeated-defect', 'missing-authority']);
+    return { stage: directionData.text(Reflect.get(value, 'stage')), owner: 'coordinator', action: 'await-user', next: '', instruction: pending.question,
+      problems: [], entryBlockers: [], planning: [], routeSha256: null, validatedStages: [], referenceWork: null, limitations: [], awaiting: { reason, pending } };
+  }
   const stage = Reflect.get(value, 'stage');
   if (typeof stage !== 'string') return null;
   const progress = Reflect.get(value, 'progress');
@@ -126,6 +146,7 @@ function parseStageWork(text: string): StageWorkPointer | null {
     planning: planningList(Reflect.get(value, 'planning')),
     routeSha256: typeof routeSha256 === 'string' && /^[a-f0-9]{64}$/.test(routeSha256) ? routeSha256 : null,
     validatedStages,
+    limitations: limitationList(Reflect.get(value, 'confidenceDebt')),
     referenceWork: recovering ? { ...observed, status: 'action', action: {
       kind: 'replan-discovery', args: recoveryArgs, reason: instruction,
     } } : observed,
@@ -156,6 +177,7 @@ function actionPacket(work: StageWorkPointer): string {
       ...(work.referenceWork.exclusions.length > 12 ? [`(+${work.referenceWork.exclusions.length - 12} earlier exclusions)`] : []),
     ] : []),
     `Procedure: ${work.instruction}`,
+    ...(work.limitations.length ? ['Confidence debt (not verified):', ...work.limitations.map(item => `- ${item}`)] : []),
     ...(issues.length ? ['Current blockers:', ...issues.map(issue => `- ${issue}`)] : []),
     'Do the required action before rerunning stage next. Repeating checks without changing owned evidence is not progress.',
   ].join('\n');
@@ -174,6 +196,20 @@ export async function handleOmdMessageEnd(task: MessageEndTask): Promise<unknown
       const result = await run(['stage', 'next', '--json'], cwd, signal);
       if (interrupted()) return;
       let work = parseStageWork(result.text);
+      if (work?.awaiting) {
+        task.onReferenceWork?.(null);
+        const pending = work.awaiting.pending, present = task.onAwaitUser?.(pending) ?? true;
+        if (!present) return;
+        const presentation = ['direction-choice', 'stale-direction'].includes(work.awaiting.reason) ? directionPresentation(cwd, pending) : null;
+        const content: NonNullable<PortablePiEvent['message']>['content'] = [];
+        for (const option of presentation?.options ?? []) {
+          content.push({ type: 'text', text: `${option.id}: ${option.layoutStrategy}\n${option.tradeoffs.map(t => `- ${t}`).join('\n')}` });
+          for (const preview of option.previews) content.push({ type: 'text', text: `${option.id} / ${preview.viewId}` },
+            { type: 'image', mimeType: 'image/png', data: directionData.readReceipt(cwd, preview.png).toString('base64') });
+        }
+        content.push({ type: 'text', text: pending.question });
+        return { message: { ...message, content } };
+      }
       const nativeReferenceAction = work?.stage === 'reference-board' && work.referenceWork?.status === 'action'
         && ['search', 'direct-entry', 'follow-link'].includes(work.referenceWork.action?.kind ?? '');
       if (nativeReferenceAction && work !== null) {
@@ -231,7 +267,12 @@ export async function handleOmdMessageEnd(task: MessageEndTask): Promise<unknown
     }
   }
   try {
-    await run(['guard', 'completion', '--json'], cwd, signal);
+    const result = await run(['guard', 'completion', '--json'], cwd, signal);
+    const output = result.text.trim().startsWith('{') ? JSON.parse(result.text) : {};
+    const limitations = limitationList(Reflect.get(output, 'limitations'));
+    const hostCapabilities = formatCompletionHostCapabilities(Reflect.get(output, 'hostCapabilities'));
+    if (limitations.length || hostCapabilities) return { message: { ...message, content: [...(message.content ?? []),
+      { type: 'text', text: [limitations.length ? `Limitations (not verified):\n${limitations.map(item => `- ${item}`).join('\n')}` : '', hostCapabilities].filter(Boolean).join('\n\n') }] } };
   } catch (error) {
     if (interrupted()) return;
     if (!(error instanceof Error)) throw error;

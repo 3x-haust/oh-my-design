@@ -1,10 +1,10 @@
 import { createHash } from 'node:crypto';
-import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { readPersistedRoute, adaptiveRouteRecordSha256 } from '../route/adaptive-route-persistence.ts';
 import { changedPathsForAdaptiveRoute } from '../route/adaptive-route-scope.ts';
-import { readPublishedReferenceResearch, validateReferenceResearch } from '../ref/reference-research.ts';
-import { checkReferenceApplication } from '../ref/reference-application.ts';
+import { completionLimitations } from './limitations.ts';
+import { completionHostCapabilities } from './host-capabilities.ts';
+import { confidenceDebt, DEBT_CAPABLE_STAGES, mergeConfidenceDebt } from '../brief/confidence-debt.ts';
 import { nodeStableProjectFileSystem, readStableProjectFile } from '../runtime/stable-project-file.ts';
 import type { ProjectRunInvocation } from '../runtime/invocation.ts';
 import type { AdaptiveRouteRecord } from '../route/adaptive-flow-domain.ts';
@@ -49,7 +49,7 @@ export function parseDesignHandoff(value: unknown): DesignHandoff {
 }
 
 /** File integrity is inspectable locally; it is not proof of independent authorship or shipped UI. */
-export function validateDesignHandoffArtifacts(root: string, route: AdaptiveRouteRecord, input: unknown) {
+export function validateDesignHandoffArtifacts(root: string, route: AdaptiveRouteRecord, input: unknown, invocation?: ProjectRunInvocation) {
   const handoff = parseDesignHandoff(input);
   if (route.deliveryMode !== 'design-only' || handoff.sourceContractSha256 !== route.sourceContractSha256) return fail('handoff must bind the current design-only route');
   const fs = nodeStableProjectFileSystem();
@@ -58,24 +58,22 @@ export function validateDesignHandoffArtifacts(root: string, route: AdaptiveRout
     const bytes = read(part.path);
     if (bytes.toString('utf8').trim().length === 0 || createHash('sha256').update(bytes).digest('hex') !== part.sha256) return fail(`missing, empty, or stale document: ${part.path}`);
   }
+  const limitations = [...completionLimitations(root, route).limitations];
   for (const stage of STAGES.filter((stage) => route.strategy.stages.includes(stage.id))) {
-    if (!read(stage.artifact).toString('utf8').trim()) return fail(`selected stage has no output: ${stage.artifact}`);
-  }
-  if (route.gates.includes('dual-reference-research')
-    || (route.projectMode === 'greenfield' && existsSync(resolve(root, '.omd/reference-research.json')))) {
-    validateReferenceResearch(root, readPublishedReferenceResearch(root), {
-      expectedSourceContractSha256: route.sourceContractSha256,
-      benchmarkRequired: route.gates.includes('greenfield-task-flow-benchmark'),
-      expectedRequest: route.request,
-    });
-    checkReferenceApplication(root, { expectedSourceContractSha256: route.sourceContractSha256,
-      benchmarkRequired: route.gates.includes('greenfield-task-flow-benchmark'), expectedRequest: route.request });
+    try {
+      if (!read(stage.artifact).toString('utf8').trim()) return fail(`selected stage has no output: ${stage.artifact}`);
+    } catch (error) {
+      if (!DEBT_CAPABLE_STAGES.has(stage.id)) throw error;
+      limitations.push(confidenceDebt(stage.id, `Design evidence not verified: ${error instanceof Error ? error.message : String(error)}`));
+    }
   }
   return {
     schema: 'design-handoff-check-v1' as const,
     status: 'design-package-verified' as const,
     sourceContractSha256: route.sourceContractSha256,
-    verification: 'artifact-integrity-and-reference-evidence' as const,
+    verification: limitations.length ? 'artifact-integrity-with-limitations' as const : 'artifact-integrity-and-reference-evidence' as const,
+    limitations: mergeConfidenceDebt(limitations),
+    hostCapabilities: completionHostCapabilities(invocation),
     review: { ...handoff.review, independence: 'not-attested' as const },
     implementation: 'not-performed' as const,
     artifacts: handoff.artifacts,
@@ -87,5 +85,5 @@ export function checkDesignHandoff(root: string, input: unknown, invocation: Pro
   if (route.deliveryMode !== 'design-only') return fail('implementation routes must use completion preflight');
   const changes = changedPathsForAdaptiveRoute(root, route, adaptiveRouteRecordSha256(route), invocation);
   if (changes.some((path) => !path.startsWith('.omd/'))) return fail('files outside .omd changed during design-only work');
-  return validateDesignHandoffArtifacts(root, route, input);
+  return validateDesignHandoffArtifacts(root, route, input, invocation);
 }

@@ -1,32 +1,26 @@
 # Placeholder policy
 
-A grey box is a design defect: it defers a decision the build must make before shipping,
-and it ships as an admission that nobody decided what belongs here. A placeholder that
-reaches production — as a grey rectangle, a "Coming soon" block, or a `background: #ccc`
-div — is not a placeholder anymore. It is content that says the design is unfinished.
+A grey box is a design defect because it defers a decision the build must make before
+shipping. Design-time placeholders never ship: not a grey rectangle, labelled mock image,
+stock stand-in, fake screenshot, pattern fill, or generic gradient. Missing final material
+has three outcomes: acquire the approved asset, recompose around available real material,
+or remove the zone.
 
-This recipe defines what to do instead. For every situation where a grey box would appear,
-there is a deliberate alternative: a typographic block, a pattern fill, or a generated
-gradient. Each carries more information about the intended content than a grey rectangle
-and requires the designer to make a decision — which is the point.
+The typographic block, pattern fill, and generated gradient below are temporary design-time
+probes. They help test geometry while acquisition is unresolved. Remove them before production.
+Beige, cream, sepia, and warm-paper styling is not an unearned premium default; temporary
+probes start from true white or a true neutral unless evidence supports another ground.
 
 ## When it earns its place / When it does not
 
-Condition: any section where final imagery is not available at build time. Team photos
-not yet shot. Product screenshots not yet captured. User-generated content zones in an
-empty state. Hero sections awaiting final photography. The placeholder policy applies
-to all of these: each one must ship as a deliberate, designed alternative to the missing
-image, not as a grey box.
+Condition: use a temporary probe only during design when a known final asset is being
+acquired and its dimensions must be tested. Record the intended subject, crop, source status,
+and removal condition. Before release, replace the probe or recompose the surface.
 
-The placeholder policy is a forcing function. Deciding what to use instead of the grey
-box requires answering: "What does this space communicate when the real content is
-absent?" A typographic block communicates the category and scale of the expected content.
-A pattern fill communicates that the space is structural, not content-bearing. A gradient
-communicates the colour register of the expected content.
-
-Condition against: this policy does not apply to actual content loading states (skeleton
-screens during data fetch are correct — see `core/theory/layout.md` on loading states).
-The policy targets design-time decisions, not runtime states.
+Condition against: do not use a placeholder when no image-specific communication job exists;
+remove the zone. This policy does not apply to runtime loading states. A skeleton may represent
+expected structure while real data loads, but it is a reachable state with its own behavior,
+not missing design content.
 
 ## Parameters
 
@@ -53,9 +47,8 @@ The policy targets design-time decisions, not runtime states.
 
 ## Implementation
 
-**Option 1: Typographic block** — for content zones that will hold a heading, a body
-paragraph, or a feature statement. The typographic placeholder communicates scale and
-category without pretending to be real content.
+**Option 1: Typographic block (design-time only)** — use to test the geometry of a known
+copy or image zone. It is an annotation for the design team, not surface content.
 
 ```html
 <!-- Instead of: <div class="hero-image" style="background:#ccc; height:400px;"></div> -->
@@ -101,8 +94,8 @@ category without pretending to be real content.
 }
 ```
 
-**Option 2: Pattern fill** — for content zones that are structural (a card image slot,
-a sidebar graphic zone) where the space needs visual weight but no textual label.
+**Option 2: Pattern fill (design-time only)** — use to expose crop and contrast boundaries
+while the approved asset is pending. It must never become fallback artwork.
 
 ```html
 <div class="placeholder placeholder--pattern" role="img" aria-label="[describe intended content]"></div>
@@ -112,15 +105,15 @@ a sidebar graphic zone) where the space needs visual weight but no textual label
 .placeholder--pattern {
   /* Dimensions match the intended content zone. */
   min-height: 200px;
-  background-color: var(--surface-subtle, #f5f5f3);
+  background-color: var(--surface-subtle, #F4F5F7);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24'%3E%3Ccircle cx='12' cy='12' r='1' fill='rgba(0%2C0%2C0%2C0.12)'/%3E%3C/svg%3E");
   background-size: 24px 24px;
   border-radius: var(--radius-card, 8px);
 }
 ```
 
-**Option 3: Generated gradient** — for hero and full-bleed sections where the missing
-image is photographic and the gradient conveys the intended colour register.
+**Option 3: Generated gradient (design-time only)** — use only to test text placement and
+contrast for a known photographic zone. A gradient cannot stand in for absent art direction.
 
 ```html
 <section class="placeholder placeholder--gradient placeholder--hero" role="img" aria-label="[describe intended imagery]">
@@ -144,12 +137,10 @@ image is photographic and the gradient conveys the intended colour register.
 }
 ```
 
-**Decision rule:** choose by content type and visibility:
-- The expected content is a heading or copy block → **typographic block**.
-- The expected content is an image in a card, thumbnail, or secondary zone → **pattern fill**.
-- The expected content is a full-bleed hero or section background photo → **generated gradient**.
-- When in doubt between pattern and gradient: gradient, because it communicates the
-  colour register of the eventual photography.
+**Decision rule:** first ask whether the zone has a specific communication job. If not,
+remove it. If it does and acquisition is active, use the cheapest temporary probe that tests
+the needed geometry. The release decision is never which placeholder to ship; it is approved
+asset, recomposed real material, or no zone.
 
 ## Linter notes
 
@@ -159,27 +150,22 @@ image is photographic and the gradient conveys the intended colour register.
   with fixed-height, no semantic content, and a near-neutral background. If a legitimate
   design element fires this check, record the reason with `omd decision`.
 
-- A single gradient placeholder is not a `SLOP-GRADIENT` finding. Repeated saturated
-  indigo–violet gradients need distinct semantic roles or one focal use; a placeholder role
-  does not justify repeating atmosphere across unrelated regions. Use the brand's actual hue
-  variable (`var(--hue-brand)`) so the placeholder follows the palette while it remains.
+- A placeholder role never waives `SLOP-GRADIENT` or licenses repeated atmosphere. Keep
+  design-time probes out of shipped source and verify the production files contain no probe
+  label, class, path, or synthetic asset.
 
-- Every placeholder element must have a meaningful `aria-label` that describes the
-  intended content. A placeholder without an accessible description is both a design
-  defect and an accessibility failure — screen readers announce it as an unlabelled image.
+- Design-time previews need a visible annotation for reviewers. Production accessibility is
+  resolved against the final material: useful images get contextual alt text, decorative
+  images get empty alt text, and removed zones leave no phantom image semantics.
 
 ## Do not combine with
 
-**Actual content** — when the real image or content is available, use it. The placeholder
-policy does not mean "use a gradient everywhere instead of photography." Photography,
-illustration, or purposeful imagery always supersedes a placeholder when it exists.
+**Production source** — no placeholder type belongs in a release. Use approved photography,
+illustration, product captures, or other real material when it serves the communication job;
+otherwise recompose or remove the zone.
 
-**Lorem ipsum text** — text placeholders are governed by the same principle: `hand.agent.yaml`
-states "Placeholder copy is a defect. 'Lorem ipsum' and 'Your content here' never ship."
-A typographic block that serves as an image placeholder is acceptable; a paragraph of
-lorem ipsum text is not. If body copy is absent, use structural whitespace or a typographic
-label indicating the content category, never placeholder prose.
+**Lorem ipsum or invented content** — placeholder copy, fake metrics, fake product screens,
+and labels such as "Hero image" never ship. Use verified content or omit the unsupported role.
 
-**More than one placeholder type in the same layout zone** — choosing between typographic,
-pattern, and gradient means choosing one. Stacking a pattern fill and a gradient on the
-same placeholder element produces a background system, not a placeholder decision.
+**Runtime loading state** — do not reuse design-time probe classes or artwork as a skeleton.
+Runtime loading follows the final component geometry and disappears when real content arrives.

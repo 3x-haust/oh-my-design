@@ -11,7 +11,7 @@ export type AdaptiveStageNode = Readonly<{
 }>;
 export type AdaptiveStageGraph = Readonly<Record<AdaptiveStageId, AdaptiveStageNode>>;
 
-export const ADAPTIVE_STAGE_OWNERS = Object.freeze({
+export const LEGACY_ADAPTIVE_STAGE_OWNERS = Object.freeze({
   domain: 'coordinator', depth: 'coordinator', frame: 'omd-framer',
   'content-grain': 'omd-framer', acquisition: 'omd-framer',
   scout: 'omd-scout', moodboard: 'omd-scout', 'reference-board': 'omd-scout', 'reference-selection': 'coordinator',
@@ -21,7 +21,7 @@ export const ADAPTIVE_STAGE_OWNERS = Object.freeze({
   'browser-evidence': 'omd-hand', 'independent-review': 'omd-eye',
 } as const satisfies Readonly<Record<AdaptiveStageId, string>>);
 
-export const ADAPTIVE_STAGE_GRAPH = Object.freeze({
+export const LEGACY_ADAPTIVE_STAGE_GRAPH = Object.freeze({
   domain: { prerequisites: [], afterIfSelected: [] },
   depth: { prerequisites: [], afterIfSelected: [] },
   frame: { prerequisites: [], afterIfSelected: ['domain'] },
@@ -50,6 +50,19 @@ export const ADAPTIVE_STAGE_GRAPH = Object.freeze({
   'browser-evidence': { prerequisites: ['production'], afterIfSelected: [] },
   'independent-review': { prerequisites: ['browser-evidence'], afterIfSelected: [] },
 } as const satisfies AdaptiveStageGraph);
+
+export const ADAPTIVE_STAGE_OWNERS = Object.freeze({ ...LEGACY_ADAPTIVE_STAGE_OWNERS,
+  'art-direction': 'omd-art-director', 'candidate-generation': 'omd-art-director',
+});
+export const ADAPTIVE_STAGE_GRAPH: AdaptiveStageGraph = Object.freeze({ ...LEGACY_ADAPTIVE_STAGE_GRAPH,
+  copy: { prerequisites: [], afterIfSelected: [] },
+  'candidate-generation': { prerequisites: ['frame'], afterIfSelected: ['content-grain', 'copy', 'scout', 'reference-selection'] },
+  'art-direction': { prerequisites: [], afterIfSelected: ['depth', 'reference-selection', 'candidate-generation'] },
+  'type-proof': { prerequisites: ['copy'], afterIfSelected: ['candidate-generation', 'art-direction'] },
+  composition: { prerequisites: ['frame', 'copy'], afterIfSelected: ['content-grain', 'scout', 'reference-selection', 'candidate-generation', 'art-direction', 'type-proof'] },
+});
+export const adaptiveStageGraph = (currentProcess = false): AdaptiveStageGraph => currentProcess ? ADAPTIVE_STAGE_GRAPH : LEGACY_ADAPTIVE_STAGE_GRAPH;
+export const adaptiveStageOwners = (currentProcess = false): Readonly<Record<AdaptiveStageId, string>> => currentProcess ? ADAPTIVE_STAGE_OWNERS : LEGACY_ADAPTIVE_STAGE_OWNERS;
 
 function knownStage(value: string): value is AdaptiveStageId {
   return ADAPTIVE_STAGE_IDS.some((stage) => stage === value);
@@ -86,12 +99,13 @@ export function validateAdaptiveStageGraph(graph: Readonly<Record<string, Adapti
   for (const stage of ADAPTIVE_STAGE_IDS) visit(stage);
 }
 
-export function validateAdaptiveStageOrder(strategy: AdaptiveStrategyDecision, deliveryMode?: 'design-only'): void {
-  validateAdaptiveStageGraph(ADAPTIVE_STAGE_GRAPH);
+export function validateAdaptiveStageOrder(strategy: AdaptiveStrategyDecision, deliveryMode?: 'design-only', currentProcess = false): void {
+  const graph = adaptiveStageGraph(currentProcess);
+  validateAdaptiveStageGraph(graph);
   const selected = new Map(strategy.stages.map((stage, index) => [stage, index]));
   for (const stage of strategy.stages) {
     if (!knownStage(stage)) return failAdaptiveRoute('UNKNOWN_ADAPTIVE_STAGE');
-    const node = ADAPTIVE_STAGE_GRAPH[stage];
+    const node = graph[stage];
     const current = selected.get(stage);
     if (current === undefined) return failAdaptiveRoute('ADAPTIVE_STAGE_ORDER_INVALID');
     for (const prerequisite of node.prerequisites) {

@@ -1,25 +1,53 @@
-# Korean display wrapping is a production contract, while ordinary body copy remains a
-# contextual KLREQ choice. Headings, blockquotes, and data-omd-display regions are marked
-# by dom.ts as displayText. Their safe default is word-break: keep-all plus text-wrap:
-# balance. Character-based breaking is accepted only when the display context carries the
-# exact machine-readable data-omd-korean-wrap="character" override; balance still applies.
-- id: KO-DISPLAY-WRAP
+# Korean line-breaking rules are based on rendered failures, not mandatory declarations.
+# `word-break: keep-all` and `text-wrap: balance` can be useful defaults, but requiring the
+# declarations mistakes an implementation technique for an outcome. dom.ts records direct
+# graphemes by rendered line after fonts settle for display roles, so heading checks are live.
+# KO-CONTROL-WRAP and general KO-MIDWORD-WRAP also consume textLines when supplied, but the
+# DOM extractor must broaden that field to Korean interactive/body text before those checks
+# cover ordinary controls in browser captures; inferring lines from padded element height is unsafe.
+
+# A short interactive Korean label should remain one scan unit. Multiple lines on a label
+# this short indicate that the control or navigation item was made too narrow for its copy.
+- id: KO-CONTROL-WRAP
   layer: 1
   category: a11y
   severity: warn
-  when: "node.displayText === true && Boolean(node.text) && /[\\u1100-\\u11ff\\u3130-\\u318f\\ua960-\\ua97f\\uac00-\\ud7af\\ud7b0-\\ud7ff]/u.test(node.text)"
-  value: "node.wordBreak + '/' + node.textWrap"
-  assert: "node.textWrap === 'balance' && (node.wordBreak === 'keep-all' || node.koreanWrap === 'character')"
-  message: "Korean display text uses {value}. Display roles require word-break: keep-all and text-wrap: balance by default. Character-based breaking is allowed only with the contextual data-omd-korean-wrap=\"character\" override; body text remains a KLREQ contextual choice."
+  when: "node.computed.isInteractive && Boolean(node.text) && /[\\u1100-\\u11ff\\u3130-\\u318f\\ua960-\\ua97f\\uac00-\\ud7af\\ud7b0-\\ud7ff]/u.test(node.text) && Array.isArray(node.textLines)"
+  value: "node.textLines.length"
+  assert: "value <= 1 || node.text.replace(/\\s+/g, '').length > 20"
+  message: "This short Korean control label renders on {value} lines. Give the tab stop enough inline space or use a shorter accurate label so its action remains one scan unit."
 
-# Rendered geometry, not string length, decides this rule. Ignore whitespace and punctuation
-# when counting the final line: a punctuation-only line has no meaningful grapheme and must
-# not be mislabeled, while a single Hangul grapheme followed by punctuation is still an orphan.
+# Detect a rendered line boundary inside one Korean eojeol. If the final meaningful
+# grapheme of one line and the first meaningful grapheme of the next are both Hangul and
+# no whitespace occurs at that boundary, the browser split a word rather than between words.
+- id: KO-MIDWORD-WRAP
+  layer: 1
+  category: a11y
+  severity: warn
+  when: "Boolean(node.text) && /[\\u1100-\\u11ff\\u3130-\\u318f\\ua960-\\ua97f\\uac00-\\ud7af\\ud7b0-\\ud7ff]/u.test(node.text) && Array.isArray(node.textLines) && node.textLines.length > 1"
+  value: "(() => { const hangul = /[\\u1100-\\u11ff\\u3130-\\u318f\\ua960-\\ua97f\\uac00-\\ud7af\\ud7b0-\\ud7ff]/u; for (let i = 0; i < node.textLines.length - 1; i++) { const left = node.textLines[i].graphemes.map(g => g.text).join(''); const right = node.textLines[i + 1].graphemes.map(g => g.text).join(''); const a = [...left].reverse().find(ch => /[\\p{L}\\p{N}]/u.test(ch)); const b = [...right].find(ch => /[\\p{L}\\p{N}]/u.test(ch)); if (a && b && hangul.test(a) && hangul.test(b) && !/\\s$/u.test(left) && !/^\\s/u.test(right)) return a + '|' + b; } return null; })()"
+  assert: "value === null"
+  message: "Korean text wraps inside a word at {value}. Widen or recompose the text container, or choose a word-based break strategy for this copy."
+
+# Hidden/clip overflow on an ancestor loses Korean copy. This is deliberately checked here
+# as well as the generic system clipping rule so Korean typography review reports the actual
+# language-specific failure instead of prescribing keep-all/balance.
+- id: KO-TEXT-CLIP
+  layer: 1
+  category: a11y
+  severity: warn
+  when: "Boolean(node.text) && /[\\u1100-\\u11ff\\u3130-\\u318f\\ua960-\\ua97f\\uac00-\\ud7af\\ud7b0-\\ud7ff]/u.test(node.text)"
+  value: "(() => { let p = node.parent; while (p) { const par = ir.nodes.find(n => n.id === p); if (!par) break; if ((par.overflow === 'hidden' || par.overflow === 'clip') && (node.box.x < par.box.x - 4 || node.box.y < par.box.y - 4 || node.box.x + node.box.w > par.box.x + par.box.w + 4 || node.box.y + node.box.h > par.box.y + par.box.h + 4)) return par.path; p = par.parent; } return null; })()"
+  assert: "value === null"
+  message: "Korean text is clipped by {value}. Increase the container, permit visible/reflowing overflow, or shorten the copy without losing meaning."
+
+# Rendered geometry decides heading orphans. Ignore whitespace and punctuation when
+# counting the final line; only headings are subject to this display-specific warning.
 - id: KO-DISPLAY-ORPHAN
   layer: 1
   category: a11y
   severity: warn
-  when: "node.displayText === true && Boolean(node.text) && Array.isArray(node.textLines) && node.textLines.length > 1"
+  when: "Boolean(node.heading) && Boolean(node.text) && Array.isArray(node.textLines) && node.textLines.length > 1"
   value: "(() => { const last = node.textLines[node.textLines.length - 1]; const meaningful = last.graphemes.filter(g => /[\\p{L}\\p{N}]/u.test(g.text)); if (meaningful.length !== 1) return null; return /[\\u1100-\\u11ff\\u3130-\\u318f\\ua960-\\ua97f\\uac00-\\ud7af\\ud7b0-\\ud7ff]/u.test(meaningful[0].text) ? meaningful[0].text : null; })()"
   assert: "value === null"
-  message: "The final rendered display line contains only the Korean grapheme \"{value}\" after punctuation is ignored. Rebalance the copy, measure, or type size so the final line carries more than one meaningful grapheme."
+  message: "The final rendered heading line contains only the Korean grapheme \"{value}\" after punctuation is ignored. Rebalance the copy, measure, or type size so the final line carries more than one meaningful grapheme."

@@ -14,6 +14,10 @@ export type {
   ReferenceResearch,
   ResearchDiscoveryRoot,
   ResearchEvidence,
+  ResearchSource,
+  ResearchLane,
+  BrowseSourceProvenance,
+  BrowseDesignDiscovery,
   ValidationOptions,
 } from './reference-research-types.ts';
 export { fail, httpsUrl, parseReferenceResearch, record } from './reference-research-parser.ts';

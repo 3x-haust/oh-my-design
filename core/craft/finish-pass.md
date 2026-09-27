@@ -1,8 +1,8 @@
 # Finish pass — the last 5%
 
-Done is when the build passes checks and the eye approves it. Cared for is when the cursor selects text and the highlight colour is yours, when focus rings look designed rather than browser-default, when the favicon tab reads as the brand in a row of twenty other tabs. Nobody schedules these items because none of them ships features. All of them ship the difference between a page a developer handed off and a page a designer finished.
+Done is when the build passes checks, reachable states work, content survives reflow, touch targets remain operable, focus is visible, and the eye approves it. Favicon, selection color, and custom scrollbar are optional brand polish, not universal completion criteria.
 
-This checklist runs after `omd check` returns clean and before handback. Walk it top to bottom. Each item is either implemented or skipped with a written reason. A page without a favicon and `::selection` colour reads as unfinished regardless of everything else.
+This checklist runs after `omd check` returns clean and before handback. Prioritize focus, overflow, loading/error/empty states, keyboard behavior, and touch targets. Then add optional brand polish when it has a real identity role. Each item is implemented or skipped with a concise reason.
 
 ---
 
@@ -36,7 +36,7 @@ For browsers without `oklch()` color relative syntax support, declare an explici
 }
 ```
 
-Condition for skipping: the brief specifies a monochrome print stylesheet as the only output. Otherwise, this ships.
+Condition for use: customize selection when the brand system defines a tested selection pair or the default conflicts with the surface. Otherwise retain the platform default and record that this optional polish was skipped.
 
 ---
 
@@ -114,7 +114,7 @@ Follow with the `-webkit-` prefixed properties as the noted fallback for Safari 
 }
 ```
 
-Condition for skipping: the page is a web application that deliberately defers to the OS scrollbar for platform-native feel. Record the reason.
+Condition for use: customize the scrollbar only when it carries a deliberate brand or contrast role and remains platform-appropriate. Otherwise keep the legible OS scrollbar and record that this optional polish was skipped.
 
 ---
 
@@ -157,7 +157,7 @@ These corrections are small and cumulative. None of them will survive a linter c
 
 ## Favicon
 
-A favicon delivered as a separate asset file creates a dependency and an HTTP request. The inline SVG data-URI pattern delivers the icon with the HTML, requires no build step, and works across every browser that renders the page.
+A favicon is optional brand polish. Add one when the product has an approved mark, monogram, or deliberate symbol that remains legible at tab size; do not invent a generic glyph merely to fill the slot. When an inline favicon is appropriate, an SVG data URI avoids a separate request and build step.
 
 **SVG data-URI (recommended):** Build the icon as an SVG element, then encode it as a data URI. For a typographic favicon, this means a single `<text>` element with a carefully chosen character and fill colour.
 
